@@ -255,10 +255,12 @@ func matchesDefaultBranch(patterns []string, whenUnparseable bool) bool {
 		// preceding character, while filepath.Match reads ? as any single
 		// character and + as a literal, and returns no error for either. It
 		// errors only on a malformed pattern. So a pattern carrying either
-		// character, or one filepath.Match rejects, is one we cannot read, and
-		// skipping it is precisely the hole this matcher exists to close.
+		// character unescaped, or one filepath.Match rejects, is one we cannot
+		// read, and skipping it is precisely the hole this matcher exists to
+		// close. An escaped \? or \+ is a literal in both syntaxes and is matched
+		// normally.
 		matched, err := filepath.Match(pattern, "main")
-		if err != nil || strings.ContainsAny(pattern, "?+") {
+		if err != nil || hasUnescapedQuantifier(pattern) {
 			if whenUnparseable {
 				return true
 			}
@@ -267,6 +269,25 @@ func matchesDefaultBranch(patterns []string, whenUnparseable bool) bool {
 		}
 
 		if matched {
+			return true
+		}
+	}
+
+	return false
+}
+
+// hasUnescapedQuantifier reports whether pattern carries a ? or + that is not
+// escaped by a preceding backslash.
+func hasUnescapedQuantifier(pattern string) bool {
+	escaped := false
+
+	for _, char := range pattern {
+		switch {
+		case escaped:
+			escaped = false
+		case char == '\\':
+			escaped = true
+		case char == '?' || char == '+':
 			return true
 		}
 	}
@@ -310,6 +331,15 @@ func TestRunsOnDefaultBranch(t *testing.T) {
 		"quantifier leading plus": {yaml: "on:\n  push:\n    branches: ['m+ain']\n", want: true},
 		"quantifier ignore": {
 			yaml: "on:\n  push:\n    branches-ignore: ['mai?']\n",
+			want: true,
+		},
+
+		// An escaped quantifier is a literal character in both syntaxes, so the pattern is
+		// readable and is matched normally.
+		"escaped plus":     {yaml: "on:\n  push:\n    branches: ['m\\+ain']\n", want: false},
+		"escaped question": {yaml: "on:\n  push:\n    branches: ['ma\\?in']\n", want: false},
+		"escaped ignore": {
+			yaml: "on:\n  push:\n    branches-ignore: ['m\\+ain']\n",
 			want: true,
 		},
 	}
