@@ -269,7 +269,12 @@ func replaceModelledSpec(existing *unstructured.Unstructured, desired *InstanceS
 		}
 	}
 
-	return unstructured.SetNestedMap(existing.Object, spec, "spec")
+	err = unstructured.SetNestedMap(existing.Object, spec, "spec")
+	if err != nil {
+		return fmt.Errorf("write merged spec: %w", err)
+	}
+
+	return nil
 }
 
 // modelledInstanceSpecKeys returns the JSON names of the spec fields InstanceSpec models. It is

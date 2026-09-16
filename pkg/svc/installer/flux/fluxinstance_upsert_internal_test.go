@@ -3,6 +3,7 @@ package fluxinstaller
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -31,10 +32,15 @@ func (c *jsonStoreClient) Get(
 ) error {
 	raw, err := json.Marshal(c.stored)
 	if err != nil {
-		return err
+		return fmt.Errorf("encode stored object: %w", err)
 	}
 
-	return json.Unmarshal(raw, obj)
+	err = json.Unmarshal(raw, obj)
+	if err != nil {
+		return fmt.Errorf("decode stored object: %w", err)
+	}
+
+	return nil
 }
 
 func (c *jsonStoreClient) Update(
@@ -44,14 +50,14 @@ func (c *jsonStoreClient) Update(
 ) error {
 	raw, err := json.Marshal(obj)
 	if err != nil {
-		return err
+		return fmt.Errorf("encode updated object: %w", err)
 	}
 
 	stored := map[string]any{}
 
 	err = json.Unmarshal(raw, &stored)
 	if err != nil {
-		return err
+		return fmt.Errorf("decode updated object: %w", err)
 	}
 
 	c.stored = stored
