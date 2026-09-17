@@ -313,6 +313,10 @@ func TestEvaluate_BlockingIsResolvedPerRule(t *testing.T) {
 		blocking[violation.Rule] = violation.Blocking
 	}
 
-	assert.False(t, blocking["audit-owner"], "an Audit rule never blocks, even beside an enforced failure")
+	assert.False(
+		t,
+		blocking["audit-owner"],
+		"an Audit rule never blocks, even beside an enforced failure",
+	)
 	assert.True(t, blocking["enforce-team"], "an Enforce rule's failure blocks")
 }

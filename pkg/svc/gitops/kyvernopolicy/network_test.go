@@ -152,7 +152,11 @@ func countConnections(t *testing.T) (string, func() int) {
 		for {
 			select {
 			case remote, open := <-remotes:
-				require.True(t, open, "the listener closed before the sentinel connection was accepted")
+				require.True(
+					t,
+					open,
+					"the listener closed before the sentinel connection was accepted",
+				)
 
 				if remote == sentinel.LocalAddr().String() {
 					return earlier
