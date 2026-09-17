@@ -252,7 +252,8 @@ func loadUsableEKSOwnershipRecord(clusterName, path string) (*EKSOwnershipState,
 
 	err = validateEKSOwnershipState(clusterName, region, &ownership)
 	if err != nil {
-		return nil, !hasAWSOptionsField(data) && isLegacyEKSOwnershipRecord(clusterName, region, &ownership)
+		return nil, !hasAWSOptionsField(data) &&
+			isLegacyEKSOwnershipRecord(clusterName, region, &ownership)
 	}
 
 	return &ownership, true
