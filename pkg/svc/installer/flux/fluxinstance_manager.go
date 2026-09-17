@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"path"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +19,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -211,7 +213,11 @@ func (m *instanceManager) tryUpsert(
 	key client.ObjectKey,
 	desired *FluxInstance,
 ) error {
-	existing := &FluxInstance{}
+	// Read the live object unstructured. KSail's FluxInstance type models only part of the
+	// flux-operator spec, so a typed read would drop the rest (components, cluster, sharding,
+	// storage, ...) and the update would write them away on every run.
+	existing := &unstructured.Unstructured{}
+	existing.SetGroupVersionKind(fluxInstanceGroupVersion.WithKind(fluxInstanceKind))
 
 	err := fluxClient.Get(ctx, key, existing)
 	if err != nil {
@@ -222,7 +228,10 @@ func (m *instanceManager) tryUpsert(
 		return fmt.Errorf("failed to get FluxInstance %s/%s: %w", key.Namespace, key.Name, err)
 	}
 
-	existing.Spec = desired.Spec
+	err = replaceModelledSpec(existing, &desired.Spec)
+	if err != nil {
+		return fmt.Errorf("merge FluxInstance %s/%s spec: %w", key.Namespace, key.Name, err)
+	}
 
 	err = fluxClient.Update(ctx, existing)
 	if err != nil {
@@ -230,6 +239,58 @@ func (m *instanceManager) tryUpsert(
 	}
 
 	return nil
+}
+
+// replaceModelledSpec writes KSail's desired value for every spec field InstanceSpec models into
+// the live object and leaves every other spec field as it was. A modelled field is replaced
+// whole, and removed when KSail sets none, so ownership of those fields is unchanged; only the
+// fields KSail does not model are now preserved.
+func replaceModelledSpec(existing *unstructured.Unstructured, desired *InstanceSpec) error {
+	desiredSpec, err := runtime.DefaultUnstructuredConverter.ToUnstructured(desired)
+	if err != nil {
+		return fmt.Errorf("convert desired spec: %w", err)
+	}
+
+	spec, _, err := unstructured.NestedMap(existing.Object, "spec")
+	if err != nil {
+		return fmt.Errorf("read live spec: %w", err)
+	}
+
+	if spec == nil {
+		spec = map[string]any{}
+	}
+
+	for _, field := range modelledInstanceSpecKeys() {
+		value, set := desiredSpec[field]
+		if set {
+			spec[field] = value
+		} else {
+			delete(spec, field)
+		}
+	}
+
+	err = unstructured.SetNestedMap(existing.Object, spec, "spec")
+	if err != nil {
+		return fmt.Errorf("write merged spec: %w", err)
+	}
+
+	return nil
+}
+
+// modelledInstanceSpecKeys returns the JSON names of the spec fields InstanceSpec models. It is
+// derived from the type so a newly modelled field is owned by KSail without a second edit.
+func modelledInstanceSpecKeys() []string {
+	specType := reflect.TypeFor[InstanceSpec]()
+	keys := make([]string, 0, specType.NumField())
+
+	for field := range specType.Fields() {
+		name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
+		if name != "" && name != "-" {
+			keys = append(keys, name)
+		}
+	}
+
+	return keys
 }
 
 // createAndVerify creates a FluxInstance and verifies it was persisted.

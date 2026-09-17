@@ -523,14 +523,16 @@ func (s *Service) useDefaultClients() {
 }
 
 // resolveCluster finds the distribution and provider of an existing cluster, checking live
-// providers first and then the job store (for clusters still being provisioned).
+// providers first and then the job store (for clusters still being provisioned). An ownership record
+// that exists but cannot be read is returned as an error rather than as "not found", so the refusal
+// names the damaged file instead of claiming the cluster does not exist.
 func (s *Service) resolveCluster(
 	ctx context.Context,
 	name string,
-) (v1alpha1.Distribution, v1alpha1.Provider, bool) {
+) (v1alpha1.Distribution, v1alpha1.Provider, bool, error) {
 	live := s.enumerate(ctx)
 	if cluster, ok := live[name]; ok {
-		return cluster.Distribution, cluster.Provider, true
+		return cluster.Distribution, cluster.Provider, true, nil
 	}
 
 	s.mu.Lock()
@@ -538,7 +540,7 @@ func (s *Service) resolveCluster(
 	if current, ok := s.jobs[name]; ok {
 		s.mu.Unlock()
 
-		return current.distribution, current.provider, true
+		return current.distribution, current.provider, true, nil
 	}
 
 	s.mu.Unlock()
@@ -555,10 +557,14 @@ func (s *Service) resolveCluster(
 	// account for.
 	_, ownershipErr := state.ListEKSOwnershipStates(name)
 	if ownershipErr == nil {
-		return v1alpha1.DistributionEKS, v1alpha1.ProviderAWS, true
+		return v1alpha1.DistributionEKS, v1alpha1.ProviderAWS, true, nil
 	}
 
-	return "", "", false
+	if errors.Is(ownershipErr, state.ErrEKSOwnershipStateUnreadable) {
+		return "", "", false, unreadableOwnershipError(name, ownershipErr)
+	}
+
+	return "", "", false, nil
 }
 
 // dockerFactory adapts the Service's provisioner factory to the discovery DockerFactory shape,
@@ -580,7 +586,11 @@ func (s *Service) startJob(
 	name string,
 	phase v1alpha1.ClusterPhase,
 ) (v1alpha1.Spec, error) {
-	distribution, provider, ok := s.resolveCluster(ctx, name)
+	distribution, provider, ok, resolveErr := s.resolveCluster(ctx, name)
+	if resolveErr != nil {
+		return v1alpha1.Spec{}, resolveErr
+	}
+
 	if !ok {
 		return v1alpha1.Spec{}, fmt.Errorf("%w: %q", api.ErrNotFound, name)
 	}
