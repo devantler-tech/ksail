@@ -87,6 +87,7 @@ require (
 	github.com/invopop/jsonschema v0.14.0
 	github.com/kubescape/kubescape/v3 v3.0.48
 	github.com/kubescape/opa-utils v0.0.313
+	github.com/kyverno/kyverno v1.19.1
 	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac
 	github.com/loft-sh/vcluster v0.36.1
 	github.com/modelcontextprotocol/go-sdk v1.7.0
@@ -114,8 +115,54 @@ require (
 )
 
 require (
+	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20260415201107-50325440f8f2.1 // indirect
+	connectrpc.com/connect v1.20.0 // indirect
+	cuelabs.dev/go/oci/ociregistry v0.0.0-20251212221603-3adeb8663819 // indirect
+	cuelang.org/go v0.16.1 // indirect
+	github.com/Azure/go-ntlmssp v0.1.1 // indirect
+	github.com/IGLOU-EU/go-wildcard v1.0.3 // indirect
+	github.com/alibabacloud-go/tea-utils/v2 v2.0.7 // indirect
+	github.com/aptible/supercronic v0.2.48 // indirect
+	github.com/aquilax/truncate v1.0.1 // indirect
+	github.com/cockroachdb/apd/v3 v3.2.1 // indirect
+	github.com/dgraph-io/ristretto/v2 v2.4.2 // indirect
+	github.com/djherbis/times v1.6.0 // indirect
 	github.com/dlclark/regexp2/v2 v2.2.1 // indirect
+	github.com/emicklei/proto v1.14.3 // indirect
+	github.com/fluxcd/pkg/oci v0.45.0 // indirect
+	github.com/go-asn1-ber/asn1-ber v1.5.7 // indirect
+	github.com/go-ldap/ldap/v3 v3.4.10 // indirect
+	github.com/go-logr/zerologr v1.2.3 // indirect
+	github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-20260224031529-85f2bf5f7303 // indirect
+	github.com/google/go-github/v88 v88.0.0 // indirect
+	github.com/jellydator/ttlcache/v3 v3.4.1 // indirect
+	github.com/jmoiron/jsonq v0.0.0-20150511023944-e874b168d07e // indirect
+	github.com/kyverno/api v0.0.1-alpha.3.0.20260723090831-fb2785727f98 // indirect
+	github.com/kyverno/go-jmespath v0.4.1-0.20231124160150-95e59c162877 // indirect
+	github.com/kyverno/sdk v0.0.0-20260825082632-68d74afcb07a // indirect
+	github.com/natefinch/atomic v1.0.1 // indirect
+	github.com/notaryproject/notation-core-go v1.3.0 // indirect
+	github.com/notaryproject/notation-go v1.3.2 // indirect
+	github.com/notaryproject/notation-plugin-framework-go v1.0.0 // indirect
+	github.com/notaryproject/tspclient-go v1.0.0 // indirect
+	github.com/oliveagle/jsonpath v0.0.0-20180606110733-2e52cf6e6852 // indirect
+	github.com/open-policy-agent/gatekeeper/v3 v3.17.0 // indirect
+	github.com/prometheus/otlptranslator v1.0.0 // indirect
+	github.com/protocolbuffers/txtpbfmt v0.0.0-20260217160748-a481f6a22f94 // indirect
+	github.com/r3labs/diff v1.1.0 // indirect
 	github.com/redis/go-redis/extra/redisotel/v9 v9.5.3 // indirect
+	github.com/robfig/cron v1.2.0 // indirect
+	github.com/rs/zerolog v1.35.1 // indirect
+	github.com/sigstore/k8s-manifest-sigstore v0.5.5-0.20251214123302-4152ec03ed3d // indirect
+	github.com/sigstore/sigstore/pkg/signature/kms/aws v1.10.9 // indirect
+	github.com/sigstore/sigstore/pkg/signature/kms/azure v1.10.9 // indirect
+	github.com/sigstore/sigstore/pkg/signature/kms/gcp v1.10.9 // indirect
+	github.com/sigstore/sigstore/pkg/signature/kms/hashivault v1.10.9 // indirect
+	github.com/tektoncd/chains v0.22.0 // indirect
+	github.com/veraison/go-cose v1.3.0 // indirect
+	github.com/zach-klippenstein/goregen v0.0.0-20160303162051-795b5e3961ea // indirect
+	go.opentelemetry.io/otel/exporters/prometheus v0.66.0 // indirect
+	k8s.io/pod-security-admission v0.36.2 // indirect
 )
 
 require (
@@ -128,7 +175,7 @@ require (
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	cloud.google.com/go/iam v1.12.0 // indirect
-	cloud.google.com/go/kms v1.32.0 // indirect
+	cloud.google.com/go/kms v1.33.0 // indirect
 	cloud.google.com/go/longrunning v1.2.0 // indirect
 	cloud.google.com/go/monitoring v1.30.0 // indirect
 	cloud.google.com/go/storage v1.63.1 // indirect
@@ -143,7 +190,7 @@ require (
 	github.com/Abirdcfly/dupword v0.1.7 // indirect
 	github.com/AdminBenni/iota-mixing v1.0.0 // indirect
 	github.com/AlecAivazis/survey/v2 v2.3.7 // indirect
-	github.com/AliyunContainerService/ack-ram-tool/pkg/credentials/provider v0.14.0 // indirect
+	github.com/AliyunContainerService/ack-ram-tool/pkg/credentials/provider v0.15.2 // indirect
 	github.com/AlwxSin/noinlineerr v1.0.5 // indirect
 	github.com/Antonboom/errname v1.1.1 // indirect
 	github.com/Antonboom/nilnil v1.1.1 // indirect
@@ -156,7 +203,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage v1.8.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys v1.5.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/internal v1.2.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.4 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.8.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
 	github.com/Azure/go-autorest/autorest v0.11.29 // indirect
@@ -204,19 +251,19 @@ require (
 	github.com/alexkohler/nakedret/v2 v2.0.6 // indirect
 	github.com/alexkohler/prealloc v1.0.1 // indirect
 	github.com/alfatraining/structtag v1.0.0 // indirect
-	github.com/alibabacloud-go/alibabacloud-gateway-spi v0.0.4 // indirect
+	github.com/alibabacloud-go/alibabacloud-gateway-spi v0.0.5 // indirect
 	github.com/alibabacloud-go/cr-20160607 v1.0.1 // indirect
 	github.com/alibabacloud-go/cr-20181201 v1.0.10 // indirect
 	github.com/alibabacloud-go/darabonba-openapi v0.2.1 // indirect
-	github.com/alibabacloud-go/debug v1.0.0 // indirect
+	github.com/alibabacloud-go/debug v1.0.1 // indirect
 	github.com/alibabacloud-go/endpoint-util v1.1.1 // indirect
-	github.com/alibabacloud-go/openapi-util v0.1.0 // indirect
-	github.com/alibabacloud-go/tea v1.2.1 // indirect
+	github.com/alibabacloud-go/openapi-util v0.1.1 // indirect
+	github.com/alibabacloud-go/tea v1.2.2 // indirect
 	github.com/alibabacloud-go/tea-utils v1.4.5 // indirect
 	github.com/alibabacloud-go/tea-xml v1.1.3 // indirect
 	github.com/alingse/asasalint v0.0.11 // indirect
 	github.com/alingse/nilnesserr v0.2.0 // indirect
-	github.com/aliyun/credentials-go v1.3.2 // indirect
+	github.com/aliyun/credentials-go v1.4.3 // indirect
 	github.com/anchore/clio v0.1.0 // indirect
 	github.com/anchore/fangs v0.1.0 // indirect
 	github.com/anchore/go-collections v0.1.0 // indirect
@@ -291,8 +338,8 @@ require (
 	github.com/breml/errchkjson v0.4.1 // indirect
 	github.com/briandowns/spinner v1.23.2 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
-	github.com/buildkite/agent/v3 v3.118.0 // indirect
-	github.com/buildkite/go-pipeline v0.16.0 // indirect
+	github.com/buildkite/agent/v3 v3.130.0 // indirect
+	github.com/buildkite/go-pipeline v0.17.1 // indirect
 	github.com/buildkite/interpolate v0.1.5 // indirect
 	github.com/buildkite/roko v1.4.0 // indirect
 	github.com/butuzov/ireturn v0.4.0 // indirect
@@ -348,12 +395,12 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/curioswitch/go-reassign v0.3.0 // indirect
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
-	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
+	github.com/cyphar/filepath-securejoin v0.7.0 // indirect
 	github.com/daixiang0/gci v0.13.7 // indirect
 	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/dave/dst v0.27.3 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0 // indirect
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1 // indirect
 	github.com/deitch/magic v0.0.0-20240306090643-c67ab88f10cb // indirect
 	github.com/denis-tingaikin/go-header v0.5.0 // indirect
 	github.com/denisbrodbeck/machineid v1.0.1 // indirect
@@ -408,7 +455,7 @@ require (
 	github.com/gdamore/encoding v1.0.1 // indirect
 	github.com/gertd/go-pluralize v0.2.1 // indirect
 	github.com/getsops/gopgagent v0.0.0-20241224165529-7044f28e491e // indirect
-	github.com/ghodss/yaml v1.0.0 // indirect
+	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32 // indirect
 	github.com/ghostiam/protogetter v0.3.18 // indirect
 	github.com/github/go-spdx/v2 v2.4.0 // indirect
 	github.com/gkampitakis/ciinfo v0.3.4 // indirect
@@ -460,7 +507,7 @@ require (
 	github.com/go-toolsmith/typep v1.1.0 // indirect
 	github.com/go-xmlfmt/xmlfmt v1.1.3 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
-	github.com/goccy/go-json v0.10.5 // indirect
+	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/gocsaf/csaf/v3 v3.5.1 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
@@ -491,7 +538,6 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-github/v30 v30.1.0 // indirect
 	github.com/google/go-github/v53 v53.2.1-0.20230815134205-bb00f570d301 // indirect
-	github.com/google/go-github/v73 v73.0.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/google/licensecheck v0.3.1 // indirect
@@ -604,11 +650,11 @@ require (
 	github.com/ldez/usetesting v0.5.0 // indirect
 	github.com/leonklingele/grouper v1.1.2 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.4 // indirect
-	github.com/lestrrat-go/dsig v1.0.0 // indirect
+	github.com/lestrrat-go/dsig v1.2.1 // indirect
 	github.com/lestrrat-go/dsig-secp256k1 v1.0.0 // indirect
 	github.com/lestrrat-go/httpcc v1.0.1 // indirect
-	github.com/lestrrat-go/httprc/v3 v3.0.2 // indirect
-	github.com/lestrrat-go/jwx/v3 v3.0.13 // indirect
+	github.com/lestrrat-go/httprc/v3 v3.0.5 // indirect
+	github.com/lestrrat-go/jwx/v3 v3.1.1 // indirect
 	github.com/lestrrat-go/option/v2 v2.0.0 // indirect
 	github.com/lib/pq v1.12.3 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
@@ -704,7 +750,7 @@ require (
 	github.com/olekukonko/ll v0.1.6 // indirect
 	github.com/olekukonko/tablewriter v1.1.4 // indirect
 	github.com/olvrng/ujson v1.1.0 // indirect
-	github.com/open-policy-agent/opa v1.14.1 // indirect
+	github.com/open-policy-agent/opa v1.17.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/runtime-spec v1.3.0 // indirect
 	github.com/openvex/go-vex v0.2.8 // indirect
@@ -732,10 +778,10 @@ require (
 	github.com/planetscale/vtprotobuf v0.6.1-0.20250313105119-ba97887b0a25 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/project-copacetic/copacetic v0.10.0 // indirect
-	github.com/prometheus/client_golang v1.23.2 // indirect
+	github.com/prometheus/client_golang v1.24.1 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
-	github.com/prometheus/common v0.69.0 // indirect
-	github.com/prometheus/procfs v0.20.1 // indirect
+	github.com/prometheus/common v0.70.1 // indirect
+	github.com/prometheus/procfs v0.21.1 // indirect
 	github.com/quasilyte/go-ruleguard v0.4.5 // indirect
 	github.com/quasilyte/go-ruleguard/dsl v0.3.23 // indirect
 	github.com/quasilyte/gogrep v0.5.0 // indirect
@@ -786,8 +832,8 @@ require (
 	github.com/siderolabs/net v0.4.0 // indirect
 	github.com/siderolabs/proto-codec v0.1.4 // indirect
 	github.com/siderolabs/protoenc v0.2.4 // indirect
-	github.com/sigstore/cosign/v3 v3.0.6 // indirect
-	github.com/sigstore/fulcio v1.8.6 // indirect
+	github.com/sigstore/cosign/v3 v3.1.2 // indirect
+	github.com/sigstore/fulcio v1.8.8 // indirect
 	github.com/sigstore/protobuf-specs v0.5.1 // indirect
 	github.com/sigstore/rekor v1.5.3 // indirect
 	github.com/sigstore/rekor-tiles/v2 v2.3.0 // indirect
@@ -849,11 +895,11 @@ require (
 	github.com/urfave/cli v1.22.17 // indirect
 	github.com/uudashr/gocognit v1.2.0 // indirect
 	github.com/uudashr/iface v1.4.1 // indirect
-	github.com/valyala/fastjson v1.6.7 // indirect
+	github.com/valyala/fastjson v1.6.10 // indirect
 	github.com/vbatts/go-mtree v0.7.0 // indirect
 	github.com/vbatts/tar-split v0.12.3 // indirect
 	github.com/vbauerster/mpb/v8 v8.10.2 // indirect
-	github.com/vektah/gqlparser/v2 v2.5.32 // indirect
+	github.com/vektah/gqlparser/v2 v2.5.33 // indirect
 	github.com/vifraa/gopom v1.0.0 // indirect
 	github.com/vishvananda/netlink v1.3.2-0.20260624190457-bab08b3566fc // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
@@ -962,7 +1008,7 @@ require (
 	k8s.io/component-helpers v0.36.4 // indirect
 	k8s.io/cri-api v0.36.3 // indirect
 	k8s.io/cri-client v0.36.3 // indirect
-	k8s.io/kube-aggregator v0.36.0 // indirect
+	k8s.io/kube-aggregator v0.36.3 // indirect
 	k8s.io/kube-openapi v0.0.0-20260603220949-865597e52e25 // indirect
 	k8s.io/kube-proxy v0.36.2 // indirect
 	k8s.io/kubelet v0.36.2 // indirect
@@ -985,7 +1031,7 @@ require (
 	sigs.k8s.io/knftables v0.0.21 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/release-utils v0.12.4 // indirect
-	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
+	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
 )
 
 // Dependency version pins: modules replaced here have upstream incompatibilities
@@ -1054,6 +1100,13 @@ replace (
 	// longer imports libcontainer/user) — bumping it cannot go past v1.3.6 without
 	// reintroducing the break described above.
 	github.com/opencontainers/runc => github.com/opencontainers/runc v1.3.6
+
+	// Kyverno's policy engine (pkg/svc/gitops/kyvernopolicy) compiles its Pod Security
+	// checks against Kyverno's fork of pod-security-admission, which keeps the
+	// field-error API upstream removed. Kyverno declares the same replace, but a
+	// dependency's replace does not apply to KSail, so it is repeated here. Keep the
+	// pseudo-version in step with the replace in the kyverno go.mod on each bump.
+	k8s.io/pod-security-admission => github.com/kyverno/pod-security-admission v0.0.0-20251031094455-46f20778634f
 )
 
 tool (
