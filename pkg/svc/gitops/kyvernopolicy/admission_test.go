@@ -463,3 +463,130 @@ func TestEvaluate_UnknownNamespaceKeepsGeneratedPodControllerRules(t *testing.T)
 		assert.Equal(t, "prod-pods", violation.Policy)
 	}
 }
+
+// splitEnforcePolicy puts its only Enforce action on a namespace-selector rule
+// and pairs it with an Audit rule whose context cannot load offline.
+const splitEnforcePolicy = `
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: split-enforce
+spec:
+  failurePolicy: Fail
+  rules:
+  - name: prod-team
+    match:
+      any:
+      - resources:
+          kinds: ["ConfigMap"]
+          namespaceSelector:
+            matchLabels:
+              env: prod
+    validate:
+      failureAction: Enforce
+      message: "label team is required in prod"
+      pattern:
+        metadata:
+          labels:
+            team: "?*"
+  - name: needs-cluster
+    match:
+      any:
+      - resources:
+          kinds: ["ConfigMap"]
+    context:
+    - name: kube
+      apiCall:
+        urlPath: /api/v1/namespaces/kube-system/secrets
+    validate:
+      failureAction: Audit
+      message: "kubernetes context must stay unloaded"
+      deny:
+        conditions:
+          any:
+          - key: "{{ kube }}"
+            operator: Equals
+            value: "unreachable"
+`
+
+func TestEvaluate_UnknownNamespaceKeepsPolicyEnforcingPath(t *testing.T) {
+	t.Parallel()
+
+	engine := kyvernopolicy.NewEngine(
+		[]kyvernov1.PolicyInterface{policy(t, splitEnforcePolicy)},
+		nil,
+	)
+
+	violations, err := engine.Evaluate(t.Context(), configMap("elsewhere", nil))
+	require.NoError(t, err)
+
+	byRule := map[string]kyvernopolicy.Violation{}
+	for _, violation := range violations {
+		byRule[violation.Rule] = violation
+	}
+
+	require.True(t, byRule["prod-team"].Unsupported)
+
+	errored, found := byRule["needs-cluster"]
+	require.True(t, found, "the evaluable rule must still be evaluated")
+	assert.True(t, errored.Error)
+	assert.True(t, errored.Blocking,
+		"the policy is on the enforcing path even though its Enforce rule could not be evaluated")
+}
+
+// excludedSelectorPolicy selects on namespace labels but excludes one
+// ConfigMap by name, which needs no labels to decide.
+const excludedSelectorPolicy = `
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: excluded-selector
+spec:
+  validationFailureAction: Enforce
+  rules:
+  - name: prod-team
+    match:
+      any:
+      - resources:
+          kinds: ["ConfigMap"]
+          namespaceSelector:
+            matchLabels:
+              env: prod
+    exclude:
+      any:
+      - resources:
+          names: ["settings"]
+      - resources:
+          kinds: ["ConfigMap"]
+          namespaceSelector:
+            matchLabels:
+              exempt: "true"
+    validate:
+      message: "label team is required in prod"
+      pattern:
+        metadata:
+          labels:
+            team: "?*"
+`
+
+func TestEvaluate_UnknownNamespaceHonoursLabelFreeExclusions(t *testing.T) {
+	t.Parallel()
+
+	engine := kyvernopolicy.NewEngine(
+		[]kyvernov1.PolicyInterface{policy(t, excludedSelectorPolicy)},
+		nil,
+	)
+
+	excluded, err := engine.Evaluate(t.Context(), configMap("elsewhere", nil))
+	require.NoError(t, err)
+	assert.Empty(t, excluded, "a ConfigMap excluded by name must not be reported as unsupported")
+
+	other := configMap("elsewhere", nil)
+	other["metadata"].(map[string]any)["name"] = "other"
+
+	unexcluded, err := engine.Evaluate(t.Context(), other)
+	require.NoError(t, err)
+	require.Len(t, unexcluded, 1)
+	assert.True(t, unexcluded[0].Unsupported,
+		"a label-dependent exclusion must not hide a rule whose labels are unknown")
+}

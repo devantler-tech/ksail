@@ -183,7 +183,11 @@ func (e *Engine) Evaluate(ctx context.Context, doc map[string]any) ([]Violation,
 
 	var violations []Violation
 
-	for _, policy := range e.policies {
+	for _, original := range e.policies {
+		// policy may shrink to the rules evaluable offline; blocking is still
+		// classified against original, as the admission path sees it.
+		policy := original
+
 		namespaceLabels, err := e.namespaceLabels(resource, policy)
 		if apierrors.IsNotFound(err) {
 			evaluable, unsupported, splitErr := e.splitOnUnknownNamespace(resource, policy)
@@ -216,7 +220,7 @@ func (e *Engine) Evaluate(ctx context.Context, doc map[string]any) ([]Violation,
 			ctx,
 			policyContext.WithNamespaceLabels(namespaceLabels).WithPolicy(policy),
 		)
-		violations = append(violations, collect(ctx, policy, response)...)
+		violations = append(violations, collect(ctx, original, response)...)
 	}
 
 	return violations, nil
@@ -334,7 +338,7 @@ func broadMatch(
 	rule kyvernov1.Rule,
 ) bool {
 	broadened := *rule.DeepCopy()
-	broadened.ExcludeResources = nil
+	broadened.ExcludeResources = labelFreeExclusions(broadened.ExcludeResources)
 	broadened.MatchResources.NamespaceSelector = nil
 
 	for index := range broadened.MatchResources.Any {
@@ -449,4 +453,46 @@ func policyName(policy kyvernov1.PolicyInterface) string {
 	}
 
 	return policy.GetName()
+}
+
+// labelFreeExclusions returns the part of an exclude block that does not depend
+// on namespace labels, so an exclusion that holds whatever those labels are
+// still applies. A filter that selects on namespace labels is dropped from an
+// any block; an all block, or a plain block, that selects on them is dropped
+// entirely, because excluding less can only widen a match.
+func labelFreeExclusions(exclude *kyvernov1.MatchResources) *kyvernov1.MatchResources {
+	if exclude == nil {
+		return nil
+	}
+
+	switch {
+	case len(exclude.Any) > 0:
+		var kept kyvernov1.ResourceFilters
+
+		for _, filter := range exclude.Any {
+			if filter.NamespaceSelector == nil {
+				kept = append(kept, filter)
+			}
+		}
+
+		if len(kept) == 0 {
+			return nil
+		}
+
+		exclude.Any = kept
+
+		return exclude
+	case len(exclude.All) > 0:
+		for _, filter := range exclude.All {
+			if filter.NamespaceSelector != nil {
+				return nil
+			}
+		}
+
+		return exclude
+	case exclude.NamespaceSelector != nil:
+		return nil
+	default:
+		return exclude
+	}
 }
