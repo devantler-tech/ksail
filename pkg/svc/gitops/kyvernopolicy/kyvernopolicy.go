@@ -257,6 +257,7 @@ func (e *Engine) splitOnUnknownNamespace(
 	policy kyvernov1.PolicyInterface,
 ) (kyvernov1.PolicyInterface, []Violation, error) {
 	rules := policy.GetSpec().Rules
+	namespace := resource.GetNamespace()
 
 	var (
 		evaluable   []kyvernov1.Rule
@@ -278,17 +279,7 @@ func (e *Engine) splitOnUnknownNamespace(
 		}
 
 		if applyOne && unknownEarlierRule {
-			unsupported = append(unsupported, Violation{
-				Policy: policyName(policy),
-				Rule:   name,
-				Message: fmt.Sprintf(
-					"an earlier rule's namespaceSelector cannot be evaluated offline and this "+
-						"policy sets applyRules: One, so whether namespace %q reaches this rule "+
-						"is unknown",
-					resource.GetNamespace(),
-				),
-				Unsupported: true,
-			})
+			unsupported = append(unsupported, unknownReachViolation(policy, name, namespace))
 
 			continue
 		}
@@ -302,16 +293,7 @@ func (e *Engine) splitOnUnknownNamespace(
 		case apierrors.IsNotFound(err):
 			unknownEarlierRule = true
 
-			unsupported = append(unsupported, Violation{
-				Policy: policyName(policy),
-				Rule:   name,
-				Message: fmt.Sprintf(
-					"namespace %q is not among the rendered documents, so its labels are unknown "+
-						"and this rule's namespaceSelector cannot be evaluated offline",
-					resource.GetNamespace(),
-				),
-				Unsupported: true,
-			})
+			unsupported = append(unsupported, unknownNamespaceViolation(policy, name, namespace))
 		case err != nil:
 			return nil, nil, fmt.Errorf(
 				"resolve namespace labels for %s rule %s: %w",
@@ -332,6 +314,42 @@ func (e *Engine) splitOnUnknownNamespace(
 	remaining.GetSpec().Rules = evaluable
 
 	return remaining, unsupported, nil
+}
+
+// unknownReachViolation reports a rule the engine is not known to reach: an
+// earlier rule's namespaceSelector could not be evaluated offline, and the
+// policy sets applyRules: One, so the engine may stop before this rule runs.
+func unknownReachViolation(policy kyvernov1.PolicyInterface, rule, namespace string) Violation {
+	return Violation{
+		Policy: policyName(policy),
+		Rule:   rule,
+		Message: fmt.Sprintf(
+			"an earlier rule's namespaceSelector cannot be evaluated offline and this "+
+				"policy sets applyRules: One, so whether namespace %q reaches this rule "+
+				"is unknown",
+			namespace,
+		),
+		Unsupported: true,
+	}
+}
+
+// unknownNamespaceViolation reports a rule whose namespaceSelector cannot be
+// evaluated because the resource's Namespace is not among the rendered
+// documents, so its labels are unknown.
+func unknownNamespaceViolation(
+	policy kyvernov1.PolicyInterface,
+	rule, namespace string,
+) Violation {
+	return Violation{
+		Policy: policyName(policy),
+		Rule:   rule,
+		Message: fmt.Sprintf(
+			"namespace %q is not among the rendered documents, so its labels are unknown "+
+				"and this rule's namespaceSelector cannot be evaluated offline",
+			namespace,
+		),
+		Unsupported: true,
+	}
 }
 
 // matchedRule reports whether rule, or a pod-controller rule Kyverno generates
