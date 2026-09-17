@@ -51,7 +51,7 @@ Distribution is chosen via `--distribution` (`Vanilla`, `K3s`, `Talos`, `VCluste
 
 ## MCP server
 
-This plugin registers the `ksail` MCP server via `.mcp.json` (`command: ksail, args: [mcp]`). All `ksail cluster` and `ksail workload` commands (including the nested `ksail workload cipher` SOPS operations) are exposed as consolidated MCP tools (`cluster_read`, `cluster_write`, `workload_read`, `workload_write`). Prefer these tools for cluster/workload operations when running inside Copilot CLI.
+This plugin registers the `ksail` MCP server via `.mcp.json` (`command: ksail, args: [open, mcp]`). The `ksail cluster`, `ksail workload` (including the nested `ksail workload cipher` SOPS operations), project and tenant commands are exposed as consolidated MCP tools (`cluster_read`, `cluster_write`, `workload_read`, `workload_write`, `project_read`, `project_write`, `tenant_write`). Prefer these tools for cluster/workload operations when running inside Copilot CLI.
 
 ## Safety
 
