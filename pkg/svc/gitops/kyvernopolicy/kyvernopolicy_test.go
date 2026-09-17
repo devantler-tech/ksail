@@ -88,7 +88,10 @@ func TestEvaluate_CompliantDocumentPasses(t *testing.T) {
 
 	engine := kyvernopolicy.NewEngine([]kyvernov1.PolicyInterface{requireTeam(t, "Enforce")})
 
-	violations, err := engine.Evaluate(t.Context(), configMap("default", map[string]any{"team": "platform"}))
+	violations, err := engine.Evaluate(
+		t.Context(),
+		configMap("default", map[string]any{"team": "platform"}),
+	)
 	require.NoError(t, err)
 	assert.Empty(t, violations)
 }
@@ -186,8 +189,16 @@ spec:
 func TestIsPolicy(t *testing.T) {
 	t.Parallel()
 
-	assert.True(t, kyvernopolicy.IsPolicy(map[string]any{"apiVersion": "kyverno.io/v1", "kind": "ClusterPolicy"}))
-	assert.True(t, kyvernopolicy.IsPolicy(map[string]any{"apiVersion": "kyverno.io/v1", "kind": "Policy"}))
+	assert.True(
+		t,
+		kyvernopolicy.IsPolicy(
+			map[string]any{"apiVersion": "kyverno.io/v1", "kind": "ClusterPolicy"},
+		),
+	)
+	assert.True(
+		t,
+		kyvernopolicy.IsPolicy(map[string]any{"apiVersion": "kyverno.io/v1", "kind": "Policy"}),
+	)
 	assert.False(t, kyvernopolicy.IsPolicy(
 		map[string]any{"apiVersion": "policies.kyverno.io/v1", "kind": "ValidatingPolicy"},
 	))
@@ -207,6 +218,7 @@ func TestDecodePolicy_RejectsUnknownField(t *testing.T) {
 	doc := decodeYAML(t, sprintf(requireTeamLabel, "Enforce"))
 	spec, ok := doc["spec"].(map[string]any)
 	require.True(t, ok)
+
 	spec["validationFailureActon"] = "Enforce"
 
 	_, err := kyvernopolicy.DecodePolicy(doc)

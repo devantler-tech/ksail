@@ -148,6 +148,11 @@ func TestEvaluate_NetworkContextIsNeverLoaded(t *testing.T) {
 
 	violations, err := engine.Evaluate(t.Context(), configMap("default", nil))
 	require.NoError(t, err)
-	require.Len(t, violations, networkContextRules, "every rule must run, or its context was never reached")
+	require.Len(
+		t,
+		violations,
+		networkContextRules,
+		"every rule must run, or its context was never reached",
+	)
 	assert.Zero(t, connections.Load(), "evaluating a policy must not open a network connection")
 }
