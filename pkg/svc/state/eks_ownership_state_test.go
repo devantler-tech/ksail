@@ -387,6 +387,20 @@ func TestListEKSOwnershipStatesRefusesAMalformedRecordAsAbsence(t *testing.T) {
 
 			return record
 		},
+		"empty aws options": func(clusterName string) map[string]any {
+			record := completeOwnershipRecord(clusterName, "eu-north-1")
+			record["awsOptions"] = map[string]any{}
+
+			return record
+		},
+		"partial aws options": func(clusterName string) map[string]any {
+			record := completeOwnershipRecord(clusterName, "eu-north-1")
+			options := canonicalAWSOptions()
+			options.SessionTokenEnvVar = ""
+			record["awsOptions"] = options
+
+			return record
+		},
 		"region does not match its filename": func(clusterName string) map[string]any {
 			return completeOwnershipRecord(clusterName, "us-west-2")
 		},

@@ -252,10 +252,30 @@ func loadUsableEKSOwnershipRecord(clusterName, path string) (*EKSOwnershipState,
 
 	err = validateEKSOwnershipState(clusterName, region, &ownership)
 	if err != nil {
-		return nil, isLegacyEKSOwnershipRecord(clusterName, region, &ownership)
+		return nil, !hasAWSOptionsField(data) && isLegacyEKSOwnershipRecord(clusterName, region, &ownership)
 	}
 
 	return &ownership, true
+}
+
+// hasAWSOptionsField reports whether the raw record carries an awsOptions field at all. Only a record
+// without one predates the awsOptions schema; a present but incomplete field is a damaged record.
+func hasAWSOptionsField(data []byte) bool {
+	var fields map[string]json.RawMessage
+
+	err := json.Unmarshal(data, &fields)
+	if err != nil {
+		return true
+	}
+
+	// encoding/json matches struct fields case-insensitively, so any casing populated AWSOptions.
+	for name := range fields {
+		if strings.EqualFold(name, "awsOptions") {
+			return true
+		}
+	}
+
+	return false
 }
 
 // isEKSOwnershipRecordAtPath reports whether path is the file the record's own region keys to.
