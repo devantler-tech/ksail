@@ -5,15 +5,16 @@ description: Use the ksail CLI to spin up and manage Kubernetes clusters (Kind/K
 
 # ksail
 
-KSail bundles common Kubernetes tooling (kubectl, helm, kind, k3d, vcluster, flux, argocd, …) into a single Go binary. Only Docker is required externally.
+KSail bundles common Kubernetes tooling (kubectl, helm, kind, k3d, vcluster, flux, argocd, …) into a single Go binary. Local clusters need only Docker; cloud providers also need that provider's credentials, and EKS additionally needs the `eksctl` CLI.
 
 Full docs: <https://ksail.devantler.tech>. Treat the docs site and `ksail <command> --help` as the source of truth; do not paraphrase flag semantics — link users to the relevant page instead.
 
 ## Prerequisites
 
 - `ksail` on `PATH` (see <https://ksail.devantler.tech/installation/>)
-- Docker daemon running (required for all local cluster providers)
-- Cloud credentials only when using non-Docker providers (`HCLOUD_TOKEN` for Hetzner, `OMNI_SERVICE_ACCOUNT_KEY` for Omni)
+- Docker daemon running (required for the local `Docker` provider)
+- Cloud credentials only when using non-Docker providers (`HCLOUD_TOKEN` for Hetzner, `OMNI_SERVICE_ACCOUNT_KEY` for Omni, standard AWS SDK credentials such as `aws configure` or `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_REGION` for AWS)
+- `eksctl` on `PATH` for the `EKS` distribution (see <https://ksail.devantler.tech/distributions/eks/>)
 
 ## When to use this skill
 
