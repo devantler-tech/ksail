@@ -320,3 +320,68 @@ func TestEvaluate_BlockingIsResolvedPerRule(t *testing.T) {
 	)
 	assert.True(t, blocking["enforce-team"], "an Enforce rule's failure blocks")
 }
+
+const mixedSelectorPolicy = `
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: mixed-selectors
+spec:
+  validationFailureAction: Enforce
+  rules:
+  - name: prod-team
+    match:
+      any:
+      - resources:
+          kinds: ["ConfigMap"]
+          namespaceSelector:
+            matchLabels:
+              env: prod
+    validate:
+      message: "label team is required in prod"
+      pattern:
+        metadata:
+          labels:
+            team: "?*"
+  - name: owner-everywhere
+    match:
+      any:
+      - resources:
+          kinds: ["ConfigMap"]
+    validate:
+      message: "label owner is required"
+      pattern:
+        metadata:
+          labels:
+            owner: "?*"
+`
+
+func TestEvaluate_UnknownNamespaceIsUnsupportedOnlyForSelectorRules(t *testing.T) {
+	t.Parallel()
+
+	engine := kyvernopolicy.NewEngine(
+		[]kyvernov1.PolicyInterface{policy(t, mixedSelectorPolicy)},
+		nil,
+	)
+
+	violations, err := engine.Evaluate(t.Context(), configMap("elsewhere", nil))
+	require.NoError(t, err)
+	require.Len(t, violations, 2)
+
+	byRule := map[string]kyvernopolicy.Violation{}
+	for _, violation := range violations {
+		byRule[violation.Rule] = violation
+	}
+
+	selector, found := byRule["prod-team"]
+	require.True(t, found, "the selector rule must report that it could not be evaluated")
+	assert.True(t, selector.Unsupported)
+	assert.False(t, selector.Blocking)
+	assert.Equal(t, "mixed-selectors", selector.Policy)
+	assert.Contains(t, selector.Message, "elsewhere")
+
+	plain, found := byRule["owner-everywhere"]
+	require.True(t, found, "a rule without selectors in the same policy must still be evaluated")
+	assert.False(t, plain.Unsupported)
+	assert.True(t, plain.Blocking, "its enforced failure must not be hidden by the selector rule")
+}

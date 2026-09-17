@@ -164,10 +164,11 @@ func namespaceLister(docs []map[string]any) corev1listers.NamespaceLister {
 
 // Evaluate applies every validating policy to doc, simulating its creation,
 // and returns the failing and erroring rules. As in a cluster, the engine
-// applies a namespaced Policy only to documents in its own namespace. A policy
+// applies a namespaced Policy only to documents in its own namespace. A rule
 // that selects on namespace labels, for a document whose Namespace is not
 // among the rendered documents, is reported as Unsupported instead of being
-// evaluated against labels it cannot see.
+// evaluated against labels it cannot see; the policy's other rules are still
+// evaluated.
 //
 // doc's namespace is used as given. For a namespaced kind the namespace a
 // cluster admits it into is chosen by whatever applies it (a Flux
@@ -180,25 +181,21 @@ func (e *Engine) Evaluate(ctx context.Context, doc map[string]any) ([]Violation,
 	var violations []Violation
 
 	for _, policy := range e.policies {
-		namespaceLabels, err := engineutils.GetNamespaceSelectorsFromNamespaceLister(
-			resource.GetKind(),
-			resource.GetNamespace(),
-			e.namespaces,
-			[]kyvernov1.PolicyInterface{policy},
-			logr.Discard(),
-		)
+		namespaceLabels, err := e.namespaceLabels(resource, policy)
 		if apierrors.IsNotFound(err) {
-			violations = append(violations, Violation{
-				Policy: policyName(policy),
-				Message: fmt.Sprintf(
-					"namespace %q is not among the rendered documents, so its labels are unknown "+
-						"and this policy's namespaceSelector cannot be evaluated offline",
-					resource.GetNamespace(),
-				),
-				Unsupported: true,
-			})
+			evaluable, unsupported, splitErr := e.splitOnUnknownNamespace(resource, policy)
+			if splitErr != nil {
+				return nil, splitErr
+			}
 
-			continue
+			violations = append(violations, unsupported...)
+
+			if evaluable == nil {
+				continue
+			}
+
+			// The remaining rules select on no namespace labels, so none are needed.
+			policy, namespaceLabels, err = evaluable, nil, nil
 		}
 
 		if err != nil {
@@ -220,6 +217,80 @@ func (e *Engine) Evaluate(ctx context.Context, doc map[string]any) ([]Violation,
 	}
 
 	return violations, nil
+}
+
+// namespaceLabels resolves the labels of resource's Namespace when policy selects
+// on them. It returns a NotFound error when policy needs labels of a Namespace
+// that is not among the rendered documents.
+func (e *Engine) namespaceLabels(
+	resource unstructured.Unstructured,
+	policy kyvernov1.PolicyInterface,
+) (map[string]string, error) {
+	labels, err := engineutils.GetNamespaceSelectorsFromNamespaceLister(
+		resource.GetKind(),
+		resource.GetNamespace(),
+		e.namespaces,
+		[]kyvernov1.PolicyInterface{policy},
+		logr.Discard(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get namespace selectors: %w", err)
+	}
+
+	return labels, nil
+}
+
+// splitOnUnknownNamespace handles a policy whose namespace labels are unknown one
+// rule at a time, so a rule that selects on those labels does not hide the
+// results of the rules that do not. It returns a copy of policy holding only the
+// rules that need no namespace labels (nil when there are none), and an
+// Unsupported violation for each rule that does.
+func (e *Engine) splitOnUnknownNamespace(
+	resource unstructured.Unstructured,
+	policy kyvernov1.PolicyInterface,
+) (kyvernov1.PolicyInterface, []Violation, error) {
+	rules := policy.GetSpec().Rules
+
+	var (
+		evaluable   []kyvernov1.Rule
+		unsupported []Violation
+	)
+
+	for i := range rules {
+		single := policy.CreateDeepCopy()
+		single.GetSpec().Rules = []kyvernov1.Rule{rules[i]}
+
+		_, err := e.namespaceLabels(resource, single)
+
+		switch {
+		case apierrors.IsNotFound(err):
+			unsupported = append(unsupported, Violation{
+				Policy: policyName(policy),
+				Rule:   rules[i].Name,
+				Message: fmt.Sprintf(
+					"namespace %q is not among the rendered documents, so its labels are unknown "+
+						"and this rule's namespaceSelector cannot be evaluated offline",
+					resource.GetNamespace(),
+				),
+				Unsupported: true,
+			})
+		case err != nil:
+			return nil, nil, fmt.Errorf(
+				"resolve namespace labels for %s rule %s: %w", policyName(policy), rules[i].Name, err,
+			)
+		default:
+			evaluable = append(evaluable, rules[i])
+		}
+	}
+
+	if len(evaluable) == 0 {
+		return nil, unsupported, nil
+	}
+
+	remaining := policy.CreateDeepCopy()
+	remaining.GetSpec().Rules = evaluable
+
+	return remaining, unsupported, nil
 }
 
 // collect converts a response into violations. A failure blocks when Kyverno
