@@ -168,6 +168,12 @@ func namespaceLister(docs []map[string]any) corev1listers.NamespaceLister {
 // that selects on namespace labels, for a document whose Namespace is not
 // among the rendered documents, is reported as Unsupported instead of being
 // evaluated against labels it cannot see.
+//
+// doc's namespace is used as given. For a namespaced kind the namespace a
+// cluster admits it into is chosen by whatever applies it (a Flux
+// targetNamespace, a kubectl context), not by the document, and the engine has
+// no API discovery to tell namespaced kinds from cluster-scoped ones, so the
+// caller sets the namespace the applier would use before evaluating.
 func (e *Engine) Evaluate(ctx context.Context, doc map[string]any) ([]Violation, error) {
 	resource := unstructured.Unstructured{Object: doc}
 
@@ -226,7 +232,6 @@ func collect(
 	policy kyvernov1.PolicyInterface,
 	response engineapi.EngineResponse,
 ) []Violation {
-	blocking := response.HasEnforcedFailure()
 	errorBlocking := enforcing(policy.GetSpec()) &&
 		policy.GetSpec().GetFailurePolicy(ctx) == kyvernov1.Fail
 
@@ -241,7 +246,7 @@ func collect(
 				Policy:   policyName(policy),
 				Rule:     rule.Name(),
 				Message:  rule.Message(),
-				Blocking: blocking,
+				Blocking: enforcedFailure(response, *rule),
 			})
 		case engineapi.RuleStatusError:
 			violations = append(violations, Violation{
@@ -256,6 +261,16 @@ func collect(
 	}
 
 	return violations
+}
+
+// enforcedFailure reports whether Kyverno resolves an Enforce action for this
+// one failing rule. HasEnforcedFailure answers for the whole response, so it is
+// asked about a copy holding only this rule; otherwise an Audit failure beside
+// an enforced failure would be reported as blocking.
+func enforcedFailure(response engineapi.EngineResponse, rule engineapi.RuleResponse) bool {
+	response.PolicyResponse.Rules = []engineapi.RuleResponse{rule}
+
+	return response.HasEnforcedFailure()
 }
 
 // enforcing reports whether Kyverno's policy cache places the policy on the

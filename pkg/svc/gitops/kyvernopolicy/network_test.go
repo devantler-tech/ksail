@@ -3,8 +3,8 @@ package kyvernopolicy_test
 import (
 	"errors"
 	"net"
-	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/kyvernopolicy"
 	kyvernov1 "github.com/kyverno/kyverno/api/kyverno/v1"
@@ -104,17 +104,24 @@ spec:
 // networkContextRules is the number of rules in networkContextPolicy.
 const networkContextRules = 4
 
-// countConnections accepts TCP connections on a loopback listener and counts them, so a request of
-// any protocol (plain HTTP, TLS, registry) is observed, not only well-formed HTTP.
-func countConnections(t *testing.T) (string, *atomic.Int64) {
+// countConnections accepts TCP connections on a loopback listener, so a request of any protocol
+// (plain HTTP, TLS, registry) is observed, not only well-formed HTTP. The returned function reports
+// how many connections were made before it was called. It dials a sentinel connection and reads
+// accepted connections until it reaches the sentinel: accepts are served in arrival order, so every
+// earlier connection is counted, however late the accept loop was scheduled.
+func countConnections(t *testing.T) (string, func() int) {
 	t.Helper()
 
 	listener, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 
-	var connections atomic.Int64
+	t.Cleanup(func() { _ = listener.Close() })
+
+	remotes := make(chan string, acceptBuffer)
 
 	go func() {
+		defer close(remotes)
+
 		for {
 			conn, acceptErr := listener.Accept()
 			if errors.Is(acceptErr, net.ErrClosed) {
@@ -122,17 +129,49 @@ func countConnections(t *testing.T) (string, *atomic.Int64) {
 			}
 
 			if acceptErr == nil {
-				connections.Add(1)
+				remotes <- conn.RemoteAddr().String()
 
 				_ = conn.Close()
 			}
 		}
 	}()
 
-	t.Cleanup(func() { _ = listener.Close() })
+	address := listener.Addr().String()
 
-	return listener.Addr().String(), &connections
+	return address, func() int {
+		t.Helper()
+
+		sentinel, dialErr := (&net.Dialer{}).DialContext(t.Context(), "tcp", address)
+		require.NoError(t, dialErr)
+
+		defer func() { _ = sentinel.Close() }()
+
+		timeout := time.After(sentinelTimeout)
+		earlier := 0
+
+		for {
+			select {
+			case remote, open := <-remotes:
+				require.True(t, open, "the listener closed before the sentinel connection was accepted")
+
+				if remote == sentinel.LocalAddr().String() {
+					return earlier
+				}
+
+				earlier++
+			case <-timeout:
+				require.FailNow(t, "the sentinel connection was never accepted")
+			}
+		}
+	}
 }
+
+const (
+	// acceptBuffer bounds how many connections the accept loop records before it blocks.
+	acceptBuffer = 64
+	// sentinelTimeout bounds the wait for the accept loop to reach the sentinel connection.
+	sentinelTimeout = 10 * time.Second
+)
 
 // TestEvaluate_NetworkContextIsNeverLoaded pins that the offline evaluator opens no connection for a
 // policy's context entries. The engine has no Kubernetes client, registry client, ConfigMap resolver
@@ -141,7 +180,7 @@ func countConnections(t *testing.T) (string, *atomic.Int64) {
 func TestEvaluate_NetworkContextIsNeverLoaded(t *testing.T) {
 	t.Parallel()
 
-	address, connections := countConnections(t)
+	address, connectionsMade := countConnections(t)
 	engine := kyvernopolicy.NewEngine([]kyvernov1.PolicyInterface{
 		policy(t, sprintf(networkContextPolicy, address)),
 	}, nil)
@@ -154,5 +193,5 @@ func TestEvaluate_NetworkContextIsNeverLoaded(t *testing.T) {
 		networkContextRules,
 		"every rule must run, or its context was never reached",
 	)
-	assert.Zero(t, connections.Load(), "evaluating a policy must not open a network connection")
+	assert.Zero(t, connectionsMade(), "evaluating a policy must not open a network connection")
 }

@@ -262,3 +262,57 @@ spec:
 	require.Len(t, dev, 1)
 	assert.False(t, dev[0].Blocking)
 }
+
+const mixedActionPolicy = `
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: mixed-actions
+spec:
+  rules:
+  - name: audit-owner
+    match:
+      any:
+      - resources:
+          kinds: ["ConfigMap"]
+    validate:
+      failureAction: Audit
+      message: "label owner is recommended"
+      pattern:
+        metadata:
+          labels:
+            owner: "?*"
+  - name: enforce-team
+    match:
+      any:
+      - resources:
+          kinds: ["ConfigMap"]
+    validate:
+      failureAction: Enforce
+      message: "label team is required"
+      pattern:
+        metadata:
+          labels:
+            team: "?*"
+`
+
+func TestEvaluate_BlockingIsResolvedPerRule(t *testing.T) {
+	t.Parallel()
+
+	engine := kyvernopolicy.NewEngine(
+		[]kyvernov1.PolicyInterface{policy(t, mixedActionPolicy)},
+		nil,
+	)
+
+	violations, err := engine.Evaluate(t.Context(), configMap("default", nil))
+	require.NoError(t, err)
+	require.Len(t, violations, 2)
+
+	blocking := map[string]bool{}
+	for _, violation := range violations {
+		blocking[violation.Rule] = violation.Blocking
+	}
+
+	assert.False(t, blocking["audit-owner"], "an Audit rule never blocks, even beside an enforced failure")
+	assert.True(t, blocking["enforce-team"], "an Enforce rule's failure blocks")
+}
