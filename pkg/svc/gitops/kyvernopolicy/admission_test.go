@@ -385,3 +385,77 @@ func TestEvaluate_UnknownNamespaceIsUnsupportedOnlyForSelectorRules(t *testing.T
 	assert.False(t, plain.Unsupported)
 	assert.True(t, plain.Blocking, "its enforced failure must not be hidden by the selector rule")
 }
+
+// podSelectorPolicy selects Pods on namespace labels. Kyverno generates
+// pod-controller rules from it, so it also applies to Deployments.
+const podSelectorPolicy = `
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: prod-pods
+spec:
+  validationFailureAction: Enforce
+  rules:
+  - name: prod-pod-team
+    match:
+      any:
+      - resources:
+          kinds: ["Pod"]
+          namespaceSelector:
+            matchLabels:
+              env: prod
+    validate:
+      message: "label team is required on prod pods"
+      pattern:
+        metadata:
+          labels:
+            team: "?*"
+`
+
+func deployment(namespace string) map[string]any {
+	return map[string]any{
+		"apiVersion": "apps/v1",
+		"kind":       "Deployment",
+		"metadata":   map[string]any{"name": "web", "namespace": namespace},
+		"spec": map[string]any{
+			"selector": map[string]any{"matchLabels": map[string]any{"app": "web"}},
+			"template": map[string]any{
+				"metadata": map[string]any{"labels": map[string]any{"app": "web"}},
+				"spec": map[string]any{
+					"containers": []any{map[string]any{"name": "web", "image": "nginx"}},
+				},
+			},
+		},
+	}
+}
+
+func TestEvaluate_UnknownNamespaceIgnoresSelectorRulesForOtherKinds(t *testing.T) {
+	t.Parallel()
+
+	engine := kyvernopolicy.NewEngine(
+		[]kyvernov1.PolicyInterface{policy(t, podSelectorPolicy)},
+		nil,
+	)
+
+	violations, err := engine.Evaluate(t.Context(), configMap("elsewhere", nil))
+	require.NoError(t, err)
+	assert.Empty(t, violations, "a Pod-only rule must not report a ConfigMap as unsupported")
+}
+
+func TestEvaluate_UnknownNamespaceKeepsGeneratedPodControllerRules(t *testing.T) {
+	t.Parallel()
+
+	engine := kyvernopolicy.NewEngine(
+		[]kyvernov1.PolicyInterface{policy(t, podSelectorPolicy)},
+		nil,
+	)
+
+	violations, err := engine.Evaluate(t.Context(), deployment("elsewhere"))
+	require.NoError(t, err)
+	require.NotEmpty(t, violations, "the rule Kyverno generates for Deployments still selects on labels")
+
+	for _, violation := range violations {
+		assert.True(t, violation.Unsupported)
+		assert.Equal(t, "prod-pods", violation.Policy)
+	}
+}

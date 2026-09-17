@@ -16,12 +16,15 @@ import (
 
 	"github.com/go-logr/logr"
 	kyvernov1 "github.com/kyverno/kyverno/api/kyverno/v1"
+	kyvernov2 "github.com/kyverno/kyverno/api/kyverno/v2"
+	"github.com/kyverno/kyverno/pkg/autogen"
 	"github.com/kyverno/kyverno/pkg/config"
 	"github.com/kyverno/kyverno/pkg/engine"
 	engineapi "github.com/kyverno/kyverno/pkg/engine/api"
 	"github.com/kyverno/kyverno/pkg/engine/factories"
 	"github.com/kyverno/kyverno/pkg/engine/jmespath"
 	"github.com/kyverno/kyverno/pkg/engine/policycontext"
+	enginematch "github.com/kyverno/kyverno/pkg/engine/utils"
 	imageverifycache "github.com/kyverno/kyverno/pkg/image/verification/cache"
 	engineutils "github.com/kyverno/kyverno/pkg/utils/engine"
 	corev1 "k8s.io/api/core/v1"
@@ -257,6 +260,13 @@ func (e *Engine) splitOnUnknownNamespace(
 	)
 
 	for index := range rules {
+		// Kyverno resolves namespace labels before matching kinds, so a rule
+		// that cannot match this resource would otherwise be reported as
+		// Unsupported instead of producing no result.
+		if !mayMatch(resource, policy, rules[index]) {
+			continue
+		}
+
 		single := policy.CreateDeepCopy()
 		single.GetSpec().Rules = []kyvernov1.Rule{rules[index]}
 
@@ -294,6 +304,59 @@ func (e *Engine) splitOnUnknownNamespace(
 	remaining.GetSpec().Rules = evaluable
 
 	return remaining, unsupported, nil
+}
+
+// mayMatch reports whether rule, or a pod-controller rule Kyverno generates
+// from it, could match resource for some labels of its Namespace. False means
+// the engine would skip the rule whatever those labels are.
+func mayMatch(
+	resource unstructured.Unstructured,
+	policy kyvernov1.PolicyInterface,
+	rule kyvernov1.Rule,
+) bool {
+	single := policy.CreateDeepCopy()
+	single.GetSpec().Rules = []kyvernov1.Rule{rule}
+
+	for _, computed := range autogen.Default.ComputeRules(single, resource.GetKind()) {
+		if broadMatch(resource, policy, computed) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// broadMatch matches a copy of rule without its namespace selectors and
+// without its exclude block, both of which can only narrow a match.
+func broadMatch(
+	resource unstructured.Unstructured,
+	policy kyvernov1.PolicyInterface,
+	rule kyvernov1.Rule,
+) bool {
+	broadened := *rule.DeepCopy()
+	broadened.ExcludeResources = nil
+	broadened.MatchResources.NamespaceSelector = nil
+
+	for index := range broadened.MatchResources.Any {
+		broadened.MatchResources.Any[index].NamespaceSelector = nil
+	}
+
+	for index := range broadened.MatchResources.All {
+		broadened.MatchResources.All[index].NamespaceSelector = nil
+	}
+
+	err := enginematch.MatchesResourceDescription(
+		resource,
+		broadened,
+		kyvernov2.RequestInfo{},
+		nil,
+		policy.GetNamespace(),
+		resource.GroupVersionKind(),
+		"",
+		kyvernov1.Create,
+	)
+
+	return err == nil
 }
 
 // collect converts a response into violations. A failure blocks when Kyverno
