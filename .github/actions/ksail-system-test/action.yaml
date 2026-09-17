@@ -511,6 +511,7 @@ runs:
         DISTRIBUTION: ${{ inputs.distribution }}
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ steps.resolve-args.outputs.args }}
+        K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
       run: |
         set -euo pipefail
         LOG_FILE="/tmp/ksail-system-test-logs/cluster-update-flux-preserve.log"
@@ -530,7 +531,7 @@ runs:
         # Strip init-only flags that cluster update does not accept.
         UPDATE_ARGS=$(echo "$ARGS" | sed 's/--image-verification [^ ]*//')
         # shellcheck disable=SC2086
-        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS 2>&1 | tee "$LOG_FILE"
+        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG 2>&1 | tee "$LOG_FILE"
 
         if grep -q "No changes detected" "$LOG_FILE"; then
           echo "❌ ERROR: the planted sync-ref drift was not detected, so the FluxInstance was never rewritten"
