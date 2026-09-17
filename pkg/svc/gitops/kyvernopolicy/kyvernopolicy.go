@@ -59,7 +59,7 @@ type Violation struct {
 	// document: Kyverno resolves an Enforce action for the failing rule, or
 	// the policy is enforcing and its failurePolicy is Fail for an error.
 	Blocking bool
-	// Unsupported is true when the policy could not be evaluated offline;
+	// Unsupported is true when the rule could not be evaluated offline;
 	// Message says why. It is never Blocking.
 	Unsupported bool
 }
@@ -256,9 +256,9 @@ func (e *Engine) splitOnUnknownNamespace(
 		unsupported []Violation
 	)
 
-	for i := range rules {
+	for index := range rules {
 		single := policy.CreateDeepCopy()
-		single.GetSpec().Rules = []kyvernov1.Rule{rules[i]}
+		single.GetSpec().Rules = []kyvernov1.Rule{rules[index]}
 
 		_, err := e.namespaceLabels(resource, single)
 
@@ -266,7 +266,7 @@ func (e *Engine) splitOnUnknownNamespace(
 		case apierrors.IsNotFound(err):
 			unsupported = append(unsupported, Violation{
 				Policy: policyName(policy),
-				Rule:   rules[i].Name,
+				Rule:   rules[index].Name,
 				Message: fmt.Sprintf(
 					"namespace %q is not among the rendered documents, so its labels are unknown "+
 						"and this rule's namespaceSelector cannot be evaluated offline",
@@ -276,10 +276,10 @@ func (e *Engine) splitOnUnknownNamespace(
 			})
 		case err != nil:
 			return nil, nil, fmt.Errorf(
-				"resolve namespace labels for %s rule %s: %w", policyName(policy), rules[i].Name, err,
+				"resolve namespace labels for %s rule %s: %w", policyName(policy), rules[index].Name, err,
 			)
 		default:
-			evaluable = append(evaluable, rules[i])
+			evaluable = append(evaluable, rules[index])
 		}
 	}
 
