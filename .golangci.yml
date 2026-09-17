@@ -109,6 +109,7 @@ linters:
         - github.com/anchore/grype
         - github.com/kubescape/kubescape/v3
         - github.com/moby/go-archive
+        - k8s.io/pod-security-admission
     wsl_v5:
       allow-first-in-block: true
       allow-whole-block: false
