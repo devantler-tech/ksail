@@ -164,6 +164,8 @@ linters:
             - github.com/kubescape
             # kyverno's policy engine backs offline policy checks in pkg/svc/gitops/kyvernopolicy (#5355).
             - github.com/kyverno
+            # Kyverno's engine takes a logr.Logger; kyvernopolicy passes logr.Discard() (#5355).
+            - github.com/go-logr/logr
             - github.com/rancher
             - github.com/mittwald
             - github.com/modelcontextprotocol

@@ -104,12 +104,12 @@ func TestEvaluate_ErrorBlockingFollowsFailurePolicy(t *testing.T) {
 		},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			engine := kyvernopolicy.NewEngine(
-				[]kyvernov1.PolicyInterface{policy(t, sprintf(erroringPolicy, tc.action, tc.spec))},
+				[]kyvernov1.PolicyInterface{policy(t, sprintf(erroringPolicy, testCase.action, testCase.spec))},
 				nil,
 			)
 
@@ -117,7 +117,7 @@ func TestEvaluate_ErrorBlockingFollowsFailurePolicy(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, violations, 1)
 			assert.True(t, violations[0].Error)
-			assert.Equal(t, tc.blocking, violations[0].Blocking)
+			assert.Equal(t, testCase.blocking, violations[0].Blocking)
 		})
 	}
 }
@@ -203,14 +203,14 @@ func TestEvaluate_NamespaceSelectorWithUnknownNamespaceIsUnsupported(t *testing.
 		byUnsupported[violation.Unsupported] = violation
 	}
 
-	unsupported, ok := byUnsupported[true]
-	require.True(t, ok, "the selector policy must report that it could not be evaluated")
+	unsupported, found := byUnsupported[true]
+	require.True(t, found, "the selector policy must report that it could not be evaluated")
 	assert.Equal(t, "require-team-label", unsupported.Policy)
 	assert.False(t, unsupported.Blocking)
 	assert.Contains(t, unsupported.Message, "elsewhere")
 
-	evaluated, ok := byUnsupported[false]
-	require.True(t, ok, "a policy without selectors must still be evaluated")
+	evaluated, found := byUnsupported[false]
+	require.True(t, found, "a policy without selectors must still be evaluated")
 	assert.True(t, evaluated.Blocking)
 }
 
