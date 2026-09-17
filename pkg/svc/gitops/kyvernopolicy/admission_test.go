@@ -452,7 +452,11 @@ func TestEvaluate_UnknownNamespaceKeepsGeneratedPodControllerRules(t *testing.T)
 
 	violations, err := engine.Evaluate(t.Context(), deployment("elsewhere"))
 	require.NoError(t, err)
-	require.NotEmpty(t, violations, "the rule Kyverno generates for Deployments still selects on labels")
+	require.NotEmpty(
+		t,
+		violations,
+		"the rule Kyverno generates for Deployments still selects on labels",
+	)
 
 	for _, violation := range violations {
 		assert.True(t, violation.Unsupported)
