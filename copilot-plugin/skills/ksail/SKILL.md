@@ -5,15 +5,16 @@ description: Use the ksail CLI to spin up and manage Kubernetes clusters (Kind/K
 
 # ksail
 
-KSail bundles common Kubernetes tooling (kubectl, helm, kind, k3d, vcluster, flux, argocd, …) into a single Go binary. Only Docker is required externally.
+KSail bundles common Kubernetes tooling (kubectl, helm, kind, k3d, vcluster, flux, argocd, …) into a single Go binary. Local clusters need only Docker; cloud providers also need that provider's credentials, and EKS additionally needs the `eksctl` CLI.
 
 Full docs: <https://ksail.devantler.tech>. Treat the docs site and `ksail <command> --help` as the source of truth; do not paraphrase flag semantics — link users to the relevant page instead.
 
 ## Prerequisites
 
 - `ksail` on `PATH` (see <https://ksail.devantler.tech/installation/>)
-- Docker daemon running (required for all local cluster providers)
-- Cloud credentials only when using non-Docker providers (`HCLOUD_TOKEN` for Hetzner, `OMNI_SERVICE_ACCOUNT_KEY` for Omni)
+- Docker daemon running (required for the local `Docker` provider)
+- Cloud credentials only when using non-Docker providers (`HCLOUD_TOKEN` for Hetzner, `OMNI_SERVICE_ACCOUNT_KEY` for Omni, standard AWS SDK credentials such as `aws configure` or `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_REGION` for AWS)
+- `eksctl` on `PATH` for the `EKS` distribution (see <https://ksail.devantler.tech/distributions/eks/>)
 
 ## When to use this skill
 
@@ -51,7 +52,7 @@ Distribution is chosen via `--distribution` (`Vanilla`, `K3s`, `Talos`, `VCluste
 
 ## MCP server
 
-This plugin registers the `ksail` MCP server via `.mcp.json` (`command: ksail, args: [mcp]`). All `ksail cluster` and `ksail workload` commands (including the nested `ksail workload cipher` SOPS operations) are exposed as consolidated MCP tools (`cluster_read`, `cluster_write`, `workload_read`, `workload_write`). Prefer these tools for cluster/workload operations when running inside Copilot CLI.
+This plugin registers the `ksail` MCP server via `.mcp.json` (`command: ksail, args: [open, mcp]`). The `ksail cluster`, `ksail workload` (including the nested `ksail workload cipher` SOPS operations), project and tenant commands are exposed as consolidated MCP tools (`cluster_read`, `cluster_write`, `workload_read`, `workload_write`, `project_read`, `project_write`, `tenant_write`). Prefer these tools for cluster/workload operations when running inside Copilot CLI.
 
 ## Safety
 
