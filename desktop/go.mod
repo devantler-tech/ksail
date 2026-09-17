@@ -46,7 +46,7 @@ require (
 	cloud.google.com/go/monitoring v1.30.0 // indirect
 	cloud.google.com/go/storage v1.63.1 // indirect
 	dario.cat/mergo v1.0.2 // indirect
-	filippo.io/age v1.3.1 // indirect
+	filippo.io/age v1.3.2 // indirect
 	filippo.io/edwards25519 v1.2.0 // indirect
 	filippo.io/hpke v0.4.0 // indirect
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
