@@ -276,7 +276,10 @@ func (e *Engine) splitOnUnknownNamespace(
 			})
 		case err != nil:
 			return nil, nil, fmt.Errorf(
-				"resolve namespace labels for %s rule %s: %w", policyName(policy), rules[index].Name, err,
+				"resolve namespace labels for %s rule %s: %w",
+				policyName(policy),
+				rules[index].Name,
+				err,
 			)
 		default:
 			evaluable = append(evaluable, rules[index])
