@@ -1049,6 +1049,11 @@ func computeSpecOnlyDiff(
 	// it previews, and left verification drift undetectable on those provisioners entirely.
 	checkFluxVerifyDrift(cmd, ctx, diffEngine, diff)
 
+	// Check for registry credential drift. Registry passwords are redacted from the
+	// structural diff, so a credential-only rotation produces no field change here, and
+	// `ksail cluster diff` and every provisioner without an Updater need this check to see it.
+	checkRegistryCredentialDrift(cmd, ctx, diffEngine, diff)
+
 	return diff
 }
 

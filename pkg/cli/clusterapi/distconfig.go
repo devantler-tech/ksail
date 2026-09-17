@@ -193,7 +193,10 @@ func refuseEKSCreateOverCompletedState(distribution v1alpha1.Distribution, name 
 		"%w: %q still has local state from a completed EKS create, which binds it to the region it"+
 			" was created in. Creating it again would provision new resources in that region rather"+
 			" than the one selected now. Run `ksail cluster delete --name %s` to remove the cluster"+
-			" and clear that state — it succeeds even when the cluster is already gone — then retry",
+			" and clear that state, then retry. The delete also succeeds when AWS confirms the cluster"+
+			" no longer exists, but it refuses while the cluster cannot be verified (for example"+
+			" expired credentials, a different AWS account, or a network failure), so resolve that"+
+			" first",
 		api.ErrAlreadyExists, name, name,
 	)
 }

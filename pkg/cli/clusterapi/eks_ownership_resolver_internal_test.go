@@ -174,3 +174,47 @@ func TestALegacyRecordKeepsTheInjectedResolver(t *testing.T) {
 	assert.Equal(t, "INJECTED_ACCESS", resolver.EnvVar(credentials.AWSAccessKeyID),
 		"a legacy record displaced the injected resolver instead of leaving it alone")
 }
+
+// TestTheIdentityClientFreezesTheRecordedCredentials pins the call site, not just the resolver. The
+// tests above call eksOwnershipResolver directly, so they stay green if eksIdentityClient stops
+// using it and resolves the ambient selection again. This drives eksIdentityClient itself with the
+// canonical AWS_* names pointing at a different identity, and requires the frozen snapshot to carry
+// the credentials the record names.
+//
+
+func TestTheIdentityClientFreezesTheRecordedCredentials(t *testing.T) {
+	isolateHome(t)
+
+	for _, canonical := range []string{
+		"AWS_PROFILE", "AWS_DEFAULT_PROFILE",
+		"AWS_REGION", "AWS_DEFAULT_REGION",
+	} {
+		t.Setenv(canonical, "")
+	}
+
+	t.Setenv("AWS_ACCESS_KEY_ID", "ambient-other-account")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "ambient-other-secret")
+	t.Setenv("AWS_SESSION_TOKEN", "ambient-other-session")
+	t.Setenv("RECORDED_ACCESS", "made-this-cluster")
+	t.Setenv("RECORDED_SECRET", "made-this-cluster-secret")
+	t.Setenv("RECORDED_SESSION", "made-this-cluster-session")
+
+	const (
+		name   = "recorded-alias-identity-cluster"
+		region = "eu-north-1"
+	)
+
+	saveOwnership(t, name, region, recordedAliases())
+
+	service := NewService()
+
+	_, resolution, err := service.eksIdentityClient(t.Context(), name, region)
+	require.NoError(t, err)
+
+	assert.Equal(t, "made-this-cluster", resolution.AccessKeyID,
+		"the identity client froze the ambient credentials instead of the ones the record names")
+	assert.Equal(t, "made-this-cluster-secret", resolution.SecretAccessKey,
+		"the identity client froze the ambient secret instead of the one the record names")
+	assert.Equal(t, "made-this-cluster-session", resolution.SessionToken,
+		"the identity client froze the ambient session token instead of the one the record names")
+}

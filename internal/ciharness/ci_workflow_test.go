@@ -237,24 +237,31 @@ func patternList(raw any) []string {
 }
 
 // matchesDefaultBranch reports whether any pattern selects main. whenUnparseable
-// is the answer for a pattern Go's matcher rejects, and differs by caller: an
-// inclusion list should assume it matches, an exclusion list should assume it
-// does not, so that either way the workflow stays in the checked set.
+// is the answer for a pattern this matcher cannot evaluate the way GitHub does,
+// and differs by caller: an inclusion list should assume it matches, an
+// exclusion list should assume it does not, so that either way the workflow
+// stays in the checked set.
 func matchesDefaultBranch(patterns []string, whenUnparseable bool) bool {
 	for _, pattern := range patterns {
-		if pattern == "main" || strings.Contains(pattern, "**") {
+		if pattern == "main" {
 			return true
 		}
 
-		// filepath.Match covers *, ? and character classes; branch names here
-		// carry no slash, so its separator handling does not matter.
+		// filepath.Match covers *, ** and character classes the way GitHub does
+		// for this one name: main carries no slash, so GitHub's ** matches it
+		// exactly as * does, and filepath.Match's separator handling does not
+		// matter. A prefix such as release/** therefore still has to match.
 		//
-		// A malformed pattern, or one using syntax GitHub accepts and Go does
-		// not, errors here. Treat that as a match: this function fails open
-		// toward inclusion, and silently skipping a pattern we cannot read is
-		// precisely the hole this matcher exists to close.
+		// It does not cover ? or +. GitHub reads both as quantifiers over the
+		// preceding character, while filepath.Match reads ? as any single
+		// character and + as a literal, and returns no error for either. It
+		// errors only on a malformed pattern. So a pattern carrying either
+		// character unescaped, or one filepath.Match rejects, is one we cannot
+		// read, and skipping it is precisely the hole this matcher exists to
+		// close. An escaped \? or \+ is a literal in both syntaxes and is matched
+		// normally.
 		matched, err := filepath.Match(pattern, "main")
-		if err != nil {
+		if err != nil || hasUnescapedQuantifier(pattern) {
 			if whenUnparseable {
 				return true
 			}
@@ -270,13 +277,34 @@ func matchesDefaultBranch(patterns []string, whenUnparseable bool) bool {
 	return false
 }
 
+// hasUnescapedQuantifier reports whether pattern carries a ? or + that is not
+// escaped by a preceding backslash.
+func hasUnescapedQuantifier(pattern string) bool {
+	escaped := false
+
+	for _, char := range pattern {
+		switch {
+		case escaped:
+			escaped = false
+		case char == '\\':
+			escaped = true
+		case char == '?' || char == '+':
+			return true
+		}
+	}
+
+	return false
+}
+
+type runsOnDefaultBranchCase struct {
+	yaml string
+	want bool
+}
+
 func TestRunsOnDefaultBranch(t *testing.T) {
 	t.Parallel()
 
-	tests := map[string]struct {
-		yaml string
-		want bool
-	}{
+	assertRunsOnDefaultBranch(t, map[string]runsOnDefaultBranchCase{
 		"literal main":     {yaml: "on:\n  push:\n    branches: [main]\n", want: true},
 		"no push trigger":  {yaml: "on:\n  pull_request:\n", want: false},
 		"tags only":        {yaml: "on:\n  push:\n    tags: ['v*']\n", want: false},
@@ -287,7 +315,7 @@ func TestRunsOnDefaultBranch(t *testing.T) {
 		"glob prefix":      {yaml: "on:\n  push:\n    branches: ['ma*n']\n", want: true},
 		"ignore other":     {yaml: "on:\n  push:\n    branches-ignore: [develop]\n", want: true},
 		"ignore main":      {yaml: "on:\n  push:\n    branches-ignore: [main]\n", want: false},
-		"ignore main glob": {yaml: "on:\n  push:\n    branches-ignore: ['mai?']\n", want: false},
+		"ignore main glob": {yaml: "on:\n  push:\n    branches-ignore: ['ma*']\n", want: false},
 
 		// A pattern Go's matcher cannot parse must not silently skip the
 		// workflow; inclusion is the safe direction.
@@ -296,7 +324,56 @@ func TestRunsOnDefaultBranch(t *testing.T) {
 			yaml: "on:\n  push:\n    branches-ignore: ['[main']\n",
 			want: true,
 		},
-	}
+	})
+}
+
+// TestRunsOnDefaultBranchReadsGitHubPatternSyntax covers the filter syntax GitHub and
+// filepath.Match read differently.
+func TestRunsOnDefaultBranchReadsGitHubPatternSyntax(t *testing.T) {
+	t.Parallel()
+
+	assertRunsOnDefaultBranch(t, map[string]runsOnDefaultBranchCase{
+		// GitHub reads ? and + as quantifiers over the preceding character, so
+		// each of these selects main there. filepath.Match gives them other
+		// meanings without erroring, so they must reach the unparseable answer
+		// rather than be skipped.
+		"quantifier plus":         {yaml: "on:\n  push:\n    branches: ['mai+n']\n", want: true},
+		"quantifier question":     {yaml: "on:\n  push:\n    branches: ['ma?in']\n", want: true},
+		"quantifier leading plus": {yaml: "on:\n  push:\n    branches: ['m+ain']\n", want: true},
+		"quantifier ignore": {
+			yaml: "on:\n  push:\n    branches-ignore: ['mai?']\n",
+			want: true,
+		},
+
+		// An escaped quantifier is a literal character in both syntaxes, so the pattern is
+		// readable and is matched normally.
+		"escaped plus":     {yaml: "on:\n  push:\n    branches: ['m\\+ain']\n", want: false},
+		"escaped question": {yaml: "on:\n  push:\n    branches: ['ma\\?in']\n", want: false},
+		"escaped ignore": {
+			yaml: "on:\n  push:\n    branches-ignore: ['m\\+ain']\n",
+			want: true,
+		},
+
+		// ** is evaluated, not assumed to select main: for a name with no slash it matches like
+		// *, so a prefix before it still has to match.
+		"doublestar other prefix": {
+			yaml: "on:\n  push:\n    branches: ['release/**']\n",
+			want: false,
+		},
+		"ignore doublestar other prefix": {
+			yaml: "on:\n  push:\n    branches-ignore: ['release/**']\n",
+			want: true,
+		},
+		"ignore doublestar": {yaml: "on:\n  push:\n    branches-ignore: ['**']\n", want: false},
+		"ignore quantifier doublestar": {
+			yaml: "on:\n  push:\n    branches-ignore: ['mai+**']\n",
+			want: true,
+		},
+	})
+}
+
+func assertRunsOnDefaultBranch(t *testing.T, tests map[string]runsOnDefaultBranchCase) {
+	t.Helper()
 
 	for name, testCase := range tests {
 		t.Run(name, func(t *testing.T) {
