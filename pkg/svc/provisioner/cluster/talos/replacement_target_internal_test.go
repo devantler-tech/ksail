@@ -217,7 +217,10 @@ func TestRevalidateReplacementTargetRejectsChangedIdentities(t *testing.T) {
 		name   string
 		mutate func(*replacementObservation)
 	}{
-		{name: "server recreated", mutate: func(o *replacementObservation) { o.Servers[0].ID = 201 }},
+		{
+			name:   "server recreated",
+			mutate: func(o *replacementObservation) { o.Servers[0].ID = 201 },
+		},
 		{
 			name:   "Node re-registered",
 			mutate: func(o *replacementObservation) { o.Nodes[0].UID = "node-uid-9" },
