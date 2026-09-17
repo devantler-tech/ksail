@@ -109,7 +109,9 @@ func TestEvaluate_ErrorBlockingFollowsFailurePolicy(t *testing.T) {
 			t.Parallel()
 
 			engine := kyvernopolicy.NewEngine(
-				[]kyvernov1.PolicyInterface{policy(t, sprintf(erroringPolicy, testCase.action, testCase.spec))},
+				[]kyvernov1.PolicyInterface{
+					policy(t, sprintf(erroringPolicy, testCase.action, testCase.spec)),
+				},
 				nil,
 			)
 
