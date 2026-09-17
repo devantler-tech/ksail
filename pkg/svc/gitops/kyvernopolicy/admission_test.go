@@ -582,7 +582,10 @@ func TestEvaluate_UnknownNamespaceHonoursLabelFreeExclusions(t *testing.T) {
 	assert.Empty(t, excluded, "a ConfigMap excluded by name must not be reported as unsupported")
 
 	other := configMap("elsewhere", nil)
-	other["metadata"].(map[string]any)["name"] = "other"
+	metadata, ok := other["metadata"].(map[string]any)
+	require.True(t, ok)
+
+	metadata["name"] = "other"
 
 	unexcluded, err := engine.Evaluate(t.Context(), other)
 	require.NoError(t, err)

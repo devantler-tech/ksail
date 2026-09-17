@@ -467,19 +467,10 @@ func labelFreeExclusions(exclude *kyvernov1.MatchResources) *kyvernov1.MatchReso
 
 	switch {
 	case len(exclude.Any) > 0:
-		var kept kyvernov1.ResourceFilters
-
-		for _, filter := range exclude.Any {
-			if filter.NamespaceSelector == nil {
-				kept = append(kept, filter)
-			}
-		}
-
-		if len(kept) == 0 {
+		exclude.Any = labelFreeFilters(exclude.Any)
+		if len(exclude.Any) == 0 {
 			return nil
 		}
-
-		exclude.Any = kept
 
 		return exclude
 	case len(exclude.All) > 0:
@@ -495,4 +486,17 @@ func labelFreeExclusions(exclude *kyvernov1.MatchResources) *kyvernov1.MatchReso
 	default:
 		return exclude
 	}
+}
+
+// labelFreeFilters returns the filters that do not select on namespace labels.
+func labelFreeFilters(filters kyvernov1.ResourceFilters) kyvernov1.ResourceFilters {
+	var kept kyvernov1.ResourceFilters
+
+	for _, filter := range filters {
+		if filter.NamespaceSelector == nil {
+			kept = append(kept, filter)
+		}
+	}
+
+	return kept
 }
