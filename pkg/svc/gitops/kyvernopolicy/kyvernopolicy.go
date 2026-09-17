@@ -98,7 +98,7 @@ type Engine struct {
 // validate rules are ignored.
 func NewEngine(policies []kyvernov1.PolicyInterface) *Engine {
 	cfg := config.NewDefaultConfiguration(false)
-	jp := jmespath.New(cfg)
+	jmesPath := jmespath.New(cfg)
 	isCluster := false
 
 	validating := make([]kyvernov1.PolicyInterface, 0, len(policies))
@@ -112,10 +112,10 @@ func NewEngine(policies []kyvernov1.PolicyInterface) *Engine {
 	return &Engine{
 		policies: validating,
 		config:   cfg,
-		jp:       jp,
+		jp:       jmesPath,
 		engine: engine.NewEngine(
 			cfg,
-			jp,
+			jmesPath,
 			nil,
 			nil,
 			imageverifycache.DisabledImageVerifyCache(),

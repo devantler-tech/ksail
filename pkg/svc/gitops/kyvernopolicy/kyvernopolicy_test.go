@@ -188,7 +188,9 @@ func TestIsPolicy(t *testing.T) {
 
 	assert.True(t, kyvernopolicy.IsPolicy(map[string]any{"apiVersion": "kyverno.io/v1", "kind": "ClusterPolicy"}))
 	assert.True(t, kyvernopolicy.IsPolicy(map[string]any{"apiVersion": "kyverno.io/v1", "kind": "Policy"}))
-	assert.False(t, kyvernopolicy.IsPolicy(map[string]any{"apiVersion": "policies.kyverno.io/v1", "kind": "ValidatingPolicy"}))
+	assert.False(t, kyvernopolicy.IsPolicy(
+		map[string]any{"apiVersion": "policies.kyverno.io/v1", "kind": "ValidatingPolicy"},
+	))
 	assert.False(t, kyvernopolicy.IsPolicy(configMap("default", nil)))
 }
 
