@@ -104,10 +104,24 @@ func revalidateReplacementTarget(
 }
 
 func uniqueOwnedServer(observation replacementObservation) (*hcloud.Server, error) {
+	server, err := uniqueServerNamed(observation.Servers, observation.NodeName)
+	if err != nil {
+		return nil, err
+	}
+
+	err = validateOwnedServer(server, observation.ClusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	return server, nil
+}
+
+func uniqueServerNamed(servers []*hcloud.Server, nodeName string) (*hcloud.Server, error) {
 	var matches []*hcloud.Server
 
-	for _, server := range observation.Servers {
-		if server != nil && server.Name == observation.NodeName {
+	for _, server := range servers {
+		if server != nil && server.Name == nodeName {
 			matches = append(matches, server)
 		}
 	}
@@ -115,43 +129,44 @@ func uniqueOwnedServer(observation replacementObservation) (*hcloud.Server, erro
 	switch len(matches) {
 	case 0:
 		return nil, fmt.Errorf(
-			"%w: no Hetzner server named %q", ErrReplacementTargetNotFound, observation.NodeName,
+			"%w: no Hetzner server named %q", ErrReplacementTargetNotFound, nodeName,
 		)
 	case 1:
+		return matches[0], nil
 	default:
 		return nil, fmt.Errorf(
 			"%w: %d Hetzner servers named %q",
 			ErrReplacementTargetAmbiguous,
 			len(matches),
-			observation.NodeName,
+			nodeName,
 		)
 	}
+}
 
-	server := matches[0]
-
+func validateOwnedServer(server *hcloud.Server, clusterName string) error {
 	if server.Labels[hetzner.LabelOwned] != hetzner.LabelOwnedValue ||
-		server.Labels[hetzner.LabelClusterName] != observation.ClusterName {
-		return nil, fmt.Errorf(
+		server.Labels[hetzner.LabelClusterName] != clusterName {
+		return fmt.Errorf(
 			"%w: server %q (ID %d) for cluster %q",
 			ErrReplacementTargetNotOwned,
 			server.Name,
 			server.ID,
-			observation.ClusterName,
+			clusterName,
 		)
 	}
 
 	if server.ID <= 0 {
-		return nil, fmt.Errorf("%w: server %q has no ID", ErrReplacementTargetInvalid, server.Name)
+		return fmt.Errorf("%w: server %q has no ID", ErrReplacementTargetInvalid, server.Name)
 	}
 
 	role := server.Labels[hetzner.LabelNodeType]
 	if role != hetzner.NodeTypeControlPlane && role != hetzner.NodeTypeWorker {
-		return nil, fmt.Errorf(
+		return fmt.Errorf(
 			"%w: server %q has unknown role %q", ErrReplacementTargetInvalid, server.Name, role,
 		)
 	}
 
-	return server, nil
+	return nil
 }
 
 func uniqueNodeForServer(nodes []corev1.Node, server *hcloud.Server) (*corev1.Node, error) {
