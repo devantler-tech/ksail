@@ -71,7 +71,7 @@ func requireTeam(t *testing.T, action string) kyvernov1.PolicyInterface {
 func TestEvaluate_EnforceFailureIsBlocking(t *testing.T) {
 	t.Parallel()
 
-	engine := kyvernopolicy.NewEngine([]kyvernov1.PolicyInterface{requireTeam(t, "Enforce")})
+	engine := kyvernopolicy.NewEngine([]kyvernov1.PolicyInterface{requireTeam(t, "Enforce")}, nil)
 
 	violations, err := engine.Evaluate(t.Context(), configMap("default", nil))
 	require.NoError(t, err)
@@ -86,7 +86,7 @@ func TestEvaluate_EnforceFailureIsBlocking(t *testing.T) {
 func TestEvaluate_CompliantDocumentPasses(t *testing.T) {
 	t.Parallel()
 
-	engine := kyvernopolicy.NewEngine([]kyvernov1.PolicyInterface{requireTeam(t, "Enforce")})
+	engine := kyvernopolicy.NewEngine([]kyvernov1.PolicyInterface{requireTeam(t, "Enforce")}, nil)
 
 	violations, err := engine.Evaluate(
 		t.Context(),
@@ -99,7 +99,7 @@ func TestEvaluate_CompliantDocumentPasses(t *testing.T) {
 func TestEvaluate_AuditFailureIsNotBlocking(t *testing.T) {
 	t.Parallel()
 
-	engine := kyvernopolicy.NewEngine([]kyvernov1.PolicyInterface{requireTeam(t, "Audit")})
+	engine := kyvernopolicy.NewEngine([]kyvernov1.PolicyInterface{requireTeam(t, "Audit")}, nil)
 
 	violations, err := engine.Evaluate(t.Context(), configMap("default", nil))
 	require.NoError(t, err)
@@ -110,7 +110,7 @@ func TestEvaluate_AuditFailureIsNotBlocking(t *testing.T) {
 func TestEvaluate_UnmatchedKindIsIgnored(t *testing.T) {
 	t.Parallel()
 
-	engine := kyvernopolicy.NewEngine([]kyvernov1.PolicyInterface{requireTeam(t, "Enforce")})
+	engine := kyvernopolicy.NewEngine([]kyvernov1.PolicyInterface{requireTeam(t, "Enforce")}, nil)
 	secret := map[string]any{
 		"apiVersion": "v1",
 		"kind":       "Secret",
@@ -146,7 +146,7 @@ spec:
           labels:
             team: "?*"
 `)
-	engine := kyvernopolicy.NewEngine([]kyvernov1.PolicyInterface{namespaced})
+	engine := kyvernopolicy.NewEngine([]kyvernov1.PolicyInterface{namespaced}, nil)
 
 	inside, err := engine.Evaluate(t.Context(), configMap("team-a", nil))
 	require.NoError(t, err)
@@ -179,7 +179,7 @@ spec:
           labels:
             team: platform
 `)
-	engine := kyvernopolicy.NewEngine([]kyvernov1.PolicyInterface{mutating})
+	engine := kyvernopolicy.NewEngine([]kyvernov1.PolicyInterface{mutating}, nil)
 
 	violations, err := engine.Evaluate(t.Context(), configMap("default", nil))
 	require.NoError(t, err)

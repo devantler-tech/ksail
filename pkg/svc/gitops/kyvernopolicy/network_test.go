@@ -144,7 +144,7 @@ func TestEvaluate_NetworkContextIsNeverLoaded(t *testing.T) {
 	address, connections := countConnections(t)
 	engine := kyvernopolicy.NewEngine([]kyvernov1.PolicyInterface{
 		policy(t, sprintf(networkContextPolicy, address)),
-	})
+	}, nil)
 
 	violations, err := engine.Evaluate(t.Context(), configMap("default", nil))
 	require.NoError(t, err)

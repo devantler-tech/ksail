@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	kyvernov1 "github.com/kyverno/kyverno/api/kyverno/v1"
 	"github.com/kyverno/kyverno/pkg/config"
 	"github.com/kyverno/kyverno/pkg/engine"
@@ -22,8 +23,14 @@ import (
 	"github.com/kyverno/kyverno/pkg/engine/jmespath"
 	"github.com/kyverno/kyverno/pkg/engine/policycontext"
 	imageverifycache "github.com/kyverno/kyverno/pkg/image/verification/cache"
+	engineutils "github.com/kyverno/kyverno/pkg/utils/engine"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	corev1listers "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 )
 
 const (
@@ -49,8 +56,12 @@ type Violation struct {
 	// than the document failing it.
 	Error bool
 	// Blocking is true when a cluster enforcing this policy would reject the
-	// document: the policy has an Enforce failure for it.
+	// document: Kyverno resolves an Enforce action for the failing rule, or
+	// the policy is enforcing and its failurePolicy is Fail for an error.
 	Blocking bool
+	// Unsupported is true when the policy could not be evaluated offline;
+	// Message says why. It is never Blocking.
+	Unsupported bool
 }
 
 // IsPolicy reports whether doc is a Kyverno policy this package evaluates.
@@ -88,15 +99,19 @@ func DecodePolicy(doc map[string]any) (kyvernov1.PolicyInterface, error) {
 
 // Engine evaluates a fixed set of policies against documents.
 type Engine struct {
-	policies []kyvernov1.PolicyInterface
-	config   config.Configuration
-	jp       jmespath.Interface
-	engine   engineapi.Engine
+	policies   []kyvernov1.PolicyInterface
+	namespaces corev1listers.NamespaceLister
+	config     config.Configuration
+	jp         jmespath.Interface
+	engine     engineapi.Engine
 }
 
-// NewEngine returns an Engine for the given policies. Policies without
-// validate rules are ignored.
-func NewEngine(policies []kyvernov1.PolicyInterface) *Engine {
+// NewEngine returns an Engine for the given policies. As at admission, it
+// keeps only policies with validate rules and admission processing enabled.
+// namespaces are the source's rendered documents; the Namespace documents
+// among them supply the labels that namespaceSelector matches and
+// failure-action overrides are resolved against.
+func NewEngine(policies []kyvernov1.PolicyInterface, namespaces []map[string]any) *Engine {
 	cfg := config.NewDefaultConfiguration(false)
 	jmesPath := jmespath.New(cfg)
 	isCluster := false
@@ -104,15 +119,16 @@ func NewEngine(policies []kyvernov1.PolicyInterface) *Engine {
 	validating := make([]kyvernov1.PolicyInterface, 0, len(policies))
 
 	for _, policy := range policies {
-		if policy.GetSpec().HasValidate() {
+		if policy.GetSpec().HasValidate() && policy.AdmissionProcessingEnabled() {
 			validating = append(validating, policy)
 		}
 	}
 
 	return &Engine{
-		policies: validating,
-		config:   cfg,
-		jp:       jmesPath,
+		policies:   validating,
+		namespaces: namespaceLister(namespaces),
+		config:     cfg,
+		jp:         jmesPath,
 		engine: engine.NewEngine(
 			cfg,
 			jmesPath,
@@ -126,15 +142,63 @@ func NewEngine(policies []kyvernov1.PolicyInterface) *Engine {
 	}
 }
 
+// namespaceLister indexes the Namespace documents among docs.
+func namespaceLister(docs []map[string]any) corev1listers.NamespaceLister {
+	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+
+	for _, doc := range docs {
+		if doc["apiVersion"] != "v1" || doc["kind"] != "Namespace" {
+			continue
+		}
+
+		name, _, _ := unstructured.NestedString(doc, "metadata", "name")
+		labels, _, _ := unstructured.NestedStringMap(doc, "metadata", "labels")
+
+		_ = indexer.Add(&corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Labels: labels},
+		})
+	}
+
+	return corev1listers.NewNamespaceLister(indexer)
+}
+
 // Evaluate applies every validating policy to doc, simulating its creation,
 // and returns the failing and erroring rules. As in a cluster, the engine
-// applies a namespaced Policy only to documents in its own namespace.
+// applies a namespaced Policy only to documents in its own namespace. A policy
+// that selects on namespace labels, for a document whose Namespace is not
+// among the rendered documents, is reported as Unsupported instead of being
+// evaluated against labels it cannot see.
 func (e *Engine) Evaluate(ctx context.Context, doc map[string]any) ([]Violation, error) {
 	resource := unstructured.Unstructured{Object: doc}
 
 	var violations []Violation
 
 	for _, policy := range e.policies {
+		namespaceLabels, err := engineutils.GetNamespaceSelectorsFromNamespaceLister(
+			resource.GetKind(),
+			resource.GetNamespace(),
+			e.namespaces,
+			[]kyvernov1.PolicyInterface{policy},
+			logr.Discard(),
+		)
+		if apierrors.IsNotFound(err) {
+			violations = append(violations, Violation{
+				Policy: policyName(policy),
+				Message: fmt.Sprintf(
+					"namespace %q is not among the rendered documents, so its labels are unknown "+
+						"and this policy's namespaceSelector cannot be evaluated offline",
+					resource.GetNamespace(),
+				),
+				Unsupported: true,
+			})
+
+			continue
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("resolve namespace labels for %s: %w", policyName(policy), err)
+		}
+
 		policyContext, err := policycontext.NewPolicyContext(
 			e.jp, resource, kyvernov1.Create, nil, e.config,
 		)
@@ -142,16 +206,29 @@ func (e *Engine) Evaluate(ctx context.Context, doc map[string]any) ([]Violation,
 			return nil, fmt.Errorf("build policy context for %s: %w", policyName(policy), err)
 		}
 
-		response := e.engine.Validate(ctx, policyContext.WithPolicy(policy))
-		violations = append(violations, collect(policy, response)...)
+		response := e.engine.Validate(
+			ctx,
+			policyContext.WithNamespaceLabels(namespaceLabels).WithPolicy(policy),
+		)
+		violations = append(violations, collect(ctx, policy, response)...)
 	}
 
 	return violations, nil
 }
 
-func collect(policy kyvernov1.PolicyInterface, response engineapi.EngineResponse) []Violation {
+// collect converts a response into violations. A failure blocks when Kyverno
+// resolves an Enforce action for its rule. An error blocks, as in Kyverno's
+// admission handler, only for a policy on the enforcing path whose
+// failurePolicy is Fail; the handler aggregates failurePolicy across the
+// request's enforcing policies, and this evaluates it per policy.
+func collect(
+	ctx context.Context,
+	policy kyvernov1.PolicyInterface,
+	response engineapi.EngineResponse,
+) []Violation {
 	blocking := response.HasEnforcedFailure()
-	enforceable := policy.GetSpec().HasValidateEnforce()
+	errorBlocking := enforcing(policy.GetSpec()) &&
+		policy.GetSpec().GetFailurePolicy(ctx) == kyvernov1.Fail
 
 	var violations []Violation
 
@@ -172,13 +249,46 @@ func collect(policy kyvernov1.PolicyInterface, response engineapi.EngineResponse
 				Rule:     rule.Name(),
 				Message:  rule.Message(),
 				Error:    true,
-				Blocking: enforceable,
+				Blocking: errorBlocking,
 			})
 		case engineapi.RuleStatusPass, engineapi.RuleStatusWarn, engineapi.RuleStatusSkip:
 		}
 	}
 
 	return violations
+}
+
+// enforcing reports whether Kyverno's policy cache places the policy on the
+// enforcing validation path: any Enforce action, at the policy or rule level,
+// including in failure-action overrides.
+func enforcing(spec *kyvernov1.Spec) bool {
+	if spec.ValidationFailureAction.Enforce() {
+		return true
+	}
+
+	for _, override := range spec.ValidationFailureActionOverrides {
+		if override.Action.Enforce() {
+			return true
+		}
+	}
+
+	for _, rule := range spec.GetRules() {
+		if !rule.HasValidate() {
+			continue
+		}
+
+		if action := rule.Validation.FailureAction; action != nil && action.Enforce() {
+			return true
+		}
+
+		for _, override := range rule.Validation.FailureActionOverrides {
+			if override.Action.Enforce() {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func policyName(policy kyvernov1.PolicyInterface) string {
