@@ -1,6 +1,7 @@
 package kyvernopolicy_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/kyvernopolicy"
@@ -461,6 +462,12 @@ func TestEvaluate_UnknownNamespaceKeepsGeneratedPodControllerRules(t *testing.T)
 	for _, violation := range violations {
 		assert.True(t, violation.Unsupported)
 		assert.Equal(t, "prod-pods", violation.Policy)
+		assert.Equal(
+			t,
+			"autogen-prod-pod-team",
+			violation.Rule,
+			"a Deployment is matched by the generated rule, which carries its own name",
+		)
 	}
 }
 
@@ -592,4 +599,86 @@ func TestEvaluate_UnknownNamespaceHonoursLabelFreeExclusions(t *testing.T) {
 	require.Len(t, unexcluded, 1)
 	assert.True(t, unexcluded[0].Unsupported,
 		"a label-dependent exclusion must not hide a rule whose labels are unknown")
+}
+
+// applyOnePolicy puts a namespace-selector rule ahead of one that always
+// matches, under applyRules: One.
+const applyOnePolicy = `
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: apply-one
+spec:
+  applyRules: One
+  rules:
+  - name: prod-team
+    match:
+      any:
+      - resources:
+          kinds: ["ConfigMap"]
+          namespaceSelector:
+            matchLabels:
+              env: prod
+    validate:
+      failureAction: Audit
+      message: "label team is required in prod"
+      pattern:
+        metadata:
+          labels:
+            team: "?*"
+  - name: owner-everywhere
+    match:
+      any:
+      - resources:
+          kinds: ["ConfigMap"]
+    validate:
+      failureAction: Enforce
+      message: "label owner is required"
+      pattern:
+        metadata:
+          labels:
+            owner: "?*"
+`
+
+func TestEvaluate_ApplyOneKeepsRuleOrderWhenNamespaceUnknown(t *testing.T) {
+	t.Parallel()
+
+	engine := kyvernopolicy.NewEngine(
+		[]kyvernov1.PolicyInterface{policy(t, applyOnePolicy)},
+		nil,
+	)
+
+	violations, err := engine.Evaluate(t.Context(), configMap("elsewhere", nil))
+	require.NoError(t, err)
+	require.Len(t, violations, 2)
+
+	for _, violation := range violations {
+		assert.True(
+			t,
+			violation.Unsupported,
+			"applyRules: One stops at the first applied rule, so a later rule's outcome is "+
+				"unknown while an earlier rule's namespaceSelector cannot be evaluated: %+v",
+			violation,
+		)
+		assert.False(t, violation.Blocking, "an unknown outcome never blocks: %+v", violation)
+	}
+
+	assert.Equal(t, "owner-everywhere", violations[1].Rule)
+}
+
+func TestEvaluate_ApplyAllEvaluatesRuleAfterUnknownSelector(t *testing.T) {
+	t.Parallel()
+
+	spec := strings.Replace(applyOnePolicy, "  applyRules: One\n", "", 1)
+	require.NotContains(t, spec, "applyRules", "the control must differ only in applyRules")
+
+	engine := kyvernopolicy.NewEngine([]kyvernov1.PolicyInterface{policy(t, spec)}, nil)
+
+	violations, err := engine.Evaluate(t.Context(), configMap("elsewhere", nil))
+	require.NoError(t, err)
+	require.Len(t, violations, 2)
+
+	assert.True(t, violations[0].Unsupported, "the selector rule stays unsupported")
+	assert.False(t, violations[1].Unsupported, "every rule runs, so the later rule is definitive")
+	assert.True(t, violations[1].Blocking, "its Enforce failure blocks admission")
 }

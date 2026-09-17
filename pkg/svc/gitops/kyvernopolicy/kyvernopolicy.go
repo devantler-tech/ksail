@@ -263,11 +263,33 @@ func (e *Engine) splitOnUnknownNamespace(
 		unsupported []Violation
 	)
 
+	// With applyRules: One the engine stops after the first rule it applies, so
+	// once a rule's outcome is unknown no later rule is known to run at all.
+	applyOne := policy.GetSpec().GetApplyRules() == kyvernov1.ApplyOne
+	unknownEarlierRule := false
+
 	for index := range rules {
 		// Kyverno resolves namespace labels before matching kinds, so a rule
 		// that cannot match this resource would otherwise be reported as
 		// Unsupported instead of producing no result.
-		if !mayMatch(resource, policy, rules[index]) {
+		matched, name := matchedRule(resource, policy, rules[index])
+		if !matched {
+			continue
+		}
+
+		if applyOne && unknownEarlierRule {
+			unsupported = append(unsupported, Violation{
+				Policy: policyName(policy),
+				Rule:   name,
+				Message: fmt.Sprintf(
+					"an earlier rule's namespaceSelector cannot be evaluated offline and this "+
+						"policy sets applyRules: One, so whether namespace %q reaches this rule "+
+						"is unknown",
+					resource.GetNamespace(),
+				),
+				Unsupported: true,
+			})
+
 			continue
 		}
 
@@ -278,9 +300,11 @@ func (e *Engine) splitOnUnknownNamespace(
 
 		switch {
 		case apierrors.IsNotFound(err):
+			unknownEarlierRule = true
+
 			unsupported = append(unsupported, Violation{
 				Policy: policyName(policy),
-				Rule:   rules[index].Name,
+				Rule:   name,
 				Message: fmt.Sprintf(
 					"namespace %q is not among the rendered documents, so its labels are unknown "+
 						"and this rule's namespaceSelector cannot be evaluated offline",
@@ -310,24 +334,26 @@ func (e *Engine) splitOnUnknownNamespace(
 	return remaining, unsupported, nil
 }
 
-// mayMatch reports whether rule, or a pod-controller rule Kyverno generates
-// from it, could match resource for some labels of its Namespace. False means
-// the engine would skip the rule whatever those labels are.
-func mayMatch(
+// matchedRule reports whether rule, or a pod-controller rule Kyverno generates
+// from it, could match resource for some labels of its Namespace, along with the
+// name the engine evaluates it under. False means the engine would skip the rule
+// whatever those labels are. The generated rules carry their own names (such as
+// autogen-<rule>), which is what a result for a matched Deployment shows.
+func matchedRule(
 	resource unstructured.Unstructured,
 	policy kyvernov1.PolicyInterface,
 	rule kyvernov1.Rule,
-) bool {
+) (bool, string) {
 	single := policy.CreateDeepCopy()
 	single.GetSpec().Rules = []kyvernov1.Rule{rule}
 
 	for _, computed := range autogen.Default.ComputeRules(single, resource.GetKind()) {
 		if broadMatch(resource, policy, computed) {
-			return true
+			return true, computed.Name
 		}
 	}
 
-	return false
+	return false, ""
 }
 
 // broadMatch matches a copy of rule without its namespace selectors and
