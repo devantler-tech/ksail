@@ -109,6 +109,7 @@ linters:
         - github.com/anchore/grype
         - github.com/kubescape/kubescape/v3
         - github.com/moby/go-archive
+        - k8s.io/pod-security-admission
     wsl_v5:
       allow-first-in-block: true
       allow-whole-block: false
@@ -161,6 +162,10 @@ linters:
             - github.com/jinzhu/copier
             - github.com/k3d-io
             - github.com/kubescape
+            # kyverno's policy engine backs offline policy checks in pkg/svc/gitops/kyvernopolicy (#5355).
+            - github.com/kyverno
+            # Kyverno's engine takes a logr.Logger; kyvernopolicy passes logr.Discard() (#5355).
+            - github.com/go-logr/logr
             - github.com/rancher
             - github.com/mittwald
             - github.com/modelcontextprotocol

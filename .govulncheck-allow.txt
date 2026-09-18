@@ -96,3 +96,29 @@ GO-2026-5932  # x/crypto/openpgp unmaintained/unsafe-by-design (transitive via k
 # this line turns the gate red rather than clean. Remove it only when the GO
 # advisory itself gains a fixed version, never on the strength of the GHSA.
 GO-2026-5939  # Claircore manifest-URI SSRF (CVE-2026-10517; sink not linked; no GO-advisory fix at any version)
+
+# --- github.com/kyverno/kyverno @ v1.19.1 (offline policy evaluator, #5355) --
+# Measured 2026-09-17. pkg/svc/gitops/kyvernopolicy links Kyverno's validate
+# engine to check manifests against Kyverno policies offline. All three
+# advisories live in Kyverno's context loaders: apiCall service calls (SSRF),
+# apiCall/ConfigMap reads across namespaces. ksail builds the engine with no
+# Kubernetes client, registry client, ConfigMap resolver or global context
+# store, so Kyverno disables every one of those loaders and they never run.
+# TestEvaluate_NetworkContextIsNeverLoaded pins it: a policy using each
+# network-backed context source opens zero connections (an ablation that
+# supplies a registry client factory makes it fail). No upstream fix.
+GO-2025-3615  # Kyverno SSRF via apiCall service calls (loader disabled: no client; no fix)
+GO-2026-5594  # Kyverno unrestricted outbound apiCall requests (loader disabled: no client; no fix)
+GO-2026-5337  # Kyverno cross-namespace read via context (loaders disabled: no client or resolver; no fix)
+
+# --- github.com/chrismellard/docker-credential-acr-env (transitive via cosign)
+# Measured 2026-09-17. The Azure credential helper matches registry hostnames
+# with an unanchored pattern and can send an Azure AD token to a lookalike
+# host. It became reachable when Kyverno (#5355) linked cosign's keychain;
+# govulncheck's only trace runs through a sync.Once function value in
+# pkg/svc/mirror, a static over-approximation rather than a real call. The
+# Kyverno evaluator has no registry client (see the test above), and the helper
+# only returns a token when Azure service-principal variables are set. The
+# module is unmaintained, so no fix will ship; remove this entry if cosign or
+# Kyverno drops the helper.
+GO-2026-6225  # ACR credential helper unanchored host match (no registry client in ksail's path; no fix)
