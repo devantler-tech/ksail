@@ -1,7 +1,11 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+# The base lives in this repository, so the system test exercises
+# `ksail workload apply -k` with a base and a patch and fails only on KSail's
+# own behaviour, never on a third-party repository being slow or down (#6456).
+# The base keeps an HPA so the delete patch below still has something to remove.
 resources:
-  - https://github.com/stefanprodan/podinfo//kustomize
+  - base
 patches:
   - target:
       kind: HorizontalPodAutoscaler
