@@ -51,9 +51,9 @@ scan_kustomization() {
 			done
 		elif [ -f "$candidate" ]; then
 			case "$(basename "$candidate")" in
-				kustomization.yaml | kustomization.yml | Kustomization)
-					scan_kustomization "$candidate"
-					;;
+			kustomization.yaml | kustomization.yml | Kustomization)
+				scan_kustomization "$candidate"
+				;;
 			esac
 		fi
 	done < <(local_kustomization_refs "$canonical")
