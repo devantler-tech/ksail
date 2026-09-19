@@ -360,7 +360,7 @@ jobs:
             gitops-assert-scripts:
               - '.github/scripts/assert-gitops-deployed.sh'
               - '.github/scripts/assert-gitops-deployed.test.sh'
-              - '.github/actions/ksail-test-workload/action.yaml'
+              - '.github/actions/ksail-test-workload/**'
               - '.github/workflows/ci.yaml'
 
   eks-smoke-scripts:
@@ -427,7 +427,7 @@ jobs:
           .github/actions/rate-limit-gate/wait-for-rate-limit.test.sh
 
   gitops-assert-scripts:
-    name: 🔐 Validate GitOps Deployment Assertion
+    name: 🔐 Validate GitOps And Workload Guards
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: [changes]
@@ -440,12 +440,15 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: 🔐 Verify the GitOps assertion rejects an engine that deployed nothing
+      - name: 🔐 Verify GitOps and workload guards fail closed
         run: |
           shellcheck \
+            .github/actions/ksail-test-workload/reject-remote-kustomize-resources.sh \
+            .github/actions/ksail-test-workload/remote-resource-guard.test.sh \
             .github/scripts/assert-gitops-deployed.sh \
             .github/scripts/assert-gitops-deployed.test.sh
           .github/scripts/assert-gitops-deployed.test.sh
+          .github/actions/ksail-test-workload/remote-resource-guard.test.sh
 
   cask-pr-handoff:
     name: 🔐 Validate Cask PR Handoff
