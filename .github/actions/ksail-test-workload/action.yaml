@@ -161,6 +161,14 @@ runs:
         OVERLAY_PATH: ${{ inputs.apply-overlay-path }}
         TIMEOUT: ${{ inputs.workload-timeout }}
       run: |
+        # The overlay must resolve from this checkout: a remote base makes the test depend on
+        # a third-party host instead of KSail (#6456).
+        if remote="$(grep -rEn --include=kustomization.yaml --include=kustomization.yml --include=Kustomization \
+            '^[[:space:]]*-[[:space:]]*["'\'']?(https?://|git@|ssh://|github\.com/)' "$OVERLAY_PATH")"; then
+          echo "❌ overlay lists a remote resource; keep the system-test overlay local:"
+          echo "$remote"
+          exit 1
+        fi
         apply_succeeded=false
         for attempt in 1 2 3; do
           if ksail workload apply -k "$OVERLAY_PATH" --wait --timeout="$TIMEOUT"; then
