@@ -164,7 +164,7 @@ runs:
         # The overlay must resolve from this checkout: a remote base makes the test depend on
         # a third-party host instead of KSail (#6456).
         if remote="$(grep -rEn --include=kustomization.yaml --include=kustomization.yml --include=Kustomization \
-            '^[[:space:]]*-[[:space:]]*["'\'']?(https?://|git@|ssh://|github\.com/)' "$OVERLAY_PATH")"; then
+            '^[[:space:]]*-[[:space:]]*["'\'']?(git::)?(https?://|git@|ssh://|github\.com/)' "$OVERLAY_PATH")"; then
           echo "❌ overlay lists a remote resource; keep the system-test overlay local:"
           echo "$remote"
           exit 1
