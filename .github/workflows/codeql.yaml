@@ -1,0 +1,118 @@
+name: 🔍 CodeQL
+
+# Advanced CodeQL setup. It replaces CodeQL default setup, and the two are mutually
+# exclusive: default setup must be disabled in the repository settings
+# (Settings → Code security → CodeQL analysis) for these results to upload.
+#
+# Default setup's Go autobuild extracts every go.mod it finds, on one runner.
+# desktop/go.mod replaces the root module (`=> ../`), so the desktop pass extracts the
+# root module's whole dependency graph and the root pass then extracts it again. That
+# exhausts the hosted runner, which is shut down mid-extraction (#6767). Here each Go
+# module is analysed on its own runner, and because the workflow lives in this
+# repository a transient failure can be re-run.
+#
+# Same languages and suite as the default setup it replaces: actions, Go and
+# JavaScript/TypeScript with the security-extended queries, emitting both code-scanning
+# and code-quality results so the "Require code scanning results" and "Require code
+# quality results" rulesets stay satisfied.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  merge_group:
+  schedule:
+    - cron: "46 6 * * 6" # weekly
+
+permissions: {}
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: actions
+            language: actions
+            build-mode: none
+            category: /language:actions
+            runner: ubuntu-latest
+          - name: javascript-typescript
+            language: javascript-typescript
+            build-mode: none
+            category: /language:javascript-typescript
+            runner: ubuntu-latest
+          # The root module only. `go build ./...` resolves this module's packages, so
+          # the desktop module is not extracted here.
+          - name: go
+            language: go
+            build-mode: manual
+            category: /language:go
+            module: root
+            runner: ubuntu-latest
+          # The desktop module, on its own runner. Wails v3 needs GTK4 + WebKitGTK 6.0,
+          # which ubuntu-24.04 ships.
+          - name: go-desktop
+            language: go
+            build-mode: manual
+            category: /language:go-desktop
+            module: desktop
+            runner: ubuntu-24.04
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Before CodeQL init: this removes the runner's cached CodeQL bundle, which init
+      # then downloads at the pinned version.
+      - name: 🧹 Free disk space
+        if: matrix.module == 'root'
+        uses: ./.github/actions/free-disk-space
+
+      - name: ⚙️ Setup Go
+        if: matrix.module == 'root'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # Frees disk, sets up Go and Node.js, installs the webview build dependencies and
+      # stages the web UI the desktop app embeds — the same setup its CI build uses.
+      - name: 🛠️ Setup desktop build
+        if: matrix.module == 'desktop'
+        uses: ./.github/actions/setup-desktop-build
+
+      - name: 🔍 Initialize CodeQL
+        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended
+          analysis-kinds: code-scanning,code-quality
+
+      - name: 🏗️ Build root module
+        if: matrix.module == 'root'
+        run: go build ./...
+
+      - name: 🏗️ Build desktop module
+        if: matrix.module == 'desktop'
+        working-directory: desktop
+        run: go build ./...
+
+      - name: 🔬 Perform CodeQL analysis
+        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          category: ${{ matrix.category }}
