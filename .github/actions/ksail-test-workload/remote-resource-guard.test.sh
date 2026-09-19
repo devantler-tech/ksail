@@ -4,7 +4,7 @@ set -euo pipefail
 action="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/action.yaml"
 
 guard="$({
-  awk '
+	awk '
     /- name: .*ksail workload apply/ { step = 1 }
     step && /^      run: \|/ { run = 1; next }
     run && /^    - name:/ { exit }
@@ -17,29 +17,29 @@ guard="$({
 ')"
 
 fail() {
-  printf 'FAIL: %s\n' "$*" >&2
-  exit 1
+	printf 'FAIL: %s\n' "$*" >&2
+	exit 1
 }
 
 run_case() {
-  local name=$1 expected=$2 resource=$3 style=${4:-block} fixture result=0
-  fixture="$(mktemp -d)"
-  trap 'rm -rf "$fixture"' RETURN
-  if [ "$style" = flow ]; then
-    printf 'resources: [%s]\n' "$resource" >"$fixture/kustomization.yaml"
-  else
-    printf 'resources:\n  - %s\n' "$resource" >"$fixture/kustomization.yaml"
-  fi
+	local name=$1 expected=$2 resource=$3 style=${4:-block} fixture result=0
+	fixture="$(mktemp -d)"
+	trap 'rm -rf "$fixture"' RETURN
+	if [ "$style" = flow ]; then
+		printf 'resources: [%s]\n' "$resource" >"$fixture/kustomization.yaml"
+	else
+		printf 'resources:\n  - %s\n' "$resource" >"$fixture/kustomization.yaml"
+	fi
 
-  OVERLAY_PATH="$fixture" bash -euo pipefail -c "$guard" >/dev/null 2>&1 || result=$?
-  if [ "$expected" = reject ] && [ "$result" -eq 0 ]; then
-    fail "$name was accepted"
-  fi
-  if [ "$expected" = accept ] && [ "$result" -ne 0 ]; then
-    fail "$name was rejected"
-  fi
-  rm -rf "$fixture"
-  trap - RETURN
+	OVERLAY_PATH="$fixture" bash -euo pipefail -c "$guard" >/dev/null 2>&1 || result=$?
+	if [ "$expected" = reject ] && [ "$result" -eq 0 ]; then
+		fail "$name was accepted"
+	fi
+	if [ "$expected" = accept ] && [ "$result" -ne 0 ]; then
+		fail "$name was rejected"
+	fi
+	rm -rf "$fixture"
+	trap - RETURN
 }
 
 run_case local accept ./base
