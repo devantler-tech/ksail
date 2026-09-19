@@ -73,7 +73,9 @@ run_case legacy-prefix reject git::https://github.com/stefanprodan/podinfo//kust
 run_case uppercase-legacy-prefix reject GIT::HTTPS://github.com/stefanprodan/podinfo//kustomize
 run_case flow-list reject https://github.com/stefanprodan/podinfo//kustomize flow
 run_yaml_case remote-patch reject $'resources:\n  - ./deployment.yaml\npatches:\n  - path: https://raw.githubusercontent.com/example/repo/main/patch.yaml'
+run_yaml_case remote-strategic-merge-patch reject $'resources:\n  - ./deployment.yaml\npatchesStrategicMerge:\n  - https://raw.githubusercontent.com/example/repo/main/patch.yaml'
 run_yaml_case remote-generator-data reject $'configMapGenerator:\n  - name: data\n    files:\n      - config=https://example.com/config.yaml'
+run_yaml_case oci-helm-repository reject $'helmCharts:\n  - name: example\n    repo: oci://registry.example.com/charts'
 run_transitive_case
 
 printf 'remote-resource-guard tests passed\n'

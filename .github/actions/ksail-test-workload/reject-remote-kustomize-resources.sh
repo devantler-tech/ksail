@@ -2,14 +2,15 @@
 set -euo pipefail
 
 overlay_path=${1:?usage: reject-remote-kustomize-resources.sh OVERLAY_PATH}
-remote_pattern='^([^=[:space:]]+=)?(git::)?(https?://|ssh://|[^/@[:space:]]+@[^/:[:space:]]+:|github\.com[:/])'
+remote_pattern='^([^=[:space:]]+=)?(git::)?(https?://|ssh://|oci://|[^/@[:space:]]+@[^/:[:space:]]+:|github\.com[:/])'
 remote=""
 visited=""
 
 remote_capable_paths() {
 	yq -r '[
 		.resources[]?, .bases[]?, .components[]?, .crds[]?,
-		.patches[]?.path?, .patchesJson6902[]?.path?, .replacements[]?.path?,
+		.patches[]?.path?, .patchesJson6902[]?.path?, .patchesStrategicMerge[]?,
+		.replacements[]?.path?,
 		.configurations[]?, .generators[]?, .transformers[]?, .validators[]?,
 		.configMapGenerator[]?.files[]?, .configMapGenerator[]?.envs[]?,
 		.configMapGenerator[]?.env?, .secretGenerator[]?.files[]?,
