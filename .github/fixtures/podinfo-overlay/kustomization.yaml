@@ -1,8 +1,9 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-# The base lives in this repository, so the system test exercises
-# `ksail workload apply -k` with a base and a patch and fails only on KSail's
-# own behaviour, never on a third-party repository being slow or down (#6456).
+# The base lives in this repository, so resolving it never clones a third-party
+# repository (#6456); the apply step refuses an overlay that lists a remote
+# resource. The one network dependency left is the Podinfo image, pulled from
+# GHCR when a node does not already have it.
 # The base keeps an HPA so the delete patch below still has something to remove.
 resources:
   - base
