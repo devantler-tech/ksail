@@ -8,6 +8,16 @@ fail() {
 	exit 1
 }
 
+assert_result() {
+	local name=$1 expected=$2 result=$3
+	if [ "$expected" = reject ] && [ "$result" -eq 0 ]; then
+		fail "$name was accepted"
+	fi
+	if [ "$expected" = accept ] && [ "$result" -ne 0 ]; then
+		fail "$name was rejected"
+	fi
+}
+
 run_case() {
 	local name=$1 expected=$2 resource=$3 style=${4:-block} fixture result=0
 	fixture="$(mktemp -d)"
@@ -19,12 +29,7 @@ run_case() {
 	fi
 
 	"$subject" "$fixture" >/dev/null 2>&1 || result=$?
-	if [ "$expected" = reject ] && [ "$result" -eq 0 ]; then
-		fail "$name was accepted"
-	fi
-	if [ "$expected" = accept ] && [ "$result" -ne 0 ]; then
-		fail "$name was rejected"
-	fi
+	assert_result "$name" "$expected" "$result"
 	rm -rf "$fixture"
 	trap - RETURN
 }
@@ -36,12 +41,7 @@ run_yaml_case() {
 	printf '%s\n' "$content" >"$fixture/kustomization.yaml"
 
 	"$subject" "$fixture" >/dev/null 2>&1 || result=$?
-	if [ "$expected" = reject ] && [ "$result" -eq 0 ]; then
-		fail "$name was accepted"
-	fi
-	if [ "$expected" = accept ] && [ "$result" -ne 0 ]; then
-		fail "$name was rejected"
-	fi
+	assert_result "$name" "$expected" "$result"
 	rm -rf "$fixture"
 	trap - RETURN
 }
