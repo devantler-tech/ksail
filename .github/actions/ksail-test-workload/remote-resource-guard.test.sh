@@ -1,20 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-action="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/action.yaml"
-
-guard="$({
-	awk '
-    /- name: .*ksail workload apply/ { step = 1 }
-    step && /^      run: \|/ { run = 1; next }
-    run && /^    - name:/ { exit }
-    run { sub(/^        /, ""); print }
-  ' "$action"
-} | awk '
-  /# The overlay must resolve from this checkout/ { keep = 1 }
-  /^apply_succeeded=false$/ { exit }
-  keep
-')"
+subject="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/reject-remote-kustomize-resources.sh"
 
 fail() {
 	printf 'FAIL: %s\n' "$*" >&2
@@ -31,7 +18,7 @@ run_case() {
 		printf 'resources:\n  - %s\n' "$resource" >"$fixture/kustomization.yaml"
 	fi
 
-	OVERLAY_PATH="$fixture" bash -euo pipefail -c "$guard" >/dev/null 2>&1 || result=$?
+	"$subject" "$fixture" >/dev/null 2>&1 || result=$?
 	if [ "$expected" = reject ] && [ "$result" -eq 0 ]; then
 		fail "$name was accepted"
 	fi
@@ -47,7 +34,9 @@ run_case https reject https://github.com/stefanprodan/podinfo//kustomize
 run_case ssh reject ssh://git@github.com/stefanprodan/podinfo
 run_case scp reject git@github.com:stefanprodan/podinfo
 run_case shorthand reject github.com/stefanprodan/podinfo
+run_case shorthand-colon reject github.com:stefanprodan/podinfo
 run_case legacy-prefix reject git::https://github.com/stefanprodan/podinfo//kustomize
+run_case uppercase-legacy-prefix reject GIT::HTTPS://github.com/stefanprodan/podinfo//kustomize
 run_case flow-list reject https://github.com/stefanprodan/podinfo//kustomize flow
 
 printf 'remote-resource-guard tests passed\n'

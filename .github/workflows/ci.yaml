@@ -443,6 +443,7 @@ jobs:
       - name: 🔐 Verify GitOps and workload guards fail closed
         run: |
           shellcheck \
+            .github/actions/ksail-test-workload/reject-remote-kustomize-resources.sh \
             .github/actions/ksail-test-workload/remote-resource-guard.test.sh \
             .github/scripts/assert-gitops-deployed.sh \
             .github/scripts/assert-gitops-deployed.test.sh

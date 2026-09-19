@@ -163,19 +163,7 @@ runs:
       run: |
         # The overlay must resolve from this checkout: a remote base makes the test depend on
         # a third-party host instead of KSail (#6456).
-        remote=""
-        while IFS= read -r -d '' kustomization; do
-          if matches="$(yq -r '(.resources // [])[], (.bases // [])[], (.components // [])[]' \
-              "$kustomization" | grep -En '^(git::)?(https?://|git@|ssh://|github\.com/)')"; then
-            remote="${remote}${kustomization}: ${matches}"$'\n'
-          fi
-        done < <(find "$OVERLAY_PATH" -type f \
-          \( -name kustomization.yaml -o -name kustomization.yml -o -name Kustomization \) -print0)
-        if [ -n "$remote" ]; then
-          echo "❌ overlay lists a remote resource; keep the system-test overlay local:"
-          echo "${remote%$'\n'}"
-          exit 1
-        fi
+        "$GITHUB_ACTION_PATH/reject-remote-kustomize-resources.sh" "$OVERLAY_PATH"
         apply_succeeded=false
         for attempt in 1 2 3; do
           if ksail workload apply -k "$OVERLAY_PATH" --wait --timeout="$TIMEOUT"; then
