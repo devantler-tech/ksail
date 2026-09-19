@@ -4,17 +4,20 @@ name: 🔍 CodeQL
 # exclusive: default setup must be disabled in the repository settings
 # (Settings → Code security → CodeQL analysis) for these results to upload.
 #
-# Default setup's Go autobuild extracts every go.mod it finds, on one runner.
-# desktop/go.mod replaces the root module (`=> ../`), so the desktop pass extracts the
-# root module's whole dependency graph and the root pass then extracts it again. That
-# exhausts the hosted runner, which is shut down mid-extraction (#6767). Here each Go
-# module is analysed on its own runner, and because the workflow lives in this
-# repository a transient failure can be re-run.
+# Default setup exhausts the runner's memory on this repository's Go graph and is shut
+# down mid-extraction, on roughly one run in three (#6767). It cannot be re-run, so a
+# pull request it fails stays blocked until something pushes a new commit. Two things
+# here address that: the extractor is given a memory budget that leaves the traced
+# build room (see `ram`/`threads` below), and each Go module is analysed on its own
+# runner — desktop/go.mod replaces the root module (`=> ../`), so a single autobuild
+# pass extracts the root module's whole dependency graph twice. Being a workflow in
+# this repository, a run that still fails can simply be re-run.
 #
 # Same languages and suite as the default setup it replaces: actions, Go and
-# JavaScript/TypeScript with the security-extended queries, emitting both code-scanning
-# and code-quality results so the "Require code scanning results" and "Require code
-# quality results" rulesets stay satisfied.
+# JavaScript/TypeScript with the security-extended queries. This satisfies the "Require
+# code scanning results" ruleset. Code-quality results cannot come from a custom
+# workflow (the CodeQL Action rejects `analysis-kinds: code-quality` here), so the
+# "Require code quality results" ruleset needs its own source once default setup is off.
 
 on:
   push:
@@ -101,16 +104,23 @@ jobs:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
           queries: security-extended
-          analysis-kinds: code-scanning,code-quality
+          # Left unset, CodeQL claims nearly all of the runner's memory for the Go
+          # extractor (14575 MB of 16 GB) — but in manual mode the traced `go build`
+          # runs alongside it, so the two together exceed the runner and the job is
+          # killed mid-build (exit 143, then a runner shutdown). Leave the compiler
+          # room; the Go analysis needs it more than the buildless languages do.
+          ram: ${{ matrix.language == 'go' && 8192 || '' }}
+          threads: ${{ matrix.language == 'go' && 2 || '' }}
 
+      # `-p 2` bounds the compiler's own parallel memory for the same reason.
       - name: 🏗️ Build root module
         if: matrix.module == 'root'
-        run: go build ./...
+        run: go build -p 2 ./...
 
       - name: 🏗️ Build desktop module
         if: matrix.module == 'desktop'
         working-directory: desktop
-        run: go build ./...
+        run: go build -p 2 ./...
 
       - name: 🔬 Perform CodeQL analysis
         uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
