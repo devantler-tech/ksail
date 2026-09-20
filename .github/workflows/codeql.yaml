@@ -14,10 +14,12 @@ name: 🔍 CodeQL
 # the module graph with `go list` and takes types from source, so it needs no compiler and
 # covers every `go.mod` in the workspace — root, `desktop/` and `third_party/go-archive/` —
 # in one job. `none` is rejected for Go, and `manual` runs a traced compile that exceeds
-# the runner's memory alongside the extractor. Extraction is capped at two threads: this
-# repository's Go graph is large enough that the extractor's default of one worker per core
-# exhausts a 16 GB runner part-way through and the runner is killed, which is the failure
-# #6767 describes. Default setup cannot set that cap; this workflow can.
+# the runner's memory alongside the extractor. CodeQL's own budget is capped well below the
+# runner's 16 GB: the Go extractor is a separate process with its own heap, and leaving CodeQL
+# the ~14.5 GB it claims by default starves it part-way through extraction, which is the
+# failure #6767 describes. Capping extractor THREADS was tried and changed nothing, so the
+# pressure is process headroom rather than worker concurrency. Default setup cannot set either
+# knob; this workflow can.
 #
 # Same languages and suite as the default setup it replaces: actions, Go and
 # JavaScript/TypeScript with the security-extended queries. This satisfies the "Require
@@ -65,7 +67,7 @@ jobs:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.language == 'go' && 'autobuild' || 'none' }}
           queries: security-extended
-          threads: 2
+          ram: 8192
 
       - name: 🏗️ Autobuild
         if: matrix.language == 'go'
