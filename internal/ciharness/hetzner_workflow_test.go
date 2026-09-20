@@ -1,6 +1,9 @@
 package ciharness_test
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -74,6 +77,53 @@ func TestHetznerWorkflowSmokesK3sAndVanilla(t *testing.T) {
 	assertHetznerFallbackCleanup(t, fallback.Steps)
 }
 
+func TestHetznerSmokeReadinessRetriesTransientFailures(t *testing.T) {
+	t.Parallel()
+
+	contents := readRepoFile(t, ".github/workflows/system-test-hetzner.yaml")
+
+	var workflow hetznerWorkflow
+	require.NoError(t, yaml.Unmarshal(contents, &workflow))
+
+	systemTest, found := workflow.Jobs["system-test"]
+	require.True(t, found, "Hetzner system-test job is missing")
+	reachability := findHarnessStep(t, systemTest.Steps, "🧪 Assert Hetzner Smoke Cluster Reachable")
+	assert.Equal(t, 6, reachability.TimeoutMinutes)
+
+	fakeBin := t.TempDir()
+	attemptsFile := filepath.Join(t.TempDir(), "attempts")
+	writeExecutable(t, filepath.Join(fakeBin, "ksail"), `#!/usr/bin/env bash
+set -euo pipefail
+attempts=0
+if [[ -f "${ATTEMPTS_FILE}" ]]; then
+  attempts=$(<"${ATTEMPTS_FILE}")
+fi
+attempts=$((attempts + 1))
+printf '%s' "${attempts}" > "${ATTEMPTS_FILE}"
+case "${attempts}" in
+  1) exit 1 ;;
+  2) printf 'starting\n' ;;
+  *) printf 'ok\n' ;;
+esac
+`)
+	writeExecutable(t, filepath.Join(fakeBin, "sleep"), "#!/usr/bin/env bash\nexit 0\n")
+
+	command := exec.Command("bash", "-c", reachability.Run)
+	command.Env = append(os.Environ(), "ATTEMPTS_FILE="+attemptsFile, "PATH="+fakeBin+":"+os.Getenv("PATH"))
+	output, err := command.CombinedOutput()
+	require.NoErrorf(t, err, "readiness check failed before the API became ready:\n%s", output)
+
+	attempts, err := os.ReadFile(attemptsFile) //nolint:gosec // The test owns this temporary path.
+	require.NoError(t, err)
+	assert.Equal(t, "3", string(attempts))
+}
+
+func writeExecutable(t *testing.T, path string, contents string) {
+	t.Helper()
+
+	require.NoError(t, os.WriteFile(path, []byte(contents), 0o700))
+}
+
 func assertHetznerSmokeMatrix(t *testing.T, matrix map[string]any) {
 	t.Helper()
 
@@ -108,7 +158,6 @@ func assertHetznerSmokeSteps(t *testing.T, steps []harnessStep) {
 	reachability := findHarnessStep(t, steps, "🧪 Assert Hetzner Smoke Cluster Reachable")
 	assert.Equal(t, "${{ matrix.smoke == true }}", reachability.If)
 	assert.Contains(t, reachability.Run, `ksail workload get --raw=/readyz`)
-	assert.Contains(t, reachability.Run, `if [ "$READYZ" != "ok" ]`)
 
 	cleanup := findHarnessStep(t, steps, "🧹 Delete Hetzner Smoke Cluster")
 	assert.Contains(t, cleanup.If, "always()")

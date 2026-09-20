@@ -272,14 +272,24 @@ jobs:
       - name: 🧪 Assert Hetzner Smoke Cluster Reachable
         if: ${{ matrix.smoke == true }}
         shell: bash
+        timeout-minutes: 6
         run: |
           set -euo pipefail
-          READYZ=$(ksail workload get --raw=/readyz | tr -d '\r\n')
-          if [ "$READYZ" != "ok" ]; then
-            echo "❌ Kubernetes API readiness probe returned: ${READYZ:-<empty>}" >&2
-            exit 1
-          fi
-          echo "✅ Kubernetes API is reachable"
+          READYZ=""
+          for attempt in {1..30}; do
+            if READYZ=$(ksail workload get --raw=/readyz 2>&1 | tr -d '\r\n') && [ "$READYZ" = "ok" ]; then
+              echo "✅ Kubernetes API is reachable"
+              exit 0
+            fi
+
+            if [ "$attempt" -lt 30 ]; then
+              echo "⏳ Waiting for Kubernetes API readiness (${attempt}/30): ${READYZ:-<empty>}" >&2
+              sleep 10
+            fi
+          done
+
+          echo "❌ Kubernetes API did not become ready after 30 attempts: ${READYZ:-<empty>}" >&2
+          exit 1
 
       - name: 🧹 Delete Hetzner Smoke Cluster
         if: ${{ always() && matrix.smoke == true }}
