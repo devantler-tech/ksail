@@ -113,8 +113,14 @@ esac
 	// The command is parsed from this repository's workflow, never from user input.
 	commandContext, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
+
 	command := exec.CommandContext(commandContext, "bash", "-c", reachability.Run) //nolint:gosec
-	command.Env = append(os.Environ(), "ATTEMPTS_FILE="+attemptsFile, "PATH="+fakeBin+":"+os.Getenv("PATH"))
+
+	command.Env = append(
+		os.Environ(),
+		"ATTEMPTS_FILE="+attemptsFile,
+		"PATH="+fakeBin+":"+os.Getenv("PATH"),
+	)
 	output, err := command.CombinedOutput()
 	require.NoErrorf(t, err, "readiness check failed before the API became ready:\n%s", output)
 
@@ -127,7 +133,10 @@ func writeExecutable(t *testing.T, path string, contents string) {
 	t.Helper()
 
 	require.NoError(t, os.WriteFile(path, []byte(contents), 0o600))
-	require.NoError(t, os.Chmod(path, 0o700)) //nolint:gosec // Test-owned shell fixture must be executable.
+	require.NoError(
+		t,
+		os.Chmod(path, 0o700),
+	) //nolint:gosec // Test-owned shell fixture must be executable.
 }
 
 func assertHetznerSmokeMatrix(t *testing.T, matrix map[string]any) {
