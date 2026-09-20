@@ -2,6 +2,7 @@ package ciharness_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -144,13 +145,37 @@ func assertHetznerSmokeMatrix(t *testing.T, matrix map[string]any) {
 
 	include, ok := matrix["include"].(string)
 	require.True(t, ok, "Hetzner matrix include must remain an expression string")
-	assert.Contains(
-		t, include, `"distribution":"K3s","suffix":"k3s-smoke","args":"","smoke":true`,
-	)
-	assert.Contains(
-		t, include,
-		`"distribution":"Vanilla","suffix":"vanilla-smoke","args":"","smoke":true`,
-	)
+
+	const fromJSONPrefix = `fromJSON('`
+	start := strings.Index(include, fromJSONPrefix)
+	require.NotEqual(t, -1, start, "Hetzner matrix must contain a static fromJSON payload")
+
+	payload := include[start+len(fromJSONPrefix):]
+	end := strings.Index(payload, `')`)
+	require.NotEqual(t, -1, end, "static Hetzner matrix JSON must be terminated")
+
+	type matrixEntry struct {
+		Init         bool   `json:"init"`
+		Distribution string `json:"distribution"`
+		Suffix       string `json:"suffix"`
+		Args         string `json:"args"`
+		Smoke        bool   `json:"smoke"`
+	}
+
+	var entries []matrixEntry
+	require.NoError(t, json.Unmarshal([]byte(payload[:end]), &entries))
+
+	var smokeEntries []matrixEntry
+	for _, entry := range entries {
+		if entry.Smoke {
+			smokeEntries = append(smokeEntries, entry)
+		}
+	}
+
+	assert.Equal(t, []matrixEntry{
+		{Distribution: "K3s", Suffix: "k3s-smoke", Smoke: true},
+		{Distribution: "Vanilla", Suffix: "vanilla-smoke", Smoke: true},
+	}, smokeEntries)
 }
 
 func assertHetznerSmokeSteps(t *testing.T, steps []harnessStep) {
@@ -162,7 +187,7 @@ func assertHetznerSmokeSteps(t *testing.T, steps []harnessStep) {
 
 	create := findHarnessStep(t, steps, "🧪 Create Hetzner Smoke Cluster")
 	assert.Equal(t, "${{ matrix.smoke == true }}", create.If)
-	assert.Equal(t, "$/.github/actions/ksail-cluster", create.Uses)
+	assert.Equal(t, "./.github/actions/ksail-cluster", create.Uses)
 	assert.Equal(t, "${{ matrix.distribution }}", create.With["distribution"])
 	assert.Equal(t, "Hetzner", create.With["provider"])
 	assert.Equal(t, "false", create.With["init"])
@@ -177,7 +202,7 @@ func assertHetznerSmokeSteps(t *testing.T, steps []harnessStep) {
 	cleanup := findHarnessStep(t, steps, "🧹 Delete Hetzner Smoke Cluster")
 	assert.Contains(t, cleanup.If, "always()")
 	assert.Contains(t, cleanup.If, "matrix.smoke == true")
-	assert.Equal(t, "$/.github/actions/ksail-system-test-cleanup", cleanup.Uses)
+	assert.Equal(t, "./.github/actions/ksail-system-test-cleanup", cleanup.Uses)
 	assert.Equal(t, "${{ secrets.HCLOUD_TOKEN }}", cleanup.Env["HCLOUD_TOKEN"])
 	assert.Equal(t, "${{ matrix.distribution }}", cleanup.With["distribution"])
 	assert.Equal(t, "Hetzner", cleanup.With["provider"])
@@ -186,19 +211,23 @@ func assertHetznerSmokeSteps(t *testing.T, steps []harnessStep) {
 func assertHetznerFallbackCleanup(t *testing.T, steps []harnessStep) {
 	t.Helper()
 
-	var selectors []string
-
-	for _, step := range steps {
-		if selector, selectorOK := step.With["label-selector"].(string); selectorOK {
-			selectors = append(selectors, selector)
-			if strings.Contains(selector, "st-hetzner-k3s-smoke-") ||
-				strings.Contains(selector, "st-hetzner-vanilla-smoke-") {
-				assert.Equal(t, "$/.github/actions/cleanup-hetzner", step.Uses)
-			}
-		}
+	expected := []struct {
+		name     string
+		selector string
+	}{
+		{
+			name:     "🧹 Cleanup Hetzner resources (K3s smoke)",
+			selector: "ksail.cluster.name=st-hetzner-k3s-smoke-${{ github.run_id }}",
+		},
+		{
+			name:     "🧹 Cleanup Hetzner resources (Vanilla smoke)",
+			selector: "ksail.cluster.name=st-hetzner-vanilla-smoke-${{ github.run_id }}",
+		},
 	}
 
-	joinedSelectors := strings.Join(selectors, "\n")
-	assert.Contains(t, joinedSelectors, "st-hetzner-k3s-smoke-${{ github.run_id }}")
-	assert.Contains(t, joinedSelectors, "st-hetzner-vanilla-smoke-${{ github.run_id }}")
+	for _, want := range expected {
+		step := findHarnessStep(t, steps, want.name)
+		assert.Equal(t, "./.github/actions/cleanup-hetzner", step.Uses)
+		assert.Equal(t, want.selector, step.With["label-selector"])
+	}
 }
