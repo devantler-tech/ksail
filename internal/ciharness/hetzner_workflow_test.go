@@ -10,12 +10,46 @@ import (
 )
 
 type hetznerWorkflow struct {
+	On struct {
+		WorkflowDispatch struct {
+			Inputs map[string]struct {
+				Type    string   `yaml:"type"`
+				Options []string `yaml:"options"`
+				Default any      `yaml:"default"`
+			} `yaml:"inputs"`
+		} `yaml:"workflow_dispatch"`
+	} `yaml:"on"`
 	Jobs map[string]struct {
 		Strategy struct {
 			Matrix map[string]any `yaml:"matrix"`
 		} `yaml:"strategy"`
 		Steps []harnessStep `yaml:"steps"`
 	} `yaml:"jobs"`
+}
+
+func TestHetznerWorkflowAllowsManualDirectProviderSmoke(t *testing.T) {
+	t.Parallel()
+
+	contents := readRepoFile(t, ".github/workflows/system-test-hetzner.yaml")
+
+	var workflow hetznerWorkflow
+	require.NoError(t, yaml.Unmarshal(contents, &workflow))
+
+	distribution, found := workflow.On.WorkflowDispatch.Inputs["distribution"]
+	require.True(t, found, "workflow dispatch must expose a distribution selector")
+	assert.Equal(t, "choice", distribution.Type)
+	assert.Equal(t, "Talos", distribution.Default)
+	assert.ElementsMatch(t, []string{"Talos", "K3s", "Vanilla"}, distribution.Options)
+
+	systemTest, found := workflow.Jobs["system-test"]
+	require.True(t, found, "Hetzner system-test job is missing")
+	include, ok := systemTest.Strategy.Matrix["include"].(string)
+	require.True(t, ok, "Hetzner matrix include must remain an expression string")
+	assert.Contains(t, include, "inputs.distribution")
+	assert.Contains(t, include, "inputs.distribution != 'Talos'")
+
+	args := findHarnessStep(t, systemTest.Steps, "🔧 Build args string")
+	assert.Contains(t, args.Run, `matrix.smoke != true`)
 }
 
 func TestHetznerWorkflowSmokesK3sAndVanilla(t *testing.T) {

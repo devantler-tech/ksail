@@ -3,6 +3,12 @@ name: "System Test - Hetzner"
 on:
   workflow_dispatch:
     inputs:
+      distribution:
+        description: "Kubernetes distribution"
+        required: false
+        type: choice
+        options: [Talos, K3s, Vanilla]
+        default: Talos
       init:
         description: "Run ksail project init before create"
         required: false
@@ -68,9 +74,10 @@ on:
   schedule:
     # Weekly: Sunday 03:00 UTC, one hour before the Omni system test, so real clusters are
     # created at most once a day. The scheduled run starts with the two direct-provider smoke
-    # tests, then covers the four Talos configurations below; workflow_dispatch runs a single
-    # Talos configuration on demand. Credentials come from the org-wide HCLOUD_TOKEN, scoped to
-    # a dedicated Hetzner test project.
+    # tests, then covers the four Talos configurations below; workflow_dispatch runs one selected
+    # distribution on demand. K3s and Vanilla use the same direct-provider smoke path as the
+    # schedule. Credentials come from the org-wide HCLOUD_TOKEN, scoped to a dedicated Hetzner
+    # test project.
     - cron: "0 3 * * 0"
 
 env:
@@ -187,9 +194,9 @@ jobs:
       max-parallel: 1
       matrix:
         # On schedule: smoke the direct K3s/Vanilla provisioners first, then run all important
-        # Talos configurations sequentially for broad E2E coverage. On workflow_dispatch: run a
-        # single user-selected Talos configuration.
-        include: ${{ github.event_name == 'schedule' && fromJSON('[{"init":false,"distribution":"K3s","suffix":"k3s-smoke","args":"","smoke":true},{"init":false,"distribution":"Vanilla","suffix":"vanilla-smoke","args":"","smoke":true},{"init":true,"distribution":"Talos","suffix":"default-init","args":"","smoke":false},{"init":false,"distribution":"Talos","suffix":"default-noinit","args":"","smoke":false},{"init":true,"distribution":"Talos","suffix":"fullstack","args":"--cni Cilium --csi Enabled --load-balancer Enabled --metrics-server Enabled --policy-engine Kyverno --cert-manager Enabled --gitops-engine Flux --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests","smoke":false},{"init":true,"distribution":"Talos","suffix":"altstack","args":"--cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine Gatekeeper --gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests","smoke":false}]') || fromJSON(format('[{{"init":{0},"distribution":"Talos","suffix":"dispatch","args":"","smoke":false}}]', inputs.init)) }}
+        # Talos configurations sequentially for broad E2E coverage. On workflow_dispatch: run one
+        # selected distribution; direct providers take the smoke path and Talos takes the full path.
+        include: ${{ github.event_name == 'schedule' && fromJSON('[{"init":false,"distribution":"K3s","suffix":"k3s-smoke","args":"","smoke":true},{"init":false,"distribution":"Vanilla","suffix":"vanilla-smoke","args":"","smoke":true},{"init":true,"distribution":"Talos","suffix":"default-init","args":"","smoke":false},{"init":false,"distribution":"Talos","suffix":"default-noinit","args":"","smoke":false},{"init":true,"distribution":"Talos","suffix":"fullstack","args":"--cni Cilium --csi Enabled --load-balancer Enabled --metrics-server Enabled --policy-engine Kyverno --cert-manager Enabled --gitops-engine Flux --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests","smoke":false},{"init":true,"distribution":"Talos","suffix":"altstack","args":"--cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine Gatekeeper --gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests","smoke":false}]') || fromJSON(format('[{{"init":{0},"distribution":"{1}","suffix":"dispatch","args":"","smoke":{2}}}]', inputs.init, inputs.distribution, inputs.distribution != 'Talos')) }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -230,7 +237,7 @@ jobs:
         run: |
           ARGS="--name st-hetzner-${{ matrix.suffix }}-${{ github.run_id }}"
 
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ matrix.smoke != true }}" == "true" ]]; then
             # Build from user-selected inputs
             [[ "${{ inputs.cni }}" != "Default" && -n "${{ inputs.cni }}" ]] && ARGS+=" --cni ${{ inputs.cni }}"
             [[ "${{ inputs.csi }}" != "Default" && -n "${{ inputs.csi }}" ]] && ARGS+=" --csi ${{ inputs.csi }}"
