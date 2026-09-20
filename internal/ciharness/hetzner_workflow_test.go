@@ -44,6 +44,7 @@ func TestHetznerWorkflowAllowsManualDirectProviderSmoke(t *testing.T) {
 
 	systemTest, found := workflow.Jobs["system-test"]
 	require.True(t, found, "Hetzner system-test job is missing")
+
 	include, ok := systemTest.Strategy.Matrix["include"].(string)
 	require.True(t, ok, "Hetzner matrix include must remain an expression string")
 	assert.Contains(t, include, "inputs.distribution")
