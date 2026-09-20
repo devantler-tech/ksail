@@ -32,7 +32,7 @@ permissions: {}
 
 concurrency:
   group: codeql-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   analyze:
@@ -83,7 +83,7 @@ jobs:
       # then downloads at the pinned version.
       - name: 🧹 Free disk space
         if: matrix.module == 'root'
-        uses: ./.github/actions/free-disk-space
+        uses: $/.github/actions/free-disk-space
 
       - name: ⚙️ Setup Go
         if: matrix.module == 'root'
@@ -96,7 +96,7 @@ jobs:
       # stages the web UI the desktop app embeds — the same setup its CI build uses.
       - name: 🛠️ Setup desktop build
         if: matrix.module == 'desktop'
-        uses: ./.github/actions/setup-desktop-build
+        uses: $/.github/actions/setup-desktop-build
 
       - name: 🔍 Initialize CodeQL
         uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
