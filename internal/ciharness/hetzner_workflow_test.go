@@ -21,6 +21,7 @@ type hetznerWorkflow struct {
 		} `yaml:"workflow_dispatch"`
 	} `yaml:"on"`
 	Jobs map[string]struct {
+		If       string `yaml:"if"`
 		Strategy struct {
 			Matrix map[string]any `yaml:"matrix"`
 		} `yaml:"strategy"`
@@ -69,6 +70,7 @@ func TestHetznerWorkflowSmokesK3sAndVanilla(t *testing.T) {
 
 	fallback, found := workflow.Jobs["cleanup"]
 	require.True(t, found, "workflow-level Hetzner cleanup job is missing")
+	assert.Contains(t, fallback.If, "always()")
 	assertHetznerFallbackCleanup(t, fallback.Steps)
 }
 
