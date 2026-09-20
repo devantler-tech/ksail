@@ -258,7 +258,7 @@ jobs:
 
       - name: 🧪 Create Hetzner Smoke Cluster
         if: ${{ matrix.smoke == true }}
-        uses: ./.github/actions/ksail-cluster
+        uses: $/.github/actions/ksail-cluster
         env:
           HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
         with:
@@ -293,7 +293,7 @@ jobs:
 
       - name: 🧹 Delete Hetzner Smoke Cluster
         if: ${{ always() && matrix.smoke == true }}
-        uses: ./.github/actions/ksail-system-test-cleanup
+        uses: $/.github/actions/ksail-system-test-cleanup
         env:
           HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
         with:
@@ -362,14 +362,14 @@ jobs:
           HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
 
       - name: 🧹 Cleanup Hetzner resources (K3s smoke)
-        uses: ./.github/actions/cleanup-hetzner
+        uses: $/.github/actions/cleanup-hetzner
         with:
           label-selector: "ksail.cluster.name=st-hetzner-k3s-smoke-${{ github.run_id }}"
         env:
           HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
 
       - name: 🧹 Cleanup Hetzner resources (Vanilla smoke)
-        uses: ./.github/actions/cleanup-hetzner
+        uses: $/.github/actions/cleanup-hetzner
         with:
           label-selector: "ksail.cluster.name=st-hetzner-vanilla-smoke-${{ github.run_id }}"
         env:

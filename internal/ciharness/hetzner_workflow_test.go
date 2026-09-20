@@ -187,7 +187,7 @@ func assertHetznerSmokeSteps(t *testing.T, steps []harnessStep) {
 
 	create := findHarnessStep(t, steps, "🧪 Create Hetzner Smoke Cluster")
 	assert.Equal(t, "${{ matrix.smoke == true }}", create.If)
-	assert.Equal(t, "./.github/actions/ksail-cluster", create.Uses)
+	assert.Equal(t, "$/.github/actions/ksail-cluster", create.Uses)
 	assert.Equal(t, "${{ matrix.distribution }}", create.With["distribution"])
 	assert.Equal(t, "Hetzner", create.With["provider"])
 	assert.Equal(t, "false", create.With["init"])
@@ -202,7 +202,7 @@ func assertHetznerSmokeSteps(t *testing.T, steps []harnessStep) {
 	cleanup := findHarnessStep(t, steps, "🧹 Delete Hetzner Smoke Cluster")
 	assert.Contains(t, cleanup.If, "always()")
 	assert.Contains(t, cleanup.If, "matrix.smoke == true")
-	assert.Equal(t, "./.github/actions/ksail-system-test-cleanup", cleanup.Uses)
+	assert.Equal(t, "$/.github/actions/ksail-system-test-cleanup", cleanup.Uses)
 	assert.Equal(t, "${{ secrets.HCLOUD_TOKEN }}", cleanup.Env["HCLOUD_TOKEN"])
 	assert.Equal(t, "${{ matrix.distribution }}", cleanup.With["distribution"])
 	assert.Equal(t, "Hetzner", cleanup.With["provider"])
@@ -227,7 +227,7 @@ func assertHetznerFallbackCleanup(t *testing.T, steps []harnessStep) {
 
 	for _, want := range expected {
 		step := findHarnessStep(t, steps, want.name)
-		assert.Equal(t, "./.github/actions/cleanup-hetzner", step.Uses)
+		assert.Equal(t, "$/.github/actions/cleanup-hetzner", step.Uses)
 		assert.Equal(t, want.selector, step.With["label-selector"])
 	}
 }
