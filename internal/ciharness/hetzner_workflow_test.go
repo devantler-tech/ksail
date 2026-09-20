@@ -9,6 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+//nolint:tagliatelle // GitHub Actions defines this external key in snake_case.
 type hetznerWorkflow struct {
 	On struct {
 		WorkflowDispatch struct {
