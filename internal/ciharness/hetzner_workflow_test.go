@@ -147,6 +147,7 @@ func assertHetznerSmokeMatrix(t *testing.T, matrix map[string]any) {
 	require.True(t, ok, "Hetzner matrix include must remain an expression string")
 
 	const fromJSONPrefix = `fromJSON('`
+
 	start := strings.Index(include, fromJSONPrefix)
 	require.NotEqual(t, -1, start, "Hetzner matrix must contain a static fromJSON payload")
 
@@ -166,6 +167,7 @@ func assertHetznerSmokeMatrix(t *testing.T, matrix map[string]any) {
 	require.NoError(t, json.Unmarshal([]byte(payload[:end]), &entries))
 
 	var smokeEntries []matrixEntry
+
 	for _, entry := range entries {
 		if entry.Smoke {
 			smokeEntries = append(smokeEntries, entry)
