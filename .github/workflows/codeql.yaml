@@ -4,20 +4,23 @@ name: 🔍 CodeQL
 # exclusive: default setup must be disabled in the repository settings
 # (Settings → Code security → CodeQL analysis) for these results to upload.
 #
-# Default setup exhausts the runner's memory on this repository's Go graph and is shut
-# down mid-extraction, on roughly one run in three (#6767). It cannot be re-run, so a
-# pull request it fails stays blocked until something pushes a new commit. Two things
-# here address that: the extractor is given a memory budget that leaves the traced
-# build room (see `ram`/`threads` below), and each Go module is analysed on its own
-# runner — desktop/go.mod replaces the root module (`=> ../`), so a single autobuild
-# pass extracts the root module's whole dependency graph twice. Being a workflow in
-# this repository, a run that still fails can simply be re-run.
+# The reason to own the workflow is re-runnability. A default-setup run is GitHub-managed
+# (`event: dynamic`, no workflow file in the repository), so `gh run rerun` is refused and
+# an intermittent extractor failure can only be cleared by pushing a new commit — which a
+# bot-authored release PR will never do, leaving it blocked indefinitely (#6767). A run of
+# this workflow can simply be re-run.
+#
+# Go is extracted buildless (`build-mode: none`). The Go extractor resolves the module
+# graph with `go list` and reads types from source, so it needs no compiler and covers
+# every `go.mod` in the workspace — root, `desktop/` and `third_party/go-archive/` — in one
+# job. A traced build instead compiles that graph alongside the extractor, and the two
+# together exceed the runner.
 #
 # Same languages and suite as the default setup it replaces: actions, Go and
 # JavaScript/TypeScript with the security-extended queries. This satisfies the "Require
-# code scanning results" ruleset. Code-quality results cannot come from a custom
-# workflow (the CodeQL Action rejects `analysis-kinds: code-quality` here), so the
-# "Require code quality results" ruleset needs its own source once default setup is off.
+# code scanning results" ruleset. Code-quality results cannot come from a custom workflow
+# (the CodeQL Action rejects `analysis-kinds: code-quality` here), so the "Require code
+# quality results" ruleset needs its own source once default setup is off.
 
 on:
   push:
@@ -36,8 +39,8 @@ concurrency:
 
 jobs:
   analyze:
-    name: Analyze (${{ matrix.name }})
-    runs-on: ${{ matrix.runner }}
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       security-events: write
@@ -46,88 +49,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: actions
-            language: actions
-            build-mode: none
-            category: /language:actions
-            runner: ubuntu-latest
-          - name: javascript-typescript
-            language: javascript-typescript
-            build-mode: none
-            category: /language:javascript-typescript
-            runner: ubuntu-latest
-          # The root module only. `go build ./...` resolves this module's packages, so
-          # the desktop module is not extracted here.
-          - name: go
-            language: go
-            build-mode: manual
-            category: /language:go
-            module: root
-            runner: ubuntu-latest
-          # The desktop module, on its own runner. Wails v3 needs GTK4 + WebKitGTK 6.0,
-          # which ubuntu-24.04 ships.
-          - name: go-desktop
-            language: go
-            build-mode: manual
-            category: /language:go-desktop
-            module: desktop
-            runner: ubuntu-24.04
+        language: [actions, go, javascript-typescript]
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      # Before CodeQL init: this removes the runner's cached CodeQL bundle, which init
-      # then downloads at the pinned version.
-      - name: 🧹 Free disk space
-        if: matrix.module == 'root'
-        # A local action reference is pinned to this repository by construction. zizmor asks for GitHub's self-repository syntax
-        # ($/), but actionlint v1.7.12 (MegaLinter v10.1.0) rejects it as a malformed
-        # ref, and the rest of this repository uses ./ throughout. Revisit once
-        # actionlint understands $/.
-        uses: ./.github/actions/free-disk-space # zizmor: ignore[self-repository]
-
-      - name: ⚙️ Setup Go
-        if: matrix.module == 'root'
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      # Frees disk, sets up Go and Node.js, installs the webview build dependencies and
-      # stages the web UI the desktop app embeds — the same setup its CI build uses.
-      - name: 🛠️ Setup desktop build
-        if: matrix.module == 'desktop'
-        # See the note on the free-disk-space step above.
-        uses: ./.github/actions/setup-desktop-build # zizmor: ignore[self-repository]
-
       - name: 🔍 Initialize CodeQL
         uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
           languages: ${{ matrix.language }}
-          build-mode: ${{ matrix.build-mode }}
+          build-mode: none
           queries: security-extended
-          # Left unset, CodeQL claims nearly all of the runner's memory for the Go
-          # extractor (14575 MB of 16 GB) — but in manual mode the traced `go build`
-          # runs alongside it, so the two together exceed the runner and the job is
-          # killed mid-build (exit 143, then a runner shutdown). Leave the compiler
-          # room; the Go analysis needs it more than the buildless languages do.
-          ram: ${{ matrix.language == 'go' && 8192 || '' }}
-          threads: ${{ matrix.language == 'go' && 2 || '' }}
-
-      # `-p 2` bounds the compiler's own parallel memory for the same reason.
-      - name: 🏗️ Build root module
-        if: matrix.module == 'root'
-        run: go build -p 2 ./...
-
-      - name: 🏗️ Build desktop module
-        if: matrix.module == 'desktop'
-        working-directory: desktop
-        run: go build -p 2 ./...
 
       - name: 🔬 Perform CodeQL analysis
         uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
-          category: ${{ matrix.category }}
+          category: /language:${{ matrix.language }}
