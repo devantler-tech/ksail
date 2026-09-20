@@ -10,11 +10,12 @@ name: 🔍 CodeQL
 # bot-authored release PR will never do, leaving it blocked indefinitely (#6767). A run of
 # this workflow can simply be re-run.
 #
-# Go is extracted buildless (`build-mode: none`). The Go extractor resolves the module
-# graph with `go list` and reads types from source, so it needs no compiler and covers
-# every `go.mod` in the workspace — root, `desktop/` and `third_party/go-archive/` — in one
-# job. A traced build instead compiles that graph alongside the extractor, and the two
-# together exceed the runner.
+# Go uses `autobuild`, which the Go extractor resolves to standalone extraction: it reads
+# the module graph with `go list` and takes types from source, so it needs no compiler and
+# covers every `go.mod` in the workspace — root, `desktop/` and `third_party/go-archive/` —
+# in one job. `none` is rejected for Go, and `manual` runs a traced compile that exceeds
+# the runner's memory alongside the extractor. Memory is left at the extractor's own
+# defaults, which is what default setup uses here.
 #
 # Same languages and suite as the default setup it replaces: actions, Go and
 # JavaScript/TypeScript with the security-extended queries. This satisfies the "Require
@@ -60,8 +61,12 @@ jobs:
         uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
           languages: ${{ matrix.language }}
-          build-mode: none
+          build-mode: ${{ matrix.language == 'go' && 'autobuild' || 'none' }}
           queries: security-extended
+
+      - name: 🏗️ Autobuild
+        if: matrix.language == 'go'
+        uses: github/codeql-action/autobuild@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
 
       - name: 🔬 Perform CodeQL analysis
         uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
