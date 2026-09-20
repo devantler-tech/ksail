@@ -135,8 +135,8 @@ func writeExecutable(t *testing.T, path string, contents string) {
 	require.NoError(t, os.WriteFile(path, []byte(contents), 0o600))
 	require.NoError(
 		t,
-		os.Chmod(path, 0o700),
-	) //nolint:gosec // Test-owned shell fixture must be executable.
+		os.Chmod(path, 0o700), //nolint:gosec // Test-owned shell fixture must be executable.
+	)
 }
 
 func assertHetznerSmokeMatrix(t *testing.T, matrix map[string]any) {
