@@ -83,7 +83,11 @@ jobs:
       # then downloads at the pinned version.
       - name: 🧹 Free disk space
         if: matrix.module == 'root'
-        uses: $/.github/actions/free-disk-space
+        # A local action reference is pinned to this repository by construction. zizmor asks for GitHub's self-repository syntax
+        # ($/), but actionlint v1.7.12 (MegaLinter v10.1.0) rejects it as a malformed
+        # ref, and the rest of this repository uses ./ throughout. Revisit once
+        # actionlint understands $/.
+        uses: ./.github/actions/free-disk-space # zizmor: ignore[self-repository]
 
       - name: ⚙️ Setup Go
         if: matrix.module == 'root'
@@ -96,7 +100,8 @@ jobs:
       # stages the web UI the desktop app embeds — the same setup its CI build uses.
       - name: 🛠️ Setup desktop build
         if: matrix.module == 'desktop'
-        uses: $/.github/actions/setup-desktop-build
+        # See the note on the free-disk-space step above.
+        uses: ./.github/actions/setup-desktop-build # zizmor: ignore[self-repository]
 
       - name: 🔍 Initialize CodeQL
         uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
