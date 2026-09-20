@@ -2,9 +2,9 @@
 description: Use when implementing any feature or bugfix, before writing implementation code
 metadata:
     github-path: skills/test-driven-development
-    github-ref: refs/tags/v6.2.0
+    github-ref: refs/tags/v6.4.1
     github-repo: https://github.com/obra/superpowers
-    github-tree-sha: a82cf8b413600c6bd7c4b482272d7990e9588cf1
+    github-tree-sha: 847144cf0824095922c0d4875648b9fa74877e1a
     internal: true
 name: test-driven-development
 ---
@@ -186,6 +186,16 @@ Confirm:
 **Test fails?** Fix code, not test.
 
 **Other tests fail?** Fix now.
+
+**"Other tests" means the project's suite, not just your file.** A
+green run of the test you wrote is not a green suite. Before you call
+the change done, run the project's test command (bare `pytest`,
+`npm test`, `cargo test` — whatever the repo uses) even when your task
+named only one test file. A scope statement in your task bounds the
+deliverable, not your verification. Any failure that run shows —
+including one you didn't cause — goes in your report by name; a red
+test you watched scroll past and didn't mention is a report falsified
+by omission.
 
 ### REFACTOR - Clean Up
 
