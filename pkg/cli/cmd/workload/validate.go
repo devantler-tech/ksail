@@ -905,6 +905,11 @@ type kustomizationValidator struct {
 	// first pass fans out concurrently.
 	kyvernoMu     sync.Mutex
 	kyvernoInputs map[string]kyvernoInput
+
+	// renderedOutputs holds every kustomization's rendered output, including one
+	// that then failed validation, so its Namespaces still reach sharedNamespaces.
+	// Guarded by kyvernoMu.
+	renderedOutputs map[string][]byte
 }
 
 // kyvernoInput is one kustomization's rendered output as the Kyverno pass needs it.
@@ -954,10 +959,11 @@ func (v *kustomizationValidator) runKyverno(
 	}
 
 	dirs := slices.Sorted(maps.Keys(v.kyvernoInputs))
+	rendered := slices.Sorted(maps.Keys(v.renderedOutputs))
 
-	outputs := make([][]byte, 0, len(dirs))
-	for _, dir := range dirs {
-		outputs = append(outputs, v.kyvernoInputs[dir].data)
+	outputs := make([][]byte, 0, len(rendered))
+	for _, dir := range rendered {
+		outputs = append(outputs, v.renderedOutputs[dir])
 	}
 
 	shared := sharedNamespaces(outputs)
@@ -999,6 +1005,19 @@ func (v *kustomizationValidator) validateSilent(ctx context.Context, kustDir str
 	data, attribution, err := v.manifests(ctx, kustDir)
 	if err != nil {
 		return err
+	}
+
+	// Record the rendered output before validating it: a kustomization that fails
+	// validation is kept out of its own Kyverno evaluation, but the Namespaces it
+	// renders still supply labels to the others.
+	if v.kyverno {
+		v.kyvernoMu.Lock()
+		if v.renderedOutputs == nil {
+			v.renderedOutputs = map[string][]byte{}
+		}
+
+		v.renderedOutputs[kustDir] = data
+		v.kyvernoMu.Unlock()
 	}
 
 	// Attach per-call attribution without mutating the shared v.opts, which

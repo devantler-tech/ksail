@@ -324,3 +324,24 @@ func TestValidateKyvernoOwnNamespaceWins(t *testing.T) {
 		"the kustomization's own dev Namespace must win over another's prod one",
 	)
 }
+
+// A kustomization that renders a valid Namespace but fails validation on another
+// document still lends that Namespace to the others, so their rules stay evaluable
+// rather than being reported as not evaluable offline.
+func TestValidateKyvernoUsesNamespaceFromAFailedKustomization(t *testing.T) {
+	t.Parallel()
+
+	root := writeLayeredTree(t, "", "prod")
+	layer := filepath.Join(root, "namespaces-a")
+	require.NoError(t, os.WriteFile(filepath.Join(layer, "kustomization.yaml"), []byte(
+		"apiVersion: kustomize.config.k8s.io/v1beta1\n"+
+			"kind: Kustomization\nresources:\n  - namespace.yaml\n  - invalid.yaml\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(layer, "invalid.yaml"), []byte(
+		"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: invalid\n  namespace: apps\n"+
+			"data: not-a-map\n"), 0o600))
+
+	output, err := runValidate(t, root, "--kyverno-policies")
+	require.Error(t, err, "the invalid document must still fail validation")
+	require.ErrorContains(t, err, `policy "require-team-label-in-prod" rule "check-team" failed`)
+	assert.NotContains(t, output, "not evaluable offline")
+}
