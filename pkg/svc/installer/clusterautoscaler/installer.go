@@ -222,6 +222,7 @@ type chartResourceRequests struct {
 }
 
 type chartResourceLimits struct {
+	CPU    string `json:"cpu,omitempty"`
 	Memory string `json:"memory"`
 }
 
@@ -328,9 +329,12 @@ func buildChartValues(
 			},
 			AdditionalRules: coreInformerRBACRules(),
 		},
+		// The CPU limit bounds the autoscaler on every cluster, independent of any
+		// namespace LimitRange: KSail installs it before such a LimitRange can
+		// exist, and a LimitRange only applies when a pod is admitted (ksail#7144).
 		Resources: chartResources{
 			Requests: chartResourceRequests{CPU: "50m", Memory: "128Mi"},
-			Limits:   chartResourceLimits{Memory: "256Mi"},
+			Limits:   chartResourceLimits{CPU: "2", Memory: "256Mi"},
 		},
 	}
 }
