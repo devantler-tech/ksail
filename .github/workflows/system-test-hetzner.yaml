@@ -3,6 +3,12 @@ name: "System Test - Hetzner"
 on:
   workflow_dispatch:
     inputs:
+      distribution:
+        description: "Kubernetes distribution"
+        required: false
+        type: choice
+        options: [Talos, K3s, Vanilla]
+        default: Talos
       init:
         description: "Run ksail project init before create"
         required: false
@@ -67,9 +73,11 @@ on:
         default: ""
   schedule:
     # Weekly: Sunday 03:00 UTC, one hour before the Omni system test, so real clusters are
-    # created at most once a day. The scheduled run covers the four matrix configurations below;
-    # workflow_dispatch runs a single configuration on demand. Credentials come from the
-    # org-wide HCLOUD_TOKEN, scoped to a dedicated Hetzner test project.
+    # created at most once a day. The scheduled run starts with the two direct-provider smoke
+    # tests, then covers the four Talos configurations below; workflow_dispatch runs one selected
+    # distribution on demand. K3s and Vanilla use the same direct-provider smoke path as the
+    # schedule. Credentials come from the org-wide HCLOUD_TOKEN, scoped to a dedicated Hetzner
+    # test project.
     - cron: "0 3 * * 0"
 
 env:
@@ -173,7 +181,7 @@ jobs:
         uses: ./.github/actions/warm-mirror-cache
 
   system-test:
-    name: "🧪 System Test (Hetzner)"
+    name: "🧪 System Test (Hetzner / ${{ matrix.distribution }} / ${{ matrix.suffix }})"
     runs-on: ubuntu-latest
     timeout-minutes: 120
     needs: [build-artifact, warm-helm-cache, warm-mirror-cache]
@@ -185,9 +193,10 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        # On schedule: run all important configurations sequentially for broad E2E coverage.
-        # On workflow_dispatch: run a single user-selected configuration.
-        include: ${{ github.event_name == 'schedule' && fromJSON('[{"init":true,"suffix":"default-init","args":""},{"init":false,"suffix":"default-noinit","args":""},{"init":true,"suffix":"fullstack","args":"--cni Cilium --csi Enabled --load-balancer Enabled --metrics-server Enabled --policy-engine Kyverno --cert-manager Enabled --gitops-engine Flux --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"},{"init":true,"suffix":"altstack","args":"--cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine Gatekeeper --gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"}]') || fromJSON(format('[{{"init":{0},"suffix":"dispatch","args":""}}]', inputs.init)) }}
+        # On schedule: smoke the direct K3s/Vanilla provisioners first, then run all important
+        # Talos configurations sequentially for broad E2E coverage. On workflow_dispatch: run one
+        # selected distribution; direct providers take the smoke path and Talos takes the full path.
+        include: ${{ github.event_name == 'schedule' && fromJSON('[{"init":false,"distribution":"K3s","suffix":"k3s-smoke","args":"","smoke":true},{"init":false,"distribution":"Vanilla","suffix":"vanilla-smoke","args":"","smoke":true},{"init":true,"distribution":"Talos","suffix":"default-init","args":"","smoke":false},{"init":false,"distribution":"Talos","suffix":"default-noinit","args":"","smoke":false},{"init":true,"distribution":"Talos","suffix":"fullstack","args":"--cni Cilium --csi Enabled --load-balancer Enabled --metrics-server Enabled --policy-engine Kyverno --cert-manager Enabled --gitops-engine Flux --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests","smoke":false},{"init":true,"distribution":"Talos","suffix":"altstack","args":"--cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine Gatekeeper --gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests","smoke":false}]') || fromJSON(format('[{{"init":{0},"distribution":"{1}","suffix":"dispatch","args":"","smoke":{2}}}]', inputs.init, inputs.distribution, inputs.distribution != 'Talos')) }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -228,7 +237,7 @@ jobs:
         run: |
           ARGS="--name st-hetzner-${{ matrix.suffix }}-${{ github.run_id }}"
 
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ matrix.smoke != true }}" == "true" ]]; then
             # Build from user-selected inputs
             [[ "${{ inputs.cni }}" != "Default" && -n "${{ inputs.cni }}" ]] && ARGS+=" --cni ${{ inputs.cni }}"
             [[ "${{ inputs.csi }}" != "Default" && -n "${{ inputs.csi }}" ]] && ARGS+=" --csi ${{ inputs.csi }}"
@@ -247,12 +256,58 @@ jobs:
           echo "value=${ARGS}" >> "$GITHUB_OUTPUT"
           echo "Args: ${ARGS}"
 
+      - name: 🧪 Create Hetzner Smoke Cluster
+        if: ${{ matrix.smoke == true }}
+        uses: $/.github/actions/ksail-cluster
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+        with:
+          distribution: ${{ matrix.distribution }}
+          provider: Hetzner
+          args: ${{ steps.args.outputs.value }}
+          init: "false"
+          install: "false"
+          cache: "false"
+
+      - name: 🧪 Assert Hetzner Smoke Cluster Reachable
+        if: ${{ matrix.smoke == true }}
+        shell: bash
+        timeout-minutes: 6
+        run: |
+          set -euo pipefail
+          READYZ=""
+          for attempt in {1..30}; do
+            if READYZ=$(ksail workload get --raw=/readyz 2>&1 | tr -d '\r\n') && [ "$READYZ" = "ok" ]; then
+              echo "✅ Kubernetes API is reachable"
+              exit 0
+            fi
+
+            if [ "$attempt" -lt 30 ]; then
+              echo "⏳ Waiting for Kubernetes API readiness (${attempt}/30): ${READYZ:-<empty>}" >&2
+              sleep 10
+            fi
+          done
+
+          echo "❌ Kubernetes API did not become ready after 30 attempts: ${READYZ:-<empty>}" >&2
+          exit 1
+
+      - name: 🧹 Delete Hetzner Smoke Cluster
+        if: ${{ always() && matrix.smoke == true }}
+        uses: $/.github/actions/ksail-system-test-cleanup
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+        with:
+          distribution: ${{ matrix.distribution }}
+          provider: Hetzner
+          args: ${{ steps.args.outputs.value }}
+
       - name: 🧪 Run KSail System Test
+        if: ${{ matrix.smoke != true }}
         uses: ./.github/actions/ksail-system-test
         env:
           HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
         with:
-          distribution: Talos
+          distribution: ${{ matrix.distribution }}
           provider: Hetzner
           init: ${{ matrix.init }}
           args: ${{ steps.args.outputs.value }}
@@ -303,6 +358,20 @@ jobs:
         uses: ./.github/actions/cleanup-hetzner
         with:
           label-selector: "ksail.cluster.name=st-hetzner-altstack-${{ github.run_id }}"
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+
+      - name: 🧹 Cleanup Hetzner resources (K3s smoke)
+        uses: $/.github/actions/cleanup-hetzner
+        with:
+          label-selector: "ksail.cluster.name=st-hetzner-k3s-smoke-${{ github.run_id }}"
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+
+      - name: 🧹 Cleanup Hetzner resources (Vanilla smoke)
+        uses: $/.github/actions/cleanup-hetzner
+        with:
+          label-selector: "ksail.cluster.name=st-hetzner-vanilla-smoke-${{ github.run_id }}"
         env:
           HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
 

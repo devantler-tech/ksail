@@ -1,0 +1,9 @@
+paths:
+  .github/workflows/system-test-hetzner.yaml:
+    ignore:
+      # GitHub supports $/ for actions in the same repository at the running
+      # commit, but actionlint v1.7.12 does not recognize that syntax yet.
+      - 'specifying action "\$/\.github/actions/.+" in invalid format because ref is missing'
+      # GitHub supports an ordered concurrency queue, but actionlint v1.7.12
+      # does not recognize the queue key yet.
+      - 'unexpected key "queue" for "concurrency" section'
