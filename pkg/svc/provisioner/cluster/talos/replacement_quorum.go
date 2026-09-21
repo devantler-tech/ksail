@@ -13,6 +13,9 @@ import (
 // members surviving a replacement form a healthy quorum.
 var ErrEtcdQuorumUnproven = errors.New("surviving etcd quorum is not proven")
 
+// quorumDivisor is the raft majority divisor: a quorum of n members is n/quorumDivisor+1.
+const quorumDivisor = 2
+
 // etcdMemberView is what one surviving control-plane node reports over the authenticated Talos
 // API: the voting membership as that node sees it, and that node's own member status.
 type etcdMemberView struct {
@@ -68,7 +71,7 @@ func proveSurvivingQuorum(target replacementTarget, observation etcdQuorumObserv
 		return err
 	}
 
-	quorum := len(membership)/2 + 1
+	quorum := len(membership)/quorumDivisor + 1
 	if healthy < quorum {
 		return fmt.Errorf(
 			"%w: %d healthy survivor(s) of %d member(s); removing member %d needs %d",
@@ -137,25 +140,12 @@ func healthySurvivors(views []etcdMemberView, membership []uint64, target uint64
 	for _, view := range views {
 		status := view.Status
 
-		switch {
-		case status == nil:
-			return 0, fmt.Errorf("%w: a surviving view has no status", ErrEtcdQuorumUnproven)
-		case status.GetMemberId() == target:
-			return 0, fmt.Errorf("%w: the target member %d reported as a survivor",
-				ErrEtcdQuorumUnproven, target)
-		case !slices.Contains(membership, status.GetMemberId()):
-			return 0, fmt.Errorf("%w: reporter %d is not a member",
-				ErrEtcdQuorumUnproven, status.GetMemberId())
-		case slices.Contains(reporters, status.GetMemberId()):
-			return 0, fmt.Errorf("%w: member %d reported twice",
-				ErrEtcdQuorumUnproven, status.GetMemberId())
-		case len(status.GetErrors()) > 0:
-			return 0, fmt.Errorf("%w: member %d reports errors: %v",
-				ErrEtcdQuorumUnproven, status.GetMemberId(), status.GetErrors())
-		case status.GetLeader() == 0:
-			return 0, fmt.Errorf("%w: member %d reports no leader",
-				ErrEtcdQuorumUnproven, status.GetMemberId())
-		case leader != 0 && status.GetLeader() != leader:
+		err := checkSurvivorStatus(status, membership, target, reporters)
+		if err != nil {
+			return 0, err
+		}
+
+		if leader != 0 && status.GetLeader() != leader {
 			return 0, fmt.Errorf("%w: survivors disagree about the leader: %d and %d",
 				ErrEtcdQuorumUnproven, leader, status.GetLeader())
 		}
@@ -169,6 +159,37 @@ func healthySurvivors(views []etcdMemberView, membership []uint64, target uint64
 	}
 
 	return len(reporters), nil
+}
+
+// checkSurvivorStatus proves one surviving view's own status: present, from a distinct
+// non-target member, without errors, and naming a leader.
+func checkSurvivorStatus(
+	status *machineapi.EtcdMemberStatus,
+	membership []uint64,
+	target uint64,
+	reporters []uint64,
+) error {
+	switch {
+	case status == nil:
+		return fmt.Errorf("%w: a surviving view has no status", ErrEtcdQuorumUnproven)
+	case status.GetMemberId() == target:
+		return fmt.Errorf("%w: the target member %d reported as a survivor",
+			ErrEtcdQuorumUnproven, target)
+	case !slices.Contains(membership, status.GetMemberId()):
+		return fmt.Errorf("%w: reporter %d is not a member",
+			ErrEtcdQuorumUnproven, status.GetMemberId())
+	case slices.Contains(reporters, status.GetMemberId()):
+		return fmt.Errorf("%w: member %d reported twice",
+			ErrEtcdQuorumUnproven, status.GetMemberId())
+	case len(status.GetErrors()) > 0:
+		return fmt.Errorf("%w: member %d reports errors: %v",
+			ErrEtcdQuorumUnproven, status.GetMemberId(), status.GetErrors())
+	case status.GetLeader() == 0:
+		return fmt.Errorf("%w: member %d reports no leader",
+			ErrEtcdQuorumUnproven, status.GetMemberId())
+	}
+
+	return nil
 }
 
 func noActiveAlarms(alarms []*machineapi.EtcdMemberAlarm) error {
