@@ -69,7 +69,11 @@ func TestProveSurvivingQuorumAcceptsATargetThatIsTheLeader(t *testing.T) {
 func TestProveSurvivingQuorumNeedsNoProofForAWorker(t *testing.T) {
 	t.Parallel()
 
-	worker := replacementTarget{ServerID: 201, ServerName: "prod-worker-1", Role: hetzner.NodeTypeWorker}
+	worker := replacementTarget{
+		ServerID:   201,
+		ServerName: "prod-worker-1",
+		Role:       hetzner.NodeTypeWorker,
+	}
 
 	require.NoError(t, proveSurvivingQuorum(worker, etcdQuorumObservation{}))
 }
@@ -115,7 +119,13 @@ func TestProveSurvivingQuorumRefusesWhatItCannotProve(t *testing.T) {
 		{
 			name: "survivors disagree about membership",
 			mutate: func(o *etcdQuorumObservation) {
-				o.Views[1] = quorumView(quorumThird, quorumTarget, quorumSurvivor, quorumThird, 7004)
+				o.Views[1] = quorumView(
+					quorumThird,
+					quorumTarget,
+					quorumSurvivor,
+					quorumThird,
+					7004,
+				)
 			},
 		},
 		{
@@ -138,7 +148,10 @@ func TestProveSurvivingQuorumRefusesWhatItCannotProve(t *testing.T) {
 			name: "a member is listed twice",
 			mutate: func(o *etcdQuorumObservation) {
 				for i := range o.Views {
-					o.Views[i].Members = append(o.Views[i].Members, &machineapi.EtcdMember{Id: quorumThird})
+					o.Views[i].Members = append(
+						o.Views[i].Members,
+						&machineapi.EtcdMember{Id: quorumThird},
+					)
 				}
 			},
 		},
