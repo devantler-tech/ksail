@@ -70,7 +70,7 @@ runs:
         # the distroless/static base in the root Dockerfile. The generate +
         # bundler hooks mirror the release build's pre-hooks so the embed
         # directives resolve. The web UI staged above is embedded via go:embed.
-        GOPROXY: "https://proxy.golang.org|direct"
+        GOPROXY: "https://proxy.golang.org,direct"
         GOMEMLIMIT: "6GiB"
         OPERATOR_IMAGE: ${{ inputs.operator-image }}
       run: |

@@ -96,6 +96,7 @@ type validateFlags struct {
 	ignoreMissingSchemas bool
 	skipHelmRender       bool
 	includeCRDSchemas    bool
+	kyvernoPolicies      bool
 	ephemeral            bool
 	skipKinds            []string
 	schemaLocations      []string
@@ -143,6 +144,12 @@ func addValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 		"Derive kubeconform schemas from CustomResourceDefinition manifests in the path so that "+
 			"custom resources whose CRD ships in the repo are validated instead of skipped "+
 			"(off by default; a CRD that cannot be converted is warned and skipped)",
+	)
+	cmd.Flags().BoolVar(
+		&flags.kyvernoPolicies,
+		"kyverno-policies",
+		false,
+		kyvernoPoliciesFlagDescription,
 	)
 	cmd.Flags().StringVar(
 		&flags.rules,
@@ -252,7 +259,9 @@ func runValidateCmdInner(
 		return err
 	}
 
-	return validatePath(ctx, cmd, path, kubeconformClient, validationOpts, renderer, engine)
+	return validatePath(
+		ctx, cmd, path, kubeconformClient, validationOpts, renderer, engine, flags.kyvernoPolicies,
+	)
 }
 
 // buildValidationOptions assembles the kubeconform validation options from the
@@ -672,6 +681,7 @@ func validatePath(
 	opts *kubeconform.ValidationOptions,
 	renderer *gitopsRenderer,
 	engine *celrules.Engine,
+	kyvernoPolicies bool,
 ) error {
 	// Check if path exists
 	info, err := os.Stat(path)
@@ -687,7 +697,9 @@ func validatePath(
 	}
 
 	// If it's a directory, walk it to find YAML files and kustomizations
-	return validateDirectory(ctx, cmd, path, kubeconformClient, opts, renderer, engine)
+	return validateDirectory(
+		ctx, cmd, path, kubeconformClient, opts, renderer, engine, kyvernoPolicies,
+	)
 }
 
 // validateFile validates a single YAML file, then applies any CEL rules. A
@@ -737,22 +749,14 @@ func validateDirectory(
 	opts *kubeconform.ValidationOptions,
 	renderer *gitopsRenderer,
 	engine *celrules.Engine,
+	kyvernoPolicies bool,
 ) error {
-	// Find all kustomizations
-	kustomizations, err := findKustomizations(dirPath)
+	targets, err := discoverValidationTargets(dirPath)
 	if err != nil {
-		return fmt.Errorf("find kustomizations: %w", err)
+		return err
 	}
 
-	// Find all YAML files
-	yamlFiles, err := findYAMLFiles(dirPath)
-	if err != nil {
-		return fmt.Errorf("find YAML files: %w", err)
-	}
-
-	// Exclude patch files — already validated as part of kustomize build output.
-	patchPaths := collectPatchPaths(dirPath, kustomizations)
-	yamlFiles = filterPatchFiles(yamlFiles, patchPaths)
+	kustomizations, yamlFiles := targets.kustomizations, targets.yamlFiles
 
 	progressOpts := []notify.ProgressOption{
 		notify.WithAppendOnly(),
@@ -766,6 +770,10 @@ func validateDirectory(
 	celSink := &celViolationSink{}
 	defer celSink.report(cmd)
 
+	// Kyverno warnings get their own sink so their report names the right check.
+	kyvernoSink := &celViolationSink{content: "Kyverno policy warning: %s"}
+	defer kyvernoSink.report(cmd)
+
 	if len(kustomizations) > 0 {
 		validator := &kustomizationValidator{
 			dirPath:     dirPath,
@@ -776,6 +784,8 @@ func validateDirectory(
 			opts:        opts,
 			engine:      engine,
 			celSink:     celSink,
+			kyverno:     kyvernoPolicies,
+			kyvernoSink: kyvernoSink,
 		}
 
 		err := validator.run(ctx, cmd, kustomizations, progressOpts)
@@ -884,6 +894,8 @@ type kustomizationValidator struct {
 	opts        *kubeconform.ValidationOptions
 	engine      *celrules.Engine  // nil → CEL rule validation disabled
 	celSink     *celViolationSink // collects warning-severity CEL violations
+	kyverno     bool              // evaluate each output's own Kyverno policies
+	kyvernoSink *celViolationSink // collects non-blocking Kyverno results
 }
 
 // run validates every kustomization directory in parallel and then reports any
@@ -956,6 +968,15 @@ func (v *kustomizationValidator) validateSilent(ctx context.Context, kustDir str
 	// same render-provenance attribution, so a skipped kind cannot surface a CEL
 	// failure and a rendered document's violation is traced to its HelmRelease.
 	err = evaluateCELDocuments(v.engine, data, kustDir, opts.SkipKinds, v.celSink, opts.Attribution)
+	if err != nil {
+		return err
+	}
+
+	// Apply the output's own Kyverno policies to the same documents, with the
+	// same kind exclusions and attribution.
+	err = evaluateKyvernoDocuments(
+		ctx, v.kyverno, data, kustDir, opts.SkipKinds, v.kyvernoSink, opts.Attribution,
+	)
 	if err != nil {
 		return err
 	}
@@ -1287,4 +1308,31 @@ func addPatchPath(kustDir, relPath string, patchPaths map[string]struct{}) {
 	}
 
 	patchPaths[resolved] = struct{}{}
+}
+
+// validationTargets are the inputs a directory validation walks.
+type validationTargets struct {
+	kustomizations []string
+	yamlFiles      []string
+}
+
+// discoverValidationTargets finds the kustomizations and standalone YAML files under dirPath.
+// Patch files are excluded — they are validated as part of kustomize build output.
+func discoverValidationTargets(dirPath string) (validationTargets, error) {
+	kustomizations, err := findKustomizations(dirPath)
+	if err != nil {
+		return validationTargets{}, fmt.Errorf("find kustomizations: %w", err)
+	}
+
+	yamlFiles, err := findYAMLFiles(dirPath)
+	if err != nil {
+		return validationTargets{}, fmt.Errorf("find YAML files: %w", err)
+	}
+
+	patchPaths := collectPatchPaths(dirPath, kustomizations)
+
+	return validationTargets{
+		kustomizations: kustomizations,
+		yamlFiles:      filterPatchFiles(yamlFiles, patchPaths),
+	}, nil
 }

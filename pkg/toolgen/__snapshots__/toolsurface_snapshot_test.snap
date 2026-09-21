@@ -1773,6 +1773,10 @@ workload_write
         "description": "Process the kustomization directory. This flag can't be used together with -f or -R. (applies to: describe, get)",
         "type": "string"
       },
+      "kyverno-policies": {
+        "description": "Evaluate the source's own Kyverno ClusterPolicy and Policy validate rules against the rendered manifests, as if each document were being created (off by default)... (applies to: validate)",
+        "type": "boolean"
+      },
       "label-columns": {
         "description": "Accepts a comma separated list of labels that are going to be presented as columns. Names are case-sensitive. You can also use multiple flag options like -L label1 -L label2... (applies to: get)",
         "items": {

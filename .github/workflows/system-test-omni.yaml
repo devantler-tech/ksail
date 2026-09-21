@@ -67,7 +67,7 @@ on:
   # on-demand runs meanwhile.
 
 env:
-  GOPROXY: "https://proxy.golang.org|direct"
+  GOPROXY: "https://proxy.golang.org,direct"
   GOMEMLIMIT: "6GiB"
 
 concurrency:

@@ -81,7 +81,7 @@ on:
     - cron: "0 3 * * 0"
 
 env:
-  GOPROXY: "https://proxy.golang.org|direct"
+  GOPROXY: "https://proxy.golang.org,direct"
   GOMEMLIMIT: "6GiB"
 
 concurrency:
