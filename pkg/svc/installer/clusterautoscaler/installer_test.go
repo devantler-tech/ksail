@@ -61,6 +61,36 @@ func assertHasRBACRule(t *testing.T, valuesYaml string, apiGroups, resources, ve
 	)
 }
 
+// renderedResources mirrors the resources shape of the rendered chart values.
+type renderedResources struct {
+	Resources struct {
+		Requests map[string]string `json:"requests"`
+		Limits   map[string]string `json:"limits"`
+	} `json:"resources"`
+}
+
+// assertResources unmarshals the rendered chart values and asserts the exact
+// requests and limits, so a dropped CPU limit fails the test rather than
+// leaving the autoscaler bounded only by whatever LimitRange its namespace
+// happens to have at admission (ksail#7144).
+func assertResources(t *testing.T, valuesYaml string) {
+	t.Helper()
+
+	var rendered renderedResources
+	require.NoError(t, yaml.Unmarshal([]byte(valuesYaml), &rendered))
+
+	assert.Equal(
+		t,
+		map[string]string{"cpu": "50m", "memory": "128Mi"},
+		rendered.Resources.Requests,
+	)
+	assert.Equal(
+		t,
+		map[string]string{"cpu": "2", "memory": "256Mi"},
+		rendered.Resources.Limits,
+	)
+}
+
 func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
@@ -495,6 +525,8 @@ func assertValuesYamlContents(t *testing.T, valuesYaml string) {
 	for _, want := range required {
 		assert.Contains(t, valuesYaml, want)
 	}
+
+	assertResources(t, valuesYaml)
 
 	// Core-informer RBAC rules the autoscaler binary needs unconditionally,
 	// granted even without capacity-buffers — assert the full rule shape so a
