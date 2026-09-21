@@ -40,8 +40,8 @@ func deniedAt(t *testing.T, rawURL string) error {
 }
 
 const (
-	tokenExchangeURL = "https://ghcr.io/token?scope=repository:org/repo:push,pull&service=ghcr.io"
-	manifestPutURL   = "https://ghcr.io/v2/org/repo/manifests/latest"
+	signInExchangeURL = "https://ghcr.io/token?scope=repository:org/repo:push,pull&service=ghcr.io"
+	manifestPutURL    = "https://ghcr.io/v2/org/repo/manifests/latest"
 )
 
 // A DENIED answer from the registry's token exchange was measured to be
@@ -52,7 +52,7 @@ func TestPushWithRetry_RetriesTokenExchangeDenial(t *testing.T) {
 
 	var callCount atomic.Int32
 
-	push := mockPushFn(&callCount, []error{deniedAt(t, tokenExchangeURL), nil})
+	push := mockPushFn(&callCount, []error{deniedAt(t, signInExchangeURL), nil})
 
 	ref, err := name.ParseReference("ghcr.io/org/repo:latest")
 	require.NoError(t, err)
@@ -70,7 +70,7 @@ func TestPushWithRetry_PersistentTokenExchangeDenialExhaustsAttempts(t *testing.
 
 	var callCount atomic.Int32
 
-	push := mockPushFn(&callCount, []error{deniedAt(t, tokenExchangeURL)})
+	push := mockPushFn(&callCount, []error{deniedAt(t, signInExchangeURL)})
 
 	ref, err := name.ParseReference("ghcr.io/org/repo:latest")
 	require.NoError(t, err)
@@ -113,31 +113,31 @@ func flakyTokenRegistry(t *testing.T, deniedTokenCalls int32) (*httptest.Server,
 
 	var server *httptest.Server
 
-	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/token" {
+	server = httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/token" {
 			if tokenCalls.Add(1) <= deniedTokenCalls {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusForbidden)
-				_, _ = w.Write([]byte(`{"errors":[{"code":"DENIED","message":"denied"}]}`))
+				writer.Header().Set("Content-Type", "application/json")
+				writer.WriteHeader(http.StatusForbidden)
+				_, _ = writer.Write([]byte(`{"errors":[{"code":"DENIED","message":"denied"}]}`))
 
 				return
 			}
 
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"token":"granted"}`))
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"token":"granted"}`))
 
 			return
 		}
 
-		if r.Header.Get("Authorization") != "Bearer granted" {
-			w.Header().Set("WWW-Authenticate",
+		if request.Header.Get("Authorization") != "Bearer granted" {
+			writer.Header().Set("WWW-Authenticate",
 				`Bearer realm="`+server.URL+`/token",service="test-registry"`)
-			w.WriteHeader(http.StatusUnauthorized)
+			writer.WriteHeader(http.StatusUnauthorized)
 
 			return
 		}
 
-		backend.ServeHTTP(w, r)
+		backend.ServeHTTP(writer, request)
 	}))
 	t.Cleanup(server.Close)
 
