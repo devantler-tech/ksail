@@ -21,7 +21,7 @@ inputs:
   copilot-cli-version:
     description: Copilot CLI version bundled into the binary. Included in the cache key so a version bump rebuilds instead of restoring a binary bundled with the previous version.
     required: false
-    default: "1.0.79"
+    default: "1.0.87"
 
 outputs:
   cache-hit:
