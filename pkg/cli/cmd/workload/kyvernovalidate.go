@@ -141,9 +141,10 @@ func namespaceDocumentName(doc map[string]any) (string, bool) {
 // kustomization's output, so a namespaced document in one kustomization can be
 // evaluated against a namespaceSelector whose Namespace another renders. A
 // Namespace is cluster-scoped, so its labels do not depend on which layer renders
-// it. When two outputs render the same Namespace with different labels, that
-// Namespace is left out: its labels are unknown, and a rule selecting on them is
-// reported as not evaluable rather than guessed.
+// it. When two outputs render the same Namespace with different labels, or any
+// output renders it with labels that cannot be read, that Namespace is left out:
+// its labels are unknown, and a rule selecting on them is reported as not
+// evaluable rather than guessed.
 func sharedNamespaces(outputs [][]byte) []map[string]any {
 	type seen struct {
 		doc        map[string]any
@@ -162,17 +163,19 @@ func sharedNamespaces(outputs [][]byte) []map[string]any {
 				continue
 			}
 
-			labels, _, _ := unstructured.NestedStringMap(doc, "metadata", "labels")
+			// Labels that cannot be read are unknown, exactly like conflicting ones.
+			labels, _, err := unstructured.NestedStringMap(doc, "metadata", "labels")
+			malformed := err != nil
 
 			existing, found := byName[name]
 			if !found {
-				byName[name] = &seen{doc: doc, labels: labels}
+				byName[name] = &seen{doc: doc, labels: labels, conflicted: malformed}
 				order = append(order, name)
 
 				continue
 			}
 
-			if !maps.Equal(existing.labels, labels) {
+			if malformed || !maps.Equal(existing.labels, labels) {
 				existing.conflicted = true
 			}
 		}

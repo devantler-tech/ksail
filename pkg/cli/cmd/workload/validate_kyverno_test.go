@@ -345,3 +345,20 @@ func TestValidateKyvernoUsesNamespaceFromAFailedKustomization(t *testing.T) {
 	require.ErrorContains(t, err, `policy "require-team-label-in-prod" rule "check-team" failed`)
 	assert.NotContains(t, output, "not evaluable offline")
 }
+
+// A shared Namespace whose labels cannot be read leaves them unknown: the rule is
+// reported as not evaluable instead of treating the Namespace as unlabelled.
+func TestValidateKyvernoMalformedSharedNamespaceLabelsAreNotEvaluable(t *testing.T) {
+	t.Parallel()
+
+	root := writeLayeredTree(t, "", "prod")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "namespaces-a", "namespace.yaml"), []byte(
+		"apiVersion: v1\nkind: Namespace\nmetadata:\n  name: apps\n  labels:\n    tier: 1\n"), 0o600))
+
+	output, _ := runValidate(t, root, "--kyverno-policies")
+	assert.Contains(
+		t,
+		output,
+		`policy "require-team-label-in-prod" rule "check-team" not evaluable offline`,
+	)
+}
