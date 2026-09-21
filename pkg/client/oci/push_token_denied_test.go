@@ -113,32 +113,34 @@ func flakyTokenRegistry(t *testing.T, deniedTokenCalls int32) (*httptest.Server,
 
 	var server *httptest.Server
 
-	server = httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path == "/token" {
-			if tokenCalls.Add(1) <= deniedTokenCalls {
+	server = httptest.NewServer(
+		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			if request.URL.Path == "/token" {
+				if tokenCalls.Add(1) <= deniedTokenCalls {
+					writer.Header().Set("Content-Type", "application/json")
+					writer.WriteHeader(http.StatusForbidden)
+					_, _ = writer.Write([]byte(`{"errors":[{"code":"DENIED","message":"denied"}]}`))
+
+					return
+				}
+
 				writer.Header().Set("Content-Type", "application/json")
-				writer.WriteHeader(http.StatusForbidden)
-				_, _ = writer.Write([]byte(`{"errors":[{"code":"DENIED","message":"denied"}]}`))
+				_, _ = writer.Write([]byte(`{"token":"granted"}`))
 
 				return
 			}
 
-			writer.Header().Set("Content-Type", "application/json")
-			_, _ = writer.Write([]byte(`{"token":"granted"}`))
+			if request.Header.Get("Authorization") != "Bearer granted" {
+				writer.Header().Set("WWW-Authenticate",
+					`Bearer realm="`+server.URL+`/token",service="test-registry"`)
+				writer.WriteHeader(http.StatusUnauthorized)
 
-			return
-		}
+				return
+			}
 
-		if request.Header.Get("Authorization") != "Bearer granted" {
-			writer.Header().Set("WWW-Authenticate",
-				`Bearer realm="`+server.URL+`/token",service="test-registry"`)
-			writer.WriteHeader(http.StatusUnauthorized)
-
-			return
-		}
-
-		backend.ServeHTTP(writer, request)
-	}))
+			backend.ServeHTTP(writer, request)
+		}),
+	)
 	t.Cleanup(server.Close)
 
 	return server, &tokenCalls
@@ -152,7 +154,10 @@ func TestPushWithRetry_RealTokenExchangeDenialIsRetried(t *testing.T) {
 
 	server, tokenCalls := flakyTokenRegistry(t, 1)
 
-	ref, err := name.ParseReference(strings.TrimPrefix(server.URL, "http://")+"/org/repo:latest", name.Insecure)
+	ref, err := name.ParseReference(
+		strings.TrimPrefix(server.URL, "http://")+"/org/repo:latest",
+		name.Insecure,
+	)
 	require.NoError(t, err)
 
 	img, err := random.Image(64, 1)

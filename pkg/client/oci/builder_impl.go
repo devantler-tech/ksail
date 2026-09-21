@@ -157,7 +157,8 @@ func isPushRetryable(err error) bool {
 // POST body and is deliberately not matched.
 func isTokenExchangeDenied(err error) bool {
 	var registryErr *transport.Error
-	if !errors.As(err, &registryErr) || registryErr.Request == nil || registryErr.Request.URL == nil {
+	if !errors.As(err, &registryErr) || registryErr.Request == nil ||
+		registryErr.Request.URL == nil {
 		return false
 	}
 
