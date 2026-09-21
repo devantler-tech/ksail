@@ -33,10 +33,12 @@ const kyvernoPoliciesFlagDescription = "Evaluate the source's own Kyverno Cluste
 // policies.
 //
 // Policies and Namespace documents are collected from the whole stream, whatever
-// the skip-kinds say, because they are the evaluation context rather than
-// validation targets. Only the remaining documents whose kind is not skipped are
-// evaluated, so a skipped kind cannot surface a policy failure — the same
-// exclusion kubeconform and the CEL rules honour.
+// the skip-kinds say, because they are evaluation context: policies are what is
+// applied, and Namespaces supply namespace metadata to other documents' rules.
+// A Namespace is also an object the cluster admits, so it is evaluated like any
+// other document unless its kind is skipped. Only documents whose kind is not
+// skipped are evaluated, so a skipped kind cannot surface a policy failure — the
+// same exclusion kubeconform and the CEL rules honour.
 //
 // Blocking violations are aggregated into an ErrKyvernoPolicyViolation. Everything
 // else — an audit-only failure, an evaluation error the policy does not block on,

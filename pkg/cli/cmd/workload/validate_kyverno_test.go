@@ -143,3 +143,58 @@ spec:
 	require.Error(t, err, "a policy that cannot be loaded must not read as a clean run")
 	require.ErrorContains(t, err, "load Kyverno policy")
 }
+
+// A Namespace is an object the cluster admits like any other, so a policy that
+// matches Namespaces is evaluated against the rendered Namespace — the admission
+// a real cluster would perform on create. Skipping the kind excludes it as a
+// target while it stays available as namespace context.
+func TestValidateKyvernoNamespaceIsEvaluatedUnlessSkipped(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	files := map[string]string{
+		"kustomization.yaml": `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - policy.yaml
+  - namespace.yaml
+`,
+		"policy.yaml": `apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-pod-security-label
+spec:
+  validationFailureAction: Enforce
+  rules:
+    - name: check-enforce-label
+      match:
+        any:
+          - resources:
+              kinds:
+                - Namespace
+      validate:
+        message: "Namespaces must set a pod-security enforce level"
+        pattern:
+          metadata:
+            labels:
+              pod-security.kubernetes.io/enforce: "?*"
+`,
+		"namespace.yaml": `apiVersion: v1
+kind: Namespace
+metadata:
+  name: apps
+`,
+	}
+
+	for name, content := range files {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600))
+	}
+
+	_, err := runValidate(t, dir, "--kyverno-policies")
+	require.Error(t, err, "an enforced Namespace policy failure must fail validation")
+	require.ErrorContains(t, err, `policy "require-pod-security-label" rule "check-enforce-label" failed`)
+	require.ErrorContains(t, err, "Namespace/apps")
+
+	_, err = runValidate(t, dir, "--kyverno-policies", "--skip-kinds", "Namespace")
+	require.NoError(t, err, "a skipped Namespace cannot surface a policy failure")
+}
