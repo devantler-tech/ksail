@@ -42,7 +42,7 @@ on:
   # manual until the OIDC role and the expected spend envelope exist.
 
 env:
-  GOPROXY: "https://proxy.golang.org|direct"
+  GOPROXY: "https://proxy.golang.org,direct"
   GOMEMLIMIT: "6GiB"
   EKSCTL_VERSION: "v0.229.0"
   AWS_OIDC_ROLE_ARN: "arn:aws:iam::939001610192:role/eks-ci"

@@ -6,10 +6,11 @@ on:
       - "v*"
 
 env:
-  # Use pipe (|) instead of comma (,) so Go falls through to direct on ANY proxy
-  # error (including 403), not just 404/410. Hardens CI against transient
-  # proxy.golang.org outages. go.sum still verifies module integrity.
-  GOPROXY: "https://proxy.golang.org|direct"
+  # Comma, not pipe: Go falls back to direct only when the proxy answers 404/410. A pipe also
+  # falls back on a transient proxy error, and direct cannot serve every pinned module (a
+  # test-only transitive dependency can name a tag the upstream repo no longer has), so a
+  # momentary proxy blip would surface as a bogus "unknown revision" dependency failure.
+  GOPROXY: "https://proxy.golang.org,direct"
   # Soft memory limit for Go build toolchain. GoReleaser links multiple
   # platform binaries and the linker can exceed runner memory.
   GOMEMLIMIT: "6GiB"
