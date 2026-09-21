@@ -353,7 +353,8 @@ func TestValidateKyvernoMalformedSharedNamespaceLabelsAreNotEvaluable(t *testing
 
 	root := writeLayeredTree(t, "", "prod")
 	require.NoError(t, os.WriteFile(filepath.Join(root, "namespaces-a", "namespace.yaml"), []byte(
-		"apiVersion: v1\nkind: Namespace\nmetadata:\n  name: apps\n  labels:\n    tier: 1\n"), 0o600))
+		"apiVersion: v1\nkind: Namespace\nmetadata:\n  name: apps\n  labels:\n    tier: 1\n",
+	), 0o600))
 
 	output, _ := runValidate(t, root, "--kyverno-policies")
 	assert.Contains(
