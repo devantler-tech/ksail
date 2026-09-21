@@ -192,7 +192,11 @@ metadata:
 
 	_, err := runValidate(t, dir, "--kyverno-policies")
 	require.Error(t, err, "an enforced Namespace policy failure must fail validation")
-	require.ErrorContains(t, err, `policy "require-pod-security-label" rule "check-enforce-label" failed`)
+	require.ErrorContains(
+		t,
+		err,
+		`policy "require-pod-security-label" rule "check-enforce-label" failed`,
+	)
 	require.ErrorContains(t, err, "Namespace/apps")
 
 	_, err = runValidate(t, dir, "--kyverno-policies", "--skip-kinds", "Namespace")
