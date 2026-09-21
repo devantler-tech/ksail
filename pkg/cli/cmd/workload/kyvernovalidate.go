@@ -22,7 +22,9 @@ const kyvernoPoliciesFlagDescription = "Evaluate the source's own Kyverno Cluste
 	"Policy validate rules against the rendered manifests, as if each document were being " +
 	"created (off by default). Each kustomization is evaluated against the policies in its own " +
 	"rendered output: a policy delivered by a different kustomization is not seen, loose YAML " +
-	"files are not evaluated, and CEL-based policies.kyverno.io policies are not supported. " +
+	"files are not evaluated, a document is evaluated in the namespace it declares (a Flux " +
+	"targetNamespace is not applied), and CEL-based policies.kyverno.io policies are not " +
+	"supported. " +
 	"A rule a cluster would enforce fails validation; an audit-only failure or a rule that " +
 	"cannot be evaluated offline is reported as a warning."
 
