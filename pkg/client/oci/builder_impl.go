@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -22,6 +23,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	"github.com/google/go-containerregistry/pkg/v1/static"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -123,6 +125,7 @@ func pushWithRetry(
 		netretry.WithCancelError(func(ctxErr error) error {
 			return fmt.Errorf("push cancelled: %w", ctxErr)
 		}),
+		netretry.WithRetryable(isPushRetryable),
 	)
 	if err == nil {
 		return nil
@@ -132,11 +135,43 @@ func pushWithRetry(
 		return err //nolint:wrapcheck // return the netretry cancellation error unwrapped (already context-tagged)
 	}
 
-	if !netretry.IsRetryable(err) {
+	if !isPushRetryable(err) {
 		return fmt.Errorf("push failed (non-retryable): %w", err)
 	}
 
 	return fmt.Errorf("push failed after %d attempts: %w", pushMaxAttempts, err)
+}
+
+// isPushRetryable extends the shared transient-error set with a DENIED answer
+// from the registry's token exchange. That denial was measured to be transient
+// on GHCR: the identical push succeeded minutes later (platform#2957).
+func isPushRetryable(err error) bool {
+	return netretry.IsRetryable(err) || isTokenExchangeDenied(err)
+}
+
+// isTokenExchangeDenied reports whether err is a DENIED returned by the token
+// exchange rather than by the registry API. The username/password exchange
+// this push uses is a GET whose query carries "service"; registry API requests
+// never do, so a DENIED from a manifest or blob upload stays a real,
+// non-retryable authorization answer. The OAuth exchange sends "service" in a
+// POST body and is deliberately not matched.
+func isTokenExchangeDenied(err error) bool {
+	var registryErr *transport.Error
+	if !errors.As(err, &registryErr) || registryErr.Request == nil || registryErr.Request.URL == nil {
+		return false
+	}
+
+	if !registryErr.Request.URL.Query().Has("service") {
+		return false
+	}
+
+	for _, diagnostic := range registryErr.Errors {
+		if diagnostic.Code == transport.DeniedErrorCode {
+			return true
+		}
+	}
+
+	return false
 }
 
 // Build collects manifests from the source path, packages them into an OCI artifact, and pushes it to the registry.
