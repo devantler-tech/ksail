@@ -200,6 +200,9 @@ func documentIdentityFromObject(obj map[string]any) string {
 type celViolationSink struct {
 	mu   sync.Mutex
 	list []string
+	// content is the warning format, with one %s for the description. Empty
+	// means "CEL rule warning: %s"; the Kyverno pass sets its own.
+	content string
 }
 
 // add records one warning-severity violation description for later reporting.
@@ -215,10 +218,15 @@ func (s *celViolationSink) report(cmd *cobra.Command) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	content := s.content
+	if content == "" {
+		content = "CEL rule warning: %s"
+	}
+
 	for _, description := range s.list {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
-			Content: "CEL rule warning: %s",
+			Content: content,
 			Args:    []any{description},
 			Writer:  cmd.ErrOrStderr(),
 		})
