@@ -301,7 +301,11 @@ func TestValidateKyvernoConflictingNamespaceLabelsAreNotEvaluable(t *testing.T) 
 
 	output, err := runValidate(t, writeLayeredTree(t, "", "prod", "dev"), "--kyverno-policies")
 	require.NoError(t, err, "conflicting Namespace labels must not produce an enforced failure")
-	assert.Contains(t, output, `policy "require-team-label-in-prod" rule "check-team" not evaluable offline`)
+	assert.Contains(
+		t,
+		output,
+		`policy "require-team-label-in-prod" rule "check-team" not evaluable offline`,
+	)
 }
 
 // A kustomization's own Namespace wins over one rendered elsewhere, even when the
@@ -314,5 +318,9 @@ func TestValidateKyvernoOwnNamespaceWins(t *testing.T) {
 	require.ErrorContains(t, err, `policy "require-team-label-in-prod" rule "check-team" failed`)
 
 	_, err = runValidate(t, writeLayeredTree(t, "dev", "prod"), "--kyverno-policies")
-	require.NoError(t, err, "the kustomization's own dev Namespace must win over another's prod one")
+	require.NoError(
+		t,
+		err,
+		"the kustomization's own dev Namespace must win over another's prod one",
+	)
 }
