@@ -751,21 +751,12 @@ func validateDirectory(
 	engine *celrules.Engine,
 	kyvernoPolicies bool,
 ) error {
-	// Find all kustomizations
-	kustomizations, err := findKustomizations(dirPath)
+	targets, err := discoverValidationTargets(dirPath)
 	if err != nil {
-		return fmt.Errorf("find kustomizations: %w", err)
+		return err
 	}
 
-	// Find all YAML files
-	yamlFiles, err := findYAMLFiles(dirPath)
-	if err != nil {
-		return fmt.Errorf("find YAML files: %w", err)
-	}
-
-	// Exclude patch files — already validated as part of kustomize build output.
-	patchPaths := collectPatchPaths(dirPath, kustomizations)
-	yamlFiles = filterPatchFiles(yamlFiles, patchPaths)
+	kustomizations, yamlFiles := targets.kustomizations, targets.yamlFiles
 
 	progressOpts := []notify.ProgressOption{
 		notify.WithAppendOnly(),
@@ -1317,4 +1308,31 @@ func addPatchPath(kustDir, relPath string, patchPaths map[string]struct{}) {
 	}
 
 	patchPaths[resolved] = struct{}{}
+}
+
+// validationTargets are the inputs a directory validation walks.
+type validationTargets struct {
+	kustomizations []string
+	yamlFiles      []string
+}
+
+// discoverValidationTargets finds the kustomizations and standalone YAML files under dirPath.
+// Patch files are excluded — they are validated as part of kustomize build output.
+func discoverValidationTargets(dirPath string) (validationTargets, error) {
+	kustomizations, err := findKustomizations(dirPath)
+	if err != nil {
+		return validationTargets{}, fmt.Errorf("find kustomizations: %w", err)
+	}
+
+	yamlFiles, err := findYAMLFiles(dirPath)
+	if err != nil {
+		return validationTargets{}, fmt.Errorf("find YAML files: %w", err)
+	}
+
+	patchPaths := collectPatchPaths(dirPath, kustomizations)
+
+	return validationTargets{
+		kustomizations: kustomizations,
+		yamlFiles:      filterPatchFiles(yamlFiles, patchPaths),
+	}, nil
 }
