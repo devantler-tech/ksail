@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
@@ -896,6 +898,20 @@ type kustomizationValidator struct {
 	celSink     *celViolationSink // collects warning-severity CEL violations
 	kyverno     bool              // evaluate each output's own Kyverno policies
 	kyvernoSink *celViolationSink // collects non-blocking Kyverno results
+
+	// kyvernoInputs holds each validated kustomization's output for the Kyverno
+	// pass, which runs after every output is rendered so Namespaces rendered by one
+	// kustomization can supply labels to another. Guarded by kyvernoMu because the
+	// first pass fans out concurrently.
+	kyvernoMu     sync.Mutex
+	kyvernoInputs map[string]kyvernoInput
+}
+
+// kyvernoInput is one kustomization's rendered output as the Kyverno pass needs it.
+type kyvernoInput struct {
+	data        []byte
+	skipKinds   []string
+	attribution map[string]string
 }
 
 // run validates every kustomization directory in parallel and then reports any
@@ -916,7 +932,50 @@ func (v *kustomizationValidator) run(
 	v.sink.report(cmd)
 
 	if err != nil {
-		return fmt.Errorf("kustomization validation failed: %w", err)
+		err = fmt.Errorf("kustomization validation failed: %w", err)
+	}
+
+	// The Kyverno pass still runs when another kustomization failed, so its own
+	// verdicts are reported in the same run, exactly as when it ran per kustomization.
+	return errors.Join(err, v.runKyverno(ctx, cmd, progressOpts))
+}
+
+// runKyverno evaluates every stored output's own Kyverno policies once all
+// outputs are rendered, giving each the Namespaces the others render (see
+// sharedNamespaces). It is a no-op when the pass is disabled or nothing passed the
+// first pass.
+func (v *kustomizationValidator) runKyverno(
+	ctx context.Context,
+	cmd *cobra.Command,
+	progressOpts []notify.ProgressOption,
+) error {
+	if !v.kyverno || len(v.kyvernoInputs) == 0 {
+		return nil
+	}
+
+	dirs := slices.Sorted(maps.Keys(v.kyvernoInputs))
+
+	outputs := make([][]byte, 0, len(dirs))
+	for _, dir := range dirs {
+		outputs = append(outputs, v.kyvernoInputs[dir].data)
+	}
+
+	shared := sharedNamespaces(outputs)
+
+	err := runParallelValidation(
+		ctx, cmd, dirs, v.dirPath, "Evaluating Kyverno policies", "🛡️",
+		func(taskCtx context.Context, dir string) error {
+			input := v.kyvernoInputs[dir]
+
+			return evaluateKyvernoDocuments(
+				taskCtx, true, input.data, dir, input.skipKinds, v.kyvernoSink,
+				input.attribution, shared,
+			)
+		},
+		append(progressOpts, notify.WithCountLabel("kustomizations"))...,
+	)
+	if err != nil {
+		return fmt.Errorf("kyverno policy evaluation failed: %w", err)
 	}
 
 	return nil
@@ -972,13 +1031,19 @@ func (v *kustomizationValidator) validateSilent(ctx context.Context, kustDir str
 		return err
 	}
 
-	// Apply the output's own Kyverno policies to the same documents, with the
-	// same kind exclusions and attribution.
-	err = evaluateKyvernoDocuments(
-		ctx, v.kyverno, data, kustDir, opts.SkipKinds, v.kyvernoSink, opts.Attribution,
-	)
-	if err != nil {
-		return err
+	// Keep the output for the Kyverno pass (runKyverno), which applies its own
+	// policies to the same documents with the same kind exclusions and attribution
+	// once every kustomization is rendered.
+	if v.kyverno {
+		v.kyvernoMu.Lock()
+		if v.kyvernoInputs == nil {
+			v.kyvernoInputs = map[string]kyvernoInput{}
+		}
+
+		v.kyvernoInputs[kustDir] = kyvernoInput{
+			data: data, skipKinds: opts.SkipKinds, attribution: opts.Attribution,
+		}
+		v.kyvernoMu.Unlock()
 	}
 
 	return nil
