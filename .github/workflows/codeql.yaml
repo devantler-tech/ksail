@@ -1,0 +1,90 @@
+name: 🔍 CodeQL
+
+# Advanced CodeQL setup. It replaces CodeQL default setup, and the two are mutually
+# exclusive: GitHub rejects an advanced configuration's results while default setup is
+# enabled. This workflow is therefore off by default and runs only when the repository
+# variable `ENABLE_ADVANCED_CODE_SCANNING` is set to `true`.
+#
+# Turning it on is one deliberate, reversible switch, and both halves belong to it:
+# disable default setup (Settings → Code security → CodeQL analysis) and set that variable.
+# Clearing the variable and re-enabling default setup restores the previous arrangement.
+# While the variable is unset the jobs are skipped, so default setup keeps serving the
+# "Require code scanning results" ruleset and nothing about the current setup changes.
+#
+# The reason to own the workflow is re-runnability. A default-setup run is GitHub-managed
+# (`event: dynamic`, no workflow file in the repository), so `gh run rerun` is refused and
+# an intermittent extractor failure can only be cleared by pushing a new commit — which a
+# bot-authored release PR will never do, leaving it blocked indefinitely (#6767). A run of
+# this workflow can simply be re-run.
+#
+# Go uses `autobuild`, which the Go extractor resolves to standalone extraction: it reads
+# the module graph with `go list` and takes types from source, so it needs no compiler and
+# covers every `go.mod` in the workspace — root, `desktop/` and `third_party/go-archive/` —
+# in one job. `none` is rejected for Go, and `manual` runs a traced compile that exceeds the
+# runner's memory alongside the extractor.
+#
+# That extraction sits at the runner's memory ceiling and sometimes exhausts it, ending the
+# job with `The runner has received a shutdown signal` part-way through extraction — the
+# intermittent failure #6767 describes. This is a property of the extraction rather than of
+# this workflow: the same crash occurs under default setup on the same commit, and CodeQL's
+# budget knobs do not avoid it, because the Go extractor is a separate process whose own heap
+# holds the accumulated module graph. Re-running the failed job is the available mitigation,
+# and being able to re-run is what owning the workflow provides. No `ram` or `threads` cap is
+# set here, so the budget matches the default setup this replaces.
+#
+# Same languages and suite as the default setup it replaces: actions, Go and
+# JavaScript/TypeScript with the security-extended queries. This satisfies the "Require
+# code scanning results" ruleset. Code-quality results cannot come from a custom workflow
+# (the CodeQL Action rejects `analysis-kinds: code-quality` here), so the "Require code
+# quality results" ruleset needs its own source once default setup is off.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  merge_group:
+  schedule:
+    - cron: "46 6 * * 6" # weekly
+
+permissions: {}
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    if: vars.ENABLE_ADVANCED_CODE_SCANNING == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, go, javascript-typescript]
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 🔍 Initialize CodeQL
+        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.language == 'go' && 'autobuild' || 'none' }}
+          queries: security-extended
+
+      - name: 🏗️ Autobuild
+        if: matrix.language == 'go'
+        uses: github/codeql-action/autobuild@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+
+      - name: 🔬 Perform CodeQL analysis
+        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          category: /language:${{ matrix.language }}

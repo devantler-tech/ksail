@@ -56,6 +56,21 @@ updates:
     ignore:
       - dependency-name: "k8s.io/*"
         update-types: ["version-update:semver-minor"]
+      # sigs.k8s.io/controller-runtime belongs to the `kubernetes` group above, but
+      # the k8s.io/* rule does not match it, so its minors were still proposed
+      # automatically. Each controller-runtime minor line targets exactly one
+      # Kubernetes minor line: v0.24.1 requires k8s.io/{api,apimachinery,apiserver,
+      # client-go} v0.36.0, while v0.25.0 requires v0.37.0. A minor bump therefore
+      # drags the whole staging set to 0.37 while k8s.io/kubernetes stays on 1.36,
+      # producing the same uncompilable graph the rule above exists to prevent
+      # (ksail#7075 failed exactly this way; ksail#7133). Patch and security
+      # updates are unaffected.
+      # Scoped to controller-runtime rather than sigs.k8s.io/* because the other
+      # modules matching that glob — yaml, kind, kwok, kustomize/*, json, randfill,
+      # release-utils, knftables — version independently of the staging set, and
+      # freezing their minors would suppress good updates for no benefit.
+      - dependency-name: "sigs.k8s.io/controller-runtime"
+        update-types: ["version-update:semver-minor"]
       # k3k v1.2.0 splits pkg/apis into its own module but publishes a go.mod that
       # requires it at v0.0.0-00010101000000-000000000000, resolved only by k3k's OWN
       # `replace ... => ./pkg/apis`. Go honours replace only in the main module, so every
