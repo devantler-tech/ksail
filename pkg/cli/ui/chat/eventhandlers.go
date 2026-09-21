@@ -344,17 +344,12 @@ func (d *sessionEventDispatcher) handleToolProgress(event copilot.SessionEvent) 
 }
 
 func (d *sessionEventDispatcher) handleTaskComplete(event copilot.SessionEvent) {
-	data, ok := event.Data.(*copilot.SessionTaskCompleteData)
-	if !ok {
+	if _, ok := event.Data.(*copilot.SessionTaskCompleteData); !ok {
 		return
 	}
 
-	msg := ""
-	if data.Summary != nil {
-		msg = *data.Summary
-	}
-
-	d.eventChan <- TaskCompleteMsg{Message: msg}
+	// The SDK's task-complete event carries no summary, so the message has no text to show.
+	d.eventChan <- TaskCompleteMsg{}
 }
 
 func (d *sessionEventDispatcher) handleAutoModeSwitchRequested(event copilot.SessionEvent) {

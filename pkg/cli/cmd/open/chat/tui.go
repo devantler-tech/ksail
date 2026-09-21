@@ -78,14 +78,7 @@ func buildTUIOnEventHandler(eventChan chan<- tea.Msg) copilot.SessionEventHandle
 				}
 			}
 		case copilot.SessionEventTypeSessionTaskComplete:
-			msg := ""
-
-			data, isTaskComplete := event.Data.(*copilot.SessionTaskCompleteData)
-			if isTaskComplete && data.Summary != nil {
-				msg = *data.Summary
-			}
-
-			eventChan <- chatui.TaskCompleteMsg{Message: msg}
+			eventChan <- chatui.TaskCompleteMsg{}
 		}
 	}
 }

@@ -268,17 +268,8 @@ func isExitCommand(input string) bool {
 // session-level events not covered by the per-turn streaming handler.
 func buildNonTUIOnEventHandler(writer io.Writer) copilot.SessionEventHandler {
 	return func(event copilot.SessionEvent) {
-		//nolint:exhaustive // Only session-level events not in per-turn handler; rest ignored.
-		switch event.Type() {
-		case copilot.SessionEventTypeToolExecutionProgress:
-			if data, ok := event.Data.(*copilot.ToolExecutionProgressData); ok {
-				_, _ = fmt.Fprintf(writer, "  ⏳ %s\n", data.ProgressMessage)
-			}
-		case copilot.SessionEventTypeSessionTaskComplete:
-			data, isTaskComplete := event.Data.(*copilot.SessionTaskCompleteData)
-			if isTaskComplete && data.Summary != nil {
-				_, _ = fmt.Fprintf(writer, "\n✅ %s\n", *data.Summary)
-			}
+		if data, ok := event.Data.(*copilot.ToolExecutionProgressData); ok {
+			_, _ = fmt.Fprintf(writer, "  ⏳ %s\n", data.ProgressMessage)
 		}
 	}
 }
@@ -370,10 +361,6 @@ func computeStreamingOutput(event copilot.SessionEvent, state *streamingState) s
 				action: actionDelta,
 				text:   "  ⏳ " + data.ProgressMessage + "\n",
 			}
-		}
-	case copilot.SessionEventTypeSessionTaskComplete:
-		if data, ok := event.Data.(*copilot.SessionTaskCompleteData); ok && data.Summary != nil {
-			return streamingOutput{action: actionDelta, text: "\n✅ " + *data.Summary + "\n"}
 		}
 	default:
 		// Ignore other event types
