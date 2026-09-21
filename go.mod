@@ -88,8 +88,8 @@ require (
 	github.com/kubescape/kubescape/v3 v3.0.48
 	github.com/kubescape/opa-utils v0.0.313
 	github.com/kyverno/kyverno v1.19.1
-	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac
-	github.com/loft-sh/vcluster v0.36.1
+	github.com/loft-sh/log v0.0.0-20260812120051-874a69680b18
+	github.com/loft-sh/vcluster v0.37.1
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/rancher/k3k v1.1.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
@@ -137,6 +137,7 @@ require (
 	github.com/google/go-github/v88 v88.0.0 // indirect
 	github.com/jellydator/ttlcache/v3 v3.4.1 // indirect
 	github.com/jmoiron/jsonq v0.0.0-20150511023944-e874b168d07e // indirect
+	github.com/kubernetes-csi/external-snapshotter/client/v8 v8.2.0 // indirect
 	github.com/kyverno/api v0.0.1-alpha.3.0.20260723090831-fb2785727f98 // indirect
 	github.com/kyverno/go-jmespath v0.4.1-0.20231124160150-95e59c162877 // indirect
 	github.com/kyverno/sdk v0.0.0-20260825082632-68d74afcb07a // indirect
@@ -660,10 +661,10 @@ require (
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/lithammer/dedent v1.1.0 // indirect
 	github.com/lmittmann/tint v1.1.3 // indirect
-	github.com/loft-sh/admin-apis v0.0.0-20260707131545-11a67ade9341 // indirect
-	github.com/loft-sh/agentapi/v4 v4.11.0-rc.1 // indirect
+	github.com/loft-sh/admin-apis v0.0.0-20260721223200-58c89e54604e // indirect
+	github.com/loft-sh/agentapi/v4 v4.12.0-rc.3 // indirect
 	github.com/loft-sh/analytics-client v0.0.0-20240219162240-2f4c64b2494e // indirect
-	github.com/loft-sh/api/v4 v4.11.0-rc.1 // indirect
+	github.com/loft-sh/api/v4 v4.12.0-rc.3 // indirect
 	github.com/loft-sh/apiserver v0.0.0-20260707184419-aef558a5ae8d // indirect
 	github.com/loft-sh/external-types v0.1.0-alpha.2.0.20260409132559-a38365a8cbf2 // indirect
 	github.com/loft-sh/image v0.0.0-20250818103249-5e7d53b59343 // indirect
