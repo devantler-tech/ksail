@@ -43,6 +43,8 @@ updates:
       # fail to build exactly as an ungrouped one does. What this buys is fewer
       # duplicate failing PRs and a failure that reads for the real reason - not a
       # lockstep guarantee. The standing upstream ceiling is tracked in ksail#6728.
+      # Equality itself is checked by a test in internal/depcontract, which fails a
+      # skewed bump with a message naming both versions (ksail#6734).
       talos:
         patterns:
           - "github.com/siderolabs/talos"
