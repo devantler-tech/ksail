@@ -193,10 +193,10 @@ func goModWith(talos, machinery string, replacements ...string) []byte {
 // version in contents, a go.mod file.
 //
 // The two are released together from one repository under one tag, and talos compiles
-// against machinery's config API. machinery is only an indirect requirement here, so any
-// dependency that needs a newer machinery (omni/client, image-factory) raises it silently
-// while talos stays put, and the build then fails inside talos's own source with an error
-// that never names the skew (ksail#6734). This check names it.
+// against machinery's config API. A go.mod requirement is only a floor under minimal
+// version selection, so any dependency that needs a newer machinery (omni/client,
+// image-factory) raises it while talos stays put, and the build then fails inside talos's
+// own source with an error that never names the skew (ksail#6734). This check names it.
 func checkTalosLockstep(contents []byte) error {
 	file, err := modfile.Parse("go.mod", contents, nil)
 	if err != nil {
