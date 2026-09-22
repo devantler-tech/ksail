@@ -92,11 +92,13 @@ type replacementRecovery struct {
 }
 
 // newReplacementLedger starts a ledger for target. A target without its immutable server
-// and node identities cannot anchor recovery evidence and is rejected.
+// and node identities cannot anchor recovery evidence and is rejected. Every ledger passes
+// through etcd member removal, so a target without an etcd member is rejected too.
 func newReplacementLedger(target replacementTarget) (replacementLedger, error) {
-	if target.ServerID <= 0 || target.NodeUID == "" {
+	if target.ServerID <= 0 || target.NodeUID == "" || target.EtcdMemberID == 0 {
 		return replacementLedger{}, fmt.Errorf(
-			"%w: target needs a server ID and a node UID", ErrReplacementLedgerInvalid)
+			"%w: target needs a server ID, a node UID and an etcd member ID",
+			ErrReplacementLedgerInvalid)
 	}
 
 	return replacementLedger{Version: replacementLedgerVersion, Target: target}, nil
@@ -311,6 +313,13 @@ func loadReplacementLedger(path string) (replacementLedger, error) {
 	err = decoder.Decode(&stored)
 	if err != nil {
 		return replacementLedger{}, fmt.Errorf("%w: %w", ErrReplacementLedgerInvalid, err)
+	}
+
+	// Decode reads only the first value; anything after it means the file is not one ledger.
+	err = decoder.Decode(&struct{}{})
+	if !errors.Is(err, io.EOF) {
+		return replacementLedger{}, fmt.Errorf(
+			"%w: trailing data after ledger", ErrReplacementLedgerInvalid)
 	}
 
 	return replayReplacementLedger(stored)

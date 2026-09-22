@@ -84,6 +84,14 @@ func TestReplacementLedgerRejectsATargetWithoutIdentities(t *testing.T) {
 
 	_, err = newReplacementLedger(noNode)
 	require.ErrorIs(t, err, ErrReplacementLedgerInvalid)
+
+	// Every ledger passes through member removal, so a target without an etcd member (a
+	// worker) would record the removal of member zero.
+	noMember := ledgerTarget()
+	noMember.EtcdMemberID = 0
+
+	_, err = newReplacementLedger(noMember)
+	require.ErrorIs(t, err, ErrReplacementLedgerInvalid)
 }
 
 func TestReplacementLedgerRecordsEveryPhaseInOrder(t *testing.T) {
@@ -281,6 +289,9 @@ func TestReplacementLedgerRefusesADirectoryOthersCanRead(t *testing.T) {
 
 	dir := filepath.Join(t.TempDir(), "shared")
 	require.NoError(t, os.Mkdir(dir, 0o750))
+	// Mkdir applies the umask, so set the mode explicitly: a 0o077 umask would otherwise
+	// leave the fixture private and fail it before the save runs.
+	require.NoError(t, os.Chmod(dir, 0o750)) //nolint:gosec // The fixture must be group-readable.
 
 	info, err := os.Stat(dir)
 	require.NoError(t, err)
@@ -333,6 +344,21 @@ func TestReplacementLedgerLoadRejectsUnknownFields(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(data), ledgerFileMode))
 
 	_, err := loadReplacementLedger(path)
+	require.ErrorIs(t, err, ErrReplacementLedgerInvalid)
+}
+
+func TestReplacementLedgerLoadRejectsTrailingData(t *testing.T) {
+	t.Parallel()
+
+	valid, err := json.Marshal(ledgerThrough(t, phasePlanned))
+	require.NoError(t, err)
+
+	// A valid ledger followed by a second value: only the trailing-data check can reject it.
+	path := filepath.Join(t.TempDir(), "ledger.json")
+	require.NoError(t, os.WriteFile(path, append(valid, []byte("{}")...), ledgerFileMode))
+	require.NoError(t, os.Chmod(path, ledgerFileMode))
+
+	_, err = loadReplacementLedger(path)
 	require.ErrorIs(t, err, ErrReplacementLedgerInvalid)
 }
 
