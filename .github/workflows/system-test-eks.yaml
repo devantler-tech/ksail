@@ -133,7 +133,7 @@ jobs:
 
       - name: 🔐 Configure AWS credentials (OIDC)
         timeout-minutes: 5
-        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ env.AWS_OIDC_ROLE_ARN }}
           role-session-name: ksail-system-test-eks-${{ github.run_id }}
@@ -284,7 +284,7 @@ jobs:
       - name: 🔐 Refresh AWS credentials before EKS update and cleanup
         if: always() && steps.init.outcome == 'success'
         timeout-minutes: 5
-        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ env.AWS_OIDC_ROLE_ARN }}
           role-session-name: ksail-system-test-eks-refresh-${{ github.run_id }}
