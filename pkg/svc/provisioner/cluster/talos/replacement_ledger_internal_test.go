@@ -113,6 +113,9 @@ func TestReplacementLedgerRejectsAnInvalidRecordWithoutChangingIt(t *testing.T) 
 	multiline := ledgerRecord(phaseMemberRemoved, 2)
 	multiline.Detail = "first line\nsecond line"
 
+	separated := ledgerRecord(phaseMemberRemoved, 2)
+	separated.Detail = "first line\u2028second line"
+
 	untimed := ledgerRecord(phaseMemberRemoved, 2)
 	untimed.At = time.Time{}
 
@@ -126,15 +129,16 @@ func TestReplacementLedgerRejectsAnInvalidRecordWithoutChangingIt(t *testing.T) 
 	strayNode.NodeUID = ledgerReplacementNodeUID
 
 	cases := map[string]replacementPhaseRecord{
-		"skipped phase":      ledgerRecord(phaseServerDeleted, 2),
-		"repeated phase":     ledgerRecord(phaseDrained, 2),
-		"oversize detail":    oversize,
-		"multi-line detail":  multiline,
-		"missing time":       untimed,
-		"time goes back":     backwards,
-		"stray server ID":    strayServer,
-		"stray node UID":     strayNode,
-		"unknown phase name": {Phase: "rebooted", At: ledgerStart().Add(time.Hour)},
+		"skipped phase":         ledgerRecord(phaseServerDeleted, 2),
+		"repeated phase":        ledgerRecord(phaseDrained, 2),
+		"oversize detail":       oversize,
+		"multi-line detail":     multiline,
+		"line-separator detail": separated,
+		"missing time":          untimed,
+		"time goes back":        backwards,
+		"stray server ID":       strayServer,
+		"stray node UID":        strayNode,
+		"unknown phase name":    {Phase: "rebooted", At: ledgerStart().Add(time.Hour)},
 	}
 
 	for name, entry := range cases {
@@ -339,9 +343,11 @@ func TestReplacementLedgerLoadRejectsAFileOthersCanRead(t *testing.T) {
 func TestReplacementLedgerLoadRejectsUnknownFields(t *testing.T) {
 	t.Parallel()
 
+	// Otherwise valid, so only the unknown-field check can reject it.
 	path := filepath.Join(t.TempDir(), "ledger.json")
-	data := `{"version":1,"target":{"serverId":1001,"nodeUid":"node-old"},"records":[],"secret":"x"}`
+	data := `{"version":1,"target":{"serverId":1001,"nodeUid":"node-old","etcdMemberId":77},"records":[],"secret":"x"}`
 	require.NoError(t, os.WriteFile(path, []byte(data), ledgerFileMode))
+	require.NoError(t, os.Chmod(path, ledgerFileMode))
 
 	_, err := loadReplacementLedger(path)
 	require.ErrorIs(t, err, ErrReplacementLedgerInvalid)

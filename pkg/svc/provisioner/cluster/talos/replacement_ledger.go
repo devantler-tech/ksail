@@ -162,7 +162,7 @@ func validateRecordDetail(detail string) error {
 	}
 
 	for _, character := range detail {
-		if unicode.IsControl(character) {
+		if !unicode.IsPrint(character) {
 			return fmt.Errorf("%w: detail must be a single line of printable text",
 				ErrReplacementLedgerInvalid)
 		}
