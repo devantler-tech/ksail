@@ -5,9 +5,13 @@
 // or the local node provider), and the labels and annotations managed services and simulators put
 // on their nodes. Each rule is a documented marker of that distribution, never a naming convention.
 //
-// Every rule must hold on EVERY node before it counts, so a mixed or partly-initialised cluster
-// reports "unknown" rather than a guess. An unknown result renders as "—"; a wrong label is worse
-// than no label, because the user acts on it.
+// The two detections take consensus differently, because the evidence differs. A distribution rule
+// must hold on EVERY node before it counts, so a mixed cluster reports "unknown" rather than a
+// guess. A provider is named by spec.providerID, which the cloud controller manager fills in per
+// node, so at least one node must carry one and every non-empty one must map to the same known
+// provider — a node still missing it supplies no evidence rather than blocking the result. Either
+// way an unknown result renders as "—"; a wrong label is worse than no label, because the user acts
+// on it.
 
 import type { Cluster, K8sObject } from "../api.ts";
 
