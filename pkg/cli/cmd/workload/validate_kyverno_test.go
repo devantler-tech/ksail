@@ -202,3 +202,164 @@ metadata:
 	_, err = runValidate(t, dir, "--kyverno-policies", "--skip-kinds", "Namespace")
 	require.NoError(t, err, "a skipped Namespace cannot surface a policy failure")
 }
+
+// teamNamespacePolicy enforces a `team` label on ConfigMaps, but only in
+// Namespaces labelled tier=prod, so evaluating it needs the Namespace's labels.
+const teamNamespacePolicy = `apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-team-label-in-prod
+spec:
+  validationFailureAction: Enforce
+  rules:
+    - name: check-team
+      match:
+        any:
+          - resources:
+              kinds:
+                - ConfigMap
+              namespaceSelector:
+                matchLabels:
+                  tier: prod
+      validate:
+        message: "ConfigMaps in prod Namespaces must carry a team label"
+        pattern:
+          metadata:
+            labels:
+              team: "?*"
+`
+
+// namespaceDoc renders a Namespace named apps with the given tier label.
+func namespaceDoc(tier string) string {
+	return "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: apps\n  labels:\n    tier: " + tier + "\n"
+}
+
+// writeLayeredTree writes a source tree with an `app` kustomization holding the
+// policy and an unlabelled ConfigMap in Namespace apps, plus one kustomization per
+// entry of namespaceLayers rendering Namespace apps with that tier. When
+// ownTier is non-empty the app kustomization renders Namespace apps itself too.
+func writeLayeredTree(t *testing.T, ownTier string, namespaceLayers ...string) string {
+	t.Helper()
+
+	root := t.TempDir()
+
+	write := func(dir string, files map[string]string) {
+		require.NoError(t, os.MkdirAll(dir, 0o750))
+
+		for name, content := range files {
+			require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600))
+		}
+	}
+
+	appResources := "  - policy.yaml\n  - configmap.yaml\n"
+	appFiles := map[string]string{
+		"policy.yaml": teamNamespacePolicy,
+		"configmap.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: app-config\n" +
+			"  namespace: apps\ndata:\n  key: value\n",
+	}
+
+	if ownTier != "" {
+		appResources += "  - namespace.yaml\n"
+		appFiles["namespace.yaml"] = namespaceDoc(ownTier)
+	}
+
+	appFiles["kustomization.yaml"] = "apiVersion: kustomize.config.k8s.io/v1beta1\n" +
+		"kind: Kustomization\nresources:\n" + appResources
+	write(filepath.Join(root, "app"), appFiles)
+
+	for index, tier := range namespaceLayers {
+		write(filepath.Join(root, "namespaces-"+string(rune('a'+index))), map[string]string{
+			"kustomization.yaml": "apiVersion: kustomize.config.k8s.io/v1beta1\n" +
+				"kind: Kustomization\nresources:\n  - namespace.yaml\n",
+			"namespace.yaml": namespaceDoc(tier),
+		})
+	}
+
+	return root
+}
+
+// A Namespace rendered by another kustomization supplies the labels a
+// namespaceSelector needs, so the rule is evaluated and its enforced failure fails
+// validation instead of being reported as not evaluable offline.
+func TestValidateKyvernoUsesNamespaceFromAnotherKustomization(t *testing.T) {
+	t.Parallel()
+
+	_, err := runValidate(t, writeLayeredTree(t, "", "prod"), "--kyverno-policies")
+	require.Error(t, err, "a Namespace from another kustomization must make the rule evaluable")
+	require.ErrorContains(t, err, `policy "require-team-label-in-prod" rule "check-team" failed`)
+	require.ErrorContains(t, err, "ConfigMap/apps/app-config")
+
+	output, err := runValidate(t, writeLayeredTree(t, "", "dev"), "--kyverno-policies")
+	require.NoError(t, err, "a Namespace outside the selector must not fail validation")
+	assert.NotContains(t, output, "not evaluable offline")
+}
+
+// Two kustomizations rendering the same Namespace with different labels leave its
+// labels unknown: the rule is reported as not evaluable, never guessed either way.
+func TestValidateKyvernoConflictingNamespaceLabelsAreNotEvaluable(t *testing.T) {
+	t.Parallel()
+
+	output, err := runValidate(t, writeLayeredTree(t, "", "prod", "dev"), "--kyverno-policies")
+	require.NoError(t, err, "conflicting Namespace labels must not produce an enforced failure")
+	assert.Contains(
+		t,
+		output,
+		`policy "require-team-label-in-prod" rule "check-team" not evaluable offline`,
+	)
+}
+
+// A kustomization's own Namespace wins over one rendered elsewhere, even when the
+// others disagree among themselves.
+func TestValidateKyvernoOwnNamespaceWins(t *testing.T) {
+	t.Parallel()
+
+	_, err := runValidate(t, writeLayeredTree(t, "prod", "dev", "staging"), "--kyverno-policies")
+	require.Error(t, err, "the kustomization's own prod Namespace must be used")
+	require.ErrorContains(t, err, `policy "require-team-label-in-prod" rule "check-team" failed`)
+
+	_, err = runValidate(t, writeLayeredTree(t, "dev", "prod"), "--kyverno-policies")
+	require.NoError(
+		t,
+		err,
+		"the kustomization's own dev Namespace must win over another's prod one",
+	)
+}
+
+// A kustomization that renders a valid Namespace but fails validation on another
+// document still lends that Namespace to the others, so their rules stay evaluable
+// rather than being reported as not evaluable offline.
+func TestValidateKyvernoUsesNamespaceFromAFailedKustomization(t *testing.T) {
+	t.Parallel()
+
+	root := writeLayeredTree(t, "", "prod")
+	layer := filepath.Join(root, "namespaces-a")
+	require.NoError(t, os.WriteFile(filepath.Join(layer, "kustomization.yaml"), []byte(
+		"apiVersion: kustomize.config.k8s.io/v1beta1\n"+
+			"kind: Kustomization\nresources:\n  - namespace.yaml\n  - invalid.yaml\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(layer, "invalid.yaml"), []byte(
+		"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: invalid\n  namespace: apps\n"+
+			"data: not-a-map\n"), 0o600))
+
+	output, err := runValidate(t, root, "--kyverno-policies")
+	require.Error(t, err, "the invalid document must still fail validation")
+	require.ErrorContains(t, err, `policy "require-team-label-in-prod" rule "check-team" failed`)
+	assert.NotContains(t, output, "not evaluable offline")
+}
+
+// A shared Namespace whose labels cannot be read leaves them unknown: the rule is
+// reported as not evaluable instead of treating the Namespace as unlabelled.
+func TestValidateKyvernoMalformedSharedNamespaceLabelsAreNotEvaluable(t *testing.T) {
+	t.Parallel()
+
+	root := writeLayeredTree(t, "", "prod")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "namespaces-a", "namespace.yaml"), []byte(
+		"apiVersion: v1\nkind: Namespace\nmetadata:\n  name: apps\n  labels:\n    tier: 1\n",
+	), 0o600))
+
+	output, _ := runValidate(t, root, "--kyverno-policies")
+	assert.Contains(
+		t,
+		output,
+		`policy "require-team-label-in-prod" rule "check-team" not evaluable offline`,
+	)
+}

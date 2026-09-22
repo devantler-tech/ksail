@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/kyvernopolicy"
 	kyvernov1 "github.com/kyverno/kyverno/api/kyverno/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // ErrKyvernoPolicyViolation is returned when a rendered document fails a Kyverno
@@ -24,7 +27,8 @@ const kyvernoPoliciesFlagDescription = "Evaluate the source's own Kyverno Cluste
 	"rendered output: a policy delivered by a different kustomization is not seen, loose YAML " +
 	"files are not evaluated, a document is evaluated in the namespace it declares (a Flux " +
 	"targetNamespace is not applied), and CEL-based policies.kyverno.io policies are not " +
-	"supported. " +
+	"supported. Namespace labels come from the kustomization's own Namespaces first, then from " +
+	"a Namespace another kustomization renders, unless two render it with different labels. " +
 	"A rule a cluster would enforce fails validation; an audit-only failure or a rule that " +
 	"cannot be evaluated offline is reported as a warning."
 
@@ -45,6 +49,12 @@ const kyvernoPoliciesFlagDescription = "Evaluate the source's own Kyverno Cluste
 // and a rule that cannot be evaluated offline — is recorded in sink for reporting
 // after the progress group. A policy that does not decode is an error: skipping it
 // would report a clean run for a policy that was never applied.
+//
+// shared holds Namespace documents rendered elsewhere in the validated tree (see
+// sharedNamespaces). They only supply labels for a Namespace data does not render
+// itself: a kustomization's own Namespace always wins, and shared Namespaces are
+// never evaluated as targets here — each is evaluated by the kustomization that
+// renders it.
 func evaluateKyvernoDocuments(
 	ctx context.Context,
 	enabled bool,
@@ -53,6 +63,7 @@ func evaluateKyvernoDocuments(
 	skipKinds []string,
 	sink *celViolationSink,
 	attribution map[string]string,
+	shared []map[string]any,
 ) error {
 	if !enabled {
 		return nil
@@ -69,7 +80,7 @@ func evaluateKyvernoDocuments(
 		return nil
 	}
 
-	engine := kyvernopolicy.NewEngine(policies, docs)
+	engine := kyvernopolicy.NewEngine(policies, withSharedNamespaces(docs, shared))
 
 	var blocking []string
 
@@ -112,6 +123,100 @@ func decodeDocuments(data []byte) []map[string]any {
 	}
 
 	return docs
+}
+
+// namespaceDocumentName returns the name of a core v1 Namespace document, the
+// same shape the policy engine reads namespace labels from.
+func namespaceDocumentName(doc map[string]any) (string, bool) {
+	if doc["apiVersion"] != "v1" || doc["kind"] != "Namespace" {
+		return "", false
+	}
+
+	name, _, _ := unstructured.NestedString(doc, "metadata", "name")
+
+	return name, name != ""
+}
+
+// sharedNamespaces collects the Namespace documents rendered across every
+// kustomization's output, so a namespaced document in one kustomization can be
+// evaluated against a namespaceSelector whose Namespace another renders. A
+// Namespace is cluster-scoped, so its labels do not depend on which layer renders
+// it. When two outputs render the same Namespace with different labels, or any
+// output renders it with labels that cannot be read, that Namespace is left out:
+// its labels are unknown, and a rule selecting on them is reported as not
+// evaluable rather than guessed.
+func sharedNamespaces(outputs [][]byte) []map[string]any {
+	type seen struct {
+		doc        map[string]any
+		labels     map[string]string
+		conflicted bool
+	}
+
+	byName := map[string]*seen{}
+
+	var order []string
+
+	for _, data := range outputs {
+		for _, doc := range decodeDocuments(data) {
+			name, ok := namespaceDocumentName(doc)
+			if !ok {
+				continue
+			}
+
+			// Labels that cannot be read are unknown, exactly like conflicting ones.
+			labels, _, err := unstructured.NestedStringMap(doc, "metadata", "labels")
+			malformed := err != nil
+
+			existing, found := byName[name]
+			if !found {
+				byName[name] = &seen{doc: doc, labels: labels, conflicted: malformed}
+				order = append(order, name)
+
+				continue
+			}
+
+			if malformed || !maps.Equal(existing.labels, labels) {
+				existing.conflicted = true
+			}
+		}
+	}
+
+	var shared []map[string]any
+
+	for _, name := range order {
+		if entry := byName[name]; !entry.conflicted {
+			shared = append(shared, entry.doc)
+		}
+	}
+
+	return shared
+}
+
+// withSharedNamespaces returns docs plus every shared Namespace docs does not
+// render itself, as the policy engine's namespace context. docs is not modified.
+func withSharedNamespaces(docs, shared []map[string]any) []map[string]any {
+	if len(shared) == 0 {
+		return docs
+	}
+
+	own := map[string]struct{}{}
+
+	for _, doc := range docs {
+		if name, ok := namespaceDocumentName(doc); ok {
+			own[name] = struct{}{}
+		}
+	}
+
+	combined := slices.Clone(docs)
+
+	for _, doc := range shared {
+		name, _ := namespaceDocumentName(doc)
+		if _, rendered := own[name]; !rendered {
+			combined = append(combined, doc)
+		}
+	}
+
+	return combined
 }
 
 // splitKyvernoPolicies separates the Kyverno policies in docs from the documents
