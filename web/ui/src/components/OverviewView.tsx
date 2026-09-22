@@ -138,11 +138,13 @@ export function OverviewView({
   const status = cluster.status;
   const spec = cluster.spec?.cluster;
   const namespace = cluster.metadata.namespace ?? "default";
-  // The host cluster's registration carries an empty spec on purpose (the operator does not manage
-  // the hub's lifecycle), so the create-form defaults would mislabel it — show "—" instead.
+  // A cluster with no spec distribution/provider is one ksail does not manage: a kubeconfig-only
+  // context, or the host cluster the operator runs on. Its nodes are the only evidence of what it
+  // runs, so the live node facts fill those fields; with no conclusive evidence they read "—". The
+  // create-form defaults are never used here, because they describe what a NEW cluster would get.
   const hostCluster = isHostCluster(cluster);
-  const distribution = spec?.distribution || (hostCluster ? "—" : meta.distributions[0] || "—");
-  const provider = spec?.provider || (hostCluster ? "—" : meta.providers[distribution]?.[0] || "—");
+  const distribution = spec?.distribution || health?.identity.distribution || "—";
+  const provider = spec?.provider || health?.identity.provider || "—";
   const secret = status?.kubeconfigSecretRef;
   const nodesHealthy = health ? health.nodesTotal > 0 && health.nodesReady === health.nodesTotal : false;
 
