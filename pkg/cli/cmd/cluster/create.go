@@ -830,7 +830,7 @@ func maybeWaitForTTL(
 	}
 
 	// Persist TTL for informational display (ksail cluster list / info).
-	saveErr := state.SaveClusterTTL(clusterName, ttl)
+	saveErr := saveClusterTTL(clusterName, clusterCfg, eksConfig, ttl)
 	if saveErr != nil {
 		notify.Warningf(cmd.OutOrStdout(),
 			"failed to save cluster TTL: %v", saveErr)
