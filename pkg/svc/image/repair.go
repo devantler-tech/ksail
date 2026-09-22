@@ -18,13 +18,31 @@ func (e *Exporter) tryExportImagesWithRepair(
 	resolveImages []string,
 ) ([]string, error) {
 	exportErr := e.tryExportImages(ctx, nodeName, tmpPath, platform, images)
-	if exportErr == nil || len(repairImages) == 0 || !isMissingContentError(exportErr) {
+	if exportErr == nil || !isMissingContentError(exportErr) {
 		return images, exportErr
 	}
 
+	// Every outcome below names what the repair did, so a missing-content failure
+	// says whether a repair ran and why it did not help. A successful repair stays
+	// silent.
+	if len(repairImages) == 0 {
+		return images, fmt.Errorf(
+			"%w (content repair skipped: no images were named, "+
+				"so a whole-cluster export is not re-pulled)",
+			exportErr,
+		)
+	}
+
+	repairTargets := strings.Join(repairImages, ", ")
+
 	successfulRepairRefs, refreshErr := e.refreshImageContent(ctx, nodeName, platform, repairImages)
 	if refreshErr != nil {
-		return images, exportErr
+		return images, fmt.Errorf(
+			"%w (content repair of %s failed: %w)",
+			exportErr,
+			repairTargets,
+			refreshErr,
+		)
 	}
 
 	refreshedImages := images
@@ -34,13 +52,17 @@ func (e *Exporter) tryExportImagesWithRepair(
 
 	refreshedImages = preferSuccessfulRepairRefs(refreshedImages, successfulRepairRefs)
 
-	return refreshedImages, e.tryExportImages(
-		ctx,
-		nodeName,
-		tmpPath,
-		platform,
-		refreshedImages,
-	)
+	err := e.tryExportImages(ctx, nodeName, tmpPath, platform, refreshedImages)
+	if err != nil {
+		return refreshedImages, fmt.Errorf(
+			"%w (content repair of %s succeeded, but the re-export failed: %w)",
+			exportErr,
+			repairTargets,
+			err,
+		)
+	}
+
+	return refreshedImages, nil
 }
 
 // repairAndReExport refreshes the node's containerd content store and re-exports once
@@ -114,7 +136,7 @@ func (e *Exporter) fallbackExportImages(
 	images []string,
 	bulkErr error,
 ) error {
-	successfulImages, failedImages := e.exportImagesOneByOne(
+	successfulImages, failedImages, failures := e.exportImagesOneByOne(
 		ctx,
 		nodeName,
 		tmpPath,
@@ -123,8 +145,10 @@ func (e *Exporter) fallbackExportImages(
 	)
 	if len(successfulImages) == 0 {
 		return fmt.Errorf(
-			"ctr export failed for all images during individual export attempts (initial bulk export error: %w)",
+			"ctr export failed for all images during individual export attempts "+
+				"(initial bulk export error: %w; individual export errors: %w)",
 			bulkErr,
+			errors.Join(failures...),
 		)
 	}
 
@@ -326,16 +350,19 @@ func (e *Exporter) tryExportSingleImageWithRepair(
 
 	successfulRef, refreshErr := e.refreshSingleImageContent(ctx, nodeName, platform, image)
 	if refreshErr != nil {
-		return image, err
+		return image, fmt.Errorf("%w (content repair failed: %w)", err, refreshErr)
 	}
 
-	return successfulRef, e.tryExportImages(
-		ctx,
-		nodeName,
-		tmpPath,
-		platform,
-		[]string{successfulRef},
-	)
+	reExportErr := e.tryExportImages(ctx, nodeName, tmpPath, platform, []string{successfulRef})
+	if reExportErr != nil {
+		return successfulRef, fmt.Errorf(
+			"%w (content repair succeeded, but the re-export failed: %w)",
+			err,
+			reExportErr,
+		)
+	}
+
+	return successfulRef, nil
 }
 
 func preferSuccessfulRepairRefs(
@@ -361,16 +388,19 @@ func preferSuccessfulRepairRefs(
 }
 
 // exportImagesOneByOne tests each image individually and returns the list of
-// images that can be successfully exported, along with the list of failed images.
+// images that can be successfully exported, the list of failed images, and one
+// error per failed image naming it.
 func (e *Exporter) exportImagesOneByOne(
 	ctx context.Context,
 	nodeName string,
 	tmpPath string,
 	platform string,
 	images []string,
-) ([]string, []string) {
+) ([]string, []string, []error) {
 	successful := make([]string, 0, len(images))
 	failed := make([]string, 0, len(images))
+
+	var failures []error
 
 	for _, image := range images {
 		successfulRef, err := e.tryExportSingleImageWithRepair(
@@ -384,11 +414,12 @@ func (e *Exporter) exportImagesOneByOne(
 			successful = append(successful, successfulRef)
 		} else {
 			failed = append(failed, image)
+			failures = append(failures, fmt.Errorf("%s: %w", image, err))
 		}
 	}
 
 	// Clean up test export file
 	_, _ = e.executor.ExecInContainer(ctx, nodeName, []string{"rm", "-f", tmpPath})
 
-	return successful, failed
+	return successful, failed, failures
 }
