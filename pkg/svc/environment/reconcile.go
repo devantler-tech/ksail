@@ -25,8 +25,8 @@ const (
 	// exists. This increment only checks existence; content drift against the
 	// declared config is a later reconcile increment.
 	OverlayPresent OverlayState = "Present"
-	// OverlayMissing means the environment declares a ksail.<env>.yaml root config
-	// but has no clusters/<env>/ overlay directory — the state a reconcile would
+	// OverlayMissing means the environment is declared but has no
+	// clusters/<env>/ overlay directory — the state a reconcile would
 	// resolve by generating the overlay (via the DeriveMultiClusterLayout /
 	// CloneOverlay seams).
 	OverlayMissing OverlayState = "Missing"
@@ -54,20 +54,15 @@ type Plan struct {
 	// its kustomizationFile (which has no ksail.<env>.yaml of its own).
 	Entries []PlanEntry
 	// Orphans lists overlay directories (relative to the source directory,
-	// slash-delimited) that no ksail.<env>.yaml declares, sorted; the shared
+	// slash-delimited) that no environment declares, sorted; the shared
 	// clusters/base/ overlay is not an orphan. Orphans are surfaced for the
 	// operator to resolve — a reconcile must never delete them silently.
 	Orphans []string
 }
 
-// baseConfigFileName is the workspace's base root config — not itself an
-// environment (DeriveEnvironments excludes it), but its kustomizationFile may
-// sync a clusters/<env> overlay that DerivePlan must not misread as orphaned.
-const baseConfigFileName = "ksail.yaml"
-
-// DerivePlan diffs the environments declared by ksail.<env>.yaml root configs in
-// repoRoot against the overlay tree at <sourceDir>/clusters/ (sourceDir is taken
-// relative to repoRoot unless already absolute — the ksail config manager hands
+// DerivePlan diffs the environments DeriveEnvironments declares in repoRoot
+// against the overlay tree at <sourceDir>/clusters/ (sourceDir is taken relative
+// to repoRoot unless already absolute — the ksail config manager hands
 // downstream consumers an absolutized source directory). A missing clusters/
 // directory is a valid pre-scaffold state: every declared environment is then
 // OverlayMissing and there are no orphans.
@@ -76,10 +71,11 @@ const baseConfigFileName = "ksail.yaml"
 // (ksail.base.yaml) is rejected with ErrReservedEnvironmentName: clusters/base
 // is the shared base every overlay builds on, so treating it as that
 // environment's overlay would mask the name collision DeriveMultiClusterLayout
-// already refuses. The overlay synced by the base ksail.yaml's
-// kustomizationFile (the initial environment `project init --multi-cluster`
-// scaffolds without a ksail.<env>.yaml) is recognised and never reported as an
-// orphan.
+// already refuses. Because the plan's entries are exactly DeriveEnvironments'
+// result, the initial environment the base ksail.yaml syncs (which `project
+// init --multi-cluster` scaffolds without a ksail.<env>.yaml) is a first-class
+// entry — reported Missing when its overlay is deleted, never an orphan — and
+// `env reconcile` always agrees with `env list` on the declared set.
 func DerivePlan(repoRoot, sourceDir string, load ConfigLoader) (Plan, error) {
 	declared, err := DeriveEnvironments(repoRoot, load)
 	if err != nil {
@@ -101,55 +97,10 @@ func DerivePlan(repoRoot, sourceDir string, load ConfigLoader) (Plan, error) {
 		return Plan{}, err
 	}
 
-	entries, declaredNames = appendBaseSyncedEntry(entries, declaredNames, overlays, load)
-
 	return Plan{
 		Entries: entries,
 		Orphans: orphanOverlays(overlays, declaredNames),
 	}, nil
-}
-
-// appendBaseSyncedEntry adds the environment declared by the base ksail.yaml's
-// kustomizationFile (the initial environment `project init --multi-cluster`
-// scaffolds without a ksail.<env>.yaml) as a first-class plan entry, so a
-// deleted clusters/<env> overlay is reported as Missing — and reconciled — like
-// any other declared environment, rather than only being kept out of the
-// orphan list. A name also declared by its own ksail.<env>.yaml keeps that
-// entry (no duplicate), and a base config syncing the shared clusters/base
-// overlay declares nothing.
-func appendBaseSyncedEntry(
-	entries []PlanEntry,
-	declaredNames map[string]struct{},
-	overlays map[string]struct{},
-	load ConfigLoader,
-) ([]PlanEntry, map[string]struct{}) {
-	baseEnv, ok := baseConfigEnvironment(load)
-	if !ok || baseEnv.Name == BaseEnvName {
-		return entries, declaredNames
-	}
-
-	if _, dup := declaredNames[baseEnv.Name]; dup {
-		return entries, declaredNames
-	}
-
-	declaredNames[baseEnv.Name] = struct{}{}
-
-	state := OverlayMissing
-	if _, exists := overlays[baseEnv.Name]; exists {
-		state = OverlayPresent
-	}
-
-	entries = append(entries, PlanEntry{
-		Environment: baseEnv,
-		OverlayDir:  path.Join(ClustersDir, baseEnv.Name),
-		State:       state,
-	})
-
-	slices.SortFunc(entries, func(left, right PlanEntry) int {
-		return strings.Compare(left.Environment.Name, right.Environment.Name)
-	})
-
-	return entries, declaredNames
 }
 
 // planEntries pairs each declared environment with its overlay state, rejecting
@@ -189,7 +140,7 @@ func planEntries(
 
 // orphanOverlays lists the overlay directories nothing declares, sorted —
 // excluding the shared base overlay (declaredNames already includes the
-// overlay the base ksail.yaml syncs, via appendBaseSyncedEntry).
+// overlay the base ksail.yaml syncs, which DeriveEnvironments declares).
 func orphanOverlays(
 	overlays map[string]struct{},
 	declaredNames map[string]struct{},
@@ -209,34 +160,6 @@ func orphanOverlays(
 	slices.SortFunc(orphans, strings.Compare)
 
 	return orphans
-}
-
-// baseConfigEnvironment derives the environment the workspace's base
-// ksail.yaml declares through its workload kustomizationFile (clusters/<name>),
-// reporting ok=false when there is no loadable base config or its sync path is
-// not exactly one directory under clusters/. `project init --multi-cluster
-// <env>` scaffolds this initial environment without a ksail.<env>.yaml, so
-// DerivePlan must learn it from the base config: its overlay is a real plan
-// entry (reported Missing when deleted), never an orphan.
-func baseConfigEnvironment(load ConfigLoader) (Environment, bool) {
-	cfg, err := load(baseConfigFileName)
-	if err != nil || cfg == nil {
-		return Environment{}, false
-	}
-
-	sync := path.Clean(filepath.ToSlash(cfg.Spec.Workload.KustomizationFile))
-
-	dir, name := path.Split(sync)
-	if path.Clean(dir) != ClustersDir || name == "" {
-		return Environment{}, false
-	}
-
-	return Environment{
-		Name:         name,
-		ConfigFile:   baseConfigFileName,
-		Distribution: cfg.Spec.Cluster.Distribution,
-		Provider:     cfg.Spec.Cluster.Provider,
-	}, true
 }
 
 // listOverlayDirs enumerates the overlay directory names under clustersAbs. A

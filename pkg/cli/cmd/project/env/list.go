@@ -30,18 +30,29 @@ const (
 // ErrInvalidOutputFormat is returned when --output is neither text nor json.
 var ErrInvalidOutputFormat = errors.New("invalid output format")
 
+// noEnvironmentsHint is printed by `env list` and `env reconcile` when the
+// workspace declares no environment. `env add` needs an existing environment to
+// clone, so the hint names the steps that declare the first one instead.
+const noEnvironmentsHint = "no environments declared; declare one by setting " +
+	"spec.workload.kustomizationFile to clusters/<name> in ksail.yaml, then " +
+	"scaffold its overlay with `ksail project env reconcile --experimental`"
+
 // listEnvironmentsLongDesc is the long help text for `project env list`,
 // shared with the deprecated `project list-environments` delegate.
 const listEnvironmentsLongDesc = `List the cluster environments declared in the workspace.
 
-An environment is a ksail.<name>.yaml root config in the workspace root (the same
-convention "project env add"'s --from resolves against); the base ksail.yaml
-is not an environment. Each declared environment is reported with its distribution
-and provider, read from its config. A config that fails to load is skipped so a
-single malformed file never hides the environments that do load.
+An environment is a ksail.<name>.yaml root config in the workspace root. The base
+ksail.yaml declares one too when its spec.workload.kustomizationFile syncs a
+clusters/<name> overlay — the initial environment "project init --multi-cluster"
+scaffolds. These are the same environments "project env add"'s --from and
+"project env reconcile" resolve against. Each declared environment is reported
+with its distribution and provider, read from its config. A config that fails to
+load is skipped so a single malformed file never hides the environments that do
+load.
 
 Output Format:
   NAME     DISTRIBUTION   PROVIDER   CONFIG
+  local    Vanilla        Docker     ksail.yaml
   prod     Talos          Hetzner    ksail.prod.yaml
   staging  K3s            Docker     ksail.staging.yaml
 
@@ -170,11 +181,7 @@ func emitEnvironmentsJSON(out io.Writer, envs []environment.Environment) error {
 // friendly hint when none are declared.
 func displayEnvironments(out io.Writer, envs []environment.Environment) {
 	if len(envs) == 0 {
-		notify.Infof(
-			out,
-			"no environments declared; scaffold one with "+
-				"`ksail project env add <name> --from <env>`",
-		)
+		notify.Infof(out, noEnvironmentsHint)
 
 		return
 	}

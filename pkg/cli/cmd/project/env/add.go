@@ -44,7 +44,9 @@ var ErrSourceConfigLoad = errors.New("failed to load source environment config")
 const addEnvironmentLongDesc = `Clone an existing cluster environment into a new one.
 
 Copies the source environment's overlay (<sourceDirectory>/clusters/<from>/) and
-its root config (ksail.<from>.yaml) into a new environment <name>, repointing the
+its root config (ksail.<from>.yaml, or the base ksail.yaml when <from> is the
+environment it syncs, as "project init --multi-cluster" scaffolds) into a new
+environment <name> with its own ksail.<name>.yaml, repointing the
 structured identity along the way: the cluster-meta cluster_name, the
 clusters/<env> path segment and content references, the root config's metadata
 name, the connection context (distribution-aware), and — when --provider is given
@@ -93,14 +95,15 @@ func NewAddCmd() *cobra.Command {
 
 // addEnvironmentParams holds the resolved inputs for a clone.
 type addEnvironmentParams struct {
-	repoRoot     string
-	srcName      string
-	dstName      string
-	srcProvider  string
-	dstProvider  string
-	distribution v1alpha1.Distribution
-	sourceDir    string
-	force        bool
+	repoRoot      string
+	srcName       string
+	srcConfigFile string
+	dstName       string
+	srcProvider   string
+	dstProvider   string
+	distribution  v1alpha1.Distribution
+	sourceDir     string
+	force         bool
 }
 
 // HandleAddRunE handles the `project env add` command. It is exported for
@@ -171,7 +174,9 @@ func resolveAddEnvironmentParams(
 	// from any subdirectory of the workspace and clone into the real tree.
 	repoRoot := resolveWorkspaceRoot(canonWorkDir)
 
-	srcCfg, err := loadSourceConfig(cmd, repoRoot, srcName)
+	srcConfigFile := declaredConfigFile(cmd, repoRoot, srcName)
+
+	srcCfg, err := loadEnvironmentConfig(cmd, filepath.Join(repoRoot, srcConfigFile))
 	if err != nil {
 		return addEnvironmentParams{}, enrichSourceConfigError(cmd, repoRoot, err)
 	}
@@ -196,14 +201,15 @@ func resolveAddEnvironmentParams(
 	}
 
 	return addEnvironmentParams{
-		repoRoot:     repoRoot,
-		srcName:      srcName,
-		dstName:      dstName,
-		srcProvider:  string(srcCfg.Spec.Cluster.Provider),
-		dstProvider:  dstProvider,
-		distribution: distribution,
-		sourceDir:    sourceDir,
-		force:        force,
+		repoRoot:      repoRoot,
+		srcName:       srcName,
+		srcConfigFile: srcConfigFile,
+		dstName:       dstName,
+		srcProvider:   string(srcCfg.Spec.Cluster.Provider),
+		dstProvider:   dstProvider,
+		distribution:  distribution,
+		sourceDir:     sourceDir,
+		force:         force,
 	}, nil
 }
 
@@ -243,23 +249,64 @@ func repoRelativeSourceDir(repoRoot, sourceDir string) (string, error) {
 	return rel, nil
 }
 
-// loadSourceConfig reads the source environment's root config
-// (<repoRoot>/ksail.<src>.yaml) to resolve its provider, distribution and source
-// directory. Validation and distribution-specific config (e.g. Talos PKI) are
-// skipped because the clone only needs the structured identity, not a
-// provisioning-ready config.
-func loadSourceConfig(cmd *cobra.Command, repoRoot, srcName string) (*v1alpha1.Cluster, error) {
-	return loadEnvironmentConfig(cmd, filepath.Join(repoRoot, "ksail."+srcName+".yaml"))
+// environmentConfigFile is the root config file an environment declares on its
+// own: ksail.<name>.yaml, relative to the workspace root.
+func environmentConfigFile(name string) string {
+	return "ksail." + name + ".yaml"
 }
 
-// loadEnvironmentConfig loads a single ksail.<name>.yaml root config by path.
-// It is the shared loader behind loadSourceConfig and the environment.ConfigLoader
-// that enrichSourceConfigError feeds to DeriveEnvironments, so both resolve a config
-// the same silent, validation-skipping way. The path is loaded as given — it does
-// not traverse parent directories — so callers join it onto the resolved workspace
-// root (see resolveWorkspaceRoot) rather than passing a bare file name.
+// declaredConfigFile resolves which root config declares the named environment,
+// relative to the workspace root: its own ksail.<name>.yaml when that file exists,
+// otherwise the base ksail.yaml when discovery reports the name as the
+// environment the base config syncs (the initial environment `project init
+// --multi-cluster <name>` scaffolds, see environment.Environment.IsBaseSynced).
+// Any other name resolves to ksail.<name>.yaml, so loading it reports the usual
+// missing-config error. Precedence to the own file keeps its load error (e.g. a
+// malformed ksail.<name>.yaml) visible instead of silently falling back to the
+// base config.
+func declaredConfigFile(cmd *cobra.Command, repoRoot, name string) string {
+	own := environmentConfigFile(name)
+
+	_, err := os.Lstat(filepath.Join(repoRoot, own))
+	if err == nil {
+		return own
+	}
+
+	envs, err := discoverWorkspaceEnvironments(cmd, repoRoot)
+	if err != nil {
+		return own
+	}
+
+	for _, env := range envs {
+		if env.Name == name {
+			return env.ConfigFile
+		}
+	}
+
+	return own
+}
+
+// loadEnvironmentConfig loads a single root config (ksail.<name>.yaml or the base
+// ksail.yaml) by path, to resolve an environment's provider, distribution and
+// source directory. It is the shared loader behind `env add`'s --from, `env rm`
+// and the environment.ConfigLoader that discoverWorkspaceEnvironments feeds to
+// DeriveEnvironments, so every verb resolves a config the same silent,
+// validation-skipping way: validation and distribution-specific config (e.g.
+// Talos PKI) are skipped because the env verbs only need the structured
+// identity, not a provisioning-ready config. The path is loaded as given — it
+// does not traverse parent directories — so callers join it onto the resolved
+// workspace root (see resolveWorkspaceRoot) rather than passing a bare file name.
 func loadEnvironmentConfig(cmd *cobra.Command, configFile string) (*v1alpha1.Cluster, error) {
-	manager := ksailconfigmanager.NewConfigManager(cmd.OutOrStdout(), configFile)
+	// Apply the full loader's distribution and provider defaults: a config that
+	// relies on them — like the base ksail.yaml `project init` scaffolds, which
+	// writes neither — would otherwise report both as empty, and a --provider
+	// override would be validated against an empty distribution.
+	manager := ksailconfigmanager.NewConfigManager(
+		cmd.OutOrStdout(),
+		configFile,
+		ksailconfigmanager.DefaultDistributionFieldSelector(),
+		ksailconfigmanager.DefaultProviderFieldSelector(),
+	)
 
 	cfg, err := manager.Load(configmanager.LoadOptions{
 		Silent:                 true,
@@ -270,7 +317,7 @@ func loadEnvironmentConfig(cmd *cobra.Command, configFile string) (*v1alpha1.Clu
 		return nil, fmt.Errorf("%w (%s): %w", ErrSourceConfigLoad, configFile, err)
 	}
 
-	// This silent, validation-skipping load does not apply field defaults, so
+	// This silent, validation-skipping load does not apply the path defaults, so
 	// a config relying on the documented sourceDirectory default ("k8s") would
 	// derive overlay paths from "" — clusters/<name> instead of
 	// k8s/clusters/<name> — making a purge miss the real overlay and a clone
@@ -347,8 +394,11 @@ func cloneEnvironment(cmd *cobra.Command, params addEnvironmentParams) error {
 		configRewrites = append(configRewrites, ctxRewrite)
 	}
 
-	configPath, wroteConfig, err := environment.CloneEnvironmentConfig(
-		params.repoRoot, "ksail."+params.srcName+".yaml", configRewrites, params.force,
+	// The destination is named explicitly: a base-synced source's root config is
+	// ksail.yaml, whose name has no environment segment for the rewrites to repoint.
+	configPath, wroteConfig, err := environment.CloneEnvironmentConfigTo(
+		params.repoRoot, params.srcConfigFile, environmentConfigFile(params.dstName),
+		configRewrites, params.force,
 	)
 	if err != nil {
 		return fmt.Errorf("cloning environment config: %w", err)
