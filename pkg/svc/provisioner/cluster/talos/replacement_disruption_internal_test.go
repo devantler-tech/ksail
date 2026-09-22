@@ -15,6 +15,7 @@ const (
 	drainNamespace = "apps"
 )
 
+// drainPod returns a running pod on node with labels in the shared test namespace.
 func drainPod(name, node string, labels map[string]string) corev1.Pod {
 	return corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: drainNamespace, Labels: labels},
@@ -23,6 +24,7 @@ func drainPod(name, node string, labels map[string]string) corev1.Pod {
 	}
 }
 
+// drainBudget returns a budget selecting match whose status is current and allows allowed disruptions.
 func drainBudget(name string, match map[string]string, allowed int32) policyv1.PodDisruptionBudget {
 	return policyv1.PodDisruptionBudget{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: drainNamespace, Generation: 3},
@@ -36,10 +38,13 @@ func drainBudget(name string, match map[string]string, allowed int32) policyv1.P
 	}
 }
 
+// webLabels returns the labels the web pods and budgets share.
 func webLabels() map[string]string {
 	return map[string]string{"app": "web"}
 }
 
+// TestProveDrainAllowedAcceptsABudgetThatAllowsADisruption verifies a pod whose only budget
+// allows a disruption can be drained.
 func TestProveDrainAllowedAcceptsABudgetThatAllowsADisruption(t *testing.T) {
 	t.Parallel()
 
@@ -49,6 +54,8 @@ func TestProveDrainAllowedAcceptsABudgetThatAllowsADisruption(t *testing.T) {
 	require.NoError(t, proveDrainAllowed(drainNode, pods, budgets))
 }
 
+// TestProveDrainAllowedRejectsABudgetThatAllowsNoDisruption verifies a budget allowing no
+// disruption blocks the drain and the error names the pod and the budget.
 func TestProveDrainAllowedRejectsABudgetThatAllowsNoDisruption(t *testing.T) {
 	t.Parallel()
 
@@ -61,6 +68,8 @@ func TestProveDrainAllowedRejectsABudgetThatAllowsNoDisruption(t *testing.T) {
 	require.ErrorContains(t, err, "apps/web")
 }
 
+// TestProveDrainAllowedRejectsAPodSelectedByTwoBudgets verifies a pod two budgets select is
+// refused, because the eviction API rejects it, and the error names both budgets.
 func TestProveDrainAllowedRejectsAPodSelectedByTwoBudgets(t *testing.T) {
 	t.Parallel()
 
@@ -77,6 +86,8 @@ func TestProveDrainAllowedRejectsAPodSelectedByTwoBudgets(t *testing.T) {
 	require.ErrorContains(t, err, "apps/web-too")
 }
 
+// TestProveDrainAllowedRejectsABudgetWhoseStatusIsStale verifies a budget whose status has not
+// observed its current generation is refused rather than trusted.
 func TestProveDrainAllowedRejectsABudgetWhoseStatusIsStale(t *testing.T) {
 	t.Parallel()
 
@@ -91,8 +102,9 @@ func TestProveDrainAllowedRejectsABudgetWhoseStatusIsStale(t *testing.T) {
 	require.ErrorContains(t, err, "apps/web ")
 }
 
-// Kubernetes trusts DisruptionsAllowed only when the observed generation equals the
-// budget's generation, so a status claiming to be ahead is not trusted either.
+// TestProveDrainAllowedRejectsABudgetWhoseStatusIsAhead verifies a status claiming a newer
+// generation is refused too: Kubernetes trusts DisruptionsAllowed only when the observed
+// generation equals the budget's generation.
 func TestProveDrainAllowedRejectsABudgetWhoseStatusIsAhead(t *testing.T) {
 	t.Parallel()
 
@@ -106,6 +118,8 @@ func TestProveDrainAllowedRejectsABudgetWhoseStatusIsAhead(t *testing.T) {
 		ErrDrainBlockedByDisruptionBudget)
 }
 
+// TestProveDrainAllowedIgnoresPodsTheDrainDoesNotEvict verifies DaemonSet-owned, mirror,
+// completed and other-node pods never block the drain.
 func TestProveDrainAllowedIgnoresPodsTheDrainDoesNotEvict(t *testing.T) {
 	t.Parallel()
 
@@ -131,6 +145,8 @@ func TestProveDrainAllowedIgnoresPodsTheDrainDoesNotEvict(t *testing.T) {
 	require.NoError(t, proveDrainAllowed(drainNode, pods, budgets))
 }
 
+// TestProveDrainAllowedIgnoresBudgetsThatDoNotSelectThePod verifies budgets in another
+// namespace or with a non-matching selector do not block the drain.
 func TestProveDrainAllowedIgnoresBudgetsThatDoNotSelectThePod(t *testing.T) {
 	t.Parallel()
 
@@ -146,6 +162,8 @@ func TestProveDrainAllowedIgnoresBudgetsThatDoNotSelectThePod(t *testing.T) {
 	require.NoError(t, proveDrainAllowed(drainNode, pods, budgets))
 }
 
+// TestProveDrainAllowedRejectsAnUnparseableSelector verifies a budget whose selector cannot be
+// parsed is refused, naming the pod and the budget.
 func TestProveDrainAllowedRejectsAnUnparseableSelector(t *testing.T) {
 	t.Parallel()
 
@@ -162,6 +180,8 @@ func TestProveDrainAllowedRejectsAnUnparseableSelector(t *testing.T) {
 	require.ErrorContains(t, err, "apps/web ")
 }
 
+// TestProveDrainAllowedJudgesOnlyTheNodeBeingDrained verifies only pods on the drained node are
+// judged, so a blocked pod elsewhere is not reported.
 func TestProveDrainAllowedJudgesOnlyTheNodeBeingDrained(t *testing.T) {
 	t.Parallel()
 
