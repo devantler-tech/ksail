@@ -37,7 +37,7 @@ const (
 
 // etcdMembersBucket is the etcd backend bucket that stores one key per member, named by the
 // member ID in hexadecimal.
-var etcdMembersBucket = []byte("members")
+const etcdMembersBucket = "members"
 
 // etcdSnapshotSource streams an etcd snapshot from a surviving control-plane node. The Talos
 // machinery client satisfies it.
@@ -253,10 +253,10 @@ func snapshotMembers(path string) ([]uint64, error) {
 
 	var members []uint64
 
-	err = database.View(func(tx *bbolt.Tx) error {
+	err = database.View(func(transaction *bbolt.Tx) error {
 		// Drain every result so the checker goroutine never blocks on an unread error.
 		var inconsistency error
-		for checkErr := range tx.Check() {
+		for checkErr := range transaction.Check() {
 			inconsistency = errors.Join(inconsistency, checkErr)
 		}
 
@@ -265,13 +265,13 @@ func snapshotMembers(path string) ([]uint64, error) {
 				ErrEtcdSnapshotUnverified, inconsistency)
 		}
 
-		ids, idsErr := memberIDs(tx.Bucket(etcdMembersBucket))
+		ids, idsErr := memberIDs(transaction.Bucket([]byte(etcdMembersBucket)))
 		members = ids
 
 		return idsErr
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read etcd snapshot database: %w", err)
 	}
 
 	return members, nil
@@ -285,18 +285,18 @@ func memberIDs(bucket *bbolt.Bucket) ([]uint64, error) {
 	var ids []uint64
 
 	err := bucket.ForEach(func(key, _ []byte) error {
-		id, err := strconv.ParseUint(string(key), 16, 64)
-		if err != nil || id == 0 {
+		memberID, err := strconv.ParseUint(string(key), 16, 64)
+		if err != nil || memberID == 0 {
 			return fmt.Errorf("%w: member key %q is not a member ID",
 				ErrEtcdSnapshotUnverified, key)
 		}
 
-		ids = append(ids, id)
+		ids = append(ids, memberID)
 
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list etcd snapshot members: %w", err)
 	}
 
 	slices.Sort(ids)

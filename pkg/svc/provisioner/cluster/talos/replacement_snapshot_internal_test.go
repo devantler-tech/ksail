@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -73,21 +74,25 @@ func snapshotDatabase(t *testing.T, withMembers bool, members ...uint64) []byte 
 	database, err := bbolt.Open(path, snapshotFileMode, &bbolt.Options{PageSize: fixturePageSize})
 	require.NoError(t, err)
 
-	err = database.Update(func(tx *bbolt.Tx) error {
-		_, bucketErr := tx.CreateBucket([]byte("key"))
-		if bucketErr != nil || !withMembers {
-			return bucketErr
-		}
-
-		bucket, bucketErr := tx.CreateBucket(etcdMembersBucket)
+	err = database.Update(func(transaction *bbolt.Tx) error {
+		_, bucketErr := transaction.CreateBucket([]byte("key"))
 		if bucketErr != nil {
-			return bucketErr
+			return fmt.Errorf("create key bucket: %w", bucketErr)
 		}
 
-		for _, id := range members {
-			putErr := bucket.Put([]byte(strconv.FormatUint(id, 16)), []byte(`{}`))
+		if !withMembers {
+			return nil
+		}
+
+		bucket, bucketErr := transaction.CreateBucket([]byte(etcdMembersBucket))
+		if bucketErr != nil {
+			return fmt.Errorf("create members bucket: %w", bucketErr)
+		}
+
+		for _, memberID := range members {
+			putErr := bucket.Put([]byte(strconv.FormatUint(memberID, 16)), []byte(`{}`))
 			if putErr != nil {
-				return putErr
+				return fmt.Errorf("put member: %w", putErr)
 			}
 		}
 
