@@ -34,11 +34,13 @@ var (
 	errSnapshotStreamBroken      = errors.New("snapshot stream broken")
 )
 
+// fakeSnapshotSource serves a fixed snapshot stream, or a fixed error, in place of a Talos node.
 type fakeSnapshotSource struct {
 	reader io.Reader
 	err    error
 }
 
+// EtcdSnapshot returns the configured error, or the configured stream wrapped as a closer.
 func (s fakeSnapshotSource) EtcdSnapshot(
 	_ context.Context,
 	_ *machineapi.EtcdSnapshotRequest,
@@ -51,8 +53,10 @@ func (s fakeSnapshotSource) EtcdSnapshot(
 	return io.NopCloser(s.reader), nil
 }
 
+// failingReader yields its prefix and then fails, simulating a stream that breaks mid-transfer.
 type failingReader struct{ prefix []byte }
 
+// Read copies the remaining prefix, then returns errSnapshotStreamBroken once it is exhausted.
 func (r *failingReader) Read(buffer []byte) (int, error) {
 	if len(r.prefix) == 0 {
 		return 0, errSnapshotStreamBroken
@@ -108,22 +112,26 @@ func snapshotDatabase(t *testing.T, withMembers bool, members ...uint64) []byte 
 	return data
 }
 
+// digested appends the SHA-256 trailer etcd writes after a snapshot database.
 func digested(database []byte) []byte {
 	digest := sha256.Sum256(database)
 
 	return append(bytes.Clone(database), digest[:]...)
 }
 
+// threeMemberSnapshot returns a digested snapshot holding the three members the safety check observed.
 func threeMemberSnapshot(t *testing.T) []byte {
 	t.Helper()
 
 	return digested(snapshotDatabase(t, true, quorumTarget, quorumSurvivor, quorumThird))
 }
 
+// observedMembership returns the membership the safety check saw, deliberately unsorted.
 func observedMembership() []uint64 {
 	return []uint64{quorumThird, quorumTarget, quorumSurvivor}
 }
 
+// captureFrom captures from source into a fresh recovery directory and returns that directory too.
 func captureFrom(t *testing.T, source etcdSnapshotSource) (string, etcdSnapshotArtifact, error) {
 	t.Helper()
 
@@ -135,6 +143,7 @@ func captureFrom(t *testing.T, source etcdSnapshotSource) (string, etcdSnapshotA
 	return dir, artifact, err
 }
 
+// requireNoArtifacts asserts that dir is absent or empty after a failed capture.
 func requireNoArtifacts(t *testing.T, dir string) {
 	t.Helper()
 

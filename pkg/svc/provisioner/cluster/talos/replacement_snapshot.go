@@ -277,6 +277,8 @@ func snapshotMembers(path string) ([]uint64, error) {
 	return members, nil
 }
 
+// memberIDs returns the sorted member IDs recorded in the snapshot's members bucket, rejecting a
+// missing bucket or any key that is not a non-zero hexadecimal member ID.
 func memberIDs(bucket *bbolt.Bucket) ([]uint64, error) {
 	if bucket == nil {
 		return nil, fmt.Errorf("%w: database has no members bucket", ErrEtcdSnapshotUnverified)
