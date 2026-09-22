@@ -2,6 +2,7 @@ import {
   Circle,
   CircleAlert,
   CircleCheck,
+  CircleDashed,
   CirclePause,
   Clock,
   House,
@@ -115,6 +116,16 @@ const PHASES: Record<string, PhaseMeta> = {
   Stopped: {
     label: "Stopped",
     icon: CirclePause,
+    spin: false,
+    badge:
+      "bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-slate-700/40 dark:text-slate-300 dark:ring-slate-600/40",
+    dot: "muted",
+  },
+  // Unmanaged is a display-only phase for a kubeconfig context ksail did not create (see
+  // clusterPhase): ksail tracks no lifecycle for it, which is a fact about ownership, not health.
+  Unmanaged: {
+    label: "Unmanaged",
+    icon: CircleDashed,
     spin: false,
     badge:
       "bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-slate-700/40 dark:text-slate-300 dark:ring-slate-600/40",

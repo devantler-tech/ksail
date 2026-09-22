@@ -2,13 +2,14 @@
 // clusters whose Cluster object carries no spec (a kubeconfig context ksail does not manage). A
 // cluster's nodes say what it runs on through fields every conformant cluster populates:
 // status.nodeInfo (OS image, kubelet version), spec.providerID (set by the cloud controller manager
-// or the local node provider), and the labels managed Kubernetes services put on their nodes.
+// or the local node provider), and the labels and annotations managed services and simulators put
+// on their nodes. Each rule is a documented marker of that distribution, never a naming convention.
 //
 // Every rule must hold on EVERY node before it counts, so a mixed or partly-initialised cluster
 // reports "unknown" rather than a guess. An unknown result renders as "—"; a wrong label is worse
 // than no label, because the user acts on it.
 
-import type { K8sObject } from "../api.ts";
+import type { Cluster, K8sObject } from "../api.ts";
 
 // ClusterIdentity is what the nodes prove about a cluster. A field is undefined when no rule matched.
 export interface ClusterIdentity {
@@ -21,6 +22,7 @@ interface NodeFacts {
   kubeletVersion: string;
   providerID: string;
   labels: Record<string, unknown>;
+  annotations: Record<string, unknown>;
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -39,6 +41,7 @@ function nodeFacts(node: K8sObject): NodeFacts {
     kubeletVersion: str(info?.kubeletVersion),
     providerID: str(record(node.spec)?.providerID),
     labels: record(node.metadata?.labels) ?? {},
+    annotations: record(node.metadata?.annotations) ?? {},
   };
 }
 
@@ -56,7 +59,10 @@ const DISTRIBUTION_RULES: { distribution: string; matches: (node: NodeFacts) => 
     matches: (node) => node.kubeletVersion.includes("-gke.") || "cloud.google.com/gke-nodepool" in node.labels,
   },
   { distribution: "AKS", matches: (node) => "kubernetes.azure.com/cluster" in node.labels },
-  // ksail's Vanilla distribution is kind, whose node provider sets a kind:// provider ID.
+  // KWOK manages simulated nodes that carry this annotation.
+  { distribution: "KWOK", matches: (node) => node.annotations["kwok.x-k8s.io/node"] === "fake" },
+  // A kind node provider sets a kind:// provider ID, and kind runs upstream Kubernetes (ksail's
+  // Vanilla). A kubeadm-built Vanilla cluster has no equally reliable node marker, so it reads "—".
   { distribution: "Vanilla", matches: (node) => node.providerID.startsWith("kind://") },
 ];
 
@@ -102,4 +108,26 @@ export function detectProvider(nodes: K8sObject[]): string | undefined {
 // detectClusterIdentity combines both detections.
 export function detectClusterIdentity(nodes: K8sObject[]): ClusterIdentity {
   return { distribution: detectDistribution(nodes), provider: detectProvider(nodes) };
+}
+
+// IdentityField is one displayed value and whether the nodes (not the spec) supplied it.
+export interface IdentityField {
+  value: string;
+  detected: boolean;
+}
+
+// displayIdentity merges a cluster's spec with its detected identity. The spec always wins: it is
+// what ksail was told to build, and detection only fills fields the spec leaves empty.
+export function displayIdentity(
+  cluster: Cluster,
+  detected: ClusterIdentity | undefined,
+): { distribution: IdentityField; provider: IdentityField } {
+  const spec = cluster.spec?.cluster;
+  const field = (fromSpec: string | undefined, fromNodes: string | undefined): IdentityField =>
+    fromSpec ? { value: fromSpec, detected: false } : { value: fromNodes || "—", detected: Boolean(fromNodes) };
+
+  return {
+    distribution: field(spec?.distribution, detected?.distribution),
+    provider: field(spec?.provider, detected?.provider),
+  };
 }

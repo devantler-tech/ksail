@@ -94,6 +94,7 @@ export interface ObjectMeta {
   namespace?: string;
   creationTimestamp?: string;
   labels?: Record<string, string>;
+  annotations?: Record<string, string>;
 }
 
 export interface Cluster {
