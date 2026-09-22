@@ -165,8 +165,8 @@ func TestUpsertPreservesUnmodelledFluxInstanceFields(t *testing.T) {
 }
 
 // TestUpsertStillOwnsModelledFluxInstanceFields pins the other half: preserving what KSail
-// does not model must not turn the fields it does model into a merge. They are still replaced
-// whole, so a value KSail stops setting is removed rather than left stale.
+// does not model must not turn the fields it does model into a merge. Each value KSail models is
+// still replaced, so a value KSail stops setting is removed rather than left stale.
 func TestUpsertStillOwnsModelledFluxInstanceFields(t *testing.T) {
 	t.Parallel()
 
@@ -195,7 +195,7 @@ func TestUpsertStillOwnsModelledFluxInstanceFields(t *testing.T) {
 
 	liveWithKustomize := liveFluxInstance()
 	liveSpec, _ := liveWithKustomize["spec"].(map[string]any)
-	liveSpec["kustomize"] = map[string]any{"patches": []any{map[string]any{"patch": "stale"}}}
+	liveSpec["kustomize"] = map[string]any{"patches": []any{ksailVerifyPatch(t, "cosign")}}
 
 	store = &jsonStoreClient{stored: liveWithKustomize}
 	spec = upsertInto(t, store, desiredFluxInstance())
@@ -204,7 +204,8 @@ func TestUpsertStillOwnsModelledFluxInstanceFields(t *testing.T) {
 		t,
 		spec,
 		"kustomize",
-		"spec.kustomize is modelled; when KSail sets none, the previous value must be removed",
+		"KSail's verify patch is its own; when KSail sets none, it must be removed, and with no "+
+			"other patch left spec.kustomize goes with it",
 	)
 }
 
