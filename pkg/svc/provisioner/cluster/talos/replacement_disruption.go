@@ -3,6 +3,7 @@ package talosprovisioner
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -74,8 +75,9 @@ func podEvictable(pod *corev1.Pod, budgets []policyv1.PodDisruptionBudget) error
 
 		selector, err := metav1.LabelSelectorAsSelector(budget.Spec.Selector)
 		if err != nil {
-			return fmt.Errorf("%w: budget %s/%s has an invalid selector: %w",
-				ErrDrainBlockedByDisruptionBudget, budget.Namespace, budget.Name, err)
+			return fmt.Errorf("%w: pod %s/%s; budget %s/%s has an invalid selector: %w",
+				ErrDrainBlockedByDisruptionBudget, pod.Namespace, pod.Name,
+				budget.Namespace, budget.Name, err)
 		}
 
 		if selector.Matches(labels.Set(pod.Labels)) {
@@ -84,8 +86,13 @@ func podEvictable(pod *corev1.Pod, budgets []policyv1.PodDisruptionBudget) error
 	}
 
 	if len(selecting) > 1 {
-		return fmt.Errorf("%w: pod %s/%s is selected by %d budgets and cannot be evicted",
-			ErrDrainBlockedByDisruptionBudget, pod.Namespace, pod.Name, len(selecting))
+		names := make([]string, 0, len(selecting))
+		for _, budget := range selecting {
+			names = append(names, budget.Namespace+"/"+budget.Name)
+		}
+
+		return fmt.Errorf("%w: pod %s/%s is selected by budgets %s and cannot be evicted",
+			ErrDrainBlockedByDisruptionBudget, pod.Namespace, pod.Name, strings.Join(names, ", "))
 	}
 
 	if len(selecting) == 0 {
@@ -93,10 +100,18 @@ func podEvictable(pod *corev1.Pod, budgets []policyv1.PodDisruptionBudget) error
 	}
 
 	budget := selecting[0]
-	if budget.Status.ObservedGeneration < budget.Generation {
-		return fmt.Errorf("%w: budget %s/%s status is stale (observed generation %d of %d)",
-			ErrDrainBlockedByDisruptionBudget, budget.Namespace, budget.Name,
-			budget.Status.ObservedGeneration, budget.Generation)
+	// Kubernetes trusts DisruptionsAllowed only when the status reflects exactly this generation.
+	if budget.Status.ObservedGeneration != budget.Generation {
+		return fmt.Errorf(
+			"%w: pod %s/%s; budget %s/%s status is stale (observed generation %d of %d)",
+			ErrDrainBlockedByDisruptionBudget,
+			pod.Namespace,
+			pod.Name,
+			budget.Namespace,
+			budget.Name,
+			budget.Status.ObservedGeneration,
+			budget.Generation,
+		)
 	}
 
 	if budget.Status.DisruptionsAllowed < 1 {

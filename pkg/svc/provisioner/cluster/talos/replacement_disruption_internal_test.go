@@ -70,18 +70,34 @@ func TestProveDrainAllowedRejectsAPodSelectedByTwoBudgets(t *testing.T) {
 		drainBudget("web-too", webLabels(), 1),
 	}
 
-	require.ErrorIs(
-		t,
-		proveDrainAllowed(drainNode, pods, budgets),
-		ErrDrainBlockedByDisruptionBudget,
-	)
+	err := proveDrainAllowed(drainNode, pods, budgets)
+	require.ErrorIs(t, err, ErrDrainBlockedByDisruptionBudget)
+	require.ErrorContains(t, err, "apps/web-0")
+	require.ErrorContains(t, err, "apps/web,")
+	require.ErrorContains(t, err, "apps/web-too")
 }
 
 func TestProveDrainAllowedRejectsABudgetWhoseStatusIsStale(t *testing.T) {
 	t.Parallel()
 
 	budget := drainBudget("web", webLabels(), 1)
-	budget.Status.ObservedGeneration = 2
+	budget.Status.ObservedGeneration = budget.Generation - 1
+
+	pods := []corev1.Pod{drainPod("web-0", drainNode, webLabels())}
+
+	err := proveDrainAllowed(drainNode, pods, []policyv1.PodDisruptionBudget{budget})
+	require.ErrorIs(t, err, ErrDrainBlockedByDisruptionBudget)
+	require.ErrorContains(t, err, "apps/web-0")
+	require.ErrorContains(t, err, "apps/web ")
+}
+
+// Kubernetes trusts DisruptionsAllowed only when the observed generation equals the
+// budget's generation, so a status claiming to be ahead is not trusted either.
+func TestProveDrainAllowedRejectsABudgetWhoseStatusIsAhead(t *testing.T) {
+	t.Parallel()
+
+	budget := drainBudget("web", webLabels(), 1)
+	budget.Status.ObservedGeneration = budget.Generation + 1
 
 	pods := []corev1.Pod{drainPod("web-0", drainNode, webLabels())}
 
@@ -140,9 +156,10 @@ func TestProveDrainAllowedRejectsAnUnparseableSelector(t *testing.T) {
 
 	pods := []corev1.Pod{drainPod("web-0", drainNode, webLabels())}
 
-	require.ErrorIs(t,
-		proveDrainAllowed(drainNode, pods, []policyv1.PodDisruptionBudget{budget}),
-		ErrDrainBlockedByDisruptionBudget)
+	err := proveDrainAllowed(drainNode, pods, []policyv1.PodDisruptionBudget{budget})
+	require.ErrorIs(t, err, ErrDrainBlockedByDisruptionBudget)
+	require.ErrorContains(t, err, "apps/web-0")
+	require.ErrorContains(t, err, "apps/web ")
 }
 
 func TestProveDrainAllowedJudgesOnlyTheNodeBeingDrained(t *testing.T) {
