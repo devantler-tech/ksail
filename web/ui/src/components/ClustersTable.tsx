@@ -5,22 +5,28 @@ import { cx } from "../lib/cx.ts";
 import { epochMs } from "../lib/format.ts";
 import { usePreferences, useTimeFormatters } from "../hooks/usePreferences.tsx";
 import { clusterKey, clusterPhase, isHostCluster } from "../lib/k8s.ts";
+import { displayIdentity, type IdentityField } from "../lib/clusterIdentity.ts";
+import { useDetectedIdentities } from "../lib/identityStore.ts";
+import { IdentityValue } from "./IdentityValue.tsx";
 import { HostBadge, StatusBadge } from "./StatusBadge.tsx";
 import { SortHeader, TablePager, td, th, usePagination, useSort } from "./table.tsx";
 
 type SortKey = "name" | "namespace" | "distribution" | "provider" | "status" | "nodes" | "age";
 
-// compareBySortKey returns the ordering of two clusters for the active sort column.
-function compareBySortKey(a: Cluster, b: Cluster, key: SortKey): number {
+type IdentityOf = (cluster: Cluster) => { distribution: IdentityField; provider: IdentityField };
+
+// compareBySortKey returns the ordering of two clusters for the active sort column. Distribution
+// and provider sort by the displayed value, so a detected identity sorts with configured ones.
+function compareBySortKey(a: Cluster, b: Cluster, key: SortKey, identityOf: IdentityOf): number {
   switch (key) {
     case "name":
       return a.metadata.name.localeCompare(b.metadata.name);
     case "namespace":
       return (a.metadata.namespace ?? "default").localeCompare(b.metadata.namespace ?? "default");
     case "distribution":
-      return (a.spec?.cluster?.distribution ?? "").localeCompare(b.spec?.cluster?.distribution ?? "");
+      return identityOf(a).distribution.value.localeCompare(identityOf(b).distribution.value);
     case "provider":
-      return (a.spec?.cluster?.provider ?? "").localeCompare(b.spec?.cluster?.provider ?? "");
+      return identityOf(a).provider.value.localeCompare(identityOf(b).provider.value);
     case "status":
       return clusterPhase(a).localeCompare(clusterPhase(b));
     case "nodes":
@@ -60,9 +66,12 @@ export function ClustersTable({
   onSelect,
   onEdit,
   onDelete,
+  canDetect,
 }: {
   clusters: Cluster[];
   readOnly: boolean;
+  // canDetect allows reading unmanaged clusters' nodes to identify them (workload-read capability).
+  canDetect: boolean;
   // canEdit gates the per-row edit button independently of delete: a backend may allow delete but
   // not in-place update (the local `ksail open web`/desktop backend), so edit is hidden while delete stays.
   canEdit: boolean;
@@ -73,16 +82,18 @@ export function ClustersTable({
   const { format } = useTimeFormatters();
   const { prefs } = usePreferences();
   const { sortKey, sortDir, toggleSort } = useSort<SortKey>("name");
+  const detected = useDetectedIdentities(clusters, canDetect);
+  const identityOf: IdentityOf = (cluster) => displayIdentity(cluster, detected.get(clusterKey(cluster)));
 
   // Sort a copy with a stable namespace/name tiebreaker so equal values keep a deterministic order
   // and the list never reorders between refreshes (the API list order is not guaranteed).
   const sorted = useMemo(() => {
     const factor = sortDir === "asc" ? 1 : -1;
     return [...clusters].sort((a, b) => {
-      const primary = compareBySortKey(a, b, sortKey) * factor;
+      const primary = compareBySortKey(a, b, sortKey, identityOf) * factor;
       return primary !== 0 ? primary : clusterKey(a).localeCompare(clusterKey(b));
     });
-  }, [clusters, sortKey, sortDir]);
+  }, [clusters, sortKey, sortDir, detected]);
 
   const headerProps = { activeKey: sortKey, dir: sortDir, onSort: toggleSort } as const;
 
@@ -157,10 +168,10 @@ export function ClustersTable({
                   {cluster.metadata.namespace ?? "default"}
                 </td>
                 <td className={cx(td, "hidden text-sm text-slate-600 sm:table-cell dark:text-slate-300")}>
-                  {cluster.spec?.cluster?.distribution ?? "—"}
+                  <IdentityValue field={identityOf(cluster).distribution} />
                 </td>
                 <td className={cx(td, "hidden text-sm text-slate-600 sm:table-cell dark:text-slate-300")}>
-                  {cluster.spec?.cluster?.provider ?? "—"}
+                  <IdentityValue field={identityOf(cluster).provider} />
                 </td>
                 <td className={td}>
                   <StatusBadge phase={clusterPhase(cluster)} />

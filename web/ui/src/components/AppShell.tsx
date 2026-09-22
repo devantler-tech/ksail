@@ -264,7 +264,12 @@ export function AppShell({
       {activeClusterKey ? (
         <>
           <div className="pb-1">
-            <ClusterSwitcher clusters={clusters} activeKey={activeClusterKey} onSelect={onSelectCluster} />
+            <ClusterSwitcher
+              clusters={clusters}
+              activeKey={activeClusterKey}
+              onSelect={onSelectCluster}
+              canDetect={workloadEnabled}
+            />
           </div>
           {renderNav(clusterViews, onPick)}
           {pluginEntries && pluginEntries.length > 0 ? (

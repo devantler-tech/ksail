@@ -19,10 +19,13 @@ import { cx } from "../lib/cx.ts";
 import { useTimeFormatters } from "../hooks/usePreferences.tsx";
 import { clusterKey, clusterPhase, isHostCluster, splitClusterKey } from "../lib/k8s.ts";
 import { loadHealth, type LiveHealth, type PodSegment } from "../lib/health.ts";
+import { displayIdentity } from "../lib/clusterIdentity.ts";
+import { primeIdentity, useDetectedIdentities } from "../lib/identityStore.ts";
 import { COMPONENT_LABELS, useMeta } from "../lib/meta.ts";
 import { Card, Field } from "./Card.tsx";
 import { EventList } from "./EventList.tsx";
 import { ResourceUsagePanel } from "./ResourceUsage.tsx";
+import { IdentityValue } from "./IdentityValue.tsx";
 import { HostBadge, StatusBadge, StatusDot } from "./StatusBadge.tsx";
 import { EmptyState } from "./states.tsx";
 import { Button } from "./ui.tsx";
@@ -94,16 +97,22 @@ export function OverviewView({
   const meta = useMeta();
   const toast = useToast();
   const { format, formatAbsolute } = useTimeFormatters();
-  const [health, setHealth] = useState<LiveHealth | null>(null);
+  const [healthState, setHealthState] = useState<{ key: string; value: LiveHealth } | null>(null);
   const [loading, setLoading] = useState(false);
   const [nonce, setNonce] = useState(0);
   const [downloading, setDownloading] = useState(false);
 
   const key = cluster ? clusterKey(cluster) : "";
+  // Health is kept with the key it was loaded for: `key` changes the moment another cluster is
+  // selected, but the in-flight load for it has not resolved, so an unkeyed `health` would feed the
+  // PREVIOUS cluster's identity into displayIdentity and the live cards until it does. A refresh
+  // (nonce) keeps the same key, so the cards do not blank while it re-reads.
+  const health = healthState?.key === key ? healthState.value : null;
+  const detected = useDetectedIdentities(cluster ? [cluster] : [], canBrowse).get(key);
 
   useEffect(() => {
     if (key === "" || !canBrowse) {
-      setHealth(null);
+      setHealthState(null);
 
       return undefined;
     }
@@ -117,7 +126,9 @@ export function OverviewView({
     loadHealth(namespace, name)
       .then((result) => {
         if (!cancelled) {
-          setHealth(result);
+          setHealthState({ key, value: result });
+          // A refresh re-reads the nodes, so share the fresh identity with every surface.
+          primeIdentity(key, result.identity);
         }
       })
       .finally(() => {
@@ -138,11 +149,12 @@ export function OverviewView({
   const status = cluster.status;
   const spec = cluster.spec?.cluster;
   const namespace = cluster.metadata.namespace ?? "default";
-  // The host cluster's registration carries an empty spec on purpose (the operator does not manage
-  // the hub's lifecycle), so the create-form defaults would mislabel it — show "—" instead.
+  // A cluster with no spec distribution/provider is one ksail does not manage: a kubeconfig-only
+  // context, or the host cluster the operator runs on. Its nodes are the only evidence of what it
+  // runs, so the live node facts fill those fields; with no conclusive evidence they read "—". The
+  // create-form defaults are never used here, because they describe what a NEW cluster would get.
   const hostCluster = isHostCluster(cluster);
-  const distribution = spec?.distribution || (hostCluster ? "—" : meta.distributions[0] || "—");
-  const provider = spec?.provider || (hostCluster ? "—" : meta.providers[distribution]?.[0] || "—");
+  const { distribution, provider } = displayIdentity(cluster, health?.identity ?? detected);
   const secret = status?.kubeconfigSecretRef;
   const nodesHealthy = health ? health.nodesTotal > 0 && health.nodesReady === health.nodesTotal : false;
 
@@ -175,7 +187,7 @@ export function OverviewView({
             {hostCluster ? <HostBadge /> : null}
           </div>
           <p className="mt-0.5 break-words text-sm text-slate-500 dark:text-slate-400">
-            {distribution} · {provider} · namespace {namespace}
+            <IdentityValue field={distribution} /> · <IdentityValue field={provider} /> · namespace {namespace}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -278,8 +290,8 @@ export function OverviewView({
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card title="Spec" icon={<Server className="size-3.5" aria-hidden />}>
           <dl className="divide-y divide-slate-100 dark:divide-slate-800">
-            <Field label="Distribution">{distribution}</Field>
-            <Field label="Provider">{provider}</Field>
+            <Field label="Distribution"><IdentityValue field={distribution} /></Field>
+            <Field label="Provider"><IdentityValue field={provider} /></Field>
             <Field label="Control planes">{spec?.controlPlanes ?? health?.controlPlanes ?? "—"}</Field>
             <Field label="Workers">{spec?.workers ?? liveWorkers ?? "—"}</Field>
             {specManaged ? (

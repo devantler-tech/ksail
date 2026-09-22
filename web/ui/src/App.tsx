@@ -709,6 +709,7 @@ export function App() {
             ) : (
               <ClustersTable
                 clusters={clusters}
+                canDetect={canBrowse}
                 readOnly={readOnly}
                 canEdit={canEdit}
                 onSelect={(cluster) => enterCluster(clusterKey(cluster))}

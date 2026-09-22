@@ -18,8 +18,7 @@ ksail cluster list
 
 Unmanaged clusters appear with **blank distribution and provider columns** (there is no KSail spec to read) and a `STATUS` of `Unmanaged`. Discovery reads your **default kubeconfig** (`~/.kube/config`), so a context kept only in a non-default `KUBECONFIG` path may not be listed.
 
-> [!NOTE]
-> The web UI / desktop app **lists** unmanaged contexts, but selecting one for resource browsing or actions currently reports *not found*: the UI resolves a row back to a context by KSail-detected cluster name, which an arbitrary unmanaged context (an EKS/`kubeadm` context) has none of. **Operating on an unmanaged cluster is CLI-only for now** — tracked in [#6116](https://github.com/devantler-tech/ksail/issues/6116).
+The web UI and desktop app mark these clusters `Unmanaged` too, and identify their distribution and provider from the cluster's own nodes. The node's OS image names Talos, the kubelet version names K3s, EKS or GKE, well-known node labels and annotations name AKS and KWOK, and a `kind://` node ID names Vanilla. The node ID also names the provider: `hcloud://` is Hetzner, and `aws://`, `gce://`, `azure://` and `kind://` name AWS, GCP, Azure and Docker. A value found this way is dotted-underlined, and hovering it reads "Detected from the cluster's nodes", so it is never mistaken for a configured value. Every node has to agree on the distribution. The provider works differently: a node whose ID has not been filled in yet supplies no evidence rather than a disagreement, so it is every node that *has* an ID that must name the same provider. When the evidence that exists conflicts, or the cluster can't be reached, the field shows `—` instead of a guess.
 
 ## Operating within limits
 
@@ -75,8 +74,8 @@ The refusal covers the lifecycle operations KSail cannot drive without a provide
 | `workload network` / `images` / `push` | ✅ | ⚠️ also need a local `ksail.yaml` |
 | `workload export` / `import` | ✅ (Docker) | ⛔ Docker-backed nodes only |
 | `cluster backup` / `cluster restore` | ✅ | ✅ |
-| Web UI / desktop resource browsing | ✅ | ⛔ listed only; operations are CLI-only ([#6116](https://github.com/devantler-tech/ksail/issues/6116)) |
+| Web UI / desktop resource browsing | ✅ | ✅ |
 | Delete / update / start / stop | ✅ | ⛔ refused with a documented message |
 | Component install (CNI, CSI, GitOps, policy) | ✅ | ⛔ requires `spec.cluster.*` |
 | GitOps reconcile | ✅ | ⛔ requires a GitOps-configured cluster |
-| Distribution / provider | reported | blank (no KSail spec) |
+| Distribution / provider | reported | CLI: blank (no KSail spec). Web UI / desktop: detected from the nodes, or `—` |
