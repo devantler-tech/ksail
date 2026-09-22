@@ -1,6 +1,7 @@
 package fsutil_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -129,15 +130,10 @@ func TestAtomicWriteFile_CreateTempError(t *testing.T) {
 }
 
 // TestAtomicWriteFile_RenameError verifies a rename failure (target path is an
-// existing directory) is surfaced as a wrapped rename error and the staging
-// temp file is still cleaned up. Skipped on Windows, where the function takes a
-// different remove-and-retry branch for an existing destination.
+// existing directory) is surfaced as a wrapped rename error, the directory is
+// left in place, and the staging temp file is still cleaned up.
 func TestAtomicWriteFile_RenameError(t *testing.T) {
 	t.Parallel()
-
-	if runtime.GOOS == windowsGOOS {
-		t.Skip("Windows takes the remove-and-retry rename branch for an existing destination")
-	}
 
 	dir := t.TempDir()
 	// The target path is an existing directory; renaming a file onto it fails.
@@ -146,5 +142,44 @@ func TestAtomicWriteFile_RenameError(t *testing.T) {
 
 	err := fsutil.AtomicWriteFile(path, []byte("data"), 0o600)
 	require.ErrorContains(t, err, "rename temp file")
+
+	info, statErr := os.Stat(path)
+	require.NoError(t, statErr, "a failed rename must not remove the destination")
+	assert.True(t, info.IsDir())
+	assertNoTempLeftover(t, dir)
+}
+
+// errSimulatedRename stands in for a real rename failure, such as a Windows
+// sharing violation while another process holds the destination open.
+var errSimulatedRename = errors.New("simulated rename failure")
+
+// TestAtomicWriteFile_FailedRenameKeepsExistingDestination verifies a failed
+// rename over an existing destination returns the first rename error without
+// retrying, leaves the previous file byte-for-byte intact, and still removes the
+// staging temp file. The rename is injected so the failure is reproducible on
+// every platform.
+func TestAtomicWriteFile_FailedRenameKeepsExistingDestination(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ledger.json")
+	previous := []byte(`{"completed":["cordon","drain"]}`)
+	require.NoError(t, os.WriteFile(path, previous, 0o600))
+
+	renameCalls := 0
+	failingRename := func(_, _ string) error {
+		renameCalls++
+
+		return errSimulatedRename
+	}
+
+	err := fsutil.AtomicWriteFileWithRename(path, []byte("replacement"), 0o600, failingRename)
+	require.ErrorIs(t, err, errSimulatedRename)
+	require.ErrorContains(t, err, "rename temp file")
+	assert.Equal(t, 1, renameCalls, "a failed rename must not be retried")
+
+	got, readErr := os.ReadFile(path) //nolint:gosec // test file
+	require.NoError(t, readErr, "the previous destination must survive a failed rename")
+	assert.Equal(t, previous, got)
 	assertNoTempLeftover(t, dir)
 }
