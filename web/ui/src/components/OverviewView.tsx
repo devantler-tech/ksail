@@ -97,17 +97,22 @@ export function OverviewView({
   const meta = useMeta();
   const toast = useToast();
   const { format, formatAbsolute } = useTimeFormatters();
-  const [health, setHealth] = useState<LiveHealth | null>(null);
+  const [healthState, setHealthState] = useState<{ key: string; value: LiveHealth } | null>(null);
   const [loading, setLoading] = useState(false);
   const [nonce, setNonce] = useState(0);
   const [downloading, setDownloading] = useState(false);
 
   const key = cluster ? clusterKey(cluster) : "";
+  // Health is kept with the key it was loaded for: `key` changes the moment another cluster is
+  // selected, but the in-flight load for it has not resolved, so an unkeyed `health` would feed the
+  // PREVIOUS cluster's identity into displayIdentity and the live cards until it does. A refresh
+  // (nonce) keeps the same key, so the cards do not blank while it re-reads.
+  const health = healthState?.key === key ? healthState.value : null;
   const detected = useDetectedIdentities(cluster ? [cluster] : [], canBrowse).get(key);
 
   useEffect(() => {
     if (key === "" || !canBrowse) {
-      setHealth(null);
+      setHealthState(null);
 
       return undefined;
     }
@@ -121,7 +126,7 @@ export function OverviewView({
     loadHealth(namespace, name)
       .then((result) => {
         if (!cancelled) {
-          setHealth(result);
+          setHealthState({ key, value: result });
           // A refresh re-reads the nodes, so share the fresh identity with every surface.
           primeIdentity(key, result.identity);
         }

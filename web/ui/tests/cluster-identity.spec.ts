@@ -25,6 +25,7 @@ function node({ osImage = "", kubeletVersion = "v1.36.4", providerID, labels = {
 
 const talosHetzner = (id: number) => node({ osImage: "Talos (v1.13.9)", providerID: `hcloud://${id}` });
 const ubuntu = () => node({ osImage: "Ubuntu 24.04 LTS" });
+const k3sNode = () => node({ osImage: "Ubuntu 24.04 LTS", kubeletVersion: "v1.30.4+k3s1" });
 
 test.describe("detectDistribution", () => {
   test("names each distribution from the fields its nodes carry", () => {
@@ -241,6 +242,45 @@ test("an unmanaged cluster with no conclusive node evidence is not guessed", asy
   await expect(page.getByText("— · — · namespace default", { exact: true })).toBeVisible();
   await expect(page.getByTitle(DETECTED)).toHaveCount(0);
   await expect(page.getByText("Vanilla", { exact: true })).toHaveCount(0);
+});
+
+test("switching clusters never shows the previous cluster's identity while the new one loads", async ({ page }) => {
+  // The identity of a cluster ksail does not manage comes from its live Nodes, so health held across
+  // a switch would label the NEW cluster with the OLD cluster's distribution and provider until the
+  // in-flight read resolves. The delay makes that window wide enough to observe.
+  await mockDesktopApi(page, {
+    clusters: [unmanaged("oidc@prod"), unmanaged("k3s@edge")],
+    nodesFor: (name) => (name === "oidc@prod" ? [talosHetzner(1), talosHetzner(2)] : [k3sNode(), k3sNode()]),
+    delayMs: 2000,
+  });
+  await openOverview(page, "oidc@prod");
+
+  const main = page.locator("#main-content");
+  await expect(main.getByText("Talos · Hetzner · namespace default", { exact: true })).toBeVisible();
+
+  // Switch through the sidebar switcher, which is the path that keeps this view mounted — returning
+  // to the cluster list and coming back would remount it and reset the state under test.
+  await page.getByRole("button", { name: /oidc@prod/ }).first().click();
+  await page.getByRole("menuitem").filter({ hasText: "k3s@edge" }).click();
+
+  // A snapshot, deliberately not a retrying assertion: the point is what the page reads DURING the
+  // load, and a retrying one would pass as soon as the new read lands.
+  expect(await main.innerText()).not.toContain("Hetzner");
+
+  await expect(main.getByText("K3s · — · namespace default", { exact: true })).toBeVisible();
+});
+
+test("the switcher drops the separator when only the distribution is known", async ({ page }) => {
+  // The sidebar line is compact: a known distribution beside an unknown provider reads "K3s", not
+  // "K3s · —". The Overview is the surface that spells an unknown field out as a dash.
+  await mockDesktopApi(page, { clusters: [unmanaged("k3s@edge")], nodesFor: () => [k3sNode(), k3sNode()] });
+  await openOverview(page, "k3s@edge");
+
+  await expect(page.locator("#main-content").getByText("K3s · — · namespace default", { exact: true })).toBeVisible();
+
+  const switcher = page.getByRole("button", { name: /k3s@edge/ }).first();
+  await expect(switcher).toContainText("K3s");
+  await expect(switcher).not.toContainText("·");
 });
 
 test("the clusters table identifies unmanaged clusters, keeps configured ones, and bounds its reads", async ({ page }) => {
