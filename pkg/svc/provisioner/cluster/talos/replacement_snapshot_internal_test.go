@@ -197,15 +197,19 @@ func TestCaptureVerifiedSnapshotRejectsUnverifiableStreams(t *testing.T) {
 	notADatabase := digested(bytes.Repeat([]byte{0x5a}, 4*snapshotSectorSize))
 
 	cases := map[string][]byte{
-		"missing digest":        threeMembers,
-		"wrong digest":          wrongDigest,
-		"tampered database":     tampered,
-		"empty stream":          nil,
-		"not a database":        notADatabase,
-		"no members bucket":     digested(snapshotDatabase(t, false)),
-		"member missing":        digested(snapshotDatabase(t, true, quorumTarget, quorumSurvivor)),
-		"unexpected member":     digested(snapshotDatabase(t, true, quorumTarget, quorumSurvivor, quorumThird, 7004)),
-		"target already absent": digested(snapshotDatabase(t, true, quorumSurvivor, quorumThird, 7004)),
+		"missing digest":    threeMembers,
+		"wrong digest":      wrongDigest,
+		"tampered database": tampered,
+		"empty stream":      nil,
+		"not a database":    notADatabase,
+		"no members bucket": digested(snapshotDatabase(t, false)),
+		"member missing":    digested(snapshotDatabase(t, true, quorumTarget, quorumSurvivor)),
+		"unexpected member": digested(
+			snapshotDatabase(t, true, quorumTarget, quorumSurvivor, quorumThird, 7004),
+		),
+		"target already absent": digested(
+			snapshotDatabase(t, true, quorumSurvivor, quorumThird, 7004),
+		),
 	}
 
 	for name, stream := range cases {
