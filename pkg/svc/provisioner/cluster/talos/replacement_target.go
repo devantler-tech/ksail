@@ -41,11 +41,11 @@ type replacementObservation struct {
 // cannot reuse: the Hetzner server ID, the Kubernetes Node UID and, for a control-plane
 // node, the etcd member ID.
 type replacementTarget struct {
-	ServerID     int64
-	ServerName   string
-	Role         string
-	NodeUID      types.UID
-	EtcdMemberID uint64
+	ServerID     int64     `json:"serverId"`
+	ServerName   string    `json:"serverName"`
+	Role         string    `json:"role"`
+	NodeUID      types.UID `json:"nodeUid"`
+	EtcdMemberID uint64    `json:"etcdMemberId"`
 }
 
 // resolveReplacementTarget binds the named node to its immutable identities. It rejects
