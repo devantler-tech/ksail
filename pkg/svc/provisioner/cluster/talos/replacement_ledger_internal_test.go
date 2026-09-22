@@ -248,7 +248,8 @@ func TestReplacementLedgerSavesPrivatelyAndLoadsBack(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "recovery", "ledger.json")
-	ledger := ledgerThrough(t, phaseReplacementCreated)
+	// Through the last phase, so every optional field (ServerID, NodeUID) is carried.
+	ledger := ledgerThrough(t, phaseVerified)
 
 	require.NoError(t, saveReplacementLedger(path, ledger))
 
@@ -262,13 +263,7 @@ func TestReplacementLedgerSavesPrivatelyAndLoadsBack(t *testing.T) {
 
 	loaded, err := loadReplacementLedger(path)
 	require.NoError(t, err)
-	require.Equal(t, ledger.Target, loaded.Target)
-	require.Len(t, loaded.Records, len(ledger.Records))
-
-	for index := range ledger.Records {
-		require.True(t, ledger.Records[index].At.Equal(loaded.Records[index].At))
-		require.Equal(t, ledger.Records[index].Phase, loaded.Records[index].Phase)
-	}
+	require.Equal(t, ledger, loaded, "the loaded ledger must match what was saved, field for field")
 
 	entries, err := os.ReadDir(filepath.Dir(path))
 	require.NoError(t, err)
