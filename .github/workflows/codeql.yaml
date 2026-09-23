@@ -1,15 +1,9 @@
 name: 🔍 CodeQL
 
-# Advanced CodeQL setup. It replaces CodeQL default setup, and the two are mutually
-# exclusive: GitHub rejects an advanced configuration's results while default setup is
-# enabled. This workflow is therefore off by default and runs only when the repository
-# variable `ENABLE_ADVANCED_CODE_SCANNING` is set to `true`.
-#
-# Turning it on is one deliberate, reversible switch, and both halves belong to it:
-# disable default setup (Settings → Code security → CodeQL analysis) and set that variable.
-# Clearing the variable and re-enabling default setup restores the previous arrangement.
-# While the variable is unset the jobs are skipped, so default setup keeps serving the
-# "Require code scanning results" ruleset and nothing about the current setup changes.
+# Advanced CodeQL setup. It replaces CodeQL default setup, which is disabled for this
+# repository (Settings → Code security → CodeQL analysis). The two are mutually exclusive:
+# GitHub rejects an advanced configuration's results while default setup is enabled, so
+# re-enabling default setup requires removing this workflow.
 #
 # The reason to own the workflow is re-runnability. A default-setup run is GitHub-managed
 # (`event: dynamic`, no workflow file in the repository), so `gh run rerun` is refused and
@@ -56,7 +50,6 @@ concurrency:
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
-    if: vars.ENABLE_ADVANCED_CODE_SCANNING == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
