@@ -74,17 +74,16 @@ func progressWriter(cmd *cobra.Command) io.Writer {
 	return cmd.OutOrStdout()
 }
 
-// routeConfigLoadingProgress sends config-loading progress to stderr under
-// --output json. Config loading reports before the command's handler runs,
-// through the stdout captured when the command was built, so it has to be
-// redirected here for stdout to carry only the JSON document.
+// routeConfigLoadingProgress points config-loading progress at this run's
+// progress stream. Config loading reports before the command's handler runs,
+// through the writer captured when the command was built, so it is set on every
+// run: for stdout to carry only the JSON document under --output json, and so a
+// JSON run does not leave a later run's progress on stderr.
 func routeConfigLoadingProgress(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 ) {
-	if getOutputFormat(cmd) == outputFormatJSON {
-		cfgManager.Writer = cmd.ErrOrStderr()
-	}
+	cfgManager.Writer = progressWriter(cmd)
 }
 
 // validateOutputFormat returns an error when the --output flag value is

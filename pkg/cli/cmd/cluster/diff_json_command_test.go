@@ -1,6 +1,7 @@
 package cluster_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -18,14 +19,7 @@ import (
 func runDiffCommand(t *testing.T, args ...string) (string, string) {
 	t.Helper()
 
-	workingDir := t.TempDir()
-	t.Chdir(workingDir)
-	writeTestConfigFiles(t, workingDir)
-	require.NoError(t, os.Remove(filepath.Join(workingDir, "kubeconfig")))
-
-	t.Cleanup(cluster.SetProvisionerFactoryForTests(
-		updatableUpgraderFactory{&updatableUpgraderFake{}},
-	))
+	setUpDiffProject(t)
 
 	stdoutPath, stderrPath := redirectProcessOutput(t)
 
@@ -44,6 +38,21 @@ func runDiffCommand(t *testing.T, args ...string) (string, string) {
 	require.NoError(t, execErr, "stdout:\n%s\nstderr:\n%s", stdout, stderr)
 
 	return string(stdout), string(stderr)
+}
+
+// setUpDiffProject changes into a fresh project whose kubeconfig does not
+// exist and fakes the provisioner, so the real diff command runs offline.
+func setUpDiffProject(t *testing.T) {
+	t.Helper()
+
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+	writeTestConfigFiles(t, workingDir)
+	require.NoError(t, os.Remove(filepath.Join(workingDir, "kubeconfig")))
+
+	t.Cleanup(cluster.SetProvisionerFactoryForTests(
+		updatableUpgraderFactory{&updatableUpgraderFake{}},
+	))
 }
 
 // `ksail cluster diff --output json` is meant for CI and MCP consumers that
@@ -72,4 +81,26 @@ func TestDiffCommandTextKeepsWarningsOnStderr(t *testing.T) {
 	assert.Contains(t, stdout, "config loaded")
 	assert.NotContains(t, stdout, "component detection")
 	assert.Contains(t, stderr, "Cannot create Helm client for component detection")
+}
+
+// Config-loading progress follows the streams the command runs with, not the
+// stdout captured when it was built, so a caller that sets its own stdout sees
+// the progress there, alongside the rest of the command's output.
+//
+//nolint:paralleltest // uses t.Chdir and replaces the process's stdout/stderr.
+func TestDiffCommandTextReportsConfigLoadingOnItsOwnStdout(t *testing.T) {
+	setUpDiffProject(t)
+	redirectProcessOutput(t)
+
+	cmd := cluster.NewDiffCmd()
+	cmd.SetContext(t.Context())
+
+	var stdout, stderr bytes.Buffer
+
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	require.NoError(t, cmd.Execute())
+
+	assert.Contains(t, stdout.String(), "config loaded")
+	assert.NotContains(t, stderr.String(), "config loaded")
 }
