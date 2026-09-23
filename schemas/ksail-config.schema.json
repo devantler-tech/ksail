@@ -679,7 +679,7 @@
               "properties": {
                 "version": {
                   "type": "string",
-                  "description": "Version pins the Talos OS (distribution) version used for cluster creation and\nupgrades. When set, KSail uses this version as the Docker container image tag\nand `cluster update` reconciles the cluster toward it (skipping downgrades).\nAccepts values with or without the \"v\" prefix (e.g., \"v1.11.2\" or \"1.11.2\").\nWhen empty, `cluster create` uses KSail's built-in default version and\n`cluster update` follows the latest stable version available in the OCI\nregistry. Override per invocation with the --distribution-version flag\n(precedence: flag \u003e env \u003e config \u003e default)."
+                  "description": "Version pins the Talos OS (distribution) version used for cluster creation and\nupgrades. When set, KSail uses this version as the Docker container image tag\nand `cluster update` reconciles the cluster toward it (skipping downgrades).\nAccepts values with or without the \"v\" prefix (e.g., \"v1.11.2\" or \"1.11.2\").\nWhen empty, `cluster create` uses KSail's built-in default version and\n`cluster update` follows the latest stable version available in the OCI\nregistry. Override per invocation with the --distribution-version flag\n(precedence: flag \u003e env \u003e config \u003e default).\nRequired for a custom Hetzner ISO; set it to the Talos release that ISO boots."
                 },
                 "controlPlanes": {
                   "type": "integer",
@@ -699,7 +699,7 @@
                 },
                 "iso": {
                   "type": "integer",
-                  "description": "ISO is the cloud provider's ISO/image ID for booting Talos Linux.\nOnly used when targeting cloud providers (e.g., Hetzner Cloud).\nFor Hetzner: See https://docs.hetzner.cloud/changelog for available Talos ISOs.\nThe x86 default is advanced automatically from Hetzner's official changelog.\nFor ARM, look up the matching Talos ISO ID in the Hetzner Cloud Console\n(Images → ISOs).\nWhen SchematicID is set, ISO is ignored in favour of a pre-built snapshot."
+                  "description": "ISO is the cloud provider's ISO/image ID for booting Talos Linux.\nOnly used when targeting cloud providers (e.g., Hetzner Cloud).\nFor Hetzner: See https://docs.hetzner.cloud/changelog for available Talos ISOs.\nThe x86 default is advanced automatically from Hetzner's official changelog.\nFor ARM, look up the matching Talos ISO ID in the Hetzner Cloud Console\n(Images → ISOs).\nA custom Hetzner ISO requires Version to match the ISO's Talos release.\nWhen SchematicID is set, ISO is ignored in favour of a pre-built snapshot."
                 },
                 "schematicId": {
                   "type": "string",

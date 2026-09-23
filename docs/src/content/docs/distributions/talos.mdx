@@ -235,7 +235,7 @@ spec:
         - siderolabs/qemu-guest-agent
 ```
 
-`spec.cluster.talos.extensions` builds an [Image Factory](https://factory.talos.dev/) schematic so system extensions (for example `iscsi-tools` for storage, or `qemu-guest-agent` on cloud providers) are baked into the boot image. On the Hetzner provider you additionally pin an image/ISO id — see the [Hetzner Provider](/providers/hetzner/) page. See the [CLI flag reference](/cli-flags/cluster/cluster-root/) for every init/create/update flag.
+`spec.cluster.talos.extensions` builds an [Image Factory](https://factory.talos.dev/) schematic so system extensions (for example `iscsi-tools` for storage, or `qemu-guest-agent` on cloud providers) are baked into the boot image. On Hetzner, a schematic snapshot requires a Talos version pin. If you boot a custom Hetzner ISO instead, pin `spec.cluster.talos.version` to the release that ISO boots; KSail cannot infer it from the ISO ID. See the [Hetzner Provider](/providers/hetzner/#using-a-custom-talos-iso) page for configuration and the [CLI flag reference](/cli-flags/cluster/cluster-root/) for every init/create/update flag.
 
 ## Use Cases
 
@@ -439,4 +439,3 @@ Place the file in the `cluster/` subdirectory so it applies to all nodes (e.g. `
 ### GitOps Integration
 
 Enable Flux or ArgoCD for declarative workload management—see [GitOps Workflows](/guides/gitops-workflows/).
-

@@ -2,6 +2,7 @@ package configmanager_test
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"testing"
@@ -229,4 +230,54 @@ func TestWarnKubernetesVersionCapped_SilentWhenDefaultNotCapped(t *testing.T) {
 	)
 
 	assert.Empty(t, out.String(), "an uncapped default needs no notice")
+}
+
+//nolint:paralleltest // Uses t.Chdir to exercise actual CLI config loading.
+func TestLoadConfig_TalosCustomISOVersion(t *testing.T) {
+	const pinnedISOVersion = "v1.12.4"
+
+	for _, patchesExist := range []bool{false, true} {
+		for _, version := range []string{"", " ", pinnedISOVersion} {
+			t.Run(fmt.Sprintf("patches=%t/version=%q", patchesExist, version), func(t *testing.T) {
+				t.Chdir(t.TempDir())
+
+				if patchesExist {
+					require.NoError(t, os.MkdirAll("talos/cluster", 0o700))
+					require.NoError(t, os.WriteFile("talos/cluster/disable-default-cni.yaml",
+						[]byte("cluster:\n  network:\n    cni:\n      name: none\n"), 0o600))
+				}
+
+				configYAML := fmt.Sprintf(`apiVersion: ksail.io/v1alpha1
+kind: Cluster
+spec:
+  cluster:
+    distribution: Talos
+    provider: Hetzner
+    cni: Cilium
+    talos:
+      iso: 123456
+      version: %q
+`, version)
+				require.NoError(t, os.WriteFile("ksail.yaml", []byte(configYAML), 0o600))
+
+				var output bytes.Buffer
+
+				manager := configmanager.NewConfigManager(&output, "")
+				manager.Viper.SetConfigFile("ksail.yaml")
+
+				_, err := manager.Load(configmanagerinterface.LoadOptions{})
+				if version != pinnedISOVersion {
+					require.ErrorIs(t, err, v1alpha1.ErrTalosCustomISOVersionRequired)
+					assert.Contains(t, err.Error(), "spec.cluster.talos.version")
+					assert.Contains(t, err.Error(), "--distribution-version")
+
+					return
+				}
+
+				require.NoError(t, err, output.String())
+				require.NotNil(t, manager.DistributionConfig.Talos)
+				assert.Equal(t, "1.35.0", manager.DistributionConfig.Talos.KubernetesVersion())
+			})
+		}
+	}
 }

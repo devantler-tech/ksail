@@ -236,3 +236,17 @@ func TestResolveProvider(t *testing.T) {
 		operator.ResolveProvider(clusterWithDistribution("c1", v1alpha1.DistributionAKS)),
 	)
 }
+
+func TestBuildDistributionConfig_TalosCustomISORequiresVersion(t *testing.T) {
+	t.Parallel()
+
+	cluster := clusterWithDistribution("custom-iso", v1alpha1.DistributionTalos)
+	cluster.Spec.Cluster.Provider = v1alpha1.ProviderHetzner
+	cluster.Spec.Cluster.Talos.ISO = 123456
+
+	config, err := operator.BuildDistributionConfig(cluster)
+	require.ErrorIs(t, err, v1alpha1.ErrTalosCustomISOVersionRequired)
+	assert.Nil(t, config)
+	assert.Contains(t, err.Error(), "spec.cluster.talos.version")
+	assert.Contains(t, err.Error(), "--distribution-version")
+}

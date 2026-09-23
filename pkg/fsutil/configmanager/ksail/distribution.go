@@ -115,7 +115,7 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 	// Align the version contract with the pinned Talos version so that
 	// generated machine configs only use fields the target version supports.
 	contractErr := applyPinnedVersionContract(
-		m.Config.Spec.Cluster.Talos.Version, talosManager,
+		m.Config, talosManager,
 	)
 	if contractErr != nil {
 		return nil, contractErr
@@ -449,9 +449,7 @@ func (m *ConfigManager) cacheTalosConfig() error {
 		// no scaffolded talos/ dir, this fallback must still honor a pin or cap the
 		// default to the pinned Talos version — otherwise a pinned older Talos would
 		// be paired with an incompatible default Kubernetes version.
-		versionContract, contractErr := talosconfigmanager.ParseVersionContract(
-			m.Config.Spec.Cluster.Talos.Version,
-		)
+		versionContract, contractErr := talosconfigmanager.ResolveClusterVersionContract(m.Config)
 		if contractErr != nil {
 			return fmt.Errorf("resolve pinned Talos version contract: %w", contractErr)
 		}
@@ -1132,14 +1130,13 @@ func ingressFirewallPatches(
 	}, nil
 }
 
-// applyPinnedVersionContract sets the version contract on the Talos config manager
-// when a pinned Talos version is specified. Returns an error if the version cannot
-// be parsed. An empty pin retains the conservative Talos 1.12 default contract.
+// applyPinnedVersionContract validates the selected ISO and sets the machine-config
+// version contract before patches are loaded or migrated.
 func applyPinnedVersionContract(
-	pinnedVersion string,
+	cluster *v1alpha1.Cluster,
 	talosManager *talosconfigmanager.ConfigManager,
 ) error {
-	contract, err := talosconfigmanager.ParseVersionContract(pinnedVersion)
+	contract, err := talosconfigmanager.ResolveClusterVersionContract(cluster)
 	if err != nil {
 		return fmt.Errorf("resolve pinned Talos version contract: %w", err)
 	}
