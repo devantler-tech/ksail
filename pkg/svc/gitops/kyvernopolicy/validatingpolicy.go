@@ -34,9 +34,17 @@ const (
 	kindNamespacedValidatingPolicy = "NamespacedValidatingPolicy"
 )
 
-// celPolicyVersions are the policies.kyverno.io versions a ValidatingPolicy is
-// served under. They share one spec type, so each decodes into v1beta1.
-var celPolicyVersions = map[string]struct{}{"v1": {}, "v1beta1": {}, "v1alpha1": {}}
+// isCELPolicyVersion reports whether version is one a policies.kyverno.io
+// ValidatingPolicy is served under. They share one spec type, so each decodes
+// into v1beta1.
+func isCELPolicyVersion(version string) bool {
+	switch version {
+	case "v1", "v1beta1", "v1alpha1":
+		return true
+	default:
+		return false
+	}
+}
 
 // errOffline is what every cluster, registry or global-context lookup returns
 // while evaluating offline. Its text is how a rule error caused by a lookup is
@@ -67,7 +75,7 @@ func IsValidatingPolicy(doc map[string]any) bool {
 		return false
 	}
 
-	if _, served := celPolicyVersions[version]; !served {
+	if !isCELPolicyVersion(version) {
 		return false
 	}
 

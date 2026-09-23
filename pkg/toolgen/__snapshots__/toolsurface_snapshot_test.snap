@@ -1774,7 +1774,7 @@ workload_write
         "type": "string"
       },
       "kyverno-policies": {
-        "description": "Evaluate the source's own Kyverno ClusterPolicy and Policy validate rules against the rendered manifests, as if each document were being created (off by default)... (applies to: validate)",
+        "description": "Evaluate the source's own Kyverno ClusterPolicy and Policy validate rules, and its CEL-based ValidatingPolicy and NamespacedValidatingPolicy validations, against the rendered manifests... (applies to: validate)",
         "type": "boolean"
       },
       "label-columns": {

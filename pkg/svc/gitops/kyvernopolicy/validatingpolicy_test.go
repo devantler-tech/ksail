@@ -61,7 +61,7 @@ func requireTeamCEL(t *testing.T, version, action string) policiesv1beta1.Valida
 func TestIsValidatingPolicy(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
+	for _, testCase := range []struct {
 		apiVersion, kind string
 		want             bool
 	}{
@@ -74,8 +74,8 @@ func TestIsValidatingPolicy(t *testing.T) {
 		{"kyverno.io/v1", "ValidatingPolicy", false},
 		{"policies.kyverno.io", "ValidatingPolicy", false},
 	} {
-		doc := map[string]any{"apiVersion": tc.apiVersion, "kind": tc.kind}
-		assert.Equal(t, tc.want, kyvernopolicy.IsValidatingPolicy(doc), "%s %s", tc.apiVersion, tc.kind)
+		doc := map[string]any{"apiVersion": testCase.apiVersion, "kind": testCase.kind}
+		assert.Equal(t, testCase.want, kyvernopolicy.IsValidatingPolicy(doc), "%s %s", testCase.apiVersion, testCase.kind)
 	}
 }
 

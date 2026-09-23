@@ -95,17 +95,10 @@ func evaluateKyvernoDocuments(
 	var blocking []string
 
 	for _, doc := range split.targets {
-		violations, evalErr := engine.Evaluate(ctx, doc)
+		violations, evalErr := evaluateKyvernoDocument(ctx, engine, celEngine, doc, source)
 		if evalErr != nil {
-			return fmt.Errorf("evaluate Kyverno policies in %s: %w", source, evalErr)
+			return evalErr
 		}
-
-		celViolations, evalErr := celEngine.Evaluate(ctx, doc)
-		if evalErr != nil {
-			return fmt.Errorf("evaluate Kyverno ValidatingPolicies in %s: %w", source, evalErr)
-		}
-
-		violations = append(violations, celViolations...)
 
 		for _, violation := range violations {
 			described := describeKyvernoViolation(violation, doc, source, attribution)
@@ -125,6 +118,28 @@ func evaluateKyvernoDocuments(
 	}
 
 	return nil
+}
+
+// evaluateKyvernoDocument applies both the kyverno.io policies and the CEL
+// ValidatingPolicies to one document and returns their combined violations.
+func evaluateKyvernoDocument(
+	ctx context.Context,
+	engine *kyvernopolicy.Engine,
+	celEngine *kyvernopolicy.CELEngine,
+	doc map[string]any,
+	source string,
+) ([]kyvernopolicy.Violation, error) {
+	violations, err := engine.Evaluate(ctx, doc)
+	if err != nil {
+		return nil, fmt.Errorf("evaluate Kyverno policies in %s: %w", source, err)
+	}
+
+	celViolations, err := celEngine.Evaluate(ctx, doc)
+	if err != nil {
+		return nil, fmt.Errorf("evaluate Kyverno ValidatingPolicies in %s: %w", source, err)
+	}
+
+	return append(violations, celViolations...), nil
 }
 
 // decodeDocuments decodes every mapping document in data, dropping empty and

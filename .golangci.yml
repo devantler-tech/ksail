@@ -65,6 +65,12 @@ linters:
       - linters:
           - gochecknoglobals
         path: pkg/svc/repairer/
+      # Kyverno's CEL compiler reads its library context from a process-wide
+      # package variable, so the offline context is installed once per process.
+      - linters:
+          - gochecknoglobals
+        path: pkg/svc/gitops/kyvernopolicy/validatingpolicy\.go
+        text: "installOffline is a global variable"
       # Package names that conflict with stdlib or are too generic cannot be renamed without breaking changes
       - linters:
           - revive
