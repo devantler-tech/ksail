@@ -85,3 +85,28 @@ func TestMaterializeIdentityRejectsANonMappingConfig(t *testing.T) {
 	)
 	require.ErrorIs(t, err, environment.ErrInvalidConfig)
 }
+
+func TestMaterializeIdentityFillsANullValue(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]string{
+		"empty intermediate": "metadata:\n  name: ~\nspec:\n",
+		"null intermediate":  "metadata:\n  name: null\nspec: ~\n",
+	}
+
+	for name, content := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := environment.MaterializeIdentity(
+				content,
+				environment.Identity{Name: "staging", Context: "kind-staging"},
+			)
+			require.NoError(t, err)
+			assert.Contains(t, got, "name: staging")
+			assert.Contains(t, got, "context: kind-staging")
+			assert.NotContains(t, got, "null")
+			assert.NotContains(t, got, "~")
+		})
+	}
+}

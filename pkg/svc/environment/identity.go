@@ -91,10 +91,10 @@ func encodeConfig(doc *yamlv3.Node) (string, error) {
 	return buf.String(), nil
 }
 
-// ensureScalar sets the scalar at keyPath under mapping to value when it is absent
-// or empty, creating intermediate mappings as needed. It reports whether it changed
-// anything; a present non-empty value, or a path blocked by a non-mapping node, is
-// left untouched.
+// ensureScalar sets the scalar at keyPath under mapping to value when it is absent,
+// empty or null, creating intermediate mappings as needed (in place of a null one
+// too). It reports whether it changed anything; a present non-empty value, or a
+// path blocked by a non-mapping node, is left untouched.
 func ensureScalar(mapping *yamlv3.Node, keyPath []string, value string) bool {
 	node := mapping
 
@@ -111,7 +111,7 @@ func ensureScalar(mapping *yamlv3.Node, keyPath []string, value string) bool {
 			child = &yamlv3.Node{Kind: yamlv3.MappingNode}
 			insertPair(node, key, child)
 		case last:
-			if child.Kind != yamlv3.ScalarNode || child.Value != "" {
+			if !isUnset(child) {
 				return false
 			}
 
@@ -120,6 +120,11 @@ func ensureScalar(mapping *yamlv3.Node, keyPath []string, value string) bool {
 			child.Value = value
 
 			return true
+		case isNull(child):
+			child.Kind = yamlv3.MappingNode
+			child.Tag = ""
+			child.Style = 0
+			child.Value = ""
 		case child.Kind != yamlv3.MappingNode:
 			return false
 		}
@@ -128,6 +133,17 @@ func ensureScalar(mapping *yamlv3.Node, keyPath []string, value string) bool {
 	}
 
 	return false
+}
+
+// isNull reports whether node is a YAML null scalar (`~`, `null`, or an empty value),
+// which the config treats as unset.
+func isNull(node *yamlv3.Node) bool {
+	return node.Kind == yamlv3.ScalarNode && node.ShortTag() == "!!null"
+}
+
+// isUnset reports whether a leaf node holds no value: null, or an empty string.
+func isUnset(node *yamlv3.Node) bool {
+	return isNull(node) || (node.Kind == yamlv3.ScalarNode && node.Value == "")
 }
 
 // mappingValue returns the value node for key in mapping, or nil when absent.
