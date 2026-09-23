@@ -824,7 +824,7 @@ func refreshAndVerifyKubeconfig(
 			// stale). We cannot refresh it (e.g., talosconfig is missing on an
 			// ephemeral CI runner), but the file may still work. Warn and let
 			// the downstream operations decide.
-			notify.Warningf(cmd.OutOrStderr(), "failed to refresh kubeconfig: %v", err)
+			notify.Warningf(cmd.ErrOrStderr(), "failed to refresh kubeconfig: %v", err)
 
 			return nil
 		}
@@ -852,7 +852,7 @@ func buildComponentDetector(
 ) *detector.ComponentDetector {
 	helmClient, kubeconfig, err := setup.HelmClientForCluster(ctx.ClusterCfg)
 	if err != nil {
-		notify.Warningf(cmd.OutOrStderr(),
+		notify.Warningf(cmd.ErrOrStderr(),
 			"Cannot create Helm client for component detection, using defaults: %v", err)
 
 		return nil
@@ -860,7 +860,7 @@ func buildComponentDetector(
 
 	k8sClientset, err := k8s.NewClientset(kubeconfig, resolveKubeContext(ctx))
 	if err != nil {
-		notify.Warningf(cmd.OutOrStderr(),
+		notify.Warningf(cmd.ErrOrStderr(),
 			"Cannot create K8s clientset for component detection, using defaults: %v", err)
 
 		return nil
@@ -1163,7 +1163,7 @@ func checkWorkloadTagDrift(
 
 	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(ctx.ClusterCfg)
 	if err != nil {
-		notify.Warningf(cmd.OutOrStderr(),
+		notify.Warningf(cmd.ErrOrStderr(),
 			"Cannot resolve kubeconfig path for workload tag drift detection: %v", err)
 
 		return
@@ -1190,7 +1190,7 @@ func checkWorkloadTagDrift(
 	}
 
 	if err != nil {
-		notify.Warningf(cmd.OutOrStderr(),
+		notify.Warningf(cmd.ErrOrStderr(),
 			"Cannot query current GitOps sync ref for drift detection: %v", err)
 
 		return
@@ -1223,7 +1223,7 @@ func checkFluxDistributionVersionDrift(
 
 	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(ctx.ClusterCfg)
 	if err != nil {
-		notify.Warningf(cmd.OutOrStderr(),
+		notify.Warningf(cmd.ErrOrStderr(),
 			"Cannot resolve kubeconfig path for Flux distribution-version drift detection: %v", err)
 
 		return
@@ -1233,7 +1233,7 @@ func checkFluxDistributionVersionDrift(
 		cmd.Context(), kubeconfigPath, resolveKubeContext(ctx),
 	)
 	if err != nil {
-		notify.Warningf(cmd.OutOrStderr(),
+		notify.Warningf(cmd.ErrOrStderr(),
 			"Cannot query current Flux distribution version for drift detection: %v", err)
 
 		return
@@ -1283,7 +1283,7 @@ func checkRegistryCredentialDrift(
 
 	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(ctx.ClusterCfg)
 	if err != nil {
-		notify.Warningf(cmd.OutOrStderr(),
+		notify.Warningf(cmd.ErrOrStderr(),
 			"Cannot resolve kubeconfig path for registry credential drift detection: %v", err)
 
 		return
@@ -1293,7 +1293,7 @@ func checkRegistryCredentialDrift(
 		cmd.Context(), kubeconfigPath, resolveKubeContext(ctx), ctx.ClusterCfg,
 	)
 	if err != nil {
-		notify.Warningf(cmd.OutOrStderr(),
+		notify.Warningf(cmd.ErrOrStderr(),
 			"Cannot compare registry credentials for drift detection: %v", err)
 
 		return
@@ -1332,7 +1332,7 @@ func checkFluxVerifyDrift(
 
 	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(ctx.ClusterCfg)
 	if err != nil {
-		notify.Warningf(cmd.OutOrStderr(),
+		notify.Warningf(cmd.ErrOrStderr(),
 			"Cannot resolve kubeconfig path for Flux verify drift detection: %v", err)
 
 		return
@@ -1342,7 +1342,7 @@ func checkFluxVerifyDrift(
 		cmd.Context(), kubeconfigPath, resolveKubeContext(ctx), ctx.ClusterCfg,
 	)
 	if err != nil {
-		notify.Warningf(cmd.OutOrStderr(),
+		notify.Warningf(cmd.ErrOrStderr(),
 			"Cannot compare Flux artifact verification for drift detection: %v", err)
 
 		return
