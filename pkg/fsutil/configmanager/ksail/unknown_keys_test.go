@@ -135,9 +135,14 @@ func TestFindUnknownKeysIgnoresNonMappingContent(t *testing.T) {
 	assert.Empty(t, configmanager.FindUnknownKeys([]byte("key: [unterminated\n")))
 }
 
+// misspelledWorkloadKeyYAML appends a misspelled spec.workload key to
+// ksailClusterBaseYAML.
+const misspelledWorkloadKeyYAML = "  workload:\n" +
+	"    kustomizationFil: clusters/dev\n"
+
 // writeUnknownKeyConfig writes a loadable Vanilla ksail.yaml (plus kind.yaml)
-// carrying one misspelled key into dir and returns the config path.
-func writeUnknownKeyConfig(t *testing.T, dir string) string {
+// carrying the extra, unknown-key YAML into dir and returns the config path.
+func writeUnknownKeyConfig(t *testing.T, dir, extra string) string {
 	t.Helper()
 
 	require.NoError(t, os.WriteFile(
@@ -145,10 +150,7 @@ func writeUnknownKeyConfig(t *testing.T, dir string) string {
 	))
 
 	configPath := filepath.Join(dir, "ksail.yaml")
-	require.NoError(t, os.WriteFile(configPath, []byte(ksailClusterBaseYAML+
-		"  workload:\n"+
-		"    kustomizationFil: clusters/dev\n",
-	), 0o600))
+	require.NoError(t, os.WriteFile(configPath, []byte(ksailClusterBaseYAML+extra), 0o600))
 
 	return configPath
 }
@@ -156,7 +158,7 @@ func writeUnknownKeyConfig(t *testing.T, dir string) string {
 func TestLoadWarnsAboutUnknownKeysWithFieldAndFix(t *testing.T) {
 	t.Parallel()
 
-	configPath := writeUnknownKeyConfig(t, t.TempDir())
+	configPath := writeUnknownKeyConfig(t, t.TempDir(), misspelledWorkloadKeyYAML)
 
 	var output bytes.Buffer
 
@@ -173,10 +175,30 @@ func TestLoadWarnsAboutUnknownKeysWithFieldAndFix(t *testing.T) {
 	assert.Contains(t, output.String(), "config loaded")
 }
 
+func TestLoadWarnsAboutUnknownTopLevelKeyWithReferenceFix(t *testing.T) {
+	t.Parallel()
+
+	// No valid key is close, so the fix points at the configuration reference.
+	configPath := writeUnknownKeyConfig(t, t.TempDir(), "totallyBogusTopLevelField: 12345\n")
+
+	var output bytes.Buffer
+
+	manager := configmanager.NewConfigManager(&output, configPath)
+
+	cfg, err := manager.Load(configmanagerinterface.LoadOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+
+	assert.Contains(t, output.String(), "⚠ unknown key in ksail.yaml is ignored\n"+
+		"  field: totallyBogusTopLevelField\n"+
+		"  fix: remove the key, or check its spelling and nesting against "+
+		"https://ksail.devantler.tech/configuration/declarative-configuration/\n")
+}
+
 func TestLoadSilentDoesNotWarnAboutUnknownKeys(t *testing.T) {
 	t.Parallel()
 
-	configPath := writeUnknownKeyConfig(t, t.TempDir())
+	configPath := writeUnknownKeyConfig(t, t.TempDir(), misspelledWorkloadKeyYAML)
 
 	var output bytes.Buffer
 

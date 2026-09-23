@@ -60,9 +60,10 @@ There is no separate "prod CLI" and no per-environment workflow to learn — `cr
    # ksail.yaml — local: thin test-bed on Docker
    apiVersion: ksail.io/v1alpha1
    kind: Cluster
+   metadata:
+     name: local
    spec:
      cluster:
-       name: local
        distribution: Talos
        provider: Docker
        gitOpsEngine: Flux
@@ -75,9 +76,10 @@ There is no separate "prod CLI" and no per-environment workflow to learn — `cr
    # ksail.prod.yaml — production: full cluster on Hetzner
    apiVersion: ksail.io/v1alpha1
    kind: Cluster
+   metadata:
+     name: production
    spec:
      cluster:
-       name: production
        distribution: Talos
        provider: Hetzner
        gitOpsEngine: Flux
