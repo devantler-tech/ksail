@@ -43,6 +43,18 @@ func CommitTarball(
 	return commitTarball(tarWriter, gzipWriter, outFile, tmpPath, targetPath)
 }
 
+// CommitTarballWithRename exposes commitTarball with an injected rename so
+// black-box tests can simulate a rename failure on any platform.
+func CommitTarballWithRename(
+	tarWriter *tar.Writer,
+	gzipWriter *gzip.Writer,
+	outFile *os.File,
+	tmpPath, targetPath string,
+	rename func(oldpath, newpath string) error,
+) error {
+	return commitTarballWithRename(tarWriter, gzipWriter, outFile, tmpPath, targetPath, rename)
+}
+
 // ExtractBackupArchive exposes extractBackupArchive for testing.
 func ExtractBackupArchive(inputPath string) (string, *BackupMetadata, error) {
 	return extractBackupArchive(inputPath)
