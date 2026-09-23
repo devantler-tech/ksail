@@ -117,7 +117,7 @@ func runInfoCmd(
 	// context — displayKSailDetails would otherwise fall back to the current
 	// context and reintroduce the cross-cluster false-positive.
 	if hasProviderInfo || hasKubeInfo {
-		displayKSailDetails(cmd, resolved.KubeconfigPath, contextName)
+		displayKSailDetails(cmd, resolved, contextName)
 
 		return nil
 	}
@@ -481,12 +481,16 @@ func tryKubeClusterInfo(cmd *cobra.Command, kubeconfigPath, contextName string) 
 // It requires a resolved contextName: with an empty context, DetectInfo would
 // fall back to the kubeconfig current context and could report an unrelated
 // cluster, so details are skipped entirely in that case.
-func displayKSailDetails(cmd *cobra.Command, kubeconfigPath, contextName string) {
+func displayKSailDetails(
+	cmd *cobra.Command,
+	resolved *lifecycle.ResolvedClusterInfo,
+	contextName string,
+) {
 	if contextName == "" {
 		return
 	}
 
-	info, err := clusterdetector.DetectInfo(cmd.Context(), kubeconfigPath, contextName)
+	info, err := clusterdetector.DetectInfo(cmd.Context(), resolved.KubeconfigPath, contextName)
 	if err != nil || info == nil {
 		// If detection fails, skip KSail details because cluster identity could not be determined.
 		return
@@ -498,7 +502,7 @@ func displayKSailDetails(cmd *cobra.Command, kubeconfigPath, contextName string)
 	_, _ = fmt.Fprintln(writer)
 
 	displayClusterIdentity(writer, info)
-	displayTTLInfo(writer, info.ClusterName)
+	displayTTLInfo(writer, info.ClusterName, resolved.Provider, resolved.AWSRegion)
 	displayComponents(writer, info.ClusterName)
 }
 
@@ -523,9 +527,15 @@ func displayClusterIdentity(writer io.Writer, info *clusterdetector.Info) {
 	}
 }
 
-// displayTTLInfo prints TTL status if set.
-func displayTTLInfo(writer io.Writer, clusterName string) {
-	ttlInfo, err := state.LoadClusterTTL(clusterName)
+// displayTTLInfo prints TTL status if set. An AWS (EKS) cluster's TTL is the one recorded for
+// awsRegion.
+func displayTTLInfo(
+	writer io.Writer,
+	clusterName string,
+	provider v1alpha1.Provider,
+	awsRegion string,
+) {
+	ttlInfo, err := loadClusterTTL(clusterName, provider, awsRegion)
 	if err != nil || ttlInfo == nil {
 		return
 	}

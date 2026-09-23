@@ -683,9 +683,29 @@ func ExportDisplayClusterIdentity(writer io.Writer, info *clusterdetector.Info) 
 	displayClusterIdentity(writer, info)
 }
 
-// ExportDisplayTTLInfo exports displayTTLInfo for testing.
+// ExportDisplayTTLInfo exports displayTTLInfo for a cluster on a provider other than AWS.
 func ExportDisplayTTLInfo(writer io.Writer, clusterName string) {
-	displayTTLInfo(writer, clusterName)
+	displayTTLInfo(writer, clusterName, v1alpha1.ProviderDocker, "")
+}
+
+// ExportDisplayRegionTTLInfo exports displayTTLInfo with an explicit provider and AWS region.
+func ExportDisplayRegionTTLInfo(
+	writer io.Writer,
+	clusterName string,
+	provider v1alpha1.Provider,
+	awsRegion string,
+) {
+	displayTTLInfo(writer, clusterName, provider, awsRegion)
+}
+
+// ExportSaveClusterTTL exports saveClusterTTL for testing.
+func ExportSaveClusterTTL(
+	clusterName string,
+	clusterCfg *v1alpha1.Cluster,
+	eksConfig *clusterprovisioner.EKSConfig,
+	ttl time.Duration,
+) error {
+	return saveClusterTTL(clusterName, clusterCfg, eksConfig, ttl)
 }
 
 // ExportDisplayComponents exports displayComponents for testing.

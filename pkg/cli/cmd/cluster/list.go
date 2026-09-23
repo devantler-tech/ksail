@@ -121,6 +121,10 @@ type ListDeps struct {
 	// (kubeconfig-only) clusters. If nil, the user's default kubeconfig is used. Primarily for
 	// testing, so unmanaged discovery reads a temp kubeconfig instead of the real one.
 	KubeconfigPathFunc func() string
+
+	// AWSLister optionally lists EKS cluster names, routed into the discoverer's AWS seam. If nil,
+	// discovery queries EKS through eksctl when AWS is configured. Primarily for testing.
+	AWSLister clusterdiscovery.ClusterLister
 }
 
 // HandleListRunE handles the list command. It delegates cluster enumeration to the shared
@@ -133,7 +137,10 @@ func HandleListRunE(
 ) error {
 	providers := resolveProviders(providerFilter)
 
-	clusters, failures := newDiscoverer(deps).Discover(cmd.Context(), providers)
+	discoverer := newDiscoverer(deps)
+	clusters, failures := discoverer.Discover(cmd.Context(), providers)
+	// EKS clusters are listed from one region, and their TTLs are recorded per region.
+	awsRegion := discoverer.AWSRegion()
 
 	for _, failure := range failures {
 		_, _ = fmt.Fprintf(
@@ -155,7 +162,7 @@ func HandleListRunE(
 	allResults := make([]listResult, 0, len(clusters))
 
 	for _, cluster := range clusters {
-		ttlInfo, ttlErr := state.LoadClusterTTL(cluster.Name)
+		ttlInfo, ttlErr := loadClusterTTL(cluster.Name, cluster.Provider, awsRegion)
 		if ttlErr != nil && !errors.Is(ttlErr, state.ErrTTLNotSet) {
 			notify.Warningf(
 				cmd.ErrOrStderr(),
@@ -203,6 +210,10 @@ func newDiscoverer(deps ListDeps) *clusterdiscovery.Discoverer {
 
 	if deps.DockerStatusFunc != nil {
 		discoverer.DockerStatus = deps.DockerStatusFunc
+	}
+
+	if deps.AWSLister != nil {
+		discoverer.AWS = deps.AWSLister
 	}
 
 	return discoverer
