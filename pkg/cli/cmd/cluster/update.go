@@ -79,12 +79,7 @@ Use --output json to emit a machine-readable diff for CI/MCP consumption.`,
 
 	runUpdate := lifecycle.WrapHandler(cfgManager, handleUpdateRunE)
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		// Config loading reports its progress before the handler runs. With
-		// --output json, stdout carries only the JSON document, so that progress
-		// goes to stderr like the rest of the run's human-readable text.
-		if getOutputFormat(cmd) == outputFormatJSON {
-			cfgManager.Writer = cmd.ErrOrStderr()
-		}
+		routeConfigLoadingProgress(cmd, cfgManager)
 
 		return runUpdate(cmd, args)
 	}
