@@ -363,3 +363,68 @@ func TestValidateKyvernoMalformedSharedNamespaceLabelsAreNotEvaluable(t *testing
 		`policy "require-team-label-in-prod" rule "check-team" not evaluable offline`,
 	)
 }
+
+// requireTeamLabelValidatingPolicy is the CEL ValidatingPolicy form of
+// requireTeamLabelPolicy, with the given validation action.
+func requireTeamLabelValidatingPolicy(action string) string {
+	return `apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: require-team-label-cel
+spec:
+  validationActions: [` + action + `]
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["configmaps"]
+  validations:
+    - expression: "has(object.metadata.labels) && 'team' in object.metadata.labels"
+      message: "ConfigMaps must carry a team label"
+`
+}
+
+func TestValidateKyvernoValidatingPolicyOffByDefault(t *testing.T) {
+	t.Parallel()
+
+	dir := writeKyvernoKustomization(t, requireTeamLabelValidatingPolicy("Deny"), false)
+
+	out, err := runValidate(t, dir)
+	require.NoError(t, err, "without --kyverno-policies the policy must not be evaluated")
+	assert.NotContains(t, out, "require-team-label-cel")
+}
+
+func TestValidateKyvernoValidatingPolicyDenyViolationFails(t *testing.T) {
+	t.Parallel()
+
+	dir := writeKyvernoKustomization(t, requireTeamLabelValidatingPolicy("Deny"), false)
+
+	_, err := runValidate(t, dir, "--kyverno-policies")
+	require.Error(t, err, "a denying ValidatingPolicy failure must fail validation")
+	require.ErrorContains(t, err, "kyverno policy violation")
+	require.ErrorContains(t, err, `policy "require-team-label-cel" failed`)
+	require.ErrorContains(t, err, "ConfigMap/default/app-config", "the failure names the resource")
+	require.ErrorContains(t, err, "ConfigMaps must carry a team label", "the message surfaces")
+}
+
+func TestValidateKyvernoValidatingPolicyAuditViolationWarns(t *testing.T) {
+	t.Parallel()
+
+	dir := writeKyvernoKustomization(t, requireTeamLabelValidatingPolicy("Audit"), false)
+
+	out, err := runValidate(t, dir, "--kyverno-policies")
+	require.NoError(t, err, "an audit-only failure must not fail validation")
+	assert.Contains(t, out, "Kyverno policy warning", "the audit failure is reported")
+	assert.Contains(t, out, `policy "require-team-label-cel" failed (audit)`)
+}
+
+func TestValidateKyvernoValidatingPolicySatisfiedPasses(t *testing.T) {
+	t.Parallel()
+
+	dir := writeKyvernoKustomization(t, requireTeamLabelValidatingPolicy("Deny"), true)
+
+	out, err := runValidate(t, dir, "--kyverno-policies")
+	require.NoError(t, err, "a document satisfying the policy passes")
+	assert.NotContains(t, out, "Kyverno policy warning")
+}

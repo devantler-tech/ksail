@@ -5,8 +5,10 @@
 // process, with no cluster connection. Like celrules, it is decoupled from the
 // render pipeline and CLI: callers hand it decoded documents.
 //
-// Scope: validate rules of kyverno.io/v1 ClusterPolicy and Policy. CEL-based
-// policies.kyverno.io policies are not evaluated here.
+// Scope: validate rules of kyverno.io/v1 ClusterPolicy and Policy, and the
+// validations of CEL-based policies.kyverno.io ValidatingPolicy and
+// NamespacedValidatingPolicy (see CELEngine). Other policies.kyverno.io kinds
+// are not evaluated here.
 package kyvernopolicy
 
 import (
