@@ -396,9 +396,19 @@ func cloneEnvironment(cmd *cobra.Command, params addEnvironmentParams) error {
 
 	// The destination is named explicitly: a base-synced source's root config is
 	// ksail.yaml, whose name has no environment segment for the rewrites to repoint.
-	configPath, wroteConfig, err := environment.CloneEnvironmentConfigTo(
+	// That config usually declares no cluster name or context either, so the clone
+	// is given its own, or both environments would target the same default cluster.
+	var identity environment.Identity
+	if params.srcConfigFile == environment.BaseConfigFile {
+		identity = environment.Identity{
+			Name:    params.dstName,
+			Context: materializedContext(params.distribution, params.dstName),
+		}
+	}
+
+	configPath, wroteConfig, err := environment.CloneBaseSyncedConfigTo(
 		params.repoRoot, params.srcConfigFile, environmentConfigFile(params.dstName),
-		configRewrites, params.force,
+		configRewrites, identity, params.force,
 	)
 	if err != nil {
 		return fmt.Errorf("cloning environment config: %w", err)
@@ -407,6 +417,19 @@ func cloneEnvironment(cmd *cobra.Command, params addEnvironmentParams) error {
 	reportClone(out, written, configPath, wroteConfig)
 
 	return nil
+}
+
+// materializedContext returns the kubeconfig context to write into a clone of a
+// base-synced config, or "" when the distribution's context name is only a partial
+// guess: EKS and GKE contexts embed an account and location that are unknown until
+// the cluster exists, so KSail derives those from the kubeconfig instead.
+func materializedContext(distribution v1alpha1.Distribution, name string) string {
+	switch distribution {
+	case v1alpha1.DistributionEKS, v1alpha1.DistributionGKE:
+		return ""
+	default:
+		return distribution.ContextName(name)
+	}
 }
 
 // reportClone prints the files the clone wrote, or a skip note when --force was not

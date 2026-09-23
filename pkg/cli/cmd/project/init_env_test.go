@@ -121,6 +121,10 @@ func TestEnvVerbsSeeTheMultiClusterScaffoldsInitialEnvironment(t *testing.T) {
 	stagingConfig := readWorkspaceFile(t, root, "ksail.staging.yaml")
 	assert.Contains(t, stagingConfig, "kustomizationFile: clusters/staging")
 	assert.NotContains(t, stagingConfig, "clusters/prod")
+	// The base config the scaffold wrote names no cluster, so the clone must name its
+	// own: otherwise both environments resolve to the default cluster and context.
+	assert.Contains(t, stagingConfig, "name: staging")
+	assert.Contains(t, stagingConfig, "context: kind-staging")
 	assert.Contains(
 		t,
 		readWorkspaceFile(t, root, "k8s/clusters/staging/kustomization.yaml"),

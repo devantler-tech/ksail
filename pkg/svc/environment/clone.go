@@ -129,7 +129,7 @@ func CloneEnvironmentConfig(
 	rewrites []Rewrite,
 	force bool,
 ) (string, bool, error) {
-	return cloneEnvironmentConfig(repoRoot, srcConfigRel, "", rewrites, force)
+	return cloneEnvironmentConfig(repoRoot, srcConfigRel, "", rewrites, Identity{}, force)
 }
 
 // CloneEnvironmentConfigTo is [CloneEnvironmentConfig] with an explicit
@@ -144,7 +144,20 @@ func CloneEnvironmentConfigTo(
 	rewrites []Rewrite,
 	force bool,
 ) (string, bool, error) {
-	return cloneEnvironmentConfig(repoRoot, srcConfigRel, dstConfigRel, rewrites, force)
+	return cloneEnvironmentConfig(repoRoot, srcConfigRel, dstConfigRel, rewrites, Identity{}, force)
+}
+
+// CloneBaseSyncedConfigTo is [CloneEnvironmentConfigTo] for a base-synced source: after
+// the rewrites it writes identity into the clone wherever the base config leaves it
+// unset (see [MaterializeIdentity]), so the new environment targets its own cluster
+// rather than the default one its source resolves to.
+func CloneBaseSyncedConfigTo(
+	repoRoot, srcConfigRel, dstConfigRel string,
+	rewrites []Rewrite,
+	identity Identity,
+	force bool,
+) (string, bool, error) {
+	return cloneEnvironmentConfig(repoRoot, srcConfigRel, dstConfigRel, rewrites, identity, force)
 }
 
 // cloneEnvironmentConfig is the shared implementation behind CloneEnvironmentConfig
@@ -155,6 +168,7 @@ func CloneEnvironmentConfigTo(
 func cloneEnvironmentConfig(
 	repoRoot, srcConfigRel, dstConfigRel string,
 	rewrites []Rewrite,
+	identity Identity,
 	force bool,
 ) (string, bool, error) {
 	srcConfigRel = filepath.ToSlash(srcConfigRel)
@@ -175,6 +189,14 @@ func cloneEnvironmentConfig(
 	newRelPath, content, err := cloneFile(repoRoot, repoRoot, srcAbs, rewrites)
 	if err != nil {
 		return "", false, err
+	}
+
+	// Ciphertext is cloned verbatim, so identity is only written into a plaintext config.
+	if identity != (Identity{}) && !strings.HasSuffix(srcConfigRel, encryptedFileSuffix) {
+		content, err = MaterializeIdentity(content, identity)
+		if err != nil {
+			return "", false, fmt.Errorf("writing clone identity: %w", err)
+		}
 	}
 
 	if dstConfigRel != "" {
