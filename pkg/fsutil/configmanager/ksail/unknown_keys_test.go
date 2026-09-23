@@ -208,3 +208,45 @@ func TestLoadSilentDoesNotWarnAboutUnknownKeys(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, output.String(), "unknown key")
 }
+
+func TestFindUnknownKeysAcceptsADottedKeyTheLoaderApplies(t *testing.T) {
+	t.Parallel()
+
+	// The loader reads the file through viper, which splits a dotted key into
+	// its nested path, so the key is applied and must not be reported.
+	content := []byte(ksailClusterBaseYAML + "spec.cluster.connection.context: dotted-ctx\n")
+
+	assert.Empty(t, configmanager.FindUnknownKeys(content))
+}
+
+func TestFindUnknownKeysReportsANonStringNestedKey(t *testing.T) {
+	t.Parallel()
+
+	// A numeric key is valid YAML; the loader ignores it, so it is reported
+	// rather than aborting the detection.
+	content := []byte(ksailClusterBaseYAML + "  workload:\n    1: stray\n")
+
+	assert.Equal(t, []configmanager.UnknownKey{{Path: "spec.workload.1"}},
+		configmanager.FindUnknownKeys(content))
+}
+
+func TestLoadAppliesADottedKeyWithoutWarning(t *testing.T) {
+	t.Parallel()
+
+	configPath := writeUnknownKeyConfig(
+		t,
+		t.TempDir(),
+		"spec.cluster.connection.context: dotted-ctx\n",
+	)
+
+	var output bytes.Buffer
+
+	manager := configmanager.NewConfigManager(&output, configPath)
+
+	cfg, err := manager.Load(configmanagerinterface.LoadOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+
+	assert.Equal(t, "dotted-ctx", cfg.Spec.Cluster.Connection.Context)
+	assert.NotContains(t, output.String(), "unknown key")
+}

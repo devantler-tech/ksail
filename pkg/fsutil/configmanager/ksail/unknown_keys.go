@@ -1,6 +1,7 @@
 package configmanager
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	mapstructure "github.com/go-viper/mapstructure/v2"
+	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
 
@@ -34,17 +36,23 @@ type UnknownKey struct {
 }
 
 // FindUnknownKeys reports the keys in a ksail config file's content that the
-// config loader ignores. It decodes the content with the same mapstructure
-// rules the loader uses (field matching, squashed embeds, decode hooks), so a
-// key is reported exactly when loading would drop it — never a key the loader
-// reads, and never a flag or environment binding, which are not part of the
-// file. The result is sorted by path. Content that is not a YAML mapping yields
-// no keys: reading it fails the load with its own error.
+// config loader ignores. It reads the content through viper and decodes the
+// result with the same mapstructure rules the loader uses (field matching,
+// squashed embeds, decode hooks), so a key is reported exactly when loading
+// would drop it — never a key the loader reads (including a dotted key viper
+// splits into its nested path), and never a flag or environment binding, which
+// are not part of the file. The result is sorted by path. Content that is not a
+// YAML mapping yields no keys: reading it fails the load with its own error.
 func FindUnknownKeys(content []byte) []UnknownKey {
 	var raw map[string]any
 
 	err := yaml.Unmarshal(content, &raw)
 	if err != nil || raw == nil {
+		return nil
+	}
+
+	settings, err := loaderSettings(content)
+	if err != nil {
 		return nil
 	}
 
@@ -64,7 +72,7 @@ func FindUnknownKeys(content []byte) []UnknownKey {
 
 	// A value of the wrong type is the real load's error to report; the
 	// unused-key metadata is still collected for every other key.
-	_ = decoder.Decode(raw)
+	_ = decoder.Decode(settings)
 
 	unknown := make([]UnknownKey, 0, len(metadata.Unused))
 	for _, keyPath := range metadata.Unused {
@@ -81,6 +89,20 @@ func FindUnknownKeys(content []byte) []UnknownKey {
 	})
 
 	return unknown
+}
+
+// loaderSettings reads content the way the loader does, through viper, so a
+// dotted key is split into its nested path and every key is a string.
+func loaderSettings(content []byte) (map[string]any, error) {
+	fileViper := viper.New()
+	fileViper.SetConfigType("yaml")
+
+	err := fileViper.ReadConfig(bytes.NewReader(content))
+	if err != nil {
+		return nil, fmt.Errorf("reading config content: %w", err)
+	}
+
+	return fileViper.AllSettings(), nil
 }
 
 // warnUnknownConfigKeys writes one warning per key in the loaded config file
@@ -139,7 +161,7 @@ func originalKeyPath(raw map[string]any, keyPath string) string {
 	for _, segment := range segments {
 		name := listIndexPattern.ReplaceAllString(segment, "")
 
-		mapping, isMapping := node.(map[string]any)
+		mapping, isMapping := stringKeyed(node)
 		if !isMapping {
 			return keyPath
 		}
@@ -166,6 +188,24 @@ func originalKeyPath(raw map[string]any, keyPath string) string {
 	}
 
 	return strings.Join(resolved, ".")
+}
+
+// stringKeyed returns node as a string-keyed mapping, converting the
+// map[any]any YAML produces for a mapping with a non-string key.
+func stringKeyed(node any) (map[string]any, bool) {
+	switch mapping := node.(type) {
+	case map[string]any:
+		return mapping, true
+	case map[any]any:
+		converted := make(map[string]any, len(mapping))
+		for key, value := range mapping {
+			converted[fmt.Sprint(key)] = value
+		}
+
+		return converted, true
+	default:
+		return nil, false
+	}
 }
 
 // lookupKeyFold finds the key of mapping equal to name, preferring an exact
