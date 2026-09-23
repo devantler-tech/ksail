@@ -43,6 +43,14 @@ annotations, and the `providerID` scheme (#7179) — and reported as not managed
 that serves no API at all is left to provider enumeration, which is also what continues to reveal
 clusters that exist but are stopped.
 
+Only a marker the API reports as absent (`404 Not Found`) means "not managed by KSail". Reading the
+ConfigMap still needs Kubernetes `get` permission in `kube-system`, and a user without it receives
+`403 Forbidden`; that answer, like any other failed read, says nothing about who created the
+cluster. KSail therefore reports such a cluster's management as unknown — still identified from its
+nodes where they are readable, and with the missing permission named — and never as unmanaged. It
+does not fall back to context-name patterns to fill the gap, since those are what this decision
+retires as a source of identity.
+
 Clusters created before this marker existed do not have one. They gain it on the next KSail create
 or update, and an explicit adopt path lets a user stamp one without a provisioning run. Until then
 they read as unmanaged-but-identified, which is what they already do today.
