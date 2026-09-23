@@ -187,6 +187,22 @@ func TestIsKSailVerifyPatch(t *testing.T) {
 			},
 		},
 		{
+			name:  "same_target_remove_verify",
+			patch: consumerVerifyOperation(sameTarget, "- op: remove\n  path: /spec/verify\n"),
+		},
+		{
+			name: "same_target_replace_verify",
+			patch: consumerVerifyOperation(
+				sameTarget, "- op: replace\n  path: /spec/verify\n  value:\n    provider: cosign\n",
+			),
+		},
+		{
+			name: "same_target_test_verify",
+			patch: consumerVerifyOperation(
+				sameTarget, "- op: test\n  path: /spec/verify\n  value:\n    provider: cosign\n",
+			),
+		},
+		{
 			name: "other_repository",
 			patch: map[string]any{
 				"target": map[string]any{"kind": fluxOCIRepositoryKind, "name": "apps"},
@@ -208,6 +224,39 @@ func TestIsKSailVerifyPatch(t *testing.T) {
 
 			assert.Equal(t, testCase.want, isKSailVerifyPatch(testCase.patch))
 		})
+	}
+}
+
+// consumerVerifyOperation returns a consumer patch on target whose single operation touches
+// /spec/verify with something other than KSail's add.
+func consumerVerifyOperation(target map[string]any, body string) map[string]any {
+	return map[string]any{"target": target, "patch": body}
+}
+
+// TestMergeKustomizePatchesKeepsConsumerVerifyOperations guards the operation half of the
+// ownership rule: KSail only ever adds /spec/verify, so a consumer's remove, replace or test on
+// that path is theirs and survives both turning verification on and turning it off.
+func TestMergeKustomizePatchesKeepsConsumerVerifyOperations(t *testing.T) {
+	t.Parallel()
+
+	sameTarget := map[string]any{"kind": fluxOCIRepositoryKind, "name": defaultOCIRepositoryName}
+	ksailPatch := ksailVerifyPatch(t, "cosign")
+
+	for _, body := range []string{
+		"- op: remove\n  path: /spec/verify\n",
+		"- op: replace\n  path: /spec/verify\n  value:\n    provider: cosign\n",
+		"- op: test\n  path: /spec/verify\n  value:\n    provider: cosign\n",
+	} {
+		consumer := consumerVerifyOperation(sameTarget, body)
+
+		assert.Equal(t,
+			[]any{consumer, ksailPatch},
+			mergeKustomizePatches([]any{consumer}, []any{ksailPatch}),
+			"verify on: %q", body)
+		assert.Equal(t,
+			[]any{consumer},
+			mergeKustomizePatches([]any{consumer, ksailPatch}, nil),
+			"verify off: %q", body)
 	}
 }
 

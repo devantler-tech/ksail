@@ -15,6 +15,8 @@ const (
 	kustomizePatchesKey = "patches"
 	// verifyPatchPath is the only path KSail's own spec.kustomize patch touches.
 	verifyPatchPath = "/spec/verify"
+	// verifyPatchOperation is the only JSON6902 operation KSail's own verify patch performs.
+	verifyPatchOperation = "add"
 )
 
 // mergeModelledField writes KSail's desired value for one modelled spec field into spec.
@@ -116,13 +118,14 @@ func mergeKustomizePatches(live, desired []any) []any {
 // isKSailVerifyPatch reports whether a live spec.kustomize patch is the one KSail writes.
 //
 // The rule is target plus content, never position: the patch targets the OCIRepository named
-// flux-system, and its body is a JSON6902 list of exactly one operation on /spec/verify. A patch
-// with that target that changes anything else, or /spec/verify together with something else, is
-// the consumer's and is kept. A consumer patch that matches the rule, one operation on
-// /spec/verify of flux-system, is indistinguishable from KSail's and is treated as KSail's:
-// spec.workload.flux.verify is where that verification is configured, so KSail's setting replaces
-// it, and removes it when verification is off. A strategic-merge patch setting spec.verify is not
-// recognised and is kept; it then competes with KSail's patch.
+// flux-system, and its body is a JSON6902 list of exactly one add operation on /spec/verify. A
+// patch with that target that changes anything else, operates on /spec/verify other than by add
+// (remove, replace, test), or adds /spec/verify together with something else, is the consumer's
+// and is kept. A consumer patch that matches the rule, one add on /spec/verify of flux-system, is
+// indistinguishable from KSail's and is treated as KSail's: spec.workload.flux.verify is where
+// that verification is configured, so KSail's setting replaces it, and removes it when
+// verification is off. A strategic-merge patch setting spec.verify is not recognised and is kept;
+// it then competes with KSail's patch.
 func isKSailVerifyPatch(patch any) bool {
 	entry, isObject := patch.(map[string]any)
 	if !isObject {
@@ -146,7 +149,8 @@ func isKSailVerifyPatch(patch any) bool {
 		return false
 	}
 
-	return operations[0]["path"] == verifyPatchPath
+	return operations[0]["op"] == verifyPatchOperation &&
+		operations[0]["path"] == verifyPatchPath
 }
 
 // modelledJSONKeys returns the JSON names of the fields structType models.
