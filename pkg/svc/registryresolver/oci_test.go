@@ -1,16 +1,25 @@
 package registryresolver_test
 
 import (
+	"archive/tar"
 	"context"
 	"errors"
+	"io"
+	"log"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/registryresolver"
+	"github.com/google/go-containerregistry/pkg/name"
+	ggcrregistry "github.com/google/go-containerregistry/pkg/registry"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,49 +31,166 @@ const (
 	testRetryMaxWait  = 5 * time.Millisecond
 )
 
+// startTestRegistry serves an in-memory OCI registry on an ephemeral loopback
+// port for the lifetime of the test and returns its host:port endpoint, so push
+// tests never reach whatever happens to listen on a fixed local port.
+func startTestRegistry(t *testing.T) string {
+	t.Helper()
+
+	server := httptest.NewServer(ggcrregistry.New(ggcrregistry.Logger(log.New(io.Discard, "", 0))))
+	t.Cleanup(server.Close)
+
+	return strings.TrimPrefix(server.URL, "http://")
+}
+
+// registryCatalog lists the repositories the test registry holds.
+func registryCatalog(ctx context.Context, t *testing.T, endpoint string) []string {
+	t.Helper()
+
+	reg, err := name.NewRegistry(endpoint, name.Insecure)
+	require.NoError(t, err)
+
+	repos, err := remote.Catalog(ctx, reg)
+	require.NoError(t, err)
+
+	return repos
+}
+
+// pulledArtifactFiles pulls endpoint/repository:tag from the test registry and
+// returns the file contents of its single layer, keyed by archive path.
+func pulledArtifactFiles(
+	ctx context.Context,
+	t *testing.T,
+	endpoint, repository, tag string,
+) map[string]string {
+	t.Helper()
+
+	ref, err := name.ParseReference(endpoint+"/"+repository+":"+tag, name.Insecure)
+	require.NoError(t, err)
+
+	img, err := remote.Image(ref, remote.WithContext(ctx))
+	require.NoError(t, err)
+
+	layers, err := img.Layers()
+	require.NoError(t, err)
+	require.Len(t, layers, 1, "a workload artifact carries exactly one layer")
+
+	contents, err := layers[0].Uncompressed()
+	require.NoError(t, err)
+
+	defer func() { _ = contents.Close() }()
+
+	files := map[string]string{}
+	reader := tar.NewReader(contents)
+
+	for {
+		header, nextErr := reader.Next()
+		if errors.Is(nextErr, io.EOF) {
+			break
+		}
+
+		require.NoError(t, nextErr)
+
+		data, readErr := io.ReadAll(reader)
+		require.NoError(t, readErr)
+
+		files[header.Name] = string(data)
+	}
+
+	return files
+}
+
 func TestPushOCIArtifact_MissingDirectory_PushesEmptyArtifact(t *testing.T) {
 	t.Parallel()
 
-	// Create a test cluster config
+	ctx := t.Context()
+	endpoint := startTestRegistry(t)
+
 	clusterCfg := &v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				GitOpsEngine: v1alpha1.GitOpsEngineFlux,
 				LocalRegistry: v1alpha1.LocalRegistry{
-					Registry: "localhost:5000",
+					Registry: endpoint + "/team/workloads",
 				},
 			},
 			Workload: v1alpha1.WorkloadSpec{
-				SourceDirectory: "/nonexistent/directory",
+				SourceDirectory: filepath.Join(t.TempDir(), "missing"),
 			},
 		},
 	}
 
-	// Should attempt to push empty artifact when directory doesn't exist
-	// Note: This will fail at the registry push stage since we don't have a real registry,
-	// but it should NOT return early due to missing directory
 	result, err := registryresolver.PushOCIArtifact(
-		context.Background(),
+		ctx,
 		registryresolver.PushOCIArtifactOptions{
 			ClusterConfig: clusterCfg,
 			ClusterName:   "test-cluster",
 		},
 	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.Pushed, "expected Pushed to be true")
+	assert.True(t, result.Empty, "expected Empty to be true when directory is missing")
 
-	// Will error due to registry connection, but should attempt the push
-	// The error should be about pushing, not about missing directory
-	if err != nil {
-		assert.Contains(
-			t,
-			err.Error(),
-			"push",
-			"expected error to be about pushing, not missing directory",
-		)
-	} else {
-		require.NotNil(t, result)
-		assert.True(t, result.Pushed, "expected Pushed to be true")
-		assert.True(t, result.Empty, "expected Empty to be true when directory is missing")
+	assert.Equal(t, []string{"team/workloads"}, registryCatalog(ctx, t, endpoint),
+		"the artifact must land in the requested repository and nowhere else")
+
+	files := pulledArtifactFiles(
+		ctx, t, endpoint, "team/workloads", registry.DefaultLocalArtifactTag,
+	)
+	require.Len(t, files, 1, "an empty artifact carries only an empty kustomization")
+	assert.Contains(t, files["kustomization.yaml"], "kind: Kustomization")
+	assert.Contains(t, files["kustomization.yaml"], "resources: []")
+}
+
+//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir()
+func TestPushOCIArtifact_UsesDefaultSourceDir(t *testing.T) {
+	ctx := t.Context()
+	endpoint := startTestRegistry(t)
+
+	// Create the default source directory (k8s) with one manifest and run from
+	// its parent, so an unset source directory must resolve to it.
+	tmpDir := t.TempDir()
+	k8sDir := filepath.Join(tmpDir, v1alpha1.DefaultSourceDirectory)
+	require.NoError(t, os.MkdirAll(k8sDir, 0o750))
+	manifestPath := filepath.Join(k8sDir, "test.yaml")
+	require.NoError(t, os.WriteFile(manifestPath, []byte("test: data"), 0o600))
+
+	t.Chdir(tmpDir)
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				GitOpsEngine: v1alpha1.GitOpsEngineFlux,
+				LocalRegistry: v1alpha1.LocalRegistry{
+					Registry: endpoint,
+				},
+			},
+			Workload: v1alpha1.WorkloadSpec{
+				// Empty - should use the default "k8s" source directory
+			},
+		},
 	}
+
+	result, err := registryresolver.PushOCIArtifact(
+		ctx,
+		registryresolver.PushOCIArtifactOptions{
+			ClusterConfig: clusterCfg,
+			ClusterName:   "test-cluster",
+		},
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.Pushed, "expected Pushed to be true")
+	assert.False(t, result.Empty, "expected a non-empty artifact from the default source directory")
+
+	// With no repository configured, the repository is named after the source directory.
+	assert.Equal(t, []string{v1alpha1.DefaultSourceDirectory}, registryCatalog(ctx, t, endpoint))
+
+	files := pulledArtifactFiles(
+		ctx, t, endpoint, v1alpha1.DefaultSourceDirectory, registry.DefaultLocalArtifactTag,
+	)
+	assert.Equal(t, map[string]string{"test.yaml": "test: data"}, files)
 }
 
 func TestPushOCIArtifact_IncompleteExternalCredentials(t *testing.T) {
@@ -96,54 +222,6 @@ func TestPushOCIArtifact_IncompleteExternalCredentials(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, registryresolver.ErrExternalRegistryCredentialsIncomplete)
-}
-
-//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir()
-func TestPushOCIArtifact_UsesDefaultSourceDir(t *testing.T) {
-	// Note: Cannot use t.Parallel() when using t.Chdir()
-
-	// Create a temporary directory
-	tmpDir := t.TempDir()
-
-	// Create the default source directory (k8s)
-	k8sDir := filepath.Join(tmpDir, "k8s")
-	require.NoError(t, os.MkdirAll(k8sDir, 0o750))
-
-	// Create a test file
-	testFile := filepath.Join(k8sDir, "test.yaml")
-	require.NoError(t, os.WriteFile(testFile, []byte("test: data"), 0o600))
-
-	// Change to the temp directory using t.Chdir
-	t.Chdir(tmpDir)
-
-	// Create a test cluster config with no source directory specified
-	clusterCfg := &v1alpha1.Cluster{
-		Spec: v1alpha1.Spec{
-			Cluster: v1alpha1.ClusterSpec{
-				GitOpsEngine: v1alpha1.GitOpsEngineFlux,
-				LocalRegistry: v1alpha1.LocalRegistry{
-					Registry: "localhost:5000",
-				},
-			},
-			Workload: v1alpha1.WorkloadSpec{
-				// Empty - should use default "k8s"
-			},
-		},
-	}
-
-	// This will fail to resolve registry, but we're just testing directory resolution
-	_, err := registryresolver.PushOCIArtifact(
-		context.Background(),
-		registryresolver.PushOCIArtifactOptions{
-			ClusterConfig: clusterCfg,
-			ClusterName:   "test-cluster",
-		},
-	)
-	// Will error due to registry resolution, but the directory should be found
-	// (error should be about pushing/registry, not about source directory)
-	if err != nil {
-		assert.NotContains(t, err.Error(), "source directory not found")
-	}
 }
 
 // Test sentinel errors for retry behavior tests.
