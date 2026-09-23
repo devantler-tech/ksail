@@ -2,8 +2,8 @@ name: 🔍 CodeQL
 
 # Advanced CodeQL setup. It replaces CodeQL default setup, which is disabled for this
 # repository (Settings → Code security → CodeQL analysis). The two are mutually exclusive:
-# GitHub rejects an advanced configuration's results while default setup is enabled, so
-# re-enabling default setup requires removing this workflow.
+# while default setup is enabled GitHub rejects this workflow's uploads, so re-enabling
+# default setup turns this workflow into a failing check until it is disabled or removed.
 #
 # The reason to own the workflow is re-runnability. A default-setup run is GitHub-managed
 # (`event: dynamic`, no workflow file in the repository), so `gh run rerun` is refused and
