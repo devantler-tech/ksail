@@ -324,6 +324,7 @@ func originalKeyPath(raw map[string]any, keyPath string) (string, []string) {
 
 	segments := strings.Split(keyPath, ".")
 	resolved := make([]string, 0, len(segments))
+	levels := []keyLevel{}
 
 	for len(segments) > 0 {
 		mapping, isMapping := stringKeyed(node)
@@ -331,9 +332,14 @@ func originalKeyPath(raw map[string]any, keyPath string) (string, []string) {
 			return keyPath, []string{keyPath}
 		}
 
+		levels = append(
+			levels,
+			keyLevel{mapping: mapping, resolved: slices.Clone(resolved), rest: segments},
+		)
+
 		key, used, found := lookupDottedKeyFold(mapping, segments)
 		if !found {
-			return dottedKeyPaths(mapping, keyPath, resolved, segments)
+			return dottedKeyPaths(keyPath, levels)
 		}
 
 		segment := segments[used-1]
@@ -360,28 +366,25 @@ func originalKeyPath(raw map[string]any, keyPath string) (string, []string) {
 	return path, []string{path}
 }
 
-// dottedKeyPaths resolves the unmatched rest of a decoder path against the keys
-// of mapping that it is the leading part of: viper splits totally.bogus into
-// totally → bogus, and the decoder reports only the unknown totally. Each such
-// key is reported in full, as written. When there is none, the decoder path is
-// returned unchanged.
-func dottedKeyPaths(
-	mapping map[string]any,
-	keyPath string,
-	resolved, rest []string,
-) (string, []string) {
-	if slices.ContainsFunc(rest, listIndexPattern.MatchString) {
-		return keyPath, []string{keyPath}
-	}
+// keyLevel is a mapping visited while resolving a decoder path, with the path
+// resolved up to it and the decoder segments that remained there.
+type keyLevel struct {
+	mapping  map[string]any
+	resolved []string
+	rest     []string
+}
 
-	prefix := strings.ToLower(strings.Join(rest, ".")) + "."
+// dottedKeyPaths resolves a decoder path whose remaining segments no key
+// spells, as the leading part of dotted keys: viper splits totally.bogus into
+// totally → bogus, and merges a root spec.clustr.distribution into the spec
+// mapping, while the decoder reports only the unknown totally or spec.clustr.
+// Each such key is reported in full, as written, in whichever visited mapping
+// holds it. When there is none, the decoder path is returned unchanged.
+func dottedKeyPaths(keyPath string, levels []keyLevel) (string, []string) {
+	paths := make([]string, 0, len(levels))
 
-	paths := []string{}
-
-	for key := range mapping {
-		if strings.HasPrefix(strings.ToLower(key), prefix) {
-			paths = append(paths, strings.Join(slices.Concat(resolved, []string{key}), "."))
-		}
+	for _, level := range levels {
+		paths = append(paths, dottedKeysAt(level)...)
 	}
 
 	if len(paths) == 0 {
@@ -390,7 +393,29 @@ func dottedKeyPaths(
 
 	slices.Sort(paths)
 
-	return strings.Join(slices.Concat(resolved, rest), "."), paths
+	deepest := levels[len(levels)-1]
+
+	return strings.Join(slices.Concat(deepest.resolved, deepest.rest), "."), paths
+}
+
+// dottedKeysAt lists the full paths of the keys of level's mapping that its
+// remaining segments are the leading part of.
+func dottedKeysAt(level keyLevel) []string {
+	if slices.ContainsFunc(level.rest, listIndexPattern.MatchString) {
+		return nil
+	}
+
+	prefix := strings.ToLower(strings.Join(level.rest, ".")) + "."
+
+	paths := []string{}
+
+	for key := range level.mapping {
+		if strings.HasPrefix(strings.ToLower(key), prefix) {
+			paths = append(paths, strings.Join(slices.Concat(level.resolved, []string{key}), "."))
+		}
+	}
+
+	return paths
 }
 
 // stringKeyed returns node as a string-keyed mapping, converting the

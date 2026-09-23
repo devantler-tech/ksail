@@ -323,6 +323,19 @@ func TestFindUnknownKeysReportsADottedKeyWithAnUnknownPrefixInFull(t *testing.T)
 				{Path: "spec.clustr.provider", Suggestion: "cluster"},
 			},
 		},
+		"at the root beside the mapping it merges into": {
+			extra: "spec.clustr.distribution: K3s\n",
+			want: []configmanager.UnknownKey{
+				{Path: "spec.clustr.distribution", Suggestion: "cluster"},
+			},
+		},
+		"both inside the mapping and at the root": {
+			extra: "  clustr.provider: Docker\nspec.clustr.distribution: K3s\n",
+			want: []configmanager.UnknownKey{
+				{Path: "spec.clustr.distribution", Suggestion: "cluster"},
+				{Path: "spec.clustr.provider", Suggestion: "cluster"},
+			},
+		},
 	}
 
 	for name, test := range tests {
