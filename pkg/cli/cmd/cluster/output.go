@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 
+	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/spf13/cobra"
@@ -73,6 +74,18 @@ func progressWriter(cmd *cobra.Command) io.Writer {
 	return cmd.OutOrStdout()
 }
 
+// routeConfigLoadingProgress points config-loading progress at this run's
+// progress stream. Config loading reports before the command's handler runs,
+// through the writer captured when the command was built, so it is set on every
+// run: for stdout to carry only the JSON document under --output json, and so a
+// JSON run does not leave a later run's progress on stderr.
+func routeConfigLoadingProgress(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+) {
+	cfgManager.Writer = progressWriter(cmd)
+}
+
 // validateOutputFormat returns an error when the --output flag value is
 // neither "text" nor "json".
 func validateOutputFormat(cmd *cobra.Command) error {
@@ -135,7 +148,7 @@ func emitDiffJSON(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
 	err := enc.Encode(out)
 	if err != nil {
 		// Encoding a plain struct with only basic types never fails.
-		notify.Errorf(cmd.OutOrStderr(), "failed to marshal diff to JSON: %v", err)
+		notify.Errorf(cmd.ErrOrStderr(), "failed to marshal diff to JSON: %v", err)
 
 		return
 	}

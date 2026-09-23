@@ -87,6 +87,7 @@ func NewDiffCmd() *cobra.Command {
 		}
 
 		format := getOutputFormat(cmd)
+		routeConfigLoadingProgress(cmd, cfgManager)
 
 		handler := lifecycle.WrapHandler(
 			cfgManager,
