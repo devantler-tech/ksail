@@ -157,8 +157,8 @@ func TestUpsertOfKSailPatchIsIdempotent(t *testing.T) {
 }
 
 // TestIsKSailVerifyPatch documents the ownership rule: a patch is KSail's when it targets the
-// flux-system OCIRepository and consists of one operation on /spec/verify. Everything else, even
-// with the same target, is the consumer's.
+// flux-system OCIRepository and consists of one add on /spec/verify. Everything else, even with
+// the same target, is the consumer's.
 func TestIsKSailVerifyPatch(t *testing.T) {
 	t.Parallel()
 
@@ -185,22 +185,6 @@ func TestIsKSailVerifyPatch(t *testing.T) {
 				"patch": "- op: add\n  path: /spec/verify\n  value:\n    provider: cosign\n" +
 					"- op: replace\n  path: /spec/interval\n  value: 5m\n",
 			},
-		},
-		{
-			name:  "same_target_remove_verify",
-			patch: consumerVerifyOperation(sameTarget, "- op: remove\n  path: /spec/verify\n"),
-		},
-		{
-			name: "same_target_replace_verify",
-			patch: consumerVerifyOperation(
-				sameTarget, "- op: replace\n  path: /spec/verify\n  value:\n    provider: cosign\n",
-			),
-		},
-		{
-			name: "same_target_test_verify",
-			patch: consumerVerifyOperation(
-				sameTarget, "- op: test\n  path: /spec/verify\n  value:\n    provider: cosign\n",
-			),
 		},
 		{
 			name: "other_repository",
@@ -233,6 +217,32 @@ func consumerVerifyOperation(target map[string]any, body string) map[string]any 
 	return map[string]any{"target": target, "patch": body}
 }
 
+// consumerVerifyOperationBodies are single JSON6902 operations on /spec/verify that KSail never
+// writes, since its own verify patch only ever adds that path.
+func consumerVerifyOperationBodies() map[string]string {
+	return map[string]string{
+		"remove":  "- op: remove\n  path: /spec/verify\n",
+		"replace": "- op: replace\n  path: /spec/verify\n  value:\n    provider: cosign\n",
+		"test":    "- op: test\n  path: /spec/verify\n  value:\n    provider: cosign\n",
+	}
+}
+
+// TestIsKSailVerifyPatchRejectsOtherVerifyOperations guards the operation half of the ownership
+// rule: a single remove, replace or test on /spec/verify of flux-system is the consumer's.
+func TestIsKSailVerifyPatchRejectsOtherVerifyOperations(t *testing.T) {
+	t.Parallel()
+
+	sameTarget := map[string]any{"kind": fluxOCIRepositoryKind, "name": defaultOCIRepositoryName}
+
+	for operation, body := range consumerVerifyOperationBodies() {
+		t.Run(operation, func(t *testing.T) {
+			t.Parallel()
+
+			assert.False(t, isKSailVerifyPatch(consumerVerifyOperation(sameTarget, body)))
+		})
+	}
+}
+
 // TestMergeKustomizePatchesKeepsConsumerVerifyOperations guards the operation half of the
 // ownership rule: KSail only ever adds /spec/verify, so a consumer's remove, replace or test on
 // that path is theirs and survives both turning verification on and turning it off.
@@ -242,11 +252,7 @@ func TestMergeKustomizePatchesKeepsConsumerVerifyOperations(t *testing.T) {
 	sameTarget := map[string]any{"kind": fluxOCIRepositoryKind, "name": defaultOCIRepositoryName}
 	ksailPatch := ksailVerifyPatch(t, "cosign")
 
-	for _, body := range []string{
-		"- op: remove\n  path: /spec/verify\n",
-		"- op: replace\n  path: /spec/verify\n  value:\n    provider: cosign\n",
-		"- op: test\n  path: /spec/verify\n  value:\n    provider: cosign\n",
-	} {
+	for _, body := range consumerVerifyOperationBodies() {
 		consumer := consumerVerifyOperation(sameTarget, body)
 
 		assert.Equal(t,
