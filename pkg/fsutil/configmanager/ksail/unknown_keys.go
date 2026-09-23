@@ -75,14 +75,20 @@ func FindUnknownKeys(content []byte) []UnknownKey {
 	// unused-key metadata is still collected for every other key.
 	_ = decoder.Decode(settings)
 
+	aliased := aliasedPaths(content)
+
 	unknown := make([]UnknownKey, 0, len(metadata.Unused))
 	for _, keyPath := range metadata.Unused {
-		keyPath = originalKeyPath(raw, keyPath)
+		suggestionPath, paths := originalKeyPath(raw, keyPath)
+		suggestion := suggestKey(suggestionPath)
 
-		unknown = append(unknown, UnknownKey{
-			Path:       keyPath,
-			Suggestion: suggestKey(keyPath),
-		})
+		for _, path := range paths {
+			if usedByAlias(aliased, path) {
+				continue
+			}
+
+			unknown = append(unknown, UnknownKey{Path: path, Suggestion: suggestion})
+		}
 	}
 
 	slices.SortFunc(unknown, func(left, right UnknownKey) int {
@@ -106,6 +112,133 @@ func loaderSettings(content []byte) (map[string]any, error) {
 	return fileViper.AllSettings(), nil
 }
 
+// aliasedPaths lists the paths, in the reported format, of the values in the
+// content's first document that a YAML alias refers to. A key holding such a
+// value is used by the alias (for example merged with <<: *anchor), so it is
+// not reported even though the decoder never reads it by name.
+func aliasedPaths(content []byte) []string {
+	var document yaml.Node
+
+	err := yaml.Unmarshal(content, &document)
+	if err != nil {
+		return nil
+	}
+
+	targets := map[*yaml.Node]bool{}
+	collectAliasTargets(&document, targets)
+
+	if len(targets) == 0 {
+		return nil
+	}
+
+	paths := []string{}
+	collectAliasedPaths(&document, "", targets, &paths)
+
+	return paths
+}
+
+// usedByAlias reports whether the value at path, or a value under it, is one
+// an alias refers to.
+func usedByAlias(aliased []string, path string) bool {
+	return slices.ContainsFunc(aliased, func(aliasedPath string) bool {
+		return aliasedPath == path ||
+			strings.HasPrefix(aliasedPath, path+".") ||
+			strings.HasPrefix(aliasedPath, path+"[")
+	})
+}
+
+// collectAliasTargets records the node each alias under node refers to.
+func collectAliasTargets(node *yaml.Node, targets map[*yaml.Node]bool) {
+	if node.Kind == yaml.AliasNode {
+		if node.Alias != nil {
+			targets[node.Alias] = true
+		}
+
+		return
+	}
+
+	for _, child := range node.Content {
+		collectAliasTargets(child, targets)
+	}
+}
+
+// collectAliasedPaths appends the path of every value under node that is an
+// alias target, naming mapping keys as written and list elements as [i].
+func collectAliasedPaths(
+	node *yaml.Node,
+	path string,
+	targets map[*yaml.Node]bool,
+	paths *[]string,
+) {
+	switch node.Kind {
+	case yaml.DocumentNode:
+		for _, child := range node.Content {
+			collectAliasedPaths(child, path, targets, paths)
+		}
+	case yaml.MappingNode:
+		for index := 0; index+1 < len(node.Content); index += 2 {
+			childPath := node.Content[index].Value
+			if path != "" {
+				childPath = path + "." + childPath
+			}
+
+			collectAliasedValue(node.Content[index+1], childPath, targets, paths)
+		}
+	case yaml.SequenceNode:
+		for index, child := range node.Content {
+			collectAliasedValue(child, fmt.Sprintf("%s[%d]", path, index), targets, paths)
+		}
+	case yaml.ScalarNode, yaml.AliasNode:
+	}
+}
+
+// collectAliasedValue records value's path when it is an alias target, then
+// descends into it.
+func collectAliasedValue(
+	value *yaml.Node,
+	path string,
+	targets map[*yaml.Node]bool,
+	paths *[]string,
+) {
+	if targets[value] {
+		*paths = append(*paths, path)
+	}
+
+	collectAliasedPaths(value, path, targets, paths)
+}
+
+// hasIgnoredYAMLDocuments reports whether content holds a YAML document with
+// content after the first one. The loader reads only the first document, so
+// everything in the others is silently ignored. A bare document marker, as in
+// a trailing ---, holds nothing and does not count.
+func hasIgnoredYAMLDocuments(content []byte) bool {
+	decoder := yaml.NewDecoder(bytes.NewReader(content))
+
+	for index := 0; ; index++ {
+		var document yaml.Node
+
+		err := decoder.Decode(&document)
+		if err != nil {
+			return false
+		}
+
+		if index > 0 && !isEmptyDocument(&document) {
+			return true
+		}
+	}
+}
+
+// isEmptyDocument reports whether a decoded document holds nothing but null.
+func isEmptyDocument(document *yaml.Node) bool {
+	for _, child := range document.Content {
+		if child.Kind != yaml.ScalarNode || child.ShortTag() != "!!null" {
+			return false
+		}
+	}
+
+	return true
+}
+
 // warnUnknownConfigKeys writes one warning per key in the loaded config file
 // that the loader ignores, naming the key's path and the fix in the same
 // field:/fix: shape as validation errors. It is a warning, not an error: configs
@@ -122,6 +255,16 @@ func (m *ConfigManager) warnUnknownConfigKeys() {
 	content, err := os.ReadFile(configFile)
 	if err != nil {
 		return
+	}
+
+	if hasIgnoredYAMLDocuments(content) {
+		notify.WriteMessage(notify.Message{
+			Type: notify.WarningType,
+			Content: "only the first YAML document in %s is read\n" +
+				"fix: move the settings of the other documents into the first one, or remove them",
+			Args:   []any{filepath.Base(configFile)},
+			Writer: m.Writer,
+		})
 	}
 
 	for _, key := range FindUnknownKeys(content) {
@@ -172,8 +315,11 @@ var listIndexPattern = regexp.MustCompile(`\[(\d+)\]`)
 // Go field names the decoder matched, e.g. spec.Cluster.EKS.x — into the keys as
 // written in the file (spec.cluster.eks.x), by resolving its segments
 // case-insensitively against the raw content, where one dotted key may spell
-// several of them. A path that cannot be resolved is returned unchanged.
-func originalKeyPath(raw map[string]any, keyPath string) string {
+// several of them. It returns the path to suggest a fix for and the written
+// paths to report: usually one and the same, but an unknown key that is only
+// the leading part of dotted keys (totally in totally.bogus) is reported as each
+// of those keys. A path that cannot be resolved is returned unchanged.
+func originalKeyPath(raw map[string]any, keyPath string) (string, []string) {
 	var node any = raw
 
 	segments := strings.Split(keyPath, ".")
@@ -182,12 +328,12 @@ func originalKeyPath(raw map[string]any, keyPath string) string {
 	for len(segments) > 0 {
 		mapping, isMapping := stringKeyed(node)
 		if !isMapping {
-			return keyPath
+			return keyPath, []string{keyPath}
 		}
 
 		key, used, found := lookupDottedKeyFold(mapping, segments)
 		if !found {
-			return keyPath
+			return dottedKeyPaths(mapping, keyPath, resolved, segments)
 		}
 
 		segment := segments[used-1]
@@ -200,7 +346,7 @@ func originalKeyPath(raw map[string]any, keyPath string) string {
 
 			index, err := strconv.Atoi(match[1])
 			if !isList || err != nil || index >= len(list) {
-				return keyPath
+				return keyPath, []string{keyPath}
 			}
 
 			node = list[index]
@@ -209,7 +355,42 @@ func originalKeyPath(raw map[string]any, keyPath string) string {
 		resolved = append(resolved, key+segment[len(name):])
 	}
 
-	return strings.Join(resolved, ".")
+	path := strings.Join(resolved, ".")
+
+	return path, []string{path}
+}
+
+// dottedKeyPaths resolves the unmatched rest of a decoder path against the keys
+// of mapping that it is the leading part of: viper splits totally.bogus into
+// totally → bogus, and the decoder reports only the unknown totally. Each such
+// key is reported in full, as written. When there is none, the decoder path is
+// returned unchanged.
+func dottedKeyPaths(
+	mapping map[string]any,
+	keyPath string,
+	resolved, rest []string,
+) (string, []string) {
+	if slices.ContainsFunc(rest, listIndexPattern.MatchString) {
+		return keyPath, []string{keyPath}
+	}
+
+	prefix := strings.ToLower(strings.Join(rest, ".")) + "."
+
+	paths := []string{}
+
+	for key := range mapping {
+		if strings.HasPrefix(strings.ToLower(key), prefix) {
+			paths = append(paths, strings.Join(slices.Concat(resolved, []string{key}), "."))
+		}
+	}
+
+	if len(paths) == 0 {
+		return keyPath, []string{keyPath}
+	}
+
+	slices.Sort(paths)
+
+	return strings.Join(slices.Concat(resolved, rest), "."), paths
 }
 
 // stringKeyed returns node as a string-keyed mapping, converting the

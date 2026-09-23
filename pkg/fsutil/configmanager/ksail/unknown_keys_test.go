@@ -302,3 +302,101 @@ func TestLoadAppliesADottedKeyWithoutWarning(t *testing.T) {
 	assert.Equal(t, "dotted-ctx", cfg.Spec.Cluster.Connection.Context)
 	assert.NotContains(t, output.String(), "unknown key")
 }
+
+// A dotted key whose first segment is unknown is reported in full, as written,
+// with the suggestion for the unknown segment.
+func TestFindUnknownKeysReportsADottedKeyWithAnUnknownPrefixInFull(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		extra string
+		want  []configmanager.UnknownKey
+	}{
+		"at the root": {
+			extra: "totally.bogus: 1\n",
+			want:  []configmanager.UnknownKey{{Path: "totally.bogus"}},
+		},
+		"inside a mapping": {
+			extra: "  clustr.distribution: K3s\n  clustr.provider: Docker\n",
+			want: []configmanager.UnknownKey{
+				{Path: "spec.clustr.distribution", Suggestion: "cluster"},
+				{Path: "spec.clustr.provider", Suggestion: "cluster"},
+			},
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			content := []byte(ksailClusterBaseYAML + test.extra)
+
+			assert.Equal(t, test.want, configmanager.FindUnknownKeys(content))
+		})
+	}
+}
+
+// A key that only defines an anchor merged into another key is used, so it is
+// not reported; removing it would break the merge. An anchor nothing refers to
+// is still reported.
+func TestFindUnknownKeysIgnoresAnchorDefinitionsThatAreMerged(t *testing.T) {
+	t.Parallel()
+
+	merged := []byte("apiVersion: ksail.io/v1alpha1\n" +
+		"kind: Cluster\n" +
+		"x-defaults: &defaults\n" +
+		"  distributionConfig: kind.yaml\n" +
+		"spec:\n" +
+		"  cluster:\n" +
+		"    <<: *defaults\n" +
+		"    distribution: Vanilla\n")
+
+	assert.Empty(t, configmanager.FindUnknownKeys(merged))
+
+	unreferenced := []byte(ksailClusterBaseYAML + "x-defaults: &defaults\n  distribution: K3s\n")
+
+	assert.Equal(t, []configmanager.UnknownKey{{Path: "x-defaults"}},
+		configmanager.FindUnknownKeys(unreferenced))
+}
+
+// KSail reads only the first YAML document of the config file, so loading warns
+// when a later document carries content. Document markers alone do not warn.
+func TestLoadWarnsAboutIgnoredYAMLDocuments(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		extra string
+		warns bool
+	}{
+		"a second document with settings": {
+			extra: "---\nspec:\n  cluster:\n    distribution: K3s\n",
+			warns: true,
+		},
+		"a trailing document marker": {extra: "---\n", warns: false},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			configPath := writeUnknownKeyConfig(t, t.TempDir(), test.extra)
+
+			var output bytes.Buffer
+
+			manager := configmanager.NewConfigManager(&output, configPath)
+
+			cfg, err := manager.Load(configmanagerinterface.LoadOptions{})
+			require.NoError(t, err)
+			require.NotNil(t, cfg)
+
+			const warning = "⚠ only the first YAML document in ksail.yaml is read\n" +
+				"  fix: move the settings of the other documents into the first one, or remove them\n"
+
+			if test.warns {
+				assert.Contains(t, output.String(), warning)
+			} else {
+				assert.NotContains(t, output.String(), "YAML document")
+			}
+		})
+	}
+}
