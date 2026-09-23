@@ -26,34 +26,49 @@ KSail stays native to the Kubernetes workflow.
 
 The marker carries the `kube-system` namespace UID it was written against. A marker whose recorded
 UID does not match the live one was copied or restored into a different cluster and is ignored. This
-makes the marker verifiable against the cluster serving it, which a context name never was.
+makes the marker verifiable against the cluster serving it, which a context name never was. The
+comparison needs a second read: the ConfigMap names its namespace but not that namespace's UID, so
+KSail also needs `get` on the cluster-scoped `kube-system` Namespace. A user who may read the
+ConfigMap but not the Namespace holds a marker KSail cannot verify, and KSail treats it as
+unverified: management is reported as unknown, never as managed.
 
 The kubeconfig keeps the role it is good at: enumerating what the user can reach and connecting to
-it. It stops being the source of truth for what a cluster *is*. Name patterns remain only as a
-fallback for matching a provider-listed cluster that is stopped or otherwise serving no API.
+it. It stops being the source of truth for what a cluster *is*. Whenever KSail reads a valid marker
+through a context, it records that context-to-cluster mapping locally. A cluster that is stopped or
+serving no API is joined to its context through that last-known mapping. Where no mapping has been
+recorded, KSail lists the provider-discovered cluster and the unreachable context separately, each
+marked as not yet identified, rather than guessing a join from the context name.
 
 The marker asserts provenance, not privilege. Anything with write access to `kube-system` can forge
-it, so it must never by itself authorise a destructive action: lifecycle operations continue to
-verify the cluster with its infrastructure provider before acting. Its purpose is to stop KSail
-mislabelling clusters and to let read surfaces resolve identity without credentials.
+it, including its name and provider, so it never selects the target of a destructive action.
+Lifecycle operations resolve what to act on only from trusted records: provider discovery with the
+user's credentials, or KSail's persisted ownership state. A context is used for such an operation
+only when an identifier held on the infrastructure side matches the live cluster — for example a
+node's `providerID` matching a server the provider reports for that cluster. A forged marker can
+therefore make a hostile cluster look like a KSail cluster in read surfaces, but it cannot steer a
+delete or update onto real infrastructure. The marker's purpose is to stop KSail mislabelling
+clusters and to let read surfaces resolve identity without credentials.
 
 Three fallbacks remain, in order. A cluster with a valid marker is managed and identified by it. A
 cluster without one is identified from its nodes — OS image, kubelet version, well-known labels and
-annotations, and the `providerID` scheme (#7179) — and reported as not managed by KSail. A cluster
-that serves no API at all is left to provider enumeration, which is also what continues to reveal
-clusters that exist but are stopped.
+annotations, and the `providerID` scheme (#7179) — and its management is decided by the rules below.
+A cluster that serves no API at all is left to provider enumeration and the last-known mapping,
+which is also what continues to reveal clusters that exist but are stopped.
 
-Only a marker the API reports as absent (`404 Not Found`) means "not managed by KSail". Reading the
-ConfigMap still needs Kubernetes `get` permission in `kube-system`, and a user without it receives
-`403 Forbidden`; that answer, like any other failed read, says nothing about who created the
-cluster. KSail therefore reports such a cluster's management as unknown — still identified from its
-nodes where they are readable, and with the missing permission named — and never as unmanaged. It
-does not fall back to context-name patterns to fill the gap, since those are what this decision
+A marker the API reports as absent (`404 Not Found`) means the cluster carries no marker, not that
+KSail did not create it. KSail reports it as unmanaged only when no other positive evidence of
+ownership exists. Provider discovery or persisted state that identifies the cluster as one KSail
+created keeps it managed, and KSail writes the missing marker on its next create or update. Any
+other failed read, including `403 Forbidden` from a user without `get` in `kube-system`, says
+nothing about who created the cluster: KSail reports management as unknown — still identified from
+its nodes where they are readable, and with the missing permission named — and never as unmanaged.
+It does not fall back to context-name patterns to fill the gap, since those are what this decision
 retires as a source of identity.
 
-Clusters created before this marker existed do not have one. They gain it on the next KSail create
-or update, and an explicit adopt path lets a user stamp one without a provisioning run. Until then
-they read as unmanaged-but-identified, which is what they already do today.
+Clusters created before this marker existed do not have one. They keep the classification their
+provider or persisted evidence gives them, gain the marker on the next KSail create or update, and
+an explicit adopt path lets a user stamp one without a provisioning run. A cluster with neither a
+marker nor other ownership evidence reads as unmanaged-but-identified, as it does today.
 
 Rejected alternatives: keeping context-name patterns (unverifiable, and measured wrong on a real
 cluster); relying only on provider enumeration (invisible without credentials, which is exactly how
