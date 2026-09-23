@@ -15,6 +15,17 @@ registries:
     replaces-base: true
 
 updates:
+  # Root module only. desktop/ is a second Go module that builds the root through
+  # `replace ... => ../`, and it is deliberately not a Dependabot directory. Every
+  # dependency it shares with the root is listed there as `// indirect`, and version
+  # updates only touch direct dependencies by default, so an entry for it would not
+  # keep it in step (security updates reach it regardless, e.g. ksail#7118).
+  # Grouped and ungrouped updates behave the same here: neither updates desktop/
+  # (ksail#6816). Instead, CI adds a desktop-only tidy commit to the bump's own
+  # branch (the "Apply patches" step in ci.yaml, ksail#6974), so a gomod PR builds
+  # and fails for the real dependency reason instead of a stale desktop/go.mod.
+  # The cost is that Dependabot will no longer rebase a branch carrying that commit;
+  # ksail#7140 tracks removing it.
   - package-ecosystem: gomod
     directory: /
     schedule:
