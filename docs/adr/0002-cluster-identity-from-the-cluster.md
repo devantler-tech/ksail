@@ -32,10 +32,24 @@ KSail also needs `get` on the cluster-scoped `kube-system` Namespace. A user who
 ConfigMap but not the Namespace holds a marker KSail cannot verify, and KSail treats it as
 unverified: management is reported as unknown, never as managed.
 
+The UID check catches a marker copied into another cluster, not a full etcd snapshot restore: a
+snapshot restores the `kube-system` Namespace with its UID, so the recorded and live values still
+match. The marker therefore identifies a logical cluster, and a control plane restored from a full
+snapshot is the same logical cluster as its source. Running a restored clone alongside its source
+is a deliberate identity split, and the clone must be re-stamped with a new cluster identity
+through KSail's explicit adopt path before it is used. Until then, when two reachable contexts serve
+the same cluster identity through different API servers, read surfaces report a duplicate-identity
+conflict for both instead of merging them into one entry.
+
 The kubeconfig keeps the role it is good at: enumerating what the user can reach and connecting to
 it. It stops being the source of truth for what a cluster *is*. Whenever KSail reads a valid marker
-through a context, it records that context-to-cluster mapping locally. A cluster that is stopped or
-serving no API is joined to its context through that last-known mapping. Where no mapping has been
+through a context, it records that context-to-cluster mapping locally, bound to the kubeconfig
+cluster entry the context points at: its API server URL and the fingerprint of its certificate
+authority. A cluster that is stopped or serving no API is joined to its context through that
+last-known mapping only while the context still points at the same server and CA. When the context
+is repointed, its cluster entry changes, or the entry disappears, KSail discards the mapping and
+treats the context as not yet identified, since context names are mutable and reusable. Where no
+mapping has been
 recorded, KSail lists the provider-discovered cluster and the unreachable context separately, each
 marked as not yet identified, rather than guessing a join from the context name.
 
@@ -43,8 +57,12 @@ The marker asserts provenance, not privilege. Anything with write access to `kub
 it, including its name and provider, so it never selects the target of a destructive action.
 Lifecycle operations resolve what to act on only from trusted records: provider discovery with the
 user's credentials, or KSail's persisted ownership state. A context is used for such an operation
-only when an identifier held on the infrastructure side matches the live cluster — for example a
-node's `providerID` matching a server the provider reports for that cluster. A forged marker can
+only when a binding the cluster cannot assert about itself matches: the cluster's certificate
+authority fingerprint, recorded in KSail's trusted records when it provisioned the cluster, must
+equal the CA the context trusts, and the API server must complete a TLS handshake against that CA,
+which proves it holds the matching key. Data the cluster reports about itself — the marker, node
+labels, or a node's `providerID` — never counts as that binding, because an administrator of a
+hostile cluster can set any of it to a victim's known values. A forged marker can
 therefore make a hostile cluster look like a KSail cluster in read surfaces, but it cannot steer a
 delete or update onto real infrastructure. The marker's purpose is to stop KSail mislabelling
 clusters and to let read surfaces resolve identity without credentials.
