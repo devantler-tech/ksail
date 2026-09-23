@@ -61,7 +61,12 @@ only when that trusted record binds the intended cluster to the exact API-server
 certificate authority the context points at. KSail rejects an update or delete when the binding is
 absent or either value differs. The CA fingerprint check and a TLS handshake against that CA stay
 necessary, but on their own they prove only that the endpoint holds a key the CA trusts; a CA can be
-shared or reused, so they do not identify the intended cluster.
+shared or reused, so they do not identify the intended cluster. For the same reason the endpoint
+and CA alone are not enough either: a cluster recreated behind the same address can present them
+again. The trusted record therefore also carries a stable identity for the cluster from provider
+discovery or persisted ownership state (for example the provider's cluster or server IDs), and
+KSail rejects a context-based update or delete when the provider no longer reports that identity
+behind the endpoint, even if the endpoint and CA are unchanged.
 
 The binding gates only operations that reach the cluster through a context. A delete that provider
 discovery resolves and that acts only through the provider's API — removing servers, load balancers
