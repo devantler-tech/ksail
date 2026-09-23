@@ -149,28 +149,29 @@ var listIndexPattern = regexp.MustCompile(`\[(\d+)\]`)
 
 // originalKeyPath rewrites a decoder key path — whose parent segments are the
 // Go field names the decoder matched, e.g. spec.Cluster.EKS.x — into the keys as
-// written in the file (spec.cluster.eks.x), by resolving each segment
-// case-insensitively against the raw content. A path that cannot be resolved is
-// returned unchanged.
+// written in the file (spec.cluster.eks.x), by resolving its segments
+// case-insensitively against the raw content, where one dotted key may spell
+// several of them. A path that cannot be resolved is returned unchanged.
 func originalKeyPath(raw map[string]any, keyPath string) string {
 	var node any = raw
 
 	segments := strings.Split(keyPath, ".")
 	resolved := make([]string, 0, len(segments))
 
-	for _, segment := range segments {
-		name := listIndexPattern.ReplaceAllString(segment, "")
-
+	for len(segments) > 0 {
 		mapping, isMapping := stringKeyed(node)
 		if !isMapping {
 			return keyPath
 		}
 
-		key, found := lookupKeyFold(mapping, name)
+		key, used, found := lookupDottedKeyFold(mapping, segments)
 		if !found {
 			return keyPath
 		}
 
+		segment := segments[used-1]
+		name := listIndexPattern.ReplaceAllString(segment, "")
+		segments = segments[used:]
 		node = mapping[key]
 
 		for _, match := range listIndexPattern.FindAllStringSubmatch(segment, -1) {
@@ -206,6 +207,27 @@ func stringKeyed(node any) (map[string]any, bool) {
 	default:
 		return nil, false
 	}
+}
+
+// lookupDottedKeyFold finds the key of mapping that spells the longest leading
+// run of segments joined with dots, because viper splits a dotted key such as
+// cluster.connection.context into its nested path. Only the run's last segment
+// may carry a list index. It returns the key and how many segments it spells.
+func lookupDottedKeyFold(mapping map[string]any, segments []string) (string, int, bool) {
+	for used := len(segments); used > 0; used-- {
+		if slices.ContainsFunc(segments[:used-1], listIndexPattern.MatchString) {
+			continue
+		}
+
+		name := listIndexPattern.ReplaceAllString(strings.Join(segments[:used], "."), "")
+
+		key, found := lookupKeyFold(mapping, name)
+		if found {
+			return key, used, true
+		}
+	}
+
+	return "", 0, false
 }
 
 // lookupKeyFold finds the key of mapping equal to name, preferring an exact

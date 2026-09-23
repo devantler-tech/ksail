@@ -17,6 +17,8 @@ import (
 // These tests pin issue #6980: a key the loader ignores must be surfaced,
 // naming its path and the fix, instead of reading as a successful load.
 
+// A misspelled nested key is reported by its path, with the key it most likely
+// meant.
 func TestFindUnknownKeysReportsMisspelledNestedKey(t *testing.T) {
 	t.Parallel()
 
@@ -36,6 +38,8 @@ spec:
 	}}, configmanager.FindUnknownKeys(content))
 }
 
+// Unknown keys are reported at the top level and inside spec.cluster; nothing is
+// close to either key, so neither carries a suggestion.
 func TestFindUnknownKeysReportsUnknownTopLevelAndClusterKeys(t *testing.T) {
 	t.Parallel()
 
@@ -48,13 +52,13 @@ spec:
     totallyBogusTopLevelField: 12345
 `)
 
-	// Nothing is close to either key, so neither carries a suggestion.
 	assert.Equal(t, []configmanager.UnknownKey{
 		{Path: "spec.cluster.totallyBogusTopLevelField"},
 		{Path: "totallyBogusTopLevelField"},
 	}, configmanager.FindUnknownKeys(content))
 }
 
+// A key inside a list element is reported with the element's index in its path.
 func TestFindUnknownKeysReportsKeysInsideListElements(t *testing.T) {
 	t.Parallel()
 
@@ -72,10 +76,11 @@ func TestFindUnknownKeysReportsKeysInsideListElements(t *testing.T) {
 	}}, configmanager.FindUnknownKeys(content))
 }
 
+// A valid key at the wrong level is reported: distribution belongs under
+// spec.cluster, and one level up the loader drops it.
 func TestFindUnknownKeysReportsMisplacedKey(t *testing.T) {
 	t.Parallel()
 
-	// distribution belongs under spec.cluster; one level up the loader drops it.
 	content := []byte(`spec:
   distribution: Vanilla
 `)
@@ -85,12 +90,12 @@ func TestFindUnknownKeysReportsMisplacedKey(t *testing.T) {
 	assert.Equal(t, "spec.distribution", unknown[0].Path)
 }
 
+// Keys matched case-insensitively, squashed type metadata, object metadata,
+// free-form maps and values converted by the loader's decode hooks are all read,
+// so none of them is unknown.
 func TestFindUnknownKeysAcceptsEveryKeyTheLoaderReads(t *testing.T) {
 	t.Parallel()
 
-	// Keys matched case-insensitively, squashed type metadata, object metadata,
-	// free-form maps and values converted by the loader's decode hooks are all
-	// read, so none of them is unknown.
 	content := []byte(`apiVersion: ksail.io/v1alpha1
 kind: Cluster
 metadata:
@@ -117,17 +122,18 @@ spec:
 	assert.Empty(t, configmanager.FindUnknownKeys(content))
 }
 
+// Every key KSail itself writes (the scaffold's serialised form) must be one the
+// loader reads; otherwise the warning would fire on generated configs.
 func TestFindUnknownKeysAcceptsAFullySerialisedDefaultConfig(t *testing.T) {
 	t.Parallel()
 
-	// Every key KSail itself writes (the scaffold's serialised form) must be one
-	// the loader reads; otherwise the warning would fire on generated configs.
 	content, err := yaml.Marshal(v1alpha1.NewCluster())
 	require.NoError(t, err)
 
 	assert.Empty(t, configmanager.FindUnknownKeys(content), string(content))
 }
 
+// Content that is not a YAML mapping yields no keys; the load reports it.
 func TestFindUnknownKeysIgnoresNonMappingContent(t *testing.T) {
 	t.Parallel()
 
@@ -155,6 +161,8 @@ func writeUnknownKeyConfig(t *testing.T, dir, extra string) string {
 	return configPath
 }
 
+// Loading warns about an unknown key with its field and fix. It is a warning,
+// not an error: configs carrying stray keys keep loading.
 func TestLoadWarnsAboutUnknownKeysWithFieldAndFix(t *testing.T) {
 	t.Parallel()
 
@@ -164,7 +172,6 @@ func TestLoadWarnsAboutUnknownKeysWithFieldAndFix(t *testing.T) {
 
 	manager := configmanager.NewConfigManager(&output, configPath)
 
-	// A warning, not an error: configs carrying stray keys keep loading.
 	cfg, err := manager.Load(configmanagerinterface.LoadOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
@@ -175,10 +182,10 @@ func TestLoadWarnsAboutUnknownKeysWithFieldAndFix(t *testing.T) {
 	assert.Contains(t, output.String(), "config loaded")
 }
 
+// When no valid key is close, the fix points at the configuration reference.
 func TestLoadWarnsAboutUnknownTopLevelKeyWithReferenceFix(t *testing.T) {
 	t.Parallel()
 
-	// No valid key is close, so the fix points at the configuration reference.
 	configPath := writeUnknownKeyConfig(t, t.TempDir(), "totallyBogusTopLevelField: 12345\n")
 
 	var output bytes.Buffer
@@ -195,6 +202,7 @@ func TestLoadWarnsAboutUnknownTopLevelKeyWithReferenceFix(t *testing.T) {
 		"https://ksail.devantler.tech/configuration/declarative-configuration/\n")
 }
 
+// A silent load does not warn about unknown keys.
 func TestLoadSilentDoesNotWarnAboutUnknownKeys(t *testing.T) {
 	t.Parallel()
 
@@ -209,27 +217,52 @@ func TestLoadSilentDoesNotWarnAboutUnknownKeys(t *testing.T) {
 	assert.NotContains(t, output.String(), "unknown key")
 }
 
+// The loader reads the file through viper, which splits a dotted key into its
+// nested path, so the key is applied and must not be reported.
 func TestFindUnknownKeysAcceptsADottedKeyTheLoaderApplies(t *testing.T) {
 	t.Parallel()
 
-	// The loader reads the file through viper, which splits a dotted key into
-	// its nested path, so the key is applied and must not be reported.
 	content := []byte(ksailClusterBaseYAML + "spec.cluster.connection.context: dotted-ctx\n")
 
 	assert.Empty(t, configmanager.FindUnknownKeys(content))
 }
 
+// A numeric key is valid YAML; the loader ignores it, so it is reported rather
+// than aborting the detection.
 func TestFindUnknownKeysReportsANonStringNestedKey(t *testing.T) {
 	t.Parallel()
 
-	// A numeric key is valid YAML; the loader ignores it, so it is reported
-	// rather than aborting the detection.
 	content := []byte(ksailClusterBaseYAML + "  workload:\n    1: stray\n")
 
 	assert.Equal(t, []configmanager.UnknownKey{{Path: "spec.workload.1"}},
 		configmanager.FindUnknownKeys(content))
 }
 
+// Viper splits a dotted key into its nested path, so the decoder names it by
+// that path; the warning still names the key as it is written in the file.
+func TestFindUnknownKeysReportsAMisspelledDottedKeyAsWritten(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]string{
+		"at the root":      "spec.cluster.connection.Contex: dotted-ctx\n",
+		"inside a mapping": "  cluster.connection.Contex: dotted-ctx\n",
+	}
+
+	for name, line := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			content := []byte(ksailClusterBaseYAML + line)
+
+			assert.Equal(t, []configmanager.UnknownKey{{
+				Path:       "spec.cluster.connection.Contex",
+				Suggestion: "context",
+			}}, configmanager.FindUnknownKeys(content))
+		})
+	}
+}
+
+// Loading applies a dotted key's value and does not warn about it.
 func TestLoadAppliesADottedKeyWithoutWarning(t *testing.T) {
 	t.Parallel()
 
