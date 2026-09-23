@@ -57,12 +57,13 @@ The marker asserts provenance, not privilege. Anything with write access to `kub
 it, including its name and provider, so it never selects the target of a destructive action.
 Lifecycle operations resolve what to act on only from trusted records: provider discovery with the
 user's credentials, or KSail's persisted ownership state. A context is used for such an operation
-only when a binding the cluster cannot assert about itself matches: the cluster's certificate
-authority fingerprint, recorded in KSail's trusted records when it provisioned the cluster, must
-equal the CA the context trusts, and the API server must complete a TLS handshake against that CA,
-which proves it holds the matching key. Data the cluster reports about itself — the marker, node
-labels, or a node's `providerID` — never counts as that binding, because an administrator of a
-hostile cluster can set any of it to a victim's known values. A forged marker can
+only when that trusted record binds the intended cluster to the exact API-server endpoint and
+certificate authority the context points at. KSail rejects an update or delete when the binding is
+absent or either value differs. The CA fingerprint check and a TLS handshake against that CA stay
+necessary, but on their own they prove only that the endpoint holds a key the CA trusts; a CA can be
+shared or reused, so they do not identify the intended cluster. Data the cluster reports about
+itself — the marker, node labels, or a node's `providerID` — never counts as that binding, because
+an administrator of a hostile cluster can set any of it to a victim's known values. A forged marker can
 therefore make a hostile cluster look like a KSail cluster in read surfaces, but it cannot steer a
 delete or update onto real infrastructure. The marker's purpose is to stop KSail mislabelling
 clusters and to let read surfaces resolve identity without credentials.
