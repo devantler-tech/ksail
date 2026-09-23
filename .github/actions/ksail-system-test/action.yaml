@@ -498,9 +498,11 @@ runs:
         echo "✅ No unexpected changes detected"
 
     - name: 🧪 ksail cluster update — preserves FluxInstance settings KSail does not own
-      # Re-asserting the FluxInstance must change only what KSail owns (#6455). Plant a setting
-      # KSail does not model, force a sync-ref drift so the update rewrites the FluxInstance,
-      # and check both that the ref was repaired and that the planted setting survived.
+      # Re-asserting the FluxInstance must change only what KSail owns (#6455, #7092). Plant a
+      # setting KSail does not model and a consumer spec.kustomize patch on the same
+      # OCIRepository KSail's own verify patch targets, force a sync-ref drift so the update
+      # rewrites the FluxInstance, and check that the ref was repaired and both plants survived.
+      # The consumer patch sets the interval the sync already uses, so it changes nothing live.
       # One Docker leg is enough: the rewrite path is distribution-independent.
       id: cluster-update-flux-preserve
       if: >-
@@ -524,9 +526,23 @@ runs:
           exit 1
         fi
 
-        echo "=== Planting an unmodelled setting and a sync-ref drift ==="
-        kubectl patch "${FLUXINSTANCE[@]}" --type merge \
-          -p "{\"spec\":{\"commonMetadata\":{\"labels\":{\"${PROBE_LABEL}\":\"kept\"}},\"sync\":{\"ref\":\"${desired_ref}-drift\"}}}"
+        # This leg does not enable Flux verification, so KSail writes no spec.kustomize of its
+        # own; whatever is there before the plant is restored afterwards.
+        kustomize_before=$(kubectl get "${FLUXINSTANCE[@]}" -o jsonpath='{.spec.kustomize}')
+        sync_interval=$(kubectl get "${FLUXINSTANCE[@]}" -o jsonpath='{.spec.sync.interval}')
+        consumer_patch=$(printf -- '- op: add\n  path: /spec/interval\n  value: %s\n' "${sync_interval:-1m}")
+
+        echo "=== Planting an unmodelled setting, a consumer kustomize patch and a sync-ref drift ==="
+        plant=$(jq -cn \
+          --arg label "$PROBE_LABEL" \
+          --arg ref "${desired_ref}-drift" \
+          --arg patch "$consumer_patch" \
+          '{spec: {
+            commonMetadata: {labels: {($label): "kept"}},
+            sync: {ref: $ref},
+            kustomize: {patches: [{target: {kind: "OCIRepository", name: "flux-system"}, patch: $patch}]}
+          }}')
+        kubectl patch "${FLUXINSTANCE[@]}" --type merge -p "$plant"
 
         # Strip init-only flags that cluster update does not accept.
         UPDATE_ARGS=$(echo "$ARGS" | sed 's/--image-verification [^ ]*//')
@@ -540,9 +556,16 @@ runs:
 
         actual_ref=$(kubectl get "${FLUXINSTANCE[@]}" -o jsonpath='{.spec.sync.ref}')
         kept=$(kubectl get "${FLUXINSTANCE[@]}" -o "jsonpath={.spec.commonMetadata.labels.ksail\.devantler\.tech/system-test-preserve}")
+        patches_after=$(kubectl get "${FLUXINSTANCE[@]}" -o jsonpath='{.spec.kustomize.patches}')
 
-        # Remove the probe whatever the verdict, so later steps see the cluster as created.
+        # Remove the probes whatever the verdict, so later steps see the cluster as created.
         kubectl patch "${FLUXINSTANCE[@]}" --type json -p '[{"op":"remove","path":"/spec/commonMetadata"}]' || true
+        if [ -z "$kustomize_before" ]; then
+          kubectl patch "${FLUXINSTANCE[@]}" --type json -p '[{"op":"remove","path":"/spec/kustomize"}]' || true
+        else
+          kubectl patch "${FLUXINSTANCE[@]}" --type merge \
+            -p "$(jq -cn --argjson kustomize "$kustomize_before" '{spec: {kustomize: $kustomize}}')" || true
+        fi
 
         if [ "$actual_ref" != "$desired_ref" ]; then
           echo "❌ ERROR: update did not repair spec.sync.ref (want ${desired_ref}, got ${actual_ref})"
@@ -552,7 +575,14 @@ runs:
           echo "❌ ERROR: update dropped spec.commonMetadata, a FluxInstance setting KSail does not own"
           exit 1
         fi
-        echo "✅ Update repaired the sync ref and kept the unmodelled FluxInstance setting"
+        if ! jq -e --arg patch "$consumer_patch" \
+          'any(.[]?; .target.kind == "OCIRepository" and .target.name == "flux-system"
+            and (.patch | rtrimstr("\n")) == ($patch | rtrimstr("\n")))' \
+          <<<"${patches_after:-[]}" >/dev/null; then
+          echo "❌ ERROR: update dropped the consumer's spec.kustomize patch (got: ${patches_after:-none})"
+          exit 1
+        fi
+        echo "✅ Update repaired the sync ref and kept the unmodelled setting and the consumer kustomize patch"
 
     - name: 🧪 ksail cluster update — rolling server-type resize
       id: cluster-update-rolling-resize

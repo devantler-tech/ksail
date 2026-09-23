@@ -215,6 +215,12 @@ func (d *Discoverer) Discover(
 	return clusters, failures
 }
 
+// AWSRegion returns the AWS region EKS clusters are listed from, or "" when none is configured
+// and eksctl falls back to its default region.
+func (d *Discoverer) AWSRegion() string {
+	return d.resolver().Value(credentials.AWSRegion)
+}
+
 func (d *Discoverer) listProvider(
 	ctx context.Context,
 	prov v1alpha1.Provider,

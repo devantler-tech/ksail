@@ -242,9 +242,9 @@ func (m *instanceManager) tryUpsert(
 }
 
 // replaceModelledSpec writes KSail's desired value for every spec field InstanceSpec models into
-// the live object and leaves every other spec field as it was. A modelled field is replaced
-// whole, and removed when KSail sets none, so ownership of those fields is unchanged; only the
-// fields KSail does not model are now preserved.
+// the live object and leaves every other spec field as it was. KSail owns exactly what it models,
+// one level down as well: see mergeModelledField for spec.distribution and spec.sync, and
+// mergeKustomize for the patch list KSail shares with the consumer.
 func replaceModelledSpec(existing *unstructured.Unstructured, desired *InstanceSpec) error {
 	desiredSpec, err := runtime.DefaultUnstructuredConverter.ToUnstructured(desired)
 	if err != nil {
@@ -260,13 +260,20 @@ func replaceModelledSpec(existing *unstructured.Unstructured, desired *InstanceS
 		spec = map[string]any{}
 	}
 
-	for _, field := range modelledInstanceSpecKeys() {
-		value, set := desiredSpec[field]
-		if set {
-			spec[field] = value
-		} else {
-			delete(spec, field)
+	for field := range reflect.TypeFor[InstanceSpec]().Fields() {
+		key := jsonFieldName(field)
+		if key == "" {
+			continue
 		}
+
+		value, set := desiredSpec[key]
+		if key == kustomizeSpecKey {
+			mergeKustomize(spec, value)
+
+			continue
+		}
+
+		mergeModelledField(spec, key, field.Type, value, set)
 	}
 
 	err = unstructured.SetNestedMap(existing.Object, spec, "spec")
@@ -280,17 +287,7 @@ func replaceModelledSpec(existing *unstructured.Unstructured, desired *InstanceS
 // modelledInstanceSpecKeys returns the JSON names of the spec fields InstanceSpec models. It is
 // derived from the type so a newly modelled field is owned by KSail without a second edit.
 func modelledInstanceSpecKeys() []string {
-	specType := reflect.TypeFor[InstanceSpec]()
-	keys := make([]string, 0, specType.NumField())
-
-	for field := range specType.Fields() {
-		name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
-		if name != "" && name != "-" {
-			keys = append(keys, name)
-		}
-	}
-
-	return keys
+	return modelledJSONKeys(reflect.TypeFor[InstanceSpec]())
 }
 
 // createAndVerify creates a FluxInstance and verifies it was persisted.

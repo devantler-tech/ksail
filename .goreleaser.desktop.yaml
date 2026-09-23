@@ -95,6 +95,10 @@ homebrew_casks:
         # release (tap#1172 — GoReleaser tolerates an existing ref and soft-skips the duplicate PR;
         # the tap deletes the branch on merge, so it is recreated fresh from main next release).
         draft: true
+    # The commit message is also the cask PR's title, and the tap squash-merges on that title under a
+    # Conventional commit-message ruleset that rejects GoReleaser's default ("Brew cask update for
+    # ..."). Match the title the cd.yaml handoff normalizes to (#6975).
+    commit_msg_template: "chore(cask): update {{ .ProjectName }} to {{ .Tag }}"
     # The cask schema has no first-class `app`, `depends_on` or `uninstall` field; emit them via a
     # custom stanza. `depends_on macos` satisfies `brew style` (Homebrew/OSDependsOn) for this
     # macOS-only GUI cask; the bare `:big_sur` symbol means "Big Sur or newer" (matching the Go

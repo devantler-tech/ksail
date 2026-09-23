@@ -3,6 +3,9 @@ import { Check, ChevronsUpDown } from "lucide-react";
 import type { Cluster } from "../api.ts";
 import { cx } from "../lib/cx.ts";
 import { clusterKey, clusterPhase } from "../lib/k8s.ts";
+import { displayIdentity } from "../lib/clusterIdentity.ts";
+import { useDetectedIdentities } from "../lib/identityStore.ts";
+import { IdentityValue } from "./IdentityValue.tsx";
 import { phaseMeta, StatusDot } from "./StatusBadge.tsx";
 
 // Dot is a small status-coloured dot derived from a cluster's phase (reuses the StatusBadge palette).
@@ -18,17 +21,21 @@ export function ClusterSwitcher({
   clusters,
   activeKey,
   onSelect,
+  canDetect,
 }: {
   clusters: Cluster[];
   activeKey: string;
   onSelect: (key: string) => void;
+  // canDetect allows reading an unmanaged cluster's nodes to identify it (workload-read capability).
+  canDetect: boolean;
 }) {
   const active = clusters.find((cluster) => clusterKey(cluster) === activeKey) ?? null;
+  const detected = useDetectedIdentities(active ? [active] : [], canDetect).get(activeKey);
   if (!active) {
     return null;
   }
 
-  const spec = active.spec?.cluster;
+  const identity = displayIdentity(active, detected);
 
   return (
     <Menu as="div" className="relative">
@@ -37,8 +44,13 @@ export function ClusterSwitcher({
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-semibold text-slate-900 dark:text-white">{active.metadata.name}</span>
           <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
-            {spec?.distribution ?? "—"}
-            {spec?.provider ? ` · ${spec.provider}` : ""}
+            <IdentityValue field={identity.distribution} />
+            {identity.provider.value !== "—" ? (
+              <>
+                {" · "}
+                <IdentityValue field={identity.provider} />
+              </>
+            ) : null}
           </span>
         </span>
         <ChevronsUpDown className="size-4 shrink-0 text-slate-400" aria-hidden />

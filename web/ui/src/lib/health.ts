@@ -14,6 +14,7 @@ import {
   recentEvents,
   type EventFields,
 } from "./k8s.ts";
+import { detectClusterIdentity, type ClusterIdentity } from "./clusterIdentity.ts";
 import { buildClusterUsage, buildPodConsumption, type ClusterUsage, type PodConsumption } from "./usage.ts";
 import type { StatusTone } from "../components/StatusBadge.tsx";
 
@@ -30,6 +31,8 @@ export interface LiveHealth {
   controlPlanes: number;
   kubernetesVersion: string;
   osImage: string;
+  // identity is the distribution and provider the nodes prove, for a cluster whose spec carries none.
+  identity: ClusterIdentity;
   createdAt?: string;
   segments: PodSegment[];
   podsTotal: number;
@@ -198,6 +201,7 @@ export async function loadHealth(namespace: string, name: string): Promise<LiveH
     controlPlanes: nodes.filter(nodeIsControlPlane).length,
     kubernetesVersion: distinctSummary(systemInfos.map((info) => info.kubeletVersion)),
     osImage: distinctSummary(systemInfos.map((info) => info.osImage)),
+    identity: detectClusterIdentity(nodes),
     createdAt: clusterCreatedAt(namespaces),
     segments,
     podsTotal: pods.length,

@@ -174,6 +174,10 @@ func (o *updateOrchestrator) runWithoutUpdater() error {
 //
 // Distributions without an Upgrader (e.g. KWOK or EKS without its opt-in) have no version
 // reconciliation; the regular update flow handles their changes.
+//
+// Reconciliation runs before the change summary is rendered, so its progress and outcome text is
+// written through progressWriter: with --output json it goes to stderr, keeping the summary the
+// only document on stdout.
 func (o *updateOrchestrator) reconcileClusterVersions(
 	provisioner clusterprovisioner.Provisioner,
 ) (bool, error) {
@@ -310,7 +314,7 @@ func (o *updateOrchestrator) executeVersionUpgrade(params versionUpgradeParams) 
 		Content: fmt.Sprintf(
 			"discovering available %s versions from %s", params.upgradeType, params.imageRef,
 		),
-		Writer: o.cmd.OutOrStdout(),
+		Writer: progressWriter(o.cmd),
 	})
 
 	path, err := versionresolver.ComputeUpgradePath(
@@ -330,7 +334,7 @@ func (o *updateOrchestrator) executeVersionUpgrade(params versionUpgradeParams) 
 			path[len(path)-1].Version.Original,
 			len(path),
 		),
-		Writer: o.cmd.OutOrStdout(),
+		Writer: progressWriter(o.cmd),
 	})
 
 	if o.dryRun {
@@ -347,7 +351,7 @@ func (o *updateOrchestrator) handleUpgradePathError(
 	err error,
 ) (bool, error) {
 	if errors.Is(err, versionresolver.ErrNoUpgradesAvailable) {
-		notify.Infof(o.cmd.OutOrStdout(),
+		notify.Infof(progressWriter(o.cmd),
 			"%s is already at the latest stable version (%s)", upgradeType, currentVersion)
 
 		return false, nil
@@ -362,10 +366,10 @@ func (o *updateOrchestrator) reportVersionUpgradeDryRun(
 	path []versionresolver.UpgradeStep,
 ) (bool, error) {
 	for i, step := range path {
-		_, _ = fmt.Fprintf(o.cmd.OutOrStdout(), "  %d. %s\n", i+1, step.Version.Original)
+		_, _ = fmt.Fprintf(progressWriter(o.cmd), "  %d. %s\n", i+1, step.Version.Original)
 	}
 
-	notify.Infof(o.cmd.OutOrStdout(), "Dry run complete. No %s upgrades applied.", upgradeType)
+	notify.Infof(progressWriter(o.cmd), "Dry run complete. No %s upgrades applied.", upgradeType)
 
 	return false, nil
 }
@@ -385,7 +389,7 @@ func (o *updateOrchestrator) applyVersionUpgradePath(
 		o.cmd.Context(), o.clusterName, params.currentVersion, path[0].Version.Original,
 	)
 	if probeErr != nil && errors.Is(probeErr, clustererr.ErrUpgradeSkipped) {
-		notify.Infof(o.cmd.OutOrStdout(), "%s upgrade skipped: %v", params.upgradeType, probeErr)
+		notify.Infof(progressWriter(o.cmd), "%s upgrade skipped: %v", params.upgradeType, probeErr)
 
 		return false, nil
 	}
@@ -417,7 +421,7 @@ func (o *updateOrchestrator) applyVersionUpgradePath(
 		Type: notify.SuccessType,
 		Content: fmt.Sprintf("%s upgraded: step 1/%d → %s",
 			params.upgradeType, len(path), path[0].Version.Original),
-		Writer: o.cmd.OutOrStdout(),
+		Writer: progressWriter(o.cmd),
 	})
 
 	return o.applyRemainingUpgradeSteps(params, path, targetVersion)
@@ -438,7 +442,7 @@ func (o *updateOrchestrator) applyRemainingUpgradeSteps(
 			Type: notify.ActivityType,
 			Content: fmt.Sprintf("upgrading %s: step %d/%d (%s → %s)",
 				params.upgradeType, stepIdx+1, len(path), prevVersion, step.Version.Original),
-			Writer: o.cmd.OutOrStdout(),
+			Writer: progressWriter(o.cmd),
 		})
 
 		applyErr := params.applyFn(
@@ -460,7 +464,7 @@ func (o *updateOrchestrator) applyRemainingUpgradeSteps(
 			Type: notify.SuccessType,
 			Content: fmt.Sprintf("%s upgraded: step %d/%d → %s",
 				params.upgradeType, stepIdx+1, len(path), step.Version.Original),
-			Writer: o.cmd.OutOrStdout(),
+			Writer: progressWriter(o.cmd),
 		})
 	}
 
@@ -470,7 +474,7 @@ func (o *updateOrchestrator) applyRemainingUpgradeSteps(
 			"%s upgrade complete: %s → %s",
 			params.upgradeType, params.currentVersion, targetVersion,
 		),
-		Writer: o.cmd.OutOrStdout(),
+		Writer: progressWriter(o.cmd),
 	})
 
 	return false, nil
@@ -523,7 +527,7 @@ func (o *updateOrchestrator) reportPinnedUpgradePreamble(
 		// overall "No changes detected" line already covers this case.
 		return pinnedVersion, false, nil
 	case pinnedVersionNewer:
-		notify.Infof(o.cmd.OutOrStdout(),
+		notify.Infof(progressWriter(o.cmd),
 			"cluster is at %s which is newer than pinned version %s; skipping downgrade",
 			currentVersion, pinnedVersion)
 
@@ -535,11 +539,11 @@ func (o *updateOrchestrator) reportPinnedUpgradePreamble(
 		Type: notify.InfoType,
 		Content: fmt.Sprintf("%s upgrade capped at pinned version %s (current: %s)",
 			label, pinnedVersion, currentVersion),
-		Writer: o.cmd.OutOrStdout(),
+		Writer: progressWriter(o.cmd),
 	})
 
 	if o.dryRun {
-		notify.Infof(o.cmd.OutOrStdout(),
+		notify.Infof(progressWriter(o.cmd),
 			"Dry run complete. Would upgrade %s to pinned version %s.", label, pinnedVersion)
 
 		return pinnedVersion, false, nil
@@ -580,7 +584,7 @@ func (o *updateOrchestrator) executePinnedUpgrade(
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,
 		Content: label + " upgraded to pinned version " + pinnedVersion,
-		Writer:  o.cmd.OutOrStdout(),
+		Writer:  progressWriter(o.cmd),
 	})
 
 	return false, nil
@@ -598,7 +602,7 @@ func (o *updateOrchestrator) handlePinnedUpgradeError(
 	upgradeErr error,
 ) (bool, error) {
 	if errors.Is(upgradeErr, clustererr.ErrUpgradeSkipped) {
-		notify.Infof(o.cmd.OutOrStdout(), "%s upgrade skipped: %v", label, upgradeErr)
+		notify.Infof(progressWriter(o.cmd), "%s upgrade skipped: %v", label, upgradeErr)
 
 		return false, nil
 	}

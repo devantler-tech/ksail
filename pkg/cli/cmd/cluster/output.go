@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
@@ -58,6 +59,18 @@ func getOutputFormat(cmd *cobra.Command) string {
 	}
 
 	return strings.ToLower(flag.Value.String())
+}
+
+// progressWriter returns the stream for human-readable progress and outcome
+// text. With --output json, stdout carries exactly one machine-readable
+// document, so that text goes to stderr instead, where the user still sees it;
+// in text mode it stays on stdout.
+func progressWriter(cmd *cobra.Command) io.Writer {
+	if getOutputFormat(cmd) == outputFormatJSON {
+		return cmd.ErrOrStderr()
+	}
+
+	return cmd.OutOrStdout()
 }
 
 // validateOutputFormat returns an error when the --output flag value is

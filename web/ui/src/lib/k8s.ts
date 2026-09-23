@@ -44,8 +44,21 @@ export function clusterPhase(cluster: Cluster): string {
   const stopped = (cluster.status?.conditions ?? []).some(
     (condition) => condition.type === "Ready" && condition.status === "False" && condition.reason === "Stopped",
   );
+  if (stopped) {
+    return CLUSTER_PHASE_STOPPED;
+  }
 
-  return stopped ? CLUSTER_PHASE_STOPPED : "";
+  return isUnmanagedCluster(cluster) ? CLUSTER_PHASE_UNMANAGED : "";
+}
+
+// UNMANAGED_ANNOTATION is the backend's stable marker for a kubeconfig context ksail did not create
+// (v1alpha1.UnmanagedAnnotation). ksail tracks no lifecycle phase for such a cluster, so it shows
+// CLUSTER_PHASE_UNMANAGED, which says why the phase is absent, instead of "Unknown".
+export const UNMANAGED_ANNOTATION = "ksail.io/unmanaged";
+export const CLUSTER_PHASE_UNMANAGED = "Unmanaged";
+
+export function isUnmanagedCluster(cluster: Cluster): boolean {
+  return cluster.metadata.annotations?.[UNMANAGED_ANNOTATION] === "true";
 }
 
 // str safely reads a string field from an unstructured value (the backend returns native Kubernetes
