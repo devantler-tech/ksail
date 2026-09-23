@@ -13,6 +13,8 @@ import (
 // (<= 1.35) is older than the built-in default, used to exercise capping.
 const pinnedTalos112 = "v1.12.4"
 
+// TestResolveClusterVersionContract preserves explicit ISO release contracts and
+// the default behavior for providers that do not boot Hetzner ISOs.
 func TestResolveClusterVersionContract(t *testing.T) {
 	t.Parallel()
 

@@ -232,6 +232,9 @@ func TestWarnKubernetesVersionCapped_SilentWhenDefaultNotCapped(t *testing.T) {
 	assert.Empty(t, out.String(), "an uncapped default needs no notice")
 }
 
+// TestLoadConfig_TalosCustomISOVersion enforces the version pin both when loading
+// existing patches and when generating the fallback configuration.
+//
 //nolint:paralleltest // Uses t.Chdir to exercise actual CLI config loading.
 func TestLoadConfig_TalosCustomISOVersion(t *testing.T) {
 	const pinnedISOVersion = "v1.12.4"

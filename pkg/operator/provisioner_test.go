@@ -237,6 +237,8 @@ func TestResolveProvider(t *testing.T) {
 	)
 }
 
+// TestBuildDistributionConfig_TalosCustomISORequiresVersion prevents the operator
+// from generating machine configuration for an unknown custom ISO release.
 func TestBuildDistributionConfig_TalosCustomISORequiresVersion(t *testing.T) {
 	t.Parallel()
 
