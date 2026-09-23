@@ -61,7 +61,18 @@ only when that trusted record binds the intended cluster to the exact API-server
 certificate authority the context points at. KSail rejects an update or delete when the binding is
 absent or either value differs. The CA fingerprint check and a TLS handshake against that CA stay
 necessary, but on their own they prove only that the endpoint holds a key the CA trusts; a CA can be
-shared or reused, so they do not identify the intended cluster. Data the cluster reports about
+shared or reused, so they do not identify the intended cluster.
+
+The binding gates only operations that reach the cluster through a context. A delete that provider
+discovery resolves and that acts only through the provider's API — removing servers, load balancers
+and volumes — never talks to the cluster, so it needs no binding and still works when the cluster is
+stopped or its control plane is broken. A cluster whose trusted record predates this decision has
+no recorded endpoint or CA. KSail fills that gap only from a source it already trusts: the
+provider's own report of the cluster's endpoint and CA (for example the EKS API), or the kubeconfig
+KSail itself wrote when it created the cluster and recorded in its persisted state. It writes the
+binding before the first update, and never copies it from whatever context the user happens to have
+selected. When no trusted source can supply it, KSail refuses the update and names the missing
+binding rather than guessing. Data the cluster reports about
 itself — the marker, node labels, or a node's `providerID` — never counts as that binding, because
 an administrator of a hostile cluster can set any of it to a victim's known values. A forged marker can
 therefore make a hostile cluster look like a KSail cluster in read surfaces, but it cannot steer a
@@ -69,8 +80,11 @@ delete or update onto real infrastructure. The marker's purpose is to stop KSail
 clusters and to let read surfaces resolve identity without credentials.
 
 Three fallbacks remain, in order. A cluster with a valid marker is managed and identified by it. A
-cluster without one is identified from its nodes — OS image, kubelet version, well-known labels and
-annotations, and the `providerID` scheme (#7179) — and its management is decided by the rules below.
+cluster without one is classified from its nodes — OS image, kubelet version, well-known labels and
+annotations, and the `providerID` scheme (#7179) — which tells KSail its distribution and provider,
+not which cluster it is: several clusters of one distribution look the same, and `providerID` names
+a machine, not a cluster. Its identity comes only from provider or persisted evidence; without
+either, KSail reports the identity as unknown, and its management is decided by the rules below.
 A cluster that serves no API at all is left to provider enumeration and the last-known mapping,
 which is also what continues to reveal clusters that exist but are stopped.
 
@@ -79,7 +93,7 @@ KSail did not create it. KSail reports it as unmanaged only when no other positi
 ownership exists. Provider discovery or persisted state that identifies the cluster as one KSail
 created keeps it managed, and KSail writes the missing marker on its next create or update. Any
 other failed read, including `403 Forbidden` from a user without `get` in `kube-system`, says
-nothing about who created the cluster: KSail reports management as unknown — still identified from
+nothing about who created the cluster: KSail reports management as unknown — still classified from
 its nodes where they are readable, and with the missing permission named — and never as unmanaged.
 It does not fall back to context-name patterns to fill the gap, since those are what this decision
 retires as a source of identity.
