@@ -313,6 +313,9 @@ func (m *ConfigManager) readConfig(silent bool) error {
 	m.configFileFound = true
 	if !silent {
 		m.notifyConfigFound()
+		// Surface keys the decoder is about to drop, so a misspelled or
+		// misplaced setting is not mistaken for an applied one.
+		m.warnUnknownConfigKeys()
 	}
 
 	return nil

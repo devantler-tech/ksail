@@ -485,4 +485,6 @@ spec:
   # ...
 ` + cbt + `
 
-IDEs with YAML language support (e.g., VS Code + [Red Hat YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml)) provide field autocompletion, inline docs, validation, and enum suggestions.`
+IDEs with YAML language support (e.g., VS Code + [Red Hat YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml)) provide field autocompletion, inline docs, validation, and enum suggestions.
+
+KSail checks the file itself when it loads it, too: a key it does not recognise — a misspelling, or a setting nested at the wrong level — is reported as a warning that names the key's path and, when one is close, the key you probably meant. KSail ignores that key, so rename or remove it.`
