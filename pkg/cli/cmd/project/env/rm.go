@@ -1,6 +1,7 @@
 package env
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -14,6 +15,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// ErrBaseSyncedEnvironment is returned by `env rm` for the environment the base
+// ksail.yaml declares through its kustomizationFile (the initial environment
+// `project init --multi-cluster` scaffolds): its root config is the workspace's
+// base config, which env rm never deletes.
+var ErrBaseSyncedEnvironment = errors.New(
+	"environment is declared by the workspace base config ksail.yaml",
+)
+
 // rmLongDesc documents the removal semantics: the declared root config is what
 // an environment *is*, so removing it un-declares the environment; the overlay
 // holds user-authored manifests and is only deleted on explicit opt-in.
@@ -22,7 +31,9 @@ const rmLongDesc = `Remove a declared cluster environment.
 Deletes the environment's root config (ksail.<name>.yaml), which un-declares the
 environment. The cluster overlay (<sourceDirectory>/clusters/<name>/) holds
 user-authored manifests and is retained by default; pass --purge to delete it in
-the same run. The shared base overlay (clusters/base) is never deleted.
+the same run. The shared base overlay (clusters/base) is never deleted, and
+neither is the base ksail.yaml: the environment it syncs (as "project init
+--multi-cluster" scaffolds) is refused with instructions instead.
 
 Examples:
   # Un-declare the "staging" environment, keeping its overlay
@@ -92,7 +103,16 @@ func HandleRmRunE(cmd *cobra.Command, name string) error {
 	// workspace — the nearest ancestor holding ksail.yaml.
 	repoRoot := resolveWorkspaceRoot(canonWorkDir)
 
-	configRel := "ksail." + name + ".yaml"
+	configRel := declaredConfigFile(cmd, repoRoot, name)
+	if configRel == environment.BaseConfigFile {
+		return fmt.Errorf(
+			"%w: %s syncs clusters/%s, and env rm never deletes the workspace base config; "+
+				"to stop declaring %q, point spec.workload.kustomizationFile in %s at another "+
+				"environment's overlay",
+			ErrBaseSyncedEnvironment, environment.BaseConfigFile, name, name,
+			environment.BaseConfigFile,
+		)
+	}
 
 	// Locating the overlay needs the environment's config (for its declared
 	// sourceDirectory). Only --purge REQUIRES that resolution — it must know

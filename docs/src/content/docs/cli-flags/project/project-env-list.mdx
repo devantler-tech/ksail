@@ -8,14 +8,18 @@ description: "List the cluster environments declared in the workspace"
 ```text
 List the cluster environments declared in the workspace.
 
-An environment is a ksail.<name>.yaml root config in the workspace root (the same
-convention "project env add"'s --from resolves against); the base ksail.yaml
-is not an environment. Each declared environment is reported with its distribution
-and provider, read from its config. A config that fails to load is skipped so a
-single malformed file never hides the environments that do load.
+An environment is a ksail.<name>.yaml root config in the workspace root. The base
+ksail.yaml declares one too when its spec.workload.kustomizationFile syncs a
+clusters/<name> overlay — the initial environment "project init --multi-cluster"
+scaffolds. These are the same environments "project env add"'s --from and
+"project env reconcile" resolve against. Each declared environment is reported
+with its distribution and provider, read from its config. A config that fails to
+load is skipped so a single malformed file never hides the environments that do
+load.
 
 Output Format:
   NAME     DISTRIBUTION   PROVIDER   CONFIG
+  local    Vanilla        Docker     ksail.yaml
   prod     Talos          Hetzner    ksail.prod.yaml
   staging  K3s            Docker     ksail.staging.yaml
 

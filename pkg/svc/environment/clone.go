@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -29,6 +30,12 @@ var ErrSourceConfigMissing = errors.New("source environment config not found")
 // write outside repoRoot, including through an existing symlinked parent or
 // destination file.
 var ErrDestinationEscapesRepository = errors.New("destination escapes repository root")
+
+// ErrDestinationIsSource is returned by CloneEnvironmentConfig and
+// CloneEnvironmentConfigTo when the clone destination is the source config itself
+// (e.g. cloning the base ksail.yaml, whose name carries no environment segment to
+// repoint): writing it would overwrite the source.
+var ErrDestinationIsSource = errors.New("clone destination is its own source config")
 
 // CloneOverlay clones every file under repoRoot/srcRelDir into the destination
 // overlay implied by rewrites, applying the structured path+content rewrites to
@@ -122,6 +129,48 @@ func CloneEnvironmentConfig(
 	rewrites []Rewrite,
 	force bool,
 ) (string, bool, error) {
+	return cloneEnvironmentConfig(repoRoot, srcConfigRel, "", rewrites, Identity{}, force)
+}
+
+// CloneEnvironmentConfigTo is [CloneEnvironmentConfig] with an explicit
+// repo-relative destination (e.g. ksail.<dst>.yaml) instead of one derived from the
+// rewrites' PathSegment. It exists for a base-synced environment (see
+// [Environment.IsBaseSynced]): its root config is the workspace's ksail.yaml, whose
+// name carries no environment segment to repoint, so the derived destination would
+// be the source itself. The content rewrites, containment checks and write
+// semantics are identical.
+func CloneEnvironmentConfigTo(
+	repoRoot, srcConfigRel, dstConfigRel string,
+	rewrites []Rewrite,
+	force bool,
+) (string, bool, error) {
+	return cloneEnvironmentConfig(repoRoot, srcConfigRel, dstConfigRel, rewrites, Identity{}, force)
+}
+
+// CloneBaseSyncedConfigTo is [CloneEnvironmentConfigTo] for a base-synced source: after
+// the rewrites it writes identity into the clone wherever the base config leaves it
+// unset (see [MaterializeIdentity]), so the new environment targets its own cluster
+// rather than the default one its source resolves to.
+func CloneBaseSyncedConfigTo(
+	repoRoot, srcConfigRel, dstConfigRel string,
+	rewrites []Rewrite,
+	identity Identity,
+	force bool,
+) (string, bool, error) {
+	return cloneEnvironmentConfig(repoRoot, srcConfigRel, dstConfigRel, rewrites, identity, force)
+}
+
+// cloneEnvironmentConfig is the shared implementation behind CloneEnvironmentConfig
+// (dstConfigRel empty: derive the destination from the rewrites) and
+// CloneEnvironmentConfigTo. A destination that resolves to the source config is
+// refused with ErrDestinationIsSource — even with force — so a clone can never
+// overwrite the config it reads from.
+func cloneEnvironmentConfig(
+	repoRoot, srcConfigRel, dstConfigRel string,
+	rewrites []Rewrite,
+	identity Identity,
+	force bool,
+) (string, bool, error) {
 	srcConfigRel = filepath.ToSlash(srcConfigRel)
 	srcAbs := filepath.Join(repoRoot, filepath.FromSlash(srcConfigRel))
 
@@ -142,12 +191,41 @@ func CloneEnvironmentConfig(
 		return "", false, err
 	}
 
+	content, err = materializeCloneIdentity(content, srcConfigRel, identity)
+	if err != nil {
+		return "", false, err
+	}
+
+	if dstConfigRel != "" {
+		newRelPath = path.Clean(filepath.ToSlash(dstConfigRel))
+	}
+
+	if newRelPath == path.Clean(srcConfigRel) {
+		return "", false, fmt.Errorf("%w: %s", ErrDestinationIsSource, srcConfigRel)
+	}
+
 	wrote, err := writeClone(repoRoot, newRelPath, content, force)
 	if err != nil {
 		return "", false, err
 	}
 
 	return newRelPath, wrote, nil
+}
+
+// materializeCloneIdentity writes identity into a cloned config's content (see
+// [MaterializeIdentity]). Ciphertext is cloned verbatim, so identity is only written
+// into a plaintext config, and an empty identity leaves the content unchanged.
+func materializeCloneIdentity(content, srcConfigRel string, identity Identity) (string, error) {
+	if identity == (Identity{}) || strings.HasSuffix(srcConfigRel, encryptedFileSuffix) {
+		return content, nil
+	}
+
+	materialized, err := MaterializeIdentity(content, identity)
+	if err != nil {
+		return "", fmt.Errorf("writing clone identity: %w", err)
+	}
+
+	return materialized, nil
 }
 
 // writeClone writes one cloned file's content to repoRoot/newRelPath, returning

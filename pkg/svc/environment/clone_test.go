@@ -489,3 +489,65 @@ func TestCloneEnvironmentConfig_SourceTraversalRejected(t *testing.T) {
 		repoRoot, "../../etc/passwd", rewrites, false)
 	require.ErrorIs(t, err, environment.ErrSourceConfigMissing)
 }
+
+// baseRootConfig mirrors the base ksail.yaml `project init --multi-cluster prod`
+// scaffolds: the environment is named only by its workload kustomizationFile.
+const baseRootConfig = `apiVersion: ksail.io/v1alpha1
+kind: Cluster
+spec:
+  cluster:
+    distribution: Vanilla
+    provider: Docker
+  workload:
+    sourceDirectory: k8s
+    kustomizationFile: clusters/prod
+`
+
+func writeBaseRootConfig(t *testing.T, repoRoot string) {
+	t.Helper()
+
+	abs := filepath.Join(repoRoot, environment.BaseConfigFile)
+	require.NoError(t, os.WriteFile(abs, []byte(baseRootConfig), 0o600))
+}
+
+func TestCloneEnvironmentConfigTo_ClonesBaseConfigIntoNamedConfig(t *testing.T) {
+	t.Parallel()
+
+	// A base-synced environment's root config is ksail.yaml, whose name carries no
+	// environment segment for the PathSegment rewrite to repoint, so the clone
+	// destination must be named explicitly (issue #6905).
+	repoRoot := t.TempDir()
+	writeBaseRootConfig(t, repoRoot)
+
+	rewrites := environment.DeriveConfigRewrites("prod", "staging", "", "")
+
+	newRel, wrote, err := environment.CloneEnvironmentConfigTo(
+		repoRoot, environment.BaseConfigFile, "ksail.staging.yaml", rewrites, false)
+	require.NoError(t, err)
+	assert.True(t, wrote)
+	assert.Equal(t, "ksail.staging.yaml", newRel)
+
+	clone := readClone(t, repoRoot, "ksail.staging.yaml")
+	assert.Contains(t, clone, "kustomizationFile: clusters/staging")
+	assert.Contains(t, clone, "provider: Docker")
+
+	// The workspace base config is the source, never a destination.
+	assert.Equal(t, baseRootConfig, readClone(t, repoRoot, environment.BaseConfigFile))
+}
+
+func TestCloneEnvironmentConfig_RefusesToOverwriteItsSource(t *testing.T) {
+	t.Parallel()
+
+	// Deriving the destination from ksail.yaml yields ksail.yaml itself; even with
+	// force, the clone must refuse rather than overwrite the workspace base config.
+	repoRoot := t.TempDir()
+	writeBaseRootConfig(t, repoRoot)
+
+	rewrites := environment.DeriveConfigRewrites("prod", "staging", "", "")
+
+	_, wrote, err := environment.CloneEnvironmentConfig(
+		repoRoot, environment.BaseConfigFile, rewrites, true)
+	require.ErrorIs(t, err, environment.ErrDestinationIsSource)
+	assert.False(t, wrote)
+	assert.Equal(t, baseRootConfig, readClone(t, repoRoot, environment.BaseConfigFile))
+}
