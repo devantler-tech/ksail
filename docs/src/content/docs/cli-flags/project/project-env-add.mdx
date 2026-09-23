@@ -9,7 +9,9 @@ description: "Clone an existing cluster environment into a new one"
 Clone an existing cluster environment into a new one.
 
 Copies the source environment's overlay (<sourceDirectory>/clusters/<from>/) and
-its root config (ksail.<from>.yaml) into a new environment <name>, repointing the
+its root config (ksail.<from>.yaml, or the base ksail.yaml when <from> is the
+environment it syncs, as "project init --multi-cluster" scaffolds) into a new
+environment <name> with its own ksail.<name>.yaml, repointing the
 structured identity along the way: the cluster-meta cluster_name, the
 clusters/<env> path segment and content references, the root config's metadata
 name, the connection context (distribution-aware), and — when --provider is given

@@ -113,3 +113,102 @@ func TestDeriveEnvironmentsErrorsOnUnreadableRoot(t *testing.T) {
 	require.ErrorIs(t, err, environment.ErrDiscoverEnvironments)
 	assert.Nil(t, envs)
 }
+
+// baseSyncedConfig builds a base ksail.yaml config whose workload
+// kustomizationFile syncs the given clusters/<env> overlay — the shape
+// `project init --multi-cluster <env>` scaffolds without a ksail.<env>.yaml.
+func baseSyncedConfig(kustomizationFile string) *v1alpha1.Cluster {
+	cfg := clusterConfig(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	cfg.Spec.Workload.KustomizationFile = kustomizationFile
+
+	return cfg
+}
+
+func TestDeriveEnvironmentsIncludesBaseSyncedEnvironment(t *testing.T) {
+	t.Parallel()
+
+	// `project init --multi-cluster prod` declares prod only through the base
+	// ksail.yaml's kustomizationFile; it must be a declared environment for
+	// every env verb, not just reconcile (issue #6905).
+	dir := t.TempDir()
+	writeFiles(t, dir, "ksail.yaml", "ksail.local.yaml")
+
+	loader := stubLoader(map[string]*v1alpha1.Cluster{
+		"ksail.yaml":       baseSyncedConfig("clusters/prod"),
+		"ksail.local.yaml": clusterConfig(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner),
+	})
+
+	envs, err := environment.DeriveEnvironments(dir, loader)
+	require.NoError(t, err)
+	require.Len(t, envs, 2)
+
+	assert.Equal(t, "local", envs[0].Name)
+	assert.False(t, envs[0].IsBaseSynced())
+	assert.Equal(t, "prod", envs[1].Name)
+	assert.Equal(t, environment.BaseConfigFile, envs[1].ConfigFile)
+	assert.Equal(t, v1alpha1.DistributionVanilla, envs[1].Distribution)
+	assert.Equal(t, v1alpha1.ProviderDocker, envs[1].Provider)
+	assert.True(t, envs[1].IsBaseSynced())
+}
+
+func TestDeriveEnvironmentsPrefersOwnConfigOverBaseSync(t *testing.T) {
+	t.Parallel()
+
+	// A name declared by its own ksail.<env>.yaml AND synced by the base config
+	// is listed once, from its own config.
+	dir := t.TempDir()
+	writeFiles(t, dir, "ksail.yaml", "ksail.prod.yaml")
+
+	loader := stubLoader(map[string]*v1alpha1.Cluster{
+		"ksail.yaml":      baseSyncedConfig("clusters/prod"),
+		"ksail.prod.yaml": clusterConfig(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner),
+	})
+
+	envs, err := environment.DeriveEnvironments(dir, loader)
+	require.NoError(t, err)
+	require.Len(t, envs, 1)
+	assert.Equal(t, "ksail.prod.yaml", envs[0].ConfigFile)
+	assert.Equal(t, v1alpha1.ProviderHetzner, envs[0].Provider)
+}
+
+func TestDeriveEnvironmentsBaseSyncDeclaresNothingOutsideAnEnvironmentOverlay(t *testing.T) {
+	t.Parallel()
+
+	for name, sync := range map[string]string{
+		"flat source root":     "",
+		"shared base overlay":  "clusters/base",
+		"deeper than overlay":  "clusters/prod/deeper",
+		"outside clusters dir": "apps/prod",
+		"invalid label":        "clusters/Prod_1",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			writeFiles(t, dir, "ksail.yaml")
+
+			loader := stubLoader(map[string]*v1alpha1.Cluster{"ksail.yaml": baseSyncedConfig(sync)})
+
+			envs, err := environment.DeriveEnvironments(dir, loader)
+			require.NoError(t, err)
+			assert.Empty(t, envs)
+		})
+	}
+}
+
+func TestDeriveEnvironmentsIgnoresBaseSyncWithoutBaseConfigFile(t *testing.T) {
+	t.Parallel()
+
+	// The CLI's loader can resolve defaults for a ksail.yaml that does not
+	// exist; only a base config actually present in the workspace declares an
+	// environment.
+	dir := t.TempDir()
+
+	loader := stubLoader(
+		map[string]*v1alpha1.Cluster{"ksail.yaml": baseSyncedConfig("clusters/prod")},
+	)
+
+	envs, err := environment.DeriveEnvironments(dir, loader)
+	require.NoError(t, err)
+	assert.Empty(t, envs)
+}
