@@ -289,3 +289,37 @@ func TestDerivePlanIgnoresBaseConfigSyncPathsOutsideClusters(t *testing.T) {
 	assert.Empty(t, plan.Entries)
 	assert.Equal(t, []string{"clusters/attic"}, plan.Orphans)
 }
+
+func TestDerivePlanAndDeriveEnvironmentsAgreeOnTheDeclaredSet(t *testing.T) {
+	t.Parallel()
+
+	// `env list` (DeriveEnvironments) and `env reconcile` (DerivePlan) must
+	// report the same environments for the same workspace — including the
+	// base-synced initial environment `project init --multi-cluster` scaffolds
+	// — so a change to either resolver alone fails here (issue #6905).
+	dir := t.TempDir()
+	writeFiles(t, dir, "ksail.yaml", "ksail.prod.yaml", "ksail.staging.yaml")
+	mkOverlays(t, dir, "local", "prod")
+
+	loader := stubLoader(map[string]*v1alpha1.Cluster{
+		"ksail.yaml":         baseSyncedConfig(localOverlayDir),
+		"ksail.prod.yaml":    clusterConfig(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner),
+		"ksail.staging.yaml": clusterConfig(v1alpha1.DistributionK3s, v1alpha1.ProviderDocker),
+	})
+
+	envs, err := environment.DeriveEnvironments(dir, loader)
+	require.NoError(t, err)
+
+	plan, err := environment.DerivePlan(dir, sourceDir, loader)
+	require.NoError(t, err)
+
+	planned := make([]environment.Environment, 0, len(plan.Entries))
+	for _, entry := range plan.Entries {
+		planned = append(planned, entry.Environment)
+	}
+
+	assert.Equal(t, envs, planned)
+	require.Len(t, envs, 3)
+	assert.Equal(t, "local", envs[0].Name)
+	assert.True(t, envs[0].IsBaseSynced())
+}

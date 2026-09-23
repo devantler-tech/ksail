@@ -22,11 +22,12 @@ import (
 // only — never an overwrite, never a deletion.
 const reconcileLongDesc = `Reconcile the declared cluster environments with their overlays.
 
-Derives the workspace's reconcile plan — which declared environments
-(ksail.<name>.yaml) have their clusters/<name>/ overlay, which are missing it,
-and which overlay directories no environment declares (orphans) — prints it,
-and scaffolds the missing overlays (the shared clusters/base plus a
-clusters/<name> kustomization referencing it).
+Derives the workspace's reconcile plan — which declared environments (the same
+set "project env list" reports: each ksail.<name>.yaml, plus the environment the
+base ksail.yaml's kustomizationFile syncs) have their clusters/<name>/ overlay,
+which are missing it, and which overlay directories no environment declares
+(orphans) — prints it, and scaffolds the missing overlays (the shared
+clusters/base plus a clusters/<name> kustomization referencing it).
 
 Generation never overwrites: existing files are preserved (a second run reports
 the same paths while rewriting nothing) and orphan overlays are only surfaced,
@@ -140,11 +141,7 @@ func resolveWorkspaceRoot(workDir string) string {
 // then the orphan overlays nothing declares.
 func displayPlan(out io.Writer, plan environment.Plan) {
 	if len(plan.Entries) == 0 {
-		notify.Infof(
-			out,
-			"no environments declared; scaffold one with "+
-				"`ksail project env add <name> --from <env>`",
-		)
+		notify.Infof(out, noEnvironmentsHint)
 	} else {
 		writer := tabwriter.NewWriter(out, 0, listEnvTabSize, listEnvTabPadding, ' ', 0)
 
