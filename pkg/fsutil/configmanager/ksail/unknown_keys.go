@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
@@ -127,10 +128,30 @@ func (m *ConfigManager) warnUnknownConfigKeys() {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
 			Content: "unknown key in %s is ignored\nfield: %s\nfix: %s",
-			Args:    []any{filepath.Base(configFile), key.Path, unknownKeyFix(key)},
+			Args:    []any{filepath.Base(configFile), displayKeyPath(key.Path), unknownKeyFix(key)},
 			Writer:  m.Writer,
 		})
 	}
+}
+
+// displayKeyPath escapes the non-printable characters of a key path for the
+// warning, so a key name in the config cannot send control sequences to the
+// terminal.
+func displayKeyPath(path string) string {
+	var display strings.Builder
+
+	for _, char := range path {
+		if unicode.IsPrint(char) {
+			display.WriteRune(char)
+
+			continue
+		}
+
+		quoted := strconv.QuoteRune(char)
+		display.WriteString(quoted[1 : len(quoted)-1])
+	}
+
+	return display.String()
 }
 
 // unknownKeyFix names the fix for an unknown key: the likely intended key when

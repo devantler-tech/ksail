@@ -202,6 +202,25 @@ func TestLoadWarnsAboutUnknownTopLevelKeyWithReferenceFix(t *testing.T) {
 		"https://ksail.devantler.tech/configuration/declarative-configuration/\n")
 }
 
+// Whoever wrote the config chose the key name, so the warning escapes its
+// control characters instead of passing terminal control sequences through.
+func TestLoadEscapesControlCharactersInUnknownKeyPaths(t *testing.T) {
+	t.Parallel()
+
+	configPath := writeUnknownKeyConfig(t, t.TempDir(), "\"evil\\e]0;pwned\\a\": 1\n")
+
+	var output bytes.Buffer
+
+	manager := configmanager.NewConfigManager(&output, configPath)
+
+	_, err := manager.Load(configmanagerinterface.LoadOptions{})
+	require.NoError(t, err)
+
+	assert.NotContains(t, output.String(), "\x1b")
+	assert.NotContains(t, output.String(), "\a")
+	assert.Contains(t, output.String(), "  field: evil\\x1b]0;pwned\\a\n")
+}
+
 // A silent load does not warn about unknown keys.
 func TestLoadSilentDoesNotWarnAboutUnknownKeys(t *testing.T) {
 	t.Parallel()
