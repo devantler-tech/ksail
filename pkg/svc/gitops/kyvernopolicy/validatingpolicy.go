@@ -25,7 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -90,11 +89,9 @@ func DecodeValidatingPolicy(doc map[string]any) (policiesv1beta1.ValidatingPolic
 		policy = &policiesv1beta1.NamespacedValidatingPolicy{}
 	}
 
-	err := runtime.DefaultUnstructuredConverter.FromUnstructuredWithValidation(doc, policy, true)
+	err := decodeInto(doc, policy)
 	if err != nil {
-		name, _, _ := unstructured.NestedString(doc, "metadata", "name")
-
-		return nil, fmt.Errorf("%w %q: %w", errDecodePolicy, name, err)
+		return nil, err
 	}
 
 	return policy, nil
@@ -175,7 +172,7 @@ func renderedNamespaces(docs []map[string]any) map[string]*corev1.Namespace {
 	known := map[string]*corev1.Namespace{}
 
 	for _, doc := range docs {
-		name, ok := namespaceName(doc)
+		name, ok := NamespaceDocumentName(doc)
 		if !ok {
 			continue
 		}
@@ -384,16 +381,6 @@ func selectsOnNamespaceLabels(policy policiesv1beta1.ValidatingPolicyLike) bool 
 	selector := constraints.NamespaceSelector
 
 	return len(selector.MatchLabels) > 0 || len(selector.MatchExpressions) > 0
-}
-
-func namespaceName(doc map[string]any) (string, bool) {
-	if doc["apiVersion"] != "v1" || doc["kind"] != "Namespace" {
-		return "", false
-	}
-
-	name, _, _ := unstructured.NestedString(doc, "metadata", "name")
-
-	return name, name != ""
 }
 
 func celPolicyName(policy policiesv1beta1.ValidatingPolicyLike) string {

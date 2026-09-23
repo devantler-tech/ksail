@@ -92,14 +92,37 @@ func DecodePolicy(doc map[string]any) (kyvernov1.PolicyInterface, error) {
 		policy = &kyvernov1.Policy{}
 	}
 
-	err := runtime.DefaultUnstructuredConverter.FromUnstructuredWithValidation(doc, policy, true)
+	err := decodeInto(doc, policy)
 	if err != nil {
-		name, _, _ := unstructured.NestedString(doc, "metadata", "name")
-
-		return nil, fmt.Errorf("%w %q: %w", errDecodePolicy, name, err)
+		return nil, err
 	}
 
 	return policy, nil
+}
+
+// decodeInto converts doc into the typed policy target, rejecting unknown
+// fields. The error names the policy so a bad document can be found.
+func decodeInto(doc map[string]any, target any) error {
+	err := runtime.DefaultUnstructuredConverter.FromUnstructuredWithValidation(doc, target, true)
+	if err != nil {
+		name, _, _ := unstructured.NestedString(doc, "metadata", "name")
+
+		return fmt.Errorf("%w %q: %w", errDecodePolicy, name, err)
+	}
+
+	return nil
+}
+
+// NamespaceDocumentName returns the name of a core v1 Namespace document, the
+// same shape the policy engine reads namespace labels from.
+func NamespaceDocumentName(doc map[string]any) (string, bool) {
+	if doc["apiVersion"] != "v1" || doc["kind"] != "Namespace" {
+		return "", false
+	}
+
+	name, _, _ := unstructured.NestedString(doc, "metadata", "name")
+
+	return name, name != ""
 }
 
 // Engine evaluates a fixed set of policies against documents.

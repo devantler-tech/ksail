@@ -142,18 +142,6 @@ func decodeDocuments(data []byte) []map[string]any {
 	return docs
 }
 
-// namespaceDocumentName returns the name of a core v1 Namespace document, the
-// same shape the policy engine reads namespace labels from.
-func namespaceDocumentName(doc map[string]any) (string, bool) {
-	if doc["apiVersion"] != "v1" || doc["kind"] != "Namespace" {
-		return "", false
-	}
-
-	name, _, _ := unstructured.NestedString(doc, "metadata", "name")
-
-	return name, name != ""
-}
-
 // sharedNamespaces collects the Namespace documents rendered across every
 // kustomization's output, so a namespaced document in one kustomization can be
 // evaluated against a namespaceSelector whose Namespace another renders. A
@@ -175,7 +163,7 @@ func sharedNamespaces(outputs [][]byte) []map[string]any {
 
 	for _, data := range outputs {
 		for _, doc := range decodeDocuments(data) {
-			name, ok := namespaceDocumentName(doc)
+			name, ok := kyvernopolicy.NamespaceDocumentName(doc)
 			if !ok {
 				continue
 			}
@@ -219,7 +207,7 @@ func withSharedNamespaces(docs, shared []map[string]any) []map[string]any {
 	own := map[string]struct{}{}
 
 	for _, doc := range docs {
-		if name, ok := namespaceDocumentName(doc); ok {
+		if name, ok := kyvernopolicy.NamespaceDocumentName(doc); ok {
 			own[name] = struct{}{}
 		}
 	}
@@ -227,7 +215,7 @@ func withSharedNamespaces(docs, shared []map[string]any) []map[string]any {
 	combined := slices.Clone(docs)
 
 	for _, doc := range shared {
-		name, _ := namespaceDocumentName(doc)
+		name, _ := kyvernopolicy.NamespaceDocumentName(doc)
 		if _, rendered := own[name]; !rendered {
 			combined = append(combined, doc)
 		}
