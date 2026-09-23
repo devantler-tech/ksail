@@ -25,7 +25,9 @@ func TestMaterializeIdentityWritesAnUnsetNameAndContext(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	assert.Equal(t, `# yaml-language-server: $schema=https://example.invalid/ksail-config.schema.json
+	assert.Equal(
+		t,
+		`# yaml-language-server: $schema=https://example.invalid/ksail-config.schema.json
 apiVersion: ksail.io/v1alpha1
 kind: Cluster
 metadata:
@@ -36,7 +38,9 @@ spec:
   cluster:
     connection:
       context: kind-staging
-`, got)
+`,
+		got,
+	)
 }
 
 func TestMaterializeIdentityKeepsDeclaredFields(t *testing.T) {
