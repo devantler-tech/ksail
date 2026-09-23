@@ -1831,6 +1831,8 @@ github.com/opencontainers/runc v1.3.6 h1:SLGIymCtsk80iNPWgbc8dtjI30r+5mTVV+4dN8/
 github.com/opencontainers/runc v1.3.6/go.mod h1:o1wyv76EDlTkcf0KTFgN8bMWLPvgF/HfX709lDv+rr4=
 github.com/opencontainers/runtime-spec v1.3.0 h1:YZupQUdctfhpZy3TM39nN9Ika5CBWT5diQ8ibYCRkxg=
 github.com/opencontainers/runtime-spec v1.3.0/go.mod h1:jwyrGlmzljRJv/Fgzds9SsS/C5hL+LL3ko9hs6T5lQ0=
+github.com/openreports/reports-api v0.2.1 h1:g9KS3yle9Y1elmww4TK9EkD1rl6inIaiIJPX6e+u680=
+github.com/openreports/reports-api v0.2.1/go.mod h1:Es52ppXibHHVWs8dEd322rEzCP6R6/7Wu+3rdwuRndU=
 github.com/openvex/go-vex v0.2.8 h1:m/iH6+0fc7QXwfx7vJ0UeT8Z1oN1zVcyHjcVK+UO11Y=
 github.com/openvex/go-vex v0.2.8/go.mod h1:V09jOICYN/3VS4oU2hthSN8wGI6UAv3FvvYbpYS1xCE=
 github.com/openzipkin/zipkin-go v0.1.1/go.mod h1:NtoC/o8u3JlF1lSlyPNswIbeQH9bJTmOf0Erfk+hxe8=
