@@ -179,6 +179,7 @@ func TestDeriveEnvironmentsBaseSyncDeclaresNothingOutsideAnEnvironmentOverlay(t 
 		"shared base overlay":  "clusters/base",
 		"deeper than overlay":  "clusters/prod/deeper",
 		"outside clusters dir": "apps/prod",
+		"invalid label":        "clusters/Prod_1",
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

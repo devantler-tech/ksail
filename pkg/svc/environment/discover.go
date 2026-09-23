@@ -176,7 +176,8 @@ func appendBaseSyncedEnvironment(environments []Environment, load ConfigLoader) 
 // declares through its workload kustomizationFile (clusters/<name>), reporting
 // ok=false when there is no loadable base config, its sync path is not exactly
 // one directory under clusters/, or that directory is the shared clusters/base
-// overlay every environment builds on (which declares no environment).
+// overlay every environment builds on (which declares no environment), or
+// its name is not a DNS-1123 label (the same rule ksail.<name>.yaml names follow).
 func baseConfigEnvironment(load ConfigLoader) (Environment, bool) {
 	cfg, err := load(BaseConfigFile)
 	if err != nil || cfg == nil {
@@ -192,7 +193,8 @@ func baseConfigEnvironment(load ConfigLoader) (Environment, bool) {
 	sync := path.Clean(filepath.ToSlash(cfg.Spec.Workload.KustomizationFile))
 
 	dir, name := path.Split(sync)
-	if path.Clean(dir) != ClustersDir || name == "" || name == BaseEnvName {
+	if path.Clean(dir) != ClustersDir || name == "" || name == BaseEnvName ||
+		v1alpha1.ValidateClusterName(name) != nil {
 		return Environment{}, false
 	}
 
