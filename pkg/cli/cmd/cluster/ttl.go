@@ -134,6 +134,62 @@ func autoDeleteResolvedCluster(
 	return nil
 }
 
+// saveClusterTTL records the TTL shown by `ksail cluster list` and `ksail cluster info`. An EKS
+// cluster name is unique only within its region, so its TTL is recorded for that region and a
+// same-named cluster in another region keeps its own.
+func saveClusterTTL(
+	clusterName string,
+	clusterCfg *v1alpha1.Cluster,
+	eksConfig *clusterprovisioner.EKSConfig,
+	ttl time.Duration,
+) error {
+	if clusterCfg != nil && clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS {
+		if eksConfig == nil {
+			return errEKSConfigurationUnavailable
+		}
+
+		err := state.SaveEKSClusterTTL(clusterName, eksConfig.Region, ttl)
+		if err != nil {
+			return fmt.Errorf("save exact-region EKS TTL: %w", err)
+		}
+
+		return nil
+	}
+
+	err := state.SaveClusterTTL(clusterName, ttl)
+	if err != nil {
+		return fmt.Errorf("save cluster TTL: %w", err)
+	}
+
+	return nil
+}
+
+// loadClusterTTL reads the recorded TTL of a listed cluster. EKS is the only distribution on
+// the AWS provider, and an EKS name is unique only within its region, so an AWS cluster's TTL is
+// read for awsRegion; an empty awsRegion means the caller does not know it (see
+// state.LoadEKSClusterTTL).
+func loadClusterTTL(
+	clusterName string,
+	provider v1alpha1.Provider,
+	awsRegion string,
+) (*state.TTLInfo, error) {
+	if provider == v1alpha1.ProviderAWS {
+		ttl, err := state.LoadEKSClusterTTL(clusterName, awsRegion)
+		if err != nil {
+			return nil, fmt.Errorf("load EKS cluster TTL: %w", err)
+		}
+
+		return ttl, nil
+	}
+
+	ttl, err := state.LoadClusterTTL(clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("load cluster TTL: %w", err)
+	}
+
+	return ttl, nil
+}
+
 func deleteTTLClusterState(
 	clusterName string,
 	clusterCfg *v1alpha1.Cluster,

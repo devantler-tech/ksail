@@ -255,6 +255,9 @@ func (p *ociRepositoryPatcher) tryPatch(
 // applied by the Flux Operator before the generated sync resources can
 // reconcile. Signature verification is seeded here instead of patched only
 // after creation to avoid an initial unverified OCIRepository reconcile window.
+// On update the patch is merged with the consumer's own patches, not written over
+// them; isKSailVerifyPatch documents how the two are told apart, so its target and
+// single add on /spec/verify must stay as they are.
 func buildSyncKustomize(clusterCfg *v1alpha1.Cluster) (*SyncKustomize, error) {
 	verify := clusterCfg.Spec.Workload.Flux.Verify
 	if !verify.Enabled() {
@@ -266,12 +269,14 @@ func buildSyncKustomize(clusterCfg *v1alpha1.Cluster) (*SyncKustomize, error) {
 		return nil, fmt.Errorf("marshal OCIRepository verify patch: %w", err)
 	}
 
+	header := "- op: " + verifyPatchOperation + "\n  path: " + verifyPatchPath + "\n  value:\n"
+
 	return &SyncKustomize{Patches: []SyncKustomizePatch{{
 		Target: SyncKustomizePatchTarget{
 			Kind: fluxOCIRepositoryKind,
 			Name: defaultOCIRepositoryName,
 		},
-		Patch: "- op: add\n  path: /spec/verify\n  value:\n" + indentYAML(
+		Patch: header + indentYAML(
 			string(verifyYAML),
 			"    ",
 		),

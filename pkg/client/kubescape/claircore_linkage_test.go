@@ -1,8 +1,9 @@
 package kubescape_test
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -184,33 +185,9 @@ func assertClaircoreVersions(
 	t.Helper()
 
 	for modulePath, auditedVersion := range auditedVersions {
-		//nolint:gosec // modulePath is selected only from the fixed audited-version map above.
-		cmd := exec.CommandContext(
-			t.Context(),
-			"go",
-			"list",
-			"-m",
-			"-json",
-			modulePath,
-		)
-		cmd.Dir = moduleDir
-
-		out, err := cmd.Output()
+		out, err := runGoCommand(t.Context(), moduleDir, "list", "-m", "-json", modulePath)
 		if err != nil {
-			var stderr string
-
-			exitErr := new(exec.ExitError)
-			if errors.As(err, &exitErr) {
-				stderr = string(exitErr.Stderr)
-			}
-
-			t.Fatalf(
-				"read %q version from module %q: %v\n%s",
-				modulePath,
-				moduleDir,
-				err,
-				stderr,
-			)
+			t.Fatalf("read %q version: %v", modulePath, err)
 		}
 
 		actual := goListModule{}
@@ -267,19 +244,9 @@ func assertClaircorePackagesStayInert(
 ) {
 	t.Helper()
 
-	cmd := exec.CommandContext(t.Context(), "go", "list", "-deps", "./...")
-	cmd.Dir = moduleDir
-
-	out, err := cmd.Output()
+	out, err := runGoCommand(t.Context(), moduleDir, "list", "-deps", "./...")
 	if err != nil {
-		var stderr string
-
-		exitErr := new(exec.ExitError)
-		if errors.As(err, &exitErr) {
-			stderr = string(exitErr.Stderr)
-		}
-
-		t.Fatalf("go list -deps ./... in module %q failed: %v\n%s", moduleDir, err, stderr)
+		t.Fatal(err)
 	}
 
 	var unexpected []string
@@ -325,6 +292,140 @@ func moduleRoot(t *testing.T) string {
 		}
 
 		dir = parent
+	}
+}
+
+// goCommandStderrLimit bounds how much of a failed go command's stderr a
+// failure message carries: ample for the go command's own diagnostic (a stale
+// module graph, an unresolvable requirement, a go.mod syntax error, a module
+// fetch failure), short enough that a large output cannot swamp the test log.
+const goCommandStderrLimit = 4 << 10
+
+// runGoCommand runs `go <args>` in moduleDir and returns its stdout. Every
+// guard in this file shells out through it, so a failure always names the
+// command, the module and the go command's own diagnostic from stderr —
+// bounded by goCommandStderrLimit — rather than only an exit status (issue
+// #6977): `go list` fails for several genuinely different reasons, and the
+// exit status alone cannot tell them apart.
+func runGoCommand(ctx context.Context, moduleDir string, args ...string) ([]byte, error) {
+	var stderr bytes.Buffer
+
+	//nolint:gosec // G204: callers pass fixed go subcommands and audited module paths.
+	cmd := exec.CommandContext(ctx, "go", args...)
+	cmd.Dir = moduleDir
+	cmd.Stderr = &stderr
+
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf(
+			"go %s in module %q failed: %w\n%s",
+			strings.Join(args, " "),
+			moduleDir,
+			err,
+			boundGoStderr(stderr.String(), goCommandStderrLimit),
+		)
+	}
+
+	return out, nil
+}
+
+// boundGoStderr trims a go command's stderr to at most limit bytes, keeping its
+// head and tail (where the go command reports the cause and the command to
+// fix it) around a marker naming how much was omitted.
+func boundGoStderr(stderr string, limit int) string {
+	stderr = strings.TrimSpace(stderr)
+	if stderr == "" {
+		return "(the go command wrote nothing to stderr)"
+	}
+
+	if len(stderr) <= limit {
+		return stderr
+	}
+
+	half := limit / 2
+	omitted := len(stderr) - 2*half
+
+	return strings.ToValidUTF8(stderr[:half], "") +
+		fmt.Sprintf("\n... %d bytes of go stderr omitted ...\n", omitted) +
+		strings.ToValidUTF8(stderr[len(stderr)-half:], "")
+}
+
+// TestRunGoCommandReportsTheGoDiagnostic proves a failing go command's own
+// diagnostic reaches the failure message, not just its exit status (issue
+// #6977): it points the helper at a module whose go.mod fails to parse, which
+// the go command reports only on stderr and without any network access.
+func TestRunGoCommandReportsTheGoDiagnostic(t *testing.T) {
+	t.Parallel()
+
+	_, err := exec.LookPath("go")
+	if err != nil {
+		t.Skip("go toolchain not available on PATH")
+	}
+
+	moduleDir := t.TempDir()
+
+	writeErr := os.WriteFile(
+		filepath.Join(moduleDir, "go.mod"),
+		[]byte("module example.com/broken\n\ngo 1.24\n\nbogus directive\n"),
+		0o600,
+	)
+	if writeErr != nil {
+		t.Fatalf("write go.mod: %v", writeErr)
+	}
+
+	_, err = runGoCommand(t.Context(), moduleDir, "list", "-deps", "./...")
+	if err == nil {
+		t.Fatal("expected go list to fail on a malformed go.mod")
+	}
+
+	message := err.Error()
+
+	for _, want := range []string{
+		"go list -deps ./...",
+		moduleDir,
+		"exit status",
+		"unknown directive: bogus",
+	} {
+		if !strings.Contains(message, want) {
+			t.Errorf("failure message does not contain %q:\n%s", want, message)
+		}
+	}
+}
+
+// TestBoundGoStderrKeepsHeadAndTail pins the bound: short stderr passes through
+// unchanged, long stderr is cut to its head and tail around an omission marker
+// so neither the cause nor the suggested fix is lost, and empty stderr says so.
+func TestBoundGoStderrKeepsHeadAndTail(t *testing.T) {
+	t.Parallel()
+
+	const limit = 64
+
+	short := "go: updates to go.mod needed; to update it:\n\tgo mod tidy"
+	if got := boundGoStderr(short+"\n", len(short)); got != short {
+		t.Errorf("short stderr changed: %q", got)
+	}
+
+	long := "HEAD" + strings.Repeat("x", 10*limit) + "TAIL"
+	got := boundGoStderr(long, limit)
+
+	if !strings.HasPrefix(got, "HEAD") || !strings.HasSuffix(got, "TAIL") {
+		t.Errorf("bounded stderr lost its head or tail: %q", got)
+	}
+
+	if !strings.Contains(got, fmt.Sprintf("%d bytes of go stderr omitted", len(long)-limit)) {
+		t.Errorf("bounded stderr does not report the omitted size: %q", got)
+	}
+
+	if len(got) > limit+64 {
+		t.Errorf(
+			"bounded stderr is %d bytes, want at most the %d-byte limit plus the marker",
+			len(got),
+			limit,
+		)
+	}
+
+	if got := boundGoStderr(" \n", limit); !strings.Contains(got, "nothing to stderr") {
+		t.Errorf("empty stderr is not reported as such: %q", got)
 	}
 }
 
@@ -401,19 +502,9 @@ func TestRootClaircoreAuditExcludesDesktopOnlyPackages(t *testing.T) {
 func linkedClaircorePackages(t *testing.T, moduleDir string) map[string]bool {
 	t.Helper()
 
-	cmd := exec.CommandContext(t.Context(), "go", "list", "-deps", "./...")
-	cmd.Dir = moduleDir
-
-	out, err := cmd.Output()
+	out, err := runGoCommand(t.Context(), moduleDir, "list", "-deps", "./...")
 	if err != nil {
-		var stderr string
-
-		exitErr := new(exec.ExitError)
-		if errors.As(err, &exitErr) {
-			stderr = string(exitErr.Stderr)
-		}
-
-		t.Fatalf("go list -deps ./... in module %q failed: %v\n%s", moduleDir, err, stderr)
+		t.Fatal(err)
 	}
 
 	linked := map[string]bool{}

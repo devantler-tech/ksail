@@ -279,4 +279,46 @@ fi
 assert_contains '.github/scripts/cask-pr-handoff-workflow.test.sh' "${ci_workflow}" \
 	'CI must execute the handoff workflow contract suite'
 
+# GoReleaser opens each cask PR with its commit message as the title, and the tap squash-merges on
+# that title under a Conventional commit-message ruleset. The default message ("Brew cask update for
+# ...") is rejected, so each config must set a Conventional commit_msg_template that renders to the
+# exact title the handoff job normalizes to (#6975). The tap's pattern, with \w spelled for POSIX ERE:
+tap_title_pattern='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test){1}(\([[:alnum:]_.-]+\))?(!)?:'
+sample_tag='v7.183.3'
+for goreleaser_config in "${repo_root}/.goreleaser.yaml" "${repo_root}/.goreleaser.desktop.yaml"; do
+	config_name="$(basename -- "${goreleaser_config}")"
+	casks_block="${tmp_dir}/${config_name}.casks"
+	awk '
+		/^homebrew_casks:/ { in_casks = 1; next }
+		in_casks && /^[^[:space:]#]/ { in_casks = 0 }
+		in_casks { print }
+	' "${goreleaser_config}" >"${casks_block}"
+
+	cask_name="$(sed -nE 's/^  - name: *"?([^"[:space:]]+)"?[[:space:]]*$/\1/p' "${casks_block}")"
+	[[ -n "${cask_name}" && "${cask_name}" != *$'\n'* ]] ||
+		fail "${config_name} must define exactly one homebrew cask"
+	project_name="$(sed -nE 's/^project_name: *"?([^"[:space:]]+)"?[[:space:]]*$/\1/p' \
+		"${goreleaser_config}")"
+	project_name="${project_name:-ksail}"
+
+	templates="$(sed -nE 's/^    commit_msg_template: *"(.*)"[[:space:]]*$/\1/p' "${casks_block}")"
+	[[ -n "${templates}" && "${templates}" != *$'\n'* ]] ||
+		fail "${config_name} must set exactly one commit_msg_template on its cask (GoReleaser's default title is not Conventional)"
+	[[ "${templates}" == 'chore(cask): update {{ .ProjectName }} to {{ .Tag }}' ]] ||
+		fail "${config_name} commit_msg_template must be 'chore(cask): update {{ .ProjectName }} to {{ .Tag }}', got '${templates}'"
+
+	rendered="${templates//\{\{ .ProjectName \}\}/${project_name}}"
+	rendered="${rendered//\{\{ .Tag \}\}/${sample_tag}}"
+	[[ "${rendered}" =~ ${tap_title_pattern} ]] ||
+		fail "${config_name} cask PR title '${rendered}' does not match the tap's Conventional ruleset"
+	[[ "${rendered}" == "chore(cask): update ${cask_name} to ${sample_tag}" ]] ||
+		fail "${config_name} cask PR title '${rendered}' must equal the handoff's normalized title for cask ${cask_name}"
+done
+[[ ! 'Brew cask update for ksail version v7.183.3' =~ ${tap_title_pattern} ]] ||
+	fail 'the tap title pattern must reject GoReleaser default cask titles (negative control)'
+assert_contains "- '.goreleaser.yaml'" "${ci_workflow}" \
+	'CI paths filter must trigger the handoff job on GoReleaser config changes'
+assert_contains "- '.goreleaser.desktop.yaml'" "${ci_workflow}" \
+	'CI paths filter must trigger the handoff job on desktop GoReleaser config changes'
+
 printf 'Cask PR handoff workflow contract passed.\n'

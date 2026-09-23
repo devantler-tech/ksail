@@ -66,6 +66,10 @@ homebrew_casks:
         # release (tap#1172 — GoReleaser tolerates an existing ref and soft-skips the duplicate PR;
         # the tap deletes the branch on merge, so it is recreated fresh from main next release).
         draft: true
+    # The commit message is also the cask PR's title, and the tap squash-merges on that title under a
+    # Conventional commit-message ruleset that rejects GoReleaser's default ("Brew cask update for
+    # ..."). Match the title the cd.yaml handoff normalizes to (#6975).
+    commit_msg_template: "chore(cask): update {{ .ProjectName }} to {{ .Tag }}"
     # macOS builds are Apple Silicon only, so the template emits no macOS-Intel `url`. Homebrew 6 loads
     # every OS and architecture when adding a tap and refuses the whole tap if any variant lacks a
     # `url` (#7034). The `on_intel` branch gives Intel Macs the Apple Silicon download and refuses the

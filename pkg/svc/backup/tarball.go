@@ -67,6 +67,18 @@ func commitTarball(
 	outFile *os.File,
 	tmpPath, targetPath string,
 ) error {
+	return commitTarballWithRename(tarWriter, gzipWriter, outFile, tmpPath, targetPath, os.Rename)
+}
+
+// commitTarballWithRename implements commitTarball with an injectable rename so
+// tests can simulate a rename failure on any platform.
+func commitTarballWithRename(
+	tarWriter *tar.Writer,
+	gzipWriter *gzip.Writer,
+	outFile *os.File,
+	tmpPath, targetPath string,
+	rename func(oldpath, newpath string) error,
+) error {
 	err := tarWriter.Close()
 	if err != nil {
 		_ = gzipWriter.Close()
@@ -91,22 +103,11 @@ func commitTarball(
 		return fmt.Errorf("failed to close output file: %w", err)
 	}
 
-	// Try an atomic rename first; on Unix this replaces the destination in one
-	// operation, so the previous archive survives if Rename fails.
-	// On Windows, Rename can fail with a permission/access error when the
-	// destination already exists. Fall back to remove-and-retry only when the
-	// target actually exists (os.Stat succeeds) so unrelated failures never
-	// destroy a valid backup.
-	err = os.Rename(tmpPath, targetPath)
-	if err != nil {
-		_, statErr := os.Stat(targetPath)
-		if statErr == nil {
-			_ = os.Remove(targetPath)
-
-			err = os.Rename(tmpPath, targetPath)
-		}
-	}
-
+	// os.Rename replaces an existing regular file on every supported platform
+	// (on Windows it uses MoveFileEx with MOVEFILE_REPLACE_EXISTING), so a failed
+	// rename is returned unchanged and never retried: the previous archive is
+	// left intact and only the staging temp file is removed.
+	err = rename(tmpPath, targetPath)
 	if err != nil {
 		_ = os.Remove(tmpPath)
 

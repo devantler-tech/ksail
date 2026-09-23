@@ -98,7 +98,7 @@ func (d *Discoverer) listAWS(ctx context.Context) ([]Cluster, error) {
 
 		provider, err := awsprovider.NewProvider(
 			client,
-			d.resolver().Value(credentials.AWSRegion),
+			d.AWSRegion(),
 			providerOptions...,
 		)
 		if err != nil {
