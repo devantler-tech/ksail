@@ -959,3 +959,49 @@ func TestCommitTarball(t *testing.T) {
 		assert.NoError(t, err)
 	})
 }
+
+// errSimulatedRename stands in for a real rename failure, such as a Windows
+// sharing violation while another process holds the archive open.
+var errSimulatedRename = errors.New("simulated rename failure")
+
+// TestCommitTarball_FailedRenameKeepsExistingArchive verifies a failed rename
+// over an existing archive returns the first rename error without retrying,
+// leaves the previous archive byte-for-byte intact, and removes the staging temp
+// file. The rename is injected so the failure is reproducible on every platform.
+func TestCommitTarball_FailedRenameKeepsExistingArchive(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	tmpPath := filepath.Join(dir, "backup.tar.gz.tmp-1")
+	targetPath := filepath.Join(dir, "backup.tar.gz")
+	previous := []byte("previous archive")
+	require.NoError(t, os.WriteFile(targetPath, previous, backup.FilePerm))
+
+	//nolint:gosec // Test creates a file inside its own temp directory.
+	outFile, err := os.Create(tmpPath)
+	require.NoError(t, err)
+
+	gzipWriter := gzip.NewWriter(outFile)
+	tarWriter := tar.NewWriter(gzipWriter)
+
+	renameCalls := 0
+	failingRename := func(_, _ string) error {
+		renameCalls++
+
+		return errSimulatedRename
+	}
+
+	err = backup.CommitTarballWithRename(
+		tarWriter, gzipWriter, outFile, tmpPath, targetPath, failingRename,
+	)
+	require.ErrorIs(t, err, errSimulatedRename)
+	require.ErrorContains(t, err, "failed to finalize archive")
+	assert.Equal(t, 1, renameCalls, "a failed rename must not be retried")
+
+	got, readErr := os.ReadFile(targetPath) //nolint:gosec // test file
+	require.NoError(t, readErr, "the previous archive must survive a failed rename")
+	assert.Equal(t, previous, got)
+
+	_, statErr := os.Stat(tmpPath)
+	assert.True(t, os.IsNotExist(statErr), "the staging temp file must be removed")
+}
