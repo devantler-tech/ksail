@@ -17,7 +17,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: devantler-tech/actions/.github/workflows/update-agent-skills.yaml@ba811f50ba081068bd91180f52ea8b4d26de1788 # v13.6.8
+    uses: devantler-tech/actions/.github/workflows/update-agent-skills.yaml@38cd4ec6665f2fd88dc0017728dd7686586dd3b2 # v13.7.3
     with:
       dir: .agents/skills
       # These are development skills our own agents use, not skills KSail publishes. Marking

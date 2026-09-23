@@ -64,7 +64,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.33.4
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.4
 	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.81.0
-	github.com/aws/aws-sdk-go-v2/service/eks v1.98.0
+	github.com/aws/aws-sdk-go-v2/service/eks v1.99.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.50.0
 	github.com/aws/smithy-go v1.28.1
 	github.com/charmbracelet/bubbles v1.0.0
@@ -78,7 +78,7 @@ require (
 	github.com/cosi-project/runtime v1.16.3
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/github/copilot-sdk/go v1.0.13
-	github.com/go-jose/go-jose/v4 v4.1.4
+	github.com/go-jose/go-jose/v4 v4.1.5
 	github.com/google/go-github/v72 v72.0.0
 	github.com/googleapis/gax-go/v2 v2.24.1
 	github.com/gopacket/gopacket v1.7.1
