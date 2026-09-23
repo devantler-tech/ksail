@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"slices"
 
 	yamlv3 "gopkg.in/yaml.v3"
 )
@@ -45,7 +46,16 @@ func MaterializeIdentity(content string, identity Identity) (string, error) {
 		return "", fmt.Errorf("%w: config is not a YAML mapping", ErrInvalidConfig)
 	}
 
-	root := doc.Content[0]
+	if !applyIdentity(doc.Content[0], identity) {
+		return content, nil
+	}
+
+	return encodeConfig(&doc)
+}
+
+// applyIdentity writes identity's non-empty fields into root where they are unset and
+// reports whether it changed anything.
+func applyIdentity(root *yamlv3.Node, identity Identity) bool {
 	changed := false
 
 	if identity.Name != "" {
@@ -58,16 +68,17 @@ func MaterializeIdentity(content string, identity Identity) (string, error) {
 		) || changed
 	}
 
-	if !changed {
-		return content, nil
-	}
+	return changed
+}
 
+// encodeConfig renders doc with the indentation KSail writes its configs with.
+func encodeConfig(doc *yamlv3.Node) (string, error) {
 	var buf bytes.Buffer
 
 	encoder := yamlv3.NewEncoder(&buf)
 	encoder.SetIndent(identityIndent)
 
-	err = encoder.Encode(&doc)
+	err := encoder.Encode(doc)
 	if err != nil {
 		return "", fmt.Errorf("encoding config: %w", err)
 	}
@@ -138,8 +149,7 @@ func insertPair(mapping *yamlv3.Node, key string, value *yamlv3.Node) {
 	if key == "metadata" {
 		for i := 0; i+1 < len(mapping.Content); i += 2 {
 			if mapping.Content[i].Value == "spec" {
-				rest := append(pair, mapping.Content[i:]...)
-				mapping.Content = append(mapping.Content[:i:i], rest...)
+				mapping.Content = slices.Insert(mapping.Content, i, pair...)
 
 				return
 			}

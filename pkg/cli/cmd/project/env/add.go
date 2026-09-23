@@ -424,12 +424,11 @@ func cloneEnvironment(cmd *cobra.Command, params addEnvironmentParams) error {
 // guess: EKS and GKE contexts embed an account and location that are unknown until
 // the cluster exists, so KSail derives those from the kubeconfig instead.
 func materializedContext(distribution v1alpha1.Distribution, name string) string {
-	switch distribution {
-	case v1alpha1.DistributionEKS, v1alpha1.DistributionGKE:
+	if distribution == v1alpha1.DistributionEKS || distribution == v1alpha1.DistributionGKE {
 		return ""
-	default:
-		return distribution.ContextName(name)
 	}
+
+	return distribution.ContextName(name)
 }
 
 // reportClone prints the files the clone wrote, or a skip note when --force was not

@@ -191,12 +191,9 @@ func cloneEnvironmentConfig(
 		return "", false, err
 	}
 
-	// Ciphertext is cloned verbatim, so identity is only written into a plaintext config.
-	if identity != (Identity{}) && !strings.HasSuffix(srcConfigRel, encryptedFileSuffix) {
-		content, err = MaterializeIdentity(content, identity)
-		if err != nil {
-			return "", false, fmt.Errorf("writing clone identity: %w", err)
-		}
+	content, err = materializeCloneIdentity(content, srcConfigRel, identity)
+	if err != nil {
+		return "", false, err
 	}
 
 	if dstConfigRel != "" {
@@ -213,6 +210,22 @@ func cloneEnvironmentConfig(
 	}
 
 	return newRelPath, wrote, nil
+}
+
+// materializeCloneIdentity writes identity into a cloned config's content (see
+// [MaterializeIdentity]). Ciphertext is cloned verbatim, so identity is only written
+// into a plaintext config, and an empty identity leaves the content unchanged.
+func materializeCloneIdentity(content, srcConfigRel string, identity Identity) (string, error) {
+	if identity == (Identity{}) || strings.HasSuffix(srcConfigRel, encryptedFileSuffix) {
+		return content, nil
+	}
+
+	materialized, err := MaterializeIdentity(content, identity)
+	if err != nil {
+		return "", fmt.Errorf("writing clone identity: %w", err)
+	}
+
+	return materialized, nil
 }
 
 // writeClone writes one cloned file's content to repoRoot/newRelPath, returning
