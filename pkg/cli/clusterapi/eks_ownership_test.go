@@ -242,6 +242,37 @@ func TestStopEKSRefusesWhenOwnershipCannotBeVerified(t *testing.T) {
 		"an unverifiable EKS target was stopped anyway")
 }
 
+// TestStartEKSRefusesWhenOwnershipCannotBeVerified covers the nodegroup-scaling boundary in the
+// other direction: start scales managed nodegroups back up, so it is a mutation too and must be
+// refused exactly like stop when the target's ownership cannot be verified. Start and stop share a
+// code path today; this arm keeps the refusal pinned if start ever gains a path of its own.
+func TestStartEKSRefusesWhenOwnershipCannotBeVerified(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "unverifiable-start-eks"
+
+	provisioner := &fakeProvisioner{}
+	recorder := &guardRecorder{}
+	service := newGuardRecordingService(
+		t, v1alpha1.DistributionEKS, provisioner, recorder, errGuardRefused,
+	)
+
+	createEKSClusterForTest(t, service, clusterName)
+
+	require.NoError(t, service.Start(context.Background(), "default", clusterName))
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, found := phaseOf(list, clusterName)
+
+		return found && phase == v1alpha1.ClusterPhaseFailed
+	}, eventuallyTimeout, eventuallyTick)
+
+	assert.Empty(t, provisioner.startedNames(),
+		"an unverifiable EKS target was started anyway")
+}
+
 // TestCreateEKSDoesNotRequireOwnershipVerification is the over-tightening control. A create has no
 // prior incarnation to verify and no persisted identity yet, so demanding a guard there would make
 // every first EKS create from the web UI fail. It must still succeed with the guard refusing.
