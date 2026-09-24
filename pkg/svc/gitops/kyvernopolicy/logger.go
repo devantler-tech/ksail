@@ -1,15 +1,21 @@
 package kyvernopolicy
 
 import (
+	"sync"
+
 	"github.com/go-logr/logr"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// setControllerRuntimeLogger is controller-runtime's SetLogger, held in a
-// variable so a test can observe the call.
-//
-//nolint:gochecknoglobals // test seam for a process-wide logger
-var setControllerRuntimeLogger = ctrllog.SetLogger
+//nolint:gochecknoglobals // process-wide logger setup and its test seam
+var (
+	// setControllerRuntimeLogger is controller-runtime's SetLogger, held in a
+	// variable so a test can observe the call.
+	setControllerRuntimeLogger = ctrllog.SetLogger
+	// silenceOnce makes the call happen once per process: controller-runtime's
+	// SetLogger is not safe to call concurrently.
+	silenceOnce sync.Once
+)
 
 // silenceControllerRuntimeLogger gives controller-runtime's global logger a
 // sink that discards everything. Kyverno's engine logs through that logger,
@@ -20,5 +26,7 @@ var setControllerRuntimeLogger = ctrllog.SetLogger
 // Only the first SetLogger call in a process takes effect, so this never
 // replaces a logger the operator has already configured.
 func silenceControllerRuntimeLogger() {
-	setControllerRuntimeLogger(logr.New(ctrllog.NullLogSink{}))
+	silenceOnce.Do(func() {
+		setControllerRuntimeLogger(logr.New(ctrllog.NullLogSink{}))
+	})
 }
