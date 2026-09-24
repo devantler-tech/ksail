@@ -7,12 +7,16 @@ import (
 )
 
 // ReplaceControllerRuntimeLoggerSetter swaps the SetLogger seam and re-arms the
-// once-per-process guard, returning a function restoring the original setter.
-// Callers must not run in parallel with other tests.
+// once-per-process guard, returning a function that restores both. Callers must
+// not run in parallel with other tests.
 func ReplaceControllerRuntimeLoggerSetter(setter func(logr.Logger)) func() {
-	original := setControllerRuntimeLogger
+	originalSetter := setControllerRuntimeLogger
+	originalOnce := silenceOnce
 	setControllerRuntimeLogger = setter
-	silenceOnce = sync.Once{}
+	silenceOnce = new(sync.Once)
 
-	return func() { setControllerRuntimeLogger = original }
+	return func() {
+		setControllerRuntimeLogger = originalSetter
+		silenceOnce = originalOnce
+	}
 }

@@ -14,7 +14,7 @@ var (
 	setControllerRuntimeLogger = ctrllog.SetLogger
 	// silenceOnce makes the call happen once per process: controller-runtime's
 	// SetLogger is not safe to call concurrently.
-	silenceOnce sync.Once
+	silenceOnce = new(sync.Once)
 )
 
 // silenceControllerRuntimeLogger gives controller-runtime's global logger a
