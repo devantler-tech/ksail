@@ -30,16 +30,14 @@ const (
 // version pins and applying the local Kind defaulting an empty Kind config requires). EKS is local-
 // specific: it renders an on-disk eksctl.yaml the EKS provisioner reads, so it is handled here.
 func distributionConfig(
-	distribution v1alpha1.Distribution,
-	name string,
+	cluster *v1alpha1.Cluster,
 ) (*clusterprovisioner.DistributionConfig, error) {
+	distribution := cluster.Spec.Cluster.Distribution
+
+	name := cluster.Name
 	if distribution == v1alpha1.DistributionEKS {
 		return eksDistributionConfig(name)
 	}
-
-	cluster := &v1alpha1.Cluster{}
-	cluster.Name = name
-	cluster.Spec.Cluster.Distribution = distribution
 
 	config, err := clusterprovisioner.BuildDistributionConfig(cluster, name, true)
 	if err != nil {

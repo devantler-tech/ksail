@@ -114,9 +114,7 @@ func newTalosDistributionConfig(
 ) (*DistributionConfig, error) {
 	kubernetesVersion := talosconfigmanager.ResolveClusterKubernetesVersion(cluster)
 
-	versionContract, err := talosconfigmanager.ParseVersionContract(
-		cluster.Spec.Cluster.Talos.Version,
-	)
+	versionContract, err := talosconfigmanager.ResolveClusterVersionContract(cluster)
 	if err != nil {
 		return nil, fmt.Errorf("resolve Talos version contract: %w", err)
 	}

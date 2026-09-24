@@ -367,7 +367,9 @@ func loadKSailConfig(cmd *cobra.Command) (*v1alpha1.Cluster, bool, error) {
 
 	cfgManager := ksailconfigmanager.NewConfigManager(cmd.OutOrStdout(), configFile)
 
-	cfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true})
+	cfg, err := cfgManager.Load(configmanager.LoadOptions{
+		Silent: true, SkipValidation: true, SkipTalosMachineConfig: true,
+	})
 	if err != nil {
 		return nil, false, fmt.Errorf("loading config: %w", err)
 	}

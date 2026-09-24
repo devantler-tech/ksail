@@ -76,8 +76,7 @@ func recordCaptureForCreate(
 		onCreate:        beforeCapture,
 	}
 	service := clusterapi.NewTestService(func(
-		_ v1alpha1.Distribution,
-		_ string,
+		_ *v1alpha1.Cluster,
 	) (clusterprovisioner.Factory, error) {
 		return midCreateFactory{provisioner: provisioner}, nil
 	})
@@ -133,8 +132,7 @@ func TestCreateEKSResolvesAccountOnceBeforeProvisioning(t *testing.T) {
 		onCreate:        func() { events <- "create" },
 	}
 	service := clusterapi.NewTestService(func(
-		_ v1alpha1.Distribution,
-		_ string,
+		_ *v1alpha1.Cluster,
 	) (clusterprovisioner.Factory, error) {
 		return midCreateFactory{provisioner: provisioner}, nil
 	})
@@ -190,8 +188,7 @@ func TestCreateEKSStopsBeforeProvisioningWhenAccountResolutionFails(t *testing.T
 		onCreate:        func() { created <- struct{}{} },
 	}
 	service := clusterapi.NewTestService(func(
-		_ v1alpha1.Distribution,
-		_ string,
+		_ *v1alpha1.Cluster,
 	) (clusterprovisioner.Factory, error) {
 		return midCreateFactory{provisioner: provisioner}, nil
 	})

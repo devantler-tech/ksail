@@ -124,3 +124,48 @@ func TestSimpleDistributionConfig(t *testing.T) {
 		})
 	}
 }
+
+// A Hetzner ISO ID carries no Talos release information. Only the tracked default
+// can safely generate machine configuration without an explicit version pin.
+func TestBuildDistributionConfig_TalosISOVersion(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		iso     int64
+		version string
+		wantErr bool
+	}{
+		{name: "implicit default"},
+		{name: "explicit default", iso: v1alpha1.DefaultTalosISO},
+		{name: "custom ISO without version", iso: 123456, wantErr: true},
+		{name: "custom ISO with blank version", iso: 123456, version: " \t", wantErr: true},
+		{name: "custom ISO with matching pin", iso: 123456, version: "v1.12.4"},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			cluster := v1alpha1.NewCluster()
+			cluster.Spec.Cluster.Distribution = v1alpha1.DistributionTalos
+			cluster.Spec.Cluster.Provider = v1alpha1.ProviderHetzner
+			cluster.Spec.Cluster.Talos.ISO = testCase.iso
+			cluster.Spec.Cluster.Talos.Version = testCase.version
+
+			config, err := clusterprovisioner.BuildDistributionConfig(cluster, "custom-iso", false)
+			if testCase.wantErr {
+				require.ErrorIs(t, err, v1alpha1.ErrTalosCustomISOVersionRequired)
+				assert.Nil(t, config)
+				assert.Contains(t, err.Error(), "spec.cluster.talos.version")
+				assert.Contains(t, err.Error(), "--distribution-version")
+				assert.Contains(t, err.Error(), "123456")
+
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, config.Talos)
+			assert.Equal(t, "1.35.0", config.Talos.KubernetesVersion())
+		})
+	}
+}

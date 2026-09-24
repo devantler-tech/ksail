@@ -368,7 +368,9 @@ Advanced configuration options are direct fields under ` + bt + `spec.cluster` +
 - ` + bt + `workers` + bt + ` – Number of worker nodes (default: ` + bt + `0` + bt + `)
 - ` + bt + `config` + bt + ` – Path to talosconfig file (default: ` + bt + `~/.talos/config` + bt + `)
 - ` + bt + `version` + bt + ` – Pin the Talos OS version; caps upgrades and selects the node image (default: built-in)
-- ` + bt + `iso` + bt + ` – Cloud provider ISO/image ID for Talos Linux (the x86 default follows Hetzner's official changelog; for ARM, look up the matching ISO ID under **Images → ISOs** in the Hetzner Cloud Console)
+- ` + bt + `iso` + bt + ` – Cloud provider ISO/image ID for Talos Linux (the x86 default follows Hetzner's official changelog; for ARM, look up the matching ISO ID under **Images → ISOs** in the Hetzner Cloud Console). A custom Hetzner ISO requires ` + bt + `version` + bt + ` to match that ISO's Talos release.
+
+KSail cannot infer a Talos release from a custom ISO ID and refuses to generate machine configuration without a version pin. Set ` + bt + `spec.cluster.talos.version` + bt + ` or pass ` + bt + `--distribution-version` + bt + ` when creating or updating the cluster. See [Using a custom Talos ISO](/providers/hetzner/#using-a-custom-talos-iso).
 
 The Kubernetes version is set at the top level (` + bt + `spec.cluster.kubernetesVersion` + bt + `), not under ` + bt + `talos` + bt + `:
 
