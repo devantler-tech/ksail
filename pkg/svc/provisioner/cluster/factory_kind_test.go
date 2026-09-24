@@ -70,10 +70,36 @@ func TestKubeadmInstallVersion(t *testing.T) {
 func TestCreateProvisioner_HetznerServerDistributionsApplyDefaults(t *testing.T) {
 	t.Setenv("HCLOUD_TOKEN", "dummy-token")
 
-	for _, distribution := range []v1alpha1.Distribution{
-		v1alpha1.DistributionVanilla,
-		v1alpha1.DistributionK3s,
-	} {
+	cases := []struct {
+		distribution v1alpha1.Distribution
+		opts         func(t *testing.T, provisioner any) v1alpha1.OptionsHetzner
+	}{
+		{
+			distribution: v1alpha1.DistributionVanilla,
+			opts: func(t *testing.T, provisioner any) v1alpha1.OptionsHetzner {
+				t.Helper()
+
+				typed, ok := provisioner.(*kubeadmhetznerprovisioner.Provisioner)
+				require.True(t, ok, "Vanilla: unexpected provisioner type %T", provisioner)
+
+				return typed.Opts
+			},
+		},
+		{
+			distribution: v1alpha1.DistributionK3s,
+			opts: func(t *testing.T, provisioner any) v1alpha1.OptionsHetzner {
+				t.Helper()
+
+				typed, ok := provisioner.(*k3shetznerprovisioner.Provisioner)
+				require.True(t, ok, "K3s: unexpected provisioner type %T", provisioner)
+
+				return typed.Opts
+			},
+		},
+	}
+
+	for _, testCase := range cases {
+		distribution := testCase.distribution
 		factory := clusterprovisioner.DefaultFactory{
 			DistributionConfig: &clusterprovisioner.DistributionConfig{},
 		}
@@ -90,22 +116,7 @@ func TestCreateProvisioner_HetznerServerDistributionsApplyDefaults(t *testing.T)
 		provisioner, _, err := factory.Create(context.Background(), cluster)
 		require.NoError(t, err, distribution)
 
-		var opts v1alpha1.OptionsHetzner
-
-		switch distribution {
-		case v1alpha1.DistributionVanilla:
-			typed, ok := provisioner.(*kubeadmhetznerprovisioner.Provisioner)
-			require.True(t, ok, "%s: unexpected provisioner type %T", distribution, provisioner)
-
-			opts = typed.Opts
-		case v1alpha1.DistributionK3s:
-			typed, ok := provisioner.(*k3shetznerprovisioner.Provisioner)
-			require.True(t, ok, "%s: unexpected provisioner type %T", distribution, provisioner)
-
-			opts = typed.Opts
-		default:
-			t.Fatalf("unexpected distribution %s", distribution)
-		}
+		opts := testCase.opts(t, provisioner)
 
 		assert.Equal(
 			t,
