@@ -104,7 +104,7 @@ func createKubeadmHetznerProvisioner(cluster *v1alpha1.Cluster) (Provisioner, an
 		kubeadmInstallVersion(),
 		controlPlanes,
 		int(cluster.Spec.Cluster.Workers),
-		cluster.Spec.Provider.Hetzner,
+		v1alpha1.ApplyHetznerDefaults(cluster.Spec.Provider.Hetzner),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create kubeadm Hetzner provisioner: %w", err)

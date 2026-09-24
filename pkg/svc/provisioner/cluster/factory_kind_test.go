@@ -7,6 +7,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	kindconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
+	k3shetznerprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/k3shetzner"
 	kubeadmhetznerprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kubeadmhetzner"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -59,4 +60,50 @@ func TestKubeadmInstallVersion(t *testing.T) {
 	// the same Kubernetes release on Docker (Kind) and Hetzner (kubeadm).
 	assert.Contains(t, kindconfigmanager.DefaultKindNodeImage, version,
 		"version must be a substring of the Kind node image")
+}
+
+// TestCreateProvisioner_HetznerServerDistributionsApplyDefaults verifies that the
+// Vanilla and K3s Hetzner provisioners receive the same Hetzner defaults as Talos
+// when the cluster sets no Hetzner options: an empty server type is rejected by the
+// Hetzner API, so a cluster created without a config file never got a server.
+// Cannot run in parallel: it sets HCLOUD_TOKEN so provider construction succeeds.
+func TestCreateProvisioner_HetznerServerDistributionsApplyDefaults(t *testing.T) {
+	t.Setenv("HCLOUD_TOKEN", "dummy-token")
+
+	for _, distribution := range []v1alpha1.Distribution{
+		v1alpha1.DistributionVanilla,
+		v1alpha1.DistributionK3s,
+	} {
+		factory := clusterprovisioner.DefaultFactory{
+			DistributionConfig: &clusterprovisioner.DistributionConfig{},
+		}
+		cluster := &v1alpha1.Cluster{
+			Spec: v1alpha1.Spec{
+				Cluster: v1alpha1.ClusterSpec{
+					Distribution:  distribution,
+					Provider:      v1alpha1.ProviderHetzner,
+					ControlPlanes: 1,
+				},
+			},
+		}
+
+		provisioner, _, err := factory.Create(context.Background(), cluster)
+		require.NoError(t, err, distribution)
+
+		var opts v1alpha1.OptionsHetzner
+
+		switch typed := provisioner.(type) {
+		case *kubeadmhetznerprovisioner.Provisioner:
+			opts = typed.Opts
+		case *k3shetznerprovisioner.Provisioner:
+			opts = typed.Opts
+		default:
+			t.Fatalf("%s: unexpected provisioner type %T", distribution, provisioner)
+		}
+
+		assert.Equal(t, v1alpha1.DefaultHetznerServerType, opts.ControlPlaneServerType, distribution)
+		assert.Equal(t, v1alpha1.DefaultHetznerServerType, opts.WorkerServerType, distribution)
+		assert.Equal(t, v1alpha1.DefaultHetznerLocation, opts.Location, distribution)
+		assert.Equal(t, v1alpha1.DefaultHetznerNetworkCIDR, opts.NetworkCIDR, distribution)
+	}
 }

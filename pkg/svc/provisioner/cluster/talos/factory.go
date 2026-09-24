@@ -235,38 +235,7 @@ func applyTalosDefaults(opts v1alpha1.OptionsTalos) v1alpha1.OptionsTalos {
 
 // applyHetznerDefaults applies default values to Hetzner options.
 func applyHetznerDefaults(opts v1alpha1.OptionsHetzner) v1alpha1.OptionsHetzner {
-	if opts.ControlPlaneServerType == "" {
-		opts.ControlPlaneServerType = v1alpha1.DefaultHetznerServerType
-	}
-
-	if opts.WorkerServerType == "" {
-		opts.WorkerServerType = v1alpha1.DefaultHetznerServerType
-	}
-
-	if opts.Location == "" {
-		opts.Location = v1alpha1.DefaultHetznerLocation
-	}
-
-	if opts.NetworkCIDR == "" {
-		opts.NetworkCIDR = v1alpha1.DefaultHetznerNetworkCIDR
-	}
-
-	if opts.TokenEnvVar == "" {
-		opts.TokenEnvVar = v1alpha1.DefaultHetznerTokenEnvVar
-	}
-
-	if len(opts.FallbackLocations) == 0 {
-		opts.FallbackLocations = v1alpha1.DefaultHetznerFallbackLocations()
-	}
-
-	// The floating IP is homed in the cluster's location unless explicitly
-	// overridden (homing affects routing latency only). Location is already
-	// defaulted above, so this always resolves to a concrete location.
-	if opts.FloatingIPLocation == "" {
-		opts.FloatingIPLocation = opts.Location
-	}
-
-	return opts
+	return v1alpha1.ApplyHetznerDefaults(opts)
 }
 
 // createOmniProvider creates an Omni provider from the given options.
