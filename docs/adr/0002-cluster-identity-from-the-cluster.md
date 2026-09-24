@@ -37,9 +37,14 @@ snapshot restores the `kube-system` Namespace with its UID, so the recorded and 
 match. The marker therefore identifies a logical cluster, and a control plane restored from a full
 snapshot is the same logical cluster as its source. Running a restored clone alongside its source
 is a deliberate identity split, and the clone must be re-stamped with a new cluster identity
-through KSail's explicit adopt path before it is used. Until then, when two reachable contexts serve
-the same cluster identity through different API servers, read surfaces report a duplicate-identity
-conflict for both instead of merging them into one entry.
+through KSail's explicit adopt path before it is used. Differing API servers alone do not tell a
+clone from one cluster exposed through several endpoints (internal and public load balancers, an HA
+endpoint, a local proxy). When two reachable contexts serve the same cluster identity through
+different API servers, read surfaces treat them as endpoints of one cluster only when provider
+discovery or persisted ownership state binds both endpoints to that cluster, and report a
+duplicate-identity conflict for both when that evidence places them on different infrastructure.
+When no evidence decides it, both entries are listed separately and marked as sharing an
+unverified identity, neither merged nor reported as a conflict.
 
 The kubeconfig keeps the role it is good at: enumerating what the user can reach and connecting to
 it. It stops being the source of truth for what a cluster *is*. Whenever KSail reads a valid marker
@@ -48,8 +53,11 @@ cluster entry the context points at: its API server URL and the fingerprint of i
 authority, plus the stable identity provider discovery or persisted ownership state reports for
 that cluster (for example the provider's cluster or server IDs). A cluster that is stopped or
 serving no API is joined to its context through that last-known mapping only while the context
-still points at the same server and CA and a trusted provider or persisted record still reports
-the recorded stable identity. The endpoint and CA alone never suffice, because a cluster recreated
+still points at the same server and CA and the recorded stable identity still holds. Live provider
+evidence decides that whenever the provider can be queried: when it no longer reports the recorded
+identity, KSail discards the mapping, whatever the local record says. Only when the provider cannot
+be queried does the persisted record keep the join, and the context is then marked as last-known
+rather than verified. The endpoint and CA alone never suffice, because a cluster recreated
 behind the same address can present both again; without a matching stable identity, the context
 is treated as not yet identified. When the context
 is repointed, its cluster entry changes, or the entry disappears, KSail discards the mapping and
