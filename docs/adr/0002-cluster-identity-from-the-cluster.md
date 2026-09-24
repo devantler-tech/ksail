@@ -45,8 +45,13 @@ The kubeconfig keeps the role it is good at: enumerating what the user can reach
 it. It stops being the source of truth for what a cluster *is*. Whenever KSail reads a valid marker
 through a context, it records that context-to-cluster mapping locally, bound to the kubeconfig
 cluster entry the context points at: its API server URL and the fingerprint of its certificate
-authority. A cluster that is stopped or serving no API is joined to its context through that
-last-known mapping only while the context still points at the same server and CA. When the context
+authority, plus the stable identity provider discovery or persisted ownership state reports for
+that cluster (for example the provider's cluster or server IDs). A cluster that is stopped or
+serving no API is joined to its context through that last-known mapping only while the context
+still points at the same server and CA and a trusted provider or persisted record still reports
+the recorded stable identity. The endpoint and CA alone never suffice, because a cluster recreated
+behind the same address can present both again; without a matching stable identity, the context
+is treated as not yet identified. When the context
 is repointed, its cluster entry changes, or the entry disappears, KSail discards the mapping and
 treats the context as not yet identified, since context names are mutable and reusable. Where no
 mapping has been
@@ -106,7 +111,8 @@ retires as a source of identity.
 Clusters created before this marker existed do not have one. They keep the classification their
 provider or persisted evidence gives them, gain the marker on the next KSail create or update, and
 an explicit adopt path lets a user stamp one without a provisioning run. A cluster with neither a
-marker nor other ownership evidence reads as unmanaged-but-identified, as it does today.
+marker nor other ownership evidence reads as unmanaged: its distribution and provider are
+classified from its nodes, and its cluster identity is reported as unknown.
 
 Rejected alternatives: keeping context-name patterns (unverifiable, and measured wrong on a real
 cluster); relying only on provider enumeration (invisible without credentials, which is exactly how
