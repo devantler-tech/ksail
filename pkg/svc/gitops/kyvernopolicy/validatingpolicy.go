@@ -351,35 +351,26 @@ func collectCEL(
 // declares no namespace is taken to be namespaced, landing in a namespace its
 // applier chooses.
 func isBuiltinClusterScoped(groupKind schema.GroupKind) bool {
-	var kinds []string
+	return slices.Contains(builtinClusterScopedKinds()[groupKind.Group], groupKind.Kind)
+}
 
-	switch groupKind.Group {
-	case "":
-		kinds = []string{"Namespace", "Node", "PersistentVolume"}
-	case "rbac.authorization.k8s.io":
-		kinds = []string{"ClusterRole", "ClusterRoleBinding"}
-	case "apiextensions.k8s.io":
-		kinds = []string{"CustomResourceDefinition"}
-	case "apiregistration.k8s.io":
-		kinds = []string{"APIService"}
-	case "admissionregistration.k8s.io":
-		kinds = []string{
+// builtinClusterScopedKinds maps each built-in API group to its kinds that
+// have no namespace.
+func builtinClusterScopedKinds() map[string][]string {
+	return map[string][]string{
+		"":                          {"Namespace", "Node", "PersistentVolume"},
+		"rbac.authorization.k8s.io": {"ClusterRole", "ClusterRoleBinding"},
+		"apiextensions.k8s.io":      {"CustomResourceDefinition"},
+		"apiregistration.k8s.io":    {"APIService"},
+		"admissionregistration.k8s.io": {
 			"MutatingWebhookConfiguration", "ValidatingWebhookConfiguration",
 			"ValidatingAdmissionPolicy", "ValidatingAdmissionPolicyBinding",
-		}
-	case "storage.k8s.io":
-		kinds = []string{"StorageClass", "CSIDriver", "CSINode", "VolumeAttachment"}
-	case "scheduling.k8s.io":
-		kinds = []string{"PriorityClass"}
-	case "networking.k8s.io":
-		kinds = []string{"IngressClass"}
-	case "node.k8s.io":
-		kinds = []string{"RuntimeClass"}
-	default:
-		return false
+		},
+		"storage.k8s.io":    {"StorageClass", "CSIDriver", "CSINode", "VolumeAttachment"},
+		"scheduling.k8s.io": {"PriorityClass"},
+		"networking.k8s.io": {"IngressClass"},
+		"node.k8s.io":       {"RuntimeClass"},
 	}
-
-	return slices.Contains(kinds, groupKind.Kind)
 }
 
 // offlineLimitation returns why entry cannot be evaluated offline for a
