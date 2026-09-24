@@ -146,12 +146,19 @@ func TestHetznerVanillaSmokeVerifiesNodeUserData(t *testing.T) {
 	verify := findHarnessStep(t, systemTest.Steps, vanillaUserDataStep)
 	assert.Equal(t, "${{ matrix.smoke == true && matrix.distribution == 'Vanilla' }}", verify.If)
 	assert.NotZero(t, verify.TimeoutMinutes)
-	assert.Contains(t, verify.Env["PROBE_IMAGE"], "@sha256:", "the probe image must be pinned by digest")
+	assert.Contains(
+		t,
+		verify.Env["PROBE_IMAGE"],
+		"@sha256:",
+		"the probe image must be pinned by digest",
+	)
 
 	// The check must run against a reachable cluster and before it is deleted.
 	verifyIndex := harnessStepIndex(t, systemTest.Steps, vanillaUserDataStep)
 	assert.Greater(
-		t, verifyIndex, harnessStepIndex(t, systemTest.Steps, "🧪 Assert Hetzner Smoke Cluster Reachable"),
+		t,
+		verifyIndex,
+		harnessStepIndex(t, systemTest.Steps, "🧪 Assert Hetzner Smoke Cluster Reachable"),
 	)
 	assert.Less(
 		t, verifyIndex, harnessStepIndex(t, systemTest.Steps, "🧹 Delete Hetzner Smoke Cluster"),
