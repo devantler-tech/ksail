@@ -367,6 +367,8 @@ func (c *Client) hasExplicitAWSConfiguration() bool {
 	return c.awsConfig != nil || c.staticCredentialProvider != nil || len(c.loadOptions) > 0
 }
 
+// configureMissingEKSClients builds EKS and inventory clients from the captured
+// configuration while preserving explicit service-option precedence.
 func (c *Client) configureMissingEKSClients(ctx context.Context, cfg aws.Config) error {
 	endpoint, frozen, err := awsconfigutil.FrozenServiceEndpoint(ctx, cfg, "EKS")
 	if err != nil {

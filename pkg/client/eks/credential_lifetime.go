@@ -44,6 +44,8 @@ func (c *Client) ValidateUpgradeCredentialLifetime(ctx context.Context) error {
 	return nil
 }
 
+// validateCredentialLifetime checks one effective provider and preserves retrieval
+// and cancellation errors before allowing an irreversible upgrade submission.
 func validateCredentialLifetime(ctx context.Context, provider aws.CredentialsProvider) error {
 	err := ctx.Err()
 	if err != nil {

@@ -327,6 +327,8 @@ func TestFrozenSDKCredentialsRetainExpiryWithoutRefreshingIdentity(t *testing.T)
 	assert.Equal(t, 1, provider.calls)
 }
 
+// TestFreezeAWSAgainPreservesCapturedConfiguration guards against ambient endpoint
+// drift and lost expiry when a frozen selection is reused for another preparation step.
 func TestFreezeAWSAgainPreservesCapturedConfiguration(t *testing.T) {
 	// Not parallel: exercise endpoint environment changes between freezes.
 	t.Setenv("AWS_ENDPOINT_URL_EKS", "https://captured.test")

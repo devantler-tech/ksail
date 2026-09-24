@@ -26,6 +26,8 @@ type upgradeHTTPFixture struct {
 	submitted int
 }
 
+// Do serves the upgrade and convergence responses while observing actual signed
+// SDK requests, so tests can prove whether any mutation was submitted.
 func (f *upgradeHTTPFixture) Do(request *http.Request) (*http.Response, error) {
 	f.t.Helper()
 	assert.Contains(f.t, request.Header.Get("Authorization"), "Credential=selected/")
@@ -61,12 +63,15 @@ func (f *upgradeHTTPFixture) Do(request *http.Request) (*http.Response, error) {
 	}, nil
 }
 
+// upgradeCredentialProvider returns a fixed synthetic session with its expiry intact.
 func upgradeCredentialProvider(values aws.Credentials) aws.CredentialsProvider {
 	return aws.CredentialsProviderFunc(func(context.Context) (aws.Credentials, error) {
 		return values, nil
 	})
 }
 
+// TestControlPlaneUpgradeChecksEffectiveSDKCredentials rejects unsafe EKS or STS
+// service overrides before mutation while allowing sessions that cover the wait.
 func TestControlPlaneUpgradeChecksEffectiveSDKCredentials(t *testing.T) {
 	t.Parallel()
 
@@ -124,6 +129,8 @@ type opaqueUpgradeAPI struct {
 	eksprovisioner.AWSClusterVersionAPI
 }
 
+// TestControlPlaneUpgradeRejectsUnverifiableClient prevents a custom API from
+// bypassing the credential-lifetime boundary by omitting its validator.
 func TestControlPlaneUpgradeRejectsUnverifiableClient(t *testing.T) {
 	t.Parallel()
 

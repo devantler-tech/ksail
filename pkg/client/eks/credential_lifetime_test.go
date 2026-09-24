@@ -13,6 +13,8 @@ import (
 
 var errUpgradeCredentialProvider = errors.New("credential provider unavailable")
 
+// TestUpgradeCredentialLifetimeBoundary exercises the strict one-minute expiry
+// margin and rejects incomplete credentials through real SDK client options.
 func TestUpgradeCredentialLifetimeBoundary(t *testing.T) {
 	t.Parallel()
 
@@ -59,6 +61,8 @@ func TestUpgradeCredentialLifetimeBoundary(t *testing.T) {
 	}
 }
 
+// TestUpgradeCredentialLifetimePreservesProviderErrors keeps provider failures and
+// canceled requests distinguishable from a session with insufficient lifetime.
 func TestUpgradeCredentialLifetimePreservesProviderErrors(t *testing.T) {
 	t.Parallel()
 

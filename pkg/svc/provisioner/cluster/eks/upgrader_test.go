@@ -233,6 +233,7 @@ func (api *upgradeAPI) DescribeClusterUpdate(
 	return api.result, nil
 }
 
+// newUpgradeProvisioner isolates upgrade orchestration from external AWS operations.
 func newUpgradeProvisioner(
 	t *testing.T,
 	api *upgradeAPI,

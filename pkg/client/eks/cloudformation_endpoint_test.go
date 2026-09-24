@@ -16,6 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestCloudFormationUsesCapturedEndpoint verifies signed inventory requests retain
+// captured endpoint policy despite environment changes and honor explicit overrides.
 func TestCloudFormationUsesCapturedEndpoint(t *testing.T) {
 	for _, testCase := range []struct {
 		name, global, service, shared, explicit, want string
