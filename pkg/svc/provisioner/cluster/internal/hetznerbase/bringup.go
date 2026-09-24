@@ -136,10 +136,14 @@ func (b *Base) BringUpNode(
 		return BringUpResult{}, ErrMissingKubeconfigPath
 	}
 
+	b.logf("Creating server %q...", spec.Server.Name)
+
 	server, err := b.Servers.CreateServer(ctx, spec.Server)
 	if err != nil {
 		return BringUpResult{}, fmt.Errorf("create server: %w", err)
 	}
+
+	b.logf("✓ Server %q created", spec.Server.Name)
 
 	kubeconfig, err := b.bootstrapAndReadKubeconfig(ctx, server, spec)
 	if err != nil {
@@ -161,19 +165,14 @@ func (b *Base) bootstrapAndReadKubeconfig(
 		return nil, err
 	}
 
-	client, err := sshbootstrap.DialWithRetry(ctx, sshbootstrap.Options{
-		Addr:            addr,
-		User:            bootstrapUser,
-		Signer:          spec.Signer,
-		HostKeyCallback: spec.HostKeyCallback,
-	}, 0)
+	client, err := b.dialBootstrapSSH(ctx, addr, spec.Signer, spec.HostKeyCallback)
 	if err != nil {
-		return nil, fmt.Errorf("dial bootstrap SSH at %s: %w", addr, err)
+		return nil, err
 	}
 
 	defer func() { _ = client.Close() }()
 
-	err = waitForRemoteFile(ctx, client, spec.KubeconfigPath, spec.PollInterval)
+	err = b.waitForBootstrapFile(ctx, client, addr, spec.KubeconfigPath, spec.PollInterval)
 	if err != nil {
 		return nil, err
 	}
