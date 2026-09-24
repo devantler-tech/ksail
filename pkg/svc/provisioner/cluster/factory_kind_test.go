@@ -101,7 +101,12 @@ func TestCreateProvisioner_HetznerServerDistributionsApplyDefaults(t *testing.T)
 			t.Fatalf("%s: unexpected provisioner type %T", distribution, provisioner)
 		}
 
-		assert.Equal(t, v1alpha1.DefaultHetznerServerType, opts.ControlPlaneServerType, distribution)
+		assert.Equal(
+			t,
+			v1alpha1.DefaultHetznerServerType,
+			opts.ControlPlaneServerType,
+			distribution,
+		)
 		assert.Equal(t, v1alpha1.DefaultHetznerServerType, opts.WorkerServerType, distribution)
 		assert.Equal(t, v1alpha1.DefaultHetznerLocation, opts.Location, distribution)
 		assert.Equal(t, v1alpha1.DefaultHetznerNetworkCIDR, opts.NetworkCIDR, distribution)
