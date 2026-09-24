@@ -87,6 +87,7 @@ require (
 	github.com/invopop/jsonschema v0.14.0
 	github.com/kubescape/kubescape/v3 v3.0.48
 	github.com/kubescape/opa-utils v0.0.313
+	github.com/kyverno/api v0.0.1-alpha.3.0.20260723090831-fb2785727f98
 	github.com/kyverno/kyverno v1.19.1
 	github.com/loft-sh/log v0.0.0-20260812120051-874a69680b18
 	github.com/loft-sh/vcluster v0.37.1
@@ -138,7 +139,6 @@ require (
 	github.com/jellydator/ttlcache/v3 v3.4.1 // indirect
 	github.com/jmoiron/jsonq v0.0.0-20150511023944-e874b168d07e // indirect
 	github.com/kubernetes-csi/external-snapshotter/client/v8 v8.2.0 // indirect
-	github.com/kyverno/api v0.0.1-alpha.3.0.20260723090831-fb2785727f98 // indirect
 	github.com/kyverno/go-jmespath v0.4.1-0.20231124160150-95e59c162877 // indirect
 	github.com/kyverno/sdk v0.0.0-20260825082632-68d74afcb07a // indirect
 	github.com/natefinch/atomic v1.0.1 // indirect
@@ -148,6 +148,7 @@ require (
 	github.com/notaryproject/tspclient-go v1.0.0 // indirect
 	github.com/oliveagle/jsonpath v0.0.0-20180606110733-2e52cf6e6852 // indirect
 	github.com/open-policy-agent/gatekeeper/v3 v3.17.0 // indirect
+	github.com/openreports/reports-api v0.2.1 // indirect
 	github.com/prometheus/otlptranslator v1.0.0 // indirect
 	github.com/protocolbuffers/txtpbfmt v0.0.0-20260217160748-a481f6a22f94 // indirect
 	github.com/r3labs/diff v1.1.0 // indirect
@@ -1002,7 +1003,7 @@ require (
 	gorm.io/gorm v1.31.1 // indirect
 	helm.sh/helm/v3 v3.20.2 // indirect
 	honnef.co/go/tools v0.7.0 // indirect
-	k8s.io/apiserver v0.36.4 // indirect
+	k8s.io/apiserver v0.36.4
 	k8s.io/cluster-bootstrap v0.36.0 // indirect
 	k8s.io/component-base v0.36.4 // indirect
 	k8s.io/component-helpers v0.36.4 // indirect

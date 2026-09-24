@@ -103,6 +103,44 @@ const (
 	DefaultTalosISO int64 = 125127
 )
 
+// ApplyHetznerDefaults returns opts with every unset Hetzner option filled with its
+// default. Every distribution that runs on Hetzner servers applies it before
+// provisioning, because the Hetzner API rejects a server with no server type.
+func ApplyHetznerDefaults(opts OptionsHetzner) OptionsHetzner {
+	if opts.ControlPlaneServerType == "" {
+		opts.ControlPlaneServerType = DefaultHetznerServerType
+	}
+
+	if opts.WorkerServerType == "" {
+		opts.WorkerServerType = DefaultHetznerServerType
+	}
+
+	if opts.Location == "" {
+		opts.Location = DefaultHetznerLocation
+	}
+
+	if opts.NetworkCIDR == "" {
+		opts.NetworkCIDR = DefaultHetznerNetworkCIDR
+	}
+
+	if opts.TokenEnvVar == "" {
+		opts.TokenEnvVar = DefaultHetznerTokenEnvVar
+	}
+
+	if len(opts.FallbackLocations) == 0 {
+		opts.FallbackLocations = DefaultHetznerFallbackLocations()
+	}
+
+	// The floating IP is homed in the cluster's location unless explicitly
+	// overridden (homing affects routing latency only). Location is already
+	// defaulted above, so this always resolves to a concrete location.
+	if opts.FloatingIPLocation == "" {
+		opts.FloatingIPLocation = opts.Location
+	}
+
+	return opts
+}
+
 // ExpectedDistributionConfigName returns the default config filename for a distribution.
 // Unknown distributions fall back to the Vanilla config filename.
 func ExpectedDistributionConfigName(distribution Distribution) string {

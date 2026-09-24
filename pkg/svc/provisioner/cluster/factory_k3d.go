@@ -124,7 +124,7 @@ func createK3sHetznerProvisioner(cluster *v1alpha1.Cluster) (Provisioner, any, e
 		k3sInstallVersion(),
 		controlPlanes,
 		int(cluster.Spec.Cluster.Workers),
-		cluster.Spec.Provider.Hetzner,
+		v1alpha1.ApplyHetznerDefaults(cluster.Spec.Provider.Hetzner),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create K3s Hetzner provisioner: %w", err)

@@ -10,6 +10,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/kyvernopolicy"
+	policiesv1beta1 "github.com/kyverno/api/api/policies.kyverno.io/v1beta1"
 	kyvernov1 "github.com/kyverno/kyverno/api/kyverno/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -22,12 +23,17 @@ var ErrKyvernoPolicyViolation = errors.New("kyverno policy violation")
 // the scope, because a check that silently covers less than it appears to is
 // worse than none.
 const kyvernoPoliciesFlagDescription = "Evaluate the source's own Kyverno ClusterPolicy and " +
-	"Policy validate rules against the rendered manifests, as if each document were being " +
+	"Policy validate rules, and its CEL-based ValidatingPolicy and NamespacedValidatingPolicy " +
+	"validations, against the rendered manifests, as if each document were being " +
 	"created (off by default). Each kustomization is evaluated against the policies in its own " +
 	"rendered output: a policy delivered by a different kustomization is not seen, loose YAML " +
 	"files are not evaluated, a document is evaluated in the namespace it declares (a Flux " +
-	"targetNamespace is not applied), and CEL-based policies.kyverno.io policies are not " +
-	"supported. Namespace labels come from the kustomization's own Namespaces first, then from " +
+	"targetNamespace is not applied, so a policy that depends on the namespace of a " +
+	"namespaced document that declares none is reported as a warning), and other " +
+	"policies.kyverno.io kinds are not " +
+	"supported. A ValidatingPolicy that calls the http library, or a CEL lookup of cluster, " +
+	"registry or global-context data, cannot be evaluated offline. Namespace labels come " +
+	"from the kustomization's own Namespaces first, then from " +
 	"a Namespace another kustomization renders, unless two render it with different labels. " +
 	"A rule a cluster would enforce fails validation; an audit-only failure or a rule that " +
 	"cannot be evaluated offline is reported as a warning."
@@ -71,23 +77,54 @@ func evaluateKyvernoDocuments(
 
 	docs := decodeDocuments(data)
 
-	policies, targets, err := splitKyvernoPolicies(docs, skipKinds)
+	split, err := splitKyvernoPolicies(docs, skipKinds)
 	if err != nil {
 		return fmt.Errorf("%s: %w", source, err)
 	}
 
-	if len(policies) == 0 {
+	if len(split.policies) == 0 && len(split.celPolicies) == 0 {
 		return nil
 	}
 
-	engine := kyvernopolicy.NewEngine(policies, withSharedNamespaces(docs, shared))
+	namespaces := withSharedNamespaces(docs, shared)
+	engine := kyvernopolicy.NewEngine(split.policies, namespaces)
 
+	celEngine, err := kyvernopolicy.NewCELEngine(split.celPolicies, namespaces)
+	if err != nil {
+		return fmt.Errorf("load Kyverno ValidatingPolicies in %s: %w", source, err)
+	}
+
+	blocking, err := evaluateKyvernoTargets(
+		ctx, engine, celEngine, split.targets, source, sink, attribution,
+	)
+	if err != nil {
+		return err
+	}
+
+	if len(blocking) > 0 {
+		return fmt.Errorf("%w:\n  %s", ErrKyvernoPolicyViolation, strings.Join(blocking, "\n  "))
+	}
+
+	return nil
+}
+
+// evaluateKyvernoTargets evaluates every target document and returns the
+// described blocking violations. Non-blocking violations are recorded in sink.
+func evaluateKyvernoTargets(
+	ctx context.Context,
+	engine *kyvernopolicy.Engine,
+	celEngine *kyvernopolicy.CELEngine,
+	targets []map[string]any,
+	source string,
+	sink *celViolationSink,
+	attribution map[string]string,
+) ([]string, error) {
 	var blocking []string
 
 	for _, doc := range targets {
-		violations, evalErr := engine.Evaluate(ctx, doc)
-		if evalErr != nil {
-			return fmt.Errorf("evaluate Kyverno policies in %s: %w", source, evalErr)
+		violations, err := evaluateKyvernoDocument(ctx, engine, celEngine, doc, source)
+		if err != nil {
+			return nil, err
 		}
 
 		for _, violation := range violations {
@@ -103,11 +140,29 @@ func evaluateKyvernoDocuments(
 		}
 	}
 
-	if len(blocking) > 0 {
-		return fmt.Errorf("%w:\n  %s", ErrKyvernoPolicyViolation, strings.Join(blocking, "\n  "))
+	return blocking, nil
+}
+
+// evaluateKyvernoDocument applies both the kyverno.io policies and the CEL
+// ValidatingPolicies to one document and returns their combined violations.
+func evaluateKyvernoDocument(
+	ctx context.Context,
+	engine *kyvernopolicy.Engine,
+	celEngine *kyvernopolicy.CELEngine,
+	doc map[string]any,
+	source string,
+) ([]kyvernopolicy.Violation, error) {
+	violations, err := engine.Evaluate(ctx, doc)
+	if err != nil {
+		return nil, fmt.Errorf("evaluate Kyverno policies in %s: %w", source, err)
 	}
 
-	return nil
+	celViolations, err := celEngine.Evaluate(ctx, doc)
+	if err != nil {
+		return nil, fmt.Errorf("evaluate Kyverno ValidatingPolicies in %s: %w", source, err)
+	}
+
+	return append(violations, celViolations...), nil
 }
 
 // decodeDocuments decodes every mapping document in data, dropping empty and
@@ -123,18 +178,6 @@ func decodeDocuments(data []byte) []map[string]any {
 	}
 
 	return docs
-}
-
-// namespaceDocumentName returns the name of a core v1 Namespace document, the
-// same shape the policy engine reads namespace labels from.
-func namespaceDocumentName(doc map[string]any) (string, bool) {
-	if doc["apiVersion"] != "v1" || doc["kind"] != "Namespace" {
-		return "", false
-	}
-
-	name, _, _ := unstructured.NestedString(doc, "metadata", "name")
-
-	return name, name != ""
 }
 
 // sharedNamespaces collects the Namespace documents rendered across every
@@ -158,7 +201,7 @@ func sharedNamespaces(outputs [][]byte) []map[string]any {
 
 	for _, data := range outputs {
 		for _, doc := range decodeDocuments(data) {
-			name, ok := namespaceDocumentName(doc)
+			name, ok := kyvernopolicy.NamespaceDocumentName(doc)
 			if !ok {
 				continue
 			}
@@ -202,7 +245,7 @@ func withSharedNamespaces(docs, shared []map[string]any) []map[string]any {
 	own := map[string]struct{}{}
 
 	for _, doc := range docs {
-		if name, ok := namespaceDocumentName(doc); ok {
+		if name, ok := kyvernopolicy.NamespaceDocumentName(doc); ok {
 			own[name] = struct{}{}
 		}
 	}
@@ -210,7 +253,7 @@ func withSharedNamespaces(docs, shared []map[string]any) []map[string]any {
 	combined := slices.Clone(docs)
 
 	for _, doc := range shared {
-		name, _ := namespaceDocumentName(doc)
+		name, _ := kyvernopolicy.NamespaceDocumentName(doc)
 		if _, rendered := own[name]; !rendered {
 			combined = append(combined, doc)
 		}
@@ -219,30 +262,44 @@ func withSharedNamespaces(docs, shared []map[string]any) []map[string]any {
 	return combined
 }
 
-// splitKyvernoPolicies separates the Kyverno policies in docs from the documents
-// to evaluate against them, dropping skipped kinds from the latter.
-func splitKyvernoPolicies(
-	docs []map[string]any,
-	skipKinds []string,
-) ([]kyvernov1.PolicyInterface, []map[string]any, error) {
+// kyvernoSplit is a document stream separated into the Kyverno policies it
+// carries and the documents to evaluate against them.
+type kyvernoSplit struct {
+	policies    []kyvernov1.PolicyInterface
+	celPolicies []policiesv1beta1.ValidatingPolicyLike
+	targets     []map[string]any
+}
+
+// splitKyvernoPolicies separates the Kyverno policies in docs, classic and CEL,
+// from the documents to evaluate against them, dropping skipped kinds from the
+// latter.
+func splitKyvernoPolicies(docs []map[string]any, skipKinds []string) (kyvernoSplit, error) {
 	skip := make(map[string]struct{}, len(skipKinds))
 	for _, kind := range skipKinds {
 		skip[kind] = struct{}{}
 	}
 
-	var (
-		policies []kyvernov1.PolicyInterface
-		targets  []map[string]any
-	)
+	var split kyvernoSplit
 
 	for _, doc := range docs {
 		if kyvernopolicy.IsPolicy(doc) {
 			policy, err := kyvernopolicy.DecodePolicy(doc)
 			if err != nil {
-				return nil, nil, fmt.Errorf("load Kyverno policy: %w", err)
+				return kyvernoSplit{}, fmt.Errorf("load Kyverno policy: %w", err)
 			}
 
-			policies = append(policies, policy)
+			split.policies = append(split.policies, policy)
+
+			continue
+		}
+
+		if kyvernopolicy.IsValidatingPolicy(doc) {
+			policy, err := kyvernopolicy.DecodeValidatingPolicy(doc)
+			if err != nil {
+				return kyvernoSplit{}, fmt.Errorf("load Kyverno ValidatingPolicy: %w", err)
+			}
+
+			split.celPolicies = append(split.celPolicies, policy)
 
 			continue
 		}
@@ -253,10 +310,10 @@ func splitKyvernoPolicies(
 			}
 		}
 
-		targets = append(targets, doc)
+		split.targets = append(split.targets, doc)
 	}
 
-	return policies, targets, nil
+	return split, nil
 }
 
 // describeKyvernoViolation renders a violation with its policy, rule, the
@@ -287,9 +344,15 @@ func describeKyvernoViolation(
 		subject = identity
 	}
 
+	// A CEL ValidatingPolicy's validations carry no rule name.
+	rule := ""
+	if violation.Rule != "" {
+		rule = fmt.Sprintf(" rule %q", violation.Rule)
+	}
+
 	described := fmt.Sprintf(
-		"policy %q rule %q %s for %s (in %s): %s",
-		violation.Policy, violation.Rule, outcome, subject, source, violation.Message,
+		"policy %q%s %s for %s (in %s): %s",
+		violation.Policy, rule, outcome, subject, source, violation.Message,
 	)
 
 	if layer := attribution[identity]; identity != "" && layer != "" {
