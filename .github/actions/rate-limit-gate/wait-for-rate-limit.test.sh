@@ -86,11 +86,17 @@ run_case exhaustion-without-reset-time-reports-unknown 1 'Resets at unknown' '' 
 
 # Once MAX_WAIT is spent, exhaustion must be reported from the last probe alone: any further gh call
 # (here one that never answers) would push completion past the budget.
+# The expected text leaves out the "Waited Ns" figure: the gate counts whole seconds, so a probe that
+# straddles a second boundary honestly reports 1s. The duration check below bounds the time instead.
 exhaustion_started=${SECONDS}
 CASE_MAX_WAIT=0 run_case exhaustion-starts-no-lookup-after-budget 1 \
-	'rate limit exhausted (5 remaining, need 100). Waited 0s (max 0s). Resets at 2026-07-20T01:00:00Z.' \
+	'(max 0s). Resets at 2026-07-20T01:00:00Z.' \
 	'unreachable' '0|5 2026-07-20T01:00:00Z|' 'hang||'
 exhaustion_seconds=$((SECONDS - exhaustion_started))
+# The same run must still name the quota it found, up to the variable "Waited Ns" figure.
+CASE_MAX_WAIT=0 run_case exhaustion-after-budget-names-quota 1 \
+	'rate limit exhausted (5 remaining, need 100). Waited ' \
+	'unreachable' '0|5 2026-07-20T01:00:00Z|' 'hang||'
 if [[ "${exhaustion_seconds}" -gt 2 ]]; then
 	printf 'FAIL: exhaustion-starts-no-lookup-after-budget: took %ss; a gh call ran after MAX_WAIT=0 was spent\n' \
 		"${exhaustion_seconds}" >&2
