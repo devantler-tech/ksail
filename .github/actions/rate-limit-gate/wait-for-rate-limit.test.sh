@@ -93,6 +93,10 @@ CASE_MAX_WAIT=0 run_case exhaustion-starts-no-lookup-after-budget 1 \
 	'(max 0s). Resets at 2026-07-20T01:00:00Z.' \
 	'unreachable' '0|5 2026-07-20T01:00:00Z|' 'hang||'
 exhaustion_seconds=$((SECONDS - exhaustion_started))
+# The same run must still name the quota it found, up to the variable "Waited Ns" figure.
+CASE_MAX_WAIT=0 run_case exhaustion-after-budget-names-quota 1 \
+	'rate limit exhausted (5 remaining, need 100). Waited ' \
+	'unreachable' '0|5 2026-07-20T01:00:00Z|' 'hang||'
 if [[ "${exhaustion_seconds}" -gt 2 ]]; then
 	printf 'FAIL: exhaustion-starts-no-lookup-after-budget: took %ss; a gh call ran after MAX_WAIT=0 was spent\n' \
 		"${exhaustion_seconds}" >&2
