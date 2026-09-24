@@ -349,3 +349,97 @@ func TestNewCELEngine_UncompilablePolicyIsAnError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "broken")
 }
+
+func secret(namespace string) map[string]any {
+	return map[string]any{
+		"apiVersion": "v1",
+		"kind":       "Secret",
+		"metadata":   map[string]any{"name": "credentials", "namespace": namespace},
+	}
+}
+
+// A policy that cannot be evaluated offline is only worth reporting for the
+// documents it would select: a Secret matches neither ConfigMap policy, so it
+// must produce no warning even though both are unsupported offline.
+func TestCELEvaluate_UnsupportedPolicyIgnoresDocumentsItDoesNotMatch(t *testing.T) {
+	t.Parallel()
+
+	for name, content := range map[string]string{
+		"http library":              httpPolicy,
+		"unknown namespace labels":  selectsProductionNamespaces,
+		"namespaceObject reference": readsNamespaceObject,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			engine := celEngine(t, nil, validatingPolicy(t, content))
+
+			violations, err := engine.Evaluate(t.Context(), secret("prod"))
+			require.NoError(t, err)
+			assert.Empty(t, violations)
+		})
+	}
+}
+
+const readsNamespaceObject = `
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: team-matches-namespace
+spec:
+  validationActions: [Deny]
+  matchConstraints:
+    resourceRules:
+    - apiGroups: [""]
+      apiVersions: ["v1"]
+      operations: ["CREATE"]
+      resources: ["configmaps"]
+  validations:
+  - expression: "namespaceObject.metadata.labels.team == object.metadata.labels.team"
+    message: "the team label must match the namespace's"
+`
+
+// An expression that reads namespaceObject for a namespace missing from the
+// rendered documents would be evaluated against nothing, so it is reported as
+// not evaluable offline instead of guessed.
+func TestCELEvaluate_UnknownNamespaceReadByExpressionIsUnsupported(t *testing.T) {
+	t.Parallel()
+
+	engine := celEngine(t, nil, validatingPolicy(t, readsNamespaceObject))
+
+	violations, err := engine.Evaluate(
+		t.Context(),
+		configMap("prod", map[string]any{"team": "platform"}),
+	)
+	require.NoError(t, err)
+	require.Len(t, violations, 1)
+	assert.True(t, violations[0].Unsupported)
+	assert.False(t, violations[0].Blocking)
+	assert.Contains(t, violations[0].Message, `namespace "prod" is not among the rendered documents`)
+}
+
+// With the namespace rendered, the same policy is evaluated normally.
+func TestCELEvaluate_RenderedNamespaceReadByExpressionIsEvaluated(t *testing.T) {
+	t.Parallel()
+
+	engine := celEngine(
+		t,
+		[]map[string]any{namespace("prod", map[string]any{"team": "platform"})},
+		validatingPolicy(t, readsNamespaceObject),
+	)
+
+	matching, err := engine.Evaluate(
+		t.Context(),
+		configMap("prod", map[string]any{"team": "platform"}),
+	)
+	require.NoError(t, err)
+	assert.Empty(t, matching)
+
+	mismatched, err := engine.Evaluate(
+		t.Context(),
+		configMap("prod", map[string]any{"team": "other"}),
+	)
+	require.NoError(t, err)
+	require.Len(t, mismatched, 1)
+	assert.True(t, mismatched[0].Blocking)
+}

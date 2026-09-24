@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apiserver/pkg/admission"
 )
 
 const (
@@ -60,6 +61,13 @@ var errOffline = errors.New(
 // network. The match is deliberately broad; a false positive only turns a
 // policy into a warning.
 var httpReference = regexp.MustCompile(`(^|[^A-Za-z0-9_.])http([^A-Za-z0-9_]|$)`)
+
+// namespaceObjectReference matches the CEL namespaceObject variable. Offline it
+// is only known for namespaces among the rendered documents. The match is broad
+// for the same reason as httpReference.
+var namespaceObjectReference = regexp.MustCompile(
+	`(^|[^A-Za-z0-9_.])namespaceObject([^A-Za-z0-9_]|$)`,
+)
 
 // installOffline makes Kyverno's process-wide CEL library context the offline
 // one. The vpol compiler binds its resource, image-data and global-context
@@ -113,12 +121,15 @@ type compiledCELPolicy struct {
 	policy      policiesv1beta1.ValidatingPolicyLike
 	engine      vpolengine.Engine
 	unsupported string
+	// readsNamespace is set when an expression mentions namespaceObject.
+	readsNamespace bool
 }
 
 // CELEngine evaluates a fixed set of CEL ValidatingPolicies against documents.
 type CELEngine struct {
 	policies   []compiledCELPolicy
 	namespaces map[string]*corev1.Namespace
+	matcher    matching.Matcher
 }
 
 // NewCELEngine compiles the given policies. As at admission, it keeps only
@@ -138,6 +149,7 @@ func NewCELEngine(
 	resolve := func(name string) *corev1.Namespace { return known[name] }
 
 	compiler := vpolcompiler.NewCompiler()
+	matcher := matching.NewMatcher()
 	compiled := make([]compiledCELPolicy, 0, len(policies))
 
 	for _, policy := range policies {
@@ -147,12 +159,12 @@ func NewCELEngine(
 			continue
 		}
 
-		usesHTTP, err := referencesHTTP(spec)
+		strs, err := specStrings(spec)
 		if err != nil {
 			return nil, fmt.Errorf("inspect %s: %w", celPolicyName(policy), err)
 		}
 
-		if usesHTTP {
+		if slices.ContainsFunc(strs, httpReference.MatchString) {
 			compiled = append(compiled, compiledCELPolicy{
 				policy: policy,
 				unsupported: "the policy uses the CEL http library, which makes network " +
@@ -171,12 +183,14 @@ func NewCELEngine(
 			return nil, fmt.Errorf("compile %s: %w", celPolicyName(policy), err)
 		}
 
-		compiled = append(compiled, compiledCELPolicy{policy: policy})
-		last := &compiled[len(compiled)-1]
-		last.engine = vpolengine.NewEngine(provider, resolve, matching.NewMatcher())
+		compiled = append(compiled, compiledCELPolicy{
+			policy:         policy,
+			engine:         vpolengine.NewEngine(provider, resolve, matcher),
+			readsNamespace: slices.ContainsFunc(strs, namespaceObjectReference.MatchString),
+		})
 	}
 
-	return &CELEngine{policies: compiled, namespaces: known}, nil
+	return &CELEngine{policies: compiled, namespaces: known, matcher: matcher}, nil
 }
 
 // renderedNamespaces indexes the Namespace documents among docs.
@@ -202,9 +216,11 @@ func renderedNamespaces(docs []map[string]any) map[string]*corev1.Namespace {
 // Evaluate applies every policy to doc, simulating its creation, and returns
 // the failing and erroring validations. A NamespacedValidatingPolicy applies
 // only to documents in its own namespace. A policy that selects on namespace
-// labels, for a document whose Namespace is not among the rendered documents,
-// is reported as Unsupported instead of being matched against labels it cannot
-// see. As with Evaluate, doc's namespace is used as given.
+// labels or reads namespaceObject, for a document whose Namespace is not among
+// the rendered documents, is reported as Unsupported instead of being evaluated
+// against a namespace it cannot see. Such a report, like one for a policy that
+// cannot run offline at all, is made only for documents the policy's other
+// match constraints select. As with Evaluate, doc's namespace is used as given.
 func (e *CELEngine) Evaluate(ctx context.Context, doc map[string]any) ([]Violation, error) {
 	resource := &unstructured.Unstructured{Object: doc}
 	namespace := resource.GetNamespace()
@@ -219,27 +235,17 @@ func (e *CELEngine) Evaluate(ctx context.Context, doc map[string]any) ([]Violati
 			continue
 		}
 
-		if entry.unsupported != "" {
-			violations = append(violations, Violation{
-				Policy:      celPolicyName(policy),
-				Message:     entry.unsupported,
-				Unsupported: true,
-			})
-
-			continue
-		}
-
-		_, known := e.namespaces[namespace]
-		if namespace != "" && !known && selectsOnNamespaceLabels(policy) {
-			violations = append(violations, Violation{
-				Policy: celPolicyName(policy),
-				Message: fmt.Sprintf(
-					"namespace %q is not among the rendered documents, so its labels are "+
-						"unknown and this policy's namespaceSelector cannot be evaluated offline",
-					namespace,
-				),
-				Unsupported: true,
-			})
+		reason := e.offlineLimitation(entry, namespace)
+		if reason != "" {
+			// A limitation is only worth reporting for a document the policy
+			// would select at all.
+			if e.appliesIgnoringNamespace(policy, resource) {
+				violations = append(violations, Violation{
+					Policy:      celPolicyName(policy),
+					Message:     reason,
+					Unsupported: true,
+				})
+			}
 
 			continue
 		}
@@ -340,30 +346,98 @@ func collectCEL(
 	return violations
 }
 
-// referencesHTTP reports whether any expression in spec mentions the CEL http
-// library.
-func referencesHTTP(spec *policiesv1beta1.ValidatingPolicySpec) (bool, error) {
-	encoded, err := json.Marshal(spec)
-	if err != nil {
-		return false, fmt.Errorf("encode policy spec: %w", err)
+// offlineLimitation returns why entry cannot be evaluated offline for a
+// document in namespace, or "" when it can. A namespace missing from the
+// rendered documents is a limitation only for a policy that selects on its
+// labels or reads it as namespaceObject; either would otherwise be evaluated
+// against a namespace that is not there.
+func (e *CELEngine) offlineLimitation(entry compiledCELPolicy, namespace string) string {
+	if entry.unsupported != "" {
+		return entry.unsupported
 	}
 
-	var strs []string
+	if _, known := e.namespaces[namespace]; namespace == "" || known {
+		return ""
+	}
+
+	switch {
+	case selectsOnNamespaceLabels(entry.policy):
+		return fmt.Sprintf(
+			"namespace %q is not among the rendered documents, so its labels are "+
+				"unknown and this policy's namespaceSelector cannot be evaluated offline",
+			namespace,
+		)
+	case entry.readsNamespace:
+		return fmt.Sprintf(
+			"namespace %q is not among the rendered documents, so the namespaceObject "+
+				"this policy reads is unknown and it cannot be evaluated offline",
+			namespace,
+		)
+	default:
+		return ""
+	}
+}
+
+// appliesIgnoringNamespace reports whether policy's match constraints select
+// the create request for resource once the namespaceSelector is set aside,
+// since that selector is exactly what may be unknowable offline. A match error
+// counts as a match, so a limitation is reported rather than hidden.
+func (e *CELEngine) appliesIgnoringNamespace(
+	policy policiesv1beta1.ValidatingPolicyLike,
+	resource *unstructured.Unstructured,
+) bool {
+	constraints := policy.GetValidatingPolicySpec().MatchConstraints
+	if constraints == nil {
+		return false
+	}
+
+	relaxed := constraints.DeepCopy()
+	relaxed.NamespaceSelector = nil
+
+	gvk := resource.GroupVersionKind()
+	gvr, _ := meta.UnsafeGuessKindToResource(gvk)
+	attr := admission.NewAttributesRecord(
+		resource,
+		nil,
+		gvk,
+		resource.GetNamespace(),
+		resource.GetName(),
+		gvr,
+		"",
+		admission.Create,
+		nil,
+		false,
+		nil,
+	)
+
+	matches, err := e.matcher.Match(&matching.MatchCriteria{Constraints: relaxed}, attr, nil)
+	if err != nil {
+		return true
+	}
+
+	return matches
+}
+
+// specStrings returns every string in spec, which is where its CEL
+// expressions live.
+func specStrings(spec *policiesv1beta1.ValidatingPolicySpec) ([]string, error) {
+	encoded, err := json.Marshal(spec)
+	if err != nil {
+		return nil, fmt.Errorf("encode policy spec: %w", err)
+	}
 
 	var decoded any
 
 	err = json.Unmarshal(encoded, &decoded)
 	if err != nil {
-		return false, fmt.Errorf("decode policy spec: %w", err)
+		return nil, fmt.Errorf("decode policy spec: %w", err)
 	}
+
+	var strs []string
 
 	collectStrings(decoded, &strs)
 
-	if slices.ContainsFunc(strs, httpReference.MatchString) {
-		return true, nil
-	}
-
-	return false, nil
+	return strs, nil
 }
 
 func collectStrings(value any, out *[]string) {
