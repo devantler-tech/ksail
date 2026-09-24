@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 
@@ -49,7 +50,9 @@ func isCELPolicyVersion(version string) bool {
 // errOffline is what every cluster, registry or global-context lookup returns
 // while evaluating offline. Its text is how a rule error caused by a lookup is
 // told apart from one the policy itself raises.
-var errOffline = errors.New("ksail evaluates Kyverno policies offline and cannot perform this lookup")
+var errOffline = errors.New(
+	"ksail evaluates Kyverno policies offline and cannot perform this lookup",
+)
 
 // httpReference matches the CEL http library identifier. A policy whose
 // expressions mention it is never evaluated: the library makes real requests
@@ -139,7 +142,8 @@ func NewCELEngine(
 
 	for _, policy := range policies {
 		spec := policy.GetValidatingPolicySpec()
-		if !spec.AdmissionEnabled() || spec.EvaluationMode() == policieskyvernoio.EvaluationModeJSON {
+		if !spec.AdmissionEnabled() ||
+			spec.EvaluationMode() == policieskyvernoio.EvaluationModeJSON {
 			continue
 		}
 
@@ -210,7 +214,8 @@ func (e *CELEngine) Evaluate(ctx context.Context, doc map[string]any) ([]Violati
 	for _, entry := range e.policies {
 		policy := entry.policy
 
-		if policyNamespace := policy.GetNamespace(); policyNamespace != "" && policyNamespace != namespace {
+		if policyNamespace := policy.GetNamespace(); policyNamespace != "" &&
+			policyNamespace != namespace {
 			continue
 		}
 
@@ -354,10 +359,8 @@ func referencesHTTP(spec *policiesv1beta1.ValidatingPolicySpec) (bool, error) {
 
 	collectStrings(decoded, &strs)
 
-	for _, s := range strs {
-		if httpReference.MatchString(s) {
-			return true, nil
-		}
+	if slices.ContainsFunc(strs, httpReference.MatchString) {
+		return true, nil
 	}
 
 	return false, nil
@@ -418,7 +421,12 @@ func (offlineContext) ListResources(
 	return nil, errOffline
 }
 
-func (offlineContext) GetResource(string, string, string, string) (*unstructured.Unstructured, error) {
+func (offlineContext) GetResource(
+	string,
+	string,
+	string,
+	string,
+) (*unstructured.Unstructured, error) {
 	return nil, errOffline
 }
 

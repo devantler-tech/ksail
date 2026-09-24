@@ -75,7 +75,14 @@ func TestIsValidatingPolicy(t *testing.T) {
 		{"policies.kyverno.io", "ValidatingPolicy", false},
 	} {
 		doc := map[string]any{"apiVersion": testCase.apiVersion, "kind": testCase.kind}
-		assert.Equal(t, testCase.want, kyvernopolicy.IsValidatingPolicy(doc), "%s %s", testCase.apiVersion, testCase.kind)
+		assert.Equal(
+			t,
+			testCase.want,
+			kyvernopolicy.IsValidatingPolicy(doc),
+			"%s %s",
+			testCase.apiVersion,
+			testCase.kind,
+		)
 	}
 }
 
@@ -241,7 +248,11 @@ func TestCELEvaluate_UnknownNamespaceWithSelectorIsUnsupported(t *testing.T) {
 	require.Len(t, violations, 1)
 	assert.True(t, violations[0].Unsupported)
 	assert.False(t, violations[0].Blocking)
-	assert.Contains(t, violations[0].Message, `namespace "prod" is not among the rendered documents`)
+	assert.Contains(
+		t,
+		violations[0].Message,
+		`namespace "prod" is not among the rendered documents`,
+	)
 }
 
 const resourceLookupPolicy = `
