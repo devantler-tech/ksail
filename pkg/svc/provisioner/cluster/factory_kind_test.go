@@ -92,13 +92,19 @@ func TestCreateProvisioner_HetznerServerDistributionsApplyDefaults(t *testing.T)
 
 		var opts v1alpha1.OptionsHetzner
 
-		switch typed := provisioner.(type) {
-		case *kubeadmhetznerprovisioner.Provisioner:
+		switch distribution {
+		case v1alpha1.DistributionVanilla:
+			typed, ok := provisioner.(*kubeadmhetznerprovisioner.Provisioner)
+			require.True(t, ok, "%s: unexpected provisioner type %T", distribution, provisioner)
+
 			opts = typed.Opts
-		case *k3shetznerprovisioner.Provisioner:
+		case v1alpha1.DistributionK3s:
+			typed, ok := provisioner.(*k3shetznerprovisioner.Provisioner)
+			require.True(t, ok, "%s: unexpected provisioner type %T", distribution, provisioner)
+
 			opts = typed.Opts
 		default:
-			t.Fatalf("%s: unexpected provisioner type %T", distribution, provisioner)
+			t.Fatalf("unexpected distribution %s", distribution)
 		}
 
 		assert.Equal(
