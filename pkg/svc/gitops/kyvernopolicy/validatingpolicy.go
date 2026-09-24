@@ -144,6 +144,7 @@ func NewCELEngine(
 	namespaces []map[string]any,
 ) (*CELEngine, error) {
 	installOffline()
+	silenceControllerRuntimeLogger()
 
 	known := renderedNamespaces(namespaces)
 	resolve := func(name string) *corev1.Namespace { return known[name] }

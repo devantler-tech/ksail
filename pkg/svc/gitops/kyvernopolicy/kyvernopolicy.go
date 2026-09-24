@@ -140,6 +140,8 @@ type Engine struct {
 // among them supply the labels that namespaceSelector matches and
 // failure-action overrides are resolved against.
 func NewEngine(policies []kyvernov1.PolicyInterface, namespaces []map[string]any) *Engine {
+	silenceControllerRuntimeLogger()
+
 	cfg := config.NewDefaultConfiguration(false)
 	jmesPath := jmespath.New(cfg)
 	isCluster := false
