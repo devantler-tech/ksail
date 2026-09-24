@@ -346,28 +346,40 @@ func collectCEL(
 	return violations
 }
 
-// clusterScopedKinds are the built-in kinds that have no namespace. There is no
-// API discovery offline, so any other kind that declares no namespace is taken
-// to be namespaced, landing in a namespace its applier chooses.
-var clusterScopedKinds = map[schema.GroupKind]struct{}{
-	{Kind: "Namespace"}:        {},
-	{Kind: "Node"}:             {},
-	{Kind: "PersistentVolume"}: {},
-	{Group: "rbac.authorization.k8s.io", Kind: "ClusterRole"}:                         {},
-	{Group: "rbac.authorization.k8s.io", Kind: "ClusterRoleBinding"}:                  {},
-	{Group: "apiextensions.k8s.io", Kind: "CustomResourceDefinition"}:                 {},
-	{Group: "apiregistration.k8s.io", Kind: "APIService"}:                             {},
-	{Group: "admissionregistration.k8s.io", Kind: "MutatingWebhookConfiguration"}:     {},
-	{Group: "admissionregistration.k8s.io", Kind: "ValidatingWebhookConfiguration"}:   {},
-	{Group: "admissionregistration.k8s.io", Kind: "ValidatingAdmissionPolicy"}:        {},
-	{Group: "admissionregistration.k8s.io", Kind: "ValidatingAdmissionPolicyBinding"}: {},
-	{Group: "storage.k8s.io", Kind: "StorageClass"}:                                   {},
-	{Group: "storage.k8s.io", Kind: "CSIDriver"}:                                      {},
-	{Group: "storage.k8s.io", Kind: "CSINode"}:                                        {},
-	{Group: "storage.k8s.io", Kind: "VolumeAttachment"}:                               {},
-	{Group: "scheduling.k8s.io", Kind: "PriorityClass"}:                               {},
-	{Group: "networking.k8s.io", Kind: "IngressClass"}:                                {},
-	{Group: "node.k8s.io", Kind: "RuntimeClass"}:                                      {},
+// isBuiltinClusterScoped reports whether groupKind is a built-in kind that has
+// no namespace. There is no API discovery offline, so any other kind that
+// declares no namespace is taken to be namespaced, landing in a namespace its
+// applier chooses.
+func isBuiltinClusterScoped(groupKind schema.GroupKind) bool {
+	var kinds []string
+
+	switch groupKind.Group {
+	case "":
+		kinds = []string{"Namespace", "Node", "PersistentVolume"}
+	case "rbac.authorization.k8s.io":
+		kinds = []string{"ClusterRole", "ClusterRoleBinding"}
+	case "apiextensions.k8s.io":
+		kinds = []string{"CustomResourceDefinition"}
+	case "apiregistration.k8s.io":
+		kinds = []string{"APIService"}
+	case "admissionregistration.k8s.io":
+		kinds = []string{
+			"MutatingWebhookConfiguration", "ValidatingWebhookConfiguration",
+			"ValidatingAdmissionPolicy", "ValidatingAdmissionPolicyBinding",
+		}
+	case "storage.k8s.io":
+		kinds = []string{"StorageClass", "CSIDriver", "CSINode", "VolumeAttachment"}
+	case "scheduling.k8s.io":
+		kinds = []string{"PriorityClass"}
+	case "networking.k8s.io":
+		kinds = []string{"IngressClass"}
+	case "node.k8s.io":
+		kinds = []string{"RuntimeClass"}
+	default:
+		return false
+	}
+
+	return slices.Contains(kinds, groupKind.Kind)
 }
 
 // offlineLimitation returns why entry cannot be evaluated offline for a
@@ -388,7 +400,7 @@ func (e *CELEngine) offlineLimitation(
 	var unknown string
 
 	if namespace == "" {
-		if _, clusterScoped := clusterScopedKinds[groupKind]; clusterScoped {
+		if isBuiltinClusterScoped(groupKind) {
 			return ""
 		}
 
