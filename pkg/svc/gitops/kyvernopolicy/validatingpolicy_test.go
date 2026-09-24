@@ -422,6 +422,80 @@ func TestCELEvaluate_UnknownNamespaceReadByExpressionIsUnsupported(t *testing.T)
 	)
 }
 
+// A namespaced document that declares no namespace lands wherever its applier
+// puts it, so a policy that depends on that namespace cannot be evaluated
+// offline. Evaluating it against the empty namespace would treat the document as
+// cluster-scoped and guess a verdict.
+func TestCELEvaluate_UndeclaredNamespaceIsUnsupported(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		policy string
+		labels map[string]any
+	}{
+		"namespaceSelector": {policy: selectsProductionNamespaces},
+		"namespaceObject": {
+			policy: readsNamespaceObject,
+			labels: map[string]any{"team": "platform"},
+		},
+	}
+
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			engine := celEngine(t, nil, validatingPolicy(t, testCase.policy))
+
+			violations, err := engine.Evaluate(t.Context(), configMap("", testCase.labels))
+			require.NoError(t, err)
+			require.Len(t, violations, 1)
+			assert.True(t, violations[0].Unsupported)
+			assert.False(t, violations[0].Blocking)
+			assert.Contains(t, violations[0].Message, "the document declares no namespace")
+		})
+	}
+}
+
+const selectsProductionClusterRoles = `
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: require-team-on-cluster-roles
+spec:
+  validationActions: [Deny]
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        tier: production
+    resourceRules:
+    - apiGroups: ["rbac.authorization.k8s.io"]
+      apiVersions: ["v1"]
+      operations: ["CREATE"]
+      resources: ["clusterroles"]
+  validations:
+  - expression: "has(object.metadata.labels) && 'team' in object.metadata.labels"
+    message: "label team is required"
+`
+
+// A cluster-scoped kind has no namespace to know, and a cluster matches it
+// against a namespaceSelector just as the offline engine does, so it is
+// evaluated normally rather than reported as unknown.
+func TestCELEvaluate_ClusterScopedKindWithoutNamespaceIsEvaluated(t *testing.T) {
+	t.Parallel()
+
+	engine := celEngine(t, nil, validatingPolicy(t, selectsProductionClusterRoles))
+
+	violations, err := engine.Evaluate(t.Context(), map[string]any{
+		"apiVersion": "rbac.authorization.k8s.io/v1",
+		"kind":       "ClusterRole",
+		"metadata":   map[string]any{"name": "reader"},
+	})
+	require.NoError(t, err)
+	require.Len(t, violations, 1)
+	assert.False(t, violations[0].Unsupported)
+	assert.True(t, violations[0].Blocking)
+}
+
 // With the namespace rendered, the same policy is evaluated normally.
 func TestCELEvaluate_RenderedNamespaceReadByExpressionIsEvaluated(t *testing.T) {
 	t.Parallel()

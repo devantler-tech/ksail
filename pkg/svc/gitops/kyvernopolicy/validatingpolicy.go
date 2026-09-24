@@ -235,7 +235,7 @@ func (e *CELEngine) Evaluate(ctx context.Context, doc map[string]any) ([]Violati
 			continue
 		}
 
-		reason := e.offlineLimitation(entry, namespace)
+		reason := e.offlineLimitation(entry, namespace, resource.GroupVersionKind().GroupKind())
 		if reason != "" {
 			// A limitation is only worth reporting for a document the policy
 			// would select at all.
@@ -346,33 +346,68 @@ func collectCEL(
 	return violations
 }
 
+// clusterScopedKinds are the built-in kinds that have no namespace. There is no
+// API discovery offline, so any other kind that declares no namespace is taken
+// to be namespaced, landing in a namespace its applier chooses.
+var clusterScopedKinds = map[schema.GroupKind]struct{}{
+	{Kind: "Namespace"}:        {},
+	{Kind: "Node"}:             {},
+	{Kind: "PersistentVolume"}: {},
+	{Group: "rbac.authorization.k8s.io", Kind: "ClusterRole"}:                         {},
+	{Group: "rbac.authorization.k8s.io", Kind: "ClusterRoleBinding"}:                  {},
+	{Group: "apiextensions.k8s.io", Kind: "CustomResourceDefinition"}:                 {},
+	{Group: "apiregistration.k8s.io", Kind: "APIService"}:                             {},
+	{Group: "admissionregistration.k8s.io", Kind: "MutatingWebhookConfiguration"}:     {},
+	{Group: "admissionregistration.k8s.io", Kind: "ValidatingWebhookConfiguration"}:   {},
+	{Group: "admissionregistration.k8s.io", Kind: "ValidatingAdmissionPolicy"}:        {},
+	{Group: "admissionregistration.k8s.io", Kind: "ValidatingAdmissionPolicyBinding"}: {},
+	{Group: "storage.k8s.io", Kind: "StorageClass"}:                                   {},
+	{Group: "storage.k8s.io", Kind: "CSIDriver"}:                                      {},
+	{Group: "storage.k8s.io", Kind: "CSINode"}:                                        {},
+	{Group: "storage.k8s.io", Kind: "VolumeAttachment"}:                               {},
+	{Group: "scheduling.k8s.io", Kind: "PriorityClass"}:                               {},
+	{Group: "networking.k8s.io", Kind: "IngressClass"}:                                {},
+	{Group: "node.k8s.io", Kind: "RuntimeClass"}:                                      {},
+}
+
 // offlineLimitation returns why entry cannot be evaluated offline for a
-// document in namespace, or "" when it can. A namespace missing from the
-// rendered documents is a limitation only for a policy that selects on its
-// labels or reads it as namespaceObject; either would otherwise be evaluated
-// against a namespace that is not there.
-func (e *CELEngine) offlineLimitation(entry compiledCELPolicy, namespace string) string {
+// document of groupKind in namespace, or "" when it can. A namespace that is
+// unknown offline is a limitation only for a policy that selects on its labels
+// or reads it as namespaceObject; either would otherwise be evaluated against a
+// namespace that is not there. A namespace is unknown when it is missing from
+// the rendered documents, or when a namespaced document declares none.
+func (e *CELEngine) offlineLimitation(
+	entry compiledCELPolicy,
+	namespace string,
+	groupKind schema.GroupKind,
+) string {
 	if entry.unsupported != "" {
 		return entry.unsupported
 	}
 
-	if _, known := e.namespaces[namespace]; namespace == "" || known {
-		return ""
+	var unknown string
+
+	if namespace == "" {
+		if _, clusterScoped := clusterScopedKinds[groupKind]; clusterScoped {
+			return ""
+		}
+
+		unknown = "the document declares no namespace, so the namespace it lands in"
+	} else {
+		if _, known := e.namespaces[namespace]; known {
+			return ""
+		}
+
+		unknown = fmt.Sprintf("namespace %q is not among the rendered documents, so it", namespace)
 	}
 
 	switch {
 	case selectsOnNamespaceLabels(entry.policy):
-		return fmt.Sprintf(
-			"namespace %q is not among the rendered documents, so its labels are "+
-				"unknown and this policy's namespaceSelector cannot be evaluated offline",
-			namespace,
-		)
+		return unknown + " has unknown labels and this policy's namespaceSelector " +
+			"cannot be evaluated offline"
 	case entry.readsNamespace:
-		return fmt.Sprintf(
-			"namespace %q is not among the rendered documents, so the namespaceObject "+
-				"this policy reads is unknown and it cannot be evaluated offline",
-			namespace,
-		)
+		return unknown + " is unknown, so the namespaceObject this policy reads " +
+			"cannot be evaluated offline"
 	default:
 		return ""
 	}
