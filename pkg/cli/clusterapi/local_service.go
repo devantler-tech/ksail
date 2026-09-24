@@ -34,10 +34,10 @@ import (
 // stable value is reported and the namespace path segment is otherwise ignored.
 const localNamespace = "default"
 
-// FactoryFunc builds a provisioner factory for a distribution. The name is used by distributions
+// FactoryFunc builds a provisioner factory for a requested cluster. The name is used by distributions
 // whose provisioner reads the cluster name from its config (VCluster, KWOK). It is injectable so
 // tests can substitute mock provisioners.
-type FactoryFunc func(distribution v1alpha1.Distribution, name string) (clusterprovisioner.Factory, error)
+type FactoryFunc func(cluster *v1alpha1.Cluster) (clusterprovisioner.Factory, error)
 
 // job tracks an in-flight or recently finished create/delete operation for a single cluster.
 type job struct {
@@ -573,7 +573,10 @@ func (s *Service) resolveCluster(
 func (s *Service) dockerFactory(
 	distribution v1alpha1.Distribution,
 ) (clusterprovisioner.Factory, error) {
-	return s.newFactory(distribution, "")
+	cluster := &v1alpha1.Cluster{}
+	cluster.Spec.Cluster.Distribution = distribution
+
+	return s.newFactory(cluster)
 }
 
 // startJob resolves a cluster, records an in-flight job for it at the given phase, and returns the
@@ -1146,8 +1149,10 @@ func (s *Service) buildProvisioner(
 	guard *eksMutationGuard,
 ) (clusterprovisioner.Provisioner, error) {
 	distribution := spec.Cluster.Distribution
+	cluster := &v1alpha1.Cluster{Spec: spec}
+	cluster.Name = name
 
-	factory, err := s.newFactory(distribution, name)
+	factory, err := s.newFactory(cluster)
 	if err != nil {
 		return nil, err
 	}
@@ -1156,11 +1161,6 @@ func (s *Service) buildProvisioner(
 	if err != nil {
 		return nil, err
 	}
-
-	// Pass the full requested spec so the factory routes to the right provider (e.g. Talos →
-	// Hetzner/Omni/Docker) and honors node counts and provider options, not just the distribution.
-	cluster := &v1alpha1.Cluster{Spec: spec}
-	cluster.Name = name
 
 	provisioner, _, err := factory.Create(ctx, cluster)
 	if err != nil {
@@ -1271,14 +1271,13 @@ func isCreatable(distribution v1alpha1.Distribution) bool {
 	return slices.Contains(creatableDistributions(), distribution)
 }
 
-// defaultFactory builds a real provisioner factory with a default distribution config for the given
-// name. The configs carry the TypeMeta/defaults the provisioners require to create clusters, and are
+// defaultFactory builds a real provisioner factory from the complete requested cluster spec.
+// The configs carry the TypeMeta/defaults the provisioners require to create clusters, and are
 // equally valid for listing (where the cluster name is ignored).
 func defaultFactory(
-	distribution v1alpha1.Distribution,
-	name string,
+	cluster *v1alpha1.Cluster,
 ) (clusterprovisioner.Factory, error) {
-	config, err := distributionConfig(distribution, name)
+	config, err := distributionConfig(cluster)
 	if err != nil {
 		return nil, err
 	}

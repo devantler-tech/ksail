@@ -15,6 +15,18 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+// BuildProvisionerForTest exercises request-to-factory wiring without running a cloud operation.
+func (s *Service) BuildProvisionerForTest(ctx context.Context, cluster *v1alpha1.Cluster) error {
+	_, err := s.buildProvisioner(ctx, cluster.Spec, cluster.Name, nil)
+
+	return err
+}
+
+// DefaultFactoryForTest exposes the production request-to-config boundary for offline inspection.
+func DefaultFactoryForTest(cluster *v1alpha1.Cluster) (clusterprovisioner.Factory, error) {
+	return defaultFactory(cluster)
+}
+
 // SetEKSLifecycleLockTimeoutForTest shortens the acquisition budget for contention tests.
 func (s *Service) SetEKSLifecycleLockTimeoutForTest(timeout time.Duration) {
 	s.eksLifecycleLockTimeout = timeout

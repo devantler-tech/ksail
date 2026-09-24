@@ -72,9 +72,30 @@ func normalizeKubernetesVersion(version string) string {
 	return strings.TrimPrefix(strings.TrimSpace(version), "v")
 }
 
+// ResolveClusterVersionContract selects the machine-config contract for a cluster.
+// A custom Hetzner ISO has no known Talos release, so it must not inherit the
+// tracked default ISO's contract. Snapshot boot already requires a version pin.
+func ResolveClusterVersionContract(
+	cluster *v1alpha1.Cluster,
+) (*talosconfig.VersionContract, error) {
+	options := cluster.Spec.Cluster.Talos
+	if cluster.Spec.Cluster.Provider == v1alpha1.ProviderHetzner &&
+		options.ISO != 0 && options.ISO != v1alpha1.DefaultTalosISO &&
+		strings.TrimSpace(options.Version) == "" {
+		return nil, fmt.Errorf(
+			"%w: ISO %d; set spec.cluster.talos.version or --distribution-version to the ISO's Talos release",
+			v1alpha1.ErrTalosCustomISOVersionRequired,
+			options.ISO,
+		)
+	}
+
+	return ParseVersionContract(options.Version)
+}
+
 // ParseVersionContract resolves a pinned Talos version to the machinery
 // contract used for config generation. An empty pin follows the Talos release
-// provided by KSail's tracked default Hetzner bootstrap ISO.
+// provided by KSail's tracked default Hetzner bootstrap ISO. Callers with a
+// Cluster must use ResolveClusterVersionContract to validate custom ISO pins.
 func ParseVersionContract(pinnedVersion string) (*talosconfig.VersionContract, error) {
 	pinnedVersion = strings.TrimSpace(pinnedVersion)
 	if pinnedVersion == "" {

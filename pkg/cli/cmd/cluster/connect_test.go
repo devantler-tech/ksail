@@ -1,11 +1,34 @@
 package cluster_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	"github.com/stretchr/testify/require"
 )
+
+// TestConnectAllowsLegacyTalosISO reaches k9s help without regenerating machine configuration.
+//
+//nolint:paralleltest // changes the process working directory
+func TestConnectAllowsLegacyTalosISO(t *testing.T) {
+	t.Chdir(t.TempDir())
+	require.NoError(t, os.WriteFile("ksail.yaml", []byte(`apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: legacy-image
+spec:
+  cluster:
+    distribution: Talos
+    provider: Hetzner
+    talos:
+      iso: 123456
+`), 0o600))
+
+	cmd := cluster.NewConnectCmd()
+	cmd.SetContext(t.Context())
+	require.NoError(t, cmd.RunE(cmd, []string{"--help"}))
+}
 
 func TestConnect_CommandFlags(t *testing.T) {
 	t.Parallel()

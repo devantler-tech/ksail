@@ -133,7 +133,7 @@ func buildDistributionConfig(
 		talosConfig, err := newTalosConfig(
 			name,
 			kubernetesVersion,
-			cluster.Spec.Cluster.Talos.Version,
+			cluster,
 		)
 		if err != nil {
 			return nil, err
@@ -175,9 +175,10 @@ func buildDistributionConfig(
 // given Kubernetes version. The cluster name is baked into the PKI, so it must be set via WithName
 // (which regenerates the bundle).
 func newTalosConfig(
-	name, kubernetesVersion, talosVersion string,
+	name, kubernetesVersion string,
+	cluster *v1alpha1.Cluster,
 ) (*talosconfigmanager.Configs, error) {
-	versionContract, err := talosconfigmanager.ParseVersionContract(talosVersion)
+	versionContract, err := talosconfigmanager.ResolveClusterVersionContract(cluster)
 	if err != nil {
 		return nil, fmt.Errorf("resolve Talos version contract: %w", err)
 	}

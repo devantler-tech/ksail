@@ -30,6 +30,26 @@ import (
 // source/Flux path resolution and formatting. They are only compiled during
 // testing and should be changed together with the tests that depend on them.
 
+// ExportLoadWorkloadConfig exercises the shared reconcile, push, and watch configuration path.
+func ExportLoadWorkloadConfig(cmd *cobra.Command) (*v1alpha1.Cluster, error) {
+	ctx, err := initCommandContext(cmd)
+	if err != nil {
+		return nil, err
+	}
+
+	return ctx.ClusterCfg, nil
+}
+
+// ExportLoadImageConfig exercises the shared image export/import configuration path.
+func ExportLoadImageConfig(cmd *cobra.Command) (*v1alpha1.Cluster, error) {
+	ctx, err := initImageCommandContext(cmd, createImageConfigManager(cmd))
+	if err != nil {
+		return nil, err
+	}
+
+	return ctx.ClusterCfg, nil
+}
+
 // ExportPollUntilApplicationReady exposes the production ArgoCD polling path.
 func ExportPollUntilApplicationReady(
 	ctx context.Context,

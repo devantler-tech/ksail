@@ -57,6 +57,7 @@ spec:
     talos:
       # Omit ISO to use KSail's automatically tracked Hetzner x86 default.
       # For ARM, set the matching ISO ID from the Hetzner Cloud Console.
+      # A custom ISO also requires version to match that ISO's Talos release.
       # Ignored when schematicId is set — KSail builds a snapshot instead.
       # Optional: Talos factory schematic ID. When set, KSail builds a Hetzner
       # snapshot from the Talos factory URL and uses it instead of the ISO.
@@ -189,8 +190,31 @@ private IP.
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
-| `talos.iso` | int | tracked x86 default | Hetzner Cloud ISO/image ID for Talos Linux (look up the matching ARM ID in the Hetzner Cloud Console). Ignored when `schematicId` is set. |
+| `talos.iso` | int | tracked x86 default | Hetzner Cloud ISO/image ID for Talos Linux (look up the matching ARM ID in the Hetzner Cloud Console). A custom ID requires `talos.version` to match the ISO's Talos release. Ignored when `schematicId` is set. |
 | `talos.schematicId` | string | _(empty)_ | [Talos factory](https://factory.talos.dev) schematic ID. When set, KSail automatically builds and manages a Hetzner snapshot image instead of booting from the ISO. `spec.cluster.talos.version` must also be set. Not supported for ARM64 server types (`cax*`). The snapshot is deleted when `ksail cluster delete --delete-storage` is run. |
+
+#### Using a custom Talos ISO
+
+When you select a custom ISO, including an ARM ISO, set `spec.cluster.talos.version`
+to the Talos release that ISO boots. KSail cannot infer a release from a Hetzner ISO
+ID and refuses to generate machine configuration for an unpinned custom ISO. This
+prevents a newer default version contract from adding fields an older ISO cannot read.
+
+```yaml
+# Partial snippet — replace both values with your ISO's ID and Talos release.
+spec:
+  cluster:
+    distribution: Talos
+    provider: Hetzner
+    talos:
+      iso: 123456
+      version: v1.12.4
+```
+
+You can also provide the version per invocation, for example
+`ksail cluster create --distribution-version v1.12.4`. Omitting `talos.iso`, or using
+KSail's tracked default ISO ID, keeps the default version contract. A schematic
+snapshot also requires a version pin and takes precedence over the ISO.
 
 ### Autoscaler Configuration
 
