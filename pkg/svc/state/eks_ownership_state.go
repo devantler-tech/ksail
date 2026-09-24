@@ -132,16 +132,12 @@ func LoadEKSOwnershipState(clusterName, region string) (*EKSOwnershipState, erro
 // Callers use this only when no region was resolved from config or kubeconfig; multiple records
 // remain ambiguous until an explicitly configured region environment variable selects one.
 //
-// Individually unusable records — unreadable, malformed, failing validation, or predating the
-// awsOptions schema — are skipped rather than failing the whole listing, so one stale record in an
-// unrelated region cannot strand a cluster whose target region is recorded correctly. When nothing
-// usable survives, the result is absence — unless a record was present but could not be read,
-// parsed, or validated as anything other than a legacy record. That returns
-// ErrEKSOwnershipStateUnreadable, naming the files, because a record that exists but cannot be
-// read is evidence that something is wrong, not evidence that none was
-// written: treating it as absent would let a stale rendered config bind a cluster unopposed.
-// Selecting a region from the survivors never weakens the ownership check:
-// eksidentity.NewVerifier still loads and strictly validates the selected region's record.
+// Legacy records predating the awsOptions schema are skipped. Any other unreadable,
+// malformed or invalid record returns ErrEKSOwnershipStateUnreadable, even beside a
+// readable record: it may conceal another region, so the readable record cannot be
+// assumed to be the only identity. Only a complete readable listing can establish
+// absence or an unambiguous recovery target. The selected region's record is still
+// strictly validated by eksidentity.NewVerifier before mutation.
 func ListEKSOwnershipStates(clusterName string) ([]*EKSOwnershipState, error) {
 	dir, err := clusterStateDir(clusterName)
 	if err != nil {
@@ -167,16 +163,16 @@ func ListEKSOwnershipStates(clusterName string) ([]*EKSOwnershipState, error) {
 		}
 	}
 
-	if len(ownerships) == 0 {
-		if len(unreadable) > 0 {
-			return nil, fmt.Errorf(
-				"%w: %s: %s",
-				ErrEKSOwnershipStateUnreadable,
-				clusterName,
-				strings.Join(unreadable, ", "),
-			)
-		}
+	if len(unreadable) > 0 {
+		return nil, fmt.Errorf(
+			"%w: %s: %s",
+			ErrEKSOwnershipStateUnreadable,
+			clusterName,
+			strings.Join(unreadable, ", "),
+		)
+	}
 
+	if len(ownerships) == 0 {
 		return nil, fmt.Errorf("%w: %s", ErrEKSOwnershipStateNotFound, clusterName)
 	}
 

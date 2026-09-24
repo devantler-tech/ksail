@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -177,6 +179,40 @@ func TestEKSRecoveryRequiresExplicitTargetWithoutLocalEvidence(t *testing.T) {
 	cmd.SetArgs([]string{"--provider", "AWS", "--yes"})
 	require.ErrorContains(t, cmd.Execute(), "explicit --name")
 	assert.Empty(t, readStandaloneEKSCalls(t, marker))
+}
+
+func TestEKSRecoveryDoesNotBorrowAnotherClustersAWSOptions(t *testing.T) {
+	const name = "eks-recovery-explicit-target"
+
+	marker, eksctlPath := setupStandaloneEKSLifecycleFixture(t, name)
+	// Aliases belonging to the other project are unrelated environment here.
+	// Keep the fixture's assertions on the actual canonical AWS credentials.
+	fixture := slices.DeleteFunc(
+		strings.Split(standaloneEKSEksctlFixture, "\n"),
+		func(line string) bool { return strings.HasPrefix(line, `[ -z "${KSAIL_`) },
+	)
+	writeExecutableFixture(t, eksctlPath, strings.Join(fixture, "\n"))
+
+	require.NoError(t, state.DeleteClusterState(name))
+	require.NoError(t, os.WriteFile("eks.yaml", []byte(standaloneEKSEksConfigFixture), 0o600))
+	t.Setenv("KSAIL_REGION", "us-west-2")
+	t.Setenv("KSAIL_ACCESS", "other-cluster-access")
+	t.Setenv("KSAIL_SECRET", "other-cluster-secret")
+	t.Setenv("AWS_PROFILE", "")
+	t.Setenv("AWS_REGION", "ap-southeast-2")
+	t.Setenv("AWS_ACCESS_KEY_ID", "fixture-access")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "fixture-secret")
+	t.Setenv("AWS_SESSION_TOKEN", "fixture-session")
+
+	require.NoError(t, recoveryEKSCommand(t, name, true).Execute())
+	ownership, err := state.LoadEKSOwnershipState(name, "ap-southeast-2")
+	require.NoError(t, err)
+	assert.Equal(t, "AWS_ACCESS_KEY_ID", ownership.AWSOptions.AccessKeyIDEnvVar)
+	assert.Equal(t, "AWS_REGION", ownership.AWSOptions.RegionEnvVar)
+	assert.Contains(t, readStandaloneEKSCalls(t, marker),
+		"get cluster --name "+name+" --output json --region ap-southeast-2")
+	_, err = state.LoadEKSOwnershipState(name, "us-west-2")
+	require.ErrorIs(t, err, state.ErrEKSOwnershipStateNotFound)
 }
 
 //nolint:paralleltest // mutates process environment, working directory, and shared hooks.

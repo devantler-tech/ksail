@@ -156,5 +156,17 @@ func validateEKSRecoveryTarget(cmd *cobra.Command, resolved *lifecycle.ResolvedC
 		return errEKSRecoveryTargetRequired
 	}
 
+	discardOtherClusterAWSOptions(resolved)
+
 	return nil
+}
+
+// Explicit recovery of another target must use its own ambient selection,
+// never credential aliases or a region borrowed from the loaded project.
+func discardOtherClusterAWSOptions(resolved *lifecycle.ResolvedClusterInfo) {
+	if resolved.ConfigSource && !loadedConfigDescribesTarget(resolved) {
+		resolved.AWSOpts = v1alpha1.OptionsAWS{}
+		resolved.AWSRegion = ""
+		resolved.AWSRegionFromConfig = false
+	}
 }

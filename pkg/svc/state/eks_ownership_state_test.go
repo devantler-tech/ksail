@@ -477,10 +477,9 @@ func TestListEKSOwnershipStatesRefusesAnUnreadableRecordAsAbsence(t *testing.T) 
 	assert.ErrorContains(t, err, path)
 }
 
-// TestListEKSOwnershipStatesKeepsAUsableRecordBesideAnUnreadableOne pins that corruption only changes
-// the no-usable-record case. A readable record in its own region still wins, exactly as a legacy
-// record beside it is skipped, so one damaged file in an unrelated region cannot strand a cluster.
-func TestListEKSOwnershipStatesKeepsAUsableRecordBesideAnUnreadableOne(t *testing.T) {
+// A corrupt record may conceal a second region. Recovery must not select the
+// surviving readable record as though it were the only identity ever recorded.
+func TestListEKSOwnershipStatesRefusesMixedReadableAndUnreadableRecords(t *testing.T) {
 	t.Parallel()
 
 	const clusterName = "ownership-list-truncated-beside-valid"
@@ -499,9 +498,8 @@ func TestListEKSOwnershipStatesKeepsAUsableRecordBesideAnUnreadableOne(t *testin
 	writeRawOwnershipRecord(t, clusterName, "us-west-2", []byte("{"))
 
 	ownerships, err := state.ListEKSOwnershipStates(clusterName)
-	require.NoError(t, err)
-	require.Len(t, ownerships, 1)
-	assert.Equal(t, "eu-north-1", ownerships[0].Region)
+	require.ErrorIs(t, err, state.ErrEKSOwnershipStateUnreadable)
+	assert.Empty(t, ownerships)
 }
 
 // TestListEKSOwnershipStatesRefusesAnUnreadableStateDirectory covers the directory itself. A listing
