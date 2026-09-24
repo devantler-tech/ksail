@@ -148,7 +148,7 @@ func stageTimedOut(ctx, stageCtx context.Context) bool {
 // bootstrapDiagnostics reads cloud-init's status off the node, formatted as a
 // suffix for the timeout error, or an empty string when it cannot be read.
 func bootstrapDiagnostics(ctx context.Context, client *sshbootstrap.Client) string {
-	diagCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), bootstrapDiagnosticsTimeout)
+	diagCtx, cancel := context.WithTimeout(ctx, bootstrapDiagnosticsTimeout)
 	defer cancel()
 
 	// cloud-init exits non-zero when it reports an error, so the output is
