@@ -299,7 +299,9 @@ func loadConfig(
 
 	cfgManager := ksailconfigmanager.NewConfigManager(nil, configFile)
 
-	cfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true, SkipValidation: true})
+	cfg, err := cfgManager.Load(configmanager.LoadOptions{
+		Silent: true, SkipValidation: true, SkipTalosMachineConfig: true,
+	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("load cluster config: %w", err)
 	}

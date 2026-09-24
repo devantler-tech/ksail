@@ -2,6 +2,9 @@ package v1alpha1
 
 import "errors"
 
+// ErrTalosCustomISOVersionRequired is returned when a custom Hetzner ISO has no Talos version pin.
+var ErrTalosCustomISOVersionRequired = errors.New("custom Hetzner Talos ISO requires a version pin")
+
 // ErrInvalidDistribution is returned when an invalid distribution is specified.
 var ErrInvalidDistribution = errors.New("invalid distribution")
 

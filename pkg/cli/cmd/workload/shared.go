@@ -43,7 +43,9 @@ func initCommandContext(cmd *cobra.Command) (*commandContext, error) {
 	cfgManager := configmanager.NewCommandConfigManager(cmd, fieldSelectors)
 	outputTimer := flags.MaybeTimer(cmd, tmr)
 
-	clusterCfg, err := cfgManager.Load(configmanagerinterface.LoadOptions{Timer: outputTimer})
+	clusterCfg, err := cfgManager.Load(configmanagerinterface.LoadOptions{
+		Timer: outputTimer, SkipValidation: true, SkipTalosMachineConfig: true,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
@@ -110,7 +112,9 @@ func initImageCommandContext(
 	outputTimer := flags.MaybeTimer(cmd, tmr)
 
 	clusterCfg, err := cfgManager.Load(
-		configmanagerinterface.LoadOptions{Silent: true, SkipValidation: true},
+		configmanagerinterface.LoadOptions{
+			Silent: true, SkipValidation: true, SkipTalosMachineConfig: true,
+		},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)

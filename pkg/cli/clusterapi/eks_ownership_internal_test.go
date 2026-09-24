@@ -89,7 +89,10 @@ func TestNoGuardLeavesTheFactoryUntouched(t *testing.T) {
 func defaultProductionFactory(t *testing.T) clusterprovisioner.Factory {
 	t.Helper()
 
-	factory, err := defaultFactory(v1alpha1.DistributionVanilla, "guard-shape-probe")
+	cluster := &v1alpha1.Cluster{}
+	cluster.Name = "guard-shape-probe"
+	cluster.Spec.Cluster.Distribution = v1alpha1.DistributionVanilla
+	factory, err := defaultFactory(cluster)
 	require.NoError(t, err)
 
 	return factory

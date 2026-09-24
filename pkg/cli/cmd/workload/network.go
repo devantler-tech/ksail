@@ -131,8 +131,9 @@ func runNetworkCommand(
 	server string,
 ) error {
 	clusterCfg, err := cfgManager.Load(configmanagerinterface.LoadOptions{
-		Silent:         true,
-		SkipValidation: true,
+		Silent:                 true,
+		SkipValidation:         true,
+		SkipTalosMachineConfig: true,
 	})
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)

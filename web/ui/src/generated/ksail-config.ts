@@ -384,6 +384,7 @@ export interface KSailClusterConfiguration {
          * `cluster update` follows the latest stable version available in the OCI
          * registry. Override per invocation with the --distribution-version flag
          * (precedence: flag > env > config > default).
+         * Required for a custom Hetzner ISO; set it to the Talos release that ISO boots.
          */
         version?: string;
         /**
@@ -408,6 +409,7 @@ export interface KSailClusterConfiguration {
          * The x86 default is advanced automatically from Hetzner's official changelog.
          * For ARM, look up the matching Talos ISO ID in the Hetzner Cloud Console
          * (Images → ISOs).
+         * A custom Hetzner ISO requires Version to match the ISO's Talos release.
          * When SchematicID is set, ISO is ignored in favour of a pre-built snapshot.
          */
         iso?: number;

@@ -13,6 +13,56 @@ import (
 // (<= 1.35) is older than the built-in default, used to exercise capping.
 const pinnedTalos112 = "v1.12.4"
 
+// TestResolveClusterVersionContract preserves explicit ISO release contracts and
+// the default behavior for providers that do not boot Hetzner ISOs.
+func TestResolveClusterVersionContract(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		provider v1alpha1.Provider
+		iso      int64
+		version  string
+	}{
+		{name: "implicit default", provider: v1alpha1.ProviderHetzner},
+		{
+			name:     "tracked default",
+			provider: v1alpha1.ProviderHetzner,
+			iso:      v1alpha1.DefaultTalosISO,
+		},
+		{
+			name:     "older custom ISO",
+			provider: v1alpha1.ProviderHetzner,
+			iso:      123456,
+			version:  "1.11.2",
+		},
+		{
+			name:     "newer custom ISO",
+			provider: v1alpha1.ProviderHetzner,
+			iso:      123456,
+			version:  "v1.14.0-alpha.2",
+		},
+		{name: "Docker ignores ISO", provider: v1alpha1.ProviderDocker, iso: 123456},
+		{name: "Omni ignores ISO", provider: v1alpha1.ProviderOmni, iso: 123456},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			cluster := v1alpha1.NewCluster()
+			cluster.Spec.Cluster.Provider = testCase.provider
+			cluster.Spec.Cluster.Talos.ISO = testCase.iso
+			cluster.Spec.Cluster.Talos.Version = testCase.version
+
+			contract, err := talos.ResolveClusterVersionContract(cluster)
+			require.NoError(t, err)
+			expected, err := talos.ParseVersionContract(testCase.version)
+			require.NoError(t, err)
+			assert.Equal(t, expected.String(), contract.String())
+		})
+	}
+}
+
 func TestParseVersionContract(t *testing.T) {
 	t.Parallel()
 

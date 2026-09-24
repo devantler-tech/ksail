@@ -290,9 +290,10 @@ func newTestService(byDistribution map[v1alpha1.Distribution]*fakeProvisioner) *
 	empty := &fakeProvisioner{}
 
 	return clusterapi.NewTestService(func(
-		distribution v1alpha1.Distribution,
-		_ string,
+		cluster *v1alpha1.Cluster,
 	) (clusterprovisioner.Factory, error) {
+		distribution := cluster.Spec.Cluster.Distribution
+
 		provisioner, ok := byDistribution[distribution]
 		if !ok {
 			provisioner = empty
@@ -1204,7 +1205,7 @@ func TestCreatePassesProviderToFactory(t *testing.T) {
 
 	captured := make(chan *v1alpha1.Cluster, 1)
 	service := clusterapi.NewTestService(
-		func(_ v1alpha1.Distribution, _ string) (clusterprovisioner.Factory, error) {
+		func(_ *v1alpha1.Cluster) (clusterprovisioner.Factory, error) {
 			return recordingFactory{sink: captured}, nil
 		},
 	)
@@ -1233,7 +1234,7 @@ func TestCreateDefaultsEKSProviderToAWS(t *testing.T) {
 
 	captured := make(chan *v1alpha1.Cluster, 1)
 	service := clusterapi.NewTestService(
-		func(_ v1alpha1.Distribution, _ string) (clusterprovisioner.Factory, error) {
+		func(_ *v1alpha1.Cluster) (clusterprovisioner.Factory, error) {
 			return recordingFactory{sink: captured}, nil
 		},
 	)
@@ -1602,9 +1603,11 @@ func newRegionRecordingEKSService(
 	empty := &fakeProvisioner{}
 
 	return clusterapi.NewTestService(func(
-		distribution v1alpha1.Distribution,
-		name string,
+		cluster *v1alpha1.Cluster,
 	) (clusterprovisioner.Factory, error) {
+		distribution := cluster.Spec.Cluster.Distribution
+		name := cluster.Name
+
 		if distribution != v1alpha1.DistributionEKS {
 			return fakeFactory{provisioner: empty}, nil
 		}
