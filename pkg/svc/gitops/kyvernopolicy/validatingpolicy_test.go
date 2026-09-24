@@ -415,7 +415,11 @@ func TestCELEvaluate_UnknownNamespaceReadByExpressionIsUnsupported(t *testing.T)
 	require.Len(t, violations, 1)
 	assert.True(t, violations[0].Unsupported)
 	assert.False(t, violations[0].Blocking)
-	assert.Contains(t, violations[0].Message, `namespace "prod" is not among the rendered documents`)
+	assert.Contains(
+		t,
+		violations[0].Message,
+		`namespace "prod" is not among the rendered documents`,
+	)
 }
 
 // With the namespace rendered, the same policy is evaluated normally.
