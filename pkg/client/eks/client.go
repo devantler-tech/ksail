@@ -390,8 +390,29 @@ func (c *Client) configureMissingEKSClients(ctx context.Context, cfg aws.Config)
 	}
 
 	if c.nodegroupStacks == nil {
-		c.nodegroupStacks = cloudformation.NewFromConfig(cfg)
+		return c.configureCloudFormationClient(ctx, cfg)
 	}
+
+	return nil
+}
+
+// configureCloudFormationClient binds node-group inventory to the captured endpoint
+// before applying explicit service options, just like EKS and STS.
+func (c *Client) configureCloudFormationClient(ctx context.Context, cfg aws.Config) error {
+	endpoint, frozen, err := awsconfigutil.FrozenServiceEndpoint(ctx, cfg, "CloudFormation")
+	if err != nil {
+		return fmt.Errorf("resolve frozen CloudFormation endpoint: %w", err)
+	}
+
+	if frozen {
+		cfg.ServiceOptions = append([]func(string, any){func(_ string, options any) {
+			if stackOptions, ok := options.(*cloudformation.Options); ok {
+				stackOptions.BaseEndpoint = endpoint
+			}
+		}}, cfg.ServiceOptions...)
+	}
+
+	c.nodegroupStacks = cloudformation.NewFromConfig(cfg)
 
 	return nil
 }

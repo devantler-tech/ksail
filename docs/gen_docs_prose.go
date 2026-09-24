@@ -378,6 +378,8 @@ The Kubernetes version is set at the top level (` + bt + `spec.cluster.kubernete
 
 **Provider options (` + bt + `spec.provider` + bt + `):** infrastructure provider options (Hetzner, Omni, AWS, GCP, Kubernetes) are documented in the generated [spec.provider (ProviderSpec)](#specprovider-providerspec) sections below.
 
+**EKS upgrade credentials:** experimental control-plane upgrades check the effective EKS and STS credentials, including service-specific overrides. Temporary sessions must report an expiry beyond the bounded wait plus one minute. Reusing a captured selection preserves its expiry and endpoint settings. See [Experimental EKS control-plane upgrades](/distributions/eks/#experimental-control-plane-upgrades).
+
 **Autoscaler options (` + bt + `spec.cluster.autoscaler` + bt + `):** pod and node autoscaling options are documented in the generated [spec.cluster.autoscaler (AutoscalerConfig)](#specclusterautoscaler-autoscalerconfig) sections below.
 
 **Vanilla options (` + bt + `spec.cluster.vanilla` + bt + `):**

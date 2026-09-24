@@ -41,6 +41,8 @@ func ResolveFrozenAWS(
 }
 
 // FreezeAWS resolves an existing immutable selection to one concrete credential tuple.
+// An already frozen selection retains its credentials, expiry, and SDK configuration;
+// only an explicitly supplied region may change.
 func FreezeAWS(
 	ctx context.Context,
 	selection AWSResolution,
@@ -55,6 +57,18 @@ func freezeAWSResolution(
 	selection AWSResolution,
 	loader awsConfigLoader,
 ) (AWSResolution, error) {
+	if selection.frozen && selection.sdkConfig != nil {
+		cfg := cloneAWSConfig(*selection.sdkConfig)
+		if strings.TrimSpace(region) != "" {
+			selection.Region = strings.TrimSpace(region)
+		}
+
+		cfg.Region = selection.Region
+		selection.sdkConfig = &cfg
+
+		return selection, nil
+	}
+
 	loadOptions, err := frozenAWSLoadOptions(region, selection)
 	if err != nil {
 		return AWSResolution{}, err

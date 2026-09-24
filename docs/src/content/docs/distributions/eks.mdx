@@ -170,12 +170,15 @@ an earlier caller deadline or cancellation. Canceling KSail stops waiting; an
 accepted AWS update can continue. Inspect its status before retrying. Once ACTIVE
 at the target, another update is a no-op.
 
-Before submitting, KSail requires frozen credentials to cover the wait deadline
+Before submitting, KSail checks the effective credentials of both the EKS and STS
+clients, including service-specific overrides. Each must cover the wait deadline
 plus one minute. Temporary credentials must come from a provider that reports
 their expiry and have sufficient lifetime remaining. A session-token tuple
 without expiry metadata is rejected for upgrades; dry runs remain available.
 KSail retains the selected credentials throughout verification and does not
-refresh into a different identity.
+refresh into a different identity. Reusing a captured selection preserves its
+expiry and endpoint settings; node-group inventory also retains the captured
+CloudFormation endpoint if the process environment changes.
 
 This operation changes only the control plane. Upgrade worker nodes and add-ons
 separately and check their compatibility; managed node groups must meet AWS's

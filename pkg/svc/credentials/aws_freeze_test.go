@@ -326,3 +326,67 @@ func TestFrozenSDKCredentialsRetainExpiryWithoutRefreshingIdentity(t *testing.T)
 
 	assert.Equal(t, 1, provider.calls)
 }
+
+func TestFreezeAWSAgainPreservesCapturedConfiguration(t *testing.T) {
+	// Not parallel: exercise endpoint environment changes between freezes.
+	t.Setenv("AWS_ENDPOINT_URL_EKS", "https://captured.test")
+
+	values := aws.Credentials{
+		AccessKeyID: "selected", SecretAccessKey: "secret", SessionToken: "session",
+		CanExpire: true, Expires: time.Now().Add(2 * time.Hour),
+	}
+	provider := &rotatingCredentialProvider{credentials: []aws.Credentials{values}}
+	loaderCalls := 0
+	loader := func(context.Context, ...func(*config.LoadOptions) error) (aws.Config, error) {
+		loaderCalls++
+
+		return aws.Config{
+			Credentials: provider, HTTPClient: http.DefaultClient,
+			ConfigSources: []any{config.EnvConfig{}},
+		}, nil
+	}
+	first, err := credentials.FreezeAWSResolutionForTest(
+		t.Context(), "us-east-1", credentials.AWSResolution{}, loader,
+	)
+	require.NoError(t, err)
+	t.Setenv("AWS_ENDPOINT_URL_EKS", "https://changed.invalid")
+
+	for _, region := range []string{"", "  us-west-2  "} {
+		again, freezeErr := credentials.FreezeAWSResolutionForTest(
+			t.Context(),
+			region,
+			first,
+			loader,
+		)
+		require.NoError(t, freezeErr)
+
+		options := credentials.OptionsForFrozenAWSConfig(again,
+			func(cfg aws.Config) aws.Config { return cfg },
+			func(string, string, string, string) aws.Config { return aws.Config{} },
+			func() aws.Config { return aws.Config{} })
+		got, getErr := options[0].Credentials.Retrieve(t.Context())
+		require.NoError(t, getErr)
+		assert.Equal(t, values, got)
+		endpoint, frozen, endpointErr := awsconfigutil.FrozenServiceEndpoint(
+			t.Context(),
+			options[0],
+			"EKS",
+		)
+		require.NoError(t, endpointErr)
+		assert.True(t, frozen)
+		assert.Equal(t, "https://captured.test", aws.ToString(endpoint))
+
+		wantRegion := "us-east-1"
+		if region != "" {
+			wantRegion = "us-west-2"
+		}
+
+		assert.Equal(t, wantRegion, again.Region)
+		assert.Equal(t, wantRegion, options[0].Region)
+		assert.Contains(t, again.ChildEnvironment(nil), "AWS_REGION="+wantRegion)
+	}
+
+	assert.Equal(t, "us-east-1", first.Region)
+	assert.Equal(t, 1, loaderCalls, "freezing again must not reload ambient AWS configuration")
+	assert.Equal(t, 1, provider.calls)
+}
