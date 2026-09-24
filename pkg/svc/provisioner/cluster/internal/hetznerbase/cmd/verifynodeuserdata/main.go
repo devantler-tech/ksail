@@ -77,9 +77,9 @@ func nodeCommandPrefix(args []string) ([]string, error) {
 // verifier treats a diagnostic on standard error as an incomplete read.
 func execNodeCommand(prefix []string) hetznerbase.NodeCommand {
 	return func(ctx context.Context, command string) ([]byte, []byte, error) {
-		// #nosec G204 -- the program and its arguments are the operator's own
-		// command line after "--", and os/exec passes them literally with no
-		// shell in between.
+		// #nosec G204 G702 -- running the operator's own command line after "--"
+		// is this tool's purpose, not a tainted input reaching it; os/exec
+		// passes the arguments literally with no shell in between.
 		cmd := exec.CommandContext(ctx, prefix[0], append(slices.Clone(prefix[1:]), command)...)
 
 		var stdout, stderr bytes.Buffer
