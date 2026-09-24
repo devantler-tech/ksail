@@ -154,7 +154,9 @@ func SetupEditorEnv(cmd *cobra.Command, editorFlag, forCommand string) func() {
 		cfgManager = ksailconfigmanager.NewConfigManager(nil, "", fieldSelectors...)
 	}
 
-	loadedCfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true})
+	loadedCfg, err := cfgManager.Load(configmanager.LoadOptions{
+		Silent: true, SkipValidation: true, SkipTalosMachineConfig: true,
+	})
 	if err == nil {
 		cfg = loadedCfg
 	}
