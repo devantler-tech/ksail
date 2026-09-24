@@ -147,7 +147,13 @@ func NewCELEngine(
 	silenceControllerRuntimeLogger()
 
 	known := renderedNamespaces(namespaces)
-	resolve := func(name string) *corev1.Namespace { return known[name] }
+	resolve := func(name string) *corev1.Namespace {
+		if namespace, found := known[name]; found {
+			return namespace
+		}
+
+		return namespaceForMatching(name)
+	}
 
 	compiler := vpolcompiler.NewCompiler()
 	matcher := matching.NewMatcher()
@@ -217,9 +223,10 @@ func renderedNamespaces(docs []map[string]any) map[string]*corev1.Namespace {
 // Evaluate applies every policy to doc, simulating its creation, and returns
 // the failing and erroring validations. A NamespacedValidatingPolicy applies
 // only to documents in its own namespace. A policy that selects on namespace
-// labels or reads namespaceObject, for a document whose Namespace is not among
-// the rendered documents, is reported as Unsupported instead of being evaluated
-// against a namespace it cannot see. Such a report, like one for a policy that
+// labels, for a document whose Namespace is not among the rendered documents,
+// is evaluated only when the immutable name label determines its selector.
+// Other selectors and namespaceObject reads are reported as Unsupported.
+// Such a report, like one for a policy that
 // cannot run offline at all, is made only for documents the policy's other
 // match constraints select. As with Evaluate, doc's namespace is used as given.
 func (e *CELEngine) Evaluate(ctx context.Context, doc map[string]any) ([]Violation, error) {
@@ -241,10 +248,16 @@ func (e *CELEngine) Evaluate(ctx context.Context, doc map[string]any) ([]Violati
 			// A limitation is only worth reporting for a document the policy
 			// would select at all.
 			if e.appliesIgnoringNamespace(policy, resource) {
+				unknownNamespace := ""
+				if entry.unsupported == "" {
+					unknownNamespace = namespace
+				}
+
 				violations = append(violations, Violation{
-					Policy:      celPolicyName(policy),
-					Message:     reason,
-					Unsupported: true,
+					Policy:           celPolicyName(policy),
+					Message:          reason,
+					Unsupported:      true,
+					UnknownNamespace: unknownNamespace,
 				})
 			}
 
@@ -406,7 +419,9 @@ func (e *CELEngine) offlineLimitation(
 	}
 
 	switch {
-	case selectsOnNamespaceLabels(entry.policy):
+	case selectsOnNamespaceLabels(entry.policy) && !namespaceSelectorKnown(
+		entry.policy.GetValidatingPolicySpec().MatchConstraints.NamespaceSelector, namespace,
+	):
 		return unknown + " has unknown labels and this policy's namespaceSelector " +
 			"cannot be evaluated offline"
 	case entry.readsNamespace:
