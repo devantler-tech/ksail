@@ -611,7 +611,7 @@ func (s *Service) startJob(
 	// owns. Checking before the job is registered keeps a refused mutation from leaving an in-flight
 	// job behind.
 	if distribution == v1alpha1.DistributionEKS {
-		bindErr := confirmEKSOwnership(name, distribution, provider, phase)
+		bindErr := confirmEKSOwnership(name, distribution, provider)
 		if bindErr != nil {
 			return v1alpha1.Spec{}, bindErr
 		}
@@ -637,9 +637,9 @@ func (s *Service) startJob(
 }
 
 // confirmEKSOwnership reports whether KSail can confirm it owns the named EKS cluster, so a
-// delete/start/stop is refused rather than aimed at a remote cluster it cannot account for. State
-// persisted at create time is the evidence: its presence marks the create as complete, and the
-// distribution/provider it records must match how the cluster resolved now.
+// delete/start/stop is refused rather than aimed at a remote cluster it cannot account for. A valid
+// creation snapshot or an explicitly recovered identity is sufficient local evidence. Live identity
+// verification still runs before provisioner work and again at the mutation boundary.
 //
 // It deliberately does NOT supply the action's target spec. The region binding is carried by the
 // on-disk eks.yaml, which the provisioner factory reads back through distributionConfig for the
@@ -650,26 +650,15 @@ func (s *Service) startJob(
 // Missing or inconsistent state fails the mutation rather than falling back to ambient settings:
 // delete is destructive, and a same-named cluster in another reachable region is the exact outcome
 // the fallback would produce.
-//
-// The phase selects the recovery guidance, because this refusal is reached from every mutating entry
-// point: Delete arrives as ClusterPhaseDeleting, while Start and Stop both arrive as
-// ClusterPhaseUpdating. Only the delete path may suggest deleting the cluster — an operator who asked
-// to start or stop one must never be handed a destructive recovery step for a cluster KSail has just
-// said it cannot identify.
 func confirmEKSOwnership(
 	name string,
 	distribution v1alpha1.Distribution,
 	provider v1alpha1.Provider,
-	phase v1alpha1.ClusterPhase,
 ) error {
 	persisted, err := state.LoadClusterSpec(name)
 	if err != nil {
 		if errors.Is(err, state.ErrStateNotFound) {
-			return fmt.Errorf(
-				"%w: no local KSail ownership state for EKS cluster %q, so KSail cannot confirm"+
-					" which remote cluster this would act on; %s",
-				api.ErrInvalid, name, unconfirmedEKSRecovery(name, phase),
-			)
+			return confirmRecoveredEKSOwnership(name)
 		}
 
 		return fmt.Errorf(
@@ -691,35 +680,28 @@ func confirmEKSOwnership(
 	return nil
 }
 
-// unconfirmedEKSRecovery returns the recovery step for a mutation KSail refused because it cannot
-// identify the remote cluster.
-//
-// `ksail cluster eks-bind` is deliberately NOT offered here, even though it is the obvious-looking
-// candidate. It writes the region-scoped immutable-identity record (eksidentity.Persist ->
-// state.SaveEKSOwnershipState), whereas this refusal comes from the missing create-time spec.json
-// that state.LoadClusterSpec reads. Those are different files, so eks-bind cannot satisfy this check:
-// naming it would send the operator round a loop ending in this same refusal.
-// eksidentity.migrationRequiredError does point at eks-bind, but for the identity record it actually
-// writes — a different condition, not this one.
-//
-// KSail has no command that rebuilds create-time ownership state for a cluster it did not create, so
-// the honest step is to act on the cluster through AWS directly. Deleting is spelled out only when
-// deleting is what was asked for: Start and Stop are node-group operations, so answering them with a
-// destructive step — for a cluster KSail has just said it cannot identify — would be actively wrong.
-func unconfirmedEKSRecovery(name string, phase v1alpha1.ClusterPhase) string {
-	const confirm = "KSail cannot rebuild the create-time ownership state for a cluster it did not" +
-		" create, so confirm which cluster the current AWS credentials select and act on it with the" +
-		" AWS tooling directly"
-
-	if phase == v1alpha1.ClusterPhaseDeleting {
-		return fmt.Sprintf(
-			"%s (`eksctl delete cluster --name %s --region <region>`) once you have confirmed"+
-				" its region",
-			confirm, name,
+// confirmRecoveredEKSOwnership accepts one immutable identity when the creation snapshot is absent.
+// It never derives a runtime spec from sanitized state or selects between same-named regions.
+func confirmRecoveredEKSOwnership(name string) error {
+	ownerships, err := state.ListEKSOwnershipStates(name)
+	if errors.Is(err, state.ErrEKSOwnershipStateNotFound) {
+		return fmt.Errorf(
+			"%w: no local KSail ownership state for EKS cluster %q; recover it with "+
+				"`AWS_REGION=<region> ksail cluster eks-bind --experimental --name %s --provider AWS`, "+
+				"review the account, ARN, region and creation time, then repeat with --yes",
+			api.ErrInvalid, name, name,
 		)
 	}
 
-	return confirm + " (`eksctl`)"
+	if err != nil {
+		return unreadableOwnershipError(name, err)
+	}
+
+	if len(ownerships) != 1 {
+		return multiRegionOwnershipError(name, ownerships)
+	}
+
+	return nil
 }
 
 // clearedFailedEKSCreate removes the local job left by an EKS create that failed before persisting
@@ -747,6 +729,12 @@ func (s *Service) clearedFailedEKSCreate(name string) bool {
 	// will not begin writing state now.
 	_, err := s.loadClusterSpec(name)
 	if !errors.Is(err, state.ErrStateNotFound) {
+		return false
+	}
+	// An explicit recovery may have completed after this create failed. Only actual absence
+	// permits local-only clearing; a present or unreadable identity must survive for verification.
+	_, ownershipErr := state.ListEKSOwnershipStates(name)
+	if !errors.Is(ownershipErr, state.ErrEKSOwnershipStateNotFound) {
 		return false
 	}
 

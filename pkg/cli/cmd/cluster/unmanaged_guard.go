@@ -253,7 +253,7 @@ func ensureAWSClusterManaged(
 	ctx context.Context,
 	resolved *lifecycle.ResolvedClusterInfo,
 ) error {
-	identityClient, err := resolveAWSOwnershipTarget(ctx, resolved, true)
+	identityClient, err := resolveAWSOwnershipTarget(ctx, resolved)
 	if err != nil {
 		return err
 	}
@@ -278,12 +278,11 @@ func ensureAWSClusterManaged(
 
 // resolveAWSOwnershipTarget performs the legacy local-intent plus exact eksctl provenance check and
 // returns an SDK client pinned to the same one-time credential snapshot. Normal mutations follow it
-// with immutable identity verification; the explicit rebind flow deliberately uses only this
-// read-only prerequisite before capturing a new identity.
+// with immutable identity verification. The explicit rebind flow supplies its own target-intent
+// check, then uses only the read-only provenance prerequisite before capturing a new identity.
 func resolveAWSOwnershipTarget(
 	ctx context.Context,
 	resolved *lifecycle.ResolvedClusterInfo,
-	restorePersistedOptions bool,
 ) (eksidentity.Client, error) {
 	if !hasLocalKSailEKSTargetEvidence(resolved) {
 		return nil, fmt.Errorf(
@@ -297,13 +296,21 @@ func resolveAWSOwnershipTarget(
 	// variable, and bindAWSRegionFromKubeconfig is a no-op once a region is known. Binding first
 	// would let a stale or duplicated same-name kubeconfig context pin (or reject) the region
 	// before the captured RegionEnvVar is ever consulted.
-	if restorePersistedOptions {
-		err := restorePersistedAWSOptions(resolved)
-		if err != nil {
-			return nil, err
-		}
+	err := restorePersistedAWSOptions(resolved)
+	if err != nil {
+		return nil, err
 	}
 
+	return queryAWSOwnershipTarget(ctx, resolved)
+}
+
+// queryAWSOwnershipTarget resolves read-only AWS evidence after the caller establishes intent.
+// Lifecycle operations require existing local intent; eks-bind can establish explicit intent
+// without a record and persists the observed identity only after confirmation.
+func queryAWSOwnershipTarget(
+	ctx context.Context,
+	resolved *lifecycle.ResolvedClusterInfo,
+) (eksidentity.Client, error) {
 	err := bindAWSRegionFromKubeconfig(resolved)
 	if err != nil {
 		return nil, err
@@ -563,9 +570,9 @@ func queryFrozenAWSOwnership(
 
 // hasLocalKSailEKSTargetEvidence requires local KSail intent before the cloud-side eksctl marker is
 // consulted. Matching an actual loaded eks.yaml authorizes config-backed commands; persisted EKS/AWS
-// creation state preserves standalone --name/--provider operation when project files are absent. A
-// kubeconfig context or EksctlCreated=True alone never qualifies. These name-based records do not
-// bind an immutable AWS account/cluster instance; ksail#6202 tracks that separate hardening.
+// creation state or an explicitly recovered immutable identity preserves standalone operation when
+// project files are absent. A kubeconfig context or EksctlCreated=True alone never qualifies. Every
+// mutation still verifies the persisted immutable identity against the live account and cluster.
 func hasLocalKSailEKSTargetEvidence(resolved *lifecycle.ResolvedClusterInfo) bool {
 	if resolved.EKSConfigSource && strings.TrimSpace(resolved.ConfigClusterName) != "" &&
 		strings.TrimSpace(resolved.ConfigClusterName) == strings.TrimSpace(resolved.ClusterName) {
@@ -574,7 +581,13 @@ func hasLocalKSailEKSTargetEvidence(resolved *lifecycle.ResolvedClusterInfo) boo
 
 	spec, err := state.LoadClusterSpec(resolved.ClusterName)
 	if err != nil {
-		return false
+		if !errors.Is(err, state.ErrStateNotFound) {
+			return false
+		}
+
+		_, ownershipErr := state.ListEKSOwnershipStates(resolved.ClusterName)
+
+		return ownershipErr == nil
 	}
 
 	return spec.Distribution == v1alpha1.DistributionEKS && spec.Provider == v1alpha1.ProviderAWS

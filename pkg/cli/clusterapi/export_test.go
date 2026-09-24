@@ -239,6 +239,12 @@ func (s *Service) SetEKSOwnershipGuardForTest(
 	s.resolveEKSGuard = guard
 }
 
+// UseDefaultEKSOwnershipGuardForTest restores production SDK identity verification while retaining
+// the test service's isolated discovery and fake provisioner factory.
+func (s *Service) UseDefaultEKSOwnershipGuardForTest() {
+	s.resolveEKSGuard = s.defaultEKSGuard
+}
+
 // ExportEKSConfigForCreate exposes eksDistributionConfig for testing the generated eks.yaml. It
 // returns the written config path and the resolved region.
 func ExportEKSConfigForCreate(name string) (string, string, error) {
