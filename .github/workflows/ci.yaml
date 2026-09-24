@@ -1273,9 +1273,12 @@ jobs:
           # each release tag, so moving or renaming it breaks the shared marketplace's plugin.
           f=copilot-plugin/skills/ksail/SKILL.md
           test -f "$f"
-          # The frontmatter must open the file and name the skill `ksail`.
+          # The frontmatter must open the file, be closed by a second `---`, name the skill `ksail` and give
+          # it a non-empty description. An unterminated block fails rather than being read to end-of-file.
           [ "$(head -n 1 "$f")" = "---" ]
-          awk 'NR>1 && /^---$/{exit} NR>1' "$f" | grep -qx 'name: ksail'
+          frontmatter="$(awk 'NR == 1 { next } /^---$/ { closed = 1; exit } { print } END { if (!closed) exit 1 }' "$f")"
+          printf '%s\n' "$frontmatter" | grep -qx 'name: ksail'
+          printf '%s\n' "$frontmatter" | grep -Eq '^description:[[:space:]]*[^[:space:]]'
 
   operator-chart-lint:
     name: ⛵ Operator Chart Lint

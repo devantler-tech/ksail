@@ -35,6 +35,13 @@ See the official [installing plugins guide](https://docs.github.com/en/copilot/h
 
 See the official [Claude Code plugins overview](https://code.claude.com/docs/en/plugins) and [marketplace docs](https://code.claude.com/docs/en/plugin-marketplaces).
 
+### Moving from the old ksail marketplace
+
+If you installed the plugin earlier from the ksail repository's own marketplace, remove that marketplace before installing from the shared one. Its copy no longer updates, and removing the marketplace also uninstalls the plugin it provided:
+
+- Copilot CLI: `copilot plugin marketplace remove ksail --force`
+- Claude Code: `/plugin marketplace remove ksail`
+
 ## Prerequisites
 
 - `ksail` available on `PATH` — see the [Installation Guide](/installation/).
@@ -44,7 +51,7 @@ See the official [Claude Code plugins overview](https://code.claude.com/docs/en/
 
 The plugin manifests and MCP server registration live in [`plugins/ksail/`](https://github.com/devantler-tech/agent-plugins/tree/main/plugins/ksail) in the marketplace repository.
 
-The ksail skill is written in this repository at [`copilot-plugin/skills/ksail/SKILL.md`](https://github.com/devantler-tech/ksail/blob/main/copilot-plugin/skills/ksail/SKILL.md). The marketplace installs it from there at each ksail release tag, so the bundled skill matches the latest released binary.
+The ksail skill is written in this repository at [`copilot-plugin/skills/ksail/SKILL.md`](https://github.com/devantler-tech/ksail/blob/main/copilot-plugin/skills/ksail/SKILL.md). The marketplace copies it from there at each ksail release tag, and the copy records which release and commit it came from. The `ksail` binary is installed separately, so it can be on a different release than the skill.
 
 ## Further reading
 

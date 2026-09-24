@@ -46,6 +46,11 @@ copilot plugin install ksail@devantler-plugins
 
 Requires `ksail` on `PATH`.
 
+If you installed the plugin earlier from this repository's own marketplace, remove that marketplace first. Its copy no longer updates, and removing the marketplace also uninstalls the plugin it provided:
+
+- Copilot CLI: `copilot plugin marketplace remove ksail --force`
+- Claude Code: `/plugin marketplace remove ksail`
+
 ## Quick Start
 
 ```bash
