@@ -130,6 +130,96 @@ esac
 	assert.Equal(t, "3", string(attempts))
 }
 
+const vanillaUserDataStep = "🔐 Verify Vanilla Control-Plane User-Data Carries No Signing Material"
+
+func TestHetznerVanillaSmokeVerifiesNodeUserData(t *testing.T) {
+	t.Parallel()
+
+	contents := readRepoFile(t, ".github/workflows/system-test-hetzner.yaml")
+
+	var workflow hetznerWorkflow
+	require.NoError(t, yaml.Unmarshal(contents, &workflow))
+
+	systemTest, found := workflow.Jobs["system-test"]
+	require.True(t, found, "Hetzner system-test job is missing")
+
+	verify := findHarnessStep(t, systemTest.Steps, vanillaUserDataStep)
+	assert.Equal(t, "${{ matrix.smoke == true && matrix.distribution == 'Vanilla' }}", verify.If)
+	assert.NotZero(t, verify.TimeoutMinutes)
+	assert.Contains(t, verify.Env["PROBE_IMAGE"], "@sha256:", "the probe image must be pinned by digest")
+
+	// The check must run against a reachable cluster and before it is deleted.
+	verifyIndex := harnessStepIndex(t, systemTest.Steps, vanillaUserDataStep)
+	assert.Greater(
+		t, verifyIndex, harnessStepIndex(t, systemTest.Steps, "🧪 Assert Hetzner Smoke Cluster Reachable"),
+	)
+	assert.Less(
+		t, verifyIndex, harnessStepIndex(t, systemTest.Steps, "🧹 Delete Hetzner Smoke Cluster"),
+	)
+
+	t.Run("runs the verifier through a pod on the control-plane node", func(t *testing.T) {
+		t.Parallel()
+
+		calls, err := runVanillaUserDataStep(t, verify.Run, "cp-1")
+		require.NoErrorf(t, err, "verification step failed:\n%s", calls)
+
+		assert.Contains(t, calls, `kubectl run userdata-probe --image=probe-image`)
+		assert.Contains(t, calls, `"nodeName":"cp-1","hostNetwork":true`)
+		assert.Contains(
+			t, calls,
+			"go run ./pkg/svc/provisioner/cluster/internal/hetznerbase/cmd/verifynodeuserdata "+
+				"-- kubectl exec userdata-probe -- sh -c",
+		)
+	})
+
+	t.Run("fails without a control-plane node instead of skipping", func(t *testing.T) {
+		t.Parallel()
+
+		calls, err := runVanillaUserDataStep(t, verify.Run, "")
+		require.Error(t, err, "a cluster with no control-plane node must fail the check")
+		assert.NotContains(t, calls, "go run", "nothing may be verified without a node")
+	})
+}
+
+// runVanillaUserDataStep runs the workflow step against fake kubectl and go
+// commands that record their arguments, and returns the recorded calls.
+func runVanillaUserDataStep(t *testing.T, script, node string) (string, error) {
+	t.Helper()
+
+	fakeBin := t.TempDir()
+	callsFile := filepath.Join(t.TempDir(), "calls")
+
+	writeExecutable(t, filepath.Join(fakeBin, "kubectl"), `#!/usr/bin/env bash
+printf 'kubectl %s\n' "$*" >> "${CALLS_FILE}"
+if [ "$1" = get ]; then printf '%s' "${CONTROL_PLANE_NODE}"; fi
+`)
+	writeExecutable(t, filepath.Join(fakeBin, "go"), `#!/usr/bin/env bash
+printf 'go %s\n' "$*" >> "${CALLS_FILE}"
+`)
+
+	// The command is parsed from this repository's workflow, never from user input.
+	commandContext, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	command := exec.CommandContext(commandContext, "bash", "-c", script) //nolint:gosec
+
+	command.Env = append(
+		os.Environ(),
+		"CALLS_FILE="+callsFile,
+		"CONTROL_PLANE_NODE="+node,
+		"PROBE_IMAGE=probe-image",
+		"PATH="+fakeBin+":"+os.Getenv("PATH"),
+	)
+	_, runErr := command.CombinedOutput()
+
+	calls, err := os.ReadFile(callsFile) //nolint:gosec // The test owns this temporary path.
+	if err != nil && !os.IsNotExist(err) {
+		require.NoError(t, err)
+	}
+
+	return string(calls), runErr
+}
+
 func writeExecutable(t *testing.T, path string, contents string) {
 	t.Helper()
 
