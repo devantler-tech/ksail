@@ -57,7 +57,8 @@ still points at the same server and CA and the recorded stable identity still ho
 evidence decides that whenever the provider can be queried: when it no longer reports the recorded
 identity, KSail discards the mapping, whatever the local record says. Only when the provider cannot
 be queried does the persisted record keep the join, and the context is then marked as last-known
-rather than verified. The endpoint and CA alone never suffice, because a cluster recreated
+rather than verified. A last-known mapping only joins a context to a cluster for display; it is not
+ownership state, and on its own it never authorizes an update or delete. The endpoint and CA alone never suffice, because a cluster recreated
 behind the same address can present both again; without a matching stable identity, the context
 is treated as not yet identified. When the context
 is repointed, its cluster entry changes, or the entry disappears, KSail discards the mapping and
