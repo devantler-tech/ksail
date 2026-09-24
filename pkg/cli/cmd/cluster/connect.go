@@ -93,7 +93,9 @@ func handleConnectRunE(
 	nameFlag string,
 ) error {
 	// Load configuration
-	cfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true})
+	cfg, err := cfgManager.Load(configmanager.LoadOptions{
+		Silent: true, SkipValidation: true, SkipTalosMachineConfig: true,
+	})
 	if err != nil {
 		return fmt.Errorf("load configuration: %w", err)
 	}

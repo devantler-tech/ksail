@@ -94,9 +94,9 @@ func newGuardRecordingService(
 	// rather than the product.
 	empty := &fakeProvisioner{}
 	service := clusterapi.NewTestService(func(
-		distribution v1alpha1.Distribution,
-		_ string,
+		cluster *v1alpha1.Cluster,
 	) (clusterprovisioner.Factory, error) {
+		distribution := cluster.Spec.Cluster.Distribution
 		if distribution != observed {
 			return fakeFactory{provisioner: empty}, nil
 		}
@@ -567,9 +567,9 @@ func newGuardRecordingServiceWithVerifierErr(
 
 	empty := &fakeProvisioner{}
 	service := clusterapi.NewTestService(func(
-		distribution v1alpha1.Distribution,
-		_ string,
+		cluster *v1alpha1.Cluster,
 	) (clusterprovisioner.Factory, error) {
+		distribution := cluster.Spec.Cluster.Distribution
 		if distribution != v1alpha1.DistributionEKS {
 			return fakeFactory{provisioner: empty}, nil
 		}
@@ -741,9 +741,9 @@ func newCarriedVerifierService(
 
 	empty := &fakeProvisioner{}
 	service := clusterapi.NewTestService(func(
-		distribution v1alpha1.Distribution,
-		_ string,
+		cluster *v1alpha1.Cluster,
 	) (clusterprovisioner.Factory, error) {
+		distribution := cluster.Spec.Cluster.Distribution
 		if distribution != v1alpha1.DistributionEKS {
 			return fakeFactory{provisioner: empty}, nil
 		}

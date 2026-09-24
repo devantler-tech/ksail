@@ -16,6 +16,32 @@ import (
 
 var errTestError = errors.New("test error")
 
+// TestResolveClusterInfoStrictAllowsLegacyTalosISO keeps existing clusters manageable without
+// requiring their bootstrap image configuration to satisfy provisioning-only requirements.
+//
+//nolint:paralleltest // changes the process working directory
+func TestResolveClusterInfoStrictAllowsLegacyTalosISO(t *testing.T) {
+	t.Chdir(t.TempDir())
+	require.NoError(t, os.WriteFile("ksail.yaml", []byte(`apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: legacy-image
+spec:
+  cluster:
+    distribution: Talos
+    provider: Hetzner
+    connection:
+      context: admin@legacy-image
+    talos:
+      iso: 123456
+`), 0o600))
+
+	resolved, err := lifecycle.ResolveClusterInfoStrict(nil, "", "", "/non-existent-kubeconfig")
+	require.NoError(t, err)
+	assert.Equal(t, "legacy-image", resolved.ClusterName)
+	assert.Equal(t, v1alpha1.ProviderHetzner, resolved.Provider)
+}
+
 // TestResolveClusterInfo tests the ResolveClusterInfo function.
 func TestResolveClusterInfo(t *testing.T) {
 	t.Parallel()

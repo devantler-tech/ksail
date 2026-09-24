@@ -29,14 +29,15 @@ var ErrDeprecatedFieldConflict = errors.New("deprecated field conflicts with its
 
 // ConfigManager implements configuration management for KSail v1alpha1.Cluster configurations.
 type ConfigManager struct {
-	Viper              *viper.Viper
-	fieldSelectors     []FieldSelector[v1alpha1.Cluster]
-	Config             *v1alpha1.Cluster
-	DistributionConfig *clusterprovisioner.DistributionConfig
-	configLoaded       bool
-	configFileFound    bool
-	Writer             io.Writer
-	command            *cobra.Command
+	Viper                  *viper.Viper
+	fieldSelectors         []FieldSelector[v1alpha1.Cluster]
+	Config                 *v1alpha1.Cluster
+	DistributionConfig     *clusterprovisioner.DistributionConfig
+	configLoaded           bool
+	configFileFound        bool
+	skipTalosMachineConfig bool
+	Writer                 io.Writer
+	command                *cobra.Command
 	// ConfigFile is the explicit config file path (from --config flag).
 	ConfigFile string
 	// localRegistryExplicit tracks if config explicitly set the local registry behavior
@@ -103,6 +104,8 @@ func NewCommandConfigManager(
 // Returns nil config on error.
 // Configuration priority: defaults < config files < environment variables < flags.
 func (m *ConfigManager) Load(opts configmanagerinterface.LoadOptions) (*v1alpha1.Cluster, error) {
+	m.skipTalosMachineConfig = opts.SkipValidation && opts.SkipTalosMachineConfig
+
 	return m.loadConfigWithOptions(
 		opts.Timer,
 		opts.Silent,

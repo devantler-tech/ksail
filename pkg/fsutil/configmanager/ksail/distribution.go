@@ -433,6 +433,14 @@ func (m *ConfigManager) cacheK3dConfig() error {
 }
 
 func (m *ConfigManager) cacheTalosConfig() error {
+	if m.skipTalosMachineConfig {
+		m.DistributionConfig.Talos = &talosconfigmanager.Configs{
+			Name: talosconfigmanager.ResolveClusterName(m.Config, nil),
+		}
+
+		return nil
+	}
+
 	talosConfig, err := m.loadTalosConfig()
 	if err != nil && !errors.Is(err, ErrDistributionConfigNotFound) {
 		return fmt.Errorf("failed to load Talos distribution config: %w", err)

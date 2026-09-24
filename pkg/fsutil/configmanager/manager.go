@@ -15,6 +15,9 @@ type LoadOptions struct {
 	// SkipValidation skips config validation when true.
 	// Useful for commands that only need partial config (e.g., context/kubeconfig).
 	SkipValidation bool
+	// SkipTalosMachineConfig loads only the Talos cluster identity when SkipValidation
+	// is also true. Target-only commands do not need bootstrap configuration or PKI.
+	SkipTalosMachineConfig bool
 	// SkipDistributionConfig skips loading distribution-specific configuration
 	// (Kind, K3d, Talos, VCluster, etc.) when true. This avoids expensive
 	// operations like Talos PKI certificate generation when only the base
