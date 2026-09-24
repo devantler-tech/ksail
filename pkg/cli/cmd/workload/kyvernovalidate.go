@@ -92,12 +92,37 @@ func evaluateKyvernoDocuments(
 		return fmt.Errorf("load Kyverno ValidatingPolicies in %s: %w", source, err)
 	}
 
+	blocking, err := evaluateKyvernoTargets(
+		ctx, engine, celEngine, split.targets, source, sink, attribution,
+	)
+	if err != nil {
+		return err
+	}
+
+	if len(blocking) > 0 {
+		return fmt.Errorf("%w:\n  %s", ErrKyvernoPolicyViolation, strings.Join(blocking, "\n  "))
+	}
+
+	return nil
+}
+
+// evaluateKyvernoTargets evaluates every target document and returns the
+// described blocking violations. Non-blocking violations are recorded in sink.
+func evaluateKyvernoTargets(
+	ctx context.Context,
+	engine *kyvernopolicy.Engine,
+	celEngine *kyvernopolicy.CELEngine,
+	targets []map[string]any,
+	source string,
+	sink *celViolationSink,
+	attribution map[string]string,
+) ([]string, error) {
 	var blocking []string
 
-	for _, doc := range split.targets {
-		violations, evalErr := evaluateKyvernoDocument(ctx, engine, celEngine, doc, source)
-		if evalErr != nil {
-			return evalErr
+	for _, doc := range targets {
+		violations, err := evaluateKyvernoDocument(ctx, engine, celEngine, doc, source)
+		if err != nil {
+			return nil, err
 		}
 
 		for _, violation := range violations {
@@ -113,11 +138,7 @@ func evaluateKyvernoDocuments(
 		}
 	}
 
-	if len(blocking) > 0 {
-		return fmt.Errorf("%w:\n  %s", ErrKyvernoPolicyViolation, strings.Join(blocking, "\n  "))
-	}
-
-	return nil
+	return blocking, nil
 }
 
 // evaluateKyvernoDocument applies both the kyverno.io policies and the CEL
