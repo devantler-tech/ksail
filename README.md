@@ -28,20 +28,20 @@ See the [Installation Guide](https://ksail.devantler.tech/installation/) for bin
 
 ## AI Assistant Plugins
 
-Install the ksail plugin for [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli) or [Claude Code](https://code.claude.com/docs/en/discover-plugins) to auto-register ksail's MCP server and a ksail expertise skill.
+Install the ksail plugin from the [devantler-tech agent plugin marketplace](https://github.com/devantler-tech/agent-plugins) for [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli) or [Claude Code](https://code.claude.com/docs/en/discover-plugins) to auto-register ksail's MCP server and a ksail expertise skill.
 
 **Copilot CLI:**
 
 ```bash
-copilot plugin marketplace add devantler-tech/ksail
-copilot plugin install ksail
+copilot plugin marketplace add devantler-tech/agent-plugins
+copilot plugin install ksail@devantler-plugins
 ```
 
 **Claude Code:**
 
 ```text
-/plugin marketplace add devantler-tech/ksail
-/plugin install ksail@ksail
+/plugin marketplace add devantler-tech/agent-plugins
+/plugin install ksail@devantler-plugins
 ```
 
 Requires `ksail` on `PATH`.

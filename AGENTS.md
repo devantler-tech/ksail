@@ -181,7 +181,7 @@ go run main.go --help
 │       └── state/          # Cluster state persistence for distributions without introspection
 ├── charts/                 # Helm charts
 │   └── ksail-operator/     # Operator + embedded web UI chart (keep README.md in sync with values.yaml)
-├── copilot-plugin/         # KSail plugin for GitHub Copilot CLI / Claude Code (MCP server + skill)
+├── copilot-plugin/         # ksail agent skill (published via devantler-tech/agent-plugins)
 ├── desktop/                # Native desktop app (separate Go module wrapping the web UI)
 ├── web/                    # Web UI source
 │   └── ui/                 # Vite/React SPA, embedded into the binary via pkg/webui

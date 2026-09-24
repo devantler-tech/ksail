@@ -219,7 +219,7 @@ The repository is organized around the top-level CLI entry point (`main.go`) and
 - **charts/** - Helm charts (`charts/ksail-operator/` — operator + embedded web UI)
 - **web/** - Web UI source (`web/ui/` — Vite/React SPA, embedded via `pkg/webui`)
 - **desktop/** - Native desktop app (separate Go module wrapping the web UI)
-- **copilot-plugin/** - KSail plugin for GitHub Copilot CLI / Claude Code (MCP server + skill)
+- **copilot-plugin/** - ksail agent skill, published as a plugin via devantler-tech/agent-plugins
 - **docs/** - Astro documentation site
 - **vsce/** - VSCode extension
 
