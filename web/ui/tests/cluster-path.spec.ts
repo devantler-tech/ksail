@@ -5,6 +5,7 @@ import {
   clusterPath,
   deleteCluster,
   deleteResource,
+  downloadKubeconfig,
   execWebSocketURL,
   listResources,
   logsEventSourceURL,
@@ -69,6 +70,23 @@ test.describe("cluster-scoped requests", () => {
       `${arnPath}/resources/Deployment/web/scale?namespace=apps`,
       `${arnPath}/resources/Deployment/web?namespace=apps`,
     ]);
+  });
+
+  test("escape the cluster name in the kubeconfig download", async () => {
+    // An error response stops the download before it touches the DOM, which these tests do not have.
+    const paths: string[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      paths.push(String(input));
+      return new Response("not found", { status: 404 });
+    }) as typeof fetch;
+    try {
+      await expect(downloadKubeconfig("default", arn)).rejects.toThrow("(404)");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+
+    expect(paths).toEqual([`${arnPath}/kubeconfig`]);
   });
 
   test("escape the cluster name in the logs stream and the exec socket", () => {
