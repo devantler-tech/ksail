@@ -446,10 +446,13 @@ jobs:
           shellcheck \
             .github/actions/ksail-test-workload/reject-remote-kustomize-resources.sh \
             .github/actions/ksail-test-workload/remote-resource-guard.test.sh \
+            .github/actions/ksail-test-workload/install-with-recovery.sh \
+            .github/actions/ksail-test-workload/install-with-recovery.test.sh \
             .github/scripts/assert-gitops-deployed.sh \
             .github/scripts/assert-gitops-deployed.test.sh
           .github/scripts/assert-gitops-deployed.test.sh
           .github/actions/ksail-test-workload/remote-resource-guard.test.sh
+          .github/actions/ksail-test-workload/install-with-recovery.test.sh
 
   cask-pr-handoff:
     name: 🔐 Validate Cask PR Handoff
