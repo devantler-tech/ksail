@@ -70,6 +70,9 @@ func observeEtcdQuorum(
 				ErrEtcdObservationIncomplete, nodeIP, err)
 		}
 
+		// One node written as IPv4 and as IPv4-mapped IPv6 must count once.
+		address = address.Unmap()
+
 		if seen[address.String()] {
 			return etcdQuorumObservation{}, fmt.Errorf(
 				"%w: control-plane address %s is listed twice",

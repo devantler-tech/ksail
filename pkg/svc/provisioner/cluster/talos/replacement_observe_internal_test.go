@@ -149,6 +149,13 @@ func incompleteObservationCases() map[string]incompleteObservationCase {
 		"duplicate survivor": {
 			survivors: []string{observedSurvivorIP, observedSurvivorIP},
 		},
+		"duplicate survivor in IPv4-mapped form": {
+			survivors: []string{observedSurvivorIP, "::ffff:" + observedSurvivorIP},
+			// Reachable under both spellings, so only the duplicate check can refuse it.
+			mutate: func(clients map[string]*fakeObservationClient) {
+				clients["::ffff:"+observedSurvivorIP] = clients[observedSurvivorIP]
+			},
+		},
 		"unreachable survivor": {
 			survivors: []string{observedSurvivorIP, "10.0.0.9"},
 		},
