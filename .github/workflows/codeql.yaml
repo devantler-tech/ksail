@@ -17,14 +17,17 @@ name: 🔍 CodeQL
 # in one job. `none` is rejected for Go, and `manual` runs a traced compile that exceeds the
 # runner's memory alongside the extractor.
 #
-# That extraction sits at the runner's memory ceiling and sometimes exhausts it, ending the
-# job with `The runner has received a shutdown signal` part-way through extraction — the
-# intermittent failure #6767 describes. This is a property of the extraction rather than of
-# this workflow: the same crash occurs under default setup on the same commit, and CodeQL's
-# budget knobs do not avoid it, because the Go extractor is a separate process whose own heap
-# holds the accumulated module graph. Re-running the failed job is the available mitigation,
-# and being able to re-run is what owning the workflow provides. No `ram` or `threads` cap is
-# set here, so the budget matches the default setup this replaces.
+# The autobuilder runs one `go-extractor` per `go.mod`, one after another, so the job's peak
+# is the largest single module. Untuned, the root module's extractor peaks above 13.4 GiB on
+# a 16 GB `ubuntu-latest` runner, leaving too little headroom for the runner agent and the
+# OS: the runner is then shut down part-way through extraction (`The runner has received a
+# shutdown signal`, #7131). CodeQL's own `ram` and `threads` budgets do not reach the
+# extractor, which is a separate Go process, and CodeQL sets no Go memory limit of its own.
+# The Autobuild step therefore sets `GOMEMLIMIT`: measured on the root module, 8 GiB brings
+# the extractor's peak to about 8.7 GiB while still extracting every first-party file, at the
+# cost of a longer extraction (about 9 minutes instead of 6). No `ram` or `threads` cap is set,
+# so CodeQL's own budget matches the default setup this replaces. Re-running a failed job
+# remains available because the workflow is owned here.
 #
 # Same languages and suite as the default setup it replaces: actions, Go and
 # JavaScript/TypeScript with the security-extended queries. This satisfies the "Require
@@ -76,6 +79,9 @@ jobs:
       - name: 🏗️ Autobuild
         if: matrix.language == 'go'
         uses: github/codeql-action/autobuild@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        env:
+          # Soft heap limit for the Go extractor (a Go program), measured in #7131.
+          GOMEMLIMIT: 8GiB
 
       - name: 🔬 Perform CodeQL analysis
         uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0

@@ -224,9 +224,8 @@ func runValidateCmdInner(
 	// Built before buildValidationOptions so that, when --include-crd-schemas is
 	// set, CRD-schema discovery can also render every kustomization and inspect
 	// its output (a CRD a chart ships under templates/ is invisible to a raw-tree
-	// walk). Reusing this same renderer for the real validation pass below lets
-	// its chart cache (pkg/svc/gitops/render.ChartCache) serve the second render
-	// of an already-seen chart from memory instead of re-templating it.
+	// walk). Discovery prepares complete render results; validation consumes those
+	// same results, including provenance, warnings, and failures, without rebuilding.
 	renderer := buildValidateRenderer(cfg, configFound, flags.skipHelmRender)
 
 	// Assemble validation options (skip-kinds, schema locations, and — when
@@ -389,9 +388,9 @@ func addCRDSchemas(
 // only exist after Helm/Kustomize rendering (invisible to a raw source-tree
 // walk). A kustomization that fails to render is skipped with a warning rather
 // than failing the run — --include-crd-schemas degrades gracefully, matching
-// crdschema.Materialize's own per-CRD warning behaviour. Reusing renderer (the
-// same instance the real validation pass below uses) lets its chart cache serve
-// a chart already rendered here from memory instead of re-templating it.
+// crdschema.Materialize's own per-CRD warning behaviour. Each result or error is
+// retained for the validation pass, so discovery and validation inspect one snapshot
+// and Kustomize, Flux substitution, and Helm expansion each run once per target.
 func addRenderedCRDSchemas(
 	ctx context.Context,
 	path string,
@@ -406,7 +405,7 @@ func addRenderedCRDSchemas(
 	}
 
 	for _, kustDir := range kustomizations {
-		rendered, err := renderer.expand(ctx, kustDir)
+		rendered, err := renderer.prepare(ctx, kustDir)
 		if err != nil {
 			result.Warnings = append(result.Warnings, crdschema.Warning{
 				Source: kustDir,
