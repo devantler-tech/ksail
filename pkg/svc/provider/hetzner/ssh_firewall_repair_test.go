@@ -43,7 +43,7 @@ func newSSHFirewallRepairServer(
 			}},
 		})
 	})
-	mux.HandleFunc("POST /firewalls/9/actions/set_rules", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("POST /firewalls/9/actions/set_rules", func(writer http.ResponseWriter, _ *http.Request) {
 		setRulesCalled.Store(true)
 
 		action := setRulesTestAction{ID: 77, Status: actionStatus, Progress: 100}
@@ -51,7 +51,7 @@ func newSSHFirewallRepairServer(
 			action.Error = map[string]string{"code": "action_failed", "message": "rules not applied"}
 		}
 
-		writeJSONResponse(t, w, map[string]any{"actions": []setRulesTestAction{action}})
+		writeJSONResponse(t, writer, map[string]any{"actions": []setRulesTestAction{action}})
 	})
 
 	srv := httptest.NewServer(mux)
