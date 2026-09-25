@@ -165,6 +165,8 @@ func (p *Provider) EnsureSSHFirewall(
 
 // ensureFirewallRules creates the cluster firewall with desiredRules, or updates an
 // existing one whose rules differ, and returns it once the rules are in effect.
+// An existing firewall is changed only when its labels show this cluster owns it,
+// so a manually managed firewall that happens to share the name is left alone.
 func (p *Provider) ensureFirewallRules(
 	ctx context.Context,
 	clusterName string,
@@ -182,10 +184,17 @@ func (p *Provider) ensureFirewallRules(
 	}
 
 	if firewall != nil {
+		if firewall.Labels[LabelOwned] != LabelOwnedValue ||
+			firewall.Labels[LabelClusterName] != clusterName {
+			return nil, fmt.Errorf("%w: %s (cluster %s)", ErrFirewallNotOwned, firewallName, clusterName)
+		}
+
 		err = p.setRulesIfChanged(ctx, firewall, desiredRules)
 		if err != nil {
 			return nil, err
 		}
+
+		firewall.Rules = desiredRules
 
 		return firewall, nil
 	}

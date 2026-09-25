@@ -819,7 +819,7 @@
                 },
                 "sshKeyName": {
                   "type": "string",
-                  "description": "SSHKeyName is the name of the SSH key to use for server access.\nThe key must already exist in the Hetzner Cloud project.\nIf empty, no SSH key is attached (only Talos API access)."
+                  "description": "SSHKeyName is the name of the SSH key to use for server access.\nThe key must already exist in the Hetzner Cloud project.\nIf empty, no pre-registered Hetzner SSH key is attached. Vanilla and K3s nodes\nare still bootstrapped over SSH with a generated per-cluster keypair delivered\nthrough cloud-init."
                 },
                 "tokenEnvVar": {
                   "type": "string",

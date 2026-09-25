@@ -232,7 +232,9 @@ type OptionsHetzner struct {
 	NetworkCIDR string `default:"10.0.0.0/16" json:"networkCidr,omitzero"`
 	// SSHKeyName is the name of the SSH key to use for server access.
 	// The key must already exist in the Hetzner Cloud project.
-	// If empty, no SSH key is attached (only Talos API access).
+	// If empty, no pre-registered Hetzner SSH key is attached. Vanilla and K3s nodes
+	// are still bootstrapped over SSH with a generated per-cluster keypair delivered
+	// through cloud-init.
 	SSHKeyName string `json:"sshKeyName,omitzero"`
 	// TokenEnvVar is the environment variable containing the Hetzner API token.
 	// Defaults to "HCLOUD_TOKEN".

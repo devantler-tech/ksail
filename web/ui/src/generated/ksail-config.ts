@@ -545,7 +545,9 @@ export interface KSailClusterConfiguration {
         /**
          * SSHKeyName is the name of the SSH key to use for server access.
          * The key must already exist in the Hetzner Cloud project.
-         * If empty, no SSH key is attached (only Talos API access).
+         * If empty, no pre-registered Hetzner SSH key is attached. Vanilla and K3s nodes
+         * are still bootstrapped over SSH with a generated per-cluster keypair delivered
+         * through cloud-init.
          */
         sshKeyName?: string;
         /**
