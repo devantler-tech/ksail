@@ -14,9 +14,11 @@ import (
 
 const ephemeralAdmissionTimeout = 10 * time.Minute
 
-const ephemeralFlagDescription = "EXPERIMENTAL: run offline checks, then check workload admission " +
+const ephemeralClusterDescription = "EXPERIMENTAL: run offline checks, then check workload admission " +
 	"in an isolated throwaway Kind cluster with declared Helm charts installed and ready " +
-	"(guaranteed teardown; off by default). Operator-generated children are not inspected."
+	"(guaranteed teardown; off by default). "
+
+const ephemeralFlagDescription = ephemeralClusterDescription + "Operator-generated children are not inspected."
 
 // newEphemeralHelmClient constructs a client pinned to the throwaway cluster.
 //
@@ -87,6 +89,20 @@ func withPreparedEphemeralCluster(
 	args []string,
 	runFn func(context.Context) error,
 ) error {
+	return withEphemeralChecks(ctx, cmd, args, ephemeralChecks{offline: runFn})
+}
+
+type ephemeralChecks struct {
+	offline  func(context.Context) error
+	children func(context.Context, ephemeral.Client, *ephemeral.Plan) error
+}
+
+func withEphemeralChecks(
+	ctx context.Context,
+	cmd *cobra.Command,
+	args []string,
+	checks ephemeralChecks,
+) error {
 	sourcePath, err := resolveEphemeralSourcePath(cmd, args)
 	if err != nil {
 		return err
@@ -97,7 +113,14 @@ func withPreparedEphemeralCluster(
 		return fmt.Errorf("prepare ephemeral admission: %w", err)
 	}
 
-	err = runFn(ctx)
+	if checks.children != nil && len(plan.Resources) == 0 {
+		return fmt.Errorf(
+			"%w: no directly submitted workloads to observe",
+			ephemeral.ErrObservation,
+		)
+	}
+
+	err = checks.offline(ctx)
 	if err != nil {
 		return err
 	}
@@ -106,40 +129,7 @@ func withPreparedEphemeralCluster(
 		ctx,
 		cmd,
 		func(ctx context.Context, cluster ephemeralCluster) error {
-			admissionCtx, cancel := context.WithTimeout(ctx, ephemeralAdmissionTimeout)
-			defer cancel()
-
-			var client ephemeral.Client
-
-			if len(plan.Namespaces)+len(plan.CRDs)+len(plan.Configuration)+len(plan.Resources) > 0 {
-				var err error
-
-				client, err = newEphemeralAdmissionClient(cluster.KubeconfigPath, cluster.Context)
-				if err != nil {
-					return fmt.Errorf("create ephemeral admission client: %w", err)
-				}
-			}
-
-			notify.Infof(
-				cmd.OutOrStdout(),
-				"checking workload admission in ephemeral cluster %q...",
-				cluster.Name,
-			)
-
-			err := plan.Run(
-				admissionCtx,
-				client,
-				func(ctx context.Context, spec *helm.ChartSpec) error {
-					return installEphemeralChart(ctx, cmd, cluster, spec)
-				},
-			)
-			if err != nil {
-				return fmt.Errorf("ephemeral admission failed: %w", err)
-			}
-
-			notify.Infof(cmd.OutOrStdout(), "ephemeral admission checks passed")
-
-			return nil
+			return runEphemeralChecks(ctx, cmd, cluster, plan, checks)
 		},
 	)
 }
@@ -159,4 +149,51 @@ func resolveEphemeralSourcePath(cmd *cobra.Command, args []string) (string, erro
 	}
 
 	return canonPath, nil
+}
+
+func runEphemeralChecks(
+	ctx context.Context,
+	cmd *cobra.Command,
+	cluster ephemeralCluster,
+	plan *ephemeral.Plan,
+	checks ephemeralChecks,
+) error {
+	admissionCtx, cancel := context.WithTimeout(ctx, ephemeralAdmissionTimeout)
+	defer cancel()
+
+	var client ephemeral.Client
+
+	if len(plan.Namespaces)+len(plan.CRDs)+len(plan.Configuration)+len(plan.Resources) > 0 {
+		var err error
+
+		client, err = newEphemeralAdmissionClient(cluster.KubeconfigPath, cluster.Context)
+		if err != nil {
+			return fmt.Errorf("create ephemeral admission client: %w", err)
+		}
+	}
+
+	notify.Infof(
+		cmd.OutOrStdout(),
+		"checking workload admission in ephemeral cluster %q...",
+		cluster.Name,
+	)
+
+	err := plan.Run(
+		admissionCtx,
+		client,
+		func(ctx context.Context, spec *helm.ChartSpec) error {
+			return installEphemeralChart(ctx, cmd, cluster, spec)
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("ephemeral admission failed: %w", err)
+	}
+
+	notify.Infof(cmd.OutOrStdout(), "ephemeral admission checks passed")
+
+	if checks.children != nil {
+		return checks.children(admissionCtx, client, plan)
+	}
+
+	return nil
 }

@@ -29,4 +29,23 @@ HelmRelease declarations and their HelmRepository/OCIRepository sources are cons
 
 Success means the selected resources passed the offline gate and their apply requests were accepted by the throwaway API server. The admission path submits every directly declared resource, including kinds excluded from the offline scan or schema pass. Bootstrap resources are created before chart installation and checked again as updates afterward; policies scoped only to creation cannot retroactively check their initial creation.
 
-This does not prove that arbitrary operators finished reconciling or that all resources they create are valid or secure. Inventory and validation of operator-generated children are tracked separately in the [ephemeral validation roadmap](https://github.com/devantler-tech/ksail/issues/5919). The isolated cluster also does not reproduce external services, cloud permissions, production admission policies, or production secrets unless they are explicitly declared in the selected input.
+Admission alone does not prove that operators finished reconciling or that their generated resources satisfy your validation rules. The isolated cluster also does not reproduce external services, cloud permissions, production admission policies, or production secrets unless they are explicitly declared in the selected input.
+
+## Validate generated children
+
+Add `--ephemeral-children` to inspect descendants of the workloads you directly submit:
+
+```bash
+ksail workload validate ./k8s/overlays/test \
+  --ephemeral --ephemeral-children \
+  --ephemeral-observation-wait 30s \
+  --include-crd-schemas --rules ./validation-rules.yaml
+```
+
+After admission, KSail waits for the requested duration, then collects a snapshot of resources linked to the submitted workloads through Kubernetes owner references. It follows nested descendants by their server-assigned identities, so a same-named replacement cannot be mistaken for the original owner. Collection errors, replaced roots, and an empty child inventory fail the command. Teardown also runs when collection or child validation fails.
+
+The wait defaults to 30 seconds and must be positive and no longer than five minutes. Collection has a two-minute limit within the existing ten-minute ephemeral deadline. Inventories larger than 10,000 resources fail with an explicit error. A longer wait can accommodate a slower controller, but does not prove that it has finished.
+
+Observed children receive the same schema checks, configured CEL rules, kind exclusions, and missing-schema behavior as the source. `--include-crd-schemas` uses CRDs from the selected source and its rendered charts. Add `--kyverno-policies` to evaluate children against Kyverno policies directly declared in the source, with its declared Namespace context. Policies supplied only by installed charts still participate in admission; they are not imported into this offline policy pass. Child manifests stay in memory rather than being written to disk.
+
+This is a bounded snapshot, not complete operator coverage. It excludes resources without a valid owner-reference chain, children of custom resources supplied only inside charts, and resources deleted before collection. A successful result does not establish readiness or predict resources created later. `workload scan --ephemeral` performs admission checks only; scanning generated children and operator-specific readiness remain in the [ephemeral validation roadmap](https://github.com/devantler-tech/ksail/issues/5919).
