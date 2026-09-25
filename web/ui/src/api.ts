@@ -248,7 +248,7 @@ export function logsEventSourceURL(
     params.set("container", container);
   }
 
-  return `/api/v1/clusters/${namespace}/${name}/logs?${params.toString()}`;
+  return `${clusterPath(namespace, name)}/logs?${params.toString()}`;
 }
 
 export interface Config {
@@ -443,6 +443,13 @@ export function testCredential(provider: string): Promise<CredentialTestResult> 
   );
 }
 
+// clusterPath is the API path of one cluster. The namespace and name are escaped: an unmanaged cluster
+// is listed under its raw kubeconfig context name, which can contain "/" (an EKS ARN), "?" or "#",
+// and would otherwise split or cut the URL.
+export function clusterPath(namespace: string, name: string): string {
+  return `/api/v1/clusters/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`;
+}
+
 export function listClusters(): Promise<ClusterList> {
   return request<ClusterList>("/api/v1/clusters");
 }
@@ -456,7 +463,7 @@ export function createCluster(cluster: Cluster): Promise<Cluster> {
 }
 
 export function updateCluster(namespace: string, name: string, cluster: Cluster): Promise<Cluster> {
-  return request<Cluster>(`/api/v1/clusters/${namespace}/${name}`, {
+  return request<Cluster>(clusterPath(namespace, name), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(cluster),
@@ -464,7 +471,7 @@ export function updateCluster(namespace: string, name: string, cluster: Cluster)
 }
 
 export function deleteCluster(namespace: string, name: string): Promise<void> {
-  return request<void>(`/api/v1/clusters/${namespace}/${name}`, { method: "DELETE" });
+  return request<void>(clusterPath(namespace, name), { method: "DELETE" });
 }
 
 // K8sObject is a loose view of an unstructured Kubernetes object: the backend returns each resource
@@ -529,7 +536,7 @@ export function listResources(
     params.set("namespace", resourceNamespace);
   }
 
-  return request<K8sList>(`/api/v1/clusters/${namespace}/${name}/resources?${params.toString()}`);
+  return request<K8sList>(`${clusterPath(namespace, name)}/resources?${params.toString()}`);
 }
 
 // SCALABLE_KINDS / RESTARTABLE_KINDS mirror the backend predicates (ResourceKindScalable /
@@ -550,7 +557,7 @@ export const CLUSTER_SCOPED_KINDS = ["Node", "Namespace"];
 // streams the bytes into a Blob rather than navigating, so an error response surfaces as an ApiError
 // (and a toast) instead of replacing the page.
 export async function downloadKubeconfig(namespace: string, name: string): Promise<void> {
-  const path = `/api/v1/clusters/${namespace}/${name}/kubeconfig`;
+  const path = `${clusterPath(namespace, name)}/kubeconfig`;
   const response = await fetch(path);
   if (!response.ok) {
     const body = (await response.text()).trim();
@@ -594,7 +601,7 @@ export function applyManifests(
 ): Promise<ApplyResponse> {
   const query = dryRun ? "?dryRun=true" : "";
 
-  return request<ApplyResponse>(`/api/v1/clusters/${namespace}/${name}/apply${query}`, {
+  return request<ApplyResponse>(`${clusterPath(namespace, name)}/apply${query}`, {
     method: "POST",
     headers: { "Content-Type": "application/yaml" },
     body: manifests,
@@ -616,7 +623,7 @@ function resourcePath(
 
   const query = params.toString() ? `?${params.toString()}` : "";
 
-  return `/api/v1/clusters/${namespace}/${name}/resources/${kind}/${resourceName}${suffix}${query}`;
+  return `${clusterPath(namespace, name)}/resources/${kind}/${resourceName}${suffix}${query}`;
 }
 
 // ResourceAction identifies a single resource targeted by a mutating action (scale/restart/delete).
@@ -707,7 +714,7 @@ export function execWebSocketURL(
     params.set("container", container);
   }
 
-  return `${protocol}//${window.location.host}/api/v1/clusters/${namespace}/${name}/exec?${params.toString()}`;
+  return `${protocol}//${window.location.host}${clusterPath(namespace, name)}/exec?${params.toString()}`;
 }
 
 // PluginInfo describes one installed web-UI plugin the backend serves (see pkg/webui/api/plugins.go).
