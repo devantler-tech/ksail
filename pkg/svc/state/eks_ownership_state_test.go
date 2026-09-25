@@ -112,10 +112,9 @@ func TestListEKSOwnershipStatesReturnsSortedValidatedRegions(t *testing.T) {
 	assert.Equal(t, "us-west-2", ownerships[1].Region)
 }
 
-// TestListEKSOwnershipStatesSkipsUnusableRecords proves one legacy record in an unrelated region
-// cannot strand a cluster whose target region is recorded correctly. Before ListEKSOwnershipStates
-// skipped unusable records, the legacy file below aborted the whole listing.
-func TestListEKSOwnershipStatesSkipsUnusableRecords(t *testing.T) {
+// TestListEKSOwnershipStatesRefusesLegacySibling prevents a name-only local API mutation from
+// selecting a current record while a legacy record still identifies a same-named cluster elsewhere.
+func TestListEKSOwnershipStatesRefusesLegacySibling(t *testing.T) {
 	t.Parallel()
 
 	const clusterName = "ownership-list-skips-legacy"
@@ -133,10 +132,9 @@ func TestListEKSOwnershipStatesSkipsUnusableRecords(t *testing.T) {
 
 	writeLegacyOwnershipRecord(t, clusterName, "us-west-2")
 
-	ownerships, err := state.ListEKSOwnershipStates(clusterName)
-	require.NoError(t, err)
-	require.Len(t, ownerships, 1)
-	assert.Equal(t, "eu-north-1", ownerships[0].Region)
+	_, err := state.ListEKSOwnershipStates(clusterName)
+	require.ErrorIs(t, err, state.ErrEKSOwnershipStateUnreadable)
+	assert.ErrorContains(t, err, "us-west-2")
 }
 
 // TestListEKSOwnershipStatesReportsAbsenceWhenNoRecordIsUsable proves skipping never degrades into

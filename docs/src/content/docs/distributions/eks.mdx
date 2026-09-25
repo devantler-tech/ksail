@@ -147,16 +147,18 @@ be able to inspect the cluster and its eksctl provenance.
 
 The confirmed command writes only a local immutable identity record and credential
 environment-variable names. It never stores credential values, creates a synthetic
-creation snapshot, or changes AWS resources. CLI, local web, and desktop lifecycle
-operations can then use that record; every mutation still checks the live account
-and exact cluster incarnation. The recovery command remains off by default behind
-`--experimental`.
+creation snapshot, or changes AWS resources. CLI lifecycle operations can then
+use that record. For local web and desktop, select the recorded region in Settings
+and refresh the cluster list before choosing the recovered cluster. The list follows
+the selected region; the ownership record alone does not add a row. Every mutation
+still checks the live account and exact cluster incarnation. The recovery command
+remains off by default behind `--experimental`.
 
 When the local web or desktop backend has no rendered EKS config, it rebuilds one
-from the single recorded region, regardless of the region currently selected in
-Settings or the environment. Multiple recorded regions, corrupt state, conflicting
-configuration, and changed live identities are refused. Use an explicitly selected
-CLI target when the local API cannot distinguish same-named clusters across regions.
+from the single recorded region for a selected cluster. Multiple recorded regions,
+corrupt state, conflicting configuration, and changed live identities are refused.
+Use an explicitly selected CLI target when the local API cannot distinguish
+same-named clusters across regions.
 
 Rebinding clears old node-group capacity snapshots. If a cluster was already
 stopped when its local state was lost, recovery cannot reconstruct its previous

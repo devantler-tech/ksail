@@ -222,6 +222,40 @@ func TestEKSRecoveryDoesNotBorrowAnotherClustersAWSOptions(t *testing.T) {
 	require.ErrorIs(t, err, state.ErrEKSOwnershipStateNotFound)
 }
 
+// TestEKSRecoveryNamelessConfigUsesExplicitAWSSelection ensures a loaded project with no EKS
+// identity cannot lend its credential aliases to an explicitly named recovery target.
+func TestEKSRecoveryNamelessConfigUsesExplicitAWSSelection(t *testing.T) {
+	const name = "eks-recovery-nameless-config"
+
+	marker, eksctlPath := setupStandaloneEKSLifecycleFixture(t, name)
+	fixture := slices.DeleteFunc(
+		strings.Split(standaloneEKSEksctlFixture, "\n"),
+		func(line string) bool { return strings.HasPrefix(line, `[ -z "${KSAIL_`) },
+	)
+	writeExecutableFixture(t, eksctlPath, strings.Join(fixture, "\n"))
+	require.NoError(t, state.DeleteClusterState(name))
+	require.NoError(t, os.Remove("eks.yaml"))
+	nameless := strings.Replace(standaloneEKSClusterFixture, "name: config-file-name", `name: ""`, 1)
+	require.NoError(t, os.WriteFile("ksail.yaml", []byte(nameless), 0o600))
+
+	t.Setenv("KSAIL_REGION", "us-west-2")
+	t.Setenv("KSAIL_ACCESS", "other-cluster-access")
+	t.Setenv("KSAIL_SECRET", "other-cluster-secret")
+	t.Setenv("AWS_PROFILE", "")
+	t.Setenv("AWS_REGION", "ap-southeast-2")
+	t.Setenv("AWS_ACCESS_KEY_ID", "fixture-access")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "fixture-secret")
+	t.Setenv("AWS_SESSION_TOKEN", "fixture-session")
+
+	require.NoError(t, recoveryEKSCommand(t, name, true).Execute())
+	ownership, err := state.LoadEKSOwnershipState(name, "ap-southeast-2")
+	require.NoError(t, err)
+	assert.Equal(t, "AWS_ACCESS_KEY_ID", ownership.AWSOptions.AccessKeyIDEnvVar)
+	assert.Equal(t, "AWS_REGION", ownership.AWSOptions.RegionEnvVar)
+	assert.Contains(t, readStandaloneEKSCalls(t, marker),
+		"get cluster --name "+name+" --output json --region ap-southeast-2")
+}
+
 //nolint:paralleltest // mutates process environment, working directory, and shared hooks.
 func TestRebindEKSOwnershipPrintsIdentityBeforeConfirmation(t *testing.T) {
 	clusterName := "eks-rebind-review-6202"
