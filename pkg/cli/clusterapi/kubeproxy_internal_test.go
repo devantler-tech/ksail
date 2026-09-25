@@ -32,7 +32,7 @@ func TestProxyKubeGetForwardsToAPIServer(t *testing.T) {
 	defer server.Close()
 
 	service := &Service{
-		restConfigForCluster: func(string) (*rest.Config, error) {
+		restConfigForCluster: func(context.Context, string) (*rest.Config, error) {
 			return &rest.Config{Host: server.URL}, nil
 		},
 	}
@@ -87,7 +87,7 @@ func TestProxyKubeGetCleansPathToStayOnHost(t *testing.T) {
 	defer server.Close()
 
 	service := &Service{
-		restConfigForCluster: func(string) (*rest.Config, error) {
+		restConfigForCluster: func(context.Context, string) (*rest.Config, error) {
 			return &rest.Config{Host: server.URL}, nil
 		},
 	}
