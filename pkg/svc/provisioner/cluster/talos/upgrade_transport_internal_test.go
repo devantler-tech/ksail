@@ -25,18 +25,23 @@ func (roundTrip upgradeRoundTripper) RoundTrip(request *http.Request) (*http.Res
 	return roundTrip(request)
 }
 
-func TestKubernetesUpgradeReadTransportDoesNotReplayOtherRequests(t *testing.T) {
-	t.Parallel()
+type upgradeReplayCase struct {
+	name     string
+	method   string
+	url      string
+	body     string
+	noRewind bool
+	err      error
+}
 
-	tests := []struct {
-		name   string
-		method string
-		body   string
-		err    error
-	}{
+func upgradeReplayRefusals() []upgradeReplayCase {
+	const dryRunURL = "https://upgrade.invalid?dryRun=All"
+
+	return []upgradeReplayCase{
 		{name: "create", method: http.MethodPost, err: refusedUpgradeConnection()},
 		{name: "update", method: http.MethodPut, err: refusedUpgradeConnection()},
 		{name: "apply", method: http.MethodPatch, err: refusedUpgradeConnection()},
+		{name: "apply after shutdown", method: http.MethodPatch, err: gracefulAPIServerShutdown()},
 		{name: "delete", method: http.MethodDelete, err: refusedUpgradeConnection()},
 		{
 			name:   "read with body",
@@ -45,9 +50,28 @@ func TestKubernetesUpgradeReadTransportDoesNotReplayOtherRequests(t *testing.T) 
 			err:    refusedUpgradeConnection(),
 		},
 		{name: "permanent error", method: http.MethodGet, err: syscall.EACCES},
+		{
+			name:     "dry run without a rewindable body",
+			method:   http.MethodPatch,
+			url:      dryRunURL,
+			body:     "body",
+			noRewind: true,
+			err:      gracefulAPIServerShutdown(),
+		},
+		{
+			name:   "dry run permanent error",
+			method: http.MethodPatch,
+			url:    dryRunURL,
+			body:   "body",
+			err:    syscall.EACCES,
+		},
 	}
+}
 
-	for _, test := range tests {
+func TestKubernetesUpgradeReadTransportDoesNotReplayOtherRequests(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range upgradeReplayRefusals() {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -58,9 +82,19 @@ func TestKubernetesUpgradeReadTransportDoesNotReplayOtherRequests(t *testing.T) 
 
 					return nil, test.err
 				})}
+
+			url := test.url
+			if url == "" {
+				url = "https://upgrade.invalid"
+			}
+
 			request, err := http.NewRequestWithContext(t.Context(), test.method,
-				"https://upgrade.invalid", strings.NewReader(test.body))
+				url, strings.NewReader(test.body))
 			require.NoError(t, err)
+
+			if test.noRewind {
+				request.GetBody = nil
+			}
 
 			response, err := transport.RoundTrip(request)
 			if response != nil {
@@ -106,29 +140,75 @@ func TestKubernetesUpgradeReadTransportPreservesHTTPFailure(t *testing.T) {
 func TestKubernetesUpgradeReadTransportStopsAtRetryLimit(t *testing.T) {
 	t.Parallel()
 
-	calls := 0
-	transport := upgradeReadTransport{transport: upgradeRoundTripper(
-		func(*http.Request) (*http.Response, error) {
-			calls++
-
-			return nil, refusedUpgradeConnection()
-		})}
-	request, err := http.NewRequestWithContext(
-		t.Context(),
-		http.MethodGet,
-		"https://upgrade.invalid",
-		nil,
-	)
-	require.NoError(t, err)
-
-	response, err := transport.RoundTrip(request)
-	if response != nil {
-		require.NoError(t, response.Body.Close())
+	tests := []struct {
+		name   string
+		method string
+		url    string
+		body   string
+		err    error
+	}{
+		{
+			name:   "read",
+			method: http.MethodGet,
+			url:    "https://upgrade.invalid",
+			err:    refusedUpgradeConnection(),
+		},
+		{
+			name:   "dry run",
+			method: http.MethodPatch,
+			url:    "https://upgrade.invalid?dryRun=All",
+			body:   "body",
+			err:    gracefulAPIServerShutdown(),
+		},
 	}
 
-	require.ErrorIs(t, err, refusedUpgradeErrno())
-	assert.Nil(t, response)
-	assert.Equal(t, 6, calls)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			bodies := []string{}
+			transport := upgradeReadTransport{
+				transport: failingBodyRecorder(t, test.err, &bodies),
+			}
+			request, err := http.NewRequestWithContext(t.Context(), test.method,
+				test.url, strings.NewReader(test.body))
+			require.NoError(t, err)
+
+			response, err := transport.RoundTrip(request)
+			if response != nil {
+				require.NoError(t, response.Body.Close())
+			}
+
+			require.ErrorIs(t, err, errKubernetesAPIUnavailable)
+			require.ErrorIs(t, err, test.err)
+			assert.Nil(t, response)
+			assert.Len(t, bodies, kubernetesUpgradeReadAttempts)
+
+			for _, body := range bodies {
+				assert.Equal(t, test.body, body)
+			}
+		})
+	}
+}
+
+// failingBodyRecorder records the body of every attempt, so a test can prove each replay resent it.
+func failingBodyRecorder(t *testing.T, failure error, bodies *[]string) upgradeRoundTripper {
+	t.Helper()
+
+	return func(request *http.Request) (*http.Response, error) {
+		body := ""
+
+		if request.Body != nil {
+			read, err := io.ReadAll(request.Body)
+			require.NoError(t, err)
+
+			body = string(read)
+		}
+
+		*bodies = append(*bodies, body)
+
+		return nil, failure
+	}
 }
 
 func TestKubernetesUpgradeReadTransportStopsOnCancellation(t *testing.T) {
