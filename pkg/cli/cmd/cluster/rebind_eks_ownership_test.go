@@ -203,6 +203,12 @@ func TestEKSRecoveryDoesNotBorrowAnotherClustersAWSOptions(t *testing.T) {
 	t.Setenv("AWS_ACCESS_KEY_ID", "fixture-access")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "fixture-secret")
 	t.Setenv("AWS_SESSION_TOKEN", "fixture-session")
+	writeStandaloneEKSKubeconfigContexts(t, name, []string{
+		"operator@" + name + ".us-west-2.eksctl.io",
+	})
+	kubeconfigPath, err := filepath.Abs("kubeconfig")
+	require.NoError(t, err)
+	t.Setenv("KUBECONFIG", kubeconfigPath)
 
 	require.NoError(t, recoveryEKSCommand(t, name, true).Execute())
 	ownership, err := state.LoadEKSOwnershipState(name, "ap-southeast-2")

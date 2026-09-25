@@ -166,7 +166,7 @@ func validateEKSRecoveryTarget(cmd *cobra.Command, resolved *lifecycle.ResolvedC
 func discardOtherClusterAWSOptions(resolved *lifecycle.ResolvedClusterInfo) {
 	if resolved.ConfigSource && !loadedConfigDescribesTarget(resolved) {
 		resolved.AWSOpts = v1alpha1.OptionsAWS{}
-		resolved.AWSRegion = ""
+		resolved.AWSRegion = lifecycle.ResolveAWSRegion(resolved.AWSOpts, nil)
 		resolved.AWSRegionFromConfig = false
 	}
 }
