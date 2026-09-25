@@ -206,6 +206,7 @@ func TestEKSRecoveryDoesNotBorrowAnotherClustersAWSOptions(t *testing.T) {
 	writeStandaloneEKSKubeconfigContexts(t, name, []string{
 		"operator@" + name + ".us-west-2.eksctl.io",
 	})
+
 	kubeconfigPath, err := filepath.Abs("kubeconfig")
 	require.NoError(t, err)
 	t.Setenv("KUBECONFIG", kubeconfigPath)
