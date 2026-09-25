@@ -28,18 +28,31 @@ func newSSHFirewallRepairServer(
 ) *httptest.Server {
 	t.Helper()
 
+	return newFirewallRepairServer(t, []map[string]any{{
+		"direction":  "in",
+		"protocol":   "tcp",
+		"port":       "50000",
+		"source_ips": []string{"0.0.0.0/0"},
+	}}, actionStatus, setRulesCalled)
+}
+
+// newFirewallRepairServer serves an existing firewall for "test-cluster" with the
+// given rules and answers set_rules with a single action in actionStatus.
+func newFirewallRepairServer(
+	t *testing.T,
+	rules []map[string]any,
+	actionStatus string,
+	setRulesCalled *atomic.Bool,
+) *httptest.Server {
+	t.Helper()
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /firewalls", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSONResponse(t, w, map[string]any{
 			"firewalls": []map[string]any{{
-				"id":   9,
-				"name": "test-cluster" + hetzner.FirewallSuffix,
-				"rules": []map[string]any{{
-					"direction":  "in",
-					"protocol":   "tcp",
-					"port":       "50000",
-					"source_ips": []string{"0.0.0.0/0"},
-				}},
+				"id":    9,
+				"name":  "test-cluster" + hetzner.FirewallSuffix,
+				"rules": rules,
 			}},
 		})
 	})
@@ -90,6 +103,50 @@ func TestEnsureSSHFirewallRepairReportsFailedSetRulesAction(t *testing.T) {
 	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
 
 	firewall, err := prov.EnsureSSHFirewall(context.Background(), "test-cluster", nil)
+
+	require.Error(t, err, "a failed rule update must not be reported as a repaired firewall")
+	assert.Contains(t, err.Error(), "failed to apply firewall rules")
+	assert.Nil(t, firewall)
+	assert.True(t, setRulesCalled.Load())
+}
+
+// TestEnsureFirewallRepairsStaleSSHFirewall catches a Talos create reusing a
+// firewall left behind by an interrupted Vanilla or K3s create of the same name,
+// which allows SSH but not the Talos API the create then depends on.
+func TestEnsureFirewallRepairsStaleSSHFirewall(t *testing.T) {
+	t.Parallel()
+
+	var setRulesCalled atomic.Bool
+
+	srv := newFirewallRepairServer(t, []map[string]any{{
+		"direction":  "in",
+		"protocol":   "tcp",
+		"port":       "22",
+		"source_ips": []string{"0.0.0.0/0"},
+	}}, "success", &setRulesCalled)
+	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
+
+	firewall, err := prov.EnsureFirewall(context.Background(), "test-cluster", nil)
+
+	require.NoError(t, err)
+	assert.NotNil(t, firewall)
+	assert.True(t, setRulesCalled.Load(), "an SSH-only firewall must be given the Talos rules")
+}
+
+func TestEnsureFirewallRepairReportsFailedSetRulesAction(t *testing.T) {
+	t.Parallel()
+
+	var setRulesCalled atomic.Bool
+
+	srv := newFirewallRepairServer(t, []map[string]any{{
+		"direction":  "in",
+		"protocol":   "tcp",
+		"port":       "22",
+		"source_ips": []string{"0.0.0.0/0"},
+	}}, "error", &setRulesCalled)
+	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
+
+	firewall, err := prov.EnsureFirewall(context.Background(), "test-cluster", nil)
 
 	require.Error(t, err, "a failed rule update must not be reported as a repaired firewall")
 	assert.Contains(t, err.Error(), "failed to apply firewall rules")

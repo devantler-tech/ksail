@@ -136,41 +136,17 @@ func (p *Provider) ensureSubnet(
 	return nil
 }
 
-// EnsureFirewall ensures a firewall exists for the cluster, creating it if needed.
+// EnsureFirewall ensures the firewall for a Talos cluster, creating it if needed.
 // When allowedCIDRs is non-empty, the Kubernetes API and Talos API firewall rules
 // restrict source IPs to the specified CIDR blocks instead of 0.0.0.0/0 and ::/0.
+// An existing firewall whose rules differ is updated, so one left behind by an
+// interrupted Vanilla or K3s create of the same name cannot block the Talos API.
 func (p *Provider) EnsureFirewall(
 	ctx context.Context,
 	clusterName string,
 	allowedCIDRs []string,
 ) (*hcloud.Firewall, error) {
-	if p.client == nil {
-		return nil, provider.ErrProviderUnavailable
-	}
-
-	firewallName := clusterName + FirewallSuffix
-
-	// Check if firewall already exists
-	firewall, _, err := p.client.Firewall.GetByName(ctx, firewallName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get firewall %s: %w", firewallName, err)
-	}
-
-	if firewall != nil {
-		return firewall, nil
-	}
-
-	// Create firewall with Talos-required rules
-	result, _, err := p.client.Firewall.Create(ctx, hcloud.FirewallCreateOpts{
-		Name:   firewallName,
-		Labels: ResourceLabels(clusterName),
-		Rules:  buildFirewallRules(allowedCIDRs),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create firewall %s: %w", firewallName, err)
-	}
-
-	return result.Firewall, nil
+	return p.ensureFirewallRules(ctx, clusterName, buildFirewallRules(allowedCIDRs))
 }
 
 // EnsureSSHFirewall ensures the firewall for a cluster whose nodes are bootstrapped
@@ -184,12 +160,21 @@ func (p *Provider) EnsureSSHFirewall(
 	clusterName string,
 	allowedCIDRs []string,
 ) (*hcloud.Firewall, error) {
+	return p.ensureFirewallRules(ctx, clusterName, buildSSHFirewallRules(allowedCIDRs))
+}
+
+// ensureFirewallRules creates the cluster firewall with desiredRules, or updates an
+// existing one whose rules differ, and returns it once the rules are in effect.
+func (p *Provider) ensureFirewallRules(
+	ctx context.Context,
+	clusterName string,
+	desiredRules []hcloud.FirewallRule,
+) (*hcloud.Firewall, error) {
 	if p.client == nil {
 		return nil, provider.ErrProviderUnavailable
 	}
 
 	firewallName := clusterName + FirewallSuffix
-	desiredRules := buildSSHFirewallRules(allowedCIDRs)
 
 	firewall, _, err := p.client.Firewall.GetByName(ctx, firewallName)
 	if err != nil {
