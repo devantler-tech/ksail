@@ -46,6 +46,27 @@ func namespaceSelectorKnown(selector *metav1.LabelSelector, namespace string) bo
 	return !unknown
 }
 
+// namespaceSelectorExcludes reports whether the namespace-name label alone
+// decides the selector as not matching, so the policy cannot select documents
+// in that namespace.
+func namespaceSelectorExcludes(selector *metav1.LabelSelector, namespace string) bool {
+	if selector == nil || namespace == "" {
+		return false
+	}
+
+	parsed, err := metav1.LabelSelectorAsSelector(selector)
+	if err != nil {
+		return false
+	}
+
+	requirements, _ := parsed.Requirements()
+	known := labels.Set{corev1.LabelMetadataName: namespace}
+
+	return slices.ContainsFunc(requirements, func(requirement labels.Requirement) bool {
+		return requirement.Key() == corev1.LabelMetadataName && !requirement.Matches(known)
+	})
+}
+
 // policyNamespaceSelectorsKnown requires every selector to be decidable before
 // passing partial labels to Kyverno, including exclusions and action overrides.
 func policyNamespaceSelectorsKnown(policy kyvernov1.PolicyInterface, namespace string) bool {

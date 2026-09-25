@@ -235,4 +235,12 @@ func TestNamespaceNameDoesNotInventNamespaceObject(t *testing.T) {
 	require.Len(t, violations, 1)
 	assert.True(t, violations[0].Unsupported)
 	assert.Contains(t, violations[0].Message, "namespaceObject")
+
+	excluded := validatingPolicy(t, readsNamespaceObject)
+	excluded.GetValidatingPolicySpec().MatchConstraints.NamespaceSelector = &metav1.LabelSelector{
+		MatchLabels: map[string]string{corev1.LabelMetadataName: "flux-system"},
+	}
+	violations, err = celEngine(t, nil, excluded).Evaluate(t.Context(), configMap("kube-system", nil))
+	require.NoError(t, err)
+	assert.Empty(t, violations)
 }

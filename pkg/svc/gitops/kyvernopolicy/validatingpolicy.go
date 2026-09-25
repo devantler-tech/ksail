@@ -419,6 +419,10 @@ func (e *CELEngine) offlineLimitation(
 	}
 
 	switch {
+	case selectsOnNamespaceLabels(entry.policy) && namespaceSelectorExcludes(
+		entry.policy.GetValidatingPolicySpec().MatchConstraints.NamespaceSelector, namespace,
+	):
+		return ""
 	case selectsOnNamespaceLabels(entry.policy) && !namespaceSelectorKnown(
 		entry.policy.GetValidatingPolicySpec().MatchConstraints.NamespaceSelector, namespace,
 	):
