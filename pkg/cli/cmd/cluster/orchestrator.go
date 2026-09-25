@@ -218,6 +218,15 @@ func (o *updateOrchestrator) reconcileDistributionVersion(
 	currentVersions *clusterupdate.VersionInfo,
 ) (bool, error) {
 	if pin := upgrader.PinnedDistributionVersion(); pin != "" {
+		target, reason, err := normalizePinnedVersion(pin, currentVersions.DistributionVersion)
+		if err != nil {
+			return false, err
+		}
+
+		if reason == pinnedVersionAlreadyAtIt {
+			return o.reconcileDistributionImage(upgrader, target)
+		}
+
 		return o.executePinnedUpgrade(
 			upgrader, distributionLabel, distributionLabel, upgrader.UpgradeDistribution, pin,
 			currentVersions.DistributionVersion,
@@ -321,6 +330,11 @@ func (o *updateOrchestrator) executeVersionUpgrade(params versionUpgradeParams) 
 		o.cmd.Context(), params.resolver, params.imageRef, params.currentVersion, params.suffix,
 	)
 	if err != nil {
+		if params.upgradeType == distributionLabel &&
+			errors.Is(err, versionresolver.ErrNoUpgradesAvailable) {
+			return o.reconcileDistributionImage(params.upgrader, params.currentVersion)
+		}
+
 		return o.handleUpgradePathError(params.upgradeType, params.currentVersion, err)
 	}
 

@@ -4,6 +4,8 @@ import "errors"
 
 // Common errors for the Talos provisioner.
 var (
+	// ErrSchematicUndetermined means the running boot image cannot be identified safely.
+	ErrSchematicUndetermined = errors.New("running Talos schematic could not be determined")
 	// ErrDockerNotAvailable is returned when Docker is not available.
 	ErrDockerNotAvailable = errors.New("docker is not available: ensure Docker is running")
 	// ErrClusterAlreadyExists is returned when attempting to create a cluster that already exists.

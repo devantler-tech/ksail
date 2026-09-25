@@ -87,7 +87,14 @@ func (p *Provisioner) upgradeNodeTalosVersion(
 	// Skip nodes already at the target. A rolling upgrade walks every node, so when
 	// resuming an interrupted or partial roll (a mixed-version cluster) it would
 	// otherwise reboot nodes that already run the desired version.
-	if runningVersionMatchesTarget(runningVersion, desiredTag) {
+	matches, matchErr := runningImageMatchesTarget(
+		ctx, talosClient.COSI, runningVersion, desiredTag, p.resolveSchematicID(),
+	)
+	if matchErr != nil {
+		return fmt.Errorf("checking running image on %s: %w", nodeIP, matchErr)
+	}
+
+	if matches {
 		_, _ = fmt.Fprintf(
 			p.logWriter,
 			"    %s already at %s, skipping upgrade\n",
@@ -108,7 +115,7 @@ func (p *Provisioner) upgradeNodeTalosVersion(
 		return err
 	}
 
-	// Wait for the node to come back with the desired version.
+	// Wait for the node to come back with the desired version and schematic.
 	_, _ = fmt.Fprintf(p.logWriter, "    Waiting for %s to become ready...\n", nodeIP)
 
 	waitErr := p.waitForNodeReadyAfterUpgrade(ctx, nodeIP, desiredTag)
@@ -311,7 +318,7 @@ func drainUpgradeStream(
 }
 
 // waitForNodeReadyAfterUpgrade polls a node's Talos API until it responds with
-// the desired version tag, indicating the node has rebooted into the new OS.
+// the desired version and schematic, proving it booted the requested OS image.
 func (p *Provisioner) waitForNodeReadyAfterUpgrade(
 	ctx context.Context,
 	nodeIP, desiredTag string,
@@ -328,11 +335,11 @@ func (p *Provisioner) waitForNodeReadyAfterUpgrade(
 	for time.Now().Before(deadline) {
 		pollCtx, pollCancel := context.WithTimeout(ctx, retryInterval)
 
-		tag, err := p.getRunningTalosVersion(pollCtx, nodeIP)
+		matches, err := p.nodeImageMatchesTarget(pollCtx, nodeIP, desiredTag)
 
 		pollCancel()
 
-		if err == nil && tag == desiredTag {
+		if err == nil && matches {
 			return nil
 		}
 
@@ -387,10 +394,19 @@ func (p *Provisioner) rollingUpgradeNodes(
 		storageProber = p.buildStorageHealthProberOrWarn(ctx, clientset, clusterName)
 	}
 
-	for i, node := range ordered {
+	for index, node := range ordered {
+		matches, matchErr := p.nodeImageMatchesTarget(ctx, node.IP, desiredTag)
+		if matchErr != nil {
+			return fmt.Errorf("checking image before drain on %s: %w", node.IP, matchErr)
+		}
+
+		if matches {
+			continue
+		}
+
 		_, _ = fmt.Fprintf(p.logWriter,
 			"  [%d/%d] Upgrading %s (%s)...\n",
-			i+1, len(ordered), node.IP, node.Role,
+			index+1, len(ordered), node.IP, node.Role,
 		)
 
 		upgradeErr := p.upgradeSingleNode(ctx, upgradeNodeRequest{
