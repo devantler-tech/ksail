@@ -2,6 +2,7 @@ package timer_test
 
 import (
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/timer"
@@ -218,23 +219,9 @@ func TestCR005_SingleStageCommand(t *testing.T) {
 func TestCR008_DurationPrecision(t *testing.T) {
 	t.Parallel()
 
-	t.Run("Sub-millisecond operations return non-zero durations", func(t *testing.T) {
+	t.Run("Nanosecond elapsed time is preserved", func(t *testing.T) {
 		t.Parallel()
-
-		tmr := timer.New()
-		tmr.Start()
-
-		// Quick operation (no sleep, just immediate call)
-		total, stage := tmr.GetTiming()
-
-		// Should still return non-zero (nanosecond precision)
-		if total <= 0 {
-			t.Errorf("Expected total > 0 for sub-millisecond operation, got %v", total)
-		}
-
-		if stage <= 0 {
-			t.Errorf("Expected stage > 0 for sub-millisecond operation, got %v", stage)
-		}
+		testNanosecondPrecision(t)
 	})
 
 	t.Run("Duration.String() formats correctly", func(t *testing.T) {
@@ -278,6 +265,29 @@ func TestCR008_DurationPrecision(t *testing.T) {
 		str := total.String()
 		if str == "" {
 			t.Error("Expected formatted duration with milliseconds")
+		}
+	})
+}
+
+func testNanosecondPrecision(t *testing.T) {
+	t.Helper()
+
+	synctest.Test(t, func(t *testing.T) {
+		tmr := timer.New()
+		tmr.Start()
+
+		// Consecutive reads may share a clock tick; zero elapsed time is valid.
+		total, stage := tmr.GetTiming()
+		if total != 0 || stage != 0 {
+			t.Errorf("Expected zero elapsed time, got total=%v stage=%v", total, stage)
+		}
+
+		// Advance the simulated clock without depending on host clock resolution.
+		time.Sleep(time.Nanosecond)
+
+		total, stage = tmr.GetTiming()
+		if total != time.Nanosecond || stage != time.Nanosecond {
+			t.Errorf("Expected 1ns elapsed time, got total=%v stage=%v", total, stage)
 		}
 	})
 }

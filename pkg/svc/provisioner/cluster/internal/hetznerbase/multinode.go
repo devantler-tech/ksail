@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 
-	sshbootstrap "github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/ssh"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
@@ -231,6 +230,8 @@ func (b *Base) createJoiningNodes(
 	haComposer, _ := composer.(HAControlPlaneComposer)
 
 	for index, spec := range joinSpecs {
+		b.logf("Creating joining node %q...", spec.Name)
+
 		server, createErr := b.Servers.CreateServer(ctx, spec)
 		if createErr != nil {
 			return b.cleanUpFailedBringUp(
@@ -239,6 +240,8 @@ func (b *Base) createJoiningNodes(
 				fmt.Errorf("create joining node %q: %w", spec.Name, createErr),
 			)
 		}
+
+		b.logf("✓ Joining node %q created", spec.Name)
 
 		// joinSpecs is derived 1:1 in order from joinNodes, so the node's role
 		// travels by index.
@@ -279,19 +282,14 @@ func (b *Base) waitForControlPlaneJoin(
 		return err
 	}
 
-	client, err := sshbootstrap.DialWithRetry(ctx, sshbootstrap.Options{
-		Addr:            addr,
-		User:            bootstrapUser,
-		Signer:          material.Signer,
-		HostKeyCallback: material.HostKeyCallback,
-	}, 0)
+	client, err := b.dialBootstrapSSH(ctx, addr, material.Signer, material.HostKeyCallback)
 	if err != nil {
-		return fmt.Errorf("dial bootstrap SSH at %s: %w", addr, err)
+		return err
 	}
 
 	defer func() { _ = client.Close() }()
 
-	return waitForRemoteFile(ctx, client, sentinelPath, b.BringUpPollInterval)
+	return b.waitForBootstrapFile(ctx, client, addr, sentinelPath, b.BringUpPollInterval)
 }
 
 // privateIPv4 returns the created server's first private-network IPv4, or

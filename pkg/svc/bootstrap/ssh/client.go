@@ -212,9 +212,9 @@ func (c *Client) exec(
 	command string,
 	stdin io.Reader,
 ) (RunResult, error) {
-	session, err := c.conn.NewSession()
+	session, err := c.openSession(ctx)
 	if err != nil {
-		return RunResult{}, fmt.Errorf("open session: %w", err)
+		return RunResult{}, err
 	}
 
 	defer func() { _ = session.Close() }()
@@ -258,6 +258,43 @@ func (c *Client) exec(
 	}
 
 	return result, nil
+}
+
+// openSession opens a session channel, giving up when ctx ends. NewSession is
+// not context-aware and blocks until the server answers the channel-open
+// request, so a server that never answers would otherwise outlive the caller's
+// deadline. A session that opens after ctx ended is closed when it arrives; the
+// open itself ends at the latest when the connection closes.
+func (c *Client) openSession(ctx context.Context) (*ssh.Session, error) {
+	type opened struct {
+		session *ssh.Session
+		err     error
+	}
+
+	result := make(chan opened, 1)
+
+	go func() {
+		session, err := c.conn.NewSession()
+		result <- opened{session: session, err: err}
+	}()
+
+	select {
+	case got := <-result:
+		if got.err != nil {
+			return nil, fmt.Errorf("open session: %w", got.err)
+		}
+
+		return got.session, nil
+	case <-ctx.Done():
+		go func() {
+			late := <-result
+			if late.err == nil {
+				_ = late.session.Close()
+			}
+		}()
+
+		return nil, fmt.Errorf("open session: %w", ctx.Err())
+	}
 }
 
 // closeOnDone closes closer when ctx is cancelled, and returns a stop func
