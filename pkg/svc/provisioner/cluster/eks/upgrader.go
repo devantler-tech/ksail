@@ -122,12 +122,15 @@ func (p *UpgradableProvisioner) UpgradeKubernetes(
 
 	token := rand.Text()
 
-	err = p.verifyUpgradeSubmission(ctx, api, expected)
+	// Validate first so the final cluster check and the update share one signer.
+	err = validateUpgradeCredentialLifetime(ctx, api)
 	if err != nil {
 		return err
 	}
 
-	err = validateUpgradeCredentialLifetime(ctx, api)
+	defer releaseUpgradeCredentials(api)
+
+	err = p.verifyUpgradeSubmission(ctx, api, expected)
 	if err != nil {
 		return err
 	}
@@ -165,6 +168,15 @@ func validateUpgradeCredentialLifetime(ctx context.Context, api AWSClusterVersio
 	}
 
 	return nil
+}
+
+// releaseUpgradeCredentials returns a reused client to its configured providers
+// once this upgrade ends.
+func releaseUpgradeCredentials(api AWSClusterVersionAPI) {
+	releaser, ok := api.(interface{ ReleaseUpgradeCredentials() })
+	if ok {
+		releaser.ReleaseUpgradeCredentials()
+	}
 }
 
 // UpgradeDistribution refuses a separate OS upgrade; AWS manages that dimension.

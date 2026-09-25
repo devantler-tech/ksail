@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
@@ -92,8 +93,10 @@ type Client struct {
 	optionErr                 error
 	awsConfig                 *aws.Config
 	// upgradeEKS and upgradeSTS hold the exact credentials that passed upgrade
-	// lifetime validation. Once set, every later EKS and STS call signs with them,
-	// so a refreshing provider cannot swap identity or lifetime mid-upgrade.
+	// lifetime validation. Until the upgrade releases them, every EKS and STS call
+	// signs with them, so a refreshing provider cannot swap identity or lifetime
+	// mid-upgrade. upgradeMu guards them because the client is shared.
+	upgradeMu  sync.RWMutex
 	upgradeEKS aws.CredentialsProvider
 	upgradeSTS aws.CredentialsProvider
 }
@@ -295,13 +298,17 @@ func (c *Client) DescribeCluster(ctx context.Context, name string) (*ekstypes.Cl
 // MintToken mints the standard EKS bearer token for the named cluster: a
 // presigned STS GetCallerIdentity URL carrying the cluster-binding header,
 // base64url-encoded under the k8s-aws-v1 prefix. The token inherits the
-// presigner's credentials and is valid for presignExpirySeconds.
+// presigner's credentials, or an upgrade's validated STS credentials while it
+// holds them, and is valid for presignExpirySeconds.
 func (c *Client) MintToken(ctx context.Context, clusterName string) (string, error) {
+	clientOptions := c.stsOptions()
+	clientOptions = append(clientOptions, withTokenHeaders(clusterName))
+
 	request, err := c.presigner.PresignGetCallerIdentity(
 		ctx,
 		&sts.GetCallerIdentityInput{},
 		func(options *sts.PresignOptions) {
-			options.ClientOptions = append(options.ClientOptions, withTokenHeaders(clusterName))
+			options.ClientOptions = append(options.ClientOptions, clientOptions...)
 		},
 	)
 	if err != nil {

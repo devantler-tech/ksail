@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -19,7 +22,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const upgradeFixtureTarget = "1.35"
+const (
+	upgradeFixtureSource = "1.34"
+	upgradeFixtureTarget = "1.35"
+)
 
 type upgradeHTTPFixture struct {
 	t         *testing.T
@@ -43,7 +49,7 @@ func (f *upgradeHTTPFixture) Do(request *http.Request) (*http.Response, error) {
 		body = `{"update":{"id":"id","type":"VersionUpdate","status":"Successful",` +
 			`"params":[{"type":"Version","value":"1.35"}]}}`
 	case request.URL.Path == "/clusters/demo":
-		version := "1.34"
+		version := upgradeFixtureSource
 		if f.submitted > 0 {
 			version = upgradeFixtureTarget
 		}
@@ -107,7 +113,9 @@ func TestControlPlaneUpgradeChecksEffectiveSDKCredentials(t *testing.T) {
 			cfg := upgradeSDKConfig(transport, testCase.service, values)
 			provisioner := newSDKUpgradeProvisioner(t, cfg)
 
-			err := provisioner.UpgradeKubernetes(t.Context(), "demo", "1.34", upgradeFixtureTarget)
+			err := provisioner.UpgradeKubernetes(
+				t.Context(), "demo", upgradeFixtureSource, upgradeFixtureTarget,
+			)
 			if testCase.wantErr {
 				require.ErrorContains(t, err, "credential")
 				assert.Zero(
@@ -138,7 +146,12 @@ func TestControlPlaneUpgradeRejectsUnverifiableClient(t *testing.T) {
 	provisioner := newUpgradeProvisioner(t, api, func(context.Context) error { return nil },
 		eksprovisioner.WithAWSClusterAPI(opaqueUpgradeAPI{AWSClusterVersionAPI: api}),
 	)
-	err := provisioner.UpgradeKubernetes(t.Context(), "demo", "1.34", upgradeFixtureTarget)
+	err := provisioner.UpgradeKubernetes(
+		t.Context(),
+		"demo",
+		upgradeFixtureSource,
+		upgradeFixtureTarget,
+	)
 	require.ErrorIs(t, err, eksclient.ErrUpgradeCredentialLifetime)
 	assert.Zero(t, api.submitted)
 }
@@ -190,4 +203,112 @@ func newSDKUpgradeProvisioner(t *testing.T, cfg aws.Config) *eksprovisioner.Upgr
 	return eksprovisioner.NewUpgradableProvisioner(
 		eksprovisioner.NewUpdatableProvisioner(base),
 	)
+}
+
+// signedRequest records one AWS request and the access key that signed it.
+type signedRequest struct{ operation, key string }
+
+// signerRecordingFixture serves the upgrade like upgradeHTTPFixture while recording the
+// signing key of every request in order.
+type signerRecordingFixture struct {
+	mu        sync.Mutex
+	submitted int
+	requests  []signedRequest
+}
+
+func (f *signerRecordingFixture) Do(request *http.Request) (*http.Response, error) {
+	_, credential, _ := strings.Cut(request.Header.Get("Authorization"), "Credential=")
+	key, _, _ := strings.Cut(credential, "/")
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	var body string
+
+	switch {
+	case request.Method == http.MethodPost && request.URL.Path == "/clusters/demo/updates":
+		f.submitted++
+		body = `{"update":{"id":"id","type":"VersionUpdate","status":"InProgress",` +
+			`"params":[{"type":"Version","value":"1.35"}]}}`
+	case request.URL.Path == "/clusters/demo/updates/id":
+		body = `{"update":{"id":"id","type":"VersionUpdate","status":"Successful",` +
+			`"params":[{"type":"Version","value":"1.35"}]}}`
+	default:
+		version := upgradeFixtureSource
+		if f.submitted > 0 {
+			version = upgradeFixtureTarget
+		}
+
+		body = fmt.Sprintf(
+			`{"cluster":{"name":"demo","arn":"arn:aws:eks:us-east-1:123456789012:cluster/demo",`+
+				`"createdAt":1700000000,"status":"ACTIVE","version":%q}}`,
+			version,
+		)
+	}
+
+	f.requests = append(
+		f.requests,
+		signedRequest{operation: request.Method + " " + request.URL.Path, key: key},
+	)
+
+	return &http.Response{
+		StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}},
+		Body: io.NopCloser(strings.NewReader(body)), Request: request,
+	}, nil
+}
+
+// TestControlPlaneUpgradeScopesValidatedCredentials binds the last pre-mutation cluster read to the
+// credentials that sign the update, and returns the reused client to its refreshing provider after.
+func TestControlPlaneUpgradeScopesValidatedCredentials(t *testing.T) {
+	t.Parallel()
+
+	var retrieved atomic.Int64
+
+	transport := &signerRecordingFixture{}
+	cfg := aws.Config{
+		Region:     "us-east-1",
+		HTTPClient: transport,
+		Credentials: aws.CredentialsProviderFunc(func(context.Context) (aws.Credentials, error) {
+			return aws.Credentials{
+				AccessKeyID: fmt.Sprintf("AKID%d", retrieved.Add(1)), SecretAccessKey: "secret",
+			}, nil
+		}),
+	}
+	client, err := eksclient.NewClient(t.Context(), "us-east-1", eksclient.WithAWSConfig(cfg))
+	require.NoError(t, err)
+
+	base, err := eksprovisioner.NewProvisioner(
+		"demo", "us-east-1", "", eksctl.NewClient(), nil,
+		eksprovisioner.WithAWSClusterAPI(client),
+		eksprovisioner.WithAWSConfig(cfg),
+		eksprovisioner.WithOwnershipVerifier(func(context.Context) error { return nil }),
+	)
+	require.NoError(t, err)
+
+	provisioner := eksprovisioner.NewUpgradableProvisioner(
+		eksprovisioner.NewUpdatableProvisioner(base),
+	)
+	require.NoError(
+		t,
+		provisioner.UpgradeKubernetes(
+			t.Context(),
+			"demo",
+			upgradeFixtureSource,
+			upgradeFixtureTarget,
+		),
+	)
+
+	_, err = client.DescribeCluster(t.Context(), "demo")
+	require.NoError(t, err)
+
+	requests := transport.requests
+	submission := slices.IndexFunc(requests, func(request signedRequest) bool {
+		return request.operation == "POST /clusters/demo/updates"
+	})
+	require.Positive(t, submission)
+	assert.Equal(t, "GET /clusters/demo", requests[submission-1].operation)
+	assert.Equal(t, requests[submission].key, requests[submission-1].key,
+		"the last cluster read before submission must use the update's signer")
+	assert.NotEqual(t, requests[submission].key, requests[len(requests)-1].key,
+		"the upgrade's credentials must not outlive the upgrade")
 }

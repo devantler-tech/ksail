@@ -54,12 +54,33 @@ func TestUpgradeSignsWithValidatedCredentials(t *testing.T) {
 	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(10*time.Minute))
 	defer cancel()
 
+	recorder := &signingRecorder{keys: map[string][]string{}}
+	client := newRetrievalCountingClient(ctx, t, recorder)
+
+	require.NoError(t, client.ValidateUpgradeCredentialLifetime(ctx))
+
+	_, err := client.UpdateClusterVersion(ctx, "cluster", "1.34", "token")
+	require.NoError(t, err)
+
+	_, err = client.CallerAccountID(ctx)
+	require.NoError(t, err)
+
+	require.Equal(t, []string{"AKIDRETRIEVAL1"}, recorder.keys["UpdateClusterVersion"])
+	require.Equal(t, []string{"AKIDRETRIEVAL2"}, recorder.keys["GetCallerIdentity"])
+}
+
+// newRetrievalCountingClient returns a client whose provider yields a new access key on every
+// retrieval, so a test can tell which retrieval signed each request.
+func newRetrievalCountingClient(
+	ctx context.Context, t *testing.T, recorder *signingRecorder,
+) *eksclient.Client {
+	t.Helper()
+
 	var (
 		retrievalLock sync.Mutex
 		retrieved     int
 	)
 
-	recorder := &signingRecorder{keys: map[string][]string{}}
 	client, err := eksclient.NewClient(ctx, "us-east-1", eksclient.WithAWSConfig(aws.Config{
 		Region:     "us-east-1",
 		HTTPClient: recorder,
@@ -76,14 +97,71 @@ func TestUpgradeSignsWithValidatedCredentials(t *testing.T) {
 	}))
 	require.NoError(t, err)
 
+	return client
+}
+
+// TestMintTokenSignsWithValidatedCredentials catches a token minted during an upgrade
+// carrying an identity other than the STS credentials whose lifetime was validated.
+func TestMintTokenSignsWithValidatedCredentials(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(10*time.Minute))
+	defer cancel()
+
+	client := newRetrievalCountingClient(ctx, t, &signingRecorder{keys: map[string][]string{}})
+
 	require.NoError(t, client.ValidateUpgradeCredentialLifetime(ctx))
 
-	_, err = client.UpdateClusterVersion(ctx, "cluster", "1.34", "token")
+	token, err := client.MintToken(ctx, "cluster")
+	require.NoError(t, err)
+
+	assertTokenCredentialPrefix(t, token, "AKIDRETRIEVAL2/")
+}
+
+// TestReleasedUpgradeCredentialsReturnToProvider catches a reused client signing with an
+// upgrade's credentials after that upgrade ends, when the session may be past its checked lifetime.
+func TestReleasedUpgradeCredentialsReturnToProvider(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(10*time.Minute))
+	defer cancel()
+
+	recorder := &signingRecorder{keys: map[string][]string{}}
+	client := newRetrievalCountingClient(ctx, t, recorder)
+
+	require.NoError(t, client.ValidateUpgradeCredentialLifetime(ctx))
+	client.ReleaseUpgradeCredentials()
+
+	_, err := client.UpdateClusterVersion(ctx, "cluster", "1.34", "token")
 	require.NoError(t, err)
 
 	_, err = client.CallerAccountID(ctx)
 	require.NoError(t, err)
 
+	require.Equal(t, []string{"AKIDRETRIEVAL3"}, recorder.keys["UpdateClusterVersion"])
+	require.Equal(t, []string{"AKIDRETRIEVAL4"}, recorder.keys["GetCallerIdentity"])
+}
+
+// TestUpgradeCredentialsRefuseOverlappingUpgrade catches a second upgrade replacing the
+// credentials an earlier upgrade on the same client still signs with.
+func TestUpgradeCredentialsRefuseOverlappingUpgrade(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(10*time.Minute))
+	defer cancel()
+
+	recorder := &signingRecorder{keys: map[string][]string{}}
+	client := newRetrievalCountingClient(ctx, t, recorder)
+
+	require.NoError(t, client.ValidateUpgradeCredentialLifetime(ctx))
+	require.ErrorIs(
+		t, client.ValidateUpgradeCredentialLifetime(ctx), eksclient.ErrUpgradeCredentialsInUse,
+	)
+
+	_, err := client.UpdateClusterVersion(ctx, "cluster", "1.34", "token")
+	require.NoError(t, err)
 	require.Equal(t, []string{"AKIDRETRIEVAL1"}, recorder.keys["UpdateClusterVersion"])
-	require.Equal(t, []string{"AKIDRETRIEVAL2"}, recorder.keys["GetCallerIdentity"])
+
+	client.ReleaseUpgradeCredentials()
+	require.NoError(t, client.ValidateUpgradeCredentialLifetime(ctx))
 }

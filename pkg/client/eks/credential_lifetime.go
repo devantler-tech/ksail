@@ -11,10 +11,17 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
-// ErrUpgradeCredentialLifetime reports credentials that cannot safely cover an accepted upgrade.
-var ErrUpgradeCredentialLifetime = errors.New(
-	"EKS upgrade credentials must remain valid through the bounded wait plus one minute; " +
-		"use a credential provider with a sufficient known session expiry",
+var (
+	// ErrUpgradeCredentialLifetime reports credentials that cannot safely cover an accepted upgrade.
+	ErrUpgradeCredentialLifetime = errors.New(
+		"EKS upgrade credentials must remain valid through the bounded wait plus one minute; " +
+			"use a credential provider with a sufficient known session expiry",
+	)
+	// ErrUpgradeCredentialsInUse reports an upgrade starting on a client whose earlier
+	// upgrade still signs with the credentials it validated.
+	ErrUpgradeCredentialsInUse = errors.New(
+		"another EKS upgrade on this client still holds its validated credentials",
+	)
 )
 
 // ValidateUpgradeCredentialLifetime checks the credentials actually selected by EKS and STS
@@ -38,11 +45,30 @@ func (c *Client) ValidateUpgradeCredentialLifetime(ctx context.Context) error {
 		return fmt.Errorf("validate STS upgrade credentials: %w", err)
 	}
 
+	c.upgradeMu.Lock()
+	defer c.upgradeMu.Unlock()
+
+	// Replacing another upgrade's credentials would change its signer mid-upgrade.
+	if c.upgradeEKS != nil || c.upgradeSTS != nil {
+		return ErrUpgradeCredentialsInUse
+	}
+
 	// Sign every later call with the values just validated, not a fresh retrieval.
 	c.upgradeEKS = frozenCredentials(eksValues)
 	c.upgradeSTS = frozenCredentials(stsValues)
 
 	return nil
+}
+
+// ReleaseUpgradeCredentials returns the client to its configured providers once the
+// upgrade that validated them ends, so later calls never sign with a session past the
+// lifetime that was checked.
+func (c *Client) ReleaseUpgradeCredentials() {
+	c.upgradeMu.Lock()
+	defer c.upgradeMu.Unlock()
+
+	c.upgradeEKS = nil
+	c.upgradeSTS = nil
 }
 
 // frozenCredentials returns a provider that always yields exactly these values.
@@ -54,22 +80,26 @@ func frozenCredentials(values aws.Credentials) aws.CredentialsProvider {
 
 // eksOptions pins validated upgrade credentials onto an EKS call once they exist.
 func (c *Client) eksOptions() []func(*awseks.Options) {
-	if c.upgradeEKS == nil {
+	c.upgradeMu.RLock()
+	provider := c.upgradeEKS
+	c.upgradeMu.RUnlock()
+
+	if provider == nil {
 		return nil
 	}
-
-	provider := c.upgradeEKS
 
 	return []func(*awseks.Options){func(options *awseks.Options) { options.Credentials = provider }}
 }
 
 // stsOptions pins validated upgrade credentials onto an STS call once they exist.
 func (c *Client) stsOptions() []func(*sts.Options) {
-	if c.upgradeSTS == nil {
+	c.upgradeMu.RLock()
+	provider := c.upgradeSTS
+	c.upgradeMu.RUnlock()
+
+	if provider == nil {
 		return nil
 	}
-
-	provider := c.upgradeSTS
 
 	return []func(*sts.Options){func(options *sts.Options) { options.Credentials = provider }}
 }

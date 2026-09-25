@@ -176,9 +176,12 @@ plus one minute. Temporary credentials must come from a provider that reports
 their expiry and have sufficient lifetime remaining. A session-token tuple
 without expiry metadata is rejected for upgrades; dry runs remain available.
 KSail retains the selected credentials throughout verification and does not
-refresh into a different identity. Reusing a captured selection preserves its
-expiry and endpoint settings; node-group inventory also retains the captured
-CloudFormation endpoint if the process environment changes.
+refresh into a different identity. The checked credentials sign the final
+cluster check, the update and its wait, and are released when the upgrade
+ends; a second upgrade cannot start on a client that still holds them.
+Reusing a captured selection preserves its expiry and endpoint settings;
+node-group inventory also retains the captured CloudFormation endpoint if the
+process environment changes.
 
 This operation changes only the control plane. Upgrade worker nodes and add-ons
 separately and check their compatibility; managed node groups must meet AWS's
