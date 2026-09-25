@@ -67,6 +67,9 @@ type Violation struct {
 	// Unsupported is true when the rule could not be evaluated offline;
 	// Message says why. It is never Blocking.
 	Unsupported bool
+	// UnknownNamespace identifies an offline namespace-context limitation, so
+	// callers can group repeated warnings without grouping actual failures.
+	UnknownNamespace string
 }
 
 // IsPolicy reports whether doc is a Kyverno policy this package evaluates.
@@ -196,9 +199,9 @@ func namespaceLister(docs []map[string]any) corev1listers.NamespaceLister {
 // and returns the failing and erroring rules. As in a cluster, the engine
 // applies a namespaced Policy only to documents in its own namespace. A rule
 // that selects on namespace labels, for a document whose Namespace is not
-// among the rendered documents, is reported as Unsupported instead of being
-// evaluated against labels it cannot see; the policy's other rules are still
-// evaluated.
+// among the rendered documents, is evaluated only when the immutable namespace
+// name label determines all its selectors. Otherwise it is Unsupported; the
+// policy's other rules are still evaluated.
 //
 // doc's namespace is used as given. For a namespaced kind the namespace a
 // cluster admits it into is chosen by whatever applies it (a Flux
@@ -228,8 +231,8 @@ func (e *Engine) Evaluate(ctx context.Context, doc map[string]any) ([]Violation,
 				continue
 			}
 
-			// The remaining rules select on no namespace labels, so none are needed.
-			policy, namespaceLabels, err = evaluable, nil, nil
+			policy = evaluable
+			namespaceLabels, err = e.namespaceLabels(resource, policy)
 		}
 
 		if err != nil {
@@ -255,7 +258,8 @@ func (e *Engine) Evaluate(ctx context.Context, doc map[string]any) ([]Violation,
 
 // namespaceLabels resolves the labels of resource's Namespace when policy selects
 // on them. It returns a NotFound error when policy needs labels of a Namespace
-// that is not among the rendered documents.
+// that is not among the rendered documents and the immutable name label alone
+// cannot determine all the policy's selectors.
 func (e *Engine) namespaceLabels(
 	resource unstructured.Unstructured,
 	policy kyvernov1.PolicyInterface,
@@ -267,6 +271,10 @@ func (e *Engine) namespaceLabels(
 		[]kyvernov1.PolicyInterface{policy},
 		logr.Discard(),
 	)
+	if apierrors.IsNotFound(err) && policyNamespaceSelectorsKnown(policy, resource.GetNamespace()) {
+		return namespaceForMatching(resource.GetNamespace()).Labels, nil
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("get namespace selectors: %w", err)
 	}
@@ -277,7 +285,7 @@ func (e *Engine) namespaceLabels(
 // splitOnUnknownNamespace handles a policy whose namespace labels are unknown one
 // rule at a time, so a rule that selects on those labels does not hide the
 // results of the rules that do not. It returns a copy of policy holding only the
-// rules that need no namespace labels (nil when there are none), and an
+// rules whose selectors are decidable (nil when there are none), and an
 // Unsupported violation for each rule that does.
 func (e *Engine) splitOnUnknownNamespace(
 	resource unstructured.Unstructured,
@@ -356,7 +364,8 @@ func unknownReachViolation(policy kyvernov1.PolicyInterface, rule, namespace str
 				"is unknown",
 			namespace,
 		),
-		Unsupported: true,
+		Unsupported:      true,
+		UnknownNamespace: namespace,
 	}
 }
 
@@ -375,7 +384,8 @@ func unknownNamespaceViolation(
 				"and this rule's namespaceSelector cannot be evaluated offline",
 			namespace,
 		),
-		Unsupported: true,
+		Unsupported:      true,
+		UnknownNamespace: namespace,
 	}
 }
 
