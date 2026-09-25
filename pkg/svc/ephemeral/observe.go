@@ -235,36 +235,58 @@ func (a *Applier) inventoryVersions(ctx context.Context) ([]schema.GroupVersion,
 	versions := []schema.GroupVersion{{Version: "v1"}}
 
 	for _, group := range groups.Groups {
-		version, err := schema.ParseGroupVersion(group.PreferredVersion.GroupVersion)
-		if err != nil || version.Group != group.Name || version.Version == "" {
+		served, err := groupVersions(group)
+		if err != nil {
+			return nil, err
+		}
+
+		versions = append(versions, served...)
+	}
+
+	return versions, nil
+}
+
+// groupVersions returns every version a group serves, preferred first. A kind can be
+// served only at a non-preferred version, so every served version is inventoried.
+func groupVersions(group metav1.APIGroup) ([]schema.GroupVersion, error) {
+	preferred, ok := parseServedVersion(group.Name, group.PreferredVersion.GroupVersion)
+	if !ok {
+		return nil, fmt.Errorf(
+			"%w: invalid preferred API version for %s",
+			ErrObservation,
+			group.Name,
+		)
+	}
+
+	versions := []schema.GroupVersion{preferred}
+
+	for _, served := range group.Versions {
+		other, ok := parseServedVersion(group.Name, served.GroupVersion)
+		if !ok {
 			return nil, fmt.Errorf(
-				"%w: invalid preferred API version for %s",
+				"%w: invalid served API version for %s",
 				ErrObservation,
 				group.Name,
 			)
 		}
 
-		versions = append(versions, version)
-
-		// A kind can be served only at a non-preferred version, so every served
-		// version is inventoried; the preferred one comes first.
-		for _, served := range group.Versions {
-			other, err := schema.ParseGroupVersion(served.GroupVersion)
-			if err != nil || other.Group != group.Name || other.Version == "" {
-				return nil, fmt.Errorf(
-					"%w: invalid served API version for %s",
-					ErrObservation,
-					group.Name,
-				)
-			}
-
-			if other != version {
-				versions = append(versions, other)
-			}
+		if other != preferred {
+			versions = append(versions, other)
 		}
 	}
 
 	return versions, nil
+}
+
+// parseServedVersion parses a discovered group version, rejecting one that names another
+// group or no version.
+func parseServedVersion(group, raw string) (schema.GroupVersion, bool) {
+	version, err := schema.ParseGroupVersion(raw)
+	if err != nil || version.Group != group || version.Version == "" {
+		return schema.GroupVersion{}, false
+	}
+
+	return version, true
 }
 
 func (a *Applier) inventoryResource(

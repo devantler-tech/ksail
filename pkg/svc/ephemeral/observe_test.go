@@ -58,42 +58,6 @@ func (api *observationAPI) serve(t *testing.T, writer http.ResponseWriter, reque
 	switch request.URL.Path {
 	case "/api":
 		body = metav1.APIVersions{Versions: []string{"v1"}}
-	case "/apis":
-		body = metav1.APIGroupList{}
-		if api.gadgets != nil {
-			preferred := metav1.GroupVersionForDiscovery{GroupVersion: "example.io/v1", Version: "v1"}
-			body = metav1.APIGroupList{Groups: []metav1.APIGroup{{
-				Name: "example.io",
-				Versions: []metav1.GroupVersionForDiscovery{
-					preferred,
-					{GroupVersion: "example.io/v1alpha1", Version: "v1alpha1"},
-				},
-				PreferredVersion: preferred,
-			}}}
-		}
-	case "/apis/example.io/v1":
-		body = metav1.APIResourceList{GroupVersion: "example.io/v1", APIResources: []metav1.APIResource{
-			{Name: "widgets", Kind: "Widget", Namespaced: true, Verbs: []string{"get", "list"}},
-		}}
-	case "/apis/example.io/v1alpha1":
-		// widgets are also served here; listing them twice would be a duplicate.
-		body = metav1.APIResourceList{GroupVersion: "example.io/v1alpha1", APIResources: []metav1.APIResource{
-			{Name: "widgets", Kind: "Widget", Namespaced: true, Verbs: []string{"get", "list"}},
-			{Name: "gadgets", Kind: "Gadget", Namespaced: true, Verbs: []string{"get", "list"}},
-		}}
-	case "/apis/example.io/v1/widgets":
-		body = &unstructured.UnstructuredList{
-			Object: map[string]any{"apiVersion": "example.io/v1", "kind": "WidgetList"},
-		}
-	case "/apis/example.io/v1alpha1/gadgets":
-		list := &unstructured.UnstructuredList{
-			Object: map[string]any{"apiVersion": "example.io/v1alpha1", "kind": "GadgetList"},
-		}
-		for _, gadget := range api.gadgets {
-			list.Items = append(list.Items, *gadget)
-		}
-
-		body = list
 	case "/api/v1":
 		if api.failure == "discovery" {
 			http.Error(writer, "discovery unavailable", http.StatusServiceUnavailable)
@@ -131,13 +95,74 @@ func (api *observationAPI) serve(t *testing.T, writer http.ResponseWriter, reque
 			},
 		}
 	default:
-		t.Errorf("unexpected API request: %s %s", request.Method, request.URL.Path)
-		http.NotFound(writer, request)
+		example, found := api.exampleBody(request.URL.Path)
+		if !found {
+			t.Errorf("unexpected API request: %s %s", request.Method, request.URL.Path)
+			http.NotFound(writer, request)
 
-		return
+			return
+		}
+
+		body = example
 	}
 
 	assert.NoError(t, json.NewEncoder(writer).Encode(body))
+}
+
+// exampleBody serves the example.io group, which prefers v1 while its Gadget kind is served
+// only at v1alpha1. It reports false for any other path.
+func (api *observationAPI) exampleBody(path string) (any, bool) {
+	switch path {
+	case "/apis":
+		if api.gadgets == nil {
+			return metav1.APIGroupList{}, true
+		}
+
+		preferred := metav1.GroupVersionForDiscovery{
+			GroupVersion: "example.io/v1",
+			Version:      "v1",
+		}
+
+		return metav1.APIGroupList{Groups: []metav1.APIGroup{{
+			Name: "example.io",
+			Versions: []metav1.GroupVersionForDiscovery{
+				preferred,
+				{GroupVersion: "example.io/v1alpha1", Version: "v1alpha1"},
+			},
+			PreferredVersion: preferred,
+		}}}, true
+	case "/apis/example.io/v1":
+		return metav1.APIResourceList{
+			GroupVersion: "example.io/v1",
+			APIResources: []metav1.APIResource{
+				{Name: "widgets", Kind: "Widget", Namespaced: true, Verbs: []string{"get", "list"}},
+			},
+		}, true
+	case "/apis/example.io/v1alpha1":
+		// widgets are also served here; listing them twice would be a duplicate.
+		return metav1.APIResourceList{
+			GroupVersion: "example.io/v1alpha1",
+			APIResources: []metav1.APIResource{
+				{Name: "widgets", Kind: "Widget", Namespaced: true, Verbs: []string{"get", "list"}},
+				{Name: "gadgets", Kind: "Gadget", Namespaced: true, Verbs: []string{"get", "list"}},
+			},
+		}, true
+	case "/apis/example.io/v1/widgets":
+		return &unstructured.UnstructuredList{
+			Object: map[string]any{"apiVersion": "example.io/v1", "kind": "WidgetList"},
+		}, true
+	case "/apis/example.io/v1alpha1/gadgets":
+		list := &unstructured.UnstructuredList{
+			Object: map[string]any{"apiVersion": "example.io/v1alpha1", "kind": "GadgetList"},
+		}
+		for _, gadget := range api.gadgets {
+			list.Items = append(list.Items, *gadget)
+		}
+
+		return list, true
+	}
+
+	return nil, false
 }
 
 func TestObserveChildrenFollowsUIDsTransitivelyAcrossPages(t *testing.T) {
