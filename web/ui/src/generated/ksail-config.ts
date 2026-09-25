@@ -598,7 +598,7 @@ export interface KSailClusterConfiguration {
          */
         serverLimit?: number;
         /**
-         * CIDR blocks allowed to access the public Kubernetes API on control-plane nodes and public Talos API on every node. Private worker Talos API access from the cluster network remains enabled. When empty defaults to 0.0.0.0/0 and ::/0 (open to all IPv4 and IPv6).
+         * CIDR blocks allowed to access the public Kubernetes API on control-plane nodes and public Talos API on every node. For Vanilla and K3s on Hetzner the same blocks also gate SSH (22) and the Kubernetes API (6443) used to bootstrap nodes, so include the address of the machine running ksail. Private worker Talos API access from the cluster network remains enabled. When empty defaults to 0.0.0.0/0 and ::/0 (open to all IPv4 and IPv6).
          */
         allowedCidrs?: string[];
         /**

@@ -246,7 +246,8 @@ func (p *Provider) SyncFirewallRules(
 }
 
 // setRulesIfChanged replaces the firewall's rules with desiredRules unless they
-// already match.
+// already match, and waits for the resulting actions so the new rules are in
+// effect (or their failure is reported) before the caller relies on them.
 func (p *Provider) setRulesIfChanged(
 	ctx context.Context,
 	firewall *hcloud.Firewall,
@@ -256,11 +257,18 @@ func (p *Provider) setRulesIfChanged(
 		return nil
 	}
 
-	_, _, err := p.client.Firewall.SetRules(ctx, firewall, hcloud.FirewallSetRulesOpts{
+	actions, _, err := p.client.Firewall.SetRules(ctx, firewall, hcloud.FirewallSetRulesOpts{
 		Rules: desiredRules,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to sync firewall rules for %s: %w", firewall.Name, err)
+	}
+
+	for _, action := range actions {
+		err = p.waitForAction(ctx, action)
+		if err != nil {
+			return fmt.Errorf("failed to apply firewall rules for %s: %w", firewall.Name, err)
+		}
 	}
 
 	return nil
