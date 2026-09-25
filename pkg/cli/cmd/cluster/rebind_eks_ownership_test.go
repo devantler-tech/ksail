@@ -235,7 +235,13 @@ func TestEKSRecoveryNamelessConfigUsesExplicitAWSSelection(t *testing.T) {
 	writeExecutableFixture(t, eksctlPath, strings.Join(fixture, "\n"))
 	require.NoError(t, state.DeleteClusterState(name))
 	require.NoError(t, os.Remove("eks.yaml"))
-	nameless := strings.Replace(standaloneEKSClusterFixture, "name: config-file-name", `name: ""`, 1)
+
+	nameless := strings.Replace(
+		standaloneEKSClusterFixture,
+		"name: config-file-name",
+		`name: ""`,
+		1,
+	)
 	require.NoError(t, os.WriteFile("ksail.yaml", []byte(nameless), 0o600))
 
 	t.Setenv("KSAIL_REGION", "us-west-2")

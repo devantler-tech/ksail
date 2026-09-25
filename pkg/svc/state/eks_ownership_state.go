@@ -159,6 +159,7 @@ func ListEKSOwnershipStates(clusterName string) ([]*EKSOwnershipState, error) {
 		if !readable {
 			unreadable = append(unreadable, path)
 		}
+
 		if legacyRecord {
 			legacy = append(legacy, path)
 		}
@@ -167,6 +168,7 @@ func ListEKSOwnershipStates(clusterName string) ([]*EKSOwnershipState, error) {
 			ownerships = append(ownerships, ownership)
 		}
 	}
+
 	if len(ownerships) > 0 {
 		unreadable = append(unreadable, legacy...)
 	}
@@ -259,6 +261,7 @@ func loadUsableEKSOwnershipRecord(clusterName, path string) (*EKSOwnershipState,
 	if err != nil {
 		legacy := !hasAWSOptionsField(data) &&
 			isLegacyEKSOwnershipRecord(clusterName, region, &ownership)
+
 		return nil, legacy, legacy
 	}
 
