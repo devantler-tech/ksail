@@ -30,6 +30,10 @@ const (
 
 // DefaultKubeconfigPath returns the default kubeconfig path for the current user.
 // The path is constructed as ~/.kube/config using the user's home directory.
+//
+// The os.UserHomeDir error is discarded on purpose. It fails only when no home directory is set,
+// and the path then becomes .kube/config in the working directory. client-go's own default
+// (clientcmd.RecommendedHomeFile) degrades to the same file, so KSail and kubectl still agree.
 func DefaultKubeconfigPath() string {
 	homeDir, _ := os.UserHomeDir()
 
@@ -68,6 +72,20 @@ func ResolveKubeconfigPath(path string) (string, error) {
 	}
 
 	return DefaultKubeconfigPath(), nil
+}
+
+// ActiveKubeconfigPath returns the kubeconfig a caller with no explicit path reads, in
+// ResolveKubeconfigPath's order: the first KUBECONFIG entry, else ~/.kube/config. Like the resolver,
+// it reads only the first entry of a KUBECONFIG list, where kubectl merges them all. It suits seams
+// that cannot return an error: a KUBECONFIG entry that cannot be expanded is returned as given, so
+// loading it fails for that path instead of quietly reading a file the user did not choose.
+func ActiveKubeconfigPath() string {
+	path, err := ResolveKubeconfigPath("")
+	if err != nil {
+		return firstKubeconfigEnvPath()
+	}
+
+	return path
 }
 
 // firstKubeconfigEnvPath returns the first path in the KUBECONFIG environment

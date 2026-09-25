@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/clusterapi"
@@ -481,4 +482,43 @@ func TestRESTConfigForUnmanagedClusterTargetsItsContext(t *testing.T) {
 	// current context and silently operating on the wrong cluster.
 	_, err = service.RESTConfigForClusterForTest("ghost")
 	require.ErrorIs(t, err, api.ErrNotFound)
+}
+
+// homeKubeconfig writes a kubeconfig under a fresh home directory whose colleague-cluster context
+// points at a different server than unmanagedContextKubeconfig's, so a test can tell which file was
+// read.
+func homeKubeconfig(t *testing.T) string {
+	t.Helper()
+
+	home := t.TempDir()
+	path := filepath.Join(home, ".kube", "config")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	require.NoError(t, os.WriteFile(path, []byte(strings.ReplaceAll(unmanagedContextKubeconfig,
+		"cluster.example.com", "home.example.com")), 0o600))
+
+	return home
+}
+
+// TestNewServiceReadsTheKubeconfigThatKUBECONFIGNames pins #6906: the web UI and desktop app resolve
+// the kubeconfig as the CLI does, so a set KUBECONFIG wins over the home directory's file.
+func TestNewServiceReadsTheKubeconfigThatKUBECONFIGNames(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(envPath, []byte(unmanagedContextKubeconfig), 0o600))
+	t.Setenv("HOME", homeKubeconfig(t))
+	t.Setenv("KUBECONFIG", envPath)
+
+	restConfig, err := clusterapi.NewService().RESTConfigForClusterForTest("colleague-cluster")
+	require.NoError(t, err)
+	assert.Equal(t, "https://cluster.example.com:6443", restConfig.Host)
+}
+
+// TestNewServiceReadsTheHomeKubeconfigWithoutKUBECONFIG pins the fallback: with KUBECONFIG unset the
+// service still reads ~/.kube/config.
+func TestNewServiceReadsTheHomeKubeconfigWithoutKUBECONFIG(t *testing.T) {
+	t.Setenv("HOME", homeKubeconfig(t))
+	t.Setenv("KUBECONFIG", "")
+
+	restConfig, err := clusterapi.NewService().RESTConfigForClusterForTest("colleague-cluster")
+	require.NoError(t, err)
+	assert.Equal(t, "https://home.example.com:6443", restConfig.Host)
 }
