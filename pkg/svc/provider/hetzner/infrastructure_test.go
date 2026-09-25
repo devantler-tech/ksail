@@ -623,7 +623,13 @@ func TestBuildSSHFirewallRulesWithAllowedCIDRs(t *testing.T) {
 		}
 
 		// SSH and the Kubernetes API must both follow the allowed CIDRs.
-		assert.ElementsMatch(t, allowedCIDRs, sourceStrs, "port %s must use the allowed CIDRs", *rule.Port)
+		assert.ElementsMatch(
+			t,
+			allowedCIDRs,
+			sourceStrs,
+			"port %s must use the allowed CIDRs",
+			*rule.Port,
+		)
 	}
 }
 
