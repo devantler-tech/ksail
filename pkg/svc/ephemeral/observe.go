@@ -168,6 +168,10 @@ func (a *Applier) inventory(ctx context.Context) ([]*unstructured.Unstructured, 
 
 	var objects []*unstructured.Unstructured
 
+	// A resource type served at several versions is listed once, at the first
+	// version discovered, which is the group's preferred version when it has one.
+	listedResources := map[schema.GroupResource]bool{}
+
 	for _, version := range versions {
 		path := "/apis/" + version.String()
 		if version.Group == "" {
@@ -185,6 +189,13 @@ func (a *Applier) inventory(ctx context.Context) ([]*unstructured.Unstructured, 
 			if strings.Contains(resource.Name, "/") || !slices.Contains(resource.Verbs, "list") {
 				continue
 			}
+
+			groupResource := version.WithResource(resource.Name).GroupResource()
+			if listedResources[groupResource] {
+				continue
+			}
+
+			listedResources[groupResource] = true
 
 			listed, err := a.inventoryResource(
 				ctx,
@@ -234,6 +245,23 @@ func (a *Applier) inventoryVersions(ctx context.Context) ([]schema.GroupVersion,
 		}
 
 		versions = append(versions, version)
+
+		// A kind can be served only at a non-preferred version, so every served
+		// version is inventoried; the preferred one comes first.
+		for _, served := range group.Versions {
+			other, err := schema.ParseGroupVersion(served.GroupVersion)
+			if err != nil || other.Group != group.Name || other.Version == "" {
+				return nil, fmt.Errorf(
+					"%w: invalid served API version for %s",
+					ErrObservation,
+					group.Name,
+				)
+			}
+
+			if other != version {
+				versions = append(versions, other)
+			}
+		}
 	}
 
 	return versions, nil

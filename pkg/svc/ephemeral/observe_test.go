@@ -45,6 +45,8 @@ type observationAPI struct {
 	reads    atomic.Int32
 	lists    atomic.Int32
 	failure  string
+	// gadgets are served only at example.io/v1alpha1, whose group prefers v1.
+	gadgets []*unstructured.Unstructured
 }
 
 func (api *observationAPI) serve(t *testing.T, writer http.ResponseWriter, request *http.Request) {
@@ -58,6 +60,40 @@ func (api *observationAPI) serve(t *testing.T, writer http.ResponseWriter, reque
 		body = metav1.APIVersions{Versions: []string{"v1"}}
 	case "/apis":
 		body = metav1.APIGroupList{}
+		if api.gadgets != nil {
+			preferred := metav1.GroupVersionForDiscovery{GroupVersion: "example.io/v1", Version: "v1"}
+			body = metav1.APIGroupList{Groups: []metav1.APIGroup{{
+				Name: "example.io",
+				Versions: []metav1.GroupVersionForDiscovery{
+					preferred,
+					{GroupVersion: "example.io/v1alpha1", Version: "v1alpha1"},
+				},
+				PreferredVersion: preferred,
+			}}}
+		}
+	case "/apis/example.io/v1":
+		body = metav1.APIResourceList{GroupVersion: "example.io/v1", APIResources: []metav1.APIResource{
+			{Name: "widgets", Kind: "Widget", Namespaced: true, Verbs: []string{"get", "list"}},
+		}}
+	case "/apis/example.io/v1alpha1":
+		// widgets are also served here; listing them twice would be a duplicate.
+		body = metav1.APIResourceList{GroupVersion: "example.io/v1alpha1", APIResources: []metav1.APIResource{
+			{Name: "widgets", Kind: "Widget", Namespaced: true, Verbs: []string{"get", "list"}},
+			{Name: "gadgets", Kind: "Gadget", Namespaced: true, Verbs: []string{"get", "list"}},
+		}}
+	case "/apis/example.io/v1/widgets":
+		body = &unstructured.UnstructuredList{
+			Object: map[string]any{"apiVersion": "example.io/v1", "kind": "WidgetList"},
+		}
+	case "/apis/example.io/v1alpha1/gadgets":
+		list := &unstructured.UnstructuredList{
+			Object: map[string]any{"apiVersion": "example.io/v1alpha1", "kind": "GadgetList"},
+		}
+		for _, gadget := range api.gadgets {
+			list.Items = append(list.Items, *gadget)
+		}
+
+		body = list
 	case "/api/v1":
 		if api.failure == "discovery" {
 			http.Error(writer, "discovery unavailable", http.StatusServiceUnavailable)
@@ -158,6 +194,36 @@ func TestObserveChildrenFollowsUIDsTransitivelyAcrossPages(t *testing.T) {
 		int32(2),
 		"root identity must be checked around collection",
 	)
+}
+
+func TestObserveChildrenFindsKindsServedOnlyAtANonPreferredVersion(t *testing.T) {
+	t.Parallel()
+
+	root := ownedObject("ConfigMap", "root", "default", "root-uid", nil)
+	gadget := ownedObject("Gadget", "gadget", "default", "gadget-uid", root)
+	gadget.SetAPIVersion("example.io/v1alpha1")
+
+	api := &observationAPI{root: root, gadgets: []*unstructured.Unstructured{gadget}}
+
+	server := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { api.serve(t, w, r) }),
+	)
+	defer server.Close()
+
+	client, err := ephemeral.NewApplier(kubeconfigFor(t, server.URL), "isolated")
+	require.NoError(t, err)
+	require.NoError(t, client.Apply(t.Context(), root))
+
+	// The fake refuses an unexpected request, so widgets listed a second time at
+	// v1alpha1 fail the test as well.
+	children, err := client.ObserveChildren(
+		t.Context(),
+		[]*unstructured.Unstructured{root},
+		time.Millisecond,
+	)
+	require.NoError(t, err)
+	require.Len(t, children, 1)
+	assert.Equal(t, "gadget", children[0].GetName())
 }
 
 func TestObserveChildrenFailsOnIncompleteInventory(t *testing.T) {
