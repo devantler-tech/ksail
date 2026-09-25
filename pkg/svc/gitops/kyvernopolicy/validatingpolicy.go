@@ -418,14 +418,23 @@ func (e *CELEngine) offlineLimitation(
 		unknown = fmt.Sprintf("namespace %q is not among the rendered documents, so it", namespace)
 	}
 
+	return unknownNamespaceLimitation(entry, namespace, unknown)
+}
+
+// unknownNamespaceLimitation returns why entry cannot be evaluated offline for
+// a document in a namespace whose labels are unknown, described by unknown, or
+// "" when the namespace-name label alone decides the policy or the policy never
+// looks at the namespace.
+func unknownNamespaceLimitation(entry compiledCELPolicy, namespace, unknown string) string {
+	var selector *metav1.LabelSelector
+	if selectsOnNamespaceLabels(entry.policy) {
+		selector = entry.policy.GetValidatingPolicySpec().MatchConstraints.NamespaceSelector
+	}
+
 	switch {
-	case selectsOnNamespaceLabels(entry.policy) && namespaceSelectorExcludes(
-		entry.policy.GetValidatingPolicySpec().MatchConstraints.NamespaceSelector, namespace,
-	):
+	case selector != nil && namespaceSelectorExcludes(selector, namespace):
 		return ""
-	case selectsOnNamespaceLabels(entry.policy) && !namespaceSelectorKnown(
-		entry.policy.GetValidatingPolicySpec().MatchConstraints.NamespaceSelector, namespace,
-	):
+	case selector != nil && !namespaceSelectorKnown(selector, namespace):
 		return unknown + " has unknown labels and this policy's namespaceSelector " +
 			"cannot be evaluated offline"
 	case entry.readsNamespace:

@@ -240,7 +240,11 @@ func TestNamespaceNameDoesNotInventNamespaceObject(t *testing.T) {
 	excluded.GetValidatingPolicySpec().MatchConstraints.NamespaceSelector = &metav1.LabelSelector{
 		MatchLabels: map[string]string{corev1.LabelMetadataName: "flux-system"},
 	}
-	violations, err = celEngine(t, nil, excluded).Evaluate(t.Context(), configMap("kube-system", nil))
+	violations, err = celEngine(
+		t,
+		nil,
+		excluded,
+	).Evaluate(t.Context(), configMap("kube-system", nil))
 	require.NoError(t, err)
 	assert.Empty(t, violations)
 }
