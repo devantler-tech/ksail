@@ -28,49 +28,81 @@ func (c *Client) ValidateUpgradeCredentialLifetime(ctx context.Context) error {
 		return ErrUpgradeCredentialLifetime
 	}
 
-	for _, service := range []struct {
-		name     string
-		provider aws.CredentialsProvider
-	}{
-		{"EKS", eksOptions.Options().Credentials},
-		{"STS", stsOptions.Options().Credentials},
-	} {
-		err := validateCredentialLifetime(ctx, service.provider)
-		if err != nil {
-			return fmt.Errorf("validate %s upgrade credentials: %w", service.name, err)
-		}
+	eksValues, err := validateCredentialLifetime(ctx, eksOptions.Options().Credentials)
+	if err != nil {
+		return fmt.Errorf("validate EKS upgrade credentials: %w", err)
 	}
+
+	stsValues, err := validateCredentialLifetime(ctx, stsOptions.Options().Credentials)
+	if err != nil {
+		return fmt.Errorf("validate STS upgrade credentials: %w", err)
+	}
+
+	// Sign every later call with the values just validated, not a fresh retrieval.
+	c.upgradeEKS = frozenCredentials(eksValues)
+	c.upgradeSTS = frozenCredentials(stsValues)
 
 	return nil
 }
 
+// frozenCredentials returns a provider that always yields exactly these values.
+func frozenCredentials(values aws.Credentials) aws.CredentialsProvider {
+	return aws.CredentialsProviderFunc(func(context.Context) (aws.Credentials, error) {
+		return values, nil
+	})
+}
+
+// eksOptions pins validated upgrade credentials onto an EKS call once they exist.
+func (c *Client) eksOptions() []func(*awseks.Options) {
+	if c.upgradeEKS == nil {
+		return nil
+	}
+
+	provider := c.upgradeEKS
+
+	return []func(*awseks.Options){func(options *awseks.Options) { options.Credentials = provider }}
+}
+
+// stsOptions pins validated upgrade credentials onto an STS call once they exist.
+func (c *Client) stsOptions() []func(*sts.Options) {
+	if c.upgradeSTS == nil {
+		return nil
+	}
+
+	provider := c.upgradeSTS
+
+	return []func(*sts.Options){func(options *sts.Options) { options.Credentials = provider }}
+}
+
 // validateCredentialLifetime checks one effective provider and preserves retrieval
 // and cancellation errors before allowing an irreversible upgrade submission.
-func validateCredentialLifetime(ctx context.Context, provider aws.CredentialsProvider) error {
+func validateCredentialLifetime(
+	ctx context.Context, provider aws.CredentialsProvider,
+) (aws.Credentials, error) {
 	err := ctx.Err()
 	if err != nil {
-		return fmt.Errorf("validate upgrade credential lifetime: %w", err)
+		return aws.Credentials{}, fmt.Errorf("validate upgrade credential lifetime: %w", err)
 	}
 
 	if provider == nil {
-		return ErrUpgradeCredentialLifetime
+		return aws.Credentials{}, ErrUpgradeCredentialLifetime
 	}
 
 	values, err := provider.Retrieve(ctx)
 	if err != nil {
-		return fmt.Errorf("read upgrade credentials: %w", err)
+		return aws.Credentials{}, fmt.Errorf("read upgrade credentials: %w", err)
 	}
 
 	if !credentialsCoverUpgradeWait(ctx, values) {
-		return ErrUpgradeCredentialLifetime
+		return aws.Credentials{}, ErrUpgradeCredentialLifetime
 	}
 
 	err = ctx.Err()
 	if err != nil {
-		return fmt.Errorf("validate upgrade credential lifetime: %w", err)
+		return aws.Credentials{}, fmt.Errorf("validate upgrade credential lifetime: %w", err)
 	}
 
-	return nil
+	return values, nil
 }
 
 // credentialsCoverUpgradeWait requires known expiry for temporary sessions and

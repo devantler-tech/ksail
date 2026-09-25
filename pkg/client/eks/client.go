@@ -91,6 +91,11 @@ type Client struct {
 	requireCredentialValues   bool
 	optionErr                 error
 	awsConfig                 *aws.Config
+	// upgradeEKS and upgradeSTS hold the exact credentials that passed upgrade
+	// lifetime validation. Once set, every later EKS and STS call signs with them,
+	// so a refreshing provider cannot swap identity or lifetime mid-upgrade.
+	upgradeEKS aws.CredentialsProvider
+	upgradeSTS aws.CredentialsProvider
 }
 
 // Option customises a Client.
@@ -246,7 +251,9 @@ func (c *Client) CallerAccountID(ctx context.Context) (string, error) {
 		return "", errCallerIdentityUnavailable
 	}
 
-	out, err := c.identityGetter.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
+	out, err := c.identityGetter.GetCallerIdentity(
+		ctx, &sts.GetCallerIdentityInput{}, c.stsOptions()...,
+	)
 	if err != nil {
 		return "", fmt.Errorf("getting AWS caller identity: %w", err)
 	}
@@ -263,6 +270,7 @@ func (c *Client) DescribeCluster(ctx context.Context, name string) (*ekstypes.Cl
 	out, err := c.describer.DescribeCluster(
 		ctx,
 		&awseks.DescribeClusterInput{Name: aws.String(name)},
+		c.eksOptions()...,
 	)
 	if err != nil {
 		// A cluster EKS has never heard of is absence, not a query failure, and it is the shape
