@@ -23,8 +23,14 @@ type etcdObservationClient interface {
 		request *machineapi.EtcdMemberListRequest,
 		options ...grpc.CallOption,
 	) (*machineapi.EtcdMemberListResponse, error)
-	EtcdStatus(ctx context.Context, options ...grpc.CallOption) (*machineapi.EtcdStatusResponse, error)
-	EtcdAlarmList(ctx context.Context, options ...grpc.CallOption) (*machineapi.EtcdAlarmListResponse, error)
+	EtcdStatus(
+		ctx context.Context,
+		options ...grpc.CallOption,
+	) (*machineapi.EtcdStatusResponse, error)
+	EtcdAlarmList(
+		ctx context.Context,
+		options ...grpc.CallOption,
+	) (*machineapi.EtcdAlarmListResponse, error)
 	Close() error
 }
 
@@ -65,8 +71,11 @@ func observeEtcdQuorum(
 		}
 
 		if seen[address.String()] {
-			return etcdQuorumObservation{}, fmt.Errorf("%w: control-plane address %s is listed twice",
-				ErrEtcdObservationIncomplete, address)
+			return etcdQuorumObservation{}, fmt.Errorf(
+				"%w: control-plane address %s is listed twice",
+				ErrEtcdObservationIncomplete,
+				address,
+			)
 		}
 
 		seen[address.String()] = true
@@ -103,8 +112,12 @@ func observeEtcdNode(
 	}
 
 	if len(members.GetMessages()) != 1 {
-		return etcdMemberView{}, nil, fmt.Errorf("%w: %s answered the member list with %d messages, want 1",
-			ErrEtcdObservationIncomplete, nodeIP, len(members.GetMessages()))
+		return etcdMemberView{}, nil, fmt.Errorf(
+			"%w: %s answered the member list with %d messages, want 1",
+			ErrEtcdObservationIncomplete,
+			nodeIP,
+			len(members.GetMessages()),
+		)
 	}
 
 	status, err := client.EtcdStatus(ctx)
@@ -125,8 +138,12 @@ func observeEtcdNode(
 	}
 
 	if len(alarmResponse.GetMessages()) != 1 {
-		return etcdMemberView{}, nil, fmt.Errorf("%w: %s answered the alarm list with %d messages, want 1",
-			ErrEtcdObservationIncomplete, nodeIP, len(alarmResponse.GetMessages()))
+		return etcdMemberView{}, nil, fmt.Errorf(
+			"%w: %s answered the alarm list with %d messages, want 1",
+			ErrEtcdObservationIncomplete,
+			nodeIP,
+			len(alarmResponse.GetMessages()),
+		)
 	}
 
 	view := etcdMemberView{

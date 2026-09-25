@@ -99,7 +99,12 @@ func TestObserveEtcdQuorumFeedsAProvableQuorum(t *testing.T) {
 	require.NoError(t, proveSurvivingQuorum(controlPlaneQuorumTarget(), observation))
 
 	for nodeIP, client := range clients {
-		require.True(t, client.listRequest.GetQueryLocal(), "%s must be asked for its local view", nodeIP)
+		require.True(
+			t,
+			client.listRequest.GetQueryLocal(),
+			"%s must be asked for its local view",
+			nodeIP,
+		)
 		require.True(t, client.closed, "%s connection must be closed", nodeIP)
 	}
 }
@@ -108,28 +113,35 @@ func TestObserveEtcdQuorumCarriesAlarmsFromEverySurvivor(t *testing.T) {
 	t.Parallel()
 
 	clients := healthyObservationClients()
-	clients[observedThirdIP].alarms = &machineapi.EtcdAlarmListResponse{Messages: []*machineapi.EtcdAlarm{{
-		MemberAlarms: []*machineapi.EtcdMemberAlarm{{
-			MemberId: quorumThird,
-			Alarm:    machineapi.EtcdMemberAlarm_NOSPACE,
+	clients[observedThirdIP].alarms = &machineapi.EtcdAlarmListResponse{
+		Messages: []*machineapi.EtcdAlarm{{
+			MemberAlarms: []*machineapi.EtcdMemberAlarm{{
+				MemberId: quorumThird,
+				Alarm:    machineapi.EtcdMemberAlarm_NOSPACE,
+			}},
 		}},
-	}}}
+	}
 
 	observation, err := observeEtcdQuorum(
 		t.Context(), openerFor(clients), []string{observedSurvivorIP, observedThirdIP},
 	)
 	require.NoError(t, err)
 	require.Len(t, observation.Alarms, 1)
-	require.ErrorIs(t, proveSurvivingQuorum(controlPlaneQuorumTarget(), observation), ErrEtcdQuorumUnproven)
+	require.ErrorIs(
+		t,
+		proveSurvivingQuorum(controlPlaneQuorumTarget(), observation),
+		ErrEtcdQuorumUnproven,
+	)
 }
 
-func TestObserveEtcdQuorumRefusesAnIncompleteObservation(t *testing.T) {
-	t.Parallel()
+type incompleteObservationCase struct {
+	survivors []string
+	mutate    func(map[string]*fakeObservationClient)
+}
 
-	cases := map[string]struct {
-		survivors []string
-		mutate    func(map[string]*fakeObservationClient)
-	}{
+// incompleteObservationCases each break one read, or the survivor list, of a healthy cluster.
+func incompleteObservationCases() map[string]incompleteObservationCase {
+	return map[string]incompleteObservationCase{
 		"no survivors": {survivors: nil},
 		"invalid address": {
 			survivors: []string{"cp-2"},
@@ -147,8 +159,8 @@ func TestObserveEtcdQuorumRefusesAnIncompleteObservation(t *testing.T) {
 		},
 		"member list from two nodes": {
 			mutate: func(clients map[string]*fakeObservationClient) {
-				messages := clients[observedThirdIP].members.GetMessages()
-				clients[observedThirdIP].members.Messages = append(messages, messages[0])
+				members := clients[observedThirdIP].members
+				members.Messages = append(members.Messages, members.GetMessages()[0])
 			},
 		},
 		"empty member list response": {
@@ -179,8 +191,12 @@ func TestObserveEtcdQuorumRefusesAnIncompleteObservation(t *testing.T) {
 			},
 		},
 	}
+}
 
-	for name, testCase := range cases {
+func TestObserveEtcdQuorumRefusesAnIncompleteObservation(t *testing.T) {
+	t.Parallel()
+
+	for name, testCase := range incompleteObservationCases() {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
