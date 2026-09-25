@@ -25,6 +25,10 @@ const talosFactoryImageURLFormat = "https://factory.talos.dev/image/%s/%s/hcloud
 // unreachable API cannot stop the process from exiting.
 const snapshotBuildCleanupTimeout = 30 * time.Second
 
+// snapshotBuildSettleTimeout bounds how long a cancelled build waits for its uploader to return
+// before looking for the resources to delete. See waitForUploadToSettle.
+const snapshotBuildSettleTimeout = 10 * time.Second
+
 // snapshotUploader is the interface used by SnapshotManager to create a snapshot from a raw image URL.
 // It is satisfied by *hcloudimages.Client and can be replaced in tests.
 type snapshotUploader interface {
@@ -37,6 +41,7 @@ type SnapshotManager struct {
 	hcloudClient *hcloud.Client
 	uploader     snapshotUploader
 	logWriter    io.Writer
+	settle       time.Duration
 }
 
 // NewSnapshotManager creates a new SnapshotManager backed by the given Hetzner Cloud client.
@@ -50,6 +55,7 @@ func NewSnapshotManager(hcloudClient *hcloud.Client, logWriter io.Writer) *Snaps
 		hcloudClient: hcloudClient,
 		uploader:     hcloudimages.NewClient(hcloudClient),
 		logWriter:    logWriter,
+		settle:       snapshotBuildSettleTimeout,
 	}
 }
 
@@ -208,12 +214,20 @@ func (sm *SnapshotManager) buildSnapshot(
 		done <- uploadResult{image: image, err: err}
 	}()
 
+	uploadReturned := false
+
 	select {
 	case result := <-done:
 		if buildCtx.Err() == nil {
 			return result.image, result.err
 		}
+
+		uploadReturned = true
 	case <-buildCtx.Done():
+	}
+
+	if !uploadReturned {
+		sm.waitForUploadToSettle(done)
 	}
 
 	_, _ = fmt.Fprintln(
@@ -232,7 +246,25 @@ func (sm *SnapshotManager) buildSnapshot(
 	return nil, fmt.Errorf("build cancelled: %w", buildCtx.Err())
 }
 
+// waitForUploadToSettle waits, up to the manager's settle bound, for a cancelled upload to
+// return. A create request already in flight at cancellation can still produce a server or
+// SSH key on Hetzner's side, and a listing taken before it lands misses a resource that
+// keeps billing. Cancellation aborts such requests, so the uploader normally returns at
+// once; an upload stuck in a step that ignores cancellation has already created both, so
+// the bound only limits how long that case waits.
+func (sm *SnapshotManager) waitForUploadToSettle(done <-chan uploadResult) {
+	settle := time.NewTimer(sm.settle)
+	defer settle.Stop()
+
+	select {
+	case <-done:
+	case <-settle.C:
+	}
+}
+
 // deleteBuildResources deletes the temporary server and SSH key of one snapshot build.
+// The two deletions run concurrently under one shared deadline, so a slow or retrying
+// server deletion cannot use up the time the SSH key deletion needs.
 func (sm *SnapshotManager) deleteBuildResources(ctx context.Context, buildID string) error {
 	cleanupCtx, cancel := context.WithTimeout(
 		context.WithoutCancel(ctx), snapshotBuildCleanupTimeout,
@@ -241,10 +273,15 @@ func (sm *SnapshotManager) deleteBuildResources(ctx context.Context, buildID str
 
 	selector := LabelTalosSnapshotBuild + "=" + buildID
 
-	return errors.Join(
-		sm.deleteBuildServers(cleanupCtx, selector),
-		sm.deleteBuildSSHKeys(cleanupCtx, selector),
-	)
+	keysErr := make(chan error, 1)
+
+	go func() {
+		keysErr <- sm.deleteBuildSSHKeys(cleanupCtx, selector)
+	}()
+
+	serversErr := sm.deleteBuildServers(cleanupCtx, selector)
+
+	return errors.Join(serversErr, <-keysErr)
 }
 
 // deleteBuildServers deletes the servers matching selector, retrying while a server is

@@ -3,6 +3,7 @@ package hetzner_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -24,6 +25,9 @@ const (
 
 	// cancelledBuildTimeout bounds how long a test waits for a cancelled build to return.
 	cancelledBuildTimeout = 10 * time.Second
+
+	// keyWait bounds how long a held server deletion waits for the SSH key deletion.
+	keyWait = 2 * time.Second
 )
 
 // errUploadAbandoned is what stuckUploader returns once the test releases it.
@@ -77,6 +81,17 @@ type buildResourcesAPI struct {
 	deleted       []string
 	failListing   bool
 	listedBuildID func() string
+
+	// created, when set, hides the build's resources until it returns true, as a create
+	// request still in flight at cancellation would.
+	created func() bool
+
+	// holdServerDelete makes a server deletion wait until the SSH key is deleted (or
+	// keyWait passes), and records whether that happened while the server deletion was
+	// still in flight.
+	holdServerDelete        bool
+	keyDeleted              chan struct{}
+	keyDeletedDuringServers bool
 }
 
 func newBuildResourcesAPI(t *testing.T, api *buildResourcesAPI) *hcloud.Client {
@@ -115,6 +130,16 @@ func newBuildResourcesAPI(t *testing.T, api *buildResourcesAPI) *hcloud.Client {
 	})
 
 	mux.HandleFunc("DELETE /servers/{id}", func(writer http.ResponseWriter, request *http.Request) {
+		if api.holdServerDelete {
+			select {
+			case <-api.keyDeleted:
+				api.mu.Lock()
+				api.keyDeletedDuringServers = true
+				api.mu.Unlock()
+			case <-time.After(keyWait):
+			}
+		}
+
 		api.recordDelete(request)
 		writeJSONResponse(t, writer, schema.ServerDeleteResponse{
 			Action: schema.Action{ID: 1, Command: "delete_server", Status: "running"},
@@ -126,6 +151,10 @@ func newBuildResourcesAPI(t *testing.T, api *buildResourcesAPI) *hcloud.Client {
 		func(writer http.ResponseWriter, request *http.Request) {
 			api.recordDelete(request)
 			writer.WriteHeader(http.StatusNoContent)
+
+			if api.keyDeleted != nil {
+				close(api.keyDeleted)
+			}
 		},
 	)
 
@@ -136,6 +165,10 @@ func newBuildResourcesAPI(t *testing.T, api *buildResourcesAPI) *hcloud.Client {
 }
 
 func (api *buildResourcesAPI) isBuildSelector(request *http.Request) bool {
+	if api.created != nil && !api.created() {
+		return false
+	}
+
 	selector := request.URL.Query().Get("label_selector")
 	if api.listedBuildID == nil {
 		return strings.HasPrefix(selector, hetzner.LabelTalosSnapshotBuild+"=")
@@ -232,4 +265,89 @@ func TestSnapshotManager_EnsureTalosSnapshot_CompletedBuildDeletesNothing(t *tes
 	require.NoError(t, err)
 	assert.Equal(t, int64(99), imageID)
 	assert.Empty(t, api.deletedPaths())
+}
+
+// lateUploader stands in for an upload cancelled while a create request was in flight: the
+// server and SSH key appear on the provider's side shortly after cancellation, and then the
+// upload returns.
+type lateUploader struct {
+	mu      sync.Mutex
+	build   string
+	onStart func()
+	visible bool
+}
+
+func (u *lateUploader) Upload(
+	ctx context.Context, opts hcloudimages.UploadOptions,
+) (*hcloud.Image, error) {
+	u.mu.Lock()
+	u.build = opts.Labels[hetzner.LabelTalosSnapshotBuild]
+	u.mu.Unlock()
+
+	u.onStart()
+	<-ctx.Done()
+	time.Sleep(200 * time.Millisecond)
+
+	u.mu.Lock()
+	u.visible = true
+	u.mu.Unlock()
+
+	return nil, fmt.Errorf("create server: %w", ctx.Err())
+}
+
+func (u *lateUploader) buildID() string {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	return u.build
+}
+
+func (u *lateUploader) created() bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	return u.visible
+}
+
+func TestSnapshotManager_EnsureTalosSnapshot_CancelledBuildDeletesResourcesCreatedLate(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	uploader := &lateUploader{onStart: cancel}
+	api := &buildResourcesAPI{listedBuildID: uploader.buildID, created: uploader.created}
+	client := newBuildResourcesAPI(t, api)
+	manager := hetzner.NewSnapshotManagerWithUploaderForTest(client, uploader, nil)
+
+	err := ensureTalosSnapshotWithin(ctx, t, manager)
+
+	require.ErrorIs(t, err, context.Canceled)
+	assert.ElementsMatch(t, []string{buildServerPath, buildSSHKeyPath}, api.deletedPaths(),
+		"a resource whose create request landed after cancellation must still be deleted")
+}
+
+func TestSnapshotManager_EnsureTalosSnapshot_DeletesServerAndKeyConcurrently(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	uploader := newStuckUploader(t, cancel)
+	api := &buildResourcesAPI{
+		listedBuildID:    uploader.buildID,
+		holdServerDelete: true,
+		keyDeleted:       make(chan struct{}),
+	}
+	client := newBuildResourcesAPI(t, api)
+	manager := hetzner.NewSnapshotManagerWithUploaderForTest(client, uploader, nil)
+
+	err := ensureTalosSnapshotWithin(ctx, t, manager)
+
+	require.ErrorIs(t, err, context.Canceled)
+	assert.ElementsMatch(t, []string{buildServerPath, buildSSHKeyPath}, api.deletedPaths())
+
+	api.mu.Lock()
+	defer api.mu.Unlock()
+
+	assert.True(t, api.keyDeletedDuringServers,
+		"a slow server deletion must not delay the SSH key deletion")
 }
