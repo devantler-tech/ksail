@@ -9,20 +9,23 @@ import (
 	"github.com/cosi-project/runtime/pkg/state"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	talosimages "github.com/siderolabs/talos/pkg/images"
 	"github.com/siderolabs/talos/pkg/machinery/constants"
 	"github.com/siderolabs/talos/pkg/machinery/resources/runtime"
 )
 
 var _ clusterupdate.DistributionImagePlanner = (*Provisioner)(nil)
 
-// DistributionImageChanged checks every managed machine's booted schematic.
-// Docker cannot install factory images in place and Omni owns its own upgrades.
+// DistributionImageChanged checks every managed machine's booted schematic, including
+// when none is configured: clearing the schematic selects the default installer image,
+// so a node still booted from a custom one must roll too. Docker cannot install
+// factory images in place and Omni owns its own upgrades.
 func (p *Provisioner) DistributionImageChanged(
 	ctx context.Context,
 	clusterName string,
 ) (bool, error) {
 	desired := p.resolveSchematicID()
-	if p.hetznerOpts == nil || p.omniOpts != nil || desired == "" {
+	if p.hetznerOpts == nil || p.omniOpts != nil {
 		return false, nil
 	}
 
@@ -52,11 +55,7 @@ func schematicsChanged(
 			return false, fmt.Errorf("reading schematic on %s: %w", node.IP, err)
 		}
 
-		if running == "" {
-			return false, fmt.Errorf("node %s: %w", node.IP, ErrSchematicUndetermined)
-		}
-
-		changed = changed || running != desired
+		changed = changed || !schematicMatches(running, desired)
 	}
 
 	return changed, nil
@@ -90,7 +89,9 @@ func (p *Provisioner) getRunningSchematic(ctx context.Context, nodeIP string) (s
 
 // ExtensionStatus describes the running image, unlike machine.install.image,
 // which only describes a future install. It is available before Talos 1.14's
-// ImageFactorySchematic resource as well.
+// ImageFactorySchematic resource as well. A node booted from a non-factory image
+// carries no schematic extension and reads as "", while a malformed or duplicated
+// identity is undetermined.
 func schematicFromState(ctx context.Context, resourceState state.State) (string, error) {
 	items, err := resourceState.List(ctx, resource.NewMetadata(
 		runtime.NamespaceName, runtime.ExtensionStatusType, "", resource.VersionUndefined,
@@ -120,11 +121,18 @@ func schematicFromState(ctx context.Context, resourceState state.State) (string,
 		schematic = metadata.Version
 	}
 
-	if schematic == "" {
-		return "", ErrSchematicUndetermined
+	return schematic, nil
+}
+
+// schematicMatches reports whether a node booted the desired schematic. With none
+// configured KSail installs the default image, which boots either with no factory
+// identity (the legacy ghcr.io installer) or with the factory's empty schematic.
+func schematicMatches(running, desired string) bool {
+	if desired == "" {
+		return running == "" || running == talosimages.DefaultInstallerImageSchematic
 	}
 
-	return schematic, nil
+	return running == desired
 }
 
 func runningImageMatchesTarget(
@@ -136,16 +144,12 @@ func runningImageMatchesTarget(
 		return false, nil
 	}
 
-	if desiredSchematic == "" {
-		return true, nil
-	}
-
 	running, err := schematicFromState(ctx, resourceState)
 	if err != nil {
 		return false, err
 	}
 
-	return running == desiredSchematic, nil
+	return schematicMatches(running, desiredSchematic), nil
 }
 
 func (p *Provisioner) nodeImageMatchesTarget(

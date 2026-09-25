@@ -1163,3 +1163,14 @@ func (p *Provisioner) AutoscalerNodeForTest(
 ) (NodeWithRoleForTest, error) {
 	return p.autoscalerNode(server, talosAddress)
 }
+
+// RecoverUpgradedNodeForTest exposes recoverUpgradedNode for unit testing, with the
+// storage-health gate disabled.
+func (p *Provisioner) RecoverUpgradedNodeForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeIP string,
+) error {
+	return p.recoverUpgradedNode(ctx, clientset, nodeWithRole{IP: nodeIP, Role: RoleWorker}, nil)
+}
+

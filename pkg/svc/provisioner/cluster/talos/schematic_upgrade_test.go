@@ -12,6 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
+	talosimages "github.com/siderolabs/talos/pkg/images"
 	"github.com/siderolabs/talos/pkg/machinery/constants"
 	"github.com/siderolabs/talos/pkg/machinery/resources/runtime"
 	"github.com/stretchr/testify/assert"
@@ -40,10 +41,11 @@ func TestSchematicFromState(t *testing.T) {
 	for _, testCase := range []struct {
 		name    string
 		ids     []string
+		want    string
 		wantErr bool
 	}{
-		{name: "running factory image", ids: []string{schematicID}},
-		{name: "missing identity", wantErr: true},
+		{name: "running factory image", ids: []string{schematicID}, want: schematicID},
+		{name: "non-factory image has no identity"},
 		{name: "empty identity", ids: []string{""}, wantErr: true},
 		{name: "malformed identity", ids: []string{"not-a-schematic"}, wantErr: true},
 		{name: "ambiguous identity", ids: []string{schematicID, schematicID}, wantErr: true},
@@ -62,7 +64,7 @@ func TestSchematicFromState(t *testing.T) {
 				assert.Empty(t, got)
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, schematicID, got)
+				assert.Equal(t, testCase.want, got)
 			}
 		})
 	}
@@ -101,13 +103,23 @@ func TestRunningImageMatchesTarget(t *testing.T) {
 		{name: "same version new image skips", running: "v1.13.10", actual: newID, desired: newID, want: true},
 		{name: "unprefixed version", running: "1.13.10", actual: newID, desired: newID, want: true},
 		{name: "old version must roll", running: "v1.13.9", actual: newID, desired: newID},
-		{name: "no schematic preserves version-only behavior", running: "v1.13.10", want: true},
+		{name: "cleared schematic on a non-factory image skips", running: "v1.13.10", want: true},
+		{
+			name: "cleared schematic on the default factory image skips", running: "v1.13.10",
+			actual: talosimages.DefaultInstallerImageSchematic, want: true,
+		},
+		{name: "cleared schematic with leftover extensions must roll", running: "v1.13.10", actual: oldID},
+		{name: "cleared schematic on an older version must roll", running: "v1.13.9"},
 		{name: "unknown image is not success", running: "v1.13.10", desired: newID, readErr: readErr},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			resourceState := schematicState(t, testCase.actual)
+			resourceState := schematicState(t)
+			if testCase.actual != "" {
+				resourceState = schematicState(t, testCase.actual)
+			}
+
 			if testCase.readErr != nil {
 				resourceState = failedSchematicState{State: resourceState, err: testCase.readErr}
 			}
@@ -132,16 +144,22 @@ func TestSchematicsChanged(t *testing.T) {
 	readErr := io.ErrUnexpectedEOF
 	for _, testCase := range []struct {
 		name    string
+		desired string
 		ids     []string
 		lastErr error
 		wantErr error
 		want    bool
 	}{
-		{name: "all matched", ids: []string{"target", "target"}},
-		{name: "partial rollout", ids: []string{"target", "old"}, want: true},
-		{name: "old first does not hide unknown last", ids: []string{"old", "target"}, lastErr: readErr, wantErr: readErr},
-		{name: "empty identity", ids: []string{""}, wantErr: talosprovisioner.ErrSchematicUndetermined},
-		{name: "empty inventory", wantErr: clustererr.ErrNoNodesFound},
+		{name: "all matched", desired: "target", ids: []string{"target", "target"}},
+		{name: "partial rollout", desired: "target", ids: []string{"target", "old"}, want: true},
+		{
+			name: "old first does not hide unknown last", desired: "target", ids: []string{"old", "target"},
+			lastErr: readErr, wantErr: readErr,
+		},
+		{name: "non-factory image against a configured schematic", desired: "target", ids: []string{""}, want: true},
+		{name: "cleared schematic on default images", ids: []string{"", talosimages.DefaultInstallerImageSchematic}},
+		{name: "cleared schematic with a custom image left", ids: []string{"", "old"}, want: true},
+		{name: "empty inventory", desired: "target", wantErr: clustererr.ErrNoNodesFound},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
@@ -162,7 +180,7 @@ func TestSchematicsChanged(t *testing.T) {
 			got, err := talosprovisioner.SchematicsChangedForTest(
 				t.Context(),
 				nodes,
-				"target",
+				testCase.desired,
 				read,
 			)
 			if testCase.wantErr != nil {
@@ -188,7 +206,6 @@ func TestDistributionImageChangedSkipsUnmanagedImages(t *testing.T) {
 	}{
 		{name: "Docker cannot roll factory images", schematic: strings.Repeat("a", 64)},
 		{name: "Omni owns its rollouts", hetzner: true, omni: true, schematic: strings.Repeat("a", 64)},
-		{name: "no configured schematic", hetzner: true},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
@@ -208,4 +225,19 @@ func TestDistributionImageChangedSkipsUnmanagedImages(t *testing.T) {
 			assert.False(t, changed)
 		})
 	}
+}
+
+// TestDistributionImageChangedInspectsClearedSchematic pins that clearing the schematic on
+// Hetzner still reads the running images: the node listing is reached, which a
+// configured-schematic-only check would have skipped.
+func TestDistributionImageChangedInspectsClearedSchematic(t *testing.T) {
+	t.Parallel()
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{})
+
+	changed, err := provisioner.DistributionImageChanged(t.Context(), "test")
+
+	require.ErrorIs(t, err, clustererr.ErrNoNodesFound)
+	assert.False(t, changed)
 }
