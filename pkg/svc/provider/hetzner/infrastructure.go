@@ -186,7 +186,12 @@ func (p *Provider) ensureFirewallRules(
 	if firewall != nil {
 		if firewall.Labels[LabelOwned] != LabelOwnedValue ||
 			firewall.Labels[LabelClusterName] != clusterName {
-			return nil, fmt.Errorf("%w: %s (cluster %s)", ErrFirewallNotOwned, firewallName, clusterName)
+			return nil, fmt.Errorf(
+				"%w: %s (cluster %s)",
+				ErrFirewallNotOwned,
+				firewallName,
+				clusterName,
+			)
 		}
 
 		err = p.setRulesIfChanged(ctx, firewall, desiredRules)
