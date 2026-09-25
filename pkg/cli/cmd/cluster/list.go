@@ -118,8 +118,9 @@ type ListDeps struct {
 	) clusterdiscovery.RunState
 
 	// KubeconfigPathFunc optionally resolves the kubeconfig path scanned for unmanaged
-	// (kubeconfig-only) clusters. If nil, the user's default kubeconfig is used. Primarily for
-	// testing, so unmanaged discovery reads a temp kubeconfig instead of the real one.
+	// (kubeconfig-only) clusters. If nil, the active kubeconfig is used (KUBECONFIG, else
+	// ~/.kube/config). Primarily for testing, so unmanaged discovery reads a temp kubeconfig
+	// instead of the real one.
 	KubeconfigPathFunc func() string
 
 	// AWSLister optionally lists EKS cluster names, routed into the discoverer's AWS seam. If nil,
@@ -221,7 +222,7 @@ func newDiscoverer(deps ListDeps) *clusterdiscovery.Discoverer {
 
 // discoverUnmanaged returns the kubeconfig-only (unmanaged) clusters not already among the discovered
 // set, keying the managed set by the discovered clusters' names so DiscoverUnmanaged can dedup
-// contexts against them. The kubeconfig path comes from the deps seam (the user's default when unset).
+// contexts against them. The kubeconfig path comes from the deps seam (the active kubeconfig when unset).
 func discoverUnmanaged(
 	deps ListDeps,
 	discovered []clusterdiscovery.Cluster,
@@ -231,7 +232,7 @@ func discoverUnmanaged(
 		managed[cluster.Name] = struct{}{}
 	}
 
-	kubeconfigPath := k8s.DefaultKubeconfigPath
+	kubeconfigPath := k8s.ActiveKubeconfigPath
 	if deps.KubeconfigPathFunc != nil {
 		kubeconfigPath = deps.KubeconfigPathFunc
 	}

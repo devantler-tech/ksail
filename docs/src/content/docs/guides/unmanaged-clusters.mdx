@@ -16,7 +16,7 @@ KSail can **see and operate on any cluster in your kubeconfig**, even one it did
 ksail cluster list
 ```
 
-Unmanaged clusters appear with **blank distribution and provider columns** (there is no KSail spec to read) and a `STATUS` of `Unmanaged`. Discovery reads your **default kubeconfig** (`~/.kube/config`), so a context kept only in a non-default `KUBECONFIG` path may not be listed.
+Unmanaged clusters appear with **blank distribution and provider columns** (there is no KSail spec to read) and a `STATUS` of `Unmanaged`. Discovery reads the kubeconfig that `KUBECONFIG` names, or `~/.kube/config` when it is unset. When `KUBECONFIG` lists several files, only the first is read.
 
 The web UI and desktop app mark these clusters `Unmanaged` too, and identify their distribution and provider from the cluster's own nodes. The node's OS image names Talos, the kubelet version names K3s, EKS or GKE, well-known node labels and annotations name AKS and KWOK, and a `kind://` node ID names Vanilla. The node ID also names the provider: `hcloud://` is Hetzner, and `aws://`, `gce://`, `azure://` and `kind://` name AWS, GCP, Azure and Docker. A value found this way is dotted-underlined, and hovering it reads "Detected from the cluster's nodes", so it is never mistaken for a configured value. Every node has to agree on the distribution. The provider works differently: a node whose ID has not been filled in yet supplies no evidence rather than a disagreement, so it is every node that *has* an ID that must name the same provider. When the evidence that exists conflicts, or the cluster can't be reached, the field shows `—` instead of a guess.
 
@@ -34,7 +34,7 @@ ksail cluster restore ./snapshot           # restore them
 ```
 
 > [!IMPORTANT]
-> **The context must live in the kubeconfig KSail reads.** Only `cluster switch` consults the `KUBECONFIG` environment variable — `cluster connect` and the `ksail workload` wrappers resolve their kubeconfig from `spec.cluster.connection.kubeconfig` in `ksail.yaml`, falling back to the **default** `~/.kube/config`, and never read `KUBECONFIG`. So if your unmanaged context exists only in a non-default `KUBECONFIG` file, `cluster switch` will select it while `apply`, `logs` or `connect` quietly target a *different* kubeconfig. Merge the context into `~/.kube/config`, or point `spec.cluster.connection.kubeconfig` at the file, before operating.
+> **The context must live in the kubeconfig KSail reads.** `cluster list`, `cluster switch`, the web UI and the desktop app read the first file `KUBECONFIG` names — `cluster connect` and the `ksail workload` wrappers resolve their kubeconfig from `spec.cluster.connection.kubeconfig` in `ksail.yaml`, falling back to the **default** `~/.kube/config`, and never read `KUBECONFIG`. So if your unmanaged context exists only in a non-default `KUBECONFIG` file, `cluster switch` will select it while `apply`, `logs` or `connect` quietly target a *different* kubeconfig. Merge the context into `~/.kube/config`, or point `spec.cluster.connection.kubeconfig` at the file, before operating.
 
 > [!IMPORTANT]
 > `cluster diagnose --name <name>` does **not** select the named context — it builds its Kubernetes client from your kubeconfig's **current context** and uses `--name` only to label the report. Always `ksail cluster switch <name>` first, or you will diagnose the wrong cluster. Tracked in [#6117](https://github.com/devantler-tech/ksail/issues/6117).
