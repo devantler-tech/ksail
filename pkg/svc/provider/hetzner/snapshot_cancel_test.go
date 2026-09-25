@@ -130,38 +130,48 @@ func newBuildResourcesAPI(t *testing.T, api *buildResourcesAPI) *hcloud.Client {
 	})
 
 	mux.HandleFunc("DELETE /servers/{id}", func(writer http.ResponseWriter, request *http.Request) {
-		if api.holdServerDelete {
-			select {
-			case <-api.keyDeleted:
-				api.mu.Lock()
-				api.keyDeletedDuringServers = true
-				api.mu.Unlock()
-			case <-time.After(keyWait):
-			}
-		}
-
-		api.recordDelete(request)
-		writeJSONResponse(t, writer, schema.ServerDeleteResponse{
-			Action: schema.Action{ID: 1, Command: "delete_server", Status: "running"},
-		})
+		api.deleteServer(t, writer, request)
 	})
 
-	mux.HandleFunc(
-		"DELETE /ssh_keys/{id}",
-		func(writer http.ResponseWriter, request *http.Request) {
-			api.recordDelete(request)
-			writer.WriteHeader(http.StatusNoContent)
-
-			if api.keyDeleted != nil {
-				close(api.keyDeleted)
-			}
-		},
-	)
+	mux.HandleFunc("DELETE /ssh_keys/{id}", api.deleteSSHKey)
 
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
 	return newTestHcloudClient(t, srv.URL)
+}
+
+// deleteServer records a server deletion. With holdServerDelete set, it first waits for the
+// SSH key deletion (or keyWait), and records whether that arrived while this was in flight.
+func (api *buildResourcesAPI) deleteServer(
+	t *testing.T, writer http.ResponseWriter, request *http.Request,
+) {
+	t.Helper()
+
+	if api.holdServerDelete {
+		select {
+		case <-api.keyDeleted:
+			api.mu.Lock()
+			api.keyDeletedDuringServers = true
+			api.mu.Unlock()
+		case <-time.After(keyWait):
+		}
+	}
+
+	api.recordDelete(request)
+	writeJSONResponse(t, writer, schema.ServerDeleteResponse{
+		Action: schema.Action{ID: 1, Command: "delete_server", Status: "running"},
+	})
+}
+
+// deleteSSHKey records an SSH key deletion and signals keyDeleted when a test waits on it.
+func (api *buildResourcesAPI) deleteSSHKey(writer http.ResponseWriter, request *http.Request) {
+	api.recordDelete(request)
+	writer.WriteHeader(http.StatusNoContent)
+
+	if api.keyDeleted != nil {
+		close(api.keyDeleted)
+	}
 }
 
 func (api *buildResourcesAPI) isBuildSelector(request *http.Request) bool {
