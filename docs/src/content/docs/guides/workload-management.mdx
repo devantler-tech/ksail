@@ -110,6 +110,19 @@ ksail workload scan       # security posture via Kubescape (NSA, MITRE, and more
 See [Validate configuration](/configuration/workload-validate/) for how `${VAR}` substitution is
 expanded during validation.
 
+To validate custom resources against CRDs declared in your repository or rendered from its
+Helm charts, enable schema discovery:
+
+```bash
+ksail workload validate ./k8s --include-crd-schemas
+```
+
+Each Kustomization is rendered once per invocation. Schema discovery and validation use that
+same output, including Helm source attribution and warnings. Render failures still fail validation;
+an unreadable or unsupported CRD schema is reported as a warning. Rendered manifests are retained
+only in memory until validation consumes them, so the next invocation reads your current files.
+With `--skip-helm-render`, schema discovery uses only CRDs present in the source files.
+
 ## Move images around
 
 Beyond `push`/`reconcile`, the workload family also handles container images and secrets:
