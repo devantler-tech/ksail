@@ -280,7 +280,7 @@ KSail applies them through **two complementary mechanisms** so they are correct 
 1. **On the real `Node`** — baked into each pool's Talos worker cloud-init as `machine.nodeLabels` / `machine.nodeTaints`, which Talos reconciles onto the `Node` (this is what actually labels/taints the running node, per the mechanism described above).
 2. **On the scale-from-zero template** — mirrored into the autoscaler's per-pool `nodeConfigs[].labels`/`taints` so the autoscaler knows, *before any node of the pool exists*, that scaling the pool would produce nodes carrying those labels/taints. Without this, the autoscaler would never scale a tainted pool up from zero (no template node tolerates the pending pod) and could scale the wrong pool for a label-selecting pod.
 
-Under the hood this is delivered via the autoscaler's `HCLOUD_CLUSTER_CONFIG` (per-pool cloud-init, image, labels, and taints), which KSail writes to the `cluster-autoscaler-config` Secret. Changing a pool's labels or taints on `ksail cluster update` is applied in place and recycles that pool's existing autoscaler nodes so they pick up the change.
+Under the hood this is delivered via the autoscaler's `HCLOUD_CLUSTER_CONFIG` (per-pool cloud-init, image, labels, and taints), which KSail writes to the `cluster-autoscaler-config` Secret. Changing a pool's labels or taints on `ksail cluster update` is applied in place and recycles that pool's existing autoscaler nodes so they pick up the change. When an update pushes other Talos config changes to existing autoscaler nodes, each node gets its pool's config, so the `ksail.io/autoscaled` marker and the pool's labels and taints stay on it. A node whose pool is no longer configured is reported as a failed change and left as it is.
 
 ## Quick Start
 
