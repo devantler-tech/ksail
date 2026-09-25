@@ -11,6 +11,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,20 +23,12 @@ type setRulesTestAction struct {
 	Error    map[string]string `json:"error,omitempty"`
 }
 
-// sentFirewallRule is one rule of a set_rules request body, as sent to the API.
-type sentFirewallRule struct {
-	Direction string   `json:"direction"`
-	Protocol  string   `json:"protocol"`
-	Port      *string  `json:"port"`
-	SourceIPs []string `json:"source_ips"`
-}
-
 // firewallRepairServer records what the provider sent to set_rules.
 type firewallRepairServer struct {
 	*httptest.Server
 
 	setRulesCalled atomic.Bool
-	sentRules      atomic.Pointer[[]sentFirewallRule]
+	sentRules      atomic.Pointer[[]schema.FirewallRuleRequest]
 }
 
 // ownedFirewallLabels are the labels KSail puts on a firewall it created for
@@ -86,9 +79,7 @@ func newFirewallRepairServer(
 		func(writer http.ResponseWriter, request *http.Request) {
 			repair.setRulesCalled.Store(true)
 
-			var body struct {
-				Rules []sentFirewallRule `json:"rules"`
-			}
+			var body schema.FirewallActionSetRulesRequest
 
 			err := json.NewDecoder(request.Body).Decode(&body)
 			if err != nil {
