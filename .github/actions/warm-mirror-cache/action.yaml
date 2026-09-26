@@ -316,7 +316,10 @@ runs:
               [ -n "$image" ] || continue
               REPO="${image#ecr-public.aws.com/}"
               if [[ "$REPO" == *@* ]]; then
-                LINK="${REPO%%@*}/_manifests/revisions/${REPO#*@}"
+                # A tag+digest pin (repo:tag@sha256:x) stores its revision under the bare repo.
+                NAME="${REPO%%@*}"
+                [[ "${NAME##*/}" == *:* ]] && NAME="${NAME%:*}"
+                LINK="${NAME}/_manifests/revisions/${REPO#*@}"
                 LINK="${LINK/://}/link"
               else
                 LINK="${REPO%:*}/_manifests/tags/${REPO##*:}/current/link"
@@ -534,10 +537,19 @@ runs:
           -e REGISTRY_PROXY_REMOTEURL=https://ecr-public.aws.com \
           -v ecr-public.aws.com:/var/lib/registry \
           registry:3 > /dev/null
+        PROXY_READY=false
         for _ in $(seq 1 30); do
-          curl -fsS http://localhost:5004/v2/ > /dev/null 2>&1 && break
+          if curl -fsS http://localhost:5004/v2/ > /dev/null 2>&1; then
+            PROXY_READY=true
+            break
+          fi
           sleep 1
         done
+        if [ "$PROXY_READY" != true ]; then
+          echo "❌ ECR Public mirror proxy never became ready"
+          docker logs ecr-public.aws.com-mirror 2>&1 | tail -n 50 || true
+          exit 1
+        fi
 
         while IFS= read -r image; do
           MIRROR_REF="localhost:5004/${image#ecr-public.aws.com/}"
@@ -599,12 +611,14 @@ runs:
           mirror.gcr.io/library/busybox:1.37 \
           tar -cf /backup/registry.k8s.io.tar -C /volume . || echo "⚠️ Failed to export registry.k8s.io mirror"
 
-        # Export ecr-public.aws.com mirror volume
+        # Export ecr-public.aws.com mirror volume. Fatal, unlike the pull-through
+        # volumes above: this one is filled by copy, and a cache saved without it
+        # would send every system test back to ECR Public.
         docker run --rm \
           -v ecr-public.aws.com:/volume:ro \
           -v /tmp/mirror-cache:/backup \
           mirror.gcr.io/library/busybox:1.37 \
-          tar -cf /backup/ecr-public.aws.com.tar -C /volume . || echo "⚠️ Failed to export ecr-public.aws.com mirror"
+          tar -cf /backup/ecr-public.aws.com.tar -C /volume .
 
         # Show cache size
         if command -v du &> /dev/null; then
