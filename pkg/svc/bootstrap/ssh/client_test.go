@@ -243,6 +243,8 @@ func TestFileExists(t *testing.T) {
 	client := mustDial(t, addr, pair, hostKey)
 
 	t.Run("present file", func(t *testing.T) {
+		t.Parallel()
+
 		exists, err := client.FileExists(t.Context(), "/present")
 		if err != nil || !exists {
 			t.Fatalf("present file: got exists=%v err=%v, want true, nil", exists, err)
@@ -250,6 +252,8 @@ func TestFileExists(t *testing.T) {
 	})
 
 	t.Run("absent file", func(t *testing.T) {
+		t.Parallel()
+
 		exists, err := client.FileExists(t.Context(), "/absent")
 		if err != nil || exists {
 			t.Fatalf("absent file: got exists=%v err=%v, want false, nil", exists, err)
@@ -257,6 +261,8 @@ func TestFileExists(t *testing.T) {
 	})
 
 	t.Run("pam expired stderr", func(t *testing.T) {
+		t.Parallel()
+
 		_, err := client.FileExists(t.Context(), "/pam-expired")
 		if err == nil {
 			t.Fatal("probe with stderr and exit code 1: want an error, got nil")
@@ -267,6 +273,8 @@ func TestFileExists(t *testing.T) {
 	})
 
 	t.Run("unexpected exit code", func(t *testing.T) {
+		t.Parallel()
+
 		_, err := client.FileExists(t.Context(), "/probe-error")
 		if err == nil {
 			t.Fatal("unexpected exit code: want an error, got nil")
