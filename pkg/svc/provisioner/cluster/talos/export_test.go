@@ -1142,3 +1142,32 @@ func (p *Provisioner) AutoscalerNodeForTest(
 ) (NodeWithRoleForTest, error) {
 	return p.autoscalerNode(server, talosAddress)
 }
+
+// WithSchematicRegistrarForTest overrides the Image Factory schematic registrar so unit tests
+// can observe registration without real network I/O.
+func (p *Provisioner) WithSchematicRegistrarForTest(
+	fn func(ctx context.Context, sc talosconfigmanager.Schematic) (string, error),
+) *Provisioner {
+	p.schematicRegistrar = fn
+
+	return p
+}
+
+// EnsureSchematicRegisteredForTest exposes ensureSchematicRegistered for unit testing.
+func (p *Provisioner) EnsureSchematicRegisteredForTest(
+	ctx context.Context,
+	schematicID string,
+) error {
+	return p.ensureSchematicRegistered(ctx, schematicID)
+}
+
+// RegisterSchematicForTest exposes registerSchematic so unit tests can point registration at a
+// local Image Factory stand-in with a short timeout.
+func RegisterSchematicForTest(
+	ctx context.Context,
+	baseURL string,
+	timeout time.Duration,
+	computed talosconfigmanager.Schematic,
+) (string, error) {
+	return registerSchematic(ctx, baseURL, timeout, computed)
+}

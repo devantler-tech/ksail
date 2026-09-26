@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httptrace"
@@ -165,7 +166,7 @@ func TestSnapshotManager_EnsureTalosSnapshot_ExistingFound(t *testing.T) {
 
 	sm := hetzner.NewSnapshotManagerWithUploaderForTest(client, uploader, &logBuf)
 
-	gotID, err := sm.EnsureTalosSnapshot(context.Background(), clusterName, version, schematic)
+	gotID, err := sm.EnsureTalosSnapshot(context.Background(), clusterName, version, schematic, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, imageID, gotID)
@@ -203,7 +204,7 @@ func TestSnapshotManager_EnsureTalosSnapshot_BuildsNew(t *testing.T) {
 
 	sm := hetzner.NewSnapshotManagerWithUploaderForTest(client, uploader, &logBuf)
 
-	gotID, err := sm.EnsureTalosSnapshot(context.Background(), clusterName, version, schematic)
+	gotID, err := sm.EnsureTalosSnapshot(context.Background(), clusterName, version, schematic, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, builtID, gotID)
@@ -238,7 +239,7 @@ func TestSnapshotManager_EnsureTalosSnapshot_UploaderError(t *testing.T) {
 
 	sm := hetzner.NewSnapshotManagerWithUploaderForTest(client, uploader, &logBuf)
 
-	_, err := sm.EnsureTalosSnapshot(context.Background(), clusterName, version, schematic)
+	_, err := sm.EnsureTalosSnapshot(context.Background(), clusterName, version, schematic, nil)
 
 	require.Error(t, err)
 	require.ErrorIs(t, err, hetzner.ErrSnapshotBuildFailed)
@@ -429,7 +430,7 @@ func TestSnapshotManager_EnsureTalosSnapshot_SkipsNonAvailableSnapshot(t *testin
 
 	sm := hetzner.NewSnapshotManagerWithUploaderForTest(client, uploader, &logBuf)
 
-	gotID, err := sm.EnsureTalosSnapshot(context.Background(), clusterName, version, schematic)
+	gotID, err := sm.EnsureTalosSnapshot(context.Background(), clusterName, version, schematic, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, builtID, gotID)
@@ -489,9 +490,106 @@ func TestSnapshotManager_EnsureTalosSnapshot_SHA256SchematicID(t *testing.T) {
 
 	sm := hetzner.NewSnapshotManagerWithUploaderForTest(client, uploader, &logBuf)
 
-	gotID, err := sm.EnsureTalosSnapshot(context.Background(), clusterName, version, schematic)
+	gotID, err := sm.EnsureTalosSnapshot(context.Background(), clusterName, version, schematic, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, imageID, gotID)
 	assert.False(t, uploader.called)
+}
+
+// errRegistrationFailed is a static sentinel used in before-build hook tests.
+var errRegistrationFailed = errors.New("schematic registration failed")
+
+func snapshotListServer(t *testing.T, images []hcloudImageSchema) *hcloudtest.Client {
+	t.Helper()
+
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	mux.HandleFunc("/images", func(responseWriter http.ResponseWriter, _ *http.Request) {
+		responseWriter.Header().Set("Content-Type", "application/json")
+		_, _ = responseWriter.Write(marshalJSON(t, hcloudImageListResponse{Images: images}))
+	})
+
+	return newTestHcloudClient(t, srv.URL)
+}
+
+const (
+	hookCluster   = "hook-cluster"
+	hookVersion   = "v1.9.0"
+	hookSchematic = "jkl012"
+)
+
+type beforeBuildCase struct {
+	name         string
+	images       []hcloudImageSchema
+	hookErr      error
+	wantHook     int
+	wantUploaded bool
+	wantErr      error
+}
+
+func beforeBuildCases() []beforeBuildCase {
+	existing := []hcloudImageSchema{{
+		ID: 7,
+		Labels: map[string]string{
+			"ksail.io/talos-version":   hookVersion,
+			"ksail.io/talos-schematic": hookSchematic,
+			"ksail.io/cluster":         hookCluster,
+		},
+		Type:   "snapshot",
+		Status: "available",
+	}}
+
+	return []beforeBuildCase{
+		{name: "existing snapshot skips the hook", images: existing},
+		{name: "build runs the hook first", wantHook: 1, wantUploaded: true},
+		{
+			name:     "hook failure stops the build",
+			hookErr:  errRegistrationFailed,
+			wantHook: 1,
+			wantErr:  errRegistrationFailed,
+		},
+	}
+}
+
+// TestSnapshotManager_EnsureTalosSnapshot_BeforeBuild pins that the before-build hook
+// (KSail registers its computed schematic there) runs only when a snapshot is built, and
+// runs before the factory image is requested, so a failure leaves nothing half-built.
+func TestSnapshotManager_EnsureTalosSnapshot_BeforeBuild(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range beforeBuildCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			uploader := &mockUploader{image: &hcloudtest.Image{ID: 99}}
+			manager := hetzner.NewSnapshotManagerWithUploaderForTest(
+				snapshotListServer(t, testCase.images), uploader, io.Discard,
+			)
+
+			hookCalls := 0
+			hook := func(context.Context) error {
+				hookCalls++
+
+				assert.False(t, uploader.called, "the hook must run before the upload")
+
+				return testCase.hookErr
+			}
+
+			_, err := manager.EnsureTalosSnapshot(
+				context.Background(), hookCluster, hookVersion, hookSchematic, hook,
+			)
+
+			if testCase.wantErr != nil {
+				require.ErrorIs(t, err, testCase.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+
+			assert.Equal(t, testCase.wantHook, hookCalls)
+			assert.Equal(t, testCase.wantUploaded, uploader.called)
+		})
+	}
 }
