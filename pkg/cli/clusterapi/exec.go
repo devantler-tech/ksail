@@ -22,10 +22,10 @@ type execClientFunc func(ctx context.Context, clusterName string) (kubernetes.In
 // defaultExecClient resolves the cluster's kubeconfig context (via the single restConfigForCluster
 // seam) and builds a clientset + rest.Config.
 func (s *Service) defaultExecClient(
-	_ context.Context,
+	ctx context.Context,
 	clusterName string,
 ) (kubernetes.Interface, *rest.Config, error) {
-	restConfig, err := s.restConfigForCluster(clusterName)
+	restConfig, err := s.restConfigForCluster(ctx, clusterName)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/clusterapi"
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	"github.com/stretchr/testify/assert"
@@ -424,14 +425,9 @@ func TestContextForClusterResolvesUnmanagedRawContextName(t *testing.T) {
 	require.ErrorIs(t, err, api.ErrNotFound)
 }
 
-// TestContextForClusterDetectedNameKeepsPrecedence pins the ordering of the two passes: a managed
-// cluster keeps resolving to its distribution context even when a stray context is literally named
-// after the cluster, so the fallback never hijacks a ksail-managed name.
-func TestContextForClusterDetectedNameKeepsPrecedence(t *testing.T) {
-	t.Parallel()
-
-	path := filepath.Join(t.TempDir(), "config")
-	require.NoError(t, os.WriteFile(path, []byte(`apiVersion: v1
+// collidingContextsKubeconfig holds a context literally named "prod" beside "kind-prod", whose
+// detected cluster name is also "prod".
+const collidingContextsKubeconfig = `apiVersion: v1
 kind: Config
 clusters:
   - name: kind-prod
@@ -454,11 +450,112 @@ users:
     user: {}
   - name: stray
     user: {}
-`), 0o600))
+`
 
-	contextName, err := clusterapi.ContextForCluster(path, "prod")
+// TestContextForClusterUnmanagedRowsResolveToTheirOwnContext pins #6909: when neither "prod" nor
+// "kind-prod" is managed, List shows both as unmanaged rows, and each must operate on its own context.
+func TestContextForClusterUnmanagedRowsResolveToTheirOwnContext(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(path, []byte(collidingContextsKubeconfig), 0o600))
+
+	for _, row := range []string{"prod", "kind-prod"} {
+		contextName, err := clusterapi.ContextForCluster(path, row)
+		require.NoError(t, err)
+		assert.Equal(t, row, contextName)
+	}
+}
+
+// TestContextForClusterDetectedNameKeepsPrecedence pins that a managed cluster keeps resolving to its
+// distribution context even when a stray context is literally named after it: List hides that stray
+// context behind the managed row, so the name can only mean the managed cluster.
+func TestContextForClusterDetectedNameKeepsPrecedence(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(path, []byte(collidingContextsKubeconfig), 0o600))
+
+	contextName, err := clusterapi.ContextForCluster(path, "prod", "prod")
 	require.NoError(t, err)
 	assert.Equal(t, "kind-prod", contextName)
+}
+
+// TestContextForClusterReportsAmbiguousName pins that a name several contexts detect to, with no row
+// of its own, is refused rather than resolved to whichever context the map yields first.
+func TestContextForClusterReportsAmbiguousName(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(path, []byte(`apiVersion: v1
+kind: Config
+clusters:
+  - name: kind-prod
+    cluster:
+      server: https://127.0.0.1:6443
+  - name: k3d-prod
+    cluster:
+      server: https://127.0.0.1:6445
+contexts:
+  - name: kind-prod
+    context:
+      cluster: kind-prod
+      user: kind-prod
+  - name: k3d-prod
+    context:
+      cluster: k3d-prod
+      user: k3d-prod
+users:
+  - name: kind-prod
+    user: {}
+  - name: k3d-prod
+    user: {}
+`), 0o600))
+
+	for _, managed := range [][]string{nil, {"prod"}} {
+		_, err := clusterapi.ContextForCluster(path, "prod", managed...)
+		require.ErrorIs(t, err, clusterapi.ErrAmbiguousClusterContext)
+		require.ErrorContains(t, err, "k3d-prod, kind-prod")
+	}
+
+	for _, contextName := range []string{"kind-prod", "k3d-prod"} {
+		resolved, err := clusterapi.ContextForCluster(path, contextName)
+		require.NoError(t, err)
+		assert.Equal(t, contextName, resolved)
+	}
+}
+
+// TestListedRowsResolveToTheirOwnEndpoint drives the production seam for every row List shows and
+// asserts it reaches the endpoint that row reports, whether or not "prod" is a managed cluster.
+func TestListedRowsResolveToTheirOwnEndpoint(t *testing.T) {
+	t.Parallel()
+
+	for name, managed := range map[string][]string{
+		"unmanaged": nil,
+		"managed":   {"prod"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			path := filepath.Join(t.TempDir(), "config")
+			require.NoError(t, os.WriteFile(path, []byte(collidingContextsKubeconfig), 0o600))
+
+			service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+				v1alpha1.DistributionVanilla: {clusters: managed},
+			})
+			service.SetKubeconfigPathForTest(path)
+
+			list, err := service.List(t.Context())
+			require.NoError(t, err)
+			require.NotEmpty(t, list.Items)
+
+			for _, row := range list.Items {
+				restConfig, err := service.RESTConfigForClusterForTest(t.Context(), row.Name)
+				require.NoError(t, err)
+				assert.Equal(t, row.Status.Endpoint, restConfig.Host, "row %q", row.Name)
+			}
+		})
+	}
 }
 
 // TestRESTConfigForUnmanagedClusterTargetsItsContext drives the production restConfigForCluster seam
@@ -474,13 +571,13 @@ func TestRESTConfigForUnmanagedClusterTargetsItsContext(t *testing.T) {
 	service := newTestService(nil)
 	service.SetKubeconfigPathForTest(path)
 
-	restConfig, err := service.RESTConfigForClusterForTest("colleague-cluster")
+	restConfig, err := service.RESTConfigForClusterForTest(t.Context(), "colleague-cluster")
 	require.NoError(t, err)
 	assert.Equal(t, "https://cluster.example.com:6443", restConfig.Host)
 
 	// A name no context carries still reports not-found (→ 404) rather than falling back to the
 	// current context and silently operating on the wrong cluster.
-	_, err = service.RESTConfigForClusterForTest("ghost")
+	_, err = service.RESTConfigForClusterForTest(t.Context(), "ghost")
 	require.ErrorIs(t, err, api.ErrNotFound)
 }
 
@@ -507,7 +604,8 @@ func TestNewServiceReadsTheKubeconfigThatKUBECONFIGNames(t *testing.T) {
 	t.Setenv("HOME", homeKubeconfig(t))
 	t.Setenv("KUBECONFIG", envPath)
 
-	restConfig, err := clusterapi.NewService().RESTConfigForClusterForTest("colleague-cluster")
+	restConfig, err := clusterapi.NewService().
+		RESTConfigForClusterForTest(t.Context(), "colleague-cluster")
 	require.NoError(t, err)
 	assert.Equal(t, "https://cluster.example.com:6443", restConfig.Host)
 }
@@ -518,7 +616,8 @@ func TestNewServiceReadsTheHomeKubeconfigWithoutKUBECONFIG(t *testing.T) {
 	t.Setenv("HOME", homeKubeconfig(t))
 	t.Setenv("KUBECONFIG", "")
 
-	restConfig, err := clusterapi.NewService().RESTConfigForClusterForTest("colleague-cluster")
+	restConfig, err := clusterapi.NewService().
+		RESTConfigForClusterForTest(t.Context(), "colleague-cluster")
 	require.NoError(t, err)
 	assert.Equal(t, "https://home.example.com:6443", restConfig.Host)
 }

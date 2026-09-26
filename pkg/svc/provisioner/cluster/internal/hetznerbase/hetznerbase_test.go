@@ -64,7 +64,7 @@ func (f *fakeInfra) EnsureNetwork(
 	return &hcloud.Network{ID: f.networkID}, f.ensureNetworkErr
 }
 
-func (f *fakeInfra) EnsureFirewall(
+func (f *fakeInfra) EnsureSSHFirewall(
 	_ context.Context,
 	_ string,
 	_ []string,
