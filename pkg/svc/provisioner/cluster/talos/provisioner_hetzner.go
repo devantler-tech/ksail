@@ -1055,6 +1055,7 @@ func poolTaintsToCoreV1(taints []v1alpha1.NodePoolTaint) []corev1.Taint {
 func autoscalerTemplateLabels(poolLabels map[string]string) map[string]string {
 	labels := make(map[string]string, len(poolLabels)+1)
 	maps.Copy(labels, poolLabels)
+	delete(labels, "node.longhorn.io/create-default-disk")
 	labels[LabelAutoscaled] = labelValueTrue
 
 	return labels

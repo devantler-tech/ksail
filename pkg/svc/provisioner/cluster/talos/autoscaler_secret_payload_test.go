@@ -123,6 +123,10 @@ func TestAutoscalerSecretPayloadBootsEveryPoolWithTheAutoscalerShape(t *testing.
 			"pool %s would boot without the autoscaler marker", name)
 		assert.NotContains(t, labels, longhornDefaultDiskLabel,
 			"pool %s would boot with the Longhorn default-disk label", name)
+		assert.Equal(t, "true", nodeConfig.Labels[talosprovisioner.LabelAutoscaled],
+			"pool %s template would omit the autoscaler marker", name)
+		assert.NotContains(t, nodeConfig.Labels, longhornDefaultDiskLabel,
+			"pool %s template would advertise a label its nodes lack", name)
 	}
 
 	cx43Labels := bootedMachineLabels(t, payload.NodeConfigs["autoscale-cx43"].CloudInit)
