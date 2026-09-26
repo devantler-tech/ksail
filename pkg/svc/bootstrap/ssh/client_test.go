@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -215,6 +216,19 @@ func mustGenerateKeyPair(t *testing.T) sshbootstrap.KeyPair {
 	return pair
 }
 
+func fakeFileExistsHandler(command string, _ io.Reader) (string, string, uint32) {
+	switch command {
+	case "test -f '/present'":
+		return "", "", 0
+	case "test -f '/absent'":
+		return "", "", 1
+	case "test -f '/pam-expired'":
+		return "", "WARNING: Your password has expired.\nPassword change required but no TTY available.", 1
+	default:
+		return "", "", 2
+	}
+}
+
 func TestFileExists(t *testing.T) {
 	t.Parallel()
 
@@ -222,35 +236,51 @@ func TestFileExists(t *testing.T) {
 	addr, hostKey := startServer(
 		t,
 		pair.Signer.PublicKey(),
-		func(command string, _ io.Reader) (string, string, uint32) {
-			switch command {
-			case "test -f '/present'":
-				return "", "", 0
-			case "test -f '/absent'":
-				return "", "", 1
-			default:
-				return "", "", 2
-			}
-		},
+		fakeFileExistsHandler,
 		0,
 	)
 
 	client := mustDial(t, addr, pair, hostKey)
 
-	exists, err := client.FileExists(t.Context(), "/present")
-	if err != nil || !exists {
-		t.Fatalf("present file: got exists=%v err=%v, want true, nil", exists, err)
-	}
+	t.Run("present file", func(t *testing.T) {
+		t.Parallel()
 
-	exists, err = client.FileExists(t.Context(), "/absent")
-	if err != nil || exists {
-		t.Fatalf("absent file: got exists=%v err=%v, want false, nil", exists, err)
-	}
+		exists, err := client.FileExists(t.Context(), "/present")
+		if err != nil || !exists {
+			t.Fatalf("present file: got exists=%v err=%v, want true, nil", exists, err)
+		}
+	})
 
-	_, err = client.FileExists(t.Context(), "/probe-error")
-	if err == nil {
-		t.Fatal("unexpected exit code: want an error, got nil")
-	}
+	t.Run("absent file", func(t *testing.T) {
+		t.Parallel()
+
+		exists, err := client.FileExists(t.Context(), "/absent")
+		if err != nil || exists {
+			t.Fatalf("absent file: got exists=%v err=%v, want false, nil", exists, err)
+		}
+	})
+
+	t.Run("pam expired stderr", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := client.FileExists(t.Context(), "/pam-expired")
+		if err == nil {
+			t.Fatal("probe with stderr and exit code 1: want an error, got nil")
+		}
+
+		if !strings.Contains(err.Error(), "Your password has expired") {
+			t.Fatalf("error message does not contain stderr: %v", err)
+		}
+	})
+
+	t.Run("unexpected exit code", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := client.FileExists(t.Context(), "/probe-error")
+		if err == nil {
+			t.Fatal("unexpected exit code: want an error, got nil")
+		}
+	})
 }
 
 func TestGenerateKeyPairRoundTrips(t *testing.T) {
