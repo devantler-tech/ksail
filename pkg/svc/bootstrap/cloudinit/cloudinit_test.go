@@ -35,7 +35,8 @@ type parsedConfig struct {
 		ED25519Public string `yaml:"ed25519_public"`
 	} `yaml:"ssh_keys"`
 	Chpasswd struct {
-		Expire bool `yaml:"expire"`
+		// A pointer, so an absent key decodes to nil rather than to false.
+		Expire *bool `yaml:"expire"`
 	} `yaml:"chpasswd"`
 	RunCmd [][]string `yaml:"runcmd"`
 }
@@ -227,7 +228,8 @@ func TestBuildUserDataRendersSSHAuthorizedKeys(t *testing.T) {
 		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA ksail-bootstrap",
 		"ssh-rsa AAAAB3NzaC1yc2E operator",
 	}, cfg.SSHAuthorizedKeys)
-	assert.False(t, cfg.Chpasswd.Expire)
+	require.NotNil(t, cfg.Chpasswd.Expire, "chpasswd must set expire explicitly")
+	assert.False(t, *cfg.Chpasswd.Expire)
 }
 
 func TestBuildUserDataSSHKeysOnlyRejected(t *testing.T) {
