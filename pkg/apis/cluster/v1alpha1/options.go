@@ -232,7 +232,9 @@ type OptionsHetzner struct {
 	NetworkCIDR string `default:"10.0.0.0/16" json:"networkCidr,omitzero"`
 	// SSHKeyName is the name of the SSH key to use for server access.
 	// The key must already exist in the Hetzner Cloud project.
-	// If empty, no SSH key is attached (only Talos API access).
+	// If empty, no pre-registered Hetzner SSH key is attached. Vanilla and K3s nodes
+	// are still bootstrapped over SSH with a generated per-cluster keypair delivered
+	// through cloud-init.
 	SSHKeyName string `json:"sshKeyName,omitzero"`
 	// TokenEnvVar is the environment variable containing the Hetzner API token.
 	// Defaults to "HCLOUD_TOKEN".
@@ -290,8 +292,11 @@ type OptionsHetzner struct {
 	// and the Talos API (50000) on every node to the specified CIDR blocks. When empty, both
 	// APIs are open to the entire internet (0.0.0.0/0 and ::/0). Applied to both the Hetzner
 	// Cloud Firewall and the Talos OS-level ingress firewall for defense-in-depth.
+	// For Vanilla and K3s on Hetzner, whose nodes are bootstrapped over SSH, the same list
+	// also gates SSH (22) and the Kubernetes API (6443), so the address of the machine running
+	// ksail must be included.
 	// Examples: ["203.0.113.0/24", "198.51.100.0/24"]
-	AllowedCIDRs []string `json:"allowedCidrs,omitzero" jsonschema_description:"CIDR blocks allowed to access the public Kubernetes API on control-plane nodes and public Talos API on every node. Private worker Talos API access from the cluster network remains enabled. When empty defaults to 0.0.0.0/0 and ::/0 (open to all IPv4 and IPv6)."` //nolint:lll
+	AllowedCIDRs []string `json:"allowedCidrs,omitzero" jsonschema_description:"CIDR blocks allowed to access the public Kubernetes API on control-plane nodes and public Talos API on every node. For Vanilla and K3s on Hetzner the same blocks also gate SSH (22) and the Kubernetes API (6443) used to bootstrap nodes, so include the address of the machine running ksail. Private worker Talos API access from the cluster network remains enabled. When empty defaults to 0.0.0.0/0 and ::/0 (open to all IPv4 and IPv6)."` //nolint:lll
 	// WorkerPublicIPv4 controls whether worker nodes are assigned a public IPv4 address.
 	// nil (default) or true assigns a public IPv4 (billed by Hetzner). false provisions
 	// IPv4-less workers; ksail then reaches their Talos API over the private network — which

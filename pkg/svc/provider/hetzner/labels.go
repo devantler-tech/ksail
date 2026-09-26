@@ -43,6 +43,11 @@ const (
 	// LabelTalosCluster identifies which cluster created the snapshot image.
 	LabelTalosCluster = "ksail.io/cluster"
 
+	// LabelTalosSnapshotBuild identifies one snapshot build. The build's temporary server
+	// and SSH key carry it, so a cancelled build can find and delete them. The snapshot
+	// image carries it too.
+	LabelTalosSnapshotBuild = "ksail.io/snapshot-build"
+
 	// maxLabelValueLen is the maximum length of a Hetzner Cloud label value.
 	// See https://github.com/hetznercloud/hcloud-go/blob/main/hcloud/label.go.
 	maxLabelValueLen = 63

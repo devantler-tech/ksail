@@ -112,22 +112,8 @@ runs:
       shell: bash
       env:
         TIMEOUT: ${{ inputs.workload-timeout }}
-      run: |
-        # Install a lightweight Helm chart to verify workload install works
-        install_succeeded=false
-        for attempt in 1 2 3; do
-          if ksail workload install ksail-install-test oci://ghcr.io/stefanprodan/charts/podinfo --version=6.7.1 --wait --timeout="$TIMEOUT"; then
-            install_succeeded=true
-            break
-          fi
-          echo "⚠️ workload install attempt $attempt failed, retrying in 10s…"
-          if [ "$attempt" -lt 3 ]; then sleep 10; fi
-        done
-        if [ "$install_succeeded" != "true" ]; then
-          echo "❌ workload install failed after 3 attempts"
-          exit 1
-        fi
-        echo "✅ workload install succeeded"
+      # Installs a lightweight Helm chart, removing a partial test release between attempts.
+      run: "$GITHUB_ACTION_PATH/install-with-recovery.sh"
 
     - name: 🧪 ksail workload install — verify
       id: workload-install-verify

@@ -1131,3 +1131,14 @@ func (p *KubernetesProvisioner) PublishConnectorKubeconfigForTest(
 func (p *Provisioner) AddReplacementCertSANForTest(server *hcloud.Server, role string) error {
 	return p.addReplacementCertSAN(server, role)
 }
+
+// ErrUnknownAutoscalerPoolForTest exposes errUnknownAutoscalerPool for unit testing.
+var ErrUnknownAutoscalerPoolForTest = errUnknownAutoscalerPool
+
+// AutoscalerNodeForTest exposes autoscalerNode, the node an autoscaler server is reconciled as.
+func (p *Provisioner) AutoscalerNodeForTest(
+	server *hcloud.Server,
+	talosAddress string,
+) (NodeWithRoleForTest, error) {
+	return p.autoscalerNode(server, talosAddress)
+}

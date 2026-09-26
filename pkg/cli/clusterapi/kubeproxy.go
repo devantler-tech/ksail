@@ -27,7 +27,7 @@ func (s *Service) ProxyKubeGet(
 	_, name, apiPath string,
 	query url.Values,
 ) (api.KubeProxyResponse, error) {
-	config, err := s.restConfigForCluster(name)
+	config, err := s.restConfigForCluster(ctx, name)
 	if err != nil {
 		return api.KubeProxyResponse{}, fmt.Errorf("resolve cluster %q: %w", name, err)
 	}

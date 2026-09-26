@@ -81,3 +81,27 @@ func TestHostKubeconfigPath_DefaultsWhenUnset(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, k8s.DefaultKubeconfigPath(), resolved)
 }
+
+// TestActiveKubeconfigPath_HonorsKubeconfigEnv verifies the active path is the first KUBECONFIG entry.
+func TestActiveKubeconfigPath_HonorsKubeconfigEnv(t *testing.T) {
+	first := filepath.Join(t.TempDir(), "first")
+	t.Setenv("KUBECONFIG", first+string(os.PathListSeparator)+filepath.Join(t.TempDir(), "second"))
+
+	assert.Equal(t, first, k8s.ActiveKubeconfigPath())
+}
+
+// TestActiveKubeconfigPath_DefaultsWhenEnvEmpty verifies the default path is used without KUBECONFIG.
+func TestActiveKubeconfigPath_DefaultsWhenEnvEmpty(t *testing.T) {
+	t.Setenv("KUBECONFIG", "")
+
+	assert.Equal(t, k8s.DefaultKubeconfigPath(), k8s.ActiveKubeconfigPath())
+}
+
+// TestActiveKubeconfigPath_KeepsAnUnexpandableEntry verifies a KUBECONFIG entry that cannot be
+// expanded is returned as given rather than replaced by the default path.
+func TestActiveKubeconfigPath_KeepsAnUnexpandableEntry(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("KUBECONFIG", "~/unexpandable")
+
+	assert.Equal(t, "~/unexpandable", k8s.ActiveKubeconfigPath())
+}
