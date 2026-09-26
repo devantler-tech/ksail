@@ -105,3 +105,6 @@ func NewSnapshotManagerWithUploaderForTest(
 		logWriter:    logWriter,
 	}
 }
+
+// BuildSSHFirewallRulesForTest exports buildSSHFirewallRules for testing.
+var BuildSSHFirewallRulesForTest = buildSSHFirewallRules

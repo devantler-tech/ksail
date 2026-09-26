@@ -66,8 +66,9 @@ var (
 type Infra interface {
 	// EnsureNetwork creates (or returns the existing) private network for the cluster.
 	EnsureNetwork(ctx context.Context, clusterName, cidr string) (*hcloud.Network, error)
-	// EnsureFirewall creates (or returns the existing) firewall for the cluster.
-	EnsureFirewall(
+	// EnsureSSHFirewall creates (or repairs) the cluster firewall, which must allow SSH
+	// because these provisioners bootstrap every node over it.
+	EnsureSSHFirewall(
 		ctx context.Context,
 		clusterName string,
 		allowedCIDRs []string,
@@ -281,7 +282,7 @@ func (b *Base) EnsureInfrastructure(
 
 	resolved.NetworkID = idOrZero(network, func(n *hcloud.Network) int64 { return n.ID })
 
-	firewall, err := b.Infra.EnsureFirewall(ctx, clusterName, b.Opts.AllowedCIDRs)
+	firewall, err := b.Infra.EnsureSSHFirewall(ctx, clusterName, b.Opts.AllowedCIDRs)
 	if err != nil {
 		return ResolvedInfra{}, fmt.Errorf("ensure firewall: %w", err)
 	}
