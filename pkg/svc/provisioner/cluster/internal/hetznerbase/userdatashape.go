@@ -29,7 +29,7 @@ var ErrUserDataShapeNotAllowed = errors.New(
 // `runcmd` -- is refused, because no bring-up produces it.
 func isAllowedTopLevelKey(key string) bool {
 	switch key {
-	case "write_files", "apt", "packages", "ssh_authorized_keys", "ssh_keys", "runcmd":
+	case "write_files", "apt", "packages", "ssh_authorized_keys", "ssh_keys", "chpasswd", "runcmd":
 		return true
 	default:
 		return false
@@ -124,17 +124,40 @@ func disallowedShape(document *yaml.Node) string {
 	return ""
 }
 
-// disallowedModule applies the per-module rules for the two modules that carry a
-// target rather than only data.
+// disallowedModule applies the per-module rules for modules that carry a
+// target or sensitive configuration rather than only data.
 func disallowedModule(key string, value *yaml.Node) string {
 	switch key {
 	case "write_files":
 		return disallowedWriteFiles(value)
 	case "runcmd":
 		return disallowedRunCmd(value)
+	case "chpasswd":
+		return disallowedChpasswd(value)
 	default:
 		return ""
 	}
+}
+
+// disallowedChpasswd enforces that chpasswd only carries the `expire: false`
+// directive the cloudinit builder emits to prevent root password expiration.
+func disallowedChpasswd(node *yaml.Node) string {
+	if node.Kind != yaml.MappingNode {
+		return "chpasswd that is not a mapping"
+	}
+
+	for index := 0; index+1 < len(node.Content); index += 2 {
+		key, val := node.Content[index], node.Content[index+1]
+		if key.Kind != yaml.ScalarNode || key.Value != "expire" {
+			return fmt.Sprintf("chpasswd key %q", key.Value)
+		}
+
+		if val.Kind != yaml.ScalarNode || val.Value != "false" {
+			return fmt.Sprintf("chpasswd expire value %q", val.Value)
+		}
+	}
+
+	return ""
 }
 
 // documentRoot returns the node a document wraps, or nil when the document

@@ -182,3 +182,45 @@ func TestDeriveServerSpecsAcceptsCommentOnlyUserData(t *testing.T) {
 
 	require.NoError(t, deriveWithUserData(t, "#cloud-config\n# worker\n"))
 }
+
+// TestDeriveServerSpecsRefusesDisallowedChpasswd pins the strict shape of chpasswd.
+// Only `expire: false` is permitted; setting arbitrary passwords or non-mapping values
+// must be rejected.
+func TestDeriveServerSpecsRefusesDisallowedChpasswd(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		userData string
+	}{
+		{
+			name:     "non-mapping chpasswd",
+			userData: "#cloud-config\nchpasswd: false\n",
+		},
+		{
+			name:     "chpasswd with list key",
+			userData: "#cloud-config\nchpasswd:\n  list: |\n    root:secret\n",
+		},
+		{
+			name:     "chpasswd with expire true",
+			userData: "#cloud-config\nchpasswd:\n  expire: true\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := deriveWithUserData(t, tt.userData)
+			require.ErrorIs(t, err, hetznerbase.ErrUserDataShapeNotAllowed)
+		})
+	}
+}
+
+// TestDeriveServerSpecsAcceptsChpasswdExpireFalse asserts that valid expire: false is accepted.
+func TestDeriveServerSpecsAcceptsChpasswdExpireFalse(t *testing.T) {
+	t.Parallel()
+
+	err := deriveWithUserData(t, "#cloud-config\nchpasswd:\n  expire: false\n")
+	require.NoError(t, err)
+}
+

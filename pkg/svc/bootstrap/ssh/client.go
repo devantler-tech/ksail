@@ -178,15 +178,16 @@ func (c *Client) ReadFile(ctx context.Context, path string) ([]byte, error) {
 
 // FileExists reports whether a regular file exists at path on the remote node
 // (`test -f`, with the path single-quoted against shell interpretation). A
-// false exit (code 1) means the file does not exist; any other failure — a
-// transport error or an unexpected exit code — is returned as an error.
+// clean false exit (code 1 with empty stderr) means the file does not exist;
+// any other failure — a transport error, remote error output, or an unexpected
+// exit code — is returned as an error.
 func (c *Client) FileExists(ctx context.Context, path string) (bool, error) {
 	result, err := c.Run(ctx, "test -f "+shellQuote(path))
 	if err == nil {
 		return true, nil
 	}
 
-	if errors.Is(err, ErrCommandFailed) && result.ExitCode == 1 {
+	if errors.Is(err, ErrCommandFailed) && result.ExitCode == 1 && len(bytes.TrimSpace(result.Stderr)) == 0 {
 		return false, nil
 	}
 
