@@ -205,6 +205,10 @@ func TestDeriveServerSpecsRefusesDisallowedChpasswd(t *testing.T) {
 			name:     "chpasswd with expire true",
 			userData: "#cloud-config\nchpasswd:\n  expire: true\n",
 		},
+		{
+			name:     "empty chpasswd mapping",
+			userData: "#cloud-config\nchpasswd: {}\n",
+		},
 	}
 
 	for _, tt := range tests {
