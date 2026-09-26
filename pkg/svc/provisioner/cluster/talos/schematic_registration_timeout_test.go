@@ -18,17 +18,20 @@ import (
 func TestRegisterSchematicReturnsTheStoredID(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		body, err := io.ReadAll(request.Body)
-		if err != nil {
-			http.Error(writer, err.Error(), http.StatusBadRequest)
+	server := httptest.NewServer(
+		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			body, err := io.ReadAll(request.Body)
+			if err != nil {
+				http.Error(writer, err.Error(), http.StatusBadRequest)
 
-			return
-		}
+				return
+			}
 
-		writer.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(writer).Encode(map[string]string{"id": "stored-id", "schematic": string(body)})
-	}))
+			writer.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(writer).
+				Encode(map[string]string{"id": "stored-id", "schematic": string(body)})
+		}),
+	)
 	t.Cleanup(server.Close)
 
 	id, err := talosprovisioner.RegisterSchematicForTest(
@@ -44,12 +47,15 @@ func TestRegisterSchematicTimesOutOnAStalledFactory(t *testing.T) {
 	t.Parallel()
 
 	release := make(chan struct{})
-	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
-		select {
-		case <-release:
-		case <-request.Context().Done():
-		}
-	}))
+	server := httptest.NewServer(
+		http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+			select {
+			case <-release:
+			case <-request.Context().Done():
+			}
+		}),
+	)
+
 	t.Cleanup(func() {
 		close(release)
 		server.Close()
