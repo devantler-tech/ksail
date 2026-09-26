@@ -62,12 +62,20 @@ func TestAutoscalerSecretPayloadBootsEveryPoolWithTheAutoscalerShape(t *testing.
 			AutoscalerNodePools: []v1alpha1.NodePool{
 				{Name: "autoscale-cx43", Labels: map[string]string{"workload": "general"}},
 				{Name: "autoscale-cx53"},
+				{
+					Name: "autoscale-conflicting",
+					Labels: map[string]string{
+						longhornDefaultDiskLabel:         "true",
+						talosprovisioner.LabelAutoscaled: "false",
+						"workload":                       "custom",
+					},
+				},
 			},
 		})
 
 	pools, err := provisioner.BuildAutoscalerPoolConfigsForTest(configs.Bundle())
 	require.NoError(t, err)
-	require.Len(t, pools, 2)
+	require.Len(t, pools, 3)
 
 	clientset := fake.NewClientset()
 	_, err = talosprovisioner.ApplyAutoscalerConfigSecret(
@@ -84,9 +92,9 @@ func TestAutoscalerSecretPayloadBootsEveryPoolWithTheAutoscalerShape(t *testing.
 	require.NoError(t, err)
 
 	payload := decodeClusterConfig(t, secret.Data[clusterConfigSecretKey])
-	require.Len(t, payload.NodeConfigs, 2)
+	require.Len(t, payload.NodeConfigs, 3)
 
-	for _, name := range []string{"autoscale-cx43", "autoscale-cx53"} {
+	for _, name := range []string{"autoscale-cx43", "autoscale-cx53", "autoscale-conflicting"} {
 		nodeConfig, ok := payload.NodeConfigs[name]
 		require.True(t, ok, "pool %s is missing from the Secret", name)
 
@@ -105,4 +113,10 @@ func TestAutoscalerSecretPayloadBootsEveryPoolWithTheAutoscalerShape(t *testing.
 	require.NoError(t, err)
 	assert.Equal(t, "general", booted.RawV1Alpha1().MachineConfig.MachineNodeLabels["workload"],
 		"a pool's own labels reach the config its nodes boot from")
+
+	conflicting := payload.NodeConfigs["autoscale-conflicting"]
+	bootedConflicting, err := configloader.NewFromBytes(decodePoolCloudInit(t, conflicting.CloudInit))
+	require.NoError(t, err)
+	assert.Equal(t, "custom", bootedConflicting.RawV1Alpha1().MachineConfig.MachineNodeLabels["workload"],
+		"a pool's non-conflicting labels reach the config its nodes boot from")
 }

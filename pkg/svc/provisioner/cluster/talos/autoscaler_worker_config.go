@@ -126,10 +126,10 @@ func shapeAutoscalerWorker(
 			cfg.MachineConfig.MachineNodeLabels = map[string]string{}
 		}
 
+		maps.Copy(cfg.MachineConfig.MachineNodeLabels, poolLabels)
+
 		delete(cfg.MachineConfig.MachineNodeLabels, "node.longhorn.io/create-default-disk")
 		cfg.MachineConfig.MachineNodeLabels[LabelAutoscaled] = labelValueTrue
-
-		maps.Copy(cfg.MachineConfig.MachineNodeLabels, poolLabels)
 
 		applyPoolTaints(cfg, poolTaints)
 
