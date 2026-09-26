@@ -49,25 +49,33 @@ func TestAutoscalerSecretPayloadBootsEveryPoolWithTheAutoscalerShape(t *testing.
 	t.Parallel()
 
 	configs := workerConfigsWithLonghornLabel(t)
-	require.Equal(t, "true",
+	require.Equal(
+		t,
+		"true",
 		configs.Bundle().Worker().RawV1Alpha1().MachineConfig.MachineNodeLabels[longhornDefaultDiskLabel],
 		"precondition: the static worker config carries the Longhorn label",
 	)
 
-	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithHetznerOptions(v1alpha1.OptionsHetzner{
-		NodeAutoscalerEnabled: true,
-		AutoscalerNodePools: []v1alpha1.NodePool{
-			{Name: "autoscale-cx43", Labels: map[string]string{"workload": "general"}},
-			{Name: "autoscale-cx53"},
-		},
-	})
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{
+			NodeAutoscalerEnabled: true,
+			AutoscalerNodePools: []v1alpha1.NodePool{
+				{Name: "autoscale-cx43", Labels: map[string]string{"workload": "general"}},
+				{Name: "autoscale-cx53"},
+			},
+		})
 
 	pools, err := provisioner.BuildAutoscalerPoolConfigsForTest(configs.Bundle())
 	require.NoError(t, err)
 	require.Len(t, pools, 2)
 
 	clientset := fake.NewClientset()
-	_, err = talosprovisioner.ApplyAutoscalerConfigSecret(context.Background(), clientset, "123", pools)
+	_, err = talosprovisioner.ApplyAutoscalerConfigSecret(
+		context.Background(),
+		clientset,
+		"123",
+		pools,
+	)
 	require.NoError(t, err)
 
 	secret, err := clientset.CoreV1().Secrets("kube-system").Get(
