@@ -18,6 +18,7 @@ import (
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	check "github.com/siderolabs/talos/pkg/cluster/check"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -1141,4 +1142,12 @@ func (p *Provisioner) AutoscalerNodeForTest(
 	talosAddress string,
 ) (NodeWithRoleForTest, error) {
 	return p.autoscalerNode(server, talosAddress)
+}
+
+// BuildAutoscalerPoolConfigsForTest exposes buildAutoscalerPoolConfigs, the step that turns the
+// configured pools and the cluster's worker config into the configs the autoscaler Secret stores.
+func (p *Provisioner) BuildAutoscalerPoolConfigsForTest(
+	configBundle *bundle.Bundle,
+) ([]AutoscalerPoolConfig, error) {
+	return p.buildAutoscalerPoolConfigs(configBundle)
 }
