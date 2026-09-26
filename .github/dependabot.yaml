@@ -102,6 +102,15 @@ updates:
       # devantler-tech actions/workflows are our own code — bump now, no cooldown.
       exclude:
         - "devantler-tech/*"
+    # CodeQL's init, autobuild and analyze actions are one release and refuse to run
+    # at mixed versions: bumping autobuild alone failed code scanning with a
+    # configuration error (ksail#7306). Dependabot tracks each sub-action path as its
+    # own dependency, so group them to move together in one PR.
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action"
+          - "github/codeql-action/*"
 
   - package-ecosystem: npm
     directory: /docs

@@ -26,9 +26,9 @@ import (
 // workers), so this does not diff each autoscaler worker individually. A worker
 // already carrying the change just stages an equivalent config and reboots
 // harmlessly. Each node's config is rebuilt from its RUNNING config via
-// buildStagedNodeConfig → buildDesiredNodeConfig, preserving the per-node sections
-// an autoscaler node carries (server-name hostname, the ksail.io/autoscaled marker,
-// pool labels/taints) — see applyInPlaceToAutoscalerNodes.
+// buildDesiredConfigForNode, which keeps its server-name hostname and gives it its
+// pool's autoscaler worker shape (the ksail.io/autoscaled marker, pool labels and
+// taints) — see applyInPlaceToAutoscalerNodes.
 //
 // Draining a node can make pods pending and briefly prompt the autoscaler to add a
 // node, which it scales back down once the rebooted node returns; nodes are handled
@@ -50,7 +50,7 @@ func (p *Provisioner) rollingRebootAutoscalerNodes(
 		return err
 	}
 
-	// buildStagedNodeConfig rebuilds each node's config from its running config + the
+	// buildDesiredConfigForNode rebuilds each node's config from its running config + the
 	// cluster PKI, which only a control-plane node carries; seed it once and reuse it
 	// for every node (see fetchSecretsSource / #4963). A worker source would fail
 	// "parse PEM block".
@@ -96,6 +96,15 @@ func (p *Provisioner) rollingRebootAutoscalerServers(
 			return fmt.Errorf("resolving address for autoscaler node %s: %w", server.Name, addrErr)
 		}
 
+		// Resolve the pool before the drain: a node whose boot config is unknown is left
+		// untouched rather than drained and then refused a staged config.
+		node, poolErr := p.autoscalerNode(server, serverIP)
+		if poolErr != nil {
+			recordFailedChange(result, RoleWorker, server.Name, poolErr)
+
+			return poolErr
+		}
+
 		_, _ = fmt.Fprintf(
 			p.logWriter,
 			"  [%d/%d] Rolling reboot for autoscaler node %s...\n",
@@ -108,7 +117,7 @@ func (p *Provisioner) rollingRebootAutoscalerServers(
 		rebootErr := p.rollingRebootSingleNode(
 			ctx,
 			clientset,
-			nodeWithRole{IP: serverIP, Role: RoleWorker},
+			node,
 			secretsSource,
 			storageProber,
 		)

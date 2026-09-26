@@ -53,7 +53,7 @@ func TestWatchKubeForcesWatchAndForwardsStream(t *testing.T) {
 	defer server.Close()
 
 	service := &Service{
-		restConfigForCluster: func(string) (*rest.Config, error) {
+		restConfigForCluster: func(context.Context, string) (*rest.Config, error) {
 			return &rest.Config{Host: server.URL}, nil
 		},
 	}
@@ -107,7 +107,7 @@ func TestWatchKubeCleansPathToStayOnHost(t *testing.T) {
 	defer server.Close()
 
 	service := &Service{
-		restConfigForCluster: func(string) (*rest.Config, error) {
+		restConfigForCluster: func(context.Context, string) (*rest.Config, error) {
 			return &rest.Config{Host: server.URL}, nil
 		},
 	}
@@ -143,7 +143,7 @@ func TestWatchKubeDoesNotMutateCallerQuery(t *testing.T) {
 	defer server.Close()
 
 	service := &Service{
-		restConfigForCluster: func(string) (*rest.Config, error) {
+		restConfigForCluster: func(context.Context, string) (*rest.Config, error) {
 			return &rest.Config{Host: server.URL}, nil
 		},
 	}

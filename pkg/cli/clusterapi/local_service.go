@@ -177,7 +177,7 @@ func NewService() *Service {
 	service := &Service{
 		newFactory:        defaultFactory,
 		discoverProviders: clusterdiscovery.AllProviders(),
-		kubeconfigPath:    k8s.DefaultKubeconfigPath,
+		kubeconfigPath:    k8s.ActiveKubeconfigPath,
 		plugins:           pluginStore{dir: defaultPluginsDir},
 		pluginCatalog:     defaultPluginCatalog(),
 		loadClusterSpec:   state.LoadClusterSpec,

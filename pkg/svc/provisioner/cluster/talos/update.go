@@ -978,7 +978,7 @@ func (p *Provisioner) applyNodeConfig(
 		return
 	}
 
-	desired, err := p.buildDesiredNodeConfig(running, secretsSource, node.Role)
+	desired, err := p.buildDesiredConfigForNode(running, secretsSource, node)
 	if err != nil {
 		p.recordNodeConfigFailure(node, result, fmt.Sprintf("build desired config: %v", err))
 

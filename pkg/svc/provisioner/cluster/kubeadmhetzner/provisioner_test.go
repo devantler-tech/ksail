@@ -60,7 +60,7 @@ func (f *fakeInfra) EnsureNetwork(
 	return &hcloud.Network{}, f.ensureNetworkErr
 }
 
-func (f *fakeInfra) EnsureFirewall(
+func (f *fakeInfra) EnsureSSHFirewall(
 	_ context.Context,
 	_ string,
 	_ []string,
