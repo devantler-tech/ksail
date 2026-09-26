@@ -2,10 +2,12 @@ package hetzner_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -86,12 +88,18 @@ type buildResourcesAPI struct {
 	// request still in flight at cancellation would.
 	created func() bool
 
-	// holdServerDelete makes a server deletion wait until the SSH key is deleted (or
-	// keyWait passes), and records whether that happened while the server deletion was
-	// still in flight.
+	// holdServerDelete holds each deletion open until the other one starts (or keyWait
+	// passes), so only overlapping deletions see each other. The SSH key deletion records
+	// whether the server deletion was in flight when it arrived.
 	holdServerDelete        bool
+	serverDeleteInFlight    bool
+	serverDeleteStarted     chan struct{}
 	keyDeleted              chan struct{}
 	keyDeletedDuringServers bool
+
+	// failedServerActions makes the action of each of the first N server deletions fail.
+	failedServerActions int
+	serverDeletes       int
 }
 
 func newBuildResourcesAPI(t *testing.T, api *buildResourcesAPI) *hcloud.Client {
@@ -135,42 +143,95 @@ func newBuildResourcesAPI(t *testing.T, api *buildResourcesAPI) *hcloud.Client {
 
 	mux.HandleFunc("DELETE /ssh_keys/{id}", api.deleteSSHKey)
 
+	mux.HandleFunc("GET /actions", api.listActions)
+
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
 	return newTestHcloudClient(t, srv.URL)
 }
 
-// deleteServer records a server deletion. With holdServerDelete set, it first waits for the
-// SSH key deletion (or keyWait), and records whether that arrived while this was in flight.
+// deleteServer records a server deletion and returns its running action.
 func (api *buildResourcesAPI) deleteServer(
 	t *testing.T, writer http.ResponseWriter, request *http.Request,
 ) {
 	t.Helper()
 
 	if api.holdServerDelete {
+		api.mu.Lock()
+		api.serverDeleteInFlight = true
+		api.mu.Unlock()
+		close(api.serverDeleteStarted)
+
 		select {
 		case <-api.keyDeleted:
-			api.mu.Lock()
-			api.keyDeletedDuringServers = true
-			api.mu.Unlock()
 		case <-time.After(keyWait):
 		}
+
+		api.mu.Lock()
+		api.serverDeleteInFlight = false
+		api.mu.Unlock()
 	}
 
 	api.recordDelete(request)
+
+	api.mu.Lock()
+	api.serverDeletes++
+	actionID := int64(api.serverDeletes)
+	api.mu.Unlock()
+
 	writeJSONResponse(t, writer, schema.ServerDeleteResponse{
-		Action: schema.Action{ID: 1, Command: "delete_server", Status: "running"},
+		Action: schema.Action{ID: actionID, Command: "delete_server", Status: "running"},
 	})
 }
 
 // deleteSSHKey records an SSH key deletion and signals keyDeleted when a test waits on it.
 func (api *buildResourcesAPI) deleteSSHKey(writer http.ResponseWriter, request *http.Request) {
+	if api.holdServerDelete {
+		select {
+		case <-api.serverDeleteStarted:
+		case <-time.After(keyWait):
+		}
+
+		api.mu.Lock()
+		api.keyDeletedDuringServers = api.serverDeleteInFlight
+		api.mu.Unlock()
+	}
+
 	api.recordDelete(request)
 	writer.WriteHeader(http.StatusNoContent)
 
 	if api.keyDeleted != nil {
 		close(api.keyDeleted)
+	}
+}
+
+// listActions reports the actions of server deletions. The first failedServerActions fail.
+func (api *buildResourcesAPI) listActions(writer http.ResponseWriter, request *http.Request) {
+	resp := schema.ActionListResponse{}
+
+	for _, raw := range request.URL.Query()["id"] {
+		actionID, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			http.Error(writer, err.Error(), http.StatusBadRequest)
+
+			return
+		}
+
+		action := schema.Action{ID: actionID, Command: "delete_server", Status: "success"}
+		if actionID <= int64(api.failedServerActions) {
+			action.Status = "error"
+			action.Error = &schema.ActionError{Code: "action_failed", Message: "deletion failed"}
+		}
+
+		resp.Actions = append(resp.Actions, action)
+	}
+
+	writer.Header().Set("Content-Type", "application/json")
+
+	err := json.NewEncoder(writer).Encode(resp)
+	if err != nil {
+		http.Error(writer, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -343,9 +404,10 @@ func TestSnapshotManager_EnsureTalosSnapshot_DeletesServerAndKeyConcurrently(t *
 	ctx, cancel := context.WithCancel(t.Context())
 	uploader := newStuckUploader(t, cancel)
 	api := &buildResourcesAPI{
-		listedBuildID:    uploader.buildID,
-		holdServerDelete: true,
-		keyDeleted:       make(chan struct{}),
+		listedBuildID:       uploader.buildID,
+		holdServerDelete:    true,
+		serverDeleteStarted: make(chan struct{}),
+		keyDeleted:          make(chan struct{}),
 	}
 	client := newBuildResourcesAPI(t, api)
 	manager := hetzner.NewSnapshotManagerWithUploaderForTest(client, uploader, nil)
@@ -360,4 +422,21 @@ func TestSnapshotManager_EnsureTalosSnapshot_DeletesServerAndKeyConcurrently(t *
 
 	assert.True(t, api.keyDeletedDuringServers,
 		"a slow server deletion must not delay the SSH key deletion")
+}
+
+func TestSnapshotManager_EnsureTalosSnapshot_RetriesAFailedServerDeletion(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	uploader := newStuckUploader(t, cancel)
+	api := &buildResourcesAPI{listedBuildID: uploader.buildID, failedServerActions: 1}
+	client := newBuildResourcesAPI(t, api)
+	manager := hetzner.NewSnapshotManagerWithUploaderForTest(client, uploader, nil)
+
+	err := ensureTalosSnapshotWithin(ctx, t, manager)
+
+	require.ErrorIs(t, err, context.Canceled)
+	assert.NotContains(t, err.Error(), "failed to delete temporary snapshot build server")
+	assert.ElementsMatch(t, []string{buildServerPath, buildServerPath, buildSSHKeyPath},
+		api.deletedPaths(), "a deletion whose action failed must be retried")
 }

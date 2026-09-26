@@ -303,12 +303,22 @@ func (sm *SnapshotManager) deleteBuildServers(ctx context.Context, selector stri
 			DefaultDeleteRetryDelay,
 			"context cancelled while retrying snapshot build server deletion",
 			func() (bool, error) {
-				_, _, err := sm.hcloudClient.Server.DeleteWithResult(ctx, server)
-				if err == nil || hcloud.IsError(err, hcloud.ErrorCodeNotFound) {
+				result, _, err := sm.hcloudClient.Server.DeleteWithResult(ctx, server)
+				if hcloud.IsError(err, hcloud.ErrorCodeNotFound) {
 					return true, nil
 				}
 
-				return false, fmt.Errorf("delete server: %w", err)
+				if err != nil {
+					return false, fmt.Errorf("delete server: %w", err)
+				}
+
+				// An accepted request only queues the deletion, which can still fail.
+				err = sm.hcloudClient.Action.WaitFor(ctx, result.Action)
+				if err != nil {
+					return false, fmt.Errorf("wait for server deletion: %w", err)
+				}
+
+				return true, nil
 			},
 			func(lastErr error) error {
 				return fmt.Errorf(
