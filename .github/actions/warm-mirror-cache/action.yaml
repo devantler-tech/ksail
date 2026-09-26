@@ -526,8 +526,13 @@ runs:
               MIRROR_REF="localhost:5004/$NAME"
             fi
           fi
+          # A digest pin names the exact manifest, often a multi-arch index; copy
+          # every platform so the mirror holds that same digest. A tag-only pin
+          # keeps the single-platform copy the tests pull today.
+          ALL_PLATFORMS=()
+          [[ "$REF" == *@* ]] && ALL_PLATFORMS=(--all)
           echo "📥 Copying $image → $MIRROR_REF"
-          if ! skopeo copy --retry-times 3 --dest-tls-verify=false \
+          if ! skopeo copy --retry-times 3 --dest-tls-verify=false "${ALL_PLATFORMS[@]}" \
             "docker://ecr-public.aws.com/$SOURCE_REF" "docker://$MIRROR_REF"; then
             FAILED="${FAILED}  ${image}"$'\n'
           fi

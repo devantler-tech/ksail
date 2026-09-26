@@ -150,16 +150,19 @@ runs:
         ARGS: ${{ inputs.args }}
         KSAIL_VERSION: ${{ inputs.ksail-version }}
         CONFIG: ${{ inputs.config }}
+        MIRROR_REGISTRY: ${{ inputs.mirror-registry }}
       run: |
         echo "ksail-version=$KSAIL_VERSION" >> "$GITHUB_OUTPUT"
 
         if [ "$PROVIDER" = "Docker" ]; then
           # shellcheck disable=SC2086
           IMAGES=$(ksail ${CONFIG:+--config "$CONFIG"} workload images --distribution "$DISTRIBUTION" $ARGS 2>/dev/null || true)
+          # The mirror set is part of the key: the same images mirrored through a
+          # different set of registries produce a different set of volumes.
           if [ -n "$IMAGES" ]; then
-            IMAGES_HASH=$(echo "$IMAGES" | sort -u | sha256sum | cut -c1-12)
+            IMAGES_HASH=$( { echo "$IMAGES" | sort -u; echo "mirrors=$MIRROR_REGISTRY"; } | sha256sum | cut -c1-12)
           else
-            IMAGES_HASH="none"
+            IMAGES_HASH="none-$(echo "mirrors=$MIRROR_REGISTRY" | sha256sum | cut -c1-8)"
           fi
           echo "images-hash=$IMAGES_HASH" >> "$GITHUB_OUTPUT"
         fi
