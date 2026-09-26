@@ -18,16 +18,16 @@ import (
 func TestRegisterSchematicReturnsTheStoredID(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		body, err := io.ReadAll(request.Body)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(writer, err.Error(), http.StatusBadRequest)
 
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"id": "stored-id", "schematic": string(body)})
+		writer.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(writer).Encode(map[string]string{"id": "stored-id", "schematic": string(body)})
 	}))
 	t.Cleanup(server.Close)
 
@@ -44,10 +44,10 @@ func TestRegisterSchematicTimesOutOnAStalledFactory(t *testing.T) {
 	t.Parallel()
 
 	release := make(chan struct{})
-	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
 		select {
 		case <-release:
-		case <-r.Context().Done():
+		case <-request.Context().Done():
 		}
 	}))
 	t.Cleanup(func() {

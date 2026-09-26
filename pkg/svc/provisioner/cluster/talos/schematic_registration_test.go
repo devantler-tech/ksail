@@ -1,6 +1,7 @@
 package talosprovisioner_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -138,9 +139,11 @@ func TestEnsureSchematicRegisteredLeavesOtherSchematicsAlone(t *testing.T) {
 func TestUpgradeDistributionRegistersBeforeRollingNodes(t *testing.T) {
 	t.Parallel()
 
+	var log bytes.Buffer
+
 	registrar := &fakeRegistrar{err: errFactoryUnavailable}
 	prov := talosprovisioner.NewProvisioner(extensionConfigs(t, []string{"siderolabs/iscsi-tools"}), nil).
-		WithLogWriter(io.Discard).
+		WithLogWriter(&log).
 		WithHetznerOptions(v1alpha1.OptionsHetzner{}).
 		WithSchematicRegistrarForTest(registrar.register)
 
@@ -148,4 +151,7 @@ func TestUpgradeDistributionRegistersBeforeRollingNodes(t *testing.T) {
 
 	require.ErrorIs(t, err, errFactoryUnavailable)
 	assert.Len(t, registrar.calls, 1)
+	// The fixture has no nodes, so the roll itself is a no-op; the log line emitted just before
+	// it proves the upgrade stopped at registration rather than rolling first.
+	assert.NotContains(t, log.String(), "Upgrading Talos from")
 }
