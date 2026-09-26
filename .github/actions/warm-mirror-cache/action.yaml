@@ -7,7 +7,8 @@ description: |
   This action:
   1. Extracts images for all distribution × component combinations
   2. Deduplicates the image list
-  3. Creates mirror registries for docker.io, ghcr.io, quay.io, and registry.k8s.io
+  3. Creates mirror registries for docker.io, ghcr.io, quay.io, registry.k8s.io,
+     and ecr-public.aws.com
   4. Pulls all images through the mirrors (populating their volumes)
   5. Saves the mirror volumes to GitHub Actions cache
 
@@ -163,7 +164,7 @@ runs:
 
         # Compute a separate hash of just the distribution node image refs (k3s,
         # kind, talos) so the dist-node pre-load tars can be cached under their own
-        # key, independent of the four mirror volumes. A GitHub Actions cache entry
+        # key, independent of the five mirror volumes. A GitHub Actions cache entry
         # is immutable once saved, so a dist-node tar that failed to save (e.g. a
         # transient Docker Hub / GHCR error) could never be repaired in place under
         # the shared mirror-cache key — every later cluster create then pulled the
@@ -185,6 +186,46 @@ runs:
         if [ "$COUNT" -gt 30 ]; then
           echo "  ... and $((COUNT - 30)) more"
         fi
+
+    - name: 🧭 Check every image registry has a mirror
+      shell: bash
+      run: |
+        # A system-test image from a registry no CI mirror covers is pulled
+        # anonymously from the shared runner IP on every job, so an upstream
+        # quota can fail unrelated PRs (#7332: Argo CD's Redis on ECR Public).
+        # Fail here, while the list is known, rather than later in a test.
+        #
+        # MIRRORED must match the mirrors created below, restore-mirror-cache,
+        # ksail-cluster's import loop and the nested mirror specs in
+        # ksail-test-kubernetes-provider.
+        MIRRORED=" docker.io ghcr.io quay.io registry.k8s.io ecr-public.aws.com "
+        # Registries deliberately pulled directly. Add one only with a reason.
+        #   reg.kyverno.io — Kyverno's own registry; no anonymous quota has
+        #   failed a system test, so it is not mirrored.
+        DIRECT=" reg.kyverno.io "
+
+        UNCOVERED=""
+        while IFS= read -r image; do
+          [ -n "$image" ] || continue
+          FIRST_COMPONENT="${image%%/*}"
+          # Same host heuristic as the pull loop: a first component with "."
+          # or ":" (or "localhost") is a registry host; anything else is Docker Hub.
+          if [[ "$image" == */* ]] && { [[ "$FIRST_COMPONENT" == *"."* ]] || [[ "$FIRST_COMPONENT" == *":"* ]] || [[ "$FIRST_COMPONENT" == "localhost" ]]; }; then
+            HOST="$FIRST_COMPONENT"
+          else
+            HOST="docker.io"
+          fi
+          if [[ "$MIRRORED" != *" $HOST "* ]] && [[ "$DIRECT" != *" $HOST "* ]]; then
+            UNCOVERED="${UNCOVERED}  ${image}"$'\n'
+          fi
+        done < /tmp/all-images.txt
+
+        if [ -n "$UNCOVERED" ]; then
+          echo "::error::System-test images come from a registry with no CI mirror. Add a mirror for it (see #7332), or list it under DIRECT with a reason:"
+          printf '%s' "$UNCOVERED"
+          exit 1
+        fi
+        echo "✅ Every system-test image registry is mirrored or deliberately pulled directly"
 
     - name: 🔑 Generate cache key
       id: generate-key
@@ -212,7 +253,7 @@ runs:
 
         # The distribution node pre-load tars are cached under their own key (keyed
         # on just the k3s/kind/talos image refs) so they are (re)generated
-        # independently of the four mirror volumes.
+        # independently of the five mirror volumes.
         DIST_NODE_CACHE_KEY="dist-node-${CACHE_VERSION}-${DIST_NODE_IMAGES_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
         echo "dist-node-cache-key=$DIST_NODE_CACHE_KEY" >> "$GITHUB_OUTPUT"
         echo "📦 Distribution node cache key: $DIST_NODE_CACHE_KEY"
@@ -254,15 +295,16 @@ runs:
       run: |
         if [ -d "/tmp/mirror-cache" ] && [ -n "$(ls -A /tmp/mirror-cache 2>/dev/null)" ]; then
           echo "✅ Cache restored, checking completeness..."
-          # Check for all 4 mirror volumes (using KSail's naming convention).
+          # Check for all 5 mirror volumes (using KSail's naming convention).
           # The KWOK control plane tar is cached under its own key (see the KWOK
           # cache steps), so it is intentionally not part of this completeness check.
           if [ -f "/tmp/mirror-cache/docker.io.tar" ] && \
              [ -f "/tmp/mirror-cache/ghcr.io.tar" ] && \
              [ -f "/tmp/mirror-cache/quay.io.tar" ] && \
-             [ -f "/tmp/mirror-cache/registry.k8s.io.tar" ]; then
+             [ -f "/tmp/mirror-cache/registry.k8s.io.tar" ] && \
+             [ -f "/tmp/mirror-cache/ecr-public.aws.com.tar" ]; then
             echo "complete=true" >> "$GITHUB_OUTPUT"
-            echo "✅ Cache complete: 4 mirror volumes present"
+            echo "✅ Cache complete: 5 mirror volumes present"
           else
             echo "complete=false" >> "$GITHUB_OUTPUT"
             echo "⚠️ Cache incomplete, will re-warm"
@@ -280,7 +322,7 @@ runs:
       if: steps.check-cache.outputs.complete != 'true'
       shell: bash
       run: |
-        echo "🐳 Creating mirror registries for docker.io, ghcr.io, quay.io, and registry.k8s.io..."
+        echo "🐳 Creating mirror registries for docker.io, ghcr.io, quay.io, registry.k8s.io, and ecr-public.aws.com..."
 
         # Create Docker network for mirrors
         docker network create ksail-mirrors 2>/dev/null || true
@@ -321,6 +363,17 @@ runs:
           -v registry.k8s.io:/var/lib/registry \
           registry:3 || echo "registry.k8s.io mirror already exists"
 
+        # Create ecr-public.aws.com mirror (port 5004). Argo CD's chart pulls its
+        # Redis image from ECR Public, whose anonymous data quota is per source IP
+        # and is shared by every job on a GitHub-hosted runner (#7332).
+        docker run -d \
+          --name ecr-public.aws.com-mirror \
+          --network ksail-mirrors \
+          -p 5004:5000 \
+          -e REGISTRY_PROXY_REMOTEURL=https://ecr-public.aws.com \
+          -v ecr-public.aws.com:/var/lib/registry \
+          registry:3 || echo "ecr-public.aws.com mirror already exists"
+
         # Wait for registries to be ready
         sleep 5
         echo "✅ Mirror registries created"
@@ -353,6 +406,8 @@ runs:
             PULL_REF="${image/quay.io\//localhost:5002/}"
           elif [[ "$image" == registry.k8s.io/* ]]; then
             PULL_REF="${image/registry.k8s.io\//localhost:5003/}"
+          elif [[ "$image" == ecr-public.aws.com/* ]]; then
+            PULL_REF="${image/ecr-public.aws.com\//localhost:5004/}"
           elif [[ "$image" == docker.io/* ]]; then
             PULL_REF="${image/docker.io\//localhost:5000/}"
           elif [[ "$image" == */* ]] && { [[ "$FIRST_COMPONENT" == *"."* ]] || [[ "$FIRST_COMPONENT" == *":"* ]] || [[ "$FIRST_COMPONENT" == "localhost" ]]; }; then
@@ -438,6 +493,13 @@ runs:
           -v /tmp/mirror-cache:/backup \
           mirror.gcr.io/library/busybox:1.37 \
           tar -cf /backup/registry.k8s.io.tar -C /volume . || echo "⚠️ Failed to export registry.k8s.io mirror"
+
+        # Export ecr-public.aws.com mirror volume
+        docker run --rm \
+          -v ecr-public.aws.com:/volume:ro \
+          -v /tmp/mirror-cache:/backup \
+          mirror.gcr.io/library/busybox:1.37 \
+          tar -cf /backup/ecr-public.aws.com.tar -C /volume . || echo "⚠️ Failed to export ecr-public.aws.com mirror"
 
         # Show cache size
         if command -v du &> /dev/null; then
@@ -599,7 +661,7 @@ runs:
           fi
 
           # Direct-pull fallback for the self-heal / targeted-refresh path: when the
-          # four mirror volumes are already cached the mirror registries were never
+          # five mirror volumes are already cached the mirror registries were never
           # created this run, so neither the canonical tag nor the localhost mirror
           # ref exists locally. Pull the exact digest-pinned reference from upstream.
           #
@@ -685,7 +747,7 @@ runs:
       run: |
         # Verify all 4 required mirror volumes were exported (see issue #2075)
         echo "🔍 Verifying exported mirror volumes..."
-        REQUIRED_VOLUMES=("docker.io" "ghcr.io" "quay.io" "registry.k8s.io")
+        REQUIRED_VOLUMES=("docker.io" "ghcr.io" "quay.io" "registry.k8s.io" "ecr-public.aws.com")
         MISSING_VOLUMES=()
 
         for vol in "${REQUIRED_VOLUMES[@]}"; do
@@ -712,7 +774,7 @@ runs:
       if: always() && steps.check-cache.outputs.complete != 'true'
       shell: bash
       run: |
-        docker rm -f docker.io-mirror ghcr.io-mirror quay.io-mirror registry.k8s.io-mirror 2>/dev/null || true
+        docker rm -f docker.io-mirror ghcr.io-mirror quay.io-mirror registry.k8s.io-mirror ecr-public.aws.com-mirror 2>/dev/null || true
         docker network rm ksail-mirrors 2>/dev/null || true
 
     - name: 💾 Save mirror cache

@@ -1428,7 +1428,7 @@ jobs:
           persist-credentials: false
 
       - name: 🧹 Free disk space
-        # Pulls every system-test image through four mirror registries and tars
+        # Pulls every system-test image through five mirror registries and tars
         # the volumes (multi-GB) — the prime "no space left on device" offender
         # (e.g. run 27774791970). Reclaim disk before warming the cache.
         uses: ./.github/actions/free-disk-space

@@ -17,6 +17,9 @@ inputs:
   init:
     description: "Whether to run ksail project init before create"
     default: "true"
+  mirror-registry:
+    description: "Comma-separated mirror registry specs passed as --mirror-registry to project init and cluster create (VCluster scaffolds no mirror config at init, so create needs the flag too). Replaces KSail's default mirror list, so include every registry to mirror. Kept apart from args because workload images does not accept the flag."
+    default: ""
   ksail-version:
     description: "KSail version to install (e.g. '5.55.0') or 'latest'"
     default: "latest"
@@ -194,7 +197,7 @@ runs:
         # token into error logs on throttle. mirror.gcr.io is anonymous and not
         # rate-limited. It re-serializes manifests, so the upstream digest can't
         # be pinned through it — tag-pinned, like registry:3 in pull-registry-image.sh.
-        for registry in docker.io ghcr.io quay.io registry.k8s.io; do
+        for registry in docker.io ghcr.io quay.io registry.k8s.io ecr-public.aws.com; do
           if [ -f "/tmp/ksail-mirror-cache/${registry}.tar" ]; then
             docker volume create "$registry" 2>/dev/null || true
             if docker run --rm \
@@ -303,12 +306,13 @@ runs:
         DISTRIBUTION: ${{ inputs.distribution }}
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ inputs.args }}
+        MIRROR_REGISTRY: ${{ inputs.mirror-registry }}
         CONFIG: ${{ inputs.config }}
       run: |
         set -o pipefail
         mkdir -p /tmp/ksail-system-test-logs
         # shellcheck disable=SC2086
-        ksail ${CONFIG:+--config "$CONFIG"} project init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force 2>&1 | tee /tmp/ksail-system-test-logs/cluster-init.log
+        ksail ${CONFIG:+--config "$CONFIG"} project init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS ${MIRROR_REGISTRY:+--mirror-registry "$MIRROR_REGISTRY"} --force 2>&1 | tee /tmp/ksail-system-test-logs/cluster-init.log
 
     - name: 🧹 Validate manifests
       if: inputs.validate == 'true'
@@ -349,6 +353,7 @@ runs:
         DISTRIBUTION: ${{ inputs.distribution }}
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ inputs.args }}
+        MIRROR_REGISTRY: ${{ inputs.mirror-registry }}
         CONFIG: ${{ inputs.config }}
       run: |
         set -euo pipefail
@@ -356,10 +361,10 @@ runs:
 
         create_cluster() {
           if [ "$INIT" = "true" ]; then
-            ksail ${CONFIG:+--config "$CONFIG"} cluster create
+            ksail ${CONFIG:+--config "$CONFIG"} cluster create ${MIRROR_REGISTRY:+--mirror-registry "$MIRROR_REGISTRY"}
           else
             # shellcheck disable=SC2086
-            ksail ${CONFIG:+--config "$CONFIG"} cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+            ksail ${CONFIG:+--config "$CONFIG"} cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS ${MIRROR_REGISTRY:+--mirror-registry "$MIRROR_REGISTRY"}
           fi
         }
 
@@ -516,7 +521,7 @@ runs:
         # busybox via mirror.gcr.io (anonymous), not Docker Hub — avoids the
         # authenticated rate limit and dckr_jti leak. See the import step above.
         mkdir -p /tmp/ksail-mirror-cache
-        for registry in docker.io ghcr.io quay.io registry.k8s.io; do
+        for registry in docker.io ghcr.io quay.io registry.k8s.io ecr-public.aws.com; do
           if docker volume inspect "$registry" > /dev/null 2>&1; then
             if docker run --rm \
               -v "${registry}":/volume:ro \
