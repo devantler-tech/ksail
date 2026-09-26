@@ -41,6 +41,43 @@ func workerConfigsWithLonghornLabel(t *testing.T) *talosconfigmanager.Configs {
 	return configs
 }
 
+func createAutoscalerTestSecret(
+	t *testing.T,
+	provisioner *talosprovisioner.Provisioner,
+	configs *talosconfigmanager.Configs,
+) []byte {
+	t.Helper()
+
+	pools, err := provisioner.BuildAutoscalerPoolConfigsForTest(configs.Bundle())
+	require.NoError(t, err)
+	require.Len(t, pools, 3)
+
+	clientset := fake.NewClientset()
+	_, err = talosprovisioner.ApplyAutoscalerConfigSecret(
+		context.Background(),
+		clientset,
+		"123",
+		pools,
+	)
+	require.NoError(t, err)
+
+	secret, err := clientset.CoreV1().Secrets("kube-system").Get(
+		context.Background(), "cluster-autoscaler-config", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+
+	return secret.Data[clusterConfigSecretKey]
+}
+
+func bootedMachineLabels(t *testing.T, cloudInit string) map[string]string {
+	t.Helper()
+
+	booted, err := configloader.NewFromBytes(decodePoolCloudInit(t, cloudInit))
+	require.NoError(t, err)
+
+	return booted.RawV1Alpha1().MachineConfig.MachineNodeLabels
+}
+
 // The config a new autoscaler node boots from is the pool's cloudInit inside the Secret, not the
 // intermediate generated worker config. This builds that Secret the way cluster create and update
 // do, decodes each pool's cloudInit the way the autoscaler and Talos do, and checks the booted
@@ -73,50 +110,26 @@ func TestAutoscalerSecretPayloadBootsEveryPoolWithTheAutoscalerShape(t *testing.
 			},
 		})
 
-	pools, err := provisioner.BuildAutoscalerPoolConfigsForTest(configs.Bundle())
-	require.NoError(t, err)
-	require.Len(t, pools, 3)
-
-	clientset := fake.NewClientset()
-	_, err = talosprovisioner.ApplyAutoscalerConfigSecret(
-		context.Background(),
-		clientset,
-		"123",
-		pools,
-	)
-	require.NoError(t, err)
-
-	secret, err := clientset.CoreV1().Secrets("kube-system").Get(
-		context.Background(), "cluster-autoscaler-config", metav1.GetOptions{},
-	)
-	require.NoError(t, err)
-
-	payload := decodeClusterConfig(t, secret.Data[clusterConfigSecretKey])
+	secretData := createAutoscalerTestSecret(t, provisioner, configs)
+	payload := decodeClusterConfig(t, secretData)
 	require.Len(t, payload.NodeConfigs, 3)
 
 	for _, name := range []string{"autoscale-cx43", "autoscale-cx53", "autoscale-conflicting"} {
 		nodeConfig, ok := payload.NodeConfigs[name]
 		require.True(t, ok, "pool %s is missing from the Secret", name)
 
-		booted, err := configloader.NewFromBytes(decodePoolCloudInit(t, nodeConfig.CloudInit))
-		require.NoError(t, err, "pool %s cloudInit is not a Talos config", name)
-
-		labels := booted.RawV1Alpha1().MachineConfig.MachineNodeLabels
+		labels := bootedMachineLabels(t, nodeConfig.CloudInit)
 		assert.Equal(t, "true", labels[talosprovisioner.LabelAutoscaled],
 			"pool %s would boot without the autoscaler marker", name)
 		assert.NotContains(t, labels, longhornDefaultDiskLabel,
 			"pool %s would boot with the Longhorn default-disk label", name)
 	}
 
-	cx43 := payload.NodeConfigs["autoscale-cx43"]
-	booted, err := configloader.NewFromBytes(decodePoolCloudInit(t, cx43.CloudInit))
-	require.NoError(t, err)
-	assert.Equal(t, "general", booted.RawV1Alpha1().MachineConfig.MachineNodeLabels["workload"],
+	cx43Labels := bootedMachineLabels(t, payload.NodeConfigs["autoscale-cx43"].CloudInit)
+	assert.Equal(t, "general", cx43Labels["workload"],
 		"a pool's own labels reach the config its nodes boot from")
 
-	conflicting := payload.NodeConfigs["autoscale-conflicting"]
-	bootedConflicting, err := configloader.NewFromBytes(decodePoolCloudInit(t, conflicting.CloudInit))
-	require.NoError(t, err)
-	assert.Equal(t, "custom", bootedConflicting.RawV1Alpha1().MachineConfig.MachineNodeLabels["workload"],
+	conflictingLabels := bootedMachineLabels(t, payload.NodeConfigs["autoscale-conflicting"].CloudInit)
+	assert.Equal(t, "custom", conflictingLabels["workload"],
 		"a pool's non-conflicting labels reach the config its nodes boot from")
 }
