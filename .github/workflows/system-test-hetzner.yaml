@@ -291,6 +291,33 @@ jobs:
           echo "❌ Kubernetes API did not become ready after 30 attempts: ${READYZ:-<empty>}" >&2
           exit 1
 
+      - name: 🔐 Verify Vanilla Control-Plane User-Data Carries No Signing Material
+        # Reads back what Hetzner actually holds as the control plane's user-data, from the
+        # node's own metadata service, and fails if cluster signing material is in it. The
+        # provisioner's create-path guard only sees what it composed; this checks the result.
+        # A pod on the node's host network is the route to the metadata service, so no SSH
+        # key has to outlive the create step.
+        if: ${{ matrix.smoke == true && matrix.distribution == 'Vanilla' }}
+        shell: bash
+        timeout-minutes: 15
+        env:
+          PROBE_IMAGE: docker.io/curlimages/curl:8.22.0@sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777
+        run: |
+          set -euo pipefail
+          node="$(kubectl get nodes --selector node-role.kubernetes.io/control-plane --output jsonpath='{.items[0].metadata.name}')"
+          if [ -z "${node}" ]; then
+            echo "❌ No control-plane node found, so its user-data could not be verified" >&2
+            exit 1
+          fi
+
+          kubectl run userdata-probe --image="${PROBE_IMAGE}" --restart=Never \
+            --overrides="{\"apiVersion\":\"v1\",\"spec\":{\"nodeName\":\"${node}\",\"hostNetwork\":true,\"tolerations\":[{\"operator\":\"Exists\"}]}}" \
+            --command -- sleep 600
+          kubectl wait --for=condition=Ready pod/userdata-probe --timeout=180s
+
+          go run ./pkg/svc/provisioner/cluster/internal/hetznerbase/cmd/verifynodeuserdata \
+            -- kubectl exec userdata-probe -- sh -c
+
       - name: 🧹 Delete Hetzner Smoke Cluster
         if: ${{ always() && matrix.smoke == true }}
         uses: $/.github/actions/ksail-system-test-cleanup
