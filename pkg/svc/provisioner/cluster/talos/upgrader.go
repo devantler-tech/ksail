@@ -109,11 +109,18 @@ func (p *Provisioner) UpgradeDistribution(
 	// only when no schematic is configured. See issue #5077.
 	installerImage := p.resolveInstallerImage(toVersion)
 
+	// The nodes pull that installer from Image Factory, which serves a computed schematic
+	// only once it has been registered (#7132).
+	err := p.ensureSchematicRegistered(ctx, p.resolveSchematicID())
+	if err != nil {
+		return err
+	}
+
 	_, _ = fmt.Fprintf(p.logWriter,
 		"  Upgrading Talos from %s to %s...\n", fromVersion, toVersion,
 	)
 
-	err := p.rollingUpgradeNodes(ctx, clusterName, installerImage, toVersion)
+	err = p.rollingUpgradeNodes(ctx, clusterName, installerImage, toVersion)
 	if err != nil {
 		return fmt.Errorf("rolling upgrade from %s to %s: %w", fromVersion, toVersion, err)
 	}
