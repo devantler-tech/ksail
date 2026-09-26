@@ -86,6 +86,7 @@ func NewValidateCmd() *cobra.Command {
 	}
 
 	addValidateFlags(cmd, flags)
+	addEphemeralChildFlags(cmd, &flags.children)
 
 	return cmd
 }
@@ -100,6 +101,7 @@ type validateFlags struct {
 	includeCRDSchemas    bool
 	kyvernoPolicies      bool
 	ephemeral            bool
+	children             ephemeralChildOptions
 	skipKinds            []string
 	schemaLocations      []string
 	rules                string
@@ -166,7 +168,7 @@ func addValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 		&flags.ephemeral,
 		"ephemeral",
 		false,
-		ephemeralFlagDescription,
+		ephemeralClusterDescription+"Add --ephemeral-children to also validate observed descendants.",
 	)
 }
 
@@ -178,6 +180,15 @@ func runValidateCmd(
 	args []string,
 	flags validateFlags,
 ) error {
+	err := flags.children.validate(cmd, flags.ephemeral)
+	if err != nil {
+		return err
+	}
+
+	if flags.children.enabled {
+		return runValidateWithChildren(ctx, cmd, args, flags)
+	}
+
 	if flags.ephemeral {
 		return withPreparedEphemeralCluster(ctx, cmd, args, func(ctx context.Context) error {
 			return runValidateCmdInner(ctx, cmd, args, flags)
