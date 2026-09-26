@@ -331,7 +331,13 @@ func TestSnapshotManager_EnsureTalosSnapshot_CompletedBuildDeletesNothing(t *tes
 	client := newBuildResourcesAPI(t, api)
 	manager := hetzner.NewSnapshotManagerWithUploaderForTest(client, uploader, nil)
 
-	imageID, err := manager.EnsureTalosSnapshot(t.Context(), "done-cluster", "v1.9.0", "abc123", nil)
+	imageID, err := manager.EnsureTalosSnapshot(
+		t.Context(),
+		"done-cluster",
+		"v1.9.0",
+		"abc123",
+		nil,
+	)
 
 	require.NoError(t, err)
 	assert.Equal(t, int64(99), imageID)
