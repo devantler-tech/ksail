@@ -2,6 +2,7 @@ package talosprovisioner_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
@@ -9,11 +10,15 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 const recoverNodeIP = "10.0.0.7"
+
+var errNodeListUnavailable = errors.New("node list unavailable")
 
 func upgradedNode(unschedulable bool, ready corev1.ConditionStatus) *corev1.Node {
 	return &corev1.Node{
@@ -32,6 +37,7 @@ type recoverCase struct {
 	nodeIP       string
 	noClient     bool
 	cancelled    bool
+	listFails    bool
 	wantErr      bool
 	wantCordoned bool
 }
@@ -56,6 +62,11 @@ func recoverCases() []recoverCase {
 			noClient: true, wantCordoned: true,
 		},
 		{
+			name: "unreadable node list fails the roll and stays cordoned",
+			node: upgradedNode(true, corev1.ConditionTrue), nodeIP: recoverNodeIP,
+			listFails: true, wantErr: true, wantCordoned: true,
+		},
+		{
 			name: "never Ready fails the roll and stays cordoned",
 			node: upgradedNode(true, corev1.ConditionFalse), nodeIP: recoverNodeIP,
 			cancelled: true, wantErr: true, wantCordoned: true,
@@ -73,6 +84,13 @@ func TestRecoverUpgradedNode(t *testing.T) {
 			t.Parallel()
 
 			clientset := fake.NewClientset(testCase.node)
+			if testCase.listFails {
+				clientset.PrependReactor("list", "nodes",
+					func(k8stesting.Action) (bool, runtime.Object, error) {
+						return true, nil, errNodeListUnavailable
+					})
+			}
+
 			prov := talosprovisioner.NewProvisioner(nil, talosprovisioner.NewOptions())
 
 			ctx, cancel := context.WithCancel(t.Context())

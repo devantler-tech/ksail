@@ -526,8 +526,9 @@ func (p *Provisioner) completeNodeUpgrade(
 // recoverUpgradedNode finishes the upgrade of a node that already runs the target
 // image but is still cordoned, which is how an earlier attempt leaves it when it times
 // out waiting for the node to become Ready. Skipping such a node would leave it
-// unschedulable. A node that is schedulable, or that cannot be resolved (so it was
-// never cordoned), needs nothing.
+// unschedulable. A node that is schedulable, or that is absent from the Kubernetes API
+// (so it was never cordoned), needs nothing; a failure to read the node list fails the
+// roll, because the node's cordon state is then unknown.
 func (p *Provisioner) recoverUpgradedNode(
 	ctx context.Context,
 	clientset kubernetes.Interface,
@@ -540,6 +541,13 @@ func (p *Provisioner) recoverUpgradedNode(
 
 	nodeName, resolveErr := p.resolveNodeName(ctx, clientset, node.IP)
 	if resolveErr != nil {
+		// Only a node that is genuinely absent from the API can be skipped: when the
+		// node list itself cannot be read, its cordon state is unknown, and reporting
+		// success could leave a node cordoned by an earlier attempt unschedulable.
+		if !errors.Is(resolveErr, ErrNodeNotFoundByIP) {
+			return fmt.Errorf("resolving Kubernetes node for %s: %w", node.IP, resolveErr)
+		}
+
 		_, _ = fmt.Fprintf(p.logWriter,
 			"  ⚠ Could not resolve %s to a Kubernetes node; skipping the cordon check: %v\n",
 			node.IP, resolveErr,
