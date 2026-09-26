@@ -140,7 +140,7 @@ func disallowedModule(key string, value *yaml.Node) string {
 }
 
 // disallowedChpasswd enforces that chpasswd only carries the `expire: false`
-// directive the cloudinit builder emits to prevent root password expiration.
+// boolean directive the cloudinit builder emits to prevent root password expiration.
 // The directive must be present: an empty mapping carries no setting at all.
 func disallowedChpasswd(node *yaml.Node) string {
 	if node.Kind != yaml.MappingNode {
@@ -157,8 +157,10 @@ func disallowedChpasswd(node *yaml.Node) string {
 			return fmt.Sprintf("chpasswd key %q", key.Value)
 		}
 
-		if val.Kind != yaml.ScalarNode || val.Value != "false" {
-			return fmt.Sprintf("chpasswd expire value %q", val.Value)
+		// The tag matters as well as the text: a quoted "false" or `!!str false` is a
+		// string, which cloud-init does not read as the boolean the renderer emits.
+		if val.Kind != yaml.ScalarNode || val.ShortTag() != "!!bool" || val.Value != "false" {
+			return fmt.Sprintf("chpasswd expire value %q (%s)", val.Value, val.ShortTag())
 		}
 	}
 
