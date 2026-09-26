@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	factoryclient "github.com/siderolabs/image-factory/pkg/client"
@@ -11,6 +12,11 @@ import (
 
 // imageFactoryURL is the Image Factory that serves KSail's installer and snapshot images.
 const imageFactoryURL = "https://factory.talos.dev"
+
+// imageFactoryRegistrationTimeout bounds one schematic registration request, so a stalled
+// Image Factory response cannot block an upgrade or snapshot build indefinitely. The factory
+// client uses an http.Client with no timeout of its own.
+const imageFactoryRegistrationTimeout = 30 * time.Second
 
 // ErrSchematicIDMismatch reports that Image Factory stored KSail's schematic under an ID other
 // than the one KSail computed, so images addressed by the computed ID would not be served.
@@ -21,7 +27,21 @@ func registerWithImageFactory(
 	ctx context.Context,
 	computed talosconfigmanager.Schematic,
 ) (string, error) {
-	client, err := factoryclient.New(imageFactoryURL)
+	return registerSchematic(ctx, imageFactoryURL, imageFactoryRegistrationTimeout, computed)
+}
+
+// registerSchematic sends a schematic to the Image Factory at baseURL, bounding the request by
+// timeout while still honouring any earlier cancellation or deadline on ctx.
+func registerSchematic(
+	ctx context.Context,
+	baseURL string,
+	timeout time.Duration,
+	computed talosconfigmanager.Schematic,
+) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	client, err := factoryclient.New(baseURL)
 	if err != nil {
 		return "", fmt.Errorf("create image factory client: %w", err)
 	}

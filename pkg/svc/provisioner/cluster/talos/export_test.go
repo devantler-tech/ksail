@@ -1160,3 +1160,14 @@ func (p *Provisioner) EnsureSchematicRegisteredForTest(
 ) error {
 	return p.ensureSchematicRegistered(ctx, schematicID)
 }
+
+// RegisterSchematicForTest exposes registerSchematic so unit tests can point registration at a
+// local Image Factory stand-in with a short timeout.
+func RegisterSchematicForTest(
+	ctx context.Context,
+	baseURL string,
+	timeout time.Duration,
+	computed talosconfigmanager.Schematic,
+) (string, error) {
+	return registerSchematic(ctx, baseURL, timeout, computed)
+}
