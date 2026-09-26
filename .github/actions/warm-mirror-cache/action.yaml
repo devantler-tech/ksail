@@ -513,10 +513,22 @@ runs:
         # is what it rejects). One anonymous pull per cache miss, on this job only.
         FAILED=""
         while IFS= read -r image; do
-          MIRROR_REF="localhost:5004/${image#ecr-public.aws.com/}"
+          REF="${image#ecr-public.aws.com/}"
+          SOURCE_REF="$REF"
+          MIRROR_REF="localhost:5004/$REF"
+          # skopeo's docker transport takes a tag or a digest, never both: copy a
+          # tag+digest pin (repo:tag@sha256:x) by its digest, and keep the tag on
+          # the mirror so both the tag and the revision link exist there.
+          if [[ "$REF" == *@* ]]; then
+            NAME="${REF%%@*}"
+            if [[ "${NAME##*/}" == *:* ]]; then
+              SOURCE_REF="${NAME%:*}@${REF#*@}"
+              MIRROR_REF="localhost:5004/$NAME"
+            fi
+          fi
           echo "📥 Copying $image → $MIRROR_REF"
           if ! skopeo copy --retry-times 3 --dest-tls-verify=false \
-            "docker://$image" "docker://$MIRROR_REF"; then
+            "docker://ecr-public.aws.com/$SOURCE_REF" "docker://$MIRROR_REF"; then
             FAILED="${FAILED}  ${image}"$'\n'
           fi
         done <<< "$ECR_IMAGES"
