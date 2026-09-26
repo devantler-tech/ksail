@@ -223,4 +223,3 @@ func TestDeriveServerSpecsAcceptsChpasswdExpireFalse(t *testing.T) {
 	err := deriveWithUserData(t, "#cloud-config\nchpasswd:\n  expire: false\n")
 	require.NoError(t, err)
 }
-

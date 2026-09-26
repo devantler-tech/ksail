@@ -149,7 +149,7 @@ type cloudConfig struct {
 	SSHAuthorizedKeys []string `yaml:"ssh_authorized_keys,omitempty"`
 	//nolint:tagliatelle // cloud-init's schema mandates the snake_case key "ssh_keys".
 	SSHKeys *sshKeysConfig `yaml:"ssh_keys,omitempty"`
-	//nolint:tagliatelle // cloud-init's schema mandates the key "chpasswd".
+
 	Chpasswd *chpasswdConfig `yaml:"chpasswd,omitempty"`
 	RunCmd   [][]string      `yaml:"runcmd,omitempty"`
 }

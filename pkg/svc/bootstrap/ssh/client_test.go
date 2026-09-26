@@ -267,6 +267,7 @@ func TestFileExists(t *testing.T) {
 		if err == nil {
 			t.Fatal("probe with stderr and exit code 1: want an error, got nil")
 		}
+
 		if !strings.Contains(err.Error(), "Your password has expired") {
 			t.Fatalf("error message does not contain stderr: %v", err)
 		}

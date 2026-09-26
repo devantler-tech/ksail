@@ -187,7 +187,8 @@ func (c *Client) FileExists(ctx context.Context, path string) (bool, error) {
 		return true, nil
 	}
 
-	if errors.Is(err, ErrCommandFailed) && result.ExitCode == 1 && len(bytes.TrimSpace(result.Stderr)) == 0 {
+	if errors.Is(err, ErrCommandFailed) && result.ExitCode == 1 &&
+		len(bytes.TrimSpace(result.Stderr)) == 0 {
 		return false, nil
 	}
 
