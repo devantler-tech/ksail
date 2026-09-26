@@ -239,6 +239,11 @@ runs:
         distribution: ${{ inputs.distribution }}
         provider: ${{ inputs.provider }}
         args: ${{ steps.resolve-args.outputs.args }}
+        # KSail's four default mirrors plus ECR Public, where Argo CD's chart pulls
+        # Redis. The warm-mirror-cache action caches the same five registries, so
+        # no system-test image is pulled anonymously from the shared runner IP
+        # (#7332). Docker only: cloud providers cannot use local mirrors.
+        mirror-registry: ${{ inputs.provider == 'Docker' && 'docker.io=https://registry-1.docker.io,ghcr.io=https://ghcr.io,quay.io=https://quay.io,registry.k8s.io=https://registry.k8s.io,ecr-public.aws.com=https://ecr-public.aws.com' || '' }}
         init: ${{ inputs.init }}
         install: "false"
         cache: "true"

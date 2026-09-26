@@ -86,14 +86,14 @@ runs:
 
         # Compute the KWOK control plane image hash (must match warm-mirror-cache
         # exactly). The KWOK pre-load tar lives in its own cache entry so it can be
-        # regenerated independently of the four mirror volumes.
+        # regenerated independently of the five mirror volumes.
         KWOK_IMAGES_HASH=$(grep '^FROM ' pkg/svc/provisioner/cluster/kwok/Dockerfile.controlplane | sed 's/^FROM //' | sort -u | sha256sum | cut -c1-12)
         echo "kwok-images-hash=$KWOK_IMAGES_HASH" >> "$GITHUB_OUTPUT"
         echo "🔑 KWOK images hash: $KWOK_IMAGES_HASH"
 
         # Compute the distribution node image hash (must match warm-mirror-cache
         # exactly). The dist-node pre-load tars live in their own cache entry so they
-        # can be regenerated independently of the four mirror volumes.
+        # can be regenerated independently of the five mirror volumes.
         DIST_NODE_IMAGES_HASH=$(grep -h '^FROM ' \
           pkg/fsutil/configmanager/k3d/Dockerfile \
           pkg/fsutil/configmanager/kind/Dockerfile \
@@ -113,7 +113,7 @@ runs:
         KWOK_IMAGES_HASH: ${{ steps.extract-images.outputs.kwok-images-hash }}
         DIST_NODE_IMAGES_HASH: ${{ steps.extract-images.outputs.dist-node-images-hash }}
       run: |
-        CACHE_KEY="mirror-cache-${CACHE_VERSION}-${IMAGES_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
+        CACHE_KEY="mirror-cache-${CACHE_VERSION}-m5-${IMAGES_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
         echo "cache-key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
 
         # Must match warm-mirror-cache's KWOK cache key exactly.
@@ -131,7 +131,7 @@ runs:
         path: /tmp/mirror-cache
         key: ${{ steps.generate-key.outputs.cache-key }}
         restore-keys: |
-          mirror-cache-${{ inputs.cache-version }}-
+          mirror-cache-${{ inputs.cache-version }}-m5-
 
     - name: 📥 Restore KWOK control plane cache
       id: restore-kwok-cache
@@ -212,6 +212,17 @@ runs:
           echo "✅ Restored registry.k8s.io mirror cache"
         fi
 
+        # Import ecr-public.aws.com mirror volume
+        if [ -f "/tmp/mirror-cache/ecr-public.aws.com.tar" ]; then
+          docker volume create ecr-public.aws.com 2>/dev/null || true
+          docker run --rm \
+            -v ecr-public.aws.com:/volume \
+            -v /tmp/mirror-cache:/backup:ro \
+            mirror.gcr.io/library/busybox:1.37 \
+            sh -c "cd /volume && tar -xf /backup/ecr-public.aws.com.tar" || echo "⚠️ Failed to import ecr-public.aws.com mirror"
+          echo "✅ Restored ecr-public.aws.com mirror cache"
+        fi
+
     - name: 🐳 Load KWOK control plane images
       if: steps.restore-kwok-cache.outputs.cache-hit == 'true'
       shell: bash
@@ -222,7 +233,7 @@ runs:
         # This avoids Google Artifact Registry rate limits when many KWOK test
         # jobs run in parallel. See issue #4058 for context. The tar is cached
         # under its own key (see warm-mirror-cache) so it is decoupled from the
-        # four mirror volumes.
+        # five mirror volumes.
         if [ -f "/tmp/kwok-cache/kwok-control-plane.tar" ]; then
           docker load -i /tmp/kwok-cache/kwok-control-plane.tar
           echo "✅ KWOK control plane images pre-loaded (kwokctl will skip registry.k8s.io pulls)"
