@@ -239,8 +239,12 @@ runs:
         DIST_NODE_IMAGES_HASH: ${{ steps.extract-images.outputs.dist-node-images-hash }}
       run: |
         # Use hash of extracted image list to invalidate when images change
-        # This covers both go.mod changes AND code changes affecting image extraction
-        CACHE_KEY="mirror-cache-${CACHE_VERSION}-${IMAGES_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
+        # This covers both go.mod changes AND code changes affecting image extraction.
+        # "m5" marks the five-mirror layout whose ECR Public volume is filled by an
+        # explicit copy. Entries without it can hold an empty ECR Public volume, and a
+        # cache entry cannot be overwritten, so they must never match. Keep it in step
+        # with restore-mirror-cache.
+        CACHE_KEY="mirror-cache-${CACHE_VERSION}-m5-${IMAGES_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
         echo "cache-key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
         echo "📦 Cache key: $CACHE_KEY"
 
@@ -265,7 +269,7 @@ runs:
         path: /tmp/mirror-cache
         key: ${{ steps.generate-key.outputs.cache-key }}
         restore-keys: |
-          mirror-cache-${{ inputs.cache-version }}-
+          mirror-cache-${{ inputs.cache-version }}-m5-
 
     - name: 📥 Restore KWOK control plane cache
       id: restore-kwok-cache
@@ -303,8 +307,31 @@ runs:
              [ -f "/tmp/mirror-cache/quay.io.tar" ] && \
              [ -f "/tmp/mirror-cache/registry.k8s.io.tar" ] && \
              [ -f "/tmp/mirror-cache/ecr-public.aws.com.tar" ]; then
-            echo "complete=true" >> "$GITHUB_OUTPUT"
-            echo "✅ Cache complete: 5 mirror volumes present"
+            # The ECR Public volume is filled by an explicit copy rather than by
+            # pull-through, so check it holds every ECR image: a volume saved
+            # without one would send every system test back to ECR Public.
+            ECR_TAR_FILES=$(tar -tf /tmp/mirror-cache/ecr-public.aws.com.tar)
+            MISSING=""
+            while IFS= read -r image; do
+              [ -n "$image" ] || continue
+              REPO="${image#ecr-public.aws.com/}"
+              if [[ "$REPO" == *@* ]]; then
+                LINK="${REPO%%@*}/_manifests/revisions/${REPO#*@}"
+                LINK="${LINK/://}/link"
+              else
+                LINK="${REPO%:*}/_manifests/tags/${REPO##*:}/current/link"
+              fi
+              if ! grep -qF "docker/registry/v2/repositories/${LINK}" <<< "$ECR_TAR_FILES"; then
+                MISSING="${MISSING} ${image}"
+              fi
+            done < <(grep '^ecr-public\.aws\.com/' /tmp/all-images.txt || true)
+            if [ -n "$MISSING" ]; then
+              echo "complete=false" >> "$GITHUB_OUTPUT"
+              echo "⚠️ ECR Public mirror lacks:${MISSING} — will re-warm"
+            else
+              echo "complete=true" >> "$GITHUB_OUTPUT"
+              echo "✅ Cache complete: 5 mirror volumes present, every ECR Public image included"
+            fi
           else
             echo "complete=false" >> "$GITHUB_OUTPUT"
             echo "⚠️ Cache incomplete, will re-warm"
@@ -366,11 +393,17 @@ runs:
         # Create ecr-public.aws.com mirror (port 5004). Argo CD's chart pulls its
         # Redis image from ECR Public, whose anonymous data quota is per source IP
         # and is shared by every job on a GitHub-hosted runner (#7332).
+        #
+        # Unlike the four mirrors above this one starts as a PLAIN registry, not a
+        # pull-through proxy: ECR Public answers a blob HEAD with 401 while a GET of
+        # the same blob succeeds, and the registry proxy HEADs every blob it does
+        # not hold, so it can never fill itself from ECR Public. The next step
+        # copies the ECR images in, then restarts it as a proxy to prove the
+        # system tests' pull path serves them from the volume.
         docker run -d \
           --name ecr-public.aws.com-mirror \
           --network ksail-mirrors \
           -p 5004:5000 \
-          -e REGISTRY_PROXY_REMOTEURL=https://ecr-public.aws.com \
           -v ecr-public.aws.com:/var/lib/registry \
           registry:3 || echo "ecr-public.aws.com mirror already exists"
 
@@ -407,7 +440,10 @@ runs:
           elif [[ "$image" == registry.k8s.io/* ]]; then
             PULL_REF="${image/registry.k8s.io\//localhost:5003/}"
           elif [[ "$image" == ecr-public.aws.com/* ]]; then
-            PULL_REF="${image/ecr-public.aws.com\//localhost:5004/}"
+            # Copied into the plain ECR mirror by the next step; a proxy pull
+            # cannot fill it (see the mirror creation step).
+            echo "[$CURRENT/$TOTAL] Deferred to the ECR Public copy step: $image"
+            continue
           elif [[ "$image" == docker.io/* ]]; then
             PULL_REF="${image/docker.io\//localhost:5000/}"
           elif [[ "$image" == */* ]] && { [[ "$FIRST_COMPONENT" == *"."* ]] || [[ "$FIRST_COMPONENT" == *":"* ]] || [[ "$FIRST_COMPONENT" == "localhost" ]]; }; then
@@ -450,6 +486,75 @@ runs:
         if [ "$FAILED" -gt 0 ]; then
           echo "⚠️ $FAILED images failed (may be platform-specific)"
         fi
+
+    - name: 📥 Copy ECR Public images into their mirror
+      id: copy-ecr-images
+      if: steps.check-cache.outputs.complete != 'true'
+      shell: bash
+      run: |
+        # The system tests rely on this mirror instead of anonymous ECR Public
+        # pulls (#7332), so an image missing here must fail the warm job. There
+        # is no direct-pull fallback: a direct pull leaves the cache without the
+        # image, and every later job would pull it anonymously again.
+        ECR_IMAGES=$(grep '^ecr-public\.aws\.com/' /tmp/all-images.txt || true)
+        if [ -z "$ECR_IMAGES" ]; then
+          echo "ℹ️ No system-test image comes from ECR Public"
+          exit 0
+        fi
+        if ! command -v skopeo > /dev/null 2>&1; then
+          echo "::error::skopeo is required to copy ECR Public images into their mirror, and the runner has none"
+          exit 1
+        fi
+
+        # skopeo GETs blobs, which ECR Public serves (the registry proxy's HEAD
+        # is what it rejects). One anonymous pull per cache miss, on this job only.
+        FAILED=""
+        while IFS= read -r image; do
+          MIRROR_REF="localhost:5004/${image#ecr-public.aws.com/}"
+          echo "📥 Copying $image → $MIRROR_REF"
+          if ! skopeo copy --retry-times 3 --dest-tls-verify=false \
+            "docker://$image" "docker://$MIRROR_REF"; then
+            FAILED="${FAILED}  ${image}"$'\n'
+          fi
+        done <<< "$ECR_IMAGES"
+        if [ -n "$FAILED" ]; then
+          echo "::error::Could not copy these ECR Public images into their mirror:"
+          printf '%s' "$FAILED"
+          exit 1
+        fi
+
+        # Restart the mirror as the pull-through proxy KSail runs in the system
+        # tests, then pull every image through it. This proves the tests' pull
+        # path serves the images from the volume rather than from ECR Public.
+        docker rm -f ecr-public.aws.com-mirror > /dev/null
+        docker run -d \
+          --name ecr-public.aws.com-mirror \
+          --network ksail-mirrors \
+          -p 5004:5000 \
+          -e REGISTRY_PROXY_REMOTEURL=https://ecr-public.aws.com \
+          -v ecr-public.aws.com:/var/lib/registry \
+          registry:3 > /dev/null
+        for _ in $(seq 1 30); do
+          curl -fsS http://localhost:5004/v2/ > /dev/null 2>&1 && break
+          sleep 1
+        done
+
+        while IFS= read -r image; do
+          MIRROR_REF="localhost:5004/${image#ecr-public.aws.com/}"
+          if docker pull "$MIRROR_REF"; then
+            docker rmi "$MIRROR_REF" > /dev/null
+          else
+            FAILED="${FAILED}  ${image}"$'\n'
+          fi
+        done <<< "$ECR_IMAGES"
+        if [ -n "$FAILED" ]; then
+          echo "::error::The ECR Public mirror, running as a proxy, did not serve these copied images:"
+          printf '%s' "$FAILED"
+          echo "--- ecr-public.aws.com-mirror log (last 40 lines) ---"
+          docker logs --tail 40 ecr-public.aws.com-mirror 2>&1 || true
+          exit 1
+        fi
+        echo "✅ Every ECR Public image is served by its mirror"
 
     - name: 💾 Export mirror volumes
       id: export-volumes
@@ -745,7 +850,7 @@ runs:
       if: steps.check-cache.outputs.complete != 'true'
       shell: bash
       run: |
-        # Verify all 4 required mirror volumes were exported (see issue #2075)
+        # Verify all 5 required mirror volumes were exported (see issue #2075)
         echo "🔍 Verifying exported mirror volumes..."
         REQUIRED_VOLUMES=("docker.io" "ghcr.io" "quay.io" "registry.k8s.io" "ecr-public.aws.com")
         MISSING_VOLUMES=()
@@ -767,7 +872,7 @@ runs:
           echo "   This may cause slower tests and potential rate limiting."
           echo "   See issue #2075 for context."
         else
-          echo "✅ All 4 required mirror cache volumes exported successfully"
+          echo "✅ All 5 required mirror cache volumes exported successfully"
         fi
 
     - name: 🧹 Cleanup containers

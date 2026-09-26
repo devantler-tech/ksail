@@ -113,7 +113,7 @@ runs:
         KWOK_IMAGES_HASH: ${{ steps.extract-images.outputs.kwok-images-hash }}
         DIST_NODE_IMAGES_HASH: ${{ steps.extract-images.outputs.dist-node-images-hash }}
       run: |
-        CACHE_KEY="mirror-cache-${CACHE_VERSION}-${IMAGES_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
+        CACHE_KEY="mirror-cache-${CACHE_VERSION}-m5-${IMAGES_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
         echo "cache-key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
 
         # Must match warm-mirror-cache's KWOK cache key exactly.
@@ -131,7 +131,7 @@ runs:
         path: /tmp/mirror-cache
         key: ${{ steps.generate-key.outputs.cache-key }}
         restore-keys: |
-          mirror-cache-${{ inputs.cache-version }}-
+          mirror-cache-${{ inputs.cache-version }}-m5-
 
     - name: 📥 Restore KWOK control plane cache
       id: restore-kwok-cache
