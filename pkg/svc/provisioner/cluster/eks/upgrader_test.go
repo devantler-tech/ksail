@@ -185,6 +185,10 @@ func (api *upgradeAPI) DescribeCluster(context.Context, string) (*ekstypes.Clust
 }
 func (api *upgradeAPI) MintToken(context.Context, string) (string, error) { return "", nil }
 
+// ValidateUpgradeCredentialLifetime models an already validated credential boundary;
+// the real SDK boundary is exercised in upgrader_credentials_test.go.
+func (api *upgradeAPI) ValidateUpgradeCredentialLifetime(context.Context) error { return nil }
+
 func (api *upgradeAPI) UpdateClusterVersion(
 	_ context.Context,
 	name, version, token string,
@@ -229,6 +233,7 @@ func (api *upgradeAPI) DescribeClusterUpdate(
 	return api.result, nil
 }
 
+// newUpgradeProvisioner isolates upgrade orchestration from external AWS operations.
 func newUpgradeProvisioner(
 	t *testing.T,
 	api *upgradeAPI,
@@ -240,18 +245,6 @@ func newUpgradeProvisioner(
 	options = append([]eksprovisioner.Option{
 		eksprovisioner.WithAWSClusterAPI(api),
 		eksprovisioner.WithOwnershipVerifier(verifier),
-		eksprovisioner.WithAWSConfig(
-			aws.Config{
-				Credentials: aws.CredentialsProviderFunc(
-					func(context.Context) (aws.Credentials, error) {
-						return aws.Credentials{
-							AccessKeyID:     "permanent",
-							SecretAccessKey: "secret",
-						}, nil
-					},
-				),
-			},
-		),
 	}, options...)
 	provisioner, err := eksprovisioner.NewProvisioner(
 		"demo",
@@ -436,56 +429,6 @@ func TestControlPlaneUpgradeRejectsMalformedSubmission(t *testing.T) {
 			require.Error(t, provisioner.UpgradeKubernetes(t.Context(), "demo", "1.34", "1.35"))
 			assert.Equal(t, 1, api.submitted)
 			assert.Zero(t, api.polls)
-		})
-	}
-}
-
-func TestControlPlaneUpgradeRequiresCredentialsThroughWait(t *testing.T) {
-	t.Parallel()
-
-	for _, testCase := range []struct {
-		name      string
-		canExpire bool
-		lifetime  time.Duration
-		token     string
-		wantErr   bool
-	}{
-		{name: "permanent"},
-		{name: "sufficient_session", canExpire: true, lifetime: 2 * time.Hour, token: "session"},
-		{name: "short_session", canExpire: true, lifetime: 30 * time.Minute, token: "session", wantErr: true},
-		{name: "expired_session", canExpire: true, lifetime: -time.Minute, token: "session", wantErr: true},
-		{name: "unknown_session", token: "session", wantErr: true},
-	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			api := &upgradeAPI{cluster: upgradeCluster(), result: upgradeResult()}
-			api.afterPoll = func() { api.cluster.Version = aws.String("1.35") }
-			values := aws.Credentials{
-				AccessKeyID: "test", SecretAccessKey: "secret", SessionToken: testCase.token,
-				CanExpire: testCase.canExpire, Expires: time.Now().Add(testCase.lifetime),
-			}
-			provisioner := newUpgradeProvisioner(
-				t,
-				api,
-				func(context.Context) error { return nil },
-				eksprovisioner.WithAWSConfig(
-					aws.Config{
-						Credentials: aws.CredentialsProviderFunc(
-							func(context.Context) (aws.Credentials, error) { return values, nil },
-						),
-					},
-				),
-			)
-
-			err := provisioner.UpgradeKubernetes(t.Context(), "demo", "1.34", "1.35")
-			if testCase.wantErr {
-				require.ErrorContains(t, err, "credential")
-				assert.Zero(t, api.submitted)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, 1, api.submitted)
-			}
 		})
 	}
 }
