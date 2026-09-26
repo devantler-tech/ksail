@@ -1221,6 +1221,7 @@ func (p *Provisioner) ensureSnapshotImage(ctx context.Context, clusterName strin
 		clusterName,
 		version,
 		schematicID,
+		func(ctx context.Context) error { return p.ensureSchematicRegistered(ctx, schematicID) },
 	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to ensure Talos snapshot: %w", err)
