@@ -52,6 +52,10 @@ type Installer struct {
 	// manifestURL is the upstream manifest location. It is a field rather than a
 	// package function call so unit tests can serve the manifest locally.
 	manifestURL string
+	// transport carries the manifest request. Nil means http.DefaultTransport; unit
+	// tests set their own server's transport so a parallel test tearing down its
+	// server cannot close a connection this installer is using.
+	transport http.RoundTripper
 }
 
 // NewInstaller creates a new local-path-storage installer instance.
@@ -104,7 +108,7 @@ func (l *Installer) Images(ctx context.Context) ([]string, error) {
 	}
 
 	// Use a client with timeout to avoid hanging indefinitely
-	client := &http.Client{Timeout: l.timeout}
+	client := &http.Client{Timeout: l.timeout, Transport: l.transport}
 
 	resp, err := client.Do(req)
 	if err != nil {
