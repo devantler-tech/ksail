@@ -57,7 +57,11 @@ func newFixtureInstallerWithTimeout(
 		timeout,
 		distribution,
 	)
-	localpathstorageinstaller.SetManifestURLForTest(installer, server.URL)
+	localpathstorageinstaller.SetManifestServerForTest(
+		installer,
+		server.URL,
+		server.Client().Transport,
+	)
 
 	return installer, hits
 }
@@ -107,7 +111,11 @@ func TestInstaller_Images_PropagatesNonOKStatus(t *testing.T) {
 		30*time.Second,
 		v1alpha1.DistributionVanilla,
 	)
-	localpathstorageinstaller.SetManifestURLForTest(installer, server.URL)
+	localpathstorageinstaller.SetManifestServerForTest(
+		installer,
+		server.URL,
+		server.Client().Transport,
+	)
 
 	images, err := installer.Images(context.Background())
 
@@ -134,5 +142,42 @@ func TestInstaller_ManifestURLDefaultsToUpstream(t *testing.T) {
 			version+"/deploy/local-path-storage.yaml",
 		localpathstorageinstaller.ManifestURLForTest(installer),
 		"the production default must track the version pinned in the embedded Dockerfile",
+	)
+}
+
+// countingTransport records how many requests went through it.
+type countingTransport struct {
+	next  http.RoundTripper
+	calls atomic.Int64
+}
+
+func (c *countingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	c.calls.Add(1)
+
+	return c.next.RoundTrip(req) //nolint:wrapcheck // test double passes the error through.
+}
+
+func TestInstaller_Images_UsesInjectedTransport(t *testing.T) {
+	t.Parallel()
+
+	server, _ := newManifestServer(t)
+	transport := &countingTransport{next: server.Client().Transport}
+
+	installer := localpathstorageinstaller.NewInstaller(
+		"/path/to/kubeconfig",
+		"test-context",
+		30*time.Second,
+		v1alpha1.DistributionVanilla,
+	)
+	localpathstorageinstaller.SetManifestServerForTest(installer, server.URL, transport)
+
+	_, err := installer.Images(context.Background())
+
+	require.NoError(t, err)
+	assert.Equal(
+		t,
+		int64(1),
+		transport.calls.Load(),
+		"the manifest request must use the injected transport, not http.DefaultTransport",
 	)
 }
