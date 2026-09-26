@@ -87,6 +87,11 @@ func (p *Provider) DeleteFloatingIPForTest(ctx context.Context, clusterName stri
 	return p.deleteFloatingIP(ctx, clusterName)
 }
 
+// testSnapshotBuildSettle is the settle bound test managers use. It is long enough for an
+// uploader that returns shortly after cancellation, and short enough that a test whose
+// uploader never returns does not wait out the production bound.
+const testSnapshotBuildSettle = 2 * time.Second
+
 // NewSnapshotManagerWithUploaderForTest creates a SnapshotManager with a custom uploader,
 // allowing tests to inject a mock without hitting real Hetzner upload infrastructure.
 // A nil logWriter is replaced with io.Discard, matching NewSnapshotManager behavior.
@@ -103,6 +108,7 @@ func NewSnapshotManagerWithUploaderForTest(
 		hcloudClient: hcloudClient,
 		uploader:     uploader,
 		logWriter:    logWriter,
+		settle:       testSnapshotBuildSettle,
 	}
 }
 
