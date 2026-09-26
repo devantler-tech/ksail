@@ -1173,4 +1173,3 @@ func (p *Provisioner) RecoverUpgradedNodeForTest(
 ) error {
 	return p.recoverUpgradedNode(ctx, clientset, nodeWithRole{IP: nodeIP, Role: RoleWorker}, nil)
 }
-
