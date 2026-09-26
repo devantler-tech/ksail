@@ -181,6 +181,8 @@ func TestKubernetesUpgradeReadTransportStopsAtRetryLimit(t *testing.T) {
 
 			require.ErrorIs(t, err, errKubernetesAPIUnavailable)
 			require.ErrorIs(t, err, test.err)
+			assert.NotContains(t, err.Error(), test.err.Error(),
+				"the plain-language cause must replace the raw transport error")
 			assert.Nil(t, response)
 			assert.Len(t, bodies, kubernetesUpgradeReadAttempts)
 
@@ -228,14 +230,18 @@ func TestKubernetesUpgradeReadTransportStopsOnCancellation(t *testing.T) {
 				}
 
 				calls := 0
-				transport := upgradeReadTransport{transport: upgradeRoundTripper(
-					func(*http.Request) (*http.Response, error) {
+				// Production waits, so cancellation must cut a real backoff short.
+				transport := upgradeReadTransport{
+					transport: upgradeRoundTripper(func(*http.Request) (*http.Response, error) {
 						calls++
 
 						cancel()
 
 						return nil, refusedUpgradeConnection()
-					})}
+					}),
+					wait:    kubernetesUpgradeReadWait,
+					maxWait: kubernetesUpgradeReadMaxWait,
+				}
 				request, err := http.NewRequestWithContext(
 					ctx,
 					http.MethodGet,
@@ -387,7 +393,8 @@ func TestKubernetesUpgradeInventoryRecoversAfterConnectionRefused(t *testing.T) 
 			), nil
 		}),
 	}
-	provider := kubernetesUpgradeProvider(upgradeConfigProvider{config: config})
+	// Zero waits: the restart is simulated rather than waited out.
+	provider := upgradeKubernetesProvider{K8sProvider: upgradeConfigProvider{config: config}}
 	upgradeConfig, err := provider.K8sRestConfig(t.Context())
 	require.NoError(t, err)
 

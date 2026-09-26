@@ -48,7 +48,8 @@ func TestKubernetesUpgradeDryRunRecoversAfterGracefulShutdown(t *testing.T) {
 			return upgradeJSONResponse(request, upgradeDryRunObject), nil
 		}),
 	}
-	provider := kubernetesUpgradeProvider(upgradeConfigProvider{config: config})
+	// Zero waits: the restart is simulated rather than waited out.
+	provider := upgradeKubernetesProvider{K8sProvider: upgradeConfigProvider{config: config}}
 	upgradeConfig, err := provider.K8sRestConfig(t.Context())
 	require.NoError(t, err)
 
