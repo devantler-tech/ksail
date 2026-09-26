@@ -495,7 +495,7 @@ func (p *Provisioner) applyDesiredNodeConfig(
 }
 
 // fetchAndBuildDesiredNodeConfig fetches a node's running config and rebuilds the
-// machine config KSail wants on it through buildDesiredNodeConfig, which preserves
+// machine config KSail wants on it through buildDesiredConfigForNode, which preserves
 // the per-node post-generation transforms (static hostname, registry mirrors, cert
 // SANs) instead of reverting to the freshly regenerated base config. The caller
 // decides how to apply the result: the rolling-reboot path STAGES it
@@ -513,7 +513,7 @@ func (p *Provisioner) fetchAndBuildDesiredNodeConfig(
 		return nil, fmt.Errorf("fetch running config: %w", err)
 	}
 
-	desired, err := p.buildDesiredNodeConfig(running, secretsSource, node.Role)
+	desired, err := p.buildDesiredConfigForNode(running, secretsSource, node)
 	if err != nil {
 		return nil, fmt.Errorf("build desired config: %w", err)
 	}
