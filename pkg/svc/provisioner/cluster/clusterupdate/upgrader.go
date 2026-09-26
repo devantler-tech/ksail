@@ -14,6 +14,12 @@ type KubernetesUpgradePlanner interface {
 	KubernetesUpgradeCategory() ChangeCategory
 }
 
+// DistributionImagePlanner detects desired boot-image changes independently of
+// the distribution version. Failed identity reads must return an error, not false.
+type DistributionImagePlanner interface {
+	DistributionImageChanged(ctx context.Context, clusterName string) (bool, error)
+}
+
 // UpgraderMetadata is the static-per-call descriptor an Upgrader exposes for the
 // version-reconciliation orchestrator: the OCI image references used for version
 // discovery, the version pins implied by the distribution itself, and the image

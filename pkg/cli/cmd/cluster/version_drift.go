@@ -30,6 +30,9 @@ type versionDimension struct {
 	rolling bool
 	// planner validates pinned targets and reports a distribution-specific impact.
 	planner clusterupdate.KubernetesUpgradePlanner
+	// imagePlanner checks boot-image drift when the OS version already matches.
+	imagePlanner clusterupdate.DistributionImagePlanner
+	clusterName  string
 }
 
 // mergeVersionDrift computes read-only version-reconciliation drift — the same
@@ -110,6 +113,7 @@ func versionDimensions(
 	}
 
 	planner, _ := upgrader.(clusterupdate.KubernetesUpgradePlanner)
+	imagePlanner, _ := upgrader.(clusterupdate.DistributionImagePlanner)
 
 	return []versionDimension{
 		{
@@ -121,7 +125,9 @@ func versionDimensions(
 			// A distinct distribution image ref means a separately-versioned OS
 			// (Talos) that upgrades by rolling reboot; otherwise the distribution
 			// version equals Kubernetes and only recreation moves it.
-			rolling: upgrader.DistributionImageRef() != "",
+			rolling:      upgrader.DistributionImageRef() != "",
+			imagePlanner: imagePlanner,
+			clusterName:  resolveClusterNameFromContext(ctx),
 		},
 		{
 			label:          "Kubernetes",
@@ -148,12 +154,53 @@ func mergeDimensionDrift(
 		return
 	}
 
-	if versionsEqual(dimension.currentVersion, target) ||
-		isDowngrade(dimension.currentVersion, target) {
+	if isDowngrade(dimension.currentVersion, target) {
+		return
+	}
+
+	if versionsEqual(dimension.currentVersion, target) {
+		mergeDistributionImageDrift(cmd, mainDiff, dimension)
+
 		return
 	}
 
 	appendVersionChange(mainDiff, dimension, target, reason)
+}
+
+func mergeDistributionImageDrift(
+	cmd *cobra.Command, mainDiff *clusterupdate.UpdateResult, dimension versionDimension,
+) {
+	if dimension.imagePlanner == nil {
+		return
+	}
+
+	changed, err := dimension.imagePlanner.DistributionImageChanged(
+		cmd.Context(),
+		dimension.clusterName,
+	)
+	if err != nil {
+		notify.Warningf(cmd.ErrOrStderr(), "Cannot compute distribution image drift: %v", err)
+
+		mainDiff.UnknownBaseline = append(mainDiff.UnknownBaseline, clusterupdate.Change{
+			Field:    "distribution.image",
+			OldValue: clusterupdate.UnknownBaselineValue,
+			NewValue: "configured boot image",
+			Category: clusterupdate.ChangeCategoryUnknown,
+			Reason:   "running boot image could not be read",
+		})
+
+		return
+	}
+
+	if changed {
+		mainDiff.RebootRequired = append(mainDiff.RebootRequired, clusterupdate.Change{
+			Field:    "distribution.image",
+			OldValue: "running boot image",
+			NewValue: "configured boot image",
+			Category: clusterupdate.ChangeCategoryRebootRequired,
+			Reason:   "boot image differs at the same distribution version",
+		})
+	}
 }
 
 // resolveDimensionTarget returns the target version for a dimension: the pinned
@@ -194,6 +241,10 @@ func resolveDimensionTarget(
 		cmd.Context(), resolver, dimension.imageRef, dimension.currentVersion, dimension.suffix,
 	)
 	if err != nil {
+		if errors.Is(err, versionresolver.ErrNoUpgradesAvailable) && dimension.imagePlanner != nil {
+			return dimension.currentVersion, "current stable version", true
+		}
+
 		if !errors.Is(err, versionresolver.ErrNoUpgradesAvailable) {
 			notify.Warningf(cmd.ErrOrStderr(),
 				"Cannot compute %s version drift: %v", dimension.label, err)

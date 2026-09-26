@@ -12,6 +12,7 @@ import (
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
 	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -87,7 +88,14 @@ func (p *Provisioner) upgradeNodeTalosVersion(
 	// Skip nodes already at the target. A rolling upgrade walks every node, so when
 	// resuming an interrupted or partial roll (a mixed-version cluster) it would
 	// otherwise reboot nodes that already run the desired version.
-	if runningVersionMatchesTarget(runningVersion, desiredTag) {
+	matches, matchErr := runningImageMatchesTarget(
+		ctx, talosClient.COSI, runningVersion, desiredTag, p.resolveSchematicID(),
+	)
+	if matchErr != nil {
+		return fmt.Errorf("checking running image on %s: %w", nodeIP, matchErr)
+	}
+
+	if matches {
 		_, _ = fmt.Fprintf(
 			p.logWriter,
 			"    %s already at %s, skipping upgrade\n",
@@ -108,7 +116,7 @@ func (p *Provisioner) upgradeNodeTalosVersion(
 		return err
 	}
 
-	// Wait for the node to come back with the desired version.
+	// Wait for the node to come back with the desired version and schematic.
 	_, _ = fmt.Fprintf(p.logWriter, "    Waiting for %s to become ready...\n", nodeIP)
 
 	waitErr := p.waitForNodeReadyAfterUpgrade(ctx, nodeIP, desiredTag)
@@ -311,7 +319,7 @@ func drainUpgradeStream(
 }
 
 // waitForNodeReadyAfterUpgrade polls a node's Talos API until it responds with
-// the desired version tag, indicating the node has rebooted into the new OS.
+// the desired version and schematic, proving it booted the requested OS image.
 func (p *Provisioner) waitForNodeReadyAfterUpgrade(
 	ctx context.Context,
 	nodeIP, desiredTag string,
@@ -328,11 +336,11 @@ func (p *Provisioner) waitForNodeReadyAfterUpgrade(
 	for time.Now().Before(deadline) {
 		pollCtx, pollCancel := context.WithTimeout(ctx, retryInterval)
 
-		tag, err := p.getRunningTalosVersion(pollCtx, nodeIP)
+		matches, err := p.nodeImageMatchesTarget(pollCtx, nodeIP, desiredTag)
 
 		pollCancel()
 
-		if err == nil && tag == desiredTag {
+		if err == nil && matches {
 			return nil
 		}
 
@@ -387,10 +395,24 @@ func (p *Provisioner) rollingUpgradeNodes(
 		storageProber = p.buildStorageHealthProberOrWarn(ctx, clientset, clusterName)
 	}
 
-	for i, node := range ordered {
+	for index, node := range ordered {
+		matches, matchErr := p.nodeImageMatchesTarget(ctx, node.IP, desiredTag)
+		if matchErr != nil {
+			return fmt.Errorf("checking image before drain on %s: %w", node.IP, matchErr)
+		}
+
+		if matches {
+			recoverErr := p.recoverUpgradedNode(ctx, clientset, node, storageProber)
+			if recoverErr != nil {
+				return fmt.Errorf("recovering node %s (%s): %w", node.IP, node.Role, recoverErr)
+			}
+
+			continue
+		}
+
 		_, _ = fmt.Fprintf(p.logWriter,
 			"  [%d/%d] Upgrading %s (%s)...\n",
-			i+1, len(ordered), node.IP, node.Role,
+			index+1, len(ordered), node.IP, node.Role,
 		)
 
 		upgradeErr := p.upgradeSingleNode(ctx, upgradeNodeRequest{
@@ -474,21 +496,81 @@ func (p *Provisioner) upgradeSingleNode(ctx context.Context, req upgradeNodeRequ
 		return nil
 	}
 
-	uncordonErr := p.uncordonAfterUpgrade(ctx, req.clientset, nodeName)
+	return p.completeNodeUpgrade(ctx, req.clientset, nodeName, req.prober)
+}
+
+// completeNodeUpgrade finishes the upgrade of a node that runs the target image: it
+// waits for the node to report Ready, uncordons it, then gates progression to the next
+// node on replicated-storage volume health so a one-replica-per-node volume is not
+// faulted by rebooting consecutive replica holders before a rebuild completes (#5467).
+// The gate is a no-op when disabled or when no backend was detected (prober == nil).
+func (p *Provisioner) completeNodeUpgrade(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeName string,
+	prober storageHealthProber,
+) error {
+	uncordonErr := p.uncordonAfterUpgrade(ctx, clientset, nodeName)
 	if uncordonErr != nil {
 		return uncordonErr
 	}
 
-	// Gate progression to the next node on replicated-storage volume health so a
-	// one-replica-per-node volume is not faulted by rebooting consecutive replica
-	// holders before a rebuild completes (#5467). No-op when the gate is disabled or
-	// no backend was detected (prober == nil).
-	storageErr := p.waitForStorageHealthy(ctx, req.prober, p.storageHealthTimeout())
+	storageErr := p.waitForStorageHealthy(ctx, prober, p.storageHealthTimeout())
 	if storageErr != nil {
 		return fmt.Errorf("storage health gate: %w", storageErr)
 	}
 
 	return nil
+}
+
+// recoverUpgradedNode finishes the upgrade of a node that already runs the target
+// image but is still cordoned, which is how an earlier attempt leaves it when it times
+// out waiting for the node to become Ready. Skipping such a node would leave it
+// unschedulable. A node that is schedulable, or that is absent from the Kubernetes API
+// (so it was never cordoned), needs nothing; a failure to read the node list fails the
+// roll, because the node's cordon state is then unknown.
+func (p *Provisioner) recoverUpgradedNode(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	node nodeWithRole,
+	prober storageHealthProber,
+) error {
+	if clientset == nil {
+		return nil
+	}
+
+	nodeName, resolveErr := p.resolveNodeName(ctx, clientset, node.IP)
+	if resolveErr != nil {
+		// Only a node that is genuinely absent from the API can be skipped: when the
+		// node list itself cannot be read, its cordon state is unknown, and reporting
+		// success could leave a node cordoned by an earlier attempt unschedulable.
+		if !errors.Is(resolveErr, ErrNodeNotFoundByIP) {
+			return fmt.Errorf("resolving Kubernetes node for %s: %w", node.IP, resolveErr)
+		}
+
+		_, _ = fmt.Fprintf(p.logWriter,
+			"  ⚠ Could not resolve %s to a Kubernetes node; skipping the cordon check: %v\n",
+			node.IP, resolveErr,
+		)
+
+		return nil
+	}
+
+	k8sNode, getErr := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	if getErr != nil {
+		return fmt.Errorf("reading node %s: %w", nodeName, getErr)
+	}
+
+	if !k8sNode.Spec.Unschedulable {
+		return nil
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter,
+		"  %s already runs the target image but is still cordoned; finishing its upgrade...\n",
+		nodeName,
+	)
+
+	return p.completeNodeUpgrade(ctx, clientset, nodeName, prober)
 }
 
 // uncordonAfterUpgrade waits for the upgraded node to report Ready, then uncordons

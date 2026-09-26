@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/cosi-project/runtime/pkg/state"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
@@ -26,6 +27,26 @@ import (
 )
 
 var errUpdateApplyStepNotFoundForTest = errors.New("update apply step not found")
+
+// SchematicFromStateForTest exposes the running-image resource decoder.
+func SchematicFromStateForTest(ctx context.Context, resourceState state.State) (string, error) {
+	return schematicFromState(ctx, resourceState)
+}
+
+// SchematicsChangedForTest exposes the all-node image preflight.
+func SchematicsChangedForTest(
+	ctx context.Context, nodes []NodeWithRoleForTest, desired string,
+	read func(context.Context, string) (string, error),
+) (bool, error) {
+	return schematicsChanged(ctx, nodes, desired, read)
+}
+
+// RunningImageMatchesTargetForTest exposes the shared pre/post-upgrade image check.
+func RunningImageMatchesTargetForTest(
+	ctx context.Context, st state.State, running, desired, schematic string,
+) (bool, error) {
+	return runningImageMatchesTarget(ctx, st, running, desired, schematic)
+}
 
 // EtcdMembershipClientForTest exposes the membership transport boundary.
 type EtcdMembershipClientForTest = etcdMembershipClient
@@ -1141,4 +1162,14 @@ func (p *Provisioner) AutoscalerNodeForTest(
 	talosAddress string,
 ) (NodeWithRoleForTest, error) {
 	return p.autoscalerNode(server, talosAddress)
+}
+
+// RecoverUpgradedNodeForTest exposes recoverUpgradedNode for unit testing, with the
+// storage-health gate disabled.
+func (p *Provisioner) RecoverUpgradedNodeForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeIP string,
+) error {
+	return p.recoverUpgradedNode(ctx, clientset, nodeWithRole{IP: nodeIP, Role: RoleWorker}, nil)
 }
