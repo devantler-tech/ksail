@@ -129,7 +129,10 @@ func TestAutoscalerSecretPayloadBootsEveryPoolWithTheAutoscalerShape(t *testing.
 	assert.Equal(t, "general", cx43Labels["workload"],
 		"a pool's own labels reach the config its nodes boot from")
 
-	conflictingLabels := bootedMachineLabels(t, payload.NodeConfigs["autoscale-conflicting"].CloudInit)
+	conflictingLabels := bootedMachineLabels(
+		t,
+		payload.NodeConfigs["autoscale-conflicting"].CloudInit,
+	)
 	assert.Equal(t, "custom", conflictingLabels["workload"],
 		"a pool's non-conflicting labels reach the config its nodes boot from")
 }
