@@ -532,10 +532,25 @@ runs:
           ALL_PLATFORMS=()
           [[ "$REF" == *@* ]] && ALL_PLATFORMS=(--all)
           echo "📥 Copying $image → $MIRROR_REF"
-          if ! skopeo copy --retry-times 3 --dest-tls-verify=false "${ALL_PLATFORMS[@]}" \
+          if skopeo copy --retry-times 3 --dest-tls-verify=false "${ALL_PLATFORMS[@]}" \
             "docker://ecr-public.aws.com/$SOURCE_REF" "docker://$MIRROR_REF"; then
-            FAILED="${FAILED}  ${image}"$'\n'
+            continue
           fi
+          # ECR Public's docker/library namespace republishes the Docker Official
+          # Images, so the same image is on Docker Hub, where the runner is logged
+          # in. Anonymous ECR Public pulls from shared runner IPs hit its data
+          # limit ("toomanyrequests: Data limit exceeded"), so fall back there
+          # rather than fail the warm job. A digest pin still has to match: skopeo
+          # fails if Docker Hub has no manifest with that digest.
+          if [[ "$SOURCE_REF" == docker/library/* ]]; then
+            HUB_REF="docker.io/library/${SOURCE_REF#docker/library/}"
+            echo "↪️ ECR Public refused $image; copying the same Docker Official Image from $HUB_REF"
+            if skopeo copy --retry-times 3 --dest-tls-verify=false "${ALL_PLATFORMS[@]}" \
+              "docker://$HUB_REF" "docker://$MIRROR_REF"; then
+              continue
+            fi
+          fi
+          FAILED="${FAILED}  ${image}"$'\n'
         done <<< "$ECR_IMAGES"
         if [ -n "$FAILED" ]; then
           echo "::error::Could not copy these ECR Public images into their mirror:"
