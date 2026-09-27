@@ -197,7 +197,9 @@ func observedManifestBytes(children []*unstructured.Unstructured) ([]byte, error
 		obj := child.DeepCopy()
 		delete(obj.Object, "status")
 
-		for _, field := range []string{"managedFields", "resourceVersion", "creationTimestamp", "generation", "selfLink"} {
+		for _, field := range []string{
+			"managedFields", "resourceVersion", "creationTimestamp", "generation", "selfLink", "uid",
+		} {
 			unstructured.RemoveNestedField(obj.Object, "metadata", field)
 		}
 

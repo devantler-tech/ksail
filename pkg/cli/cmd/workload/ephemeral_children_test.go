@@ -103,6 +103,56 @@ func TestValidateObservedChildFailsCELAndCleansUp(t *testing.T) {
 	assert.Equal(t, 1, backend.cleaned)
 }
 
+//nolint:paralleltest // replaces the isolated lifecycle/client factories
+func TestValidateObservedChildIgnoresServerUIDForCEL(t *testing.T) {
+	fake := &fakeEphemeralProvisioner{}
+	backend := installEphemeralProvisioner(t, fake, nil)
+	child := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "example.test/v1",
+		"kind":       "GeneratedWorkload",
+		"metadata": map[string]any{
+			"name":      "safe-child",
+			"namespace": "default",
+			"uid":       "server-assigned-uid",
+		},
+		"spec": map[string]any{"privileged": false},
+	}}
+	client := &childAdmission{admissionRecorder: admissionRecorder{
+		apply: func(context.Context, *unstructured.Unstructured) error { return nil },
+	}, children: []*unstructured.Unstructured{child}}
+	restore := workload.ExportSetEphemeralAdmissionClient(
+		func(string, string) (ephemeral.Client, error) { return client, nil },
+	)
+	t.Cleanup(restore)
+	rules := writeRulesFile(t, `rules:
+  - name: no-server-uid-in-source
+    expression: 'object.kind != "GeneratedWorkload" || !has(object.metadata.uid)'
+    message: "source manifests must not carry server-assigned UIDs"
+    severity: error
+`)
+	root, schemaPath := childSource(t)
+	cmd := workload.NewValidateCmd()
+	cmd.SetArgs([]string{
+		root,
+		"--ephemeral",
+		"--ephemeral-children",
+		"--schema-location", schemaPath,
+		"--rules", rules,
+	})
+
+	err := cmd.ExecuteContext(t.Context())
+	require.NoError(t, err)
+	assert.Equal(
+		t,
+		types.UID("server-assigned-uid"),
+		child.GetUID(),
+		"observation must remain intact",
+	)
+	assert.Equal(t, 1, client.observed)
+	assert.Equal(t, fake.created, fake.deleted)
+	assert.Equal(t, 1, backend.cleaned)
+}
+
 func TestChildObservationFlagsRequireEphemeral(t *testing.T) {
 	t.Parallel()
 
