@@ -245,7 +245,7 @@ If neither the repair nor a backup restore work, regenerate the talosconfig by r
 
 KSail automatically retries transient VCluster startup failures (up to 5 attempts, 5-second delay), including exit status 22/EINVAL, D-Bus errors, network transients, GHCR pull failures, and node join timeouts (kubelet TLS bootstrap). `Retrying vCluster create (attempt 2/5)...` messages are expected — no action required.
 
-If all retries fail, check Docker resource limits and D-Bus availability. See the [VCluster guide](/distributions/vcluster/#troubleshooting) for details.
+If all retries fail, check Docker resource limits. See the [VCluster guide](/distributions/vcluster/#troubleshooting) for details.
 
 ### kubectl Commands Fail After VCluster Creation
 
