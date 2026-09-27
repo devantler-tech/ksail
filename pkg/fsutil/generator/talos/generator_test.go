@@ -1220,7 +1220,12 @@ func TestIngressFirewallKubeletRuleAllowsPodCIDR(t *testing.T) {
 
 	cpRules := talosgenerator.IngressFirewallCPRulesYAML("10.0.0.0/16", 8472, nil)
 	for _, name := range []string{"etcd", "trustd", "cni-vxlan"} {
-		assert.NotContains(t, networkRuleDocument(t, cpRules, name), talosgenerator.DefaultPodCIDR, name)
+		assert.NotContains(
+			t,
+			networkRuleDocument(t, cpRules, name),
+			talosgenerator.DefaultPodCIDR,
+			name,
+		)
 	}
 }
 
