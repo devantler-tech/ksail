@@ -81,6 +81,10 @@ func NewValidateCmd() *cobra.Command {
 		Long:  validateLongDescription,
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Only this command derives the Kyverno default from ksail.yaml; other
+			// callers of runValidateCmd (push-time validation) keep what they pass.
+			flags.kyvernoPoliciesFromConfig = !cmd.Flags().Changed(kyvernoPoliciesFlagName)
+
 			return runValidateCmd(cmd.Context(), cmd, args, *flags)
 		},
 	}
@@ -100,11 +104,15 @@ type validateFlags struct {
 	skipHelmRender       bool
 	includeCRDSchemas    bool
 	kyvernoPolicies      bool
-	ephemeral            bool
-	children             ephemeralChildOptions
-	skipKinds            []string
-	schemaLocations      []string
-	rules                string
+	// kyvernoPoliciesFromConfig makes resolveKyvernoPolicies derive the Kyverno
+	// check from spec.cluster.policyEngine instead of using kyvernoPolicies. It is
+	// set only when the validate command's --kyverno-policies flag was not given.
+	kyvernoPoliciesFromConfig bool
+	ephemeral                 bool
+	children                  ephemeralChildOptions
+	skipKinds                 []string
+	schemaLocations           []string
+	rules                     string
 }
 
 // addValidateFlags registers the flags for the validate command, binding each to a
@@ -151,7 +159,7 @@ func addValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 	)
 	cmd.Flags().BoolVar(
 		&flags.kyvernoPolicies,
-		"kyverno-policies",
+		kyvernoPoliciesFlagName,
 		false,
 		kyvernoPoliciesFlagDescription,
 	)
@@ -271,9 +279,34 @@ func runValidateCmdInner(
 		return err
 	}
 
+	kyvernoPolicies := resolveKyvernoPolicies(cfg, configFound, loadErr, flags)
+
 	return validatePath(
-		ctx, cmd, path, kubeconformClient, validationOpts, renderer, engine, flags.kyvernoPolicies,
+		ctx, cmd, path, kubeconformClient, validationOpts, renderer, engine, kyvernoPolicies,
 	)
+}
+
+// resolveKyvernoPolicies returns whether to evaluate the source's own Kyverno
+// policies. An explicit --kyverno-policies (true or false) always wins. Without
+// it the check is on exactly when ksail.yaml declares Kyverno as the cluster's
+// policy engine: those are the policies the cluster will enforce at admission, so
+// validation checks the same rules before deploy. No config, or a config that did
+// not load, leaves it off.
+func resolveKyvernoPolicies(
+	cfg *v1alpha1.Cluster,
+	configFound bool,
+	loadErr error,
+	flags validateFlags,
+) bool {
+	if !flags.kyvernoPoliciesFromConfig {
+		return flags.kyvernoPolicies
+	}
+
+	if loadErr != nil || !configFound || cfg == nil {
+		return false
+	}
+
+	return cfg.Spec.Cluster.PolicyEngine == v1alpha1.PolicyEngineKyverno
 }
 
 // buildValidationOptions assembles the kubeconform validation options from the
