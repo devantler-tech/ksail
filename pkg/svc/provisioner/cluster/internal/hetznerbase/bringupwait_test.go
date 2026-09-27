@@ -19,6 +19,12 @@ const (
 	testStageTimeout         = 200 * time.Millisecond
 	testCloudInitStatusCmd   = "cloud-init status --long"
 	testCloudInitStatusError = "status: error\ndetail: runcmd failed\n"
+	testCloudInitShortCmd    = "cloud-init status"
+	testKubeadmErrorLinesCmd = "grep -E '^(\\[ERROR |error execution phase)' " +
+		"/var/log/cloud-init-output.log | tail -n 20"
+	testKubeadmErrorLines = "[ERROR FileContent--proc-sys-net-ipv4-ip_forward]: " +
+		"/proc/sys/net/ipv4/ip_forward contents are not set to 1\n" +
+		"error execution phase preflight: [preflight] Some fatal errors occurred:\n"
 )
 
 // TestBringUpNodeBootstrapWaitIsBounded pins that a node whose first-boot
@@ -174,4 +180,96 @@ func TestBringUpNodeWithoutLogWriter(t *testing.T) {
 
 	_, err = base.BringUpNode(ctx, testClusterName, bringUpSpec(pair, hostKey, port))
 	require.NoError(t, err)
+}
+
+// TestBringUpNodeFailsFastOnCloudInitError pins that a node whose cloud-init
+// already reports the first boot as failed ends the bootstrap wait at once
+// rather than on the stage's deadline (ksail#7331: a failed kubeadm preflight
+// used to surface only after 20 minutes), and that the error carries
+// cloud-init's status and kubeadm's error lines.
+func TestBringUpNodeFailsFastOnCloudInitError(t *testing.T) {
+	t.Parallel()
+
+	pair, err := sshbootstrap.GenerateKeyPair()
+	require.NoError(t, err)
+
+	failedBoot := func(command string) (string, uint32) {
+		switch command {
+		case testProbeCommand:
+			return "", errExitNotFound
+		case testCloudInitShortCmd:
+			return "status: error\n", 1
+		case testCloudInitStatusCmd:
+			return testCloudInitStatusError, 1
+		case testKubeadmErrorLinesCmd:
+			return testKubeadmErrorLines, 0
+		default:
+			return "", errExitUnknownProbe
+		}
+	}
+
+	host, port, hostKey := startBringUpSSHServer(t, pair.Signer.PublicKey(), failedBoot)
+
+	infra := &fakeInfra{createdServer: serverWithPublicIPv4(host)}
+	base := newBase(infra, v1alpha1.OptionsHetzner{})
+	// A deadline far beyond the test budget: only the fail-fast path can end
+	// the wait in time.
+	base.BringUpBootstrapTimeout = time.Hour
+
+	done := make(chan error, 1)
+
+	go func() {
+		_, bringUpErr := base.BringUpNode(
+			t.Context(), testClusterName, bringUpSpec(pair, hostKey, port),
+		)
+		done <- bringUpErr
+	}()
+
+	select {
+	case err = <-done:
+	case <-time.After(testBringUpBudget):
+		t.Fatal("bring-up kept waiting after cloud-init reported the first boot as failed")
+	}
+
+	require.ErrorIs(t, err, hetznerbase.ErrBootstrapFailed)
+	require.NotErrorIs(t, err, hetznerbase.ErrBringUpStageTimeout)
+	assert.Contains(t, err.Error(), testKubeconfigPath)
+	assert.Contains(t, err.Error(), "status: error")
+	assert.Contains(t, err.Error(), "[ERROR FileContent--proc-sys-net-ipv4-ip_forward]")
+	assert.Equal(t, 1, infra.deleteNodesCalls)
+}
+
+// TestBringUpNodeKeepsWaitingWhileCloudInitRuns pins that only an error
+// verdict ends the wait early: a first boot cloud-init still reports as
+// running is waited for until the stage's own deadline.
+func TestBringUpNodeKeepsWaitingWhileCloudInitRuns(t *testing.T) {
+	t.Parallel()
+
+	pair, err := sshbootstrap.GenerateKeyPair()
+	require.NoError(t, err)
+
+	running := func(command string) (string, uint32) {
+		switch command {
+		case testProbeCommand:
+			return "", errExitNotFound
+		case testCloudInitShortCmd:
+			return "status: running\n", 0
+		default:
+			return "", errExitUnknownProbe
+		}
+	}
+
+	host, port, hostKey := startBringUpSSHServer(t, pair.Signer.PublicKey(), running)
+
+	infra := &fakeInfra{createdServer: serverWithPublicIPv4(host)}
+	base := newBase(infra, v1alpha1.OptionsHetzner{})
+	base.BringUpBootstrapTimeout = testStageTimeout
+
+	ctx, cancel := context.WithTimeout(t.Context(), testBringUpBudget)
+	defer cancel()
+
+	_, err = base.BringUpNode(ctx, testClusterName, bringUpSpec(pair, hostKey, port))
+
+	require.ErrorIs(t, err, hetznerbase.ErrBringUpStageTimeout)
+	require.NotErrorIs(t, err, hetznerbase.ErrBootstrapFailed)
 }

@@ -232,9 +232,11 @@ func publicIPv4(server *hcloud.Server) (net.IP, error) {
 
 // waitForRemoteFile polls the remote node until path exists
 // ([sshbootstrap.Client.FileExists]), sleeping interval between probes and
-// giving up when ctx ends. "Does not exist yet" retries; a probe error is
-// surfaced immediately — the connection is already established, so transport
-// errors are real failures, not boot-time races.
+// giving up when ctx ends. "Does not exist yet" retries unless cloud-init
+// already reports the first boot as failed ([ErrBootstrapFailed]), since the
+// file will then never appear; a probe error is surfaced immediately — the
+// connection is already established, so transport errors are real failures,
+// not boot-time races.
 func waitForRemoteFile(
 	ctx context.Context,
 	client *sshbootstrap.Client,
@@ -253,6 +255,10 @@ func waitForRemoteFile(
 
 		if exists {
 			return nil
+		}
+
+		if cloudInitFailed(ctx, client) {
+			return fmt.Errorf("%w: waiting for %q", ErrBootstrapFailed, path)
 		}
 
 		select {
