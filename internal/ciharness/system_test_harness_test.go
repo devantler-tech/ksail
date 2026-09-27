@@ -735,17 +735,34 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 	updateIndex := harnessStepIndex(t, smokeJob.Steps, "🧪 ksail cluster update scales EKS nodes")
 	deleteIndex := harnessStepIndex(t, smokeJob.Steps, "🧹 Delete EKS smoke cluster")
 	assert.Less(t, refreshIndex, updateIndex)
-	recoveryRefreshIndex := harnessStepIndex(t, smokeJob.Steps, "🔐 Refresh AWS credentials before EKS recovery")
-	recoveryIndex := harnessStepIndex(t, smokeJob.Steps, "🧪 Recover EKS ownership after local state loss")
+
+	recoveryRefreshIndex := harnessStepIndex(
+		t,
+		smokeJob.Steps,
+		"🔐 Refresh AWS credentials before EKS recovery",
+	)
+	recoveryIndex := harnessStepIndex(
+		t,
+		smokeJob.Steps,
+		"🧪 Recover EKS ownership after local state loss",
+	)
 	reconcileIndex := harnessStepIndex(t, smokeJob.Steps, "🧪 ksail workload reconcile")
 	assert.Less(t, updateIndex, recoveryRefreshIndex)
 	assert.Less(t, reconcileIndex, recoveryRefreshIndex)
 	assert.Less(t, recoveryRefreshIndex, recoveryIndex)
 	assert.Less(t, recoveryIndex, deleteIndex)
 
-	recoveryCredentials := findHarnessStep(t, smokeJob.Steps, "🔐 Refresh AWS credentials before EKS recovery")
+	recoveryCredentials := findHarnessStep(
+		t,
+		smokeJob.Steps,
+		"🔐 Refresh AWS credentials before EKS recovery",
+	)
 	assert.Equal(t, initialCredentials.Uses, recoveryCredentials.Uses)
-	assert.Equal(t, initialCredentials.With["role-to-assume"], recoveryCredentials.With["role-to-assume"])
+	assert.Equal(
+		t,
+		initialCredentials.With["role-to-assume"],
+		recoveryCredentials.With["role-to-assume"],
+	)
 	assert.Equal(t, 7200, recoveryCredentials.With["role-duration-seconds"])
 	assert.Contains(t, recoveryCredentials.If, "always()")
 
@@ -755,10 +772,12 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 	}
 
 	assert.LessOrEqual(t, postRefreshMinutes+10, 120)
+
 	postRecoveryRefreshMinutes := 0
 	for _, name := range boundedStepNames[13:] {
 		postRecoveryRefreshMinutes += findHarnessStep(t, smokeJob.Steps, name).TimeoutMinutes
 	}
+
 	assert.LessOrEqual(t, postRecoveryRefreshMinutes+10, 120)
 }
 
@@ -774,9 +793,12 @@ func TestEKSSmokeRecoversOwnershipWithoutProjectOrLocalState(t *testing.T) {
 	tempDir := t.TempDir()
 	binDir := filepath.Join(tempDir, "bin")
 	require.NoError(t, os.Mkdir(binDir, 0o700))
+
 	callLog := filepath.Join(tempDir, "calls")
 	awsCallLog := filepath.Join(tempDir, "aws-calls")
+
 	const clusterARN = "arn:aws:eks:us-east-1:123456789012:cluster/fixture"
+
 	writeExecutableStub(t, filepath.Join(binDir, "ksail"), `#!/usr/bin/env bash
 set -euo pipefail
 printf '%s|%s|%s\n' "$PWD" "$HOME" "$*" >> "$KSAIL_RECOVERY_CALL_LOG"
@@ -809,14 +831,17 @@ printf '%s\t%s\n' "$STUB_CLUSTER_ARN" '2026-09-27T00:00:00Z'
 
 	calls, err := os.ReadFile(callLog) //nolint:gosec // Test-owned path.
 	require.NoError(t, err)
+
 	lines := strings.Split(strings.TrimSpace(string(calls)), "\n")
 	require.Len(t, lines, 4)
+
 	wantCommands := []string{
 		"cluster eks-bind --experimental --name fixture --provider AWS",
 		"cluster eks-bind --experimental --name fixture --provider AWS --yes",
 		"cluster stop --name fixture --provider AWS",
 		"cluster start --name fixture --provider AWS",
 	}
+
 	for index, line := range lines {
 		parts := strings.SplitN(line, "|", 3)
 		require.Len(t, parts, 3)
