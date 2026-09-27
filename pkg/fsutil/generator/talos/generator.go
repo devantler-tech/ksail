@@ -416,8 +416,24 @@ func networkRuleConfigDoc(name, port, protocol, ingressLines string) string {
 	return fmt.Sprintf(networkRuleConfigTemplate, name, port, protocol, ingressLines)
 }
 
+// DefaultPodCIDR is Talos's default pod subnet (cluster.network.podSubnets). KSail does not
+// override it, so it is the source address of every pod-network client on a KSail Talos
+// cluster.
+const DefaultPodCIDR = "10.244.0.0/16"
+
+// kubeletIngress formats the kubelet rule's `ingress:` body: the cluster network CIDR plus the
+// pod CIDR. Pod-network clients such as metrics-server scrape the kubelet from a pod address,
+// so a node-CIDR-only rule drops their traffic and metrics-server never becomes ready.
+func kubeletIngress(networkCIDR string) string {
+	if networkCIDR == DefaultPodCIDR {
+		return singleSubnetIngress(networkCIDR)
+	}
+
+	return singleSubnetIngress(networkCIDR) + singleSubnetIngress(DefaultPodCIDR)
+}
+
 // singleSubnetIngress formats the common single-CIDR `ingress:` body used by every rule that is
-// always restricted to the cluster's own network CIDR (kubelet, trustd, etcd, cni-vxlan) —
+// always restricted to the cluster's own network CIDR (trustd, etcd, cni-vxlan) —
 // formatIngressSubnets handles the API-facing rules (apid, kubernetes-api), which additionally
 // support an allowed-CIDR override.
 func singleSubnetIngress(cidr string) string {
@@ -436,7 +452,7 @@ func IngressFirewallCPRulesYAML(networkCIDR string, cniPort int, allowedCIDRs []
 	networkIngress := singleSubnetIngress(networkCIDR)
 
 	docs := []string{
-		networkRuleConfigDoc("kubelet", "10250", "tcp", networkIngress),
+		networkRuleConfigDoc("kubelet", "10250", "tcp", kubeletIngress(networkCIDR)),
 		networkRuleConfigDoc("apid", "50000", "tcp", apiIngress),
 		networkRuleConfigDoc("kubernetes-api", "6443", "tcp", apiIngress),
 		networkRuleConfigDoc("trustd", "50001", "tcp", networkIngress),
@@ -467,7 +483,7 @@ func IngressFirewallWorkerRulesYAML(
 	apiIngress := formatIngressSubnets(apiCIDRs)
 
 	docs := []string{
-		networkRuleConfigDoc("kubelet", "10250", "tcp", networkIngress),
+		networkRuleConfigDoc("kubelet", "10250", "tcp", kubeletIngress(networkCIDR)),
 		networkRuleConfigDoc("apid", "50000", "tcp", apiIngress),
 		networkRuleConfigDoc("cni-vxlan", strconv.Itoa(cniPort), "udp", networkIngress),
 	}
