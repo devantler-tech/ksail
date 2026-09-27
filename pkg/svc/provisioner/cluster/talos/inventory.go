@@ -15,6 +15,9 @@ import (
 type nodeWithRole struct {
 	IP   string
 	Role string // "control-plane" or "worker"
+	// AutoscalerPool names the node pool of a node the cluster autoscaler provisioned,
+	// and is empty for every KSail-owned node.
+	AutoscalerPool string
 }
 
 // getNodesByRole returns nodes with their roles for the cluster.

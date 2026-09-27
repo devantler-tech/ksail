@@ -2,6 +2,7 @@ package clusterapi
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -58,10 +59,16 @@ func (s *Service) SetLogClientForTest(
 	s.newLogClient = build
 }
 
-// ContextForCluster exposes contextForCluster for black-box tests of name→context resolution.
-func ContextForCluster(kubeconfigPath, clusterName string) (string, error) {
-	return contextForCluster(kubeconfigPath, clusterName)
+// ContextForCluster exposes contextForCluster for black-box tests of name→context resolution; the
+// named clusters are the managed ones.
+func ContextForCluster(kubeconfigPath, clusterName string, managed ...string) (string, error) {
+	return contextForCluster(kubeconfigPath, clusterName, func(name string) bool {
+		return slices.Contains(managed, name)
+	})
 }
+
+// ErrAmbiguousClusterContext exposes errAmbiguousClusterContext for errors.Is assertions.
+var ErrAmbiguousClusterContext = errAmbiguousClusterContext
 
 // SetKubeconfigPathForTest overrides the kubeconfig path every cluster client (and the resource
 // browser / kubeconfig export) reads from via the restConfigForCluster seam, so tests can point at a
@@ -76,13 +83,18 @@ func (s *Service) SetKubeconfigPathForTest(path string) {
 func (s *Service) SetRESTConfigForClusterForTest(
 	build func(clusterName string) (*rest.Config, error),
 ) {
-	s.restConfigForCluster = build
+	s.restConfigForCluster = func(_ context.Context, clusterName string) (*rest.Config, error) {
+		return build(clusterName)
+	}
 }
 
 // RESTConfigForClusterForTest drives the PRODUCTION kubeconfig seam (name → context → rest.Config)
 // so a test can assert which API server a cluster name resolves to, without overriding the seam.
-func (s *Service) RESTConfigForClusterForTest(clusterName string) (*rest.Config, error) {
-	return s.restConfigForCluster(clusterName)
+func (s *Service) RESTConfigForClusterForTest(
+	ctx context.Context,
+	clusterName string,
+) (*rest.Config, error) {
+	return s.restConfigForCluster(ctx, clusterName)
 }
 
 // SetApplyClientForTest overrides the apply-client builder so manifest-apply tests can inject a fake

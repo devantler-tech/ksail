@@ -1,6 +1,7 @@
 package workload
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -23,8 +24,18 @@ const renderedManifestPerm = 0o600
 // actually applies: Kustomize build, Flux variable substitution, then in-process
 // Helm rendering of HelmReleases. It is shared by the validate and scan commands.
 type gitopsRenderer struct {
-	kustomize  *kustomize.Client
+	build      func(context.Context, string) (*bytes.Buffer, error)
 	chartCache *render.ChartCache
+
+	// CRD discovery retains each complete result for the following validation pass.
+	// Parallel consumers remove their entries as validation takes ownership of them.
+	preparedMu sync.Mutex
+	prepared   map[string]preparedRender
+}
+
+type preparedRender struct {
+	result render.Result
+	err    error
 }
 
 // newGitOpsRenderer constructs a renderer. The kustomize client is stateless and
@@ -35,12 +46,46 @@ type gitopsRenderer struct {
 // stale across runs.
 func newGitOpsRenderer() *gitopsRenderer {
 	return &gitopsRenderer{
-		kustomize:  kustomize.NewClient(),
+		build:      kustomize.NewClient().Build,
 		chartCache: render.NewChartCache(),
 	}
 }
 
-// expand builds, substitutes, and Helm-renders one kustomization directory. The
+// prepare renders once for CRD discovery and retains the same outcome for validation.
+// Results are read-only, including provenance and degradations. Errors are retained too:
+// a discovery warning must become a validation failure, not an implicit second attempt.
+func (g *gitopsRenderer) prepare(ctx context.Context, kustDir string) (render.Result, error) {
+	result, err := g.expand(ctx, kustDir)
+
+	g.preparedMu.Lock()
+	defer g.preparedMu.Unlock()
+
+	if g.prepared == nil {
+		g.prepared = make(map[string]preparedRender)
+	}
+
+	g.prepared[kustDir] = preparedRender{result: result, err: err}
+
+	return result, err
+}
+
+// takePrepared transfers the discovery result to its validation consumer. The map is
+// scoped to one renderer/run, and entries are never reused after validation consumes them.
+func (g *gitopsRenderer) takePrepared(kustDir string) (preparedRender, bool) {
+	g.preparedMu.Lock()
+	defer g.preparedMu.Unlock()
+
+	prepared, found := g.prepared[kustDir]
+	delete(g.prepared, kustDir)
+
+	if len(g.prepared) == 0 {
+		g.prepared = nil
+	}
+
+	return prepared, found
+}
+
+// expand consumes a prepared result or builds, substitutes, and Helm-renders a directory. The
 // kustomize build error is returned unwrapped so the caller's simplifyBuildError
 // can strip the verbose "kustomize build <path>:" prefix.
 //
@@ -49,9 +94,18 @@ func newGitOpsRenderer() *gitopsRenderer {
 // parallel, so each render must be isolated. Construction needs no cluster
 // access and is cheap.
 func (g *gitopsRenderer) expand(ctx context.Context, kustDir string) (render.Result, error) {
-	output, err := g.kustomize.Build(ctx, kustDir)
+	err := ctx.Err()
 	if err != nil {
-		return render.Result{}, err //nolint:wrapcheck // caller strips the kustomize prefix
+		return render.Result{}, fmt.Errorf("render cancelled: %w", err)
+	}
+
+	if prepared, found := g.takePrepared(kustDir); found {
+		return prepared.result, prepared.err
+	}
+
+	output, err := g.build(ctx, kustDir)
+	if err != nil {
+		return render.Result{}, err
 	}
 
 	helmClient, err := helm.NewTemplateOnlyClient()

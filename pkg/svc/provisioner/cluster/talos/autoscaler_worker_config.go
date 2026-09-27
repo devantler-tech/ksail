@@ -87,6 +87,27 @@ func GenerateAutoscalerWorkerConfig(
 		return nil, ErrNilWorkerConfig
 	}
 
+	patched, err := shapeAutoscalerWorker(workerConfig, poolLabels, poolTaints)
+	if err != nil {
+		return nil, err
+	}
+
+	cfgBytes, err := patched.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("marshal autoscaler worker config: %w", err)
+	}
+
+	return cfgBytes, nil
+}
+
+// shapeAutoscalerWorker gives a worker config the autoscaler worker shape described on
+// GenerateAutoscalerWorkerConfig. A pool's boot config and the rebuild of a running
+// autoscaler node both use it, so the two cannot drift apart (#7013).
+func shapeAutoscalerWorker(
+	workerConfig talosconfig.Provider,
+	poolLabels map[string]string,
+	poolTaints []corev1.Taint,
+) (talosconfig.Provider, error) {
 	patched, err := workerConfig.PatchV1Alpha1(func(cfg *v1alpha1.Config) error {
 		if cfg.MachineConfig == nil {
 			cfg.MachineConfig = &v1alpha1.MachineConfig{}
@@ -118,12 +139,7 @@ func GenerateAutoscalerWorkerConfig(
 		return nil, fmt.Errorf("patch autoscaler worker config: %w", err)
 	}
 
-	cfgBytes, err := patched.Bytes()
-	if err != nil {
-		return nil, fmt.Errorf("marshal autoscaler worker config: %w", err)
-	}
-
-	return cfgBytes, nil
+	return patched, nil
 }
 
 // applyPoolTaints writes the pool's taints into machine.nodeTaints. Talos encodes

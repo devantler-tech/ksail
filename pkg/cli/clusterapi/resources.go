@@ -2,7 +2,10 @@ package clusterapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
+	"strings"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
@@ -15,6 +18,10 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
+
+// errAmbiguousClusterContext is returned when several kubeconfig contexts detect to the same cluster
+// name and no single row owns that name.
+var errAmbiguousClusterContext = errors.New("ambiguous cluster name")
 
 // Ensure the local backend exposes the read-only resource browser and the safe write actions via the
 // shared adapter (the Service supplies only ResourceClient; api.ResourceAdapter provides the six
@@ -43,16 +50,21 @@ type dynamicClientFunc func(ctx context.Context, clusterName string) (dynamic.In
 // restConfigForClusterFunc resolves a *rest.Config for the named local cluster. It is the single
 // injectable seam every default client builder (dynamic, apply, log, exec) derives from, so tests can
 // point all four at one fake kubeconfig and production honours s.kubeconfigPath consistently.
-type restConfigForClusterFunc func(clusterName string) (*rest.Config, error)
+type restConfigForClusterFunc func(ctx context.Context, clusterName string) (*rest.Config, error)
 
 // defaultRESTConfigForCluster resolves the cluster's kubeconfig context by name (using the same
 // distribution-context patterns the detector uses: kind-<name>, k3d-<name>, admin@<name>, …) and
 // builds a *rest.Config against it, reading the kubeconfig path from s.kubeconfigPath so a test can
 // redirect every derived client by injecting one temp kubeconfig.
-func (s *Service) defaultRESTConfigForCluster(clusterName string) (*rest.Config, error) {
+func (s *Service) defaultRESTConfigForCluster(
+	ctx context.Context,
+	clusterName string,
+) (*rest.Config, error) {
 	kubeconfigPath := s.kubeconfigPath()
 
-	contextName, err := contextForCluster(kubeconfigPath, clusterName)
+	contextName, err := contextForCluster(kubeconfigPath, clusterName, func(name string) bool {
+		return s.isManagedCluster(ctx, name)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -65,13 +77,28 @@ func (s *Service) defaultRESTConfigForCluster(clusterName string) (*rest.Config,
 	return restConfig, nil
 }
 
+// isManagedCluster reports whether List shows name as a managed row: a cluster discovery finds, or
+// one an in-flight job tracks.
+func (s *Service) isManagedCluster(ctx context.Context, name string) bool {
+	if _, live := s.enumerate(ctx)[name]; live {
+		return true
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, tracked := s.jobs[name]
+
+	return tracked
+}
+
 // defaultDynamicClient builds a dynamic client for a local cluster from the single restConfigForCluster
 // seam (rest.Config + dynamic.NewForConfig — identical to the former k8s.NewDynamicClient path).
 func (s *Service) defaultDynamicClient(
-	_ context.Context,
+	ctx context.Context,
 	clusterName string,
 ) (dynamic.Interface, error) {
-	restConfig, err := s.restConfigForCluster(clusterName)
+	restConfig, err := s.restConfigForCluster(ctx, clusterName)
 	if err != nil {
 		return nil, err
 	}
@@ -84,36 +111,61 @@ func (s *Service) defaultDynamicClient(
 	return client, nil
 }
 
-// contextForCluster finds the kubeconfig context for clusterName. A ksail-managed cluster is keyed
-// by its detected cluster name (kind-<name> → <name>, k3d-<name> → <name>, admin@<name> → <name>, …),
-// so the detected-name match is tried first. An unmanaged cluster — a kubeconfig context ksail did
-// not provision (EKS, kubeadm, a colleague's cluster) — is surfaced by List keyed by its RAW context
-// name (see newUnmanagedCluster), and an arbitrary context follows no distribution pattern at all,
-// so the lookup falls back to an exact raw-context-name match. Without that fallback every
-// unmanaged row List advertises would 404 the moment a surface tried to operate on it. The same
-// fallback also resolves a managed row addressed by its full context name (kind-foo), which the
-// detected-name pass alone rejects because detection yields "foo". Returns an ErrNotFound-wrapped
-// error (→ 404) when neither pass matches.
-func contextForCluster(kubeconfigPath, clusterName string) (string, error) {
+// contextForCluster finds the kubeconfig context for the row List shows as clusterName. A managed
+// row is keyed by its detected cluster name (kind-<name> → <name>, k3d-<name> → <name>,
+// admin@<name> → <name>, …); an unmanaged row is keyed by its raw context name (see
+// newUnmanagedCluster), as is a managed row addressed by its full context name (kind-foo).
+//
+// When a context is literally named clusterName and another context detects to it, isManaged decides
+// which row the name is: List hides the raw context behind a managed cluster of that name, and shows
+// it as its own unmanaged row otherwise. isManaged is consulted only in that case. A name several
+// contexts detect to, with no raw row of its own, is ambiguous rather than resolved to an arbitrary
+// one. Returns an ErrNotFound-wrapped error (→ 404) when no context matches.
+func contextForCluster(
+	kubeconfigPath, clusterName string,
+	isManaged func(name string) bool,
+) (string, error) {
 	config, err := clientcmd.LoadFromFile(kubeconfigPath)
 	if err != nil {
 		return "", fmt.Errorf("load kubeconfig %q: %w", kubeconfigPath, err)
 	}
 
+	detected := detectedContexts(config, clusterName)
+	_, rawExists := config.Contexts[clusterName]
+
+	switch {
+	case rawExists && (len(detected) == 0 || !isManaged(clusterName)):
+		return clusterName, nil
+	case len(detected) == 1:
+		return detected[0], nil
+	case len(detected) > 1:
+		return "", fmt.Errorf("%w: %q matches kubeconfig contexts %s",
+			errAmbiguousClusterContext, clusterName, strings.Join(detected, ", "))
+	default:
+		return "", fmt.Errorf("%w: no kubeconfig context for cluster %q",
+			api.ErrNotFound, clusterName)
+	}
+}
+
+// detectedContexts returns, sorted, the contexts other than clusterName itself whose detected
+// cluster name is clusterName.
+func detectedContexts(config *clientcmdapi.Config, clusterName string) []string {
+	matches := []string{}
+
 	for contextName := range config.Contexts {
-		_, name, detectErr := clusterdetector.DetectDistributionFromContext(contextName)
-		if detectErr == nil && name == clusterName {
-			return contextName, nil
+		if contextName == clusterName {
+			continue
+		}
+
+		_, name, err := clusterdetector.DetectDistributionFromContext(contextName)
+		if err == nil && name == clusterName {
+			matches = append(matches, contextName)
 		}
 	}
 
-	// The detected-name pass keeps precedence so a managed cluster "prod" still resolves to
-	// kind-prod even if a stray context happens to be literally named "prod".
-	if _, exists := config.Contexts[clusterName]; exists {
-		return clusterName, nil
-	}
+	slices.Sort(matches)
 
-	return "", fmt.Errorf("%w: no kubeconfig context for cluster %q", api.ErrNotFound, clusterName)
+	return matches
 }
 
 // loadKubeconfig reads the user's kubeconfig once, best-effort and offline. List calls it a single

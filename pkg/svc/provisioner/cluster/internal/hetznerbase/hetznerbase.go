@@ -66,8 +66,9 @@ var (
 type Infra interface {
 	// EnsureNetwork creates (or returns the existing) private network for the cluster.
 	EnsureNetwork(ctx context.Context, clusterName, cidr string) (*hcloud.Network, error)
-	// EnsureFirewall creates (or returns the existing) firewall for the cluster.
-	EnsureFirewall(
+	// EnsureSSHFirewall creates (or repairs) the cluster firewall, which must allow SSH
+	// because these provisioners bootstrap every node over it.
+	EnsureSSHFirewall(
 		ctx context.Context,
 		clusterName string,
 		allowedCIDRs []string,
@@ -152,6 +153,13 @@ type Base struct {
 	// BringUpPollInterval is the delay between the multi-node bring-up's probes for
 	// a node's admin kubeconfig; zero means [DefaultKubeconfigPollInterval].
 	BringUpPollInterval time.Duration
+	// BringUpSSHTimeout bounds each wait for a created node to accept the bootstrap
+	// SSH dial; zero means [DefaultSSHWaitTimeout].
+	BringUpSSHTimeout time.Duration
+	// BringUpBootstrapTimeout bounds each wait for a node's first-boot bootstrap to
+	// write its admin kubeconfig (or join sentinel); zero means
+	// [DefaultBootstrapWaitTimeout].
+	BringUpBootstrapTimeout time.Duration
 	// Hub is the hub-cluster clientset the Connector capability publishes the child
 	// kubeconfig Secret through (the cluster the KSail operator runs on). Nil outside
 	// a pod (the CLI flow), which skips the publish and leaves the Connector read
@@ -274,7 +282,7 @@ func (b *Base) EnsureInfrastructure(
 
 	resolved.NetworkID = idOrZero(network, func(n *hcloud.Network) int64 { return n.ID })
 
-	firewall, err := b.Infra.EnsureFirewall(ctx, clusterName, b.Opts.AllowedCIDRs)
+	firewall, err := b.Infra.EnsureSSHFirewall(ctx, clusterName, b.Opts.AllowedCIDRs)
 	if err != nil {
 		return ResolvedInfra{}, fmt.Errorf("ensure firewall: %w", err)
 	}
@@ -491,7 +499,16 @@ func (b *Base) guardCreate(ctx context.Context, clusterName string) (ResolvedInf
 		return ResolvedInfra{}, ErrMissingKubeconfigDestination
 	}
 
-	return b.EnsureInfrastructure(ctx, clusterName)
+	b.logf("Ensuring network, firewall, placement group and SSH key for %q...", clusterName)
+
+	infra, err := b.EnsureInfrastructure(ctx, clusterName)
+	if err != nil {
+		return ResolvedInfra{}, err
+	}
+
+	b.logf("✓ Infrastructure ready for %q", clusterName)
+
+	return infra, nil
 }
 
 // rewriteAndPersistKubeconfig rewrites the retrieved kubeconfig's endpoint to the

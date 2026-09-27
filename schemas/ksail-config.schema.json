@@ -819,7 +819,7 @@
                 },
                 "sshKeyName": {
                   "type": "string",
-                  "description": "SSHKeyName is the name of the SSH key to use for server access.\nThe key must already exist in the Hetzner Cloud project.\nIf empty, no SSH key is attached (only Talos API access)."
+                  "description": "SSHKeyName is the name of the SSH key to use for server access.\nThe key must already exist in the Hetzner Cloud project.\nIf empty, no pre-registered Hetzner SSH key is attached. Vanilla and K3s nodes\nare still bootstrapped over SSH with a generated per-cluster keypair delivered\nthrough cloud-init."
                 },
                 "tokenEnvVar": {
                   "type": "string",
@@ -874,7 +874,7 @@
                     "type": "string"
                   },
                   "type": "array",
-                  "description": "CIDR blocks allowed to access the public Kubernetes API on control-plane nodes and public Talos API on every node. Private worker Talos API access from the cluster network remains enabled. When empty defaults to 0.0.0.0/0 and ::/0 (open to all IPv4 and IPv6)."
+                  "description": "CIDR blocks allowed to access the public Kubernetes API on control-plane nodes and public Talos API on every node. For Vanilla and K3s on Hetzner the same blocks also gate SSH (22) and the Kubernetes API (6443) used to bootstrap nodes, so include the address of the machine running ksail. Private worker Talos API access from the cluster network remains enabled. When empty defaults to 0.0.0.0/0 and ::/0 (open to all IPv4 and IPv6)."
                 },
                 "workerPublicIPv4": {
                   "type": "boolean",

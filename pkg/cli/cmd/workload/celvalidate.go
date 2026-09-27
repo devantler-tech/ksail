@@ -203,6 +203,8 @@ type celViolationSink struct {
 	// content is the warning format, with one %s for the description. Empty
 	// means "CEL rule warning: %s"; the Kyverno pass sets its own.
 	content string
+	// namespaceWarnings groups only Kyverno's unknown namespace context.
+	namespaceWarnings map[namespaceWarningKey]*namespaceWarningGroup
 }
 
 // add records one warning-severity violation description for later reporting.
@@ -223,7 +225,7 @@ func (s *celViolationSink) report(cmd *cobra.Command) {
 		content = "CEL rule warning: %s"
 	}
 
-	for _, description := range s.list {
+	for _, description := range append(s.list, s.namespaceDescriptions()...) {
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
 			Content: content,

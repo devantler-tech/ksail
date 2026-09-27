@@ -1,6 +1,7 @@
 package workload
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -11,8 +12,11 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/flux"
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/client/hubble"
+	"github.com/devantler-tech/ksail/v7/pkg/client/kubeconform"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/crdschema"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/ephemeral"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/fluxsubst"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/render"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/hostdebug"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/mirror"
 	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
@@ -24,6 +28,45 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
+
+// ExportValidationRenderer exposes the two production render consumers to regression tests.
+type ExportValidationRenderer struct{ renderer *gitopsRenderer }
+
+// ExportNewValidationRenderer optionally counts actual Kustomize builds without global hooks.
+func ExportNewValidationRenderer(
+	build func(context.Context, string) (*bytes.Buffer, error),
+) *ExportValidationRenderer {
+	renderer := newGitOpsRenderer()
+	if build != nil {
+		renderer.build = build
+	}
+
+	return &ExportValidationRenderer{renderer: renderer}
+}
+
+// Discover exercises the rendered-CRD pre-pass with the same renderer as validation.
+func (r *ExportValidationRenderer) Discover(
+	ctx context.Context,
+	path, dest string,
+) (crdschema.Result, error) {
+	return addRenderedCRDSchemas(ctx, path, r.renderer, dest)
+}
+
+// Expand consumes rendered manifests, provenance, and degradations as validation does.
+func (r *ExportValidationRenderer) Expand(ctx context.Context, path string) (render.Result, error) {
+	return r.renderer.expand(ctx, path)
+}
+
+// Validate exercises all production validation consumers after CRD discovery.
+func (r *ExportValidationRenderer) Validate(
+	ctx context.Context, cmd *cobra.Command, path, schemas string, kyverno bool,
+) error {
+	return validatePath(ctx, cmd, path, kubeconform.NewClient(), &kubeconform.ValidationOptions{
+		Strict: true, IgnoreMissingSchemas: true,
+		SkipKinds:       []string{"CustomResourceDefinition", "OCIRepository", "HelmRelease"},
+		SchemaLocations: []string{crdschema.SchemaLocation(schemas)},
+	}, r.renderer, nil, kyverno)
+}
 
 // Test exports for unexported workload helpers used by external-package tests.
 // These seams cover validation/expansion helpers, debounce/watch behavior, and

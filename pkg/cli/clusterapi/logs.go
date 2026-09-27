@@ -20,10 +20,10 @@ type logClientFunc func(ctx context.Context, clusterName string) (kubernetes.Int
 // defaultLogClient builds a clientset for a local cluster from the single restConfigForCluster seam
 // (rest.Config + kubernetes.NewForConfig — identical to the former k8s.NewClientset path).
 func (s *Service) defaultLogClient(
-	_ context.Context,
+	ctx context.Context,
 	clusterName string,
 ) (kubernetes.Interface, error) {
-	restConfig, err := s.restConfigForCluster(clusterName)
+	restConfig, err := s.restConfigForCluster(ctx, clusterName)
 	if err != nil {
 		return nil, err
 	}

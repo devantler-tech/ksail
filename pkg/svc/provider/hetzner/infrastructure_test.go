@@ -571,3 +571,75 @@ func TestLBInNetwork(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildSSHFirewallRulesAllowSSHNotTalosAPI(t *testing.T) {
+	t.Parallel()
+
+	rules := hetzner.BuildSSHFirewallRulesForTest(nil)
+
+	require.Len(t, rules, 3, "SSH rule set must have exactly 3 rules")
+
+	ports := make(map[string]bool)
+	protocols := make(map[hcloud.FirewallRuleProtocol]bool)
+
+	for _, rule := range rules {
+		assert.Equal(t, hcloud.FirewallRuleDirectionIn, rule.Direction, "all rules must be inbound")
+
+		if rule.Port != nil {
+			ports[*rule.Port] = true
+		}
+
+		protocols[rule.Protocol] = true
+	}
+
+	// Vanilla and K3s nodes are bootstrapped over SSH from the machine running
+	// ksail, so SSH must be reachable or the create waits and fails (ksail#7256).
+	assert.True(t, ports["22"], "SSH port 22 must be present")
+	assert.True(t, ports["6443"], "Kubernetes API port 6443 must be present")
+	assert.True(t, protocols[hcloud.FirewallRuleProtocolICMP], "ICMP must be present for ping")
+	assert.False(t, ports["50000"], "Talos API port 50000 must NOT be exposed on non-Talos nodes")
+	assert.False(t, ports["2379"], "etcd port 2379 must NOT be exposed publicly")
+	assert.False(t, ports["10250"], "kubelet port 10250 must NOT be exposed publicly")
+}
+
+func TestBuildSSHFirewallRulesWithAllowedCIDRs(t *testing.T) {
+	t.Parallel()
+
+	allowedCIDRs := []string{"203.0.113.0/24", "198.51.100.0/24"}
+	rules := hetzner.BuildSSHFirewallRulesForTest(allowedCIDRs)
+
+	require.Len(t, rules, 3, "SSH rule set must have exactly 3 rules")
+
+	for _, rule := range rules {
+		sourceStrs := make([]string, 0, len(rule.SourceIPs))
+		for _, src := range rule.SourceIPs {
+			sourceStrs = append(sourceStrs, src.String())
+		}
+
+		if rule.Protocol == hcloud.FirewallRuleProtocolICMP {
+			assert.Contains(t, sourceStrs, "0.0.0.0/0", "ICMP must stay open to all")
+
+			continue
+		}
+
+		// SSH and the Kubernetes API must both follow the allowed CIDRs.
+		assert.ElementsMatch(
+			t,
+			allowedCIDRs,
+			sourceStrs,
+			"port %s must use the allowed CIDRs",
+			*rule.Port,
+		)
+	}
+}
+
+func TestEnsureSSHFirewallNilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := hetzner.NewProvider(nil)
+
+	firewall, err := prov.EnsureSSHFirewall(context.TODO(), "test-cluster", nil)
+
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	assert.Nil(t, firewall)
+}

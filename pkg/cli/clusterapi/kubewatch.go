@@ -30,7 +30,7 @@ func (s *Service) WatchKube(
 	_, name, apiPath string,
 	query url.Values,
 ) (io.ReadCloser, error) {
-	config, err := s.restConfigForCluster(name)
+	config, err := s.restConfigForCluster(ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("resolve cluster %q: %w", name, err)
 	}

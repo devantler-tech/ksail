@@ -35,6 +35,10 @@ const kyvernoPoliciesFlagDescription = "Evaluate the source's own Kyverno Cluste
 	"registry or global-context data, cannot be evaluated offline. Namespace labels come " +
 	"from the kustomization's own Namespaces first, then from " +
 	"a Namespace another kustomization renders, unless two render it with different labels. " +
+	"For an unrendered Namespace, selectors are evaluated only when Kubernetes' immutable " +
+	"kubernetes.io/metadata.name label determines the result; other labels remain unknown. " +
+	"Repeated unknown-namespace warnings are grouped by policy, rule, namespace and reason, " +
+	"with evaluation, resource and source counts and a representative example. " +
 	"A rule a cluster would enforce fails validation; an audit-only failure or a rule that " +
 	"cannot be evaluated offline is reported as a warning."
 
@@ -136,7 +140,7 @@ func evaluateKyvernoTargets(
 				continue
 			}
 
-			sink.add(described)
+			sink.addKyverno(violation, doc, source, described)
 		}
 	}
 
