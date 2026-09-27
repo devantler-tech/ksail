@@ -19,6 +19,9 @@ import (
 
 var _ clusterupdate.DistributionImagePlanner = (*Provisioner)(nil)
 
+const imageUpgradeCordonAnnotation = "ksail.devantler.tech/image-upgrade-cordon"
+const imageUpgradeStoragePendingAnnotation = "ksail.devantler.tech/image-upgrade-storage-pending"
+
 // DistributionImageChanged checks every managed machine's booted schematic, including
 // when none is configured: clearing the schematic selects the default installer image,
 // so a node still booted from a custom one must roll too. Docker cannot install
@@ -65,17 +68,18 @@ func distributionImageChanged(
 		return false, fmt.Errorf("listing nodes for unfinished upgrades: %w", err)
 	}
 
-	return hasManagedCordon(nodes, kubeNodes.Items), nil
+	return hasPendingImageUpgrade(nodes, kubeNodes.Items), nil
 }
 
-func hasManagedCordon(nodes []nodeWithRole, kubeNodes []corev1.Node) bool {
+func hasPendingImageUpgrade(nodes []nodeWithRole, kubeNodes []corev1.Node) bool {
 	managedIPs := make(map[string]struct{}, len(nodes))
 	for _, node := range nodes {
 		managedIPs[node.IP] = struct{}{}
 	}
 
 	for _, node := range kubeNodes {
-		if !node.Spec.Unschedulable {
+		if !(node.Spec.Unschedulable && node.Annotations[imageUpgradeCordonAnnotation] == "true") &&
+			node.Annotations[imageUpgradeStoragePendingAnnotation] != "true" {
 			continue
 		}
 

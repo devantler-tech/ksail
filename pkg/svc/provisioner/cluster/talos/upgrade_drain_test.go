@@ -13,6 +13,46 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
+func TestImageUpgradeCordonMarksItsOwnNode(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset(&corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "prod-worker-1"},
+	})
+	prov := talosprovisioner.NewProvisioner(nil, talosprovisioner.NewOptions())
+
+	require.NoError(t, prov.MarkImageUpgradeCordonForTest(
+		t.Context(), clientset, "prod-worker-1",
+	))
+	got, err := clientset.CoreV1().Nodes().Get(
+		t.Context(), "prod-worker-1", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+	assert.True(t, got.Spec.Unschedulable)
+	assert.Equal(t, "true", got.Annotations[testImageUpgradeCordonAnnotation])
+	assert.Equal(t, "true", got.Annotations[testImageUpgradeStoragePendingAnnotation])
+}
+
+func TestImageUpgradeCordonRejectsExistingAdministrativeCordon(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset(&corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "prod-worker-1"},
+		Spec:       corev1.NodeSpec{Unschedulable: true},
+	})
+	prov := talosprovisioner.NewProvisioner(nil, talosprovisioner.NewOptions())
+
+	require.Error(t, prov.MarkImageUpgradeCordonForTest(
+		t.Context(), clientset, "prod-worker-1",
+	))
+	got, err := clientset.CoreV1().Nodes().Get(
+		t.Context(), "prod-worker-1", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+	assert.True(t, got.Spec.Unschedulable)
+	assert.NotContains(t, got.Annotations, testImageUpgradeCordonAnnotation)
+}
+
 // TestUncordonAfterUpgradeUncordonsReadyNode asserts the graceful OS-upgrade path
 // uncordons a node once it is back Ready — the counterpart to the cordon+drain it
 // performs before the reboot.

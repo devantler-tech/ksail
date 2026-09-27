@@ -153,8 +153,15 @@ func (p *Provisioner) reconcileAutoscalerImageBaseline(
 	clusterName string,
 ) error {
 	result := clusterupdate.NewEmptyUpdateResult()
+	// A fresh invocation has newly generated PKI. The normal Update path syncs
+	// from a running control plane before writing the autoscaler Secret; the
+	// same-version image path must do so as well, including its live endpoint.
+	err := p.syncSecretsFromCluster(ctx, clusterName, nil, nil, result)
+	if err != nil {
+		return fmt.Errorf("syncing cluster identity for autoscaler image baseline: %w", err)
+	}
 
-	err := p.ensureAutoscalerSecretIfNeeded(ctx, clusterName, nil, result)
+	err = p.ensureAutoscalerSecretIfNeeded(ctx, clusterName, nil, result)
 	if err != nil {
 		return fmt.Errorf("reconciling autoscaler image baseline: %w", err)
 	}

@@ -43,7 +43,38 @@ func TestUpgradeDistributionReconcilesAutoscalerBaseline(t *testing.T) {
 		WithLogWriter(io.Discard)
 
 	err = provisioner.UpgradeDistribution(t.Context(), "test", "v1.13.10", "v1.13.10")
+	require.ErrorIs(t, err, talosprovisioner.ErrNoControlPlaneForSecretSync)
+}
+
+// A new CLI invocation generates a fresh PKI bundle. Same-version image rolls
+// must load the running cluster's identity before generating autoscaler configs.
+func TestUpgradeDistributionSyncsAutoscalerBaselineFromRunningControlPlane(t *testing.T) {
+	t.Setenv(v1alpha1.DefaultHetznerTokenEnvVar, "")
+
+	configs, err := talosconfigmanager.NewDefaultConfigs()
+	require.NoError(t, err)
+	running := runningWithHostname(t, talosprovisioner.RoleControlPlane, "fip-cluster-cp-0")
+	freshCA := configs.ControlPlane().RawV1Alpha1().ClusterConfig.ClusterCA.Crt
+	runningCA := running.RawV1Alpha1().ClusterConfig.ClusterCA.Crt
+	require.NotEqual(t, freshCA, runningCA, "precondition: new invocation has different PKI")
+
+	server := fipUpdateTestServer(t, false, &fipUpdateCalls{})
+	fetched := false
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{NodeAutoscalerEnabled: true}).
+		WithTalosOptions(v1alpha1.OptionsTalos{SchematicID: "test-schematic-id", Version: "v1.13.10"}).
+		WithInfraProvider(newFipUpdateProvider(server.URL)).
+		WithNodeConfigFetcherForTest(func(_ context.Context, _ string) (talosconfig.Provider, error) {
+			fetched = true
+			return running, nil
+		}).
+		WithLogWriter(io.Discard)
+	withUnreachableEndpointProbe(provisioner)
+
+	err = provisioner.UpgradeDistribution(t.Context(), "fip-cluster", "v1.13.10", "v1.13.10")
 	require.ErrorIs(t, err, talosprovisioner.ErrHcloudTokenNotSet)
+	assert.True(t, fetched, "running control-plane config must be fetched before autoscaler write")
+	assert.Equal(t, runningCA, provisioner.TalosConfigsForTest().ControlPlane().RawV1Alpha1().ClusterConfig.ClusterCA.Crt)
 }
 
 // TestSupportsLifecycleUpgradeAPI verifies that the upgrade path dispatch picks

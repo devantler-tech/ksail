@@ -466,6 +466,9 @@ func (p *Provisioner) upgradeSingleNode(ctx context.Context, req upgradeNodeRequ
 			)
 		} else {
 			nodeName = resolved
+			if markErr := p.markImageUpgradeCordon(ctx, req.clientset, nodeName); markErr != nil {
+				return fmt.Errorf("reserving image-upgrade cordon on %s: %w", nodeName, markErr)
+			}
 
 			drainErr := p.cordonAndDrain(ctx, req.clientset, nodeName)
 			if drainErr != nil {
@@ -499,6 +502,41 @@ func (p *Provisioner) upgradeSingleNode(ctx context.Context, req upgradeNodeRequ
 	return p.completeNodeUpgrade(ctx, req.clientset, nodeName, req.prober)
 }
 
+// markImageUpgradeCordon atomically records KSail's ownership when it cordons a
+// node. An existing administrator cordon is left untouched and blocks the roll.
+func (p *Provisioner) markImageUpgradeCordon(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeName string,
+) error {
+	node, err := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("reading node %s before image upgrade: %w", nodeName, err)
+	}
+	if node.Spec.Unschedulable {
+		if node.Annotations[imageUpgradeCordonAnnotation] == "true" &&
+			node.Annotations[imageUpgradeStoragePendingAnnotation] == "true" {
+			return nil // resuming KSail's own interrupted roll
+		}
+		if node.Annotations[imageUpgradeCordonAnnotation] != "true" {
+			return fmt.Errorf("node %s is already cordoned for another purpose", nodeName)
+		}
+	}
+
+	updated := node.DeepCopy()
+	if updated.Annotations == nil {
+		updated.Annotations = make(map[string]string)
+	}
+	updated.Annotations[imageUpgradeCordonAnnotation] = "true"
+	updated.Annotations[imageUpgradeStoragePendingAnnotation] = "true"
+	updated.Spec.Unschedulable = true
+	if _, err = clientset.CoreV1().Nodes().Update(ctx, updated, metav1.UpdateOptions{}); err != nil {
+		return fmt.Errorf("marking image-upgrade cordon on %s: %w", nodeName, err)
+	}
+
+	return nil
+}
+
 // completeNodeUpgrade finishes the upgrade of a node that runs the target image: it
 // waits for the node to report Ready, uncordons it, then gates progression to the next
 // node on replicated-storage volume health so a one-replica-per-node volume is not
@@ -515,9 +553,36 @@ func (p *Provisioner) completeNodeUpgrade(
 		return uncordonErr
 	}
 
-	storageErr := p.waitForStorageHealthy(ctx, prober, p.storageHealthTimeout())
+	storageErr := p.finishImageUpgradeStorageGate(ctx, clientset, nodeName, prober)
 	if storageErr != nil {
 		return fmt.Errorf("storage health gate: %w", storageErr)
+	}
+
+	return nil
+}
+
+func (p *Provisioner) finishImageUpgradeStorageGate(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeName string,
+	prober storageHealthProber,
+) error {
+	if err := p.waitForStorageHealthy(ctx, prober, p.storageHealthTimeout()); err != nil {
+		return err
+	}
+
+	node, err := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("reading node %s after storage recovery: %w", nodeName, err)
+	}
+	if node.Annotations[imageUpgradeStoragePendingAnnotation] != "true" {
+		return nil
+	}
+
+	updated := node.DeepCopy()
+	delete(updated.Annotations, imageUpgradeStoragePendingAnnotation)
+	if _, err = clientset.CoreV1().Nodes().Update(ctx, updated, metav1.UpdateOptions{}); err != nil {
+		return fmt.Errorf("clearing storage recovery marker on %s: %w", nodeName, err)
 	}
 
 	return nil
@@ -562,6 +627,20 @@ func (p *Provisioner) recoverUpgradedNode(
 	}
 
 	if !k8sNode.Spec.Unschedulable {
+		// A previous attempt may have uncordoned this node before the storage
+		// gate failed. Recheck it before the roll advances to another node.
+		if err := p.finishImageUpgradeStorageGate(ctx, clientset, nodeName, prober); err != nil {
+			return fmt.Errorf("storage health gate: %w", err)
+		}
+
+		return nil
+	}
+	if k8sNode.Annotations[imageUpgradeCordonAnnotation] != "true" {
+		// Another actor cordoned this node. Never make it schedulable on their behalf.
+		if err := p.finishImageUpgradeStorageGate(ctx, clientset, nodeName, prober); err != nil {
+			return fmt.Errorf("storage health gate: %w", err)
+		}
+
 		return nil
 	}
 

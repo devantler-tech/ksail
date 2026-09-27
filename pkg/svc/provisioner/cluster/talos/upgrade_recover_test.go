@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	"github.com/stretchr/testify/assert"
@@ -35,6 +36,7 @@ type recoverCase struct {
 	name         string
 	node         *corev1.Node
 	nodeIP       string
+	marked       bool
 	noClient     bool
 	cancelled    bool
 	listFails    bool
@@ -46,7 +48,12 @@ func recoverCases() []recoverCase {
 	return []recoverCase{
 		{
 			name: "cordoned and Ready is uncordoned",
+			node: upgradedNode(true, corev1.ConditionTrue), nodeIP: recoverNodeIP, marked: true,
+		},
+		{
+			name: "intentional cordon is preserved",
 			node: upgradedNode(true, corev1.ConditionTrue), nodeIP: recoverNodeIP,
+			wantCordoned: true,
 		},
 		{
 			name: "schedulable is left alone",
@@ -69,7 +76,7 @@ func recoverCases() []recoverCase {
 		{
 			name: "never Ready fails the roll and stays cordoned",
 			node: upgradedNode(true, corev1.ConditionFalse), nodeIP: recoverNodeIP,
-			cancelled: true, wantErr: true, wantCordoned: true,
+			marked: true, cancelled: true, wantErr: true, wantCordoned: true,
 		},
 	}
 }
@@ -83,6 +90,11 @@ func TestRecoverUpgradedNode(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
+			if testCase.marked {
+				testCase.node.Annotations = map[string]string{
+					testImageUpgradeCordonAnnotation: "true",
+				}
+			}
 			clientset := fake.NewClientset(testCase.node)
 			if testCase.listFails {
 				clientset.PrependReactor("list", "nodes",
@@ -117,6 +129,49 @@ func TestRecoverUpgradedNode(t *testing.T) {
 				Get(context.Background(), testCase.node.Name, metav1.GetOptions{})
 			require.NoError(t, getErr)
 			assert.Equal(t, testCase.wantCordoned, got.Spec.Unschedulable)
+			if testCase.marked && !testCase.wantCordoned {
+				assert.NotContains(t, got.Annotations, testImageUpgradeCordonAnnotation,
+					"recovery must clear its ownership marker when it uncordons")
+			}
 		})
 	}
+}
+
+// A previous attempt can uncordon the target-image node and then fail its
+// storage gate. Retrying must keep the next stale node blocked until recovery.
+func TestRecoverUpgradedNodeRepeatsStorageGateAfterUncordon(t *testing.T) {
+	t.Parallel()
+
+	node := upgradedNode(false, corev1.ConditionTrue)
+	node.Annotations = map[string]string{testImageUpgradeStoragePendingAnnotation: "true"}
+	clientset := fake.NewClientset(node)
+	prov := talosprovisioner.NewProvisioner(
+		nil,
+		talosprovisioner.NewOptions().WithStorageHealthTimeout(100*time.Millisecond),
+	)
+	prober := talosprovisioner.StorageHealthProberForTest(
+		func(context.Context) ([]string, error) {
+			return []string{"longhorn-system/pvc-still-degraded"}, nil
+		},
+	)
+
+	err := prov.RecoverUpgradedNodeWithStorageGateForTest(
+		t.Context(), clientset, recoverNodeIP, prober,
+	)
+	require.ErrorIs(t, err, talosprovisioner.ErrStorageHealthTimeout)
+	got, getErr := clientset.CoreV1().Nodes().Get(t.Context(), node.Name, metav1.GetOptions{})
+	require.NoError(t, getErr)
+	assert.Equal(t, "true", got.Annotations[testImageUpgradeStoragePendingAnnotation],
+		"a failed gate must keep recovery discoverable")
+
+	healthy := talosprovisioner.StorageHealthProberForTest(
+		func(context.Context) ([]string, error) { return nil, nil },
+	)
+	require.NoError(t, prov.RecoverUpgradedNodeWithStorageGateForTest(
+		t.Context(), clientset, recoverNodeIP, healthy,
+	))
+	got, getErr = clientset.CoreV1().Nodes().Get(t.Context(), node.Name, metav1.GetOptions{})
+	require.NoError(t, getErr)
+	assert.NotContains(t, got.Annotations, testImageUpgradeStoragePendingAnnotation,
+		"successful recovery must stop future retries")
 }

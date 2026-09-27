@@ -57,6 +57,18 @@ func (p *Provisioner) setNodeSchedulable(
 	if err != nil {
 		return fmt.Errorf("get node %s: %w", nodeName, err)
 	}
+	if schedulable && node.Annotations[imageUpgradeCordonAnnotation] == "true" {
+		// Clear the recovery marker in the same API update that uncordons the
+		// node, so a later administrative cordon cannot inherit stale ownership.
+		updated := node.DeepCopy()
+		updated.Spec.Unschedulable = false
+		delete(updated.Annotations, imageUpgradeCordonAnnotation)
+		if _, err = clientset.CoreV1().Nodes().Update(ctx, updated, metav1.UpdateOptions{}); err != nil {
+			return fmt.Errorf("unmarking image-upgrade cordon on %s: %w", nodeName, err)
+		}
+
+		return nil
+	}
 
 	helper := kubedrain.NewCordonHelper(node)
 	if !helper.UpdateIfRequired(!schedulable) {

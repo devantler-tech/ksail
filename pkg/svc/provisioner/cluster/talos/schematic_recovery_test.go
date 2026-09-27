@@ -15,6 +15,8 @@ import (
 )
 
 const testSchematic = "target"
+const testImageUpgradeCordonAnnotation = "ksail.devantler.tech/image-upgrade-cordon"
+const testImageUpgradeStoragePendingAnnotation = "ksail.devantler.tech/image-upgrade-storage-pending"
 
 var errSchematicNodeListUnavailable = errors.New("node list unavailable")
 
@@ -27,8 +29,13 @@ func TestDistributionImageChangedFindsInterruptedCordon(t *testing.T) {
 	read := func(context.Context, string) (string, error) { return testSchematic, nil }
 	newClient := func() (kubernetes.Interface, error) {
 		return fake.NewClientset(&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
-			Spec:       corev1.NodeSpec{Unschedulable: true},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "worker-1",
+				Annotations: map[string]string{
+					testImageUpgradeCordonAnnotation: "true",
+				},
+			},
+			Spec: corev1.NodeSpec{Unschedulable: true},
 			Status: corev1.NodeStatus{Addresses: []corev1.NodeAddress{
 				{Type: corev1.NodeInternalIP, Address: "10.0.0.2"},
 			}},
@@ -43,6 +50,64 @@ func TestDistributionImageChangedFindsInterruptedCordon(t *testing.T) {
 
 	if !changed {
 		t.Fatal("a node left cordoned after the image roll must re-enter recovery")
+	}
+}
+
+func TestDistributionImageChangedIgnoresIntentionalManagedNodeCordon(t *testing.T) {
+	t.Parallel()
+
+	nodes := []talosprovisioner.NodeWithRoleForTest{
+		{IP: "10.0.0.2", Role: talosprovisioner.RoleWorker},
+	}
+	read := func(context.Context, string) (string, error) { return testSchematic, nil }
+	clientset := fake.NewClientset(&corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
+		Spec:       corev1.NodeSpec{Unschedulable: true},
+		Status: corev1.NodeStatus{Addresses: []corev1.NodeAddress{
+			{Type: corev1.NodeInternalIP, Address: "10.0.0.2"},
+		}},
+	})
+
+	changed, err := talosprovisioner.DistributionImageChangedForTest(
+		t.Context(), nodes, testSchematic, read,
+		func() (kubernetes.Interface, error) { return clientset, nil },
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed {
+		t.Fatal("an administrator's cordon must not start an image recovery")
+	}
+}
+
+func TestDistributionImageChangedFindsPendingStorageGateAfterUncordon(t *testing.T) {
+	t.Parallel()
+
+	nodes := []talosprovisioner.NodeWithRoleForTest{
+		{IP: "10.0.0.2", Role: talosprovisioner.RoleWorker},
+	}
+	read := func(context.Context, string) (string, error) { return testSchematic, nil }
+	clientset := fake.NewClientset(&corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "worker-1",
+			Annotations: map[string]string{
+				testImageUpgradeStoragePendingAnnotation: "true",
+			},
+		},
+		Status: corev1.NodeStatus{Addresses: []corev1.NodeAddress{
+			{Type: corev1.NodeInternalIP, Address: "10.0.0.2"},
+		}},
+	})
+
+	changed, err := talosprovisioner.DistributionImageChangedForTest(
+		t.Context(), nodes, testSchematic, read,
+		func() (kubernetes.Interface, error) { return clientset, nil },
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("a failed storage gate after uncordon must trigger recovery on retry")
 	}
 }
 

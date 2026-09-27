@@ -1184,6 +1184,27 @@ func (p *Provisioner) RecoverUpgradedNodeForTest(
 	return p.recoverUpgradedNode(ctx, clientset, nodeWithRole{IP: nodeIP, Role: RoleWorker}, nil)
 }
 
+// RecoverUpgradedNodeWithStorageGateForTest exercises recovery while the
+// between-node storage gate is active.
+func (p *Provisioner) RecoverUpgradedNodeWithStorageGateForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeIP string,
+	prober StorageHealthProberForTest,
+) error {
+	return p.recoverUpgradedNode(ctx, clientset, nodeWithRole{IP: nodeIP, Role: RoleWorker}, prober)
+}
+
+// MarkImageUpgradeCordonForTest exercises the cordon ownership boundary before
+// an image upgrade drains the node.
+func (p *Provisioner) MarkImageUpgradeCordonForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeName string,
+) error {
+	return p.markImageUpgradeCordon(ctx, clientset, nodeName)
+}
+
 // BuildAutoscalerPoolConfigsForTest exposes buildAutoscalerPoolConfigs, the step that turns the
 // configured pools and the cluster's worker config into the configs the autoscaler Secret stores.
 func (p *Provisioner) BuildAutoscalerPoolConfigsForTest(
