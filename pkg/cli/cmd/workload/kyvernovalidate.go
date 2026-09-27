@@ -31,8 +31,9 @@ const kyvernoPoliciesFlagDescription = "Evaluate the source's own Kyverno Cluste
 	"validations, against the rendered manifests, as if each document were being " +
 	"created. On by default when ksail.yaml sets spec.cluster.policyEngine to Kyverno, off " +
 	"otherwise; --kyverno-policies=false turns it off. Each kustomization is evaluated " +
-	"against the policies in its own rendered output: a policy delivered by a different kustomization is not seen, loose YAML " +
-	"files are not evaluated, a document is evaluated in the namespace it declares (a Flux " +
+	"against the policies in its own rendered output: a policy delivered by a different " +
+	"kustomization is not seen, loose YAML files are not evaluated, a document is " +
+	"evaluated in the namespace it declares (a Flux " +
 	"targetNamespace is not applied, so a policy that depends on the namespace of a " +
 	"namespaced document that declares none is reported as a warning), and other " +
 	"policies.kyverno.io kinds are not " +
