@@ -17,6 +17,9 @@ inputs:
   init:
     description: "Whether to run ksail project init before create"
     default: "true"
+  mirror-registry:
+    description: "Comma-separated mirror registry specs passed as --mirror-registry to project init and cluster create (VCluster scaffolds no mirror config at init, so create needs the flag too). Replaces KSail's default mirror list, so include every registry to mirror. Kept apart from args because workload images does not accept the flag."
+    default: ""
   ksail-version:
     description: "KSail version to install (e.g. '5.55.0') or 'latest'"
     default: "latest"
@@ -137,6 +140,53 @@ runs:
           exit 1
         fi
 
+    - name: 🪞 Resolve mirror registry volumes
+      id: mirror-hosts
+      shell: bash
+      env:
+        MIRROR_REGISTRY: ${{ inputs.mirror-registry }}
+      run: |
+        # The Docker volume (and container-name suffix) of every mirror KSail
+        # creates, so the cache and retry-cleanup steps cover exactly the
+        # mirrors in use — including custom hosts passed via mirror-registry.
+        # Spec format: [user:pass@]host[=endpoint]; KSail names the volume by
+        # the host with "/" and ":" replaced by "-". Without the input, KSail
+        # uses its default mirrors; ecr-public.aws.com is kept for the caches
+        # this action already restores and exports.
+        # A credentialed spec (user:pass@host) mirrors a registry that whoever
+        # restores the cache may not be allowed to read, and pull-request
+        # workflows can restore base-branch caches. Its volume is therefore
+        # never exported to or imported from the cache (cache-hosts), only
+        # cleaned up on retry (hosts). A host repeated in the input is excluded
+        # from the cache when ANY of its specs carries credentials, whichever
+        # spec KSail's merge ends up using.
+        hosts=""
+        cache_hosts=""
+        if [ -n "$MIRROR_REGISTRY" ]; then
+          credentialed_hosts=" "
+          IFS=',' read -ra specs <<< "$MIRROR_REGISTRY"
+          for spec in "${specs[@]}"; do
+            host="${spec%%=*}"
+            credentialed=false
+            [[ "$host" == *@* ]] && credentialed=true
+            host="${host##*@}"
+            host="$(echo "$host" | tr -d '[:space:]' | tr '/:' '--')"
+            [ -n "$host" ] || continue
+            [ "$credentialed" = true ] && credentialed_hosts="$credentialed_hosts$host "
+            [[ " $hosts " == *" $host "* ]] || hosts="${hosts:+$hosts }$host"
+          done
+          for host in $hosts; do
+            [[ "$credentialed_hosts" == *" $host "* ]] || cache_hosts="${cache_hosts:+$cache_hosts }$host"
+          done
+        fi
+        if [ -z "$hosts" ]; then
+          hosts="docker.io ghcr.io quay.io registry.k8s.io ecr-public.aws.com"
+          cache_hosts="$hosts"
+        fi
+        echo "hosts=$hosts" >> "$GITHUB_OUTPUT"
+        echo "cache-hosts=$cache_hosts" >> "$GITHUB_OUTPUT"
+        echo "🪞 Mirror volumes: $hosts (cached: ${cache_hosts:-none})"
+
     - name: 📋 Compute cache keys
       if: inputs.cache == 'true'
       id: cache-keys
@@ -147,16 +197,19 @@ runs:
         ARGS: ${{ inputs.args }}
         KSAIL_VERSION: ${{ inputs.ksail-version }}
         CONFIG: ${{ inputs.config }}
+        MIRROR_REGISTRY: ${{ inputs.mirror-registry }}
       run: |
         echo "ksail-version=$KSAIL_VERSION" >> "$GITHUB_OUTPUT"
 
         if [ "$PROVIDER" = "Docker" ]; then
           # shellcheck disable=SC2086
           IMAGES=$(ksail ${CONFIG:+--config "$CONFIG"} workload images --distribution "$DISTRIBUTION" $ARGS 2>/dev/null || true)
+          # The mirror set is part of the key: the same images mirrored through a
+          # different set of registries produce a different set of volumes.
           if [ -n "$IMAGES" ]; then
-            IMAGES_HASH=$(echo "$IMAGES" | sort -u | sha256sum | cut -c1-12)
+            IMAGES_HASH=$( { echo "$IMAGES" | sort -u; echo "mirrors=$MIRROR_REGISTRY"; } | sha256sum | cut -c1-12)
           else
-            IMAGES_HASH="none"
+            IMAGES_HASH="none-$(echo "mirrors=$MIRROR_REGISTRY" | sha256sum | cut -c1-8)"
           fi
           echo "images-hash=$IMAGES_HASH" >> "$GITHUB_OUTPUT"
         fi
@@ -179,13 +232,15 @@ runs:
       uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
       with:
         path: /tmp/ksail-mirror-cache
-        key: ksail-mirror-${{ steps.cache-keys.outputs.images-hash }}-${{ runner.os }}-${{ runner.arch }}
+        key: ksail-mirror-m5-${{ steps.cache-keys.outputs.images-hash }}-${{ runner.os }}-${{ runner.arch }}
         restore-keys: |
-          ksail-mirror-
+          ksail-mirror-m5-
 
     - name: 📦 Import mirror volumes
       if: inputs.cache == 'true' && inputs.provider == 'Docker' && steps.restore-mirror.outputs.cache-hit == 'true'
       shell: bash
+      env:
+        MIRROR_HOSTS: ${{ steps.mirror-hosts.outputs.cache-hosts }}
       run: |
         echo "📦 Importing mirror registry volumes..."
         # Pull the tar-utility busybox via mirror.gcr.io (anonymous pull-through
@@ -194,7 +249,8 @@ runs:
         # token into error logs on throttle. mirror.gcr.io is anonymous and not
         # rate-limited. It re-serializes manifests, so the upstream digest can't
         # be pinned through it — tag-pinned, like registry:3 in pull-registry-image.sh.
-        for registry in docker.io ghcr.io quay.io registry.k8s.io; do
+        # shellcheck disable=SC2086 # space-separated host list, word-split on purpose
+        for registry in $MIRROR_HOSTS; do
           if [ -f "/tmp/ksail-mirror-cache/${registry}.tar" ]; then
             docker volume create "$registry" 2>/dev/null || true
             if docker run --rm \
@@ -203,6 +259,13 @@ runs:
               mirror.gcr.io/library/busybox:1.37 \
               sh -c "cd /volume && tar -xf /backup/${registry}.tar"; then
               echo "  ✅ Restored $registry mirror cache"
+            elif [ "$registry" = "ecr-public.aws.com" ]; then
+              # The ECR Public proxy cannot refill an empty or partial volume
+              # (upstream blob HEAD requests are rejected), so fail here rather
+              # than later as an image pull failure.
+              docker volume rm -f "$registry" >/dev/null 2>&1 || true
+              echo "  ❌ Failed to import $registry mirror; it cannot refill from upstream" >&2
+              exit 1
             else
               echo "  ⚠️ Failed to import $registry mirror"
             fi
@@ -303,12 +366,13 @@ runs:
         DISTRIBUTION: ${{ inputs.distribution }}
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ inputs.args }}
+        MIRROR_REGISTRY: ${{ inputs.mirror-registry }}
         CONFIG: ${{ inputs.config }}
       run: |
         set -o pipefail
         mkdir -p /tmp/ksail-system-test-logs
         # shellcheck disable=SC2086
-        ksail ${CONFIG:+--config "$CONFIG"} project init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force 2>&1 | tee /tmp/ksail-system-test-logs/cluster-init.log
+        ksail ${CONFIG:+--config "$CONFIG"} project init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS ${MIRROR_REGISTRY:+--mirror-registry "$MIRROR_REGISTRY"} --force 2>&1 | tee /tmp/ksail-system-test-logs/cluster-init.log
 
     - name: 🧹 Validate manifests
       if: inputs.validate == 'true'
@@ -349,17 +413,19 @@ runs:
         DISTRIBUTION: ${{ inputs.distribution }}
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ inputs.args }}
+        MIRROR_REGISTRY: ${{ inputs.mirror-registry }}
         CONFIG: ${{ inputs.config }}
+        MIRROR_HOSTS: ${{ steps.mirror-hosts.outputs.hosts }}
       run: |
         set -euo pipefail
         mkdir -p /tmp/ksail-system-test-logs
 
         create_cluster() {
           if [ "$INIT" = "true" ]; then
-            ksail ${CONFIG:+--config "$CONFIG"} cluster create
+            ksail ${CONFIG:+--config "$CONFIG"} cluster create ${MIRROR_REGISTRY:+--mirror-registry "$MIRROR_REGISTRY"}
           else
             # shellcheck disable=SC2086
-            ksail ${CONFIG:+--config "$CONFIG"} cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+            ksail ${CONFIG:+--config "$CONFIG"} cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS ${MIRROR_REGISTRY:+--mirror-registry "$MIRROR_REGISTRY"}
           fi
         }
 
@@ -445,7 +511,8 @@ runs:
             # "endpoint with name <cluster>-<registry> already exists in network <cluster>".
             # Filter by the KSail ownership label first, and keep the suffix match to
             # limit cleanup to the known registry container naming scheme.
-            for _reg_suffix in docker.io ghcr.io quay.io registry.k8s.io; do
+            # shellcheck disable=SC2086 # space-separated host list, word-split on purpose
+            for _reg_suffix in $MIRROR_HOSTS; do
               # shellcheck disable=SC2016 # $1 is expanded by the bounded child shell.
               timeout --kill-after=10s 30s bash -c '
                 docker ps -aq \
@@ -511,12 +578,15 @@ runs:
     - name: 📦 Export mirror volumes
       if: inputs.cache == 'true' && inputs.provider == 'Docker' && steps.restore-mirror.outputs.cache-hit != 'true'
       shell: bash
+      env:
+        MIRROR_HOSTS: ${{ steps.mirror-hosts.outputs.cache-hosts }}
       run: |
         echo "📦 Exporting mirror registry volumes for caching..."
         # busybox via mirror.gcr.io (anonymous), not Docker Hub — avoids the
         # authenticated rate limit and dckr_jti leak. See the import step above.
         mkdir -p /tmp/ksail-mirror-cache
-        for registry in docker.io ghcr.io quay.io registry.k8s.io; do
+        # shellcheck disable=SC2086 # space-separated host list, word-split on purpose
+        for registry in $MIRROR_HOSTS; do
           if docker volume inspect "$registry" > /dev/null 2>&1; then
             if docker run --rm \
               -v "${registry}":/volume:ro \
@@ -535,7 +605,7 @@ runs:
       uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
       with:
         path: /tmp/ksail-mirror-cache
-        key: ksail-mirror-${{ steps.cache-keys.outputs.images-hash }}-${{ runner.os }}-${{ runner.arch }}
+        key: ksail-mirror-m5-${{ steps.cache-keys.outputs.images-hash }}-${{ runner.os }}-${{ runner.arch }}
       continue-on-error: true
 
     - name: 🔥 Delete cluster

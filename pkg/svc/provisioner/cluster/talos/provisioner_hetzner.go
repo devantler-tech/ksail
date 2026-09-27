@@ -1055,6 +1055,7 @@ func poolTaintsToCoreV1(taints []v1alpha1.NodePoolTaint) []corev1.Taint {
 func autoscalerTemplateLabels(poolLabels map[string]string) map[string]string {
 	labels := make(map[string]string, len(poolLabels)+1)
 	maps.Copy(labels, poolLabels)
+	delete(labels, "node.longhorn.io/create-default-disk")
 	labels[LabelAutoscaled] = labelValueTrue
 
 	return labels
@@ -1221,6 +1222,7 @@ func (p *Provisioner) ensureSnapshotImage(ctx context.Context, clusterName strin
 		clusterName,
 		version,
 		schematicID,
+		func(ctx context.Context) error { return p.ensureSchematicRegistered(ctx, schematicID) },
 	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to ensure Talos snapshot: %w", err)
