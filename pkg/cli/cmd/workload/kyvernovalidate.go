@@ -19,15 +19,21 @@ import (
 // rule that a cluster enforcing the policy would reject at admission.
 var ErrKyvernoPolicyViolation = errors.New("kyverno policy violation")
 
+// kyvernoPoliciesFlagName is the validate flag that turns the Kyverno policy
+// check on or off.
+const kyvernoPoliciesFlagName = "kyverno-policies"
+
 // kyvernoPoliciesFlagDescription is the --kyverno-policies help text. It states
 // the scope, because a check that silently covers less than it appears to is
 // worse than none.
 const kyvernoPoliciesFlagDescription = "Evaluate the source's own Kyverno ClusterPolicy and " +
 	"Policy validate rules, and its CEL-based ValidatingPolicy and NamespacedValidatingPolicy " +
 	"validations, against the rendered manifests, as if each document were being " +
-	"created (off by default). Each kustomization is evaluated against the policies in its own " +
-	"rendered output: a policy delivered by a different kustomization is not seen, loose YAML " +
-	"files are not evaluated, a document is evaluated in the namespace it declares (a Flux " +
+	"created. On by default when ksail.yaml sets spec.cluster.policyEngine to Kyverno, off " +
+	"otherwise; --kyverno-policies=false turns it off. Each kustomization is evaluated " +
+	"against the policies in its own rendered output: a policy delivered by a different " +
+	"kustomization is not seen, loose YAML files are not evaluated, a document is " +
+	"evaluated in the namespace it declares (a Flux " +
 	"targetNamespace is not applied, so a policy that depends on the namespace of a " +
 	"namespaced document that declares none is reported as a warning), and other " +
 	"policies.kyverno.io kinds are not " +

@@ -241,7 +241,10 @@ func formatFlagArg(name string, value any) []string {
 			return []string{"--" + name}
 		}
 
-		return nil // Don't include false boolean flags
+		// Forward an explicit false rather than dropping it: commands that derive
+		// a default when the flag is not given (cmd.Flags().Changed) must see the
+		// caller's opt-out, e.g. `workload validate --kyverno-policies=false`.
+		return []string{"--" + name + "=false"}
 	case []any:
 		// Array values: --flag=value1 --flag=value2
 		args := make([]string, 0, len(typedValue))
