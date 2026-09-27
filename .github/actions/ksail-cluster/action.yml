@@ -157,10 +157,13 @@ runs:
         # restores the cache may not be allowed to read, and pull-request
         # workflows can restore base-branch caches. Its volume is therefore
         # never exported to or imported from the cache (cache-hosts), only
-        # cleaned up on retry (hosts).
+        # cleaned up on retry (hosts). A host repeated in the input is excluded
+        # from the cache when ANY of its specs carries credentials, whichever
+        # spec KSail's merge ends up using.
         hosts=""
         cache_hosts=""
         if [ -n "$MIRROR_REGISTRY" ]; then
+          credentialed_hosts=" "
           IFS=',' read -ra specs <<< "$MIRROR_REGISTRY"
           for spec in "${specs[@]}"; do
             host="${spec%%=*}"
@@ -169,8 +172,11 @@ runs:
             host="${host##*@}"
             host="$(echo "$host" | tr -d '[:space:]' | tr '/:' '--')"
             [ -n "$host" ] || continue
-            hosts="${hosts:+$hosts }$host"
-            [ "$credentialed" = true ] || cache_hosts="${cache_hosts:+$cache_hosts }$host"
+            [ "$credentialed" = true ] && credentialed_hosts="$credentialed_hosts$host "
+            [[ " $hosts " == *" $host "* ]] || hosts="${hosts:+$hosts }$host"
+          done
+          for host in $hosts; do
+            [[ "$credentialed_hosts" == *" $host "* ]] || cache_hosts="${cache_hosts:+$cache_hosts }$host"
           done
         fi
         if [ -z "$hosts" ]; then

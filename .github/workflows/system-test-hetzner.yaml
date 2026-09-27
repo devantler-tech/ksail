@@ -150,50 +150,11 @@ jobs:
       - name: 🔥 Warm Helm chart cache
         uses: ./.github/actions/warm-helm-cache
 
-  warm-mirror-cache:
-    name: 🔥 Warm Mirror Cache
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: [build-artifact]
-    permissions:
-      contents: read
-    steps:
-      - name: 📄 Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: ⚙️ Setup Go
-        id: setup-go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-
-      - name: 📦 Cache KSail Binary
-        uses: ./.github/actions/cache-ksail-binary
-        with:
-          go-version: ${{ steps.setup-go.outputs.go-version }}
-          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
-          output-path: /usr/local/bin/ksail
-          save: "false"
-
-      # The ECR Public copy falls back to Docker Hub for Docker Official
-      # Images when ECR Public rate-limits the runner; skopeo reads this login.
-      - name: 🔐 Login to Docker Hub
-        if: vars.DOCKERHUB_USERNAME != ''
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] - third-party action input, no environment scoping available
-
-      - name: 🔥 Warm mirror cache
-        uses: ./.github/actions/warm-mirror-cache
-
   system-test:
     name: "🧪 System Test (Hetzner / ${{ matrix.distribution }} / ${{ matrix.suffix }})"
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    needs: [build-artifact, warm-helm-cache, warm-mirror-cache]
+    needs: [build-artifact, warm-helm-cache]
     environment: ci
     permissions:
       contents: read
@@ -236,9 +197,6 @@ jobs:
 
       - name: 📥 Restore Helm Cache
         uses: ./.github/actions/restore-helm-cache
-
-      - name: 📥 Restore Mirror Cache
-        uses: ./.github/actions/restore-mirror-cache
 
       - name: 🔧 Build args string
         id: args
