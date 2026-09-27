@@ -49,6 +49,7 @@ func assertGeneratedWorkerIngress(t *testing.T, path string) {
 
 	workerKubeletRule := networkRuleDocument(t, workerRules, "kubelet")
 	assert.Contains(t, workerKubeletRule, "10.0.0.0/16")
+	assert.Contains(t, workerKubeletRule, "10.244.0.0/16")
 	assert.NotContains(t, workerKubeletRule, "203.0.113.0/24")
 }
 
@@ -1200,4 +1201,36 @@ func TestIngressFirewallWorkerRulesYAMLWithAllowedCIDRs(t *testing.T) {
 	assert.Contains(t, apidRule, "subnet: 192.168.0.0/24")
 	assert.NotContains(t, apidRule, "subnet: 0.0.0.0/0")
 	assert.NotContains(t, apidRule, "subnet: ::/0")
+}
+
+// TestIngressFirewallKubeletRuleAllowsPodCIDR pins that the kubelet rule admits the pod
+// network on both roles (metrics-server scrapes the kubelet from a pod address, ksail#7141)
+// while the control-plane-only rules stay restricted to the node network.
+func TestIngressFirewallKubeletRuleAllowsPodCIDR(t *testing.T) {
+	t.Parallel()
+
+	for role, rules := range map[string]string{
+		"control-plane": talosgenerator.IngressFirewallCPRulesYAML("10.0.0.0/16", 8472, nil),
+		"worker":        talosgenerator.IngressFirewallWorkerRulesYAML("10.0.0.0/16", 8472, nil),
+	} {
+		kubelet := networkRuleDocument(t, rules, "kubelet")
+		assert.Contains(t, kubelet, "subnet: 10.0.0.0/16", role)
+		assert.Contains(t, kubelet, "subnet: "+talosgenerator.DefaultPodCIDR, role)
+	}
+
+	cpRules := talosgenerator.IngressFirewallCPRulesYAML("10.0.0.0/16", 8472, nil)
+	for _, name := range []string{"etcd", "trustd", "cni-vxlan"} {
+		assert.NotContains(t, networkRuleDocument(t, cpRules, name), talosgenerator.DefaultPodCIDR, name)
+	}
+}
+
+// TestIngressFirewallKubeletRuleDoesNotDuplicatePodCIDR pins that a network CIDR equal to
+// the pod CIDR is listed once.
+func TestIngressFirewallKubeletRuleDoesNotDuplicatePodCIDR(t *testing.T) {
+	t.Parallel()
+
+	rules := talosgenerator.IngressFirewallWorkerRulesYAML(talosgenerator.DefaultPodCIDR, 8472, nil)
+	kubelet := networkRuleDocument(t, rules, "kubelet")
+
+	assert.Equal(t, 1, strings.Count(kubelet, "subnet: "+talosgenerator.DefaultPodCIDR))
 }
