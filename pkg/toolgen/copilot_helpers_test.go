@@ -66,15 +66,15 @@ func TestBuildFullCommand_WithBoolFlags(t *testing.T) {
 	assert.Contains(t, result, "--verbose")
 }
 
-func TestBuildFullCommand_FalseBoolFlagOmitted(t *testing.T) {
+func TestBuildFullCommand_FalseBoolFlagForwarded(t *testing.T) {
 	t.Parallel()
 
 	result := toolgen.BuildFullCommand("ksail cluster create", map[string]any{
 		"verbose": false,
 	})
 
-	// False bool flags should not appear
-	assert.Equal(t, "ksail cluster create", result)
+	// An explicit false is forwarded, so the displayed command matches the one run.
+	assert.Equal(t, "ksail cluster create --verbose=false", result)
 }
 
 // --- buildCopilotResult tests ---
