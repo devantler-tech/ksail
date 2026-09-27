@@ -95,6 +95,13 @@ type BringUpSpec struct {
 	// bootstrap writes (k3s: /etc/rancher/k3s/k3s.yaml, kubeadm:
 	// /etc/kubernetes/admin.conf).
 	KubeconfigPath string
+	// ReadyPath, when set, is a remote file the node's bootstrap writes only
+	// once it has fully succeeded. It is awaited before KubeconfigPath, for a
+	// distribution that writes its admin kubeconfig part-way through a bootstrap
+	// that can still fail afterwards (kubeadm writes admin.conf before its
+	// wait-control-plane phase). Empty means the kubeconfig alone signals
+	// readiness.
+	ReadyPath string
 	// PollInterval is the delay between probes for KubeconfigPath; zero means
 	// [DefaultKubeconfigPollInterval].
 	PollInterval time.Duration
@@ -171,6 +178,13 @@ func (b *Base) bootstrapAndReadKubeconfig(
 	}
 
 	defer func() { _ = client.Close() }()
+
+	if spec.ReadyPath != "" {
+		err = b.waitForBootstrapFile(ctx, client, addr, spec.ReadyPath, spec.PollInterval)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	err = b.waitForBootstrapFile(ctx, client, addr, spec.KubeconfigPath, spec.PollInterval)
 	if err != nil {

@@ -18,6 +18,8 @@ import (
 
 const (
 	testStageTimeout         = 200 * time.Millisecond
+	testReadyPath            = "/var/lib/ksail/bootstrap-complete"
+	testReadyProbeCommand    = "test -f '/var/lib/ksail/bootstrap-complete'"
 	testCloudInitStatusCmd   = "cloud-init status --long"
 	testCloudInitStatusError = "status: error\ndetail: runcmd failed\n"
 	testCloudInitShortCmd    = "cloud-init status"
@@ -299,4 +301,90 @@ func TestBootstrapErrorLinePatternSelectsOnlyKubeadmErrors(t *testing.T) {
 	} {
 		assert.False(t, pattern.MatchString(line), "should drop %q", line)
 	}
+}
+
+// TestBringUpNodeWaitsForReadyPathBeforeKubeconfig pins that a bring-up with a
+// ReadyPath does not accept a kubeconfig the bootstrap wrote before failing:
+// kubeadm writes admin.conf before its wait-control-plane phase, so the
+// kubeconfig existing while cloud-init reports an error is a failed bring-up,
+// not a running cluster.
+func TestBringUpNodeWaitsForReadyPathBeforeKubeconfig(t *testing.T) {
+	t.Parallel()
+
+	pair, err := sshbootstrap.GenerateKeyPair()
+	require.NoError(t, err)
+
+	kubeconfigWithoutSentinel := func(command string) (string, uint32) {
+		switch command {
+		case testProbeCommand, testReadCommand:
+			return testKubeconfig, 0
+		case testReadyProbeCommand:
+			return "", errExitNotFound
+		case testCloudInitShortCmd:
+			return "status: error\n", 1
+		case testCloudInitStatusCmd:
+			return testCloudInitStatusError, 1
+		case testKubeadmErrorLinesCmd:
+			return testKubeadmErrorLines, 0
+		default:
+			return "", errExitUnknownProbe
+		}
+	}
+
+	host, port, hostKey := startBringUpSSHServer(
+		t, pair.Signer.PublicKey(), kubeconfigWithoutSentinel,
+	)
+
+	infra := &fakeInfra{createdServer: serverWithPublicIPv4(host)}
+	base := newBase(infra, v1alpha1.OptionsHetzner{})
+	base.BringUpBootstrapTimeout = time.Hour
+
+	spec := bringUpSpec(pair, hostKey, port)
+	spec.ReadyPath = testReadyPath
+
+	ctx, cancel := context.WithTimeout(t.Context(), testBringUpBudget)
+	defer cancel()
+
+	result, err := base.BringUpNode(ctx, testClusterName, spec)
+
+	require.ErrorIs(t, err, hetznerbase.ErrBootstrapFailed)
+	assert.Contains(t, err.Error(), testReadyPath)
+	assert.Nil(t, result.Kubeconfig)
+	assert.Equal(t, 1, infra.deleteNodesCalls)
+}
+
+// TestBringUpNodeReadsKubeconfigOnceReadyPathExists pins the success half: once
+// the ReadyPath sentinel exists, the kubeconfig is read and returned.
+func TestBringUpNodeReadsKubeconfigOnceReadyPathExists(t *testing.T) {
+	t.Parallel()
+
+	pair, err := sshbootstrap.GenerateKeyPair()
+	require.NoError(t, err)
+
+	ready := func(command string) (string, uint32) {
+		switch command {
+		case testProbeCommand, testReadCommand:
+			return testKubeconfig, 0
+		case testReadyProbeCommand:
+			return "", 0
+		default:
+			return "", errExitUnknownProbe
+		}
+	}
+
+	host, port, hostKey := startBringUpSSHServer(t, pair.Signer.PublicKey(), ready)
+
+	infra := &fakeInfra{createdServer: serverWithPublicIPv4(host)}
+	base := newBase(infra, v1alpha1.OptionsHetzner{})
+
+	spec := bringUpSpec(pair, hostKey, port)
+	spec.ReadyPath = testReadyPath
+
+	ctx, cancel := context.WithTimeout(t.Context(), testBringUpBudget)
+	defer cancel()
+
+	result, err := base.BringUpNode(ctx, testClusterName, spec)
+	require.NoError(t, err)
+	assert.Equal(t, testKubeconfig, string(result.Kubeconfig))
+	assert.Zero(t, infra.deleteNodesCalls)
 }

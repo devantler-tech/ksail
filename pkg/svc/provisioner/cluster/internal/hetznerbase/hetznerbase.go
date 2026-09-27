@@ -193,6 +193,25 @@ type CreateStrategy interface {
 	GenerateToken() (string, error)
 }
 
+// InitReadyPather is implemented by a [CreateStrategy] whose admin kubeconfig
+// can appear on the cluster-initialising node before its bootstrap has
+// succeeded. InitReadyPath names the file the bootstrap writes only on success;
+// the bring-up waits for it before accepting the kubeconfig (see
+// [BringUpSpec.ReadyPath]).
+type InitReadyPather interface {
+	InitReadyPath() string
+}
+
+// initReadyPath returns the strategy's [InitReadyPather.InitReadyPath], or
+// empty when the strategy does not implement it.
+func (b *Base) initReadyPath() string {
+	if pather, ok := b.Strategy.(InitReadyPather); ok {
+		return pather.InitReadyPath()
+	}
+
+	return ""
+}
+
 // NewBase constructs a Base, building the Hetzner provider from opts (resolving the
 // API token from the configured environment variable). It is the shared provider
 // construction both provisioners' NewProvisioner constructors delegate to;
@@ -570,6 +589,7 @@ func (b *Base) bringUpFromPlan(
 		Signer:          plan.Signer,
 		HostKeyCallback: plan.HostKeyCallback,
 		KubeconfigPath:  plan.RemoteKubeconfigPath,
+		ReadyPath:       b.initReadyPath(),
 		PollInterval:    plan.PollInterval,
 		Port:            plan.Port,
 	})

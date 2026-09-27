@@ -189,6 +189,7 @@ func (b *Base) bringUpInitControlPlane(
 		Signer:          material.Signer,
 		HostKeyCallback: material.HostKeyCallback,
 		KubeconfigPath:  b.Strategy.RemoteKubeconfigPath(),
+		ReadyPath:       b.initReadyPath(),
 		PollInterval:    b.BringUpPollInterval,
 		Port:            b.BringUpPort,
 	})
