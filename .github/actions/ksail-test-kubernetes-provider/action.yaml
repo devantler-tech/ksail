@@ -125,7 +125,7 @@ runs:
         else
           MIRRORS+=('ghcr.io=https://ghcr.io')
         fi
-        MIRRORS+=('quay.io=https://quay.io' 'registry.k8s.io=https://registry.k8s.io')
+        MIRRORS+=('quay.io=https://quay.io' 'registry.k8s.io=https://registry.k8s.io' 'ecr-public.aws.com=https://ecr-public.aws.com')
         MIRROR_ARG="$(IFS=,; printf '%s' "${MIRRORS[*]}")"
         echo "Nested mirror registries: ${#MIRRORS[@]} (docker.io/ghcr.io authenticated when secrets present)"
         echo ""
