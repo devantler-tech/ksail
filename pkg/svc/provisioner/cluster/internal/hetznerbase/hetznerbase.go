@@ -202,16 +202,6 @@ type InitReadyPather interface {
 	InitReadyPath() string
 }
 
-// initReadyPath returns the strategy's [InitReadyPather.InitReadyPath], or
-// empty when the strategy does not implement it.
-func (b *Base) initReadyPath() string {
-	if pather, ok := b.Strategy.(InitReadyPather); ok {
-		return pather.InitReadyPath()
-	}
-
-	return ""
-}
-
 // NewBase constructs a Base, building the Hetzner provider from opts (resolving the
 // API token from the configured environment variable). It is the shared provider
 // construction both provisioners' NewProvisioner constructors delegate to;
@@ -624,6 +614,16 @@ func (b *Base) resolveSSHKeyID(ctx context.Context) (int64, error) {
 	}
 
 	return idOrZero(sshKey, func(k *hcloud.SSHKey) int64 { return k.ID }), nil
+}
+
+// initReadyPath returns the strategy's [InitReadyPather.InitReadyPath], or
+// empty when the strategy does not implement it.
+func (b *Base) initReadyPath() string {
+	if pather, ok := b.Strategy.(InitReadyPather); ok {
+		return pather.InitReadyPath()
+	}
+
+	return ""
 }
 
 // idOrZero returns id(resource), or zero when the provider returned no
