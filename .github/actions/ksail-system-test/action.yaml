@@ -246,7 +246,14 @@ runs:
         mirror-registry: ${{ inputs.provider == 'Docker' && 'docker.io=https://registry-1.docker.io,ghcr.io=https://ghcr.io,quay.io=https://quay.io,registry.k8s.io=https://registry.k8s.io,ecr-public.aws.com=https://ecr-public.aws.com' || '' }}
         init: ${{ inputs.init }}
         install: "false"
-        cache: "true"
+        # The calling job has already restored the shared caches the warm jobs
+        # built (restore-helm-cache, restore-mirror-cache). ksail-cluster's own
+        # cache would save a ~2.7 GB mirror copy per leg, keyed by that leg's
+        # image set; a single run then exceeds the repository's 10 GB cache
+        # budget and evicts the shared mirror cache before later legs restore
+        # it (#7348). Its prefix fallback could also import an older mirror
+        # volume over the shared one.
+        cache: "false"
         validate: ${{ inputs.init }}
 
     - name: 🧪 ksail cluster info
