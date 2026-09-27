@@ -2,6 +2,7 @@ package talosprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -33,6 +34,8 @@ const (
 	// kube-proxy rolls out.
 	kubernetesUpgradeReconcileTimeout = 5 * time.Minute
 )
+
+var errAutoscalerNodeConfigurationChangesFailed = errors.New("autoscaler node configuration changes failed")
 
 // kubernetesUpgradeOptions supplies the defaults that talosctl normally adds
 // around the lower-level SDK. KSail calls that SDK directly, so Go zero values
@@ -121,14 +124,8 @@ func (p *Provisioner) UpgradeDistribution(
 	// clean and skip the usual autoscaler Secret refresh. Establish the new
 	// snapshot baseline and recycle old autoscaler nodes before static nodes roll.
 	if runningVersionMatchesTarget(fromVersion, toVersion) {
-		autoscalerResult := clusterupdate.NewEmptyUpdateResult()
-		err = p.ensureAutoscalerSecretIfNeeded(ctx, clusterName, nil, autoscalerResult)
-		if err != nil {
-			return fmt.Errorf("reconciling autoscaler image baseline: %w", err)
-		}
-		if len(autoscalerResult.FailedChanges) != 0 {
-			return fmt.Errorf("reconciling autoscaler image baseline: %d node configuration changes failed",
-				len(autoscalerResult.FailedChanges))
+		if err := p.reconcileAutoscalerImageBaseline(ctx, clusterName); err != nil {
+			return err
 		}
 	}
 
@@ -144,6 +141,20 @@ func (p *Provisioner) UpgradeDistribution(
 	_, _ = fmt.Fprintf(p.logWriter,
 		"  ✓ Talos upgraded to %s\n", toVersion,
 	)
+
+	return nil
+}
+
+func (p *Provisioner) reconcileAutoscalerImageBaseline(ctx context.Context, clusterName string) error {
+	result := clusterupdate.NewEmptyUpdateResult()
+	if err := p.ensureAutoscalerSecretIfNeeded(ctx, clusterName, nil, result); err != nil {
+		return fmt.Errorf("reconciling autoscaler image baseline: %w", err)
+	}
+
+	if len(result.FailedChanges) != 0 {
+		return fmt.Errorf("reconciling autoscaler image baseline: %d changes failed: %w",
+			len(result.FailedChanges), errAutoscalerNodeConfigurationChangesFailed)
+	}
 
 	return nil
 }
