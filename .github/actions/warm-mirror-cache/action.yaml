@@ -244,11 +244,12 @@ runs:
       run: |
         # Use hash of extracted image list to invalidate when images change
         # This covers both go.mod changes AND code changes affecting image extraction.
-        # "m5" marks the five-mirror layout whose ECR Public volume is filled by an
-        # explicit copy. Entries without it can hold an empty ECR Public volume, and a
-        # cache entry cannot be overwritten, so they must never match. Keep it in step
-        # with restore-mirror-cache.
-        CACHE_KEY="mirror-cache-${CACHE_VERSION}-m5-${IMAGES_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
+        # "m6" marks the five-mirror layout whose ECR Public volume is filled by an
+        # explicit copy of every platform. Older entries can hold an empty ECR Public
+        # volume or a single-platform copy the proxy cannot serve, and a cache entry
+        # cannot be overwritten, so they must never match. Keep it in step with
+        # restore-mirror-cache.
+        CACHE_KEY="mirror-cache-${CACHE_VERSION}-m6-${IMAGES_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
         echo "cache-key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
         echo "📦 Cache key: $CACHE_KEY"
 
@@ -273,7 +274,7 @@ runs:
         path: /tmp/mirror-cache
         key: ${{ steps.generate-key.outputs.cache-key }}
         restore-keys: |
-          mirror-cache-${{ inputs.cache-version }}-m5-
+          mirror-cache-${{ inputs.cache-version }}-m6-
 
     - name: 📥 Restore KWOK control plane cache
       id: restore-kwok-cache
@@ -538,11 +539,14 @@ runs:
               MIRROR_REF="localhost:5004/$NAME"
             fi
           fi
-          # A digest pin names the exact manifest, often a multi-arch index; copy
-          # every platform so the mirror holds that same digest. A tag-only pin
-          # keeps the single-platform copy the tests pull today.
-          ALL_PLATFORMS=()
-          [[ "$REF" == *@* ]] && ALL_PLATFORMS=(--all)
+          # Copy every platform so the mirror holds the multi-arch index itself.
+          # The proxy resolves a tag against ECR Public first, and ECR Public
+          # answers that HEAD even while it refuses GETs with its data limit. The
+          # proxy then looks up the index digest the HEAD returned; with only a
+          # single-platform manifest stored, it misses and GETs the index from
+          # ECR Public, which fails with "toomanyrequests: Data limit exceeded".
+          # A digest pin names that same index, so it needs every platform too.
+          ALL_PLATFORMS=(--all)
           echo "📥 Copying $image → $MIRROR_REF"
           if skopeo copy --retry-times 3 --dest-tls-verify=false "${ALL_PLATFORMS[@]}" \
             "docker://ecr-public.aws.com/$SOURCE_REF" "docker://$MIRROR_REF"; then
