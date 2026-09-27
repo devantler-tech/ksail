@@ -153,19 +153,33 @@ runs:
         # the host with "/" and ":" replaced by "-". Without the input, KSail
         # uses its default mirrors; ecr-public.aws.com is kept for the caches
         # this action already restores and exports.
+        # A credentialed spec (user:pass@host) mirrors a registry that whoever
+        # restores the cache may not be allowed to read, and pull-request
+        # workflows can restore base-branch caches. Its volume is therefore
+        # never exported to or imported from the cache (cache-hosts), only
+        # cleaned up on retry (hosts).
         hosts=""
+        cache_hosts=""
         if [ -n "$MIRROR_REGISTRY" ]; then
           IFS=',' read -ra specs <<< "$MIRROR_REGISTRY"
           for spec in "${specs[@]}"; do
             host="${spec%%=*}"
+            credentialed=false
+            [[ "$host" == *@* ]] && credentialed=true
             host="${host##*@}"
             host="$(echo "$host" | tr -d '[:space:]' | tr '/:' '--')"
-            [ -n "$host" ] && hosts="${hosts:+$hosts }$host"
+            [ -n "$host" ] || continue
+            hosts="${hosts:+$hosts }$host"
+            [ "$credentialed" = true ] || cache_hosts="${cache_hosts:+$cache_hosts }$host"
           done
         fi
-        : "${hosts:=docker.io ghcr.io quay.io registry.k8s.io ecr-public.aws.com}"
+        if [ -z "$hosts" ]; then
+          hosts="docker.io ghcr.io quay.io registry.k8s.io ecr-public.aws.com"
+          cache_hosts="$hosts"
+        fi
         echo "hosts=$hosts" >> "$GITHUB_OUTPUT"
-        echo "🪞 Mirror volumes: $hosts"
+        echo "cache-hosts=$cache_hosts" >> "$GITHUB_OUTPUT"
+        echo "🪞 Mirror volumes: $hosts (cached: ${cache_hosts:-none})"
 
     - name: 📋 Compute cache keys
       if: inputs.cache == 'true'
@@ -220,7 +234,7 @@ runs:
       if: inputs.cache == 'true' && inputs.provider == 'Docker' && steps.restore-mirror.outputs.cache-hit == 'true'
       shell: bash
       env:
-        MIRROR_HOSTS: ${{ steps.mirror-hosts.outputs.hosts }}
+        MIRROR_HOSTS: ${{ steps.mirror-hosts.outputs.cache-hosts }}
       run: |
         echo "📦 Importing mirror registry volumes..."
         # Pull the tar-utility busybox via mirror.gcr.io (anonymous pull-through
@@ -559,7 +573,7 @@ runs:
       if: inputs.cache == 'true' && inputs.provider == 'Docker' && steps.restore-mirror.outputs.cache-hit != 'true'
       shell: bash
       env:
-        MIRROR_HOSTS: ${{ steps.mirror-hosts.outputs.hosts }}
+        MIRROR_HOSTS: ${{ steps.mirror-hosts.outputs.cache-hosts }}
       run: |
         echo "📦 Exporting mirror registry volumes for caching..."
         # busybox via mirror.gcr.io (anonymous), not Docker Hub — avoids the

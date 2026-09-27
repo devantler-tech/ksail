@@ -163,6 +163,15 @@ jobs:
           output-path: /usr/local/bin/ksail
           save: "false"
 
+      # The ECR Public copy falls back to Docker Hub for Docker Official
+      # Images when ECR Public rate-limits the runner; skopeo reads this login.
+      - name: 🔐 Login to Docker Hub
+        if: vars.DOCKERHUB_USERNAME != ''
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] - third-party action input, no environment scoping available
+
       - name: 🔥 Warm mirror cache
         uses: ./.github/actions/warm-mirror-cache
 
