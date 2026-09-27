@@ -2,6 +2,7 @@ package talosprovisioner_test
 
 import (
 	"context"
+	"io"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -23,6 +24,26 @@ func TestKubernetesImageRefUsesTalosKubeletAvailability(t *testing.T) {
 	provisioner := talosprovisioner.NewProvisioner(nil, nil)
 
 	assert.Equal(t, "ghcr.io/siderolabs/kubelet", provisioner.KubernetesImageRef())
+}
+
+// The version reconciler calls UpgradeDistribution before it computes the
+// config diff. An explicit schematic change must therefore reach autoscaler
+// baseline reconciliation here, even when static node images are already set.
+func TestUpgradeDistributionReconcilesAutoscalerBaseline(t *testing.T) {
+	t.Setenv(v1alpha1.DefaultHetznerTokenEnvVar, "")
+
+	configs, err := talosconfigmanager.NewDefaultConfigs()
+	require.NoError(t, err)
+
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{NodeAutoscalerEnabled: true}).
+		WithTalosOptions(v1alpha1.OptionsTalos{
+			SchematicID: "test-schematic-id", Version: "v1.13.10",
+		}).
+		WithLogWriter(io.Discard)
+
+	err = provisioner.UpgradeDistribution(t.Context(), "test", "v1.13.10", "v1.13.10")
+	require.ErrorIs(t, err, talosprovisioner.ErrHcloudTokenNotSet)
 }
 
 // TestSupportsLifecycleUpgradeAPI verifies that the upgrade path dispatch picks

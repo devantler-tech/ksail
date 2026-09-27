@@ -12,6 +12,9 @@ import (
 	talosimages "github.com/siderolabs/talos/pkg/images"
 	"github.com/siderolabs/talos/pkg/machinery/constants"
 	"github.com/siderolabs/talos/pkg/machinery/resources/runtime"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 var _ clusterupdate.DistributionImagePlanner = (*Provisioner)(nil)
@@ -29,12 +32,60 @@ func (p *Provisioner) DistributionImageChanged(
 		return false, nil
 	}
 
-	nodes, err := p.getNodesByRole(ctx, p.resolveClusterName(clusterName))
+	clusterName = p.resolveClusterName(clusterName)
+	nodes, err := p.getNodesByRole(ctx, clusterName)
 	if err != nil {
 		return false, fmt.Errorf("listing nodes for schematic check: %w", err)
 	}
 
-	return schematicsChanged(ctx, nodes, desired, p.getRunningSchematic)
+	return distributionImageChanged(ctx, nodes, desired, p.getRunningSchematic,
+		func() (kubernetes.Interface, error) { return p.createK8sClient(clusterName) })
+}
+
+// A previous roll can finish installing every image but time out before its
+// final uncordon. Keep the rolling recovery path reachable in that state.
+func distributionImageChanged(
+	ctx context.Context, nodes []nodeWithRole, desired string,
+	read func(context.Context, string) (string, error),
+	newClient func() (kubernetes.Interface, error),
+) (bool, error) {
+	changed, err := schematicsChanged(ctx, nodes, desired, read)
+	if err != nil || changed {
+		return changed, err
+	}
+
+	clientset, err := newClient()
+	if err != nil {
+		return false, fmt.Errorf("checking unfinished node upgrades: %w", err)
+	}
+
+	kubeNodes, err := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return false, fmt.Errorf("listing nodes for unfinished upgrades: %w", err)
+	}
+
+	managedIPs := make(map[string]struct{}, len(nodes))
+	for _, node := range nodes {
+		managedIPs[node.IP] = struct{}{}
+	}
+
+	for _, node := range kubeNodes.Items {
+		if !node.Spec.Unschedulable {
+			continue
+		}
+
+		for _, address := range node.Status.Addresses {
+			if address.Type != corev1.NodeInternalIP && address.Type != corev1.NodeExternalIP {
+				continue
+			}
+
+			if _, ok := managedIPs[address.Address]; ok {
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
 }
 
 // Read all identities even after finding drift: an unreadable remaining node

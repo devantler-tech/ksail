@@ -116,6 +116,17 @@ func (p *Provisioner) UpgradeDistribution(
 		return err
 	}
 
+	// A same-version image roll runs before the regular config diff. Explicit
+	// schematic IDs are absent from rendered Talos configs, so that diff may be
+	// clean and skip the usual autoscaler Secret refresh. Establish the new
+	// snapshot baseline and recycle old autoscaler nodes before static nodes roll.
+	if runningVersionMatchesTarget(fromVersion, toVersion) {
+		err = p.ensureAutoscalerSecretIfNeeded(ctx, clusterName, nil, nil)
+		if err != nil {
+			return fmt.Errorf("reconciling autoscaler image baseline: %w", err)
+		}
+	}
+
 	_, _ = fmt.Fprintf(p.logWriter,
 		"  Upgrading Talos from %s to %s...\n", fromVersion, toVersion,
 	)
