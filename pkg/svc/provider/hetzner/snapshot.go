@@ -65,11 +65,14 @@ func NewSnapshotManager(hcloudClient *hcloud.Client, logWriter io.Writer) *Snaps
 // Snapshots are scoped per cluster so that deleting one cluster does not remove snapshots used by another.
 // The resulting snapshot is labeled with LabelTalosVersion, LabelTalosSchematic, LabelTalosCluster, and
 // LabelTalosSnapshotBuild. If the build is cancelled, its temporary server and SSH key are deleted.
+// beforeBuild, when non-nil, runs only when a snapshot has to be built, before the factory image is
+// requested; an error from it aborts the build.
 func (sm *SnapshotManager) EnsureTalosSnapshot(
 	ctx context.Context,
 	clusterName string,
 	talosVersion string,
 	schematicID string,
+	beforeBuild func(context.Context) error,
 ) (int64, error) {
 	if !strings.HasPrefix(talosVersion, "v") {
 		talosVersion = "v" + talosVersion
@@ -84,6 +87,13 @@ func (sm *SnapshotManager) EnsureTalosSnapshot(
 		_, _ = fmt.Fprintf(sm.logWriter, "  ✓ Found existing Talos snapshot (ID: %d)\n", imageID)
 
 		return imageID, nil
+	}
+
+	if beforeBuild != nil {
+		err = beforeBuild(ctx)
+		if err != nil {
+			return 0, fmt.Errorf("preparing the Talos snapshot image: %w", err)
+		}
 	}
 
 	_, _ = fmt.Fprintf(sm.logWriter,

@@ -3,8 +3,7 @@
 // recovery (currently VCluster and KWOK). It factors out the attempt loop,
 // between-attempt cleanup, context-aware backoff, transient-error classification,
 // and terminal-error wrapping that both provisioners previously hand-rolled,
-// while preserving each provisioner's special-error handling (VCluster's D-Bus
-// delete-and-retry fallback) and per-attempt timeout (KWOK) through hooks.
+// while preserving KWOK's per-attempt timeout through a hook.
 package retry
 
 import (
@@ -12,23 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"time"
-)
-
-// SpecialResult is the outcome of a [Config.OnSpecialError] hook for an error
-// the provisioner recognizes and handles specially (e.g. VCluster's D-Bus
-// race).
-type SpecialResult int
-
-const (
-	// NotSpecial indicates the hook did not recognize the error; [Do] applies
-	// its normal transient/non-transient classification.
-	NotSpecial SpecialResult = iota
-	// Recovered indicates the hook fully recovered the cluster; [Do] returns nil.
-	Recovered
-	// RetryFresh indicates the hook could not recover in place; [Do] continues to
-	// the next attempt (cleanup + fresh create) using the hook's error as the
-	// last error.
-	RetryFresh
 )
 
 // Config parameterizes a [Do] run. The zero value is not usable; at minimum
@@ -51,10 +33,6 @@ type Config struct {
 	Cleanup func(ctx context.Context)
 	// IsTransient reports whether a create error may succeed on retry.
 	IsTransient func(error) bool
-
-	// OnSpecialError, when non-nil, is consulted before transient classification
-	// so the provisioner can handle errors that need bespoke recovery.
-	OnSpecialError func(ctx context.Context, attempt int, err error) (SpecialResult, error)
 
 	// Logf logs progress (retry notices, transient/timeout diagnostics). When nil
 	// no logging is performed. attempt is 1-based.
@@ -92,17 +70,6 @@ func Do(ctx context.Context, cfg Config) error {
 		// runAttempt already logged it, so skip further classification/logging.
 		if timedOut {
 			continue
-		}
-
-		decided, decision := cfg.handleSpecial(ctx, attempt, lastErr)
-		if decided {
-			if decision == nil {
-				return nil // Recovered.
-			}
-
-			lastErr = decision
-
-			continue // RetryFresh.
 		}
 
 		if !cfg.IsTransient(lastErr) {
@@ -162,28 +129,6 @@ func (cfg Config) runAttempt(ctx context.Context, attempt int) (bool, error) {
 	}
 
 	return timedOut, err
-}
-
-// handleSpecial consults OnSpecialError. It returns (true, newErr) when the hook
-// took ownership: newErr==nil means recovered (Do returns nil), newErr!=nil
-// means retry-fresh with that error. It returns (false, nil) when the error is
-// not special.
-func (cfg Config) handleSpecial(ctx context.Context, attempt int, err error) (bool, error) {
-	if cfg.OnSpecialError == nil {
-		return false, nil
-	}
-
-	result, hookErr := cfg.OnSpecialError(ctx, attempt, err)
-	switch result {
-	case Recovered:
-		return true, nil
-	case RetryFresh:
-		return true, hookErr
-	case NotSpecial:
-		return false, nil
-	default:
-		return false, nil
-	}
 }
 
 func (cfg Config) logf(format string, args ...any) {

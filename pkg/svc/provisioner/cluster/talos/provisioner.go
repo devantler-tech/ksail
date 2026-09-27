@@ -183,9 +183,13 @@ type Provisioner struct {
 	// known running config without real Talos API connectivity (used by the per-node
 	// desired-config rebuild — see fetchAndBuildDesiredNodeConfig).
 	nodeConfigFetcher func(ctx context.Context, nodeIP string) (talosconfig.Provider, error)
-	logWriter         io.Writer
-	logMu             sync.Mutex
-	componentDetector *detector.ComponentDetector
+	// schematicRegistrar sends a computed schematic to Image Factory and returns the ID it
+	// was stored under. Defaults to registerWithImageFactory; tests override it via
+	// export_test.go to avoid real network I/O.
+	schematicRegistrar func(ctx context.Context, sc talosconfigmanager.Schematic) (string, error)
+	logWriter          io.Writer
+	logMu              sync.Mutex
+	componentDetector  *detector.ComponentDetector
 	// imagePullRetry controls retry behavior for Docker image pulls.
 	// Tests can override this via WithImagePullRetryConfig to use near-zero delays.
 	imagePullRetry imagePullRetryConfig
@@ -245,6 +249,7 @@ func NewProvisioner(
 	}
 
 	prov.nodeConfigFetcher = prov.fetchNodeConfig
+	prov.schematicRegistrar = registerWithImageFactory
 
 	return prov
 }

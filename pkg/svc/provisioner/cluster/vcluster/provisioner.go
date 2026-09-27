@@ -2,11 +2,8 @@ package vclusterprovisioner
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -18,9 +15,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/retry"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kernelmod"
-	dockercontainer "github.com/docker/docker/api/types/container"
 	dockernetwork "github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/pkg/stdcopy"
 	loftlog "github.com/loft-sh/log"
 	"github.com/loft-sh/vcluster/pkg/cli"
 	cliconfig "github.com/loft-sh/vcluster/pkg/cli/config"
@@ -59,30 +54,6 @@ const networkRemovalInterval = 2 * time.Second
 // vCluster SDK for control plane containers.
 const controlPlaneContainerPrefix = "vcluster.cp."
 
-// dbusWaitTimeout is how long to wait for D-Bus to become available inside the
-// control plane container. On CI runners (GitHub Actions), systemd inside the
-// container may take several seconds to initialize D-Bus after container start.
-const dbusWaitTimeout = 30 * time.Second
-
-// dbusWaitInterval is the polling interval when waiting for D-Bus readiness.
-const dbusWaitInterval = 500 * time.Millisecond
-
-// dbusErrorSubstring identifies the D-Bus startup race condition error.
-// The SDK's install-standalone.sh runs "systemctl restart systemd-journald"
-// which fails when D-Bus hasn't initialized yet inside the privileged container.
-//
-// Audited against vCluster v0.33.2-rc3 (April 2026): the upstream SDK's
-// systemd readiness loop (systemctl is-system-running, up to 60s) does NOT
-// eliminate this race — when the loop times out, the install script still
-// executes and can hit the D-Bus error. KSail's recoverFromDBusError
-// workaround remains necessary.
-//
-// Audited against vCluster v0.34.0 (May 2026): no changes to
-// the D-Bus initialization path; the race condition persists. v0.34 adds
-// snapshot/restore support for the Docker driver (PR loft-sh/vcluster#3790)
-// and SecurityContext config for AutoUpgrade — neither affects this error.
-const dbusErrorSubstring = "Failed to connect to bus"
-
 // transientCreateErrors returns error substrings that indicate potentially
 // transient infrastructure failures during vCluster cluster creation.
 // Exit status 22 (EINVAL) has been observed on CI runners where the Docker
@@ -97,8 +68,14 @@ const dbusErrorSubstring = "Failed to connect to bus"
 // "Node couldn't join" covers the vCluster standalone node join timeout
 // (3 minutes) where the kubelet's TLS bootstrap fails to complete on slow
 // CI runners. Retrying with a fresh container typically resolves this.
+// "Failed to connect to bus" is the systemd/D-Bus startup race in which the
+// SDK's install script runs systemctl before D-Bus is up inside the container
+// (issue #2261). KSail used to repair it in place; that path went unused across
+// every Linux CI matrix leg on vCluster v0.36.1, so a fresh container is now the
+// only handling it gets.
 func transientCreateErrors() []string {
 	return []string{
+		"Failed to connect to bus",
 		"exit status 22",
 		"fetching blob: denied: denied",
 		"Egress is over the account limit",
@@ -129,31 +106,12 @@ type retryCleanupFn func(
 	logger loftlog.Logger,
 )
 
-// dbusRecoverFn is the signature for the D-Bus error recovery function.
-type dbusRecoverFn func(
-	ctx context.Context,
-	globalFlags *flags.GlobalFlags,
-	clusterName string,
-	logger loftlog.Logger,
-) error
-
 // networkExistsFn checks whether a Docker network with the given name exists.
 type networkExistsFn func(ctx context.Context, networkName string) bool
 
 // removeNetworkFn attempts to remove a Docker network. Errors are logged
 // but not returned because network removal is best-effort during cleanup.
 type removeNetworkFn func(ctx context.Context, networkName string, logger loftlog.Logger)
-
-// errDBusTimeout is returned when D-Bus does not become available
-// within the configured timeout.
-var errDBusTimeout = errors.New("D-Bus socket did not appear within timeout")
-
-// errEmptyJoinToken is returned when the SDK's persisted join token
-// file exists but is empty.
-var errEmptyJoinToken = errors.New("join token file is empty")
-
-// errDockerExecFailed is returned when a Docker exec command exits with a non-zero exit code.
-var errDockerExecFailed = errors.New("docker exec failed")
 
 // Provisioner implements the cluster provisioner interface for vCluster's Docker
 // driver (Vind). Create and Delete use the vCluster Go SDK directly, while
@@ -211,11 +169,6 @@ func (p *Provisioner) SetProvider(prov provider.Provider) {
 // which is too short for CI runners. We retry ConnectDocker up to
 // connectMaxAttempts times, giving an effective timeout of ~9 minutes.
 //
-// On CI runners (GitHub Actions), the SDK's install-standalone.sh may fail
-// because systemd inside the privileged container hasn't initialized D-Bus
-// yet. When this happens the container is already running, so we wait for
-// D-Bus readiness and re-run the install script.
-//
 // On Linux, this method ensures the br_netfilter kernel module is loaded before
 // creating the cluster, as it's required for Docker bridge networking features.
 func (p *Provisioner) Create(ctx context.Context, name string) error {
@@ -249,7 +202,7 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 
 	err = createWithRetry(
 		ctx, opts, globalFlags, target, logger,
-		createRetryDelay, cli.CreateDocker, cleanupFailedCreate, recoverFromDBusError,
+		createRetryDelay, cli.CreateDocker, cleanupFailedCreate,
 	)
 	if err != nil {
 		return err
@@ -258,11 +211,8 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 	return connectWithRetry(ctx, globalFlags, target, logger)
 }
 
-// createWithRetry calls CreateDocker and retries on transient errors. A D-Bus
-// error first gets an in-place recovery (the container is already running); if
-// that recovery fails it falls back to the same full delete-and-retry path as
-// other transient errors (e.g. exit status 22), because a fresh container on the
-// next attempt usually clears the underlying systemd/D-Bus race.
+// createWithRetry calls CreateDocker and retries on transient errors, deleting
+// the partially-created cluster before each fresh attempt.
 func createWithRetry(
 	ctx context.Context,
 	opts *cli.CreateOptions,
@@ -272,7 +222,6 @@ func createWithRetry(
 	retryDelay time.Duration,
 	create createDockerFn,
 	cleanup retryCleanupFn,
-	recoverDBus dbusRecoverFn,
 ) error {
 	return retry.Do(ctx, retry.Config{ //nolint:wrapcheck // identity preserved
 		MaxAttempts: createMaxAttempts,
@@ -283,9 +232,8 @@ func createWithRetry(
 		Cleanup: func(ctx context.Context) {
 			cleanup(ctx, globalFlags, clusterName, logger)
 		},
-		IsTransient:    isTransientCreateError,
-		OnSpecialError: dbusSpecialHandler(globalFlags, clusterName, logger, recoverDBus),
-		Logf:           logger.Warnf,
+		IsTransient: isTransientCreateError,
+		Logf:        logger.Warnf,
 		WrapNonTransient: func(err error) error {
 			return fmt.Errorf("failed to create vCluster: %w", err)
 		},
@@ -293,86 +241,6 @@ func createWithRetry(
 			return fmt.Errorf("failed to create vCluster after %d attempts: %w", attempts, err)
 		},
 	})
-}
-
-// dbusSpecialHandler returns a retry.OnSpecialError hook that routes the D-Bus
-// startup race: an error containing dbusErrorSubstring first gets an in-place
-// recovery (the container is already running); on success the cluster is up
-// (retry.Recovered), on failure it falls back to a full delete-and-retry
-// (retry.RetryFresh) because a fresh container on the next attempt usually
-// clears the underlying systemd/D-Bus race. All other errors are not special.
-func dbusSpecialHandler(
-	globalFlags *flags.GlobalFlags,
-	clusterName string,
-	logger loftlog.Logger,
-	recoverDBus dbusRecoverFn,
-) func(context.Context, int, error) (retry.SpecialResult, error) {
-	return func(ctx context.Context, attempt int, err error) (retry.SpecialResult, error) {
-		if !strings.Contains(err.Error(), dbusErrorSubstring) {
-			return retry.NotSpecial, nil
-		}
-
-		done, recoverErr := recoverFromDBusRace(
-			ctx, globalFlags, clusterName, logger, recoverDBus, attempt,
-		)
-		if done {
-			return retry.Recovered, nil
-		}
-
-		return retry.RetryFresh, recoverErr
-	}
-}
-
-// recoverFromDBusRace attempts the fast in-place D-Bus recovery and reports
-// whether the cluster is now up. It returns done=true on success (createWithRetry
-// should return nil). On failure it returns done=false with the error so
-// createWithRetry falls back to a full delete-and-retry instead of giving up: a
-// fresh container on the next attempt usually clears the underlying systemd/D-Bus
-// race (D-Bus not ready, join token not yet written, or a transient install-script
-// download failure) that in-place recovery cannot.
-func recoverFromDBusRace(
-	ctx context.Context,
-	globalFlags *flags.GlobalFlags,
-	clusterName string,
-	logger loftlog.Logger,
-	recoverDBus dbusRecoverFn,
-	attempt int,
-) (bool, error) {
-	recoverErr := tryDBusRecovery(ctx, globalFlags, clusterName, logger, recoverDBus)
-	if recoverErr == nil {
-		return true, nil
-	}
-
-	logger.Warnf(
-		"vCluster D-Bus recovery failed (attempt %d/%d), retrying fresh: %v",
-		attempt+1, createMaxAttempts, recoverErr,
-	)
-
-	return false, recoverErr
-}
-
-// tryDBusRecovery handles the D-Bus race condition where CreateDocker fails
-// because systemd inside the container hasn't initialized D-Bus yet. The
-// container is already running, so it recovers in place (wait for D-Bus, re-run
-// the install script) without a full recreate. It returns nil on success, or the
-// (wrapped) recovery error so the caller can fall back to a full delete-and-retry.
-func tryDBusRecovery(
-	ctx context.Context,
-	globalFlags *flags.GlobalFlags,
-	clusterName string,
-	logger loftlog.Logger,
-	recoverDBus dbusRecoverFn,
-) error {
-	logger.Info("ksail.vcluster.dbus_recovery state=entered")
-
-	recoverErr := recoverDBus(ctx, globalFlags, clusterName, logger)
-	if recoverErr != nil {
-		return fmt.Errorf("D-Bus recovery failed: %w", recoverErr)
-	}
-
-	logger.Info("ksail.vcluster.dbus_recovery state=completed")
-
-	return nil
 }
 
 // isTransientCreateError returns true when the error message contains a known
@@ -627,197 +495,6 @@ func (p *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
 	}
 
 	return slices.Contains(clusters, target), nil
-}
-
-// --- D-Bus recovery ---
-
-// recoverFromDBusError handles the case where CreateDocker fails because
-// systemd inside the container hasn't initialized D-Bus yet. The container
-// is already running at this point — we wait for D-Bus and re-run the
-// install script that the SDK originally attempted.
-//
-// Audited against vCluster v0.33.2-rc3 (April 2026): the upstream SDK
-// added a systemd readiness loop but it can still time out on slow CI
-// runners, so this workaround is still required.
-//
-// Audited against vCluster v0.34.0 (May 2026): CreateDocker,
-// ConnectDocker, DeleteDocker signatures and option structs are unchanged
-// from v0.33.1. The D-Bus race persists — this workaround is still required.
-func recoverFromDBusError(
-	ctx context.Context,
-	globalFlags *flags.GlobalFlags,
-	clusterName string,
-	logger loftlog.Logger,
-) error {
-	containerName := controlPlaneContainerPrefix + clusterName
-
-	err := waitForDBus(ctx, containerName)
-	if err != nil {
-		return fmt.Errorf("D-Bus never became available: %w", err)
-	}
-
-	logger.Infof("D-Bus ready, re-running install script...")
-
-	token, err := readJoinToken(globalFlags, clusterName)
-	if err != nil {
-		return fmt.Errorf("failed to read join token: %w", err)
-	}
-
-	err = rerunInstallScript(ctx, containerName, clusterName, token)
-	if err != nil {
-		return fmt.Errorf("install script re-run failed: %w", err)
-	}
-
-	return nil
-}
-
-// waitForDBus polls the container until the D-Bus system socket exists,
-// indicating that systemd has initialized far enough for systemctl to work.
-// Uses a ticker with select to ensure immediate response to context cancellation.
-func waitForDBus(ctx context.Context, containerName string) error {
-	dockerClient, err := dockerengine.GetDockerClient()
-	if err != nil {
-		return fmt.Errorf("failed to create Docker client: %w", err)
-	}
-
-	defer func() { _ = dockerClient.Close() }()
-
-	deadline := time.Now().Add(dbusWaitTimeout)
-
-	ticker := time.NewTicker(dbusWaitInterval)
-	defer ticker.Stop()
-
-	for time.Now().Before(deadline) {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("context cancelled while waiting for D-Bus: %w", ctx.Err())
-		case <-ticker.C:
-			execResp, execErr := dockerClient.ContainerExecCreate(
-				ctx,
-				containerName,
-				dockercontainer.ExecOptions{
-					Cmd:          []string{"test", "-e", "/run/dbus/system_bus_socket"},
-					AttachStdout: true,
-					AttachStderr: true,
-					Tty:          false,
-				},
-			)
-			if execErr != nil {
-				continue
-			}
-
-			attachResp, attachErr := dockerClient.ContainerExecAttach(
-				ctx,
-				execResp.ID,
-				dockercontainer.ExecAttachOptions{},
-			)
-			if attachErr != nil {
-				continue
-			}
-
-			_, _ = io.Copy(io.Discard, attachResp.Reader)
-			attachResp.Close()
-
-			inspectResp, inspectErr := dockerClient.ContainerExecInspect(ctx, execResp.ID)
-			if inspectErr != nil {
-				continue
-			}
-
-			if inspectResp.ExitCode == 0 {
-				return nil
-			}
-		}
-	}
-
-	return fmt.Errorf("%w: %v", errDBusTimeout, dbusWaitTimeout)
-}
-
-// readJoinToken reads the join token persisted by the SDK during container
-// creation. The token is stored alongside the SDK's config directory at
-// docker/vclusters/<name>/token.txt.
-func readJoinToken(globalFlags *flags.GlobalFlags, clusterName string) (string, error) {
-	tokenPath := filepath.Join(
-		filepath.Dir(globalFlags.Config),
-		"docker", "vclusters", clusterName, "token.txt",
-	)
-
-	//nolint:gosec // path is constructed from SDK config dir + cluster name.
-	data, err := os.ReadFile(tokenPath)
-	if err != nil {
-		return "", fmt.Errorf("read %s: %w", tokenPath, err)
-	}
-
-	token := strings.TrimSpace(string(data))
-	if token == "" {
-		return "", fmt.Errorf("%w: %s", errEmptyJoinToken, tokenPath)
-	}
-
-	return token, nil
-}
-
-// rerunInstallScript executes the same install-standalone.sh that the SDK
-// originally ran, but now D-Bus is available so systemctl commands succeed.
-func rerunInstallScript(
-	ctx context.Context,
-	containerName string,
-	clusterName string,
-	joinToken string,
-) error {
-	dockerClient, err := dockerengine.GetDockerClient()
-	if err != nil {
-		return fmt.Errorf("failed to create Docker client: %w", err)
-	}
-
-	defer func() { _ = dockerClient.Close() }()
-
-	scriptURL := fmt.Sprintf(
-		"https://github.com/loft-sh/vcluster/releases/download/v%s/install-standalone.sh",
-		vclusterconfigmanager.ChartVersion(),
-	)
-
-	installCmd := fmt.Sprintf(
-		"set -e -o pipefail; mount --make-rshared /; "+
-			`curl -sfL "%s" | sh -s -- `+
-			"--skip-download --skip-wait "+
-			"--vcluster-name %s --join-token %s",
-		scriptURL, clusterName, joinToken,
-	)
-
-	execResp, err := dockerClient.ContainerExecCreate(
-		ctx,
-		containerName,
-		dockercontainer.ExecOptions{
-			Cmd:          []string{"bash", "-c", installCmd},
-			AttachStdout: true,
-			AttachStderr: true,
-		},
-	)
-	if err != nil {
-		return fmt.Errorf("docker exec create failed: %w", err)
-	}
-
-	attachResp, err := dockerClient.ContainerExecAttach(
-		ctx,
-		execResp.ID,
-		dockercontainer.ExecAttachOptions{},
-	)
-	if err != nil {
-		return fmt.Errorf("docker exec attach failed: %w", err)
-	}
-	defer attachResp.Close()
-
-	_, _ = stdcopy.StdCopy(os.Stdout, os.Stderr, attachResp.Reader)
-
-	inspectResp, err := dockerClient.ContainerExecInspect(ctx, execResp.ID)
-	if err != nil {
-		return fmt.Errorf("docker exec inspect failed: %w", err)
-	}
-
-	if inspectResp.ExitCode != 0 {
-		return fmt.Errorf("%w: exit code %d", errDockerExecFailed, inspectResp.ExitCode)
-	}
-
-	return nil
 }
 
 // --- internals ---

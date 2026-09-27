@@ -18,6 +18,7 @@ import (
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	check "github.com/siderolabs/talos/pkg/cluster/check"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -1141,4 +1142,41 @@ func (p *Provisioner) AutoscalerNodeForTest(
 	talosAddress string,
 ) (NodeWithRoleForTest, error) {
 	return p.autoscalerNode(server, talosAddress)
+}
+
+// BuildAutoscalerPoolConfigsForTest exposes buildAutoscalerPoolConfigs, the step that turns the
+// configured pools and the cluster's worker config into the configs the autoscaler Secret stores.
+func (p *Provisioner) BuildAutoscalerPoolConfigsForTest(
+	configBundle *bundle.Bundle,
+) ([]AutoscalerPoolConfig, error) {
+	return p.buildAutoscalerPoolConfigs(configBundle)
+}
+
+// WithSchematicRegistrarForTest overrides the Image Factory schematic registrar so unit tests
+// can observe registration without real network I/O.
+func (p *Provisioner) WithSchematicRegistrarForTest(
+	fn func(ctx context.Context, sc talosconfigmanager.Schematic) (string, error),
+) *Provisioner {
+	p.schematicRegistrar = fn
+
+	return p
+}
+
+// EnsureSchematicRegisteredForTest exposes ensureSchematicRegistered for unit testing.
+func (p *Provisioner) EnsureSchematicRegisteredForTest(
+	ctx context.Context,
+	schematicID string,
+) error {
+	return p.ensureSchematicRegistered(ctx, schematicID)
+}
+
+// RegisterSchematicForTest exposes registerSchematic so unit tests can point registration at a
+// local Image Factory stand-in with a short timeout.
+func RegisterSchematicForTest(
+	ctx context.Context,
+	baseURL string,
+	timeout time.Duration,
+	computed talosconfigmanager.Schematic,
+) (string, error) {
+	return registerSchematic(ctx, baseURL, timeout, computed)
 }
