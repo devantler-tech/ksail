@@ -21,7 +21,9 @@ var errSchematicNodeListUnavailable = errors.New("node list unavailable")
 func TestDistributionImageChangedFindsInterruptedCordon(t *testing.T) {
 	t.Parallel()
 
-	nodes := []talosprovisioner.NodeWithRoleForTest{{IP: "10.0.0.2", Role: talosprovisioner.RoleWorker}}
+	nodes := []talosprovisioner.NodeWithRoleForTest{
+		{IP: "10.0.0.2", Role: talosprovisioner.RoleWorker},
+	}
 	read := func(context.Context, string) (string, error) { return testSchematic, nil }
 	newClient := func() (kubernetes.Interface, error) {
 		return fake.NewClientset(&corev1.Node{
@@ -38,6 +40,7 @@ func TestDistributionImageChangedFindsInterruptedCordon(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !changed {
 		t.Fatal("a node left cordoned after the image roll must re-enter recovery")
 	}
@@ -46,7 +49,9 @@ func TestDistributionImageChangedFindsInterruptedCordon(t *testing.T) {
 func TestDistributionImageChangedIgnoresUnrelatedCordon(t *testing.T) {
 	t.Parallel()
 
-	nodes := []talosprovisioner.NodeWithRoleForTest{{IP: "10.0.0.2", Role: talosprovisioner.RoleWorker}}
+	nodes := []talosprovisioner.NodeWithRoleForTest{
+		{IP: "10.0.0.2", Role: talosprovisioner.RoleWorker},
+	}
 	read := func(context.Context, string) (string, error) { return testSchematic, nil }
 	newClient := func() (kubernetes.Interface, error) {
 		return fake.NewClientset(
@@ -71,6 +76,7 @@ func TestDistributionImageChangedIgnoresUnrelatedCordon(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if changed {
 		t.Fatal("a cordon outside the managed node inventory must not start a rollout")
 	}
@@ -79,15 +85,22 @@ func TestDistributionImageChangedIgnoresUnrelatedCordon(t *testing.T) {
 func TestDistributionImageChangedFailsWhenCordonStateIsUnknown(t *testing.T) {
 	t.Parallel()
 
-	nodes := []talosprovisioner.NodeWithRoleForTest{{IP: "10.0.0.2", Role: talosprovisioner.RoleWorker}}
+	nodes := []talosprovisioner.NodeWithRoleForTest{
+		{IP: "10.0.0.2", Role: talosprovisioner.RoleWorker},
+	}
 	read := func(context.Context, string) (string, error) { return testSchematic, nil }
 	client := fake.NewClientset()
 	client.PrependReactor("list", "nodes", func(ktesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errSchematicNodeListUnavailable
 	})
 
-	_, err := talosprovisioner.DistributionImageChangedForTest(t.Context(), nodes, testSchematic, read,
-		func() (kubernetes.Interface, error) { return client, nil })
+	_, err := talosprovisioner.DistributionImageChangedForTest(
+		t.Context(),
+		nodes,
+		testSchematic,
+		read,
+		func() (kubernetes.Interface, error) { return client, nil },
+	)
 	if !errors.Is(err, errSchematicNodeListUnavailable) {
 		t.Fatalf("wanted node-list failure, got %v", err)
 	}

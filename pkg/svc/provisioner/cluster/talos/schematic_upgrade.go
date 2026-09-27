@@ -33,6 +33,7 @@ func (p *Provisioner) DistributionImageChanged(
 	}
 
 	clusterName = p.resolveClusterName(clusterName)
+
 	nodes, err := p.getNodesByRole(ctx, clusterName)
 	if err != nil {
 		return false, fmt.Errorf("listing nodes for schematic check: %w", err)
@@ -63,6 +64,7 @@ func distributionImageChanged(
 	if err != nil {
 		return false, fmt.Errorf("listing nodes for unfinished upgrades: %w", err)
 	}
+
 	return hasManagedCordon(nodes, kubeNodes.Items), nil
 }
 
