@@ -1,10 +1,11 @@
-package talosprovisioner
+package talosprovisioner_test
 
 import (
 	"context"
 	"errors"
 	"testing"
 
+	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -13,11 +14,15 @@ import (
 	ktesting "k8s.io/client-go/testing"
 )
 
+const testSchematic = "target"
+
+var errSchematicNodeListUnavailable = errors.New("node list unavailable")
+
 func TestDistributionImageChangedFindsInterruptedCordon(t *testing.T) {
 	t.Parallel()
 
-	nodes := []nodeWithRole{{IP: "10.0.0.2", Role: RoleWorker}}
-	read := func(context.Context, string) (string, error) { return "target", nil }
+	nodes := []talosprovisioner.NodeWithRoleForTest{{IP: "10.0.0.2", Role: talosprovisioner.RoleWorker}}
+	read := func(context.Context, string) (string, error) { return testSchematic, nil }
 	newClient := func() (kubernetes.Interface, error) {
 		return fake.NewClientset(&corev1.Node{
 			ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
@@ -28,7 +33,8 @@ func TestDistributionImageChangedFindsInterruptedCordon(t *testing.T) {
 		}), nil
 	}
 
-	changed, err := distributionImageChanged(t.Context(), nodes, "target", read, newClient)
+	changed, err := talosprovisioner.DistributionImageChangedForTest(
+		t.Context(), nodes, testSchematic, read, newClient)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,8 +46,8 @@ func TestDistributionImageChangedFindsInterruptedCordon(t *testing.T) {
 func TestDistributionImageChangedIgnoresUnrelatedCordon(t *testing.T) {
 	t.Parallel()
 
-	nodes := []nodeWithRole{{IP: "10.0.0.2", Role: RoleWorker}}
-	read := func(context.Context, string) (string, error) { return "target", nil }
+	nodes := []talosprovisioner.NodeWithRoleForTest{{IP: "10.0.0.2", Role: talosprovisioner.RoleWorker}}
+	read := func(context.Context, string) (string, error) { return testSchematic, nil }
 	newClient := func() (kubernetes.Interface, error) {
 		return fake.NewClientset(
 			&corev1.Node{
@@ -60,7 +66,8 @@ func TestDistributionImageChangedIgnoresUnrelatedCordon(t *testing.T) {
 		), nil
 	}
 
-	changed, err := distributionImageChanged(t.Context(), nodes, "target", read, newClient)
+	changed, err := talosprovisioner.DistributionImageChangedForTest(
+		t.Context(), nodes, testSchematic, read, newClient)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,17 +79,16 @@ func TestDistributionImageChangedIgnoresUnrelatedCordon(t *testing.T) {
 func TestDistributionImageChangedFailsWhenCordonStateIsUnknown(t *testing.T) {
 	t.Parallel()
 
-	nodes := []nodeWithRole{{IP: "10.0.0.2", Role: RoleWorker}}
-	read := func(context.Context, string) (string, error) { return "target", nil }
+	nodes := []talosprovisioner.NodeWithRoleForTest{{IP: "10.0.0.2", Role: talosprovisioner.RoleWorker}}
+	read := func(context.Context, string) (string, error) { return testSchematic, nil }
 	client := fake.NewClientset()
-	readErr := errors.New("node list unavailable")
 	client.PrependReactor("list", "nodes", func(ktesting.Action) (bool, runtime.Object, error) {
-		return true, nil, readErr
+		return true, nil, errSchematicNodeListUnavailable
 	})
 
-	_, err := distributionImageChanged(t.Context(), nodes, "target", read,
+	_, err := talosprovisioner.DistributionImageChangedForTest(t.Context(), nodes, testSchematic, read,
 		func() (kubernetes.Interface, error) { return client, nil })
-	if !errors.Is(err, readErr) {
+	if !errors.Is(err, errSchematicNodeListUnavailable) {
 		t.Fatalf("wanted node-list failure, got %v", err)
 	}
 }

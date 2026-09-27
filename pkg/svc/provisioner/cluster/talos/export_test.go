@@ -42,6 +42,15 @@ func SchematicsChangedForTest(
 	return schematicsChanged(ctx, nodes, desired, read)
 }
 
+// DistributionImageChangedForTest exposes interrupted-roll detection.
+func DistributionImageChangedForTest(
+	ctx context.Context, nodes []NodeWithRoleForTest, desired string,
+	read func(context.Context, string) (string, error),
+	newClient func() (kubernetes.Interface, error),
+) (bool, error) {
+	return distributionImageChanged(ctx, nodes, desired, read, newClient)
+}
+
 // RunningImageMatchesTargetForTest exposes the shared pre/post-upgrade image check.
 func RunningImageMatchesTargetForTest(
 	ctx context.Context, st state.State, running, desired, schematic string,

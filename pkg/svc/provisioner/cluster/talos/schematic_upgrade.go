@@ -63,13 +63,16 @@ func distributionImageChanged(
 	if err != nil {
 		return false, fmt.Errorf("listing nodes for unfinished upgrades: %w", err)
 	}
+	return hasManagedCordon(nodes, kubeNodes.Items), nil
+}
 
+func hasManagedCordon(nodes []nodeWithRole, kubeNodes []corev1.Node) bool {
 	managedIPs := make(map[string]struct{}, len(nodes))
 	for _, node := range nodes {
 		managedIPs[node.IP] = struct{}{}
 	}
 
-	for _, node := range kubeNodes.Items {
+	for _, node := range kubeNodes {
 		if !node.Spec.Unschedulable {
 			continue
 		}
@@ -80,12 +83,12 @@ func distributionImageChanged(
 			}
 
 			if _, ok := managedIPs[address.Address]; ok {
-				return true, nil
+				return true
 			}
 		}
 	}
 
-	return false, nil
+	return false
 }
 
 // Read all identities even after finding drift: an unreadable remaining node
