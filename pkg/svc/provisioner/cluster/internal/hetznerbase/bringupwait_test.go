@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"net"
+	"regexp"
 	"testing"
 	"time"
 
@@ -20,9 +21,9 @@ const (
 	testCloudInitStatusCmd   = "cloud-init status --long"
 	testCloudInitStatusError = "status: error\ndetail: runcmd failed\n"
 	testCloudInitShortCmd    = "cloud-init status"
-	testKubeadmErrorLinesCmd = "grep -E '^(\\[ERROR |error execution phase)' " +
-		"/var/log/cloud-init-output.log | tail -n 20"
-	testKubeadmErrorLines = "[ERROR FileContent--proc-sys-net-ipv4-ip_forward]: " +
+	testKubeadmErrorLinesCmd = "grep -hE '^[[:space:]]*(\\[ERROR |error execution phase)' " +
+		"/var/log/ksail-bootstrap.log /var/log/cloud-init-output.log 2>/dev/null | tail -n 20"
+	testKubeadmErrorLines = "\t[ERROR FileContent--proc-sys-net-ipv4-ip_forward]: " +
 		"/proc/sys/net/ipv4/ip_forward contents are not set to 1\n" +
 		"error execution phase preflight: [preflight] Some fatal errors occurred:\n"
 )
@@ -272,4 +273,30 @@ func TestBringUpNodeKeepsWaitingWhileCloudInitRuns(t *testing.T) {
 
 	require.ErrorIs(t, err, hetznerbase.ErrBringUpStageTimeout)
 	require.NotErrorIs(t, err, hetznerbase.ErrBootstrapFailed)
+}
+
+// TestBootstrapErrorLinePatternSelectsOnlyKubeadmErrors pins that the pattern
+// keeps kubeadm's tab-indented preflight errors and its failed-phase line (a
+// column-zero anchor dropped exactly the line that names the root cause), and
+// that it keeps nothing else from a transcript that can carry join tokens.
+func TestBootstrapErrorLinePatternSelectsOnlyKubeadmErrors(t *testing.T) {
+	t.Parallel()
+
+	pattern := regexp.MustCompile(hetznerbase.BootstrapErrorLinePatternForTest)
+
+	for _, line := range []string{
+		"\t[ERROR FileContent--proc-sys-net-ipv4-ip_forward]: contents are not set to 1",
+		"[ERROR Swap]: running with swap on is not supported",
+		"error execution phase preflight: [preflight] Some fatal errors occurred:",
+	} {
+		assert.True(t, pattern.MatchString(line), "should keep %q", line)
+	}
+
+	for _, line := range []string{
+		"kubeadm join 10.0.0.1:6443 --token abcdef.0123456789abcdef",
+		"\t[WARNING SystemVerification]: missing optional cgroups",
+		"[preflight] Running pre-flight checks",
+	} {
+		assert.False(t, pattern.MatchString(line), "should drop %q", line)
+	}
 }

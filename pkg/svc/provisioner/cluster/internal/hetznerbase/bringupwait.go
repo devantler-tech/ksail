@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	cloudinitbootstrap "github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/cloudinit"
 	sshbootstrap "github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/ssh"
 	gossh "golang.org/x/crypto/ssh"
 )
@@ -39,11 +40,19 @@ const (
 	// cloud-init finished with an unrecoverable error.
 	bootstrapFailedStatus = "status: error"
 
-	// bootstrapErrorLinesCommand extracts only kubeadm's own error lines from
-	// the cloud-init output log (preflight "[ERROR ...]" checks and the failed
-	// phase), never the rest of the transcript, which carries join tokens.
-	bootstrapErrorLinesCommand = "grep -E '^(\\[ERROR |error execution phase)' " +
-		"/var/log/cloud-init-output.log | tail -n 20"
+	// bootstrapErrorLinePattern matches kubeadm's own error lines: the failed
+	// phase and its preflight "[ERROR ...]" checks, which kubeadm indents with a
+	// tab. Only these lines are read, because the rest of the transcript can
+	// carry join tokens.
+	bootstrapErrorLinePattern = `^[[:space:]]*(\[ERROR |error execution phase)`
+
+	// bootstrapErrorLinesCommand extracts kubeadm's error lines from the logs a
+	// first boot writes: the bootstrap script redirects everything it runs into
+	// the KSail bootstrap log, and anything cloud-init ran before that script
+	// lands in the cloud-init output log. A missing log is not an error.
+	bootstrapErrorLinesCommand = "grep -hE '" + bootstrapErrorLinePattern + "' " +
+		cloudinitbootstrap.DefaultLogPath + " /var/log/cloud-init-output.log" +
+		" 2>/dev/null | tail -n 20"
 
 	// maxBootstrapDiagnosticsBytes caps how much of the diagnostic output is
 	// carried into the returned error.
@@ -195,8 +204,8 @@ func bootstrapDiagnostics(ctx context.Context, client *sshbootstrap.Client) stri
 	return diagnosticSection(ctx, client, bootstrapDiagnosticsCommand)
 }
 
-// bootstrapErrorLines reads kubeadm's error lines from the node's cloud-init
-// output log, formatted as a suffix for the returned error, or an empty string
+// bootstrapErrorLines reads kubeadm's error lines from the node's bootstrap
+// logs, formatted as a suffix for the returned error, or an empty string
 // when there are none.
 func bootstrapErrorLines(ctx context.Context, client *sshbootstrap.Client) string {
 	return diagnosticSection(ctx, client, bootstrapErrorLinesCommand)
