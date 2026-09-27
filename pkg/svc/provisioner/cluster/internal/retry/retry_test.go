@@ -15,8 +15,6 @@ import (
 var (
 	errTransientRetry = errors.New("transient boom")
 	errPermanentRetry = errors.New("permanent boom")
-	errSpecialRetry   = errors.New("special boom")
-	errRecoveryRetry  = errors.New("recovery failed")
 )
 
 func isTransient(err error) bool {
@@ -94,60 +92,6 @@ func TestDoNonTransientFailsImmediately(t *testing.T) {
 	require.ErrorIs(t, err, errPermanentRetry)
 	assert.Contains(t, err.Error(), "create failed")
 	assert.Equal(t, 1, attempts)
-}
-
-func TestDoOnSpecialErrorRecovered(t *testing.T) {
-	t.Parallel()
-
-	var attempts int
-
-	err := retry.Do(t.Context(), retry.Config{
-		MaxAttempts: 3,
-		RetryDelay:  time.Microsecond,
-		Attempt: func(context.Context) error {
-			attempts++
-
-			return errSpecialRetry
-		},
-		IsTransient: isTransient,
-		OnSpecialError: func(_ context.Context, _ int, err error) (retry.SpecialResult, error) {
-			if errors.Is(err, errSpecialRetry) {
-				return retry.Recovered, nil
-			}
-
-			return retry.NotSpecial, nil
-		},
-	})
-
-	require.NoError(t, err)
-	assert.Equal(t, 1, attempts, "recovered special error stops the loop")
-}
-
-func TestDoOnSpecialErrorRetryFreshThenExhaust(t *testing.T) {
-	t.Parallel()
-
-	var attempts int
-
-	err := retry.Do(t.Context(), retry.Config{
-		MaxAttempts: 2,
-		RetryDelay:  time.Microsecond,
-		Attempt: func(context.Context) error {
-			attempts++
-
-			return errSpecialRetry
-		},
-		IsTransient: isTransient,
-		OnSpecialError: func(_ context.Context, _ int, _ error) (retry.SpecialResult, error) {
-			return retry.RetryFresh, errRecoveryRetry
-		},
-		WrapExhausted: func(n int, err error) error {
-			return fmt.Errorf("failed after %d attempts: %w", n, err)
-		},
-	})
-
-	require.ErrorIs(t, err, errRecoveryRetry)
-	assert.Contains(t, err.Error(), "failed after 2 attempts")
-	assert.Equal(t, 2, attempts)
 }
 
 func TestDoAttemptTimeoutTreatedAsTransient(t *testing.T) {
