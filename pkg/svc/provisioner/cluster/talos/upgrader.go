@@ -121,9 +121,14 @@ func (p *Provisioner) UpgradeDistribution(
 	// clean and skip the usual autoscaler Secret refresh. Establish the new
 	// snapshot baseline and recycle old autoscaler nodes before static nodes roll.
 	if runningVersionMatchesTarget(fromVersion, toVersion) {
-		err = p.ensureAutoscalerSecretIfNeeded(ctx, clusterName, nil, nil)
+		autoscalerResult := clusterupdate.NewEmptyUpdateResult()
+		err = p.ensureAutoscalerSecretIfNeeded(ctx, clusterName, nil, autoscalerResult)
 		if err != nil {
 			return fmt.Errorf("reconciling autoscaler image baseline: %w", err)
+		}
+		if len(autoscalerResult.FailedChanges) != 0 {
+			return fmt.Errorf("reconciling autoscaler image baseline: %d node configuration changes failed",
+				len(autoscalerResult.FailedChanges))
 		}
 	}
 
