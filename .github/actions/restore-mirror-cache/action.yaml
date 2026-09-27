@@ -212,14 +212,21 @@ runs:
           echo "✅ Restored registry.k8s.io mirror cache"
         fi
 
-        # Import ecr-public.aws.com mirror volume
+        # Import ecr-public.aws.com mirror volume. Fatal on failure, unlike the
+        # mirrors above: the ECR Public proxy cannot refill an empty or partial
+        # volume (its upstream blob HEAD requests are rejected), so a failed
+        # restore would only surface later as an Argo CD Redis pull failure.
         if [ -f "/tmp/mirror-cache/ecr-public.aws.com.tar" ]; then
           docker volume create ecr-public.aws.com 2>/dev/null || true
-          docker run --rm \
+          if ! docker run --rm \
             -v ecr-public.aws.com:/volume \
             -v /tmp/mirror-cache:/backup:ro \
             mirror.gcr.io/library/busybox:1.37 \
-            sh -c "cd /volume && tar -xf /backup/ecr-public.aws.com.tar" || echo "⚠️ Failed to import ecr-public.aws.com mirror"
+            sh -c "cd /volume && tar -xf /backup/ecr-public.aws.com.tar"; then
+            docker volume rm -f ecr-public.aws.com >/dev/null 2>&1 || true
+            echo "❌ Failed to import the ecr-public.aws.com mirror; it cannot refill from upstream" >&2
+            exit 1
+          fi
           echo "✅ Restored ecr-public.aws.com mirror cache"
         fi
 

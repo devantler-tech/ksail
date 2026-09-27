@@ -140,6 +140,33 @@ runs:
           exit 1
         fi
 
+    - name: 🪞 Resolve mirror registry volumes
+      id: mirror-hosts
+      shell: bash
+      env:
+        MIRROR_REGISTRY: ${{ inputs.mirror-registry }}
+      run: |
+        # The Docker volume (and container-name suffix) of every mirror KSail
+        # creates, so the cache and retry-cleanup steps cover exactly the
+        # mirrors in use — including custom hosts passed via mirror-registry.
+        # Spec format: [user:pass@]host[=endpoint]; KSail names the volume by
+        # the host with "/" and ":" replaced by "-". Without the input, KSail
+        # uses its default mirrors; ecr-public.aws.com is kept for the caches
+        # this action already restores and exports.
+        hosts=""
+        if [ -n "$MIRROR_REGISTRY" ]; then
+          IFS=',' read -ra specs <<< "$MIRROR_REGISTRY"
+          for spec in "${specs[@]}"; do
+            host="${spec%%=*}"
+            host="${host##*@}"
+            host="$(echo "$host" | tr -d '[:space:]' | tr '/:' '--')"
+            [ -n "$host" ] && hosts="${hosts:+$hosts }$host"
+          done
+        fi
+        : "${hosts:=docker.io ghcr.io quay.io registry.k8s.io ecr-public.aws.com}"
+        echo "hosts=$hosts" >> "$GITHUB_OUTPUT"
+        echo "🪞 Mirror volumes: $hosts"
+
     - name: 📋 Compute cache keys
       if: inputs.cache == 'true'
       id: cache-keys
@@ -192,6 +219,8 @@ runs:
     - name: 📦 Import mirror volumes
       if: inputs.cache == 'true' && inputs.provider == 'Docker' && steps.restore-mirror.outputs.cache-hit == 'true'
       shell: bash
+      env:
+        MIRROR_HOSTS: ${{ steps.mirror-hosts.outputs.hosts }}
       run: |
         echo "📦 Importing mirror registry volumes..."
         # Pull the tar-utility busybox via mirror.gcr.io (anonymous pull-through
@@ -200,7 +229,8 @@ runs:
         # token into error logs on throttle. mirror.gcr.io is anonymous and not
         # rate-limited. It re-serializes manifests, so the upstream digest can't
         # be pinned through it — tag-pinned, like registry:3 in pull-registry-image.sh.
-        for registry in docker.io ghcr.io quay.io registry.k8s.io ecr-public.aws.com; do
+        # shellcheck disable=SC2086 # space-separated host list, word-split on purpose
+        for registry in $MIRROR_HOSTS; do
           if [ -f "/tmp/ksail-mirror-cache/${registry}.tar" ]; then
             docker volume create "$registry" 2>/dev/null || true
             if docker run --rm \
@@ -209,6 +239,13 @@ runs:
               mirror.gcr.io/library/busybox:1.37 \
               sh -c "cd /volume && tar -xf /backup/${registry}.tar"; then
               echo "  ✅ Restored $registry mirror cache"
+            elif [ "$registry" = "ecr-public.aws.com" ]; then
+              # The ECR Public proxy cannot refill an empty or partial volume
+              # (upstream blob HEAD requests are rejected), so fail here rather
+              # than later as an image pull failure.
+              docker volume rm -f "$registry" >/dev/null 2>&1 || true
+              echo "  ❌ Failed to import $registry mirror; it cannot refill from upstream" >&2
+              exit 1
             else
               echo "  ⚠️ Failed to import $registry mirror"
             fi
@@ -358,6 +395,7 @@ runs:
         ARGS: ${{ inputs.args }}
         MIRROR_REGISTRY: ${{ inputs.mirror-registry }}
         CONFIG: ${{ inputs.config }}
+        MIRROR_HOSTS: ${{ steps.mirror-hosts.outputs.hosts }}
       run: |
         set -euo pipefail
         mkdir -p /tmp/ksail-system-test-logs
@@ -453,7 +491,8 @@ runs:
             # "endpoint with name <cluster>-<registry> already exists in network <cluster>".
             # Filter by the KSail ownership label first, and keep the suffix match to
             # limit cleanup to the known registry container naming scheme.
-            for _reg_suffix in docker.io ghcr.io quay.io registry.k8s.io; do
+            # shellcheck disable=SC2086 # space-separated host list, word-split on purpose
+            for _reg_suffix in $MIRROR_HOSTS; do
               # shellcheck disable=SC2016 # $1 is expanded by the bounded child shell.
               timeout --kill-after=10s 30s bash -c '
                 docker ps -aq \
@@ -519,12 +558,15 @@ runs:
     - name: 📦 Export mirror volumes
       if: inputs.cache == 'true' && inputs.provider == 'Docker' && steps.restore-mirror.outputs.cache-hit != 'true'
       shell: bash
+      env:
+        MIRROR_HOSTS: ${{ steps.mirror-hosts.outputs.hosts }}
       run: |
         echo "📦 Exporting mirror registry volumes for caching..."
         # busybox via mirror.gcr.io (anonymous), not Docker Hub — avoids the
         # authenticated rate limit and dckr_jti leak. See the import step above.
         mkdir -p /tmp/ksail-mirror-cache
-        for registry in docker.io ghcr.io quay.io registry.k8s.io ecr-public.aws.com; do
+        # shellcheck disable=SC2086 # space-separated host list, word-split on purpose
+        for registry in $MIRROR_HOSTS; do
           if docker volume inspect "$registry" > /dev/null 2>&1; then
             if docker run --rm \
               -v "${registry}":/volume:ro \
