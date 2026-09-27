@@ -149,7 +149,15 @@ type cloudConfig struct {
 	SSHAuthorizedKeys []string `yaml:"ssh_authorized_keys,omitempty"`
 	//nolint:tagliatelle // cloud-init's schema mandates the snake_case key "ssh_keys".
 	SSHKeys *sshKeysConfig `yaml:"ssh_keys,omitempty"`
-	RunCmd  [][]string     `yaml:"runcmd,omitempty"`
+
+	Chpasswd *chpasswdConfig `yaml:"chpasswd,omitempty"`
+	RunCmd   [][]string      `yaml:"runcmd,omitempty"`
+}
+
+// chpasswdConfig is cloud-init's `chpasswd:` module, configured to prevent PAM
+// from expiring passwords on first boot when authorized keys are installed.
+type chpasswdConfig struct {
+	Expire bool `yaml:"expire"`
 }
 
 // sshKeysConfig is cloud-init's `ssh_keys:` module, limited to the ed25519
@@ -337,6 +345,10 @@ func (cfg Config) buildDoc(dirs directives) (cloudConfig, error) {
 		Packages:          dirs.packages,
 		SSHAuthorizedKeys: dirs.sshKeys,
 		SSHKeys:           dirs.hostKeys,
+	}
+
+	if len(dirs.sshKeys) > 0 {
+		doc.Chpasswd = &chpasswdConfig{Expire: false}
 	}
 
 	if len(dirs.sources) > 0 {

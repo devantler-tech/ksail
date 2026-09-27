@@ -55,8 +55,14 @@ type Configs struct {
 	// When non-empty, machine.install.image is patched to use a factory installer
 	// image and a schematic ID is computed.
 	extensions []string
-	// schematicID is the computed schematic ID from extensions.
-	schematicID string
+	// schematic is the Image Factory schematic computed from extensions, with its ID.
+	schematic computedSchematic
+}
+
+// computedSchematic is a schematic KSail computed and the content-addressed ID it hashes to.
+type computedSchematic struct {
+	id   string
+	body *Schematic
 }
 
 // NewDefaultConfigs creates a new Talos Configs with default settings.
@@ -515,7 +521,14 @@ func (c *Configs) Patches() []Patch {
 // SchematicID returns the computed Talos Image Factory schematic ID.
 // Returns an empty string if no extensions are configured.
 func (c *Configs) SchematicID() string {
-	return c.schematicID
+	return c.schematic.id
+}
+
+// Schematic returns the canonical Image Factory schematic behind SchematicID, or nil when
+// no extensions are configured. Image Factory only serves images for a schematic it has
+// been sent, so this body is registered before the ID is used.
+func (c *Configs) Schematic() *Schematic {
+	return c.schematic.body
 }
 
 // Extensions returns a copy of the configured extensions list.
@@ -842,7 +855,7 @@ func newConfigsWithEndpointAndSecrets(
 		return nil, fmt.Errorf("failed to create config bundle: %w", err)
 	}
 
-	schematicID, err := applySchematic(extensions, configBundle)
+	schematic, err := applySchematic(extensions, configBundle)
 	if err != nil {
 		return nil, err
 	}
@@ -856,7 +869,7 @@ func newConfigsWithEndpointAndSecrets(
 		patches:           patches,
 		versionContract:   versionContract,
 		extensions:        extensions,
-		schematicID:       schematicID,
+		schematic:         schematic,
 	}, nil
 }
 
@@ -1065,8 +1078,9 @@ func addRegistryAuth(cfg *v1alpha1.Config, mirror MirrorRegistry) {
 	}
 }
 
-// applySchematic computes a schematic ID from extensions and patches machine.install.image.
-// Returns an empty string if no extensions are configured (after normalization).
+// applySchematic computes a schematic and its ID from extensions and patches
+// machine.install.image. Returns an empty result if no extensions are configured (after
+// normalization).
 //
 // Any machine.install.extraKernelArgs the patches set on the (already generated) config are
 // folded into the Image Factory schematic — baked into the installer image alongside the
@@ -1079,10 +1093,13 @@ func addRegistryAuth(cfg *v1alpha1.Config, mirror MirrorRegistry) {
 // that field alongside install.grubUseUKICmdline. Folding is gated on extensions being
 // configured, the same signal that already selects a factory installer (so container-mode
 // Docker clusters, which use no factory installer, are unaffected).
-func applySchematic(extensions []string, configBundle *bundle.Bundle) (string, error) {
+func applySchematic(
+	extensions []string,
+	configBundle *bundle.Bundle,
+) (computedSchematic, error) {
 	normalized := NormalizeExtensions(extensions)
 	if len(normalized) == 0 {
-		return "", nil
+		return computedSchematic{}, nil
 	}
 
 	kernelArgs := schematicKernelArgs(configBundle)
@@ -1091,7 +1108,7 @@ func applySchematic(extensions []string, configBundle *bundle.Bundle) (string, e
 
 	schematicID, err := schematic.ID()
 	if err != nil {
-		return "", fmt.Errorf("failed to compute schematic ID: %w", err)
+		return computedSchematic{}, fmt.Errorf("failed to compute schematic ID: %w", err)
 	}
 
 	talosVersion := resolveInstallerVersion(configBundle)
@@ -1099,17 +1116,19 @@ func applySchematic(extensions []string, configBundle *bundle.Bundle) (string, e
 
 	err = applyInstallerImage(configBundle, installerImage)
 	if err != nil {
-		return "", fmt.Errorf("failed to apply installer image: %w", err)
+		return computedSchematic{}, fmt.Errorf("failed to apply installer image: %w", err)
 	}
 
 	if len(kernelArgs) > 0 {
 		err = reconcileFoldedKernelArgs(configBundle)
 		if err != nil {
-			return "", fmt.Errorf("failed to reconcile folded kernel args: %w", err)
+			return computedSchematic{}, fmt.Errorf(
+				"failed to reconcile folded kernel args: %w", err,
+			)
 		}
 	}
 
-	return schematicID, nil
+	return computedSchematic{id: schematicID, body: schematic}, nil
 }
 
 // schematicKernelArgs returns the deduplicated union of machine.install.extraKernelArgs
