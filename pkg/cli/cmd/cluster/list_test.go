@@ -750,3 +750,34 @@ func TestListCmd_OutputJSON_TTLIsString(t *testing.T) {
 	require.NotNil(t, rows[0].TTL)
 	assert.NotEmpty(t, *rows[0].TTL)
 }
+
+// TestListCmd_UnmanagedDiscoveryReadsKUBECONFIG pins #6906 for the CLI: with no path injected,
+// unmanaged discovery reads the kubeconfig that KUBECONFIG names rather than ~/.kube/config, the same
+// file the web UI reads.
+func TestListCmd_UnmanagedDiscoveryReadsKUBECONFIG(t *testing.T) {
+	t.Setenv("HCLOUD_TOKEN", "")
+
+	home := t.TempDir()
+	homeConfig := writeListKubeconfig(t, "home-only-cluster")
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".kube"), 0o700))
+	require.NoError(t, os.Rename(homeConfig, filepath.Join(home, ".kube", "config")))
+	t.Setenv("HOME", home)
+	t.Setenv("KUBECONFIG", writeListKubeconfig(t, "colleague-cluster"))
+
+	cmd, buf := newListCmdWithJSONOutput(t)
+
+	deps := cluster.ListDeps{
+		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
+			return fakeFactoryWithClusters{clusters: []string{}}
+		},
+	}
+
+	require.NoError(t, cluster.HandleListRunE(cmd, "", deps))
+
+	var rows []jsonListRow
+
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &rows))
+	require.Len(t, rows, 1)
+	assert.Equal(t, "colleague-cluster", rows[0].Name)
+	assert.Equal(t, "Unmanaged", rows[0].Status)
+}

@@ -136,13 +136,41 @@ func (p *Provider) ensureSubnet(
 	return nil
 }
 
-// EnsureFirewall ensures a firewall exists for the cluster, creating it if needed.
+// EnsureFirewall ensures the firewall for a Talos cluster, creating it if needed.
 // When allowedCIDRs is non-empty, the Kubernetes API and Talos API firewall rules
 // restrict source IPs to the specified CIDR blocks instead of 0.0.0.0/0 and ::/0.
+// An existing firewall whose rules differ is updated, so one left behind by an
+// interrupted Vanilla or K3s create of the same name cannot block the Talos API.
 func (p *Provider) EnsureFirewall(
 	ctx context.Context,
 	clusterName string,
 	allowedCIDRs []string,
+) (*hcloud.Firewall, error) {
+	return p.ensureFirewallRules(ctx, clusterName, buildFirewallRules(allowedCIDRs))
+}
+
+// EnsureSSHFirewall ensures the firewall for a cluster whose nodes are bootstrapped
+// over SSH (Vanilla and K3s on Hetzner). These nodes need SSH (22) and the
+// Kubernetes API (6443) reachable from the machine running ksail, and have no
+// Talos API. When allowedCIDRs is non-empty, SSH and the Kubernetes API accept
+// only those source CIDRs. An existing firewall whose rules differ is updated, so
+// a cluster created before SSH was allowed is repaired on its next create.
+func (p *Provider) EnsureSSHFirewall(
+	ctx context.Context,
+	clusterName string,
+	allowedCIDRs []string,
+) (*hcloud.Firewall, error) {
+	return p.ensureFirewallRules(ctx, clusterName, buildSSHFirewallRules(allowedCIDRs))
+}
+
+// ensureFirewallRules creates the cluster firewall with desiredRules, or updates an
+// existing one whose rules differ, and returns it once the rules are in effect.
+// An existing firewall is changed only when its labels show this cluster owns it,
+// so a manually managed firewall that happens to share the name is left alone.
+func (p *Provider) ensureFirewallRules(
+	ctx context.Context,
+	clusterName string,
+	desiredRules []hcloud.FirewallRule,
 ) (*hcloud.Firewall, error) {
 	if p.client == nil {
 		return nil, provider.ErrProviderUnavailable
@@ -150,21 +178,36 @@ func (p *Provider) EnsureFirewall(
 
 	firewallName := clusterName + FirewallSuffix
 
-	// Check if firewall already exists
 	firewall, _, err := p.client.Firewall.GetByName(ctx, firewallName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get firewall %s: %w", firewallName, err)
 	}
 
 	if firewall != nil {
+		if firewall.Labels[LabelOwned] != LabelOwnedValue ||
+			firewall.Labels[LabelClusterName] != clusterName {
+			return nil, fmt.Errorf(
+				"%w: %s (cluster %s)",
+				ErrFirewallNotOwned,
+				firewallName,
+				clusterName,
+			)
+		}
+
+		err = p.setRulesIfChanged(ctx, firewall, desiredRules)
+		if err != nil {
+			return nil, err
+		}
+
+		firewall.Rules = desiredRules
+
 		return firewall, nil
 	}
 
-	// Create firewall with Talos-required rules
 	result, _, err := p.client.Firewall.Create(ctx, hcloud.FirewallCreateOpts{
 		Name:   firewallName,
 		Labels: ResourceLabels(clusterName),
-		Rules:  buildFirewallRules(allowedCIDRs),
+		Rules:  desiredRules,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create firewall %s: %w", firewallName, err)
@@ -198,18 +241,33 @@ func (p *Provider) SyncFirewallRules(
 		return nil // No firewall to sync
 	}
 
-	desiredRules := buildFirewallRules(allowedCIDRs)
+	return p.setRulesIfChanged(ctx, firewall, buildFirewallRules(allowedCIDRs))
+}
 
-	// Skip update if rules already match
+// setRulesIfChanged replaces the firewall's rules with desiredRules unless they
+// already match, and waits for the resulting actions so the new rules are in
+// effect (or their failure is reported) before the caller relies on them.
+func (p *Provider) setRulesIfChanged(
+	ctx context.Context,
+	firewall *hcloud.Firewall,
+	desiredRules []hcloud.FirewallRule,
+) error {
 	if firewallRulesMatch(firewall.Rules, desiredRules) {
 		return nil
 	}
 
-	_, _, err = p.client.Firewall.SetRules(ctx, firewall, hcloud.FirewallSetRulesOpts{
+	actions, _, err := p.client.Firewall.SetRules(ctx, firewall, hcloud.FirewallSetRulesOpts{
 		Rules: desiredRules,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to sync firewall rules for %s: %w", firewallName, err)
+		return fmt.Errorf("failed to sync firewall rules for %s: %w", firewall.Name, err)
+	}
+
+	for _, action := range actions {
+		err = p.waitForAction(ctx, action)
+		if err != nil {
+			return fmt.Errorf("failed to apply firewall rules for %s: %w", firewall.Name, err)
+		}
 	}
 
 	return nil
@@ -431,6 +489,24 @@ func buildFirewallRules(allowedCIDRs []string) []hcloud.FirewallRule {
 			Description: new("ICMP (ping)"),
 		},
 	}
+}
+
+// buildSSHFirewallRules creates the public-interface firewall rules for nodes that
+// ksail bootstraps over SSH (Vanilla and K3s). They differ from the Talos set in
+// two ways: SSH (22) is allowed, because ksail waits for and connects to each node
+// over SSH, and the Talos API (50000) is not, because nothing listens there.
+// SSH and the Kubernetes API follow allowedCIDRs; ICMP stays open to all.
+func buildSSHFirewallRules(allowedCIDRs []string) []hcloud.FirewallRule {
+	rules := buildFirewallRules(allowedCIDRs)
+
+	for idx := range rules {
+		if rules[idx].Port != nil && *rules[idx].Port == "50000" {
+			rules[idx].Port = new("22")
+			rules[idx].Description = new("SSH (node bootstrap)")
+		}
+	}
+
+	return rules
 }
 
 // parseCIDRsToIPNets converts a slice of CIDR strings to net.IPNet values.

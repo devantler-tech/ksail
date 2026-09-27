@@ -132,10 +132,11 @@ func (p *Provisioner) prepareAutoscalerNodeConvergence(
 // longer stall the whole update the way a recycle's eviction loop can.
 //
 // Each node is reconciled independently via applyNodeConfig, which overlays the
-// role-scoped worker patches onto the node's *running* config — preserving the
-// create/boot-time settings an autoscaler node already carries (its server-name
-// hostname, the autoscaled marker, pool labels/taints) while still landing the new
-// patch. Per-node failures are recorded on result (surfacing as a failed update)
+// role-scoped worker patches onto the node's *running* config and gives the result
+// its pool's autoscaler worker shape (buildDesiredConfigForNode) — keeping its
+// server-name hostname, the autoscaled marker and pool labels/taints while still
+// landing the new patch. A server of an unconfigured pool is recorded as failed and
+// left untouched. Per-node failures are recorded on result (surfacing as a failed update)
 // rather than aborting the loop, so one unreachable node does not block the rest.
 func (p *Provisioner) applyInPlaceToAutoscalerNodes(
 	ctx context.Context,
@@ -173,7 +174,16 @@ func (p *Provisioner) applyInPlaceToAutoscalerNodes(
 			continue
 		}
 
-		p.applyNodeConfig(ctx, nodeWithRole{IP: serverIP, Role: RoleWorker}, secretsSource, result)
+		node, poolErr := p.autoscalerNode(server, serverIP)
+		if poolErr != nil {
+			p.recordNodeConfigFailure(
+				nodeWithRole{IP: server.Name, Role: RoleWorker}, result, poolErr.Error(),
+			)
+
+			continue
+		}
+
+		p.applyNodeConfig(ctx, node, secretsSource, result)
 	}
 
 	return nil

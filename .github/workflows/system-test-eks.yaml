@@ -107,11 +107,12 @@ jobs:
     runs-on: ubuntu-latest
     # Must cover every step budget below, or a worst-case run is cancelled while
     # the always-run cleanup is still deleting the cluster. Worst case (GitOps
-    # engine enabled): 172 minutes of steps before cleanup + 45 for cleanup = 217,
-    # plus at least 15 minutes of job-level headroom = 232, rounded up to 235.
+    # engine enabled): 217 minutes including cleanup, plus a 5-minute credential
+    # refresh and 40-minute ownership recovery = 262. Leave at least 15 minutes
+    # of job-level headroom, rounded up to 280.
     # Re-check this sum whenever a step's timeout-minutes changes; the ciharness
     # test TestEKSSmokeReservesCleanupBudgetAndFreshCredentials enforces it.
-    timeout-minutes: 235
+    timeout-minutes: 280
     needs: [preflight, build-artifact]
     if: needs.preflight.outputs.aws-credentials == 'true'
     environment: ci
@@ -139,7 +140,8 @@ jobs:
           role-session-name: ksail-system-test-eks-${{ github.run_id }}
           aws-region: ${{ inputs.region }}
           # Covers bootstrap, create, and info. Credentials are refreshed before
-          # update/reconcile/cleanup so every EKS phase stays inside a 2h session.
+          # update/reconcile and again before recovery/cleanup so every EKS phase
+          # stays inside a 2h session.
           # Requires MaxSessionDuration=7200 on the role.
           role-duration-seconds: 7200
 
@@ -412,6 +414,69 @@ jobs:
           set -euo pipefail
           cd "$KSAIL_EKS_WORKDIR"
           ksail workload reconcile --timeout 10m
+
+      - name: 🔐 Refresh AWS credentials before EKS recovery
+        if: always() && steps.init.outcome == 'success'
+        timeout-minutes: 5
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.AWS_OIDC_ROLE_ARN }}
+          role-session-name: ksail-system-test-eks-recovery-${{ github.run_id }}
+          aws-region: ${{ inputs.region }}
+          role-duration-seconds: 7200
+
+      - name: 🧪 Recover EKS ownership after local state loss
+        timeout-minutes: 40
+        shell: bash
+        run: |
+          set -euo pipefail
+          recovery_dir="$RUNNER_TEMP/eks-ownership-recovery"
+          mkdir "$recovery_dir" "$recovery_dir/home" "$recovery_dir/work"
+          export HOME="$recovery_dir/home"
+          cd "$recovery_dir/work"
+
+          expected_identity="$(aws eks describe-cluster \
+            --name "$KSAIL_EKS_CLUSTER_NAME" --region "$AWS_REGION" \
+            --query 'cluster.[arn,createdAt]' --output text)"
+          expected_arn="${expected_identity%%$'\t'*}"
+          if [[ "$expected_arn" != arn:* || "$expected_identity" == "$expected_arn" ]]; then
+            echo "::error::Could not establish the EKS cluster identity before recovery."
+            exit 1
+          fi
+
+          # A new home and empty work directory remove all local KSail target
+          # evidence. The first call must demand an explicit identity review.
+          if ksail cluster eks-bind --experimental \
+               --name "$KSAIL_EKS_CLUSTER_NAME" --provider AWS \
+               > "$recovery_dir/preview.log" 2>&1; then
+            echo "::error::EKS ownership preview unexpectedly accepted an unconfirmed target."
+            exit 1
+          fi
+          if ! grep -Fq 'EKS ownership rebind requires --yes after reviewing the displayed identity' \
+               "$recovery_dir/preview.log"; then
+            echo "::error::EKS ownership preview failed before reaching the confirmation gate."
+            exit 1
+          fi
+          if ! grep -Fq "cluster ARN: $expected_arn" "$recovery_dir/preview.log"; then
+            echo "::error::EKS ownership preview selected a different cluster identity."
+            exit 1
+          fi
+
+          if ! ksail cluster eks-bind --experimental \
+               --name "$KSAIL_EKS_CLUSTER_NAME" --provider AWS --yes \
+               > "$recovery_dir/bind.log" 2>&1; then
+            echo "::error::EKS ownership recovery failed."
+            exit 1
+          fi
+          ksail cluster stop --name "$KSAIL_EKS_CLUSTER_NAME" --provider AWS
+          ksail cluster start --name "$KSAIL_EKS_CLUSTER_NAME" --provider AWS
+          actual_identity="$(aws eks describe-cluster \
+            --name "$KSAIL_EKS_CLUSTER_NAME" --region "$AWS_REGION" \
+            --query 'cluster.[arn,createdAt]' --output text)"
+          if [[ "$actual_identity" != "$expected_identity" ]]; then
+            echo "::error::EKS cluster identity changed during recovered lifecycle operations."
+            exit 1
+          fi
 
       - name: 🧹 Delete EKS smoke cluster
         if: always()

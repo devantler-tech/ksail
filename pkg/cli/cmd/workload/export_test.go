@@ -256,6 +256,22 @@ func ExportResolveCELRulesPath(
 	return resolveCELRulesPath(cmd, cfg, configFound, loadErr, rulesFlag)
 }
 
+// ExportResolveKyvernoPolicies exposes resolveKyvernoPolicies so external tests
+// can assert the explicit-flag > spec.cluster.policyEngine precedence. fromConfig
+// mirrors the validate command leaving --kyverno-policies unset.
+func ExportResolveKyvernoPolicies(
+	cfg *v1alpha1.Cluster,
+	configFound bool,
+	loadErr error,
+	kyvernoPolicies bool,
+	fromConfig bool,
+) bool {
+	return resolveKyvernoPolicies(cfg, configFound, loadErr, validateFlags{
+		kyvernoPolicies:           kyvernoPolicies,
+		kyvernoPoliciesFromConfig: fromConfig,
+	})
+}
+
 // ExportScanSettings mirrors the resolved scan settings for external tests.
 type ExportScanSettings struct {
 	Frameworks          []string

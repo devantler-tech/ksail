@@ -34,6 +34,10 @@ type parsedConfig struct {
 		//nolint:tagliatelle // cloud-init's schema mandates the snake_case key.
 		ED25519Public string `yaml:"ed25519_public"`
 	} `yaml:"ssh_keys"`
+	Chpasswd struct {
+		// A pointer, so an absent key decodes to nil rather than to false.
+		Expire *bool `yaml:"expire"`
+	} `yaml:"chpasswd"`
 	RunCmd [][]string `yaml:"runcmd"`
 }
 
@@ -192,6 +196,7 @@ func TestBuildUserDataCommandOnlyOmitsDeclarativeKeys(t *testing.T) {
 	assert.NotContains(t, userData, "packages:")
 	assert.NotContains(t, userData, "apt:")
 	assert.NotContains(t, userData, "ssh_authorized_keys:")
+	assert.NotContains(t, userData, "chpasswd:")
 
 	cfg := parse(t, userData)
 	assert.Empty(t, cfg.Packages)
@@ -214,6 +219,8 @@ func TestBuildUserDataRendersSSHAuthorizedKeys(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	assert.Contains(t, userData, "chpasswd:")
+
 	cfg := parse(t, userData)
 
 	// Blank entries dropped, order preserved.
@@ -221,6 +228,8 @@ func TestBuildUserDataRendersSSHAuthorizedKeys(t *testing.T) {
 		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA ksail-bootstrap",
 		"ssh-rsa AAAAB3NzaC1yc2E operator",
 	}, cfg.SSHAuthorizedKeys)
+	require.NotNil(t, cfg.Chpasswd.Expire, "chpasswd must set expire explicitly")
+	assert.False(t, *cfg.Chpasswd.Expire)
 }
 
 func TestBuildUserDataSSHKeysOnlyRejected(t *testing.T) {
