@@ -17,10 +17,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const listLongDesc = `List all Kubernetes clusters managed by KSail.
+// listLongDescTemplate is formatted with the default provider names (%[1]s), so the help text
+// cannot drift from the set clusterdiscovery.DefaultProviders actually queries.
+const listLongDescTemplate = `List all Kubernetes clusters managed by KSail.
 
-By default, lists clusters from all distributions across all providers.
-Use --provider to filter results to a specific provider.
+By default, lists clusters from all distributions on the default providers
+(%[1]s). Use --provider to list a specific provider instead,
+including one outside the default set such as AWS or Kubernetes.
 
 Output Format:
   PROVIDER   DISTRIBUTION   CLUSTER       STATUS
@@ -31,9 +34,12 @@ Output Format:
 The STATUS column reports the cluster's run-state: "Running" when its nodes are
 up, "Stopped" when they exist but are not running (e.g. a stopped Docker
 cluster), and "Unknown" for providers that cannot report it (cloud providers).
-Kubeconfig contexts KSail did not provision are also listed with STATUS
-"Unmanaged" (blank PROVIDER/DISTRIBUTION) so they are visible on the CLI just as
-in the web UI; KSail-only operations (delete/stop/update) do not act on them.
+Without --provider, kubeconfig contexts that match no cluster found on the
+default providers are also listed with STATUS "Unmanaged" (blank
+PROVIDER/DISTRIBUTION), so they are visible on the CLI just as in the web UI.
+"Unmanaged" means "not found on the providers queried", not "not created by
+KSail": a cluster KSail created on AWS or Kubernetes is not queried by default,
+so it is listed as Unmanaged; list it with --provider to see it as managed.
 
 When any cluster has a TTL set, a TTL column is appended:
   PROVIDER   DISTRIBUTION   CLUSTER       STATUS    TTL
@@ -74,7 +80,7 @@ func NewListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "list",
 		Short:        "List clusters",
-		Long:         listLongDesc,
+		Long:         fmt.Sprintf(listLongDescTemplate, defaultProviderNames()),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			err := validateOutputFormat(cmd)
@@ -90,8 +96,8 @@ func NewListCmd() *cobra.Command {
 	cmd.Flags().VarP(
 		&providerFilter,
 		"provider", "p",
-		fmt.Sprintf("Filter by provider (%s). If not specified, lists all providers.",
-			strings.Join(providerFilter.ValidValues(), ", ")),
+		fmt.Sprintf("Filter by provider (%s). If not specified, lists the default providers (%s).",
+			strings.Join(providerFilter.ValidValues(), ", "), defaultProviderNames()),
 	)
 
 	cmd.Flags().String("output", outputFormatText,
@@ -437,6 +443,18 @@ func allDistributions() []v1alpha1.Distribution {
 // Omni). It delegates to clusterdiscovery.DefaultProviders.
 func allProviders() []v1alpha1.Provider {
 	return clusterdiscovery.DefaultProviders()
+}
+
+// defaultProviderNames renders the default provider set for help text, e.g. "Docker, Hetzner, Omni".
+func defaultProviderNames() string {
+	providers := allProviders()
+	names := make([]string, 0, len(providers))
+
+	for _, provider := range providers {
+		names = append(names, string(provider))
+	}
+
+	return strings.Join(names, ", ")
 }
 
 // listResult holds a cluster name with its provider and distribution for display purposes.
