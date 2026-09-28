@@ -1427,6 +1427,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: 🔍 Verify restored cache rejects missing image data
+        run: |
+          shellcheck .github/actions/warm-mirror-cache/cache-validation.test.sh
+          bash .github/actions/warm-mirror-cache/cache-validation.test.sh
+
       - name: 🧹 Free disk space
         # Pulls every system-test image through five mirror registries and tars
         # the volumes (multi-GB) — the prime "no space left on device" offender
@@ -1596,6 +1601,8 @@ jobs:
 
       - name: 📥 Restore Mirror Cache
         uses: ./.github/actions/restore-mirror-cache
+        with:
+          cache-key: ${{ needs.warm-mirror-cache.outputs.cache-key }}
 
       - name: 🧪 Run KSail System Test
         id: system-test

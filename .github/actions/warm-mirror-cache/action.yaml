@@ -25,11 +25,11 @@ inputs:
 
 outputs:
   cache-hit:
-    description: Whether the cache was restored (warm start)
-    value: ${{ steps.restore-cache.outputs.cache-hit || 'false' }}
+    description: Whether a restored cache passed the consumer pull check
+    value: ${{ steps.check-cache.outputs.complete == 'true' }}
   cache-key:
-    description: The cache key used for this operation
-    value: ${{ steps.generate-key.outputs.cache-key }}
+    description: The validated restored key or the key saved by this warm job
+    value: ${{ steps.check-cache.outputs.complete == 'true' && steps.restore-cache.outputs.cache-matched-key || steps.check-cache.outputs.repair-key || steps.generate-key.outputs.cache-key }}
   image-count:
     description: Number of unique images extracted
     value: ${{ steps.extract-images.outputs.count }}
@@ -244,12 +244,10 @@ runs:
       run: |
         # Use hash of extracted image list to invalidate when images change
         # This covers both go.mod changes AND code changes affecting image extraction.
-        # "m6" marks the five-mirror layout whose ECR Public volume is filled by an
-        # explicit copy of every platform. Older entries can hold an empty ECR Public
-        # volume or a single-platform copy the proxy cannot serve, and a cache entry
-        # cannot be overwritten, so they must never match. Keep it in step with
+        # "m7" rejects older archives whose ECR tag link was accepted without
+        # proving the restored proxy can serve the image. Keep this in step with
         # restore-mirror-cache.
-        CACHE_KEY="mirror-cache-${CACHE_VERSION}-m6-${IMAGES_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
+        CACHE_KEY="mirror-cache-${CACHE_VERSION}-m7-${IMAGES_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
         echo "cache-key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
         echo "📦 Cache key: $CACHE_KEY"
 
@@ -274,7 +272,7 @@ runs:
         path: /tmp/mirror-cache
         key: ${{ steps.generate-key.outputs.cache-key }}
         restore-keys: |
-          mirror-cache-${{ inputs.cache-version }}-m6-
+          mirror-cache-${{ inputs.cache-version }}-m7-
 
     - name: 📥 Restore KWOK control plane cache
       id: restore-kwok-cache
@@ -299,9 +297,46 @@ runs:
 
     - name: 🔍 Check if cache is complete
       id: check-cache
-      if: steps.restore-cache.outputs.cache-hit == 'true'
+      if: steps.restore-cache.outputs.cache-matched-key != ''
       shell: bash
+      env:
+        CACHE_KEY: ${{ steps.generate-key.outputs.cache-key }}
       run: |
+        # A tag link inside the tar can coexist with a missing image index.
+        # Import the archive and pull without a remote fallback.
+        check_restored_ecr() (
+          check_volume="ecr-public-cache-check-$GITHUB_RUN_ID"
+          check_container="ecr-public-cache-check-$GITHUB_RUN_ID"
+          trap 'docker rm -f "$check_container" >/dev/null 2>&1 || true; docker volume rm -f "$check_volume" >/dev/null 2>&1 || true' EXIT
+          docker volume create "$check_volume" >/dev/null || return 1
+          docker run --rm \
+            -v "$check_volume":/volume \
+            -v /tmp/mirror-cache:/backup:ro \
+            mirror.gcr.io/library/busybox:1.37 \
+            sh -c "cd /volume && tar -xf /backup/ecr-public.aws.com.tar" >/dev/null || return 1
+          docker run -d \
+            --name "$check_container" \
+            -p 5504:5000 \
+            -v "$check_volume":/var/lib/registry \
+            registry:3 >/dev/null || return 1
+          ready=false
+          for _ in $(seq 1 30); do
+            if curl -fsS http://localhost:5504/v2/ >/dev/null 2>&1; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          [ "$ready" = true ] || return 1
+          while IFS= read -r image; do
+            [ -n "$image" ] || continue
+            mirror_ref="localhost:5504/${image#ecr-public.aws.com/}"
+            docker pull --quiet "$mirror_ref" >/dev/null 2>&1 || return 1
+            docker rmi "$mirror_ref" >/dev/null 2>&1 || true
+          done < <(grep '^ecr-public\.aws\.com/' /tmp/all-images.txt || true)
+        )
+
+        complete=false
         if [ -d "/tmp/mirror-cache" ] && [ -n "$(ls -A /tmp/mirror-cache 2>/dev/null)" ]; then
           echo "✅ Cache restored, checking completeness..."
           # Check for all 5 mirror volumes (using KSail's naming convention).
@@ -334,18 +369,20 @@ runs:
               fi
             done < <(grep '^ecr-public\.aws\.com/' /tmp/all-images.txt || true)
             if [ -n "$MISSING" ]; then
-              echo "complete=false" >> "$GITHUB_OUTPUT"
               echo "⚠️ ECR Public mirror lacks:${MISSING} — will re-warm"
+            elif check_restored_ecr; then
+              complete=true
+              echo "✅ Restored ECR Public mirror served every required image offline"
             else
-              echo "complete=true" >> "$GITHUB_OUTPUT"
-              echo "✅ Cache complete: 5 mirror volumes present, every ECR Public image included"
+              echo "⚠️ Restored ECR Public mirror could not serve every image — will re-warm"
             fi
           else
-            echo "complete=false" >> "$GITHUB_OUTPUT"
             echo "⚠️ Cache incomplete, will re-warm"
           fi
-        else
-          echo "complete=false" >> "$GITHUB_OUTPUT"
+        fi
+        echo "complete=$complete" >> "$GITHUB_OUTPUT"
+        if [ "$complete" != true ]; then
+          echo "repair-key=$CACHE_KEY-repair-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
         fi
 
     - name: 📥 Pre-pull registry image
@@ -574,15 +611,14 @@ runs:
           exit 1
         fi
 
-        # Restart the mirror as the pull-through proxy KSail runs in the system
-        # tests, then pull every image through it. This proves the tests' pull
-        # path serves the images from the volume rather than from ECR Public.
+        # Verify without the proxy's remote fallback before saving the volume.
+        # A proxy pull can succeed from ECR Public even when the local cache is
+        # missing a manifest or blob, leaving an unusable immutable archive.
         docker rm -f ecr-public.aws.com-mirror > /dev/null
         docker run -d \
           --name ecr-public.aws.com-mirror \
           --network ksail-mirrors \
           -p 5004:5000 \
-          -e REGISTRY_PROXY_REMOTEURL=https://ecr-public.aws.com \
           -v ecr-public.aws.com:/var/lib/registry \
           registry:3 > /dev/null
         PROXY_READY=false
@@ -594,7 +630,7 @@ runs:
           sleep 1
         done
         if [ "$PROXY_READY" != true ]; then
-          echo "❌ ECR Public mirror proxy never became ready"
+          echo "❌ ECR Public mirror never became ready for offline verification"
           docker logs ecr-public.aws.com-mirror 2>&1 | tail -n 50 || true
           exit 1
         fi
@@ -608,7 +644,7 @@ runs:
           fi
         done <<< "$ECR_IMAGES"
         if [ -n "$FAILED" ]; then
-          echo "::error::The ECR Public mirror, running as a proxy, did not serve these copied images:"
+          echo "::error::The ECR Public mirror did not serve these copied images offline:"
           printf '%s' "$FAILED"
           echo "--- ecr-public.aws.com-mirror log (last 40 lines) ---"
           docker logs --tail 40 ecr-public.aws.com-mirror 2>&1 || true
@@ -949,7 +985,9 @@ runs:
       uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
       with:
         path: /tmp/mirror-cache
-        key: ${{ steps.generate-key.outputs.cache-key }}
+        # A restored bad entry is immutable. Save the repaired volume under a
+        # new key and hand that exact key to the system-test jobs.
+        key: ${{ steps.check-cache.outputs.repair-key || steps.generate-key.outputs.cache-key }}
 
     - name: 💾 Save KWOK control plane cache
       # Only save when the tar was actually produced (saved == 'true'). A cache
