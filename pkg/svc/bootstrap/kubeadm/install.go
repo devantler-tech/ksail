@@ -15,6 +15,20 @@ const ConfigPath = "/etc/kubernetes/ksail/kubeadm-config.yaml"
 // the shared bootstrap token, so it is root read/write only.
 const configPermissions = "0600"
 
+// SysctlPath is where the node's kernel-parameter drop-in is written. kubeadm's
+// preflight refuses to init or join unless /proc/sys/net/ipv4/ip_forward is 1,
+// and the kernel default on a stock image is 0, so the drop-in enables IPv4
+// forwarding persistently (it survives a reboot) and the first-boot commands
+// apply it before kubeadm runs.
+const SysctlPath = "/etc/sysctl.d/99-kubernetes.conf"
+
+// sysctlContent is the body of the kernel-parameter drop-in at [SysctlPath].
+const sysctlContent = "net.ipv4.ip_forward = 1\n"
+
+// sysctlPermissions is the mode of the kernel-parameter drop-in; it holds no
+// secret, so it is world-readable like the distribution's own sysctl files.
+const sysctlPermissions = "0644"
+
 // sentinelDir is the ksail-managed directory the bootstrap-completion sentinel
 // lands in; it is created by the same first-boot command that writes the
 // sentinel.
@@ -192,16 +206,24 @@ func RenderInstall(cfg InstallConfig) (Install, error) {
 			Key:    communitySigningKey,
 		}},
 		Packages: append([]string{containerdPackage}, kubePackages()...),
-		Files: []File{{
-			Path:        ConfigPath,
-			Permissions: configPermissions,
-			Content:     cfg.Config,
-		}},
+		Files: []File{
+			{
+				Path:        SysctlPath,
+				Permissions: sysctlPermissions,
+				Content:     sysctlContent,
+			},
+			{
+				Path:        ConfigPath,
+				Permissions: configPermissions,
+				Content:     cfg.Config,
+			},
+		},
 		Commands: bootstrapCommands(cfg.Role),
 	}, nil
 }
 
-// bootstrapCommands returns the ordered first-boot commands for role: enable the
+// bootstrapCommands returns the ordered first-boot commands for role: apply the
+// kernel parameters kubeadm's preflight requires (see [SysctlPath]), enable the
 // container runtime, pin the kube* packages so an unattended upgrade cannot break
 // the control plane mid-cluster, then run the role's kubeadm bootstrap command
 // against the dropped config. The bootstrap command chains the completion
@@ -214,6 +236,7 @@ func bootstrapCommands(role Role) []string {
 	}
 
 	return []string{
+		"sysctl -p " + SysctlPath,
 		"systemctl enable --now " + containerdPackage,
 		"apt-mark hold " + strings.Join(kubePackages(), " "),
 		bootstrap + " && mkdir -p " + sentinelDir + " && touch " + BootstrapSentinelPath,
