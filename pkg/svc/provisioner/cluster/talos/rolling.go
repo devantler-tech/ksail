@@ -57,12 +57,14 @@ func (p *Provisioner) setNodeSchedulable(
 	if err != nil {
 		return fmt.Errorf("get node %s: %w", nodeName, err)
 	}
+
 	if schedulable && node.Annotations[imageUpgradeCordonAnnotation] == labelValueTrue {
 		// Clear the recovery marker in the same API update that uncordons the
 		// node, so a later administrative cordon cannot inherit stale ownership.
 		updated := node.DeepCopy()
 		updated.Spec.Unschedulable = false
 		delete(updated.Annotations, imageUpgradeCordonAnnotation)
+
 		_, err = clientset.CoreV1().Nodes().Update(ctx, updated, metav1.UpdateOptions{})
 		if err != nil {
 			return fmt.Errorf("unmarking image-upgrade cordon on %s: %w", nodeName, err)

@@ -95,6 +95,7 @@ func TestRecoverUpgradedNode(t *testing.T) {
 					testImageUpgradeCordonAnnotation: "true",
 				}
 			}
+
 			clientset := fake.NewClientset(testCase.node)
 			if testCase.listFails {
 				clientset.PrependReactor("list", "nodes",
@@ -129,6 +130,7 @@ func TestRecoverUpgradedNode(t *testing.T) {
 				Get(context.Background(), testCase.node.Name, metav1.GetOptions{})
 			require.NoError(t, getErr)
 			assert.Equal(t, testCase.wantCordoned, got.Spec.Unschedulable)
+
 			if testCase.marked && !testCase.wantCordoned {
 				assert.NotContains(t, got.Annotations, testImageUpgradeCordonAnnotation,
 					"recovery must clear its ownership marker when it uncordons")

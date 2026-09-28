@@ -530,11 +530,13 @@ func (p *Provisioner) markImageUpgradeCordon(
 	if err != nil {
 		return fmt.Errorf("reading node %s before image upgrade: %w", nodeName, err)
 	}
+
 	if node.Spec.Unschedulable {
 		if node.Annotations[imageUpgradeCordonAnnotation] == labelValueTrue &&
 			node.Annotations[imageUpgradeStoragePendingAnnotation] == labelValueTrue {
 			return nil // resuming KSail's own interrupted roll
 		}
+
 		if node.Annotations[imageUpgradeCordonAnnotation] != labelValueTrue {
 			return fmt.Errorf("%w: %s", errImageUpgradeNodeAlreadyCordoned, nodeName)
 		}
@@ -544,9 +546,11 @@ func (p *Provisioner) markImageUpgradeCordon(
 	if updated.Annotations == nil {
 		updated.Annotations = make(map[string]string)
 	}
+
 	updated.Annotations[imageUpgradeCordonAnnotation] = labelValueTrue
 	updated.Annotations[imageUpgradeStoragePendingAnnotation] = labelValueTrue
 	updated.Spec.Unschedulable = true
+
 	_, err = clientset.CoreV1().Nodes().Update(ctx, updated, metav1.UpdateOptions{})
 	if err != nil {
 		return fmt.Errorf("marking image-upgrade cordon on %s: %w", nodeName, err)
@@ -594,12 +598,14 @@ func (p *Provisioner) finishImageUpgradeStorageGate(
 	if err != nil {
 		return fmt.Errorf("reading node %s after storage recovery: %w", nodeName, err)
 	}
+
 	if node.Annotations[imageUpgradeStoragePendingAnnotation] != labelValueTrue {
 		return nil
 	}
 
 	updated := node.DeepCopy()
 	delete(updated.Annotations, imageUpgradeStoragePendingAnnotation)
+
 	_, err = clientset.CoreV1().Nodes().Update(ctx, updated, metav1.UpdateOptions{})
 	if err != nil {
 		return fmt.Errorf("clearing storage recovery marker on %s: %w", nodeName, err)
@@ -656,6 +662,7 @@ func (p *Provisioner) recoverUpgradedNode(
 
 		return nil
 	}
+
 	if k8sNode.Annotations[imageUpgradeCordonAnnotation] != labelValueTrue {
 		// Another actor cordoned this node. Never make it schedulable on their behalf.
 		storageErr := p.finishImageUpgradeStorageGate(ctx, clientset, nodeName, prober)

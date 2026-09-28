@@ -66,6 +66,7 @@ func TestUpgradeDistributionSyncsAutoscalerBaselineFromRunningControlPlane(t *te
 		WithInfraProvider(newFipUpdateProvider(server.URL)).
 		WithNodeConfigFetcherForTest(func(_ context.Context, _ string) (talosconfig.Provider, error) {
 			fetched = true
+
 			return running, nil
 		}).
 		WithLogWriter(io.Discard)
@@ -74,7 +75,11 @@ func TestUpgradeDistributionSyncsAutoscalerBaselineFromRunningControlPlane(t *te
 	err = provisioner.UpgradeDistribution(t.Context(), "fip-cluster", "v1.13.10", "v1.13.10")
 	require.ErrorIs(t, err, talosprovisioner.ErrHcloudTokenNotSet)
 	assert.True(t, fetched, "running control-plane config must be fetched before autoscaler write")
-	assert.Equal(t, runningCA, provisioner.TalosConfigsForTest().ControlPlane().RawV1Alpha1().ClusterConfig.ClusterCA.Crt)
+	assert.Equal(
+		t,
+		runningCA,
+		provisioner.TalosConfigsForTest().ControlPlane().RawV1Alpha1().ClusterConfig.ClusterCA.Crt,
+	)
 }
 
 // TestSupportsLifecycleUpgradeAPI verifies that the upgrade path dispatch picks

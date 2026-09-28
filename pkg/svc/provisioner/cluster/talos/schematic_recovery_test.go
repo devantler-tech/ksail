@@ -14,9 +14,11 @@ import (
 	ktesting "k8s.io/client-go/testing"
 )
 
-const testSchematic = "target"
-const testImageUpgradeCordonAnnotation = "ksail.devantler.tech/image-upgrade-cordon"
-const testImageUpgradeStoragePendingAnnotation = "ksail.devantler.tech/image-upgrade-storage-pending"
+const (
+	testSchematic                            = "target"
+	testImageUpgradeCordonAnnotation         = "ksail.devantler.tech/image-upgrade-cordon"
+	testImageUpgradeStoragePendingAnnotation = "ksail.devantler.tech/image-upgrade-storage-pending"
+)
 
 var errSchematicNodeListUnavailable = errors.New("node list unavailable")
 
@@ -75,6 +77,7 @@ func TestDistributionImageChangedIgnoresIntentionalManagedNodeCordon(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if changed {
 		t.Fatal("an administrator's cordon must not start an image recovery")
 	}
@@ -106,6 +109,7 @@ func TestDistributionImageChangedFindsPendingStorageGateAfterUncordon(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !changed {
 		t.Fatal("a failed storage gate after uncordon must trigger recovery on retry")
 	}

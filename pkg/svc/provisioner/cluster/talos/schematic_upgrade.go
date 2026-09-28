@@ -19,8 +19,10 @@ import (
 
 var _ clusterupdate.DistributionImagePlanner = (*Provisioner)(nil)
 
-const imageUpgradeCordonAnnotation = "ksail.devantler.tech/image-upgrade-cordon"
-const imageUpgradeStoragePendingAnnotation = "ksail.devantler.tech/image-upgrade-storage-pending"
+const (
+	imageUpgradeCordonAnnotation         = "ksail.devantler.tech/image-upgrade-cordon"
+	imageUpgradeStoragePendingAnnotation = "ksail.devantler.tech/image-upgrade-storage-pending"
+)
 
 // DistributionImageChanged checks every managed machine's booted schematic, including
 // when none is configured: clearing the schematic selects the default installer image,
@@ -78,7 +80,7 @@ func hasPendingImageUpgrade(nodes []nodeWithRole, kubeNodes []corev1.Node) bool 
 	}
 
 	for _, node := range kubeNodes {
-		if !(node.Spec.Unschedulable && node.Annotations[imageUpgradeCordonAnnotation] == labelValueTrue) &&
+		if (!node.Spec.Unschedulable || node.Annotations[imageUpgradeCordonAnnotation] != labelValueTrue) &&
 			node.Annotations[imageUpgradeStoragePendingAnnotation] != labelValueTrue {
 			continue
 		}
