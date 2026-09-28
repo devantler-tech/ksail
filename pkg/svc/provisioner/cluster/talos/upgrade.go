@@ -27,6 +27,8 @@ const (
 	lifecycleUpgradeMinMinor = 13
 )
 
+var errImageUpgradeNodeAlreadyCordoned = errors.New("node already cordoned for another purpose")
+
 // supportsLifecycleUpgradeAPI reports whether a node running the given Talos
 // version tag implements the ImageService.Pull / LifecycleService.Upgrade APIs
 // (Talos >= 1.13). Unparseable tags conservatively fall back to the legacy
@@ -455,26 +457,9 @@ type upgradeNodeRequest struct {
 // needed OS upgrade still proceeds. A drain failure aborts the roll with the node
 // best-effort uncordoned (see cordonAndDrain), matching the config-change path.
 func (p *Provisioner) upgradeSingleNode(ctx context.Context, req upgradeNodeRequest) error {
-	nodeName := ""
-
-	if req.clientset != nil {
-		resolved, resolveErr := p.resolveNodeName(ctx, req.clientset, req.node.IP)
-		if resolveErr != nil {
-			_, _ = fmt.Fprintf(p.logWriter,
-				"  ⚠ Could not resolve %s to a Kubernetes node; upgrading without drain: %v\n",
-				req.node.IP, resolveErr,
-			)
-		} else {
-			nodeName = resolved
-			if markErr := p.markImageUpgradeCordon(ctx, req.clientset, nodeName); markErr != nil {
-				return fmt.Errorf("reserving image-upgrade cordon on %s: %w", nodeName, markErr)
-			}
-
-			drainErr := p.cordonAndDrain(ctx, req.clientset, nodeName)
-			if drainErr != nil {
-				return drainErr
-			}
-		}
+	nodeName, err := p.prepareNodeForImageUpgrade(ctx, req.clientset, req.node.IP)
+	if err != nil {
+		return err
 	}
 
 	// Reconcile the desired config onto the node before upgrading it. Best-effort:
@@ -502,6 +487,38 @@ func (p *Provisioner) upgradeSingleNode(ctx context.Context, req upgradeNodeRequ
 	return p.completeNodeUpgrade(ctx, req.clientset, nodeName, req.prober)
 }
 
+func (p *Provisioner) prepareNodeForImageUpgrade(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeIP string,
+) (string, error) {
+	if clientset == nil {
+		return "", nil
+	}
+
+	nodeName, err := p.resolveNodeName(ctx, clientset, nodeIP)
+	if err != nil {
+		_, _ = fmt.Fprintf(p.logWriter,
+			"  ⚠ Could not resolve %s to a Kubernetes node; upgrading without drain: %v\n",
+			nodeIP, err,
+		)
+
+		return "", nil
+	}
+
+	err = p.markImageUpgradeCordon(ctx, clientset, nodeName)
+	if err != nil {
+		return "", fmt.Errorf("reserving image-upgrade cordon on %s: %w", nodeName, err)
+	}
+
+	err = p.cordonAndDrain(ctx, clientset, nodeName)
+	if err != nil {
+		return "", err
+	}
+
+	return nodeName, nil
+}
+
 // markImageUpgradeCordon atomically records KSail's ownership when it cordons a
 // node. An existing administrator cordon is left untouched and blocks the roll.
 func (p *Provisioner) markImageUpgradeCordon(
@@ -514,12 +531,12 @@ func (p *Provisioner) markImageUpgradeCordon(
 		return fmt.Errorf("reading node %s before image upgrade: %w", nodeName, err)
 	}
 	if node.Spec.Unschedulable {
-		if node.Annotations[imageUpgradeCordonAnnotation] == "true" &&
-			node.Annotations[imageUpgradeStoragePendingAnnotation] == "true" {
+		if node.Annotations[imageUpgradeCordonAnnotation] == labelValueTrue &&
+			node.Annotations[imageUpgradeStoragePendingAnnotation] == labelValueTrue {
 			return nil // resuming KSail's own interrupted roll
 		}
-		if node.Annotations[imageUpgradeCordonAnnotation] != "true" {
-			return fmt.Errorf("node %s is already cordoned for another purpose", nodeName)
+		if node.Annotations[imageUpgradeCordonAnnotation] != labelValueTrue {
+			return fmt.Errorf("%w: %s", errImageUpgradeNodeAlreadyCordoned, nodeName)
 		}
 	}
 
@@ -527,10 +544,11 @@ func (p *Provisioner) markImageUpgradeCordon(
 	if updated.Annotations == nil {
 		updated.Annotations = make(map[string]string)
 	}
-	updated.Annotations[imageUpgradeCordonAnnotation] = "true"
-	updated.Annotations[imageUpgradeStoragePendingAnnotation] = "true"
+	updated.Annotations[imageUpgradeCordonAnnotation] = labelValueTrue
+	updated.Annotations[imageUpgradeStoragePendingAnnotation] = labelValueTrue
 	updated.Spec.Unschedulable = true
-	if _, err = clientset.CoreV1().Nodes().Update(ctx, updated, metav1.UpdateOptions{}); err != nil {
+	_, err = clientset.CoreV1().Nodes().Update(ctx, updated, metav1.UpdateOptions{})
+	if err != nil {
 		return fmt.Errorf("marking image-upgrade cordon on %s: %w", nodeName, err)
 	}
 
@@ -567,7 +585,8 @@ func (p *Provisioner) finishImageUpgradeStorageGate(
 	nodeName string,
 	prober storageHealthProber,
 ) error {
-	if err := p.waitForStorageHealthy(ctx, prober, p.storageHealthTimeout()); err != nil {
+	err := p.waitForStorageHealthy(ctx, prober, p.storageHealthTimeout())
+	if err != nil {
 		return err
 	}
 
@@ -575,7 +594,7 @@ func (p *Provisioner) finishImageUpgradeStorageGate(
 	if err != nil {
 		return fmt.Errorf("reading node %s after storage recovery: %w", nodeName, err)
 	}
-	if node.Annotations[imageUpgradeStoragePendingAnnotation] != "true" {
+	if node.Annotations[imageUpgradeStoragePendingAnnotation] != labelValueTrue {
 		return nil
 	}
 
@@ -629,16 +648,18 @@ func (p *Provisioner) recoverUpgradedNode(
 	if !k8sNode.Spec.Unschedulable {
 		// A previous attempt may have uncordoned this node before the storage
 		// gate failed. Recheck it before the roll advances to another node.
-		if err := p.finishImageUpgradeStorageGate(ctx, clientset, nodeName, prober); err != nil {
-			return fmt.Errorf("storage health gate: %w", err)
+		storageErr := p.finishImageUpgradeStorageGate(ctx, clientset, nodeName, prober)
+		if storageErr != nil {
+			return fmt.Errorf("storage health gate: %w", storageErr)
 		}
 
 		return nil
 	}
-	if k8sNode.Annotations[imageUpgradeCordonAnnotation] != "true" {
+	if k8sNode.Annotations[imageUpgradeCordonAnnotation] != labelValueTrue {
 		// Another actor cordoned this node. Never make it schedulable on their behalf.
-		if err := p.finishImageUpgradeStorageGate(ctx, clientset, nodeName, prober); err != nil {
-			return fmt.Errorf("storage health gate: %w", err)
+		storageErr := p.finishImageUpgradeStorageGate(ctx, clientset, nodeName, prober)
+		if storageErr != nil {
+			return fmt.Errorf("storage health gate: %w", storageErr)
 		}
 
 		return nil

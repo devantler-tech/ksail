@@ -78,8 +78,8 @@ func hasPendingImageUpgrade(nodes []nodeWithRole, kubeNodes []corev1.Node) bool 
 	}
 
 	for _, node := range kubeNodes {
-		if !(node.Spec.Unschedulable && node.Annotations[imageUpgradeCordonAnnotation] == "true") &&
-			node.Annotations[imageUpgradeStoragePendingAnnotation] != "true" {
+		if !(node.Spec.Unschedulable && node.Annotations[imageUpgradeCordonAnnotation] == labelValueTrue) &&
+			node.Annotations[imageUpgradeStoragePendingAnnotation] != labelValueTrue {
 			continue
 		}
 
