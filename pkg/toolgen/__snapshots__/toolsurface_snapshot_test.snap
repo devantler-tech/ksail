@@ -1628,8 +1628,17 @@ workload_write
         "type": "string"
       },
       "ephemeral": {
-        "description": "EXPERIMENTAL: run offline checks, then check workload admission in an isolated throwaway Kind cluster with declared Helm charts installed and ready (guaranteed teardown; off by default)... (applies to: scan, validate)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: scan, validate)",
         "type": "boolean"
+      },
+      "ephemeral-children": {
+        "description": "EXPERIMENTAL: validate an observed snapshot of owner-linked descendants of directly submitted workloads (requires --ephemeral; fails if none are observed; does not prove operator convergence) (applies to: validate)",
+        "type": "boolean"
+      },
+      "ephemeral-observation-wait": {
+        "default": "30s",
+        "description": "Wait after admission before collecting children (positive, at most 5m; requires --ephemeral-children) (applies to: validate)",
+        "type": "string"
       },
       "exceptions": {
         "description": "Path to a Kubescape exceptions file (a JSON array of PostureExceptionPolicy objects) forwarded to Kubescape's --exceptions (overrides spec.workload.scan.exceptions from ksail.yaml) (applies to: scan)",
