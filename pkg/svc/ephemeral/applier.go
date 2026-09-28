@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
@@ -29,6 +30,8 @@ const (
 type Applier struct {
 	client    dynamic.Interface
 	discovery rest.Interface
+	appliedMu sync.Mutex
+	applied   map[string]types.UID
 }
 
 // NewApplier creates an admission client without falling back to the user's current context.
@@ -57,7 +60,11 @@ func NewApplier(kubeconfigPath, kubeContext string) (*Applier, error) {
 		return nil, fmt.Errorf("create ephemeral discovery client: %w", err)
 	}
 
-	return &Applier{client: client, discovery: discoveryClient.RESTClient()}, nil
+	return &Applier{
+		client:    client,
+		discovery: discoveryClient.RESTClient(),
+		applied:   make(map[string]types.UID),
+	}, nil
 }
 
 // Apply submits one resource through strict server-side apply, without taking field ownership by force.
@@ -91,12 +98,22 @@ func (a *Applier) Apply(ctx context.Context, obj *unstructured.Unstructured) err
 		return fmt.Errorf("encode %s: %w", resourceIdentity(obj), err)
 	}
 
-	_, err = resource.Patch(ctx, applied.GetName(), types.ApplyPatchType, data, metav1.PatchOptions{
-		FieldManager: "ksail-ephemeral", FieldValidation: metav1.FieldValidationStrict,
-	})
+	result, err := resource.Patch(
+		ctx,
+		applied.GetName(),
+		types.ApplyPatchType,
+		data,
+		metav1.PatchOptions{
+			FieldManager: "ksail-ephemeral", FieldValidation: metav1.FieldValidationStrict,
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("admission rejected %s: %w", resourceIdentity(obj), err)
 	}
+
+	a.appliedMu.Lock()
+	a.applied[declaredIdentity(obj)] = result.GetUID()
+	a.appliedMu.Unlock()
 
 	return nil
 }
