@@ -360,6 +360,7 @@ func TestChildValidationUsesConfiguredKyvernoDefaultAndExplicitOverride(t *testi
 
 			root, schemaPath := childSource(t)
 			writePolicyEngineConfig(t, "Kyverno")
+
 			args := []string{
 				root, "--ephemeral", "--ephemeral-children",
 				"--ephemeral-observation-wait", "1ms", "--schema-location", schemaPath,
@@ -370,6 +371,7 @@ func TestChildValidationUsesConfiguredKyvernoDefaultAndExplicitOverride(t *testi
 
 			cmd := workload.NewValidateCmd()
 			cmd.SetArgs(args)
+
 			err := cmd.ExecuteContext(t.Context())
 			if testCase.wantViolation {
 				require.ErrorIs(t, err, workload.ErrKyvernoPolicyViolation)
