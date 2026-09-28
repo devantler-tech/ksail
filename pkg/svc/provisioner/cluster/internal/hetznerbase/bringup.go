@@ -95,6 +95,13 @@ type BringUpSpec struct {
 	// bootstrap writes (k3s: /etc/rancher/k3s/k3s.yaml, kubeadm:
 	// /etc/kubernetes/admin.conf).
 	KubeconfigPath string
+	// ReadyPath, when set, is a remote file the node's bootstrap writes only
+	// once it has fully succeeded. It is awaited before KubeconfigPath, for a
+	// distribution that writes its admin kubeconfig part-way through a bootstrap
+	// that can still fail afterwards (kubeadm writes admin.conf before its
+	// wait-control-plane phase). Empty means the kubeconfig alone signals
+	// readiness.
+	ReadyPath string
 	// PollInterval is the delay between probes for KubeconfigPath; zero means
 	// [DefaultKubeconfigPollInterval].
 	PollInterval time.Duration
@@ -172,6 +179,13 @@ func (b *Base) bootstrapAndReadKubeconfig(
 
 	defer func() { _ = client.Close() }()
 
+	if spec.ReadyPath != "" {
+		err = b.waitForBootstrapFile(ctx, client, addr, spec.ReadyPath, spec.PollInterval)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	err = b.waitForBootstrapFile(ctx, client, addr, spec.KubeconfigPath, spec.PollInterval)
 	if err != nil {
 		return nil, err
@@ -232,9 +246,11 @@ func publicIPv4(server *hcloud.Server) (net.IP, error) {
 
 // waitForRemoteFile polls the remote node until path exists
 // ([sshbootstrap.Client.FileExists]), sleeping interval between probes and
-// giving up when ctx ends. "Does not exist yet" retries; a probe error is
-// surfaced immediately — the connection is already established, so transport
-// errors are real failures, not boot-time races.
+// giving up when ctx ends. "Does not exist yet" retries unless cloud-init
+// already reports the first boot as failed ([ErrBootstrapFailed]), since the
+// file will then never appear; a probe error is surfaced immediately — the
+// connection is already established, so transport errors are real failures,
+// not boot-time races.
 func waitForRemoteFile(
 	ctx context.Context,
 	client *sshbootstrap.Client,
@@ -253,6 +269,10 @@ func waitForRemoteFile(
 
 		if exists {
 			return nil
+		}
+
+		if cloudInitFailed(ctx, client) {
+			return fmt.Errorf("%w: waiting for %q", ErrBootstrapFailed, path)
 		}
 
 		select {

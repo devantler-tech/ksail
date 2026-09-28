@@ -37,7 +37,7 @@ func isAllowedTopLevelKey(key string) bool {
 }
 
 // isAllowedWriteTarget reports whether path is one the renderers write. The
-// generated boot script is the cloud-init transport's own; the other two come
+// generated boot script is the cloud-init transport's own; the other three come
 // from the kubeadm and containerd bootstrappers. Referencing their exported
 // constants rather than restating the strings means a renderer that starts
 // writing somewhere new trips this guard's own test instead of drifting past it.
@@ -45,7 +45,8 @@ func isAllowedWriteTarget(path string) bool {
 	switch path {
 	case cloudinitbootstrap.DefaultScriptPath,
 		containerdbootstrap.ConfigPath,
-		kubeadmbootstrap.ConfigPath:
+		kubeadmbootstrap.ConfigPath,
+		kubeadmbootstrap.SysctlPath:
 		return true
 	default:
 		return false
@@ -238,7 +239,7 @@ func disallowedRunCmd(value *yaml.Node) string {
 		}
 
 		// The WRITE allowlist is deliberately NOT reused here: the renderers write
-		// three paths but only ever EXECUTE one of them. Allowing runcmd to name any
+		// four paths but only ever EXECUTE one of them. Allowing runcmd to name any
 		// writable target would let shell content be written to a config path and
 		// then run from it.
 		if script.Value != cloudinitbootstrap.DefaultScriptPath {
