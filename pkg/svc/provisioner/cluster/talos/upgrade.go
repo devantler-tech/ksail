@@ -600,7 +600,8 @@ func (p *Provisioner) finishImageUpgradeStorageGate(
 
 	updated := node.DeepCopy()
 	delete(updated.Annotations, imageUpgradeStoragePendingAnnotation)
-	if _, err = clientset.CoreV1().Nodes().Update(ctx, updated, metav1.UpdateOptions{}); err != nil {
+	_, err = clientset.CoreV1().Nodes().Update(ctx, updated, metav1.UpdateOptions{})
+	if err != nil {
 		return fmt.Errorf("clearing storage recovery marker on %s: %w", nodeName, err)
 	}
 
