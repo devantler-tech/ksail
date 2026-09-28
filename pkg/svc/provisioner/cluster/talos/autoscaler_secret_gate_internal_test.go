@@ -32,7 +32,11 @@ func TestShouldPropagateAutoscalerBaselineAfterEarlySecretRefresh(t *testing.T) 
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, testCase.want, shouldPropagateAutoscalerBaseline(testCase.changed, testCase.diff))
+			assert.Equal(
+				t,
+				testCase.want,
+				shouldPropagateAutoscalerBaseline(testCase.changed, testCase.diff),
+			)
 		})
 	}
 }
