@@ -18,7 +18,7 @@ func TestShouldPropagateAutoscalerBaselineAfterEarlySecretRefresh(t *testing.T) 
 	wipe := clusterupdate.NewEmptyUpdateResult()
 	wipe.WipeRequired = append(wipe.WipeRequired, clusterupdate.Change{})
 
-	for _, tc := range []struct {
+	for _, testCase := range []struct {
 		name    string
 		changed bool
 		diff    *clusterupdate.UpdateResult
@@ -30,9 +30,9 @@ func TestShouldPropagateAutoscalerBaselineAfterEarlySecretRefresh(t *testing.T) 
 		{"unchanged Secret with in-place diff", false, clusterupdate.NewEmptyUpdateResult(), false},
 		{"unchanged Secret before diff", false, nil, false},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.want, shouldPropagateAutoscalerBaseline(tc.changed, tc.diff))
+			assert.Equal(t, testCase.want, shouldPropagateAutoscalerBaseline(testCase.changed, testCase.diff))
 		})
 	}
 }
