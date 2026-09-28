@@ -1,7 +1,6 @@
 package vclusterprovisioner_test
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -22,7 +21,6 @@ var (
 	errNonTransient = errors.New("failed to start vCluster standalone: permission denied")
 	//nolint:staticcheck // Must match the exact SDK error string which is capitalised.
 	errDBus           = errors.New("Failed to connect to bus: No such file or directory")
-	errDBusRecover    = errors.New("D-Bus recovery failed")
 	errExitStatus1    = errors.New("exit status 1")
 	errWrapped22      = errors.New("something went wrong: exit status 22")
 	errEmpty          = errors.New("")
@@ -46,21 +44,6 @@ func newTestLogger() loftlog.Logger {
 	return loftlog.NewStreamLogger(io.Discard, io.Discard, logrus.WarnLevel)
 }
 
-func assertDBusRecoveryMarkers(t *testing.T, output string, wantMarkers bool) {
-	t.Helper()
-
-	for _, marker := range []string{
-		"ksail.vcluster.dbus_recovery state=entered",
-		"ksail.vcluster.dbus_recovery state=completed",
-	} {
-		if wantMarkers {
-			assert.Contains(t, output, marker)
-		} else {
-			assert.NotContains(t, output, marker)
-		}
-	}
-}
-
 // --- isTransientCreateError tests ---
 
 func TestIsTransientCreateError(t *testing.T) {
@@ -73,7 +56,7 @@ func TestIsTransientCreateError(t *testing.T) {
 	}{
 		{"exit_status_22_is_transient", errTransient, true},
 		{"permission_denied_is_not_transient", errNonTransient, false},
-		{"dbus_error_is_not_transient", errDBus, false},
+		{"dbus_error_is_transient", errDBus, true},
 		{"exit_status_22_in_wrapped_error", errWrapped22, true},
 		{"exit_status_1_is_not_transient", errExitStatus1, false},
 		{"registry_denied_is_transient", errRegistryDenied, true},
@@ -111,12 +94,6 @@ func TestCreateWithRetry_Success(t *testing.T) {
 		t.Error("cleanup should not be called on success")
 	}
 
-	recoverDBus := func(_ context.Context, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
-		t.Error("D-Bus recovery should not be called on success")
-
-		return nil
-	}
-
 	err := vclusterprovisioner.CreateWithRetryForTest(
 		context.Background(),
 		&cli.CreateOptions{},
@@ -124,7 +101,7 @@ func TestCreateWithRetry_Success(t *testing.T) {
 		"test-cluster",
 		newTestLogger(),
 		time.Millisecond,
-		create, cleanup, recoverDBus,
+		create, cleanup,
 	)
 
 	require.NoError(t, err)
@@ -149,12 +126,6 @@ func TestCreateWithRetry_TransientErrorRetries(t *testing.T) {
 		cleanupCalls++
 	}
 
-	recoverDBus := func(_ context.Context, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
-		t.Error("D-Bus recovery should not be called for transient errors")
-
-		return nil
-	}
-
 	err := vclusterprovisioner.CreateWithRetryForTest(
 		context.Background(),
 		&cli.CreateOptions{},
@@ -162,7 +133,7 @@ func TestCreateWithRetry_TransientErrorRetries(t *testing.T) {
 		"test-cluster",
 		newTestLogger(),
 		time.Millisecond,
-		create, cleanup, recoverDBus,
+		create, cleanup,
 	)
 
 	require.NoError(t, err)
@@ -185,10 +156,6 @@ func TestCreateWithRetry_TransientErrorExhaustsAttempts(t *testing.T) {
 		cleanupCalls++
 	}
 
-	recoverDBus := func(_ context.Context, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
-		return nil
-	}
-
 	err := vclusterprovisioner.CreateWithRetryForTest(
 		context.Background(),
 		&cli.CreateOptions{},
@@ -196,7 +163,7 @@ func TestCreateWithRetry_TransientErrorExhaustsAttempts(t *testing.T) {
 		"test-cluster",
 		newTestLogger(),
 		time.Millisecond,
-		create, cleanup, recoverDBus,
+		create, cleanup,
 	)
 
 	require.Error(t, err)
@@ -220,12 +187,6 @@ func TestCreateWithRetry_NonTransientErrorFailsImmediately(t *testing.T) {
 		t.Error("cleanup should not be called for non-transient errors")
 	}
 
-	recoverDBus := func(_ context.Context, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
-		t.Error("D-Bus recovery should not be called for non-transient errors")
-
-		return nil
-	}
-
 	err := vclusterprovisioner.CreateWithRetryForTest(
 		context.Background(),
 		&cli.CreateOptions{},
@@ -233,7 +194,7 @@ func TestCreateWithRetry_NonTransientErrorFailsImmediately(t *testing.T) {
 		"test-cluster",
 		newTestLogger(),
 		time.Millisecond,
-		create, cleanup, recoverDBus,
+		create, cleanup,
 	)
 
 	require.Error(t, err)
@@ -242,122 +203,26 @@ func TestCreateWithRetry_NonTransientErrorFailsImmediately(t *testing.T) {
 	assert.Equal(t, 1, createCalls, "create should be called exactly once")
 }
 
-func TestCreateWithRetry_DBusErrorTriggersRecovery(t *testing.T) {
-	t.Parallel()
-
-	create := func(_ context.Context, _ *cli.CreateOptions, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
-		return errDBus
-	}
-
-	cleanup := func(_ context.Context, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) {
-		t.Error("cleanup should not be called for D-Bus errors")
-	}
-
-	recoverCalls := 0
-	recoverDBus := func(_ context.Context, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
-		recoverCalls++
-
-		return nil
-	}
-
-	err := vclusterprovisioner.CreateWithRetryForTest(
-		context.Background(),
-		&cli.CreateOptions{},
-		&flags.GlobalFlags{},
-		"test-cluster",
-		newTestLogger(),
-		time.Millisecond,
-		create, cleanup, recoverDBus,
-	)
-
-	require.NoError(t, err)
-	assert.Equal(t, 1, recoverCalls, "D-Bus recovery should be called once")
-}
-
-func TestCreateWithRetry_DBusRecoveryMarkers(t *testing.T) {
-	t.Parallel()
-
-	for _, testCase := range []struct {
-		name        string
-		createErr   error
-		wantMarkers bool
-	}{
-		{"recovery_path_reports_start_and_completion_without_user_input", errDBus, true},
-		{"happy_path_reports_no_recovery_marker", nil, false},
-	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			var output bytes.Buffer
-
-			logger := loftlog.NewStreamLogger(&output, &output, logrus.InfoLevel)
-			create := func(
-				_ context.Context,
-				_ *cli.CreateOptions,
-				_ *flags.GlobalFlags,
-				_ string,
-				_ loftlog.Logger,
-			) error {
-				return testCase.createErr
-			}
-			cleanup := func(_ context.Context, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) {
-				t.Error("cleanup should not be called")
-			}
-			recoverDBus := func(
-				_ context.Context,
-				_ *flags.GlobalFlags,
-				_ string,
-				_ loftlog.Logger,
-			) error {
-				return nil
-			}
-
-			err := vclusterprovisioner.CreateWithRetryForTest(
-				context.Background(),
-				&cli.CreateOptions{},
-				&flags.GlobalFlags{},
-				"user-controlled\ncluster",
-				logger,
-				time.Millisecond,
-				create, cleanup, recoverDBus,
-			)
-
-			require.NoError(t, err)
-
-			assertDBusRecoveryMarkers(t, output.String(), testCase.wantMarkers)
-			assert.NotContains(t, output.String(), "user-controlled")
-		})
-	}
-}
-
-// TestCreateWithRetry_DBusRecoveryFailureFallsBackToRetry is the regression guard
-// for the hardening: when in-place D-Bus recovery fails, create must fall back to
-// a full delete-and-retry (fresh container) rather than giving up — the fresh
-// container on the next attempt usually clears the systemd/D-Bus race. Previously
-// a single failed in-place recovery aborted the whole create (issue #2261).
-func TestCreateWithRetry_DBusRecoveryFailureFallsBackToRetry(t *testing.T) {
+// TestCreateWithRetry_DBusErrorRetriesOnFreshContainer guards the handling left
+// after the in-place D-Bus recovery was removed (issue #2261): the systemd/D-Bus
+// startup race deletes the partial cluster and retries on a fresh container, like
+// any other transient create failure, instead of failing the create outright.
+func TestCreateWithRetry_DBusErrorRetriesOnFreshContainer(t *testing.T) {
 	t.Parallel()
 
 	createCalls := 0
 	create := func(_ context.Context, _ *cli.CreateOptions, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
 		createCalls++
 		if createCalls == 1 {
-			return errDBus // first attempt hits the D-Bus race
+			return errDBus
 		}
 
-		return nil // a fresh container on retry succeeds
+		return nil
 	}
 
 	cleanupCalls := 0
 	cleanup := func(_ context.Context, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) {
 		cleanupCalls++
-	}
-
-	recoverCalls := 0
-	recoverDBus := func(_ context.Context, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
-		recoverCalls++
-
-		return errDBusRecover // in-place recovery fails
 	}
 
 	err := vclusterprovisioner.CreateWithRetryForTest(
@@ -367,57 +232,12 @@ func TestCreateWithRetry_DBusRecoveryFailureFallsBackToRetry(t *testing.T) {
 		"test-cluster",
 		newTestLogger(),
 		time.Millisecond,
-		create, cleanup, recoverDBus,
+		create, cleanup,
 	)
 
-	require.NoError(t, err, "a failed in-place D-Bus recovery must fall back to a full retry")
-	assert.Equal(t, 2, createCalls, "create runs again on a fresh container after recovery fails")
-	assert.Equal(t, 1, recoverCalls, "in-place recovery is attempted once before falling back")
-	assert.Equal(t, 1, cleanupCalls, "cleanup runs before the fresh retry")
-}
-
-// TestCreateWithRetry_DBusRecoveryPersistentFailureExhaustsAttempts verifies the
-// other half: when both the D-Bus race AND its in-place recovery persist on every
-// attempt, create exhausts its retries and surfaces an actionable, wrapped error.
-func TestCreateWithRetry_DBusRecoveryPersistentFailureExhaustsAttempts(t *testing.T) {
-	t.Parallel()
-
-	createCalls := 0
-	create := func(_ context.Context, _ *cli.CreateOptions, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
-		createCalls++
-
-		return errDBus
-	}
-
-	cleanupCalls := 0
-	cleanup := func(_ context.Context, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) {
-		cleanupCalls++
-	}
-
-	recoverCalls := 0
-	recoverDBus := func(_ context.Context, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
-		recoverCalls++
-
-		return errDBusRecover
-	}
-
-	err := vclusterprovisioner.CreateWithRetryForTest(
-		context.Background(),
-		&cli.CreateOptions{},
-		&flags.GlobalFlags{},
-		"test-cluster",
-		newTestLogger(),
-		time.Millisecond,
-		create, cleanup, recoverDBus,
-	)
-
-	require.Error(t, err)
-	require.ErrorContains(t, err, "after 5 attempts")
-	require.ErrorContains(t, err, "D-Bus recovery failed")
-	require.ErrorIs(t, err, errDBusRecover)
-	assert.Equal(t, 5, createCalls, "create is attempted maxAttempts times")
-	assert.Equal(t, 5, recoverCalls, "in-place recovery is attempted on every attempt")
-	assert.Equal(t, 4, cleanupCalls, "cleanup runs before retries 2 through 5")
+	require.NoError(t, err)
+	assert.Equal(t, 2, createCalls, "create runs again after the D-Bus race")
+	assert.Equal(t, 1, cleanupCalls, "the partial cluster is deleted before the fresh attempt")
 }
 
 func TestCreateWithRetry_ContextCancellation(t *testing.T) {
@@ -440,10 +260,6 @@ func TestCreateWithRetry_ContextCancellation(t *testing.T) {
 		cleanupCalls++
 	}
 
-	recoverDBus := func(_ context.Context, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
-		return nil
-	}
-
 	err := vclusterprovisioner.CreateWithRetryForTest(
 		ctx,
 		&cli.CreateOptions{},
@@ -451,7 +267,7 @@ func TestCreateWithRetry_ContextCancellation(t *testing.T) {
 		"test-cluster",
 		newTestLogger(),
 		time.Second,
-		create, cleanup, recoverDBus,
+		create, cleanup,
 	)
 
 	require.Error(t, err)
@@ -479,10 +295,6 @@ func TestCreateWithRetry_CleanupErrorDoesNotPropagate(t *testing.T) {
 		// The retry should still proceed successfully.
 	}
 
-	recoverDBus := func(_ context.Context, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
-		return nil
-	}
-
 	err := vclusterprovisioner.CreateWithRetryForTest(
 		context.Background(),
 		&cli.CreateOptions{},
@@ -490,7 +302,7 @@ func TestCreateWithRetry_CleanupErrorDoesNotPropagate(t *testing.T) {
 		"test-cluster",
 		newTestLogger(),
 		time.Millisecond,
-		create, cleanup, recoverDBus,
+		create, cleanup,
 	)
 
 	require.NoError(t, err, "cleanup errors should not prevent successful retry")

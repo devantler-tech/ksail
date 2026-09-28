@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	cloudinitbootstrap "github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/cloudinit"
 	sshbootstrap "github.com/devantler-tech/ksail/v7/pkg/svc/bootstrap/ssh"
 	gossh "golang.org/x/crypto/ssh"
 )
@@ -31,6 +32,28 @@ const (
 	// distribution's install transcript, which can include join tokens.
 	bootstrapDiagnosticsCommand = "cloud-init status --long"
 
+	// bootstrapStatusCommand is the short cloud-init verdict probed between
+	// polls, so a first boot that has already failed ends the wait at once.
+	bootstrapStatusCommand = "cloud-init status"
+
+	// bootstrapFailedStatus is the line bootstrapStatusCommand prints once
+	// cloud-init finished with an unrecoverable error.
+	bootstrapFailedStatus = "status: error"
+
+	// bootstrapErrorLinePattern matches kubeadm's own error lines: the failed
+	// phase and its preflight "[ERROR ...]" checks, which kubeadm indents with a
+	// tab. Only these lines are read, because the rest of the transcript can
+	// carry join tokens.
+	bootstrapErrorLinePattern = `^[[:space:]]*(\[ERROR |error execution phase)`
+
+	// bootstrapErrorLinesCommand extracts kubeadm's error lines from the logs a
+	// first boot writes: the bootstrap script redirects everything it runs into
+	// the KSail bootstrap log, and anything cloud-init ran before that script
+	// lands in the cloud-init output log. A missing log is not an error.
+	bootstrapErrorLinesCommand = "grep -hE '" + bootstrapErrorLinePattern + "' " +
+		cloudinitbootstrap.DefaultLogPath + " /var/log/cloud-init-output.log" +
+		" 2>/dev/null | tail -n 20"
+
 	// maxBootstrapDiagnosticsBytes caps how much of the diagnostic output is
 	// carried into the returned error.
 	maxBootstrapDiagnosticsBytes = 2048
@@ -39,6 +62,10 @@ const (
 // ErrBringUpStageTimeout is returned when a bring-up stage does not finish
 // within its own deadline. The wrapping error names the stage and the node.
 var ErrBringUpStageTimeout = errors.New("hetzner: bring-up stage did not finish in time")
+
+// ErrBootstrapFailed is returned when cloud-init reports a node's first boot
+// as failed while the bring-up is still waiting for the bootstrap to finish.
+var ErrBootstrapFailed = errors.New("hetzner: first-boot bootstrap failed")
 
 // logf writes one progress line to the Base's LogWriter, if it has one.
 func (b *Base) logf(format string, args ...any) {
@@ -122,6 +149,12 @@ func (b *Base) waitForBootstrapFile(
 
 	err := waitForRemoteFile(stageCtx, client, path, interval)
 	if err != nil {
+		if errors.Is(err, ErrBootstrapFailed) {
+			return fmt.Errorf("%w on %s%s%s", err, addr,
+				bootstrapDiagnostics(ctx, client),
+				bootstrapErrorLines(ctx, client))
+		}
+
 		if stageTimedOut(ctx, stageCtx) {
 			return fmt.Errorf(
 				"%w: waiting for the first-boot bootstrap on %s to write %s after %s: %w%s",
@@ -145,15 +178,48 @@ func stageTimedOut(ctx, stageCtx context.Context) bool {
 	return ctx.Err() == nil && errors.Is(stageCtx.Err(), context.DeadlineExceeded)
 }
 
-// bootstrapDiagnostics reads cloud-init's status off the node, formatted as a
-// suffix for the timeout error, or an empty string when it cannot be read.
-func bootstrapDiagnostics(ctx context.Context, client *sshbootstrap.Client) string {
+// cloudInitFailed reports whether cloud-init says the node's first boot has
+// finished with an unrecoverable error. Any other answer, including a probe
+// that cannot run, keeps the caller waiting.
+func cloudInitFailed(ctx context.Context, client *sshbootstrap.Client) bool {
 	diagCtx, cancel := context.WithTimeout(ctx, bootstrapDiagnosticsTimeout)
 	defer cancel()
 
 	// cloud-init exits non-zero when it reports an error, so the output is
 	// read whatever the exit status.
-	result, _ := client.Run(diagCtx, bootstrapDiagnosticsCommand)
+	result, _ := client.Run(diagCtx, bootstrapStatusCommand)
+
+	for line := range strings.SplitSeq(string(result.Stdout), "\n") {
+		if strings.TrimSpace(line) == bootstrapFailedStatus {
+			return true
+		}
+	}
+
+	return false
+}
+
+// bootstrapDiagnostics reads cloud-init's status off the node, formatted as a
+// suffix for the returned error, or an empty string when it cannot be read.
+func bootstrapDiagnostics(ctx context.Context, client *sshbootstrap.Client) string {
+	return diagnosticSection(ctx, client, bootstrapDiagnosticsCommand)
+}
+
+// bootstrapErrorLines reads kubeadm's error lines from the node's bootstrap
+// logs, formatted as a suffix for the returned error, or an empty string
+// when there are none.
+func bootstrapErrorLines(ctx context.Context, client *sshbootstrap.Client) string {
+	return diagnosticSection(ctx, client, bootstrapErrorLinesCommand)
+}
+
+// diagnosticSection runs command on the node within the diagnostic deadline
+// and formats its capped output as an error suffix headed by the command.
+func diagnosticSection(ctx context.Context, client *sshbootstrap.Client, command string) string {
+	diagCtx, cancel := context.WithTimeout(ctx, bootstrapDiagnosticsTimeout)
+	defer cancel()
+
+	// Diagnostic commands can exit non-zero while still printing what they
+	// found, so the output is read whatever the exit status.
+	result, _ := client.Run(diagCtx, command)
 
 	output := strings.TrimSpace(string(result.Stdout) + string(result.Stderr))
 	if output == "" {
@@ -164,5 +230,5 @@ func bootstrapDiagnostics(ctx context.Context, client *sshbootstrap.Client) stri
 		output = output[:maxBootstrapDiagnosticsBytes] + "..."
 	}
 
-	return fmt.Sprintf("\n%s:\n%s", bootstrapDiagnosticsCommand, output)
+	return fmt.Sprintf("\n%s:\n%s", command, output)
 }

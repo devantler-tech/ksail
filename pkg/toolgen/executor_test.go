@@ -81,16 +81,14 @@ func TestBuildCommandArgs_BooleanFlags(t *testing.T) {
 		assert.Contains(t, args, "--force")
 	})
 
-	t.Run("false boolean omits flag", func(t *testing.T) {
+	t.Run("false boolean forwards an explicit false", func(t *testing.T) {
 		t.Parallel()
 
 		args, err := toolgen.BuildCommandArgs(tool, map[string]any{"force": false})
 
 		require.NoError(t, err)
-
-		for _, arg := range args {
-			assert.NotContains(t, arg, "force")
-		}
+		assert.Contains(t, args, "--force=false")
+		assert.NotContains(t, args, "--force")
 	})
 }
 
