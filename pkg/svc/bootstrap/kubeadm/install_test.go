@@ -72,11 +72,42 @@ func TestRenderInstallDropsConfig(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.Len(t, install.Files, 1)
-	file := install.Files[0]
+	require.Len(t, install.Files, 2)
+	file := install.Files[1]
 	assert.Equal(t, kubeadmbootstrap.ConfigPath, file.Path)
 	assert.Equal(t, "0600", file.Permissions, "the config carries the token, so it is root-only")
 	assert.Equal(t, sampleConfig, file.Content, "the rendered config is carried verbatim")
+}
+
+// TestRenderInstallEnablesIPv4Forwarding pins the kernel prerequisite kubeadm's
+// preflight enforces: without net.ipv4.ip_forward = 1 on the node, `kubeadm
+// init` and `kubeadm join` refuse to run (ksail#7331). Every role drops the
+// persistent sysctl setting and applies it before any kubeadm command.
+func TestRenderInstallEnablesIPv4Forwarding(t *testing.T) {
+	t.Parallel()
+
+	for _, role := range []kubeadmbootstrap.Role{
+		kubeadmbootstrap.RoleServerInit,
+		kubeadmbootstrap.RoleServer,
+		kubeadmbootstrap.RoleAgent,
+	} {
+		install, err := kubeadmbootstrap.RenderInstall(kubeadmbootstrap.InstallConfig{
+			KubernetesVersion: "v1.31.0",
+			Role:              role,
+			Config:            sampleConfig,
+		})
+		require.NoError(t, err, "role %q", role)
+
+		require.NotEmpty(t, install.Files, "role %q", role)
+		sysctl := install.Files[0]
+		assert.Equal(t, kubeadmbootstrap.SysctlPath, sysctl.Path, "role %q", role)
+		assert.Equal(t, "0644", sysctl.Permissions, "role %q", role)
+		assert.Equal(t, "net.ipv4.ip_forward = 1\n", sysctl.Content, "role %q", role)
+
+		require.NotEmpty(t, install.Commands, "role %q", role)
+		assert.Equal(t, "sysctl -p "+kubeadmbootstrap.SysctlPath, install.Commands[0],
+			"role %q applies the setting before any kubeadm command", role)
+	}
 }
 
 func TestRenderInstallServerInitBootstrapsWithInit(t *testing.T) {
@@ -90,6 +121,7 @@ func TestRenderInstallServerInitBootstrapsWithInit(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{
+		"sysctl -p " + kubeadmbootstrap.SysctlPath,
 		"systemctl enable --now containerd",
 		"apt-mark hold kubelet kubeadm kubectl",
 		"kubeadm init --config " + kubeadmbootstrap.ConfigPath +

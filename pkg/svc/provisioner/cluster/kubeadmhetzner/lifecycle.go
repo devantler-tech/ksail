@@ -84,6 +84,14 @@ func nodeSpecsFrom(nodes []NodeUserData) []hetznerbase.NodeSpec {
 // satisfying [hetznerbase.CreateStrategy].
 func (p *Provisioner) RemoteKubeconfigPath() string { return remoteKubeconfigPath }
 
+// InitReadyPath reports the sentinel the first-boot bootstrap writes only once
+// `kubeadm init` succeeded. kubeadm writes admin.conf before its later phases
+// (wait-control-plane among them), so the kubeconfig alone does not prove the
+// control plane came up. Satisfies [hetznerbase.InitReadyPather].
+func (p *Provisioner) InitReadyPath() string { return kubeadmbootstrap.BootstrapSentinelPath }
+
+var _ hetznerbase.InitReadyPather = (*Provisioner)(nil)
+
 // DistroLabel labels the Vanilla × Hetzner distribution for the create flow's
 // error context, satisfying [hetznerbase.CreateStrategy].
 func (p *Provisioner) DistroLabel() string { return "Vanilla × Hetzner" }
