@@ -35,7 +35,7 @@ var ErrInvalidOutputFormat = errors.New("invalid output format")
 // clone, so the hint names the steps that declare the first one instead.
 const noEnvironmentsHint = "no environments declared; declare one by setting " +
 	"spec.workload.kustomizationFile to clusters/<name> in ksail.yaml, then " +
-	"scaffold its overlay with `ksail project env reconcile --experimental`"
+	"scaffold its overlay with `ksail project env reconcile`"
 
 // listEnvironmentsLongDesc is the long help text for `project env list`,
 // shared with the deprecated `project list-environments` delegate.
