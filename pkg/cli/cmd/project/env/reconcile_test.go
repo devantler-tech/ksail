@@ -50,15 +50,12 @@ func writeReconcileRepo(t *testing.T) string {
 	return repoRoot
 }
 
-// runReconcile executes the reconcile command standalone — with the
-// experimental gate satisfied, mirroring the rm precedent — and returns its
-// combined output and error. The disabled state is covered by
-// TestHandleReconcileRunE_ExperimentalDisabled.
+// runReconcile executes the reconcile command standalone, with no
+// --experimental opt-in, and returns its combined output and error.
 func runReconcile(t *testing.T) (string, error) {
 	t.Helper()
 
 	cmd := env.NewReconcileCmd()
-	cmd.Flags().Bool(flags.ExperimentalFlagName, true, "")
 
 	var out bytes.Buffer
 
@@ -71,25 +68,34 @@ func runReconcile(t *testing.T) (string, error) {
 	return out.String(), err
 }
 
+func TestNewReconcileCmd_IsStable(t *testing.T) {
+	t.Parallel()
+
+	cmd := env.NewReconcileCmd()
+
+	// A stable command is listed in help and tool-surface generation.
+	assert.False(t, cmd.Hidden, "env reconcile should not be hidden")
+	assert.NotContains(t, cmd.Long, "--experimental")
+}
+
 //nolint:paralleltest // uses t.Chdir to set the working directory
-func TestHandleReconcileRunE_ExperimentalDisabled(t *testing.T) {
+func TestHandleReconcileRunE_ExperimentalFlagIsHarmless(t *testing.T) {
 	repoRoot := writeReconcileRepo(t)
 	t.Chdir(repoRoot)
 
+	// Scripts written while the command was experimental still pass the
+	// global opt-in; it must keep working unchanged.
 	cmd := env.NewReconcileCmd()
+	cmd.Flags().Bool(flags.ExperimentalFlagName, false, "")
 
 	var out bytes.Buffer
 
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--" + flags.ExperimentalFlagName})
 
-	err := cmd.Execute()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "experimental")
-
-	// The gate refused before anything was generated.
-	_, statErr := os.Stat(filepath.Join(repoRoot, "k8s", "clusters", "staging"))
-	require.ErrorIs(t, statErr, os.ErrNotExist)
+	require.NoError(t, cmd.Execute())
+	assert.Contains(t, out.String(), "reconciled 1 missing environment overlay")
 }
 
 //nolint:paralleltest // uses t.Chdir to set the working directory
