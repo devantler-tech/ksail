@@ -216,3 +216,15 @@ func TestComposeJoiningNodesRequiresAdminKubeconfig(t *testing.T) {
 	)
 	require.ErrorIs(t, err, kubeadmhetzner.ErrInvalidAdminKubeconfig)
 }
+
+// TestInitReadyPathIsTheBootstrapSentinel pins that the Vanilla × Hetzner
+// bring-up waits for the kubeadm success sentinel rather than admin.conf alone:
+// kubeadm writes admin.conf before its wait-control-plane phase, so a failed
+// init could otherwise be reported as a running cluster.
+func TestInitReadyPathIsTheBootstrapSentinel(t *testing.T) {
+	t.Parallel()
+
+	var pather hetznerbase.InitReadyPather = &kubeadmhetzner.Provisioner{}
+
+	assert.Equal(t, "/var/lib/ksail/bootstrap-complete", pather.InitReadyPath())
+}

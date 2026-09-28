@@ -18,3 +18,7 @@ func (b *Base) DeleteConnectorKubeconfigForTest(ctx context.Context, clusterName
 func (b *Base) ConnectorSecretNameForTest(clusterName string) string {
 	return b.connectorSecretName(clusterName)
 }
+
+// BootstrapErrorLinePatternForTest exposes the pattern that selects kubeadm's
+// error lines from a node's bootstrap logs.
+const BootstrapErrorLinePatternForTest = bootstrapErrorLinePattern
