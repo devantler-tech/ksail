@@ -27,16 +27,16 @@ Choose **(c)**. KSail creates EKS clusters with direct EKS, EC2 and IAM SDK call
 
 Delivery is phased under #7116, with native creation and deletion behind the default-off `experimentalNativeProvisioning` flag until both are proven, then made the default, and only then is the eksctl client removed:
 
-| Phase | Issue |
-|---|---|
-| 0 | #7280 remove the unused upgrade shim and gate dependency licenses |
-| 2 | #7281 validate `eks.yaml` with eksctl's own `v1alpha5` types |
-| 3 | #7282 read clusters and node groups without the binary |
-| 4 | #7283 scale node groups without the binary |
-| 5 | #7284 create natively behind `experimentalNativeProvisioning` |
-| 5 | #7285 delete natively, including eksctl-created clusters |
-| 6 | #7286 make native the default |
-| 7 | #7287 remove the eksctl client |
+| Phase | Issue                                                             |
+|-------|-------------------------------------------------------------------|
+| 0     | #7280 remove the unused upgrade shim and gate dependency licenses |
+| 2     | #7281 validate `eks.yaml` with eksctl's own `v1alpha5` types      |
+| 3     | #7282 read clusters and node groups without the binary            |
+| 4     | #7283 scale node groups without the binary                        |
+| 5     | #7284 create natively behind `experimentalNativeProvisioning`     |
+| 5     | #7285 delete natively, including eksctl-created clusters          |
+| 6     | #7286 make native the default                                     |
+| 7     | #7287 remove the eksctl client                                    |
 
 ## Consequences
 
