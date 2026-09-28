@@ -9,7 +9,6 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/experimental"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	kustomizationgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/kustomization"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
@@ -36,7 +35,7 @@ add" to declare it, or "ksail project env rm --purge" semantics to remove it).
 
 Examples:
   # Print the plan and scaffold the missing overlays
-  ksail project env reconcile --experimental`
+  ksail project env reconcile`
 
 // NewReconcileCmd creates and returns the `project env reconcile` command.
 func NewReconcileCmd() *cobra.Command {
@@ -54,12 +53,7 @@ func NewReconcileCmd() *cobra.Command {
 		},
 	}
 
-	// env reconcile is a net-new, state-modifying (file-writing) command, so it
-	// ships behind the experimental gate per the repo's feature-flag-first
-	// convention (the visible-command carve-out covers only low-risk read-only
-	// additions like env list). Graduate by dropping this Guard call once the
-	// command has settled through a release.
-	return experimental.Guard(cmd)
+	return cmd
 }
 
 // HandleReconcileRunE handles the `project env reconcile` command. It resolves
