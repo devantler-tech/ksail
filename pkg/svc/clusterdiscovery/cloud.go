@@ -79,6 +79,8 @@ func (d *Discoverer) listOmni(ctx context.Context) ([]Cluster, error) {
 // listAWS lists EKS clusters. It skips silently unless AWS appears configured and the eksctl binary
 // is on PATH, so the common no-AWS case costs nothing and never emits a warning.
 func (d *Discoverer) listAWS(ctx context.Context) ([]Cluster, error) {
+	region := d.AWSRegion()
+
 	lister := d.AWS
 	if lister == nil {
 		if !d.awsConfigured() || !d.eksctlAvailable() {
@@ -98,7 +100,7 @@ func (d *Discoverer) listAWS(ctx context.Context) ([]Cluster, error) {
 
 		provider, err := awsprovider.NewProvider(
 			client,
-			d.AWSRegion(),
+			region,
 			providerOptions...,
 		)
 		if err != nil {
@@ -113,7 +115,12 @@ func (d *Discoverer) listAWS(ctx context.Context) ([]Cluster, error) {
 		return nil, fmt.Errorf("query EKS: %w", err)
 	}
 
-	return clustersWithDistribution(names, v1alpha1.DistributionEKS, v1alpha1.ProviderAWS), nil
+	clusters := clustersWithDistribution(names, v1alpha1.DistributionEKS, v1alpha1.ProviderAWS)
+	for i := range clusters {
+		clusters[i].Region = region
+	}
+
+	return clusters, nil
 }
 
 // listGCP lists GKE clusters. It skips silently unless GCP appears configured (a project plus

@@ -222,6 +222,35 @@ func TestEKSRecoveryDoesNotBorrowAnotherClustersAWSOptions(t *testing.T) {
 	require.ErrorIs(t, err, state.ErrEKSOwnershipStateNotFound)
 }
 
+// A named but unrelated project may define its own EKS region in eks.yaml while its custom
+// region variable is unset. Explicit recovery must select the target's canonical AWS_REGION
+// before standalone target validation inspects the borrowed config.
+func TestEKSRecoveryDiscardsNamedUnrelatedConfigBeforeValidation(t *testing.T) {
+	const name = "eks-recovery-other-project-region"
+
+	marker, eksctlPath := setupStandaloneEKSLifecycleFixture(t, name)
+	fixture := slices.DeleteFunc(
+		strings.Split(standaloneEKSEksctlFixture, "\n"),
+		func(line string) bool { return strings.HasPrefix(line, `[ -z "${KSAIL_`) },
+	)
+	writeExecutableFixture(t, eksctlPath, strings.Join(fixture, "\n"))
+	require.NoError(t, state.DeleteClusterState(name))
+	require.NoError(t, os.WriteFile("eks.yaml", []byte(standaloneEKSEksConfigFixture), 0o600))
+
+	t.Setenv("KSAIL_REGION", "")
+	t.Setenv("AWS_PROFILE", "")
+	t.Setenv("AWS_REGION", "ap-southeast-2")
+	t.Setenv("AWS_ACCESS_KEY_ID", "fixture-access")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "fixture-secret")
+	t.Setenv("AWS_SESSION_TOKEN", "fixture-session")
+
+	require.NoError(t, recoveryEKSCommand(t, name, true).Execute())
+	_, err := state.LoadEKSOwnershipState(name, "ap-southeast-2")
+	require.NoError(t, err)
+	assert.Contains(t, readStandaloneEKSCalls(t, marker),
+		"get cluster --name "+name+" --output json --region ap-southeast-2")
+}
+
 // TestEKSRecoveryNamelessConfigUsesExplicitAWSSelection ensures a loaded project with no EKS
 // identity cannot lend its credential aliases to an explicitly named recovery target.
 func TestEKSRecoveryNamelessConfigUsesExplicitAWSSelection(t *testing.T) {

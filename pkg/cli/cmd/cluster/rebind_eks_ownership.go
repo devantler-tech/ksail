@@ -59,6 +59,7 @@ and select the region with AWS_REGION or your AWS profile. It never deletes or s
 		TitleContent: "Rebind EKS ownership...",
 		Activity:     "binding immutable ownership for",
 		Success:      "EKS ownership identity rebound",
+		Prepare:      discardOtherClusterAWSOptions,
 		Guard: func(ctx context.Context, resolved *lifecycle.ResolvedClusterInfo) error {
 			if resolved.Provider != v1alpha1.ProviderAWS {
 				return fmt.Errorf(
@@ -155,8 +156,6 @@ func validateEKSRecoveryTarget(cmd *cobra.Command, resolved *lifecycle.ResolvedC
 		(!cmd.Flags().Changed("name") || !cmd.Flags().Changed("provider")) {
 		return errEKSRecoveryTargetRequired
 	}
-
-	discardOtherClusterAWSOptions(resolved)
 
 	return nil
 }

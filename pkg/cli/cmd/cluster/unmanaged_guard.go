@@ -585,6 +585,14 @@ func hasLocalKSailEKSTargetEvidence(resolved *lifecycle.ResolvedClusterInfo) boo
 			return false
 		}
 
+		if region := strings.TrimSpace(resolved.AWSRegion); region != "" {
+			// A region-qualified command can validate its exact record even when an unrelated
+			// sibling is unreadable. A name-only command still needs a complete listing.
+			_, ownershipErr := state.LoadEKSOwnershipState(resolved.ClusterName, region)
+
+			return ownershipErr == nil
+		}
+
 		_, ownershipErr := state.ListEKSOwnershipStates(resolved.ClusterName)
 
 		return ownershipErr == nil

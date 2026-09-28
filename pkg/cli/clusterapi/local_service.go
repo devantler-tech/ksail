@@ -532,6 +532,13 @@ func (s *Service) resolveCluster(
 ) (v1alpha1.Distribution, v1alpha1.Provider, bool, error) {
 	live := s.enumerate(ctx)
 	if cluster, ok := live[name]; ok {
+		if cluster.Distribution == v1alpha1.DistributionEKS {
+			err := confirmDiscoveredEKSRegion(name, cluster.Region)
+			if err != nil {
+				return "", "", false, err
+			}
+		}
+
 		return cluster.Distribution, cluster.Provider, true, nil
 	}
 
@@ -565,6 +572,33 @@ func (s *Service) resolveCluster(
 	}
 
 	return "", "", false, nil
+}
+
+// confirmDiscoveredEKSRegion binds a name-only web action to the region of the row it found.
+// Otherwise a same-named cluster discovered in another region can silently redirect the action
+// to the sole locally recorded target. An unknown region or ambiguous local records also refuse.
+func confirmDiscoveredEKSRegion(name, region string) error {
+	if region == "" {
+		return fmt.Errorf(
+			"%w: cannot identify discovered region for EKS cluster %q", api.ErrInvalid, name,
+		)
+	}
+
+	ownerships, err := state.ListEKSOwnershipStates(name)
+	if err != nil {
+		return fmt.Errorf("%w: read EKS ownership regions for %q: %w", api.ErrInvalid, name, err)
+	}
+
+	if len(ownerships) != 1 || ownerships[0].Region != region {
+		return fmt.Errorf(
+			"%w: discovered EKS cluster %q in region %q does not match its unambiguous local ownership region",
+			api.ErrInvalid,
+			name,
+			region,
+		)
+	}
+
+	return nil
 }
 
 // dockerFactory adapts the Service's provisioner factory to the discovery DockerFactory shape,
