@@ -91,16 +91,22 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 	}
 
 	// The refreshed Secret alone only fixes newly provisioned nodes; existing
-	// autoscaler nodes are not KSail-owned, so the in-place rolling apply and
-	// rolling reboot never touch them. Bring them to the new baseline only when
-	// the Secret actually changed. A no-op when nothing changed.
-	if !changed {
+	// autoscaler nodes are not KSail-owned, so the static-node update never
+	// touches them. A same-version image roll may have refreshed this Secret
+	// before the regular update computed its diff. Even if the Secret is now
+	// unchanged, a classified reboot/recreate change must still reach those
+	// nodes; the earlier unclassified pass could only apply NO_REBOOT.
+	if !shouldPropagateAutoscalerBaseline(changed, diff) {
 		return nil
 	}
 
 	imageChanged := prevImageID != "" && prevImageID != strconv.FormatInt(snapshotImageID, 10)
 
 	return p.propagateAutoscalerBaseline(ctx, clusterName, diff, imageChanged, result)
+}
+
+func shouldPropagateAutoscalerBaseline(changed bool, diff *clusterupdate.UpdateResult) bool {
+	return changed || autoscalerRecycleRequired(diff, false) || autoscalerRebootRequired(diff)
 }
 
 // propagateAutoscalerBaseline brings existing autoscaler nodes to the refreshed
