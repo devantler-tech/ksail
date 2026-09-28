@@ -341,6 +341,50 @@ func TestChildValidationThroughIsolatedAPI(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // changes the working directory and lifecycle factories
+func TestChildValidationUsesConfiguredKyvernoDefaultAndExplicitOverride(t *testing.T) {
+	for _, testCase := range []struct {
+		name          string
+		override      string
+		wantViolation bool
+	}{
+		{name: "configured Kyverno is enforced", wantViolation: true},
+		{name: "explicit false disables Kyverno", override: "--kyverno-policies=false"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			fake := &fakeEphemeralProvisioner{}
+			backend := installEphemeralProvisioner(t, fake, nil)
+			server := httptest.NewServer(childAPI(t, "kyverno"))
+			t.Cleanup(server.Close)
+			installChildAPI(t, backend, server.URL)
+
+			root, schemaPath := childSource(t)
+			writePolicyEngineConfig(t, "Kyverno")
+			args := []string{
+				root, "--ephemeral", "--ephemeral-children",
+				"--ephemeral-observation-wait", "1ms", "--schema-location", schemaPath,
+			}
+			if testCase.override != "" {
+				args = append(args, testCase.override)
+			}
+
+			cmd := workload.NewValidateCmd()
+			cmd.SetArgs(args)
+			err := cmd.ExecuteContext(t.Context())
+			if testCase.wantViolation {
+				require.ErrorIs(t, err, workload.ErrKyvernoPolicyViolation)
+				require.ErrorContains(t, err, "observed-child")
+			} else {
+				require.NoError(t, err)
+			}
+
+			assert.Equal(t, fake.created, fake.deleted)
+			assert.Equal(t, 1, backend.cleaned)
+			assert.NoDirExists(t, backend.workspace)
+		})
+	}
+}
+
 func submittedChildRoot(t *testing.T, request *http.Request) *unstructured.Unstructured {
 	t.Helper()
 

@@ -108,7 +108,7 @@ func runValidateWithChildren(
 				Args:    []any{len(children), flags.children.wait},
 			})
 
-			err = validator.validate(ctx, cmd, plan, children, flags.kyvernoPolicies)
+			err = validator.validate(ctx, cmd, plan, children, validator.kyvernoPolicies)
 			if err != nil {
 				return fmt.Errorf("validate operator-generated children: %w", err)
 			}
@@ -124,8 +124,9 @@ func runValidateWithChildren(
 }
 
 type observedValidator struct {
-	opts   *kubeconform.ValidationOptions
-	engine *celrules.Engine
+	opts            *kubeconform.ValidationOptions
+	engine          *celrules.Engine
+	kyvernoPolicies bool
 }
 
 // Prepare source-derived schema and rule context before provisioning or waiting.
@@ -152,7 +153,11 @@ func prepareObservedValidator(
 		return nil, nil, err
 	}
 
-	return &observedValidator{opts: opts, engine: engine}, cleanup, nil
+	return &observedValidator{
+		opts:            opts,
+		engine:          engine,
+		kyvernoPolicies: resolveKyvernoPolicies(cfg, found, loadErr, flags),
+	}, cleanup, nil
 }
 
 func (v *observedValidator) validate(
