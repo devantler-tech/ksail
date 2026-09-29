@@ -308,17 +308,26 @@ runs:
           check_volume="ecr-public-cache-check-$GITHUB_RUN_ID"
           check_container="ecr-public-cache-check-$GITHUB_RUN_ID"
           trap 'docker rm -f "$check_container" >/dev/null 2>&1 || true; docker volume rm -f "$check_volume" >/dev/null 2>&1 || true' EXIT
-          docker volume create "$check_volume" >/dev/null || return 1
+          docker volume create "$check_volume" >/dev/null || {
+            echo "ECR cache check: volume setup failed" >&2
+            return 1
+          }
           docker run --rm \
             -v "$check_volume":/volume \
             -v /tmp/mirror-cache:/backup:ro \
             mirror.gcr.io/library/busybox:1.37 \
-            sh -c "cd /volume && tar -xf /backup/ecr-public.aws.com.tar" >/dev/null || return 1
+            sh -c "cd /volume && tar -xf /backup/ecr-public.aws.com.tar" >/dev/null || {
+              echo "ECR cache check: archive extraction failed" >&2
+              return 1
+            }
           docker run -d \
             --name "$check_container" \
             -p 5504:5000 \
             -v "$check_volume":/var/lib/registry \
-            registry:3 >/dev/null || return 1
+            registry:3 >/dev/null || {
+              echo "ECR cache check: registry startup failed" >&2
+              return 1
+            }
           ready=false
           for _ in $(seq 1 30); do
             if curl -fsS http://localhost:5504/v2/ >/dev/null 2>&1; then
@@ -327,11 +336,17 @@ runs:
             fi
             sleep 1
           done
-          [ "$ready" = true ] || return 1
+          [ "$ready" = true ] || {
+            echo "ECR cache check: registry readiness timed out" >&2
+            return 1
+          }
           while IFS= read -r image; do
             [ -n "$image" ] || continue
             mirror_ref="localhost:5504/${image#ecr-public.aws.com/}"
-            docker pull --quiet "$mirror_ref" >/dev/null 2>&1 || return 1
+            docker pull --quiet "$mirror_ref" >/dev/null 2>&1 || {
+              echo "ECR cache check: image pull failed" >&2
+              return 1
+            }
             docker rmi "$mirror_ref" >/dev/null 2>&1 || true
           done < <(grep '^ecr-public\.aws\.com/' /tmp/all-images.txt || true)
         )

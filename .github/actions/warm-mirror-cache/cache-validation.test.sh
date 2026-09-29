@@ -55,6 +55,10 @@ if ! grep -q '^pull .*redis:8.6.4-alpine' "$fixture/docker-calls"; then
 	echo "FAIL: the restored mirror was not checked through the consumer pull path" >&2
 	exit 1
 fi
+if ! grep -q 'ECR cache check: image pull failed' "$fixture/log"; then
+	echo "FAIL: the failed consumer pull did not identify its stage" >&2
+	exit 1
+fi
 if grep -q 'REGISTRY_PROXY_REMOTEURL' "$fixture/docker-calls"; then
 	echo "FAIL: validation allowed a remote registry fallback" >&2
 	exit 1
