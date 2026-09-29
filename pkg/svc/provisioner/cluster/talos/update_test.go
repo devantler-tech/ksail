@@ -822,41 +822,8 @@ func TestEnsureAutoscalerSecretIfNeeded_RejectsUnreadableImageBaseline(t *testin
 		{"absent Secret is a new baseline", http.StatusNotFound, nil, false},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			var baselineReads atomic.Int32
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				switch r.URL.Path {
-				case "/api/v1/namespaces/kube-system/secrets/hcloud":
-					_, _ = w.Write(hcloudSecret)
-				case "/api/v1/namespaces/kube-system/secrets/cluster-autoscaler-config":
-					baselineReads.Add(1)
-					w.WriteHeader(testCase.status)
-					_, _ = w.Write(testCase.response)
-				default:
-					t.Errorf("unexpected Kubernetes request: %s %s", r.Method, r.URL.Path)
-					http.NotFound(w, r)
-				}
-			}))
-			defer server.Close()
-
-			kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
-			kubeconfig := fmt.Sprintf(`apiVersion: v1
-kind: Config
-clusters:
-- name: test
-  cluster:
-    server: %s
-contexts:
-- name: test
-  context:
-    cluster: test
-    user: test
-current-context: test
-users:
-- name: test
-  user: {}
-`, server.URL)
-			require.NoError(t, os.WriteFile(kubeconfigPath, []byte(kubeconfig), 0o600))
+			server, baselineReads := autoscalerBaselineServer(t, hcloudSecret, testCase.status, testCase.response)
+			kubeconfigPath := autoscalerBaselineKubeconfig(t, server.URL)
 
 			configs, configErr := talosconfigmanager.NewDefaultConfigs()
 			require.NoError(t, configErr)
@@ -881,6 +848,59 @@ users:
 			assert.EqualValues(t, 1, baselineReads.Load())
 		})
 	}
+}
+
+func autoscalerBaselineServer(
+	t *testing.T,
+	hcloudSecret []byte,
+	status int,
+	response []byte,
+) (*httptest.Server, *atomic.Int32) {
+	t.Helper()
+
+	baselineReads := &atomic.Int32{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/namespaces/kube-system/secrets/hcloud":
+			_, _ = w.Write(hcloudSecret)
+		case "/api/v1/namespaces/kube-system/secrets/cluster-autoscaler-config":
+			baselineReads.Add(1)
+			w.WriteHeader(status)
+			_, _ = w.Write(response)
+		default:
+			t.Errorf("unexpected Kubernetes request: %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	return server, baselineReads
+}
+
+func autoscalerBaselineKubeconfig(t *testing.T, serverURL string) string {
+	t.Helper()
+
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+	kubeconfig := fmt.Sprintf(`apiVersion: v1
+kind: Config
+clusters:
+- name: test
+  cluster:
+    server: %s
+contexts:
+- name: test
+  context:
+    cluster: test
+    user: test
+current-context: test
+users:
+- name: test
+  user: {}
+`, serverURL)
+	require.NoError(t, os.WriteFile(kubeconfigPath, []byte(kubeconfig), 0o600))
+
+	return kubeconfigPath
 }
 
 //nolint:funlen // Table-driven test with multiple node topology scenarios is clearer as single function
