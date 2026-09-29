@@ -34,20 +34,20 @@ chmod +x "$fixture/bin/docker" "$fixture/bin/ksail"
 offline_url="http:"'//172.17.0.1:5505'
 
 if [ ! -f "$subject" ]; then
-  echo 'FAIL: offline ECR consumer verifier is missing' >&2
-  exit 1
+	echo 'FAIL: offline ECR consumer verifier is missing' >&2
+	exit 1
 fi
 
 PATH="$fixture/bin:$PATH" FAKE_READY_REPLICAS=1 \
-  bash "$subject" "$offline_url" >"$fixture/good-log"
+	bash "$subject" "$offline_url" >"$fixture/good-log"
 grep -Fq 'Argo CD Redis is ready with local-only ECR fallback' "$fixture/good-log"
 
 for invalid in 0 unknown; do
-  if PATH="$fixture/bin:$PATH" FAKE_READY_REPLICAS="$invalid" \
-    bash "$subject" "$offline_url" >"$fixture/bad-log" 2>&1; then
-    echo "FAIL: readiness value '$invalid' was accepted" >&2
-    exit 1
-  fi
+	if PATH="$fixture/bin:$PATH" FAKE_READY_REPLICAS="$invalid" \
+		bash "$subject" "$offline_url" >"$fixture/bad-log" 2>&1; then
+		echo "FAIL: readiness value '$invalid' was accepted" >&2
+		exit 1
+	fi
 done
 
 echo 'PASS: offline ECR consumer gate requires a ready Redis deployment'
