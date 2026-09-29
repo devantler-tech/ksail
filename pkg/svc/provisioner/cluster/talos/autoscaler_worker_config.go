@@ -249,7 +249,7 @@ func buildClusterConfigSecretValue(
 func snapshotImageIDFromSecret(secret *corev1.Secret) (string, error) {
 	raw := secret.Data[clusterautoscalerinstaller.AutoscalerConfigHcloudClusterConfigKey]
 	if len(raw) == 0 {
-		return "", fmt.Errorf("autoscaler cluster config is missing")
+		return "", ErrAutoscalerClusterConfigMissing
 	}
 
 	jsonBytes, err := base64.StdEncoding.DecodeString(string(raw))
@@ -258,12 +258,13 @@ func snapshotImageIDFromSecret(secret *corev1.Secret) (string, error) {
 	}
 
 	var clusterConfig hcloudClusterConfig
-	if err := json.Unmarshal(jsonBytes, &clusterConfig); err != nil {
+	err = json.Unmarshal(jsonBytes, &clusterConfig)
+	if err != nil {
 		return "", fmt.Errorf("parsing autoscaler cluster config: %w", err)
 	}
 
 	if clusterConfig.ImagesForArch.Amd64 == "" {
-		return "", fmt.Errorf("autoscaler cluster config has no amd64 image")
+		return "", ErrAutoscalerAMD64ImageMissing
 	}
 
 	return clusterConfig.ImagesForArch.Amd64, nil

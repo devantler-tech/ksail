@@ -99,6 +99,12 @@ var (
 	// ErrHcloudTokenNotSet is returned when the Hetzner Cloud API token environment
 	// variable is not set but is required for autoscaler secret creation.
 	ErrHcloudTokenNotSet = errors.New("hcloud API token environment variable is not set")
+	// ErrAutoscalerClusterConfigMissing is returned when the existing autoscaler
+	// Secret does not contain its cluster configuration.
+	ErrAutoscalerClusterConfigMissing = errors.New("autoscaler cluster config is missing")
+	// ErrAutoscalerAMD64ImageMissing is returned when the existing autoscaler
+	// configuration has no amd64 snapshot image to compare against.
+	ErrAutoscalerAMD64ImageMissing = errors.New("autoscaler cluster config has no amd64 image")
 	// ErrAutoscalerUserDataTooLarge is returned when the gzip-compressed,
 	// base64-encoded autoscaler worker config still exceeds Hetzner's 32 KiB
 	// user_data limit. Hetzner would otherwise reject every scale-up with

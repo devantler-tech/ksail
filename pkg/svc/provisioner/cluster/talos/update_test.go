@@ -821,32 +821,29 @@ func TestEnsureAutoscalerSecretIfNeeded_RejectsUnreadableImageBaseline(t *testin
 		{"malformed existing Secret", http.StatusOK, malformedSecret, true},
 		{"absent Secret is a new baseline", http.StatusNotFound, nil, false},
 	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			server, baselineReads := autoscalerBaselineServer(t, hcloudSecret, testCase.status, testCase.response)
-			kubeconfigPath := autoscalerBaselineKubeconfig(t, server.URL)
+		server, baselineReads := autoscalerBaselineServer(t, hcloudSecret, testCase.status, testCase.response)
+		kubeconfigPath := autoscalerBaselineKubeconfig(t, server.URL)
 
-			configs, configErr := talosconfigmanager.NewDefaultConfigs()
-			require.NoError(t, configErr)
-			provisioner := talosprovisioner.NewProvisioner(
-				nil, talosprovisioner.NewOptions().WithKubeconfigPath(kubeconfigPath),
-			).
-				WithHetznerOptions(v1alpha1.OptionsHetzner{
-					NodeAutoscalerEnabled: true,
-					NetworkName:           "test-network",
-				}).
-				WithTalosOptsForTest(&v1alpha1.OptionsTalos{SchematicID: "test-schematic-id"}).
-				WithTalosConfigsForTest(configs).
-				WithLogWriter(io.Discard)
+		configs, configErr := talosconfigmanager.NewDefaultConfigs()
+		require.NoError(t, configErr, testCase.name)
+		provisioner := talosprovisioner.NewProvisioner(
+			nil, talosprovisioner.NewOptions().WithKubeconfigPath(kubeconfigPath),
+		).
+			WithHetznerOptions(v1alpha1.OptionsHetzner{
+				NodeAutoscalerEnabled: true,
+				NetworkName:           "test-network",
+			}).
+			WithTalosOptsForTest(&v1alpha1.OptionsTalos{SchematicID: "test-schematic-id"}).
+			WithTalosConfigsForTest(configs).
+			WithLogWriter(io.Discard)
 
-			updateErr := provisioner.EnsureAutoscalerSecretIfNeededForTest(t.Context(), "test-cluster")
-			if testCase.wantErr {
-				require.Error(t, updateErr)
-				assert.ErrorContains(t, updateErr, "autoscaler snapshot")
-			} else {
-				require.NoError(t, updateErr)
-			}
-			assert.EqualValues(t, 1, baselineReads.Load())
-		})
+		updateErr := provisioner.EnsureAutoscalerSecretIfNeededForTest(t.Context(), "test-cluster")
+		if testCase.wantErr {
+			require.ErrorContains(t, updateErr, "autoscaler snapshot", testCase.name)
+		} else {
+			require.NoError(t, updateErr, testCase.name)
+		}
+		assert.EqualValues(t, 1, baselineReads.Load(), testCase.name)
 	}
 }
 
@@ -859,18 +856,18 @@ func autoscalerBaselineServer(
 	t.Helper()
 
 	baselineReads := &atomic.Int32{}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+	server := httptest.NewServer(http.HandlerFunc(func(responseWriter http.ResponseWriter, r *http.Request) {
+		responseWriter.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/v1/namespaces/kube-system/secrets/hcloud":
-			_, _ = w.Write(hcloudSecret)
+			_, _ = responseWriter.Write(hcloudSecret)
 		case "/api/v1/namespaces/kube-system/secrets/cluster-autoscaler-config":
 			baselineReads.Add(1)
-			w.WriteHeader(status)
-			_, _ = w.Write(response)
+			responseWriter.WriteHeader(status)
+			_, _ = responseWriter.Write(response)
 		default:
 			t.Errorf("unexpected Kubernetes request: %s %s", r.Method, r.URL.Path)
-			http.NotFound(w, r)
+			http.NotFound(responseWriter, r)
 		}
 	}))
 	t.Cleanup(server.Close)
