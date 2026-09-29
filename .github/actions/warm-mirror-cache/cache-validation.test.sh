@@ -4,9 +4,9 @@ set -euo pipefail
 
 action_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
 restore_step=$(sed -n '/^    - name: 📥 Restore mirror cache$/,/^    - name: 📥 Restore KWOK control plane cache$/p' "$action_dir/action.yaml")
-if ! grep -Fq "key: \${{ steps.generate-key.outputs.cache-key }}-repair-" <<< "$restore_step" ||
-   ! grep -Fxq "          \${{ steps.generate-key.outputs.cache-key }}" <<< "$restore_step" ||
-   grep -Fq "mirror-cache-\${{ inputs.cache-version }}-m7-" <<< "$restore_step"; then
+if ! grep -Fq "key: \${{ steps.generate-key.outputs.cache-key }}-repair-" <<<"$restore_step" ||
+	! grep -Fxq "          \${{ steps.generate-key.outputs.cache-key }}" <<<"$restore_step" ||
+	grep -Fq "mirror-cache-\${{ inputs.cache-version }}-m7-" <<<"$restore_step"; then
 	echo 'FAIL: cache restore must prefer repaired keys and stay within the exact image set' >&2
 	exit 1
 fi
