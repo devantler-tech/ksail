@@ -22,6 +22,25 @@ snapshot=$(mktemp "$config_dir/ksail-config-XXXXXX")
 candidate=$(mktemp "$config_dir/ksail-mirrors-XXXXXX")
 trap 'rm -f "$snapshot" "$candidate"' EXIT
 containerd config dump > "$snapshot"
+has_registry_hosts_path() {
+  awk '
+    /^[[:space:]]*\[/ {
+      registry = ($0 ~ /io[.]containerd[.]cri[.]v1[.]images.*[.]registry\]$/ ||
+                  $0 ~ /io[.]containerd[.]grpc[.]v1[.]cri.*[.]registry\]$/)
+    }
+    registry && /^[[:space:]]*config_path[[:space:]]*=/ {
+      value = $0
+      sub(/^[^=]*=[[:space:]]*/, "", value)
+      sub(/[[:space:]]*$/, "", value)
+      if (value ~ /^["\047].*["\047]$/) value = substr(value, 2, length(value) - 2)
+      count = split(value, paths, ":")
+      for (i = 1; i <= count; i++) {
+        if (paths[i] == "/etc/containerd/certs.d") found = 1
+      }
+    }
+    END { if (!found) exit 1 }
+  ' "$1"
+}
 awk '
   /^[[:space:]]*\[/ {
     registry = ($0 ~ /io[.]containerd[.]cri[.]v1[.]images.*[.]registry\]$/ ||
@@ -29,8 +48,18 @@ awk '
   }
   registry && /^[[:space:]]*config_path[[:space:]]*=/ {
     found = 1
-    if ($0 !~ /["\047]\/etc\/containerd\/certs[.]d["\047][[:space:]]*$/) {
-      sub(/=.*/, "= \"/etc/containerd/certs.d\"")
+    value = $0
+    sub(/^[^=]*=[[:space:]]*/, "", value)
+    sub(/[[:space:]]*$/, "", value)
+    if (value ~ /^["\047].*["\047]$/) value = substr(value, 2, length(value) - 2)
+    count = split(value, paths, ":")
+    has_hosts = 0
+    for (i = 1; i <= count; i++) {
+      if (paths[i] == "/etc/containerd/certs.d") has_hosts = 1
+    }
+    if (!has_hosts) {
+      if (value != "") value = value ":"
+      sub(/=.*/, "= \"" value "/etc/containerd/certs.d\"")
     }
   }
   { print }
@@ -39,10 +68,15 @@ awk '
 if cmp -s "$snapshot" "$candidate"; then
   exit 0
 fi
-chmod 0644 "$candidate"
+chmod 0600 "$candidate"
 mv "$candidate" "$config_dir/config.toml"
 systemctl restart containerd
-systemctl is-active --quiet containerd`
+systemctl is-active --quiet containerd
+containerd config dump > "$snapshot"
+if ! has_registry_hosts_path "$snapshot"; then
+  echo 'containerd effective registry configuration lacks the mirror hosts path' >&2
+  exit 1
+fi`
 
 // ConfigureContainerdRegistryMirrors injects hosts.toml files directly into VCluster
 // nodes to configure containerd to use the local registry mirrors. This is called after
@@ -121,13 +155,19 @@ func enableRegistryHostsOnNode(
 
 	var stderr bytes.Buffer
 
-	_, _ = stdcopy.StdCopy(io.Discard, &stderr, response.Reader)
+	_, copyErr := stdcopy.StdCopy(io.Discard, &stderr, response.Reader)
+	if copyErr != nil {
+		return fmt.Errorf("read containerd configuration exec: %w", copyErr)
+	}
 
 	result, err := dockerClient.ContainerExecInspect(ctx, execID.ID)
 	if err != nil {
 		return fmt.Errorf("inspect containerd configuration exec: %w", err)
 	}
 
+	if result.Running {
+		return fmt.Errorf("%w: containerd configuration exec still running", registry.ErrExecFailed)
+	}
 	if result.ExitCode != 0 {
 		return fmt.Errorf(
 			"%w with exit code %d: %s",

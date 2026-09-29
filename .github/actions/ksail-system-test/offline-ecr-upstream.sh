@@ -17,6 +17,7 @@ start)
 	container="ksail-ecr-offline-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 	url="http://${gateway}:5505"
 	docker run -d --name "$container" -p "${gateway}:5505:5000" registry:3 >/dev/null
+	trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
 
 	ready=false
 	for _ in $(seq 1 30); do
@@ -27,12 +28,12 @@ start)
 		sleep 1
 	done
 	if [ "$ready" != true ]; then
-		docker rm -f "$container" >/dev/null 2>&1 || true
 		echo 'Empty ECR fallback registry did not become ready' >&2
 		exit 1
 	fi
 
 	printf 'remote-url=%s\ncontainer-name=%s\n' "$url" "$container" >>"$GITHUB_OUTPUT"
+	trap - EXIT
 	;;
 stop)
 	container=${2:-}

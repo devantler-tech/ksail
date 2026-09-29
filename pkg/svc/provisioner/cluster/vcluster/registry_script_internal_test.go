@@ -45,22 +45,7 @@ func TestEnableContainerdRegistryHosts_ConfiguresCRIOnce(t *testing.T) {
 
 	systemctlLog := filepath.Join(tempDir, "systemctl.log")
 	run := func() {
-		command := exec.CommandContext(
-			t.Context(),
-			"sh",
-			"-c",
-			containerdRegistryCommandStubs+enableContainerdRegistryHosts,
-			"ksail",
-			".",
-		)
-		command.Dir = configDir
-		command.Env = append(os.Environ(),
-			"KSAIL_TEST_CONFIG_DIR="+configDir,
-			"KSAIL_TEST_FIXTURE="+fixturePath,
-			"KSAIL_TEST_SYSTEMCTL_LOG="+systemctlLog,
-		)
-		output, err := command.CombinedOutput()
-		require.NoError(t, err, string(output))
+		runContainerdRegistryHosts(t, configDir, fixturePath, systemctlLog)
 	}
 
 	run()
@@ -83,4 +68,45 @@ func TestEnableContainerdRegistryHosts_ConfiguresCRIOnce(t *testing.T) {
 		"restart containerd\nis-active --quiet containerd",
 		strings.TrimSpace(string(restarts)),
 	)
+}
+
+func TestEnableContainerdRegistryHosts_PreservesExistingPathAndMode(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	configDir := filepath.Join(tempDir, "containerd")
+	require.NoError(t, os.Mkdir(configDir, 0o750))
+	fixturePath := filepath.Join(tempDir, "original.toml")
+	fixture := strings.Replace(containerdRegistryFixture, "config_path = ''", "config_path = '/opt/existing-certs'", 1)
+	require.NoError(t, os.WriteFile(fixturePath, []byte(fixture), 0o600))
+	configPath := filepath.Join(configDir, "config.toml")
+	require.NoError(t, os.WriteFile(configPath, []byte(fixture), 0o600))
+
+	systemctlLog := filepath.Join(tempDir, "systemctl.log")
+	runContainerdRegistryHosts(t, configDir, fixturePath, systemctlLog)
+	runContainerdRegistryHosts(t, configDir, fixturePath, systemctlLog)
+	configured, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	require.Contains(t, string(configured), "config_path = \"/opt/existing-certs:/etc/containerd/certs.d\"")
+	info, err := os.Stat(configPath)
+	require.NoError(t, err)
+	require.Equal(t, fs.FileMode(0o600), info.Mode().Perm())
+	restarts, err := os.ReadFile(systemctlLog)
+	require.NoError(t, err)
+	require.Equal(t, "restart containerd\nis-active --quiet containerd", strings.TrimSpace(string(restarts)))
+}
+
+func runContainerdRegistryHosts(t *testing.T, configDir, fixturePath, systemctlLog string) {
+	t.Helper()
+	command := exec.CommandContext(
+		t.Context(), "sh", "-c", containerdRegistryCommandStubs+enableContainerdRegistryHosts, "ksail", ".",
+	)
+	command.Dir = configDir
+	command.Env = append(os.Environ(),
+		"KSAIL_TEST_CONFIG_DIR="+configDir,
+		"KSAIL_TEST_FIXTURE="+fixturePath,
+		"KSAIL_TEST_SYSTEMCTL_LOG="+systemctlLog,
+	)
+	output, err := command.CombinedOutput()
+	require.NoError(t, err, string(output))
 }

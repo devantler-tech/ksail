@@ -82,4 +82,17 @@ PATH="$fixture/bin:$PATH" FAKE_DOCKER_STATE="$fixture/docker-state" \
 	exit 1
 }
 
+# A failed output handoff must also release the bound port and container.
+mkdir "$fixture/output-dir"
+if PATH="$fixture/bin:$PATH" FAKE_DOCKER_STATE="$fixture/docker-state" \
+	GITHUB_OUTPUT="$fixture/output-dir" GITHUB_RUN_ID=17 GITHUB_RUN_ATTEMPT=2 \
+	bash "$subject" start >"$fixture/failed-start.log" 2>&1; then
+	echo 'FAIL: an unwritable output handoff was accepted' >&2
+	exit 1
+fi
+[ ! -e "$fixture/docker-state" ] || {
+	echo 'FAIL: the empty registry survived a failed output handoff' >&2
+	exit 1
+}
+
 echo 'PASS: offline ECR fallback uses a reachable empty local registry'

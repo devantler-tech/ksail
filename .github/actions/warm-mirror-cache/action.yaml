@@ -270,9 +270,12 @@ runs:
       uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
       with:
         path: /tmp/mirror-cache
-        key: ${{ steps.generate-key.outputs.cache-key }}
+        # Repair archives take priority over an immutable invalid primary key.
+        # Keep both lookups bound to this exact image-list hash: an archive for a
+        # different list may have all five tar names but lack required images.
+        key: ${{ steps.generate-key.outputs.cache-key }}-repair-
         restore-keys: |
-          mirror-cache-${{ inputs.cache-version }}-m7-
+          ${{ steps.generate-key.outputs.cache-key }}
 
     - name: 📥 Restore KWOK control plane cache
       id: restore-kwok-cache
