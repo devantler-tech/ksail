@@ -25,7 +25,7 @@ case "$1" in
       printf '[plugins."io.containerd.cri.v1.images".registry]\n  config_path = "%s"\n' "$FAKE_CONFIG_PATH"
     else
       [ "$3 $4 $5 $6" = 'crictl info -o json' ]
-      printf '{"config":{"registry":{"configPath":"%s"}}}\n' "$FAKE_CRI_PATH"
+      printf '{"status":{"conditions":[{"type":"RuntimeReady","status":%s}]},"config":{"containerd":{}}}\n' "$FAKE_CRI_READY"
     fi
     ;;
   logs)
@@ -52,13 +52,13 @@ if [ ! -f "$subject" ]; then
 fi
 
 PATH="$fixture/bin:$PATH" FAKE_READY_REPLICAS=1 \
-	FAKE_CONFIG_PATH=/etc/containerd/certs.d FAKE_CRI_PATH=/etc/containerd/certs.d FAKE_MIRROR_REQUESTS=1 \
+	FAKE_CONFIG_PATH=/etc/containerd/certs.d FAKE_CRI_READY=true FAKE_MIRROR_REQUESTS=1 \
 	bash "$subject" "$offline_url" >"$fixture/good-log"
 grep -Fq 'Argo CD Redis is ready through the restored ECR mirror with local-only fallback' "$fixture/good-log"
 
 for invalid in 0 unknown; do
 	if PATH="$fixture/bin:$PATH" FAKE_READY_REPLICAS="$invalid" \
-		FAKE_CONFIG_PATH=/etc/containerd/certs.d FAKE_CRI_PATH=/etc/containerd/certs.d FAKE_MIRROR_REQUESTS=1 \
+		FAKE_CONFIG_PATH=/etc/containerd/certs.d FAKE_CRI_READY=true FAKE_MIRROR_REQUESTS=1 \
 		bash "$subject" "$offline_url" >"$fixture/bad-log" 2>&1; then
 		echo "FAIL: readiness value '$invalid' was accepted" >&2
 		exit 1
@@ -66,22 +66,22 @@ for invalid in 0 unknown; do
 done
 
 if PATH="$fixture/bin:$PATH" FAKE_READY_REPLICAS=1 \
-	FAKE_CONFIG_PATH=/opt/unrelated-certs FAKE_CRI_PATH=/etc/containerd/certs.d FAKE_MIRROR_REQUESTS=1 \
+	FAKE_CONFIG_PATH=/opt/unrelated-certs FAKE_CRI_READY=true FAKE_MIRROR_REQUESTS=1 \
 	bash "$subject" "$offline_url" >"$fixture/bad-config-log" 2>&1; then
 	echo 'FAIL: a missing effective CRI registry path was accepted' >&2
 	exit 1
 fi
 if PATH="$fixture/bin:$PATH" FAKE_READY_REPLICAS=1 \
-	FAKE_CONFIG_PATH=/etc/containerd/certs.d FAKE_CRI_PATH=/opt/unrelated-certs FAKE_MIRROR_REQUESTS=1 \
+	FAKE_CONFIG_PATH=/etc/containerd/certs.d FAKE_CRI_READY=false FAKE_MIRROR_REQUESTS=1 \
 	bash "$subject" "$offline_url" >"$fixture/bad-cri-log" 2>&1; then
-	echo 'FAIL: a missing live CRI registry path was accepted' >&2
+	echo 'FAIL: an unready CRI runtime was accepted' >&2
 	exit 1
 fi
 if PATH="$fixture/bin:$PATH" FAKE_READY_REPLICAS=1 \
-	FAKE_CONFIG_PATH=/etc/containerd/certs.d FAKE_CRI_PATH=/etc/containerd/certs.d FAKE_MIRROR_REQUESTS=0 \
+	FAKE_CONFIG_PATH=/etc/containerd/certs.d FAKE_CRI_READY=true FAKE_MIRROR_REQUESTS=0 \
 	bash "$subject" "$offline_url" >"$fixture/no-mirror-log" 2>&1; then
 	echo 'FAIL: Redis readiness without a mirror request was accepted' >&2
 	exit 1
 fi
 
-echo 'PASS: offline ECR consumer gate requires CRI routing, a mirror request, and ready Redis'
+echo 'PASS: offline ECR consumer gate requires effective routing, CRI readiness, a mirror request, and ready Redis'
