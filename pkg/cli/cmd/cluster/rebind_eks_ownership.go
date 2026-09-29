@@ -138,11 +138,8 @@ and select the region with AWS_REGION or your AWS profile. It never deletes or s
 // validateEKSRecoveryTarget permits explicit recovery without prior local intent, while keeping
 // unreadable state and another distribution's same-named state from being overwritten or hidden.
 func validateEKSRecoveryTarget(cmd *cobra.Command, resolved *lifecycle.ResolvedClusterInfo) error {
-	if cmd.Flags().Changed("name") {
-		name, err := cmd.Flags().GetString("name")
-		if err != nil || strings.TrimSpace(name) == "" {
-			return errEKSRecoveryTargetRequired
-		}
+	if err := validateExplicitEKSRecoveryName(cmd); err != nil {
+		return err
 	}
 
 	spec, err := state.LoadClusterSpec(resolved.ClusterName)
@@ -162,6 +159,19 @@ func validateEKSRecoveryTarget(cmd *cobra.Command, resolved *lifecycle.ResolvedC
 
 	if !hasLocalKSailEKSTargetEvidence(resolved) &&
 		(!cmd.Flags().Changed("name") || !cmd.Flags().Changed("provider")) {
+		return errEKSRecoveryTargetRequired
+	}
+
+	return nil
+}
+
+func validateExplicitEKSRecoveryName(cmd *cobra.Command) error {
+	if !cmd.Flags().Changed("name") {
+		return nil
+	}
+
+	name, err := cmd.Flags().GetString("name")
+	if err != nil || strings.TrimSpace(name) == "" {
 		return errEKSRecoveryTargetRequired
 	}
 
