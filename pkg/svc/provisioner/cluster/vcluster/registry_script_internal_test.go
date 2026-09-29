@@ -37,15 +37,19 @@ else
   cat "$KSAIL_TEST_FIXTURE"
 fi
 `
-	require.NoError(t, os.WriteFile(filepath.Join(binDir, "containerd"), []byte(containerd), 0o500))
+	containerdPath := filepath.Join(binDir, "containerd")
+	require.NoError(t, os.WriteFile(containerdPath, []byte(containerd), 0o600))
+	require.NoError(t, os.Chmod(containerdPath, 0o500))
 	systemctlLog := filepath.Join(tempDir, "systemctl.log")
 	systemctl := `#!/bin/sh
 echo "$*" >> "$KSAIL_TEST_SYSTEMCTL_LOG"
 `
-	require.NoError(t, os.WriteFile(filepath.Join(binDir, "systemctl"), []byte(systemctl), 0o500))
+	systemctlPath := filepath.Join(binDir, "systemctl")
+	require.NoError(t, os.WriteFile(systemctlPath, []byte(systemctl), 0o600))
+	require.NoError(t, os.Chmod(systemctlPath, 0o500))
 
 	run := func() {
-		command := exec.Command("sh", "-c", enableContainerdRegistryHosts, "ksail", ".")
+		command := exec.CommandContext(t.Context(), "sh", "-c", enableContainerdRegistryHosts, "ksail", ".")
 		command.Dir = configDir
 		command.Env = append(os.Environ(),
 			"PATH="+binDir+":"+os.Getenv("PATH"),
