@@ -21,6 +21,40 @@ if ! docker exec "$node" grep -Fxq "server = \"$upstream\"" \
 	exit 1
 fi
 
+effective=$(docker exec "$node" containerd config dump)
+if ! awk '
+  /^[[:space:]]*\[/ {
+    registry = ($0 ~ /io[.]containerd[.]cri[.]v1[.]images.*[.]registry\]$/ ||
+                $0 ~ /io[.]containerd[.]grpc[.]v1[.]cri.*[.]registry\]$/)
+  }
+  registry && /^[[:space:]]*config_path[[:space:]]*=/ {
+    value = $0
+    sub(/^[^=]*=[[:space:]]*/, "", value)
+    gsub(/["\047]/, "", value)
+    count = split(value, paths, ":")
+    for (i = 1; i <= count; i++) {
+      if (paths[i] == "/etc/containerd/certs.d") found = 1
+    }
+  }
+  END { if (!found) exit 1 }
+' <<<"$effective"; then
+	echo 'VCluster CRI does not use the mirror hosts directory' >&2
+	exit 1
+fi
+
+cri_path=$(docker exec "$node" crictl info -o json |
+	jq -er '.config.registry.configPath // .config.registry.config_path // empty') || {
+	echo 'VCluster CRI registry path is unavailable' >&2
+	exit 1
+}
+case ":$cri_path:" in
+*:/etc/containerd/certs.d:*) ;;
+*)
+	echo 'VCluster CRI does not use the mirror hosts directory' >&2
+	exit 1
+	;;
+esac
+
 ready=$(ksail workload get deployment argocd-redis -n argocd \
 	-o jsonpath='{.status.readyReplicas}')
 if [[ ! "$ready" =~ ^[1-9][0-9]*$ ]]; then
@@ -28,4 +62,15 @@ if [[ ! "$ready" =~ ^[1-9][0-9]*$ ]]; then
 	exit 1
 fi
 
-echo 'Argo CD Redis is ready with local-only ECR fallback'
+mirror="vcluster-${node#vcluster.cp.}-ecr-public.aws.com"
+mirror_log=$(docker logs "$mirror" 2>&1) || {
+	echo 'VCluster ECR mirror logs are unavailable' >&2
+	exit 1
+}
+if ! grep -E 'http[.]request[.]method=GET.*http[.]request[.]uri="?/v2/[^[:space:]"]*redis/(manifests|blobs)/' <<<"$mirror_log" |
+	grep -Eq 'http[.]response[.]status=200'; then
+	echo 'No successful Redis request was observed at the restored ECR mirror' >&2
+	exit 1
+fi
+
+echo 'Argo CD Redis is ready through the restored ECR mirror with local-only fallback'

@@ -24,21 +24,20 @@ trap 'rm -f "$snapshot" "$candidate"' EXIT
 containerd config dump > "$snapshot"
 has_registry_hosts_path() {
   awk '
-    /^[[:space:]]*\[/ {
-      registry = ($0 ~ /io[.]containerd[.]cri[.]v1[.]images.*[.]registry\]$/ ||
-                  $0 ~ /io[.]containerd[.]grpc[.]v1[.]cri.*[.]registry\]$/)
+    /^\[plugins[.]/ {
+      registry = ($0 ~ /cri[.]v1[.]images.*[.]registry\]$/ ||
+                  $0 ~ /grpc[.]v1[.]cri.*[.]registry\]$/)
+      next
     }
-    registry && /^[[:space:]]*config_path[[:space:]]*=/ {
-      value = $0
-      sub(/^[^=]*=[[:space:]]*/, "", value)
-      sub(/[[:space:]]*$/, "", value)
-      if (value ~ /^["\047].*["\047]$/) value = substr(value, 2, length(value) - 2)
-      count = split(value, paths, ":")
-      for (i = 1; i <= count; i++) {
-        if (paths[i] == "/etc/containerd/certs.d") found = 1
-      }
+    /^\[/ { registry = 0 }
+    registry && /config_path[[:space:]]*=/ {
+      path = $0
+      sub(/^[^=]*=/, "", path)
+      gsub(/["\047[:space:]]/, "", path)
+      n = split(path, parts, ":")
+      for (i = 1; i <= n; i++) found = found || parts[i] == "/etc/containerd/certs.d"
     }
-    END { if (!found) exit 1 }
+    END { exit !found }
   ' "$1"
 }
 awk '
