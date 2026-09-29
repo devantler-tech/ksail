@@ -80,7 +80,10 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 
 	// Read the snapshot image existing nodes booted from before the Secret is
 	// overwritten, so a Talos OS bump (new boot image) can be detected below.
-	prevImageID := p.currentAutoscalerSnapshotImageID(ctx)
+	prevImageID, err := p.currentAutoscalerSnapshotImageID(ctx)
+	if err != nil {
+		return fmt.Errorf("reading autoscaler snapshot baseline: %w", err)
+	}
 
 	// Restart the autoscaler when the config changed so it reloads the new
 	// Kubernetes version / snapshot baked into the Secret (read as env vars,

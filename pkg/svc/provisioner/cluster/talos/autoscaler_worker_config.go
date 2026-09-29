@@ -244,43 +244,48 @@ func buildClusterConfigSecretValue(
 // in a cluster-autoscaler-config Secret's HCLOUD_CLUSTER_CONFIG value. It is used
 // to detect a Talos OS bump (a new boot image) across an update: a changed image
 // ID means existing autoscaler nodes booted from an older snapshot and can only
-// adopt the new one by being replaced. It returns "" when the key is absent or
-// the value cannot be decoded, so callers treat an unreadable baseline as "no
-// detectable image change" rather than forcing a disruptive recycle.
-func snapshotImageIDFromSecret(secret *corev1.Secret) string {
+// adopt the new one by being replaced. An existing but unreadable baseline is an
+// error: treating it as unchanged could report success while nodes retain the old image.
+func snapshotImageIDFromSecret(secret *corev1.Secret) (string, error) {
 	raw := secret.Data[clusterautoscalerinstaller.AutoscalerConfigHcloudClusterConfigKey]
 	if len(raw) == 0 {
-		return ""
+		return "", fmt.Errorf("autoscaler cluster config is missing")
 	}
 
 	jsonBytes, err := base64.StdEncoding.DecodeString(string(raw))
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("decoding autoscaler cluster config: %w", err)
 	}
 
 	var clusterConfig hcloudClusterConfig
-	if json.Unmarshal(jsonBytes, &clusterConfig) != nil {
-		return ""
+	if err := json.Unmarshal(jsonBytes, &clusterConfig); err != nil {
+		return "", fmt.Errorf("parsing autoscaler cluster config: %w", err)
 	}
 
-	return clusterConfig.ImagesForArch.Amd64
+	if clusterConfig.ImagesForArch.Amd64 == "" {
+		return "", fmt.Errorf("autoscaler cluster config has no amd64 image")
+	}
+
+	return clusterConfig.ImagesForArch.Amd64, nil
 }
 
 // currentAutoscalerSnapshotImageID returns the amd64 snapshot image ID currently
-// recorded in the cluster-autoscaler-config Secret, or "" when the Secret is
-// absent or unreadable. It is best-effort: an empty result simply means no boot
-// image change can be detected, so the caller falls back to the diff-based gate.
-func (p *Provisioner) currentAutoscalerSnapshotImageID(ctx context.Context) string {
+// recorded in the cluster-autoscaler-config Secret. Only a missing Secret means
+// no prior baseline; read and decode failures must stop the update.
+func (p *Provisioner) currentAutoscalerSnapshotImageID(ctx context.Context) (string, error) {
 	kubeclient, err := p.newSecretKubeclient("autoscaler snapshot probe")
 	if err != nil {
-		return ""
+		return "", err
 	}
 
 	secret, err := kubeclient.CoreV1().
 		Secrets(autoscalerConfigSecretNamespace).
 		Get(ctx, autoscalerConfigSecretName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return "", nil
+	}
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("getting autoscaler snapshot Secret: %w", err)
 	}
 
 	return snapshotImageIDFromSecret(secret)

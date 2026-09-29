@@ -662,13 +662,13 @@ func (p *Provisioner) RunUpdateApplyStepForTest(
 }
 
 // SnapshotImageIDFromSecretForTest exposes snapshotImageIDFromSecret for unit testing.
-func SnapshotImageIDFromSecretForTest(secret *corev1.Secret) string {
+func SnapshotImageIDFromSecretForTest(secret *corev1.Secret) (string, error) {
 	return snapshotImageIDFromSecret(secret)
 }
 
 // CurrentAutoscalerSnapshotImageIDForTest exposes currentAutoscalerSnapshotImageID
 // for unit testing.
-func (p *Provisioner) CurrentAutoscalerSnapshotImageIDForTest(ctx context.Context) string {
+func (p *Provisioner) CurrentAutoscalerSnapshotImageIDForTest(ctx context.Context) (string, error) {
 	return p.currentAutoscalerSnapshotImageID(ctx)
 }
 
