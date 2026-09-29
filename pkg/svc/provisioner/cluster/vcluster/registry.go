@@ -1,6 +1,7 @@
 package vclusterprovisioner
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -9,7 +10,39 @@ import (
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/pkg/stdcopy"
 )
+
+// VCluster's containerd 2.x image service does not read certs.d when its CRI
+// registry config_path is empty. Keep the node's effective configuration, set
+// that path, and restart containerd before workloads are installed.
+const enableContainerdRegistryHosts = `set -eu
+config_dir=${1:?containerd configuration directory is required}
+snapshot=$(mktemp "$config_dir/ksail-config-XXXXXX")
+candidate=$(mktemp "$config_dir/ksail-mirrors-XXXXXX")
+trap 'rm -f "$snapshot" "$candidate"' EXIT
+containerd config dump > "$snapshot"
+awk '
+  /^[[:space:]]*\[/ {
+    registry = ($0 ~ /io[.]containerd[.]cri[.]v1[.]images.*[.]registry\]$/ ||
+                $0 ~ /io[.]containerd[.]grpc[.]v1[.]cri.*[.]registry\]$/)
+  }
+  registry && /^[[:space:]]*config_path[[:space:]]*=/ {
+    found = 1
+    if ($0 !~ /["\047]\/etc\/containerd\/certs[.]d["\047][[:space:]]*$/) {
+      sub(/=.*/, "= \"/etc/containerd/certs.d\"")
+    }
+  }
+  { print }
+  END { if (!found) exit 1 }
+' "$snapshot" > "$candidate"
+if cmp -s "$snapshot" "$candidate"; then
+  exit 0
+fi
+chmod 0644 "$candidate"
+mv "$candidate" "$config_dir/config.toml"
+systemctl restart containerd
+systemctl is-active --quiet containerd`
 
 // ConfigureContainerdRegistryMirrors injects hosts.toml files directly into VCluster
 // nodes to configure containerd to use the local registry mirrors. This is called after
@@ -48,6 +81,45 @@ func ConfigureContainerdRegistryMirrors(
 	)
 	if err != nil {
 		return fmt.Errorf("failed to inject hosts.toml into vcluster nodes: %w", err)
+	}
+	for _, node := range nodes {
+		if err := enableRegistryHostsOnNode(ctx, dockerClient, node); err != nil {
+			return fmt.Errorf("failed to enable registry hosts on vcluster node %s: %w", node, err)
+		}
+	}
+
+	return nil
+}
+
+func enableRegistryHostsOnNode(
+	ctx context.Context,
+	dockerClient dockerclient.Client,
+	node string,
+) error {
+	execID, err := dockerClient.ContainerExecCreate(ctx, node, container.ExecOptions{
+		Cmd:          []string{"sh", "-c", enableContainerdRegistryHosts, "ksail", "/etc/containerd"},
+		AttachStdout: true,
+		AttachStderr: true,
+	})
+	if err != nil {
+		return fmt.Errorf("create containerd configuration exec: %w", err)
+	}
+
+	response, err := dockerClient.ContainerExecAttach(ctx, execID.ID, container.ExecStartOptions{})
+	if err != nil {
+		return fmt.Errorf("attach containerd configuration exec: %w", err)
+	}
+	defer response.Close()
+
+	var stderr bytes.Buffer
+	_, _ = stdcopy.StdCopy(io.Discard, &stderr, response.Reader)
+
+	result, err := dockerClient.ContainerExecInspect(ctx, execID.ID)
+	if err != nil {
+		return fmt.Errorf("inspect containerd configuration exec: %w", err)
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("%w with exit code %d: %s", registry.ErrExecFailed, result.ExitCode, stderr.String())
 	}
 
 	return nil
