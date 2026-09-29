@@ -118,15 +118,7 @@ func (d *Discoverer) listAWS(ctx context.Context) ([]Cluster, error) {
 			return nil, fmt.Errorf("query EKS: %w", err)
 		}
 
-		clusters := make([]Cluster, 0, len(summaries))
-		for _, summary := range summaries {
-			clusters = append(clusters, Cluster{
-				Name: summary.Name, Distribution: v1alpha1.DistributionEKS,
-				Provider: v1alpha1.ProviderAWS, Region: summary.Region,
-			})
-		}
-
-		return clusters, nil
+		return clustersFromEKSSummaries(summaries), nil
 	}
 
 	names, err := lister.ListAllClusters(ctx)
@@ -140,6 +132,18 @@ func (d *Discoverer) listAWS(ctx context.Context) ([]Cluster, error) {
 	}
 
 	return clusters, nil
+}
+
+func clustersFromEKSSummaries(summaries []eksctlclient.ClusterSummary) []Cluster {
+	clusters := make([]Cluster, 0, len(summaries))
+	for _, summary := range summaries {
+		clusters = append(clusters, Cluster{
+			Name: summary.Name, Distribution: v1alpha1.DistributionEKS,
+			Provider: v1alpha1.ProviderAWS, Region: summary.Region,
+		})
+	}
+
+	return clusters
 }
 
 // listGCP lists GKE clusters. It skips silently unless GCP appears configured (a project plus
