@@ -16,66 +16,7 @@ import (
 // VCluster's containerd 2.x image service does not read certs.d when its CRI
 // registry config_path is empty. Keep the node's effective configuration, set
 // that path, and restart containerd before workloads are installed.
-const enableContainerdRegistryHosts = `set -eu
-config_dir=${1:?containerd configuration directory is required}
-snapshot=$(mktemp "$config_dir/ksail-config-XXXXXX")
-candidate=$(mktemp "$config_dir/ksail-mirrors-XXXXXX")
-trap 'rm -f "$snapshot" "$candidate"' EXIT
-containerd config dump > "$snapshot"
-has_registry_hosts_path() {
-  awk '
-    /^[[:space:]]*\[plugins[.]/ {
-      registry = ($0 ~ /cri[.]v1[.]images.*[.]registry\]$/ ||
-                  $0 ~ /grpc[.]v1[.]cri.*[.]registry\]$/)
-      next
-    }
-    /^\[/ { registry = 0 }
-    registry && /config_path[[:space:]]*=/ {
-      path = $0
-      sub(/^[^=]*=/, "", path)
-      gsub(/["\047[:space:]]/, "", path)
-      n = split(path, parts, ":")
-      for (i = 1; i <= n; i++) found = found || parts[i] == "/etc/containerd/certs.d"
-    }
-    END { exit !found }
-  ' "$1"
-}
-awk '
-  /^[[:space:]]*\[/ {
-    registry = ($0 ~ /io[.]containerd[.]cri[.]v1[.]images.*[.]registry\]$/ ||
-                $0 ~ /io[.]containerd[.]grpc[.]v1[.]cri.*[.]registry\]$/)
-  }
-  registry && /^[[:space:]]*config_path[[:space:]]*=/ {
-    found = 1
-    value = $0
-    sub(/^[^=]*=[[:space:]]*/, "", value)
-    sub(/[[:space:]]*$/, "", value)
-    if (value ~ /^["\047].*["\047]$/) value = substr(value, 2, length(value) - 2)
-    count = split(value, paths, ":")
-    has_hosts = 0
-    for (i = 1; i <= count; i++) {
-      if (paths[i] == "/etc/containerd/certs.d") has_hosts = 1
-    }
-    if (!has_hosts) {
-      if (value != "") value = value ":"
-      sub(/=.*/, "= \"" value "/etc/containerd/certs.d\"")
-    }
-  }
-  { print }
-  END { if (!found) exit 1 }
-' "$snapshot" > "$candidate"
-if cmp -s "$snapshot" "$candidate"; then
-  exit 0
-fi
-chmod 0600 "$candidate"
-mv "$candidate" "$config_dir/config.toml"
-systemctl restart containerd
-systemctl is-active --quiet containerd
-containerd config dump > "$snapshot"
-if ! has_registry_hosts_path "$snapshot"; then
-  echo 'containerd effective registry configuration lacks the mirror hosts path' >&2
-  exit 1
-fi`
+const enableContainerdRegistryHosts = "set -eu\nconfig_dir=${1:?containerd configuration directory is required}\nsnapshot=$(mktemp \"$config_dir/ksail-config-XXXXXX\")\ncandidate=$(mktemp \"$config_dir/ksail-mirrors-XXXXXX\")\ntrap 'rm -f \"$snapshot\" \"$candidate\"' EXIT\ncontainerd config dump > \"$snapshot\"\nhas_registry_hosts_path() {\n  awk '\n    /^[[:space:]]*\\[plugins[.]/ {\n      registry = ($0 ~ /cri[.]v1[.]images.*[.]registry\\]$/ ||\n                  $0 ~ /grpc[.]v1[.]cri.*[.]registry\\]$/)\n      next\n    }\n    /^\\[/ { registry = 0 }\n    registry && /config_path[[:space:]]*=/ {\n      path = $0\n      sub(/^[^=]*=/, \"\", path)\n      gsub(/[\"\\047[:space:]]/, \"\", path)\n      n = split(path, parts, \":\")\n      for (i = 1; i <= n; i++) found = found || parts[i] == \"/etc/containerd/certs.d\"\n    }\n    END { exit !found }\n  ' \"$1\"\n}\nawk '\n  /^[[:space:]]*\\[/ {\n    registry = ($0 ~ /io[.]containerd[.]cri[.]v1[.]images.*[.]registry\\]$/ ||\n                $0 ~ /io[.]containerd[.]grpc[.]v1[.]cri.*[.]registry\\]$/)\n  }\n  registry && /^[[:space:]]*config_path[[:space:]]*=/ {\n    found = 1\n    value = $0\n    sub(/^[^=]*=[[:space:]]*/, \"\", value)\n    sub(/[[:space:]]*$/, \"\", value)\n    if (value ~ /^[\"\\047].*[\"\\047]$/) value = substr(value, 2, length(value) - 2)\n    count = split(value, paths, \":\")\n    has_hosts = 0\n    for (i = 1; i <= count; i++) {\n      if (paths[i] == \"/etc/containerd/certs.d\") has_hosts = 1\n    }\n    if (!has_hosts) {\n      if (value != \"\") value = value \":\"\n      sub(/=.*/, \"= \\\"\" value \"/etc/containerd/certs.d\\\"\")\n    }\n  { print }\n  END { if (!found) exit 1 }\n' \"$snapshot\" > \"$candidate\"\nif cmp -s \"$snapshot\" \"$candidate\"; then\n  exit 0\nfi\nchmod 0600 \"$candidate\"\nmv \"$candidate\" \"$config_dir/config.toml\"\nsystemctl restart containerd\nsystemctl is-active --quiet containerd\nconfig dump > \"$snapshot\"\nif ! has_registry_hosts_path \"$snapshot\"; then\n  echo 'containerd effective registry configuration lacks the mirror hosts path' >&2\n  exit 1\nfi"
 
 // ConfigureContainerdRegistryMirrors injects hosts.toml files directly into VCluster
 // nodes to configure containerd to use the local registry mirrors. This is called after
@@ -167,6 +108,7 @@ func enableRegistryHostsOnNode(
 	if result.Running {
 		return fmt.Errorf("%w: containerd configuration exec still running", registry.ErrExecFailed)
 	}
+
 	if result.ExitCode != 0 {
 		return fmt.Errorf(
 			"%w with exit code %d: %s",

@@ -25,10 +25,14 @@ func TestEnableRegistryHostsOnNodeRejectsRunningExec(t *testing.T) {
 	client := dockerclient.NewMockAPIClient(t)
 	client.On("ContainerExecCreate", ctx, "node", testifymock.Anything).
 		Return(container.ExecCreateResponse{ID: "exec-id"}, nil).Once()
+
 	connection, peer := net.Pipe()
+
 	defer func() { require.NoError(t, peer.Close()) }()
+
 	client.On("ContainerExecAttach", ctx, "exec-id", testifymock.Anything).
-		Return(types.HijackedResponse{Reader: bufio.NewReader(strings.NewReader("")), Conn: connection}, nil).Once()
+		Return(types.HijackedResponse{Reader: bufio.NewReader(strings.NewReader("")), Conn: connection}, nil).
+		Once()
 	client.On("ContainerExecInspect", ctx, "exec-id").
 		Return(container.ExecInspect{Running: true, ExitCode: 0}, nil).Once()
 
@@ -43,13 +47,19 @@ func TestEnableRegistryHostsOnNodeRejectsBrokenStream(t *testing.T) {
 	client := dockerclient.NewMockAPIClient(t)
 	client.On("ContainerExecCreate", ctx, "node", testifymock.Anything).
 		Return(container.ExecCreateResponse{ID: "exec-id"}, nil).Once()
+
 	reader, writer := io.Pipe()
 	require.NoError(t, writer.CloseWithError(errBrokenExecStream))
+
 	defer func() { require.NoError(t, reader.Close()) }()
+
 	connection, peer := net.Pipe()
+
 	defer func() { require.NoError(t, peer.Close()) }()
+
 	client.On("ContainerExecAttach", ctx, "exec-id", testifymock.Anything).
-		Return(types.HijackedResponse{Reader: bufio.NewReader(reader), Conn: connection}, nil).Once()
+		Return(types.HijackedResponse{Reader: bufio.NewReader(reader), Conn: connection}, nil).
+		Once()
 	client.On("ContainerExecInspect", ctx, "exec-id").
 		Return(container.ExecInspect{ExitCode: 0}, nil).Maybe()
 

@@ -76,6 +76,7 @@ func TestEnableContainerdRegistryHosts_IndentedEffectiveRegistrySection(t *testi
 	tempDir := t.TempDir()
 	configDir := filepath.Join(tempDir, "containerd")
 	require.NoError(t, os.Mkdir(configDir, 0o750))
+
 	fixture := strings.Replace(
 		containerdRegistryFixture,
 		"[plugins.'io.containerd.cri.v1.images'.registry]",
@@ -94,9 +95,16 @@ func TestEnableContainerdRegistryHosts_PreservesExistingPathAndMode(t *testing.T
 	tempDir := t.TempDir()
 	configDir := filepath.Join(tempDir, "containerd")
 	require.NoError(t, os.Mkdir(configDir, 0o750))
+
 	fixturePath := filepath.Join(tempDir, "original.toml")
-	fixture := strings.Replace(containerdRegistryFixture, "config_path = ''", "config_path = '/opt/existing-certs'", 1)
+	fixture := strings.Replace(
+		containerdRegistryFixture,
+		"config_path = ''",
+		"config_path = '/opt/existing-certs'",
+		1,
+	)
 	require.NoError(t, os.WriteFile(fixturePath, []byte(fixture), 0o600))
+
 	configPath := filepath.Join(configDir, "config.toml")
 	require.NoError(t, os.WriteFile(configPath, []byte(fixture), 0o600))
 
@@ -105,19 +113,34 @@ func TestEnableContainerdRegistryHosts_PreservesExistingPathAndMode(t *testing.T
 	runContainerdRegistryHosts(t, configDir, fixturePath, systemctlLog)
 	configured, err := fs.ReadFile(os.DirFS(configDir), "config.toml")
 	require.NoError(t, err)
-	require.Contains(t, string(configured), "config_path = \"/opt/existing-certs:/etc/containerd/certs.d\"")
+	require.Contains(
+		t,
+		string(configured),
+		"config_path = \"/opt/existing-certs:/etc/containerd/certs.d\"",
+	)
+
 	info, err := os.Stat(configPath)
 	require.NoError(t, err)
 	require.Equal(t, fs.FileMode(0o600), info.Mode().Perm())
+
 	restarts, err := fs.ReadFile(os.DirFS(tempDir), "systemctl.log")
 	require.NoError(t, err)
-	require.Equal(t, "restart containerd\nis-active --quiet containerd", strings.TrimSpace(string(restarts)))
+	require.Equal(
+		t,
+		"restart containerd\nis-active --quiet containerd",
+		strings.TrimSpace(string(restarts)),
+	)
 }
 
 func runContainerdRegistryHosts(t *testing.T, configDir, fixturePath, systemctlLog string) {
 	t.Helper()
 	command := exec.CommandContext(
-		t.Context(), "sh", "-c", containerdRegistryCommandStubs+enableContainerdRegistryHosts, "ksail", ".",
+		t.Context(),
+		"sh",
+		"-c",
+		containerdRegistryCommandStubs+enableContainerdRegistryHosts,
+		"ksail",
+		".",
 	)
 	command.Dir = configDir
 	command.Env = append(os.Environ(),
