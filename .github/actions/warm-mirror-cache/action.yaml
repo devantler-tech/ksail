@@ -651,7 +651,8 @@ runs:
         # registry so this check follows the system-test proxy path while a
         # missing manifest or blob cannot be fetched from ECR Public.
         docker rm -f ecr-public.aws.com-mirror > /dev/null
-        docker run -d --name ecr-public-empty-upstream --network ksail-mirrors -p 127.0.0.1:5505:5000 registry:3 > /dev/null
+        validation_upstream=ecr-public-empty-upstream
+        docker run -d --name "$validation_upstream" --network ksail-mirrors -p 127.0.0.1:5505:5000 registry:3 > /dev/null
         UPSTREAM_READY=false
         for _ in $(seq 1 30); do
           if curl -fsS http://localhost:5505/v2/ > /dev/null 2>&1; then
@@ -662,14 +663,14 @@ runs:
         done
         if [ "$UPSTREAM_READY" != true ]; then
           echo "❌ Empty ECR validation upstream never became ready"
-          docker logs --tail 40 ecr-public-empty-upstream 2>&1 || true
+          docker logs --tail 40 "$validation_upstream" 2>&1 || true
           exit 1
         fi
         docker run -d \
           --name ecr-public.aws.com-mirror \
           --network ksail-mirrors \
           -p 5004:5000 \
-          -e REGISTRY_PROXY_REMOTEURL=http://ecr-public-empty-upstream:5000 \
+          -e REGISTRY_PROXY_REMOTEURL="http://$validation_upstream:5000" \
           -v ecr-public.aws.com:/var/lib/registry \
           registry:3 > /dev/null
         PROXY_READY=false
