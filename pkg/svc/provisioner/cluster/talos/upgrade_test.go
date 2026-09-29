@@ -3,7 +3,9 @@ package talosprovisioner_test
 import (
 	"context"
 	"io"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
@@ -80,6 +82,39 @@ func TestUpgradeDistributionSyncsAutoscalerBaselineFromRunningControlPlane(t *te
 		runningCA,
 		provisioner.TalosConfigsForTest().ControlPlane().RawV1Alpha1().ClusterConfig.ClusterCA.Crt,
 	)
+}
+
+// A same-version image change must still visit each node. A missing Talos API
+// response is an error, rather than evidence that the requested image is installed.
+func TestUpgradeDistributionSameVersionChecksNodeImage(t *testing.T) {
+	t.Setenv(v1alpha1.DefaultHetznerTokenEnvVar, "")
+
+	configs, err := talosconfigmanager.NewDefaultConfigs()
+	require.NoError(t, err)
+
+	serverJSON := strings.Replace(
+		fipUpdateControlPlaneServerJSON, "203.0.113.5", "127.0.0.1", 1,
+	)
+	server := fipUpdateTestServerWithServers(t, false, &fipUpdateCalls{}, serverJSON)
+	running := runningWithHostname(t, talosprovisioner.RoleControlPlane, "fip-cluster-cp-0")
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{}).
+		WithTalosOptions(v1alpha1.OptionsTalos{
+			SchematicID: "test-schematic-id", Version: "v1.13.10",
+		}).
+		WithInfraProvider(newFipUpdateProvider(server.URL)).
+		WithNodeConfigFetcherForTest(func(context.Context, string) (talosconfig.Provider, error) {
+			return running, nil
+		}).
+		WithTalosAPIRetryConfig(1, time.Millisecond, time.Millisecond).
+		WithLogWriter(io.Discard)
+	withUnreachableEndpointProbe(provisioner)
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+
+	err = provisioner.UpgradeDistribution(ctx, "fip-cluster", "v1.13.10", "v1.13.10")
+	require.ErrorContains(t, err, "checking image before drain on 127.0.0.1")
 }
 
 // TestSupportsLifecycleUpgradeAPI verifies that the upgrade path dispatch picks
