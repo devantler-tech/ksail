@@ -42,8 +42,17 @@ if ! awk '
 	exit 1
 fi
 
-cri_path=$(docker exec "$node" crictl info -o json |
-	jq -er '.config.registry.configPath // .config.registry.config_path // empty') || {
+if ! cri_info=$(docker exec "$node" crictl info -o json 2>/dev/null); then
+	echo 'VCluster CRI info command failed' >&2
+	exit 1
+fi
+cri_path=$(jq -er '.config.registry.configPath // .config.registry.config_path // empty' <<<"$cri_info") || {
+	# Report only JSON field names. CRI info can contain registry and runtime details
+	# that must not be copied into a public CI log.
+	jq -r '["CRI info fields: " + (keys_unsorted | join(",")),
+	        "CRI config fields: " + ((.config // {}) | keys_unsorted | join(",")),
+	        "CRI registry fields: " + ((.config.registry // {}) | keys_unsorted | join(","))] | .[]' \
+		<<<"$cri_info" >&2 || true
 	echo 'VCluster CRI registry path is unavailable' >&2
 	exit 1
 }
