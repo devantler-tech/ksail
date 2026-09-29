@@ -916,8 +916,12 @@ func ExportCheckAutoscalerValuesDrift(
 	diff *clusterupdate.UpdateResult,
 ) {
 	checkAutoscalerValuesDrift(
-		cmd, ctx,
-		specdiff.NewEngine(ctx.ClusterCfg.Spec.Cluster.Distribution, ctx.ClusterCfg.Spec.Cluster.Provider),
+		cmd,
+		ctx,
+		specdiff.NewEngine(
+			ctx.ClusterCfg.Spec.Cluster.Distribution,
+			ctx.ClusterCfg.Spec.Cluster.Provider,
+		),
 		diff,
 	)
 }
