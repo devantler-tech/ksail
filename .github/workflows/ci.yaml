@@ -1619,7 +1619,7 @@ jobs:
 
       - name: 📥 Pre-pull registry image for offline ECR check
         if: ${{ matrix.ecr-public-offline == 'true' }}
-        uses: ./.github/actions/pull-registry-image
+        run: bash .github/actions/pull-registry-image/pull-registry-image.sh
 
       - name: 🚫 Start empty ECR Public fallback
         id: offline-ecr
