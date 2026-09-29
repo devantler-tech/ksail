@@ -3,6 +3,7 @@ package clusterautoscalerinstaller
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -125,6 +126,18 @@ func (i *Installer) ValuesDrifted(ctx context.Context) (bool, error) {
 	}
 
 	if !exists {
+		return false, nil
+	}
+
+	// A GitOps-owned release is not KSail's to upgrade: Install skips it, so
+	// reporting drift would claim a reconcile that never happens and resurface
+	// on every update.
+	labels, err := i.client.GetReleaseStorageLabels(ctx, ReleaseName, namespace)
+	if err != nil && !errors.Is(err, helm.ErrNoReleaseStorage) {
+		return false, fmt.Errorf("clusterautoscaler: check release ownership: %w", err)
+	}
+
+	if _, managed := helmutil.IsGitOpsManaged(labels); managed {
 		return false, nil
 	}
 

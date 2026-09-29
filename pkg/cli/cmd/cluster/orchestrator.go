@@ -1392,7 +1392,14 @@ func checkAutoscalerValuesDrift(
 		return
 	}
 
-	inst, err := factories.ClusterAutoscaler(ctx.ClusterCfg)
+	// Pin the probe to the context the other drift probes resolve. Without it
+	// the Helm client falls back to the kubeconfig's current-context, and the
+	// check would read (and schedule an upgrade from) whatever cluster that
+	// points at.
+	probeCfg := *ctx.ClusterCfg
+	probeCfg.Spec.Cluster.Connection.Context = resolveKubeContext(ctx)
+
+	inst, err := factories.ClusterAutoscaler(&probeCfg)
 	if err != nil {
 		notify.Warningf(cmd.ErrOrStderr(),
 			"Cannot build the cluster-autoscaler installer for values drift detection: %v", err)

@@ -15,6 +15,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
+	specdiff "github.com/devantler-tech/ksail/v7/pkg/svc/diff"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	awsprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/aws"
@@ -906,4 +907,17 @@ var ErrEKSUpgradeWithRecreation = errEKSUpgradeWithRecreation
 // ExportReportEKSUpgraded exports reportEKSUpgraded for testing.
 func ExportReportEKSUpgraded(cmd *cobra.Command, version string) {
 	reportEKSUpgraded(cmd, version)
+}
+
+// ExportCheckAutoscalerValuesDrift exports checkAutoscalerValuesDrift for testing.
+func ExportCheckAutoscalerValuesDrift(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	diff *clusterupdate.UpdateResult,
+) {
+	checkAutoscalerValuesDrift(
+		cmd, ctx,
+		specdiff.NewEngine(ctx.ClusterCfg.Spec.Cluster.Distribution, ctx.ClusterCfg.Spec.Cluster.Provider),
+		diff,
+	)
 }

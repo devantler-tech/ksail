@@ -59,6 +59,9 @@ func expectDeployedValues(client *helm.MockInterface, values map[string]any, err
 		ReleaseExists(mock.Anything, "cluster-autoscaler", "kube-system").
 		Return(true, nil)
 	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "cluster-autoscaler", "kube-system").
+		Return(map[string]string{"owner": "helm"}, nil)
+	client.EXPECT().
 		GetReleaseValues(mock.Anything, "cluster-autoscaler", "kube-system").
 		Return(values, err)
 }
@@ -152,4 +155,45 @@ func TestValuesDrifted_SurfacesProbeErrors(t *testing.T) {
 		_, err := installer.ValuesDrifted(context.Background())
 		require.ErrorIs(t, err, errDriftProbe)
 	})
+}
+
+// TestValuesDrifted_LeavesGitOpsOwnedReleasesAlone keeps a Flux- or
+// ArgoCD-owned release out of the drift report: Install skips such a release,
+// so reporting drift would claim a reconcile that never happens and resurface
+// on every update.
+func TestValuesDrifted_LeavesGitOpsOwnedReleasesAlone(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := newDriftInstaller(t, client)
+
+	client.EXPECT().
+		ReleaseExists(mock.Anything, "cluster-autoscaler", "kube-system").
+		Return(true, nil)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "cluster-autoscaler", "kube-system").
+		Return(map[string]string{"helm.toolkit.fluxcd.io/name": "cluster-autoscaler"}, nil)
+
+	drifted, err := installer.ValuesDrifted(context.Background())
+	require.NoError(t, err)
+	assert.False(t, drifted, "a GitOps-owned release must never report KSail drift")
+}
+
+// TestValuesDrifted_SurfacesOwnershipProbeErrors never reads an unreadable
+// ownership label set as "KSail-owned, compare away".
+func TestValuesDrifted_SurfacesOwnershipProbeErrors(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := newDriftInstaller(t, client)
+
+	client.EXPECT().
+		ReleaseExists(mock.Anything, "cluster-autoscaler", "kube-system").
+		Return(true, nil)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "cluster-autoscaler", "kube-system").
+		Return(nil, errDriftProbe)
+
+	_, err := installer.ValuesDrifted(context.Background())
+	require.ErrorIs(t, err, errDriftProbe)
 }
