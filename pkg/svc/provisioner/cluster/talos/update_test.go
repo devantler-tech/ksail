@@ -856,9 +856,9 @@ func autoscalerBaselineServer(
 	t.Helper()
 
 	baselineReads := &atomic.Int32{}
-	server := httptest.NewServer(http.HandlerFunc(func(responseWriter http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
 		responseWriter.Header().Set("Content-Type", "application/json")
-		switch r.URL.Path {
+		switch request.URL.Path {
 		case "/api/v1/namespaces/kube-system/secrets/hcloud":
 			_, _ = responseWriter.Write(hcloudSecret)
 		case "/api/v1/namespaces/kube-system/secrets/cluster-autoscaler-config":
@@ -866,8 +866,8 @@ func autoscalerBaselineServer(
 			responseWriter.WriteHeader(status)
 			_, _ = responseWriter.Write(response)
 		default:
-			t.Errorf("unexpected Kubernetes request: %s %s", r.Method, r.URL.Path)
-			http.NotFound(responseWriter, r)
+			t.Errorf("unexpected Kubernetes request: %s %s", request.Method, request.URL.Path)
+			http.NotFound(responseWriter, request)
 		}
 	}))
 	t.Cleanup(server.Close)
