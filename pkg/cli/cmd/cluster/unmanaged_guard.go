@@ -530,10 +530,13 @@ func queryFrozenAWSOwnership(
 	if resolved.AWSRegion == "" {
 		resolved.AWSRegion = strings.TrimSpace(auth.Region)
 	}
+
 	if resolved.AWSRegion == "" {
-		if err := bindAWSRegionFromKubeconfig(resolved); err != nil {
+		err := bindAWSRegionFromKubeconfig(resolved)
+		if err != nil {
 			return credentials.AWSResolution{}, err
 		}
+
 		auth = auth.WithRegion(resolved.AWSRegion)
 	}
 

@@ -223,7 +223,9 @@ func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
 
 // ListAllClustersWithRegion retains the region reported by eksctl for each cluster.
 // This matters when eksctl selected a profile default rather than an explicit region.
-func (p *Provider) ListAllClustersWithRegion(ctx context.Context) ([]eksctlclient.ClusterSummary, error) {
+func (p *Provider) ListAllClustersWithRegion(
+	ctx context.Context,
+) ([]eksctlclient.ClusterSummary, error) {
 	clusters, err := provider.FetchOrTranslate(
 		p.client != nil,
 		func() ([]eksctlclient.ClusterSummary, error) {

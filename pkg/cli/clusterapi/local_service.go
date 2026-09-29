@@ -1026,7 +1026,8 @@ func (s *Service) runDelete(ctx context.Context, name string, spec v1alpha1.Spec
 			return deleteProvisionerAndState(actionCtx, p, name, spec.Cluster.Distribution)
 		},
 		func() {
-			if cleanupErr := deleteEKSClusterState(name); cleanupErr != nil {
+			cleanupErr := deleteEKSClusterState(name)
+			if cleanupErr != nil {
 				slog.Warn("failed to clean up local EKS cluster state after deletion",
 					"cluster", name, "error", cleanupErr)
 			}

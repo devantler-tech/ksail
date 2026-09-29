@@ -631,6 +631,7 @@ func TestDeleteEKSStaysIdempotentWhenTheClusterIsAlreadyGone(t *testing.T) {
 
 	assert.Empty(t, provisioner.deletedNames(),
 		"a delete was issued against a cluster the guard had established was gone")
+
 	_, err := state.LoadEKSOwnershipState(clusterName, "ap-southeast-2")
 	require.ErrorIs(t, err, state.ErrEKSOwnershipStateNotFound,
 		"a completed delete must remove the recovered ownership record")

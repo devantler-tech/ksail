@@ -109,6 +109,7 @@ func (d *Discoverer) listAWS(ctx context.Context) ([]Cluster, error) {
 
 		lister = provider
 	}
+
 	if regional, ok := lister.(interface {
 		ListAllClustersWithRegion(ctx context.Context) ([]eksctlclient.ClusterSummary, error)
 	}); ok {
