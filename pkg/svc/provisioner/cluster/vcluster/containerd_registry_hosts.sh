@@ -25,8 +25,7 @@ has_registry_hosts_path() {
 }
 awk '
   /^[[:space:]]*\[/ {
-    registry = ($0 ~ /io[.]containerd[.]cri[.]v1[.]images.*[.]registry\]$/ ||
-                $0 ~ /io[.]containerd[.]grpc[.]v1[.]cri.*[.]registry\]$/)
+    registry = $0 ~ /io[.]containerd[.](cri[.]v1[.]images|grpc[.]v1[.]cri).*[.]registry\]$/
   }
   registry && /^[[:space:]]*config_path[[:space:]]*=/ {
     found = 1
