@@ -46,6 +46,7 @@ func TestHandlerForField_KnownFields(t *testing.T) {
 		"cluster.autoscaler.node.expander",
 		"cluster.autoscaler.node.scaleDownUnneededTime",
 		"cluster.autoscaler.node.pools[my-pool]",
+		specdiff.AutoscalerValuesField,
 	}
 
 	for _, field := range knownFields {

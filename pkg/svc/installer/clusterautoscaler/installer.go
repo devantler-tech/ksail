@@ -1,7 +1,10 @@
 package clusterautoscalerinstaller
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -53,6 +56,9 @@ const (
 // "cluster-autoscaler-config" secret (created by the Talos provisioner).
 type Installer struct {
 	*helmutil.Base
+
+	client     helm.Interface
+	valuesYaml string
 }
 
 // NewInstaller creates a new Cluster Autoscaler installer instance.
@@ -100,7 +106,74 @@ func NewInstaller(
 				ValuesYaml:  valuesYaml,
 			},
 		),
+		client:     client,
+		valuesYaml: valuesYaml,
 	}, nil
+}
+
+// ValuesDrifted reports whether the installed release carries different values
+// from the ones this installer renders. `cluster update` reconciles the
+// autoscaler only when a cluster.autoscaler.node.* spec field changes, so a
+// KSail release that changes only the values it renders (ksail#7145's CPU
+// limit) would otherwise never reach an existing cluster (ksail#7366).
+//
+// A missing release is not drift: installing it is the enabled field's job.
+func (i *Installer) ValuesDrifted(ctx context.Context) (bool, error) {
+	exists, err := i.client.ReleaseExists(ctx, ReleaseName, namespace)
+	if err != nil {
+		return false, fmt.Errorf("clusterautoscaler: check release: %w", err)
+	}
+
+	if !exists {
+		return false, nil
+	}
+
+	deployed, err := i.client.GetReleaseValues(ctx, ReleaseName, namespace)
+	if err != nil {
+		return false, fmt.Errorf("clusterautoscaler: read release values: %w", err)
+	}
+
+	var rendered map[string]any
+
+	err = yaml.Unmarshal([]byte(i.valuesYaml), &rendered)
+	if err != nil {
+		return false, fmt.Errorf("clusterautoscaler: parse rendered values: %w", err)
+	}
+
+	deployedNormalized, err := normalizeValues(deployed)
+	if err != nil {
+		return false, err
+	}
+
+	renderedNormalized, err := normalizeValues(rendered)
+	if err != nil {
+		return false, err
+	}
+
+	return !reflect.DeepEqual(deployedNormalized, renderedNormalized), nil
+}
+
+// normalizeValues round-trips values through JSON so both sides compare with
+// the same concrete types (float64 numbers, []any, map[string]any) whichever
+// decoder produced them, and so an empty map and a nil map compare equal.
+func normalizeValues(values map[string]any) (map[string]any, error) {
+	if len(values) == 0 {
+		return map[string]any{}, nil
+	}
+
+	raw, err := json.Marshal(values)
+	if err != nil {
+		return nil, fmt.Errorf("clusterautoscaler: encode values: %w", err)
+	}
+
+	var normalized map[string]any
+
+	err = json.Unmarshal(raw, &normalized)
+	if err != nil {
+		return nil, fmt.Errorf("clusterautoscaler: decode values: %w", err)
+	}
+
+	return normalized, nil
 }
 
 // chartValues mirrors the cluster-autoscaler Helm chart values schema.
