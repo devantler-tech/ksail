@@ -299,7 +299,7 @@ runs:
         key: ${{ steps.generate-key.outputs.dist-node-cache-key }}
 
     - name: 📥 Pre-pull registry image
-      uses: $/.github/actions/pull-registry-image
+      uses: ./.github/actions/pull-registry-image
 
     - name: 🔍 Check if cache is complete
       id: check-cache
