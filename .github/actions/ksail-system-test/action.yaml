@@ -32,6 +32,10 @@ inputs:
     description: Whether to run ksail project init before create
     required: false
     default: "false"
+  ecr-public-upstream:
+    description: Upstream for the ECR Public mirror and containerd fallback
+    required: false
+    default: "https://ecr-public.aws.com"
   test-workload-image:
     description: Image to use for workload create test
     required: false
@@ -243,7 +247,7 @@ runs:
         # Redis. The warm-mirror-cache action caches the same five registries, so
         # no system-test image is pulled anonymously from the shared runner IP
         # (#7332). Docker only: cloud providers cannot use local mirrors.
-        mirror-registry: ${{ inputs.provider == 'Docker' && 'docker.io=https://registry-1.docker.io,ghcr.io=https://ghcr.io,quay.io=https://quay.io,registry.k8s.io=https://registry.k8s.io,ecr-public.aws.com=https://ecr-public.aws.com' || '' }}
+        mirror-registry: ${{ inputs.provider == 'Docker' && format('docker.io=https://registry-1.docker.io,ghcr.io=https://ghcr.io,quay.io=https://quay.io,registry.k8s.io=https://registry.k8s.io,ecr-public.aws.com={0}', inputs.ecr-public-upstream) || '' }}
         init: ${{ inputs.init }}
         install: "false"
         # The calling job has already restored the shared caches the warm jobs
