@@ -306,11 +306,14 @@ runs:
         CACHE_KEY: ${{ steps.generate-key.outputs.cache-key }}
       run: |
         # A tag link inside the tar can coexist with a missing image index.
-        # Import the archive and pull without a remote fallback.
+        # Import the archive and pull with only an empty local registry as the
+        # upstream. Distribution contacts its upstream during startup, so an
+        # unreachable address prevents the proxy from starting at all.
         check_restored_ecr() (
           check_volume="ecr-public-cache-check-$GITHUB_RUN_ID"
           check_container="ecr-public-cache-check-$GITHUB_RUN_ID"
-          trap 'docker rm -f "$check_container" >/dev/null 2>&1 || true; docker volume rm -f "$check_volume" >/dev/null 2>&1 || true' EXIT
+          check_upstream="ecr-public-empty-upstream-$GITHUB_RUN_ID"
+          trap 'docker rm -f "$check_container" "$check_upstream" >/dev/null 2>&1 || true; docker volume rm -f "$check_volume" >/dev/null 2>&1 || true' EXIT
           docker volume create "$check_volume" >/dev/null || {
             echo "ECR cache check: volume setup failed" >&2
             return 1
@@ -323,10 +326,28 @@ runs:
               echo "ECR cache check: archive extraction failed" >&2
               return 1
             }
+          docker network create ksail-mirrors >/dev/null 2>&1 || true
+          docker run -d --name "$check_upstream" --network ksail-mirrors -p 127.0.0.1:5505:5000 registry:3 >/dev/null || {
+            echo "ECR cache check: empty upstream startup failed" >&2
+            return 1
+          }
+          upstream_ready=false
+          for _ in $(seq 1 30); do
+            if curl -fsS http://localhost:5505/v2/ >/dev/null 2>&1; then
+              upstream_ready=true
+              break
+            fi
+            sleep 1
+          done
+          [ "$upstream_ready" = true ] || {
+            echo "ECR cache check: empty upstream readiness timed out" >&2
+            return 1
+          }
           docker run -d \
             --name "$check_container" \
+            --network ksail-mirrors \
             -p 5504:5000 \
-            -e REGISTRY_PROXY_REMOTEURL=http://127.0.0.1:1 \
+            -e REGISTRY_PROXY_REMOTEURL="http://$check_upstream:5000" \
             -v "$check_volume":/var/lib/registry \
             registry:3 >/dev/null || {
               echo "ECR cache check: registry startup failed" >&2
@@ -626,14 +647,29 @@ runs:
           exit 1
         fi
 
-        # Use proxy mode with an unreachable upstream so verification follows
-        # the system-test path without hiding a missing manifest or blob.
+        # Proxy startup requires a reachable upstream. Use an empty local
+        # registry so this check follows the system-test proxy path while a
+        # missing manifest or blob cannot be fetched from ECR Public.
         docker rm -f ecr-public.aws.com-mirror > /dev/null
+        docker run -d --name ecr-public-empty-upstream --network ksail-mirrors -p 127.0.0.1:5505:5000 registry:3 > /dev/null
+        UPSTREAM_READY=false
+        for _ in $(seq 1 30); do
+          if curl -fsS http://localhost:5505/v2/ > /dev/null 2>&1; then
+            UPSTREAM_READY=true
+            break
+          fi
+          sleep 1
+        done
+        if [ "$UPSTREAM_READY" != true ]; then
+          echo "❌ Empty ECR validation upstream never became ready"
+          docker logs --tail 40 ecr-public-empty-upstream 2>&1 || true
+          exit 1
+        fi
         docker run -d \
           --name ecr-public.aws.com-mirror \
           --network ksail-mirrors \
           -p 5004:5000 \
-          -e REGISTRY_PROXY_REMOTEURL=http://127.0.0.1:1 \
+          -e REGISTRY_PROXY_REMOTEURL=http://ecr-public-empty-upstream:5000 \
           -v ecr-public.aws.com:/var/lib/registry \
           registry:3 > /dev/null
         PROXY_READY=false
@@ -992,7 +1028,7 @@ runs:
       if: always() && steps.check-cache.outputs.complete != 'true'
       shell: bash
       run: |
-        docker rm -f docker.io-mirror ghcr.io-mirror quay.io-mirror registry.k8s.io-mirror ecr-public.aws.com-mirror 2>/dev/null || true
+        docker rm -f docker.io-mirror ghcr.io-mirror quay.io-mirror registry.k8s.io-mirror ecr-public.aws.com-mirror ecr-public-empty-upstream 2>/dev/null || true
         docker network rm ksail-mirrors 2>/dev/null || true
 
     - name: 💾 Save mirror cache

@@ -22,6 +22,10 @@ printf 'ecr-public.aws.com/docker/library/redis:8.6.4-alpine\n' >"$fixture/all-i
 cat >"$fixture/bin/docker" <<'SH'
 #!/bin/sh
 printf '%s\n' "$*" >> "$DOCKER_CALLS"
+if [ "$1" = run ] && printf '%s\n' "$*" | grep -q 'REGISTRY_PROXY_REMOTEURL=http://127.0.0.1:1'; then
+  # Distribution probes its configured upstream during startup.
+  exit 1
+fi
 if [ "$1" = pull ]; then
   exit 1
 fi
@@ -65,8 +69,12 @@ if ! grep -q 'ECR cache check: image pull failed' "$fixture/log"; then
 	echo "FAIL: the failed consumer pull did not identify its stage" >&2
 	exit 1
 fi
-if ! grep -q 'REGISTRY_PROXY_REMOTEURL=http://127.0.0.1:1' "$fixture/docker-calls"; then
-	echo "FAIL: validation did not use proxy mode with an unreachable upstream" >&2
+if ! grep -q 'REGISTRY_PROXY_REMOTEURL=http://ecr-public-empty-upstream-17:5000' "$fixture/docker-calls"; then
+	echo "FAIL: validation did not use a reachable empty registry upstream" >&2
+	exit 1
+fi
+if ! awk '/--name ecr-public-empty-upstream-17/ { upstream = NR } /--name ecr-public-cache-check-17/ { if (!upstream) exit 1; checked = 1 } END { if (!checked) exit 1 }' "$fixture/docker-calls"; then
+	echo "FAIL: the empty upstream must start before the restored-cache proxy" >&2
 	exit 1
 fi
 if ! grep -qx 'repair-key=mirror-test-repair-17-2' "$fixture/output"; then
