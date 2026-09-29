@@ -70,6 +70,24 @@ func TestEnableContainerdRegistryHosts_ConfiguresCRIOnce(t *testing.T) {
 	)
 }
 
+func TestEnableContainerdRegistryHosts_IndentedEffectiveRegistrySection(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	configDir := filepath.Join(tempDir, "containerd")
+	require.NoError(t, os.Mkdir(configDir, 0o750))
+	fixture := strings.Replace(
+		containerdRegistryFixture,
+		"[plugins.'io.containerd.cri.v1.images'.registry]",
+		"  [plugins.'io.containerd.cri.v1.images'.registry]",
+		1,
+	)
+	fixturePath := filepath.Join(tempDir, "original.toml")
+	require.NoError(t, os.WriteFile(fixturePath, []byte(fixture), 0o600))
+
+	runContainerdRegistryHosts(t, configDir, fixturePath, filepath.Join(tempDir, "systemctl.log"))
+}
+
 func TestEnableContainerdRegistryHosts_PreservesExistingPathAndMode(t *testing.T) {
 	t.Parallel()
 
@@ -85,13 +103,13 @@ func TestEnableContainerdRegistryHosts_PreservesExistingPathAndMode(t *testing.T
 	systemctlLog := filepath.Join(tempDir, "systemctl.log")
 	runContainerdRegistryHosts(t, configDir, fixturePath, systemctlLog)
 	runContainerdRegistryHosts(t, configDir, fixturePath, systemctlLog)
-	configured, err := os.ReadFile(configPath)
+	configured, err := fs.ReadFile(os.DirFS(configDir), "config.toml")
 	require.NoError(t, err)
 	require.Contains(t, string(configured), "config_path = \"/opt/existing-certs:/etc/containerd/certs.d\"")
 	info, err := os.Stat(configPath)
 	require.NoError(t, err)
 	require.Equal(t, fs.FileMode(0o600), info.Mode().Perm())
-	restarts, err := os.ReadFile(systemctlLog)
+	restarts, err := fs.ReadFile(os.DirFS(tempDir), "systemctl.log")
 	require.NoError(t, err)
 	require.Equal(t, "restart containerd\nis-active --quiet containerd", strings.TrimSpace(string(restarts)))
 }

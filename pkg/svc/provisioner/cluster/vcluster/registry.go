@@ -24,7 +24,7 @@ trap 'rm -f "$snapshot" "$candidate"' EXIT
 containerd config dump > "$snapshot"
 has_registry_hosts_path() {
   awk '
-    /^\[plugins[.]/ {
+    /^[[:space:]]*\[plugins[.]/ {
       registry = ($0 ~ /cri[.]v1[.]images.*[.]registry\]$/ ||
                   $0 ~ /grpc[.]v1[.]cri.*[.]registry\]$/)
       next

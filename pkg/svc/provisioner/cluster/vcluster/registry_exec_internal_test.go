@@ -16,6 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var errBrokenExecStream = errors.New("broken exec stream")
+
 func TestEnableRegistryHostsOnNodeRejectsRunningExec(t *testing.T) {
 	t.Parallel()
 
@@ -24,7 +26,7 @@ func TestEnableRegistryHostsOnNodeRejectsRunningExec(t *testing.T) {
 	client.On("ContainerExecCreate", ctx, "node", testifymock.Anything).
 		Return(container.ExecCreateResponse{ID: "exec-id"}, nil).Once()
 	connection, peer := net.Pipe()
-	defer peer.Close()
+	defer func() { require.NoError(t, peer.Close()) }()
 	client.On("ContainerExecAttach", ctx, "exec-id", testifymock.Anything).
 		Return(types.HijackedResponse{Reader: bufio.NewReader(strings.NewReader("")), Conn: connection}, nil).Once()
 	client.On("ContainerExecInspect", ctx, "exec-id").
@@ -42,10 +44,10 @@ func TestEnableRegistryHostsOnNodeRejectsBrokenStream(t *testing.T) {
 	client.On("ContainerExecCreate", ctx, "node", testifymock.Anything).
 		Return(container.ExecCreateResponse{ID: "exec-id"}, nil).Once()
 	reader, writer := io.Pipe()
-	require.NoError(t, writer.CloseWithError(errors.New("broken exec stream")))
-	defer reader.Close()
+	require.NoError(t, writer.CloseWithError(errBrokenExecStream))
+	defer func() { require.NoError(t, reader.Close()) }()
 	connection, peer := net.Pipe()
-	defer peer.Close()
+	defer func() { require.NoError(t, peer.Close()) }()
 	client.On("ContainerExecAttach", ctx, "exec-id", testifymock.Anything).
 		Return(types.HijackedResponse{Reader: bufio.NewReader(reader), Conn: connection}, nil).Once()
 	client.On("ContainerExecInspect", ctx, "exec-id").
