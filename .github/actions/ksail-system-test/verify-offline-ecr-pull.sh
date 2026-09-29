@@ -62,7 +62,7 @@ if [[ ! "$ready" =~ ^[1-9][0-9]*$ ]]; then
 	exit 1
 fi
 
-mirror="vcluster-${node#vcluster.cp.}-ecr-public.aws.com"
+mirror="${node#vcluster.cp.}-ecr-public.aws.com"
 mirror_log=$(docker logs "$mirror" 2>&1) || {
 	echo 'VCluster ECR mirror logs are unavailable' >&2
 	exit 1

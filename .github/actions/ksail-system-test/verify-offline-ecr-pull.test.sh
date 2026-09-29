@@ -12,9 +12,9 @@ cat >"$fixture/bin/docker" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 case "$1" in
-  ps) echo vcluster.cp.test ;;
+  ps) echo vcluster.cp.vcluster-default ;;
   exec)
-    [ "$2" = vcluster.cp.test ]
+    [ "$2" = vcluster.cp.vcluster-default ]
     if [ "$3" = grep ]; then
       [ "$4" = -Fxq ]
       upstream="http:"'//172.17.0.1:5505'
@@ -29,7 +29,7 @@ case "$1" in
     fi
     ;;
   logs)
-    [ "$2" = vcluster-test-ecr-public.aws.com ]
+    [ "$2" = vcluster-default-ecr-public.aws.com ]
     if [ "$FAKE_MIRROR_REQUESTS" = 1 ]; then
       echo 'http.request.method=GET http.request.uri="/v2/docker/library/redis/manifests/8.6.4-alpine" http.response.status=200'
     fi
