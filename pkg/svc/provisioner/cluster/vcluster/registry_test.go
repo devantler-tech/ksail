@@ -24,6 +24,7 @@ func TestConfigureContainerdRegistryMirrors_EnablesHostsDirectory(t *testing.T) 
 	ctx := context.Background()
 	mockClient := dockerclient.NewMockAPIClient(t)
 	node := "vcluster.cp.test-cluster"
+
 	var commands [][]string
 
 	mockClient.On("ContainerList", ctx, testifymock.Anything).
@@ -32,11 +33,15 @@ func TestConfigureContainerdRegistryMirrors_EnablesHostsDirectory(t *testing.T) 
 		Run(func(args testifymock.Arguments) {
 			options, ok := args.Get(2).(container.ExecOptions)
 			require.True(t, ok)
+
 			commands = append(commands, options.Cmd)
 		}).
 		Return(container.ExecCreateResponse{ID: "exec-id"}, nil).Twice()
+
 	connection, peer := net.Pipe()
+
 	defer func() { require.NoError(t, peer.Close()) }()
+
 	mockClient.On("ContainerExecAttach", ctx, "exec-id", testifymock.Anything).
 		Return(types.HijackedResponse{
 			Reader: bufio.NewReader(strings.NewReader("")),

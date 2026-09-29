@@ -82,8 +82,10 @@ func ConfigureContainerdRegistryMirrors(
 	if err != nil {
 		return fmt.Errorf("failed to inject hosts.toml into vcluster nodes: %w", err)
 	}
+
 	for _, node := range nodes {
-		if err := enableRegistryHostsOnNode(ctx, dockerClient, node); err != nil {
+		err := enableRegistryHostsOnNode(ctx, dockerClient, node)
+		if err != nil {
 			return fmt.Errorf("failed to enable registry hosts on vcluster node %s: %w", node, err)
 		}
 	}
@@ -97,7 +99,13 @@ func enableRegistryHostsOnNode(
 	node string,
 ) error {
 	execID, err := dockerClient.ContainerExecCreate(ctx, node, container.ExecOptions{
-		Cmd:          []string{"sh", "-c", enableContainerdRegistryHosts, "ksail", "/etc/containerd"},
+		Cmd: []string{
+			"sh",
+			"-c",
+			enableContainerdRegistryHosts,
+			"ksail",
+			"/etc/containerd",
+		},
 		AttachStdout: true,
 		AttachStderr: true,
 	})
@@ -112,14 +120,21 @@ func enableRegistryHostsOnNode(
 	defer response.Close()
 
 	var stderr bytes.Buffer
+
 	_, _ = stdcopy.StdCopy(io.Discard, &stderr, response.Reader)
 
 	result, err := dockerClient.ContainerExecInspect(ctx, execID.ID)
 	if err != nil {
 		return fmt.Errorf("inspect containerd configuration exec: %w", err)
 	}
+
 	if result.ExitCode != 0 {
-		return fmt.Errorf("%w with exit code %d: %s", registry.ErrExecFailed, result.ExitCode, stderr.String())
+		return fmt.Errorf(
+			"%w with exit code %d: %s",
+			registry.ErrExecFailed,
+			result.ExitCode,
+			stderr.String(),
+		)
 	}
 
 	return nil
