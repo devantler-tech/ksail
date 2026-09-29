@@ -295,6 +295,9 @@ runs:
         # trigger a fresh, correctly-pinned save below.
         key: ${{ steps.generate-key.outputs.dist-node-cache-key }}
 
+    - name: 📥 Pre-pull registry image
+      uses: ./.github/actions/pull-registry-image
+
     - name: 🔍 Check if cache is complete
       id: check-cache
       if: steps.restore-cache.outputs.cache-matched-key != ''
@@ -323,6 +326,7 @@ runs:
           docker run -d \
             --name "$check_container" \
             -p 5504:5000 \
+            -e REGISTRY_PROXY_REMOTEURL=http://127.0.0.1:1 \
             -v "$check_volume":/var/lib/registry \
             registry:3 >/dev/null || {
               echo "ECR cache check: registry startup failed" >&2
@@ -399,10 +403,6 @@ runs:
         if [ "$complete" != true ]; then
           echo "repair-key=$CACHE_KEY-repair-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
         fi
-
-    - name: 📥 Pre-pull registry image
-      if: steps.check-cache.outputs.complete != 'true'
-      uses: ./.github/actions/pull-registry-image
 
     - name: 🐳 Create mirror registries
       id: create-mirrors
@@ -626,14 +626,14 @@ runs:
           exit 1
         fi
 
-        # Verify without the proxy's remote fallback before saving the volume.
-        # A proxy pull can succeed from ECR Public even when the local cache is
-        # missing a manifest or blob, leaving an unusable immutable archive.
+        # Use proxy mode with an unreachable upstream so verification follows
+        # the system-test path without hiding a missing manifest or blob.
         docker rm -f ecr-public.aws.com-mirror > /dev/null
         docker run -d \
           --name ecr-public.aws.com-mirror \
           --network ksail-mirrors \
           -p 5004:5000 \
+          -e REGISTRY_PROXY_REMOTEURL=http://127.0.0.1:1 \
           -v ecr-public.aws.com:/var/lib/registry \
           registry:3 > /dev/null
         PROXY_READY=false

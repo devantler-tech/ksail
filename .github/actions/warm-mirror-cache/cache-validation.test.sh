@@ -3,6 +3,12 @@
 set -euo pipefail
 
 action_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
+prepull_line=$(grep -n '^    - name: 📥 Pre-pull registry image$' "$action_dir/action.yaml" | cut -d: -f1)
+check_line=$(grep -n '^    - name: 🔍 Check if cache is complete$' "$action_dir/action.yaml" | cut -d: -f1)
+if [ -z "$prepull_line" ] || [ -z "$check_line" ] || [ "$prepull_line" -ge "$check_line" ]; then
+	echo "FAIL: reliable registry pre-pull must precede restored-cache validation" >&2
+	exit 1
+fi
 fixture=$(mktemp -d)
 trap 'rm -rf "$fixture"' EXIT
 mkdir -p "$fixture/mirror-cache" "$fixture/contents/docker/registry/v2/repositories/docker/library/redis/_manifests/tags/8.6.4-alpine/current" "$fixture/bin"
@@ -59,8 +65,8 @@ if ! grep -q 'ECR cache check: image pull failed' "$fixture/log"; then
 	echo "FAIL: the failed consumer pull did not identify its stage" >&2
 	exit 1
 fi
-if grep -q 'REGISTRY_PROXY_REMOTEURL' "$fixture/docker-calls"; then
-	echo "FAIL: validation allowed a remote registry fallback" >&2
+if ! grep -q 'REGISTRY_PROXY_REMOTEURL=http://127.0.0.1:1' "$fixture/docker-calls"; then
+	echo "FAIL: validation did not use proxy mode with an unreachable upstream" >&2
 	exit 1
 fi
 if ! grep -qx 'repair-key=mirror-test-repair-17-2' "$fixture/output"; then
