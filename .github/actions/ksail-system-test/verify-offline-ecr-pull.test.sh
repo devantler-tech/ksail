@@ -32,6 +32,10 @@ case "$1" in
     [ "$2" = vcluster-default-ecr-public.aws.com ]
     if [ "$FAKE_MIRROR_REQUESTS" = 1 ]; then
       echo 'http.request.method=GET http.request.uri="/v2/docker/library/redis/manifests/8.6.4-alpine" http.response.status=200'
+    elif [ "$FAKE_MIRROR_REQUESTS" = bulk ]; then
+      for ((i = 0; i < 10000; i++)); do
+        echo 'http.request.method=GET http.request.uri="/v2/docker/library/redis/manifests/8.6.4-alpine" http.response.status=200'
+      done
     fi
     ;;
   *) exit 1 ;;
@@ -55,6 +59,13 @@ PATH="$fixture/bin:$PATH" FAKE_READY_REPLICAS=1 \
 	FAKE_CONFIG_PATH=/etc/containerd/certs.d FAKE_CRI_READY=true FAKE_MIRROR_REQUESTS=1 \
 	bash "$subject" "$offline_url" >"$fixture/good-log"
 grep -Fq 'Argo CD Redis is ready through the restored ECR mirror with local-only fallback' "$fixture/good-log"
+
+# A large legitimate mirror log must not turn a successful match into SIGPIPE
+# when a short-circuiting reader exits before its producer finishes writing.
+PATH="$fixture/bin:$PATH" FAKE_READY_REPLICAS=1 \
+	FAKE_CONFIG_PATH=/etc/containerd/certs.d FAKE_CRI_READY=true FAKE_MIRROR_REQUESTS=bulk \
+	bash "$subject" "$offline_url" >"$fixture/bulk-log"
+grep -Fq 'Argo CD Redis is ready through the restored ECR mirror with local-only fallback' "$fixture/bulk-log"
 
 for invalid in 0 unknown; do
 	if PATH="$fixture/bin:$PATH" FAKE_READY_REPLICAS="$invalid" \

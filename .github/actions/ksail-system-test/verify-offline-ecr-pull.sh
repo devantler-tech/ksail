@@ -67,8 +67,11 @@ mirror_log=$(docker logs "$mirror" 2>&1) || {
 	echo 'VCluster ECR mirror logs are unavailable' >&2
 	exit 1
 }
-if ! grep -E 'http[.]request[.]method=GET.*http[.]request[.]uri="?/v2/[^[:space:]"]*redis/(manifests|blobs)/' <<<"$mirror_log" |
-	grep -Eq 'http[.]response[.]status=200'; then
+if ! awk '
+  /http[.]request[.]method=GET.*http[.]request[.]uri="?\/v2\/[^[:space:]"]*redis\/(manifests|blobs)\// &&
+  /http[.]response[.]status=200/ { found = 1; exit }
+  END { exit !found }
+' <<<"$mirror_log"; then
 	echo 'No successful Redis request was observed at the restored ECR mirror' >&2
 	exit 1
 fi
