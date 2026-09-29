@@ -801,7 +801,10 @@ func TestEnsureAutoscalerSecretIfNeeded_RejectsUnreadableImageBaseline(t *testin
 	hcloudSecret, err := json.Marshal(&corev1.Secret{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
 		ObjectMeta: metav1.ObjectMeta{Name: "hcloud", Namespace: "kube-system"},
-		Data:       map[string][]byte{"token": []byte("test-token"), "network": []byte("test-network")},
+		Data: map[string][]byte{
+			"token":   []byte("test-token"),
+			"network": []byte("test-network"),
+		},
 	})
 	require.NoError(t, err)
 	malformedSecret, err := json.Marshal(&corev1.Secret{
@@ -821,11 +824,17 @@ func TestEnsureAutoscalerSecretIfNeeded_RejectsUnreadableImageBaseline(t *testin
 		{"malformed existing Secret", http.StatusOK, malformedSecret, true},
 		{"absent Secret is a new baseline", http.StatusNotFound, nil, false},
 	} {
-		server, baselineReads := autoscalerBaselineServer(t, hcloudSecret, testCase.status, testCase.response)
+		server, baselineReads := autoscalerBaselineServer(
+			t,
+			hcloudSecret,
+			testCase.status,
+			testCase.response,
+		)
 		kubeconfigPath := autoscalerBaselineKubeconfig(t, server.URL)
 
 		configs, configErr := talosconfigmanager.NewDefaultConfigs()
 		require.NoError(t, configErr, testCase.name)
+
 		provisioner := talosprovisioner.NewProvisioner(
 			nil, talosprovisioner.NewOptions().WithKubeconfigPath(kubeconfigPath),
 		).
@@ -843,6 +852,7 @@ func TestEnsureAutoscalerSecretIfNeeded_RejectsUnreadableImageBaseline(t *testin
 		} else {
 			require.NoError(t, updateErr, testCase.name)
 		}
+
 		assert.EqualValues(t, 1, baselineReads.Load(), testCase.name)
 	}
 }
@@ -856,20 +866,23 @@ func autoscalerBaselineServer(
 	t.Helper()
 
 	baselineReads := &atomic.Int32{}
-	server := httptest.NewServer(http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
-		responseWriter.Header().Set("Content-Type", "application/json")
-		switch request.URL.Path {
-		case "/api/v1/namespaces/kube-system/secrets/hcloud":
-			_, _ = responseWriter.Write(hcloudSecret)
-		case "/api/v1/namespaces/kube-system/secrets/cluster-autoscaler-config":
-			baselineReads.Add(1)
-			responseWriter.WriteHeader(status)
-			_, _ = responseWriter.Write(response)
-		default:
-			t.Errorf("unexpected Kubernetes request: %s %s", request.Method, request.URL.Path)
-			http.NotFound(responseWriter, request)
-		}
-	}))
+	server := httptest.NewServer(
+		http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
+			responseWriter.Header().Set("Content-Type", "application/json")
+
+			switch request.URL.Path {
+			case "/api/v1/namespaces/kube-system/secrets/hcloud":
+				_, _ = responseWriter.Write(hcloudSecret)
+			case "/api/v1/namespaces/kube-system/secrets/cluster-autoscaler-config":
+				baselineReads.Add(1)
+				responseWriter.WriteHeader(status)
+				_, _ = responseWriter.Write(response)
+			default:
+				t.Errorf("unexpected Kubernetes request: %s %s", request.Method, request.URL.Path)
+				http.NotFound(responseWriter, request)
+			}
+		}),
+	)
 	t.Cleanup(server.Close)
 
 	return server, baselineReads

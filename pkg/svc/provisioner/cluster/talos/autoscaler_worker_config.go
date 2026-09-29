@@ -258,6 +258,7 @@ func snapshotImageIDFromSecret(secret *corev1.Secret) (string, error) {
 	}
 
 	var clusterConfig hcloudClusterConfig
+
 	err = json.Unmarshal(jsonBytes, &clusterConfig)
 	if err != nil {
 		return "", fmt.Errorf("parsing autoscaler cluster config: %w", err)
@@ -285,6 +286,7 @@ func (p *Provisioner) currentAutoscalerSnapshotImageID(ctx context.Context) (str
 	if apierrors.IsNotFound(err) {
 		return "", nil
 	}
+
 	if err != nil {
 		return "", fmt.Errorf("getting autoscaler snapshot Secret: %w", err)
 	}
