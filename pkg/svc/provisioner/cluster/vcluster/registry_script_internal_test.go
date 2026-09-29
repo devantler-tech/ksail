@@ -1,6 +1,7 @@
 package vclusterprovisioner
 
 import (
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,11 +12,13 @@ import (
 )
 
 func TestEnableContainerdRegistryHosts_ConfiguresCRIOnce(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 	binDir := filepath.Join(tempDir, "bin")
-	require.NoError(t, os.Mkdir(binDir, 0o755))
+	require.NoError(t, os.Mkdir(binDir, 0o750))
 	configDir := filepath.Join(tempDir, "containerd")
-	require.NoError(t, os.Mkdir(configDir, 0o755))
+	require.NoError(t, os.Mkdir(configDir, 0o750))
 	fixturePath := filepath.Join(tempDir, "original.toml")
 	fixture := `version = 3
 [plugins.'io.containerd.cri.v1.images'.registry]
@@ -34,15 +37,16 @@ else
   cat "$KSAIL_TEST_FIXTURE"
 fi
 `
-	require.NoError(t, os.WriteFile(filepath.Join(binDir, "containerd"), []byte(containerd), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "containerd"), []byte(containerd), 0o500))
 	systemctlLog := filepath.Join(tempDir, "systemctl.log")
 	systemctl := `#!/bin/sh
 echo "$*" >> "$KSAIL_TEST_SYSTEMCTL_LOG"
 `
-	require.NoError(t, os.WriteFile(filepath.Join(binDir, "systemctl"), []byte(systemctl), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "systemctl"), []byte(systemctl), 0o500))
 
 	run := func() {
-		command := exec.Command("sh", "-c", enableContainerdRegistryHosts, "ksail", configDir)
+		command := exec.Command("sh", "-c", enableContainerdRegistryHosts, "ksail", ".")
+		command.Dir = configDir
 		command.Env = append(os.Environ(),
 			"PATH="+binDir+":"+os.Getenv("PATH"),
 			"KSAIL_TEST_CONFIG_DIR="+configDir,
@@ -55,12 +59,12 @@ echo "$*" >> "$KSAIL_TEST_SYSTEMCTL_LOG"
 
 	run()
 	run()
-	configured, err := os.ReadFile(filepath.Join(configDir, "config.toml"))
+	configured, err := fs.ReadFile(os.DirFS(configDir), "config.toml")
 	require.NoError(t, err)
 	require.Contains(t, string(configured), "config_path = \"/etc/containerd/certs.d\"")
 	require.Contains(t, string(configured), "max_concurrent_downloads = 3")
 	require.Contains(t, string(configured), "[plugins.'io.containerd.transfer.v1.local']\n  config_path = ''")
-	restarts, err := os.ReadFile(systemctlLog)
+	restarts, err := fs.ReadFile(os.DirFS(tempDir), "systemctl.log")
 	require.NoError(t, err)
 	require.Equal(t, "restart containerd\nis-active --quiet containerd", strings.TrimSpace(string(restarts)))
 }

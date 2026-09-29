@@ -30,11 +30,13 @@ func TestConfigureContainerdRegistryMirrors_EnablesHostsDirectory(t *testing.T) 
 		Return([]container.Summary{{Names: []string{"/" + node}}}, nil).Once()
 	mockClient.On("ContainerExecCreate", ctx, node, testifymock.Anything).
 		Run(func(args testifymock.Arguments) {
-			commands = append(commands, args.Get(2).(container.ExecOptions).Cmd)
+			options, ok := args.Get(2).(container.ExecOptions)
+			require.True(t, ok)
+			commands = append(commands, options.Cmd)
 		}).
 		Return(container.ExecCreateResponse{ID: "exec-id"}, nil).Twice()
 	connection, peer := net.Pipe()
-	defer peer.Close()
+	defer func() { require.NoError(t, peer.Close()) }()
 	mockClient.On("ContainerExecAttach", ctx, "exec-id", testifymock.Anything).
 		Return(types.HijackedResponse{
 			Reader: bufio.NewReader(strings.NewReader("")),
