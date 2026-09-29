@@ -11,15 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestEnableContainerdRegistryHosts_ConfiguresCRIOnce(t *testing.T) {
-	t.Parallel()
-
-	tempDir := t.TempDir()
-	configDir := filepath.Join(tempDir, "containerd")
-	require.NoError(t, os.Mkdir(configDir, 0o750))
-
-	fixturePath := filepath.Join(tempDir, "original.toml")
-	fixture := `version = 3
+const containerdRegistryFixture = `version = 3
 [plugins.'io.containerd.cri.v1.images'.registry]
   config_path = ''
 [plugins.'io.containerd.cri.v1.runtime']
@@ -27,10 +19,8 @@ func TestEnableContainerdRegistryHosts_ConfiguresCRIOnce(t *testing.T) {
 [plugins.'io.containerd.transfer.v1.local']
   config_path = ''
 `
-	require.NoError(t, os.WriteFile(fixturePath, []byte(fixture), 0o600))
 
-	systemctlLog := filepath.Join(tempDir, "systemctl.log")
-	commandStubs := `containerd() {
+const containerdRegistryCommandStubs = `containerd() {
   test "$1 $2" = "config dump" || return 1
   if test -f "$KSAIL_TEST_CONFIG_DIR/config.toml"; then
     cat "$KSAIL_TEST_CONFIG_DIR/config.toml"
@@ -43,12 +33,23 @@ systemctl() {
 }
 `
 
+func TestEnableContainerdRegistryHosts_ConfiguresCRIOnce(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	configDir := filepath.Join(tempDir, "containerd")
+	require.NoError(t, os.Mkdir(configDir, 0o750))
+
+	fixturePath := filepath.Join(tempDir, "original.toml")
+	require.NoError(t, os.WriteFile(fixturePath, []byte(containerdRegistryFixture), 0o600))
+
+	systemctlLog := filepath.Join(tempDir, "systemctl.log")
 	run := func() {
 		command := exec.CommandContext(
 			t.Context(),
 			"sh",
 			"-c",
-			commandStubs+enableContainerdRegistryHosts,
+			containerdRegistryCommandStubs+enableContainerdRegistryHosts,
 			"ksail",
 			".",
 		)
