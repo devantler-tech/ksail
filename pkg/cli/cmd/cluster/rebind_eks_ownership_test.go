@@ -181,6 +181,60 @@ func TestEKSRecoveryRequiresExplicitTargetWithoutLocalEvidence(t *testing.T) {
 	assert.Empty(t, readStandaloneEKSCalls(t, marker))
 }
 
+func TestEKSRecoveryRejectsAnExplicitEmptyName(t *testing.T) {
+	const name = "eks-empty-name-recovery"
+
+	marker, _ := setupStandaloneEKSLifecycleFixture(t, name)
+	removeEKSRecoveryProject(t, name)
+	writeStandaloneEKSKubeconfigContexts(t, name, []string{
+		"operator@" + name + ".ap-southeast-2.eksctl.io",
+	})
+
+	path, err := filepath.Abs("kubeconfig")
+	require.NoError(t, err)
+	t.Setenv("KUBECONFIG", path)
+	cmd := recoveryEKSCommand(t, name, true)
+	cmd.SetArgs([]string{"--name", "", "--provider", "AWS", "--yes"})
+	require.ErrorContains(t, cmd.Execute(), "explicit --name")
+	assert.Empty(t, readStandaloneEKSCalls(t, marker))
+}
+
+func TestEKSRecoveryPrefersProfileRegionToStaleKubeconfigContext(t *testing.T) {
+	const name = "eks-profile-region-recovery"
+
+	marker, _ := setupStandaloneEKSLifecycleFixture(t, name)
+	removeEKSRecoveryProject(t, name)
+	writeStandaloneEKSKubeconfigContexts(t, name, []string{
+		"operator@" + name + ".us-west-2.eksctl.io",
+	})
+
+	kubeconfigPath, err := filepath.Abs("kubeconfig")
+	require.NoError(t, err)
+	t.Setenv("KUBECONFIG", kubeconfigPath)
+	configPath := filepath.Join(t.TempDir(), "aws-config")
+	require.NoError(t, os.WriteFile(configPath, []byte(`[profile selected]
+region = ap-southeast-2
+aws_access_key_id = fixture-access
+aws_secret_access_key = fixture-secret
+aws_session_token = fixture-session
+`), 0o600))
+	t.Setenv("AWS_CONFIG_FILE", configPath)
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", filepath.Join(t.TempDir(), "empty-credentials"))
+	t.Setenv("AWS_PROFILE", "selected")
+	t.Setenv("AWS_REGION", "")
+	t.Setenv("AWS_ACCESS_KEY_ID", "")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "")
+	t.Setenv("AWS_SESSION_TOKEN", "")
+
+	require.NoError(t, recoveryEKSCommand(t, name, true).Execute())
+	_, err = state.LoadEKSOwnershipState(name, "ap-southeast-2")
+	require.NoError(t, err)
+	_, err = state.LoadEKSOwnershipState(name, "us-west-2")
+	require.ErrorIs(t, err, state.ErrEKSOwnershipStateNotFound)
+	assert.Contains(t, readStandaloneEKSCalls(t, marker),
+		"get cluster --name "+name+" --output json --region ap-southeast-2")
+}
+
 func TestEKSRecoveryDoesNotBorrowAnotherClustersAWSOptions(t *testing.T) {
 	const name = "eks-recovery-explicit-target"
 

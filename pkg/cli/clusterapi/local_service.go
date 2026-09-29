@@ -1018,12 +1018,18 @@ func (s *Service) runCreate(ctx context.Context, name string, spec v1alpha1.Spec
 }
 
 func (s *Service) runDelete(ctx context.Context, name string, spec v1alpha1.Spec) {
-	err := s.runGuardedProvisioner(
+	err := s.runGuardedProvisionerWithMissing(
 		ctx,
 		name,
 		spec,
 		func(actionCtx context.Context, p clusterprovisioner.Provisioner) error {
 			return deleteProvisionerAndState(actionCtx, p, name, spec.Cluster.Distribution)
+		},
+		func() {
+			if cleanupErr := deleteEKSClusterState(name); cleanupErr != nil {
+				slog.Warn("failed to clean up local EKS cluster state after deletion",
+					"cluster", name, "error", cleanupErr)
+			}
 		},
 	)
 
@@ -1088,9 +1094,25 @@ func (s *Service) runGuardedProvisioner(
 	spec v1alpha1.Spec,
 	action func(context.Context, clusterprovisioner.Provisioner) error,
 ) error {
+	return s.runGuardedProvisionerWithMissing(ctx, name, spec, action, nil)
+}
+
+// runGuardedProvisionerWithMissing runs the deletion cleanup while holding the
+// EKS lifecycle lock when the ownership guard proves the cluster is absent.
+func (s *Service) runGuardedProvisionerWithMissing(
+	ctx context.Context,
+	name string,
+	spec v1alpha1.Spec,
+	action func(context.Context, clusterprovisioner.Provisioner) error,
+	onMissing func(),
+) error {
 	run := func() error {
 		guard, err := s.resolveEKSMutationGuard(ctx, spec.Cluster.Distribution, name)
 		if err != nil {
+			if onMissing != nil && errors.Is(err, clustererr.ErrClusterNotFound) {
+				onMissing()
+			}
+
 			return err
 		}
 

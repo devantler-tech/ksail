@@ -109,6 +109,24 @@ func (d *Discoverer) listAWS(ctx context.Context) ([]Cluster, error) {
 
 		lister = provider
 	}
+	if regional, ok := lister.(interface {
+		ListAllClustersWithRegion(context.Context) ([]eksctlclient.ClusterSummary, error)
+	}); ok {
+		summaries, err := regional.ListAllClustersWithRegion(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("query EKS: %w", err)
+		}
+
+		clusters := make([]Cluster, 0, len(summaries))
+		for _, summary := range summaries {
+			clusters = append(clusters, Cluster{
+				Name: summary.Name, Distribution: v1alpha1.DistributionEKS,
+				Provider: v1alpha1.ProviderAWS, Region: summary.Region,
+			})
+		}
+
+		return clusters, nil
+	}
 
 	names, err := lister.ListAllClusters(ctx)
 	if err != nil {

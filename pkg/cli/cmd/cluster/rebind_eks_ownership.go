@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
@@ -137,6 +138,13 @@ and select the region with AWS_REGION or your AWS profile. It never deletes or s
 // validateEKSRecoveryTarget permits explicit recovery without prior local intent, while keeping
 // unreadable state and another distribution's same-named state from being overwritten or hidden.
 func validateEKSRecoveryTarget(cmd *cobra.Command, resolved *lifecycle.ResolvedClusterInfo) error {
+	if cmd.Flags().Changed("name") {
+		name, err := cmd.Flags().GetString("name")
+		if err != nil || strings.TrimSpace(name) == "" {
+			return errEKSRecoveryTargetRequired
+		}
+	}
+
 	spec, err := state.LoadClusterSpec(resolved.ClusterName)
 	if err != nil && !errors.Is(err, state.ErrStateNotFound) {
 		return fmt.Errorf("read local state before EKS recovery: %w", err)

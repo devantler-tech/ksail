@@ -311,11 +311,6 @@ func queryAWSOwnershipTarget(
 	ctx context.Context,
 	resolved *lifecycle.ResolvedClusterInfo,
 ) (eksidentity.Client, error) {
-	err := bindAWSRegionFromKubeconfig(resolved)
-	if err != nil {
-		return nil, err
-	}
-
 	auth, err := queryFrozenAWSOwnership(ctx, resolved)
 	if err != nil {
 		return nil, err
@@ -534,6 +529,12 @@ func queryFrozenAWSOwnership(
 
 	if resolved.AWSRegion == "" {
 		resolved.AWSRegion = strings.TrimSpace(auth.Region)
+	}
+	if resolved.AWSRegion == "" {
+		if err := bindAWSRegionFromKubeconfig(resolved); err != nil {
+			return credentials.AWSResolution{}, err
+		}
+		auth = auth.WithRegion(resolved.AWSRegion)
 	}
 
 	eksctlOptions := credentials.OptionsForAWSChildEnvironment(
