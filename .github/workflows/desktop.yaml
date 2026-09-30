@@ -48,7 +48,7 @@ jobs:
           persist-credentials: false
 
       - name: 🛠️ Setup desktop build (Go, Node.js, webview deps, staged web UI)
-        uses: ./.github/actions/setup-desktop-build
+        uses: $/.github/actions/setup-desktop-build
 
       # Tidy includes dependencies from tagged files. Dependabot maintains this
       # same manifest, so no branch-write exception or PR exemption is needed.
@@ -78,7 +78,7 @@ jobs:
           persist-credentials: false
 
       - name: 🛠️ Setup desktop build
-        uses: ./.github/actions/setup-desktop-build
+        uses: $/.github/actions/setup-desktop-build
 
       - name: 🏗️ Build desktop app
         run: go build -mod=readonly -tags desktop -o desktop/ksail-desktop.exe ./desktop
