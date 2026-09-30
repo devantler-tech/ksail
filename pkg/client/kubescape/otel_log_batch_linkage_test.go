@@ -113,7 +113,9 @@ func allowedEntryPointReferences() map[string]map[string]string {
 //
 // Risk accepted 2026-09-30 while #7375's blocker stands: no otelutil/otelzap
 // release supports go.opentelemetry.io/otel/log v0.21 or later (Go proxy
-// @latest v0.3.2). The accepted risk is the linked but never-constructed
+//
+//	@latest	v0.3.2). The accepted risk is the linked but never-constructed
+//
 // BatchProcessor; the moment it could be constructed, this test fails.
 //
 // The package graph is the host platform's; the scan also reads files that
@@ -169,12 +171,16 @@ func auditModuleOTelReachability(t *testing.T, name, moduleDir string) {
 	}
 
 	if !linked {
-		t.Fatalf("%s is no longer linked on any shipped platform: re-establish the #7375 verdict and delete this guard",
-			otelSDKLogModulePath)
+		t.Fatalf(
+			"%s is no longer linked on any shipped platform: re-establish the #7375 verdict and delete this guard",
+			otelSDKLogModulePath,
+		)
 	}
 
 	if !scanned {
-		t.Fatal("no package imports an OTel batch entry point on any shipped platform, so the scan examined nothing")
+		t.Fatal(
+			"no package imports an OTel batch entry point on any shipped platform, so the scan examined nothing",
+		)
 	}
 }
 
@@ -210,14 +216,22 @@ var b = logger.InitOtel
 
 	got := findEntryPointReferences(fset, file, names, nil)
 	if len(got) != 4 {
-		t.Fatalf("expected 4 references (dot import, InitOtel body, call, value), got %d: %v", len(got), got)
+		t.Fatalf(
+			"expected 4 references (dot import, InitOtel body, call, value), got %d: %v",
+			len(got),
+			got,
+		)
 	}
 
 	allowed := map[string]string{uptracePackagePath: "InitOtel"}
 
 	got = findEntryPointReferences(fset, file, names, allowed)
 	if len(got) != 3 {
-		t.Fatalf("expected 3 references once the InitOtel body is allowed, got %d: %v", len(got), got)
+		t.Fatalf(
+			"expected 3 references once the InitOtel body is allowed, got %d: %v",
+			len(got),
+			got,
+		)
 	}
 }
 
@@ -239,14 +253,26 @@ func TestImportsEntryPointReadsBuildConstrainedFiles(t *testing.T) {
 		}
 	}
 
-	selected, err := importsEntryPoint(goListPackage{Dir: dir, IgnoredGoFiles: []string{"otel_windows.go"}})
+	selected, err := importsEntryPoint(
+		goListPackage{Dir: dir, IgnoredGoFiles: []string{"otel_windows.go"}},
+	)
 	if err != nil || !selected {
-		t.Fatalf("a Windows-only entry-point import was not selected for the scan: selected=%v err=%v", selected, err)
+		t.Fatalf(
+			"a Windows-only entry-point import was not selected for the scan: selected=%v err=%v",
+			selected,
+			err,
+		)
 	}
 
-	selected, err = importsEntryPoint(goListPackage{Dir: dir, IgnoredGoFiles: []string{"other_windows.go"}})
+	selected, err = importsEntryPoint(
+		goListPackage{Dir: dir, IgnoredGoFiles: []string{"other_windows.go"}},
+	)
 	if err != nil || selected {
-		t.Fatalf("a package importing no entry point was selected: selected=%v err=%v", selected, err)
+		t.Fatalf(
+			"a package importing no entry point was selected: selected=%v err=%v",
+			selected,
+			err,
+		)
 	}
 }
 
@@ -304,12 +330,24 @@ func moduleCGO() map[string]string {
 	return map[string]string{"root": "0", "desktop": "1"}
 }
 
-func listDependencyPackages(t *testing.T, moduleDir string, target platform, cgo string) []goListPackage {
+func listDependencyPackages(
+	t *testing.T,
+	moduleDir string,
+	target platform,
+	cgo string,
+) []goListPackage {
 	t.Helper()
 
-	//nolint:gosec // G204: a fixed go subcommand; the target comes from shippedPlatforms.
-	cmd := exec.CommandContext(t.Context(), "go", "list", "-deps", "-json="+goListPackageFields, "./...")
+	cmd := exec.CommandContext(
+		t.Context(),
+		"go",
+		"list",
+		"-deps",
+		"-json="+goListPackageFields,
+		"./...",
+	)
 	cmd.Dir = moduleDir
+
 	cmd.Env = append(os.Environ(), "GOOS="+target.goos, "GOARCH="+target.goarch, "CGO_ENABLED="+cgo)
 
 	var stderr bytes.Buffer
@@ -325,6 +363,7 @@ func listDependencyPackages(t *testing.T, moduleDir string, target platform, cgo
 	var packages []goListPackage
 
 	decoder := json.NewDecoder(bytes.NewReader(out))
+
 	for {
 		var pkg goListPackage
 
@@ -368,7 +407,12 @@ func assertOTelSDKLogImporters(t *testing.T, packages []goListPackage, target st
 
 	if len(unexpected) > 0 {
 		sort.Strings(unexpected)
-		t.Fatalf("unaudited packages import %s on %s (#7375): %v", otelSDKLogModulePath, target, unexpected)
+		t.Fatalf(
+			"unaudited packages import %s on %s (#7375): %v",
+			otelSDKLogModulePath,
+			target,
+			unexpected,
+		)
 	}
 
 	return found
@@ -376,7 +420,11 @@ func assertOTelSDKLogImporters(t *testing.T, packages []goListPackage, target st
 
 // assertNoOTelBatchEntryPointCallers fails on any entry-point reference outside the allowed places and
 // reports whether any package was scanned.
-func assertNoOTelBatchEntryPointCallers(t *testing.T, packages []goListPackage, target string) bool {
+func assertNoOTelBatchEntryPointCallers(
+	t *testing.T,
+	packages []goListPackage,
+	target string,
+) bool {
 	t.Helper()
 
 	packageNames := make(map[string]string, len(packages))
@@ -419,8 +467,11 @@ func assertNoOTelBatchEntryPointCallers(t *testing.T, packages []goListPackage, 
 	}
 
 	if len(references) > 0 {
-		t.Fatalf("OTel log BatchProcessor entry points are referenced on %s (GHSA-hjf4-fphr-2h65, #7375):\n%s",
-			target, strings.Join(references, "\n"))
+		t.Fatalf(
+			"OTel log BatchProcessor entry points are referenced on %s (GHSA-hjf4-fphr-2h65, #7375):\n%s",
+			target,
+			strings.Join(references, "\n"),
+		)
 	}
 
 	return scanned > 0
@@ -475,8 +526,13 @@ func importsEntryPoint(pkg goListPackage) (bool, error) {
 	return false, nil
 }
 
-func scanPackageForEntryPoints(pkg goListPackage, packageNames map[string]string) ([]string, error) {
-	files := append(append(append([]string{}, pkg.GoFiles...), pkg.CgoFiles...), pkg.IgnoredGoFiles...)
+func scanPackageForEntryPoints(
+	pkg goListPackage,
+	packageNames map[string]string,
+) ([]string, error) {
+	files := append(
+		append(append([]string{}, pkg.GoFiles...), pkg.CgoFiles...),
+		pkg.IgnoredGoFiles...)
 	fset := token.NewFileSet()
 	allowed := allowedEntryPointReferences()[pkg.ImportPath]
 
@@ -487,12 +543,19 @@ func scanPackageForEntryPoints(pkg goListPackage, packageNames map[string]string
 			continue
 		}
 
-		file, err := parser.ParseFile(fset, filepath.Join(pkg.Dir, name), nil, parser.SkipObjectResolution)
+		file, err := parser.ParseFile(
+			fset,
+			filepath.Join(pkg.Dir, name),
+			nil,
+			parser.SkipObjectResolution,
+		)
 		if err != nil {
 			return nil, fmt.Errorf("parse %s: %w", name, err)
 		}
 
-		references = append(references, findEntryPointReferences(fset, file, packageNames, allowed)...)
+		references = append(
+			references,
+			findEntryPointReferences(fset, file, packageNames, allowed)...)
 	}
 
 	return references, nil
@@ -540,7 +603,10 @@ func entryPointImports(
 		}
 
 		if local == "." {
-			references = append(references, fmt.Sprintf("%s: dot import of %s", fset.Position(spec.Pos()), path))
+			references = append(
+				references,
+				fmt.Sprintf("%s: dot import of %s", fset.Position(spec.Pos()), path),
+			)
 
 			continue
 		}
@@ -584,7 +650,10 @@ func selectorReferences(
 
 		allowedFunc, isAllowed := allowed[path]
 		if !isAllowed || allowedFunc != enclosing {
-			references = append(references, fmt.Sprintf("%s: %s.%s", fset.Position(sel.Pos()), path, sel.Sel.Name))
+			references = append(
+				references,
+				fmt.Sprintf("%s: %s.%s", fset.Position(sel.Pos()), path, sel.Sel.Name),
+			)
 		}
 
 		return true
@@ -615,7 +684,9 @@ func TestShippedPlatformsCoverReleaseMatrices(t *testing.T) {
 
 	targets := append(goreleaserTargets(t, filepath.Join(root, ".goreleaser.yaml")),
 		goreleaserTargets(t, filepath.Join(root, ".goreleaser.desktop.yaml"))...)
-	targets = append(targets, desktopWorkflowTargets(t, filepath.Join(root, ".github", "workflows", "cd.yaml"))...)
+	targets = append(
+		targets,
+		desktopWorkflowTargets(t, filepath.Join(root, ".github", "workflows", "cd.yaml"))...)
 
 	if len(targets) == 0 {
 		t.Fatal("no release target was read, so the comparison examined nothing")
@@ -623,7 +694,11 @@ func TestShippedPlatformsCoverReleaseMatrices(t *testing.T) {
 
 	for _, target := range targets {
 		if !audited[target.GOOS+"/"+target.GOARCH] {
-			t.Errorf("release target %s/%s is not in shippedPlatforms (#7375)", target.GOOS, target.GOARCH)
+			t.Errorf(
+				"release target %s/%s is not in shippedPlatforms (#7375)",
+				target.GOOS,
+				target.GOARCH,
+			)
 		}
 	}
 }
