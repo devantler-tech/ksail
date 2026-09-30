@@ -335,6 +335,23 @@ func findEntryPointReferences(
 	packageNames map[string]string,
 	allowed map[string]string,
 ) []string {
+	localNames, references := entryPointImports(fset, file, packageNames)
+
+	for _, decl := range file.Decls {
+		references = append(references, selectorReferences(fset, decl, localNames, allowed)...)
+	}
+
+	return references
+}
+
+// entryPointImports maps the local name of every import of an entry-point
+// package to its path, and reports each dot import of one, which no selector
+// check could see.
+func entryPointImports(
+	fset *token.FileSet,
+	file *ast.File,
+	packageNames map[string]string,
+) (map[string]string, []string) {
 	localNames := map[string]string{}
 
 	var references []string
@@ -359,36 +376,47 @@ func findEntryPointReferences(
 		localNames[local] = path
 	}
 
-	for _, decl := range file.Decls {
-		enclosing := ""
-		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil {
-			enclosing = fn.Name.Name
+	return localNames, references
+}
+
+// selectorReferences reports every selector in decl naming an entry point on
+// one of localNames, unless decl is the function allowed for that package.
+func selectorReferences(
+	fset *token.FileSet,
+	decl ast.Decl,
+	localNames map[string]string,
+	allowed map[string]string,
+) []string {
+	enclosing := ""
+	if fn, isFunc := decl.(*ast.FuncDecl); isFunc && fn.Recv == nil {
+		enclosing = fn.Name.Name
+	}
+
+	var references []string
+
+	ast.Inspect(decl, func(node ast.Node) bool {
+		sel, isSelector := node.(*ast.SelectorExpr)
+		if !isSelector {
+			return true
 		}
 
-		ast.Inspect(decl, func(node ast.Node) bool {
-			sel, ok := node.(*ast.SelectorExpr)
-			if !ok {
-				return true
-			}
-
-			ident, ok := sel.X.(*ast.Ident)
-			if !ok {
-				return true
-			}
-
-			path, ok := localNames[ident.Name]
-			if !ok || sel.Sel.Name != otelBatchEntryPoints()[path] {
-				return true
-			}
-
-			allowedFunc, isAllowed := allowed[path]
-			if !isAllowed || allowedFunc != enclosing {
-				references = append(references, fmt.Sprintf("%s: %s.%s", fset.Position(sel.Pos()), path, sel.Sel.Name))
-			}
-
+		ident, isIdent := sel.X.(*ast.Ident)
+		if !isIdent {
 			return true
-		})
-	}
+		}
+
+		path, imported := localNames[ident.Name]
+		if !imported || sel.Sel.Name != otelBatchEntryPoints()[path] {
+			return true
+		}
+
+		allowedFunc, isAllowed := allowed[path]
+		if !isAllowed || allowedFunc != enclosing {
+			references = append(references, fmt.Sprintf("%s: %s.%s", fset.Position(sel.Pos()), path, sel.Sel.Name))
+		}
+
+		return true
+	})
 
 	return references
 }
