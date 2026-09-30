@@ -546,7 +546,10 @@ runs:
         # Project init leaves Talos unpinned; pin the version it already runs,
         # then change only the desired boot image.
         yq -i ".spec.cluster.talos.version = \"${talos_version}\" | .spec.cluster.talos.extensions = [\"siderolabs/iscsi-tools\"]" ksail.yaml
-        UPDATE_ARGS=$(echo "$ARGS" | sed 's/--image-verification [^ ]*//')
+        UPDATE_ARGS=$ARGS
+        if [[ "$UPDATE_ARGS" =~ --image-verification[[:space:]][^[:space:]]* ]]; then
+          UPDATE_ARGS=${UPDATE_ARGS/"${BASH_REMATCH[0]}"/}
+        fi
 
         # The pre-update plan must detect the live node's different boot image.
         # shellcheck disable=SC2086
@@ -572,6 +575,7 @@ runs:
             ready=true
             break
           fi
+          echo "Waiting for Talos nodes to become Ready ($attempt/30)"
           sleep 10
         done
         if [[ "$ready" != true ]]; then
@@ -581,10 +585,12 @@ runs:
         ksail cluster info 2>&1 | tee -a "$LOG_FILE"
 
         # The second plan reads the running schematic through the Talos API.
-        # No changes means the image actually booted and the version stayed put.
+        # The configuration summary can be clean while the image still drifts.
+        # Require both a clean plan and no further image reconciliation.
         # shellcheck disable=SC2086
         ksail cluster update --dry-run --distribution Talos --provider Hetzner $UPDATE_ARGS 2>&1 | tee "$POST_LOG" | tee -a "$LOG_FILE"
-        if ! grep -Fq "No changes detected" "$POST_LOG"; then
+        if grep -Fq "Would reconcile distribution image" "$POST_LOG" ||
+          ! grep -Fq "No changes detected" "$POST_LOG"; then
           echo "❌ Running Talos image did not converge" >&2
           exit 1
         fi

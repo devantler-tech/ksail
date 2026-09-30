@@ -180,7 +180,7 @@ func assertHetznerSchematicRolloutScenario(
 	command.Dir = fixture.project
 	command.Env = append(os.Environ(),
 		"PATH="+fixture.fakeBin+":"+os.Getenv("PATH"),
-		"ARGS=--name schematic-trial",
+		"ARGS=--name schematic-trial --image-verification cosign",
 		"SCENARIO="+scenario.name,
 		"CALLS_FILE="+fixture.callsFile,
 		"DRY_COUNT_FILE="+fixture.dryCountFile,
@@ -197,6 +197,8 @@ func assertHetznerSchematicRolloutScenario(
 	calls, readErr := os.ReadFile(fixture.callsFile)
 	require.NoError(t, readErr)
 	assert.Contains(t, string(calls), "cluster update --dry-run")
+	assert.Contains(t, string(calls), "--name schematic-trial")
+	assert.NotContains(t, string(calls), "--image-verification")
 
 	if scenario.wantNoApply {
 		assert.NotContains(t, string(calls), "cluster update --force")

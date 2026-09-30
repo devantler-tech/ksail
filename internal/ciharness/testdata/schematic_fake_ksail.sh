@@ -12,12 +12,12 @@ if [[ "$1 $2" == "cluster update" ]]; then
 			echo 'No changes detected'
 		else
 			echo 'Would reconcile distribution image at v1.12.4.'
-			if [[ "$count" == 1 ]]; then
-				if [[ "$SCENARIO" == pre-config-drift ]]; then
-					echo 'Would apply 1 in-place, 0 reboot-required, 0 recreate-required'
-				else
-					echo 'No changes detected'
-				fi
+			if [[ "$SCENARIO" == pre-config-drift && "$count" == 1 ]]; then
+				echo 'Would apply 1 in-place, 0 reboot-required, 0 recreate-required'
+			else
+				# Image reconciliation and the configuration summary are separate.
+				# A still-drifted image can accompany a clean configuration plan.
+				echo 'No changes detected'
 			fi
 		fi
 	else
