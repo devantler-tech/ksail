@@ -208,6 +208,13 @@ type Provisioner struct {
 	// and read by drainNode. The provisioner is created per command invocation and
 	// used sequentially, so a field is safe here.
 	drainForce bool
+	// revertFloatingIPEndpoint, when true, makes the desired node configs
+	// authoritative over the running floating-IP endpoint and HCloud VIP, so the
+	// in-place push of a `floatingIPEnabled: true`→`false` update actually strips
+	// them instead of grafting them back from the running config (#6032). It is
+	// request-scoped like drainForce: set by the floating-IP reconcile step of an
+	// update and read by buildDesiredNodeConfig.
+	revertFloatingIPEndpoint bool
 }
 
 // NewProvisioner creates a new Provisioner.

@@ -189,6 +189,20 @@ func (p *Provider) DetachFloatingIP(ctx context.Context, floatingIP *hcloud.Floa
 	return nil
 }
 
+// ReleaseFloatingIP deletes the cluster's ksail-owned floating IP, the
+// `cluster update` counterpart of the release `cluster delete` performs when
+// `floatingIPEnabled` is switched off (#6032). It carries the same ownership
+// guard: a same-name address without the ksail.owned label is left alone.
+// Hetzner unassigns an assigned floating IP as part of the delete, so no
+// separate detach is needed.
+func (p *Provider) ReleaseFloatingIP(ctx context.Context, clusterName string) error {
+	if p.client == nil {
+		return provider.ErrProviderUnavailable
+	}
+
+	return p.deleteFloatingIP(ctx, clusterName)
+}
+
 // deleteFloatingIP deletes the cluster's floating IP when it exists and is
 // ksail-owned. A floating IP that merely shares the name but lacks the
 // ksail.owned label is left alone — reserved addresses the user manages

@@ -52,6 +52,7 @@ func withUnreachableEndpointProbe(p *talosprovisioner.Provisioner) {
 type fipUpdateCalls struct {
 	create atomic.Int32
 	assign atomic.Int32
+	del    atomic.Int32
 }
 
 // fipUpdateOwnedFloatingIPJSON is the canned owned floating IP the update
@@ -147,6 +148,19 @@ func fipUpdateTestServerWithServers(
 	)
 
 	mux.HandleFunc("/floating_ips/7/actions/assign", fipUpdateAssignHandler(calls))
+	mux.HandleFunc(
+		"/floating_ips/7",
+		func(responseWriter http.ResponseWriter, request *http.Request) {
+			if request.Method == http.MethodDelete {
+				calls.del.Add(1)
+				responseWriter.WriteHeader(http.StatusNoContent)
+
+				return
+			}
+
+			http.NotFound(responseWriter, request)
+		},
+	)
 	mux.HandleFunc(
 		"/servers",
 		func(responseWriter http.ResponseWriter, request *http.Request) {
@@ -547,28 +561,51 @@ func TestAllControlPlanesHaveHetznerFloatingIPConfig_RequiresEveryNode(t *testin
 	))
 }
 
-// TestMergeFloatingIPChanges_DisabledWithPresentIPWarnsOnly verifies that the
-// deferred disable transition is visible without claiming a reconcile.
-func TestMergeFloatingIPChanges_DisabledWithPresentIPWarnsOnly(t *testing.T) {
+// TestMergeFloatingIPChanges_DisabledWithPresentIPAddsDisableChange verifies
+// that switching floatingIPEnabled off while the ksail-owned address still
+// exists surfaces the disable transition as one in-place change that names the
+// address it will release (#6032), and that detection stays read-only.
+func TestMergeFloatingIPChanges_DisabledWithPresentIPAddsDisableChange(t *testing.T) {
 	t.Parallel()
 
 	calls := &fipUpdateCalls{}
 	server := fipUpdateTestServer(t, true, calls)
 
-	var log bytes.Buffer
-
 	provisioner := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{
 		FloatingIPLocation: "fsn1",
-	}).WithInfraProvider(newFipUpdateProvider(server.URL)).WithLogWriter(&log)
+	}).WithInfraProvider(newFipUpdateProvider(server.URL))
 
 	diff := &clusterupdate.UpdateResult{}
 	require.NoError(t,
 		provisioner.MergeFloatingIPChangesForTest(t.Context(), "fip-cluster", diff))
 
-	assert.Empty(t, diff.InPlaceChanges,
-		"the disable transition is deferred (#6032) and must not claim a reconcile")
-	assert.Contains(t, log.String(), "does not reconcile the disable transition",
-		"the deferred disable transition must warn instead of staying silent")
+	require.Len(t, diff.InPlaceChanges, 1)
+	change := diff.InPlaceChanges[0]
+	assert.Equal(t, floatingIPEnabledField, change.Field)
+	assert.Equal(t, "true", change.OldValue)
+	assert.Equal(t, "false", change.NewValue)
+	assert.Equal(t, clusterupdate.ChangeCategoryInPlace, change.Category)
+	assert.Contains(t, change.Reason, "192.0.2.10",
+		"the preflight must name the address the update releases")
+	assert.Equal(t, int32(0), calls.del.Load(), "detection must be read-only")
+}
+
+// TestMergeFloatingIPChanges_DisabledWithoutIPIsNoop verifies a cluster that
+// never had (or has already released) its floating IP reports no change.
+func TestMergeFloatingIPChanges_DisabledWithoutIPIsNoop(t *testing.T) {
+	t.Parallel()
+
+	calls := &fipUpdateCalls{}
+	server := fipUpdateTestServer(t, false, calls)
+
+	provisioner := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{}).
+		WithInfraProvider(newFipUpdateProvider(server.URL))
+
+	diff := &clusterupdate.UpdateResult{}
+	require.NoError(t,
+		provisioner.MergeFloatingIPChangesForTest(t.Context(), "fip-cluster", diff))
+
+	assert.Empty(t, diff.InPlaceChanges)
 }
 
 // TestMergeFloatingIPChanges_DisabledIgnoresUnownedCollision verifies external

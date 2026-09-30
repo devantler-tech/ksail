@@ -185,8 +185,9 @@ const floatingIPEnabledField = "provider.hetzner.floatingIPEnabled"
 // in-place reconcile change, so a retry can recover when a prior update created
 // the address but failed before pushing Talos config (#5947). Cloud state is
 // read live because introspection echoes the desired flag and cannot reveal
-// address drift. The disable transition is warned about but remains deferred to
-// #6032. Ownership collisions propagate as errors rather than being swallowed.
+// address drift. A `floatingIPEnabled: false` configuration whose ksail-owned
+// address still exists merges the disable change (#6032). Ownership collisions
+// propagate as errors rather than being swallowed.
 func (p *Provisioner) mergeFloatingIPChanges(
 	ctx context.Context,
 	name string,
@@ -209,8 +210,6 @@ func (p *Provisioner) mergeFloatingIPChanges(
 		return nil
 	}
 
-	exists := floatingIP != nil
-
 	configured, configDetected, configErr := p.detectHetznerFloatingIPConfig(
 		ctx, name, floatingIP,
 	)
@@ -222,17 +221,22 @@ func (p *Provisioner) mergeFloatingIPChanges(
 		return nil
 	}
 
-	p.mergeDetectedFloatingIPChanges(diff, exists, configured)
+	p.mergeDetectedFloatingIPChanges(diff, floatingIP, configured)
 
 	return nil
 }
 
-// mergeDetectedFloatingIPChanges records the enabled-state repair or warns
-// about the separately tracked disable transition after live detection.
+// mergeDetectedFloatingIPChanges records the enabled-state repair or the
+// disable transition after live detection. The disable change names the
+// address in its reason because applying it releases that address, which
+// cannot be undone, so the preflight diff is where the user sees it first.
 func (p *Provisioner) mergeDetectedFloatingIPChanges(
 	diff *clusterupdate.UpdateResult,
-	exists, configured bool,
+	floatingIP *hcloud.FloatingIP,
+	configured bool,
 ) {
+	exists := floatingIP != nil
+
 	if p.hetznerOpts.FloatingIPEnabled {
 		if exists && configured {
 			return
@@ -249,15 +253,30 @@ func (p *Provisioner) mergeDetectedFloatingIPChanges(
 		return
 	}
 
-	if exists {
-		_, _ = fmt.Fprintf(
-			p.logWriter,
-			"  ⚠ floatingIPEnabled is false but the cluster's ksail-owned floating IP"+
-				" still exists; cluster update does not reconcile the disable transition"+
-				" yet (#6032) — detach and release it via the Hetzner console or CLI if"+
-				" it is no longer wanted\n",
-		)
+	if !exists {
+		return
 	}
+
+	diff.InPlaceChanges = append(diff.InPlaceChanges, clusterupdate.Change{
+		Field:    floatingIPEnabledField,
+		OldValue: strconv.FormatBool(true),
+		NewValue: strconv.FormatBool(false),
+		Category: clusterupdate.ChangeCategoryInPlace,
+		Reason:   floatingIPDisableReason(floatingIP),
+	})
+}
+
+// floatingIPDisableReason describes the disable transition, naming the
+// ksail-owned address it releases.
+func floatingIPDisableReason(floatingIP *hcloud.FloatingIP) string {
+	address := floatingIP.Name
+	if floatingIP.IP != nil {
+		address = floatingIP.IP.String()
+	}
+
+	return "control planes drop the VIP config and move back to the first " +
+		"control-plane node's endpoint without reboot, then the ksail-owned " +
+		"floating IP " + address + " is released"
 }
 
 // detectHetznerFloatingIPConfig detects running endpoint/VIP state only when
@@ -679,6 +698,12 @@ func (p *Provisioner) updateApplySteps(
 			return wrapStepErr(p.refreshFloatingIPKubeconfigAfterChanges(
 				ctx, clusterName, oldSpec, newSpec, diff, result,
 			), "failed to refresh floating IP kubeconfig")
+		}},
+		{"release disabled floating IP", func(ctx context.Context) error {
+			// Last of the floating-IP steps: nodes and kubeconfig have already left
+			// the address, so releasing it cannot strand a client (#6032).
+			return wrapStepErr(p.releaseDisabledFloatingIP(ctx, clusterName, diff, result),
+				"failed to release disabled floating IP")
 		}},
 		{"apply reboot-required changes", func(ctx context.Context) error {
 			return wrapStepErr(p.applyRebootChangesIfNeeded(ctx, clusterName, result, diff, opts),

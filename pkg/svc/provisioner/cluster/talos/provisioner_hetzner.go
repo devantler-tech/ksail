@@ -479,6 +479,11 @@ func (p *Provisioner) prepareFloatingIPEndpointBeforeNodeChanges(
 		return err
 	}
 
+	// A drift change while management is disabled is the disable transition:
+	// the regenerated node-IP endpoint without a VIP must win over the running
+	// floating-IP state when the in-place push rebuilds each node's config.
+	p.revertFloatingIPEndpoint = hasEndpointDrift && !p.floatingIPEnabled()
+
 	err = p.applyFloatingIPEndpointConfig(ctx, clusterName)
 	if err != nil {
 		return err
@@ -565,14 +570,23 @@ func (p *Provisioner) runningFloatingIPEndpointIsClean(
 // refreshFloatingIPKubeconfigAfterChanges persists the stable endpoint after
 // endpoint drift has been pushed to running nodes or control-plane topology has
 // changed. The operation is idempotent and skipped for unrelated updates.
+//
+// The disable transition takes the same path: the reconciled bundle's endpoint
+// is then the first control-plane node, so the kubeconfig moves off the
+// floating IP before that address is released.
 func (p *Provisioner) refreshFloatingIPKubeconfigAfterChanges(
 	ctx context.Context,
 	clusterName string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	diff, result *clusterupdate.UpdateResult,
 ) error {
-	if p.hetznerOpts == nil || !p.hetznerOpts.FloatingIPEnabled ||
-		(!hasFloatingIPChange(diff) && !hasControlPlaneTopologyChange(oldSpec, newSpec, result)) {
+	if p.hetznerOpts == nil {
+		return nil
+	}
+
+	topologyRefresh := p.floatingIPEnabled() &&
+		hasControlPlaneTopologyChange(oldSpec, newSpec, result)
+	if !hasFloatingIPChange(diff) && !topologyRefresh {
 		return nil
 	}
 
@@ -626,6 +640,53 @@ func (p *Provisioner) refreshFloatingIPKubeconfig(ctx context.Context, clusterNa
 	kubernetesEndpoint := "https://" + net.JoinHostPort(verifiedIP, "6443")
 
 	return p.fetchAndWriteKubeconfigForCP(ctx, talosEndpoint, kubernetesEndpoint)
+}
+
+// floatingIPEnabled reports whether Hetzner floating-IP management is enabled.
+func (p *Provisioner) floatingIPEnabled() bool {
+	return p.hetznerOpts != nil && p.hetznerOpts.FloatingIPEnabled
+}
+
+// releaseDisabledFloatingIP completes the disable transition (#6032) by
+// releasing the cluster's ksail-owned floating IP. It runs only after the
+// in-place push has moved every node off the address and the kubeconfig has
+// been rewritten, and never when any change failed: releasing an address
+// cannot be undone, so a partial update keeps it and the next `cluster update`
+// re-detects the transition and retries the whole idempotent sequence.
+func (p *Provisioner) releaseDisabledFloatingIP(
+	ctx context.Context,
+	clusterName string,
+	diff, result *clusterupdate.UpdateResult,
+) error {
+	if p.hetznerOpts == nil || p.hetznerOpts.FloatingIPEnabled || !hasFloatingIPChange(diff) {
+		return nil
+	}
+
+	if result != nil && result.HasFailedChanges() {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  ⚠ Keeping the floating IP because the update had failed changes;"+
+				" re-run cluster update to finish disabling it\n",
+		)
+
+		return nil
+	}
+
+	hzProvider, isHetzner := p.infraProvider.(*hetzner.Provider)
+	if !isHetzner {
+		return nil
+	}
+
+	name := p.resolveClusterName(clusterName)
+
+	err := hzProvider.ReleaseFloatingIP(ctx, name)
+	if err != nil {
+		return fmt.Errorf("release floating IP: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Floating IP %s released\n", name+hetzner.FloatingIPSuffix)
+
+	return nil
 }
 
 // refreshFloatingIPEndpointAfterNodeChanges rebuilds the floating-IP endpoint,

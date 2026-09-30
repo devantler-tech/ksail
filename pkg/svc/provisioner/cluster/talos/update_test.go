@@ -231,6 +231,7 @@ func TestUpdateApplyStepOrder_AutoscalerBeforeScaling(t *testing.T) {
 		"refresh floating IP endpoint after node changes",
 		"apply in-place config changes",
 		"refresh floating IP kubeconfig",
+		"release disabled floating IP",
 		"apply reboot-required changes",
 	}, names)
 
@@ -255,6 +256,17 @@ func TestUpdateApplyStepOrder_AutoscalerBeforeScaling(t *testing.T) {
 		"floating IP reconcile must refresh configs before autoscaler template rendering (#5947)")
 	assert.Less(t, floatingIPIdx, inPlaceIdx,
 		"floating IP reconcile must regenerate configs before the in-place push (#5947)")
+
+	// The disable invariant (#6032): the address is released only after every
+	// node and the kubeconfig have moved off it, since a release cannot be undone.
+	kubeconfigIdx := slices.Index(names, "refresh floating IP kubeconfig")
+	releaseIdx := slices.Index(names, "release disabled floating IP")
+
+	require.NotEqual(t, -1, releaseIdx, "floating IP release step must be present")
+	assert.Less(t, inPlaceIdx, releaseIdx,
+		"floating IP must be released only after the in-place push (#6032)")
+	assert.Less(t, kubeconfigIdx, releaseIdx,
+		"floating IP must be released only after the kubeconfig refresh (#6032)")
 }
 
 // TestApplyNodeScalingChanges_NilSpecs verifies that nil specs short-circuit scaling without error.
