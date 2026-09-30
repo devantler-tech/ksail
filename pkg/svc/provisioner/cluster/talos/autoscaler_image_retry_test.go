@@ -12,6 +12,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
@@ -25,6 +26,42 @@ import (
 )
 
 const autoscalerRetryEnvironmentVariable = "KSAIL_TEST_IMAGE"
+
+// Propagation can return nil while recording individual node failures. Such an
+// attempt must keep a durable retry signal even after its Secret is up to date.
+func TestAutoscalerImageRefreshRetainsPendingOnRecordedFailure(t *testing.T) {
+	t.Setenv(autoscalerRetryEnvironmentVariable, "test-token")
+
+	client := autoscalerImageRetryClient(t)
+	serverLists := &atomic.Int32{}
+	serverLists.Store(3)
+	server := autoscalerImageRetryServer(t, client, serverLists, false)
+	result := clusterupdate.NewEmptyUpdateResult()
+	result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{})
+
+	err := newAutoscalerImageRetryProvisioner(t, server.URL).
+		EnsureAutoscalerSecretWithResultForTest(t.Context(), "test-cluster", result)
+	require.ErrorContains(t, err, "configuration changes failed")
+	secret, err := client.CoreV1().Secrets("kube-system").Get(
+		t.Context(), "cluster-autoscaler-config", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "2", secret.Annotations["ksail.io/autoscaler-image-rollout-pending"])
+
+	require.NoError(t, newAutoscalerImageRetryProvisioner(t, server.URL).
+		EnsureAutoscalerSecretIfNeededForTest(t.Context(), "test-cluster"))
+	retried, err := client.CoreV1().Secrets("kube-system").Get(
+		t.Context(), "cluster-autoscaler-config", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+	assert.Equal(
+		t,
+		secret.Data,
+		retried.Data,
+		"the successful retry leaves the desired template unchanged",
+	)
+	assert.NotContains(t, retried.Annotations, "ksail.io/autoscaler-image-rollout-pending")
+}
 
 func TestAutoscalerImageRefreshAtZeroCapacityWaitsForActivation(t *testing.T) {
 	t.Setenv(autoscalerRetryEnvironmentVariable, "test-token")
@@ -117,7 +154,7 @@ func TestAutoscalerImageRefreshRetriesInterruptedConvergence(t *testing.T) {
 		t,
 		newProvisioner().EnsureAutoscalerSecretIfNeededForTest(t.Context(), "test-cluster"),
 	)
-	assert.EqualValues(t, 3, serverLists.Load())
+	assert.EqualValues(t, 4, serverLists.Load())
 	secret, err = client.CoreV1().Secrets("kube-system").Get(
 		t.Context(), "cluster-autoscaler-config", metav1.GetOptions{},
 	)
@@ -128,7 +165,7 @@ func TestAutoscalerImageRefreshRetriesInterruptedConvergence(t *testing.T) {
 		t,
 		newProvisioner().EnsureAutoscalerSecretIfNeededForTest(t.Context(), "test-cluster"),
 	)
-	assert.EqualValues(t, 3, serverLists.Load())
+	assert.EqualValues(t, 4, serverLists.Load())
 }
 
 func TestAutoscalerImageRefreshRetriesInterruptedRestart(t *testing.T) {

@@ -613,6 +613,16 @@ func (p *Provisioner) EnsureAutoscalerSecretIfNeededForTest(
 	)
 }
 
+// EnsureAutoscalerSecretWithResultForTest retains recorded per-node failures in
+// the real unclassified image-convergence path.
+func (p *Provisioner) EnsureAutoscalerSecretWithResultForTest(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.ensureAutoscalerSecretIfNeeded(ctx, clusterName, nil, result)
+}
+
 // AutoscalerRecycleRequiredForTest exposes autoscalerRecycleRequired for unit testing.
 func AutoscalerRecycleRequiredForTest(diff *clusterupdate.UpdateResult, imageChanged bool) bool {
 	return autoscalerRecycleRequired(diff, imageChanged)

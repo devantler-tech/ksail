@@ -140,6 +140,11 @@ func (p *Provisioner) convergeAutoscalerBaseline(
 		return err
 	}
 
+	if result != nil && result.HasFailedChanges() {
+		return fmt.Errorf("autoscaler image convergence: %d changes failed: %w",
+			len(result.FailedChanges), errAutoscalerNodeConfigurationChangesFailed)
+	}
+
 	return p.completeAutoscalerImageBaseline(ctx, desiredImageID)
 }
 
@@ -180,10 +185,6 @@ func (p *Provisioner) propagateAutoscalerBaseline(
 		err := p.recycleAutoscalerImageNodes(ctx, clusterName)
 		if err != nil {
 			return err
-		}
-
-		if diff == nil || (!diff.HasInPlaceChanges() && !autoscalerRebootRequired(diff)) {
-			return nil
 		}
 	}
 

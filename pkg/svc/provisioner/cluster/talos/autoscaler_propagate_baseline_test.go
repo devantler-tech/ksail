@@ -117,6 +117,7 @@ func TestPropagateAutoscalerBaseline_ImageWithConfiguration(t *testing.T) {
 		diff    *clusterupdate.UpdateResult
 		wantMsg string
 	}{
+		{"unclassified config retry", nil, inPlaceNoopMsg},
 		{"in-place config", inPlaceDiff(), inPlaceNoopMsg},
 		{"reboot config", reboot, rebootNoopMsg},
 	} {
