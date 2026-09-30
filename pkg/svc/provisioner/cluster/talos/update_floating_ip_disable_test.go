@@ -9,6 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,11 +19,12 @@ import (
 // the floating-IP endpoint and HCloud VIP while ksail.yaml now sets
 // `floatingIPEnabled: false` — the state the disable transition starts from.
 type floatingIPDisableFixture struct {
-	provisioner    *talosprovisioner.Provisioner
-	calls          *fipUpdateCalls
-	running        talosconfig.Provider
-	diff           *clusterupdate.UpdateResult
-	kubeconfigPath string
+	provisioner     *talosprovisioner.Provisioner
+	calls           *fipUpdateCalls
+	running         talosconfig.Provider
+	diff            *clusterupdate.UpdateResult
+	kubeconfigPath  string
+	talosconfigPath string
 }
 
 // newFloatingIPDisableFixture renders the running control-plane config with
@@ -51,10 +53,13 @@ func newFloatingIPDisableFixture(t *testing.T) *floatingIPDisableFixture {
 	require.True(t, hasHCloudVIP(running), "fixture must start from a VIP-carrying node")
 
 	kubeconfigPath := t.TempDir() + "/kubeconfig"
+	talosconfigPath := writeFloatingIPTalosconfig(t)
 	provisioner := newFloatingIPTestProvisionerWithOptions(t, v1alpha1.OptionsHetzner{
 		FloatingIPLocation: "fsn1",
 		TokenEnvVar:        testFloatingIPTokenEnvVar,
-	}, talosprovisioner.NewOptions().WithKubeconfigPath(kubeconfigPath)).
+	}, talosprovisioner.NewOptions().
+		WithKubeconfigPath(kubeconfigPath).
+		WithTalosconfigPath(talosconfigPath)).
 		WithInfraProvider(hzProvider).
 		WithNodeConfigFetcherForTest(
 			func(context.Context, string) (talosconfig.Provider, error) {
@@ -73,11 +78,12 @@ func newFloatingIPDisableFixture(t *testing.T) *floatingIPDisableFixture {
 	require.Len(t, diff.InPlaceChanges, 1, "the disable transition must be detected")
 
 	return &floatingIPDisableFixture{
-		provisioner:    provisioner,
-		calls:          calls,
-		running:        running,
-		diff:           diff,
-		kubeconfigPath: kubeconfigPath,
+		provisioner:     provisioner,
+		calls:           calls,
+		running:         running,
+		diff:            diff,
+		kubeconfigPath:  kubeconfigPath,
+		talosconfigPath: talosconfigPath,
 	}
 }
 
@@ -93,6 +99,30 @@ func (f *floatingIPDisableFixture) runStep(
 	require.NoError(t, f.provisioner.RunUpdateApplyStepForTest(
 		t.Context(), name, "fip-cluster", spec, spec, f.diff, result,
 	))
+}
+
+// writeFloatingIPTalosconfig saves a talosconfig whose cluster context dials
+// the floating IP, next to an unrelated context that lists the same address
+// and must be left alone.
+func writeFloatingIPTalosconfig(t *testing.T) string {
+	t.Helper()
+
+	path := t.TempDir() + "/talosconfig"
+	config := &clientconfig.Config{
+		Context: "fip-cluster",
+		Contexts: map[string]*clientconfig.Context{
+			"fip-cluster": {
+				Endpoints: []string{"192.0.2.10", "203.0.113.5"},
+				Nodes:     []string{"203.0.113.5"},
+			},
+			"other-cluster": {
+				Endpoints: []string{"192.0.2.10"},
+			},
+		},
+	}
+	require.NoError(t, config.Save(path))
+
+	return path
 }
 
 // hasHCloudVIP reports whether any network device in config carries an HCloud
@@ -140,6 +170,13 @@ func TestUpdateApplySteps_FloatingIPDisableRevertsNodesThenReleases(t *testing.T
 
 	assert.Equal(t, int32(1), fixture.calls.del.Load(),
 		"the ksail-owned floating IP must be released once clients have moved")
+
+	saved, err := clientconfig.Open(fixture.talosconfigPath)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"203.0.113.5"}, saved.Contexts["fip-cluster"].Endpoints,
+		"talosctl must stop dialing the released address")
+	assert.Equal(t, []string{"192.0.2.10"}, saved.Contexts["other-cluster"].Endpoints,
+		"another cluster's context must not be rewritten")
 }
 
 // TestUpdateApplySteps_FloatingIPDisableKeepsAddressAfterFailedChanges proves

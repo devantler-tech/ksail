@@ -648,11 +648,13 @@ func (p *Provisioner) floatingIPEnabled() bool {
 }
 
 // releaseDisabledFloatingIP completes the disable transition (#6032) by
-// releasing the cluster's ksail-owned floating IP. It runs only after the
-// in-place push has moved every node off the address and the kubeconfig has
-// been rewritten, and never when any change failed: releasing an address
-// cannot be undone, so a partial update keeps it and the next `cluster update`
-// re-detects the transition and retries the whole idempotent sequence.
+// moving the saved talosconfig off the cluster's ksail-owned floating IP and
+// then releasing it. It is the last update step, so it runs only after every
+// other fallible step succeeded, the in-place push has moved every node off the
+// address, and the kubeconfig has been rewritten — and never when any change
+// failed: releasing an address cannot be undone, so a partial update keeps it
+// and the next `cluster update` re-detects the transition and retries the whole
+// idempotent sequence.
 func (p *Provisioner) releaseDisabledFloatingIP(
 	ctx context.Context,
 	clusterName string,
@@ -679,7 +681,28 @@ func (p *Provisioner) releaseDisabledFloatingIP(
 
 	name := p.resolveClusterName(clusterName)
 
-	err := hzProvider.ReleaseFloatingIP(ctx, name)
+	floatingIP, err := hzProvider.GetOwnedFloatingIP(ctx, name)
+	if err != nil {
+		return fmt.Errorf("look up floating IP before release: %w", err)
+	}
+
+	if floatingIP == nil {
+		return nil
+	}
+
+	if floatingIP.IP != nil && p.talosConfigs != nil && p.talosConfigs.ControlPlane() != nil &&
+		p.talosConfigs.ControlPlane().Cluster().Endpoint() != nil {
+		err = p.repointTalosconfigEndpoint(
+			name,
+			floatingIP.IP.String(),
+			p.talosConfigs.ControlPlane().Cluster().Endpoint().Hostname(),
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = hzProvider.ReleaseFloatingIP(ctx, name)
 	if err != nil {
 		return fmt.Errorf("release floating IP: %w", err)
 	}

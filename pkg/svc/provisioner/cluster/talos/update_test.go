@@ -231,8 +231,8 @@ func TestUpdateApplyStepOrder_AutoscalerBeforeScaling(t *testing.T) {
 		"refresh floating IP endpoint after node changes",
 		"apply in-place config changes",
 		"refresh floating IP kubeconfig",
-		"release disabled floating IP",
 		"apply reboot-required changes",
+		"release disabled floating IP",
 	}, names)
 
 	// The load-bearing invariant (#5219): autoscaler refresh precedes scaling.
@@ -267,6 +267,8 @@ func TestUpdateApplyStepOrder_AutoscalerBeforeScaling(t *testing.T) {
 		"floating IP must be released only after the in-place push (#6032)")
 	assert.Less(t, kubeconfigIdx, releaseIdx,
 		"floating IP must be released only after the kubeconfig refresh (#6032)")
+	assert.Equal(t, len(names)-1, releaseIdx,
+		"floating IP release must be the last step so no later failure can follow it (#6032)")
 }
 
 // TestApplyNodeScalingChanges_NilSpecs verifies that nil specs short-circuit scaling without error.

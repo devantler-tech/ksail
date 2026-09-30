@@ -699,15 +699,16 @@ func (p *Provisioner) updateApplySteps(
 				ctx, clusterName, oldSpec, newSpec, diff, result,
 			), "failed to refresh floating IP kubeconfig")
 		}},
-		{"release disabled floating IP", func(ctx context.Context) error {
-			// Last of the floating-IP steps: nodes and kubeconfig have already left
-			// the address, so releasing it cannot strand a client (#6032).
-			return wrapStepErr(p.releaseDisabledFloatingIP(ctx, clusterName, diff, result),
-				"failed to release disabled floating IP")
-		}},
 		{"apply reboot-required changes", func(ctx context.Context) error {
 			return wrapStepErr(p.applyRebootChangesIfNeeded(ctx, clusterName, result, diff, opts),
 				"failed to apply reboot-required changes")
+		}},
+		{"release disabled floating IP", func(ctx context.Context) error {
+			// Always the LAST step: a release cannot be undone, so it runs only once
+			// every fallible step has succeeded and nodes, kubeconfig and talosconfig
+			// have left the address (#6032).
+			return wrapStepErr(p.releaseDisabledFloatingIP(ctx, clusterName, diff, result),
+				"failed to release disabled floating IP")
 		}},
 	}
 }

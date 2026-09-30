@@ -92,6 +92,86 @@ func (p *Provisioner) saveTalosconfig(configBundle *bundle.Bundle) error {
 	return nil
 }
 
+// repointTalosconfigEndpoint replaces fromIP with toIP in the endpoints and nodes
+// of every saved talosconfig context belonging to clusterName, so talosctl stops
+// dialing an address that is about to be released (#6032). Only this cluster's
+// contexts — matched by context name or recorded cluster — are touched, and a
+// missing talosconfig is not an error: there is nothing stale to repoint.
+func (p *Provisioner) repointTalosconfigEndpoint(clusterName, fromIP, toIP string) error {
+	if p.options == nil || p.options.TalosconfigPath == "" || fromIP == "" || toIP == "" {
+		return nil
+	}
+
+	talosconfigPath, err := fsutil.ExpandHomePath(p.options.TalosconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to expand talosconfig path: %w", err)
+	}
+
+	talosconfigPath, err = fsutil.EvalCanonicalPath(talosconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to canonicalize talosconfig path: %w", err)
+	}
+
+	existing, err := clientconfig.Open(talosconfigPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+
+		return fmt.Errorf("failed to open existing talosconfig: %w", err)
+	}
+
+	changed := false
+
+	for name, talosContext := range existing.Contexts {
+		if talosContext == nil || (name != clusterName && talosContext.Cluster != clusterName) {
+			continue
+		}
+
+		endpoints, endpointsChanged := replaceAddress(talosContext.Endpoints, fromIP, toIP)
+		nodes, nodesChanged := replaceAddress(talosContext.Nodes, fromIP, toIP)
+
+		talosContext.Endpoints = endpoints
+		talosContext.Nodes = nodes
+		changed = changed || endpointsChanged || nodesChanged
+	}
+
+	if !changed {
+		return nil
+	}
+
+	err = existing.Save(talosconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to save repointed talosconfig: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Talosconfig endpoints moved from %s to %s\n", fromIP, toIP)
+
+	return nil
+}
+
+// replaceAddress returns addresses with every fromIP replaced by toIP, dropping
+// the duplicate when toIP is already listed, and whether anything changed.
+func replaceAddress(addresses []string, fromIP, toIP string) ([]string, bool) {
+	if !slices.Contains(addresses, fromIP) {
+		return addresses, false
+	}
+
+	result := make([]string, 0, len(addresses))
+
+	for _, address := range addresses {
+		if address == fromIP {
+			address = toIP
+		}
+
+		if !slices.Contains(result, address) {
+			result = append(result, address)
+		}
+	}
+
+	return result, true
+}
+
 // mergeTalosconfigBytes merges raw talosconfig bytes into an existing talosconfig file.
 // If the file does not exist, it creates it with the new content.
 // It creates the parent directory and canonicalizes the path before reading or writing
