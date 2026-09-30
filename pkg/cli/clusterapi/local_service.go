@@ -187,6 +187,9 @@ func NewService() *Service {
 		DockerFactory: service.dockerFactory,
 		// The web UI renders per-cluster run-state, so opt into the Docker run-state probe.
 		ProbeRunState: true,
+		// Lifecycle calls a kubeconfig-only row unmanaged only after a complete listing, so an
+		// unreachable Docker daemon must count as a failed provider, not as no Docker clusters.
+		ReportDockerFailures: true,
 	}
 	service.ResourceAdapter = api.ResourceAdapter{Provider: service}
 	service.resolveEKSGuard = service.defaultEKSGuard
@@ -530,7 +533,7 @@ func (s *Service) resolveCluster(
 	ctx context.Context,
 	name string,
 ) (v1alpha1.Distribution, v1alpha1.Provider, bool, error) {
-	live := s.enumerate(ctx)
+	live, complete := s.discover(ctx)
 	if cluster, ok := live[name]; ok {
 		if cluster.Distribution == v1alpha1.DistributionEKS {
 			err := confirmDiscoveredEKSRegion(name, cluster.Region)
@@ -551,6 +554,12 @@ func (s *Service) resolveCluster(
 	}
 
 	s.mu.Unlock()
+
+	// An unmanaged row is decided here, before the EKS ownership fallback below, which could bind
+	// the row to a separately owned cluster of the same name.
+	if handled, err := s.unmanagedRowOutcome(name, live, complete); handled {
+		return "", "", false, err
+	}
 
 	// Persisted EKS ownership is the last resort, and it is what makes a bound cluster reachable at
 	// all. Live enumeration lists only the region selected NOW, so an EKS cluster created in another
@@ -613,11 +622,68 @@ func (s *Service) dockerFactory(
 	return s.newFactory(cluster)
 }
 
+// unmanagedRowOutcome decides a lifecycle target that List surfaces as an unmanaged (kubeconfig-only)
+// row. List shows such rows, so a UI that offers one must not then hear "not found" when it asks to
+// delete/start/stop it: handled is true and err is api.ErrUnmanagedCluster, like the CLI's lifecycle
+// guard. When a provider failed, that provider may be hiding the managed cluster behind the context,
+// so the row is neither called unmanaged nor resolved any further: handled is true with a nil err,
+// which the caller reports as "not found". handled is false for any name that is not such a row.
+func (s *Service) unmanagedRowOutcome(
+	name string,
+	live map[string]clusterdiscovery.Cluster,
+	complete bool,
+) (bool, error) {
+	if !s.surfacesAsUnmanaged(name, live) {
+		return false, nil
+	}
+
+	if !complete {
+		return true, nil
+	}
+
+	return true, fmt.Errorf(
+		"%q is an unmanaged cluster: %w; read-only operations (resource browsing, logs, exec) still work",
+		name,
+		api.ErrUnmanagedCluster,
+	)
+}
+
+// surfacesAsUnmanaged reports whether List would surface name as an unmanaged (kubeconfig-only)
+// cluster, given the clusters discovery found and the names with a tracked job — the same managed set
+// and the same shared helper List uses. It reuses the caller's discovery rather than listing every
+// provider again.
+func (s *Service) surfacesAsUnmanaged(name string, live map[string]clusterdiscovery.Cluster) bool {
+	s.mu.Lock()
+
+	jobNames := make(map[string]struct{}, len(s.jobs))
+	for jobName := range s.jobs {
+		jobNames[jobName] = struct{}{}
+	}
+
+	s.mu.Unlock()
+
+	unmanaged := clusterdiscovery.UnmanagedContextNames(
+		s.loadKubeconfig(),
+		func(candidate string) bool {
+			if _, ok := live[candidate]; ok {
+				return true
+			}
+
+			_, ok := jobNames[candidate]
+
+			return ok
+		},
+	)
+
+	return slices.Contains(unmanaged, name)
+}
+
 // startJob resolves a cluster, records an in-flight job for it at the given phase, and returns the
 // minimal Spec a background provisioner action needs (distribution + provider — provider options like
-// server types are irrelevant for delete/start/stop). Returns api.ErrNotFound when the cluster is
-// unknown. Shared by Delete and the Start/Stop lifecycle path so the resolve+register handshake lives
-// in one place.
+// server types are irrelevant for delete/start/stop). Returns api.ErrUnmanagedCluster for a
+// kubeconfig context List surfaces as unmanaged, and api.ErrNotFound when the cluster is unknown.
+// Shared by Delete and the Start/Stop lifecycle path so the resolve+register handshake lives in one
+// place.
 func (s *Service) startJob(
 	ctx context.Context,
 	name string,
@@ -1170,6 +1236,15 @@ func (s *Service) runProvisionerWithGuard(
 // provider to report a name wins). Per-provider failures are logged and skipped (best-effort) so a
 // single unreachable provider never blanks the list; this matches `ksail cluster list`.
 func (s *Service) enumerate(ctx context.Context) map[string]clusterdiscovery.Cluster {
+	found, _ := s.discover(ctx)
+
+	return found
+}
+
+// discover is enumerate plus whether every provider answered. A caller that draws a conclusion from
+// a cluster's ABSENCE (such as "this kubeconfig context is not one ksail manages") must check that
+// flag: a provider that failed may hold the cluster that was not found.
+func (s *Service) discover(ctx context.Context) (map[string]clusterdiscovery.Cluster, bool) {
 	clusters, failures := s.discoverer.Discover(ctx, s.discoverProviders)
 
 	for _, failure := range failures {
@@ -1184,7 +1259,7 @@ func (s *Service) enumerate(ctx context.Context) map[string]clusterdiscovery.Clu
 		}
 	}
 
-	return found
+	return found, len(failures) == 0
 }
 
 func (s *Service) buildProvisioner(
