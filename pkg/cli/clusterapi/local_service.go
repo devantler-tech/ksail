@@ -530,7 +530,7 @@ func (s *Service) resolveCluster(
 	ctx context.Context,
 	name string,
 ) (v1alpha1.Distribution, v1alpha1.Provider, bool, error) {
-	live := s.enumerate(ctx)
+	live, complete := s.discover(ctx)
 	if cluster, ok := live[name]; ok {
 		return cluster.Distribution, cluster.Provider, true, nil
 	}
@@ -543,7 +543,27 @@ func (s *Service) resolveCluster(
 		return current.distribution, current.provider, true, nil
 	}
 
+	jobNames := make(map[string]struct{}, len(s.jobs))
+	for jobName := range s.jobs {
+		jobNames[jobName] = struct{}{}
+	}
+
 	s.mu.Unlock()
+
+	// List surfaces kubeconfig contexts ksail did not provision as unmanaged clusters, so a UI that
+	// shows one must not then hear "not found" when it asks to delete/start/stop it — nor reach the
+	// EKS ownership fallback below, which could bind the row to a separately owned cluster of the
+	// same name. Refuse it as unmanaged instead, like the CLI's lifecycle guard. The check reuses
+	// this discovery and List's managed set (live plus jobs), so it cannot disagree with the list,
+	// and it applies only when every provider answered: a provider that failed may be hiding the
+	// managed cluster behind that context.
+	if complete && s.surfacesAsUnmanaged(name, live, jobNames) {
+		return "", "", false, fmt.Errorf(
+			"%q is an unmanaged cluster: %w; read-only operations (resource browsing, logs, exec) still work",
+			name,
+			api.ErrUnmanagedCluster,
+		)
+	}
 
 	// Persisted EKS ownership is the last resort, and it is what makes a bound cluster reachable at
 	// all. Live enumeration lists only the region selected NOW, so an EKS cluster created in another
@@ -579,16 +599,25 @@ func (s *Service) dockerFactory(
 	return s.newFactory(cluster)
 }
 
-// isUnmanagedCluster reports whether List surfaces name as an unmanaged (kubeconfig-only) cluster. It
-// reads the same list the UI shows, so the refusal can never disagree with what the user was offered.
-// A failed list is not evidence of anything and reports false, leaving the caller's "not found".
-func (s *Service) isUnmanagedCluster(ctx context.Context, name string) bool {
-	cluster, err := s.Get(ctx, "", name)
-	if err != nil {
-		return false
-	}
+// surfacesAsUnmanaged reports whether List would surface name as an unmanaged (kubeconfig-only)
+// cluster, given the clusters discovery found and the names with a tracked job — the same managed set
+// and the same shared helper List uses.
+func (s *Service) surfacesAsUnmanaged(
+	name string,
+	live map[string]clusterdiscovery.Cluster,
+	jobNames map[string]struct{},
+) bool {
+	unmanaged := clusterdiscovery.UnmanagedContextNames(s.loadKubeconfig(), func(candidate string) bool {
+		if _, ok := live[candidate]; ok {
+			return true
+		}
 
-	return cluster.IsUnmanaged()
+		_, ok := jobNames[candidate]
+
+		return ok
+	})
+
+	return slices.Contains(unmanaged, name)
 }
 
 // startJob resolves a cluster, records an in-flight job for it at the given phase, and returns the
@@ -608,17 +637,6 @@ func (s *Service) startJob(
 	}
 
 	if !ok {
-		// List surfaces kubeconfig contexts ksail did not provision as unmanaged clusters, so a UI
-		// that shows one must not then hear "not found" when it asks to delete/start/stop it. Refuse
-		// it as unmanaged instead, like the CLI's lifecycle guard.
-		if s.isUnmanagedCluster(ctx, name) {
-			return v1alpha1.Spec{}, fmt.Errorf(
-				"%q is an unmanaged cluster: %w; read-only operations (resource browsing, logs, exec) still work",
-				name,
-				api.ErrUnmanagedCluster,
-			)
-		}
-
 		return v1alpha1.Spec{}, fmt.Errorf("%w: %q", api.ErrNotFound, name)
 	}
 
@@ -1149,6 +1167,15 @@ func (s *Service) runProvisionerWithGuard(
 // provider to report a name wins). Per-provider failures are logged and skipped (best-effort) so a
 // single unreachable provider never blanks the list; this matches `ksail cluster list`.
 func (s *Service) enumerate(ctx context.Context) map[string]clusterdiscovery.Cluster {
+	found, _ := s.discover(ctx)
+
+	return found
+}
+
+// discover is enumerate plus whether every provider answered. A caller that draws a conclusion from
+// a cluster's ABSENCE (such as "this kubeconfig context is not one ksail manages") must check that
+// flag: a provider that failed may hold the cluster that was not found.
+func (s *Service) discover(ctx context.Context) (map[string]clusterdiscovery.Cluster, bool) {
 	clusters, failures := s.discoverer.Discover(ctx, s.discoverProviders)
 
 	for _, failure := range failures {
@@ -1163,7 +1190,7 @@ func (s *Service) enumerate(ctx context.Context) map[string]clusterdiscovery.Clu
 		}
 	}
 
-	return found
+	return found, len(failures) == 0
 }
 
 func (s *Service) buildProvisioner(

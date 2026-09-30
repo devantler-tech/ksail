@@ -2767,3 +2767,83 @@ users:
 - name: colleague
   user: {}
 `
+
+// countingLister is a discovery lister that returns a fixed result and counts its calls.
+type countingLister struct {
+	mu    sync.Mutex
+	calls int
+	err   error
+}
+
+func (l *countingLister) ListAllClusters(context.Context) ([]string, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	l.calls++
+
+	return nil, l.err
+}
+
+func (l *countingLister) count() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	return l.calls
+}
+
+// unmanagedTestService returns a service whose kubeconfig holds one managed and one unmanaged
+// context, with Hetzner discovery backed by lister.
+func unmanagedTestService(t *testing.T, lister *countingLister) *clusterapi.Service {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVanilla: {clusters: []string{devClusterName}},
+	})
+
+	kubeconfig := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(kubeconfig, []byte(managedAndUnmanagedKubeconfig), 0o600))
+	service.SetKubeconfigPathForTest(kubeconfig)
+	service.AddHetznerDiscoveryForTest(lister)
+
+	return service
+}
+
+// TestLifecycleRefusesUnmanagedRowBeforeEKSOwnershipFallback checks that an unmanaged row whose name
+// also has persisted EKS ownership is refused as unmanaged. Resolving it through the ownership
+// fallback instead would let the row the UI calls unmanaged act on a separately owned EKS cluster.
+func TestLifecycleRefusesUnmanagedRowBeforeEKSOwnershipFallback(t *testing.T) {
+	service := unmanagedTestService(t, &countingLister{})
+	require.NoError(t, state.SaveEKSOwnershipState(
+		unmanagedContextName, "eu-north-1", ownershipRecordFor(unmanagedContextName, "eu-north-1")))
+
+	err := service.Delete(context.Background(), "default", unmanagedContextName)
+	require.ErrorIs(t, err, api.ErrUnmanagedCluster)
+}
+
+// TestLifecycleDoesNotCallAContextUnmanagedWhenDiscoveryFailed checks that a failed provider listing
+// never turns a kubeconfig context into an "unmanaged" refusal: the failed provider may hold the
+// cluster that was not found, so the answer stays "not found".
+func TestLifecycleDoesNotCallAContextUnmanagedWhenDiscoveryFailed(t *testing.T) {
+	service := unmanagedTestService(t, &countingLister{err: errTestDiscovery})
+
+	err := service.Delete(context.Background(), "default", unmanagedContextName)
+	require.ErrorIs(t, err, api.ErrNotFound)
+	require.NotErrorIs(t, err, api.ErrUnmanagedCluster)
+}
+
+// TestLifecycleRefusalRunsDiscoveryOnce checks that refusing an unmanaged row reuses the discovery
+// that resolved it instead of listing every provider a second time.
+func TestLifecycleRefusalRunsDiscoveryOnce(t *testing.T) {
+	lister := &countingLister{}
+	service := unmanagedTestService(t, lister)
+
+	err := service.Delete(context.Background(), "default", unmanagedContextName)
+	require.ErrorIs(t, err, api.ErrUnmanagedCluster)
+	assert.Equal(t, 1, lister.count(), "the refusal must run provider discovery exactly once")
+}
+
+// unmanagedContextName is the context managedAndUnmanagedKubeconfig holds that ksail did not provision.
+const unmanagedContextName = "colleague-cluster"
+
+var errTestDiscovery = errors.New("provider unavailable")

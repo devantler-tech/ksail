@@ -278,3 +278,10 @@ func (s *Service) ReplaceJobWithAnotherFailedEKSCreateForTest(name string) {
 		startedAt:    time.Now(),
 	}
 }
+
+// AddHetznerDiscoveryForTest adds the Hetzner provider to discovery, backed by lister. A lister that
+// fails makes discovery incomplete; a counting one shows how often a path runs discovery.
+func (s *Service) AddHetznerDiscoveryForTest(lister clusterdiscovery.ClusterLister) {
+	s.discoverer.Hetzner = lister
+	s.discoverProviders = append(slices.Clone(s.discoverProviders), v1alpha1.ProviderHetzner)
+}
