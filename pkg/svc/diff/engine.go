@@ -28,6 +28,12 @@ const RegistryCredentialField = "cluster.localRegistry.credentials"
 // renames cannot silently disconnect detection from application.
 const FluxVerifyField = "cluster.workload.flux.verify"
 
+// AutoscalerValuesField is the diff key for Cluster Autoscaler chart values
+// that differ from the ones this KSail version renders. It carries the
+// cluster.autoscaler.node. prefix so reconciliation routes it to the same single
+// Helm upgrade as every other autoscaler field.
+const AutoscalerValuesField = "cluster.autoscaler.node.chartValues"
+
 // fluxVerifyDriftedDisplay is the old value rendered for verify drift. The
 // detector receives a single boolean covering both an absent spec.verify block
 // and one that is present but differs, so this names the disjunction rather than
@@ -204,6 +210,33 @@ func (e *Engine) CheckRegistryCredential(
 		NewValue: registryCredentialNewDisplay,
 		Category: clusterupdate.ChangeCategoryInPlace,
 		Reason:   "registry credentials can be refreshed in-place by re-writing the registry Secret",
+	})
+}
+
+// CheckAutoscalerValues appends an in-place change when the installed Cluster
+// Autoscaler release carries values other than the ones this KSail version
+// renders. This is the only signal a KSail upgrade that changes the rendered
+// values produces: the structural diff compares cluster specs, so a new CPU
+// limit (ksail#7145) with an unchanged spec yields no field change, and
+// `cluster update` reported success while the cluster kept the old values
+// (ksail#7366).
+//
+// drifted is decided by the autoscaler installer, which renders the values
+// and reads the deployed ones.
+func (e *Engine) CheckAutoscalerValues(
+	drifted bool,
+	result *clusterupdate.UpdateResult,
+) {
+	if !drifted {
+		return
+	}
+
+	routeChange(result, clusterupdate.Change{
+		Field:    AutoscalerValuesField,
+		OldValue: "deployed",
+		NewValue: "rendered by this KSail version",
+		Category: clusterupdate.ChangeCategoryInPlace,
+		Reason:   "the autoscaler release can be upgraded in-place to the values this KSail version renders",
 	})
 }
 

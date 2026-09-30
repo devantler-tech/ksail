@@ -46,6 +46,7 @@ func TestHandlerForField_KnownFields(t *testing.T) {
 		"cluster.autoscaler.node.expander",
 		"cluster.autoscaler.node.scaleDownUnneededTime",
 		"cluster.autoscaler.node.pools[my-pool]",
+		specdiff.AutoscalerValuesField,
 	}
 
 	for _, field := range knownFields {
@@ -351,6 +352,55 @@ func TestReconcileClusterAutoscaler_Uninstall_NilFactory(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, setup.ErrClusterAutoscalerInstallerFactoryNil)
+}
+
+// TestReconcileAutoscalerPinsTarget catches writes falling back to an unrelated
+// ambient context after drift detection inspected the intended cluster.
+//
+//nolint:paralleltest // Overrides the process-wide installer factory.
+func TestReconcileAutoscalerPinsTarget(t *testing.T) {
+	for _, testCase := range []struct{ name, configured, want string }{
+		{name: "derived", want: "admin@test-cluster"},
+		{name: "whitespace", configured: " \t", want: "admin@test-cluster"},
+		{name: "explicit", configured: "selected-cluster", want: "selected-cluster"},
+		{name: "trimmed", configured: " selected-cluster ", want: "selected-cluster"},
+	} {
+		for _, enabled := range []v1alpha1.NodeAutoscalerEnabled{
+			v1alpha1.NodeAutoscalerEnabledEnabled, v1alpha1.NodeAutoscalerEnabledDisabled,
+		} {
+			t.Run(testCase.name+"/"+string(enabled), func(t *testing.T) {
+				cfg := &v1alpha1.Cluster{}
+				cfg.Spec.Cluster.Distribution = v1alpha1.DistributionTalos
+				cfg.Spec.Cluster.Provider = v1alpha1.ProviderHetzner
+				cfg.Spec.Cluster.Autoscaler.Node.Enabled = enabled
+				cfg.Spec.Cluster.Connection.Context = testCase.configured
+				original := cfg.DeepCopy()
+				calls := 0
+				restore := cluster.SetClusterAutoscalerInstallerFactoryForTests(
+					func(target *v1alpha1.Cluster) (installer.Installer, error) {
+						calls++
+
+						assert.Equal(t, testCase.want, target.Spec.Cluster.Connection.Context)
+
+						return nil, errStopAfterCapture
+					},
+				)
+				t.Cleanup(restore)
+
+				diff := &clusterupdate.UpdateResult{InPlaceChanges: []clusterupdate.Change{
+					{Field: specdiff.AutoscalerValuesField},
+					{Field: "cluster.autoscaler.node.maxNodesTotal"},
+				}}
+				result := clusterupdate.NewEmptyUpdateResult()
+				err := cluster.ExportReconcileComponents(newReconcileTestCmd(), cfg, diff, result)
+				require.ErrorIs(t, err, errStopAfterCapture)
+				assert.Equal(t, 1, calls, "multiple autoscaler fields share one attempt")
+				assert.Len(t, result.FailedChanges, 2,
+					"the first failure must survive deduplication")
+				assert.Equal(t, original, cfg, "target pinning must not mutate the caller")
+			})
+		}
+	}
 }
 
 // TestReconcileComponents_EmptyDiff verifies that an empty diff results in no changes and no error.
