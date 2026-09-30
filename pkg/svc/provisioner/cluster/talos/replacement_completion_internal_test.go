@@ -49,13 +49,11 @@ func completedControlPlane() replacementCompletionObservation {
 				targetServer(
 					replacedServerID,
 					targetName,
-					targetCluster,
 					hetzner.NodeTypeControlPlane,
 				),
 				targetServer(
 					102,
 					"prod-control-plane-2",
-					targetCluster,
 					hetzner.NodeTypeControlPlane,
 				),
 			},
@@ -136,7 +134,7 @@ func TestProveReplacementCompletedRefusesAnIncompleteReplacement(t *testing.T) {
 			name: "original and new server both carry the name",
 			mutate: func(o *replacementCompletionObservation) {
 				o.Servers = append(o.Servers,
-					targetServer(101, targetName, targetCluster, hetzner.NodeTypeControlPlane))
+					targetServer(101, targetName, hetzner.NodeTypeControlPlane))
 			},
 			want: "ambiguous",
 		},
