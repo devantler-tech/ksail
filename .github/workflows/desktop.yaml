@@ -7,9 +7,8 @@ on:
       - "pkg/cli/uiserver/**"
       - "pkg/webui/**"
       - "web/ui/**"
-      # The desktop module vendors the main module via `replace => ../`, so a root
-      # dependency bump (which touches only go.mod/go.sum) can break the desktop
-      # build. Trigger on those too so drift is caught here, not at release time.
+      # Both entry points share the root manifest. Check dependency bumps against
+      # the native build as well as the default CLI build.
       - "go.mod"
       - "go.sum"
       - ".goreleaser.desktop.yaml"
@@ -51,31 +50,41 @@ jobs:
       - name: 🛠️ Setup desktop build (Go, Node.js, webview deps, staged web UI)
         uses: ./.github/actions/setup-desktop-build
 
-      # The desktop app is a SEPARATE Go module that vendors the main module via `replace => ../`, so
-      # its go.mod/go.sum must independently track the main module's dependency graph. The main repo's
-      # Tidy check does not cover it, so a dependency bump in the root module (e.g. hcloud-go) can
-      # leave desktop/go.{mod,sum} stale and break this build with a cryptic "updates to go.mod
-      # needed" / "missing go.sum entry". Fail fast with a clear, actionable message instead: run
-      # `go -C desktop mod tidy` and commit the result.
-      #
-      # Same-repo PRs are exempt: ci.yaml's verify-desktop-tidy job self-heals them (it commits the
-      # tidy diff back to the PR branch via the auto-commit job), so hard-failing here would only add
-      # a transient red X that the auto-commit push then re-runs. Keep the hard gate for pushes to
-      # main and for fork PRs, which the self-heal cannot push to.
-      - name: 🧹 Verify desktop module is tidy
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
-        working-directory: desktop
+      # Tidy includes dependencies from tagged files. Dependabot maintains this
+      # same manifest, so no branch-write exception or PR exemption is needed.
+      - name: 🧹 Verify shared module is tidy
         run: go mod tidy -diff
 
       - name: 🏗️ Build desktop app
-        working-directory: desktop
-        run: go build -o ksail-desktop .
+        run: go build -mod=readonly -tags desktop -o desktop/ksail-desktop ./desktop
 
-      # The desktop module's tests are not covered by the main repo's test suite (separate module),
-      # so run them here — this is the only CI leg with the CGO webview toolchain they compile against.
-      - name: 🧪 Test desktop module
-        working-directory: desktop
-        run: go test ./...
+      - name: 🔍 Lint desktop app
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.11.4
+          args: --build-tags desktop --timeout 20m ./desktop/...
+
+      - name: 🧪 Test desktop app
+        run: go test -mod=readonly -tags desktop ./desktop
+
+  build-windows:
+    name: 🏗️ Build + test (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 🛠️ Setup desktop build
+        uses: ./.github/actions/setup-desktop-build
+
+      - name: 🏗️ Build desktop app
+        run: go build -mod=readonly -tags desktop -o desktop/ksail-desktop.exe ./desktop
+
+      - name: 🧪 Test desktop app
+        run: go test -mod=readonly -tags desktop ./desktop
 
   # Validate the full macOS desktop release pipeline (build into KSail.app, archive, cask
   # generation) without publishing. --snapshot needs no secrets, so this runs on fork PRs too.
@@ -100,6 +109,9 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6.4.0 # zizmor: ignore[cache-poisoning]
         with:
           node-version: "24"
+
+      - name: 🧪 Test desktop app (Darwin helpers included)
+        run: go test -mod=readonly -tags desktop ./desktop
 
       - name: 🏗️ Run GoReleaser (snapshot)
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3

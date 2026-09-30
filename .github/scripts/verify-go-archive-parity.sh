@@ -47,7 +47,6 @@ done
 # manifest that requires the module.
 readonly module_manifests=(
 	'go.mod'
-	'desktop/go.mod'
 )
 
 require_manifest_pin() {

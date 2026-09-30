@@ -93,6 +93,23 @@ go build -ldflags="-s -w" -o ksail-optimized
 
 > **Note:** Release builds use `-ldflags="-s -w -X .../buildmeta.Version=... -X .../buildmeta.Commit=... -X .../buildmeta.Date=..."`. The `-s -w` flags strip debug symbols (reducing binary size significantly) and the `-X` flags inject version metadata via GoReleaser. Development builds retain debug symbols for a better debugging experience.
 
+### Native desktop builds
+
+The CLI and desktop app share the root Go module. Desktop source and tests require
+`-tags desktop`, leaving ordinary CLI builds and tests independent of the system webview.
+Run `go mod tidy` at the repository root for both entry points.
+
+```sh
+make desktop                           # builds the web UI and native binary
+make desktop-app                       # macOS app bundle
+go test -tags desktop ./desktop        # native tests; requires the platform webview toolchain
+golangci-lint run --build-tags desktop ./desktop/...  # native lint
+```
+
+Linux requires GTK4 and WebKitGTK 6.0 development packages; macOS requires Xcode
+command line tools. Desktop CI runs native tests on Linux and macOS and checks the
+macOS app/cask packaging.
+
 ### Test
 
 #### Generating mocks
@@ -218,7 +235,7 @@ The repository is organized around the top-level CLI entry point (`main.go`) and
 - **internal/** - Private packages (build metadata, operator reconcilers, test utilities)
 - **charts/** - Helm charts (`charts/ksail-operator/` — operator + embedded web UI)
 - **web/** - Web UI source (`web/ui/` — Vite/React SPA, embedded via `pkg/webui`)
-- **desktop/** - Native desktop app (separate Go module wrapping the web UI)
+- **desktop/** - Native desktop app (shared Go module; opt in with -tags desktop)
 - **copilot-plugin/** - ksail agent skill, published as a plugin via devantler-tech/agent-plugins
 - **docs/** - Astro documentation site
 - **vsce/** - VSCode extension

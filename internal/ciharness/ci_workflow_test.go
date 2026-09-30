@@ -394,30 +394,13 @@ type autoCommitWorkflow struct {
 	} `yaml:"jobs"`
 }
 
-// The exact conditions the two auto-commit delivery paths must carry, plus the
-// restriction that decides what may be applied on a Dependabot branch.
-//
-// Dependabot's exclusion lives in 📋 Apply patches rather than on the PR-branch push:
-// what may reach a Dependabot branch is a per-patch question, not a per-step one, and
-// pinning it on the push could only express "all patches or none". The protected-branch
-// path is asserted alongside because it is where a skipped generated-file sync lands
-// instead, and silently losing it would turn this into a generated-file correctness
-// regression on the default branch.
+// Dependabot must retain sole ownership of its branches. Ordinary PR sync and
+// the protected-branch repair remain reachable for generated-file correctness.
 const (
-	approvedAutoCommitPRBranchCondition        = "github.event_name == 'pull_request'"
+	approvedAutoCommitPRBranchCondition = "github.event_name == 'pull_request'" +
+		" && github.event.pull_request.user.login != 'dependabot[bot]'"
 	approvedAutoCommitProtectedBranchCondition = "github.event_name != 'pull_request'"
-	approvedDesktopTidyOnlyRestriction         = "${{ github.event_name == 'pull_request'" +
-		" && github.event.pull_request.user.login == 'dependabot[bot]' }}"
 )
-
-// The guard 📋 Apply patches must carry, pinned as a whole block.
-//
-// A substring match on the variable name alone would pass against an inverted test, a
-// negated comparison, or a guard that logs without skipping — each of which pushes a
-// generated-file commit onto a Dependabot branch and re-opens #6832. Requiring the
-// `continue` in the same block is what makes this an assertion about behaviour.
-const approvedDesktopTidyOnlyGuard = `if [ "${DESKTOP_TIDY_ONLY}" = "true" ] && ` +
-	`[ "$(basename "$patch")" != "desktop-tidy.patch" ]; then`
 
 // stepCondition returns the `if:` of the uniquely-named step in the given job.
 //
@@ -462,133 +445,30 @@ func step(t *testing.T, job []map[string]any, stepName string) map[string]any {
 	return found[0]
 }
 
-// Pins Dependabot's ownership of its own branches.
-//
-// GitHub permanently revokes Dependabot's ability to rebase a pull request once any
-// other actor pushes to its branch ("this PR has been edited by someone other than
-// Dependabot"). CI's generated-file sync used to push onto every same-repo PR branch,
-// Dependabot's included, so a synced bump could never recover from base drift: the
-// moment anything else merged it went behind base, auto-merge could never fire, and
-// the ordinary `@dependabot rebase` remedy was refused. Roughly half of Dependabot
-// PRs carried the sync commit, and because the ecosystem is capped at an open-PR
-// limit, the stranded ones throttled dependency intake generally (issue #6832).
-//
-// The condition is asserted whole rather than by substring for the reason the
-// concurrency tests above record: a fragment match admits inverted and appended
-// forms that still push to Dependabot's branch. A generated-file change on a
-// Dependabot bump is not lost by this exclusion — it lands through the
-// protected-branch path after the bump merges, which is why that path is pinned here
-// too.
 func TestAutoCommitLeavesDependabotBranchesToDependabot(t *testing.T) {
 	t.Parallel()
 
-	contents := readRepoFile(t, ".github/workflows/ci.yaml")
-
 	var workflow autoCommitWorkflow
-	require.NoError(t, yaml.Unmarshal(contents, &workflow))
-
+	require.NoError(t, yaml.Unmarshal(readRepoFile(t, ".github/workflows/ci.yaml"), &workflow))
 	job, found := workflow.Jobs["auto-commit"]
-	require.True(t, found, "ci workflow must define the auto-commit job")
-
-	assert.Equal(
-		t,
-		approvedAutoCommitPRBranchCondition,
+	require.True(t, found)
+	assert.Equal(t, approvedAutoCommitPRBranchCondition,
 		stepCondition(t, job.Steps, "📤 Commit and push generated changes (PR branch)"),
-		"the PR-branch push must commit whatever was applied; restricting WHICH patches"+
-			" reach a Dependabot branch is 📋 Apply patches' job, asserted below",
-	)
-
-	assert.Equal(
-		t,
-		approvedAutoCommitProtectedBranchCondition,
+		"a foreign commit permanently prevents Dependabot from rebasing")
+	assert.Equal(t, approvedAutoCommitProtectedBranchCondition,
 		stepCondition(t, job.Steps, "📤 Open PR for generated changes (protected branch)"),
-		"the protected-branch sync must stay reachable: it is where a Dependabot bump's"+
-			" generated changes land once the bump has merged",
-	)
-
-	applyPatches := step(t, job.Steps, "📋 Apply patches")
-
-	env, hasEnv := applyPatches["env"].(map[string]any)
-	require.True(t, hasEnv, "📋 Apply patches must carry an `env:` mapping")
-
-	assert.Equal(
-		t,
-		approvedDesktopTidyOnlyRestriction,
-		env["DESKTOP_TIDY_ONLY"],
-		"the Dependabot restriction must key on the pull request's author; any other"+
-			" expression either leaks generated-file commits onto Dependabot branches"+
-			" (#6832) or withholds the desktop tidy from everyone (#6974)",
-	)
-
-	run, hasRun := applyPatches["run"].(string)
-	require.True(t, hasRun, "📋 Apply patches must carry a string `run:` script")
-
-	assert.Contains(
-		t,
-		run,
-		approvedDesktopTidyOnlyGuard,
-		"📋 Apply patches must actually skip non-desktop patches when the restriction is"+
-			" set — an unread DESKTOP_TIDY_ONLY is a restriction in name only",
-	)
-
-	assert.Contains(
-		t,
-		run,
-		"continue",
-		"the guard must skip the patch rather than only logging about it",
-	)
+		"generated changes must still be delivered after a dependency update merges")
 }
 
-// Pins the desktop tidy's delivery onto Dependabot branches.
-//
-// desktop/ is a separate Go module that vendors the root via `replace => ../`, so a root
-// dependency bump leaves desktop/go.{mod,sum} stale. ci.yaml's verify-desktop-tidy job
-// computes the fix and uploads it as desktop-tidy.patch, and desktop.yaml deliberately
-// SKIPS its own hard `go mod tidy -diff` gate on same-repo PRs on the stated grounds that
-// this self-heal covers them.
-//
-// Between 2026-09-03 and 2026-09-08 it did not: the PR-branch push excluded Dependabot,
-// so on a bump the patch was computed, uploaded, applied — and then never committed, while
-// the job reported success. The bump's own required checks failed on the stale module, so
-// it could never merge, and the protected-branch path that was supposed to repair it only
-// runs after a merge. Three bumps (#6971, #6972, #6973) stalled on one root cause, with a
-// clean before/after: every bump merged before the exclusion carried an automated tidy
-// commit, every one after needed a hand-pushed one.
-//
-// The two workflows defer to each other, so this test exists to keep at least one of them
-// honest: if the self-heal is ever restricted away from Dependabot again, desktop.yaml's
-// skipped gate means nothing catches it until a bump goes red.
-func TestApplyPatchesDeliversDesktopTidyToDependabotBranches(t *testing.T) {
+func TestDesktopChecksSharedManifestWithoutPRExemption(t *testing.T) {
 	t.Parallel()
 
-	contents := readRepoFile(t, ".github/workflows/ci.yaml")
-
 	var workflow autoCommitWorkflow
-	require.NoError(t, yaml.Unmarshal(contents, &workflow))
-
-	job, found := workflow.Jobs["auto-commit"]
-	require.True(t, found, "ci workflow must define the auto-commit job")
-
-	run, hasRun := step(t, job.Steps, "📋 Apply patches")["run"].(string)
-	require.True(t, hasRun, "📋 Apply patches must carry a string `run:` script")
-
-	// The restriction names the one patch that survives it. If verify-desktop-tidy's
-	// artifact is ever renamed, the guard silently starts skipping every patch on a
-	// Dependabot branch — including the desktop tidy — and the stall returns.
-	assert.Contains(
-		t,
-		run,
-		`!= "desktop-tidy.patch"`,
-		"the guard must admit desktop-tidy.patch by name; a rename of the uploaded"+
-			" artifact must break this test rather than silently restore the stall",
-	)
-
-	desktopTidy := readRepoFile(t, ".github/workflows/ci.yaml")
-	assert.Contains(
-		t,
-		string(desktopTidy),
-		"name: desktop-tidy-patch",
-		"verify-desktop-tidy must keep uploading the artifact under the name the guard"+
-			" admits; the two are only connected by this string",
-	)
+	require.NoError(t, yaml.Unmarshal(readRepoFile(t, ".github/workflows/desktop.yaml"), &workflow))
+	job, found := workflow.Jobs["build-linux"]
+	require.True(t, found)
+	tidy := step(t, job.Steps, "🧹 Verify shared module is tidy")
+	assert.Equal(t, "go mod tidy -diff", tidy["run"])
+	assert.NotContains(t, tidy, "if", "every dependency branch needs a real tidy gate")
+	assert.NotContains(t, tidy, "working-directory", "verify the shared root manifest")
 }

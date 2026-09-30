@@ -129,8 +129,8 @@ linters:
           list-mode: strict
           allow:
             - $gostd
-            # wails is the native desktop module's UI runtime (desktop/ is a separate Go module). The
-            # CLI binary never imports it; allowing it here lets the desktop module lint under this
+            # wails is the tagged native desktop entry point's UI runtime. The CLI binary
+            # never imports it; allowing it here lets tagged desktop code lint under this
             # shared config without per-import nolint:depguard directives.
             - github.com/wailsapp/wails
             - github.com/apricote
@@ -190,7 +190,7 @@ linters:
             # sigstore-go (+ the sigstore signature helpers) powers cosign/sigstore plugin verification
             # in pkg/svc/pluginsig. The CLI binary already links these transitively (via the kubescape
             # client); they are confined to pluginsig (wired in only at the `ksail open web` command
-            # layer) so clusterapi and the desktop module stay sigstore-free. The org prefix covers both
+            # layer) so clusterapi and the desktop entry point stay sigstore-free. The org prefix covers both
             # github.com/sigstore/sigstore-go and github.com/sigstore/sigstore (the signature helpers).
             - github.com/sigstore
             - github.com/sirupsen/logrus
