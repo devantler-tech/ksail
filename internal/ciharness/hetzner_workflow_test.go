@@ -77,6 +77,15 @@ func TestHetznerManualSchematicRolloutIsOptInAndKeepsCleanup(t *testing.T) {
 	systemTest, found := workflow.Jobs["system-test"]
 	require.True(t, found, "Hetzner system-test job is missing")
 	run := findHarnessStep(t, systemTest.Steps, "🧪 Run KSail System Test")
+	selection := findHarnessStep(t, systemTest.Steps, "✅ Validate Talos schematic trial selection")
+	assert.Contains(t, selection.If, "inputs.test_schematic_rollout")
+	assert.Contains(t, selection.Run, "Talos")
+	assert.Contains(t, selection.Run, "INIT")
+	assert.Contains(t, selection.Run, "RESIZE_TYPE")
+	assert.Less(t,
+		harnessStepIndex(t, systemTest.Steps, selection.Name),
+		harnessStepIndex(t, systemTest.Steps, run.Name),
+	)
 	assert.Equal(t,
 		"${{ github.event_name == 'workflow_dispatch' && inputs.test_schematic_rollout || false }}",
 		run.With["test-talos-schematic-rollout"],
@@ -122,6 +131,7 @@ func TestHetznerSchematicRolloutRequiresLiveDriftAndReadback(t *testing.T) {
 	}{
 		{name: "converged", wantSuccess: true},
 		{name: "pre-missing", wantNoApply: true},
+		{name: "not-ready"},
 		{name: "post-drift"},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
@@ -165,11 +175,16 @@ if [[ "$1 $2" == "cluster update" ]]; then
 elif [[ "$1 $2" == "cluster info" ]]; then
   echo 'Ready: 1/1 (ready/total)'
 elif [[ "$1 $2 $3" == "workload get nodes" ]]; then
-  echo '{"items":[{"status":{"conditions":[{"type":"Ready","status":"True"}]}}]}'
+  if [[ "$SCENARIO" == not-ready ]]; then
+    echo '{"items":[{"status":{"conditions":[{"type":"Ready","status":"False"}]}}]}'
+  else
+    echo '{"items":[{"status":{"conditions":[{"type":"Ready","status":"True"}]}}]}'
+  fi
 else
   exit 1
 fi
 `)
+			writeExecutable(t, filepath.Join(fakeBin, "sleep"), "#!/usr/bin/env bash\nexit 0\n")
 
 			commandContext, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 			defer cancel()

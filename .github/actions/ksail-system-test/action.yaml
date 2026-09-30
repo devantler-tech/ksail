@@ -562,7 +562,6 @@ runs:
           echo "❌ The Talos image upgrade path did not run" >&2
           exit 1
         fi
-        ksail cluster info 2>&1 | tee -a "$LOG_FILE"
         ready=false
         for attempt in {1..30}; do
           if ksail workload get nodes -o json | jq -e '.items | length > 0 and all(.[]; any(.status.conditions[]?; .type == "Ready" and .status == "True"))' >/dev/null; then
@@ -575,6 +574,7 @@ runs:
           echo "❌ Talos nodes did not become Ready after the image rollout" >&2
           exit 1
         fi
+        ksail cluster info 2>&1 | tee -a "$LOG_FILE"
 
         # The second plan reads the running schematic through the Talos API.
         # No changes means the image actually booted and the version stayed put.
