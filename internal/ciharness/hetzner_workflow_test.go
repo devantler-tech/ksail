@@ -170,12 +170,12 @@ func assertHetznerSchematicRolloutScenario(
 	commandContext, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
-	command := exec.CommandContext(
+	command := exec.CommandContext( //nolint:gosec // Reviewed action body.
 		commandContext,
 		"bash",
 		"-c",
 		rollout,
-	) //nolint:gosec // Reviewed action body.
+	)
 	command.Dir = fixture.project
 	command.Env = append(os.Environ(),
 		"PATH="+fixture.fakeBin+":"+os.Getenv("PATH"),
