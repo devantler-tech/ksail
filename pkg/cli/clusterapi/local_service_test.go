@@ -2855,7 +2855,9 @@ func TestLifecycleDoesNotCallAContextUnmanagedWhenDockerListingFailed(t *testing
 // TestLifecycleIncompleteDiscoveryNeverReachesEKSFallbackForUnmanagedRow checks the combination of a
 // failed provider listing and persisted EKS ownership for an unmanaged row's name: the row must stay
 // "not found" rather than resolve through the ownership fallback to a separately owned cluster.
-func TestLifecycleIncompleteDiscoveryNeverReachesEKSFallbackForUnmanagedRow(t *testing.T) { //nolint:paralleltest // t.Setenv
+//
+//nolint:paralleltest // t.Setenv
+func TestLifecycleIncompleteDiscoveryNeverReachesEKSFallbackForUnmanagedRow(t *testing.T) {
 	service := unmanagedTestService(t, &countingLister{err: errTestDiscovery})
 	require.NoError(t, state.SaveEKSOwnershipState(
 		unmanagedContextName, "eu-north-1", ownershipRecordFor(unmanagedContextName, "eu-north-1")))

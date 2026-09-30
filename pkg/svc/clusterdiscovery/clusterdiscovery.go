@@ -261,6 +261,33 @@ func (d *Discoverer) resolver() credentials.Resolver {
 	return credentials.EnvResolver{}
 }
 
+// listDockerDistribution lists the cluster names one Docker-based distribution reports.
+func (d *Discoverer) listDockerDistribution(
+	ctx context.Context,
+	distribution v1alpha1.Distribution,
+) ([]string, error) {
+	factory, err := d.dockerFactory(distribution)
+	if err != nil {
+		return nil, fmt.Errorf("build %s factory: %w", distribution, err)
+	}
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{Cluster: v1alpha1.ClusterSpec{Distribution: distribution}},
+	}
+
+	provisioner, _, err := factory.Create(ctx, clusterCfg)
+	if err != nil {
+		return nil, fmt.Errorf("create %s provisioner: %w", distribution, err)
+	}
+
+	names, err := provisioner.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list %s clusters: %w", distribution, err)
+	}
+
+	return names, nil
+}
+
 // listDocker enumerates Docker-based clusters across all local distributions, deduplicated by name
 // (a name uniquely identifies a Docker cluster, and the first distribution that reports it wins).
 // Per-distribution failures are swallowed (best-effort), matching `ksail cluster list`, unless
@@ -274,27 +301,9 @@ func (d *Discoverer) listDocker(ctx context.Context) ([]Cluster, error) {
 	)
 
 	for _, distribution := range LocalDistributions() {
-		factory, err := d.dockerFactory(distribution)
+		names, err := d.listDockerDistribution(ctx, distribution)
 		if err != nil {
-			failures = append(failures, fmt.Errorf("%s: %w", distribution, err))
-
-			continue
-		}
-
-		clusterCfg := &v1alpha1.Cluster{
-			Spec: v1alpha1.Spec{Cluster: v1alpha1.ClusterSpec{Distribution: distribution}},
-		}
-
-		provisioner, _, err := factory.Create(ctx, clusterCfg)
-		if err != nil {
-			failures = append(failures, fmt.Errorf("%s: %w", distribution, err))
-
-			continue
-		}
-
-		names, err := provisioner.List(ctx)
-		if err != nil {
-			failures = append(failures, fmt.Errorf("%s: %w", distribution, err))
+			failures = append(failures, err)
 
 			continue
 		}
