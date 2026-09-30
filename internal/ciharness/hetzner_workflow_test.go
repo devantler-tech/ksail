@@ -115,6 +115,20 @@ func TestHetznerManualSchematicRolloutIsOptInAndKeepsCleanup(t *testing.T) {
 	assert.Contains(t, cleanup.If, "always()")
 }
 
+type hetznerSchematicScenario struct {
+	name        string
+	wantSuccess bool
+	wantNoApply bool
+}
+
+type schematicRolloutFixture struct {
+	project      string
+	fakeBin      string
+	logDir       string
+	callsFile    string
+	dryCountFile string
+}
+
 func TestHetznerSchematicRolloutRequiresLiveDriftAndReadback(t *testing.T) {
 	t.Parallel()
 
@@ -124,11 +138,7 @@ func TestHetznerSchematicRolloutRequiresLiveDriftAndReadback(t *testing.T) {
 	))
 	rollout := findHarnessStep(t, action.Runs.Steps, "🧪 ksail cluster update — same-version Talos schematic")
 
-	for _, scenario := range []struct {
-		name        string
-		wantSuccess bool
-		wantNoApply bool
-	}{
+	for _, scenario := range []hetznerSchematicScenario{
 		{name: "converged", wantSuccess: true},
 		{name: "pre-missing", wantNoApply: true},
 		{name: "not-ready"},
@@ -136,25 +146,83 @@ func TestHetznerSchematicRolloutRequiresLiveDriftAndReadback(t *testing.T) {
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			t.Parallel()
+			assertHetznerSchematicRolloutScenario(t, rollout.Run, scenario)
+		})
+	}
+}
 
-			project := t.TempDir()
-			fakeBin := t.TempDir()
-			logDir := t.TempDir()
-			callsFile := filepath.Join(t.TempDir(), "calls")
-			dryCountFile := filepath.Join(t.TempDir(), "dry-count")
-			defaultsDir := filepath.Join(project, "pkg", "apis", "cluster", "v1alpha1")
-			require.NoError(t, os.MkdirAll(defaultsDir, 0o755))
-			require.NoError(t, os.WriteFile(
-				filepath.Join(defaultsDir, "defaults.go"),
-				[]byte("package v1alpha1\nconst (\n\tDefaultHetznerTalosVersion = \"v1.12.4\"\n)\n"),
-				0o644,
-			))
-			require.NoError(t, os.WriteFile(
-				filepath.Join(project, "ksail.yaml"),
-				[]byte("spec:\n  cluster:\n    distribution: Talos\n    provider: Hetzner\n"),
-				0o644,
-			))
-			writeExecutable(t, filepath.Join(fakeBin, "ksail"), `#!/usr/bin/env bash
+func assertHetznerSchematicRolloutScenario(t *testing.T, rollout string, scenario hetznerSchematicScenario) {
+	t.Helper()
+	fixture := newSchematicRolloutFixture(t)
+
+	commandContext, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	command := exec.CommandContext(commandContext, "bash", "-c", rollout)
+	command.Dir = fixture.project
+	command.Env = append(os.Environ(),
+		"PATH="+fixture.fakeBin+":"+os.Getenv("PATH"),
+		"ARGS=--name schematic-trial",
+		"SCENARIO="+scenario.name,
+		"CALLS_FILE="+fixture.callsFile,
+		"DRY_COUNT_FILE="+fixture.dryCountFile,
+		"KSAIL_SYSTEM_TEST_LOG_DIR="+fixture.logDir,
+	)
+
+	output, err := command.CombinedOutput()
+	if scenario.wantSuccess {
+		require.NoErrorf(t, err, "rollout failed:\n%s", output)
+	} else {
+		require.Errorf(t, err, "rollout accepted missing live evidence:\n%s", output)
+	}
+
+	calls, readErr := os.ReadFile(fixture.callsFile)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(calls), "cluster update --dry-run")
+
+	if scenario.wantNoApply {
+		assert.NotContains(t, string(calls), "cluster update --force")
+	} else {
+		assert.Contains(t, string(calls), "cluster update --force")
+	}
+
+	if scenario.wantSuccess {
+		config, readErr := os.ReadFile(filepath.Join(fixture.project, "ksail.yaml"))
+		require.NoError(t, readErr)
+		assert.Contains(t, string(config), "v1.12.4")
+		assert.Contains(t, string(config), "siderolabs/iscsi-tools")
+	}
+}
+
+func newSchematicRolloutFixture(t *testing.T) schematicRolloutFixture {
+	t.Helper()
+	fixture := schematicRolloutFixture{
+		project:      t.TempDir(),
+		fakeBin:      t.TempDir(),
+		logDir:       t.TempDir(),
+		callsFile:    filepath.Join(t.TempDir(), "calls"),
+		dryCountFile: filepath.Join(t.TempDir(), "dry-count"),
+	}
+	defaultsDir := filepath.Join(fixture.project, "pkg", "apis", "cluster", "v1alpha1")
+	require.NoError(t, os.MkdirAll(defaultsDir, 0o700))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(defaultsDir, "defaults.go"),
+		[]byte("package v1alpha1\nconst (\n\tDefaultHetznerTalosVersion = \"v1.12.4\"\n)\n"),
+		0o600,
+	))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(fixture.project, "ksail.yaml"),
+		[]byte("spec:\n  cluster:\n    distribution: Talos\n    provider: Hetzner\n"),
+		0o600,
+	))
+	writeSchematicFakeKSail(t, filepath.Join(fixture.fakeBin, "ksail"))
+	writeExecutable(t, filepath.Join(fixture.fakeBin, "sleep"), "#!/usr/bin/env bash\nexit 0\n")
+
+	return fixture
+}
+
+func writeSchematicFakeKSail(t *testing.T, path string) {
+	t.Helper()
+	writeExecutable(t, path, `#!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >> "$CALLS_FILE"
 if [[ "$1 $2" == "cluster update" ]]; then
@@ -184,43 +252,6 @@ else
   exit 1
 fi
 `)
-			writeExecutable(t, filepath.Join(fakeBin, "sleep"), "#!/usr/bin/env bash\nexit 0\n")
-
-			commandContext, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-			defer cancel()
-			command := exec.CommandContext(commandContext, "bash", "-c", rollout.Run) //nolint:gosec // Reviewed repository action body.
-			command.Dir = project
-			command.Env = append(os.Environ(),
-				"PATH="+fakeBin+":"+os.Getenv("PATH"),
-				"ARGS=--name schematic-trial",
-				"SCENARIO="+scenario.name,
-				"CALLS_FILE="+callsFile,
-				"DRY_COUNT_FILE="+dryCountFile,
-				"KSAIL_SYSTEM_TEST_LOG_DIR="+logDir,
-			)
-			output, err := command.CombinedOutput()
-			if scenario.wantSuccess {
-				require.NoErrorf(t, err, "rollout failed:\n%s", output)
-			} else {
-				require.Errorf(t, err, "rollout accepted missing live evidence:\n%s", output)
-			}
-
-			calls, readErr := os.ReadFile(callsFile) //nolint:gosec // The test owns this temporary path.
-			require.NoError(t, readErr)
-			assert.Contains(t, string(calls), "cluster update --dry-run")
-			if scenario.wantNoApply {
-				assert.NotContains(t, string(calls), "cluster update --force")
-			} else {
-				assert.Contains(t, string(calls), "cluster update --force")
-			}
-			if scenario.wantSuccess {
-				config, readErr := os.ReadFile(filepath.Join(project, "ksail.yaml")) //nolint:gosec // The test owns this temporary path.
-				require.NoError(t, readErr)
-				assert.Contains(t, string(config), "v1.12.4")
-				assert.Contains(t, string(config), "siderolabs/iscsi-tools")
-			}
-		})
-	}
 }
 
 func TestHetznerWorkflowSmokesK3sAndVanilla(t *testing.T) {
