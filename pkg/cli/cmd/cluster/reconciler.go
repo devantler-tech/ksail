@@ -86,9 +86,14 @@ func newComponentReconciler(
 		region = strings.TrimSpace(eksRegion[0])
 	}
 
+	// Component writes must use the same resolved target as cluster inspection.
+	// Keep the caller's declarative configuration unchanged.
+	targetCfg := clusterCfg.DeepCopy()
+	targetCfg.Spec.Cluster.Connection.Context = kubeContextFor(clusterCfg, clusterName)
+
 	return &componentReconciler{
 		cmd:         cmd,
-		clusterCfg:  clusterCfg,
+		clusterCfg:  targetCfg,
 		clusterName: clusterName,
 		eksRegion:   region,
 		factories:   getInstallerFactories(),
