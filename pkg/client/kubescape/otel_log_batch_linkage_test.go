@@ -1,6 +1,7 @@
 package kubescape_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,10 +19,11 @@ import (
 )
 
 const (
-	otelSDKLogModulePath = "go.opentelemetry.io/otel/sdk/log"
-	uptraceModulePath    = "github.com/uptrace/uptrace-go"
-	uptracePackagePath   = "github.com/uptrace/uptrace-go/uptrace"
-	kubescapeLoggerPath  = "github.com/kubescape/go-logger"
+	otelSDKLogModulePath  = "go.opentelemetry.io/otel/sdk/log"
+	uptraceModulePath     = "github.com/uptrace/uptrace-go"
+	uptracePackagePath    = "github.com/uptrace/uptrace-go/uptrace"
+	kubescapeLoggerPath   = "github.com/kubescape/go-logger"
+	otlpLogHTTPModulePath = "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 )
 
 // goListPackage mirrors the Go command's exported JSON field names.
@@ -48,9 +50,10 @@ type goListPackage struct {
 // name, so any change to either re-opens the verdict.
 func auditedOTelModuleVersions() map[string]map[string]string {
 	audited := map[string]string{
-		otelSDKLogModulePath: "v0.19.0",
-		uptraceModulePath:    "v1.37.0",
-		kubescapeLoggerPath:  "v0.0.25",
+		otelSDKLogModulePath:  "v0.19.0",
+		uptraceModulePath:     "v1.37.0",
+		kubescapeLoggerPath:   "v0.0.25",
+		otlpLogHTTPModulePath: "v0.19.0",
 	}
 
 	return map[string]map[string]string{
@@ -132,13 +135,30 @@ func TestOTelLogBatchProcessorStaysUnreachable(t *testing.T) {
 				t.Fatalf("module %q has no audited OTel module versions", name)
 			}
 
+			if moduleCGO()[name] == "" {
+				t.Fatalf("module %q has no CGO setting", name)
+			}
+
 			for modulePath, auditedVersion := range auditedVersions {
 				assertAuditedModuleVersion(t, moduleDir, modulePath, auditedVersion)
 			}
 
-			packages := listDependencyPackages(t, moduleDir)
-			assertOTelSDKLogImporters(t, packages)
-			assertNoOTelBatchEntryPointCallers(t, packages)
+			linked, scanned := false, false
+
+			for _, goos := range shippedGOOS() {
+				packages := listDependencyPackages(t, moduleDir, goos, moduleCGO()[name])
+				linked = assertOTelSDKLogImporters(t, packages, goos) || linked
+				scanned = assertNoOTelBatchEntryPointCallers(t, packages, goos) || scanned
+			}
+
+			if !linked {
+				t.Fatalf("%s is no longer linked on any shipped GOOS: re-establish the #7375 verdict and delete this guard",
+					otelSDKLogModulePath)
+			}
+
+			if !scanned {
+				t.Fatal("no package imports an OTel batch entry point on any shipped GOOS, so the scan examined nothing")
+			}
 		})
 	}
 }
@@ -239,12 +259,35 @@ func assertAuditedModuleVersion(t *testing.T, moduleDir, modulePath, auditedVers
 	}
 }
 
-func listDependencyPackages(t *testing.T, moduleDir string) []goListPackage {
+// shippedGOOS is every GOOS the CLI release builds (.goreleaser.yaml); the desktop app is listed for
+// the same set, a superset of the platforms it ships on. The package graph differs per platform, so
+// a caller present only in the Windows graph is invisible to a Linux-only listing.
+func shippedGOOS() []string {
+	return []string{"darwin", "linux", "windows"}
+}
+
+// moduleCGO is the CGO setting each shipped module is built with: the CLI release disables CGO,
+// while the desktop app needs it for its webview, and without it the desktop graph cannot be listed.
+func moduleCGO() map[string]string {
+	return map[string]string{"root": "0", "desktop": "1"}
+}
+
+func listDependencyPackages(t *testing.T, moduleDir, goos, cgo string) []goListPackage {
 	t.Helper()
 
-	out, err := runGoCommand(t.Context(), moduleDir, "list", "-deps", "-json", "./...")
+	//nolint:gosec // G204: a fixed go subcommand; goos comes from shippedGOOS.
+	cmd := exec.CommandContext(t.Context(), "go", "list", "-deps", "-json", "./...")
+	cmd.Dir = moduleDir
+	cmd.Env = append(os.Environ(), "GOOS="+goos, "CGO_ENABLED="+cgo)
+
+	var stderr bytes.Buffer
+
+	cmd.Stderr = &stderr
+
+	out, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("list dependency packages: %v", err)
+		t.Fatalf("list dependency packages for GOOS=%s: %v\n%s", goos, err,
+			boundGoStderr(stderr.String(), goCommandStderrLimit))
 	}
 
 	var packages []goListPackage
@@ -268,7 +311,9 @@ func listDependencyPackages(t *testing.T, moduleDir string) []goListPackage {
 	return packages
 }
 
-func assertOTelSDKLogImporters(t *testing.T, packages []goListPackage) {
+// assertOTelSDKLogImporters fails on any unaudited importer of sdk/log and reports whether the
+// graph links sdk/log at all.
+func assertOTelSDKLogImporters(t *testing.T, packages []goListPackage, goos string) bool {
 	t.Helper()
 
 	audited := auditedOTelSDKLogImporters()
@@ -289,17 +334,17 @@ func assertOTelSDKLogImporters(t *testing.T, packages []goListPackage) {
 		}
 	}
 
-	if !found {
-		t.Fatalf("%s is no longer linked: re-establish the #7375 verdict and delete this guard", otelSDKLogModulePath)
-	}
-
 	if len(unexpected) > 0 {
 		sort.Strings(unexpected)
-		t.Fatalf("unaudited packages import %s (#7375): %v", otelSDKLogModulePath, unexpected)
+		t.Fatalf("unaudited packages import %s on GOOS=%s (#7375): %v", otelSDKLogModulePath, goos, unexpected)
 	}
+
+	return found
 }
 
-func assertNoOTelBatchEntryPointCallers(t *testing.T, packages []goListPackage) {
+// assertNoOTelBatchEntryPointCallers fails on any entry-point reference outside the allowed places and
+// reports whether any package was scanned.
+func assertNoOTelBatchEntryPointCallers(t *testing.T, packages []goListPackage, goos string) bool {
 	t.Helper()
 
 	packageNames := make(map[string]string, len(packages))
@@ -341,14 +386,12 @@ func assertNoOTelBatchEntryPointCallers(t *testing.T, packages []goListPackage) 
 		references = append(references, refs...)
 	}
 
-	if scanned == 0 {
-		t.Fatal("no package imports an OTel batch entry point, so the scan examined nothing")
+	if len(references) > 0 {
+		t.Fatalf("OTel log BatchProcessor entry points are referenced on GOOS=%s (GHSA-hjf4-fphr-2h65, #7375):\n%s",
+			goos, strings.Join(references, "\n"))
 	}
 
-	if len(references) > 0 {
-		t.Fatalf("OTel log BatchProcessor entry points are referenced (GHSA-hjf4-fphr-2h65, #7375):\n%s",
-			strings.Join(references, "\n"))
-	}
+	return scanned > 0
 }
 
 // entryPointPackageNames gives each entry-point package's declared name, for a
