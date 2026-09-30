@@ -543,26 +543,12 @@ func (s *Service) resolveCluster(
 		return current.distribution, current.provider, true, nil
 	}
 
-	jobNames := make(map[string]struct{}, len(s.jobs))
-	for jobName := range s.jobs {
-		jobNames[jobName] = struct{}{}
-	}
-
 	s.mu.Unlock()
 
-	// List surfaces kubeconfig contexts ksail did not provision as unmanaged clusters, so a UI that
-	// shows one must not then hear "not found" when it asks to delete/start/stop it — nor reach the
-	// EKS ownership fallback below, which could bind the row to a separately owned cluster of the
-	// same name. Refuse it as unmanaged instead, like the CLI's lifecycle guard. The check reuses
-	// this discovery and List's managed set (live plus jobs), so it cannot disagree with the list,
-	// and it applies only when every provider answered: a provider that failed may be hiding the
-	// managed cluster behind that context.
-	if complete && s.surfacesAsUnmanaged(name, live, jobNames) {
-		return "", "", false, fmt.Errorf(
-			"%q is an unmanaged cluster: %w; read-only operations (resource browsing, logs, exec) still work",
-			name,
-			api.ErrUnmanagedCluster,
-		)
+	// An unmanaged row is decided here, before the EKS ownership fallback below, which could bind
+	// the row to a separately owned cluster of the same name.
+	if handled, err := s.unmanagedRowOutcome(name, live, complete); handled {
+		return "", "", false, err
 	}
 
 	// Persisted EKS ownership is the last resort, and it is what makes a bound cluster reachable at
@@ -599,14 +585,46 @@ func (s *Service) dockerFactory(
 	return s.newFactory(cluster)
 }
 
-// surfacesAsUnmanaged reports whether List would surface name as an unmanaged (kubeconfig-only)
-// cluster, given the clusters discovery found and the names with a tracked job — the same managed set
-// and the same shared helper List uses.
-func (s *Service) surfacesAsUnmanaged(
+// unmanagedRowOutcome decides a lifecycle target that List surfaces as an unmanaged (kubeconfig-only)
+// row. List shows such rows, so a UI that offers one must not then hear "not found" when it asks to
+// delete/start/stop it: handled is true and err is api.ErrUnmanagedCluster, like the CLI's lifecycle
+// guard. When a provider failed, that provider may be hiding the managed cluster behind the context,
+// so the row is neither called unmanaged nor resolved any further: handled is true with a nil err,
+// which the caller reports as "not found". handled is false for any name that is not such a row.
+func (s *Service) unmanagedRowOutcome(
 	name string,
 	live map[string]clusterdiscovery.Cluster,
-	jobNames map[string]struct{},
-) bool {
+	complete bool,
+) (bool, error) {
+	if !s.surfacesAsUnmanaged(name, live) {
+		return false, nil
+	}
+
+	if !complete {
+		return true, nil
+	}
+
+	return true, fmt.Errorf(
+		"%q is an unmanaged cluster: %w; read-only operations (resource browsing, logs, exec) still work",
+		name,
+		api.ErrUnmanagedCluster,
+	)
+}
+
+// surfacesAsUnmanaged reports whether List would surface name as an unmanaged (kubeconfig-only)
+// cluster, given the clusters discovery found and the names with a tracked job — the same managed set
+// and the same shared helper List uses. It reuses the caller's discovery rather than listing every
+// provider again.
+func (s *Service) surfacesAsUnmanaged(name string, live map[string]clusterdiscovery.Cluster) bool {
+	s.mu.Lock()
+
+	jobNames := make(map[string]struct{}, len(s.jobs))
+	for jobName := range s.jobs {
+		jobNames[jobName] = struct{}{}
+	}
+
+	s.mu.Unlock()
+
 	unmanaged := clusterdiscovery.UnmanagedContextNames(s.loadKubeconfig(), func(candidate string) bool {
 		if _, ok := live[candidate]; ok {
 			return true
