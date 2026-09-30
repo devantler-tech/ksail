@@ -98,9 +98,8 @@ func TestProveReplacementCompletedAcceptsANewWorker(t *testing.T) {
 	require.Equal(t, replacedServerID, current.ServerID)
 }
 
-func TestProveReplacementCompletedRefusesAnIncompleteReplacement(
-	t *testing.T,
-) { //nolint:funlen // table-driven tests
+//nolint:funlen // Table-driven test coverage is naturally long.
+func TestProveReplacementCompletedRefusesAnIncompleteReplacement(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
