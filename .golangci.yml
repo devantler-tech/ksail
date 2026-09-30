@@ -24,6 +24,10 @@ linters:
       - ".*mocks.*\\.go$"
       - "^vsce/node_modules/.*\\.go$"
     rules:
+      # Repeated fixture literals stay inline; production literals remain checked.
+      - linters:
+          - goconst
+        path: _test\.go$
       # Tests that mutate shared global state (SetClusterStabilityCheckForTests) cannot run in parallel
       - linters:
           - paralleltest
@@ -86,11 +90,6 @@ linters:
       # misspelling of "mirrored".
       ignore-rules:
         - mirrord
-    goconst:
-      # Repeated string literals in table-driven tests (distribution names, config
-      # field paths, fixture cluster names) are idiomatic and clearer inline than
-      # behind shared constants; only flag duplicated literals in production code.
-      ignore-tests: true
     recvcheck:
       # Some methods have their receiver style dictated by an external contract, not by choice:
       # controller-gen emits DeepCopy* methods and json.Unmarshaler requires a pointer receiver for

@@ -11,6 +11,8 @@ on:
       # the native build as well as the default CLI build.
       - "go.mod"
       - "go.sum"
+      - ".gitattributes"
+      - ".golangci.yml"
       - ".goreleaser.desktop.yaml"
       - ".github/workflows/desktop.yaml"
       - ".github/actions/setup-desktop-build/**"
@@ -25,6 +27,8 @@ on:
       - "web/ui/**"
       - "go.mod"
       - "go.sum"
+      - ".gitattributes"
+      - ".golangci.yml"
       - ".goreleaser.desktop.yaml"
       - ".github/workflows/desktop.yaml"
       - ".github/actions/setup-desktop-build/**"
