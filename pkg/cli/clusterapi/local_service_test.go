@@ -2725,7 +2725,11 @@ func TestLifecycleRefusesUnmanagedClusterInsteadOfNotFound(t *testing.T) {
 
 	unmanaged := clusterNamed(list, "colleague-cluster")
 	require.NotNil(t, unmanaged)
-	assert.True(t, unmanaged.IsUnmanaged(), "a refused action must leave the cluster listed as unmanaged")
+	assert.True(
+		t,
+		unmanaged.IsUnmanaged(),
+		"a refused action must leave the cluster listed as unmanaged",
+	)
 	assert.Empty(t, unmanaged.Status.Phase, "a refused action must not start a job")
 
 	require.NoError(t, service.Start(ctx, "default", devClusterName),
