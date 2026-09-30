@@ -843,3 +843,58 @@ func goreleaserCGO(t *testing.T, path string) string {
 
 	return value
 }
+
+// TestDesktopWorkflowBuildsKeepCGOEnabled pins the Linux and Windows desktop builds in cd.yaml to
+// the desktop CGO mode moduleCGO audits. Those are native `go build` runs, so CGO is on unless
+// something sets CGO_ENABLED: the workflow, the desktop job, one of its steps, or the shared setup
+// action. Any such setting other than 1 would ship a graph the audit never listed.
+func TestDesktopWorkflowBuildsKeepCGOEnabled(t *testing.T) {
+	t.Parallel()
+
+	root := moduleRoot(t)
+
+	if moduleCGO()["desktop"] != "1" {
+		t.Fatalf("moduleCGO()[\"desktop\"] = %q, but the workflow-built desktop apps use Go's native default, 1",
+			moduleCGO()["desktop"])
+	}
+
+	var workflow struct {
+		Env  map[string]string `json:"env"`
+		Jobs map[string]struct {
+			Env   map[string]string `json:"env"`
+			Steps []struct {
+				Env map[string]string `json:"env"`
+			} `json:"steps"`
+		} `json:"jobs"`
+	}
+
+	readYAML(t, filepath.Join(root, ".github", "workflows", "cd.yaml"), &workflow)
+
+	job, ok := workflow.Jobs["desktop"]
+	if !ok || len(job.Steps) == 0 {
+		t.Fatal("cd.yaml has no desktop job steps, so the check examined nothing")
+	}
+
+	settings := []map[string]string{workflow.Env, job.Env}
+	for _, step := range job.Steps {
+		settings = append(settings, step.Env)
+	}
+
+	for _, env := range settings {
+		if cgo, set := env["CGO_ENABLED"]; set && cgo != "1" {
+			t.Errorf("cd.yaml sets CGO_ENABLED=%s for the desktop build (#7375)", cgo)
+		}
+	}
+
+	action, err := os.ReadFile(filepath.Join(root, ".github", "actions", "setup-desktop-build", "action.yml"))
+	if err != nil {
+		t.Fatalf("read the desktop setup action: %v", err)
+	}
+
+	for _, line := range strings.Split(string(action), "\n") {
+		if strings.Contains(line, "CGO_ENABLED") && !strings.Contains(line, "CGO_ENABLED=1") &&
+			!strings.Contains(line, "CGO_ENABLED: \"1\"") && !strings.Contains(line, "CGO_ENABLED: 1") {
+			t.Errorf("the desktop setup action changes CGO_ENABLED (#7375): %s", strings.TrimSpace(line))
+		}
+	}
+}
