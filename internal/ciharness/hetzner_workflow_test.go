@@ -149,6 +149,7 @@ func TestHetznerSchematicRolloutRequiresLiveDriftAndReadback(t *testing.T) {
 	for _, scenario := range []hetznerSchematicScenario{
 		{name: "converged", wantSuccess: true},
 		{name: "pre-missing", wantNoApply: true},
+		{name: "pre-config-drift", wantNoApply: true},
 		{name: "not-ready"},
 		{name: "post-drift"},
 	} {
@@ -254,6 +255,13 @@ if [[ "$1 $2" == "cluster update" ]]; then
       echo 'No changes detected'
     else
       echo 'Would reconcile distribution image at v1.12.4.'
+      if [[ "$count" == 1 ]]; then
+        if [[ "$SCENARIO" == pre-config-drift ]]; then
+          echo 'Would apply 1 in-place, 0 reboot-required, 0 recreate-required'
+        else
+          echo 'No changes detected'
+        fi
+      fi
     fi
   else
     echo 'Distribution image reconciled at v1.12.4.'

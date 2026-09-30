@@ -555,6 +555,10 @@ runs:
           echo "❌ Live Talos image change was not detected" >&2
           exit 1
         fi
+        if ! grep -Fq "No changes detected" "$PRE_LOG"; then
+          echo "❌ Unexpected configuration changes were detected" >&2
+          exit 1
+        fi
 
         # shellcheck disable=SC2086
         ksail cluster update --force --distribution Talos --provider Hetzner $UPDATE_ARGS 2>&1 | tee "$APPLY_LOG" | tee -a "$LOG_FILE"
