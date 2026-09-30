@@ -856,7 +856,7 @@ func auditedReleaseConfigDigests() map[string]string {
 		".goreleaser.yaml":                               "603b04ca07558b8e1acb3d9c4e00e3c49ceaa10ea9f5af0ed2f84f01f96496c2",
 		".goreleaser.desktop.yaml":                       "be6f45e10f4f608db285d641ce166714a404aaa2d31aacf9479679fbdb58df11",
 		".github/actions/setup-desktop-build/action.yml": "d4b17b1a6442ffc2e499419153db96c75fff26c836027ed8cc00f43dea5a2559",
-		".github/workflows/cd.yaml#jobs.desktop":         "3f68fcec1219196b540664b44b8d44d257f547e582ae956db9214f074bd0f32a",
+		".github/workflows/cd.yaml#without-uses":         "c21810bf0565961663ffda3cd1a73da1c052ccb8a4db1644c5b9f609a4febe9f",
 	}
 }
 
@@ -879,8 +879,9 @@ func TestReleaseBuildConfigMatchesAudit(t *testing.T) {
 	}
 }
 
-// releaseConfigDigests hashes each audited release configuration: whole files, and for cd.yaml only
-// the desktop job, canonicalised through JSON so unrelated jobs and formatting do not count.
+// releaseConfigDigests hashes each audited release configuration: whole files, and for cd.yaml the
+// whole workflow (workflow-level env such as GOFLAGS reaches every release job) canonicalised through
+// JSON with every `uses:` value removed, so formatting and action-version bumps do not count.
 func releaseConfigDigests(t *testing.T, root string) map[string]string {
 	t.Helper()
 
@@ -899,30 +900,46 @@ func releaseConfigDigests(t *testing.T, root string) map[string]string {
 		digests[name] = fmt.Sprintf("%x", sha256.Sum256(data))
 	}
 
-	var workflow struct {
-		Jobs map[string]json.RawMessage `json:"jobs"`
-	}
+	var workflow map[string]any
 
 	readYAML(t, filepath.Join(root, ".github", "workflows", "cd.yaml"), &workflow)
 
-	job, ok := workflow.Jobs["desktop"]
-	if !ok {
-		t.Fatal("cd.yaml has no desktop job")
+	if _, ok := workflow["jobs"]; !ok {
+		t.Fatal("cd.yaml has no jobs")
 	}
 
-	var canonical any
-
-	err := json.Unmarshal(job, &canonical)
+	encoded, err := json.Marshal(withoutActionPins(workflow))
 	if err != nil {
-		t.Fatalf("decode the desktop job: %v", err)
+		t.Fatalf("encode cd.yaml: %v", err)
 	}
 
-	encoded, err := json.Marshal(canonical)
-	if err != nil {
-		t.Fatalf("encode the desktop job: %v", err)
-	}
-
-	digests[".github/workflows/cd.yaml#jobs.desktop"] = fmt.Sprintf("%x", sha256.Sum256(encoded))
+	digests[".github/workflows/cd.yaml#without-uses"] = fmt.Sprintf("%x", sha256.Sum256(encoded))
 
 	return digests
+}
+
+// withoutActionPins returns a copy of a decoded workflow with every `uses` key removed: an action
+// version bump cannot change the Go graph a release builds, while any env, flag or run change can.
+func withoutActionPins(node any) any {
+	switch value := node.(type) {
+	case map[string]any:
+		copied := make(map[string]any, len(value))
+
+		for key, child := range value {
+			if key != "uses" {
+				copied[key] = withoutActionPins(child)
+			}
+		}
+
+		return copied
+	case []any:
+		copied := make([]any, len(value))
+		for index, child := range value {
+			copied[index] = withoutActionPins(child)
+		}
+
+		return copied
+	default:
+		return node
+	}
 }
