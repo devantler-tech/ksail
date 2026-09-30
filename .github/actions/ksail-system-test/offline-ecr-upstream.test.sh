@@ -42,7 +42,9 @@ cat >"$fixture/bin/curl" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 url="http:"'//172.17.0.1:5505/v2/'
-[ "$*" = "-fsS $url" ]
+# Each readiness probe must have a transfer deadline; otherwise one hung
+# registry response can hold the entire retry loop indefinitely.
+[ "$*" = "-fsS --max-time 2 $url" ]
 [ -f "$FAKE_DOCKER_STATE" ]
 [ "$(cut -d'|' -f2 "$FAKE_DOCKER_STATE")" = '172.17.0.1:5505:5000' ]
 SH

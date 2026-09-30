@@ -21,7 +21,7 @@ start)
 
 	ready=false
 	for _ in $(seq 1 30); do
-		if curl -fsS "$url/v2/" >/dev/null 2>&1; then
+		if curl -fsS --max-time 2 "$url/v2/" >/dev/null 2>&1; then
 			ready=true
 			break
 		fi
