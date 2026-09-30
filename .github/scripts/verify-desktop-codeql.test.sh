@@ -21,6 +21,7 @@ JSON
 
 bash "${validator}" --results "${scratch}/positive.json" >/dev/null
 
+# reject requires the named negative fixture to fail the extraction validator.
 reject() {
 	local name="$1"
 	if bash "${validator}" --results "${scratch}/${name}.json" >/dev/null 2>&1; then

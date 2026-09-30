@@ -107,7 +107,7 @@ golangci-lint run --build-tags desktop ./desktop/...  # native lint
 ```
 
 Linux requires GTK4 and WebKitGTK 6.0 development packages; macOS requires Xcode
-command line tools. Desktop CI runs native tests on Linux and macOS and checks the
+command line tools. Desktop CI runs native tests on Linux, macOS and Windows and checks the
 macOS app/cask packaging.
 
 ### Test

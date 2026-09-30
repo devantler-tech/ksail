@@ -16,7 +16,7 @@ Use the root Go module for both entry points. Gate every desktop source and test
 
 Go's minimum version selection resolves the shared graph, and `go mod tidy` maintains dependencies from tagged files too. Dependabot therefore updates the same manifest that both entry points build from. Desktop CI checks that manifest without a same-repository exemption. Generated-file CI never writes to a Dependabot pull request branch; ordinary pull request sync and the protected-branch generated-file repair remain available.
 
-Security analysis must include the tagged desktop source, and its extraction evidence must be checked before delivery. Native desktop builds and tests run on Linux, macOS and Windows; macOS CI also validates the complete app bundle and cask snapshot.
+CodeQL runs on Linux and checks extracted function bodies from the CLI and Linux desktop source before delivery. This witness set does not establish extraction of Darwin-specific helpers. Native desktop builds and tests run on Linux, macOS and Windows, with Darwin helpers exercised on macOS; macOS CI also validates the complete app bundle and cask snapshot.
 
 ## Consequences
 

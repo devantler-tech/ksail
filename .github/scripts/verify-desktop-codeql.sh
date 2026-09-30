@@ -3,6 +3,7 @@
 # file. A successful upload or source archive alone does not prove this coverage.
 set -euo pipefail
 
+# verify_results rejects incomplete or malformed CLI/desktop extraction evidence.
 verify_results() {
 	jq -e '
     .["#select"].tuples as $rows |

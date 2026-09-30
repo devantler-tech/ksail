@@ -223,6 +223,7 @@ mkdir -p "${fake_repo}/.github/scripts"
 cp "${validator}" "${fake_repo}/.github/scripts/"
 fake_validator="${fake_repo}/.github/scripts/${validator##*/}"
 
+# write_fake_manifests creates a shared-module fixture with the requested pin.
 write_fake_manifests() {
 	printf 'module fake\n\nrequire (\n\tgithub.com/moby/go-archive %s // indirect\n)\n' "$1" \
 		>"${fake_repo}/go.mod"
