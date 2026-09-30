@@ -826,7 +826,12 @@ func goreleaserCGO(t *testing.T, path string) string {
 		}
 
 		if found == "" || (value != "" && found != value) {
-			t.Fatalf("%s: every build must set one CGO_ENABLED value, got %q after %q", path, found, value)
+			t.Fatalf(
+				"%s: every build must set one CGO_ENABLED value, got %q after %q",
+				path,
+				found,
+				value,
+			)
 		}
 
 		value = found
