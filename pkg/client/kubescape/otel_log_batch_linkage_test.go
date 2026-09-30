@@ -163,6 +163,13 @@ func auditModuleOTelReachability(t *testing.T, name, moduleDir string) {
 		assertAuditedModuleVersion(t, moduleDir, modulePath, auditedVersion)
 	}
 
+	// In vendor mode the build reads module sources from vendor/, which `go list -m` does not reflect,
+	// so the audited versions would no longer say what is compiled.
+	_, err := os.Stat(filepath.Join(moduleDir, "vendor", "modules.txt"))
+	if err == nil {
+		t.Fatalf("module %q is vendored: re-establish the #7375 verdict against the vendored sources", name)
+	}
+
 	linked, scanned := false, false
 
 	for _, target := range shippedPlatforms() {
@@ -856,7 +863,7 @@ func auditedReleaseConfigDigests() map[string]string {
 		".goreleaser.yaml":                               "603b04ca07558b8e1acb3d9c4e00e3c49ceaa10ea9f5af0ed2f84f01f96496c2",
 		".goreleaser.desktop.yaml":                       "be6f45e10f4f608db285d641ce166714a404aaa2d31aacf9479679fbdb58df11",
 		".github/actions/setup-desktop-build/action.yml": "d4b17b1a6442ffc2e499419153db96c75fff26c836027ed8cc00f43dea5a2559",
-		".github/workflows/cd.yaml#without-uses":         "c21810bf0565961663ffda3cd1a73da1c052ccb8a4db1644c5b9f609a4febe9f",
+		".github/workflows/cd.yaml#without-uses":         "79029e1d4ee4b1f2017a2d9e753f429983eb77c8cb608cfc9e59cb9b8dc1965d",
 	}
 }
 
@@ -890,9 +897,9 @@ func releaseConfigDigests(t *testing.T, root string) map[string]string {
 	for _, name := range []string{
 		".goreleaser.yaml", ".goreleaser.desktop.yaml", ".github/actions/setup-desktop-build/action.yml",
 	} {
-		data, err := os.ReadFile(
-			filepath.Join(root, name),
-		) //nolint:gosec // G304: fixed release config paths.
+		path := filepath.Join(root, name)
+
+		data, err := os.ReadFile(path) //nolint:gosec // G304: fixed release config paths.
 		if err != nil {
 			t.Fatalf("read %s: %v", name, err)
 		}
@@ -918,17 +925,22 @@ func releaseConfigDigests(t *testing.T, root string) map[string]string {
 	return digests
 }
 
-// withoutActionPins returns a copy of a decoded workflow with every `uses` key removed: an action
-// version bump cannot change the Go graph a release builds, while any env, flag or run change can.
+// withoutActionPins returns a copy of a decoded workflow with only the VERSION of each remote action
+// removed (`owner/action@sha` becomes `owner/action`): a version bump cannot change the Go graph a
+// release builds, while swapping in another action, or pointing at another local action, can.
 func withoutActionPins(node any) any {
 	switch value := node.(type) {
 	case map[string]any:
 		copied := make(map[string]any, len(value))
 
 		for key, child := range value {
-			if key != "uses" {
-				copied[key] = withoutActionPins(child)
+			if action, isString := child.(string); key == "uses" && isString {
+				copied[key] = actionIdentity(action)
+
+				continue
 			}
+
+			copied[key] = withoutActionPins(child)
 		}
 
 		return copied
@@ -942,4 +954,15 @@ func withoutActionPins(node any) any {
 	default:
 		return node
 	}
+}
+
+// actionIdentity keeps a local action's path whole and drops a remote action's @version.
+func actionIdentity(action string) string {
+	if strings.HasPrefix(action, "./") {
+		return action
+	}
+
+	name, _, _ := strings.Cut(action, "@")
+
+	return name
 }
