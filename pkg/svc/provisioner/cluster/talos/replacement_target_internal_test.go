@@ -19,11 +19,11 @@ const (
 	targetIP      = "203.0.113.10"
 )
 
-func targetServer(id int64, name, cluster, role string) *hcloud.Server {
+func targetServer(id int64, name string) *hcloud.Server {
 	return &hcloud.Server{
 		ID:     id,
 		Name:   name,
-		Labels: hetzner.NodeLabels(cluster, role, 1),
+		Labels: hetzner.NodeLabels(targetCluster, hetzner.NodeTypeControlPlane, 1),
 		PublicNet: hcloud.ServerPublicNet{
 			IPv4: hcloud.ServerPublicNetIPv4{IP: net.ParseIP(targetIP)},
 		},
@@ -44,8 +44,8 @@ func controlPlaneObservation() replacementObservation {
 		ClusterName: targetCluster,
 		NodeName:    targetName,
 		Servers: []*hcloud.Server{
-			targetServer(101, targetName, targetCluster, hetzner.NodeTypeControlPlane),
-			targetServer(102, "prod-control-plane-2", targetCluster, hetzner.NodeTypeControlPlane),
+			targetServer(101, targetName),
+			targetServer(102, "prod-control-plane-2"),
 		},
 		Nodes: []corev1.Node{
 			targetNode(targetName, "node-uid-1", targetIP),
@@ -116,7 +116,7 @@ func TestResolveReplacementTargetRejectsUnprovableIdentities(t *testing.T) {
 			name: "two servers with the name",
 			mutate: func(o *replacementObservation) {
 				o.Servers = append(o.Servers,
-					targetServer(103, targetName, targetCluster, hetzner.NodeTypeControlPlane))
+					targetServer(103, targetName))
 			},
 			wantErr: ErrReplacementTargetAmbiguous,
 		},

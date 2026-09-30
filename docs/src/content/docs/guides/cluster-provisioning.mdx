@@ -108,6 +108,10 @@ spec:
 > [!NOTE]
 > Other distributions currently ignore this setting; it is only active for Talos.
 
+For a KSail-managed Cluster Autoscaler on Talos with Hetzner, `cluster diff` also compares the installed Helm values with the values rendered by the current KSail version. A mismatch appears as `cluster.autoscaler.node.chartValues`; `cluster update` applies it even when `ksail.yaml` has not changed. Both operations use the resolved cluster context. Releases managed by Flux or Argo CD are excluded from this check and remain under GitOps control.
+
+If the release cannot be inspected, KSail prints a warning and continues with the other diff checks. Resolve that warning before treating the absence of a chart-values change as confirmation that the autoscaler settings match.
+
 ## Version Upgrades
 
 `ksail cluster update` reconciles the cluster's distribution and Kubernetes versions declaratively on every run — there are no opt-in upgrade flags. Each version follows one of two rules:
