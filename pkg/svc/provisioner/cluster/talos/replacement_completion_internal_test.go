@@ -98,7 +98,9 @@ func TestProveReplacementCompletedAcceptsANewWorker(t *testing.T) {
 	require.Equal(t, replacedServerID, current.ServerID)
 }
 
-func TestProveReplacementCompletedRefusesAnIncompleteReplacement(t *testing.T) { //nolint:funlen // table-driven tests
+func TestProveReplacementCompletedRefusesAnIncompleteReplacement(
+	t *testing.T,
+) { //nolint:funlen // table-driven tests
 	t.Parallel()
 
 	tests := []struct {
