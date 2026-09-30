@@ -95,7 +95,11 @@ func TestHetznerManualSchematicRolloutIsOptInAndKeepsCleanup(t *testing.T) {
 	require.NoError(t, yaml.Unmarshal(
 		readRepoFile(t, ".github/actions/ksail-system-test/action.yaml"), &action,
 	))
-	rollout := findHarnessStep(t, action.Runs.Steps, "🧪 ksail cluster update — same-version Talos schematic")
+	rollout := findHarnessStep(
+		t,
+		action.Runs.Steps,
+		"🧪 ksail cluster update — same-version Talos schematic",
+	)
 	assert.Contains(t, rollout.If, "inputs.provider == 'Hetzner'")
 	assert.Contains(t, rollout.If, "inputs.distribution == 'Talos'")
 	assert.Contains(t, rollout.If, "inputs.test-talos-schematic-rollout == 'true'")
@@ -136,7 +140,11 @@ func TestHetznerSchematicRolloutRequiresLiveDriftAndReadback(t *testing.T) {
 	require.NoError(t, yaml.Unmarshal(
 		readRepoFile(t, ".github/actions/ksail-system-test/action.yaml"), &action,
 	))
-	rollout := findHarnessStep(t, action.Runs.Steps, "🧪 ksail cluster update — same-version Talos schematic")
+	rollout := findHarnessStep(
+		t,
+		action.Runs.Steps,
+		"🧪 ksail cluster update — same-version Talos schematic",
+	)
 
 	for _, scenario := range []hetznerSchematicScenario{
 		{name: "converged", wantSuccess: true},
@@ -151,13 +159,23 @@ func TestHetznerSchematicRolloutRequiresLiveDriftAndReadback(t *testing.T) {
 	}
 }
 
-func assertHetznerSchematicRolloutScenario(t *testing.T, rollout string, scenario hetznerSchematicScenario) {
+func assertHetznerSchematicRolloutScenario(
+	t *testing.T,
+	rollout string,
+	scenario hetznerSchematicScenario,
+) {
 	t.Helper()
 	fixture := newSchematicRolloutFixture(t)
 
 	commandContext, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
-	command := exec.CommandContext(commandContext, "bash", "-c", rollout) //nolint:gosec // Reviewed action body.
+
+	command := exec.CommandContext(
+		commandContext,
+		"bash",
+		"-c",
+		rollout,
+	) //nolint:gosec // Reviewed action body.
 	command.Dir = fixture.project
 	command.Env = append(os.Environ(),
 		"PATH="+fixture.fakeBin+":"+os.Getenv("PATH"),
