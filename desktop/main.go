@@ -1,3 +1,5 @@
+//go:build desktop
+
 // Command ksail-desktop runs the KSail web UI in a native desktop window using Wails v3.
 //
 // It reuses the same in-process server as `ksail open web` (pkg/cli/uiserver): NewServer().Handler() is an
@@ -7,8 +9,8 @@
 // production origin) with no loopback TCP port, no CORS, and no SPA changes — the same SPA the
 // operator and `ksail open web` serve in a browser.
 //
-// This is a separate Go module so its CGO/webview dependency stays out of the main, statically linked
-// `ksail` binary.
+// The desktop build tag keeps its CGO/webview dependency out of the default, statically linked
+// `ksail` binary while both entry points share one dependency manifest.
 package main
 
 import (
