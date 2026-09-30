@@ -32,6 +32,10 @@ inputs:
     description: Whether to run ksail project init before create
     required: false
     default: "false"
+  ecr-public-upstream:
+    description: Upstream for the ECR Public mirror and containerd fallback
+    required: false
+    default: "https://ecr-public.aws.com"
   test-workload-image:
     description: Image to use for workload create test
     required: false
@@ -243,7 +247,7 @@ runs:
         # Redis. The warm-mirror-cache action caches the same five registries, so
         # no system-test image is pulled anonymously from the shared runner IP
         # (#7332). Docker only: cloud providers cannot use local mirrors.
-        mirror-registry: ${{ inputs.provider == 'Docker' && 'docker.io=https://registry-1.docker.io,ghcr.io=https://ghcr.io,quay.io=https://quay.io,registry.k8s.io=https://registry.k8s.io,ecr-public.aws.com=https://ecr-public.aws.com' || '' }}
+        mirror-registry: ${{ inputs.provider == 'Docker' && format('docker.io=https://registry-1.docker.io,ghcr.io=https://ghcr.io,quay.io=https://quay.io,registry.k8s.io=https://registry.k8s.io,ecr-public.aws.com={0}', inputs.ecr-public-upstream) || '' }}
         init: ${{ inputs.init }}
         install: "false"
         # The calling job has already restored the shared caches the warm jobs
@@ -781,6 +785,8 @@ runs:
     - name: 📋 Save system test diagnostics
       if: failure()
       shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
       run: |
         mkdir -p /tmp/system-test-diagnostics
         {
@@ -802,6 +808,39 @@ runs:
           echo ""
           echo "=== Node Status ==="
           timeout --kill-after=10s 1m ksail workload get nodes -o wide 2>&1 || true
+          if [ "$DISTRIBUTION" = "VCluster" ]; then
+            echo ""
+            echo "=== VCluster ECR mirror routing ==="
+            node=$(docker ps --format '{{.Names}}' --filter 'name=vcluster.cp.' | head -n 1 || true)
+            if [ -n "$node" ]; then
+              if timeout --kill-after=5s 15s docker exec "$node" \
+                test -f /etc/containerd/certs.d/ecr-public.aws.com/hosts.toml; then
+                echo "ecr_hosts_toml=present"
+              else
+                echo "ecr_hosts_toml=absent-or-unreadable"
+              fi
+              timeout --kill-after=5s 15s docker exec "$node" \
+                containerd config dump 2>/dev/null \
+                | awk '/^[[:space:]]*config_path[[:space:]]*=/ { print "containerd_" $0; found=1 } END { if (!found) print "containerd_config_path=not-reported" }' \
+                || true
+              cri_path=$(timeout --kill-after=5s 15s docker exec "$node" \
+                crictl info -o json 2>/dev/null \
+                | jq -r '.config.registry.configPath // .config.registry.config_path // empty' \
+                | head -n 1 || true)
+              echo "cri_registry_config_path=${cri_path:-not-reported}"
+            else
+              echo "vcluster_control_plane=unavailable"
+            fi
+            mirror=$(docker ps --format '{{.Names}}' \
+              | grep -E '^vcluster-.*-ecr-public\.aws\.com$' | head -n 1 || true)
+            if [ -n "$mirror" ]; then
+              timeout --kill-after=5s 15s docker logs "$mirror" 2>&1 \
+                | awk '/GET/ { total++ } /GET/ && /redis/ { requests++; if (/429/) limited++ } END { printf "mirror_log_gets=%d redis_mirror_log_gets=%d redis_mirror_log_429=%d\n", total, requests, limited }' \
+                || true
+            else
+              echo "ecr_mirror_container=unavailable"
+            fi
+          fi
         } > /tmp/system-test-diagnostics/diagnostics.log 2>&1
 
     - name: 📤 Upload system test diagnostics

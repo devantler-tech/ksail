@@ -7,6 +7,10 @@ description: |
   ensuring restore jobs can find the cache created by warm-mirror-cache.
 
 inputs:
+  cache-key:
+    description: Exact validated mirror cache key emitted by warm-mirror-cache
+    required: false
+    default: ""
   cache-version:
     description: |
       Version salt for cache key. Must match warm-mirror-cache.
@@ -113,7 +117,7 @@ runs:
         KWOK_IMAGES_HASH: ${{ steps.extract-images.outputs.kwok-images-hash }}
         DIST_NODE_IMAGES_HASH: ${{ steps.extract-images.outputs.dist-node-images-hash }}
       run: |
-        CACHE_KEY="mirror-cache-${CACHE_VERSION}-m6-${IMAGES_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
+        CACHE_KEY="mirror-cache-${CACHE_VERSION}-m7-${IMAGES_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
         echo "cache-key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
 
         # Must match warm-mirror-cache's KWOK cache key exactly.
@@ -129,9 +133,16 @@ runs:
       uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
       with:
         path: /tmp/mirror-cache
-        key: ${{ steps.generate-key.outputs.cache-key }}
+        key: ${{ inputs.cache-key || steps.generate-key.outputs.cache-key }}
         restore-keys: |
-          mirror-cache-${{ inputs.cache-version }}-m6-
+          mirror-cache-${{ inputs.cache-version }}-m7-
+
+    - name: 🔍 Require validated mirror cache
+      if: inputs.cache-key != '' && steps.restore-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        echo "Expected the exact validated mirror cache from the warm job" >&2
+        exit 1
 
     - name: 📥 Restore KWOK control plane cache
       id: restore-kwok-cache
