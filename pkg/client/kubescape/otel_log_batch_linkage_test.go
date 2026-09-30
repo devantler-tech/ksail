@@ -782,3 +782,59 @@ func readYAML(t *testing.T, path string, into any) {
 		t.Fatalf("parse %s: %v", path, err)
 	}
 }
+
+// TestModuleCGOMatchesReleaseBuilds pins moduleCGO to the CGO_ENABLED each module's GoReleaser
+// configuration builds with: a file selected only by the other CGO mode belongs to a graph the
+// audit would otherwise never list. The Linux and Windows desktop builds in cd.yaml are native
+// `go build` runs, where Go's own default is CGO enabled, matching the desktop setting here.
+func TestModuleCGOMatchesReleaseBuilds(t *testing.T) {
+	t.Parallel()
+
+	root := moduleRoot(t)
+
+	for name, file := range map[string]string{"root": ".goreleaser.yaml", "desktop": ".goreleaser.desktop.yaml"} {
+		released := goreleaserCGO(t, filepath.Join(root, file))
+		if moduleCGO()[name] != released {
+			t.Errorf("moduleCGO()[%q] = %q, but %s builds with CGO_ENABLED=%s (#7375)",
+				name, moduleCGO()[name], file, released)
+		}
+	}
+}
+
+// goreleaserCGO returns the CGO_ENABLED value every build in a GoReleaser file sets; a build that
+// sets none, or builds that disagree, fail the test rather than guess.
+func goreleaserCGO(t *testing.T, path string) string {
+	t.Helper()
+
+	var config struct {
+		Builds []struct {
+			Env []string `json:"env"`
+		} `json:"builds"`
+	}
+
+	readYAML(t, path, &config)
+
+	value := ""
+
+	for _, build := range config.Builds {
+		found := ""
+
+		for _, entry := range build.Env {
+			if cgo, ok := strings.CutPrefix(entry, "CGO_ENABLED="); ok {
+				found = cgo
+			}
+		}
+
+		if found == "" || (value != "" && found != value) {
+			t.Fatalf("%s: every build must set one CGO_ENABLED value, got %q after %q", path, found, value)
+		}
+
+		value = found
+	}
+
+	if value == "" {
+		t.Fatalf("%s has no build", path)
+	}
+
+	return value
+}
