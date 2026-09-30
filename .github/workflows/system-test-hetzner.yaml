@@ -71,6 +71,11 @@ on:
         required: false
         type: string
         default: ""
+      test_schematic_rollout:
+        description: "Roll a changed Talos schematic at the same OS version and verify the running image. Talos only."
+        required: false
+        type: boolean
+        default: false
   schedule:
     # Weekly: Sunday 03:00 UTC, one hour before the Omni system test, so real clusters are
     # created at most once a day. The scheduled run starts with the two direct-provider smoke
@@ -308,6 +313,7 @@ jobs:
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
           test-kubernetes-provider: ${{ matrix.suffix == 'default-init' && 'true' || 'false' }}
           rolling-resize-server-type: ${{ github.event_name == 'workflow_dispatch' && inputs.rolling_resize_server_type || '' }}
+          test-talos-schematic-rollout: ${{ github.event_name == 'workflow_dispatch' && inputs.test_schematic_rollout || false }}
 
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}

@@ -61,6 +61,153 @@ func TestHetznerWorkflowAllowsManualDirectProviderSmoke(t *testing.T) {
 	assert.Contains(t, args.Run, `matrix.smoke != true`)
 }
 
+func TestHetznerManualSchematicRolloutIsOptInAndKeepsCleanup(t *testing.T) {
+	t.Parallel()
+
+	var workflow hetznerWorkflow
+	require.NoError(t, yaml.Unmarshal(
+		readRepoFile(t, ".github/workflows/system-test-hetzner.yaml"), &workflow,
+	))
+
+	selector, found := workflow.On.WorkflowDispatch.Inputs["test_schematic_rollout"]
+	require.True(t, found, "manual dispatch must expose the schematic rollout trial")
+	assert.Equal(t, "boolean", selector.Type)
+	assert.Equal(t, false, selector.Default)
+
+	systemTest, found := workflow.Jobs["system-test"]
+	require.True(t, found, "Hetzner system-test job is missing")
+	run := findHarnessStep(t, systemTest.Steps, "🧪 Run KSail System Test")
+	assert.Equal(t,
+		"${{ github.event_name == 'workflow_dispatch' && inputs.test_schematic_rollout || false }}",
+		run.With["test-talos-schematic-rollout"],
+	)
+
+	var action compositeAction
+	require.NoError(t, yaml.Unmarshal(
+		readRepoFile(t, ".github/actions/ksail-system-test/action.yaml"), &action,
+	))
+	rollout := findHarnessStep(t, action.Runs.Steps, "🧪 ksail cluster update — same-version Talos schematic")
+	assert.Contains(t, rollout.If, "inputs.provider == 'Hetzner'")
+	assert.Contains(t, rollout.If, "inputs.distribution == 'Talos'")
+	assert.Contains(t, rollout.If, "inputs.test-talos-schematic-rollout == 'true'")
+	assert.Contains(t, rollout.Run, "Would reconcile distribution image")
+	assert.Contains(t, rollout.Run, "No changes detected")
+	assert.Greater(t,
+		harnessStepIndex(t, action.Runs.Steps, rollout.Name),
+		harnessStepIndex(t, action.Runs.Steps, "🧪 ksail cluster update"),
+	)
+	assert.Less(t,
+		harnessStepIndex(t, action.Runs.Steps, rollout.Name),
+		harnessStepIndex(t, action.Runs.Steps, "🧪 ksail cluster stop"),
+	)
+
+	cleanup, found := workflow.Jobs["cleanup"]
+	require.True(t, found, "workflow-level fallback cleanup is missing")
+	assert.Contains(t, cleanup.If, "always()")
+}
+
+func TestHetznerSchematicRolloutRequiresLiveDriftAndReadback(t *testing.T) {
+	t.Parallel()
+
+	var action compositeAction
+	require.NoError(t, yaml.Unmarshal(
+		readRepoFile(t, ".github/actions/ksail-system-test/action.yaml"), &action,
+	))
+	rollout := findHarnessStep(t, action.Runs.Steps, "🧪 ksail cluster update — same-version Talos schematic")
+
+	for _, scenario := range []struct {
+		name        string
+		wantSuccess bool
+		wantNoApply bool
+	}{
+		{name: "converged", wantSuccess: true},
+		{name: "pre-missing", wantNoApply: true},
+		{name: "post-drift"},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+
+			project := t.TempDir()
+			fakeBin := t.TempDir()
+			logDir := t.TempDir()
+			callsFile := filepath.Join(t.TempDir(), "calls")
+			dryCountFile := filepath.Join(t.TempDir(), "dry-count")
+			defaultsDir := filepath.Join(project, "pkg", "apis", "cluster", "v1alpha1")
+			require.NoError(t, os.MkdirAll(defaultsDir, 0o755))
+			require.NoError(t, os.WriteFile(
+				filepath.Join(defaultsDir, "defaults.go"),
+				[]byte("package v1alpha1\nconst (\n\tDefaultHetznerTalosVersion = \"v1.12.4\"\n)\n"),
+				0o644,
+			))
+			require.NoError(t, os.WriteFile(
+				filepath.Join(project, "ksail.yaml"),
+				[]byte("spec:\n  cluster:\n    distribution: Talos\n    provider: Hetzner\n"),
+				0o644,
+			))
+			writeExecutable(t, filepath.Join(fakeBin, "ksail"), `#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "$CALLS_FILE"
+if [[ "$1 $2" == "cluster update" ]]; then
+  if [[ " $* " == *" --dry-run "* ]]; then
+    count=0
+    [[ ! -f "$DRY_COUNT_FILE" ]] || count=$(<"$DRY_COUNT_FILE")
+    count=$((count + 1))
+    printf '%s' "$count" > "$DRY_COUNT_FILE"
+    if [[ "$SCENARIO" == pre-missing && "$count" == 1 ]] ||
+       [[ "$SCENARIO" == converged && "$count" == 2 ]]; then
+      echo 'No changes detected'
+    else
+      echo 'Would reconcile distribution image at v1.12.4.'
+    fi
+  else
+    echo 'Distribution image reconciled at v1.12.4.'
+  fi
+elif [[ "$1 $2" == "cluster info" ]]; then
+  echo 'Ready: 1/1 (ready/total)'
+elif [[ "$1 $2 $3" == "workload get nodes" ]]; then
+  echo '{"items":[{"status":{"conditions":[{"type":"Ready","status":"True"}]}}]}'
+else
+  exit 1
+fi
+`)
+
+			commandContext, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+			defer cancel()
+			command := exec.CommandContext(commandContext, "bash", "-c", rollout.Run) //nolint:gosec // Reviewed repository action body.
+			command.Dir = project
+			command.Env = append(os.Environ(),
+				"PATH="+fakeBin+":"+os.Getenv("PATH"),
+				"ARGS=--name schematic-trial",
+				"SCENARIO="+scenario.name,
+				"CALLS_FILE="+callsFile,
+				"DRY_COUNT_FILE="+dryCountFile,
+				"KSAIL_SYSTEM_TEST_LOG_DIR="+logDir,
+			)
+			output, err := command.CombinedOutput()
+			if scenario.wantSuccess {
+				require.NoErrorf(t, err, "rollout failed:\n%s", output)
+			} else {
+				require.Errorf(t, err, "rollout accepted missing live evidence:\n%s", output)
+			}
+
+			calls, readErr := os.ReadFile(callsFile) //nolint:gosec // The test owns this temporary path.
+			require.NoError(t, readErr)
+			assert.Contains(t, string(calls), "cluster update --dry-run")
+			if scenario.wantNoApply {
+				assert.NotContains(t, string(calls), "cluster update --force")
+			} else {
+				assert.Contains(t, string(calls), "cluster update --force")
+			}
+			if scenario.wantSuccess {
+				config, readErr := os.ReadFile(filepath.Join(project, "ksail.yaml")) //nolint:gosec // The test owns this temporary path.
+				require.NoError(t, readErr)
+				assert.Contains(t, string(config), "v1.12.4")
+				assert.Contains(t, string(config), "siderolabs/iscsi-tools")
+			}
+		})
+	}
+}
+
 func TestHetznerWorkflowSmokesK3sAndVanilla(t *testing.T) {
 	t.Parallel()
 
