@@ -45,11 +45,37 @@ const autoscalerRolloutTimeout = 5 * time.Minute
 // demand. Compute-only autoscaler nodes hold no persistent storage and no etcd
 // membership, so replace-by-recreation is the idiomatic, lossless path.
 func (p *Provisioner) recycleAutoscalerNodes(ctx context.Context, clusterName string) error {
+	return p.recycleAutoscalerNodesWithImageCheck(ctx, clusterName, nil)
+}
+
+func (p *Provisioner) recycleAutoscalerImageNodes(ctx context.Context, clusterName string) error {
+	return p.recycleAutoscalerNodesWithImageCheck(ctx, clusterName,
+		func(ctx context.Context, ip string) (bool, error) {
+			if p.talosOpts == nil || p.talosOpts.Version == "" {
+				return false, ErrSchematicRequiresVersion
+			}
+
+			return p.nodeImageMatchesTarget(ctx, ip, p.talosOpts.Version)
+		})
+}
+
+func (p *Provisioner) recycleAutoscalerNodesWithImageCheck(
+	ctx context.Context,
+	clusterName string,
+	imageMatches func(context.Context, string) (bool, error),
+) error {
 	clientset, ordered, ok, err := p.prepareAutoscalerNodeConvergence(
 		ctx, clusterName, "  ⓘ No autoscaler nodes to recycle\n",
 	)
 	if err != nil || !ok {
 		return err
+	}
+
+	if imageMatches != nil {
+		ordered, err = selectAutoscalerImageServers(ctx, ordered, imageMatches)
+		if err != nil {
+			return err
+		}
 	}
 
 	hzProvider, err := p.hetznerProvider()
@@ -58,6 +84,34 @@ func (p *Provisioner) recycleAutoscalerNodes(ctx context.Context, clusterName st
 	}
 
 	return p.recycleAutoscalerServers(ctx, clientset, hzProvider, ordered)
+}
+
+// Inspect every live image before authorizing a drain. A successful replacement
+// from a partial attempt is already at the target and must survive the retry.
+// Wipe/config recreation uses the ordinary path and still replaces every server.
+func selectAutoscalerImageServers(
+	ctx context.Context,
+	servers []*hcloud.Server,
+	imageMatches func(context.Context, string) (bool, error),
+) ([]*hcloud.Server, error) {
+	selected := make([]*hcloud.Server, 0, len(servers))
+	for _, server := range sortServersByName(servers) {
+		ip, err := hetznerNodeTalosAddress(server)
+		if err != nil {
+			return nil, fmt.Errorf("resolving address for %s: %w", server.Name, err)
+		}
+
+		matches, err := imageMatches(ctx, ip)
+		if err != nil {
+			return nil, fmt.Errorf("checking autoscaler image on %s: %w", server.Name, err)
+		}
+
+		if !matches {
+			selected = append(selected, server)
+		}
+	}
+
+	return selected, nil
 }
 
 // listAutoscalerServers returns the running autoscaler-managed servers for the

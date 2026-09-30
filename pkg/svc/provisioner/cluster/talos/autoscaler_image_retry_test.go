@@ -1,12 +1,14 @@
 package talosprovisioner_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
@@ -14,17 +16,77 @@ import (
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
 )
+
+const autoscalerRetryEnvironmentVariable = "KSAIL_TEST_IMAGE"
+
+func TestAutoscalerImageRefreshAtZeroCapacityWaitsForActivation(t *testing.T) {
+	t.Setenv(autoscalerRetryEnvironmentVariable, "test-token")
+
+	client := autoscalerImageRetryClient(t)
+	serverLists := &atomic.Int32{}
+	serverLists.Store(3)
+	server := autoscalerImageRetryServer(t, client, serverLists, false)
+	require.NoError(t, newAutoscalerImageRetryProvisioner(t, server.URL).
+		EnsureAutoscalerSecretIfNeededForTest(t.Context(), "test-cluster"))
+	secret, err := client.CoreV1().Secrets("kube-system").Get(
+		t.Context(), "cluster-autoscaler-config", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+
+	secret.Annotations["ksail.io/autoscaler-image-rollout-pending"] = "2"
+	_, err = client.CoreV1().
+		Secrets("kube-system").
+		Update(t.Context(), secret, metav1.UpdateOptions{})
+	require.NoError(t, err)
+
+	deployment := autoscalerDeployment(true)
+	deployment.Generation = 2
+	deployment.Status.ObservedGeneration = 1
+	deployment.Spec.Replicas = new(int32(1))
+	_, err = client.AppsV1().Deployments("kube-system").Create(
+		t.Context(), deployment, metav1.CreateOptions{},
+	)
+	require.NoError(t, err)
+
+	provisioner := newAutoscalerImageRetryProvisioner(t, server.URL)
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+
+	err = provisioner.EnsureAutoscalerSecretIfNeededForTest(ctx, "test-cluster")
+	require.ErrorContains(t, err, "rollout")
+	secret, err = client.CoreV1().Secrets("kube-system").Get(
+		t.Context(), "cluster-autoscaler-config", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "2", secret.Annotations["ksail.io/autoscaler-image-rollout-pending"])
+
+	deployment.Status.ObservedGeneration = 2
+	_, err = client.AppsV1().Deployments("kube-system").UpdateStatus(
+		t.Context(), deployment, metav1.UpdateOptions{},
+	)
+	require.NoError(t, err)
+	require.NoError(t, newAutoscalerImageRetryProvisioner(t, server.URL).
+		EnsureAutoscalerSecretIfNeededForTest(t.Context(), "test-cluster"))
+	secret, err = client.CoreV1().Secrets("kube-system").Get(
+		t.Context(), "cluster-autoscaler-config", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+	assert.NotContains(t, secret.Annotations, "ksail.io/autoscaler-image-rollout-pending")
+}
 
 // Saving the new image is not evidence that existing autoscaler nodes adopted it.
 // A fresh invocation must keep attempting convergence after an interrupted recycle,
 // even when the Secret and static-node diff are already up to date.
 func TestAutoscalerImageRefreshRetriesInterruptedConvergence(t *testing.T) {
-	t.Setenv("KSAIL_TEST_AUTOSCALER_RETRY_TOKEN", "test-token")
+	t.Setenv(autoscalerRetryEnvironmentVariable, "test-token")
 
 	client := autoscalerImageRetryClient(t)
 	serverLists := &atomic.Int32{}
@@ -70,7 +132,7 @@ func TestAutoscalerImageRefreshRetriesInterruptedConvergence(t *testing.T) {
 }
 
 func TestAutoscalerImageRefreshRetriesInterruptedRestart(t *testing.T) {
-	t.Setenv("KSAIL_TEST_AUTOSCALER_RETRY_TOKEN", "test-token")
+	t.Setenv(autoscalerRetryEnvironmentVariable, "test-token")
 
 	client := autoscalerImageRetryClient(t)
 	serverLists := &atomic.Int32{}
@@ -92,7 +154,7 @@ func TestAutoscalerImageRefreshRetriesInterruptedRestart(t *testing.T) {
 }
 
 func TestAutoscalerImageRefreshWithoutSnapshotManagerDoesNotRecycle(t *testing.T) {
-	t.Setenv("KSAIL_TEST_AUTOSCALER_RETRY_TOKEN", "test-token")
+	t.Setenv(autoscalerRetryEnvironmentVariable, "test-token")
 
 	serverLists := &atomic.Int32{}
 	client := autoscalerImageRetryClient(t)
@@ -152,8 +214,10 @@ func newAutoscalerImageRetryProvisioner(
 		WithKubeconfigPath(autoscalerBaselineKubeconfig(t, serverURL)).
 		WithKubeconfigContext("test")).
 		WithHetznerOptions(v1alpha1.OptionsHetzner{
-			NodeAutoscalerEnabled: true, NetworkName: "test-network",
-			TokenEnvVar: "KSAIL_TEST_AUTOSCALER_RETRY_TOKEN", AutoscalerNodePoolNames: []string{"workers"},
+			NodeAutoscalerEnabled:   true,
+			NetworkName:             "test-network",
+			TokenEnvVar:             autoscalerRetryEnvironmentVariable,
+			AutoscalerNodePoolNames: []string{"workers"},
 		}).
 		WithTalosOptions(v1alpha1.OptionsTalos{SchematicID: "test-schematic", Version: "v1.13.3"}).
 		WithTalosConfigsForTest(loadConfigs(t)).
@@ -191,10 +255,9 @@ func autoscalerImageRetryServer(
 					return
 				}
 
-				_, _ = io.WriteString(
-					writer,
-					`{"apiVersion":"apps/v1","kind":"DeploymentList","items":[]}`,
-				)
+				serveAutoscalerRetryDeploymentList(t, client, writer, request)
+			case "/apis/apps/v1/namespaces/kube-system/deployments/cluster-autoscaler":
+				serveAutoscalerRetryDeployment(t, client, writer, request)
 			case "/images":
 				_, _ = io.WriteString(
 					writer,
@@ -216,6 +279,57 @@ func autoscalerImageRetryServer(
 	t.Cleanup(server.Close)
 
 	return server
+}
+
+func serveAutoscalerRetryDeploymentList(
+	t *testing.T,
+	client *fake.Clientset,
+	writer http.ResponseWriter,
+	request *http.Request,
+) {
+	t.Helper()
+
+	deployments, err := client.AppsV1().Deployments("kube-system").List(
+		request.Context(), metav1.ListOptions{},
+	)
+	require.NoError(t, err)
+
+	deployments.TypeMeta = metav1.TypeMeta{APIVersion: "apps/v1", Kind: "DeploymentList"}
+	assert.NoError(t, json.NewEncoder(writer).Encode(deployments))
+}
+
+func serveAutoscalerRetryDeployment(
+	t *testing.T,
+	client *fake.Clientset,
+	writer http.ResponseWriter,
+	request *http.Request,
+) {
+	t.Helper()
+
+	deployments := client.AppsV1().Deployments("kube-system")
+
+	var deployment *appsv1.Deployment
+
+	var err error
+
+	if request.Method == http.MethodPatch {
+		body, readErr := io.ReadAll(request.Body)
+		require.NoError(t, readErr)
+
+		deployment, err = deployments.Patch(request.Context(), "cluster-autoscaler",
+			types.StrategicMergePatchType, body, metav1.PatchOptions{})
+	} else {
+		deployment, err = deployments.Get(
+			request.Context(),
+			"cluster-autoscaler",
+			metav1.GetOptions{},
+		)
+	}
+
+	require.NoError(t, err)
+
+	deployment.TypeMeta = metav1.TypeMeta{APIVersion: "apps/v1", Kind: "Deployment"}
+	assert.NoError(t, json.NewEncoder(writer).Encode(deployment))
 }
 
 func serveAutoscalerRetryServers(writer http.ResponseWriter, count int32, interruptRestart bool) {

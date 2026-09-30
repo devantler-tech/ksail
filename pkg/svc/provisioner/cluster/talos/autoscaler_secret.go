@@ -118,15 +118,8 @@ func (p *Provisioner) convergeAutoscalerBaseline(
 	changed, imageChanged bool,
 	desiredImageID string,
 ) error {
-	if imageChanged && !changed {
-		// A previous attempt may have stopped after saving the Secret but before
-		// restarting the autoscaler. Retry the restart before draining old nodes.
-		kubeclient, clientErr := p.newSecretKubeclient("pending autoscaler image restart")
-		if clientErr != nil {
-			return clientErr
-		}
-
-		err := p.restartAutoscalerAfterConfigChange(ctx, kubeclient)
+	if imageChanged {
+		err := p.activateAutoscalerImage(ctx, !changed)
 		if err != nil {
 			return err
 		}
@@ -175,6 +168,8 @@ func (p *Provisioner) propagateAutoscalerBaseline(
 	result *clusterupdate.UpdateResult,
 ) error {
 	switch {
+	case imageChanged && !autoscalerRecycleRequired(diff, false) && !autoscalerRebootRequired(diff):
+		return p.recycleAutoscalerImageNodes(ctx, clusterName)
 	case autoscalerRecycleRequired(diff, imageChanged):
 		return p.recycleAutoscalerNodes(ctx, clusterName)
 	case autoscalerRebootRequired(diff):

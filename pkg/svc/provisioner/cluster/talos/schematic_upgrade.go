@@ -45,7 +45,8 @@ func (p *Provisioner) DistributionImageChanged(
 	}
 
 	return distributionImageChanged(ctx, nodes, desired, p.getRunningSchematic,
-		func() (kubernetes.Interface, error) { return p.createK8sClient(clusterName) })
+		func() (kubernetes.Interface, error) { return p.createK8sClient(clusterName) },
+		p.hetznerOpts.NodeAutoscalerEnabled)
 }
 
 // A previous roll can finish installing every image but time out before its
@@ -54,6 +55,7 @@ func distributionImageChanged(
 	ctx context.Context, nodes []nodeWithRole, desired string,
 	read func(context.Context, string) (string, error),
 	newClient func() (kubernetes.Interface, error),
+	autoscalerEnabled bool,
 ) (bool, error) {
 	changed, err := schematicsChanged(ctx, nodes, desired, read)
 	if err != nil || changed {
@@ -70,7 +72,15 @@ func distributionImageChanged(
 		return false, fmt.Errorf("listing nodes for unfinished upgrades: %w", err)
 	}
 
-	return hasPendingImageUpgrade(nodes, kubeNodes.Items), nil
+	if hasPendingImageUpgrade(nodes, kubeNodes.Items) {
+		return true, nil
+	}
+
+	if autoscalerEnabled {
+		return hasPendingAutoscalerImageRollout(ctx, clientset)
+	}
+
+	return false, nil
 }
 
 func hasPendingImageUpgrade(nodes []nodeWithRole, kubeNodes []corev1.Node) bool {

@@ -3,6 +3,7 @@ package talosprovisioner_test
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
 
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
@@ -21,6 +22,62 @@ const (
 )
 
 var errSchematicNodeListUnavailable = errors.New("node list unavailable")
+
+func TestDistributionImageChangedFailsOnUnknownAutoscalerWork(t *testing.T) {
+	t.Parallel()
+
+	nodes := []talosprovisioner.NodeWithRoleForTest{
+		{IP: "10.0.0.2", Role: talosprovisioner.RoleWorker},
+	}
+	client := fake.NewClientset(nodeWithIP("static-worker", "10.0.0.2"))
+	client.PrependReactor("get", "secrets", func(ktesting.Action) (bool, runtime.Object, error) {
+		return true, nil, io.ErrUnexpectedEOF
+	})
+
+	read := func(context.Context, string) (string, error) { return testSchematic, nil }
+	newClient := func() (kubernetes.Interface, error) { return client, nil }
+
+	changed, err := talosprovisioner.DistributionImageChangedForTest(
+		t.Context(), nodes, testSchematic, read, newClient,
+	)
+	if !errors.Is(err, io.ErrUnexpectedEOF) || changed {
+		t.Fatalf("unknown autoscaler work must fail closed: changed=%t error=%v", changed, err)
+	}
+
+	changed, err = talosprovisioner.DistributionImageChangedForTest(
+		t.Context(), nodes, testSchematic, read, newClient, false,
+	)
+	if err != nil || changed {
+		t.Fatalf("disabled autoscaling must not read its Secret: changed=%t error=%v", changed, err)
+	}
+}
+
+func TestDistributionImageChangedFindsPendingAutoscalerImage(t *testing.T) {
+	t.Parallel()
+
+	nodes := []talosprovisioner.NodeWithRoleForTest{
+		{IP: "10.0.0.2", Role: talosprovisioner.RoleWorker},
+	}
+	client := fake.NewClientset(nodeWithIP("static-worker", "10.0.0.2"), &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cluster-autoscaler-config", Namespace: "kube-system",
+			Annotations: map[string]string{"ksail.io/autoscaler-image-rollout-pending": "2"},
+		},
+	})
+
+	changed, err := talosprovisioner.DistributionImageChangedForTest(
+		t.Context(), nodes, testSchematic,
+		func(context.Context, string) (string, error) { return testSchematic, nil },
+		func() (kubernetes.Interface, error) { return client, nil },
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !changed {
+		t.Fatal("matching static images must not hide a pending autoscaler image rollout")
+	}
+}
 
 func TestDistributionImageChangedFindsInterruptedCordon(t *testing.T) {
 	t.Parallel()

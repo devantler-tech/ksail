@@ -7,7 +7,9 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
 )
 
@@ -18,6 +20,44 @@ var errAutoscalerImageBaselineChanged = errors.New(
 )
 
 var errAutoscalerSnapshotImageUnavailable = errors.New("autoscaler snapshot image is unavailable")
+
+func hasPendingAutoscalerImageRollout(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+) (bool, error) {
+	secret, err := clientset.CoreV1().Secrets(autoscalerConfigSecretNamespace).
+		Get(ctx, autoscalerConfigSecretName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return false, nil
+	}
+
+	if err != nil {
+		return false, fmt.Errorf("checking pending autoscaler image rollout: %w", err)
+	}
+
+	_, pending := secret.Annotations[autoscalerImagePendingAnnotation]
+
+	return pending, nil
+}
+
+// Activate the saved template independently of worker count. Even a zero-capacity
+// pool must not acknowledge an image while a present autoscaler still runs an old
+// Deployment generation. A missing Deployment reads the current Secret on install.
+func (p *Provisioner) activateAutoscalerImage(ctx context.Context, restart bool) error {
+	clientset, err := p.newSecretKubeclient("pending autoscaler image activation")
+	if err != nil {
+		return err
+	}
+
+	if restart {
+		err = p.restartAutoscalerAfterConfigChange(ctx, clientset)
+		if err != nil {
+			return err
+		}
+	}
+
+	return p.waitForAutoscalerRollout(ctx, clientset)
+}
 
 func autoscalerImageChanged(changed, pending bool, previousImage, desiredImage string) bool {
 	return pending || (changed && previousImage != "" && previousImage != desiredImage)

@@ -47,8 +47,19 @@ func DistributionImageChangedForTest(
 	ctx context.Context, nodes []NodeWithRoleForTest, desired string,
 	read func(context.Context, string) (string, error),
 	newClient func() (kubernetes.Interface, error),
+	autoscalerEnabled ...bool,
 ) (bool, error) {
-	return distributionImageChanged(ctx, nodes, desired, read, newClient)
+	enabled := len(autoscalerEnabled) == 0 || autoscalerEnabled[0]
+
+	return distributionImageChanged(ctx, nodes, desired, read, newClient, enabled)
+}
+
+// SelectAutoscalerImageServersForTest exposes the pre-drain live-image census.
+func SelectAutoscalerImageServersForTest(
+	ctx context.Context, servers []*hcloud.Server,
+	imageMatches func(context.Context, string) (bool, error),
+) ([]*hcloud.Server, error) {
+	return selectAutoscalerImageServers(ctx, servers, imageMatches)
 }
 
 // RunningImageMatchesTargetForTest exposes the shared pre/post-upgrade image check.
