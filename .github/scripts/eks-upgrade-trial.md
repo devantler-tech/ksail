@@ -32,9 +32,11 @@ that the driver removes on success, error, or termination. They are never
 uploaded. The trial obtains a fresh session through GitHub OIDC and exposes its
 real expiry through AWS's `credential_process` format; the action's usual
 environment tuple cannot carry that metadata. Final cleanup independently
-refreshes credentials and retains its full 45-minute budget, even after trial
-failure. An accepted EKS upgrade can continue after the CLI stops waiting;
-always inspect the cleanup result before declaring the run finished.
+refreshes credentials, waits up to 20 minutes for an accepted update to settle,
+and retains its full 45-minute deletion budget, even after trial failure. AWS
+rejects deletion during an update, which can continue after the CLI stops
+waiting. A failed settling wait still runs deletion and leaves the job failed;
+inspect cleanup and resolve any remaining resources before declaring completion.
 
 The local command-double controls run through `go test ./internal/ciharness/...`.
 They establish that the driver rejects false success and cleans up credentials;

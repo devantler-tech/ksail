@@ -49,6 +49,17 @@ func TestEKSUpgradeTrialReservesFreshCleanupSession(t *testing.T) {
 		harnessStepIndex(t, job.Steps, refresh.Name))
 	assert.Less(t,
 		harnessStepIndex(t, job.Steps, refresh.Name),
+		harnessStepIndex(t, job.Steps, "⏳ Wait for EKS update before cleanup"))
+	wait := findHarnessStep(t, job.Steps, "⏳ Wait for EKS update before cleanup")
+	assert.Equal(t,
+		"always() && steps.create.outputs.attempted == 'true' && inputs.upgrade_from_version != ''",
+		wait.If)
+	assert.Equal(t,
+		"timeout 20m bash .github/scripts/eks-upgrade-trial.sh --wait-before-cleanup",
+		wait.Run)
+	assert.Equal(t, 21, wait.TimeoutMinutes)
+	assert.Less(t,
+		harnessStepIndex(t, job.Steps, wait.Name),
 		harnessStepIndex(t, job.Steps, "🧹 Delete EKS smoke cluster"))
 
 	minutes := 15 // Final job-level headroom in addition to every bounded step.
@@ -59,4 +70,5 @@ func TestEKSUpgradeTrialReservesFreshCleanupSession(t *testing.T) {
 	}
 
 	assert.GreaterOrEqual(t, job.TimeoutMinutes, minutes)
+	assert.LessOrEqual(t, job.TimeoutMinutes, 360, "GitHub-hosted jobs have a six-hour limit")
 }

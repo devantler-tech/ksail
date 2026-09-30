@@ -129,10 +129,10 @@ jobs:
   smoke-test:
     name: 🧪 EKS Smoke Test
     runs-on: ubuntu-latest
-    # All bounded steps, including the optional 90m upgrade trial and the 45m
-    # always-run deletion, plus at least 15m of job-level headroom. The ciharness
-    # tests sum the actual step budgets to protect cleanup when a trial times out.
-    timeout-minutes: 340
+    # All bounded steps, including the optional 90m upgrade trial, 21m settling
+    # step, and 45m always-run deletion, plus at least 15m of job-level headroom.
+    # The ciharness tests sum the actual budgets and enforce the hosted-job cap.
+    timeout-minutes: 360
     needs: [preflight, build-artifact]
     if: needs.preflight.outputs.aws-credentials == 'true'
     environment: ci
@@ -460,6 +460,12 @@ jobs:
           role-session-name: ksail-system-test-eks-cleanup-${{ github.run_id }}
           aws-region: ${{ inputs.region }}
           role-duration-seconds: 7200
+
+      - name: ⏳ Wait for EKS update before cleanup
+        if: always() && steps.create.outputs.attempted == 'true' && inputs.upgrade_from_version != ''
+        timeout-minutes: 21
+        shell: bash
+        run: timeout 20m bash .github/scripts/eks-upgrade-trial.sh --wait-before-cleanup
 
       - name: 🧹 Delete EKS smoke cluster
         if: always()

@@ -8,6 +8,31 @@ fail() {
   exit 1
 }
 
+# A CLI timeout does not cancel an accepted AWS update, and EKS rejects deletion
+# during that update. This mode uses the workflow's independently refreshed
+# cleanup session, never the trial's deleted credential_process files. The
+# workflow bounds this entire probe/wait to 20m and still reserves 45m to delete.
+if [[ "${1:-}" == --wait-before-cleanup ]]; then
+  : "${KSAIL_EKS_CLUSTER_NAME:?}" "${AWS_REGION:?}"
+  export AWS_PAGER='' AWS_MAX_ATTEMPTS=3
+  if ! status="$(aws eks describe-cluster --name "$KSAIL_EKS_CLUSTER_NAME" --region "$AWS_REGION" \
+    --query 'cluster.status' --output text --cli-connect-timeout 10 --cli-read-timeout 30 2>&1)"; then
+    if [[ "$status" == *'(ResourceNotFoundException) when calling the DescribeCluster operation'* ]]; then
+      echo 'Cluster does not exist; no update to wait for.'
+      exit 0
+    fi
+    fail 'Cannot determine EKS status before cleanup; deletion checks must still run.'
+  fi
+  [[ -n "$status" && "$status" != None ]] || fail 'AWS returned no EKS status before cleanup.'
+  if [[ "$status" == UPDATING ]]; then
+    echo 'Waiting for the accepted EKS update before deletion.'
+    aws eks wait cluster-active --name "$KSAIL_EKS_CLUSTER_NAME" --region "$AWS_REGION" \
+      --cli-connect-timeout 10 --cli-read-timeout 30 ||
+      fail 'EKS update did not settle; deletion must still run and any remaining resources need attention.'
+  fi
+  exit 0
+fi
+
 from="${EKS_UPGRADE_FROM:-}"
 to="${EKS_UPGRADE_TO:-}"
 if [[ "${1:-}" == --validate-versions && -z "$from$to" ]]; then

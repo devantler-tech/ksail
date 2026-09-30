@@ -695,6 +695,7 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 		"🧪 ksail workload reconcile",
 		"🧪 EKS control-plane upgrade trial",
 		"🔐 Refresh AWS credentials for final cleanup",
+		"⏳ Wait for EKS update before cleanup",
 		"🧹 Delete EKS smoke cluster",
 	}
 
