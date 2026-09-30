@@ -129,37 +129,45 @@ func TestOTelLogBatchProcessorStaysUnreachable(t *testing.T) {
 
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-
-			auditedVersions, ok := auditedOTelModuleVersions()[name]
-			if !ok {
-				t.Fatalf("module %q has no audited OTel module versions", name)
-			}
-
-			if moduleCGO()[name] == "" {
-				t.Fatalf("module %q has no CGO setting", name)
-			}
-
-			for modulePath, auditedVersion := range auditedVersions {
-				assertAuditedModuleVersion(t, moduleDir, modulePath, auditedVersion)
-			}
-
-			linked, scanned := false, false
-
-			for _, goos := range shippedGOOS() {
-				packages := listDependencyPackages(t, moduleDir, goos, moduleCGO()[name])
-				linked = assertOTelSDKLogImporters(t, packages, goos) || linked
-				scanned = assertNoOTelBatchEntryPointCallers(t, packages, goos) || scanned
-			}
-
-			if !linked {
-				t.Fatalf("%s is no longer linked on any shipped GOOS: re-establish the #7375 verdict and delete this guard",
-					otelSDKLogModulePath)
-			}
-
-			if !scanned {
-				t.Fatal("no package imports an OTel batch entry point on any shipped GOOS, so the scan examined nothing")
-			}
+			auditModuleOTelReachability(t, name, moduleDir)
 		})
+	}
+}
+
+// auditModuleOTelReachability pins the audited module versions for one shipped module, then checks
+// its package graph on every shipped platform.
+func auditModuleOTelReachability(t *testing.T, name, moduleDir string) {
+	t.Helper()
+
+	auditedVersions, ok := auditedOTelModuleVersions()[name]
+	if !ok {
+		t.Fatalf("module %q has no audited OTel module versions", name)
+	}
+
+	cgo := moduleCGO()[name]
+	if cgo == "" {
+		t.Fatalf("module %q has no CGO setting", name)
+	}
+
+	for modulePath, auditedVersion := range auditedVersions {
+		assertAuditedModuleVersion(t, moduleDir, modulePath, auditedVersion)
+	}
+
+	linked, scanned := false, false
+
+	for _, target := range shippedPlatforms() {
+		packages := listDependencyPackages(t, moduleDir, target, cgo)
+		linked = assertOTelSDKLogImporters(t, packages, target.String()) || linked
+		scanned = assertNoOTelBatchEntryPointCallers(t, packages, target.String()) || scanned
+	}
+
+	if !linked {
+		t.Fatalf("%s is no longer linked on any shipped platform: re-establish the #7375 verdict and delete this guard",
+			otelSDKLogModulePath)
+	}
+
+	if !scanned {
+		t.Fatal("no package imports an OTel batch entry point on any shipped platform, so the scan examined nothing")
 	}
 }
 
@@ -259,11 +267,28 @@ func assertAuditedModuleVersion(t *testing.T, moduleDir, modulePath, auditedVers
 	}
 }
 
-// shippedGOOS is every GOOS the CLI release builds (.goreleaser.yaml); the desktop app is listed for
-// the same set, a superset of the platforms it ships on. The package graph differs per platform, so
-// a caller present only in the Windows graph is invisible to a Linux-only listing.
-func shippedGOOS() []string {
-	return []string{"darwin", "linux", "windows"}
+// platform is one GOOS/GOARCH pair a module is built for.
+type platform struct {
+	goos   string
+	goarch string
+}
+
+func (p platform) String() string { return p.goos + "/" + p.goarch }
+
+// shippedPlatforms is every GOOS/GOARCH pair either module can ship on: the CLI release matrix
+// (.goreleaser.yaml: darwin, linux and windows on amd64 and arm64, less darwin/amd64) plus
+// darwin/amd64, so the desktop app is covered too. The package graph differs per platform, so a
+// caller present only in, say, the windows/arm64 graph is invisible to any other listing.
+func shippedPlatforms() []platform {
+	var platforms []platform
+
+	for _, goos := range []string{"darwin", "linux", "windows"} {
+		for _, goarch := range []string{"amd64", "arm64"} {
+			platforms = append(platforms, platform{goos: goos, goarch: goarch})
+		}
+	}
+
+	return platforms
 }
 
 // moduleCGO is the CGO setting each shipped module is built with: the CLI release disables CGO,
@@ -272,13 +297,13 @@ func moduleCGO() map[string]string {
 	return map[string]string{"root": "0", "desktop": "1"}
 }
 
-func listDependencyPackages(t *testing.T, moduleDir, goos, cgo string) []goListPackage {
+func listDependencyPackages(t *testing.T, moduleDir string, target platform, cgo string) []goListPackage {
 	t.Helper()
 
-	//nolint:gosec // G204: a fixed go subcommand; goos comes from shippedGOOS.
+	//nolint:gosec // G204: a fixed go subcommand; the target comes from shippedPlatforms.
 	cmd := exec.CommandContext(t.Context(), "go", "list", "-deps", "-json", "./...")
 	cmd.Dir = moduleDir
-	cmd.Env = append(os.Environ(), "GOOS="+goos, "CGO_ENABLED="+cgo)
+	cmd.Env = append(os.Environ(), "GOOS="+target.goos, "GOARCH="+target.goarch, "CGO_ENABLED="+cgo)
 
 	var stderr bytes.Buffer
 
@@ -286,7 +311,7 @@ func listDependencyPackages(t *testing.T, moduleDir, goos, cgo string) []goListP
 
 	out, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("list dependency packages for GOOS=%s: %v\n%s", goos, err,
+		t.Fatalf("list dependency packages for %s: %v\n%s", target, err,
 			boundGoStderr(stderr.String(), goCommandStderrLimit))
 	}
 
@@ -313,7 +338,7 @@ func listDependencyPackages(t *testing.T, moduleDir, goos, cgo string) []goListP
 
 // assertOTelSDKLogImporters fails on any unaudited importer of sdk/log and reports whether the
 // graph links sdk/log at all.
-func assertOTelSDKLogImporters(t *testing.T, packages []goListPackage, goos string) bool {
+func assertOTelSDKLogImporters(t *testing.T, packages []goListPackage, target string) bool {
 	t.Helper()
 
 	audited := auditedOTelSDKLogImporters()
@@ -336,7 +361,7 @@ func assertOTelSDKLogImporters(t *testing.T, packages []goListPackage, goos stri
 
 	if len(unexpected) > 0 {
 		sort.Strings(unexpected)
-		t.Fatalf("unaudited packages import %s on GOOS=%s (#7375): %v", otelSDKLogModulePath, goos, unexpected)
+		t.Fatalf("unaudited packages import %s on %s (#7375): %v", otelSDKLogModulePath, target, unexpected)
 	}
 
 	return found
@@ -344,7 +369,7 @@ func assertOTelSDKLogImporters(t *testing.T, packages []goListPackage, goos stri
 
 // assertNoOTelBatchEntryPointCallers fails on any entry-point reference outside the allowed places and
 // reports whether any package was scanned.
-func assertNoOTelBatchEntryPointCallers(t *testing.T, packages []goListPackage, goos string) bool {
+func assertNoOTelBatchEntryPointCallers(t *testing.T, packages []goListPackage, target string) bool {
 	t.Helper()
 
 	packageNames := make(map[string]string, len(packages))
@@ -387,8 +412,8 @@ func assertNoOTelBatchEntryPointCallers(t *testing.T, packages []goListPackage, 
 	}
 
 	if len(references) > 0 {
-		t.Fatalf("OTel log BatchProcessor entry points are referenced on GOOS=%s (GHSA-hjf4-fphr-2h65, #7375):\n%s",
-			goos, strings.Join(references, "\n"))
+		t.Fatalf("OTel log BatchProcessor entry points are referenced on %s (GHSA-hjf4-fphr-2h65, #7375):\n%s",
+			target, strings.Join(references, "\n"))
 	}
 
 	return scanned > 0
