@@ -868,9 +868,13 @@ func TestReleaseBuildConfigMatchesAudit(t *testing.T) {
 
 	for name, want := range auditedReleaseConfigDigests() {
 		if actual[name] != want {
-			t.Errorf("%s changed (digest %s, audited %s): re-establish the GHSA-hjf4-fphr-2h65 verdict "+
-				"for the new release configuration (#7375), then update auditedReleaseConfigDigests",
-				name, actual[name], want)
+			t.Errorf(
+				"%s changed (digest %s, audited %s): re-establish the GHSA-hjf4-fphr-2h65 verdict "+
+					"for the new release configuration (#7375), then update auditedReleaseConfigDigests",
+				name,
+				actual[name],
+				want,
+			)
 		}
 	}
 }
@@ -885,7 +889,9 @@ func releaseConfigDigests(t *testing.T, root string) map[string]string {
 	for _, name := range []string{
 		".goreleaser.yaml", ".goreleaser.desktop.yaml", ".github/actions/setup-desktop-build/action.yml",
 	} {
-		data, err := os.ReadFile(filepath.Join(root, name)) //nolint:gosec // G304: fixed release config paths.
+		data, err := os.ReadFile(
+			filepath.Join(root, name),
+		) //nolint:gosec // G304: fixed release config paths.
 		if err != nil {
 			t.Fatalf("read %s: %v", name, err)
 		}
