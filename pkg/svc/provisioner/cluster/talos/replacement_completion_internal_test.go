@@ -2,6 +2,7 @@ package talosprovisioner
 
 import (
 	"errors"
+	"net"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
@@ -96,6 +97,28 @@ func TestProveReplacementCompletedAcceptsANewWorker(t *testing.T) {
 	current, err := proveReplacementCompleted(planned, nil, observation)
 	require.NoError(t, err)
 	require.Equal(t, replacedServerID, current.ServerID)
+}
+
+// A worker has no etcd member to disagree, so the name is the only fact that ties the
+// observation back to the planned server: a different healthy worker must not count.
+func TestProveReplacementCompletedRefusesAWorkerUnderAnotherName(t *testing.T) {
+	t.Parallel()
+
+	planned := plannedControlPlane()
+	planned.Role = hetzner.NodeTypeWorker
+	planned.EtcdMemberID = 0
+
+	workerLabels := hetzner.NodeLabels(targetCluster, hetzner.NodeTypeWorker, 1)
+	observation := completedControlPlane()
+	observation.NodeName = "prod-control-plane-2"
+	observation.Servers[0].Labels = workerLabels
+	observation.Servers[1].Labels = workerLabels
+	observation.Servers[1].PublicNet.IPv4.IP = net.ParseIP("203.0.113.11")
+	observation.EtcdMembers = nil
+
+	_, err := proveReplacementCompleted(planned, nil, observation)
+	require.ErrorIs(t, err, ErrReplacementIncomplete)
+	require.ErrorContains(t, err, `server name changed from "prod-control-plane-1" to "prod-control-plane-2"`)
 }
 
 //nolint:funlen // Table-driven test coverage is naturally long.

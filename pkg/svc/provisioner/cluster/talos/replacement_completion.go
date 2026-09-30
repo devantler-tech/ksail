@@ -71,6 +71,9 @@ func proveReplacementCompleted(
 
 func newIdentities(planned, current replacementTarget) error {
 	switch {
+	case current.ServerName != planned.ServerName:
+		return fmt.Errorf("%w: server name changed from %q to %q",
+			ErrReplacementIncomplete, planned.ServerName, current.ServerName)
 	case current.Role != planned.Role:
 		return fmt.Errorf("%w: role changed from %q to %q",
 			ErrReplacementIncomplete, planned.Role, current.Role)
