@@ -187,6 +187,9 @@ func NewService() *Service {
 		DockerFactory: service.dockerFactory,
 		// The web UI renders per-cluster run-state, so opt into the Docker run-state probe.
 		ProbeRunState: true,
+		// Lifecycle calls a kubeconfig-only row unmanaged only after a complete listing, so an
+		// unreachable Docker daemon must count as a failed provider, not as no Docker clusters.
+		ReportDockerFailures: true,
 	}
 	service.ResourceAdapter = api.ResourceAdapter{Provider: service}
 	service.resolveEKSGuard = service.defaultEKSGuard

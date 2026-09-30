@@ -148,6 +148,7 @@ type fakeProvisioner struct {
 	deleted    []string
 	started    []string
 	stopped    []string
+	listErr    error
 }
 
 func (f *fakeProvisioner) Create(_ context.Context, name string) error {
@@ -200,7 +201,7 @@ func (f *fakeProvisioner) List(_ context.Context) ([]string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	return slices.Clone(f.clusters), nil
+	return slices.Clone(f.clusters), f.listErr
 }
 
 func (f *fakeProvisioner) Start(_ context.Context, name string) error {
@@ -2812,7 +2813,7 @@ func unmanagedTestService(t *testing.T, lister *countingLister) *clusterapi.Serv
 // TestLifecycleRefusesUnmanagedRowBeforeEKSOwnershipFallback checks that an unmanaged row whose name
 // also has persisted EKS ownership is refused as unmanaged. Resolving it through the ownership
 // fallback instead would let the row the UI calls unmanaged act on a separately owned EKS cluster.
-func TestLifecycleRefusesUnmanagedRowBeforeEKSOwnershipFallback(t *testing.T) {
+func TestLifecycleRefusesUnmanagedRowBeforeEKSOwnershipFallback(t *testing.T) { //nolint:paralleltest // t.Setenv
 	service := unmanagedTestService(t, &countingLister{})
 	require.NoError(t, state.SaveEKSOwnershipState(
 		unmanagedContextName, "eu-north-1", ownershipRecordFor(unmanagedContextName, "eu-north-1")))
@@ -2824,8 +2825,27 @@ func TestLifecycleRefusesUnmanagedRowBeforeEKSOwnershipFallback(t *testing.T) {
 // TestLifecycleDoesNotCallAContextUnmanagedWhenDiscoveryFailed checks that a failed provider listing
 // never turns a kubeconfig context into an "unmanaged" refusal: the failed provider may hold the
 // cluster that was not found, so the answer stays "not found".
-func TestLifecycleDoesNotCallAContextUnmanagedWhenDiscoveryFailed(t *testing.T) {
+func TestLifecycleDoesNotCallAContextUnmanagedWhenDiscoveryFailed(t *testing.T) { //nolint:paralleltest // t.Setenv
 	service := unmanagedTestService(t, &countingLister{err: errTestDiscovery})
+
+	err := service.Delete(context.Background(), "default", unmanagedContextName)
+	require.ErrorIs(t, err, api.ErrNotFound)
+	require.NotErrorIs(t, err, api.ErrUnmanagedCluster)
+}
+
+// TestLifecycleDoesNotCallAContextUnmanagedWhenDockerListingFailed checks that a failed Docker listing
+// counts as incomplete discovery: Docker may hold the KSail cluster behind the context, so the answer
+// stays "not found" rather than an "unmanaged" refusal.
+func TestLifecycleDoesNotCallAContextUnmanagedWhenDockerListingFailed(t *testing.T) { //nolint:paralleltest // t.Setenv
+	t.Setenv("HOME", t.TempDir())
+
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVanilla: {listErr: errTestDiscovery},
+	})
+
+	kubeconfig := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(kubeconfig, []byte(managedAndUnmanagedKubeconfig), 0o600))
+	service.SetKubeconfigPathForTest(kubeconfig)
 
 	err := service.Delete(context.Background(), "default", unmanagedContextName)
 	require.ErrorIs(t, err, api.ErrNotFound)
@@ -2835,7 +2855,7 @@ func TestLifecycleDoesNotCallAContextUnmanagedWhenDiscoveryFailed(t *testing.T) 
 // TestLifecycleIncompleteDiscoveryNeverReachesEKSFallbackForUnmanagedRow checks the combination of a
 // failed provider listing and persisted EKS ownership for an unmanaged row's name: the row must stay
 // "not found" rather than resolve through the ownership fallback to a separately owned cluster.
-func TestLifecycleIncompleteDiscoveryNeverReachesEKSFallbackForUnmanagedRow(t *testing.T) {
+func TestLifecycleIncompleteDiscoveryNeverReachesEKSFallbackForUnmanagedRow(t *testing.T) { //nolint:paralleltest // t.Setenv
 	service := unmanagedTestService(t, &countingLister{err: errTestDiscovery})
 	require.NoError(t, state.SaveEKSOwnershipState(
 		unmanagedContextName, "eu-north-1", ownershipRecordFor(unmanagedContextName, "eu-north-1")))
@@ -2846,7 +2866,7 @@ func TestLifecycleIncompleteDiscoveryNeverReachesEKSFallbackForUnmanagedRow(t *t
 
 // TestLifecycleRefusalRunsDiscoveryOnce checks that refusing an unmanaged row reuses the discovery
 // that resolved it instead of listing every provider a second time.
-func TestLifecycleRefusalRunsDiscoveryOnce(t *testing.T) {
+func TestLifecycleRefusalRunsDiscoveryOnce(t *testing.T) { //nolint:paralleltest // t.Setenv
 	lister := &countingLister{}
 	service := unmanagedTestService(t, lister)
 
