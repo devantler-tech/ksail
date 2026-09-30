@@ -12,10 +12,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
+
+	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -25,6 +28,10 @@ const (
 	kubescapeLoggerPath   = "github.com/kubescape/go-logger"
 	otlpLogHTTPModulePath = "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 )
+
+// goListPackageFields limits `go list -json` to the fields goListPackage reads: the full record is
+// about 69 MB per module and platform, and the audit lists twelve of them.
+const goListPackageFields = "ImportPath,Name,Dir,Standard,GoFiles,CgoFiles,IgnoredGoFiles,Imports"
 
 // goListPackage mirrors the Go command's exported JSON field names.
 type goListPackage struct {
@@ -280,7 +287,7 @@ func (p platform) String() string { return p.goos + "/" + p.goarch }
 // darwin/amd64, so the desktop app is covered too. The package graph differs per platform, so a
 // caller present only in, say, the windows/arm64 graph is invisible to any other listing.
 func shippedPlatforms() []platform {
-	var platforms []platform
+	platforms := make([]platform, 0, 6)
 
 	for _, goos := range []string{"darwin", "linux", "windows"} {
 		for _, goarch := range []string{"amd64", "arm64"} {
@@ -301,7 +308,7 @@ func listDependencyPackages(t *testing.T, moduleDir string, target platform, cgo
 	t.Helper()
 
 	//nolint:gosec // G204: a fixed go subcommand; the target comes from shippedPlatforms.
-	cmd := exec.CommandContext(t.Context(), "go", "list", "-deps", "-json", "./...")
+	cmd := exec.CommandContext(t.Context(), "go", "list", "-deps", "-json="+goListPackageFields, "./...")
 	cmd.Dir = moduleDir
 	cmd.Env = append(os.Environ(), "GOOS="+target.goos, "GOARCH="+target.goarch, "CGO_ENABLED="+cgo)
 
@@ -317,7 +324,7 @@ func listDependencyPackages(t *testing.T, moduleDir string, target platform, cgo
 
 	var packages []goListPackage
 
-	decoder := json.NewDecoder(strings.NewReader(string(out)))
+	decoder := json.NewDecoder(bytes.NewReader(out))
 	for {
 		var pkg goListPackage
 
@@ -584,4 +591,119 @@ func selectorReferences(
 	})
 
 	return references
+}
+
+// releaseTarget is one GOOS/GOARCH pair a release configuration builds.
+type releaseTarget struct {
+	GOOS   string `json:"goos"`
+	GOARCH string `json:"goarch"`
+}
+
+// TestShippedPlatformsCoverReleaseMatrices pins shippedPlatforms to the release configurations: every
+// target the CLI release (.goreleaser.yaml), the macOS desktop release (.goreleaser.desktop.yaml) and
+// the Linux/Windows desktop builds (cd.yaml) produce must be audited, so a target added to a release
+// cannot ship a graph the reachability audit never listed.
+func TestShippedPlatformsCoverReleaseMatrices(t *testing.T) {
+	t.Parallel()
+
+	root := moduleRoot(t)
+	audited := map[string]bool{}
+
+	for _, target := range shippedPlatforms() {
+		audited[target.String()] = true
+	}
+
+	targets := append(goreleaserTargets(t, filepath.Join(root, ".goreleaser.yaml")),
+		goreleaserTargets(t, filepath.Join(root, ".goreleaser.desktop.yaml"))...)
+	targets = append(targets, desktopWorkflowTargets(t, filepath.Join(root, ".github", "workflows", "cd.yaml"))...)
+
+	if len(targets) == 0 {
+		t.Fatal("no release target was read, so the comparison examined nothing")
+	}
+
+	for _, target := range targets {
+		if !audited[target.GOOS+"/"+target.GOARCH] {
+			t.Errorf("release target %s/%s is not in shippedPlatforms (#7375)", target.GOOS, target.GOARCH)
+		}
+	}
+}
+
+// goreleaserTargets expands every build's goos x goarch matrix in a GoReleaser file, less its ignores.
+func goreleaserTargets(t *testing.T, path string) []releaseTarget {
+	t.Helper()
+
+	var config struct {
+		Builds []struct {
+			GOOS   []string        `json:"goos"`
+			GOARCH []string        `json:"goarch"`
+			Ignore []releaseTarget `json:"ignore"`
+		} `json:"builds"`
+	}
+
+	readYAML(t, path, &config)
+
+	var targets []releaseTarget
+
+	for _, build := range config.Builds {
+		if len(build.GOOS) == 0 || len(build.GOARCH) == 0 {
+			t.Fatalf("%s has a build without an explicit goos and goarch list", path)
+		}
+
+		for _, goos := range build.GOOS {
+			for _, goarch := range build.GOARCH {
+				target := releaseTarget{GOOS: goos, GOARCH: goarch}
+				if !slices.Contains(build.Ignore, target) {
+					targets = append(targets, target)
+				}
+			}
+		}
+	}
+
+	return targets
+}
+
+// desktopWorkflowTargets reads the desktop job's build matrix from the CD workflow.
+func desktopWorkflowTargets(t *testing.T, path string) []releaseTarget {
+	t.Helper()
+
+	var workflow struct {
+		Jobs map[string]struct {
+			Strategy struct {
+				Matrix struct {
+					Include []struct {
+						GOOS string `json:"goos"`
+						Arch string `json:"arch"`
+					} `json:"include"`
+				} `json:"matrix"`
+			} `json:"strategy"`
+		} `json:"jobs"`
+	}
+
+	readYAML(t, path, &workflow)
+
+	include := workflow.Jobs["desktop"].Strategy.Matrix.Include
+	if len(include) == 0 {
+		t.Fatalf("%s has no desktop build matrix", path)
+	}
+
+	targets := make([]releaseTarget, 0, len(include))
+	for _, entry := range include {
+		targets = append(targets, releaseTarget{GOOS: entry.GOOS, GOARCH: entry.Arch})
+	}
+
+	return targets
+}
+
+func readYAML(t *testing.T, path string, into any) {
+	t.Helper()
+
+	data, err := os.ReadFile(path) //nolint:gosec // G304: fixed release configuration paths.
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+
+	err = yaml.Unmarshal(data, into)
+	if err != nil {
+		t.Fatalf("parse %s: %v", path, err)
+	}
 }
