@@ -182,7 +182,7 @@ go run main.go --help
 ├── charts/                 # Helm charts
 │   └── ksail-operator/     # Operator + embedded web UI chart (keep README.md in sync with values.yaml)
 ├── copilot-plugin/         # ksail agent skill (published via devantler-tech/agent-plugins)
-├── desktop/                # Native desktop app (separate Go module wrapping the web UI)
+├── desktop/                # Native desktop app (shared Go module; opt in with -tags desktop)
 ├── web/                    # Web UI source
 │   └── ui/                 # Vite/React SPA, embedded into the binary via pkg/webui
 ├── docs/                   # Astro documentation source

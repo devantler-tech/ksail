@@ -13,7 +13,7 @@ name: 🔍 CodeQL
 #
 # Go uses `autobuild`, which the Go extractor resolves to standalone extraction: it reads
 # the module graph with `go list` and takes types from source, so it needs no compiler and
-# covers every `go.mod` in the workspace — root, `desktop/` and `third_party/go-archive/` —
+# covers both modules — root (CLI plus tagged desktop) and `third_party/go-archive/` —
 # in one job. `none` is rejected for Go, and `manual` runs a traced compile that exceeds the
 # runner's memory alongside the extractor.
 #
@@ -69,9 +69,21 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: 🧪 Verify desktop coverage evidence guard
+        if: matrix.language == 'go'
+        run: bash .github/scripts/verify-desktop-codeql.test.sh
+
+      - name: 🐧 Install desktop extraction headers
+        if: matrix.language == 'go'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+
       - name: 🔍 Initialize CodeQL
+        id: init
         uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
+          db-location: ${{ runner.temp }}/codeql-databases
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.language == 'go' && 'autobuild' || 'none' }}
           queries: security-extended
@@ -82,8 +94,16 @@ jobs:
         env:
           # Soft heap limit for the Go extractor (a Go program), measured in #7131.
           GOMEMLIMIT: 8GiB
+          # Include the native entry point in standalone Go package extraction.
+          GOFLAGS: -tags=desktop
 
       - name: 🔬 Perform CodeQL analysis
         uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           category: /language:${{ matrix.language }}
+
+      - name: 🔎 Require CLI and desktop function bodies in the database
+        if: matrix.language == 'go'
+        env:
+          CODEQL_CLI: ${{ steps.init.outputs.codeql-path }}
+        run: bash .github/scripts/verify-desktop-codeql.sh "$RUNNER_TEMP/codeql-databases/go"
