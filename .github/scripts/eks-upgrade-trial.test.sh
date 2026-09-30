@@ -96,38 +96,38 @@ STUB
 chmod +x "$scratch/bin/"*
 
 run_case() {
-  local scenario="$1" expected="$2" state="$scratch/$1" status=0
-  mkdir -p "$state/tmp" "$state/project"
-  PATH="$scratch/bin:$PATH" TRIAL_SCENARIO="$scenario" TRIAL_STATE="$state" \
-    RUNNER_TEMP="$state/tmp" KSAIL_EKS_WORKDIR="$state/project" \
-    KSAIL_EKS_CLUSTER_NAME=st-eks-fixture AWS_REGION=us-east-1 \
-    EKS_UPGRADE_FROM=1.34 EKS_UPGRADE_TO=1.35 \
-    AWS_OIDC_ROLE_ARN=arn:aws:iam::123456789012:role/eks-ci \
-    ACTIONS_ID_TOKEN_REQUEST_URL='https://oidc.invalid/token?scope=fixture' \
-    ACTIONS_ID_TOKEN_REQUEST_TOKEN=fixture-request-token \
-    bash "$trial" >"$state/output" 2>&1 || status=$?
-  if [[ "$status" != "$expected" ]]; then
-    cat "$state/output" >&2
-    echo "FAIL: $scenario expected $expected got $status" >&2
-    exit 1
-  fi
-  [[ -z "$(ls -A "$state/tmp")" ]] || {
-    echo "FAIL: credentials survived $scenario" >&2
-    exit 1
-  }
-  if grep -Eq 'fixture-(secret|session|oidc-token|request-token)' "$state/output"; then
-    echo "FAIL: credentials leaked in $scenario" >&2
-    exit 1
-  fi
-  if [[ "$scenario" == success ]]; then
-    [[ -f "$state/repeated" ]] || {
-      echo 'FAIL: repeat invocation missing' >&2
-      exit 1
-    }
-    echo 'PASS: successful upgrade and repeat'
-  else
-    echo "PASS: $scenario"
-  fi
+	local scenario="$1" expected="$2" state="$scratch/$1" status=0
+	mkdir -p "$state/tmp" "$state/project"
+	PATH="$scratch/bin:$PATH" TRIAL_SCENARIO="$scenario" TRIAL_STATE="$state" \
+		RUNNER_TEMP="$state/tmp" KSAIL_EKS_WORKDIR="$state/project" \
+		KSAIL_EKS_CLUSTER_NAME=st-eks-fixture AWS_REGION=us-east-1 \
+		EKS_UPGRADE_FROM=1.34 EKS_UPGRADE_TO=1.35 \
+		AWS_OIDC_ROLE_ARN=arn:aws:iam::123456789012:role/eks-ci \
+		ACTIONS_ID_TOKEN_REQUEST_URL='https://oidc.invalid/token?scope=fixture' \
+		ACTIONS_ID_TOKEN_REQUEST_TOKEN=fixture-request-token \
+		bash "$trial" >"$state/output" 2>&1 || status=$?
+	if [[ "$status" != "$expected" ]]; then
+		cat "$state/output" >&2
+		echo "FAIL: $scenario expected $expected got $status" >&2
+		exit 1
+	fi
+	[[ -z "$(ls -A "$state/tmp")" ]] || {
+		echo "FAIL: credentials survived $scenario" >&2
+		exit 1
+	}
+	if grep -Eq 'fixture-(secret|session|oidc-token|request-token)' "$state/output"; then
+		echo "FAIL: credentials leaked in $scenario" >&2
+		exit 1
+	fi
+	if [[ "$scenario" == success ]]; then
+		[[ -f "$state/repeated" ]] || {
+			echo 'FAIL: repeat invocation missing' >&2
+			exit 1
+		}
+		echo 'PASS: successful upgrade and repeat'
+	else
+		echo "PASS: $scenario"
+	fi
 }
 
 run_case success 0
@@ -144,10 +144,10 @@ run_case inventory-error 1
 run_case repeat-mutated 1
 
 for pair in '1.34:' ':1.35' '1.34:1.34' '1.34:1.36' '1.35:1.34' '1.034:1.35'; do
-  if EKS_UPGRADE_FROM="${pair%:*}" EKS_UPGRADE_TO="${pair#*:}" bash "$trial" --validate-versions >/dev/null 2>&1; then
-    echo "FAIL: invalid version pair accepted: $pair" >&2
-    exit 1
-  fi
+	if EKS_UPGRADE_FROM="${pair%:*}" EKS_UPGRADE_TO="${pair#*:}" bash "$trial" --validate-versions >/dev/null 2>&1; then
+		echo "FAIL: invalid version pair accepted: $pair" >&2
+		exit 1
+	fi
 done
 EKS_UPGRADE_FROM='' EKS_UPGRADE_TO='' bash "$trial" --validate-versions
 echo 'PASS: version inputs fail closed and default off'
@@ -155,25 +155,25 @@ echo 'PASS: version inputs fail closed and default off'
 # Cleanup must remain usable after the trial fails, without its private session
 # files, version inputs, project directory, or OIDC request environment.
 for scenario in cleanup-updating cleanup-wait-error cleanup-active cleanup-missing cleanup-query-error cleanup-empty; do
-  state="$scratch/$scenario"
-  mkdir -p "$state"
-  status=0
-  PATH="$scratch/bin:$PATH" TRIAL_SCENARIO="$scenario" TRIAL_STATE="$state" \
-    KSAIL_EKS_CLUSTER_NAME=st-eks-fixture AWS_REGION=us-east-1 \
-    EKS_UPGRADE_FROM='' EKS_UPGRADE_TO='' \
-    bash "$trial" --wait-before-cleanup >"$state/output" 2>&1 || status=$?
-  expected=0
-  case "$scenario" in
-  cleanup-wait-error | cleanup-query-error | cleanup-empty) expected=1 ;;
-  esac
-  if [[ "$status" != "$expected" ]]; then
-    cat "$state/output" >&2
-    echo "FAIL: $scenario expected $expected got $status" >&2
-    exit 1
-  fi
-  case "$scenario" in
-  cleanup-updating | cleanup-wait-error) [[ -f "$state/waited" ]] ;;
-  *) [[ ! -f "$state/waited" ]] ;;
-  esac
-  echo "PASS: $scenario"
+	state="$scratch/$scenario"
+	mkdir -p "$state"
+	status=0
+	PATH="$scratch/bin:$PATH" TRIAL_SCENARIO="$scenario" TRIAL_STATE="$state" \
+		KSAIL_EKS_CLUSTER_NAME=st-eks-fixture AWS_REGION=us-east-1 \
+		EKS_UPGRADE_FROM='' EKS_UPGRADE_TO='' \
+		bash "$trial" --wait-before-cleanup >"$state/output" 2>&1 || status=$?
+	expected=0
+	case "$scenario" in
+	cleanup-wait-error | cleanup-query-error | cleanup-empty) expected=1 ;;
+	esac
+	if [[ "$status" != "$expected" ]]; then
+		cat "$state/output" >&2
+		echo "FAIL: $scenario expected $expected got $status" >&2
+		exit 1
+	fi
+	case "$scenario" in
+	cleanup-updating | cleanup-wait-error) [[ -f "$state/waited" ]] ;;
+	*) [[ ! -f "$state/waited" ]] ;;
+	esac
+	echo "PASS: $scenario"
 done
