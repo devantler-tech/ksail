@@ -2813,7 +2813,9 @@ func unmanagedTestService(t *testing.T, lister *countingLister) *clusterapi.Serv
 // TestLifecycleRefusesUnmanagedRowBeforeEKSOwnershipFallback checks that an unmanaged row whose name
 // also has persisted EKS ownership is refused as unmanaged. Resolving it through the ownership
 // fallback instead would let the row the UI calls unmanaged act on a separately owned EKS cluster.
-func TestLifecycleRefusesUnmanagedRowBeforeEKSOwnershipFallback(t *testing.T) { //nolint:paralleltest // t.Setenv
+func TestLifecycleRefusesUnmanagedRowBeforeEKSOwnershipFallback(
+	t *testing.T,
+) { //nolint:paralleltest // t.Setenv
 	service := unmanagedTestService(t, &countingLister{})
 	require.NoError(t, state.SaveEKSOwnershipState(
 		unmanagedContextName, "eu-north-1", ownershipRecordFor(unmanagedContextName, "eu-north-1")))
@@ -2825,7 +2827,9 @@ func TestLifecycleRefusesUnmanagedRowBeforeEKSOwnershipFallback(t *testing.T) { 
 // TestLifecycleDoesNotCallAContextUnmanagedWhenDiscoveryFailed checks that a failed provider listing
 // never turns a kubeconfig context into an "unmanaged" refusal: the failed provider may hold the
 // cluster that was not found, so the answer stays "not found".
-func TestLifecycleDoesNotCallAContextUnmanagedWhenDiscoveryFailed(t *testing.T) { //nolint:paralleltest // t.Setenv
+func TestLifecycleDoesNotCallAContextUnmanagedWhenDiscoveryFailed(
+	t *testing.T,
+) { //nolint:paralleltest // t.Setenv
 	service := unmanagedTestService(t, &countingLister{err: errTestDiscovery})
 
 	err := service.Delete(context.Background(), "default", unmanagedContextName)
@@ -2836,7 +2840,7 @@ func TestLifecycleDoesNotCallAContextUnmanagedWhenDiscoveryFailed(t *testing.T) 
 // TestLifecycleDoesNotCallAContextUnmanagedWhenDockerListingFailed checks that a failed Docker listing
 // counts as incomplete discovery: Docker may hold the KSail cluster behind the context, so the answer
 // stays "not found" rather than an "unmanaged" refusal.
-func TestLifecycleDoesNotCallAContextUnmanagedWhenDockerListingFailed(t *testing.T) { //nolint:paralleltest // t.Setenv
+func TestLifecycleDoesNotCallAContextUnmanagedWhenDockerListingFailed(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{

@@ -628,15 +628,18 @@ func (s *Service) surfacesAsUnmanaged(name string, live map[string]clusterdiscov
 
 	s.mu.Unlock()
 
-	unmanaged := clusterdiscovery.UnmanagedContextNames(s.loadKubeconfig(), func(candidate string) bool {
-		if _, ok := live[candidate]; ok {
-			return true
-		}
+	unmanaged := clusterdiscovery.UnmanagedContextNames(
+		s.loadKubeconfig(),
+		func(candidate string) bool {
+			if _, ok := live[candidate]; ok {
+				return true
+			}
 
-		_, ok := jobNames[candidate]
+			_, ok := jobNames[candidate]
 
-		return ok
-	})
+			return ok
+		},
+	)
 
 	return slices.Contains(unmanaged, name)
 }
