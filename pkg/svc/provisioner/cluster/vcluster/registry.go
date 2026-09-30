@@ -1,7 +1,9 @@
 package vclusterprovisioner
 
 import (
+	"bytes"
 	"context"
+	_ "embed"
 	"fmt"
 	"io"
 	"strings"
@@ -9,7 +11,15 @@ import (
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/pkg/stdcopy"
 )
+
+// VCluster's containerd 2.x image service does not read certs.d when its CRI
+// registry config_path is empty. Keep the node's effective configuration, set
+// that path, and restart containerd before workloads are installed.
+//
+//go:embed containerd_registry_hosts.sh
+var enableContainerdRegistryHosts string
 
 // ConfigureContainerdRegistryMirrors injects hosts.toml files directly into VCluster
 // nodes to configure containerd to use the local registry mirrors. This is called after
@@ -48,6 +58,67 @@ func ConfigureContainerdRegistryMirrors(
 	)
 	if err != nil {
 		return fmt.Errorf("failed to inject hosts.toml into vcluster nodes: %w", err)
+	}
+
+	for _, node := range nodes {
+		err := enableRegistryHostsOnNode(ctx, dockerClient, node)
+		if err != nil {
+			return fmt.Errorf("failed to enable registry hosts on vcluster node %s: %w", node, err)
+		}
+	}
+
+	return nil
+}
+
+func enableRegistryHostsOnNode(
+	ctx context.Context,
+	dockerClient dockerclient.Client,
+	node string,
+) error {
+	execID, err := dockerClient.ContainerExecCreate(ctx, node, container.ExecOptions{
+		Cmd: []string{
+			"sh",
+			"-c",
+			enableContainerdRegistryHosts,
+			"ksail",
+			"/etc/containerd",
+		},
+		AttachStdout: true,
+		AttachStderr: true,
+	})
+	if err != nil {
+		return fmt.Errorf("create containerd configuration exec: %w", err)
+	}
+
+	response, err := dockerClient.ContainerExecAttach(ctx, execID.ID, container.ExecStartOptions{})
+	if err != nil {
+		return fmt.Errorf("attach containerd configuration exec: %w", err)
+	}
+	defer response.Close()
+
+	var stderr bytes.Buffer
+
+	_, copyErr := stdcopy.StdCopy(io.Discard, &stderr, response.Reader)
+	if copyErr != nil {
+		return fmt.Errorf("read containerd configuration exec: %w", copyErr)
+	}
+
+	result, err := dockerClient.ContainerExecInspect(ctx, execID.ID)
+	if err != nil {
+		return fmt.Errorf("inspect containerd configuration exec: %w", err)
+	}
+
+	if result.Running {
+		return fmt.Errorf("%w: containerd configuration exec still running", registry.ErrExecFailed)
+	}
+
+	if result.ExitCode != 0 {
+		return fmt.Errorf(
+			"%w with exit code %d: %s",
+			registry.ErrExecFailed,
+			result.ExitCode,
+			stderr.String(),
+		)
 	}
 
 	return nil
