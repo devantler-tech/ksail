@@ -465,7 +465,7 @@ func TestDesktopChecksSharedManifestWithoutPRExemption(t *testing.T) {
 
 	var workflow autoCommitWorkflow
 	require.NoError(t, yaml.Unmarshal(readRepoFile(t, ".github/workflows/desktop.yaml"), &workflow))
-	job, found := workflow.Jobs["build-linux"]
+	job, found := workflow.Jobs["build-desktop"]
 	require.True(t, found)
 	tidy := step(t, job.Steps, "🧹 Verify shared module is tidy")
 	assert.Equal(t, "go mod tidy -diff", tidy["run"])
