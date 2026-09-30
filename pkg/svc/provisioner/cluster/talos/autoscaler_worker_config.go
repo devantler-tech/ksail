@@ -15,7 +15,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	clusterautoscalerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/clusterautoscaler"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	x509 "github.com/siderolabs/crypto/x509"
@@ -275,23 +274,32 @@ func snapshotImageIDFromSecret(secret *corev1.Secret) (string, error) {
 // recorded in the cluster-autoscaler-config Secret. Only a missing Secret means
 // no prior baseline; read and decode failures must stop the update.
 func (p *Provisioner) currentAutoscalerSnapshotImageID(ctx context.Context) (string, error) {
+	imageID, _, err := p.currentAutoscalerSnapshotBaseline(ctx)
+
+	return imageID, err
+}
+
+func (p *Provisioner) currentAutoscalerSnapshotBaseline(ctx context.Context) (string, bool, error) {
 	kubeclient, err := p.newSecretKubeclient("autoscaler snapshot probe")
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 
 	secret, err := kubeclient.CoreV1().
 		Secrets(autoscalerConfigSecretNamespace).
 		Get(ctx, autoscalerConfigSecretName, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
-		return "", nil
+		return "", false, nil
 	}
 
 	if err != nil {
-		return "", fmt.Errorf("getting autoscaler snapshot Secret: %w", err)
+		return "", false, fmt.Errorf("getting autoscaler snapshot Secret: %w", err)
 	}
 
-	return snapshotImageIDFromSecret(secret)
+	imageID, err := snapshotImageIDFromSecret(secret)
+	_, pending := secret.Annotations[autoscalerImagePendingAnnotation]
+
+	return imageID, pending, err
 }
 
 // compressWorkerConfigToUserData encodes a Talos worker machine config into the
@@ -435,7 +443,7 @@ func updateAutoscalerSecretIfNeeded(
 	existing *corev1.Secret,
 	desiredData map[string][]byte,
 ) (bool, error) {
-	if !k8s.MergeSecretData(existing, desiredData) {
+	if !mergeAutoscalerSecretData(existing, desiredData) {
 		return false, nil
 	}
 
@@ -448,7 +456,7 @@ func updateAutoscalerSecretIfNeeded(
 			return fmt.Errorf("get autoscaler config secret for update: %w", getErr)
 		}
 
-		if !k8s.MergeSecretData(latest, desiredData) {
+		if !mergeAutoscalerSecretData(latest, desiredData) {
 			return nil
 		}
 
