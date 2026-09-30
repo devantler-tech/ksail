@@ -1427,6 +1427,17 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: 🔍 Verify restored cache rejects missing image data
+        run: |
+          shellcheck .github/actions/warm-mirror-cache/cache-validation.test.sh
+          bash .github/actions/warm-mirror-cache/cache-validation.test.sh
+          shellcheck .github/actions/ksail-system-test/offline-ecr-upstream.sh \
+            .github/actions/ksail-system-test/offline-ecr-upstream.test.sh \
+            .github/actions/ksail-system-test/verify-offline-ecr-pull.sh \
+            .github/actions/ksail-system-test/verify-offline-ecr-pull.test.sh
+          bash .github/actions/ksail-system-test/offline-ecr-upstream.test.sh
+          bash .github/actions/ksail-system-test/verify-offline-ecr-pull.test.sh
+
       - name: 🧹 Free disk space
         # Pulls every system-test image through five mirror registries and tars
         # the volumes (multi-GB) — the prime "no space left on device" offender
@@ -1541,6 +1552,13 @@ jobs:
             args: ""
             test-kubernetes-provider: "true"
             test-workload-mirror: "true"
+          # Exercise Argo CD's Redis pull with both the proxy upstream and
+          # containerd's fallback pointed at an empty local registry.
+          - distribution: VCluster
+            provider: Docker
+            init: true
+            args: "--gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
+            ecr-public-offline: "true"
           # Validate Calico on the Kubernetes (k3k) provider. Calico v3.30+'s CRD
           # chart ships MutatingAdmissionPolicy resources that need the v1beta1
           # admissionregistration API enabled on the embedded k3s server via the k3k
@@ -1596,6 +1614,17 @@ jobs:
 
       - name: 📥 Restore Mirror Cache
         uses: ./.github/actions/restore-mirror-cache
+        with:
+          cache-key: ${{ needs.warm-mirror-cache.outputs.cache-key }}
+
+      - name: 📥 Pre-pull registry image for offline ECR check
+        if: ${{ matrix.ecr-public-offline == 'true' }}
+        run: bash .github/actions/pull-registry-image/pull-registry-image.sh
+
+      - name: 🚫 Start empty ECR Public fallback
+        id: offline-ecr
+        if: ${{ matrix.ecr-public-offline == 'true' }}
+        run: bash .github/actions/ksail-system-test/offline-ecr-upstream.sh start
 
       - name: 🧪 Run KSail System Test
         id: system-test
@@ -1605,6 +1634,7 @@ jobs:
           provider: ${{ matrix.provider }}
           init: ${{ matrix.init }}
           args: ${{ matrix.args }}
+          ecr-public-upstream: ${{ steps.offline-ecr.outputs.remote-url || 'https://ecr-public.aws.com' }}
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
           test-kubernetes-provider: ${{ matrix.test-kubernetes-provider || 'false' }}
           test-workload-mirror: ${{ matrix.test-workload-mirror || 'false' }}
@@ -1624,6 +1654,12 @@ jobs:
           # rich debug action. Keep its essential diagnostics on bounded calls.
           comprehensive-debug: ${{ matrix.distribution == 'K3s' && 'false' || 'true' }}
 
+      - name: 🔍 Verify offline ECR consumer pull
+        if: ${{ matrix.ecr-public-offline == 'true' && steps.system-test.outcome == 'success' }}
+        env:
+          OFFLINE_ECR_UPSTREAM: ${{ steps.offline-ecr.outputs.remote-url }}
+        run: bash .github/actions/ksail-system-test/verify-offline-ecr-pull.sh "$OFFLINE_ECR_UPSTREAM"
+
       - name: 📤 Upload system test diagnostics
         if: ${{ failure() && steps.system-test.outcome == 'failure' }}
         continue-on-error: true
@@ -1642,6 +1678,12 @@ jobs:
           distribution: ${{ matrix.distribution }}
           provider: ${{ matrix.provider }}
           args: ${{ matrix.args }}
+
+      - name: 🧹 Stop empty ECR Public fallback
+        if: ${{ always() && steps.offline-ecr.outcome == 'success' }}
+        env:
+          OFFLINE_ECR_CONTAINER: ${{ steps.offline-ecr.outputs.container-name }}
+        run: bash .github/actions/ksail-system-test/offline-ecr-upstream.sh stop "$OFFLINE_ECR_CONTAINER"
 
       - name: 📤 Upload system test logs
         if: ${{ always() && steps.system-test.outcome != 'skipped' && steps.system-test.outcome != '' }}
