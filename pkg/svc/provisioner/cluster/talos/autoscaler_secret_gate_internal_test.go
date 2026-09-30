@@ -17,6 +17,8 @@ func TestShouldPropagateAutoscalerBaselineAfterEarlySecretRefresh(t *testing.T) 
 	reboot.RebootRequired = append(reboot.RebootRequired, clusterupdate.Change{})
 	wipe := clusterupdate.NewEmptyUpdateResult()
 	wipe.WipeRequired = append(wipe.WipeRequired, clusterupdate.Change{})
+	inPlace := clusterupdate.NewEmptyUpdateResult()
+	inPlace.InPlaceChanges = append(inPlace.InPlaceChanges, clusterupdate.Change{})
 
 	for _, testCase := range []struct {
 		name    string
@@ -27,7 +29,8 @@ func TestShouldPropagateAutoscalerBaselineAfterEarlySecretRefresh(t *testing.T) 
 		{"early refresh with unknown diff", true, nil, true},
 		{"unchanged Secret with reboot-required diff", false, reboot, true},
 		{"unchanged Secret with wipe-required diff", false, wipe, true},
-		{"unchanged Secret with in-place diff", false, clusterupdate.NewEmptyUpdateResult(), false},
+		{"unchanged Secret with in-place diff", false, inPlace, true},
+		{"unchanged Secret with empty diff", false, clusterupdate.NewEmptyUpdateResult(), false},
 		{"unchanged Secret before diff", false, nil, false},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
