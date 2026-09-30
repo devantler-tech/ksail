@@ -2701,30 +2701,7 @@ func TestLifecycleRefusesUnmanagedClusterInsteadOfNotFound(t *testing.T) {
 	})
 
 	kubeconfig := filepath.Join(t.TempDir(), "config")
-	require.NoError(t, os.WriteFile(kubeconfig, []byte(`apiVersion: v1
-kind: Config
-clusters:
-- name: kind-dev
-  cluster:
-    server: https://127.0.0.1:6443
-- name: colleague
-  cluster:
-    server: https://cluster.example.com:6443
-contexts:
-- name: kind-dev
-  context:
-    cluster: kind-dev
-    user: kind-dev
-- name: colleague-cluster
-  context:
-    cluster: colleague
-    user: colleague
-users:
-- name: kind-dev
-  user: {}
-- name: colleague
-  user: {}
-`), 0o600))
+	require.NoError(t, os.WriteFile(kubeconfig, []byte(managedAndUnmanagedKubeconfig), 0o600))
 	service.SetKubeconfigPathForTest(kubeconfig)
 
 	ctx := context.Background()
@@ -2759,3 +2736,30 @@ users:
 	assert.Equal(t, []string{devClusterName}, provisioner.startedNames(),
 		"only the managed cluster may reach the provisioner")
 }
+
+// managedAndUnmanagedKubeconfig holds one context ksail provisioned (kind-dev) and one it did not
+// (colleague-cluster), which List surfaces as unmanaged.
+const managedAndUnmanagedKubeconfig = `apiVersion: v1
+kind: Config
+clusters:
+- name: kind-dev
+  cluster:
+    server: https://127.0.0.1:6443
+- name: colleague
+  cluster:
+    server: https://cluster.example.com:6443
+contexts:
+- name: kind-dev
+  context:
+    cluster: kind-dev
+    user: kind-dev
+- name: colleague-cluster
+  context:
+    cluster: colleague
+    user: colleague
+users:
+- name: kind-dev
+  user: {}
+- name: colleague
+  user: {}
+`

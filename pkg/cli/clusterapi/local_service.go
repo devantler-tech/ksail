@@ -594,8 +594,9 @@ func (s *Service) isUnmanagedCluster(ctx context.Context, name string) bool {
 // startJob resolves a cluster, records an in-flight job for it at the given phase, and returns the
 // minimal Spec a background provisioner action needs (distribution + provider — provider options like
 // server types are irrelevant for delete/start/stop). Returns api.ErrUnmanagedCluster for a
-// kubeconfig context List surfaces as unmanaged, and api.ErrNotFound when the cluster is unknown. Shared by Delete and the Start/Stop lifecycle path so the resolve+register handshake lives
-// in one place.
+// kubeconfig context List surfaces as unmanaged, and api.ErrNotFound when the cluster is unknown.
+// Shared by Delete and the Start/Stop lifecycle path so the resolve+register handshake lives in one
+// place.
 func (s *Service) startJob(
 	ctx context.Context,
 	name string,
