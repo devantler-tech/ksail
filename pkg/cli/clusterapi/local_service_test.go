@@ -148,6 +148,7 @@ type fakeProvisioner struct {
 	deleted    []string
 	started    []string
 	stopped    []string
+	listErr    error
 }
 
 func (f *fakeProvisioner) Create(_ context.Context, name string) error {
@@ -200,7 +201,7 @@ func (f *fakeProvisioner) List(_ context.Context) ([]string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	return slices.Clone(f.clusters), nil
+	return slices.Clone(f.clusters), f.listErr
 }
 
 func (f *fakeProvisioner) Start(_ context.Context, name string) error {
@@ -2687,3 +2688,202 @@ func TestCreateRefusesANameWhoseEKSCreateStateRemains(t *testing.T) {
 	assert.Equal(t, "eu-north-1", region,
 		"a refused create must preserve the original region binding")
 }
+
+// TestLifecycleRefusesUnmanagedClusterInsteadOfNotFound checks that delete/start/stop on a
+// kubeconfig context List surfaces as unmanaged is refused as unmanaged, not reported as a cluster
+// that does not exist, and starts no job. A name in neither set is still "not found", and the
+// managed cluster in the same kubeconfig stays operable.
+func TestLifecycleRefusesUnmanagedClusterInsteadOfNotFound(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	provisioner := &fakeProvisioner{clusters: []string{devClusterName}}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVanilla: provisioner,
+	})
+
+	kubeconfig := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(kubeconfig, []byte(managedAndUnmanagedKubeconfig), 0o600))
+	service.SetKubeconfigPathForTest(kubeconfig)
+
+	ctx := context.Background()
+
+	for action, run := range map[string]func(name string) error{
+		"delete": func(name string) error { return service.Delete(ctx, "default", name) },
+		"start":  func(name string) error { return service.Start(ctx, "default", name) },
+		"stop":   func(name string) error { return service.Stop(ctx, "default", name) },
+	} {
+		err := run("colleague-cluster")
+		require.ErrorIs(t, err, api.ErrUnmanagedCluster, action)
+		require.NotErrorIs(t, err, api.ErrNotFound, action)
+		assert.Contains(t, err.Error(), `"colleague-cluster"`, action)
+
+		require.ErrorIs(t, run("ghost"), api.ErrNotFound, action)
+		require.NotErrorIs(t, run("ghost"), api.ErrUnmanagedCluster, action)
+	}
+
+	list, err := service.List(ctx)
+	require.NoError(t, err)
+
+	unmanaged := clusterNamed(list, "colleague-cluster")
+	require.NotNil(t, unmanaged)
+	assert.True(
+		t,
+		unmanaged.IsUnmanaged(),
+		"a refused action must leave the cluster listed as unmanaged",
+	)
+	assert.Empty(t, unmanaged.Status.Phase, "a refused action must not start a job")
+
+	require.NoError(t, service.Start(ctx, "default", devClusterName),
+		"the managed cluster in the same kubeconfig must stay operable")
+	require.Eventually(t, func() bool {
+		return len(provisioner.startedNames()) == 1
+	}, eventuallyTimeout, eventuallyTick)
+	assert.Equal(t, []string{devClusterName}, provisioner.startedNames(),
+		"only the managed cluster may reach the provisioner")
+}
+
+// managedAndUnmanagedKubeconfig holds one context ksail provisioned (kind-dev) and one it did not
+// (colleague-cluster), which List surfaces as unmanaged.
+const managedAndUnmanagedKubeconfig = `apiVersion: v1
+kind: Config
+clusters:
+- name: kind-dev
+  cluster:
+    server: https://127.0.0.1:6443
+- name: colleague
+  cluster:
+    server: https://cluster.example.com:6443
+contexts:
+- name: kind-dev
+  context:
+    cluster: kind-dev
+    user: kind-dev
+- name: colleague-cluster
+  context:
+    cluster: colleague
+    user: colleague
+users:
+- name: kind-dev
+  user: {}
+- name: colleague
+  user: {}
+`
+
+// countingLister is a discovery lister that returns a fixed result and counts its calls.
+type countingLister struct {
+	mu    sync.Mutex
+	calls int
+	err   error
+}
+
+func (l *countingLister) ListAllClusters(context.Context) ([]string, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	l.calls++
+
+	return nil, l.err
+}
+
+func (l *countingLister) count() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	return l.calls
+}
+
+// unmanagedTestService returns a service whose kubeconfig holds one managed and one unmanaged
+// context, with Hetzner discovery backed by lister.
+func unmanagedTestService(t *testing.T, lister *countingLister) *clusterapi.Service {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVanilla: {clusters: []string{devClusterName}},
+	})
+
+	kubeconfig := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(kubeconfig, []byte(managedAndUnmanagedKubeconfig), 0o600))
+	service.SetKubeconfigPathForTest(kubeconfig)
+	service.AddHetznerDiscoveryForTest(lister)
+
+	return service
+}
+
+// TestLifecycleRefusesUnmanagedRowBeforeEKSOwnershipFallback checks that an unmanaged row whose name
+// also has persisted EKS ownership is refused as unmanaged. Resolving it through the ownership
+// fallback instead would let the row the UI calls unmanaged act on a separately owned EKS cluster.
+//
+//nolint:paralleltest // t.Setenv
+func TestLifecycleRefusesUnmanagedRowBeforeEKSOwnershipFallback(t *testing.T) {
+	service := unmanagedTestService(t, &countingLister{})
+	require.NoError(t, state.SaveEKSOwnershipState(
+		unmanagedContextName, "eu-north-1", ownershipRecordFor(unmanagedContextName, "eu-north-1")))
+
+	err := service.Delete(context.Background(), "default", unmanagedContextName)
+	require.ErrorIs(t, err, api.ErrUnmanagedCluster)
+}
+
+// TestLifecycleDoesNotCallAContextUnmanagedWhenDiscoveryFailed checks that a failed provider listing
+// never turns a kubeconfig context into an "unmanaged" refusal: the failed provider may hold the
+// cluster that was not found, so the answer stays "not found".
+//
+//nolint:paralleltest // t.Setenv
+func TestLifecycleDoesNotCallAContextUnmanagedWhenDiscoveryFailed(t *testing.T) {
+	service := unmanagedTestService(t, &countingLister{err: errTestDiscovery})
+
+	err := service.Delete(context.Background(), "default", unmanagedContextName)
+	require.ErrorIs(t, err, api.ErrNotFound)
+	require.NotErrorIs(t, err, api.ErrUnmanagedCluster)
+}
+
+// TestLifecycleDoesNotCallAContextUnmanagedWhenDockerListingFailed checks that a failed Docker listing
+// counts as incomplete discovery: Docker may hold the KSail cluster behind the context, so the answer
+// stays "not found" rather than an "unmanaged" refusal.
+func TestLifecycleDoesNotCallAContextUnmanagedWhenDockerListingFailed(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVanilla: {listErr: errTestDiscovery},
+	})
+
+	kubeconfig := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(kubeconfig, []byte(managedAndUnmanagedKubeconfig), 0o600))
+	service.SetKubeconfigPathForTest(kubeconfig)
+
+	err := service.Delete(context.Background(), "default", unmanagedContextName)
+	require.ErrorIs(t, err, api.ErrNotFound)
+	require.NotErrorIs(t, err, api.ErrUnmanagedCluster)
+}
+
+// TestLifecycleIncompleteDiscoveryNeverReachesEKSFallbackForUnmanagedRow checks the combination of a
+// failed provider listing and persisted EKS ownership for an unmanaged row's name: the row must stay
+// "not found" rather than resolve through the ownership fallback to a separately owned cluster.
+//
+//nolint:paralleltest // t.Setenv
+func TestLifecycleIncompleteDiscoveryNeverReachesEKSFallbackForUnmanagedRow(t *testing.T) {
+	service := unmanagedTestService(t, &countingLister{err: errTestDiscovery})
+	require.NoError(t, state.SaveEKSOwnershipState(
+		unmanagedContextName, "eu-north-1", ownershipRecordFor(unmanagedContextName, "eu-north-1")))
+
+	err := service.Delete(context.Background(), "default", unmanagedContextName)
+	require.ErrorIs(t, err, api.ErrNotFound)
+}
+
+// TestLifecycleRefusalRunsDiscoveryOnce checks that refusing an unmanaged row reuses the discovery
+// that resolved it instead of listing every provider a second time.
+//
+//nolint:paralleltest // t.Setenv
+func TestLifecycleRefusalRunsDiscoveryOnce(t *testing.T) {
+	lister := &countingLister{}
+	service := unmanagedTestService(t, lister)
+
+	err := service.Delete(context.Background(), "default", unmanagedContextName)
+	require.ErrorIs(t, err, api.ErrUnmanagedCluster)
+	assert.Equal(t, 1, lister.count(), "the refusal must run provider discovery exactly once")
+}
+
+// unmanagedContextName is the context managedAndUnmanagedKubeconfig holds that ksail did not provision.
+const unmanagedContextName = "colleague-cluster"
+
+var errTestDiscovery = errors.New("provider unavailable")
