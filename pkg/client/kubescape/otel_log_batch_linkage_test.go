@@ -2,6 +2,7 @@ package kubescape_test
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -844,57 +845,78 @@ func goreleaserCGO(t *testing.T, path string) string {
 	return value
 }
 
-// TestDesktopWorkflowBuildsKeepCGOEnabled pins the Linux and Windows desktop builds in cd.yaml to
-// the desktop CGO mode moduleCGO audits. Those are native `go build` runs, so CGO is on unless
-// something sets CGO_ENABLED: the workflow, the desktop job, one of its steps, or the shared setup
-// action. Any such setting other than 1 would ship a graph the audit never listed.
-func TestDesktopWorkflowBuildsKeepCGOEnabled(t *testing.T) {
+// auditedReleaseConfigDigests pins the release build configuration the #7375 verdict was
+// established against: both GoReleaser files, the desktop job in cd.yaml and the setup action it
+// uses. The platform and CGO tests above check what those files say today; this catches every
+// other way a release can change the graph it ships (build tags, flags, a build dir pointing at
+// another module, a CGO override inside a run line), because ANY change to them re-opens the audit.
+// To update: re-run the reachability audit for the new configuration, then paste the new digests.
+func auditedReleaseConfigDigests() map[string]string {
+	return map[string]string{
+		".goreleaser.yaml":                               "603b04ca07558b8e1acb3d9c4e00e3c49ceaa10ea9f5af0ed2f84f01f96496c2",
+		".goreleaser.desktop.yaml":                       "be6f45e10f4f608db285d641ce166714a404aaa2d31aacf9479679fbdb58df11",
+		".github/actions/setup-desktop-build/action.yml": "d4b17b1a6442ffc2e499419153db96c75fff26c836027ed8cc00f43dea5a2559",
+		".github/workflows/cd.yaml#jobs.desktop":         "3f68fcec1219196b540664b44b8d44d257f547e582ae956db9214f074bd0f32a",
+	}
+}
+
+// TestReleaseBuildConfigMatchesAudit fails when any audited release build configuration changes.
+func TestReleaseBuildConfigMatchesAudit(t *testing.T) {
 	t.Parallel()
 
-	root := moduleRoot(t)
+	actual := releaseConfigDigests(t, moduleRoot(t))
 
-	if moduleCGO()["desktop"] != "1" {
-		t.Fatalf("moduleCGO()[\"desktop\"] = %q, but the workflow-built desktop apps use Go's native default, 1",
-			moduleCGO()["desktop"])
+	for name, want := range auditedReleaseConfigDigests() {
+		if actual[name] != want {
+			t.Errorf("%s changed (digest %s, audited %s): re-establish the GHSA-hjf4-fphr-2h65 verdict "+
+				"for the new release configuration (#7375), then update auditedReleaseConfigDigests",
+				name, actual[name], want)
+		}
+	}
+}
+
+// releaseConfigDigests hashes each audited release configuration: whole files, and for cd.yaml only
+// the desktop job, canonicalised through JSON so unrelated jobs and formatting do not count.
+func releaseConfigDigests(t *testing.T, root string) map[string]string {
+	t.Helper()
+
+	digests := map[string]string{}
+
+	for _, name := range []string{
+		".goreleaser.yaml", ".goreleaser.desktop.yaml", ".github/actions/setup-desktop-build/action.yml",
+	} {
+		data, err := os.ReadFile(filepath.Join(root, name)) //nolint:gosec // G304: fixed release config paths.
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+
+		digests[name] = fmt.Sprintf("%x", sha256.Sum256(data))
 	}
 
 	var workflow struct {
-		Env  map[string]string `json:"env"`
-		Jobs map[string]struct {
-			Env   map[string]string `json:"env"`
-			Steps []struct {
-				Env map[string]string `json:"env"`
-			} `json:"steps"`
-		} `json:"jobs"`
+		Jobs map[string]json.RawMessage `json:"jobs"`
 	}
 
 	readYAML(t, filepath.Join(root, ".github", "workflows", "cd.yaml"), &workflow)
 
 	job, ok := workflow.Jobs["desktop"]
-	if !ok || len(job.Steps) == 0 {
-		t.Fatal("cd.yaml has no desktop job steps, so the check examined nothing")
+	if !ok {
+		t.Fatal("cd.yaml has no desktop job")
 	}
 
-	settings := []map[string]string{workflow.Env, job.Env}
-	for _, step := range job.Steps {
-		settings = append(settings, step.Env)
-	}
+	var canonical any
 
-	for _, env := range settings {
-		if cgo, set := env["CGO_ENABLED"]; set && cgo != "1" {
-			t.Errorf("cd.yaml sets CGO_ENABLED=%s for the desktop build (#7375)", cgo)
-		}
-	}
-
-	action, err := os.ReadFile(filepath.Join(root, ".github", "actions", "setup-desktop-build", "action.yml"))
+	err := json.Unmarshal(job, &canonical)
 	if err != nil {
-		t.Fatalf("read the desktop setup action: %v", err)
+		t.Fatalf("decode the desktop job: %v", err)
 	}
 
-	for _, line := range strings.Split(string(action), "\n") {
-		if strings.Contains(line, "CGO_ENABLED") && !strings.Contains(line, "CGO_ENABLED=1") &&
-			!strings.Contains(line, "CGO_ENABLED: \"1\"") && !strings.Contains(line, "CGO_ENABLED: 1") {
-			t.Errorf("the desktop setup action changes CGO_ENABLED (#7375): %s", strings.TrimSpace(line))
-		}
+	encoded, err := json.Marshal(canonical)
+	if err != nil {
+		t.Fatalf("encode the desktop job: %v", err)
 	}
+
+	digests[".github/workflows/cd.yaml#jobs.desktop"] = fmt.Sprintf("%x", sha256.Sum256(encoded))
+
+	return digests
 }
