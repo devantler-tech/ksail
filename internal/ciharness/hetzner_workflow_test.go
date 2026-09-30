@@ -241,7 +241,11 @@ func newSchematicRolloutFixture(t *testing.T) schematicRolloutFixture {
 
 func writeSchematicFakeKSail(t *testing.T, path string) {
 	t.Helper()
-	writeExecutable(t, path, string(readRepoFile(t, "internal/ciharness/testdata/schematic_fake_ksail.sh")))
+	writeExecutable(
+		t,
+		path,
+		string(readRepoFile(t, "internal/ciharness/testdata/schematic_fake_ksail.sh")),
+	)
 }
 
 func TestHetznerWorkflowSmokesK3sAndVanilla(t *testing.T) {
