@@ -27,6 +27,10 @@ var (
 	ErrHostClusterProtected = errors.New(
 		"the host cluster registration cannot be modified through the API",
 	)
+	// ErrUnmanagedCluster indicates a ksail-only lifecycle action (delete, start, stop) targets a
+	// kubeconfig context ksail did not provision. The cluster is listed as unmanaged, so it exists;
+	// ksail just does not own its lifecycle (HTTP 409).
+	ErrUnmanagedCluster = errors.New("cluster is not managed by ksail")
 )
 
 // errClusterUpdateNotSupported is the 501 a backend without ClusterUpdater (the local `ksail open web`

@@ -138,6 +138,33 @@ func TestDiscover_DockerListErrorSkippedSilently(t *testing.T) {
 	assert.Empty(t, failures, "per-distribution list errors are swallowed, not surfaced")
 }
 
+// TestDiscover_DockerListErrorReportedWhenRequested checks that ReportDockerFailures turns a swallowed
+// per-distribution failure into a Docker provider failure, while keeping the clusters that did list:
+// an unreachable Docker daemon must not read as a complete listing with no Docker clusters.
+func TestDiscover_DockerListErrorReportedWhenRequested(t *testing.T) {
+	t.Parallel()
+
+	discoverer := &clusterdiscovery.Discoverer{
+		ReportDockerFailures: true,
+		DockerFactory: func(distribution v1alpha1.Distribution) (clusterprovisioner.Factory, error) {
+			if distribution == v1alpha1.DistributionVanilla {
+				return fakeFactory{provisioner: fakeProvisioner{clusters: []string{"dev"}}}, nil
+			}
+
+			return fakeFactory{provisioner: fakeProvisioner{listErr: errBoom}}, nil
+		},
+	}
+
+	clusters, failures := discoverer.Discover(context.Background(),
+		[]v1alpha1.Provider{v1alpha1.ProviderDocker})
+
+	require.Len(t, clusters, 1)
+	assert.Equal(t, "dev", clusters[0].Name)
+	require.Len(t, failures, 1)
+	assert.Equal(t, v1alpha1.ProviderDocker, failures[0].Provider)
+	assert.ErrorIs(t, failures[0].Err, errBoom)
+}
+
 func TestDiscover_CloudProvidersMapToTheirDistributions(t *testing.T) {
 	t.Parallel()
 
