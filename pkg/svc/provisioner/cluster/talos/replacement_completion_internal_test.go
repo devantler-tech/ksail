@@ -118,7 +118,11 @@ func TestProveReplacementCompletedRefusesAWorkerUnderAnotherName(t *testing.T) {
 
 	_, err := proveReplacementCompleted(planned, nil, observation)
 	require.ErrorIs(t, err, ErrReplacementIncomplete)
-	require.ErrorContains(t, err, `server name changed from "prod-control-plane-1" to "prod-control-plane-2"`)
+	require.ErrorContains(
+		t,
+		err,
+		`server name changed from "prod-control-plane-1" to "prod-control-plane-2"`,
+	)
 }
 
 //nolint:funlen // Table-driven test coverage is naturally long.
