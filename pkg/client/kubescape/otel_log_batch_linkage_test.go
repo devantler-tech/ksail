@@ -167,7 +167,10 @@ func auditModuleOTelReachability(t *testing.T, name, moduleDir string) {
 	// so the audited versions would no longer say what is compiled.
 	_, err := os.Stat(filepath.Join(moduleDir, "vendor", "modules.txt"))
 	if err == nil {
-		t.Fatalf("module %q is vendored: re-establish the #7375 verdict against the vendored sources", name)
+		t.Fatalf(
+			"module %q is vendored: re-establish the #7375 verdict against the vendored sources",
+			name,
+		)
 	}
 
 	linked, scanned := false, false
