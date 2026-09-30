@@ -579,10 +579,22 @@ func (s *Service) dockerFactory(
 	return s.newFactory(cluster)
 }
 
+// isUnmanagedCluster reports whether List surfaces name as an unmanaged (kubeconfig-only) cluster. It
+// reads the same list the UI shows, so the refusal can never disagree with what the user was offered.
+// A failed list is not evidence of anything and reports false, leaving the caller's "not found".
+func (s *Service) isUnmanagedCluster(ctx context.Context, name string) bool {
+	cluster, err := s.Get(ctx, "", name)
+	if err != nil {
+		return false
+	}
+
+	return cluster.IsUnmanaged()
+}
+
 // startJob resolves a cluster, records an in-flight job for it at the given phase, and returns the
 // minimal Spec a background provisioner action needs (distribution + provider — provider options like
-// server types are irrelevant for delete/start/stop). Returns api.ErrNotFound when the cluster is
-// unknown. Shared by Delete and the Start/Stop lifecycle path so the resolve+register handshake lives
+// server types are irrelevant for delete/start/stop). Returns api.ErrUnmanagedCluster for a
+// kubeconfig context List surfaces as unmanaged, and api.ErrNotFound when the cluster is unknown. Shared by Delete and the Start/Stop lifecycle path so the resolve+register handshake lives
 // in one place.
 func (s *Service) startJob(
 	ctx context.Context,
@@ -595,6 +607,17 @@ func (s *Service) startJob(
 	}
 
 	if !ok {
+		// List surfaces kubeconfig contexts ksail did not provision as unmanaged clusters, so a UI
+		// that shows one must not then hear "not found" when it asks to delete/start/stop it. Refuse
+		// it as unmanaged instead, like the CLI's lifecycle guard.
+		if s.isUnmanagedCluster(ctx, name) {
+			return v1alpha1.Spec{}, fmt.Errorf(
+				"%q is an unmanaged cluster: %w; read-only operations (resource browsing, logs, exec) still work",
+				name,
+				api.ErrUnmanagedCluster,
+			)
+		}
+
 		return v1alpha1.Spec{}, fmt.Errorf("%w: %q", api.ErrNotFound, name)
 	}
 

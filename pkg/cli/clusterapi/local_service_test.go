@@ -2687,3 +2687,75 @@ func TestCreateRefusesANameWhoseEKSCreateStateRemains(t *testing.T) {
 	assert.Equal(t, "eu-north-1", region,
 		"a refused create must preserve the original region binding")
 }
+
+// TestLifecycleRefusesUnmanagedClusterInsteadOfNotFound checks that delete/start/stop on a
+// kubeconfig context List surfaces as unmanaged is refused as unmanaged, not reported as a cluster
+// that does not exist, and starts no job. A name in neither set is still "not found", and the
+// managed cluster in the same kubeconfig stays operable.
+func TestLifecycleRefusesUnmanagedClusterInsteadOfNotFound(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	provisioner := &fakeProvisioner{clusters: []string{devClusterName}}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVanilla: provisioner,
+	})
+
+	kubeconfig := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(kubeconfig, []byte(`apiVersion: v1
+kind: Config
+clusters:
+- name: kind-dev
+  cluster:
+    server: https://127.0.0.1:6443
+- name: colleague
+  cluster:
+    server: https://cluster.example.com:6443
+contexts:
+- name: kind-dev
+  context:
+    cluster: kind-dev
+    user: kind-dev
+- name: colleague-cluster
+  context:
+    cluster: colleague
+    user: colleague
+users:
+- name: kind-dev
+  user: {}
+- name: colleague
+  user: {}
+`), 0o600))
+	service.SetKubeconfigPathForTest(kubeconfig)
+
+	ctx := context.Background()
+
+	for action, run := range map[string]func(name string) error{
+		"delete": func(name string) error { return service.Delete(ctx, "default", name) },
+		"start":  func(name string) error { return service.Start(ctx, "default", name) },
+		"stop":   func(name string) error { return service.Stop(ctx, "default", name) },
+	} {
+		err := run("colleague-cluster")
+		require.ErrorIs(t, err, api.ErrUnmanagedCluster, action)
+		require.NotErrorIs(t, err, api.ErrNotFound, action)
+		assert.Contains(t, err.Error(), `"colleague-cluster"`, action)
+
+		require.ErrorIs(t, run("ghost"), api.ErrNotFound, action)
+		require.NotErrorIs(t, run("ghost"), api.ErrUnmanagedCluster, action)
+	}
+
+	list, err := service.List(ctx)
+	require.NoError(t, err)
+
+	unmanaged := clusterNamed(list, "colleague-cluster")
+	require.NotNil(t, unmanaged)
+	assert.True(t, unmanaged.IsUnmanaged(), "a refused action must leave the cluster listed as unmanaged")
+	assert.Empty(t, unmanaged.Status.Phase, "a refused action must not start a job")
+
+	require.NoError(t, service.Start(ctx, "default", devClusterName),
+		"the managed cluster in the same kubeconfig must stay operable")
+	require.Eventually(t, func() bool {
+		return len(provisioner.startedNames()) == 1
+	}, eventuallyTimeout, eventuallyTick)
+	assert.Equal(t, []string{devClusterName}, provisioner.startedNames(),
+		"only the managed cluster may reach the provisioner")
+}
