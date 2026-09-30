@@ -79,10 +79,12 @@ fi
 jq -e '.Version == 1 and .Expiration == "2099-01-01T00:00:00Z"' "$KSAIL_EKS_TRIAL_CREDENTIALS" >/dev/null || exit 85
 case "$TRIAL_SCENARIO" in
 upgrade-error) exit 1 ;;
+upgrade-timeout) exit 124 ;;
 silent-noop) exit 0 ;;
 esac
 if [[ -f "$TRIAL_STATE/upgraded" ]]; then
   touch "$TRIAL_STATE/repeated"
+  [[ "$TRIAL_SCENARIO" != repeat-error ]] || exit 1
   [[ "$TRIAL_SCENARIO" != repeat-mutated ]] || touch "$TRIAL_STATE/reupgraded"
 else
   touch "$TRIAL_STATE/upgraded"
@@ -97,6 +99,7 @@ chmod +x "$scratch/bin/"*
 
 run_case() {
 	local scenario="$1" expected="$2" state="$scratch/$1" status=0
+	local expected_message="${3:-}"
 	mkdir -p "$state/tmp" "$state/project"
 	PATH="$scratch/bin:$PATH" TRIAL_SCENARIO="$scenario" TRIAL_STATE="$state" \
 		RUNNER_TEMP="$state/tmp" KSAIL_EKS_WORKDIR="$state/project" \
@@ -119,6 +122,10 @@ run_case() {
 		echo "FAIL: credentials leaked in $scenario" >&2
 		exit 1
 	fi
+	if [[ -n "$expected_message" ]] && ! grep -Fq -- "$expected_message" "$state/output"; then
+		echo "FAIL: $scenario missing error annotation" >&2
+		exit 1
+	fi
 	if [[ "$scenario" == success ]]; then
 		[[ -f "$state/repeated" ]] || {
 			echo 'FAIL: repeat invocation missing' >&2
@@ -134,7 +141,9 @@ run_case success 0
 run_case accepts-unknown-expiry 1
 run_case unrelated-rejection 1
 run_case wrong-start 1
-run_case upgrade-error 1
+run_case upgrade-error 1 '::error::EKS control-plane upgrade failed or timed out.'
+run_case upgrade-timeout 1 '::error::EKS control-plane upgrade failed or timed out.'
+run_case repeat-error 1 '::error::Repeated EKS upgrade check failed or timed out.'
 run_case silent-noop 1
 run_case changed-identity 1
 run_case unsuccessful-update 1

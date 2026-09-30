@@ -131,7 +131,8 @@ unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOK
 	AWS_DEFAULT_PROFILE AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE \
 	AWS_CONTAINER_CREDENTIALS_FULL_URI AWS_CONTAINER_CREDENTIALS_RELATIVE_URI
 
-timeout 70m ksail cluster update --kubernetes-version "$to" --yes
+timeout 70m ksail cluster update --kubernetes-version "$to" --yes ||
+	fail 'EKS control-plane upgrade failed or timed out.'
 assert_cluster "$to"
 after_updates="$(updates)" || fail 'Cannot inventory EKS updates after the upgrade.'
 update_id="$(jq -er --argjson before "$before_updates" '
@@ -145,7 +146,8 @@ aws eks describe-update --name "$KSAIL_EKS_CLUSTER_NAME" --region "$AWS_REGION" 
 	' >/dev/null || fail 'AWS did not confirm the exact version update succeeded.'
 [[ "$(timeout 2m kubectl get --raw /readyz)" == ok ]] || fail 'Upgraded Kubernetes API is not ready.'
 
-timeout 5m ksail cluster update --kubernetes-version "$to" --yes
+timeout 5m ksail cluster update --kubernetes-version "$to" --yes ||
+	fail 'Repeated EKS upgrade check failed or timed out.'
 assert_cluster "$to"
 [[ "$(updates)" == "$after_updates" ]] || fail 'Repeating the target submitted another AWS update.'
 echo 'PASS: one successful version update, preserved identity, ready API, and repeat no-op'
