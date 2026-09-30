@@ -8,6 +8,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -18,6 +19,7 @@ import (
 
 const (
 	otelSDKLogModulePath = "go.opentelemetry.io/otel/sdk/log"
+	uptraceModulePath    = "github.com/uptrace/uptrace-go"
 	uptracePackagePath   = "github.com/uptrace/uptrace-go/uptrace"
 	kubescapeLoggerPath  = "github.com/kubescape/go-logger"
 )
@@ -34,16 +36,26 @@ type goListPackage struct {
 	Imports        []string `json:"Imports"`        //nolint:tagliatelle // Go command output contract.
 }
 
-// auditedOTelSDKLogVersions pins the go.opentelemetry.io/otel/sdk/log release
-// each shipped module links. The advisory GHSA-hjf4-fphr-2h65 (BatchProcessor
-// busy-spin, fixed in v0.21.0) affects these versions, and no fix can be
-// adopted until uptrace's otelutil compiles against otel/log v0.21 (#7375).
-// A move to v0.21.0 or later makes this guard and its risk acceptance
-// obsolete: delete both then.
-func auditedOTelSDKLogVersions() map[string]string {
-	return map[string]string{
-		"root":    "v0.19.0",
-		"desktop": "v0.19.0",
+// auditedOTelModuleVersions pins, per shipped module, the releases the
+// reachability verdict was established against. The advisory
+// GHSA-hjf4-fphr-2h65 (BatchProcessor busy-spin, fixed in v0.21.0) affects the
+// go.opentelemetry.io/otel/sdk/log release, and no fix can be adopted until
+// uptrace's otelutil compiles against otel/log v0.21 (#7375). A move to v0.21.0
+// or later makes this guard and its risk acceptance obsolete: delete both then.
+// uptrace-go and kubescape's go-logger are pinned too, because the entry points
+// below were read from these releases: a new release may construct the
+// processor from init or through another exported function this scan does not
+// name, so any change to either re-opens the verdict.
+func auditedOTelModuleVersions() map[string]map[string]string {
+	audited := map[string]string{
+		otelSDKLogModulePath: "v0.19.0",
+		uptraceModulePath:    "v1.37.0",
+		kubescapeLoggerPath:  "v0.0.25",
+	}
+
+	return map[string]map[string]string{
+		"root":    audited,
+		"desktop": audited,
 	}
 }
 
@@ -115,12 +127,14 @@ func TestOTelLogBatchProcessorStaysUnreachable(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			auditedVersion, ok := auditedOTelSDKLogVersions()[name]
+			auditedVersions, ok := auditedOTelModuleVersions()[name]
 			if !ok {
-				t.Fatalf("module %q has no audited sdk/log version", name)
+				t.Fatalf("module %q has no audited OTel module versions", name)
 			}
 
-			assertOTelSDKLogVersion(t, moduleDir, auditedVersion)
+			for modulePath, auditedVersion := range auditedVersions {
+				assertAuditedModuleVersion(t, moduleDir, modulePath, auditedVersion)
+			}
 
 			packages := listDependencyPackages(t, moduleDir)
 			assertOTelSDKLogImporters(t, packages)
@@ -172,26 +186,55 @@ var b = logger.InitOtel
 	}
 }
 
-func assertOTelSDKLogVersion(t *testing.T, moduleDir, auditedVersion string) {
+// TestImportsEntryPointReadsBuildConstrainedFiles proves a package that imports
+// an entry point only from a file the host's build constraints exclude is still
+// selected for the scan, and that a package importing none is not.
+func TestImportsEntryPointReadsBuildConstrainedFiles(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	windowsOnly := "//go:build windows\n\npackage demo\n\nimport logger \"" + kubescapeLoggerPath + "\"\n\n" +
+		"func init() { logger.InitOtel() }\n"
+	unrelated := "//go:build windows\n\npackage demo\n\nimport \"fmt\"\n\nvar _ = fmt.Sprint\n"
+
+	for name, src := range map[string]string{"otel_windows.go": windowsOnly, "other_windows.go": unrelated} {
+		err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o600)
+		if err != nil {
+			t.Fatalf("write fixture %s: %v", name, err)
+		}
+	}
+
+	selected, err := importsEntryPoint(goListPackage{Dir: dir, IgnoredGoFiles: []string{"otel_windows.go"}})
+	if err != nil || !selected {
+		t.Fatalf("a Windows-only entry-point import was not selected for the scan: selected=%v err=%v", selected, err)
+	}
+
+	selected, err = importsEntryPoint(goListPackage{Dir: dir, IgnoredGoFiles: []string{"other_windows.go"}})
+	if err != nil || selected {
+		t.Fatalf("a package importing no entry point was selected: selected=%v err=%v", selected, err)
+	}
+}
+
+func assertAuditedModuleVersion(t *testing.T, moduleDir, modulePath, auditedVersion string) {
 	t.Helper()
 
-	out, err := runGoCommand(t.Context(), moduleDir, "list", "-m", "-json", otelSDKLogModulePath)
+	out, err := runGoCommand(t.Context(), moduleDir, "list", "-m", "-json", modulePath)
 	if err != nil {
-		t.Fatalf("read %q version: %v", otelSDKLogModulePath, err)
+		t.Fatalf("read %q version: %v", modulePath, err)
 	}
 
 	actual := goListModule{}
 
 	err = json.Unmarshal(out, &actual)
 	if err != nil {
-		t.Fatalf("decode %q module metadata: %v", otelSDKLogModulePath, err)
+		t.Fatalf("decode %q module metadata: %v", modulePath, err)
 	}
 
 	if actual.Replace != nil || actual.Version != auditedVersion {
 		t.Fatalf(
 			"%s moved from audited %s to %+v in %q: re-establish the GHSA-hjf4-fphr-2h65 verdict "+
-				"(#7375), and delete this guard once the version is v0.21.0 or later",
-			otelSDKLogModulePath, auditedVersion, actual, moduleDir,
+				"(#7375), and delete this guard once %s is v0.21.0 or later",
+			modulePath, auditedVersion, actual, moduleDir, otelSDKLogModulePath,
 		)
 	}
 }
@@ -268,8 +311,23 @@ func assertNoOTelBatchEntryPointCallers(t *testing.T, packages []goListPackage) 
 
 	var references []string
 
+	for path, name := range entryPointPackageNames() {
+		if packageNames[path] == "" {
+			packageNames[path] = name
+		}
+	}
+
 	for _, pkg := range packages {
-		if pkg.Standard || !importsEntryPoint(pkg) {
+		if pkg.Standard {
+			continue
+		}
+
+		imports, err := importsEntryPoint(pkg)
+		if err != nil {
+			t.Fatalf("read imports of %s: %v", pkg.ImportPath, err)
+		}
+
+		if !imports {
 			continue
 		}
 
@@ -293,14 +351,53 @@ func assertNoOTelBatchEntryPointCallers(t *testing.T, packages []goListPackage) 
 	}
 }
 
-func importsEntryPoint(pkg goListPackage) bool {
+// entryPointPackageNames gives each entry-point package's declared name, for a
+// package that imports one only from a file the host's build constraints
+// exclude: the host graph then need not contain the entry-point package at all.
+func entryPointPackageNames() map[string]string {
+	return map[string]string{
+		kubescapeLoggerPath: "logger",
+		uptracePackagePath:  "uptrace",
+	}
+}
+
+// importsEntryPoint reports whether pkg imports an entry-point package from any
+// non-test file, including files the host's build constraints exclude: go list
+// derives Imports from the active files only, so a caller in, say, a
+// Windows-only file of a package that imports nothing else relevant would
+// otherwise never be scanned.
+func importsEntryPoint(pkg goListPackage) (bool, error) {
 	for _, imported := range pkg.Imports {
-		if _, ok := otelBatchEntryPoints()[imported]; ok {
-			return true
+		if _, isEntryPoint := otelBatchEntryPoints()[imported]; isEntryPoint {
+			return true, nil
 		}
 	}
 
-	return false
+	fset := token.NewFileSet()
+
+	for _, name := range pkg.IgnoredGoFiles {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+
+		file, err := parser.ParseFile(fset, filepath.Join(pkg.Dir, name), nil, parser.ImportsOnly)
+		if err != nil {
+			return false, fmt.Errorf("parse imports of %s: %w", name, err)
+		}
+
+		for _, spec := range file.Imports {
+			path, err := strconv.Unquote(spec.Path.Value)
+			if err != nil {
+				return false, fmt.Errorf("unquote import in %s: %w", name, err)
+			}
+
+			if _, isEntryPoint := otelBatchEntryPoints()[path]; isEntryPoint {
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
 }
 
 func scanPackageForEntryPoints(pkg goListPackage, packageNames map[string]string) ([]string, error) {
