@@ -359,7 +359,8 @@ func moduleBuildTags() map[string]string {
 
 // auditGoEnv is the caller's environment with every graph-affecting Go setting the release
 // configuration does not control cleared: GOFLAGS (tags, -modfile, -mod), GOEXPERIMENT (which adds
-// goexperiment.* tags), the user go env file and a workspace file would otherwise make the audit list a graph the release never builds.
+// goexperiment.* tags), the user go env file and a workspace file would otherwise make the audit
+// list a graph the release never builds.
 func auditGoEnv(extra ...string) []string {
 	env := append(os.Environ(), "GOFLAGS=", "GOENV=off", "GOWORK=off", "GOEXPERIMENT=")
 
@@ -977,6 +978,8 @@ func goreleaserCGO(t *testing.T, path string) string {
 // other way a release can change the graph it ships (build tags, flags, a build dir pointing at
 // another module, a CGO override inside a run line), because ANY change to them re-opens the audit.
 // To update: re-run the reachability audit for the new configuration, then paste the new digests.
+//
+//nolint:lll // file-path keys and 64-character SHA-256 digests do not wrap
 func auditedReleaseConfigDigests() map[string]string {
 	return map[string]string{
 		".goreleaser.yaml":                                   "603b04ca07558b8e1acb3d9c4e00e3c49ceaa10ea9f5af0ed2f84f01f96496c2",
