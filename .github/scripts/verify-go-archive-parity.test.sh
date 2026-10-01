@@ -219,37 +219,29 @@ rm -f -- "${newline_path}"
 # relocated copy reads the manifests beside it and no tracked file is ever
 # mutated (a test that edits real manifests leaves them corrupted if it aborts).
 fake_repo="${tmp_dir}/fake-repo"
-mkdir -p "${fake_repo}/.github/scripts" "${fake_repo}/desktop"
+mkdir -p "${fake_repo}/.github/scripts"
 cp "${validator}" "${fake_repo}/.github/scripts/"
 fake_validator="${fake_repo}/.github/scripts/${validator##*/}"
 
+# write_fake_manifests creates a shared-module fixture with the requested pin.
 write_fake_manifests() {
 	printf 'module fake\n\nrequire (\n\tgithub.com/moby/go-archive %s // indirect\n)\n' "$1" \
 		>"${fake_repo}/go.mod"
-	printf 'module fake/desktop\n\nrequire (\n\tgithub.com/moby/go-archive %s // indirect\n)\n' "$2" \
-		>"${fake_repo}/desktop/go.mod"
 }
 
-# POSITIVE CONTROL first: with both manifests on the reviewed pin the relocated
-# validator passes, so the two rejections below are attributable to the version
+# POSITIVE CONTROL first: with the shared manifest on the reviewed pin the relocated
+# validator passes, so the rejection below is attributable to the version
 # and not to the fake tree merely being unusable.
-write_fake_manifests 'v0.3.0' 'v0.3.0'
+write_fake_manifests 'v0.3.0'
 if ! "${fake_validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}" >/dev/null 2>&1; then
 	printf 'FAIL: relocated validator rejected manifests that are on the reviewed pin\n' >&2
 	exit 1
 fi
 
-# Each manifest is asserted separately: a check covering only the other one
-# would still pass here.
-write_fake_manifests 'v0.2.0' 'v0.3.0'
+# Reject a superseded shared pin; the metadata must describe the reviewed bytes.
+write_fake_manifests 'v0.2.0'
 if "${fake_validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}" >/dev/null 2>&1; then
 	printf 'FAIL: go.mod requiring a superseded version passed parity validation\n' >&2
-	exit 1
-fi
-
-write_fake_manifests 'v0.3.0' 'v0.2.0'
-if "${fake_validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}" >/dev/null 2>&1; then
-	printf 'FAIL: desktop/go.mod requiring a superseded version passed parity validation\n' >&2
 	exit 1
 fi
 

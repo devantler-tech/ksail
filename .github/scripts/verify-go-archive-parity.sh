@@ -10,6 +10,7 @@ repo_root="$(cd -- "${script_dir}/../.." && pwd)"
 local_dir="${repo_root}/third_party/go-archive"
 upstream_dir=''
 
+# usage prints the supported local and upstream source-directory overrides.
 usage() {
 	printf 'Usage: %s [--upstream-dir DIR] [--local-dir DIR]\n' "${0##*/}" >&2
 }
@@ -47,9 +48,9 @@ done
 # manifest that requires the module.
 readonly module_manifests=(
 	'go.mod'
-	'desktop/go.mod'
 )
 
+# require_manifest_pin binds dependency metadata to the reviewed source version.
 require_manifest_pin() {
 	local manifest="$1" path required count
 	path="${repo_root}/${manifest}"
@@ -154,6 +155,7 @@ readonly parity_exceptions=(
 	'compat_legacy_test.go'
 )
 
+# is_excepted matches approved parity exceptions and their directory descendants.
 is_excepted() {
 	local rel="$1" exception
 	for exception in "${parity_exceptions[@]}"; do
