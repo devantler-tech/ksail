@@ -227,13 +227,13 @@ func (p *Provisioner) UpgradeKubernetes(
 }
 
 // withKubernetesUpgradeProvider connects to the control-plane node at cpNodeIP and
-// runs fn with the Talos SDK's Kubernetes upgrade provider for that connection.
+// runs action with the Talos SDK's Kubernetes upgrade provider for that connection.
 // The planner and the upgrade step share it, so both read the running version
 // through the same client.
 func (p *Provisioner) withKubernetesUpgradeProvider(
 	ctx context.Context,
 	cpNodeIP, description string,
-	fn func(state k8s.UpgradeProvider) error,
+	action func(state k8s.UpgradeProvider) error,
 ) error {
 	talosClient, err := p.dialTalosClientWithRetry(ctx, cpNodeIP, description)
 	if err != nil {
@@ -257,8 +257,9 @@ func (p *Provisioner) withKubernetesUpgradeProvider(
 			ClientProvider: clientProvider,
 		}),
 	}
+	defer state.K8sClose() //nolint:errcheck
 
-	return fn(&state)
+	return action(&state)
 }
 
 // detectRunningKubernetesVersion returns the lowest Kubernetes version running on
@@ -277,7 +278,11 @@ func (p *Provisioner) detectRunningKubernetesVersion(
 
 	err := p.withKubernetesUpgradeProvider(ctx, cpNodeIP, "kubernetes version check",
 		func(state k8s.UpgradeProvider) error {
-			detected, err := k8s.DetectLowestVersion(ctx, state, kubernetesUpgradeOptions(io.Discard))
+			detected, err := k8s.DetectLowestVersion(
+				ctx,
+				state,
+				kubernetesUpgradeOptions(io.Discard),
+			)
 			if err != nil {
 				return fmt.Errorf("detecting running K8s version: %w", err)
 			}

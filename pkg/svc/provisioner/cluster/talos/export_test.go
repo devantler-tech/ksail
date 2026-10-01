@@ -1200,3 +1200,9 @@ func (p *Provisioner) GetLowestRunningKubernetesVersionForTest(
 ) (string, error) {
 	return p.getLowestRunningKubernetesVersion(ctx, nodes)
 }
+
+// ProgressWriterForTest exposes the writer KubernetesProvisioner.Create reports
+// its progress to.
+func (p *KubernetesProvisioner) ProgressWriterForTest() io.Writer {
+	return p.progressWriter()
+}

@@ -160,6 +160,10 @@ func (o *updateOrchestrator) runWithoutUpdater() error {
 		return nil
 	}
 
+	// Show what the recreation is for, as the Updater path does before it
+	// applies; under --output json this is the run's one document.
+	displayChangesSummary(o.cmd, specDiff)
+
 	return o.executeRecreateFlow()
 }
 
@@ -495,6 +499,20 @@ func (o *updateOrchestrator) handleRecreationUpgrade(
 		),
 		Writer: o.cmd.OutOrStdout(),
 	})
+
+	// Under --output json the recreation is the run's result: record it as the
+	// one document, in the shape `cluster diff --include-version-drift` reports.
+	if getOutputFormat(o.cmd) == outputFormatJSON {
+		emitDiffJSON(o.cmd, &clusterupdate.UpdateResult{
+			RecreateRequired: []clusterupdate.Change{{
+				Field:    strings.ToLower(upgradeType) + ".version",
+				OldValue: currentVersion,
+				NewValue: targetVersion,
+				Category: clusterupdate.ChangeCategoryRecreateRequired,
+				Reason:   "version upgrade requires cluster recreation",
+			}},
+		})
+	}
 
 	return o.executeRecreateFlow()
 }

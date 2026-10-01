@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 
 	"cloud.google.com/go/container/apiv1/containerpb"
 	armcontainerservice "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v7"
@@ -186,6 +187,10 @@ type DefaultFactory struct {
 	// AWSOwnershipVerifier rechecks the exact EKS incarnation inside the provisioner immediately
 	// before each AWS mutation. It is nil for creates and non-EKS consumers.
 	AWSOwnershipVerifier eksidentity.Verifier
+
+	// LogWriter receives provisioner progress output where the provisioner supports
+	// redirecting it (Talos today). Nil keeps the provisioner's default (stdout).
+	LogWriter io.Writer
 }
 
 // WithEKSMutationGuard returns a copy of the factory pinned to one frozen credential snapshot and

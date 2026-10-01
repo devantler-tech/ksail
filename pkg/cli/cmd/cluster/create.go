@@ -199,6 +199,7 @@ func defaultProvisionerFactory(ctx *localregistry.Context) clusterprovisioner.De
 			AKS:         ctx.AKSConfig,
 			MirrorSpecs: ctx.MirrorSpecs,
 		},
+		LogWriter: ctx.ProvisionerLogWriter,
 	}
 }
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Require extracted function bodies from the CLI and every Linux desktop source
-# file. A successful upload or source archive alone does not prove this coverage.
+# Reject failed Go project extraction and require function bodies from the CLI
+# and every Linux desktop source file. An upload alone does not prove coverage.
 set -euo pipefail
 
 # verify_results rejects incomplete or malformed CLI/desktop extraction evidence.
@@ -27,12 +27,36 @@ verify_results() {
 	}
 }
 
+# verify_diagnostics rejects module failures even when sampled bodies survived.
+verify_diagnostics() {
+	jq -se '
+    length == 1 and (.[0] | type == "array" and all(.[];
+      .source.id | type == "string" and length > 0))
+  ' "$1" >/dev/null || {
+		printf '::error::CodeQL extraction diagnostics are malformed.\n' >&2
+		return 1
+	}
+	if jq -e 'any(.[]; .source.id == "go/autobuilder/extraction-failed-for-project")' "$1" >/dev/null; then
+		# Legacy workflow commands can match anywhere in a log line. Unicode-escape
+		# hashes after JSON encoding so diagnostic text remains data in both parsers.
+		jq -r '.[] | select(.source.id == "go/autobuilder/extraction-failed-for-project") |
+      {source: .source.id, message: (.plaintextMessage // .source.name)} |
+      tojson | gsub("#"; "\\u0023")' "$1"
+		printf '::error::CodeQL failed to extract a Go project; the database is incomplete.\n' >&2
+		return 1
+	fi
+}
+
 if [[ $# == 2 && "$1" == --results ]]; then
 	verify_results "$2"
 	exit
 fi
-if [[ $# != 1 ]]; then
-	printf 'Usage: %s DATABASE | --results BQRS_JSON\n' "$0" >&2
+diagnostics_only=false
+if [[ $# == 2 && "$1" == --diagnostics-only ]]; then
+	diagnostics_only=true
+	shift
+elif [[ $# != 1 ]]; then
+	printf 'Usage: %s [--diagnostics-only] DATABASE | --results BQRS_JSON\n' "$0" >&2
 	exit 2
 fi
 
@@ -45,6 +69,15 @@ fi
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 coverage_dir="$(mktemp -d)"
 trap 'rm -rf "${coverage_dir}"' EXIT
+
+# Go autobuild can complete successfully after a module's extractor failed.
+# Export all diagnostics, including warnings hidden from the uploaded results.
+if ! "${CODEQL_CLI}" database export-diagnostics --format=raw -- "$1" >"${coverage_dir}/diagnostics.json"; then
+	printf '::error::CodeQL extraction diagnostics could not be exported.\n' >&2
+	exit 1
+fi
+verify_diagnostics "${coverage_dir}/diagnostics.json"
+if [[ "${diagnostics_only}" == true ]]; then exit; fi
 cp "${script_dir}/../codeql/desktop-coverage/"* "${coverage_dir}/"
 
 # Resolve the library shipped with this analysis bundle, rather than independently

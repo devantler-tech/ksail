@@ -513,6 +513,46 @@ runs:
         fi
         echo "✅ No unexpected changes detected"
 
+    - name: 🧪 ksail cluster update --output json — stdout is one document
+      # Scripts read `cluster update --output json` from stdout, so a real update must leave
+      # exactly one JSON document there and send its progress text to stderr (#7200).
+      # Talos must also pass this second update after an unpinned Kubernetes upgrade (#7412).
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ steps.resolve-args.outputs.args }}
+        K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
+      run: |
+        set -o pipefail
+        STDOUT_FILE=/tmp/ksail-system-test-logs/cluster-update-json.stdout
+        STDERR_FILE=/tmp/ksail-system-test-logs/cluster-update-json.stderr
+        # Strip init-only flags that cluster update does not accept
+        UPDATE_ARGS=$(echo "$ARGS" | sed 's/--image-verification [^ ]*//')
+        status=0
+        # shellcheck disable=SC2086
+        ksail cluster update --force --output json --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG >"$STDOUT_FILE" 2>"$STDERR_FILE" || status=$?
+        if [ "$status" -ne 0 ]; then
+          echo "❌ ERROR: cluster update --output json exited $status"
+          echo "--- stdout ---"; cat "$STDOUT_FILE"
+          echo "--- stderr ---"; cat "$STDERR_FILE"
+          exit 1
+        fi
+        # The cluster was just created and updated with the same config, so this update is a
+        # no-op: one object reporting zero changes, and nothing else on stdout.
+        if ! jq -e -s 'length == 1 and (.[0] | type == "object" and .totalChanges == 0)' "$STDOUT_FILE" >/dev/null; then
+          echo "❌ ERROR: stdout is not exactly one JSON document reporting zero changes"
+          echo "--- stdout ---"; cat "$STDOUT_FILE"
+          echo "--- stderr ---"; cat "$STDERR_FILE"
+          exit 1
+        fi
+        if ! grep -q "No changes detected" "$STDERR_FILE"; then
+          echo "❌ ERROR: the update's progress text did not reach stderr"
+          echo "--- stderr ---"; cat "$STDERR_FILE"
+          exit 1
+        fi
+        echo "✅ stdout held one JSON document: $(jq -c . "$STDOUT_FILE")"
+
     - name: 🧪 ksail cluster update — preserves FluxInstance settings KSail does not own
       # Re-asserting the FluxInstance must change only what KSail owns (#6455, #7092). Plant a
       # setting KSail does not model and a consumer spec.kustomize patch on the same
