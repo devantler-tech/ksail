@@ -48,8 +48,12 @@ if [[ $# == 2 && "$1" == --results ]]; then
 	verify_results "$2"
 	exit
 fi
-if [[ $# != 1 ]]; then
-	printf 'Usage: %s DATABASE | --results BQRS_JSON\n' "$0" >&2
+diagnostics_only=false
+if [[ $# == 2 && "$1" == --diagnostics-only ]]; then
+	diagnostics_only=true
+	shift
+elif [[ $# != 1 ]]; then
+	printf 'Usage: %s [--diagnostics-only] DATABASE | --results BQRS_JSON\n' "$0" >&2
 	exit 2
 fi
 
@@ -62,7 +66,6 @@ fi
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 coverage_dir="$(mktemp -d)"
 trap 'rm -rf "${coverage_dir}"' EXIT
-cp "${script_dir}/../codeql/desktop-coverage/"* "${coverage_dir}/"
 
 # Go autobuild can complete successfully after a module's extractor failed.
 # Export all diagnostics, including warnings hidden from the uploaded results.
@@ -71,6 +74,8 @@ if ! "${CODEQL_CLI}" database export-diagnostics --format=raw -- "$1" >"${covera
 	exit 1
 fi
 verify_diagnostics "${coverage_dir}/diagnostics.json"
+if [[ "${diagnostics_only}" == true ]]; then exit; fi
+cp "${script_dir}/../codeql/desktop-coverage/"* "${coverage_dir}/"
 
 # Resolve the library shipped with this analysis bundle, rather than independently
 # selecting a newer query library. Keep generated pack locks/cache outside the repo.

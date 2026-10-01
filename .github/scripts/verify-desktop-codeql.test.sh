@@ -53,6 +53,7 @@ reject malformed
 cat >"${scratch}/codeql" <<'BASH'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "${GUARD_MODE:-full}" == diagnostics && "$1" != database ]]; then exit 2; fi
 case "$1 $2" in
 "resolve qlpacks") printf '{"go":["/fixture/go"]}\n' ;;
 "pack install" | "query run") ;;
@@ -73,35 +74,45 @@ chmod +x "${scratch}/codeql"
 
 # run_database keeps the guard's complete command path under test.
 run_database() {
+	local arguments=("${scratch}/database")
+	if [[ "${2:-full}" == diagnostics ]]; then arguments=(--diagnostics-only "${scratch}/database"); fi
 	CODEQL_CLI="${scratch}/codeql" BODY_RESULTS="${scratch}/positive.json" \
 		DIAGNOSTICS="${scratch}/diagnostics.json" EXPORT_FAILURE="${1:-false}" \
-		bash "${validator}" "${scratch}/database" >"${scratch}/output.log" 2>&1
+		GUARD_MODE="${2:-full}" \
+		bash "${validator}" "${arguments[@]}" >"${scratch}/output.log" 2>&1
 }
 
 # reject_database requires an extraction failure or unreadable export to stop CI.
 reject_database() {
 	local name="$1"
-	if run_database "${2:-false}"; then
-		printf 'FAIL: accepted %s extraction diagnostics\n' "${name}" >&2
-		exit 1
-	fi
+	local mode
+	for mode in full diagnostics; do
+		if run_database "${2:-false}" "${mode}"; then
+			printf 'FAIL: accepted %s extraction diagnostics (%s)\n' "${name}" "${mode}" >&2
+			exit 1
+		fi
+	done
 }
 
 printf '[]\n' >"${scratch}/diagnostics.json"
 run_database
+run_database false diagnostics
 printf '[{"source":{"id":"go/extractor/warning","name":"Recoverable warning"},"severity":"warning"}]\n' \
 	>"${scratch}/diagnostics.json"
 run_database
+run_database false diagnostics
 
 # A killed module must fail despite all sampled CLI/desktop bodies surviving.
 for project in . third_party/go-archive; do
-	jq -n --arg project "${project}" '[{
+	for severity in warning error note; do
+		jq -n --arg project "${project}" --arg severity "${severity}" '[{
     source: {id: "go/autobuilder/extraction-failed-for-project", name: "Extraction failed"},
-    severity: "warning", plaintextMessage: ("Extraction failed for " + $project + ": signal: killed")
+    severity: $severity, plaintextMessage: ("Extraction failed for " + $project + ": signal: killed")
   }]' >"${scratch}/diagnostics.json"
-	reject_database "failed extraction for ${project} with valid body evidence"
-	jq -e --arg project "${project}" '.message | contains($project)' \
-		<(head -n 1 "${scratch}/output.log") >/dev/null
+		reject_database "failed extraction for ${project} with valid body evidence"
+		jq -e --arg project "${project}" '.message == ("Extraction failed for " + $project + ": signal: killed")' \
+			<(head -n 1 "${scratch}/output.log") >/dev/null
+	done
 done
 
 for invalid in '{}' 'null' '[{}]' '[{"source":{"id":null}}]' '[{"source":{"id":""}}]' '{invalid'; do

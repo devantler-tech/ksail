@@ -99,6 +99,12 @@ jobs:
           # Include the native entry point in standalone Go package extraction.
           GOFLAGS: -tags=desktop
 
+      - name: 🔎 Reject failed Go extraction before analysis
+        if: matrix.language == 'go'
+        env:
+          CODEQL_CLI: ${{ steps.init.outputs.codeql-path }}
+        run: bash .github/scripts/verify-desktop-codeql.sh --diagnostics-only "$RUNNER_TEMP/codeql-databases/go"
+
       - name: 🔬 Perform CodeQL analysis
         uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
