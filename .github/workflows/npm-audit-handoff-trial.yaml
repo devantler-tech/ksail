@@ -27,7 +27,7 @@ jobs:
       - name: Prepare public vulnerable fixture
         shell: bash
         env:
-          FIXTURE: ${{ runner.temp }}/audit-fixture
+          FIXTURE: ${{ github.workspace }}/.audit-fixture
           BASELINE: ${{ runner.temp }}/audit-baseline
         run: |
           mkdir -p "$FIXTURE" "$BASELINE"
@@ -48,7 +48,7 @@ jobs:
         uses: ./.github/actions/npm-audit-handoff-probe
         continue-on-error: true
         with:
-          working-directory: ${{ runner.temp }}/audit-fixture
+          working-directory: .audit-fixture
           patch-artifact-name: npm-audit-handoff-patch
       - name: Assert failed composite still exposes truthful outputs
         shell: bash
@@ -58,7 +58,7 @@ jobs:
           REPAIR_PASSED: ${{ steps.audit.outputs.repair-passed }}
           PATCH_CREATED: ${{ steps.audit.outputs.patch-created }}
           CHANGES_COMMITTED: ${{ steps.audit.outputs.changes-committed }}
-          FIXTURE: ${{ runner.temp }}/audit-fixture
+          FIXTURE: ${{ github.workspace }}/.audit-fixture
         run: |
           test "$AUDIT_OUTCOME" = failure
           test "$AUDIT_PASSED" = false
