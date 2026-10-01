@@ -39,7 +39,10 @@ func newFloatingIPDisableFixture(t *testing.T) *floatingIPDisableFixture {
 
 // newFloatingIPDisableFixtureFor is newFloatingIPDisableFixture with the cloud
 // address present or already released outside KSail.
-func newFloatingIPDisableFixtureFor(t *testing.T, floatingIPPresent bool) *floatingIPDisableFixture {
+func newFloatingIPDisableFixtureFor(
+	t *testing.T,
+	floatingIPPresent bool,
+) *floatingIPDisableFixture {
 	t.Helper()
 
 	t.Setenv(testFloatingIPTokenEnvVar, "vip-test-token")

@@ -317,7 +317,10 @@ func (p *Provisioner) mergeStaleFloatingIPConfig(
 
 // detectStaleHCloudVIP returns the HCloud VIP address any running control plane
 // still carries, or "" when none does or when a config could not be fetched.
-func (p *Provisioner) detectStaleHCloudVIP(ctx context.Context, clusterName string) (string, error) {
+func (p *Provisioner) detectStaleHCloudVIP(
+	ctx context.Context,
+	clusterName string,
+) (string, error) {
 	nodes, err := p.getNodesByRole(ctx, clusterName)
 	if err != nil {
 		return "", fmt.Errorf("failed to inventory nodes for stale VIP detection: %w", err)

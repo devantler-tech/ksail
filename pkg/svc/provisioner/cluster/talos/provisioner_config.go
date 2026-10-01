@@ -185,7 +185,11 @@ func repointClusterContexts(config *clientconfig.Config, clusterName, fromIP, to
 // clusterName: it records the cluster, carries its name, or carries the name
 // Talos's Merge gives it on a collision (`<name>-<n>`). Generated contexts do not
 // record a cluster, so a merge-renamed context is only recognisable by name.
-func isClusterTalosContext(name string, talosContext *clientconfig.Context, clusterName string) bool {
+func isClusterTalosContext(
+	name string,
+	talosContext *clientconfig.Context,
+	clusterName string,
+) bool {
 	if talosContext == nil {
 		return false
 	}
