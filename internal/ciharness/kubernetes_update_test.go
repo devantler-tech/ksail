@@ -1,6 +1,7 @@
 package ciharness_test
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -18,7 +19,12 @@ set -euo pipefail
 version=$(cat "$FIXTURE_VERSION")
 case "$1" in
   version) printf '{"serverVersion":{"gitVersion":"%s"}}\n' "$version" ;;
-  get) printf '{"items":[{"status":{"nodeInfo":{"kubeletVersion":"%s"},"conditions":[{"type":"Ready","status":"%s"}]}}]}\n' "${FIXTURE_NODE_VERSION:-$version}" "${FIXTURE_READY:-True}" ;;
+  get)
+    cat <<EOF
+{"items":[{"status":{"nodeInfo":{"kubeletVersion":"${FIXTURE_NODE_VERSION:-$version}"},
+"conditions":[{"type":"Ready","status":"${FIXTURE_READY:-True}"}]}}]}
+EOF
+    ;;
   *) exit 99 ;;
 esac
 `
@@ -65,10 +71,25 @@ func runVersionStep(t *testing.T, stepName string, env map[string]string) (strin
 		command.Env = append(command.Env, key+"="+value)
 	}
 	output, err := command.CombinedOutput()
-	outputs, _ := os.ReadFile(outputFile) // absence is meaningful on failed steps
-	calls, _ := os.ReadFile(callsFile)
+	fixtureRoot, openErr := os.OpenRoot(dir)
+	require.NoError(t, openErr)
+	t.Cleanup(func() { require.NoError(t, fixtureRoot.Close()) })
+	outputs := readOptionalVersionFixture(t, fixtureRoot, "outputs")
+	calls := readOptionalVersionFixture(t, fixtureRoot, "calls")
 
 	return string(output) + string(outputs), string(calls), err
+}
+
+func readOptionalVersionFixture(t *testing.T, root *os.Root, name string) []byte {
+	t.Helper()
+
+	contents, err := root.ReadFile(name)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil // Failed steps can legitimately leave no output or call record.
+	}
+	require.NoError(t, err)
+
+	return contents
 }
 
 func TestSystemTestTalosNoopUsesRunningVersion(t *testing.T) {
@@ -100,7 +121,10 @@ func TestSystemTestTalosUpgradeRejectsWrongLiveState(t *testing.T) {
 		{name: "server_unchanged", env: map[string]string{"FIXTURE_OBSERVED": "v1.36.2"}, want: "server version"},
 		{name: "lagging_node", env: map[string]string{"FIXTURE_NODE_VERSION": "v1.36.2"}, want: "node versions or readiness"},
 		{name: "node_not_ready", env: map[string]string{"FIXTURE_READY": "False"}, want: "node versions or readiness"},
-		{name: "repeat_upgrades", env: map[string]string{"FIXTURE_REPEAT_UPGRADE": "true"}, want: "repeated update performed a Kubernetes upgrade"},
+		{
+			name: "repeat_upgrades", env: map[string]string{"FIXTURE_REPEAT_UPGRADE": "true"},
+			want: "repeated update performed a Kubernetes upgrade",
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
