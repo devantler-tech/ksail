@@ -47,6 +47,20 @@ runs:
         # Small delay to let server deletions propagate
         sleep 5
 
+        # Delete all KSail-owned floating IPs (billed even while unassigned)
+        echo "🗑️  Deleting floating IPs..."
+        FIP_IDS=$(hcloud floating-ip list -o noheader -o columns=id -l "${LABEL_SELECTOR}" 2>/dev/null || true)
+        if [[ -n "${FIP_IDS}" ]]; then
+          echo "Found floating IPs to delete:"
+          hcloud floating-ip list -l "${LABEL_SELECTOR}"
+          for FIP_ID in ${FIP_IDS}; do
+            echo "  Deleting floating IP ID: ${FIP_ID}"
+            hcloud floating-ip delete "${FIP_ID}" || echo "⚠️  Failed to delete floating IP ${FIP_ID}"
+          done
+        else
+          echo "  No floating IPs found"
+        fi
+
         # Delete all KSail-owned placement groups
         echo "🗑️  Deleting placement groups..."
         PG_IDS=$(hcloud placement-group list -o noheader -o columns=id -l "${LABEL_SELECTOR}" 2>/dev/null || true)
