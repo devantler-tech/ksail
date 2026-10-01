@@ -3,6 +3,7 @@ package localregistry
 import (
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -120,6 +121,10 @@ type Context struct {
 	// nested clusters pull through authenticated, caching mirrors. Nil for other
 	// providers, which handle mirrors via host-level Docker stages.
 	MirrorSpecs []registry.MirrorSpec
+	// ProvisionerLogWriter receives provisioner progress output. Nil keeps each
+	// provisioner's default (stdout); a --output json run points it at stderr so
+	// stdout carries only the JSON document.
+	ProvisionerLogWriter io.Writer
 }
 
 // NewContextFromConfigManager creates a Context from a config manager.
