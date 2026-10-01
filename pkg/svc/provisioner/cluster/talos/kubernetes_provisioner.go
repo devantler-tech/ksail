@@ -3,6 +3,7 @@ package talosprovisioner
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strconv"
@@ -169,7 +170,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// Talos SDK reads DOCKER_HOST across the sequential provisioning steps below, so
 	// the env var stays set until Create returns) and create a Docker client for DinD.
 	_, _ = fmt.Fprintf(
-		os.Stdout,
+		p.progressWriter(),
 		"► creating Talos cluster via SDK (DOCKER_HOST=tcp://127.0.0.1:%d)\n",
 		dockerPF.LocalPort,
 	)
@@ -227,7 +228,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("provision cluster: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(os.Stdout, "► containers provisioned inside DinD [%s]\n",
+	_, _ = fmt.Fprintf(p.progressWriter(), "► containers provisioned inside DinD [%s]\n",
 		time.Since(provisionStart).Truncate(time.Second))
 
 	// === Phase 2: Port-forward Talos API + K8s API from DinD, then bootstrap ===
@@ -263,8 +264,8 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	hostTalosEndpoint := net.JoinHostPort("127.0.0.1", strconv.Itoa(talosPF.LocalPort))
 	hostK8sEndpoint := fmt.Sprintf("https://127.0.0.1:%d", k8sPF.LocalPort)
 
-	_, _ = fmt.Fprintf(os.Stdout, "► Talos API → localhost:%d\n", talosPF.LocalPort)
-	_, _ = fmt.Fprintf(os.Stdout, "► K8s API → localhost:%d\n", k8sPF.LocalPort)
+	_, _ = fmt.Fprintf(p.progressWriter(), "► Talos API → localhost:%d\n", talosPF.LocalPort)
+	_, _ = fmt.Fprintf(p.progressWriter(), "► K8s API → localhost:%d\n", k8sPF.LocalPort)
 
 	// Save talosconfig with host-accessible endpoint
 	talosConfig := configBundle.TalosConfig()
@@ -672,6 +673,17 @@ func (p *KubernetesProvisioner) dumpNestedDiagnostics(
 		_, _ = stdcopy.StdCopy(writer, writer, logs)
 		_ = logs.Close()
 	}
+}
+
+// progressWriter returns where Create reports its progress: the inner Talos
+// provisioner's log writer, which the factory points at stderr. Writing to os.Stdout
+// instead would corrupt the single JSON document `--output json` promises there.
+func (p *KubernetesProvisioner) progressWriter() io.Writer {
+	if p.inner == nil || p.inner.logWriter == nil {
+		return os.Stdout
+	}
+
+	return p.inner.logWriter
 }
 
 // setupDinD creates the namespace and DinD pod, then waits for readiness.

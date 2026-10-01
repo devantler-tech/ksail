@@ -1180,3 +1180,9 @@ func RegisterSchematicForTest(
 ) (string, error) {
 	return registerSchematic(ctx, baseURL, timeout, computed)
 }
+
+// ProgressWriterForTest exposes the writer KubernetesProvisioner.Create reports
+// its progress to.
+func (p *KubernetesProvisioner) ProgressWriterForTest() io.Writer {
+	return p.progressWriter()
+}
