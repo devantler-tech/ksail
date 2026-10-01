@@ -30,7 +30,7 @@ echo "🧪 Explicit Talos Kubernetes upgrade: $UPGRADE_FROM → $UPGRADE_TO"
 update_args_text=$(printf '%s' "${ARGS:-}" | sed -E 's/--image-verification [^ ]*//g; s/--kubernetes-version(=| +)[^ ]*//g')
 read -r -a update_args <<<"$update_args_text"
 if ! timeout --kill-after=10s 900s ksail cluster update --force --distribution Talos --provider Docker \
-	"${update_args[@]}" --kubernetes-version "$UPGRADE_TO" 2>&1 | tee "$log_dir/talos-kubernetes-upgrade.log"; then
+	${update_args[@]+"${update_args[@]}"} --kubernetes-version "$UPGRADE_TO" 2>&1 | tee "$log_dir/talos-kubernetes-upgrade.log"; then
 	echo "❌ ERROR: explicit Talos Kubernetes upgrade failed"
 	exit 1
 fi
@@ -39,7 +39,7 @@ assert_running_version "$UPGRADE_TO" "after upgrade"
 stdout_file="$log_dir/talos-upgrade-repeat.stdout"
 stderr_file="$log_dir/talos-upgrade-repeat.stderr"
 if ! timeout --kill-after=10s 900s ksail cluster update --force --output json --distribution Talos --provider Docker \
-	"${update_args[@]}" --kubernetes-version "$UPGRADE_TO" >"$stdout_file" 2>"$stderr_file"; then
+	${update_args[@]+"${update_args[@]}"} --kubernetes-version "$UPGRADE_TO" >"$stdout_file" 2>"$stderr_file"; then
 	echo "❌ ERROR: repeated update failed after the explicit Talos Kubernetes upgrade"
 	cat "$stderr_file"
 	exit 1
