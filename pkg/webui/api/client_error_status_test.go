@@ -34,6 +34,12 @@ func TestClientErrorStatus(t *testing.T) {
 		},
 		{"apierror not found", apierrors.NewNotFound(resource, "dev"), http.StatusNotFound},
 		{"sentinel already exists", api.ErrAlreadyExists, http.StatusConflict},
+		{"sentinel unmanaged cluster", api.ErrUnmanagedCluster, http.StatusConflict},
+		{
+			"wrapped sentinel unmanaged cluster",
+			fmt.Errorf("delete cluster: %w", api.ErrUnmanagedCluster),
+			http.StatusConflict,
+		},
 		{"apierror conflict", apierrors.NewConflict(resource, "dev", nil), http.StatusConflict},
 		{
 			"apierror already exists",

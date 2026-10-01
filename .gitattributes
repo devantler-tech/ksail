@@ -1,0 +1,3 @@
+# Go rewrites these files with LF endings. Keep tidy checks identical on Windows.
+go.mod text eol=lf
+go.sum text eol=lf

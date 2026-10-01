@@ -147,7 +147,6 @@ jobs:
       vsce-deps: ${{ steps.filter.outputs.vsce-deps }}
       copilot-plugin: ${{ steps.filter.outputs.copilot-plugin }}
       operator-chart: ${{ steps.filter.outputs.operator-chart }}
-      desktop: ${{ steps.filter.outputs.desktop }}
       calico-cni: ${{ steps.filter.outputs.calico-cni }}
       cask-pr-handoff: ${{ steps.filter.outputs.cask-pr-handoff }}
       eks-smoke-scripts: ${{ steps.filter.outputs.eks-smoke-scripts }}
@@ -304,17 +303,6 @@ jobs:
               - 'Dockerfile'
               - '.github/actions/operator-chart-e2e/**'
               - 'scripts/stage-webui.sh'
-              - '.github/workflows/ci.yaml'
-            desktop:
-              # The desktop app is a SEPARATE Go module that vendors the main
-              # module via `replace => ../`, so its go.{mod,sum} must track the
-              # main module's dependency graph independently. A root dependency
-              # bump (go.mod/go.sum) does NOT touch desktop/**, so it must be
-              # listed here or desktop drift slips through to release. Keep
-              # go.mod/go.sum in this filter.
-              - 'desktop/**'
-              - 'go.mod'
-              - 'go.sum'
               - '.github/workflows/ci.yaml'
             calico-cni:
               # The Calico installer derives the tigera-operator chart version
@@ -798,12 +786,13 @@ jobs:
     name: 📤 Auto-Commit Generated Changes
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [changes, generate, verify-desktop-tidy]
+    needs: [changes, generate]
     if: >-
       always()
       && github.event_name != 'merge_group'
       && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-      && (needs.generate.result == 'success' || needs.verify-desktop-tidy.result == 'success')
+      && needs.generate.result == 'success'
+      && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]')
     permissions:
       contents: write
       pull-requests: write
@@ -830,31 +819,11 @@ jobs:
           path: /tmp/patches
 
       - name: 📋 Apply patches
-        env:
-          # Dependabot loses its rebase ability permanently once anything else pushes to
-          # its branch, so its branches are left alone (#6832) — with one exception.
-          #
-          # That exclusion assumed every patch here is cosmetic drift the protected-branch
-          # sync repairs after the bump merges. The desktop tidy is not: desktop/ is a
-          # separate module vendoring the root via `replace => ../`, so a root bump leaves
-          # desktop/go.{mod,sum} stale and fails the bump's OWN required checks. Deferring
-          # it means the bump can never merge, so the post-merge path it was deferred to is
-          # never reached, and the PR sits red in the ecosystem's open-PR cap (#6974).
-          #
-          # Apply only the desktop tidy on a Dependabot branch: the one patch Dependabot
-          # cannot produce itself and cannot merge without. When desktop is already tidy
-          # this patch is empty, nothing is staged, and the branch is never touched — so
-          # Dependabot keeps its rebase ability in exactly the cases #6832 was about.
-          DESKTOP_TIDY_ONLY: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]' }}
         run: |
           set -euo pipefail
           shopt -s nullglob
 
           for patch in /tmp/patches/*.patch; do
-            if [ "${DESKTOP_TIDY_ONLY}" = "true" ] && [ "$(basename "$patch")" != "desktop-tidy.patch" ]; then
-              echo "Skipping $(basename "$patch"): Dependabot branch — only the desktop tidy is applied here."
-              continue
-            fi
             if [ -s "$patch" ]; then
               patch_name="$(basename "$patch")"
               echo "Applying ${patch_name}..."
@@ -893,12 +862,9 @@ jobs:
       # modes are not expressible. Reject anything other than a regular 0644 file below
       # rather than dereferencing a symlink or silently losing an executable bit.
       - name: 📤 Commit and push generated changes (PR branch)
-        # Dependabot is no longer excluded here; the exclusion moved into 📋 Apply patches,
-        # which restricts a Dependabot branch to the desktop tidy. That keeps the decision
-        # about WHAT may be pushed in one place and lets this step stay a plain "commit
-        # whatever was applied" — on a Dependabot bump with a tidy desktop module nothing
-        # is applied, so this step finds no changes and pushes nothing (#6974).
-        if: github.event_name == 'pull_request'
+        # A foreign commit prevents Dependabot rebasing. Both entry points now use
+        # its root manifest; generated docs are repaired after the bump merges.
+        if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           BRANCH: ${{ github.head_ref }}
@@ -1696,69 +1662,6 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  verify-desktop-tidy:
-    name: 🧩 Verify Desktop Module Tidy
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [changes]
-    if: github.event_name != 'merge_group' && needs.changes.outputs.desktop == 'true'
-    permissions:
-      contents: read
-    steps:
-      - name: 📄 Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-
-      - name: ⚙️ Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      # The desktop app is a SEPARATE Go module that vendors the main module via `replace => ../`, so
-      # its go.{mod,sum} must independently track the main module's dependency graph. A root dependency
-      # bump (e.g. a dependabot gomod PR) touches only the root go.{mod,sum} and leaves desktop stale,
-      # which would break the release-time desktop build with a cryptic "updates to go.mod needed".
-      # Rather than hard-fail and force a manual `go -C desktop mod tidy`, self-heal the same way
-      # generated files are synced: run tidy, capture the diff as a patch artifact, and let the
-      # 📤 Auto-Commit Generated Changes job apply it to the PR branch. Fork PRs — which that job cannot
-      # push to — still hard-fail with actionable guidance.
-      - name: 🧹 Tidy desktop module
-        working-directory: desktop
-        run: go mod tidy
-
-      - name: 📤 Upload patch
-        run: |
-          git add -N .
-          git diff > /tmp/desktop-tidy.patch
-          if [ -s /tmp/desktop-tidy.patch ]; then
-            echo "Desktop module drift detected; patch will be auto-committed on same-repo PRs."
-          else
-            echo "Desktop module already tidy."
-          fi
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: desktop-tidy-patch
-          path: /tmp/desktop-tidy.patch
-          if-no-files-found: ignore
-          retention-days: 1
-
-      - name: ❌ Fail if desktop module is out of date (fork PR)
-        if: >-
-          github.event_name == 'pull_request'
-          && github.event.pull_request.head.repo.full_name != github.repository
-        shell: bash
-        run: |
-          if [ -s /tmp/desktop-tidy.patch ]; then
-            echo "::error::desktop/go.{mod,sum} are out of date. Please run 'go -C desktop mod tidy' locally and commit the result."
-            echo ""
-            cat /tmp/desktop-tidy.patch
-            exit 1
-          fi
-
   validate-calico-chart:
     name: 🔍 Validate Calico Chart Version
     runs-on: ubuntu-latest
@@ -1912,7 +1815,6 @@ jobs:
         copilot-plugin,
         operator-chart-lint,
         operator-chart-e2e,
-        verify-desktop-tidy,
         validate-calico-chart,
         verify-dependency-test-graph,
         verify-todos-workflow-contract,
@@ -1945,7 +1847,6 @@ jobs:
             ${{ needs.copilot-plugin.result }}
             ${{ needs.operator-chart-lint.result }}
             ${{ needs.operator-chart-e2e.result }}
-            ${{ needs.verify-desktop-tidy.result }}
             ${{ needs.validate-calico-chart.result }}
             ${{ needs.verify-dependency-test-graph.result }}
             ${{ needs.verify-todos-workflow-contract.result }}

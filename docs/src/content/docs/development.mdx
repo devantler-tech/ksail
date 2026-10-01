@@ -32,6 +32,21 @@ cd docs/ && npm ci && cd ..  # docs only
 go build -o ksail && ./ksail --version
 ````
 
+### Native desktop app
+
+Desktop shares the root Go module and uses the `desktop` build tag. Default CLI builds
+and tests do not compile the native webview. Maintain both entry points with
+`go mod tidy` at the repository root.
+
+```sh
+make desktop                     # stages the UI and builds the native app
+make desktop-app                 # macOS app bundle
+go test -tags desktop ./desktop  # native tests
+```
+
+Linux needs GTK4 and WebKitGTK 6.0 development packages; macOS needs Xcode command
+line tools. The desktop workflow checks native tests and macOS release packaging.
+
 ### 4. Run Tests
 
 ````bash

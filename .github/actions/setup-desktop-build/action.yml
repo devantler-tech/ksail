@@ -6,9 +6,8 @@ description: |
   ubuntu-24.04 — 22.04 only ships the legacy webkit2gtk-4.0/4.1), and build +
   stage the web UI for embedding (go:embed via pkg/webui/embed.go).
 
-  Used by the desktop CI build (.github/workflows/desktop.yaml) and the
-  desktop release legs (.github/workflows/cd.yaml). Assumes the repository is
-  already checked out.
+  Used by the desktop release legs (.github/workflows/cd.yaml). Assumes the
+  repository is already checked out.
 
 runs:
   using: composite

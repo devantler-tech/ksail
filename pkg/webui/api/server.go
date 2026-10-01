@@ -1343,6 +1343,7 @@ func clientErrorStatus(err error) int {
 	case errors.Is(err, ErrNotFound), apierrors.IsNotFound(err):
 		return http.StatusNotFound
 	case errors.Is(err, ErrAlreadyExists),
+		errors.Is(err, ErrUnmanagedCluster),
 		apierrors.IsConflict(err),
 		apierrors.IsAlreadyExists(err):
 		return http.StatusConflict
