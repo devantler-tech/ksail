@@ -93,6 +93,7 @@ func TestPrepareRejectsInvalidInputs(t *testing.T) {
 			dir := t.TempDir()
 			eksPath := filepath.Join(dir, "eks.yaml")
 			projectPath := filepath.Join(dir, "ksail.yaml")
+
 			require.NoError(t, os.WriteFile(eksPath, []byte(testCase.eks), 0o600))
 			require.NoError(t, os.WriteFile(projectPath, []byte(testCase.project), 0o600))
 
