@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Require extracted function bodies from the CLI and every Linux desktop source
-# file. A successful upload or source archive alone does not prove this coverage.
+# Reject failed Go project extraction and require function bodies from the CLI
+# and every Linux desktop source file. An upload alone does not prove coverage.
 set -euo pipefail
 
 # verify_results rejects incomplete or malformed CLI/desktop extraction evidence.
@@ -27,6 +27,23 @@ verify_results() {
 	}
 }
 
+# verify_diagnostics rejects module failures even when sampled bodies survived.
+verify_diagnostics() {
+	jq -se '
+    length == 1 and (.[0] | type == "array" and all(.[];
+      .source.id | type == "string" and length > 0))
+  ' "$1" >/dev/null || {
+		printf '::error::CodeQL extraction diagnostics are malformed.\n' >&2
+		return 1
+	}
+	if jq -e 'any(.[]; .source.id == "go/autobuilder/extraction-failed-for-project")' "$1" >/dev/null; then
+		jq -c '.[] | select(.source.id == "go/autobuilder/extraction-failed-for-project") |
+      {source: .source.id, message: (.plaintextMessage // .source.name)}' "$1"
+		printf '::error::CodeQL failed to extract a Go project; the database is incomplete.\n' >&2
+		return 1
+	fi
+}
+
 if [[ $# == 2 && "$1" == --results ]]; then
 	verify_results "$2"
 	exit
@@ -46,6 +63,14 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 coverage_dir="$(mktemp -d)"
 trap 'rm -rf "${coverage_dir}"' EXIT
 cp "${script_dir}/../codeql/desktop-coverage/"* "${coverage_dir}/"
+
+# Go autobuild can complete successfully after a module's extractor failed.
+# Export all diagnostics, including warnings hidden from the uploaded results.
+if ! "${CODEQL_CLI}" database export-diagnostics --format=raw -- "$1" >"${coverage_dir}/diagnostics.json"; then
+	printf '::error::CodeQL extraction diagnostics could not be exported.\n' >&2
+	exit 1
+fi
+verify_diagnostics "${coverage_dir}/diagnostics.json"
 
 # Resolve the library shipped with this analysis bundle, rather than independently
 # selecting a newer query library. Keep generated pack locks/cache outside the repo.

@@ -48,4 +48,69 @@ reject empty
 printf '{invalid\n' >"${scratch}/malformed.json"
 reject malformed
 
+# Exercise the database path with valid body evidence even when a module failed.
+# The CLI double supplies exports; the real guard decides whether CI may pass.
+cat >"${scratch}/codeql" <<'BASH'
+#!/usr/bin/env bash
+set -euo pipefail
+case "$1 $2" in
+"resolve qlpacks") printf '{"go":["/fixture/go"]}\n' ;;
+"pack install" | "query run") ;;
+"database export-diagnostics")
+  [[ "$3" == --format=raw && "$4" == -- ]] || exit 2
+  if [[ "${EXPORT_FAILURE:-false}" == true ]]; then exit 7; fi
+  cat "${DIAGNOSTICS}"
+  ;;
+"bqrs decode")
+  for argument in "$@"; do
+    case "${argument}" in --output=*) cp "${BODY_RESULTS}" "${argument#--output=}" ;; esac
+  done
+  ;;
+*) printf 'Unexpected CodeQL invocation\n' >&2; exit 2 ;;
+esac
+BASH
+chmod +x "${scratch}/codeql"
+
+# run_database keeps the guard's complete command path under test.
+run_database() {
+	CODEQL_CLI="${scratch}/codeql" BODY_RESULTS="${scratch}/positive.json" \
+		DIAGNOSTICS="${scratch}/diagnostics.json" EXPORT_FAILURE="${1:-false}" \
+		bash "${validator}" "${scratch}/database" >"${scratch}/output.log" 2>&1
+}
+
+# reject_database requires an extraction failure or unreadable export to stop CI.
+reject_database() {
+	local name="$1"
+	if run_database "${2:-false}"; then
+		printf 'FAIL: accepted %s extraction diagnostics\n' "${name}" >&2
+		exit 1
+	fi
+}
+
+printf '[]\n' >"${scratch}/diagnostics.json"
+run_database
+printf '[{"source":{"id":"go/extractor/warning","name":"Recoverable warning"},"severity":"warning"}]\n' \
+	>"${scratch}/diagnostics.json"
+run_database
+
+# A killed module must fail despite all sampled CLI/desktop bodies surviving.
+for project in . third_party/go-archive; do
+	jq -n --arg project "${project}" '[{
+    source: {id: "go/autobuilder/extraction-failed-for-project", name: "Extraction failed"},
+    severity: "warning", plaintextMessage: ("Extraction failed for " + $project + ": signal: killed")
+  }]' >"${scratch}/diagnostics.json"
+	reject_database "failed extraction for ${project} with valid body evidence"
+	jq -e --arg project "${project}" '.message | contains($project)' \
+		<(head -n 1 "${scratch}/output.log") >/dev/null
+done
+
+for invalid in '{}' 'null' '[{}]' '[{"source":{"id":null}}]' '[{"source":{"id":""}}]' '{invalid'; do
+	printf '%s\n' "${invalid}" >"${scratch}/diagnostics.json"
+	reject_database malformed
+done
+printf '{}\n[]\n' >"${scratch}/diagnostics.json"
+reject_database multiple-documents
+printf '[]\n' >"${scratch}/diagnostics.json"
+reject_database export-command-failed true
+
 printf 'All desktop CodeQL coverage cases passed.\n'
