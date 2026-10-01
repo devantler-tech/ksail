@@ -11,10 +11,11 @@ import (
 const ciliumModulePath = "github.com/cilium/cilium"
 
 // GO-2026-6596 concerns Cilium's HTTP route controller. Its symbol-free Go
-// report conservatively flags the Hubble API types linked by KSail. This
-// disposition only covers the audited API packages and v1.20.2; any new
+// report conservatively flags the Cilium module linked by KSail. The audited
+// graph includes Hubble APIs and transitive label utilities, but excludes the
+// HTTP route controller. This guard pins that package set and v1.20.2; any new
 // package, changed version or replacement requires another assessment (#7432).
-func TestCiliumLinkedPackagesStayInert(t *testing.T) {
+func TestCiliumHTTPRouteControllerStaysUnlinked(t *testing.T) {
 	t.Parallel()
 
 	root := moduleRoot(t)
@@ -44,9 +45,30 @@ func TestCiliumLinkedPackagesStayInert(t *testing.T) {
 
 func validateCiliumLinkedPackages(packages []goListPackage) string {
 	expected := map[string]bool{
-		ciliumModulePath + "/api/v1/flow":     false,
-		ciliumModulePath + "/api/v1/observer": false,
-		ciliumModulePath + "/api/v1/relay":    false,
+		ciliumModulePath + "/api/v1/flow":                     false,
+		ciliumModulePath + "/api/v1/models":                   false,
+		ciliumModulePath + "/api/v1/observer":                 false,
+		ciliumModulePath + "/api/v1/relay":                    false,
+		ciliumModulePath + "/pkg/cidr":                        false,
+		ciliumModulePath + "/pkg/clustermesh/types":           false,
+		ciliumModulePath + "/pkg/command":                     false,
+		ciliumModulePath + "/pkg/container/cache":             false,
+		ciliumModulePath + "/pkg/defaults":                    false,
+		ciliumModulePath + "/pkg/ip":                          false,
+		ciliumModulePath + "/pkg/ipam/option":                 false,
+		ciliumModulePath + "/pkg/k8s/slim/k8s/apis/labels":    false,
+		ciliumModulePath + "/pkg/k8s/slim/k8s/apis/meta/v1":   false,
+		ciliumModulePath + "/pkg/k8s/slim/k8s/apis/selection": false,
+		ciliumModulePath + "/pkg/kpr":                         false,
+		ciliumModulePath + "/pkg/labels":                      false,
+		ciliumModulePath + "/pkg/lock":                        false,
+		ciliumModulePath + "/pkg/logging":                     false,
+		ciliumModulePath + "/pkg/logging/logfields":           false,
+		ciliumModulePath + "/pkg/option":                      false,
+		ciliumModulePath + "/pkg/time":                        false,
+		ciliumModulePath + "/pkg/util":                        false,
+		ciliumModulePath + "/pkg/version":                     false,
+		ciliumModulePath + "/pkg/versioncheck":                false,
 	}
 
 	for _, pkg := range packages {
@@ -113,9 +135,16 @@ func TestCiliumDispositionAcceptsCompleteAuditedGraph(t *testing.T) {
 
 func ciliumGraphFixture() []goListPackage {
 	var packages []goListPackage
-	for _, name := range []string{"flow", "observer", "relay"} {
+	for _, name := range []string{
+		"api/v1/flow", "api/v1/models", "api/v1/observer", "api/v1/relay",
+		"pkg/cidr", "pkg/clustermesh/types", "pkg/command", "pkg/container/cache",
+		"pkg/defaults", "pkg/ip", "pkg/ipam/option", "pkg/k8s/slim/k8s/apis/labels",
+		"pkg/k8s/slim/k8s/apis/meta/v1", "pkg/k8s/slim/k8s/apis/selection", "pkg/kpr",
+		"pkg/labels", "pkg/lock", "pkg/logging", "pkg/logging/logfields", "pkg/option",
+		"pkg/time", "pkg/util", "pkg/version", "pkg/versioncheck",
+	} {
 		packages = append(packages, goListPackage{
-			ImportPath: ciliumModulePath + "/api/v1/" + name,
+			ImportPath: ciliumModulePath + "/" + name,
 			Module:     &goListModule{Path: ciliumModulePath, Version: "v1.20.2"},
 		})
 	}
