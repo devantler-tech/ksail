@@ -414,10 +414,8 @@ func (o *updateOrchestrator) applyVersionUpgradePath(
 
 	// Rolling upgrade (Talos): first step already applied by the probe, continue with the rest.
 	if probeErr != nil {
-		return false, fmt.Errorf(
-			"%s upgrade failed at step 1/%d (%s → %s), cluster is still running %s: %w",
-			params.upgradeType, len(path), params.currentVersion, path[0].Version.Original,
-			params.currentVersion, probeErr,
+		return o.reportFailedUpgradeStep(
+			params, 1, len(path), params.currentVersion, path[0].Version.Original, probeErr,
 		)
 	}
 
@@ -453,14 +451,8 @@ func (o *updateOrchestrator) applyRemainingUpgradeSteps(
 			o.cmd.Context(), o.clusterName, prevVersion, step.Version.Original,
 		)
 		if applyErr != nil {
-			notify.Warningf(o.cmd.OutOrStderr(),
-				"%s upgrade to %s failed (cluster is at %s): %v",
-				params.upgradeType, step.Version.Original, prevVersion, applyErr)
-
-			return false, fmt.Errorf(
-				"%s upgrade failed at step %d/%d (%s → %s), cluster is running %s: %w",
-				params.upgradeType, stepIdx+1, len(path), prevVersion, step.Version.Original,
-				prevVersion, applyErr,
+			return o.reportFailedUpgradeStep(
+				params, stepIdx+1, len(path), prevVersion, step.Version.Original, applyErr,
 			)
 		}
 
