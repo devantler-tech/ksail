@@ -668,7 +668,7 @@ runs:
         owned_floating_ip() {
           local body
           body=$(curl -fsS -H "Authorization: Bearer ${HCLOUD_TOKEN}" \
-            "https://api.hetzner.cloud/v1/floating_ips?label_selector=ksail.cluster.name%3D${CLUSTER_NAME}")
+            "https://api.hetzner.cloud/v1/floating_ips?label_selector=ksail.cluster.name%3D${CLUSTER_NAME}%2Cksail.owned%3Dtrue")
           jq -r '[.floating_ips[].ip] | first // empty' <<<"$body"
         }
         kubeconfig_server() {

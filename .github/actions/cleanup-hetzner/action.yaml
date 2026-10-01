@@ -49,10 +49,11 @@ runs:
 
         # Delete all KSail-owned floating IPs (billed even while unassigned)
         echo "🗑️  Deleting floating IPs..."
-        FIP_IDS=$(hcloud floating-ip list -o noheader -o columns=id -l "${LABEL_SELECTOR}" 2>/dev/null || true)
+        FIP_LABEL_SELECTOR="ksail.owned=true,${LABEL_SELECTOR}"
+        FIP_IDS=$(hcloud floating-ip list -o noheader -o columns=id -l "${FIP_LABEL_SELECTOR}" 2>/dev/null || true)
         if [[ -n "${FIP_IDS}" ]]; then
           echo "Found floating IPs to delete:"
-          hcloud floating-ip list -l "${LABEL_SELECTOR}"
+          hcloud floating-ip list -l "${FIP_LABEL_SELECTOR}"
           for FIP_ID in ${FIP_IDS}; do
             echo "  Deleting floating IP ID: ${FIP_ID}"
             hcloud floating-ip delete "${FIP_ID}" || echo "⚠️  Failed to delete floating IP ${FIP_ID}"
