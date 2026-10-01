@@ -50,8 +50,13 @@ runs:
         # Delete all KSail-owned floating IPs (billed even while unassigned)
         echo "🗑️  Deleting floating IPs..."
         FIP_LABEL_SELECTOR="ksail.owned=true,${LABEL_SELECTOR}"
-        FIP_IDS=$(hcloud floating-ip list -o noheader -o columns=id -l "${FIP_LABEL_SELECTOR}" 2>/dev/null || true)
-        if [[ -n "${FIP_IDS}" ]]; then
+        # A failed list must not read as "nothing to delete": an unassigned
+        # floating IP keeps billing. Finish the remaining cleanup, then fail.
+        FIP_LIST_FAILED=0
+        if ! FIP_IDS=$(hcloud floating-ip list -o noheader -o columns=id -l "${FIP_LABEL_SELECTOR}"); then
+          echo "❌ Failed to list floating IPs"
+          FIP_LIST_FAILED=1
+        elif [[ -n "${FIP_IDS}" ]]; then
           echo "Found floating IPs to delete:"
           hcloud floating-ip list -l "${FIP_LABEL_SELECTOR}"
           for FIP_ID in ${FIP_IDS}; do
@@ -124,6 +129,11 @@ runs:
           done
         else
           echo "  No networks found"
+        fi
+
+        if [[ ${FIP_LIST_FAILED} -ne 0 ]]; then
+          echo "❌ Hetzner Cloud cleanup failed: floating IPs could not be listed"
+          exit 1
         fi
 
         echo "✅ Hetzner Cloud cleanup complete!"
