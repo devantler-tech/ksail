@@ -172,6 +172,7 @@ func TestImageUpgradeCordonRetriesAResourceVersionConflict(t *testing.T) {
 		)
 	}
 	clientset.PrependReactor("update", "nodes", conflictOnce)
+
 	prov := talosprovisioner.NewProvisioner(nil, talosprovisioner.NewOptions())
 
 	require.NoError(t, prov.MarkImageUpgradeCordonForTest(
