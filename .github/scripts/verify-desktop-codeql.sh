@@ -37,8 +37,11 @@ verify_diagnostics() {
 		return 1
 	}
 	if jq -e 'any(.[]; .source.id == "go/autobuilder/extraction-failed-for-project")' "$1" >/dev/null; then
-		jq -c '.[] | select(.source.id == "go/autobuilder/extraction-failed-for-project") |
-      {source: .source.id, message: (.plaintextMessage // .source.name)}' "$1"
+		# Legacy workflow commands can match anywhere in a log line. Unicode-escape
+		# hashes after JSON encoding so diagnostic text remains data in both parsers.
+		jq -r '.[] | select(.source.id == "go/autobuilder/extraction-failed-for-project") |
+      {source: .source.id, message: (.plaintextMessage // .source.name)} |
+      tojson | gsub("#"; "\\u0023")' "$1"
 		printf '::error::CodeQL failed to extract a Go project; the database is incomplete.\n' >&2
 		return 1
 	fi

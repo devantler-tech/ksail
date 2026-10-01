@@ -139,12 +139,16 @@ jq -se '[.[].message] == [
 # Diagnostic text stays JSON data instead of becoming another workflow command.
 jq -n '[{
   source: {id: "go/autobuilder/extraction-failed-for-project", name: "Extraction failed"},
-  plaintextMessage: "Extraction failed for module\n::error::injected: signal: killed"
+  plaintextMessage: "Extraction failed for module\n::error::injected ##[add-mask]injected: signal: killed"
 }]' >"${scratch}/diagnostics.json"
 reject_database escaped-message
 [[ $(wc -l <"${scratch}/output.log") -eq 2 ]]
-jq -e '.message == "Extraction failed for module\n::error::injected: signal: killed"' \
+jq -e '.message == "Extraction failed for module\n::error::injected ##[add-mask]injected: signal: killed"' \
 	<(head -n 1 "${scratch}/output.log") >/dev/null
+if grep -Fq '##[' "${scratch}/output.log"; then
+	printf 'FAIL: emitted a legacy workflow command in diagnostic text\n' >&2
+	exit 1
+fi
 
 for invalid in '{}' 'null' '[{}]' '[{"source":{"id":null}}]' '[{"source":{"id":""}}]' '{invalid'; do
 	printf '%s\n' "${invalid}" >"${scratch}/diagnostics.json"
