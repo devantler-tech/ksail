@@ -398,7 +398,8 @@ type autoCommitWorkflow struct {
 // the protected-branch repair remain reachable for generated-file correctness.
 const (
 	approvedAutoCommitPRBranchCondition = "github.event_name == 'pull_request'" +
-		" && github.event.pull_request.user.login != 'dependabot[bot]'"
+		" && github.event.pull_request.user.login != 'dependabot[bot]'" +
+		" && github.event.pull_request.user.login != 'renovate[bot]'"
 	approvedAutoCommitProtectedBranchCondition = "github.event_name != 'pull_request'"
 )
 
