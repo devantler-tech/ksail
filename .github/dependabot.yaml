@@ -13,6 +13,11 @@ registries:
     username: devantler
     password: ${{secrets.GHCR_TOKEN}}
     replaces-base: true
+  # registry.k8s.io is public, but Dependabot's updater proxy only reaches hosts
+  # declared here; without this entry its image checks fail with an egress block.
+  k8s:
+    type: docker-registry
+    url: https://registry.k8s.io
 
 updates:
   # CLI and desktop share this manifest. Tidy includes tagged desktop dependencies,
@@ -140,6 +145,7 @@ updates:
       interval: daily
 
   - package-ecosystem: docker
+    registries: [k8s]
     directory: /pkg/svc/installer/cloudproviderkind # cloud-provider-kind image (embedded in Go via go:embed)
     cooldown:
       default-days: 7
@@ -188,6 +194,7 @@ updates:
       interval: daily
 
   - package-ecosystem: docker
+    registries: [k8s]
     directory: /pkg/svc/installer/cni/cilium # Cilium chart version
     cooldown:
       default-days: 7
