@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
@@ -24,6 +25,7 @@ type floatingIPDisableFixture struct {
 	calls           *fipUpdateCalls
 	running         talosconfig.Provider
 	diff            *clusterupdate.UpdateResult
+	enabledConfigs  *talosconfigmanager.Configs
 	kubeconfigPath  string
 	talosconfigPath string
 }
@@ -95,6 +97,7 @@ func newFloatingIPDisableFixtureFor(
 		calls:           calls,
 		running:         running,
 		diff:            diff,
+		enabledConfigs:  enabled.TalosConfigsForTest(),
 		kubeconfigPath:  kubeconfigPath,
 		talosconfigPath: talosconfigPath,
 	}
@@ -290,4 +293,20 @@ func TestUpdateApplySteps_FloatingIPDisableReleasesWithoutTalosconfigDir(t *test
 	fixture.runStep(t, "release disabled floating IP", clusterupdate.NewEmptyUpdateResult())
 
 	assert.Equal(t, int32(1), fixture.calls.del.Load())
+}
+
+// TestMergeFloatingIPChanges_KeepsUserManagedHCloudVIP proves a running HCloud
+// VIP the desired configuration still declares (a user's own Talos patch) is
+// not mistaken for KSail residue once KSail's floating IP is gone.
+//
+//nolint:paralleltest // the fixture sets the Hetzner token with t.Setenv.
+func TestMergeFloatingIPChanges_KeepsUserManagedHCloudVIP(t *testing.T) {
+	fixture := newFloatingIPDisableFixtureFor(t, false)
+	fixture.provisioner.WithTalosConfigsForTest(fixture.enabledConfigs)
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	require.NoError(t,
+		fixture.provisioner.MergeFloatingIPChangesForTest(t.Context(), "fip-cluster", diff))
+
+	assert.Empty(t, diff.InPlaceChanges, "a VIP the desired config declares is the user's")
 }

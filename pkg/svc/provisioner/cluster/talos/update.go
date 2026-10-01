@@ -315,32 +315,77 @@ func (p *Provisioner) mergeStaleFloatingIPConfig(
 	return nil
 }
 
-// detectStaleHCloudVIP returns the HCloud VIP address any running control plane
-// still carries, or "" when none does or when a config could not be fetched.
+// detectStaleHCloudVIP returns the address of a KSail-shaped HCloud VIP that a
+// running control plane still carries, or "" when there is none to clean up.
+// Only control planes carry the VIP, so workers are not fetched and an
+// unreachable worker cannot hide the proof. A VIP counts as KSail's residue only
+// when it is also the node's cluster endpoint (the way KSail configures it) and
+// the desired configuration declares no HCloud VIP: a VIP the user supplies
+// through a Talos patch is theirs to keep.
 func (p *Provisioner) detectStaleHCloudVIP(
 	ctx context.Context,
 	clusterName string,
 ) (string, error) {
+	if p.desiredDeclaresHCloudVIP() {
+		return "", nil
+	}
+
 	nodes, err := p.getNodesByRole(ctx, clusterName)
 	if err != nil {
 		return "", fmt.Errorf("failed to inventory nodes for stale VIP detection: %w", err)
 	}
 
-	controlPlaneConfigs, _, fetchedAll, err := p.fetchFloatingIPConfigsByRole(ctx, nodes)
-	if err != nil || !fetchedAll {
-		return "", err
-	}
+	for _, node := range nodes {
+		if node.Role != RoleControlPlane {
+			continue
+		}
 
-	for _, config := range controlPlaneConfigs {
-		for _, device := range config.Machine().Network().Devices() {
-			vip := device.VIPConfig()
-			if vip != nil && vip.HCloud() != nil && vip.IP() != "" {
-				return vip.IP(), nil
-			}
+		config, fetched, err := p.fetchFloatingIPNodeConfig(ctx, node)
+		if err != nil {
+			return "", err
+		}
+
+		if staleIP := ksailHCloudVIP(config); fetched && staleIP != "" {
+			return staleIP, nil
 		}
 	}
 
 	return "", nil
+}
+
+// ksailHCloudVIP returns the HCloud VIP address config carries when it is also
+// the config's cluster endpoint, the shape KSail's floating-IP patch produces.
+func ksailHCloudVIP(config talosconfig.Provider) string {
+	if config == nil || config.Cluster().Endpoint() == nil {
+		return ""
+	}
+
+	endpoint := config.Cluster().Endpoint().Hostname()
+
+	for _, device := range config.Machine().Network().Devices() {
+		vip := device.VIPConfig()
+		if vip != nil && vip.HCloud() != nil && vip.IP() != "" && vip.IP() == endpoint {
+			return vip.IP()
+		}
+	}
+
+	return ""
+}
+
+// desiredDeclaresHCloudVIP reports whether the desired control-plane
+// configuration declares an HCloud VIP itself, or cannot be read: either way a
+// running VIP cannot be proven to be KSail's residue.
+func (p *Provisioner) desiredDeclaresHCloudVIP() bool {
+	if p.talosConfigs == nil || p.talosConfigs.ControlPlane() == nil {
+		return true
+	}
+
+	raw := p.talosConfigs.ControlPlane().RawV1Alpha1()
+	if raw == nil || raw.MachineConfig == nil {
+		return true
+	}
+
+	return machineNetworkHasHCloudVIP(raw.MachineConfig.MachineNetwork) //nolint:staticcheck // Talos v1alpha1 machine networking remains the active config API
 }
 
 // detectHetznerFloatingIPConfig detects running endpoint/VIP state only when
