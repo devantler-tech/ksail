@@ -328,20 +328,21 @@ type platform struct {
 
 func (p platform) String() string { return p.goos + "/" + p.goarch }
 
-// shippedPlatforms is every GOOS/GOARCH pair either module can ship on: the CLI release matrix
-// (.goreleaser.yaml: darwin, linux and windows on amd64 and arm64, less darwin/amd64) plus
-// darwin/amd64, so the desktop app is covered too. The package graph differs per platform, so a
-// caller present only in, say, the windows/arm64 graph is invisible to any other listing.
+// shippedPlatforms is every GOOS/GOARCH pair either module ships on: the CLI release matrix
+// (.goreleaser.yaml: darwin, linux and windows on amd64 and arm64, less darwin/amd64), which also
+// covers every desktop build (darwin/arm64 cask, linux/amd64 and windows/amd64 downloads). The
+// package graph differs per platform, so a caller present only in, say, the windows/arm64 graph is
+// invisible to any other listing. An unshipped pair is left out: its graph could fail the audit
+// for a binary nobody receives. TestShippedPlatformsCoverReleaseMatrices keeps this list equal to
+// the release matrices in both directions.
 func shippedPlatforms() []platform {
-	platforms := make([]platform, 0, 6)
-
-	for _, goos := range []string{"darwin", "linux", "windows"} {
-		for _, goarch := range []string{"amd64", "arm64"} {
-			platforms = append(platforms, platform{goos: goos, goarch: goarch})
-		}
+	return []platform{
+		{goos: "darwin", goarch: "arm64"},
+		{goos: "linux", goarch: "amd64"},
+		{goos: "linux", goarch: "arm64"},
+		{goos: "windows", goarch: "amd64"},
+		{goos: "windows", goarch: "arm64"},
 	}
-
-	return platforms
 }
 
 // moduleCGO is the CGO setting each shipped module is built with: the CLI release disables CGO,
@@ -775,13 +776,20 @@ func TestShippedPlatformsCoverReleaseMatrices(t *testing.T) {
 		t.Fatal("no release target was read, so the comparison examined nothing")
 	}
 
+	released := map[string]bool{}
+
 	for _, target := range targets {
-		if !audited[target.GOOS+"/"+target.GOARCH] {
-			t.Errorf(
-				"release target %s/%s is not in shippedPlatforms (#7375)",
-				target.GOOS,
-				target.GOARCH,
-			)
+		key := target.GOOS + "/" + target.GOARCH
+		released[key] = true
+
+		if !audited[key] {
+			t.Errorf("release target %s is not in shippedPlatforms (#7375)", key)
+		}
+	}
+
+	for key := range audited {
+		if !released[key] {
+			t.Errorf("shippedPlatforms audits %s, which no release builds (#7375)", key)
 		}
 	}
 }
