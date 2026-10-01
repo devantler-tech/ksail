@@ -63,6 +63,51 @@ func TestPrepareRejectsMalformedProject(t *testing.T) {
 	}
 }
 
+// TestPrepareRejectsInvalidInputs covers the remaining rejection branches:
+// a version outside 1.MINOR, missing EKS metadata, and a non-map eks block.
+// Each must fail before either project file is rewritten.
+func TestPrepareRejectsInvalidInputs(t *testing.T) {
+	t.Parallel()
+
+	const (
+		validEKS     = "metadata:\n  name: trial\n"
+		validProject = "spec:\n  cluster:\n    distribution: EKS\n"
+	)
+
+	for name, testCase := range map[string]struct{ version, eks, project string }{
+		"empty version":         {version: "", eks: validEKS, project: validProject},
+		"version without minor": {version: "1.", eks: validEKS, project: validProject},
+		"minor zero":            {version: "1.0", eks: validEKS, project: validProject},
+		"three-digit minor":     {version: "1.100", eks: validEKS, project: validProject},
+		"major two":             {version: "2.1", eks: validEKS, project: validProject},
+		"patch version":         {version: "1.35.1", eks: validEKS, project: validProject},
+		"missing metadata":      {version: "1.35", eks: "iam: {}\n", project: validProject},
+		"non-map eks options": {
+			version: "1.35", eks: validEKS,
+			project: "spec:\n  cluster:\n    distribution: EKS\n    eks: enabled\n",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			eksPath := filepath.Join(dir, "eks.yaml")
+			projectPath := filepath.Join(dir, "ksail.yaml")
+			require.NoError(t, os.WriteFile(eksPath, []byte(testCase.eks), 0o600))
+			require.NoError(t, os.WriteFile(projectPath, []byte(testCase.project), 0o600))
+
+			require.Error(t, eksupgrade.Prepare(dir, testCase.version))
+
+			originals := map[string]string{eksPath: testCase.eks, projectPath: testCase.project}
+			for path, original := range originals {
+				actual, err := os.ReadFile(filepath.Clean(path))
+				require.NoError(t, err)
+				assert.Equal(t, original, string(actual))
+			}
+		})
+	}
+}
+
 // readYAML checks the persisted documents rather than any in-memory helper result.
 func readYAML(t *testing.T, path string, dest any) {
 	t.Helper()

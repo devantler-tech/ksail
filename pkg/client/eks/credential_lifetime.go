@@ -35,6 +35,12 @@ func (c *Client) ValidateUpgradeCredentialLifetime(ctx context.Context) error {
 		return ErrUpgradeCredentialLifetime
 	}
 
+	// Refuse an overlapping upgrade before retrieving, which can refresh a session.
+	// The check under the write lock below stays authoritative for concurrent callers.
+	if c.holdsUpgradeCredentials() {
+		return ErrUpgradeCredentialsInUse
+	}
+
 	eksValues, err := validateCredentialLifetime(ctx, eksOptions.Options().Credentials)
 	if err != nil {
 		return fmt.Errorf("validate EKS upgrade credentials: %w", err)
@@ -69,6 +75,14 @@ func (c *Client) ReleaseUpgradeCredentials() {
 
 	c.upgradeEKS = nil
 	c.upgradeSTS = nil
+}
+
+// holdsUpgradeCredentials reports whether an earlier upgrade still holds its credentials.
+func (c *Client) holdsUpgradeCredentials() bool {
+	c.upgradeMu.RLock()
+	defer c.upgradeMu.RUnlock()
+
+	return c.upgradeEKS != nil || c.upgradeSTS != nil
 }
 
 // frozenCredentials returns a provider that always yields exactly these values.

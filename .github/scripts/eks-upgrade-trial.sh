@@ -86,11 +86,13 @@ before_updates="$(updates)" || fail 'Cannot inventory existing EKS updates.'
 curl --fail --silent --show-error --max-time 30 \
 	-H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
 	"${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" |
-	jq -er '.value | select(type == "string" and length > 0)' >"$private_dir/oidc"
+	jq -er '.value | select(type == "string" and length > 0)' >"$private_dir/oidc" ||
+	fail 'Cannot obtain a GitHub OIDC token for STS.'
 aws sts assume-role-with-web-identity --role-arn "$AWS_OIDC_ROLE_ARN" \
 	--role-session-name "ksail-upgrade-${GITHUB_RUN_ID:-trial}" --duration-seconds 7200 \
 	--web-identity-token "file://$private_dir/oidc" --region "$AWS_REGION" \
-	--cli-connect-timeout 10 --cli-read-timeout 30 --output json >"$private_dir/sts.json"
+	--cli-connect-timeout 10 --cli-read-timeout 30 --output json >"$private_dir/sts.json" ||
+	fail 'Cannot assume the EKS trial role with the GitHub OIDC token.'
 export KSAIL_EKS_TRIAL_CREDENTIALS="$private_dir/credentials.json"
 jq -e '.Credentials | {Version:1,AccessKeyId,SecretAccessKey,SessionToken,Expiration} |
 	if all(.AccessKeyId,.SecretAccessKey,.SessionToken,.Expiration; type == "string" and length > 0)

@@ -164,4 +164,11 @@ func TestUpgradeCredentialsRefuseOverlappingUpgrade(t *testing.T) {
 
 	client.ReleaseUpgradeCredentials()
 	require.NoError(t, client.ValidateUpgradeCredentialLifetime(ctx))
+
+	// The refused validation retrieved nothing, so the next one gets retrievals 3 and 4.
+	_, err = client.UpdateClusterVersion(ctx, "cluster", "1.34", "token")
+	require.NoError(t, err)
+	require.Equal(
+		t, []string{"AKIDRETRIEVAL1", "AKIDRETRIEVAL3"}, recorder.keys["UpdateClusterVersion"],
+	)
 }
