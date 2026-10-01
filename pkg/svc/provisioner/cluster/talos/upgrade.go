@@ -12,6 +12,7 @@ import (
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
 	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -526,34 +527,40 @@ func (p *Provisioner) markImageUpgradeCordon(
 	clientset kubernetes.Interface,
 	nodeName string,
 ) error {
-	node, err := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("reading node %s before image upgrade: %w", nodeName, err)
-	}
+	foreignCordon := false
 
-	if node.Spec.Unschedulable {
-		if node.Annotations[imageUpgradeCordonAnnotation] == labelValueTrue &&
-			node.Annotations[imageUpgradeStoragePendingAnnotation] == labelValueTrue {
-			return nil // resuming KSail's own interrupted roll
+	err := updateLatestNode(ctx, clientset, nodeName, func(node *corev1.Node) bool {
+		foreignCordon = false
+
+		if node.Spec.Unschedulable {
+			if node.Annotations[imageUpgradeCordonAnnotation] == labelValueTrue &&
+				node.Annotations[imageUpgradeStoragePendingAnnotation] == labelValueTrue {
+				return false // resuming KSail's own interrupted roll
+			}
+
+			if node.Annotations[imageUpgradeCordonAnnotation] != labelValueTrue {
+				foreignCordon = true
+
+				return false
+			}
 		}
 
-		if node.Annotations[imageUpgradeCordonAnnotation] != labelValueTrue {
-			return fmt.Errorf("%w: %s", errImageUpgradeNodeAlreadyCordoned, nodeName)
+		if node.Annotations == nil {
+			node.Annotations = make(map[string]string)
 		}
-	}
 
-	updated := node.DeepCopy()
-	if updated.Annotations == nil {
-		updated.Annotations = make(map[string]string)
-	}
+		node.Annotations[imageUpgradeCordonAnnotation] = labelValueTrue
+		node.Annotations[imageUpgradeStoragePendingAnnotation] = labelValueTrue
+		node.Spec.Unschedulable = true
 
-	updated.Annotations[imageUpgradeCordonAnnotation] = labelValueTrue
-	updated.Annotations[imageUpgradeStoragePendingAnnotation] = labelValueTrue
-	updated.Spec.Unschedulable = true
-
-	_, err = clientset.CoreV1().Nodes().Update(ctx, updated, metav1.UpdateOptions{})
+		return true
+	})
 	if err != nil {
 		return fmt.Errorf("marking image-upgrade cordon on %s: %w", nodeName, err)
+	}
+
+	if foreignCordon {
+		return fmt.Errorf("%w: %s", errImageUpgradeNodeAlreadyCordoned, nodeName)
 	}
 
 	return nil
@@ -594,19 +601,15 @@ func (p *Provisioner) finishImageUpgradeStorageGate(
 		return err
 	}
 
-	node, err := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("reading node %s after storage recovery: %w", nodeName, err)
-	}
+	err = updateLatestNode(ctx, clientset, nodeName, func(node *corev1.Node) bool {
+		if node.Annotations[imageUpgradeStoragePendingAnnotation] != labelValueTrue {
+			return false
+		}
 
-	if node.Annotations[imageUpgradeStoragePendingAnnotation] != labelValueTrue {
-		return nil
-	}
+		delete(node.Annotations, imageUpgradeStoragePendingAnnotation)
 
-	updated := node.DeepCopy()
-	delete(updated.Annotations, imageUpgradeStoragePendingAnnotation)
-
-	_, err = clientset.CoreV1().Nodes().Update(ctx, updated, metav1.UpdateOptions{})
+		return true
+	})
 	if err != nil {
 		return fmt.Errorf("clearing storage recovery marker on %s: %w", nodeName, err)
 	}
