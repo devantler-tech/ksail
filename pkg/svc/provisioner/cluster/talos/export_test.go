@@ -1180,3 +1180,29 @@ func RegisterSchematicForTest(
 ) (string, error) {
 	return registerSchematic(ctx, baseURL, timeout, computed)
 }
+
+// WithKubernetesVersionDetectorForTest overrides the running Kubernetes version
+// detector so unit tests can drive version planning without real Talos and
+// Kubernetes API connectivity.
+func (p *Provisioner) WithKubernetesVersionDetectorForTest(
+	fn func(ctx context.Context, cpNodeIP string) (string, error),
+) *Provisioner {
+	p.kubernetesVersionDetector = fn
+
+	return p
+}
+
+// GetLowestRunningKubernetesVersionForTest exposes getLowestRunningKubernetesVersion
+// for unit testing.
+func (p *Provisioner) GetLowestRunningKubernetesVersionForTest(
+	ctx context.Context,
+	nodes []NodeWithRoleForTest,
+) (string, error) {
+	return p.getLowestRunningKubernetesVersion(ctx, nodes)
+}
+
+// ProgressWriterForTest exposes the writer KubernetesProvisioner.Create reports
+// its progress to.
+func (p *KubernetesProvisioner) ProgressWriterForTest() io.Writer {
+	return p.progressWriter()
+}

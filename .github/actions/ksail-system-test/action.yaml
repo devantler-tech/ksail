@@ -28,6 +28,14 @@ inputs:
     description: Additional arguments for project init/create
     required: false
     default: ""
+  kubernetes-upgrade-from:
+    description: Known starting Kubernetes version for the optional Docker/Talos upgrade trial
+    required: false
+    default: ""
+  kubernetes-upgrade-to:
+    description: Known target Kubernetes version for the optional Docker/Talos upgrade trial
+    required: false
+    default: ""
   init:
     description: Whether to run ksail project init before create
     required: false
@@ -217,7 +225,12 @@ runs:
         GHCR_USER: ${{ inputs.ghcr-user }}
         GHCR_TOKEN: ${{ inputs.ghcr-token }}
         ARTIFACT_TAG: ${{ steps.generate-tag.outputs.tag }}
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        UPGRADE_FROM: ${{ inputs.kubernetes-upgrade-from }}
+        UPGRADE_TO: ${{ inputs.kubernetes-upgrade-to }}
       run: |
+        set -euo pipefail
         # Inject GHCR credentials into --local-registry if it contains ghcr.io
         RESOLVED_ARGS="$ARGS"
         if [[ "$ARGS" == *"--local-registry"* ]] && [[ "$ARGS" == *"ghcr.io"* ]] && [[ -n "$GHCR_USER" ]] && [[ -n "$GHCR_TOKEN" ]]; then
@@ -226,6 +239,16 @@ runs:
           # Append unique tag only to the --local-registry value (not the entire args string)
           # This is safe regardless of flag ordering
           RESOLVED_ARGS=$(echo "$RESOLVED_ARGS" | sed -E 's/(--local-registry[[:space:]]+)([^[:space:]]+)/\1\2:'"${ARTIFACT_TAG}"'/')
+        fi
+        if [[ -n "${UPGRADE_FROM:-}" || -n "${UPGRADE_TO:-}" ]]; then
+          if [[ "$DISTRIBUTION" != Talos || "$PROVIDER" != Docker ]] ||
+             [[ ! "$UPGRADE_FROM" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+             [[ ! "$UPGRADE_TO" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+             [[ "$UPGRADE_FROM" == "$UPGRADE_TO" ]]; then
+            echo "❌ ERROR: the upgrade trial requires Docker/Talos and two distinct stable Kubernetes versions"
+            exit 1
+          fi
+          RESOLVED_ARGS="$RESOLVED_ARGS --kubernetes-version $UPGRADE_FROM"
         fi
         echo "args=$RESOLVED_ARGS" >> "$GITHUB_OUTPUT"
 
@@ -443,11 +466,18 @@ runs:
         # KSail parses, so a Renovate/Dependabot bump moves both sides together
         # and the two sources cannot silently diverge again.
         #
-        # Only distributions whose Kubernetes version comes from a pinned node
-        # image are covered. Talos pins an OS version on a separate axis,
-        # VCluster bakes its Kubernetes version into the SDK image, and KWOK/EKS
-        # have no pinned node image — those keep today's unpinned behaviour.
+        # Talos has a separate OS image: pin its no-op checks to the Kubernetes
+        # version actually created. Its upgrade trial runs as a distinct step.
         case "$DISTRIBUTION" in
+          Talos)
+            version=$(kubectl version --request-timeout=30s -o json | jq -er '.serverVersion.gitVersion')
+            if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+              echo "❌ ERROR: could not determine the created Talos Kubernetes version"
+              exit 1
+            fi
+            echo "flag=--kubernetes-version $version" >> "$GITHUB_OUTPUT"
+            exit 0
+            ;;
           K3s)     dockerfile="pkg/fsutil/configmanager/k3d/Dockerfile";  repo="rancher/k3s" ;;
           Vanilla) dockerfile="pkg/fsutil/configmanager/kind/Dockerfile"; repo="kindest/node" ;;
           *)
@@ -521,6 +551,55 @@ runs:
           exit 1
         fi
         echo "✅ No unexpected changes detected"
+
+    - name: 🧪 ksail cluster update --output json — stdout is one document
+      # Scripts read `cluster update --output json` from stdout, so a real update must leave
+      # exactly one JSON document there and send its progress text to stderr (#7200).
+      # The separate Talos upgrade trial repeats this check at its known target (#7412).
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ steps.resolve-args.outputs.args }}
+        K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
+      run: |
+        set -o pipefail
+        STDOUT_FILE=/tmp/ksail-system-test-logs/cluster-update-json.stdout
+        STDERR_FILE=/tmp/ksail-system-test-logs/cluster-update-json.stderr
+        # Strip init-only flags that cluster update does not accept
+        UPDATE_ARGS=$(echo "$ARGS" | sed 's/--image-verification [^ ]*//')
+        status=0
+        # shellcheck disable=SC2086
+        ksail cluster update --force --output json --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG >"$STDOUT_FILE" 2>"$STDERR_FILE" || status=$?
+        if [ "$status" -ne 0 ]; then
+          echo "❌ ERROR: cluster update --output json exited $status"
+          echo "--- stdout ---"; cat "$STDOUT_FILE"
+          echo "--- stderr ---"; cat "$STDERR_FILE"
+          exit 1
+        fi
+        # The cluster was just created and updated with the same config, so this update is a
+        # no-op: one object reporting zero changes, and nothing else on stdout.
+        if ! jq -e -s 'length == 1 and (.[0] | type == "object" and .totalChanges == 0)' "$STDOUT_FILE" >/dev/null; then
+          echo "❌ ERROR: stdout is not exactly one JSON document reporting zero changes"
+          echo "--- stdout ---"; cat "$STDOUT_FILE"
+          echo "--- stderr ---"; cat "$STDERR_FILE"
+          exit 1
+        fi
+        if ! grep -q "No changes detected" "$STDERR_FILE"; then
+          echo "❌ ERROR: the update's progress text did not reach stderr"
+          echo "--- stderr ---"; cat "$STDERR_FILE"
+          exit 1
+        fi
+        echo "✅ stdout held one JSON document: $(jq -c . "$STDOUT_FILE")"
+
+    - name: 🧪 Talos Kubernetes upgrade — known version path
+      if: inputs.kubernetes-upgrade-from != '' && inputs.kubernetes-upgrade-to != ''
+      shell: bash
+      env:
+        UPGRADE_FROM: ${{ inputs.kubernetes-upgrade-from }}
+        UPGRADE_TO: ${{ inputs.kubernetes-upgrade-to }}
+        ARGS: ${{ steps.resolve-args.outputs.args }}
+      run: bash .github/actions/ksail-system-test/talos-kubernetes-upgrade.sh
 
     - name: 🧪 ksail cluster update — preserves FluxInstance settings KSail does not own
       # Re-asserting the FluxInstance must change only what KSail owns (#6455, #7092). Plant a

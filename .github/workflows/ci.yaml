@@ -285,8 +285,10 @@ jobs:
               - '.github/workflows/ci.yaml'
             docs-deps:
               - 'docs/package*.json'
+              - '.github/actions/npm-audit-and-fix/**'
             vsce-deps:
               - 'vsce/package*.json'
+              - '.github/actions/npm-audit-and-fix/**'
             copilot-plugin:
               - 'copilot-plugin/**'
               - '.github/workflows/ci.yaml'
@@ -786,13 +788,13 @@ jobs:
     name: 📤 Auto-Commit Generated Changes
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [changes, generate]
+    needs: [changes, generate, audit-docs, audit-vsce]
     if: >-
       always()
       && github.event_name != 'merge_group'
       && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-      && needs.generate.result == 'success'
-      && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]')
+      && (needs.generate.result == 'success' || needs.audit-docs.outputs.repair-patch == 'true' || needs.audit-vsce.outputs.repair-patch == 'true')
+      && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.user.login != 'renovate[bot]'))
     permissions:
       contents: write
       pull-requests: write
@@ -803,6 +805,8 @@ jobs:
         with:
           client-id: ${{ vars.APP_CLIENT_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }} # zizmor: ignore[secrets-outside-env] - GitHub App token generation, no environment scoping available for app installations
+          permission-contents: write
+          permission-pull-requests: write
 
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -864,7 +868,7 @@ jobs:
       - name: 📤 Commit and push generated changes (PR branch)
         # A foreign commit prevents Dependabot rebasing. Both entry points now use
         # its root manifest; generated docs are repaired after the bump merges.
-        if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
+        if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.user.login != 'renovate[bot]'
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           BRANCH: ${{ github.head_ref }}
@@ -1000,20 +1004,32 @@ jobs:
           verify_signed "$oid"
 
       - name: 📤 Open PR for generated changes (protected branch)
+        id: protected-repair
         if: github.event_name != 'pull_request'
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
           token: ${{ steps.generate-token.outputs.token }}
           commit-message: "chore: sync modules and update generated files"
-          committer: "generator-bot <generator-bot@users.noreply.github.com>"
+          sign-commits: true
           branch: chore/sync-generated-files/${{ github.ref_name }}
           base: ${{ github.ref_name }}
-          title: "chore: sync modules and update generated files"
+          title: "chore: sync generated files and npm audit repairs"
           body: |
-            Auto-generated changes detected on `${{ github.ref_name }}`.
-            This PR updates generated files (schemas, docs, etc.) that were
-            not included in the originating commit.
+            Corrections detected on `${{ github.ref_name }}`.
+            This PR delivers generated-file changes and eligible npm repairs.
+            Repair patches pass their re-audit before delivery. Source audit
+            findings clear only after the correction is committed and checked again.
           delete-branch: true
+
+      - name: 🔏 Verify protected-branch correction signatures
+        if: steps.protected-repair.outputs.pull-request-operation == 'created' || steps.protected-repair.outputs.pull-request-operation == 'updated'
+        env:
+          COMMITS_VERIFIED: ${{ steps.protected-repair.outputs.pull-request-commits-verified }}
+        run: |
+          if [ "$COMMITS_VERIFIED" != "true" ]; then
+            echo "::error::Protected-branch correction commits are not verified."
+            exit 1
+          fi
 
   home-isolation:
     name: 🏠 Home Isolation Guard
@@ -1110,7 +1126,9 @@ jobs:
     needs: [changes]
     if: github.event_name != 'merge_group' && needs.changes.outputs.docs-deps == 'true'
     permissions:
-      contents: write
+      contents: read
+    outputs:
+      repair-patch: ${{ steps.npm-audit.outputs.patch-created }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1118,12 +1136,11 @@ jobs:
           persist-credentials: false
 
       - name: 🔍 NPM Audit and Fix
+        id: npm-audit
         uses: ./.github/actions/npm-audit-and-fix
         with:
           working-directory: docs
-          client-id: ${{ vars.APP_CLIENT_ID }}
-          app-private-key: ${{ secrets.APP_PRIVATE_KEY }} # zizmor: ignore[secrets-outside-env] - GitHub App token generation, no environment scoping available for app installations
-          commit-message: "chore(docs): fix npm audit vulnerabilities"
+          patch-artifact-name: npm-audit-docs-patch
 
   audit-vsce:
     name: 🔍 Audit VSCode Extension Dependencies
@@ -1132,7 +1149,9 @@ jobs:
     needs: [changes]
     if: github.event_name != 'merge_group' && needs.changes.outputs.vsce-deps == 'true'
     permissions:
-      contents: write
+      contents: read
+    outputs:
+      repair-patch: ${{ steps.npm-audit.outputs.patch-created }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1140,12 +1159,11 @@ jobs:
           persist-credentials: false
 
       - name: 🔍 NPM Audit and Fix
+        id: npm-audit
         uses: ./.github/actions/npm-audit-and-fix
         with:
           working-directory: vsce
-          client-id: ${{ vars.APP_CLIENT_ID }}
-          app-private-key: ${{ secrets.APP_PRIVATE_KEY }} # zizmor: ignore[secrets-outside-env] - GitHub App token generation, no environment scoping available for app installations
-          commit-message: "chore(vsce): fix npm audit vulnerabilities"
+          patch-artifact-name: npm-audit-vsce-patch
 
   build-docs:
     name: 📚 Build Documentation
@@ -1511,6 +1529,8 @@ jobs:
             provider: Docker
             init: true
             args: ""
+            kubernetes-upgrade-from: "v1.36.2"
+            kubernetes-upgrade-to: "v1.37.1"
             test-kubernetes-provider: "true"
           - distribution: VCluster
             provider: Docker
@@ -1600,6 +1620,8 @@ jobs:
           provider: ${{ matrix.provider }}
           init: ${{ matrix.init }}
           args: ${{ matrix.args }}
+          kubernetes-upgrade-from: ${{ matrix.kubernetes-upgrade-from || '' }}
+          kubernetes-upgrade-to: ${{ matrix.kubernetes-upgrade-to || '' }}
           ecr-public-upstream: ${{ steps.offline-ecr.outputs.remote-url || 'https://ecr-public.aws.com' }}
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
           test-kubernetes-provider: ${{ matrix.test-kubernetes-provider || 'false' }}

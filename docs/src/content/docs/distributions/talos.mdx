@@ -362,6 +362,8 @@ KSail performs a rolling upgrade, one node at a time:
 
 For each node, KSail selects the upgrade API based on the node's running Talos version — nodes on Talos 1.13+ use the LifecycleService/ImageService APIs, while older nodes (for example 1.12.x) use the legacy MachineService upgrade API — then triggers the upgrade and waits for the node to be ready before proceeding.
 
+If an automatic upgrade step fails, its warning and error show the attempted step and a fresh reading of the running Kubernetes and Talos versions. These readings use the lowest version across the cluster, so a partially upgraded cluster can still have nodes on newer versions. If the versions cannot be read, KSail says they could not be determined; the planned starting version is not a reading of the cluster.
+
 > [!NOTE]
 > Omni-managed clusters are excluded from KSail-driven upgrades — Omni handles OS upgrades externally through its own cluster lifecycle management.
 
@@ -439,4 +441,3 @@ Place the file in the `cluster/` subdirectory so it applies to all nodes (e.g. `
 ### GitOps Integration
 
 Enable Flux or ArgoCD for declarative workload management—see [GitOps Workflows](/guides/gitops-workflows/).
-

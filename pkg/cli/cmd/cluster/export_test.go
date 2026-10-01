@@ -22,6 +22,7 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/versionresolver"
 	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
@@ -44,6 +45,27 @@ func ExportReconcileClusterVersions(
 	}
 
 	return orchestrator.reconcileClusterVersions(provisioner)
+}
+
+// ExportExecuteVersionUpgrade exercises discovery and rolling steps with an injected registry.
+func ExportExecuteVersionUpgrade(
+	cmd *cobra.Command,
+	upgrader clusterupdate.Upgrader,
+	resolver versionresolver.Resolver,
+	upgradeType, currentVersion string,
+	dryRun bool,
+) (bool, error) {
+	orchestrator := &updateOrchestrator{cmd: cmd, clusterName: "demo", dryRun: dryRun}
+
+	apply := upgrader.UpgradeKubernetes
+	if upgradeType == distributionLabel {
+		apply = upgrader.UpgradeDistribution
+	}
+
+	return orchestrator.executeVersionUpgrade(versionUpgradeParams{
+		upgrader: upgrader, resolver: resolver, upgradeType: upgradeType,
+		imageRef: "registry.invalid/ksail/node", currentVersion: currentVersion, applyFn: apply,
+	})
 }
 
 // ExportSetupMutationCmdFlags exposes the command's real configuration/flag bindings.
