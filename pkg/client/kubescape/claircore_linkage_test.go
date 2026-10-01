@@ -207,7 +207,7 @@ func claircoreBuildDeps(t *testing.T, root string, build claircoreBuild) []strin
 				t.Fatal(err)
 			}
 
-			for _, pkg := range strings.Fields(string(out)) {
+			for pkg := range strings.FieldsSeq(string(out)) {
 				if !seen[pkg] {
 					seen[pkg] = true
 					packages = append(packages, pkg)
@@ -389,6 +389,7 @@ func runGoCommandWithEnv(
 	//nolint:gosec // G204: callers pass fixed go subcommands and audited module paths.
 	cmd := exec.CommandContext(ctx, "go", args...)
 	cmd.Dir = moduleDir
+
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Stderr = &stderr
 
