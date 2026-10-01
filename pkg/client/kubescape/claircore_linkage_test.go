@@ -73,22 +73,25 @@ func auditedClaircoreModules() map[string]claircoreModuleAudit {
 	}
 }
 
-// TestClaircoreModuleDirsIncludesDesktop pins every Go module whose Claircore
-// dependency graph must stay within the audited inert package set.
-func TestClaircoreModuleDirsIncludesDesktop(t *testing.T) {
+// TestClaircoreBuildsIncludeDesktop pins every shipped build whose Claircore
+// dependency graph must stay within the audited inert package set, with the
+// tags and CGO setting that select the desktop app's own files.
+func TestClaircoreBuildsIncludeDesktop(t *testing.T) {
 	t.Parallel()
 
-	root := moduleRoot(t)
-	got := claircoreModuleDirs(root)
-	want := []string{root, filepath.Join(root, "desktop")}
+	want := []claircoreBuild{
+		{name: "root", tags: "", cgo: "0"},
+		{name: "desktop", tags: "desktop", cgo: "1"},
+	}
 
+	got := claircoreBuilds()
 	if len(got) != len(want) {
-		t.Fatalf("expected %d guarded module directories, got %d: %v", len(want), len(got), got)
+		t.Fatalf("expected %d guarded builds, got %d: %v", len(want), len(got), got)
 	}
 
 	for i := range want {
 		if got[i] != want[i] {
-			t.Errorf("module directory %d: expected %q, got %q", i, want[i], got[i])
+			t.Errorf("build %d: expected %+v, got %+v", i, want[i], got[i])
 		}
 	}
 }
@@ -146,32 +149,68 @@ func TestClaircoreLinkedPackagesStayInert(t *testing.T) {
 	}
 
 	root := moduleRoot(t)
-	for _, moduleDir := range claircoreModuleDirs(root) {
-		name := filepath.Base(moduleDir)
-
-		if moduleDir == root {
-			name = "root"
-		}
-
-		t.Run(name, func(t *testing.T) {
+	for _, build := range claircoreBuilds() {
+		t.Run(build.name, func(t *testing.T) {
 			t.Parallel()
 
-			audit, ok := auditedClaircoreModules()[name]
+			audit, ok := auditedClaircoreModules()[build.name]
 			if !ok {
-				t.Fatalf("module %q has no Claircore audit", name)
+				t.Fatalf("build %q has no Claircore audit", build.name)
 			}
 
-			assertClaircoreVersions(t, moduleDir, audit.versions)
-			assertClaircorePackagesStayInert(t, moduleDir, audit.inertPackages)
+			assertClaircoreVersions(t, root, audit.versions)
+			assertClaircorePackagesStayInert(t, root, build, audit.inertPackages)
 		})
 	}
 }
 
-// claircoreModuleDirs returns every Go module whose dependency graph ships as
-// part of KSail and therefore needs an independently re-established SSRF
-// reachability verdict after dependency changes.
-func claircoreModuleDirs(root string) []string {
-	return []string{root, filepath.Join(root, "desktop")}
+// claircoreBuild is one shipped KSail build whose dependency graph needs an
+// independently re-established SSRF reachability verdict after dependency
+// changes. The CLI and the desktop app share the root module (ADR 0007), so the
+// desktop graph is the root graph listed with the desktop build tag and CGO
+// enabled, the way its release compiles it.
+type claircoreBuild struct {
+	name string
+	tags string
+	cgo  string
+}
+
+// claircoreBuilds returns every shipped build: the CLI (no tags, CGO disabled
+// for release) and the desktop app.
+func claircoreBuilds() []claircoreBuild {
+	return []claircoreBuild{
+		{name: "root", tags: "", cgo: "0"},
+		{name: "desktop", tags: "desktop", cgo: "1"},
+	}
+}
+
+// claircoreBuildDeps lists every package one build's dependency graph links,
+// from the module root with that build's tags and CGO setting.
+func claircoreBuildDeps(t *testing.T, root string, build claircoreBuild) []string {
+	t.Helper()
+
+	out, err := runGoCommandWithEnv(
+		t.Context(), root, []string{"CGO_ENABLED=" + build.cgo},
+		"list", "-deps", "-tags="+build.tags, "./...",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return strings.Fields(string(out))
+}
+
+// claircorePackagesIn returns the Claircore packages among packages.
+func claircorePackagesIn(packages []string) map[string]bool {
+	linked := map[string]bool{}
+
+	for _, pkg := range packages {
+		if pkg == claircoreModulePath || strings.HasPrefix(pkg, claircoreModulePath+"/") {
+			linked[pkg] = true
+		}
+	}
+
+	return linked
 }
 
 // assertClaircoreVersions invalidates the reachability verdict whenever a
@@ -235,36 +274,43 @@ func validateClaircoreModuleVersion(
 	return ""
 }
 
-// assertClaircorePackagesStayInert fails when a module links any Claircore
-// package outside the audited set.
+// assertClaircorePackagesStayInert fails when a build links any Claircore
+// package outside the audited set, and when it links none at all: an empty
+// listing means the audit examined nothing (#7404), not that the build is safe.
 func assertClaircorePackagesStayInert(
 	t *testing.T,
-	moduleDir string,
+	root string,
+	build claircoreBuild,
 	inertPackages map[string]bool,
 ) {
 	t.Helper()
 
-	out, err := runGoCommand(t.Context(), moduleDir, "list", "-deps", "./...")
-	if err != nil {
-		t.Fatal(err)
+	linked := claircorePackagesIn(claircoreBuildDeps(t, root, build))
+	if len(linked) == 0 {
+		t.Fatalf(
+			"build %q links no claircore package, so the audit examined nothing: "+
+				"check its tags and CGO setting, or re-establish the #6008 verdict and "+
+				"drop the build from auditedClaircoreModules",
+			build.name,
+		)
 	}
 
 	var unexpected []string
 
-	for pkg := range strings.FieldsSeq(string(out)) {
-		isClaircore := pkg == "github.com/quay/claircore" ||
-			strings.HasPrefix(pkg, "github.com/quay/claircore/")
-		if isClaircore && !inertPackages[pkg] {
+	for pkg := range linked {
+		if !inertPackages[pkg] {
 			unexpected = append(unexpected, pkg)
 		}
 	}
 
+	sort.Strings(unexpected)
+
 	if len(unexpected) > 0 {
 		t.Fatalf(
-			"module %q links claircore packages outside the audited inert set: %v — "+
+			"build %q links claircore packages outside the audited inert set: %v — "+
 				"re-establish the #6008 SSRF reachability verdict before extending "+
 				"inertClaircorePackages",
-			moduleDir,
+			build.name,
 			unexpected,
 		)
 	}
@@ -308,11 +354,23 @@ const goCommandStderrLimit = 4 << 10
 // #6977): `go list` fails for several genuinely different reasons, and the
 // exit status alone cannot tell them apart.
 func runGoCommand(ctx context.Context, moduleDir string, args ...string) ([]byte, error) {
+	return runGoCommandWithEnv(ctx, moduleDir, nil, args...)
+}
+
+// runGoCommandWithEnv is runGoCommand with extra environment entries appended to
+// the caller's, which override any earlier value of the same variable.
+func runGoCommandWithEnv(
+	ctx context.Context,
+	moduleDir string,
+	env []string,
+	args ...string,
+) ([]byte, error) {
 	var stderr bytes.Buffer
 
 	//nolint:gosec // G204: callers pass fixed go subcommands and audited module paths.
 	cmd := exec.CommandContext(ctx, "go", args...)
 	cmd.Dir = moduleDir
+	cmd.Env = append(os.Environ(), env...)
 	cmd.Stderr = &stderr
 
 	out, err := cmd.Output()
@@ -475,7 +533,7 @@ func TestRootClaircoreAuditExcludesDesktopOnlyPackages(t *testing.T) {
 
 	rootAudit := auditedClaircoreModules()["root"]
 	desktopAudit := auditedClaircoreModules()["desktop"]
-	rootLinked := linkedClaircorePackages(t, moduleRoot(t))
+	rootLinked := claircorePackagesIn(claircoreBuildDeps(t, moduleRoot(t), claircoreBuilds()[0]))
 
 	inherited := make([]string, 0, len(desktopAudit.inertPackages))
 
@@ -494,30 +552,6 @@ func TestRootClaircoreAuditExcludesDesktopOnlyPackages(t *testing.T) {
 			pkg,
 		)
 	}
-}
-
-// linkedClaircorePackages returns the Claircore packages a module's dependency
-// graph actually links, so an audit can be checked against reality rather than
-// against another module's audit.
-func linkedClaircorePackages(t *testing.T, moduleDir string) map[string]bool {
-	t.Helper()
-
-	out, err := runGoCommand(t.Context(), moduleDir, "list", "-deps", "./...")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	linked := map[string]bool{}
-
-	for pkg := range strings.FieldsSeq(string(out)) {
-		isClaircore := pkg == "github.com/quay/claircore" ||
-			strings.HasPrefix(pkg, "github.com/quay/claircore/")
-		if isClaircore {
-			linked[pkg] = true
-		}
-	}
-
-	return linked
 }
 
 // TestValidateClaircoreModuleVersionRejectsReplacement prevents a fork or
