@@ -46,11 +46,11 @@ jobs:
       - name: Replay failing main audit with unchanged repair scripts
         id: audit
         uses: ./.github/actions/npm-audit-handoff-probe
-        continue-on-error: true
         with:
           working-directory: .audit-fixture
           patch-artifact-name: npm-audit-handoff-patch
       - name: Assert failed composite still exposes truthful outputs
+        if: always()
         shell: bash
         env:
           AUDIT_OUTCOME: ${{ steps.audit.outcome }}
@@ -83,7 +83,7 @@ jobs:
           PATCH_CREATED: ${{ needs.producer.outputs.patch-created }}
           CHANGES_COMMITTED: ${{ needs.producer.outputs.changes-committed }}
         run: |
-          test "$PRODUCER_RESULT" = success
+          test "$PRODUCER_RESULT" = failure
           test "$AUDIT_OUTCOME" = failure
           test "$AUDIT_PASSED" = false
           test "$REPAIR_PASSED" = true
