@@ -92,6 +92,7 @@ export interface ClusterMeta {
 export interface ObjectMeta {
   name: string;
   namespace?: string;
+  uid?: string;
   creationTimestamp?: string;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;

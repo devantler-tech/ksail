@@ -17,7 +17,7 @@ import { useEffect, useState } from "react";
 import { downloadKubeconfig, errorMessage, type Cluster, type Condition } from "../api.ts";
 import { cx } from "../lib/cx.ts";
 import { useTimeFormatters } from "../hooks/usePreferences.tsx";
-import { clusterKey, clusterPhase, isHostCluster, splitClusterKey } from "../lib/k8s.ts";
+import { clusterInstanceKey, clusterKey, clusterPhase, isHostCluster, splitClusterKey } from "../lib/k8s.ts";
 import { loadHealth, type LiveHealth, type PodSegment } from "../lib/health.ts";
 import { displayIdentity } from "../lib/clusterIdentity.ts";
 import { primeIdentity, useDetectedIdentities } from "../lib/identityStore.ts";
@@ -103,11 +103,10 @@ export function OverviewView({
   const [downloading, setDownloading] = useState(false);
 
   const key = cluster ? clusterKey(cluster) : "";
-  // Health is kept with the key it was loaded for: `key` changes the moment another cluster is
-  // selected, but the in-flight load for it has not resolved, so an unkeyed `health` would feed the
-  // PREVIOUS cluster's identity into displayIdentity and the live cards until it does. A refresh
-  // (nonce) keeps the same key, so the cards do not blank while it re-reads.
-  const health = healthState?.key === key ? healthState.value : null;
+  const instanceKey = cluster ? clusterInstanceKey(cluster) : "";
+  // Health belongs to the loaded instance: switching or replacing it clears old facts immediately.
+  // A refresh (nonce) retains the same instance, so the cards stay visible while it re-reads.
+  const health = healthState?.key === instanceKey ? healthState.value : null;
   const detected = useDetectedIdentities(cluster ? [cluster] : [], canBrowse).get(key);
 
   useEffect(() => {
@@ -126,9 +125,9 @@ export function OverviewView({
     loadHealth(namespace, name)
       .then((result) => {
         if (!cancelled) {
-          setHealthState({ key, value: result });
+          setHealthState({ key: instanceKey, value: result });
           // A refresh re-reads the nodes, so share the fresh identity with every surface.
-          primeIdentity(key, result.identity);
+          primeIdentity(instanceKey, result.identity);
         }
       })
       .finally(() => {
@@ -140,7 +139,7 @@ export function OverviewView({
     return () => {
       cancelled = true;
     };
-  }, [key, canBrowse, nonce]);
+  }, [key, instanceKey, canBrowse, nonce]);
 
   if (!cluster) {
     return <EmptyState title="No cluster selected" description="Choose a cluster to see its overview." />;
