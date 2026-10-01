@@ -32,18 +32,19 @@ const (
 
 // goListPackageFields limits `go list -json` to the fields goListPackage reads: the full record is
 // about 69 MB per module and platform, and the audit lists twelve of them.
-const goListPackageFields = "ImportPath,Name,Dir,Standard,GoFiles,CgoFiles,IgnoredGoFiles,Imports"
+const goListPackageFields = "ImportPath,Name,Dir,Standard,Module,GoFiles,CgoFiles,IgnoredGoFiles,Imports"
 
 // goListPackage mirrors the Go command's exported JSON field names.
 type goListPackage struct {
-	ImportPath     string   `json:"ImportPath"`     //nolint:tagliatelle // Go command output contract.
-	Name           string   `json:"Name"`           //nolint:tagliatelle // Go command output contract.
-	Dir            string   `json:"Dir"`            //nolint:tagliatelle // Go command output contract.
-	Standard       bool     `json:"Standard"`       //nolint:tagliatelle // Go command output contract.
-	GoFiles        []string `json:"GoFiles"`        //nolint:tagliatelle // Go command output contract.
-	CgoFiles       []string `json:"CgoFiles"`       //nolint:tagliatelle // Go command output contract.
-	IgnoredGoFiles []string `json:"IgnoredGoFiles"` //nolint:tagliatelle // Go command output contract.
-	Imports        []string `json:"Imports"`        //nolint:tagliatelle // Go command output contract.
+	ImportPath     string        `json:"ImportPath"`     //nolint:tagliatelle // Go command output contract.
+	Name           string        `json:"Name"`           //nolint:tagliatelle // Go command output contract.
+	Dir            string        `json:"Dir"`            //nolint:tagliatelle // Go command output contract.
+	Standard       bool          `json:"Standard"`       //nolint:tagliatelle // Go command output contract.
+	Module         *goListModule `json:"Module"`         //nolint:tagliatelle // Go command output contract.
+	GoFiles        []string      `json:"GoFiles"`        //nolint:tagliatelle // Go command output contract.
+	CgoFiles       []string      `json:"CgoFiles"`       //nolint:tagliatelle // Go command output contract.
+	IgnoredGoFiles []string      `json:"IgnoredGoFiles"` //nolint:tagliatelle // Go command output contract.
+	Imports        []string      `json:"Imports"`        //nolint:tagliatelle // Go command output contract.
 }
 
 // auditedOTelModuleVersions pins, per shipped module, the releases the
@@ -130,16 +131,13 @@ func TestOTelLogBatchProcessorStaysUnreachable(t *testing.T) {
 		t.Skip("go toolchain not available on PATH")
 	}
 
+	// The CLI and the desktop app are both built from the root module (ADR 0007); they differ only
+	// in build tags and CGO, so each build is listed from the root with its own settings.
 	root := moduleRoot(t)
-	for _, moduleDir := range claircoreModuleDirs(root) {
-		name := filepath.Base(moduleDir)
-		if moduleDir == root {
-			name = "root"
-		}
-
+	for _, name := range []string{"root", "desktop"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			auditModuleOTelReachability(t, name, moduleDir)
+			auditModuleOTelReachability(t, name, root)
 		})
 	}
 }
@@ -176,7 +174,8 @@ func auditModuleOTelReachability(t *testing.T, name, moduleDir string) {
 	linked, scanned := false, false
 
 	for _, target := range shippedPlatforms() {
-		packages := listDependencyPackages(t, moduleDir, target, cgo)
+		packages := listDependencyPackages(t, moduleDir, target, cgo, moduleBuildTags()[name])
+		assertAuditedPackageModules(t, packages, auditedVersions, target.String())
 		linked = assertOTelSDKLogImporters(t, packages, target.String()) || linked
 		scanned = assertNoOTelBatchEntryPointCallers(t, packages, target.String()) || scanned
 	}
@@ -290,9 +289,18 @@ func TestImportsEntryPointReadsBuildConstrainedFiles(t *testing.T) {
 func assertAuditedModuleVersion(t *testing.T, moduleDir, modulePath, auditedVersion string) {
 	t.Helper()
 
-	out, err := runGoCommand(t.Context(), moduleDir, "list", "-m", "-json", modulePath)
+	cmd := exec.CommandContext(t.Context(), "go", "list", "-m", "-json", modulePath)
+	cmd.Dir = moduleDir
+	cmd.Env = auditGoEnv()
+
+	var stderr bytes.Buffer
+
+	cmd.Stderr = &stderr
+
+	out, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("read %q version: %v", modulePath, err)
+		t.Fatalf("read %q version: %v\n%s", modulePath, err,
+			boundGoStderr(stderr.String(), goCommandStderrLimit))
 	}
 
 	actual := goListModule{}
@@ -341,11 +349,28 @@ func moduleCGO() map[string]string {
 	return map[string]string{"root": "0", "desktop": "1"}
 }
 
+// moduleBuildTags is the build tag set each shipped build is compiled with: the desktop app shares
+// the root module and opts in with the `desktop` tag (ADR 0007), so without it the desktop graph is
+// the CLI's.
+func moduleBuildTags() map[string]string {
+	return map[string]string{"root": "", "desktop": "desktop"}
+}
+
+// auditGoEnv is the caller's environment with every graph-affecting Go setting the release
+// configuration does not control cleared: GOFLAGS (tags, -modfile, -mod), the user go env file and a
+// workspace file would otherwise make the audit list a graph the release never builds.
+func auditGoEnv(extra ...string) []string {
+	env := append(os.Environ(), "GOFLAGS=", "GOENV=off", "GOWORK=off")
+
+	return append(env, extra...)
+}
+
 func listDependencyPackages(
 	t *testing.T,
 	moduleDir string,
 	target platform,
 	cgo string,
+	tags string,
 ) []goListPackage {
 	t.Helper()
 
@@ -354,12 +379,13 @@ func listDependencyPackages(
 		"go",
 		"list",
 		"-deps",
+		"-tags="+tags,
 		"-json="+goListPackageFields,
 		"./...",
 	)
 	cmd.Dir = moduleDir
 
-	cmd.Env = append(os.Environ(), "GOOS="+target.goos, "GOARCH="+target.goarch, "CGO_ENABLED="+cgo)
+	cmd.Env = auditGoEnv("GOOS="+target.goos, "GOARCH="+target.goarch, "CGO_ENABLED="+cgo)
 
 	var stderr bytes.Buffer
 
@@ -391,6 +417,49 @@ func listDependencyPackages(
 	}
 
 	return packages
+}
+
+// auditedPackageModules maps every package the verdict trusts by import path (sdk/log, its audited
+// importers and the entry-point packages) to the module that must supply it. Go resolves a package
+// to the longest matching module path, so a new child module could supply an allowlisted path
+// while the parent module stays at its audited version.
+func auditedPackageModules() map[string]string {
+	return map[string]string{
+		otelSDKLogModulePath:                          otelSDKLogModulePath,
+		uptracePackagePath:                            uptraceModulePath,
+		kubescapeLoggerPath:                           kubescapeLoggerPath,
+		otlpLogHTTPModulePath:                         otlpLogHTTPModulePath,
+		otlpLogHTTPModulePath + "/internal/transform": otlpLogHTTPModulePath,
+	}
+}
+
+// assertAuditedPackageModules fails when a trusted package comes from any module, version or
+// replacement other than the audited one.
+func assertAuditedPackageModules(
+	t *testing.T,
+	packages []goListPackage,
+	auditedVersions map[string]string,
+	target string,
+) {
+	t.Helper()
+
+	expected := auditedPackageModules()
+
+	for _, pkg := range packages {
+		modulePath, trusted := expected[pkg.ImportPath]
+		if !trusted {
+			continue
+		}
+
+		module := pkg.Module
+		if module == nil || module.Path != modulePath || module.Replace != nil ||
+			module.Version != auditedVersions[modulePath] {
+			t.Fatalf(
+				"%s on %s comes from %+v, not the audited %s@%s: re-establish the #7375 verdict",
+				pkg.ImportPath, target, module, modulePath, auditedVersions[modulePath],
+			)
+		}
+	}
 }
 
 // assertOTelSDKLogImporters fails on any unaudited importer of sdk/log and reports whether the
@@ -812,6 +881,51 @@ func TestModuleCGOMatchesReleaseBuilds(t *testing.T) {
 	}
 }
 
+// TestModuleBuildTagsMatchReleaseBuilds pins moduleBuildTags to the build tags each GoReleaser
+// configuration compiles with: a tag-gated file belongs to a graph the audit would otherwise never
+// list.
+func TestModuleBuildTagsMatchReleaseBuilds(t *testing.T) {
+	t.Parallel()
+
+	root := moduleRoot(t)
+
+	for name, file := range map[string]string{"root": ".goreleaser.yaml", "desktop": ".goreleaser.desktop.yaml"} {
+		released := goreleaserTags(t, filepath.Join(root, file))
+		if moduleBuildTags()[name] != released {
+			t.Errorf("moduleBuildTags()[%q] = %q, but %s builds with tags %q (#7375)",
+				name, moduleBuildTags()[name], file, released)
+		}
+	}
+}
+
+// goreleaserTags returns the comma-joined build tags every build in a GoReleaser file sets; builds
+// that disagree fail the test rather than guess.
+func goreleaserTags(t *testing.T, path string) string {
+	t.Helper()
+
+	var config struct {
+		Builds []struct {
+			Tags []string `json:"tags"`
+		} `json:"builds"`
+	}
+
+	readYAML(t, path, &config)
+
+	if len(config.Builds) == 0 {
+		t.Fatalf("%s has no build", path)
+	}
+
+	value := strings.Join(config.Builds[0].Tags, ",")
+
+	for _, build := range config.Builds[1:] {
+		if joined := strings.Join(build.Tags, ","); joined != value {
+			t.Fatalf("%s: every build must set the same tags, got %q and %q", path, value, joined)
+		}
+	}
+
+	return value
+}
+
 // goreleaserCGO returns the CGO_ENABLED value every build in a GoReleaser file sets; a build that
 // sets none, or builds that disagree, fail the test rather than guess.
 func goreleaserCGO(t *testing.T, path string) string {
@@ -864,9 +978,10 @@ func goreleaserCGO(t *testing.T, path string) string {
 func auditedReleaseConfigDigests() map[string]string {
 	return map[string]string{
 		".goreleaser.yaml":                               "603b04ca07558b8e1acb3d9c4e00e3c49ceaa10ea9f5af0ed2f84f01f96496c2",
-		".goreleaser.desktop.yaml":                       "be6f45e10f4f608db285d641ce166714a404aaa2d31aacf9479679fbdb58df11",
-		".github/actions/setup-desktop-build/action.yml": "d4b17b1a6442ffc2e499419153db96c75fff26c836027ed8cc00f43dea5a2559",
-		".github/workflows/cd.yaml#without-uses":         "79029e1d4ee4b1f2017a2d9e753f429983eb77c8cb608cfc9e59cb9b8dc1965d",
+		".goreleaser.desktop.yaml":                       "46eef12c0c592f5fae1a76082d897a1f63099a4a87b268ed7a39629c8e7c4eb6",
+		".github/actions/setup-desktop-build/action.yml": "09d319886697e84b880a9744cacb0928daa9a6998f24600cf09183e152592c6a",
+		"scripts/stage-webui.sh":                         "5b3d7b0fa8b237f77ee9a88e6807e070c1b35c97df3d5f17357b3ecb8b2938a6",
+		".github/workflows/cd.yaml#without-uses":         "12907f450e439856e5f369ed804a3fea5f04e64870f39d8bb3efa105ad2204ba",
 	}
 }
 
@@ -899,6 +1014,7 @@ func releaseConfigDigests(t *testing.T, root string) map[string]string {
 
 	for _, name := range []string{
 		".goreleaser.yaml", ".goreleaser.desktop.yaml", ".github/actions/setup-desktop-build/action.yml",
+		"scripts/stage-webui.sh",
 	} {
 		path := filepath.Join(root, name)
 
