@@ -88,14 +88,18 @@ func (f *failingRollingUpgrader) apply() error {
 		if f.observed != nil {
 			f.current = *f.observed
 		}
+
 		if f.cancel != nil {
 			f.cancel()
 		}
+
 		if f.stepErr != nil {
 			return f.stepErr
 		}
+
 		return errPartialUpgrade
 	}
+
 	return nil
 }
 
