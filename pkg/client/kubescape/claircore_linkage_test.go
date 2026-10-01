@@ -80,8 +80,8 @@ func TestClaircoreBuildsIncludeDesktop(t *testing.T) {
 	t.Parallel()
 
 	want := []claircoreBuild{
-		{name: "root", tags: "", cgo: "0"},
-		{name: "desktop", tags: "desktop", cgo: "1"},
+		{name: "root", entry: ".", tags: "", cgo: "0"},
+		{name: "desktop", entry: "./desktop", tags: "desktop", cgo: "1"},
 	}
 
 	got := claircoreBuilds()
@@ -170,34 +170,53 @@ func TestClaircoreLinkedPackagesStayInert(t *testing.T) {
 // desktop graph is the root graph listed with the desktop build tag and CGO
 // enabled, the way its release compiles it.
 type claircoreBuild struct {
-	name string
-	tags string
-	cgo  string
+	name  string
+	entry string
+	tags  string
+	cgo   string
 }
 
-// claircoreBuilds returns every shipped build: the CLI (no tags, CGO disabled
-// for release) and the desktop app.
+// claircoreBuilds returns every shipped build by its main package: the CLI (no
+// tags, CGO disabled for release) and the desktop app.
 func claircoreBuilds() []claircoreBuild {
 	return []claircoreBuild{
-		{name: "root", tags: "", cgo: "0"},
-		{name: "desktop", tags: "desktop", cgo: "1"},
+		{name: "root", entry: ".", tags: "", cgo: "0"},
+		{name: "desktop", entry: "./desktop", tags: "desktop", cgo: "1"},
 	}
 }
 
-// claircoreBuildDeps lists every package one build's dependency graph links,
-// from the module root with that build's tags and CGO setting.
+// claircoreBuildDeps lists every package one build's main package links on any
+// shipped platform, with that build's tags and CGO setting. A platform-specific
+// file only enters the graph of its own GOOS/GOARCH, so each is listed and the
+// results are merged.
 func claircoreBuildDeps(t *testing.T, root string, build claircoreBuild) []string {
 	t.Helper()
 
-	out, err := runGoCommandWithEnv(
-		t.Context(), root, []string{"CGO_ENABLED=" + build.cgo},
-		"list", "-deps", "-tags="+build.tags, "./...",
-	)
-	if err != nil {
-		t.Fatal(err)
+	seen := map[string]bool{}
+
+	var packages []string
+
+	for _, goos := range []string{"darwin", "linux", "windows"} {
+		for _, goarch := range []string{"amd64", "arm64"} {
+			out, err := runGoCommandWithEnv(
+				t.Context(), root,
+				[]string{"CGO_ENABLED=" + build.cgo, "GOOS=" + goos, "GOARCH=" + goarch},
+				"list", "-deps", "-tags="+build.tags, build.entry,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			for _, pkg := range strings.Fields(string(out)) {
+				if !seen[pkg] {
+					seen[pkg] = true
+					packages = append(packages, pkg)
+				}
+			}
+		}
 	}
 
-	return strings.Fields(string(out))
+	return packages
 }
 
 // claircorePackagesIn returns the Claircore packages among packages.
