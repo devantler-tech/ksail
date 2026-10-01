@@ -52,24 +52,40 @@ func runVersionStep(t *testing.T, stepName string, env map[string]string) (strin
 	versionFile := filepath.Join(dir, "version")
 	outputFile := filepath.Join(dir, "outputs")
 	callsFile := filepath.Join(dir, "calls")
+
 	require.NoError(t, os.WriteFile(versionFile, []byte("v1.36.2"), 0o600))
 	writeExecutableStub(t, filepath.Join(dir, "kubectl"), versionStub)
 	writeExecutableStub(t, filepath.Join(dir, "ksail"), updateStub)
-	writeExecutableStub(t, filepath.Join(dir, "timeout"), "#!/usr/bin/env bash\nshift 2\nexec \"$@\"\n")
+	writeExecutableStub(
+		t,
+		filepath.Join(dir, "timeout"),
+		"#!/usr/bin/env bash\nshift 2\nexec \"$@\"\n",
+	)
 
 	command := exec.CommandContext(t.Context(), "bash")
 	command.Stdin = strings.NewReader(step.Run)
 	command.Dir = filepath.Join("..", "..")
-	command.Env = append(os.Environ(),
+
+	command.Env = append(
+		os.Environ(),
 		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
-		"DISTRIBUTION=Talos", "PROVIDER=Docker", "ARGS=", "GHCR_USER=", "GHCR_TOKEN=", "ARTIFACT_TAG=fixture",
-		"UPGRADE_FROM=v1.36.2", "UPGRADE_TO=v1.37.1",
-		"GITHUB_OUTPUT="+outputFile, "SYSTEM_TEST_LOG_DIR="+dir,
-		"FIXTURE_VERSION="+versionFile, "FIXTURE_CALLS="+callsFile,
+		"DISTRIBUTION=Talos",
+		"PROVIDER=Docker",
+		"ARGS=",
+		"GHCR_USER=",
+		"GHCR_TOKEN=",
+		"ARTIFACT_TAG=fixture",
+		"UPGRADE_FROM=v1.36.2",
+		"UPGRADE_TO=v1.37.1",
+		"GITHUB_OUTPUT="+outputFile,
+		"SYSTEM_TEST_LOG_DIR="+dir,
+		"FIXTURE_VERSION="+versionFile,
+		"FIXTURE_CALLS="+callsFile,
 	)
 	for key, value := range env {
 		command.Env = append(command.Env, key+"="+value)
 	}
+
 	output, err := command.CombinedOutput()
 	fixtureRoot, openErr := os.OpenRoot(dir)
 	require.NoError(t, openErr)
@@ -87,6 +103,7 @@ func readOptionalVersionFixture(t *testing.T, root *os.Root, name string) []byte
 	if errors.Is(err, os.ErrNotExist) {
 		return nil // Failed steps can legitimately leave no output or call record.
 	}
+
 	require.NoError(t, err)
 
 	return contents
@@ -104,15 +121,18 @@ func TestSystemTestTalosUpgradeObservesTargetAndRepeatsNoop(t *testing.T) {
 	output, calls, err := runVersionStep(t, "🧪 Talos Kubernetes upgrade — known version path", nil)
 	require.NoError(t, err, output)
 	assert.Equal(t, 2, strings.Count(calls, "cluster update"), calls)
+
 	for line := range strings.SplitSeq(strings.TrimSpace(calls), "\n") {
 		assert.Contains(t, line, "--kubernetes-version v1.37.1")
 	}
+
 	assert.Contains(t, calls, "--output json")
 	assert.Contains(t, output, "v1.36.2 → v1.37.1")
 }
 
 func TestSystemTestTalosUpgradeRejectsWrongLiveState(t *testing.T) {
 	t.Parallel()
+
 	for _, testCase := range []struct {
 		name string
 		env  map[string]string
@@ -128,7 +148,11 @@ func TestSystemTestTalosUpgradeRejectsWrongLiveState(t *testing.T) {
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			output, _, err := runVersionStep(t, "🧪 Talos Kubernetes upgrade — known version path", testCase.env)
+			output, _, err := runVersionStep(
+				t,
+				"🧪 Talos Kubernetes upgrade — known version path",
+				testCase.env,
+			)
 			require.Error(t, err)
 			assert.Contains(t, output, testCase.want)
 		})
@@ -137,14 +161,19 @@ func TestSystemTestTalosUpgradeRejectsWrongLiveState(t *testing.T) {
 
 func TestSystemTestTalosUpgradeFixtureRequiresBothVersions(t *testing.T) {
 	t.Parallel()
+
 	for _, versions := range []struct{ from, to string }{
 		{from: "v1.36.2"}, {to: "v1.37.1"}, {from: "v1.36.2;true", to: "v1.37.1"},
 	} {
 		t.Run(fmt.Sprintf("%s_%s", versions.from, versions.to), func(t *testing.T) {
 			t.Parallel()
-			output, _, err := runVersionStep(t, "🔧 Resolve GHCR credentials in args", map[string]string{
-				"UPGRADE_FROM": versions.from, "UPGRADE_TO": versions.to,
-			})
+			output, _, err := runVersionStep(
+				t,
+				"🔧 Resolve GHCR credentials in args",
+				map[string]string{
+					"UPGRADE_FROM": versions.from, "UPGRADE_TO": versions.to,
+				},
+			)
 			require.Error(t, err, output)
 		})
 	}
@@ -167,6 +196,7 @@ func TestSystemTestTalosUpgradeMatrixWiresKnownVersions(t *testing.T) {
 	require.NoError(t, yaml.Unmarshal(readRepoFile(t, ".github/workflows/ci.yaml"), &workflow))
 
 	var trialEntries int
+
 	for _, job := range workflow.Jobs {
 		for _, entry := range job.Strategy.Matrix.Include {
 			if entry["kubernetes-upgrade-from"] == nil && entry["kubernetes-upgrade-to"] == nil {
@@ -174,26 +204,36 @@ func TestSystemTestTalosUpgradeMatrixWiresKnownVersions(t *testing.T) {
 			}
 
 			trialEntries++
+
 			assert.Equal(t, "Talos", entry["distribution"])
 			assert.Equal(t, "Docker", entry["provider"])
 			assert.Equal(t, true, entry["init"])
-			assert.Equal(t, "", entry["args"])
+			assert.Empty(t, entry["args"])
 			assert.Equal(t, "v1.36.2", entry["kubernetes-upgrade-from"])
 			assert.Equal(t, "v1.37.1", entry["kubernetes-upgrade-to"])
 
 			var wired bool
+
 			for _, step := range job.Steps {
 				if step.Uses != "./.github/actions/ksail-system-test" {
 					continue
 				}
 
 				wired = true
+
 				for _, input := range []string{"kubernetes-upgrade-from", "kubernetes-upgrade-to"} {
 					assert.Equal(t, "${{ matrix."+input+" || '' }}", step.With[input])
 				}
 			}
+
 			assert.True(t, wired, "the matrix must pass its known versions to the system test")
 		}
 	}
-	assert.Equal(t, 1, trialEntries, "run one known upgrade path, separate from ordinary no-op legs")
+
+	assert.Equal(
+		t,
+		1,
+		trialEntries,
+		"run one known upgrade path, separate from ordinary no-op legs",
+	)
 }
