@@ -516,9 +516,7 @@ runs:
     - name: 🧪 ksail cluster update --output json — stdout is one document
       # Scripts read `cluster update --output json` from stdout, so a real update must leave
       # exactly one JSON document there and send its progress text to stderr (#7200).
-      # Not on Talos yet: there a second update after an unpinned Kubernetes upgrade plans
-      # from the stale config version and fails (#7412), so it is not the no-op this asserts.
-      if: inputs.distribution != 'Talos'
+      # Talos must also pass this second update after an unpinned Kubernetes upgrade (#7412).
       shell: bash
       env:
         DISTRIBUTION: ${{ inputs.distribution }}
