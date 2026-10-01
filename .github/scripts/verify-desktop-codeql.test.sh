@@ -115,6 +115,37 @@ for project in . third_party/go-archive; do
 	done
 done
 
+# Recoverable warnings must not hide a failed project anywhere in the export.
+for index in {0..2}; do
+	jq -n --argjson i "${index}" '[range(3) | {
+    source: {id: "go/extractor/warning", name: "Recoverable warning"}
+  }] | .[$i] = {
+    source: {id: "go/autobuilder/extraction-failed-for-project", name: "Extraction failed"},
+    plaintextMessage: "Extraction failed for .: signal: killed"
+  }' >"${scratch}/diagnostics.json"
+	reject_database mixed-diagnostics
+done
+
+jq -n '[".", "third_party/go-archive"] | map({
+  source: {id: "go/autobuilder/extraction-failed-for-project", name: "Extraction failed"},
+  plaintextMessage: ("Extraction failed for " + . + ": signal: killed")
+})' >"${scratch}/diagnostics.json"
+reject_database multiple-failed-projects
+jq -se '[.[].message] == [
+  "Extraction failed for .: signal: killed",
+  "Extraction failed for third_party/go-archive: signal: killed"
+]' <(head -n 2 "${scratch}/output.log") >/dev/null
+
+# Diagnostic text stays JSON data instead of becoming another workflow command.
+jq -n '[{
+  source: {id: "go/autobuilder/extraction-failed-for-project", name: "Extraction failed"},
+  plaintextMessage: "Extraction failed for module\n::error::injected: signal: killed"
+}]' >"${scratch}/diagnostics.json"
+reject_database escaped-message
+[[ $(wc -l <"${scratch}/output.log") -eq 2 ]]
+jq -e '.message == "Extraction failed for module\n::error::injected: signal: killed"' \
+	<(head -n 1 "${scratch}/output.log") >/dev/null
+
 for invalid in '{}' 'null' '[{}]' '[{"source":{"id":null}}]' '[{"source":{"id":""}}]' '{invalid'; do
 	printf '%s\n' "${invalid}" >"${scratch}/diagnostics.json"
 	reject_database malformed
