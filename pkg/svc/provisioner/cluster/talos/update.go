@@ -210,6 +210,10 @@ func (p *Provisioner) mergeFloatingIPChanges(
 		return nil
 	}
 
+	if !p.hetznerOpts.FloatingIPEnabled && floatingIP == nil {
+		return p.mergeStaleFloatingIPConfig(ctx, name, diff)
+	}
+
 	configured, configDetected, configErr := p.detectHetznerFloatingIPConfig(
 		ctx, name, floatingIP,
 	)
@@ -277,6 +281,63 @@ func floatingIPDisableReason(floatingIP *hcloud.FloatingIP) string {
 	return "control planes drop the VIP config and move back to the first " +
 		"control-plane node's endpoint without reboot, then the ksail-owned " +
 		"floating IP " + address + " is released"
+}
+
+// mergeStaleFloatingIPConfig merges the disable transition when the cluster's
+// floating IP is already gone (released outside KSail) but running control
+// planes still carry its HCloud VIP. Introspection echoes the desired flag and
+// normal drift detection keeps the running endpoint and VIP, so without this
+// the nodes, kubeconfig and talosconfig would keep pointing at a deleted
+// address. A node whose config cannot be fetched leaves the state unproven, so
+// nothing is merged and the next update retries.
+func (p *Provisioner) mergeStaleFloatingIPConfig(
+	ctx context.Context,
+	name string,
+	diff *clusterupdate.UpdateResult,
+) error {
+	staleIP, err := p.detectStaleHCloudVIP(ctx, p.resolveClusterName(name))
+	if err != nil || staleIP == "" {
+		return err
+	}
+
+	p.staleFloatingIPAddress = staleIP
+
+	diff.InPlaceChanges = append(diff.InPlaceChanges, clusterupdate.Change{
+		Field:    floatingIPEnabledField,
+		OldValue: strconv.FormatBool(true),
+		NewValue: strconv.FormatBool(false),
+		Category: clusterupdate.ChangeCategoryInPlace,
+		Reason: "control planes drop the stale VIP config for the already released " +
+			"floating IP " + staleIP + " and move back to the first control-plane " +
+			"node's endpoint without reboot",
+	})
+
+	return nil
+}
+
+// detectStaleHCloudVIP returns the HCloud VIP address any running control plane
+// still carries, or "" when none does or when a config could not be fetched.
+func (p *Provisioner) detectStaleHCloudVIP(ctx context.Context, clusterName string) (string, error) {
+	nodes, err := p.getNodesByRole(ctx, clusterName)
+	if err != nil {
+		return "", fmt.Errorf("failed to inventory nodes for stale VIP detection: %w", err)
+	}
+
+	controlPlaneConfigs, _, fetchedAll, err := p.fetchFloatingIPConfigsByRole(ctx, nodes)
+	if err != nil || !fetchedAll {
+		return "", err
+	}
+
+	for _, config := range controlPlaneConfigs {
+		for _, device := range config.Machine().Network().Devices() {
+			vip := device.VIPConfig()
+			if vip != nil && vip.HCloud() != nil && vip.IP() != "" {
+				return vip.IP(), nil
+			}
+		}
+	}
+
+	return "", nil
 }
 
 // detectHetznerFloatingIPConfig detects running endpoint/VIP state only when

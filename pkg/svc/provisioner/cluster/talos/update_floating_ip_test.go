@@ -123,70 +123,76 @@ func fipUpdateTestServerWithServers(
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc(
-		"/floating_ips",
-		func(responseWriter http.ResponseWriter, request *http.Request) {
-			responseWriter.Header().Set("Content-Type", "application/json")
-
-			if request.Method == http.MethodPost {
-				calls.create.Add(1)
-
-				_, _ = responseWriter.Write([]byte(
-					`{"floating_ip":` + fipUpdateOwnedFloatingIPJSON + `,"action":null}`,
-				))
-
-				return
-			}
-
-			list := ""
-			if floatingIPPresent {
-				list = fipUpdateOwnedFloatingIPJSON
-			}
-
-			_, _ = responseWriter.Write([]byte(`{"floating_ips":[` + list + `]}`))
-		},
-	)
-
+	mux.HandleFunc("/floating_ips", fipUpdateFloatingIPsHandler(floatingIPPresent, calls))
 	mux.HandleFunc("/floating_ips/7/actions/assign", fipUpdateAssignHandler(calls))
-	mux.HandleFunc(
-		"/floating_ips/7",
-		func(responseWriter http.ResponseWriter, request *http.Request) {
-			if request.Method == http.MethodDelete {
-				calls.del.Add(1)
-				responseWriter.WriteHeader(http.StatusNoContent)
-
-				return
-			}
-
-			http.NotFound(responseWriter, request)
-		},
-	)
-	mux.HandleFunc(
-		"/servers",
-		func(responseWriter http.ResponseWriter, request *http.Request) {
-			responseWriter.Header().Set("Content-Type", "application/json")
-
-			selected := serversJSON
-			if name := request.URL.Query().Get("name"); name != "" {
-				selected = nil
-
-				for _, candidate := range serversJSON {
-					if strings.Contains(candidate, `"name":"`+name+`"`) {
-						selected = append(selected, candidate)
-					}
-				}
-			}
-
-			_, _ = responseWriter.Write(
-				[]byte(`{"servers":[` + strings.Join(selected, ",") + `]}`),
-			)
-		},
-	)
+	mux.HandleFunc("/floating_ips/7", fipUpdateDeleteHandler(calls))
+	mux.HandleFunc("/servers", fipUpdateServersHandler(serversJSON))
 
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 
 	return server
+}
+
+// fipUpdateFloatingIPsHandler lists the owned floating IP when present and
+// counts creations.
+func fipUpdateFloatingIPsHandler(floatingIPPresent bool, calls *fipUpdateCalls) http.HandlerFunc {
+	return func(responseWriter http.ResponseWriter, request *http.Request) {
+		responseWriter.Header().Set("Content-Type", "application/json")
+
+		if request.Method == http.MethodPost {
+			calls.create.Add(1)
+
+			_, _ = responseWriter.Write([]byte(
+				`{"floating_ip":` + fipUpdateOwnedFloatingIPJSON + `,"action":null}`,
+			))
+
+			return
+		}
+
+		list := ""
+		if floatingIPPresent {
+			list = fipUpdateOwnedFloatingIPJSON
+		}
+
+		_, _ = responseWriter.Write([]byte(`{"floating_ips":[` + list + `]}`))
+	}
+}
+
+// fipUpdateDeleteHandler counts deletions of the owned floating IP.
+func fipUpdateDeleteHandler(calls *fipUpdateCalls) http.HandlerFunc {
+	return func(responseWriter http.ResponseWriter, request *http.Request) {
+		if request.Method == http.MethodDelete {
+			calls.del.Add(1)
+			responseWriter.WriteHeader(http.StatusNoContent)
+
+			return
+		}
+
+		http.NotFound(responseWriter, request)
+	}
+}
+
+// fipUpdateServersHandler serves serversJSON, filtered by the name query.
+func fipUpdateServersHandler(serversJSON []string) http.HandlerFunc {
+	return func(responseWriter http.ResponseWriter, request *http.Request) {
+		responseWriter.Header().Set("Content-Type", "application/json")
+
+		selected := serversJSON
+		if name := request.URL.Query().Get("name"); name != "" {
+			selected = nil
+
+			for _, candidate := range serversJSON {
+				if strings.Contains(candidate, `"name":"`+name+`"`) {
+					selected = append(selected, candidate)
+				}
+			}
+		}
+
+		_, _ = responseWriter.Write(
+			[]byte(`{"servers":[` + strings.Join(selected, ",") + `]}`),
+		)
+	}
 }
 
 // fipUpdateInventoryFailureTestServer returns a control plane from the label

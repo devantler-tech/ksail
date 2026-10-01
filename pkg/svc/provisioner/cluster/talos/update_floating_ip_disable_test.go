@@ -33,11 +33,20 @@ type floatingIPDisableFixture struct {
 func newFloatingIPDisableFixture(t *testing.T) *floatingIPDisableFixture {
 	t.Helper()
 
+	return newFloatingIPDisableFixtureFor(t, true)
+}
+
+// newFloatingIPDisableFixtureFor is newFloatingIPDisableFixture with the cloud
+// address present or already released outside KSail.
+func newFloatingIPDisableFixtureFor(t *testing.T, floatingIPPresent bool) *floatingIPDisableFixture {
+	t.Helper()
+
 	t.Setenv(testFloatingIPTokenEnvVar, "vip-test-token")
 
 	calls := &fipUpdateCalls{}
 	server := fipUpdateTestServer(t, true, calls)
 	hzProvider := newFipUpdateProvider(server.URL)
+	cloud := newFipUpdateProvider(fipUpdateTestServer(t, floatingIPPresent, calls).URL)
 
 	enabled := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{
 		FloatingIPEnabled:  true,
@@ -60,7 +69,7 @@ func newFloatingIPDisableFixture(t *testing.T) *floatingIPDisableFixture {
 	}, talosprovisioner.NewOptions().
 		WithKubeconfigPath(kubeconfigPath).
 		WithTalosconfigPath(talosconfigPath)).
-		WithInfraProvider(hzProvider).
+		WithInfraProvider(cloud).
 		WithNodeConfigFetcherForTest(
 			func(context.Context, string) (talosconfig.Provider, error) {
 				return running, nil
@@ -101,9 +110,9 @@ func (f *floatingIPDisableFixture) runStep(
 	))
 }
 
-// writeFloatingIPTalosconfig saves a talosconfig whose cluster context dials
-// the floating IP, next to an unrelated context that lists the same address
-// and must be left alone.
+// writeFloatingIPTalosconfig saves a talosconfig whose cluster context, and the
+// `-1` copy Talos's Merge creates on a name collision, dial the floating IP,
+// next to unrelated contexts that list the same address and must be left alone.
 func writeFloatingIPTalosconfig(t *testing.T) string {
 	t.Helper()
 
@@ -114,6 +123,12 @@ func writeFloatingIPTalosconfig(t *testing.T) string {
 			"fip-cluster": {
 				Endpoints: []string{"192.0.2.10", "203.0.113.5"},
 				Nodes:     []string{"203.0.113.5"},
+			},
+			"fip-cluster-1": {
+				Endpoints: []string{"192.0.2.10"},
+			},
+			"fip-cluster-old": {
+				Endpoints: []string{"192.0.2.10"},
 			},
 			"other-cluster": {
 				Endpoints: []string{"192.0.2.10"},
@@ -142,6 +157,8 @@ func hasHCloudVIP(config talosconfig.Provider) bool {
 // config drops the VIP and returns to the direct control-plane endpoint instead
 // of grafting the running floating-IP state back, the kubeconfig moves off the
 // address, and only then is the ksail-owned floating IP released.
+//
+//nolint:paralleltest // the fixture sets the Hetzner token with t.Setenv.
 func TestUpdateApplySteps_FloatingIPDisableRevertsNodesThenReleases(t *testing.T) {
 	fixture := newFloatingIPDisableFixture(t)
 	result := clusterupdate.NewEmptyUpdateResult()
@@ -175,13 +192,19 @@ func TestUpdateApplySteps_FloatingIPDisableRevertsNodesThenReleases(t *testing.T
 	require.NoError(t, err)
 	assert.Equal(t, []string{"203.0.113.5"}, saved.Contexts["fip-cluster"].Endpoints,
 		"talosctl must stop dialing the released address")
+	assert.Equal(t, []string{"203.0.113.5"}, saved.Contexts["fip-cluster-1"].Endpoints,
+		"the context Talos renamed on a merge collision must move too")
 	assert.Equal(t, []string{"192.0.2.10"}, saved.Contexts["other-cluster"].Endpoints,
 		"another cluster's context must not be rewritten")
+	assert.Equal(t, []string{"192.0.2.10"}, saved.Contexts["fip-cluster-old"].Endpoints,
+		"only a numeric merge suffix marks a renamed copy")
 }
 
 // TestUpdateApplySteps_FloatingIPDisableKeepsAddressAfterFailedChanges proves
 // the release is withheld when any change failed: a release cannot be undone,
 // and keeping the address lets the next update retry the whole transition.
+//
+//nolint:paralleltest // the fixture sets the Hetzner token with t.Setenv.
 func TestUpdateApplySteps_FloatingIPDisableKeepsAddressAfterFailedChanges(t *testing.T) {
 	fixture := newFloatingIPDisableFixture(t)
 	result := clusterupdate.NewEmptyUpdateResult()
@@ -219,4 +242,34 @@ func TestUpdateApplySteps_FloatingIPReleaseSkipsWhenEnabled(t *testing.T) {
 	))
 
 	assert.Equal(t, int32(0), calls.del.Load())
+}
+
+// TestUpdateApplySteps_FloatingIPDisableCleansUpAfterExternalRelease covers a
+// floating IP already released outside KSail while nodes still carry its VIP:
+// the stale VIP is still detected as the disable transition, the pushed config
+// drops it, the talosconfig moves off the dead address, and nothing is deleted.
+//
+//nolint:paralleltest // the fixture sets the Hetzner token with t.Setenv.
+func TestUpdateApplySteps_FloatingIPDisableCleansUpAfterExternalRelease(t *testing.T) {
+	fixture := newFloatingIPDisableFixtureFor(t, false)
+	result := clusterupdate.NewEmptyUpdateResult()
+
+	fixture.runStep(t, "reconcile floating IP endpoint", result)
+
+	desired, err := fixture.provisioner.BuildDesiredNodeConfigForTest(
+		fixture.running, fixture.running, talosprovisioner.RoleControlPlane,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "203.0.113.5", desired.Cluster().Endpoint().Hostname())
+	assert.False(t, hasHCloudVIP(desired), "the stale HCloud VIP must be dropped")
+
+	fixture.runStep(t, "refresh floating IP kubeconfig", result)
+	fixture.runStep(t, "release disabled floating IP", result)
+
+	assert.Equal(t, int32(0), fixture.calls.del.Load(), "there is no address left to delete")
+
+	saved, err := clientconfig.Open(fixture.talosconfigPath)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"203.0.113.5"}, saved.Contexts["fip-cluster"].Endpoints,
+		"talosctl must stop dialing the released address")
 }

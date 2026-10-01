@@ -642,6 +642,38 @@ func (p *Provisioner) refreshFloatingIPKubeconfig(ctx context.Context, clusterNa
 	return p.fetchAndWriteKubeconfigForCP(ctx, talosEndpoint, kubernetesEndpoint)
 }
 
+// disableTransitionSucceeded reports whether this update carried the disable
+// transition and every change succeeded, logging why the address is kept when
+// a change failed.
+func (p *Provisioner) disableTransitionSucceeded(diff, result *clusterupdate.UpdateResult) bool {
+	if p.hetznerOpts == nil || p.hetznerOpts.FloatingIPEnabled || !hasFloatingIPChange(diff) {
+		return false
+	}
+
+	if result != nil && result.HasFailedChanges() {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  ⚠ Keeping the floating IP because the update had failed changes;"+
+				" re-run cluster update to finish disabling it\n",
+		)
+
+		return false
+	}
+
+	return true
+}
+
+// desiredControlPlaneEndpoint returns the host of the reconciled control-plane
+// endpoint, or "" when no control-plane config is loaded.
+func (p *Provisioner) desiredControlPlaneEndpoint() string {
+	if p.talosConfigs == nil || p.talosConfigs.ControlPlane() == nil ||
+		p.talosConfigs.ControlPlane().Cluster().Endpoint() == nil {
+		return ""
+	}
+
+	return p.talosConfigs.ControlPlane().Cluster().Endpoint().Hostname()
+}
+
 // floatingIPEnabled reports whether Hetzner floating-IP management is enabled.
 func (p *Provisioner) floatingIPEnabled() bool {
 	return p.hetznerOpts != nil && p.hetznerOpts.FloatingIPEnabled
@@ -660,17 +692,7 @@ func (p *Provisioner) releaseDisabledFloatingIP(
 	clusterName string,
 	diff, result *clusterupdate.UpdateResult,
 ) error {
-	if p.hetznerOpts == nil || p.hetznerOpts.FloatingIPEnabled || !hasFloatingIPChange(diff) {
-		return nil
-	}
-
-	if result != nil && result.HasFailedChanges() {
-		_, _ = fmt.Fprintf(
-			p.logWriter,
-			"  ⚠ Keeping the floating IP because the update had failed changes;"+
-				" re-run cluster update to finish disabling it\n",
-		)
-
+	if !p.disableTransitionSucceeded(diff, result) {
 		return nil
 	}
 
@@ -687,15 +709,15 @@ func (p *Provisioner) releaseDisabledFloatingIP(
 	}
 
 	if floatingIP == nil {
-		return nil
+		// Released outside KSail: only the talosconfig still names the address.
+		return p.repointTalosconfigEndpoint(
+			name, p.staleFloatingIPAddress, p.desiredControlPlaneEndpoint(),
+		)
 	}
 
-	if floatingIP.IP != nil && p.talosConfigs != nil && p.talosConfigs.ControlPlane() != nil &&
-		p.talosConfigs.ControlPlane().Cluster().Endpoint() != nil {
+	if floatingIP.IP != nil {
 		err = p.repointTalosconfigEndpoint(
-			name,
-			floatingIP.IP.String(),
-			p.talosConfigs.ControlPlane().Cluster().Endpoint().Hostname(),
+			name, floatingIP.IP.String(), p.desiredControlPlaneEndpoint(),
 		)
 		if err != nil {
 			return err

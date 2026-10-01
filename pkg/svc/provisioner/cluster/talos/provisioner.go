@@ -215,6 +215,12 @@ type Provisioner struct {
 	// request-scoped like drainForce: set by the floating-IP reconcile step of an
 	// update and read by buildDesiredNodeConfig.
 	revertFloatingIPEndpoint bool
+	// staleFloatingIPAddress is the HCloud VIP address running control planes
+	// still carry after their ksail-owned floating IP was released outside KSail
+	// while `floatingIPEnabled` is false. Detection records it so the disable
+	// transition can move the talosconfig off it; it is request-scoped like
+	// revertFloatingIPEndpoint.
+	staleFloatingIPAddress string
 }
 
 // NewProvisioner creates a new Provisioner.
