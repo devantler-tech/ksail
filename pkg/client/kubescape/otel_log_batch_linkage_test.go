@@ -358,10 +358,10 @@ func moduleBuildTags() map[string]string {
 }
 
 // auditGoEnv is the caller's environment with every graph-affecting Go setting the release
-// configuration does not control cleared: GOFLAGS (tags, -modfile, -mod), the user go env file and a
-// workspace file would otherwise make the audit list a graph the release never builds.
+// configuration does not control cleared: GOFLAGS (tags, -modfile, -mod), GOEXPERIMENT (which adds
+// goexperiment.* tags), the user go env file and a workspace file would otherwise make the audit list a graph the release never builds.
 func auditGoEnv(extra ...string) []string {
-	env := append(os.Environ(), "GOFLAGS=", "GOENV=off", "GOWORK=off")
+	env := append(os.Environ(), "GOFLAGS=", "GOENV=off", "GOWORK=off", "GOEXPERIMENT=")
 
 	return append(env, extra...)
 }
@@ -979,11 +979,12 @@ func goreleaserCGO(t *testing.T, path string) string {
 // To update: re-run the reachability audit for the new configuration, then paste the new digests.
 func auditedReleaseConfigDigests() map[string]string {
 	return map[string]string{
-		".goreleaser.yaml":                               "603b04ca07558b8e1acb3d9c4e00e3c49ceaa10ea9f5af0ed2f84f01f96496c2",
-		".goreleaser.desktop.yaml":                       "46eef12c0c592f5fae1a76082d897a1f63099a4a87b268ed7a39629c8e7c4eb6",
-		".github/actions/setup-desktop-build/action.yml": "09d319886697e84b880a9744cacb0928daa9a6998f24600cf09183e152592c6a",
-		"scripts/stage-webui.sh":                         "5b3d7b0fa8b237f77ee9a88e6807e070c1b35c97df3d5f17357b3ecb8b2938a6",
-		".github/workflows/cd.yaml#without-uses":         "12907f450e439856e5f369ed804a3fea5f04e64870f39d8bb3efa105ad2204ba",
+		".goreleaser.yaml":                                   "603b04ca07558b8e1acb3d9c4e00e3c49ceaa10ea9f5af0ed2f84f01f96496c2",
+		".goreleaser.desktop.yaml":                           "46eef12c0c592f5fae1a76082d897a1f63099a4a87b268ed7a39629c8e7c4eb6",
+		".github/actions/setup-desktop-build/action.yml":     "09d319886697e84b880a9744cacb0928daa9a6998f24600cf09183e152592c6a",
+		"scripts/stage-webui.sh":                             "5b3d7b0fa8b237f77ee9a88e6807e070c1b35c97df3d5f17357b3ecb8b2938a6",
+		".github/actions/free-disk-space/free-disk-space.sh": "2dd12fcf3779137ca1cb5f21194947f6a10d3f94f8fb438a1a29ec9021fbdc30",
+		".github/workflows/cd.yaml#without-uses":             "12907f450e439856e5f369ed804a3fea5f04e64870f39d8bb3efa105ad2204ba",
 	}
 }
 
@@ -992,8 +993,16 @@ func TestReleaseBuildConfigMatchesAudit(t *testing.T) {
 	t.Parallel()
 
 	actual := releaseConfigDigests(t, moduleRoot(t))
+	audited := auditedReleaseConfigDigests()
 
-	for name, want := range auditedReleaseConfigDigests() {
+	// A hashed input without an audited digest would otherwise never be compared.
+	for name := range actual {
+		if _, ok := audited[name]; !ok {
+			t.Errorf("%s is hashed but has no audited digest in auditedReleaseConfigDigests", name)
+		}
+	}
+
+	for name, want := range audited {
 		if actual[name] != want {
 			t.Errorf(
 				"%s changed (digest %s, audited %s): re-establish the GHSA-hjf4-fphr-2h65 verdict "+
@@ -1017,6 +1026,7 @@ func releaseConfigDigests(t *testing.T, root string) map[string]string {
 	for _, name := range []string{
 		".goreleaser.yaml", ".goreleaser.desktop.yaml", ".github/actions/setup-desktop-build/action.yml",
 		"scripts/stage-webui.sh",
+		".github/actions/free-disk-space/free-disk-space.sh",
 	} {
 		path := filepath.Join(root, name)
 
