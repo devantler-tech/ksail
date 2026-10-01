@@ -375,6 +375,8 @@ func ksailHCloudVIP(config talosconfig.Provider) string {
 // desiredDeclaresHCloudVIP reports whether the desired control-plane
 // configuration declares an HCloud VIP itself, or cannot be read: either way a
 // running VIP cannot be proven to be KSail's residue.
+//
+//nolint:staticcheck // Talos v1alpha1 machine networking remains the active config API
 func (p *Provisioner) desiredDeclaresHCloudVIP() bool {
 	if p.talosConfigs == nil || p.talosConfigs.ControlPlane() == nil {
 		return true
@@ -385,7 +387,7 @@ func (p *Provisioner) desiredDeclaresHCloudVIP() bool {
 		return true
 	}
 
-	return machineNetworkHasHCloudVIP(raw.MachineConfig.MachineNetwork) //nolint:staticcheck // Talos v1alpha1 machine networking remains the active config API
+	return machineNetworkHasHCloudVIP(raw.MachineConfig.MachineNetwork)
 }
 
 // detectHetznerFloatingIPConfig detects running endpoint/VIP state only when
