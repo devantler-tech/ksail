@@ -289,6 +289,7 @@ func TestImportsEntryPointReadsBuildConstrainedFiles(t *testing.T) {
 func assertAuditedModuleVersion(t *testing.T, moduleDir, modulePath, auditedVersion string) {
 	t.Helper()
 
+	//nolint:gosec // G204: a fixed go subcommand and an audited module path.
 	cmd := exec.CommandContext(t.Context(), "go", "list", "-m", "-json", modulePath)
 	cmd.Dir = moduleDir
 	cmd.Env = auditGoEnv()
@@ -374,6 +375,7 @@ func listDependencyPackages(
 ) []goListPackage {
 	t.Helper()
 
+	//nolint:gosec // G204: a fixed go subcommand; tags come from moduleBuildTags.
 	cmd := exec.CommandContext(
 		t.Context(),
 		"go",
