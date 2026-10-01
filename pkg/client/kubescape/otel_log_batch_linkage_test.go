@@ -104,12 +104,12 @@ func allowedEntryPointReferences() map[string]map[string]string {
 }
 
 // TestOTelLogBatchProcessorStaysUnreachable pins the reachability verdict for
-// GHSA-hjf4-fphr-2h65 (issue #7375). sdk/log is linked into KSail through
+// GO-2026-6615 / GHSA-hjf4-fphr-2h65 (issue #7375). sdk/log is linked into KSail through
 // kubescape's logger and uptrace-go, but its BatchProcessor is only built by
 // uptrace.ConfigureOpentelemetry, which only kubescape's logger.InitOtel calls,
-// and nothing in KSail's build graph calls InitOtel. The Go vulnerability
-// database carries no entry for this advisory, so govulncheck cannot report
-// it; this test is the gate instead. It fails when the audited sdk/log release
+// and nothing in KSail's build graph calls InitOtel. The symbol-free Go advisory
+// reports the linked package conservatively; this test guards the scoped
+// reachability verdict. It fails when the audited sdk/log release
 // changes, when a new package imports sdk/log, or when any package in the
 // graph references an entry point outside the allowed places.
 //
