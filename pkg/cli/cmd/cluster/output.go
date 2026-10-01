@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -74,6 +75,63 @@ func progressWriter(cmd *cobra.Command) io.Writer {
 	return cmd.OutOrStdout()
 }
 
+// jsonDocument is the one machine-readable document a --output json run writes
+// to its real stdout. While it is installed the command's stdout points at
+// stderr, so progress text from every path — the in-place apply, a recreation's
+// delete and create workflow, and anything else that writes to the command's
+// stdout — cannot reach the stream the document is parsed from.
+type jsonDocument struct {
+	out     io.Writer
+	emitted bool
+}
+
+// jsonDocumentKey is the context key under which the run's jsonDocument is stored.
+type jsonDocumentKey struct{}
+
+// reserveStdoutForJSONDocument gives a --output json run's real stdout to its
+// JSON document alone and points the command's stdout at stderr for everything
+// else, where the user still sees it. It returns the document (nil in text mode)
+// and a function that restores the command's stdout and context; text mode is
+// left untouched.
+func reserveStdoutForJSONDocument(cmd *cobra.Command) (*jsonDocument, func()) {
+	if getOutputFormat(cmd) != outputFormatJSON {
+		return nil, func() {}
+	}
+
+	stdout := cmd.OutOrStdout()
+	parent := cmd.Context()
+
+	if parent == nil {
+		parent = context.Background()
+	}
+
+	doc := &jsonDocument{out: stdout}
+
+	cmd.SetContext(context.WithValue(parent, jsonDocumentKey{}, doc))
+	cmd.SetOut(cmd.ErrOrStderr())
+
+	return doc, func() {
+		cmd.SetOut(stdout)
+		cmd.SetContext(parent)
+	}
+}
+
+// jsonDocumentWriter returns the stream a JSON document is written to: the
+// reserved real stdout when reserveStdoutForJSONDocument installed one (marking
+// the document emitted), otherwise the command's stdout.
+func jsonDocumentWriter(cmd *cobra.Command) io.Writer {
+	if ctx := cmd.Context(); ctx != nil {
+		doc, ok := ctx.Value(jsonDocumentKey{}).(*jsonDocument)
+		if ok {
+			doc.emitted = true
+
+			return doc.out
+		}
+	}
+
+	return cmd.OutOrStdout()
+}
+
 // routeConfigLoadingProgress points config-loading progress at this run's
 // progress stream. Config loading reports before the command's handler runs,
 // through the writer captured when the command was built, so it is set on every
@@ -133,7 +191,8 @@ func diffToJSON(diff *clusterupdate.UpdateResult) DiffJSONOutput {
 	}
 }
 
-// emitDiffJSON serialises diff as indented JSON and writes it to cmd's stdout.
+// emitDiffJSON serialises diff as indented JSON and writes it to the stream
+// jsonDocumentWriter selects: the real stdout a --output json run reserved.
 func emitDiffJSON(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
 	out := diffToJSON(diff)
 
@@ -154,5 +213,5 @@ func emitDiffJSON(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
 	}
 
 	// enc.Encode already appends a trailing newline.
-	_, _ = fmt.Fprint(cmd.OutOrStdout(), buf.String())
+	_, _ = fmt.Fprint(jsonDocumentWriter(cmd), buf.String())
 }

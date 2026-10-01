@@ -302,6 +302,7 @@ jobs:
 
       - name: ✅ Validate Talos schematic trial selection
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.test_schematic_rollout }}
+        shell: bash
         env:
           DISTRIBUTION: ${{ matrix.distribution }}
           INIT: ${{ matrix.init }}

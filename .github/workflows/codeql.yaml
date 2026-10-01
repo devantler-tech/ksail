@@ -28,6 +28,8 @@ name: 🔍 CodeQL
 # cost of a longer extraction (about 9 minutes instead of 6). No `ram` or `threads` cap is set,
 # so CodeQL's own budget matches the default setup this replaces. Re-running a failed job
 # remains available because the workflow is owned here.
+# The Go evidence guard rejects failed-project extraction diagnostics even when
+# Autobuild and analysis succeed, then requires real CLI/desktop function bodies.
 #
 # Same languages and suite as the default setup it replaces: actions, Go and
 # JavaScript/TypeScript with the security-extended queries. This satisfies the "Require
@@ -81,7 +83,7 @@ jobs:
 
       - name: 🔍 Initialize CodeQL
         id: init
-        uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           db-location: ${{ runner.temp }}/codeql-databases
           languages: ${{ matrix.language }}
@@ -90,19 +92,25 @@ jobs:
 
       - name: 🏗️ Autobuild
         if: matrix.language == 'go'
-        uses: github/codeql-action/autobuild@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        uses: github/codeql-action/autobuild@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         env:
           # Soft heap limit for the Go extractor (a Go program), measured in #7131.
           GOMEMLIMIT: 8GiB
           # Include the native entry point in standalone Go package extraction.
           GOFLAGS: -tags=desktop
 
+      - name: 🔎 Reject failed Go extraction before analysis
+        if: matrix.language == 'go'
+        env:
+          CODEQL_CLI: ${{ steps.init.outputs.codeql-path }}
+        run: bash .github/scripts/verify-desktop-codeql.sh --diagnostics-only "$RUNNER_TEMP/codeql-databases/go"
+
       - name: 🔬 Perform CodeQL analysis
-        uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           category: /language:${{ matrix.language }}
 
-      - name: 🔎 Require CLI and desktop function bodies in the database
+      - name: 🔎 Require complete Go extraction and CLI/desktop function bodies
         if: matrix.language == 'go'
         env:
           CODEQL_CLI: ${{ steps.init.outputs.codeql-path }}

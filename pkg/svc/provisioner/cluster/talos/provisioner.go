@@ -187,9 +187,14 @@ type Provisioner struct {
 	// was stored under. Defaults to registerWithImageFactory; tests override it via
 	// export_test.go to avoid real network I/O.
 	schematicRegistrar func(ctx context.Context, sc talosconfigmanager.Schematic) (string, error)
-	logWriter          io.Writer
-	logMu              sync.Mutex
-	componentDetector  *detector.ComponentDetector
+	// kubernetesVersionDetector returns the lowest Kubernetes version running on the
+	// cluster, read through the control-plane node at cpNodeIP. A nil detector uses
+	// the Talos SDK's k8s.DetectLowestVersion; tests override it via export_test.go
+	// to avoid real Talos and Kubernetes API connectivity.
+	kubernetesVersionDetector func(ctx context.Context, cpNodeIP string) (string, error)
+	logWriter                 io.Writer
+	logMu                     sync.Mutex
+	componentDetector         *detector.ComponentDetector
 	// imagePullRetry controls retry behavior for Docker image pulls.
 	// Tests can override this via WithImagePullRetryConfig to use near-zero delays.
 	imagePullRetry imagePullRetryConfig

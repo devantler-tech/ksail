@@ -20,25 +20,43 @@ import (
 // whole `cluster update` command can run against it without a real cluster.
 type updatableUpgraderFake struct {
 	versionUpgraderFake
+
+	// diff is the provisioner-level diff DiffConfig reports; nil reports none.
+	diff *clusterupdate.UpdateResult
 }
 
-func (*updatableUpgraderFake) Update(
+func (f *updatableUpgraderFake) Update(
 	context.Context, string, *v1alpha1.ClusterSpec, *v1alpha1.ClusterSpec,
 	clusterupdate.UpdateOptions,
 ) (*clusterupdate.UpdateResult, error) {
-	return clusterupdate.NewEmptyUpdateResult(), nil
+	result := clusterupdate.NewEmptyUpdateResult()
+
+	if f.diff != nil {
+		result.AppliedChanges = append(result.AppliedChanges, f.diff.InPlaceChanges...)
+	}
+
+	return result, nil
 }
 
-func (*updatableUpgraderFake) DiffConfig(
+func (f *updatableUpgraderFake) DiffConfig(
 	context.Context, string, *v1alpha1.ClusterSpec, *v1alpha1.ClusterSpec,
 ) (*clusterupdate.UpdateResult, error) {
+	if f.diff != nil {
+		return f.diff, nil
+	}
+
 	return clusterupdate.NewEmptyUpdateResult(), nil
 }
 
 func (*updatableUpgraderFake) GetCurrentConfig(
 	context.Context, string,
 ) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error) {
-	return &v1alpha1.ClusterSpec{}, nil, nil
+	// Match the distribution and provider writeTestConfigFiles declares, so the
+	// spec diff reports no recreation and only the fake's own diff remains.
+	return &v1alpha1.ClusterSpec{
+		Distribution: v1alpha1.DistributionVanilla,
+		Provider:     v1alpha1.ProviderDocker,
+	}, nil, nil
 }
 
 type updatableUpgraderFactory struct{ provisioner *updatableUpgraderFake }
@@ -88,17 +106,21 @@ func redirectProcessOutput(t *testing.T) (string, string) {
 func runUpdateCommand(t *testing.T, args ...string) (string, string) {
 	t.Helper()
 
+	return runUpdateCommandWith(t, pinnedUpgraderFake(), args...)
+}
+
+// runUpdateCommandWith runs the real `ksail cluster update` command against
+// the given provisioner fake and returns what reached stdout and stderr.
+func runUpdateCommandWith(
+	t *testing.T,
+	provisioner *updatableUpgraderFake,
+	args ...string,
+) (string, string) {
+	t.Helper()
+
 	workingDir := t.TempDir()
 	t.Chdir(workingDir)
 	writeTestConfigFiles(t, workingDir)
-
-	provisioner := &updatableUpgraderFake{versionUpgraderFake: versionUpgraderFake{
-		current: clusterupdate.VersionInfo{
-			KubernetesVersion:   "v1.34.0",
-			DistributionVersion: "v1.12.0",
-		},
-		distributionPin: "v1.13.0",
-	}}
 
 	t.Cleanup(cluster.SetProvisionerFactoryForTests(updatableUpgraderFactory{provisioner}))
 	t.Cleanup(cluster.ExportSetUpdateUnmanagedGuard(

@@ -218,13 +218,68 @@ func (p *Provisioner) UpgradeKubernetes(
 		return fmt.Errorf("%w: %s", clustererr.ErrNoControlPlaneNodes, clusterName)
 	}
 
-	// Build the Talos client. The client is held across the multi-step K8s upgrade
-	// workflow (static-pod upgrades, kubelet rollout), which cannot be safely
-	// re-run wholesale, so the transient apid handshake race is absorbed by the
-	// Version probe inside dialTalosClientWithRetry rather than retrying the flow.
-	talosClient, err := p.dialTalosClientWithRetry(ctx, cpNodeIP, "kubernetes upgrade connect")
+	// The client is held across the multi-step K8s upgrade workflow (static-pod
+	// upgrades, kubelet rollout), which cannot be safely re-run wholesale, so the
+	// transient apid handshake race is absorbed by the Version probe inside
+	// dialTalosClientWithRetry rather than retrying the flow.
+	err = p.withKubernetesUpgradeProvider(ctx, cpNodeIP, "kubernetes upgrade connect",
+		func(state k8s.UpgradeProvider) error {
+			_, _ = fmt.Fprintf(p.logWriter,
+				"  Upgrading Kubernetes to %s...\n", toVersion,
+			)
+
+			// Strip the "v" prefix — the Talos SDK uses bare version numbers (e.g., "1.35.1").
+			toVersionBare := strings.TrimPrefix(toVersion, "v")
+
+			// Auto-detect the current running K8s version from the cluster.
+			upgradeOpts := kubernetesUpgradeOptions(p.logWriter)
+
+			fromVersionBare, upgradeErr := k8s.DetectLowestVersion(ctx, state, upgradeOpts)
+			if upgradeErr != nil {
+				return fmt.Errorf("detecting current K8s version: %w", upgradeErr)
+			}
+
+			upgradeOpts.Path, upgradeErr = upgrade.NewPath(fromVersionBare, toVersionBare)
+			if upgradeErr != nil {
+				return fmt.Errorf(
+					"creating upgrade path %s → %s: %w", fromVersionBare, toVersionBare, upgradeErr,
+				)
+			}
+
+			_, _ = fmt.Fprintf(p.logWriter,
+				"  Upgrade path: %s → %s\n", fromVersionBare, toVersionBare,
+			)
+
+			upgradeErr = k8s.Upgrade(ctx, state, upgradeOpts)
+			if upgradeErr != nil {
+				return fmt.Errorf("K8s upgrade to %s failed: %w", toVersion, upgradeErr)
+			}
+
+			return nil
+		})
 	if err != nil {
-		return fmt.Errorf("creating Talos client for K8s upgrade: %w", err)
+		return err
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter,
+		"  ✓ Kubernetes upgraded to %s\n", toVersion,
+	)
+
+	return nil
+}
+
+// withKubernetesUpgradeProvider connects to the control-plane node at cpNodeIP and
+// runs action with the Talos SDK's Kubernetes upgrade provider for that connection.
+// The planner and the upgrade step share it, so both read the running version
+// through the same client.
+func (p *Provisioner) withKubernetesUpgradeProvider(
+	ctx context.Context,
+	cpNodeIP, description string,
+	action func(state k8s.UpgradeProvider) error,
+) error {
+	talosClient, err := p.dialTalosClientWithRetry(ctx, cpNodeIP, description)
+	if err != nil {
+		return fmt.Errorf("creating Talos client for %s: %w", description, err)
 	}
 
 	defer talosClient.Close() //nolint:errcheck
@@ -244,41 +299,45 @@ func (p *Provisioner) UpgradeKubernetes(
 			ClientProvider: clientProvider,
 		}),
 	}
+	defer state.K8sClose() //nolint:errcheck
 
-	_, _ = fmt.Fprintf(p.logWriter,
-		"  Upgrading Kubernetes to %s...\n", toVersion,
-	)
+	return action(&state)
+}
 
-	// Strip the "v" prefix — the Talos SDK uses bare version numbers (e.g., "1.35.1").
-	toVersionBare := strings.TrimPrefix(toVersion, "v")
-
-	// Auto-detect the current running K8s version from the cluster.
-	upgradeOpts := kubernetesUpgradeOptions(p.logWriter)
-
-	fromVersionBare, err := k8s.DetectLowestVersion(ctx, &state, upgradeOpts)
-	if err != nil {
-		return fmt.Errorf("detecting current K8s version: %w", err)
+// detectRunningKubernetesVersion returns the lowest Kubernetes version running on
+// the cluster's control-plane components, read through the control-plane node at
+// cpNodeIP. It is the same detection the upgrade step uses, so the planned path
+// starts where the upgrade will.
+func (p *Provisioner) detectRunningKubernetesVersion(
+	ctx context.Context,
+	cpNodeIP string,
+) (string, error) {
+	if p.kubernetesVersionDetector != nil {
+		return p.kubernetesVersionDetector(ctx, cpNodeIP)
 	}
 
-	upgradeOpts.Path, err = upgrade.NewPath(fromVersionBare, toVersionBare)
+	var version string
+
+	err := p.withKubernetesUpgradeProvider(ctx, cpNodeIP, "kubernetes version check",
+		func(state k8s.UpgradeProvider) error {
+			detected, err := k8s.DetectLowestVersion(
+				ctx,
+				state,
+				kubernetesUpgradeOptions(io.Discard),
+			)
+			if err != nil {
+				return fmt.Errorf("detecting running K8s version: %w", err)
+			}
+
+			version = detected
+
+			return nil
+		})
 	if err != nil {
-		return fmt.Errorf("creating upgrade path %s → %s: %w", fromVersionBare, toVersionBare, err)
+		return "", err
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter,
-		"  Upgrade path: %s → %s\n", fromVersionBare, toVersionBare,
-	)
-
-	err = k8s.Upgrade(ctx, &state, upgradeOpts)
-	if err != nil {
-		return fmt.Errorf("K8s upgrade to %s failed: %w", toVersion, err)
-	}
-
-	_, _ = fmt.Fprintf(p.logWriter,
-		"  ✓ Kubernetes upgraded to %s\n", toVersion,
-	)
-
-	return nil
+	return version, nil
 }
 
 // GetCurrentVersions returns the running Talos and Kubernetes versions.
@@ -309,15 +368,51 @@ func (p *Provisioner) GetCurrentVersions(
 		return nil, fmt.Errorf("getting Talos version: %w", err)
 	}
 
-	var k8sVersion string
-
-	if p.talosConfigs != nil {
-		k8sVersion = p.talosConfigs.KubernetesVersion()
+	k8sVersion, err := p.getLowestRunningKubernetesVersion(ctx, nodes)
+	if err != nil {
+		return nil, err
 	}
 
+	return &clusterupdate.VersionInfo{
+		KubernetesVersion:   k8sVersion,
+		DistributionVersion: talosVersion,
+	}, nil
+}
+
+// getLowestRunningKubernetesVersion returns the lowest Kubernetes version the
+// cluster actually runs, with a "v" prefix. It never falls back to the rendered
+// machine config: that keeps the version KSail first generated, so after an
+// automatic upgrade it lags the cluster and the planner would start the next
+// path from a version the cluster has already left (ksail#7412).
+func (p *Provisioner) getLowestRunningKubernetesVersion(
+	ctx context.Context,
+	nodes []nodeWithRole,
+) (string, error) {
+	var cpNodeIP string
+
+	for _, n := range nodes {
+		if n.Role == RoleControlPlane {
+			cpNodeIP = n.IP
+
+			break
+		}
+	}
+
+	if cpNodeIP == "" {
+		return "", fmt.Errorf(
+			"getting Kubernetes version: %w", clustererr.ErrNoControlPlaneNodes,
+		)
+	}
+
+	k8sVersion, err := p.detectRunningKubernetesVersion(ctx, cpNodeIP)
+	if err != nil {
+		return "", fmt.Errorf("getting Kubernetes version: %w", err)
+	}
+
+	k8sVersion = strings.TrimSpace(k8sVersion)
 	if k8sVersion == "" {
-		return nil, fmt.Errorf(
-			"kubernetes version from Talos machine configs: %w", clustererr.ErrVersionUndetermined,
+		return "", fmt.Errorf(
+			"kubernetes version from the running cluster: %w", clustererr.ErrVersionUndetermined,
 		)
 	}
 
@@ -325,10 +420,7 @@ func (p *Provisioner) GetCurrentVersions(
 		k8sVersion = "v" + k8sVersion
 	}
 
-	return &clusterupdate.VersionInfo{
-		KubernetesVersion:   k8sVersion,
-		DistributionVersion: talosVersion,
-	}, nil
+	return k8sVersion, nil
 }
 
 // getLowestRunningTalosVersion returns the lowest (least-upgraded) running Talos
