@@ -1529,6 +1529,8 @@ jobs:
             provider: Docker
             init: true
             args: ""
+            kubernetes-upgrade-from: "v1.36.2"
+            kubernetes-upgrade-to: "v1.37.1"
             test-kubernetes-provider: "true"
           - distribution: VCluster
             provider: Docker
@@ -1618,6 +1620,8 @@ jobs:
           provider: ${{ matrix.provider }}
           init: ${{ matrix.init }}
           args: ${{ matrix.args }}
+          kubernetes-upgrade-from: ${{ matrix.kubernetes-upgrade-from || '' }}
+          kubernetes-upgrade-to: ${{ matrix.kubernetes-upgrade-to || '' }}
           ecr-public-upstream: ${{ steps.offline-ecr.outputs.remote-url || 'https://ecr-public.aws.com' }}
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
           test-kubernetes-provider: ${{ matrix.test-kubernetes-provider || 'false' }}
