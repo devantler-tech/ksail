@@ -22,14 +22,20 @@ func TestCiliumLinkedPackagesStayInert(t *testing.T) {
 		t.Fatal("vendored Cilium sources require a new GO-2026-6596 assessment")
 	}
 
-	for _, build := range claircoreBuilds() {
-		t.Run(build.name, func(t *testing.T) {
+	for _, name := range []string{"root", "desktop"} {
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
+			cgo, knownCGO := moduleCGO()[name]
+			tags, knownTags := moduleBuildTags()[name]
+			if !knownCGO || !knownTags {
+				t.Fatalf("%s lacks release-validated build settings", name)
+			}
+
 			for _, target := range shippedPlatforms() {
-				packages := listDependencyPackages(t, root, target, build.cgo, build.tags)
+				packages := listDependencyPackages(t, root, target, cgo, tags)
 				if failure := validateCiliumLinkedPackages(packages); failure != "" {
-					t.Fatalf("%s on %s: %s", build.name, target.String(), failure)
+					t.Fatalf("%s on %s: %s", name, target.String(), failure)
 				}
 			}
 		})
