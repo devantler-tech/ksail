@@ -1038,6 +1038,8 @@ func releaseConfigDigests(t *testing.T, root string) map[string]string {
 			t.Fatalf("read %s: %v", name, err)
 		}
 
+		// A CRLF checkout (Windows, core.autocrlf) must not change the digest of unchanged content.
+		data = bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
 		digests[name] = fmt.Sprintf("%x", sha256.Sum256(data))
 	}
 
