@@ -2,7 +2,9 @@ package talosprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -133,7 +135,8 @@ func (p *Provisioner) repointTalosconfigEndpoint(clusterName, fromIP, toIP strin
 }
 
 // canonicalTalosconfigPath expands and canonicalizes a configured talosconfig
-// path; an unconfigured (empty) path stays empty.
+// path. It returns "" for an unconfigured path and for one that does not exist
+// (even when its parent directory is gone): there is then nothing to rewrite.
 func canonicalTalosconfigPath(path string) (string, error) {
 	if path == "" {
 		return "", nil
@@ -142,6 +145,11 @@ func canonicalTalosconfigPath(path string) (string, error) {
 	expanded, err := fsutil.ExpandHomePath(path)
 	if err != nil {
 		return "", fmt.Errorf("failed to expand talosconfig path: %w", err)
+	}
+
+	_, err = os.Lstat(expanded)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", nil
 	}
 
 	canonical, err := fsutil.EvalCanonicalPath(expanded)

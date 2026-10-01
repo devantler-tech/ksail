@@ -3,6 +3,7 @@ package talosprovisioner_test
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -272,4 +273,18 @@ func TestUpdateApplySteps_FloatingIPDisableCleansUpAfterExternalRelease(t *testi
 	require.NoError(t, err)
 	assert.Equal(t, []string{"203.0.113.5"}, saved.Contexts["fip-cluster"].Endpoints,
 		"talosctl must stop dialing the released address")
+}
+
+// TestUpdateApplySteps_FloatingIPDisableReleasesWithoutTalosconfigDir proves a
+// talosconfig whose directory was deleted is nothing to rewrite, not a failure
+// that would keep the address on every retry.
+//
+//nolint:paralleltest // the fixture sets the Hetzner token with t.Setenv.
+func TestUpdateApplySteps_FloatingIPDisableReleasesWithoutTalosconfigDir(t *testing.T) {
+	fixture := newFloatingIPDisableFixture(t)
+	require.NoError(t, os.RemoveAll(filepath.Dir(fixture.talosconfigPath)))
+
+	fixture.runStep(t, "release disabled floating IP", clusterupdate.NewEmptyUpdateResult())
+
+	assert.Equal(t, int32(1), fixture.calls.del.Load())
 }
