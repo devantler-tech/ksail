@@ -89,6 +89,7 @@ func runMirrorCacheCompleteness(t *testing.T, directory *os.Root) (string, error
 		"/tmp/mirror-cache", `"$FIXTURE_MIRROR_DIR"`,
 		"/tmp/all-images.txt", `"$FIXTURE_IMAGES"`,
 	).Replace(step.Run))
+
 	command.Env = append(os.Environ(), "GITHUB_ACTION_PATH="+actionPath,
 		"CACHE_KEY=mirror-fixture", "GITHUB_RUN_ID=503", "GITHUB_RUN_ATTEMPT=2",
 		"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"),
@@ -102,11 +103,13 @@ func runMirrorCacheCompleteness(t *testing.T, directory *os.Root) (string, error
 
 func TestMirrorRestoredCacheRepairsInvalidArchives(t *testing.T) {
 	t.Parallel()
+
 	for _, name := range mirrorArchiveNames() {
 		for _, invalid := range []string{"missing", "empty", "malformed", "symlink"} {
 			t.Run(name+"/"+invalid, func(t *testing.T) {
 				t.Parallel()
 				directory := mirrorArchiveFixture(t)
+
 				switch invalid {
 				case "missing":
 					require.NoError(t, directory.Remove(name))
@@ -119,11 +122,14 @@ func TestMirrorRestoredCacheRepairsInvalidArchives(t *testing.T) {
 					if name == other {
 						other = "ghcr.io.tar"
 					}
+
 					require.NoError(t, directory.Remove(name))
 					require.NoError(t, directory.Symlink(other, name))
 				}
+
 				output, err := runMirrorCacheCompleteness(t, directory)
 				require.NoError(t, err, "invalid cached inputs must enter repair: %s", output)
+
 				outputs, readErr := directory.ReadFile("outputs")
 				require.NoError(t, readErr)
 				assert.Equal(t,
@@ -141,6 +147,7 @@ func TestMirrorRestoredCacheKeepsValidArchives(t *testing.T) {
 	outputs, err := directory.ReadFile("outputs")
 	require.NoError(t, err)
 	assert.Equal(t, "complete=true\n", string(outputs))
+
 	_, err = directory.Stat("SHA256SUMS")
 	assert.ErrorIs(t, err, os.ErrNotExist, "checking a restored cache must not reseal it")
 }
@@ -151,19 +158,23 @@ func TestMirrorRegenerationReplacesRejectedSymlinks(t *testing.T) {
 	export := findHarnessStep(t, action.Runs.Steps, "💾 Export mirror volumes")
 	seal := findHarnessStep(t, action.Runs.Steps, "🔍 Verify all mirror volumes exported")
 	assert.Equal(t, "steps.check-cache.outputs.complete != 'true'", export.If)
+
 	actionPath, err := filepath.Abs(
 		filepath.Join("..", "..", ".github", "actions", "warm-mirror-cache"),
 	)
 	require.NoError(t, err)
+
 	for _, name := range mirrorArchiveNames() {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			directory := mirrorArchiveFixture(t)
 			valid := mirrorArchiveFixture(t)
+
 			other := "docker.io.tar"
 			if name == other {
 				other = "ghcr.io.tar"
 			}
+
 			require.NoError(t, directory.Remove(name))
 			require.NoError(t, directory.Symlink(other, name))
 			bin := t.TempDir()
@@ -184,20 +195,24 @@ exit 1
 			command.Stdin = strings.NewReader(strings.ReplaceAll(
 				export.Run+"\n"+seal.Run, "/tmp/mirror-cache", `"$FIXTURE_MIRROR_DIR"`,
 			))
+
 			command.Env = append(os.Environ(), "GITHUB_ACTION_PATH="+actionPath,
 				"CACHE_KEY=mirror-repaired", "FIXTURE_MIRROR_DIR="+directory.Name(),
 				"FIXTURE_VALID_TAR="+filepath.Join(valid.Name(), "docker.io.tar"),
 				"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 			output, runErr := command.CombinedOutput()
 			require.NoError(t, runErr, "regenerated archives must seal successfully: %s", output)
+
 			repaired, openErr := os.OpenRoot(directory.Name())
 			require.NoError(t, openErr)
 			t.Cleanup(func() { require.NoError(t, repaired.Close()) })
+
 			for _, archive := range mirrorArchiveNames() {
 				info, statErr := repaired.Lstat(archive)
 				require.NoError(t, statErr)
 				assert.True(t, info.Mode().IsRegular(), "%s must be a new regular archive", archive)
 			}
+
 			key, readErr := repaired.ReadFile("cache-key")
 			require.NoError(t, readErr)
 			assert.Equal(t, "mirror-repaired\n", string(key))
