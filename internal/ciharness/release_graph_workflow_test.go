@@ -31,12 +31,14 @@ func TestReleaseGraphAuditRunsForReleaseOnlyChanges(t *testing.T) {
 		workflow.Jobs["changes"].Outputs["release-graph-audit"])
 
 	filter := findHarnessStep(t, workflow.Jobs["changes"].Steps, "🔍 Filter paths")
+
 	var filters map[string][]string
 	require.NoError(t, yaml.Unmarshal([]byte(stringValue(filter.With["filters"])), &filters))
 	patterns := filters["release-graph-audit"]
 	require.NotEmpty(t, patterns)
 
 	inputs := auditedReleaseInputPaths(t)
+
 	inputs = append(inputs, ".github/workflows/ci.yaml", "go.mod", "go.sum",
 		".govulncheck-allow.txt", "pkg/client/kubescape/cilium_linkage_test.go",
 		"desktop/main.go", "internal/ciharness/release_graph_workflow_test.go")
@@ -44,13 +46,18 @@ func TestReleaseGraphAuditRunsForReleaseOnlyChanges(t *testing.T) {
 		assert.Truef(t, contractFilterMatches(t, patterns, input),
 			"changing only %s must run the shipped dependency audit", input)
 	}
+
 	assert.False(t, contractFilterMatches(t, patterns, "README.md"),
 		"the release audit should not be selected by unrelated prose")
 
 	aggregate := workflow.Jobs["require-checks-in-pr"]
 	assert.Contains(t, aggregate.Needs, "release-graph-audit")
 	require.NotEmpty(t, aggregate.Steps)
-	assert.Contains(t, aggregate.Steps[0].With["job-results"], "${{ needs.release-graph-audit.result }}")
+	assert.Contains(
+		t,
+		aggregate.Steps[0].With["job-results"],
+		"${{ needs.release-graph-audit.result }}",
+	)
 }
 
 // Discover the inputs the release audit pins so adding another hashed file cannot silently leave
@@ -63,25 +70,32 @@ func auditedReleaseInputPaths(t *testing.T) []string {
 	require.NoError(t, err)
 
 	var paths []string
+
 	for _, declaration := range source.Decls {
 		function, ok := declaration.(*ast.FuncDecl)
 		if !ok || function.Name.Name != "auditedReleaseConfigDigests" {
 			continue
 		}
+
 		ast.Inspect(function.Body, func(node ast.Node) bool {
 			entry, isEntry := node.(*ast.KeyValueExpr)
 			if !isEntry {
 				return true
 			}
+
 			key, isString := entry.Key.(*ast.BasicLit)
 			require.True(t, isString)
+
 			path, unquoteErr := strconv.Unquote(key.Value)
 			require.NoError(t, unquoteErr)
+
 			path, _, _ = strings.Cut(path, "#")
 			paths = append(paths, path)
+
 			return false
 		})
 	}
+
 	require.NotEmpty(t, paths, "release input discovery must examine the audited configuration")
 
 	return paths
@@ -110,6 +124,7 @@ func TestReleaseGraphAuditPropagatesFailure(t *testing.T) {
 	command := exec.CommandContext(t.Context(), "bash", "-e", "-c", auditCommand)
 	output, err := command.CombinedOutput()
 	require.Errorf(t, err, "a failed dependency audit must fail the workflow step: %s", output)
+
 	actual, readErr := os.ReadFile(arguments) //nolint:gosec // test-owned temporary file.
 	require.NoError(t, readErr)
 	assert.Contains(t, strings.Split(string(actual), "\n"), "./pkg/client/kubescape/...")
