@@ -168,7 +168,7 @@ func handleUpdateRunE(
 	outputTimer := flags.MaybeTimer(cmd, deps.Timer)
 
 	// Load and validate configuration using shared helper
-	ctx, clusterName, err := loadAndValidateClusterConfig(cfgManager, deps)
+	ctx, clusterName, err := loadAndValidateClusterConfig(cfgManager, deps, existingClusterTarget)
 	if err != nil {
 		return err
 	}

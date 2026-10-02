@@ -289,6 +289,8 @@ const configConnectionProse = `#### connection (Connection)
 
 When using Talos with Omni, Omni generates the context name; set ` + bt + `spec.cluster.connection.context` + bt + ` to that generated name.
 
+**Context and cluster name:** a blank context is derived from the cluster name. ` + bt + `ksail cluster diff` + bt + ` and ` + bt + `ksail cluster update` + bt + ` connect through an explicit context even when ` + bt + `metadata.name` + bt + ` names the cluster, so a custom or OIDC context keeps working. ` + bt + `ksail cluster create` + bt + ` and the ` + bt + `--name` + bt + ` flag replace the context with the one derived from the cluster name.
+
 **Timeout format:** Go duration string (e.g., ` + bt + `30s` + bt + `, ` + bt + `5m` + bt + `, ` + bt + `1h` + bt + `)`
 
 // cniDetails provides prose after the CNI enum list.

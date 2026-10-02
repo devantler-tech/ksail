@@ -269,6 +269,25 @@ func ExportApplyClusterNameOverride(ctx *localregistry.Context, name string) err
 	return applyClusterNameOverride(ctx, name)
 }
 
+// ExportApplyResolvedNameOverride exports applyResolvedNameOverride for testing. fromFlag marks
+// a --name override; existingCluster selects the diff/update target instead of create.
+func ExportApplyResolvedNameOverride(
+	ctx *localregistry.Context,
+	name string,
+	fromFlag, existingCluster bool,
+) error {
+	target := newClusterTarget
+	if existingCluster {
+		target = existingClusterTarget
+	}
+
+	return applyResolvedNameOverride(
+		ctx,
+		clusterNameOverride{name: name, fromFlag: fromFlag},
+		target,
+	)
+}
+
 // ExportResolveConsent exports resolveConsent for testing.
 func ExportResolveConsent(viperForce bool, yesFlag *pflag.Flag) bool {
 	return resolveConsent(viperForce, yesFlag)

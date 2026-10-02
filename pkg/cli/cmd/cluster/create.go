@@ -85,7 +85,7 @@ func handleCreateRunE(
 ) error {
 	deps.Timer.Start()
 
-	ctx, clusterName, err := loadAndValidateClusterConfig(cfgManager, deps)
+	ctx, clusterName, err := loadAndValidateClusterConfig(cfgManager, deps, newClusterTarget)
 	if err != nil {
 		return err
 	}
@@ -624,6 +624,8 @@ func setupVClusterCNI(
 // applyClusterNameOverride updates distribution configs with the cluster name override.
 // This function mutates the distribution config pointers in ctx to apply the --name flag value.
 // The name override takes highest priority over distribution config or context-derived names.
+// It always retargets the connection context to the one derived from the name; diff and update
+// go through applyResolvedNameOverride, which keeps an explicit context for metadata.name.
 //
 // For Talos, this regenerates the config bundle with the new cluster name because
 // the cluster name is embedded in PKI certificates and the kubeconfig context name.
