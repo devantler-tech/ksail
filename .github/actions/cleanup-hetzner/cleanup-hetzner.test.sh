@@ -55,6 +55,12 @@ chmod +x "${fake_bin}/hcloud" "${fake_bin}/sleep"
 
 pass_count=0
 
+# mismatch NAME WHAT WANT GOT OUTPUT — report one failed expectation of a case, with its output.
+mismatch() {
+	printf 'FAIL: %s: %s: wanted %q, got %q\n--- output ---\n%s\n' "$1" "$2" "$3" "$4" "$5" >&2
+	return 1
+}
+
 # run_case NAME EXPECTED_STATUS EXPECTED_TEXT FAIL_RULES RESOURCES... — each RESOURCE is
 # "<kind>=<id>[,<id>...]". FAIL_RULES is newline-separated. After the run, every case asserts that
 # CASE_REMAINING (default: nothing) is exactly what is left across all kinds.
@@ -71,30 +77,21 @@ run_case() {
 		tr ',' '\n' <<<"${ids}" >"${state}/${kind}"
 	done
 
-	local output status
-	set +e
+	local output status=0
 	output="$(PATH="${fake_bin}:${PATH}" FAKE_HCLOUD_STATE="${state}" FAKE_HCLOUD_FAIL="${fail_rules}" \
-		LABEL_SELECTOR="ksail.cluster.name=test" bash "${cleanup}" 2>&1)"
-	status=$?
-	set -e
-
-	if [[ "${status}" -ne "${expected_status}" ]]; then
-		printf 'FAIL: %s: expected status %s, got %s\n%s\n' "${name}" "${expected_status}" "${status}" "${output}" >&2
-		return 1
-	fi
-	if [[ "${output}" != *"${expected_text}"* ]]; then
-		printf 'FAIL: %s: expected output containing %q, got:\n%s\n' "${name}" "${expected_text}" "${output}" >&2
-		return 1
-	fi
+		LABEL_SELECTOR="ksail.cluster.name=test" bash "${cleanup}" 2>&1)" || status=$?
 
 	local remaining
 	remaining="$(cd "${state}" && for kind in server floating-ip placement-group firewall network; do
 		if [[ -s "${kind}" ]]; then sed "s/^/${kind}=/" "${kind}"; fi
 	done | tr '\n' ' ')"
-	if [[ "${remaining}" != "${CASE_REMAINING:-}" ]]; then
-		printf 'FAIL: %s: expected remaining %q, got %q\n%s\n' "${name}" "${CASE_REMAINING:-}" "${remaining}" "${output}" >&2
-		return 1
-	fi
+
+	[[ "${status}" -eq "${expected_status}" ]] ||
+		mismatch "${name}" "exit status" "${expected_status}" "${status}" "${output}"
+	[[ "${output}" == *"${expected_text}"* ]] ||
+		mismatch "${name}" "output fragment" "${expected_text}" "(absent)" "${output}"
+	[[ "${remaining}" == "${CASE_REMAINING:-}" ]] ||
+		mismatch "${name}" "resources left" "${CASE_REMAINING:-}" "${remaining}" "${output}"
 
 	pass_count=$((pass_count + 1))
 }
