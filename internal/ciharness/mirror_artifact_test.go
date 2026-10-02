@@ -51,6 +51,18 @@ func mirrorArchiveFixture(t *testing.T) *os.Root {
 	return directory
 }
 
+func replaceMirrorArchiveWithSymlink(t *testing.T, directory *os.Root, name string) {
+	t.Helper()
+
+	other := "docker.io.tar"
+	if name == other {
+		other = "ghcr.io.tar"
+	}
+
+	require.NoError(t, directory.Remove(name))
+	require.NoError(t, directory.Symlink(other, name))
+}
+
 func runMirrorProducerValidation(t *testing.T, directory *os.Root) (string, error) {
 	t.Helper()
 	action := readCompositeAction(t, ".github/actions/warm-mirror-cache/action.yaml")
@@ -118,13 +130,7 @@ func TestMirrorRestoredCacheRepairsInvalidArchives(t *testing.T) {
 				case "malformed":
 					require.NoError(t, directory.WriteFile(name, []byte("not an archive"), 0o600))
 				case "symlink":
-					other := "docker.io.tar"
-					if name == other {
-						other = "ghcr.io.tar"
-					}
-
-					require.NoError(t, directory.Remove(name))
-					require.NoError(t, directory.Symlink(other, name))
+					replaceMirrorArchiveWithSymlink(t, directory, name)
 				}
 
 				output, err := runMirrorCacheCompleteness(t, directory)
@@ -152,6 +158,22 @@ func TestMirrorRestoredCacheKeepsValidArchives(t *testing.T) {
 	assert.ErrorIs(t, err, os.ErrNotExist, "checking a restored cache must not reseal it")
 }
 
+func TestMirrorRestoredCacheChecksConsumerPull(t *testing.T) {
+	t.Parallel()
+	command := exec.CommandContext(
+		t.Context(),
+		"bash",
+		"../../.github/actions/warm-mirror-cache/cache-validation.test.sh",
+	)
+	output, err := command.CombinedOutput()
+	require.NoError(
+		t,
+		err,
+		"the restored-cache fixture must reach the failed consumer pull: %s",
+		output,
+	)
+}
+
 func TestMirrorRegenerationReplacesRejectedSymlinks(t *testing.T) {
 	t.Parallel()
 	action := readCompositeAction(t, ".github/actions/warm-mirror-cache/action.yaml")
@@ -170,13 +192,7 @@ func TestMirrorRegenerationReplacesRejectedSymlinks(t *testing.T) {
 			directory := mirrorArchiveFixture(t)
 			valid := mirrorArchiveFixture(t)
 
-			other := "docker.io.tar"
-			if name == other {
-				other = "ghcr.io.tar"
-			}
-
-			require.NoError(t, directory.Remove(name))
-			require.NoError(t, directory.Symlink(other, name))
+			replaceMirrorArchiveWithSymlink(t, directory, name)
 			bin := t.TempDir()
 			writeExecutableStub(t, filepath.Join(bin, "docker"), `#!/bin/bash
 set -euo pipefail
