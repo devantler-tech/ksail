@@ -145,6 +145,66 @@ func TestMirrorRestoredCacheKeepsValidArchives(t *testing.T) {
 	assert.ErrorIs(t, err, os.ErrNotExist, "checking a restored cache must not reseal it")
 }
 
+func TestMirrorRegenerationReplacesRejectedSymlinks(t *testing.T) {
+	t.Parallel()
+	action := readCompositeAction(t, ".github/actions/warm-mirror-cache/action.yaml")
+	export := findHarnessStep(t, action.Runs.Steps, "💾 Export mirror volumes")
+	seal := findHarnessStep(t, action.Runs.Steps, "🔍 Verify all mirror volumes exported")
+	assert.Equal(t, "steps.check-cache.outputs.complete != 'true'", export.If)
+	actionPath, err := filepath.Abs(
+		filepath.Join("..", "..", ".github", "actions", "warm-mirror-cache"),
+	)
+	require.NoError(t, err)
+	for _, name := range mirrorArchiveNames() {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			directory := mirrorArchiveFixture(t)
+			valid := mirrorArchiveFixture(t)
+			other := "docker.io.tar"
+			if name == other {
+				other = "ghcr.io.tar"
+			}
+			require.NoError(t, directory.Remove(name))
+			require.NoError(t, directory.Symlink(other, name))
+			bin := t.TempDir()
+			writeExecutableStub(t, filepath.Join(bin, "docker"), `#!/bin/bash
+set -euo pipefail
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = tar ]; then
+    [ "$2" = -cf ] || exit 1
+    name=${3#/backup/}
+    cp "$FIXTURE_VALID_TAR" "$FIXTURE_MIRROR_DIR/$name"
+    exit 0
+  fi
+  shift
+done
+exit 1
+`)
+			command := exec.CommandContext(t.Context(), "bash", "-e", "-o", "pipefail")
+			command.Stdin = strings.NewReader(strings.ReplaceAll(
+				export.Run+"\n"+seal.Run, "/tmp/mirror-cache", `"$FIXTURE_MIRROR_DIR"`,
+			))
+			command.Env = append(os.Environ(), "GITHUB_ACTION_PATH="+actionPath,
+				"CACHE_KEY=mirror-repaired", "FIXTURE_MIRROR_DIR="+directory.Name(),
+				"FIXTURE_VALID_TAR="+filepath.Join(valid.Name(), "docker.io.tar"),
+				"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			output, runErr := command.CombinedOutput()
+			require.NoError(t, runErr, "regenerated archives must seal successfully: %s", output)
+			repaired, openErr := os.OpenRoot(directory.Name())
+			require.NoError(t, openErr)
+			t.Cleanup(func() { require.NoError(t, repaired.Close()) })
+			for _, archive := range mirrorArchiveNames() {
+				info, statErr := repaired.Lstat(archive)
+				require.NoError(t, statErr)
+				assert.True(t, info.Mode().IsRegular(), "%s must be a new regular archive", archive)
+			}
+			key, readErr := repaired.ReadFile("cache-key")
+			require.NoError(t, readErr)
+			assert.Equal(t, "mirror-repaired\n", string(key))
+		})
+	}
+}
+
 func TestMirrorProducerRejectsIncompleteArtifact(t *testing.T) {
 	t.Parallel()
 
