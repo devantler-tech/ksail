@@ -1155,7 +1155,12 @@ func assertK3dCiliumTransformation(t *testing.T, k3dConfig *v1alpha5.SimpleConfi
 
 	// Use the same public transformation as cluster creation. An explicit image
 	// and disabled load balancer keep this a configuration test with no runtime.
-	transformed, err := k3dconfig.TransformSimpleToClusterConfig(context.Background(), nil, *k3dConfig, "")
+	transformed, err := k3dconfig.TransformSimpleToClusterConfig(
+		context.Background(),
+		nil,
+		*k3dConfig,
+		"",
+	)
 	require.NoError(t, err)
 	require.Len(t, transformed.Nodes, 3)
 	require.Nil(t, transformed.ServerLoadBalancer)
@@ -1164,14 +1169,21 @@ func assertK3dCiliumTransformation(t *testing.T, k3dConfig *v1alpha5.SimpleConfi
 
 	for index, node := range transformed.Nodes {
 		require.Equal(t, k3dConfig.Image, node.Image)
+
 		if index == 2 {
 			require.Equal(t, "k3d-cilium-config-test-agent-0", node.Name)
 			require.Equal(t, k3dtypes.AgentRole, node.Role)
 			require.Empty(t, node.Args)
+
 			continue
 		}
+
 		require.Equal(t, k3dtypes.ServerRole, node.Role)
-		require.Equal(t, []string{"k3d-cilium-config-test-server-0", "k3d-cilium-config-test-server-1"}[index], node.Name)
+		require.Equal(
+			t,
+			[]string{"k3d-cilium-config-test-server-0", "k3d-cilium-config-test-server-1"}[index],
+			node.Name,
+		)
 		require.ElementsMatch(t, []string{
 			"--flannel-backend=none", "--disable-network-policy", disableTraefikArg,
 		}, node.Args)
@@ -1179,7 +1191,12 @@ func assertK3dCiliumTransformation(t *testing.T, k3dConfig *v1alpha5.SimpleConfi
 
 	// An unfiltered server flag must be rejected rather than leaking to agents.
 	k3dConfig.Options.K3sOptions.ExtraArgs[0].NodeFilters = nil
-	transformed, err = k3dconfig.TransformSimpleToClusterConfig(context.Background(), nil, *k3dConfig, "")
+	transformed, err = k3dconfig.TransformSimpleToClusterConfig(
+		context.Background(),
+		nil,
+		*k3dConfig,
+		"",
+	)
 	require.ErrorContains(t, err, "lacks a node filter")
 	require.Nil(t, transformed)
 }

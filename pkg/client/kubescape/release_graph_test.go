@@ -180,7 +180,10 @@ func TestShippedPlatformsCoverReleaseMatrices(t *testing.T) {
 
 	for key := range audited {
 		if !released[key] {
-			t.Errorf("shippedPlatforms audits %s, which no release builds (release-graph audit)", key)
+			t.Errorf(
+				"shippedPlatforms audits %s, which no release builds (release-graph audit)",
+				key,
+			)
 		}
 	}
 }
@@ -277,8 +280,13 @@ func TestModuleCGOMatchesReleaseBuilds(t *testing.T) {
 	for name, file := range map[string]string{"root": ".goreleaser.yaml", "desktop": ".goreleaser.desktop.yaml"} {
 		released := goreleaserCGO(t, filepath.Join(root, file))
 		if moduleCGO()[name] != released {
-			t.Errorf("moduleCGO()[%q] = %q, but %s builds with CGO_ENABLED=%s (release-graph audit)",
-				name, moduleCGO()[name], file, released)
+			t.Errorf(
+				"moduleCGO()[%q] = %q, but %s builds with CGO_ENABLED=%s (release-graph audit)",
+				name,
+				moduleCGO()[name],
+				file,
+				released,
+			)
 		}
 	}
 }
