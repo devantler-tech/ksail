@@ -407,6 +407,8 @@ This mirrors the upstream Cluster Autoscaler model — the autoscaler owns node 
 > [!NOTE]
 > Recycling drains nodes one at a time, so a strict PodDisruptionBudget can slow or block it. Pods that cannot be evicted within the drain timeout fail the update so the condition surfaces rather than abruptly evicting workloads.
 
+**Removed pools.** Removing a pool from `spec.cluster.autoscaler.node.pools` leaves its servers running: the cluster-autoscaler no longer manages them, and KSail can no longer rebuild the configuration they booted from. The `ksail cluster update` that removes the pool still finds them — by the autoscaler's `hcloud/node-group` label, in the cluster's private network only — but never drains, reboots, reconfigures or deletes them. It reports each one as a failed change instead, so the update exits non-zero. Restore the pool, or drain each node and delete its server.
+
 ### List Clusters
 
 ```bash
