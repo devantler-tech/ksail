@@ -71,6 +71,80 @@ func runMirrorProducerValidation(t *testing.T, directory *os.Root) (string, erro
 	return string(output), err
 }
 
+// Exercise the restored-cache decision with controlled successful registry probes.
+func runMirrorCacheCompleteness(t *testing.T, directory *os.Root) (string, error) {
+	t.Helper()
+	action := readCompositeAction(t, ".github/actions/warm-mirror-cache/action.yaml")
+	step := findHarnessStep(t, action.Runs.Steps, "🔍 Check if cache is complete")
+	actionPath, err := filepath.Abs(
+		filepath.Join("..", "..", ".github", "actions", "warm-mirror-cache"),
+	)
+	require.NoError(t, err)
+	bin := t.TempDir()
+	writeExecutableStub(t, filepath.Join(bin, "docker"), "#!/bin/sh\nexit 0\n")
+	writeExecutableStub(t, filepath.Join(bin, "curl"), "#!/bin/sh\nexit 0\n")
+	require.NoError(t, directory.WriteFile("images", nil, 0o600))
+	command := exec.CommandContext(t.Context(), "bash", "-e", "-o", "pipefail")
+	command.Stdin = strings.NewReader(strings.NewReplacer(
+		"/tmp/mirror-cache", `"$FIXTURE_MIRROR_DIR"`,
+		"/tmp/all-images.txt", `"$FIXTURE_IMAGES"`,
+	).Replace(step.Run))
+	command.Env = append(os.Environ(), "GITHUB_ACTION_PATH="+actionPath,
+		"CACHE_KEY=mirror-fixture", "GITHUB_RUN_ID=503", "GITHUB_RUN_ATTEMPT=2",
+		"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"FIXTURE_MIRROR_DIR="+directory.Name(),
+		"FIXTURE_IMAGES="+filepath.Join(directory.Name(), "images"),
+		"GITHUB_OUTPUT="+filepath.Join(directory.Name(), "outputs"))
+	output, err := command.CombinedOutput()
+
+	return string(output), err
+}
+
+func TestMirrorRestoredCacheRepairsInvalidArchives(t *testing.T) {
+	t.Parallel()
+	for _, name := range mirrorArchiveNames() {
+		for _, invalid := range []string{"missing", "empty", "malformed", "symlink"} {
+			t.Run(name+"/"+invalid, func(t *testing.T) {
+				t.Parallel()
+				directory := mirrorArchiveFixture(t)
+				switch invalid {
+				case "missing":
+					require.NoError(t, directory.Remove(name))
+				case "empty":
+					require.NoError(t, directory.WriteFile(name, nil, 0o600))
+				case "malformed":
+					require.NoError(t, directory.WriteFile(name, []byte("not an archive"), 0o600))
+				case "symlink":
+					other := "docker.io.tar"
+					if name == other {
+						other = "ghcr.io.tar"
+					}
+					require.NoError(t, directory.Remove(name))
+					require.NoError(t, directory.Symlink(other, name))
+				}
+				output, err := runMirrorCacheCompleteness(t, directory)
+				require.NoError(t, err, "invalid cached inputs must enter repair: %s", output)
+				outputs, readErr := directory.ReadFile("outputs")
+				require.NoError(t, readErr)
+				assert.Equal(t,
+					"complete=false\nrepair-key=mirror-fixture-repair-503-2\n", string(outputs))
+			})
+		}
+	}
+}
+
+func TestMirrorRestoredCacheKeepsValidArchives(t *testing.T) {
+	t.Parallel()
+	directory := mirrorArchiveFixture(t)
+	output, err := runMirrorCacheCompleteness(t, directory)
+	require.NoError(t, err, output)
+	outputs, err := directory.ReadFile("outputs")
+	require.NoError(t, err)
+	assert.Equal(t, "complete=true\n", string(outputs))
+	_, err = directory.Stat("SHA256SUMS")
+	assert.ErrorIs(t, err, os.ErrNotExist, "checking a restored cache must not reseal it")
+}
+
 func TestMirrorProducerRejectsIncompleteArtifact(t *testing.T) {
 	t.Parallel()
 
