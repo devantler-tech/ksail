@@ -13,6 +13,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/detector"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -157,12 +158,30 @@ func namedContextKubeconfig(servers map[string]*recordingAPIServer) string {
 		"  user:\n    token: " + namedContextKubeToken + "\n"
 }
 
-// runNamedContextCommand runs the real `ksail cluster <command>` against an
-// offline provisioner fake and returns its combined stdout and stderr.
+// runNamedContextCommand runs the real `ksail cluster diff` or
+// `ksail cluster update --dry-run` against an offline provisioner fake and
+// returns its combined stdout and stderr.
 func runNamedContextCommand(t *testing.T, command string, args ...string) string {
 	t.Helper()
 
-	provisioner := &detectingUpgraderFake{updatableUpgraderFake: pinnedUpgraderFake()}
+	if command == "update" {
+		args = append([]string{"--dry-run"}, args...)
+	}
+
+	return runNamedContextCommandWith(t, pinnedUpgraderFake(), command, args...)
+}
+
+// runNamedContextCommandWith runs the real `ksail cluster <command>` with args
+// against the given provisioner fake and returns its combined stdout and stderr.
+func runNamedContextCommandWith(
+	t *testing.T,
+	upgrader *updatableUpgraderFake,
+	command string,
+	args ...string,
+) string {
+	t.Helper()
+
+	provisioner := &detectingUpgraderFake{updatableUpgraderFake: upgrader}
 
 	t.Cleanup(cluster.SetProvisionerFactoryForTests(detectingUpgraderFactory{provisioner}))
 	t.Cleanup(cluster.ExportSetUpdateUnmanagedGuard(
@@ -174,8 +193,6 @@ func runNamedContextCommand(t *testing.T, command string, args ...string) string
 	cmd := cluster.NewDiffCmd()
 	if command == "update" {
 		cmd = cluster.NewUpdateCmd()
-
-		args = append([]string{"--dry-run"}, args...)
 	}
 
 	cmd.SetContext(t.Context())
@@ -270,4 +287,36 @@ func TestNameFlagRetargetsExplicitContext(t *testing.T) {
 				explicitContextName, output)
 		})
 	}
+}
+
+// When update has to recreate a named cluster, the recreated cluster is written
+// to the context derived from its name, so post-creation setup must target that
+// context, exactly as create does, rather than the custom context kept for
+// inspecting the old cluster.
+func TestNamedClusterRecreationTargetsCreatedContext(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	writeNamedContextProject(t, explicitContextName, map[string]*recordingAPIServer{
+		explicitContextName: newRecordingAPIServer(t),
+		derivedContextName:  newRecordingAPIServer(t),
+	})
+	setupMockRegistryBackend(t)
+
+	var installContexts []string
+
+	t.Cleanup(cluster.SetCertManagerInstallerFactoryForTests(
+		func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+			installContexts = append(installContexts, clusterCfg.Spec.Cluster.Connection.Context)
+
+			return &fakeInstaller{}, nil
+		},
+	))
+
+	output := runNamedContextCommandWith(
+		t, recreationUpgraderFake(), "update", "--yes", "--cert-manager", "Enabled",
+	)
+
+	require.Contains(t, output, "cluster deleted", "update must take the recreation path")
+	assert.Equal(t, []string{derivedContextName}, installContexts,
+		"post-creation setup must target the recreated cluster's context; output:\n%s", output)
 }

@@ -24,6 +24,7 @@ func TestResolveClusterName(t *testing.T) {
 		kindConfig   *kindv1alpha4.Cluster
 		k3dConfig    *k3dv1alpha5.SimpleConfig
 		context      string
+		metadataName string
 		expected     string
 	}{
 		{
@@ -67,6 +68,20 @@ func TestResolveClusterName(t *testing.T) {
 			expected:     "kwok-default",
 		},
 		{
+			name:         "KWOK with a custom context uses metadata.name",
+			distribution: v1alpha1.DistributionKWOK,
+			context:      "custom-context",
+			metadataName: "named",
+			expected:     "named",
+		},
+		{
+			name:         "KWOK context name wins over metadata.name",
+			distribution: v1alpha1.DistributionKWOK,
+			context:      "kwok-test-cluster",
+			metadataName: "named",
+			expected:     "test-cluster",
+		},
+		{
 			name:         "EKS extracts cluster name from eksctl context",
 			distribution: v1alpha1.DistributionEKS,
 			context:      "iam-user@my-cluster.eu-west-1.eksctl.io",
@@ -99,6 +114,7 @@ func TestResolveClusterName(t *testing.T) {
 					},
 				},
 			}
+			clusterCfg.Name = tc.metadataName
 
 			result := localregistry.ResolveClusterNameForTest(
 				clusterCfg, tc.kindConfig, tc.k3dConfig, nil, nil,

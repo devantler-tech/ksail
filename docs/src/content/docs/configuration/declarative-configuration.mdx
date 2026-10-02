@@ -327,7 +327,7 @@ See [Distribution Configuration](#distribution-configuration) below for details 
 
 When using Talos with Omni, Omni generates the context name; set `spec.cluster.connection.context` to that generated name.
 
-**Context and cluster name:** a blank context is derived from the cluster name. `ksail cluster diff` and `ksail cluster update` connect through an explicit context even when `metadata.name` names the cluster, so a custom or OIDC context keeps working. `ksail cluster create` and the `--name` flag replace the context with the one derived from the cluster name.
+**Context and cluster name:** a blank context is derived from the cluster name. When `metadata.name` names the cluster, `ksail cluster diff` and `ksail cluster update` reach it through a custom context, such as an OIDC context; a context that follows the naming convention above follows the cluster name instead. `ksail cluster create`, a recreation during `ksail cluster update`, and the `--name` flag use the context derived from the cluster name. GKE and AKS read the cluster name from the context, so they always derive it.
 
 **Timeout format:** Go duration string (e.g., `30s`, `5m`, `1h`)
 

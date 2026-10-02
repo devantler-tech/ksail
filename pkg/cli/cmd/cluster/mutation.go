@@ -248,10 +248,10 @@ func resolveMutationNameOverride(
 
 // applyResolvedNameOverride applies a resolved cluster name override to the distribution configs.
 // On create, and for --name, the context derived from the name replaces
-// spec.cluster.connection.context. Diff and update keep an explicit context when the name comes
+// spec.cluster.connection.context. Diff and update keep a custom context when the name comes
 // from metadata.name: the name identifies the cluster, and the context says how to reach it, so
-// replacing it would inspect a context the user never selected. A blank context is still derived
-// from the name.
+// replacing it would inspect a context the user never selected. A blank context, and one that
+// follows the distribution's naming convention, is still derived from the name.
 func applyResolvedNameOverride(
 	ctx *localregistry.Context,
 	override clusterNameOverride,
@@ -261,28 +261,83 @@ func applyResolvedNameOverride(
 		return nil
 	}
 
-	configuredContext := ctx.ClusterCfg.Spec.Cluster.Connection.Context
-
-	err := applyClusterNameOverride(ctx, override.name)
+	err := renameDistributionConfigs(ctx, override.name)
 	if err != nil {
 		return err
 	}
 
-	if override.fromFlag || target == newClusterTarget ||
-		strings.TrimSpace(configuredContext) == "" {
-		return nil
-	}
-
-	derivedContext := ctx.ClusterCfg.Spec.Cluster.Connection.Context
-	ctx.ClusterCfg.Spec.Cluster.Connection.Context = configuredContext
-
-	// GKE and AKS have no renamed distribution config here, so their cluster name is read back
-	// from the context. For them the derived context is what carries the name, so keep it.
-	if resolveClusterNameFromContext(ctx) != override.name {
-		ctx.ClusterCfg.Spec.Cluster.Connection.Context = derivedContext
+	if !keepsConfiguredContext(ctx, override, target) {
+		retargetConnectionContext(ctx, override.name)
 	}
 
 	return nil
+}
+
+// retargetContextForRecreation applies create's context rule before update recreates a cluster: a
+// named cluster is recreated under the context derived from its name, which keepsConfiguredContext
+// may have set aside while the old cluster was inspected. A cluster with no name override keeps
+// its configured context, as before.
+func retargetContextForRecreation(
+	cfgManager *ksailconfigmanager.ConfigManager,
+	ctx *localregistry.Context,
+) error {
+	if cfgManager == nil {
+		return nil
+	}
+
+	override, err := resolveMutationNameOverride(cfgManager, ctx)
+	if err != nil {
+		return err
+	}
+
+	if override.name != "" {
+		retargetConnectionContext(ctx, override.name)
+	}
+
+	return nil
+}
+
+// keepsConfiguredContext reports whether diff or update keeps the configured context for a cluster
+// name from metadata.name. It holds only for a custom context: a blank one is derived from the
+// name, and one that follows the distribution's naming convention (kind-<name>, admin@<name>, …)
+// is a context KSail derives from a name, such as the one `project env add` writes, so it follows
+// a renamed metadata.name rather than pinning the old cluster. GKE and AKS read their cluster
+// name back from the context, so a context that does not resolve to the name is not kept either.
+// Call it after renameDistributionConfigs, which the name check reads.
+func keepsConfiguredContext(
+	ctx *localregistry.Context,
+	override clusterNameOverride,
+	target clusterConfigTarget,
+) bool {
+	if override.fromFlag || target != existingClusterTarget {
+		return false
+	}
+
+	configuredContext := strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context)
+	if configuredContext == "" ||
+		followsContextConvention(ctx.ClusterCfg.Spec.Cluster, configuredContext) {
+		return false
+	}
+
+	return resolveClusterNameFromContext(ctx) == override.name
+}
+
+// followsContextConvention reports whether contextName has the shape the distribution's tooling
+// gives the contexts it writes for some cluster name: the prefix and suffix of the context a
+// created cluster is written to, around a non-empty name.
+func followsContextConvention(spec v1alpha1.ClusterSpec, contextName string) bool {
+	const placeholder = "\x00"
+
+	pattern := resolveCreatedContextName(spec.Distribution, spec.Provider, placeholder)
+
+	prefix, suffix, found := strings.Cut(pattern, placeholder)
+	if !found {
+		return false
+	}
+
+	return len(contextName) > len(prefix)+len(suffix) &&
+		strings.HasPrefix(contextName, prefix) &&
+		strings.HasSuffix(contextName, suffix)
 }
 
 func validateMutationClusterName(name string) error {

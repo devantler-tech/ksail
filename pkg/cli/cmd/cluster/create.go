@@ -624,16 +624,30 @@ func setupVClusterCNI(
 // applyClusterNameOverride updates distribution configs with the cluster name override.
 // This function mutates the distribution config pointers in ctx to apply the --name flag value.
 // The name override takes highest priority over distribution config or context-derived names.
-// It always retargets the connection context to the one derived from the name; diff and update
-// go through applyResolvedNameOverride, which keeps an explicit context for metadata.name.
-//
-// For Talos, this regenerates the config bundle with the new cluster name because
-// the cluster name is embedded in PKI certificates and the kubeconfig context name.
+// It renames the distribution configs and then retargets the connection context to the one
+// derived from the name, which is what create and --name need; diff and update go through
+// applyResolvedNameOverride, which can keep a custom context for metadata.name instead.
 func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
 	if name == "" {
 		return nil
 	}
 
+	err := renameDistributionConfigs(ctx, name)
+	if err != nil {
+		return err
+	}
+
+	retargetConnectionContext(ctx, name)
+
+	return nil
+}
+
+// renameDistributionConfigs applies a cluster name to the distribution configs without touching
+// the connection context.
+//
+// For Talos, this regenerates the config bundle with the new cluster name because
+// the cluster name is embedded in PKI certificates and the kubeconfig context name.
+func renameDistributionConfigs(ctx *localregistry.Context, name string) error {
 	applyDirectClusterNameOverrides(ctx, name)
 
 	// Update Talos config - must regenerate bundle for new cluster name
@@ -647,21 +661,25 @@ func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
 		ctx.TalosConfig = newConfig
 	}
 
-	// Update the ksail.yaml context to match the pattern the created cluster uses.
-	// Must be provider-aware: the Kubernetes (k3k) provider writes a "k3k-<name>"
-	// context for K3s rather than the standalone "k3d-<name>", so post-creation CNI
-	// install can resolve it. eksctl adds the creating AWS identity to EKS context
-	// names, so that context is resolved from the written kubeconfig after creation.
-	if ctx.ClusterCfg != nil &&
-		ctx.ClusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS {
-		ctx.ClusterCfg.Spec.Cluster.Connection.Context = resolveCreatedContextName(
-			ctx.ClusterCfg.Spec.Cluster.Distribution,
-			ctx.ClusterCfg.Spec.Cluster.Provider,
-			name,
-		)
+	return nil
+}
+
+// retargetConnectionContext sets the ksail.yaml context to the one a cluster created under name
+// is written to. Must be provider-aware: the Kubernetes (k3k) provider writes a "k3k-<name>"
+// context for K3s rather than the standalone "k3d-<name>", so post-creation CNI install can
+// resolve it. eksctl adds the creating AWS identity to EKS context names, so that context is
+// resolved from the written kubeconfig after creation instead.
+func retargetConnectionContext(ctx *localregistry.Context, name string) {
+	if ctx.ClusterCfg == nil ||
+		ctx.ClusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS {
+		return
 	}
 
-	return nil
+	ctx.ClusterCfg.Spec.Cluster.Connection.Context = resolveCreatedContextName(
+		ctx.ClusterCfg.Spec.Cluster.Distribution,
+		ctx.ClusterCfg.Spec.Cluster.Provider,
+		name,
+	)
 }
 
 // applyDirectClusterNameOverrides updates in-memory distribution configs whose names directly drive

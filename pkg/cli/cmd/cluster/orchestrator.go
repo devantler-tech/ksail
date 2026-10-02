@@ -1729,6 +1729,18 @@ func (o *updateOrchestrator) executeRecreateFlow() error {
 		Writer:  o.cmd.OutOrStdout(),
 	})
 
+	return o.createRecreatedCluster()
+}
+
+// createRecreatedCluster runs the create half of a recreation. Recreation is creation: the new
+// cluster is written to the context derived from its name, so a custom context kept to inspect
+// the old cluster gives way to it, exactly as on create.
+func (o *updateOrchestrator) createRecreatedCluster() error {
+	err := retargetContextForRecreation(o.cfgManager, o.ctx)
+	if err != nil {
+		return err
+	}
+
 	// Execute create using shared workflow.
 	controllerReconciliationStarted, creationErr := runClusterCreationWorkflow(
 		o.cmd,

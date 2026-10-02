@@ -289,7 +289,7 @@ const configConnectionProse = `#### connection (Connection)
 
 When using Talos with Omni, Omni generates the context name; set ` + bt + `spec.cluster.connection.context` + bt + ` to that generated name.
 
-**Context and cluster name:** a blank context is derived from the cluster name. ` + bt + `ksail cluster diff` + bt + ` and ` + bt + `ksail cluster update` + bt + ` connect through an explicit context even when ` + bt + `metadata.name` + bt + ` names the cluster, so a custom or OIDC context keeps working. ` + bt + `ksail cluster create` + bt + ` and the ` + bt + `--name` + bt + ` flag replace the context with the one derived from the cluster name.
+**Context and cluster name:** a blank context is derived from the cluster name. When ` + bt + `metadata.name` + bt + ` names the cluster, ` + bt + `ksail cluster diff` + bt + ` and ` + bt + `ksail cluster update` + bt + ` reach it through a custom context, such as an OIDC context; a context that follows the naming convention above follows the cluster name instead. ` + bt + `ksail cluster create` + bt + `, a recreation during ` + bt + `ksail cluster update` + bt + `, and the ` + bt + `--name` + bt + ` flag use the context derived from the cluster name. GKE and AKS read the cluster name from the context, so they always derive it.
 
 **Timeout format:** Go duration string (e.g., ` + bt + `30s` + bt + `, ` + bt + `5m` + bt + `, ` + bt + `1h` + bt + `)`
 

@@ -53,6 +53,15 @@ func TestApplyResolvedNameOverride(t *testing.T) {
 			wantContext:     "kind-named",
 		},
 		{
+			// A conventional context for another name is a leftover of a rename,
+			// e.g. one `project env add` wrote, so it follows the configured name.
+			name:            "update derives a conventional context for another name",
+			distribution:    v1alpha1.DistributionVanilla,
+			context:         "kind-old",
+			existingCluster: true,
+			wantContext:     "kind-named",
+		},
+		{
 			name:            "update treats a whitespace context as blank",
 			distribution:    v1alpha1.DistributionVanilla,
 			context:         "  ",
@@ -89,8 +98,8 @@ func TestApplyResolvedNameOverride(t *testing.T) {
 		},
 		{
 			// AKS has no renamed distribution config here: its cluster name is read
-			// back from the context, so only the derived context keeps the name.
-			name:            "AKS update keeps the context that carries its name",
+			// back from the context, so it keeps deriving that context as before.
+			name:            "AKS update keeps deriving the context that carries its name",
 			distribution:    v1alpha1.DistributionAKS,
 			context:         "custom-context",
 			existingCluster: true,

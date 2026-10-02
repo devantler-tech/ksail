@@ -66,7 +66,7 @@ spec:
     gitOpsEngine: Flux
 ```
 
-Set `metadata.name` to pin the cluster name in version control. This takes priority over the distribution config name but is overridden by the `--name` CLI flag. An explicit `spec.cluster.connection.context` is kept when `ksail cluster diff` and `ksail cluster update` inspect a named cluster; only `ksail cluster create` and `--name` replace it with the context derived from the cluster name.
+Set `metadata.name` to pin the cluster name in version control. This takes priority over the distribution config name but is overridden by the `--name` CLI flag. A custom `spec.cluster.connection.context`, such as an OIDC context, is kept when `ksail cluster diff` and `ksail cluster update` inspect a named cluster; creating or recreating the cluster, and `--name`, use the context derived from the cluster name (see [connection](/configuration/declarative-configuration/#connection-connection)).
 
 ### CLI Flags
 
