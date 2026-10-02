@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/internal/moduleintegrity"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,6 +58,7 @@ func TestK3dUsesAuthenticatedImmutableSource(t *testing.T) {
 		Version string `json:"Version"` //nolint:tagliatelle // Go command output contract.
 		Sum     string `json:"Sum"`     //nolint:tagliatelle // Go command output contract.
 		Error   string `json:"Error"`   //nolint:tagliatelle // Go command output contract.
+		Dir     string `json:"Dir"`     //nolint:tagliatelle // Go command output contract.
 	}
 
 	data := authenticatedSourceGoOutput(
@@ -76,6 +78,9 @@ func TestK3dUsesAuthenticatedImmutableSource(t *testing.T) {
 		downloaded.Sum,
 		"the archive must retain the original authenticated source",
 	)
+	require.NoError(t, moduleintegrity.Verify(
+		downloaded.Dir, k3dModulePath+"@"+k3dOriginalVersion, k3dOriginalSum,
+	), "the extracted source must retain its authenticated archive checksum")
 }
 
 func authenticatedSourceGoOutput(t *testing.T, args ...string) []byte {

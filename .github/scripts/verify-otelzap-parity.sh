@@ -9,6 +9,7 @@ repo_root="$(cd -- "${script_dir}/../.." && pwd -P)"
 local_dir="${repo_root}/third_party/otelzap"
 patch_file="${script_dir}/../patches/otelzap-v0.3.2.patch"
 upstream_dir=''
+authenticate_source=false
 
 # Overrides support isolated, network-free regression fixtures. CI uses the fixed defaults.
 while (($#)); do
@@ -38,6 +39,7 @@ if [[ -z "${upstream_dir}" ]]; then
 	resolved="$(go mod download -json "${module}@${version}")"
 	upstream_dir="$(jq -er --arg sum "${checksum}" \
 		'select(.Sum == $sum and (.Error // "") == "") | .Dir' <<<"${resolved}")"
+	authenticate_source=true
 fi
 
 # Resolve the actual directory before rejecting a linked root. Appended slash/dot
@@ -71,6 +73,13 @@ temporary="$(mktemp -d)"
 trap 'rm -rf "${temporary}"' EXIT
 cp -R "${upstream_dir}/." "${temporary}/expected"
 chmod -R u+w "${temporary}/expected"
+if [[ "${authenticate_source}" == true ]]; then
+	# Authenticate the snapshot being patched, rather than metadata or a cache
+	# directory that could change between verification and copying.
+	(cd -- "${repo_root}" && GOFLAGS='' GOENV=off GOWORK=off \
+		go run ./internal/moduleintegrity/cmd/verify \
+		"${temporary}/expected" "${module}@${version}" "${checksum}")
+fi
 patch --batch --forward -d "${temporary}/expected" -p1 <"${patch_file}"
 cp -R "${local_dir}/." "${temporary}/actual"
 chmod -R u+w "${temporary}/actual"

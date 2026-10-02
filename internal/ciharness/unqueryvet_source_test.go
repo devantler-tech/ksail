@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/internal/moduleintegrity"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,6 +45,7 @@ func TestUnqueryvetUsesAuthenticatedRelease(t *testing.T) {
 	var downloaded struct {
 		Sum   string `json:"Sum"`   //nolint:tagliatelle // Go command output contract.
 		Error string `json:"Error"` //nolint:tagliatelle // Go command output contract.
+		Dir   string `json:"Dir"`   //nolint:tagliatelle // Go command output contract.
 	}
 
 	data = authenticatedSourceGoOutput(t, "mod", "download", "-json", module+"@"+selected.Version)
@@ -55,4 +57,7 @@ func TestUnqueryvetUsesAuthenticatedRelease(t *testing.T) {
 		downloaded.Sum,
 		"the selected release must retain its SumDB-authenticated archive",
 	)
+	require.NoError(t, moduleintegrity.Verify(
+		downloaded.Dir, module+"@"+version, checksum,
+	), "the extracted source must retain its authenticated archive checksum")
 }
