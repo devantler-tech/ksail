@@ -2,6 +2,8 @@ package kubescape_test
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"golang.org/x/mod/semver"
@@ -14,6 +16,10 @@ func TestOTelLoggingModulesUseFixedSDK(t *testing.T) {
 	t.Parallel()
 
 	root := moduleRoot(t)
+	_, err := os.Stat(filepath.Join(root, "vendor", "modules.txt"))
+	if !os.IsNotExist(err) {
+		t.Fatal("vendored logging sources require verification against the actual fixed implementation")
+	}
 	for _, name := range []string{"root", "desktop"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

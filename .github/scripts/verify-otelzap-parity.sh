@@ -28,6 +28,11 @@ jq -e --arg module "${module}" --arg version "${version}" --arg dir "${repo_root
   printf 'otelzap is not supplied by the reviewed local replacement\n' >&2
   exit 1
 }
+effective_dir="$(jq -er '.Replace.Dir' <<<"${metadata}")"
+[[ "$(cd -- "${effective_dir}" && pwd -P)" == "${repo_root}/third_party/otelzap" ]] || {
+  printf 'the selected adapter resolves outside the reviewed module directory\n' >&2
+  exit 1
+}
 
 if [[ -z "${upstream_dir}" ]]; then
   resolved="$(go mod download -json "${module}@${version}")"
