@@ -27,12 +27,12 @@ func TestK3dUsesAuthenticatedImmutableSource(t *testing.T) {
 	require.True(t, os.IsNotExist(err), "vendored sources require their own integrity verification")
 
 	var selected struct {
-		Path    string
-		Version string
+		Path    string `json:"Path"`    //nolint:tagliatelle // Go command output contract.
+		Version string `json:"Version"` //nolint:tagliatelle // Go command output contract.
 		Replace *struct {
-			Path    string
-			Version string
-		}
+			Path    string `json:"Path"`    //nolint:tagliatelle // Go command output contract.
+			Version string `json:"Version"` //nolint:tagliatelle // Go command output contract.
+		} `json:"Replace"` //nolint:tagliatelle // Go command output contract.
 	}
 
 	require.NoError(t, json.Unmarshal(k3dGoOutput(t, "list", "-m", "-json", k3dModulePath), &selected))
@@ -43,10 +43,10 @@ func TestK3dUsesAuthenticatedImmutableSource(t *testing.T) {
 	require.Equal(t, k3dOriginalVersion, selected.Replace.Version)
 
 	var downloaded struct {
-		Path    string
-		Version string
-		Sum     string
-		Error   string
+		Path    string `json:"Path"`    //nolint:tagliatelle // Go command output contract.
+		Version string `json:"Version"` //nolint:tagliatelle // Go command output contract.
+		Sum     string `json:"Sum"`     //nolint:tagliatelle // Go command output contract.
+		Error   string `json:"Error"`   //nolint:tagliatelle // Go command output contract.
 	}
 
 	data := k3dGoOutput(t, "mod", "download", "-json", k3dModulePath+"@"+selected.Replace.Version)
