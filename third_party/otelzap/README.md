@@ -28,13 +28,13 @@ log := otelzap.New(zap.NewExample())
 
 // And then pass ctx to propagate the span.
 log.Ctx(ctx).Error("hello from zap",
-	zap.Error(errors.New("hello world")),
-	zap.String("foo", "bar"))
+ zap.Error(errors.New("hello world")),
+ zap.String("foo", "bar"))
 
 // Alternatively.
 log.ErrorContext(ctx, "hello from zap",
-	zap.Error(errors.New("hello world")),
-	zap.String("foo", "bar"))
+ zap.Error(errors.New("hello world")),
+ zap.String("foo", "bar"))
 ```
 
 Both variants are fast and don't allocate. See the
@@ -48,19 +48,19 @@ Just like Zap, otelzap provides a global logger that can be set with `otelzap.Re
 package main
 
 import (
-	"go.uber.org/zap"
-	"github.com/uptrace/opentelemetry-go-extra/otelzap"
+ "go.uber.org/zap"
+ "github.com/uptrace/opentelemetry-go-extra/otelzap"
 )
 
 func main() {
-	logger := otelzap.New(zap.NewExample())
-	defer logger.Sync()
+ logger := otelzap.New(zap.NewExample())
+ defer logger.Sync()
 
-	undo := otelzap.ReplaceGlobals(logger)
-	defer undo()
+ undo := otelzap.ReplaceGlobals(logger)
+ defer undo()
 
-	otelzap.L().Info("replaced zap's global loggers")
-	otelzap.Ctx(context.TODO()).Info("... and with context")
+ otelzap.L().Info("replaced zap's global loggers")
+ otelzap.Ctx(context.TODO()).Info("... and with context")
 }
 ```
 
@@ -73,16 +73,16 @@ log := otelzap.New(zap.NewExample())
 sugar := log.Sugar()
 
 sugar.Ctx(ctx).Infow("failed to fetch URL",
-	// Structured context as loosely typed key-value pairs.
-	"url", url,
-	"attempt", 3,
-	"backoff", time.Second,
+ // Structured context as loosely typed key-value pairs.
+ "url", url,
+ "attempt", 3,
+ "backoff", time.Second,
 )
 sugar.InfowContext(ctx, "failed to fetch URL",
-	// Structured context as loosely typed key-value pairs.
-	"url", url,
-	"attempt", 3,
-	"backoff", time.Second,
+ // Structured context as loosely typed key-value pairs.
+ "url", url,
+ "attempt", 3,
+ "backoff", time.Second,
 )
 
 sugar.Ctx(ctx).Infof("Failed to fetch URL: %s", url)
