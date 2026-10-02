@@ -1147,6 +1147,12 @@ func TestSetupK3dCNI_CiliumDisablesFlannelNetworkPolicyAndTraefik(t *testing.T) 
 		)
 	}
 
+	assertK3dCiliumTransformation(t, k3dConfig)
+}
+
+func assertK3dCiliumTransformation(t *testing.T, k3dConfig *v1alpha5.SimpleConfig) {
+	t.Helper()
+
 	// Use the same public transformation as cluster creation. An explicit image
 	// and disabled load balancer keep this a configuration test with no runtime.
 	transformed, err := k3dconfig.TransformSimpleToClusterConfig(context.Background(), nil, *k3dConfig, "")

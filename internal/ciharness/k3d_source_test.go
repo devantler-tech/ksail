@@ -22,6 +22,7 @@ const (
 // bytes or relying on the owned CodeQL workflow's environment.
 func TestK3dUsesAuthenticatedImmutableSource(t *testing.T) {
 	t.Parallel()
+
 	_, err := os.Stat(filepath.Join("..", "..", "vendor", "modules.txt"))
 	require.True(t, os.IsNotExist(err), "vendored sources require their own integrity verification")
 
@@ -33,6 +34,7 @@ func TestK3dUsesAuthenticatedImmutableSource(t *testing.T) {
 			Version string
 		}
 	}
+
 	require.NoError(t, json.Unmarshal(k3dGoOutput(t, "list", "-m", "-json", k3dModulePath), &selected))
 	require.Equal(t, k3dModulePath, selected.Path)
 	require.Equal(t, "v5.9.0", selected.Version)
@@ -46,6 +48,7 @@ func TestK3dUsesAuthenticatedImmutableSource(t *testing.T) {
 		Sum     string
 		Error   string
 	}
+
 	data := k3dGoOutput(t, "mod", "download", "-json", k3dModulePath+"@"+selected.Replace.Version)
 	require.NoError(t, json.Unmarshal(data, &downloaded))
 	require.Empty(t, downloaded.Error)
@@ -62,8 +65,11 @@ func k3dGoOutput(t *testing.T, args ...string) []byte {
 	command.Dir = filepath.Join("..", "..")
 	command.Env = append(os.Environ(), "GOFLAGS=", "GOENV=off", "GOWORK=off", "GOEXPERIMENT=",
 		"GOPROXY=https://proxy.golang.org,direct", "GOSUMDB=sum.golang.org")
+
 	var stderr bytes.Buffer
+
 	command.Stderr = &stderr
+
 	output, err := command.Output()
 	require.NoError(t, err, "inspect k3d source: %s", stderr.String())
 
