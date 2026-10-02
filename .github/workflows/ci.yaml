@@ -138,6 +138,7 @@ jobs:
       dependency-test-graph: ${{ steps.filter.outputs.dependency-test-graph }}
       govuln-allowlist: ${{ steps.filter.outputs.govuln-allowlist }}
       todos-contract: ${{ steps.filter.outputs.todos-contract }}
+      release-config: ${{ steps.filter.outputs.release-config }}
       system-test: ${{ steps.filter.outputs.system-test }}
       schema: ${{ steps.filter.outputs.schema }}
       cli: ${{ steps.filter.outputs.cli }}
@@ -198,6 +199,23 @@ jobs:
               - '.github/actions/**'
               - '.github/scripts/**'
               - 'internal/ciharness/**'
+            # The release build configuration is the subject of Go tests too: the OTel
+            # reachability guard in pkg/client/kubescape pins a digest of every file below, and
+            # other tests read the GoReleaser files and the CD workflow. The org-required Go
+            # validation skips its test job when no Go file changed, so a pull request changing
+            # only these files would merge with those assertions unexecuted and the mismatch
+            # would surface on the next unrelated Go change (ksail#7400). This filter feeds a
+            # job that runs the suite for that class of change; it includes THIS workflow for
+            # the same reason todos-contract does. TestReleaseConfigChangesRunTheGoTests fails
+            # if a release file is dropped from it.
+            release-config:
+              - '.goreleaser.yaml'
+              - '.goreleaser.desktop.yaml'
+              - '.github/workflows/cd.yaml'
+              - '.github/actions/setup-desktop-build/**'
+              - '.github/actions/free-disk-space/**'
+              - 'scripts/stage-webui.sh'
+              - '.github/workflows/ci.yaml'
             # Deliberately NARROWER than `code`: the job resolves a module graph, so only the
             # module files matter — not every .go file. It also includes THIS workflow, because
             # the check lives here and a workflow-only PR would otherwise be able to weaken or
@@ -1837,6 +1855,40 @@ jobs:
             exit 1
           fi
 
+  # Runs the Go suite when only the release build configuration changed. The org-required Go
+  # validation skips its test job on such a pull request, because no Go file changed, while
+  # Go tests assert on exactly these files (see the release-config filter, ksail#7400).
+  test-release-config:
+    name: 🧪 Test Release Configuration
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [changes]
+    if: github.event_name != 'merge_group' && needs.changes.outputs.release-config == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: 🧹 Free disk space
+        # The whole suite's build cache can exhaust a stock runner's disk, as the
+        # org-required test job also guards against.
+        uses: ./.github/actions/free-disk-space
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      # -count=1 is load-bearing: the files under test are invisible to the Go build graph,
+      # so a cached PASS from an earlier run would be replayed over the changed configuration.
+      - name: 🧪 Test
+        run: go test ./... -count=1
+
   require-checks-in-pr:
     name: CI - Required Checks
     runs-on: ubuntu-latest
@@ -1865,6 +1917,7 @@ jobs:
         validate-calico-chart,
         verify-dependency-test-graph,
         verify-todos-workflow-contract,
+        test-release-config,
         cask-pr-handoff,
         k3k-sentinel-scripts,
         rate-limit-gate-script,
@@ -1898,6 +1951,7 @@ jobs:
             ${{ needs.validate-calico-chart.result }}
             ${{ needs.verify-dependency-test-graph.result }}
             ${{ needs.verify-todos-workflow-contract.result }}
+            ${{ needs.test-release-config.result }}
             ${{ needs.cask-pr-handoff.result }}
             ${{ needs.k3k-sentinel-scripts.result }}
             ${{ needs.rate-limit-gate-script.result }}
