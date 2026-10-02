@@ -385,14 +385,10 @@ runs:
         complete=false
         if [ -d "/tmp/mirror-cache" ] && [ -n "$(ls -A /tmp/mirror-cache 2>/dev/null)" ]; then
           echo "✅ Cache restored, checking completeness..."
-          # Check for all 5 mirror volumes (using KSail's naming convention).
+          # Validate every cached archive before deciding to skip regeneration.
           # The KWOK control plane tar is cached under its own key (see the KWOK
           # cache steps), so it is intentionally not part of this completeness check.
-          if [ -f "/tmp/mirror-cache/docker.io.tar" ] && \
-             [ -f "/tmp/mirror-cache/ghcr.io.tar" ] && \
-             [ -f "/tmp/mirror-cache/quay.io.tar" ] && \
-             [ -f "/tmp/mirror-cache/registry.k8s.io.tar" ] && \
-             [ -f "/tmp/mirror-cache/ecr-public.aws.com.tar" ]; then
+          if bash "$GITHUB_ACTION_PATH/mirror-artifact.sh" check /tmp/mirror-cache "$CACHE_KEY"; then
             # The ECR Public volume is filled by an explicit copy rather than by
             # pull-through, so check it holds every ECR image: a volume saved
             # without one would send every system test back to ECR Public.
@@ -423,7 +419,7 @@ runs:
               echo "⚠️ Restored ECR Public mirror could not serve every image — will re-warm"
             fi
           else
-            echo "⚠️ Cache incomplete, will re-warm"
+            echo "⚠️ Cache incomplete or invalid, will re-warm"
           fi
         fi
         echo "complete=$complete" >> "$GITHUB_OUTPUT"
