@@ -719,6 +719,9 @@ runs:
         # mirror.gcr.io is anonymous and not rate-limited. It re-serializes
         # manifests, so the upstream digest can't be pinned through it — we pin
         # by tag, exactly like registry:3 in pull-registry-image.sh.
+        # The restored entry was rejected. Do not export through its symlinks
+        # or retain old archives that could conceal an unsuccessful export.
+        rm -rf -- /tmp/mirror-cache
         mkdir -p /tmp/mirror-cache
 
         # Export docker.io mirror volume
