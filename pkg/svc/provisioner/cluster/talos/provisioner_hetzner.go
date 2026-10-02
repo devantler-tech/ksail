@@ -615,16 +615,20 @@ func (p *Provisioner) refreshFloatingIPKubeconfig(ctx context.Context, clusterNa
 		return errFloatingIPConfigsUnavailable
 	}
 
-	_, controlPlaneServers, err := p.hetznerNodesForRole(ctx, clusterName, RoleControlPlane)
+	controlPlaneServers, err := p.kubeconfigRefreshControlPlanes(ctx, clusterName)
 	if err != nil {
-		return fmt.Errorf("list control-plane servers for kubeconfig refresh: %w", err)
-	}
-
-	if len(controlPlaneServers) == 0 {
-		return fmt.Errorf("%w: cluster %q", ErrNoControlPlaneForRefresh, clusterName)
+		return err
 	}
 
 	talosEndpoint, err := hetznerNodeTalosAddress(controlPlaneServers[0])
+	if err != nil {
+		return err
+	}
+
+	// The endpoint change restarts kube-apiserver; persisting and using the
+	// kubeconfig before that restart has finished hits `connection refused`
+	// (#6032).
+	err = p.waitForAPIServersServingEndpoint(ctx, controlPlaneServers, endpointIP)
 	if err != nil {
 		return err
 	}
@@ -640,6 +644,24 @@ func (p *Provisioner) refreshFloatingIPKubeconfig(ctx context.Context, clusterNa
 	kubernetesEndpoint := "https://" + net.JoinHostPort(verifiedIP, "6443")
 
 	return p.fetchAndWriteKubeconfigForCP(ctx, talosEndpoint, kubernetesEndpoint)
+}
+
+// kubeconfigRefreshControlPlanes lists the cluster's live control-plane
+// servers, failing with ErrNoControlPlaneForRefresh when there are none.
+func (p *Provisioner) kubeconfigRefreshControlPlanes(
+	ctx context.Context,
+	clusterName string,
+) ([]*hcloud.Server, error) {
+	_, controlPlaneServers, err := p.hetznerNodesForRole(ctx, clusterName, RoleControlPlane)
+	if err != nil {
+		return nil, fmt.Errorf("list control-plane servers for kubeconfig refresh: %w", err)
+	}
+
+	if len(controlPlaneServers) == 0 {
+		return nil, fmt.Errorf("%w: cluster %q", ErrNoControlPlaneForRefresh, clusterName)
+	}
+
+	return controlPlaneServers, nil
 }
 
 // disableTransitionSucceeded reports whether this update carried the disable

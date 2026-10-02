@@ -36,6 +36,10 @@ const floatingIPEnabledField = "provider.hetzner.floatingIPEnabled"
 // tests inject for an unreachable Kubernetes API endpoint.
 var errEndpointProbeFailed = errors.New("kubernetes api endpoint unreachable")
 
+// errAPIServerStillRestarting is the canned settle-wait failure for a
+// kube-apiserver that never settles on the floating IP (#6032).
+var errAPIServerStillRestarting = errors.New("kube-apiserver still restarting")
+
 // withUnreachableEndpointProbe overrides the endpoint reachability probe to
 // always fail, simulating a floating IP that was attached but never claimed
 // on the node (ksail#6070).
@@ -1188,6 +1192,69 @@ func TestUpdateApplyStep_RefreshesFloatingIPKubeconfig(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(written), "https://192.0.2.10:6443",
 		"the persisted Kubernetes endpoint must use the floating IP")
+}
+
+// TestUpdateApplyStep_WaitsForAPIServerBeforeKubeconfigRefresh verifies the
+// refresh waits for every control plane's kube-apiserver to serve the floating
+// IP, verified against the cluster CA, before it fetches and persists the
+// kubeconfig (#6032).
+//
+//nolint:paralleltest // helper uses t.Setenv.
+func TestUpdateApplyStep_WaitsForAPIServerBeforeKubeconfigRefresh(t *testing.T) {
+	calls := &fipUpdateCalls{}
+	server := fipUpdateTestServer(t, true, calls)
+	provisioner, _, capture := newFloatingIPKubeconfigTestProvisioner(t, server.URL)
+	wantCA := provisioner.TalosConfigsForTest().ControlPlane().Cluster().IssuingCA().Crt
+
+	var waited []string
+
+	provisioner.WithAPIServerServingCheckForTest(
+		func(_ context.Context, ip, serverName string, caPEM []byte) error {
+			assert.Zero(t, capture.calls, "the kubeconfig must not be fetched before the wait")
+			assert.Equal(t, "192.0.2.10", serverName)
+			assert.Equal(t, wantCA, caPEM)
+
+			waited = append(waited, ip)
+
+			return nil
+		},
+	)
+
+	spec := &v1alpha1.ClusterSpec{ControlPlanes: 1}
+
+	require.NoError(t, provisioner.RunUpdateApplyStepForTest(
+		t.Context(), "refresh floating IP kubeconfig", "fip-cluster",
+		spec, spec, floatingIPChangeResult(), clusterupdate.NewEmptyUpdateResult(),
+	))
+	assert.Equal(t, []string{"203.0.113.5"}, waited)
+	assert.Equal(t, 1, capture.calls)
+}
+
+// TestUpdateApplyStep_KubeconfigNotRefreshedWhenAPIServerNotSettled verifies a
+// kube-apiserver that never settles on the floating IP fails the update
+// instead of persisting a kubeconfig the next command cannot use (#6032).
+//
+//nolint:paralleltest // helper uses t.Setenv.
+func TestUpdateApplyStep_KubeconfigNotRefreshedWhenAPIServerNotSettled(t *testing.T) {
+	calls := &fipUpdateCalls{}
+	server := fipUpdateTestServer(t, true, calls)
+	provisioner, kubeconfigPath, capture := newFloatingIPKubeconfigTestProvisioner(t, server.URL)
+
+	provisioner.WithAPIServerServingCheckForTest(
+		func(context.Context, string, string, []byte) error { return errAPIServerStillRestarting },
+	)
+
+	spec := &v1alpha1.ClusterSpec{ControlPlanes: 1}
+
+	err := provisioner.RunUpdateApplyStepForTest(
+		t.Context(), "refresh floating IP kubeconfig", "fip-cluster",
+		spec, spec, floatingIPChangeResult(), clusterupdate.NewEmptyUpdateResult(),
+	)
+	require.ErrorIs(t, err, errAPIServerStillRestarting)
+	assert.Zero(t, capture.calls)
+
+	_, statErr := os.Stat(kubeconfigPath)
+	assert.ErrorIs(t, statErr, os.ErrNotExist)
 }
 
 // TestUpdateApplyStep_DoesNotRefreshKubeconfigAfterPartialApply verifies a

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -178,6 +179,13 @@ type Provisioner struct {
 	// be a dead address (ksail#6070). Defaults to a bounded TCP dial loop;
 	// tests override it via export_test.go to avoid real network I/O.
 	apiEndpointReachabilityCheck func(ctx context.Context, ip string, timeout time.Duration) error
+	// apiServerServingCheck waits until the kube-apiserver at ip:kubernetesAPIPort
+	// has served a certificate valid for serverName, chaining to caPEM, for a whole
+	// stable window. It gates the kubeconfig refresh after an in-place endpoint
+	// change, which restarts kube-apiserver (#6032). Defaults to
+	// waitForServingCertificate; tests override it via export_test.go to avoid real
+	// network I/O.
+	apiServerServingCheck func(ctx context.Context, ip, serverName string, caPEM []byte) error
 	// nodeConfigFetcher returns the running Talos machine config for a node by IP.
 	// Defaults to fetchNodeConfig; tests override it via export_test.go to inject a
 	// known running config without real Talos API connectivity (used by the per-node
@@ -264,6 +272,15 @@ func NewProvisioner(
 		ctx context.Context, ip string, timeout time.Duration,
 	) error {
 		return dialTCPUntilReachable(ctx, ip, kubernetesAPIPort, timeout, retryInterval)
+	}
+
+	prov.apiServerServingCheck = func(
+		ctx context.Context, ip, serverName string, caPEM []byte,
+	) error {
+		return waitForServingCertificate(
+			ctx, net.JoinHostPort(ip, strconv.Itoa(kubernetesAPIPort)), serverName, caPEM,
+			apiServerRestartTimeout, apiServerStableWindow, apiServerProbeInterval,
+		)
 	}
 
 	prov.nodeConfigFetcher = prov.fetchNodeConfig
