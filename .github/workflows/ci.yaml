@@ -1876,7 +1876,10 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: 🧹 Free disk space
-        uses: $/.github/actions/free-disk-space
+        # Run the checked-out script: actionlint does not yet support self-repository uses.
+        env:
+          DOCKER_PRUNE: "false"
+        run: bash .github/actions/free-disk-space/free-disk-space.sh
 
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
