@@ -22,9 +22,10 @@ runs:
       run: |
         echo "🧹 Starting Hetzner Cloud cleanup for KSail-owned resources..."
 
-        # Validate token access using the environment token
-        if ! hcloud datacenter list >/dev/null 2>&1; then
-          echo "❌ Failed to access Hetzner Cloud - invalid token?"
+        # Validate token access using the environment token. Probe Locations:
+        # Hetzner removed the Datacenters endpoints on 2026-10-01 (HTTP 410).
+        if ! probe_error=$(hcloud location list -o noheader 2>&1 >/dev/null); then
+          echo "❌ Failed to access Hetzner Cloud: ${probe_error}"
           exit 1
         fi
 
