@@ -26,14 +26,14 @@ func releaseConfigFiles() []string {
 	}
 }
 
-// TestReleaseConfigChangesRunTheGoTests keeps a pull request that changes only the release
-// build configuration from merging with the Go tests about it unexecuted (ksail#7400).
+// TestReleaseConfigFilterCoversTheReleaseFiles keeps a pull request that changes only the
+// release build configuration from merging with the Go tests about it unexecuted (ksail#7400).
 //
 // The org-required Go validation gates its test job on Go sources and module files, so on such
 // a pull request it skips the suite by its own rule, and the mismatch surfaces later on an
 // unrelated Go change. ci.yaml therefore runs the suite itself whenever its release-config
-// filter matches, and the required-checks aggregator counts that job's result.
-func TestReleaseConfigChangesRunTheGoTests(t *testing.T) {
+// filter matches; this test pins what that filter matches.
+func TestReleaseConfigFilterCoversTheReleaseFiles(t *testing.T) {
 	t.Parallel()
 
 	patterns := changesFilterPatterns(t, "release-config")
@@ -63,6 +63,13 @@ func TestReleaseConfigChangesRunTheGoTests(t *testing.T) {
 		contractFilterMatches(t, patterns, "README.md"),
 		"negative control: the release-config filter must not match unrelated files",
 	)
+}
+
+// TestReleaseConfigChangesRunTheGoTests pins the job the release-config filter feeds: it runs
+// the whole Go suite on a matching pull request, and the required-checks aggregator counts its
+// result, so a red run blocks the merge instead of being recorded as an ordinary skip.
+func TestReleaseConfigChangesRunTheGoTests(t *testing.T) {
+	t.Parallel()
 
 	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
 
@@ -76,6 +83,7 @@ func TestReleaseConfigChangesRunTheGoTests(t *testing.T) {
 	job, found := workflow.Jobs["test-release-config"]
 	require.True(t, found, "test-release-config job is missing")
 	assert.Contains(t, job.Needs, "changes")
+	assert.Contains(t, job.If, "github.event_name == 'pull_request'")
 	assert.Contains(t, job.If, "needs.changes.outputs.release-config == 'true'")
 
 	// -count=1 is load-bearing: the suite's subject here is files the Go build graph cannot see,

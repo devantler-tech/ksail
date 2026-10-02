@@ -206,8 +206,8 @@ jobs:
             # only these files would merge with those assertions unexecuted and the mismatch
             # would surface on the next unrelated Go change (ksail#7400). This filter feeds a
             # job that runs the suite for that class of change; it includes THIS workflow for
-            # the same reason todos-contract does. TestReleaseConfigChangesRunTheGoTests fails
-            # if a release file is dropped from it.
+            # the same reason todos-contract does. TestReleaseConfigFilterCoversTheReleaseFiles
+            # fails if a release file is dropped from it.
             release-config:
               - '.goreleaser.yaml'
               - '.goreleaser.desktop.yaml'
@@ -1858,12 +1858,14 @@ jobs:
   # Runs the Go suite when only the release build configuration changed. The org-required Go
   # validation skips its test job on such a pull request, because no Go file changed, while
   # Go tests assert on exactly these files (see the release-config filter, ksail#7400).
+  # Pull requests only: on main, ci-go already runs the whole suite on every push
+  # (test-default-branch).
   test-release-config:
     name: 🧪 Test Release Configuration
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [changes]
-    if: github.event_name != 'merge_group' && needs.changes.outputs.release-config == 'true'
+    if: github.event_name == 'pull_request' && needs.changes.outputs.release-config == 'true'
     permissions:
       contents: read
     steps:
@@ -1871,8 +1873,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: 🧹 Free disk space
         # The whole suite's build cache can exhaust a stock runner's disk, as the
