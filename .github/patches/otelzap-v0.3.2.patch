@@ -245,8 +245,20 @@ index 0000000..0c29498
 +	}
 +	return attribute.StringValue(fmt.Sprint(value))
 +}
+diff --git a/option.go b/option.go
+index 89d88b6..3454a06 100644
+--- a/option.go
++++ b/option.go
+@@ -40,2 +40,2 @@ func WithSchemaURL(schemaURL string) Option {
+-// WithMinLevel sets the minimal zap logging level on which the log message
+-// is recorded on the span.
++// WithMinLevel sets the minimum zap logging level emitted as an OTel log record.
++// It does not control the span's error-status threshold.
+@@ -51 +51 @@ func WithMinLevel(lvl zapcore.Level) Option {
+-// the span status is set to codes.Error.
++// a recording span's status is set to codes.Error, independently of WithMinLevel.
 diff --git a/otelzap.go b/otelzap.go
-index 97fba42..dafa3e5 100644
+index 97fba42..848442e 100644
 --- a/otelzap.go
 +++ b/otelzap.go
 @@ -7,0 +8 @@ import (
@@ -254,32 +266,57 @@ index 97fba42..dafa3e5 100644
 @@ -14,2 +14,0 @@ import (
 -
 -	"github.com/uptrace/opentelemetry-go-extra/otelutil"
-@@ -162 +161 @@ func (l *Logger) log(
+@@ -96 +95,2 @@ func (l *Logger) Sugar() *SugaredLogger {
+-// Clone clones the current logger applying the supplied options.
++// Clone clones the current logger, applying its options to the provider and
++// instrumentation scope without changing the original logger.
+@@ -101,0 +102 @@ func (l *Logger) Clone(opts ...Option) *Logger {
++	clone.otelLogger = clone.newOtelLogger(clone.Logger.Name())
+@@ -156,0 +158,2 @@ func (l *Logger) logFields(
++	} else {
++		l.setSpanStatus(ctx, lvl, msg)
+@@ -161,3 +164,2 @@ func (l *Logger) logFields(
+-func (l *Logger) log(
 -	ctx context.Context, lvl zapcore.Level, msg string, kvs []log.KeyValue,
+-) {
++// setSpanStatus applies the error threshold independently of log emission.
++func (l *Logger) setSpanStatus(ctx context.Context, lvl zapcore.Level, msg string) {
+@@ -168,0 +171,6 @@ func (l *Logger) log(
++}
++
++func (l *Logger) log(
 +	ctx context.Context, lvl zapcore.Level, msg string, kvs []attribute.KeyValue,
-@@ -171 +170 @@ func (l *Logger) log(
++) {
++	l.setSpanStatus(ctx, lvl, msg)
+@@ -171 +179 @@ func (l *Logger) log(
 -	record.SetBody(log.StringValue(msg))
 +	record.SetBody(attribute.StringValue(msg))
-@@ -177 +176 @@ func (l *Logger) log(
+@@ -177 +185 @@ func (l *Logger) log(
 -				kvs = append(kvs, log.String("code.function", fn))
 +				kvs = append(kvs, attribute.String("code.function", fn))
-@@ -180,2 +179,2 @@ func (l *Logger) log(
+@@ -180,2 +188,2 @@ func (l *Logger) log(
 -				kvs = append(kvs, log.String("code.filepath", file))
 -				kvs = append(kvs, log.Int("code.lineno", line))
 +				kvs = append(kvs, attribute.String("code.filepath", file))
 +				kvs = append(kvs, attribute.Int("code.lineno", line))
-@@ -189 +188 @@ func (l *Logger) log(
+@@ -189 +197 @@ func (l *Logger) log(
 -		kvs = append(kvs, log.String("exception.stacktrace", string(stackTrace[:n])))
 +		kvs = append(kvs, attribute.String("exception.stacktrace", string(stackTrace[:n])))
-@@ -437,2 +436,2 @@ func (s *SugaredLogger) logArgs(
+@@ -433,0 +442,3 @@ func (s *SugaredLogger) logArgs(
++		if lvl >= s.l.errorStatusLevel && trace.SpanFromContext(ctx).IsRecording() {
++			s.l.setSpanStatus(ctx, lvl, fmt.Sprintf(template, args...))
++		}
+@@ -437,2 +448,2 @@ func (s *SugaredLogger) logArgs(
 -	kvs := make([]log.KeyValue, 0, 1+numExtraAttr)
 -	kvs = append(kvs, log.String("log.template", template))
 +	kvs := make([]attribute.KeyValue, 0, 1+numExtraAttr)
 +	kvs = append(kvs, attribute.String("log.template", template))
-@@ -513 +512 @@ func (s *SugaredLogger) logKVs(
+@@ -509,0 +521 @@ func (s *SugaredLogger) logKVs(
++		s.l.setSpanStatus(ctx, lvl, msg)
+@@ -513 +525 @@ func (s *SugaredLogger) logKVs(
 -	kvs := make([]log.KeyValue, 0, len(args)/2)
 +	kvs := make([]attribute.KeyValue, 0, len(args)/2)
-@@ -517,3 +516,3 @@ func (s *SugaredLogger) logKVs(
+@@ -517,3 +529,3 @@ func (s *SugaredLogger) logKVs(
 -			kvs = append(kvs, log.KeyValue{
 -				Key:   key,
 -				Value: otelutil.LogValue(args[i+1]),

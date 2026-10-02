@@ -37,8 +37,8 @@ func WithSchemaURL(schemaURL string) Option {
 	}
 }
 
-// WithMinLevel sets the minimal zap logging level on which the log message
-// is recorded on the span.
+// WithMinLevel sets the minimum zap logging level emitted as an OTel log record.
+// It does not control the span's error-status threshold.
 //
 // The default is >= zap.WarnLevel.
 func WithMinLevel(lvl zapcore.Level) Option {
@@ -48,7 +48,7 @@ func WithMinLevel(lvl zapcore.Level) Option {
 }
 
 // WithErrorStatusLevel sets the minimal zap logging level on which
-// the span status is set to codes.Error.
+// a recording span's status is set to codes.Error, independently of WithMinLevel.
 //
 // The default is >= zap.ErrorLevel.
 func WithErrorStatusLevel(lvl zapcore.Level) Option {

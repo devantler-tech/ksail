@@ -13,6 +13,7 @@ import (
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
 	collector "go.opentelemetry.io/proto/otlp/collector/logs/v1"
 	"go.uber.org/zap"
 )
@@ -32,6 +33,36 @@ func capturedLogProvider(t *testing.T) (*sdklog.LoggerProvider, chan *collector.
 	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
 
 	return provider, requests
+}
+
+// countedMessage exposes formatting side effects in a filtered logging call.
+type countedMessage struct {
+	calls *int
+}
+
+// String records whether the logger evaluated an otherwise suppressed value.
+func (m countedMessage) String() string {
+	*m.calls++
+
+	return "failed"
+}
+
+// TestOTelZapFilteredFormattingRemainsLazy preserves filtering for irrelevant span status.
+func TestOTelZapFilteredFormattingRemainsLazy(t *testing.T) {
+	t.Parallel()
+
+	provider := sdktrace.NewTracerProvider()
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+	ctx, span := provider.Tracer("ksail.logging").Start(t.Context(), "operation")
+	defer span.End()
+
+	require.True(t, trace.SpanFromContext(ctx).IsRecording())
+	logger := otelzap.New(zap.NewNop(), otelzap.WithMinLevel(zap.DPanicLevel),
+		otelzap.WithErrorStatusLevel(zap.WarnLevel), otelzap.WithCaller(false))
+	calls := 0
+	logger.Sugar().InfofContext(ctx, "operation %s", countedMessage{calls: &calls})
+	logger.Sugar().WarnfContext(t.Context(), "operation %s", countedMessage{calls: &calls})
+	require.Zero(t, calls, "suppressed messages with no qualifying recording span must stay unevaluated")
 }
 
 // TestOTelZapCloneOptionsReachExporter catches stale provider and scope options in clones.
@@ -61,10 +92,15 @@ func TestOTelZapCloneOptionsReachExporter(t *testing.T) {
 		message  string
 		schema   string
 	}{
-		{name: "original", requests: originalRequests, message: "original record", schema: "https://schemas.invalid/original"},
+		{
+			name: "original", requests: originalRequests, message: "original record",
+			schema: "https://schemas.invalid/original",
+		},
 		{name: "clone", requests: cloneRequests, message: "cloned record", schema: "https://schemas.invalid/clone"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
 			select {
 			case request := <-test.requests:
 				require.Len(t, request.GetResourceLogs(), 1)
@@ -94,8 +130,12 @@ func TestOTelZapSpanStatusIsIndependentOfEmission(t *testing.T) {
 	}{
 		{name: "structured", warn: func(ctx context.Context, l *otelzap.Logger) { l.WarnContext(ctx, "operation failed") },
 			info: func(ctx context.Context, l *otelzap.Logger) { l.InfoContext(ctx, "operation succeeded") }},
-		{name: "formatted", warn: func(ctx context.Context, l *otelzap.Logger) { l.Sugar().WarnfContext(ctx, "operation %s", "failed") },
-			info: func(ctx context.Context, l *otelzap.Logger) { l.Sugar().InfofContext(ctx, "operation %s", "succeeded") }},
+		{name: "formatted", warn: func(ctx context.Context, l *otelzap.Logger) {
+			l.Sugar().WarnfContext(ctx, "operation %s", "failed")
+		},
+			info: func(ctx context.Context, l *otelzap.Logger) {
+				l.Sugar().InfofContext(ctx, "operation %s", "succeeded")
+			}},
 		{name: "key-values", warn: func(ctx context.Context, l *otelzap.Logger) {
 			l.Sugar().WarnwContext(ctx, "operation failed", "attempt", 1)
 		},

@@ -21,6 +21,12 @@ processor or vulnerability check is disabled. The integration regression
 checks fields and context at the adapter boundary, and a real batch processor
 and HTTP exporter produce protobuf records through a captured transport.
 
+Cloning rebinds the OTel logger to the clone's provider, instrumentation version
+and schema while preserving its logger name. The error-status threshold applies
+to recording spans independently of the emission threshold for structured,
+formatted and key/value logging. Suppressed formatted messages stay unevaluated
+when no recording span qualifies for an error status.
+
 The compatibility patch records the differences from the checksum-verified
 upstream module. Source changes must update that patch and retain the
 integration regression. Remove the local replacement once a published

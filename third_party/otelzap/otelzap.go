@@ -92,12 +92,14 @@ func (l *Logger) Sugar() *SugaredLogger {
 	}
 }
 
-// Clone clones the current logger applying the supplied options.
+// Clone clones the current logger, applying its options to the provider and
+// instrumentation scope without changing the original logger.
 func (l *Logger) Clone(opts ...Option) *Logger {
 	clone := *l
 	for _, opt := range opts {
 		opt(&clone)
 	}
+	clone.otelLogger = clone.newOtelLogger(clone.Logger.Name())
 	return &clone
 }
 
@@ -153,18 +155,25 @@ func (l *Logger) logFields(
 
 	if lvl >= l.minLevel {
 		l.log(ctx, lvl, msg, convertFields(fields))
+	} else {
+		l.setSpanStatus(ctx, lvl, msg)
 	}
 	return fields
 }
 
-func (l *Logger) log(
-	ctx context.Context, lvl zapcore.Level, msg string, kvs []attribute.KeyValue,
-) {
+// setSpanStatus applies the error threshold independently of log emission.
+func (l *Logger) setSpanStatus(ctx context.Context, lvl zapcore.Level, msg string) {
 	if lvl >= l.errorStatusLevel {
 		if span := trace.SpanFromContext(ctx); span.IsRecording() {
 			span.SetStatus(codes.Error, msg)
 		}
 	}
+}
+
+func (l *Logger) log(
+	ctx context.Context, lvl zapcore.Level, msg string, kvs []attribute.KeyValue,
+) {
+	l.setSpanStatus(ctx, lvl, msg)
 
 	record := log.Record{}
 	record.SetBody(attribute.StringValue(msg))
@@ -430,6 +439,9 @@ func (s *SugaredLogger) logArgs(
 	ctx context.Context, lvl zapcore.Level, template string, args []interface{},
 ) {
 	if lvl < s.l.minLevel {
+		if lvl >= s.l.errorStatusLevel && trace.SpanFromContext(ctx).IsRecording() {
+			s.l.setSpanStatus(ctx, lvl, fmt.Sprintf(template, args...))
+		}
 		return
 	}
 
@@ -506,6 +518,7 @@ func (s *SugaredLogger) logKVs(
 	ctx context.Context, lvl zapcore.Level, msg string, args []interface{},
 ) {
 	if lvl < s.l.minLevel {
+		s.l.setSpanStatus(ctx, lvl, msg)
 		return
 	}
 
