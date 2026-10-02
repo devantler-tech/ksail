@@ -453,10 +453,11 @@ type upgradeNodeRequest struct {
 // upgradeSingleNode runs the full graceful per-node OS-upgrade sequence: cordon →
 // drain → reconcile desired config (#5294) → upgrade + reboot → wait Ready →
 // uncordon → between-node storage-health gate (#5467). When the clientset is nil
-// (Kubernetes API unreachable) or the node cannot be resolved to a Kubernetes node,
-// it degrades to the legacy reconcile + upgrade + reboot without draining, so a
-// needed OS upgrade still proceeds. A drain failure aborts the roll with the node
-// best-effort uncordoned (see cordonAndDrain), matching the config-change path.
+// (Kubernetes API unreachable) or a successful lookup finds no Kubernetes node,
+// it degrades to the legacy reconcile + upgrade + reboot without draining.
+// A failed lookup aborts the roll because the node's cordon state is unknown.
+// A drain failure aborts the roll with the node best-effort uncordoned
+// (see cordonAndDrain), matching the config-change path.
 func (p *Provisioner) upgradeSingleNode(ctx context.Context, req upgradeNodeRequest) error {
 	nodeName, err := p.prepareNodeForImageUpgrade(ctx, req.clientset, req.node.IP)
 	if err != nil {
@@ -488,6 +489,8 @@ func (p *Provisioner) upgradeSingleNode(ctx context.Context, req upgradeNodeRequ
 	return p.completeNodeUpgrade(ctx, req.clientset, nodeName, req.prober)
 }
 
+// prepareNodeForImageUpgrade reserves and drains a registered Kubernetes node.
+// Only a confirmed absent node or an unavailable client permits the recovery fallback.
 func (p *Provisioner) prepareNodeForImageUpgrade(
 	ctx context.Context,
 	clientset kubernetes.Interface,
@@ -499,6 +502,10 @@ func (p *Provisioner) prepareNodeForImageUpgrade(
 
 	nodeName, err := p.resolveNodeName(ctx, clientset, nodeIP)
 	if err != nil {
+		if !errors.Is(err, ErrNodeNotFoundByIP) {
+			return "", fmt.Errorf("resolving Kubernetes node for %s: %w", nodeIP, err)
+		}
+
 		_, _ = fmt.Fprintf(p.logWriter,
 			"  ⚠ Could not resolve %s to a Kubernetes node; upgrading without drain: %v\n",
 			nodeIP, err,
