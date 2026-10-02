@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Reject failed Go project extraction and require function bodies from the CLI
-# and every Linux desktop source file. An upload alone does not prove coverage.
+# every Linux desktop source file, and authenticated dependency modules. An
+# upload alone does not prove coverage.
 set -euo pipefail
 
-# verify_results rejects incomplete or malformed CLI/desktop extraction evidence.
+# verify_results rejects incomplete or malformed extraction evidence.
 verify_results() {
 	jq -e '
     .["#select"].tuples as $rows |
     ($rows | type == "array") and
-    ($rows | length == 8) and
+    ($rows | length == 11) and
     ($rows | all(length == 3 and
       (.[2] | type == "number" and . > 0 and floor == .))) and
     ([$rows[] | .[0:2]] | sort) == ([
@@ -19,10 +20,13 @@ verify_results() {
       ["desktop/menu.go", "installApplicationMenu"],
       ["desktop/deeplink.go", "handleDeepLink"],
       ["desktop/notify.go", "watchClusterStatus"],
-      ["desktop/window_state.go", "trackWindowState"]
+      ["desktop/window_state.go", "trackWindowState"],
+      ["third_party/cel-go/cel/env.go", "NewEnv"],
+      ["third_party/glamour/glamour.go", "NewTermRenderer"],
+      ["third_party/go-macholibre/universal_binary.go", "ExtractReaders"]
     ] | sort)
   ' "$1" >/dev/null || {
-		printf '::error::CodeQL database lacks the required CLI/desktop function bodies.\n' >&2
+		printf '::error::CodeQL database lacks required CLI, desktop, or dependency function bodies.\n' >&2
 		return 1
 	}
 }

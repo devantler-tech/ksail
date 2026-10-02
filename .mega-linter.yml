@@ -43,7 +43,10 @@ EXCLUDED_DIRECTORIES:
 # list so the local compatibility surface remains visible to applicable linters.
 # web/ui is a self-contained Vite/React app with its own toolchain (tsc + vite build, run in CI),
 # so it is excluded from the repo-wide linters here.
-FILTER_REGEX_EXCLUDE: (megalinter-reports/.*|web/ui/.*)
+# These exact foreign trees have complete-byte authentication in the required
+# harness gate. Formatting their published source would invalidate provenance.
+# Owned compatibility modules and every guard remain in the lint surface.
+FILTER_REGEX_EXCLUDE: (megalinter-reports/.*|web/ui/.*|(^|/)third_party/(cel-go|glamour|go-macholibre)/.*)
 SPELL_LYCHEE_FILTER_REGEX_EXCLUDE: (AGENTS\.md|.*\.mdx|docs/src/.*\.md)
 # Helm chart templates contain Go template directives ({{ ... }}) and are not valid standalone
 # YAML; generated CRDs (controller-gen output) are large and machine-managed. Exclude both from

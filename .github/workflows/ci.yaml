@@ -199,6 +199,16 @@ jobs:
               - '.github/actions/**'
               - '.github/scripts/**'
               - 'internal/ciharness/**'
+              # Authenticate every copied byte, including embedded data and
+              # metadata edits that the shared Go source filter does not select.
+              - 'third_party/cel-go/**'
+              - 'third_party/glamour/**'
+              - 'third_party/go-macholibre/**'
+              - '.gitattributes'
+              - '.mega-linter.yml'
+              - '.jscpd.json'
+              - 'go.mod'
+              - 'go.sum'
             # Deliberately NARROWER than `code`: the job resolves a module graph, so only the
             # module files matter — not every .go file. It also includes THIS workflow, because
             # the check lives here and a workflow-only PR would otherwise be able to weaken or

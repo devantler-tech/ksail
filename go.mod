@@ -1042,6 +1042,11 @@ require (
 // Dependency version pins: modules replaced here have upstream incompatibilities
 // that require pinning until the respective projects ship compatible releases.
 replace (
+	// Authenticate the complete release source instead of unavailable Git/LFS
+	// downloads (ksail#7131, ADR 0010). This qualified pin leaves future releases
+	// unaffected; remove it after an authenticated successor passes managed analysis.
+	github.com/anchore/go-macholibre v0.1.0 => ./third_party/go-macholibre
+
 	// image-factory v1.3.0 transitively pulls in grype v0.112.0 (via go-vex),
 	// which added a *DistroAlertData parameter to models.NewDocument. kubescape
 	// v3.0.48 still calls the 10-argument form and will not compile against
@@ -1050,6 +1055,9 @@ replace (
 	// so pinning grype back to v0.104.2 is safe. This replace can be removed
 	// once kubescape ships a release compatible with grype v0.106+.
 	github.com/anchore/grype => github.com/anchore/grype v0.104.2
+	// Same source authentication and removal condition as ADR 0010, without
+	// replacing newer Glamour releases.
+	github.com/charmbracelet/glamour v1.0.0 => ./third_party/glamour
 
 	// k3d v5.9.0-rc.0 uses docker/docker monolith types. docker/cli v29 migrated
 	// to the new moby/moby/api and moby/moby/client split modules whose types are
@@ -1057,6 +1065,9 @@ replace (
 	// everything on the monolith type system.
 	github.com/docker/cli => github.com/docker/cli v28.3.1+incompatible
 	github.com/docker/docker => github.com/docker/docker v28.5.2+incompatible
+	// Same source authentication and removal condition as ADR 0010, without
+	// replacing newer CEL releases.
+	github.com/google/cel-go v0.31.0 => ./third_party/cel-go
 	// The v5.9.0 tag moved after Go's checksum database recorded its original
 	// source. Select that authenticated commit without accepting changed tag
 	// bytes (ksail#6781). This qualified replacement leaves future releases

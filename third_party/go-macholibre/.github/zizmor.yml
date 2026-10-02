@@ -1,0 +1,6 @@
+rules:
+  unpinned-uses:
+    ignore:
+      # Allow unpinned uses of trusted internal anchore/workflows actions
+      - oss-project-board-add.yaml
+      - remove-awaiting-response-label.yaml
