@@ -93,6 +93,11 @@ func TestReleaseGraphAuditPropagatesFailure(t *testing.T) {
 	require.True(t, found, "release-only changes need a dependency-audit job")
 	step := findHarnessStep(t, job.Steps, "🔐 Audit Shipped Dependency Graphs")
 	require.NotEmpty(t, step.Run)
+
+	const auditCommand = "go test ./pkg/client/kubescape/... -count=1"
+
+	require.Equal(t, auditCommand, strings.TrimSpace(step.Run),
+		"the workflow must run the reviewed audit command without shell wrappers")
 	assert.Empty(t, step.If, "a selected audit must not skip its test step")
 	assert.False(t, step.ContinueOnError)
 
@@ -102,7 +107,7 @@ func TestReleaseGraphAuditPropagatesFailure(t *testing.T) {
 		"#!/bin/sh\nprintf '%s\\n' \"$@\" >\"$AUDIT_ARGUMENTS\"\nexit 1\n")
 	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("AUDIT_ARGUMENTS", arguments)
-	command := exec.CommandContext(t.Context(), "bash", "-e", "-c", step.Run)
+	command := exec.CommandContext(t.Context(), "bash", "-e", "-c", auditCommand)
 	output, err := command.CombinedOutput()
 	require.Errorf(t, err, "a failed dependency audit must fail the workflow step: %s", output)
 	actual, readErr := os.ReadFile(arguments) //nolint:gosec // test-owned temporary file.
