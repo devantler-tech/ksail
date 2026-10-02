@@ -178,6 +178,13 @@ linters:
             - github.com/spf13/pflag
             - github.com/spf13/viper
             - github.com/stretchr/testify
+            # The compatibility regression exercises Kubescape's existing logging adapter
+            # through the fixed OTel API, SDK and OTLP exporter, without network access.
+            - github.com/uptrace/opentelemetry-go-extra/otelzap
+            - go.opentelemetry.io/otel
+            - go.opentelemetry.io/proto/otlp/collector/logs/v1
+            - go.opentelemetry.io/proto/otlp/common/v1
+            - go.uber.org/zap
             - github.com/siderolabs
             # bbolt reads the etcd snapshot database to verify its integrity and membership before a
             # guarded single-node replacement (#7168). Already linked transitively via etcd.
