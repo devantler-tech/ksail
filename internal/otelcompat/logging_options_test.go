@@ -129,17 +129,17 @@ func TestOTelZapCloneOptionsReachExporter(t *testing.T) {
 	}
 }
 
-// TestOTelZapSpanStatusIsIndependentOfEmission catches span errors hidden by log filtering.
-func TestOTelZapSpanStatusIsIndependentOfEmission(t *testing.T) {
-	t.Parallel()
+type spanStatusLoggingPath struct {
+	name string
+	warn func(context.Context, *otelzap.Logger)
+	info func(context.Context, *otelzap.Logger)
+}
 
-	for _, path := range []struct {
-		name string
-		warn func(context.Context, *otelzap.Logger)
-		info func(context.Context, *otelzap.Logger)
-	}{
+func spanStatusLoggingPaths() []spanStatusLoggingPath {
+	return []spanStatusLoggingPath{
 		{
-			name: "structured", warn: func(ctx context.Context, l *otelzap.Logger) { l.WarnContext(ctx, "operation failed") },
+			name: "structured",
+			warn: func(ctx context.Context, l *otelzap.Logger) { l.WarnContext(ctx, "operation failed") },
 			info: func(ctx context.Context, l *otelzap.Logger) { l.InfoContext(ctx, "operation succeeded") },
 		},
 		{
@@ -158,7 +158,14 @@ func TestOTelZapSpanStatusIsIndependentOfEmission(t *testing.T) {
 				l.Sugar().InfowContext(ctx, "operation succeeded", "attempt", 1)
 			},
 		},
-	} {
+	}
+}
+
+// TestOTelZapSpanStatusIsIndependentOfEmission catches span errors hidden by log filtering.
+func TestOTelZapSpanStatusIsIndependentOfEmission(t *testing.T) {
+	t.Parallel()
+
+	for _, path := range spanStatusLoggingPaths() {
 		for _, scenario := range []string{"suppressed-error", "suppressed-info", "emitted-error"} {
 			t.Run(path.name+"/"+scenario, func(t *testing.T) {
 				t.Parallel()
