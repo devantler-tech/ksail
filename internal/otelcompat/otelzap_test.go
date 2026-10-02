@@ -41,6 +41,7 @@ type captureLogger struct {
 
 	checkContext func(context.Context)
 	record       otellog.Record
+	emitted      int
 }
 
 func (l *captureLogger) Emit(ctx context.Context, record otellog.Record) {
@@ -49,6 +50,7 @@ func (l *captureLogger) Emit(ctx context.Context, record otellog.Record) {
 	}
 
 	l.record = record.Clone()
+	l.emitted++
 }
 
 func TestOTelZapStructuredFields(t *testing.T) {
