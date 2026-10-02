@@ -116,9 +116,10 @@ func startServingServer(t *testing.T, served *atomic.Pointer[tls.Certificate]) s
 			}
 
 			go func() {
-				_ = conn.(*tls.Conn).HandshakeContext(
-					ctx,
-				) //nolint:forcetypeassert // tls.Listen yields *tls.Conn
+				if tlsConn, isTLS := conn.(*tls.Conn); isTLS {
+					_ = tlsConn.HandshakeContext(ctx)
+				}
+
 				_ = conn.Close()
 			}()
 		}

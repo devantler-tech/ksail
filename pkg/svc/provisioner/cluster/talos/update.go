@@ -261,6 +261,13 @@ func (p *Provisioner) mergeDetectedFloatingIPChanges(
 		return
 	}
 
+	// Keep the planned address: if the floating IP is released outside KSail
+	// before the release step, its lookup finds nothing, and this is then the
+	// only record of the address the talosconfig must move off.
+	if floatingIP.IP != nil {
+		p.staleFloatingIPAddress = floatingIP.IP.String()
+	}
+
 	diff.InPlaceChanges = append(diff.InPlaceChanges, clusterupdate.Change{
 		Field:    floatingIPEnabledField,
 		OldValue: strconv.FormatBool(true),

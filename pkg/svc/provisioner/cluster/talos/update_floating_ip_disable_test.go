@@ -310,3 +310,30 @@ func TestMergeFloatingIPChanges_KeepsUserManagedHCloudVIP(t *testing.T) {
 
 	assert.Empty(t, diff.InPlaceChanges, "a VIP the desired config declares is the user's")
 }
+
+// TestUpdateApplySteps_FloatingIPDisableRepointsAfterMidUpdateRelease proves
+// the address detected when the disable transition was planned is kept for the
+// talosconfig rewrite: when the floating IP is released outside KSail while the
+// update runs, the release step's lookup finds nothing, yet talosctl must still
+// stop dialing the address the plan named.
+//
+//nolint:paralleltest // the fixture sets the Hetzner token with t.Setenv.
+func TestUpdateApplySteps_FloatingIPDisableRepointsAfterMidUpdateRelease(t *testing.T) {
+	fixture := newFloatingIPDisableFixture(t)
+	result := clusterupdate.NewEmptyUpdateResult()
+
+	fixture.runStep(t, "reconcile floating IP endpoint", result)
+	fixture.runStep(t, "refresh floating IP kubeconfig", result)
+
+	gone := newFipUpdateProvider(fipUpdateTestServer(t, false, fixture.calls).URL)
+	fixture.provisioner.WithInfraProvider(gone)
+
+	fixture.runStep(t, "release disabled floating IP", result)
+
+	assert.Equal(t, int32(0), fixture.calls.del.Load(), "there is no address left to delete")
+
+	saved, err := clientconfig.Open(fixture.talosconfigPath)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"203.0.113.5"}, saved.Contexts["fip-cluster"].Endpoints,
+		"talosctl must stop dialing the address released mid-update")
+}

@@ -230,7 +230,8 @@ type Provisioner struct {
 	revertFloatingIPEndpoint bool
 	// staleFloatingIPAddress is the HCloud VIP address running control planes
 	// still carry after their ksail-owned floating IP was released outside KSail
-	// while `floatingIPEnabled` is false. Detection records it so the disable
+	// while `floatingIPEnabled` is false, or the address a planned disable
+	// transition releases. Detection records it so the disable
 	// transition can move the talosconfig off it; it is request-scoped like
 	// revertFloatingIPEndpoint.
 	staleFloatingIPAddress string

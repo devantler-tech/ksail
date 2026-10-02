@@ -732,6 +732,7 @@ runs:
         DISTRIBUTION: ${{ inputs.distribution }}
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ steps.resolve-args.outputs.args }}
+        K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
       run: |
         set -euo pipefail
         LOG_DIR="/tmp/ksail-system-test-logs"
@@ -753,11 +754,25 @@ runs:
         kubeconfig_server() {
           kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}'
         }
+        # Prints the kubeconfig server's host, without scheme, port or IPv6 brackets.
+        kubeconfig_host() {
+          local host
+          host=$(kubeconfig_server)
+          host=${host#*://}
+          host=${host%%/*}
+          if [[ "$host" == \[* ]]; then
+            host=${host#[}
+            host=${host%%]*}
+          else
+            host=${host%:*}
+          fi
+          printf '%s' "$host"
+        }
 
         echo "=== Enabling the floating IP ==="
         yq -i '.spec.provider.hetzner.floatingIPEnabled = true' ksail.yaml
         # shellcheck disable=SC2086
-        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS \
+        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG \
           2>&1 | tee "$LOG_DIR/cluster-update-floating-ip-enable.log"
         FLOATING_IP=$(owned_floating_ip)
         if [ -z "$FLOATING_IP" ]; then
@@ -765,7 +780,7 @@ runs:
           exit 1
         fi
         SERVER=$(kubeconfig_server)
-        if [[ "$SERVER" != *"$FLOATING_IP"* ]]; then
+        if [[ "$(kubeconfig_host)" != "$FLOATING_IP" ]]; then
           echo "❌ ERROR: kubeconfig server ${SERVER} does not use the floating IP ${FLOATING_IP}"
           exit 1
         fi
@@ -775,7 +790,7 @@ runs:
         echo "=== Disabling the floating IP ==="
         yq -i '.spec.provider.hetzner.floatingIPEnabled = false' ksail.yaml
         # shellcheck disable=SC2086
-        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS \
+        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG \
           2>&1 | tee "$LOG_DIR/cluster-update-floating-ip-disable.log"
         REMAINING=$(owned_floating_ip)
         if [ -n "$REMAINING" ]; then
@@ -783,7 +798,7 @@ runs:
           exit 1
         fi
         SERVER=$(kubeconfig_server)
-        if [[ "$SERVER" == *"$FLOATING_IP"* ]]; then
+        if [[ "$(kubeconfig_host)" == "$FLOATING_IP" ]]; then
           echo "❌ ERROR: kubeconfig server ${SERVER} still points at the released floating IP"
           exit 1
         fi
