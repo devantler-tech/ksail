@@ -264,9 +264,10 @@ func ExportPrepareEKSCreateConfig(ctx *localregistry.Context) error {
 	return prepareEKSCreateConfig(ctx)
 }
 
-// ExportApplyClusterNameOverride exports applyClusterNameOverride for testing.
+// ExportApplyClusterNameOverride applies a create-time name override, as `cluster create` does with
+// metadata.name or --name: the distribution configs are renamed and the context retargeted.
 func ExportApplyClusterNameOverride(ctx *localregistry.Context, name string) error {
-	return applyClusterNameOverride(ctx, name)
+	return applyResolvedNameOverride(ctx, clusterNameOverride{name: name}, newClusterTarget)
 }
 
 // ExportApplyResolvedNameOverride exports applyResolvedNameOverride for testing. fromFlag marks

@@ -1695,6 +1695,23 @@ func (o *updateOrchestrator) executeRecreateFlow() error {
 		return fmt.Errorf("reverify EKS ownership before cluster recreation: %w", err)
 	}
 
+	// Resolve the recreated cluster's context before anything is deleted, so a failure here
+	// cannot leave the cluster deleted and not recreated.
+	createdContext, err := recreatedClusterContext(o.cfgManager, o.ctx)
+	if err != nil {
+		return err
+	}
+
+	err = o.deleteForRecreation(outputTimer)
+	if err != nil {
+		return err
+	}
+
+	return o.createRecreatedCluster(createdContext)
+}
+
+// deleteForRecreation deletes the existing cluster as the first half of a recreation.
+func (o *updateOrchestrator) deleteForRecreation(outputTimer timer.Timer) error {
 	// Create provisioner for delete
 	factory := newProvisionerFactory(o.ctx)
 
@@ -1729,17 +1746,14 @@ func (o *updateOrchestrator) executeRecreateFlow() error {
 		Writer:  o.cmd.OutOrStdout(),
 	})
 
-	return o.createRecreatedCluster()
+	return nil
 }
 
-// createRecreatedCluster runs the create half of a recreation. Recreation is creation: the new
-// cluster is written to the context derived from its name, so a custom context kept to inspect
-// the old cluster gives way to it, exactly as on create.
-func (o *updateOrchestrator) createRecreatedCluster() error {
-	err := retargetContextForRecreation(o.cfgManager, o.ctx)
-	if err != nil {
-		return err
-	}
+// createRecreatedCluster runs the create half of a recreation under createdContext. Recreation is
+// creation: the new cluster is written to the context derived from its name, so a custom context
+// kept to inspect the old cluster gives way to it, exactly as on create.
+func (o *updateOrchestrator) createRecreatedCluster(createdContext string) error {
+	o.ctx.ClusterCfg.Spec.Cluster.Connection.Context = createdContext
 
 	// Execute create using shared workflow.
 	controllerReconciliationStarted, creationErr := runClusterCreationWorkflow(

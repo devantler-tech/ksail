@@ -273,28 +273,33 @@ func applyResolvedNameOverride(
 	return nil
 }
 
-// retargetContextForRecreation applies create's context rule before update recreates a cluster: a
-// named cluster is recreated under the context derived from its name, which keepsConfiguredContext
-// may have set aside while the old cluster was inspected. A cluster with no name override keeps
-// its configured context, as before.
-func retargetContextForRecreation(
+// recreatedClusterContext returns the context update recreates a cluster under, applying create's
+// rule: a named cluster is recreated under the context derived from its name, which
+// keepsConfiguredContext may have set aside while the old cluster was inspected. A cluster with no
+// name override, and EKS, keep the configured context, as before.
+func recreatedClusterContext(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	ctx *localregistry.Context,
-) error {
+) (string, error) {
+	configuredContext := ctx.ClusterCfg.Spec.Cluster.Connection.Context
 	if cfgManager == nil {
-		return nil
+		return configuredContext, nil
 	}
 
 	override, err := resolveMutationNameOverride(cfgManager, ctx)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	if override.name != "" {
-		retargetConnectionContext(ctx, override.name)
+	if override.name == "" {
+		return configuredContext, nil
 	}
 
-	return nil
+	if createdContext, derived := createdContextName(ctx.ClusterCfg, override.name); derived {
+		return createdContext, nil
+	}
+
+	return configuredContext, nil
 }
 
 // keepsConfiguredContext reports whether diff or update keeps the configured context for a cluster

@@ -621,29 +621,10 @@ func setupVClusterCNI(
 	vclusterConfig.DisableFlannel = true
 }
 
-// applyClusterNameOverride updates distribution configs with the cluster name override.
-// This function mutates the distribution config pointers in ctx to apply the --name flag value.
-// The name override takes highest priority over distribution config or context-derived names.
-// It renames the distribution configs and then retargets the connection context to the one
-// derived from the name, which is what create and --name need; diff and update go through
-// applyResolvedNameOverride, which can keep a custom context for metadata.name instead.
-func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
-	if name == "" {
-		return nil
-	}
-
-	err := renameDistributionConfigs(ctx, name)
-	if err != nil {
-		return err
-	}
-
-	retargetConnectionContext(ctx, name)
-
-	return nil
-}
-
-// renameDistributionConfigs applies a cluster name to the distribution configs without touching
-// the connection context.
+// renameDistributionConfigs applies a cluster name override (the --name flag or metadata.name) to
+// the distribution configs without touching the connection context; the name takes priority over
+// distribution config or context-derived names. applyResolvedNameOverride decides separately
+// whether the context follows the name.
 //
 // For Talos, this regenerates the config bundle with the new cluster name because
 // the cluster name is embedded in PKI certificates and the kubeconfig context name.
@@ -665,21 +646,28 @@ func renameDistributionConfigs(ctx *localregistry.Context, name string) error {
 }
 
 // retargetConnectionContext sets the ksail.yaml context to the one a cluster created under name
-// is written to. Must be provider-aware: the Kubernetes (k3k) provider writes a "k3k-<name>"
-// context for K3s rather than the standalone "k3d-<name>", so post-creation CNI install can
-// resolve it. eksctl adds the creating AWS identity to EKS context names, so that context is
-// resolved from the written kubeconfig after creation instead.
+// is written to, leaving it unchanged where createdContextName derives none.
 func retargetConnectionContext(ctx *localregistry.Context, name string) {
-	if ctx.ClusterCfg == nil ||
-		ctx.ClusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS {
-		return
+	if createdContext, derived := createdContextName(ctx.ClusterCfg, name); derived {
+		ctx.ClusterCfg.Spec.Cluster.Connection.Context = createdContext
+	}
+}
+
+// createdContextName returns the context a cluster created under name is written to. Must be
+// provider-aware: the Kubernetes (k3k) provider writes a "k3k-<name>" context for K3s rather than
+// the standalone "k3d-<name>", so post-creation CNI install can resolve it. It derives none (false)
+// for EKS: eksctl adds the creating AWS identity to EKS context names, so that context is resolved
+// from the written kubeconfig after creation instead.
+func createdContextName(clusterCfg *v1alpha1.Cluster, name string) (string, bool) {
+	if clusterCfg == nil || clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS {
+		return "", false
 	}
 
-	ctx.ClusterCfg.Spec.Cluster.Connection.Context = resolveCreatedContextName(
-		ctx.ClusterCfg.Spec.Cluster.Distribution,
-		ctx.ClusterCfg.Spec.Cluster.Provider,
+	return resolveCreatedContextName(
+		clusterCfg.Spec.Cluster.Distribution,
+		clusterCfg.Spec.Cluster.Provider,
 		name,
-	)
+	), true
 }
 
 // applyDirectClusterNameOverrides updates in-memory distribution configs whose names directly drive
@@ -805,7 +793,8 @@ func resolveKWOKName(ctx *localregistry.Context) string {
 }
 
 func resolveFallbackName(ctx *localregistry.Context) string {
-	// Connection context takes priority because --name flag updates it via applyClusterNameOverride
+	// Connection context takes priority because a name override retargets it to the derived
+	// context (GKE and AKS always follow the name; see keepsConfiguredContext)
 	if name := strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context); name != "" {
 		return name
 	}
