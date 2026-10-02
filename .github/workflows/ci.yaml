@@ -152,6 +152,7 @@ jobs:
       eks-smoke-scripts: ${{ steps.filter.outputs.eks-smoke-scripts }}
       k3k-sentinel-scripts: ${{ steps.filter.outputs.k3k-sentinel-scripts }}
       rate-limit-gate-script: ${{ steps.filter.outputs.rate-limit-gate-script }}
+      hetzner-cleanup-script: ${{ steps.filter.outputs.hetzner-cleanup-script }}
       gitops-assert-scripts: ${{ steps.filter.outputs.gitops-assert-scripts }}
     steps:
       - name: 📄 Checkout
@@ -348,6 +349,9 @@ jobs:
             rate-limit-gate-script:
               - '.github/actions/rate-limit-gate/**'
               - '.github/workflows/ci.yaml'
+            hetzner-cleanup-script:
+              - '.github/actions/cleanup-hetzner/**'
+              - '.github/workflows/ci.yaml'
             gitops-assert-scripts:
               - '.github/scripts/assert-gitops-deployed.sh'
               - '.github/scripts/assert-gitops-deployed.test.sh'
@@ -416,6 +420,27 @@ jobs:
             .github/actions/rate-limit-gate/wait-for-rate-limit.sh \
             .github/actions/rate-limit-gate/wait-for-rate-limit.test.sh
           .github/actions/rate-limit-gate/wait-for-rate-limit.test.sh
+
+  hetzner-cleanup-script:
+    name: 🧹 Validate Hetzner Cleanup
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [changes]
+    if: needs.changes.outputs.hetzner-cleanup-script == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 🧹 Verify a failed Hetzner call is never reported as a clean cleanup
+        run: |
+          shellcheck \
+            .github/actions/cleanup-hetzner/cleanup-hetzner.sh \
+            .github/actions/cleanup-hetzner/cleanup-hetzner.test.sh
+          .github/actions/cleanup-hetzner/cleanup-hetzner.test.sh
 
   gitops-assert-scripts:
     name: 🔐 Validate GitOps And Workload Guards
@@ -1848,6 +1873,7 @@ jobs:
         cask-pr-handoff,
         k3k-sentinel-scripts,
         rate-limit-gate-script,
+        hetzner-cleanup-script,
         gitops-assert-scripts,
       ]
     if: ${{ always() }}
@@ -1880,4 +1906,5 @@ jobs:
             ${{ needs.cask-pr-handoff.result }}
             ${{ needs.k3k-sentinel-scripts.result }}
             ${{ needs.rate-limit-gate-script.result }}
+            ${{ needs.hetzner-cleanup-script.result }}
             ${{ needs.gitops-assert-scripts.result }}
