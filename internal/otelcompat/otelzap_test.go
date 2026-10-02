@@ -28,6 +28,7 @@ import (
 // captureProvider preserves the context and record delivered through the public API.
 type captureProvider struct {
 	noop.LoggerProvider
+
 	logger *captureLogger
 }
 
@@ -37,37 +38,46 @@ func (p captureProvider) Logger(_ string, _ ...otellog.LoggerOption) otellog.Log
 
 type captureLogger struct {
 	noop.Logger
-	ctx    context.Context
-	record otellog.Record
+
+	checkContext func(context.Context)
+	record       otellog.Record
 }
 
 func (l *captureLogger) Emit(ctx context.Context, record otellog.Record) {
-	l.ctx = ctx
+	if l.checkContext != nil {
+		l.checkContext(ctx)
+	}
+
 	l.record = record.Clone()
 }
 
 func TestOTelZapStructuredFields(t *testing.T) {
 	t.Parallel()
 
-	capture := &captureLogger{}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	capture := &captureLogger{checkContext: func(actual context.Context) {
+		require.Same(t, ctx, actual)
+	}}
 	logger := otelzap.New(zap.NewNop(),
 		otelzap.WithLoggerProvider(captureProvider{logger: capture}),
 		otelzap.WithCaller(false),
 	)
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
 	logger.Ctx(ctx).Warn("structured record",
 		zap.Bool("enabled", true), zap.Int64("attempt", 42), zap.Float64("ratio", 1.25),
 		zap.String("name", "ksail"), zap.Binary("payload", []byte{0, 1, 255}),
 		zap.Duration("delay", 3*time.Second), zap.Error(io.EOF),
 	)
 
-	require.Same(t, ctx, capture.ctx)
 	require.Equal(t, "structured record", capture.record.Body().AsString())
 	require.Equal(t, otellog.SeverityWarn, capture.record.Severity())
+
 	attrs := make(map[string]any)
+
 	capture.record.WalkAttributes(func(kv attribute.KeyValue) bool {
 		attrs[string(kv.Key)] = kv.Value.AsInterface()
+
 		return true
 	})
 	require.Equal(t, map[string]any{
@@ -99,13 +109,17 @@ func TestOTelZapSugaredValues(t *testing.T) {
 			attribute.Int64Value(1), attribute.Int64Value(2),
 		}},
 		{name: "nested", value: [][]int{{1}, {2}}, want: []attribute.Value{
-			attribute.SliceValue(attribute.Int64Value(1)), attribute.SliceValue(attribute.Int64Value(2)),
+			attribute.SliceValue(
+				attribute.Int64Value(1),
+			),
+			attribute.SliceValue(attribute.Int64Value(2)),
 		}},
 		{name: "json", value: map[string]int{"attempt": 42}, want: `{"attempt":42}`},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
+
 			capture := &captureLogger{}
 			logger := otelzap.New(zap.NewNop(),
 				otelzap.WithLoggerProvider(captureProvider{logger: capture}),
@@ -117,6 +131,7 @@ func TestOTelZapSugaredValues(t *testing.T) {
 			capture.record.WalkAttributes(func(kv attribute.KeyValue) bool {
 				require.Equal(t, "value", string(kv.Key))
 				require.Equal(t, test.want, kv.Value.AsInterface())
+
 				return true
 			})
 		})
@@ -133,15 +148,20 @@ func (c requestCapture) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read log request: %w", err)
 	}
+
 	var payload collector.ExportLogsServiceRequest
-	if err = proto.Unmarshal(body, &payload); err != nil {
+
+	err = proto.Unmarshal(body, &payload)
+	if err != nil {
 		return nil, fmt.Errorf("decode log request: %w", err)
 	}
+
 	select {
 	case c.requests <- &payload:
 	case <-req.Context().Done():
-		return nil, req.Context().Err()
+		return nil, fmt.Errorf("capture log request: %w", req.Context().Err())
 	}
+
 	return &http.Response{
 		StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("")),
 		Header: make(http.Header), Request: req,
@@ -157,16 +177,32 @@ func TestOTelZapFixedBatchProcessorExportsTraceContext(t *testing.T) {
 		otlploghttp.WithHTTPClient(&http.Client{Transport: requestCapture{requests: requests}}),
 	)
 	require.NoError(t, err)
+
 	provider := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewBatchProcessor(exporter)))
+
 	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
-	logger := otelzap.New(zap.NewNop(), otelzap.WithLoggerProvider(provider), otelzap.WithCaller(false))
+
+	logger := otelzap.New(
+		zap.NewNop(),
+		otelzap.WithLoggerProvider(provider),
+		otelzap.WithCaller(false),
+	)
 	span := trace.NewSpanContext(trace.SpanContextConfig{
-		TraceID: trace.TraceID{1, 2, 3}, SpanID: trace.SpanID{4, 5, 6}, TraceFlags: trace.FlagsSampled,
+		TraceID: trace.TraceID{
+			1,
+			2,
+			3,
+		},
+		SpanID:     trace.SpanID{4, 5, 6},
+		TraceFlags: trace.FlagsSampled,
 	})
 	ctx := trace.ContextWithSpanContext(t.Context(), span)
-	logger.Ctx(ctx).Warn("exported record", zap.Binary("payload", []byte{0, 1, 255}), zap.Int("attempt", 42))
+	logger.Ctx(ctx).
+		Warn("exported record", zap.Binary("payload", []byte{0, 1, 255}), zap.Int("attempt", 42))
+
 	flushCtx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
+
 	require.NoError(t, provider.ForceFlush(flushCtx))
 
 	select {
@@ -178,13 +214,16 @@ func TestOTelZapFixedBatchProcessorExportsTraceContext(t *testing.T) {
 		record := records[0]
 		require.Equal(t, "exported record", record.GetBody().GetStringValue())
 		require.EqualValues(t, otellog.SeverityWarn, record.GetSeverityNumber())
+
 		traceID, spanID := span.TraceID(), span.SpanID()
 		require.True(t, bytes.Equal(traceID[:], record.GetTraceId()))
 		require.True(t, bytes.Equal(spanID[:], record.GetSpanId()))
+
 		attrs := make(map[string]*common.AnyValue)
 		for _, kv := range record.GetAttributes() {
 			attrs[kv.GetKey()] = kv.GetValue()
 		}
+
 		require.Equal(t, []byte{0, 1, 255}, attrs["payload"].GetBytesValue())
 		require.Equal(t, int64(42), attrs["attempt"].GetIntValue())
 	case <-flushCtx.Done():

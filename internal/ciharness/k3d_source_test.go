@@ -35,10 +35,20 @@ func TestK3dUsesAuthenticatedImmutableSource(t *testing.T) {
 		} `json:"Replace"` //nolint:tagliatelle // Go command output contract.
 	}
 
-	require.NoError(t, json.Unmarshal(k3dGoOutput(t, "list", "-m", "-json", k3dModulePath), &selected))
+	require.NoError(
+		t,
+		json.Unmarshal(
+			authenticatedSourceGoOutput(t, "list", "-m", "-json", k3dModulePath),
+			&selected,
+		),
+	)
 	require.Equal(t, k3dModulePath, selected.Path)
 	require.Equal(t, "v5.9.0", selected.Version)
-	require.NotNil(t, selected.Replace, "the mutable tag must select its authenticated original commit")
+	require.NotNil(
+		t,
+		selected.Replace,
+		"the mutable tag must select its authenticated original commit",
+	)
 	require.Equal(t, k3dModulePath, selected.Replace.Path)
 	require.Equal(t, k3dOriginalVersion, selected.Replace.Version)
 
@@ -49,20 +59,32 @@ func TestK3dUsesAuthenticatedImmutableSource(t *testing.T) {
 		Error   string `json:"Error"`   //nolint:tagliatelle // Go command output contract.
 	}
 
-	data := k3dGoOutput(t, "mod", "download", "-json", k3dModulePath+"@"+selected.Replace.Version)
+	data := authenticatedSourceGoOutput(
+		t,
+		"mod",
+		"download",
+		"-json",
+		k3dModulePath+"@"+selected.Replace.Version,
+	)
 	require.NoError(t, json.Unmarshal(data, &downloaded))
 	require.Empty(t, downloaded.Error)
 	require.Equal(t, k3dModulePath, downloaded.Path)
 	require.Equal(t, k3dOriginalVersion, downloaded.Version)
-	require.Equal(t, k3dOriginalSum, downloaded.Sum, "the archive must retain the original authenticated source")
+	require.Equal(
+		t,
+		k3dOriginalSum,
+		downloaded.Sum,
+		"the archive must retain the original authenticated source",
+	)
 }
 
-func k3dGoOutput(t *testing.T, args ...string) []byte {
+func authenticatedSourceGoOutput(t *testing.T, args ...string) []byte {
 	t.Helper()
 
 	//nolint:gosec // The callers use fixed Go module inspection subcommands.
 	command := exec.CommandContext(t.Context(), "go", args...)
 	command.Dir = filepath.Join("..", "..")
+
 	command.Env = append(os.Environ(), "GOFLAGS=", "GOENV=off", "GOWORK=off", "GOEXPERIMENT=",
 		"GOPROXY=https://proxy.golang.org,direct", "GOSUMDB=sum.golang.org")
 
@@ -71,7 +93,7 @@ func k3dGoOutput(t *testing.T, args ...string) []byte {
 	command.Stderr = &stderr
 
 	output, err := command.Output()
-	require.NoError(t, err, "inspect k3d source: %s", stderr.String())
+	require.NoError(t, err, "inspect authenticated module source: %s", stderr.String())
 
 	return output
 }
