@@ -1,6 +1,8 @@
 name: OTel compatibility regression
 
 on:
+  push:
+    branches: [codex/ksail-otel-log-compat-7411]
   workflow_dispatch:
 
 permissions: {}
