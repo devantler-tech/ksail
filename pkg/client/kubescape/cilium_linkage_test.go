@@ -19,6 +19,7 @@ func TestCiliumHTTPRouteControllerStaysUnlinked(t *testing.T) {
 	t.Parallel()
 
 	root := moduleRoot(t)
+
 	_, err := os.Stat(filepath.Join(root, "vendor", "modules.txt"))
 	if !os.IsNotExist(err) {
 		t.Fatal("vendored Cilium sources require a new GO-2026-6596 assessment")
@@ -29,6 +30,7 @@ func TestCiliumHTTPRouteControllerStaysUnlinked(t *testing.T) {
 			t.Parallel()
 
 			cgo, knownCGO := moduleCGO()[name]
+
 			tags, knownTags := moduleBuildTags()[name]
 			if !knownCGO || !knownTags {
 				t.Fatalf("%s lacks release-validated build settings", name)
@@ -73,21 +75,34 @@ func validateCiliumLinkedPackages(packages []goListPackage) string {
 	}
 
 	for _, pkg := range packages {
-		if pkg.ImportPath != ciliumModulePath && !strings.HasPrefix(pkg.ImportPath, ciliumModulePath+"/") {
+		if pkg.ImportPath != ciliumModulePath &&
+			!strings.HasPrefix(pkg.ImportPath, ciliumModulePath+"/") {
 			continue
 		}
+
 		if _, allowed := expected[pkg.ImportPath]; !allowed {
-			return fmt.Sprintf("unaudited Cilium package %q; re-establish the GO-2026-6596 disposition", pkg.ImportPath)
+			return fmt.Sprintf(
+				"unaudited Cilium package %q; re-establish the GO-2026-6596 disposition",
+				pkg.ImportPath,
+			)
 		}
+
 		if !ciliumModuleIsAudited(pkg.Module) {
-			return fmt.Sprintf("unaudited module for %q; require unreplaced Cilium v1.20.2", pkg.ImportPath)
+			return fmt.Sprintf(
+				"unaudited module for %q; require unreplaced Cilium v1.20.2",
+				pkg.ImportPath,
+			)
 		}
+
 		expected[pkg.ImportPath] = true
 	}
 
 	for path, linked := range expected {
 		if !linked {
-			return fmt.Sprintf("missing audited Cilium package %q; the complete build graph is required", path)
+			return fmt.Sprintf(
+				"missing audited Cilium package %q; the complete build graph is required",
+				path,
+			)
 		}
 	}
 
@@ -109,13 +124,20 @@ func TestCiliumDispositionRejectsUnauditedGraph(t *testing.T) {
 			t.Parallel()
 
 			packages := ciliumGraphFixture()
+
 			switch name {
 			case "controller":
-				packages = append(packages, goListPackage{ImportPath: ciliumModulePath + "/operator/pkg/gateway-api"})
+				packages = append(
+					packages,
+					goListPackage{ImportPath: ciliumModulePath + "/operator/pkg/gateway-api"},
+				)
 			case "version":
 				packages[0].Module.Version = "v1.20.3"
 			case "replacement":
-				packages[0].Module.Replace = &goListModule{Path: "example.test/cilium", Version: "v1.20.2"}
+				packages[0].Module.Replace = &goListModule{
+					Path:    "example.test/cilium",
+					Version: "v1.20.2",
+				}
 			case "missing-module":
 				packages[0].Module = nil
 			case "wrong-module":
@@ -150,6 +172,7 @@ func ciliumGraphFixture() []goListPackage {
 		"pkg/labels", "pkg/lock", "pkg/logging", "pkg/logging/logfields", "pkg/option",
 		"pkg/time", "pkg/util", "pkg/version", "pkg/versioncheck",
 	}
+
 	packages := make([]goListPackage, 0, len(names))
 	for _, name := range names {
 		packages = append(packages, goListPackage{
