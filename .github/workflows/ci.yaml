@@ -1876,11 +1876,6 @@ jobs:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: 🧹 Free disk space
-        # The whole suite's build cache can exhaust a stock runner's disk, as the
-        # org-required test job also guards against.
-        uses: $/.github/actions/free-disk-space
-
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
