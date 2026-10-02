@@ -19,7 +19,9 @@ import (
 )
 
 // capturedLogProvider exports real SDK records through an in-memory HTTP transport.
-func capturedLogProvider(t *testing.T) (*sdklog.LoggerProvider, chan *collector.ExportLogsServiceRequest) {
+func capturedLogProvider(
+	t *testing.T,
+) (*sdklog.LoggerProvider, chan *collector.ExportLogsServiceRequest) {
 	t.Helper()
 
 	requests := make(chan *collector.ExportLogsServiceRequest, 4)
@@ -30,6 +32,7 @@ func capturedLogProvider(t *testing.T) (*sdklog.LoggerProvider, chan *collector.
 	require.NoError(t, err)
 
 	provider := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewBatchProcessor(exporter)))
+
 	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
 
 	return provider, requests
@@ -52,17 +55,24 @@ func TestOTelZapFilteredFormattingRemainsLazy(t *testing.T) {
 	t.Parallel()
 
 	provider := sdktrace.NewTracerProvider()
+
 	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+
 	ctx, span := provider.Tracer("ksail.logging").Start(t.Context(), "operation")
 	defer span.End()
 
 	require.True(t, trace.SpanFromContext(ctx).IsRecording())
+
 	logger := otelzap.New(zap.NewNop(), otelzap.WithMinLevel(zap.DPanicLevel),
 		otelzap.WithErrorStatusLevel(zap.WarnLevel), otelzap.WithCaller(false))
 	calls := 0
 	logger.Sugar().InfofContext(ctx, "operation %s", countedMessage{calls: &calls})
 	logger.Sugar().WarnfContext(t.Context(), "operation %s", countedMessage{calls: &calls})
-	require.Zero(t, calls, "suppressed messages with no qualifying recording span must stay unevaluated")
+	require.Zero(
+		t,
+		calls,
+		"suppressed messages with no qualifying recording span must stay unevaluated",
+	)
 }
 
 // TestOTelZapCloneOptionsReachExporter catches stale provider and scope options in clones.
@@ -128,20 +138,26 @@ func TestOTelZapSpanStatusIsIndependentOfEmission(t *testing.T) {
 		warn func(context.Context, *otelzap.Logger)
 		info func(context.Context, *otelzap.Logger)
 	}{
-		{name: "structured", warn: func(ctx context.Context, l *otelzap.Logger) { l.WarnContext(ctx, "operation failed") },
-			info: func(ctx context.Context, l *otelzap.Logger) { l.InfoContext(ctx, "operation succeeded") }},
-		{name: "formatted", warn: func(ctx context.Context, l *otelzap.Logger) {
-			l.Sugar().WarnfContext(ctx, "operation %s", "failed")
+		{
+			name: "structured", warn: func(ctx context.Context, l *otelzap.Logger) { l.WarnContext(ctx, "operation failed") },
+			info: func(ctx context.Context, l *otelzap.Logger) { l.InfoContext(ctx, "operation succeeded") },
 		},
+		{
+			name: "formatted", warn: func(ctx context.Context, l *otelzap.Logger) {
+				l.Sugar().WarnfContext(ctx, "operation %s", "failed")
+			},
 			info: func(ctx context.Context, l *otelzap.Logger) {
 				l.Sugar().InfofContext(ctx, "operation %s", "succeeded")
-			}},
-		{name: "key-values", warn: func(ctx context.Context, l *otelzap.Logger) {
-			l.Sugar().WarnwContext(ctx, "operation failed", "attempt", 1)
+			},
 		},
+		{
+			name: "key-values", warn: func(ctx context.Context, l *otelzap.Logger) {
+				l.Sugar().WarnwContext(ctx, "operation failed", "attempt", 1)
+			},
 			info: func(ctx context.Context, l *otelzap.Logger) {
 				l.Sugar().InfowContext(ctx, "operation succeeded", "attempt", 1)
-			}},
+			},
+		},
 	} {
 		for _, scenario := range []string{"suppressed-error", "suppressed-info", "emitted-error"} {
 			t.Run(path.name+"/"+scenario, func(t *testing.T) {
@@ -149,27 +165,36 @@ func TestOTelZapSpanStatusIsIndependentOfEmission(t *testing.T) {
 
 				exporter := tracetest.NewInMemoryExporter()
 				tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
-				t.Cleanup(func() { require.NoError(t, tracerProvider.Shutdown(context.Background())) })
+
+				t.Cleanup(
+					func() { require.NoError(t, tracerProvider.Shutdown(context.Background())) },
+				)
 				ctx, span := tracerProvider.Tracer("ksail.logging").Start(t.Context(), "operation")
 				capture := &captureLogger{}
 				minLevel := zap.DPanicLevel
+
 				wantEmitted := 0
 				if scenario == "emitted-error" {
 					minLevel, wantEmitted = zap.WarnLevel, 1
 				}
+
 				logger := otelzap.New(zap.NewNop(),
 					otelzap.WithLoggerProvider(captureProvider{logger: capture}),
 					otelzap.WithCaller(false), otelzap.WithMinLevel(minLevel),
 					otelzap.WithErrorStatusLevel(zap.WarnLevel),
 				)
 				wantStatus := sdktrace.Status{Code: codes.Error, Description: "operation failed"}
+
 				if scenario == "suppressed-info" {
 					path.info(ctx, logger)
+
 					wantStatus = sdktrace.Status{Code: codes.Unset}
 				} else {
 					path.warn(ctx, logger)
 				}
+
 				span.End()
+
 				spans := exporter.GetSpans()
 				require.Len(t, spans, 1)
 				require.Equal(t, wantStatus, spans[0].Status)
