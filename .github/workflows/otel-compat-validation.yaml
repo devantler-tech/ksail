@@ -7,18 +7,29 @@ on:
 
 permissions: {}
 
+env:
+  GOMEMLIMIT: 6GiB
+  GOPROXY: https://proxy.golang.org,direct
+
 jobs:
   compatibility:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - uses: ./.github/actions/free-disk-space
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: go.mod
       - name: Exercise the adapter and fixed batch processor
         run: go test ./internal/otelcompat -count=1 -v
+      - name: Verify compatibility module provenance
+        run: |
+          bash .github/scripts/verify-otelzap-parity.sh
+          bash .github/scripts/verify-otelzap-parity.test.sh
+      - name: Verify fixed modules in release graphs
+        run: go test ./pkg/client/kubescape -run '^TestOTelLoggingModulesUseFixedSDK$|^TestFixedOTelModules' -count=1

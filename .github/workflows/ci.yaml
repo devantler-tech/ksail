@@ -640,6 +640,11 @@ jobs:
       - name: 🔐 Verify reviewed upstream bytes
         run: .github/scripts/verify-go-archive-parity.sh
 
+      - name: 🔐 Verify OTel logging adapter provenance
+        run: |
+          .github/scripts/verify-otelzap-parity.sh
+          .github/scripts/verify-otelzap-parity.test.sh
+
   build-artifact:
     name: 🏗️ Build KSail Binary
     runs-on: ubuntu-latest
