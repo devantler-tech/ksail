@@ -22,7 +22,7 @@ while (($#)); do
   shift 2
 done
 
-metadata="$(GOFLAGS= GOENV=off GOWORK=off go list -m -json "${module}")"
+metadata="$(GOFLAGS='' GOENV=off GOWORK=off go list -m -json "${module}")"
 jq -e --arg module "${module}" --arg version "${version}" --arg dir "${repo_root}/third_party/otelzap" \
   '.Path == $module and .Version == $version and .Replace.Dir == $dir' <<<"${metadata}" >/dev/null || {
   printf 'otelzap is not supplied by the reviewed local replacement\n' >&2

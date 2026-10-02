@@ -16,7 +16,7 @@ Use a narrowly patched copy of otelzap v0.3.2 as a local module replacement. Pre
 
 Store the original module checksum and a reproducible patch. Required CI reconstructs the adapter from that exact upstream module and compares every source file with the selected local module. The comparison rejects missing or extra files, source changes and symlinks; a top-level provenance note is the only excluded file.
 
-Exercise structured fields, recursive values and trace context through both the public adapter and the actual fixed BatchProcessor and HTTP exporter. Release-graph tests require the fixed, unreplaced logging modules for every shipped CLI and desktop target and reject incomplete graphs or unverified vendor sources.
+Exercise structured fields and recursive values through the public adapter. Exercise binary and integer fields and trace context through the actual fixed BatchProcessor and HTTP exporter. Release-graph tests require the fixed, unreplaced logging modules for every shipped CLI and desktop target and reject incomplete graphs or unverified vendor sources.
 
 ## Consequences
 

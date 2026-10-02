@@ -11,6 +11,9 @@ with the same scalar, recursive-slice, stringer and JSON conversions, using
 direct indexing for arrays so an unaddressable array does not panic. Binary
 Zap fields remain byte values rather than integer arrays.
 
+The copied README links to the existing upstream documentation instead of an
+example directory that is absent from the published module.
+
 The root module selects the v0.21 API, SDK and HTTP exporter together. The
 batch processor is the fixed upstream implementation; no logging operation,
 processor or vulnerability check is disabled. The integration regression

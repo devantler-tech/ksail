@@ -37,7 +37,8 @@ log.ErrorContext(ctx, "hello from zap",
 	zap.String("foo", "bar"))
 ```
 
-Both variants are fast and don't allocate. See [example](/example/) for details.
+Both variants are fast and don't allocate. See the
+[documentation](https://uptrace.dev/get/instrument/opentelemetry-zap.html) for details.
 
 ### Global logger
 
