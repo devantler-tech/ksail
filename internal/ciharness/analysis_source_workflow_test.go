@@ -47,7 +47,7 @@ func TestAnalysisSourceIntegrityRunsForEveryCopiedByte(t *testing.T) {
 		)
 	}
 
-	for _, directory := range []string{"cel-go", "glamour", "go-macholibre"} {
+	for _, directory := range []string{"cel-go", "glamour", "go-macholibre", "kyverno-jmespath", "jmespath", "ansi"} {
 		assertAnalysisSourceFilter(t, patterns, directory)
 	}
 }
@@ -66,6 +66,10 @@ func TestAnalysisSourceClassificationKeepsOwnedCodeChecked(t *testing.T) {
 		"third_party/cel-go/cel/env.go":                 true,
 		"third_party/glamour/glamour.go":                true,
 		"third_party/go-macholibre/universal_binary.go": true,
+		"third_party/kyverno-jmespath/api.go":           true,
+		"third_party/jmespath/api.go":                   true,
+		"third_party/ansi/truncate.go":                  true,
+		"third_party/ansi-owned/main.go":                false,
 		"third_party/cel-golang/main.go":                false,
 		"third_party/go-archive/compat_legacy.go":       false,
 		"third_party/otelzap/otelzap.go":                false,

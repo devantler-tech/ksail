@@ -2,6 +2,8 @@ module github.com/charmbracelet/glamour
 
 go 1.24.0
 
+replace github.com/charmbracelet/x/ansi v0.10.2 => ../ansi
+
 require (
 	github.com/alecthomas/chroma/v2 v2.20.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834

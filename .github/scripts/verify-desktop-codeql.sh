@@ -9,7 +9,7 @@ verify_results() {
 	jq -e '
     .["#select"].tuples as $rows |
     ($rows | type == "array") and
-    ($rows | length == 11) and
+    ($rows | length == 14) and
     ($rows | all(length == 3 and
       (.[2] | type == "number" and . > 0 and floor == .))) and
     ([$rows[] | .[0:2]] | sort) == ([
@@ -23,7 +23,10 @@ verify_results() {
       ["desktop/window_state.go", "trackWindowState"],
       ["third_party/cel-go/cel/env.go", "NewEnv"],
       ["third_party/glamour/glamour.go", "NewTermRenderer"],
-      ["third_party/go-macholibre/universal_binary.go", "ExtractReaders"]
+      ["third_party/go-macholibre/universal_binary.go", "ExtractReaders"],
+      ["third_party/kyverno-jmespath/api.go", "Search"],
+      ["third_party/jmespath/api.go", "Search"],
+      ["third_party/ansi/width.go", "Strip"]
     ] | sort)
   ' "$1" >/dev/null || {
 		printf '::error::CodeQL database lacks required CLI, desktop, or dependency function bodies.\n' >&2

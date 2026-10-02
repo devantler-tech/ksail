@@ -1068,6 +1068,9 @@ replace (
 	// Same source authentication and removal condition as ADR 0010, without
 	// replacing newer CEL releases.
 	github.com/google/cel-go v0.31.0 => ./third_party/cel-go
+
+	// Authenticate the selected JMESPath source independently of shallow Git fetches.
+	github.com/jmespath/go-jmespath v0.4.1-0.20220621161143-b0104c826a24 => ./third_party/jmespath
 	// The v5.9.0 tag moved after Go's checksum database recorded its original
 	// source. Select that authenticated commit without accepting changed tag
 	// bytes (ksail#6781). This qualified replacement leaves future releases
@@ -1088,6 +1091,7 @@ replace (
 	// fixes patch.go without forcing the moby/moby split (or once KSail migrates to
 	// the split universe).
 	github.com/kubescape/kubescape/v3 => github.com/devantler/kubescape/v3 v3.0.49-0.20260529230755-084b6f1ebcc8
+	github.com/kyverno/go-jmespath v0.4.1-0.20231124160150-95e59c162877 => ./third_party/kyverno-jmespath
 
 	// loft-sh/log uses tablewriter v0.0.5 API which is incompatible with v1.x
 	// required by k9s, grype, and syft. This replace can be removed once
