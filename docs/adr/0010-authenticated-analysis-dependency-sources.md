@@ -14,14 +14,14 @@ The CLI and desktop need reproducible dependency source without changing APIs or
 
 Use complete copies of the published modules as version-qualified local replacements. Preserve all source code, licenses and published LFS pointer bytes. Apply only the checkout metadata adjustments below, then authenticate the actual selected directory with Go's module directory hash, independently of cached download metadata.
 
-| Module | Version | Published source checksum |
-| --- | --- | --- |
-| github.com/google/cel-go | v0.31.0 | `h1:H0bhpFTqOvmHrBGrWKp7ZlhBm5Hh8PYUEXnwxT1LL7A=` |
-| github.com/charmbracelet/glamour | v1.0.0 | `h1:AWMLOVFHTsysl4WV8T8QgkQ0s/ZNZo7CiE4WKhk8l08=` |
-| github.com/anchore/go-macholibre | v0.1.0 | `h1:qHbdusBZNcZM/uuKf1Psa9xxAFSoyRTps8GW9gpJgsg=` |
-| github.com/kyverno/go-jmespath | v0.4.1-0.20231124160150-95e59c162877 | `h1:XOLJNGX/q6MVpI8p8MKvk6jGBMvO4CrdwrizMMSsaRU=` |
-| github.com/jmespath/go-jmespath | v0.4.1-0.20220621161143-b0104c826a24 | `h1:liMMTbpW34dhU4az1GN0pTPADwNmvoRSeoZ6PItiqnY=` |
-| github.com/charmbracelet/x/ansi | v0.10.2 | `h1:ith2ArZS0CJG30cIUfID1LXN7ZFXRCww6RUvAPA+Pzw=` |
+| Module                           | Version                              | Published source checksum                         |
+|----------------------------------|--------------------------------------|---------------------------------------------------|
+| github.com/google/cel-go         | v0.31.0                              | `h1:H0bhpFTqOvmHrBGrWKp7ZlhBm5Hh8PYUEXnwxT1LL7A=` |
+| github.com/charmbracelet/glamour | v1.0.0                               | `h1:AWMLOVFHTsysl4WV8T8QgkQ0s/ZNZo7CiE4WKhk8l08=` |
+| github.com/anchore/go-macholibre | v0.1.0                               | `h1:qHbdusBZNcZM/uuKf1Psa9xxAFSoyRTps8GW9gpJgsg=` |
+| github.com/kyverno/go-jmespath   | v0.4.1-0.20231124160150-95e59c162877 | `h1:XOLJNGX/q6MVpI8p8MKvk6jGBMvO4CrdwrizMMSsaRU=` |
+| github.com/jmespath/go-jmespath  | v0.4.1-0.20220621161143-b0104c826a24 | `h1:liMMTbpW34dhU4az1GN0pTPADwNmvoRSeoZ6PItiqnY=` |
+| github.com/charmbracelet/x/ansi  | v0.10.2                              | `h1:ith2ArZS0CJG30cIUfID1LXN7ZFXRCww6RUvAPA+Pzw=` |
 
 Glamour and go-macholibre use `* -filter -text` in their attribute files so a normal checkout preserves module archive bytes without contacting KSail's LFS endpoint. CEL's archive contains a vendor manifest without its vendor packages; preserve that manifest at `upstream-vendor/modules.txt` so Go resolves dependencies through the module graph.
 
