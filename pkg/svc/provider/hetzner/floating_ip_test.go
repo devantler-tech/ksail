@@ -88,7 +88,8 @@ func newFloatingIPServer(
 					responseWriter.Header().Set("Content-Type", "application/json")
 					responseWriter.WriteHeader(http.StatusUnprocessableEntity)
 					_, _ = responseWriter.Write([]byte(
-						`{"error":{"code":"must_be_unassigned","message":"IP must be unassigned"}}`))
+						`{"error":{"code":"must_be_unassigned","message":"IP must be unassigned"}}`,
+					))
 
 					return
 				}
