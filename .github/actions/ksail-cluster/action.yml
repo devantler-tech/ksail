@@ -151,8 +151,8 @@ runs:
         # mirrors in use — including custom hosts passed via mirror-registry.
         # Spec format: [user:pass@]host[=endpoint]; KSail names the volume by
         # the host with "/" and ":" replaced by "-". Without the input, KSail
-        # uses its default mirrors; ecr-public.aws.com is kept for the caches
-        # this action already restores and exports.
+        # uses its default mirrors, so the fallback list below must name
+        # exactly those hosts (internal/ciharness checks it).
         # A credentialed spec (user:pass@host) mirrors a registry that whoever
         # restores the cache may not be allowed to read, and pull-request
         # workflows can restore base-branch caches. Its volume is therefore

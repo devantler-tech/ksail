@@ -73,8 +73,9 @@ pull fetches from upstream and caches the image in a Docker volume; every later 
 cluster on the machine — is served locally. Recreating a cluster does not empty the cache.
 
 Docker-based clusters (Vanilla, K3s, Talos-on-Docker, VCluster, KWOK) enable mirrors for `docker.io`,
-`ghcr.io`, `quay.io`, and `registry.k8s.io` by default. Talos on Hetzner requires explicit mirror
-configuration.
+`ghcr.io`, `quay.io`, `registry.k8s.io`, and `ecr-public.aws.com` by default, so every image KSail installs
+comes through a mirror — including Argo CD's Redis, which Amazon ECR Public serves with a data limit
+for anonymous pulls. Talos on Hetzner requires explicit mirror configuration.
 
 ```bash
 # Format: [user:pass@]host[=upstream]
@@ -90,7 +91,7 @@ ksail project init --mirror-registry '${GITHUB_USER}:${GITHUB_TOKEN}@ghcr.io=htt
 
 :::caution[`--mirror-registry` replaces the defaults]
 Whatever you pass **completely replaces** the default mirror list (`docker.io`, `ghcr.io`, `quay.io`,
-`registry.k8s.io`) — it does not append. To customize one mirror while keeping the others, pass all of
+`registry.k8s.io`, `ecr-public.aws.com`) — it does not append. To customize one mirror while keeping the others, pass all of
 them on the same `ksail project init` invocation.
 :::
 

@@ -17,6 +17,10 @@ const (
 //   - ghcr.io: Flux, Kyverno, kubelet-csr-approver, ArgoCD
 //   - quay.io: Cilium, Calico (tigera), ArgoCD, cert-manager
 //   - registry.k8s.io: metrics-server, cloud-provider-kind, CSI sidecars
+//   - ecr-public.aws.com: ArgoCD's Redis (ECR Public; anonymous pulls have a data limit)
+//
+// CI's image-registry coverage check mirrors exactly these hosts (internal/ciharness keeps them
+// equal), so a component image from any other registry fails CI.
 //
 //nolint:gochecknoglobals // Exported constant configuration for test access.
 var DefaultMirrors = []string{
@@ -24,6 +28,7 @@ var DefaultMirrors = []string{
 	"ghcr.io=https://ghcr.io",
 	"quay.io=https://quay.io",
 	"registry.k8s.io=https://registry.k8s.io",
+	"ecr-public.aws.com=https://ecr-public.aws.com",
 }
 
 // GetMirrorRegistriesWithDefaults returns mirror registries with default values applied.
@@ -35,7 +40,7 @@ var DefaultMirrors = []string{
 //   - With values: REPLACE (flag values completely override defaults AND config values)
 //   - If flag not set:
 //   - With config values: use config values from ksail.yaml
-//   - Without config values: use defaults (docker.io and ghcr.io) for Docker provider,
+//   - Without config values: use DefaultMirrors for the Docker and Kubernetes providers,
 //     or empty for cloud providers (Hetzner) since they cannot use local Docker mirrors.
 //
 // Note: This is intentionally REPLACE semantics, not EXTEND. When a user provides

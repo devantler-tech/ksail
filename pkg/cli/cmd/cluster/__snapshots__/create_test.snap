@@ -3,6 +3,7 @@
 📦 Create registries...
 ► creating and configuring registries
 ► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ecr-public.aws.com' for 'https://ecr-public.aws.com'
 ► creating 'test-ghcr.io' for 'https://ghcr.io'
 ► creating 'test-quay.io' for 'https://quay.io'
 ► creating 'test-registry.k8s.io' for 'https://registry.k8s.io'
@@ -17,6 +18,7 @@
 🔗 Connect registries...
 ► connecting registries to docker network
 ► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ecr-public.aws.com' to 'kind'
 ► connecting 'test-ghcr.io' to 'kind'
 ► connecting 'test-quay.io' to 'kind'
 ► connecting 'test-registry.k8s.io' to 'kind'
@@ -40,6 +42,7 @@
 📦 Create registries...
 ► creating and configuring registries
 ► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ecr-public.aws.com' for 'https://ecr-public.aws.com'
 ► creating 'test-ghcr.io' for 'https://ghcr.io'
 ► creating 'test-quay.io' for 'https://quay.io'
 ► creating 'test-registry.k8s.io' for 'https://registry.k8s.io'
@@ -54,6 +57,7 @@
 🔗 Connect registries...
 ► connecting registries to docker network
 ► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ecr-public.aws.com' to 'kind'
 ► connecting 'test-ghcr.io' to 'kind'
 ► connecting 'test-quay.io' to 'kind'
 ► connecting 'test-registry.k8s.io' to 'kind'
@@ -76,6 +80,7 @@
 📦 Create registries...
 ► creating and configuring registries
 ► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ecr-public.aws.com' for 'https://ecr-public.aws.com'
 ► creating 'test-ghcr.io' for 'https://ghcr.io'
 ► creating 'test-quay.io' for 'https://quay.io'
 ► creating 'test-registry.k8s.io' for 'https://registry.k8s.io'
@@ -90,6 +95,7 @@
 🔗 Connect registries...
 ► connecting registries to docker network
 ► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ecr-public.aws.com' to 'kind'
 ► connecting 'test-ghcr.io' to 'kind'
 ► connecting 'test-quay.io' to 'kind'
 ► connecting 'test-registry.k8s.io' to 'kind'
@@ -126,6 +132,7 @@
 📦 Create registries...
 ► creating and configuring registries
 ► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ecr-public.aws.com' for 'https://ecr-public.aws.com'
 ► creating 'test-ghcr.io' for 'https://ghcr.io'
 ► creating 'test-quay.io' for 'https://quay.io'
 ► creating 'test-registry.k8s.io' for 'https://registry.k8s.io'
@@ -140,6 +147,7 @@
 🔗 Connect registries...
 ► connecting registries to docker network
 ► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ecr-public.aws.com' to 'kind'
 ► connecting 'test-ghcr.io' to 'kind'
 ► connecting 'test-quay.io' to 'kind'
 ► connecting 'test-registry.k8s.io' to 'kind'
@@ -172,6 +180,7 @@
 📦 Create registries...
 ► creating and configuring registries
 ► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ecr-public.aws.com' for 'https://ecr-public.aws.com'
 ► creating 'test-ghcr.io' for 'https://ghcr.io'
 ► creating 'test-quay.io' for 'https://quay.io'
 ► creating 'test-registry.k8s.io' for 'https://registry.k8s.io'
@@ -186,6 +195,7 @@
 🔗 Connect registries...
 ► connecting registries to docker network
 ► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ecr-public.aws.com' to 'kind'
 ► connecting 'test-ghcr.io' to 'kind'
 ► connecting 'test-quay.io' to 'kind'
 ► connecting 'test-registry.k8s.io' to 'kind'
@@ -209,6 +219,7 @@
 📦 Create registries...
 ► creating and configuring registries
 ► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ecr-public.aws.com' for 'https://ecr-public.aws.com'
 ► creating 'test-ghcr.io' for 'https://ghcr.io'
 ► creating 'test-quay.io' for 'https://quay.io'
 ► creating 'test-registry.k8s.io' for 'https://registry.k8s.io'
@@ -223,6 +234,7 @@
 🔗 Connect registries...
 ► connecting registries to docker network
 ► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ecr-public.aws.com' to 'kind'
 ► connecting 'test-ghcr.io' to 'kind'
 ► connecting 'test-quay.io' to 'kind'
 ► connecting 'test-registry.k8s.io' to 'kind'
@@ -241,6 +253,7 @@
 📦 Create registries...
 ► creating and configuring registries
 ► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ecr-public.aws.com' for 'https://ecr-public.aws.com'
 ► creating 'test-ghcr.io' for 'https://ghcr.io'
 ► creating 'test-quay.io' for 'https://quay.io'
 ► creating 'test-registry.k8s.io' for 'https://registry.k8s.io'
@@ -255,6 +268,7 @@
 🔗 Connect registries...
 ► connecting registries to docker network
 ► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ecr-public.aws.com' to 'kind'
 ► connecting 'test-ghcr.io' to 'kind'
 ► connecting 'test-quay.io' to 'kind'
 ► connecting 'test-registry.k8s.io' to 'kind'
@@ -273,6 +287,7 @@
 📦 Create registries...
 ► creating and configuring registries
 ► creating 'test-docker.io' for 'https://registry-1.docker.io'
+► creating 'test-ecr-public.aws.com' for 'https://ecr-public.aws.com'
 ► creating 'test-ghcr.io' for 'https://ghcr.io'
 ► creating 'test-quay.io' for 'https://quay.io'
 ► creating 'test-registry.k8s.io' for 'https://registry.k8s.io'
@@ -287,6 +302,7 @@
 🔗 Connect registries...
 ► connecting registries to docker network
 ► connecting 'test-docker.io' to 'kind'
+► connecting 'test-ecr-public.aws.com' to 'kind'
 ► connecting 'test-ghcr.io' to 'kind'
 ► connecting 'test-quay.io' to 'kind'
 ► connecting 'test-registry.k8s.io' to 'kind'

@@ -24,11 +24,13 @@ func TestDefaultMirrorsContainsRequiredRegistries(t *testing.T) {
 	// - ghcr.io: Flux, Kyverno, kubelet-csr-approver, ArgoCD
 	// - quay.io: Cilium, Calico (tigera), ArgoCD, cert-manager
 	// - registry.k8s.io: metrics-server, cloud-provider-kind, CSI sidecars
+	// - ecr-public.aws.com: ArgoCD's Redis (see issue #7336)
 	requiredHosts := []string{
 		"docker.io",
 		"ghcr.io",
 		"quay.io",
 		"registry.k8s.io",
+		"ecr-public.aws.com",
 	}
 
 	// Build a set of hosts from DefaultMirrors

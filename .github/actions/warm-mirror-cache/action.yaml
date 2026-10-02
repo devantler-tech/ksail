@@ -199,9 +199,12 @@ runs:
         # quota can fail unrelated PRs (#7332: Argo CD's Redis on ECR Public).
         # Fail here, while the list is known, rather than later in a test.
         #
-        # MIRRORED must match the mirrors created below, restore-mirror-cache,
-        # ksail-cluster's import loop and the nested mirror specs in
-        # ksail-test-kubernetes-provider.
+        # MIRRORED is KSail's own default mirror set (DefaultMirrors), so this
+        # check also fails when a component image comes from a registry users'
+        # default mirrors do not cover (#7336); internal/ciharness keeps the two
+        # equal. It must also match the mirrors created below,
+        # restore-mirror-cache, ksail-cluster's import loop and the nested
+        # mirror specs in ksail-test-kubernetes-provider.
         MIRRORED=" docker.io ghcr.io quay.io registry.k8s.io ecr-public.aws.com "
         # Registries deliberately pulled directly. Add one only with a reason.
         #   reg.kyverno.io — Kyverno's own registry; no anonymous quota has
@@ -225,7 +228,7 @@ runs:
         done < /tmp/all-images.txt
 
         if [ -n "$UNCOVERED" ]; then
-          echo "::error::System-test images come from a registry with no CI mirror. Add a mirror for it (see #7332), or list it under DIRECT with a reason:"
+          echo "::error::System-test images come from a registry no KSail default mirror covers. Add it to KSail's default mirrors and to MIRRORED (see #7332, #7336), or list it under DIRECT with a reason:"
           printf '%s' "$UNCOVERED"
           exit 1
         fi

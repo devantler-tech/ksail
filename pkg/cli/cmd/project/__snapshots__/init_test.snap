@@ -7,6 +7,7 @@
 ✚ created 'kind/mirrors/ghcr.io/hosts.toml'
 ✚ created 'kind/mirrors/quay.io/hosts.toml'
 ✚ created 'kind/mirrors/registry.k8s.io/hosts.toml'
+✚ created 'kind/mirrors/ecr-public.aws.com/hosts.toml'
 ✚ created 'k8s/kustomization.yaml'
 ✚ created '.devcontainer/devcontainer.json'
 ✔ initialized project
@@ -21,6 +22,7 @@
 ✚ created 'kind/mirrors/ghcr.io/hosts.toml'
 ✚ created 'kind/mirrors/quay.io/hosts.toml'
 ✚ created 'kind/mirrors/registry.k8s.io/hosts.toml'
+✚ created 'kind/mirrors/ecr-public.aws.com/hosts.toml'
 ✚ created 'k8s/kustomization.yaml'
 ✚ created '.devcontainer/devcontainer.json'
 ✔ initialized project
