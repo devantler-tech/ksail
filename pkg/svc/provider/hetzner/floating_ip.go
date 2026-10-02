@@ -171,7 +171,8 @@ func (p *Provider) AttachFloatingIPToServer(
 }
 
 // DetachFloatingIP unassigns the floating IP from whatever server it is
-// assigned to. Unassigned IPs are a no-op, so the call is idempotent.
+// assigned to and waits for the unassign action to finish. Unassigned IPs are
+// a no-op, so the call is idempotent.
 func (p *Provider) DetachFloatingIP(ctx context.Context, floatingIP *hcloud.FloatingIP) error {
 	if p.client == nil {
 		return provider.ErrProviderUnavailable
@@ -181,9 +182,14 @@ func (p *Provider) DetachFloatingIP(ctx context.Context, floatingIP *hcloud.Floa
 		return nil
 	}
 
-	_, _, err := p.client.FloatingIP.Unassign(ctx, floatingIP)
+	action, _, err := p.client.FloatingIP.Unassign(ctx, floatingIP)
 	if err != nil {
 		return fmt.Errorf("failed to unassign floating IP %s: %w", floatingIP.Name, err)
+	}
+
+	err = p.client.Action.WaitFor(ctx, action)
+	if err != nil {
+		return fmt.Errorf("failed to wait for floating IP %s unassign: %w", floatingIP.Name, err)
 	}
 
 	return nil
@@ -193,8 +199,8 @@ func (p *Provider) DetachFloatingIP(ctx context.Context, floatingIP *hcloud.Floa
 // `cluster update` counterpart of the release `cluster delete` performs when
 // `floatingIPEnabled` is switched off (#6032). It carries the same ownership
 // guard: a same-name address without the ksail.owned label is left alone.
-// Hetzner unassigns an assigned floating IP as part of the delete, so no
-// separate detach is needed.
+// The address is detached first: Hetzner rejects deleting an assigned
+// floating IP (must_be_unassigned).
 func (p *Provider) ReleaseFloatingIP(ctx context.Context, clusterName string) error {
 	if p.client == nil {
 		return provider.ErrProviderUnavailable
@@ -233,6 +239,13 @@ func (p *Provider) deleteFloatingIP(ctx context.Context, clusterName string) err
 
 	if floatingIP == nil || floatingIP.Labels[LabelOwned] != LabelOwnedValue {
 		return nil
+	}
+
+	// Hetzner refuses to delete an assigned floating IP (must_be_unassigned),
+	// and server deletion unassigns it only once that deletion completes.
+	err = p.DetachFloatingIP(ctx, floatingIP)
+	if err != nil {
+		return err
 	}
 
 	_, deleteErr := p.client.FloatingIP.Delete(ctx, floatingIP)

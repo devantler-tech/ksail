@@ -25,6 +25,16 @@ const ownedFloatingIPJSON = `{"id":7,"name":"test-cluster-floating-ip","descript
 	`"labels":{"ksail.owned":"true","ksail.cluster.name":"test-cluster"},` +
 	`"created":"2026-07-02T00:00:00+00:00"}`
 
+// assignedOwnedFloatingIPJSON is the cluster's ksail-owned floating IP while
+// it is still assigned to a server (id 9).
+const assignedOwnedFloatingIPJSON = `{"id":7,"name":"test-cluster-floating-ip","description":"",` +
+	`"ip":"192.0.2.10","type":"ipv4","server":9,"dns_ptr":[],` +
+	`"home_location":{"id":1,"name":"fsn1","description":"","country":"DE","city":"",` +
+	`"latitude":0,"longitude":0,"network_zone":"eu-central"},` +
+	`"blocked":false,"protection":{"delete":false},` +
+	`"labels":{"ksail.owned":"true","ksail.cluster.name":"test-cluster"},` +
+	`"created":"2026-07-02T00:00:00+00:00"}`
+
 // unownedFloatingIPJSON is the same address without the ksail.owned label — a
 // user-managed reserved address that ksail must neither adopt nor release.
 const unownedFloatingIPJSON = `{"id":7,"name":"test-cluster-floating-ip","description":"",` +
@@ -72,6 +82,17 @@ func newFloatingIPServer(
 		"/floating_ips/7",
 		func(responseWriter http.ResponseWriter, request *http.Request) {
 			if request.Method == http.MethodDelete {
+				// Like the real API, refuse to delete an address that is still
+				// assigned to a server.
+				if listJSON == assignedOwnedFloatingIPJSON && atomic.LoadInt32(unassignCalls) == 0 {
+					responseWriter.Header().Set("Content-Type", "application/json")
+					responseWriter.WriteHeader(http.StatusUnprocessableEntity)
+					_, _ = responseWriter.Write([]byte(
+						`{"error":{"code":"must_be_unassigned","message":"IP must be unassigned"}}`))
+
+					return
+				}
+
 				atomic.AddInt32(deleteCalls, 1)
 				responseWriter.WriteHeader(http.StatusNoContent)
 			}
@@ -464,6 +485,21 @@ func TestDeleteFloatingIP_DeletesOwned(t *testing.T) {
 	err := prov.DeleteFloatingIPForTest(t.Context(), "test-cluster")
 
 	require.NoError(t, err)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&counters.del))
+}
+
+// TestDeleteFloatingIP_UnassignsBeforeDeletingAnAssignedAddress verifies that
+// deletion detaches an address still assigned to a server first, since the API
+// refuses to delete an assigned floating IP.
+func TestDeleteFloatingIP_UnassignsBeforeDeletingAnAssignedAddress(t *testing.T) {
+	t.Parallel()
+
+	prov, counters := newFloatingIPProvider(t, assignedOwnedFloatingIPJSON)
+
+	err := prov.DeleteFloatingIPForTest(t.Context(), "test-cluster")
+
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&counters.unassign))
 	assert.Equal(t, int32(1), atomic.LoadInt32(&counters.del))
 }
 
