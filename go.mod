@@ -1042,12 +1042,6 @@ require (
 // Dependency version pins: modules replaced here have upstream incompatibilities
 // that require pinning until the respective projects ship compatible releases.
 replace (
-	// The v5.9.0 tag moved after Go's checksum database recorded its original
-	// source. Select that authenticated commit without accepting changed tag
-	// bytes (ksail#6781). This qualified replacement leaves future releases
-	// unaffected; remove it when an authenticated successor passes the k3d
-	// configuration regression.
-	github.com/k3d-io/k3d/v5 v5.9.0 => github.com/k3d-io/k3d/v5 v5.9.0-rc.0.0.20260602135457-2a0cb9f9a5c1
 
 	// image-factory v1.3.0 transitively pulls in grype v0.112.0 (via go-vex),
 	// which added a *DistroAlertData parameter to models.NewDocument. kubescape
@@ -1064,6 +1058,12 @@ replace (
 	// everything on the monolith type system.
 	github.com/docker/cli => github.com/docker/cli v28.3.1+incompatible
 	github.com/docker/docker => github.com/docker/docker v28.5.2+incompatible
+	// The v5.9.0 tag moved after Go's checksum database recorded its original
+	// source. Select that authenticated commit without accepting changed tag
+	// bytes (ksail#6781). This qualified replacement leaves future releases
+	// unaffected; remove it when an authenticated successor passes the k3d
+	// configuration regression.
+	github.com/k3d-io/k3d/v5 v5.9.0 => github.com/k3d-io/k3d/v5 v5.9.0-rc.0.0.20260602135457-2a0cb9f9a5c1
 
 	// kubescape v3.0.48 (the latest v3 tag) calls
 	// authprovider.DockerAuthProviderConfig{ConfigFile: ...} in core/core/patch.go,
