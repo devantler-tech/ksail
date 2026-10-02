@@ -1,6 +1,7 @@
 package helm
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,7 +11,34 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-func (c *Client) mergeValues(spec *ChartSpec, chartPath string) (map[string]any, error) {
+// ErrChartRelativeValues reports a ChartSpec whose values come from files that
+// resolve against the chart, so they cannot be rendered without loading it.
+var ErrChartRelativeValues = errors.New("helm: values reference chart-relative files")
+
+// UserSuppliedValues returns the user-supplied values that Install and Upgrade
+// send to Helm for spec, merged in the same order, without loading the chart.
+// Helm stores these values on the release, and `helm get values` reads them
+// back, so callers can compare a deployed release with what KSail renders now.
+//
+// A spec with value files or set-file values returns ErrChartRelativeValues:
+// those sources resolve against the chart, and leaving them out would
+// understate the values.
+func UserSuppliedValues(spec *ChartSpec) (map[string]any, error) {
+	if spec == nil {
+		return nil, errChartSpecRequired
+	}
+
+	if len(spec.ValueFiles) > 0 || len(spec.SetFileVals) > 0 {
+		return nil, ErrChartRelativeValues
+	}
+
+	return mergeValues(spec, "")
+}
+
+// mergeValues merges every value source of spec in Helm's precedence order:
+// value files, the values YAML, then --set, --set-json and --set-file entries.
+// chartPath resolves relative file sources.
+func mergeValues(spec *ChartSpec, chartPath string) (map[string]any, error) {
 	base := map[string]any{}
 
 	err := mergeValueFiles(spec.ValueFiles, chartPath, base)

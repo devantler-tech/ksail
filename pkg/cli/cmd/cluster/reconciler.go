@@ -53,6 +53,11 @@ type componentReconciler struct {
 	// subsequent calls surface the same failure instead of silently succeeding.
 	autoscalerReconciled bool
 	autoscalerErr        error
+	// certManagerInstalled coalesces a cluster.certManager change and
+	// cert-manager chart-values drift into one Helm install/upgrade per pass;
+	// certManagerErr replays the first attempt's failure for the other field.
+	certManagerInstalled bool
+	certManagerErr       error
 	// loadBalancerReconciled coalesces the generic load-balancer field and the
 	// EKS-specific controller opt-in when both change in one update pass.
 	loadBalancerReconciled bool
@@ -162,6 +167,7 @@ func (r *componentReconciler) handlerForField(
 	handlers[specdiff.EKSLoadBalancerControllerField] = r.reconcileLoadBalancer
 	handlers[specdiff.RegistryCredentialField] = r.reconcileRegistryCredentials
 	handlers[specdiff.FluxVerifyField] = r.reconcileFluxVerify
+	handlers[specdiff.CertManagerValuesField] = r.reconcileCertManagerValues
 
 	if handler, ok := handlers[field]; ok {
 		return handler, true
@@ -191,7 +197,8 @@ func isComponentReconcileField(field string) bool {
 		"cluster.workload.flux.distributionVersion",
 		specdiff.EKSLoadBalancerControllerField,
 		specdiff.RegistryCredentialField,
-		specdiff.FluxVerifyField:
+		specdiff.FluxVerifyField,
+		specdiff.CertManagerValuesField:
 		return true
 	default:
 		return strings.HasPrefix(field, "cluster.autoscaler.node.")
@@ -490,12 +497,41 @@ func (r *componentReconciler) reconcileCertManager(
 		return r.uninstallWithFactory(ctx, r.factories.CertManager)
 	}
 
-	err := setup.InstallCertManagerSilent(ctx, r.clusterCfg, r.factories)
-	if err != nil {
-		return fmt.Errorf("failed to install cert-manager: %w", err)
+	return r.installCertManagerOnce(ctx)
+}
+
+// reconcileCertManagerValues upgrades cert-manager to the chart values this
+// KSail version renders when the installed release carries other values
+// (ksail#7444). Drift is only reported while KSail installs cert-manager, so
+// this re-checks that rather than installing a component the configuration
+// does not want.
+func (r *componentReconciler) reconcileCertManagerValues(
+	ctx context.Context,
+	_ clusterupdate.Change,
+) error {
+	if !setup.GetComponentRequirements(r.clusterCfg).NeedsCertManager {
+		return nil
 	}
 
-	return nil
+	return r.installCertManagerOnce(ctx)
+}
+
+// installCertManagerOnce runs the cert-manager Helm install/upgrade at most
+// once per update pass, replaying the first outcome for every later field that
+// maps to it.
+func (r *componentReconciler) installCertManagerOnce(ctx context.Context) error {
+	if r.certManagerInstalled {
+		return r.certManagerErr
+	}
+
+	r.certManagerInstalled = true
+
+	err := setup.InstallCertManagerSilent(ctx, r.clusterCfg, r.factories)
+	if err != nil {
+		r.certManagerErr = fmt.Errorf("failed to install cert-manager: %w", err)
+	}
+
+	return r.certManagerErr
 }
 
 // reconcilePolicyEngine installs or uninstalls the policy engine.
