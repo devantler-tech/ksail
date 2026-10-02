@@ -1,11 +1,59 @@
 diff --git a/README.md b/README.md
-index 9c8a5c4..a4ccc19 100644
+index 9c8a5c4..fd1be27 100644
 --- a/README.md
 +++ b/README.md
+@@ -31,2 +31,2 @@ log.Ctx(ctx).Error("hello from zap",
+-	zap.Error(errors.New("hello world")),
+-	zap.String("foo", "bar"))
++ zap.Error(errors.New("hello world")),
++ zap.String("foo", "bar"))
+@@ -36,2 +36,2 @@ log.ErrorContext(ctx, "hello from zap",
+-	zap.Error(errors.New("hello world")),
+-	zap.String("foo", "bar"))
++ zap.Error(errors.New("hello world")),
++ zap.String("foo", "bar"))
 @@ -40 +40,2 @@ log.ErrorContext(ctx, "hello from zap",
 -Both variants are fast and don't allocate. See [example](/example/) for details.
 +Both variants are fast and don't allocate. See the
 +[documentation](https://uptrace.dev/get/instrument/opentelemetry-zap.html) for details.
+@@ -50,2 +51,2 @@ import (
+-	"go.uber.org/zap"
+-	"github.com/uptrace/opentelemetry-go-extra/otelzap"
++ "go.uber.org/zap"
++ "github.com/uptrace/opentelemetry-go-extra/otelzap"
+@@ -55,2 +56,2 @@ func main() {
+-	logger := otelzap.New(zap.NewExample())
+-	defer logger.Sync()
++ logger := otelzap.New(zap.NewExample())
++ defer logger.Sync()
+@@ -58,2 +59,2 @@ func main() {
+-	undo := otelzap.ReplaceGlobals(logger)
+-	defer undo()
++ undo := otelzap.ReplaceGlobals(logger)
++ defer undo()
+@@ -61,2 +62,2 @@ func main() {
+-	otelzap.L().Info("replaced zap's global loggers")
+-	otelzap.Ctx(context.TODO()).Info("... and with context")
++ otelzap.L().Info("replaced zap's global loggers")
++ otelzap.Ctx(context.TODO()).Info("... and with context")
+@@ -75,4 +76,4 @@ sugar.Ctx(ctx).Infow("failed to fetch URL",
+-	// Structured context as loosely typed key-value pairs.
+-	"url", url,
+-	"attempt", 3,
+-	"backoff", time.Second,
++ // Structured context as loosely typed key-value pairs.
++ "url", url,
++ "attempt", 3,
++ "backoff", time.Second,
+@@ -81,4 +82,4 @@ sugar.InfowContext(ctx, "failed to fetch URL",
+-	// Structured context as loosely typed key-value pairs.
+-	"url", url,
+-	"attempt", 3,
+-	"backoff", time.Second,
++ // Structured context as loosely typed key-value pairs.
++ "url", url,
++ "attempt", 3,
++ "backoff", time.Second,
 diff --git a/conv.go b/conv.go
 index 41406ba..62bc11f 100644
 --- a/conv.go

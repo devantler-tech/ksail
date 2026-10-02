@@ -12,7 +12,8 @@ direct indexing for arrays so an unaddressable array does not panic. Binary
 Zap fields remain byte values rather than integer arrays.
 
 The copied README links to the existing upstream documentation instead of an
-example directory that is absent from the published module.
+example directory that is absent from the published module. Its code examples
+use the indentation required by the repository's documentation checks.
 
 The root module selects the v0.21 API, SDK and HTTP exporter together. The
 batch processor is the fixed upstream implementation; no logging operation,
