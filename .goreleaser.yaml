@@ -1,3 +1,4 @@
+# Temporary release-only audit selection fixture for KSail issue 7400.
 version: 2
 
 before:
