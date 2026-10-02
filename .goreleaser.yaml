@@ -1,5 +1,7 @@
 version: 2
 
+# Throwaway user check for ksail#7400: a release-configuration-only change. Never merged.
+
 before:
   hooks:
     - go mod tidy
