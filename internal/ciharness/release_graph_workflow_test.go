@@ -26,6 +26,9 @@ func TestReleaseGraphAuditRunsForReleaseOnlyChanges(t *testing.T) {
 	require.True(t, found, "release-only changes need a dependency-audit job")
 	assert.Contains(t, job.Needs, "changes")
 	assert.Equal(t, "needs.changes.outputs.release-graph-audit == 'true'", job.If)
+	assert.False(t, job.ContinueOnError)
+	assert.Equal(t, "${{ steps.filter.outputs.release-graph-audit }}",
+		workflow.Jobs["changes"].Outputs["release-graph-audit"])
 
 	filter := findHarnessStep(t, workflow.Jobs["changes"].Steps, "🔍 Filter paths")
 	var filters map[string][]string
@@ -46,6 +49,7 @@ func TestReleaseGraphAuditRunsForReleaseOnlyChanges(t *testing.T) {
 
 	aggregate := workflow.Jobs["require-checks-in-pr"]
 	assert.Contains(t, aggregate.Needs, "release-graph-audit")
+	require.NotEmpty(t, aggregate.Steps)
 	assert.Contains(t, aggregate.Steps[0].With["job-results"], "${{ needs.release-graph-audit.result }}")
 }
 
