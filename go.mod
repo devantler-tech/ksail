@@ -1042,6 +1042,13 @@ require (
 // Dependency version pins: modules replaced here have upstream incompatibilities
 // that require pinning until the respective projects ship compatible releases.
 replace (
+	// The v5.9.0 tag moved after Go's checksum database recorded its original
+	// source. Select that authenticated commit without accepting changed tag
+	// bytes (ksail#6781). This qualified replacement leaves future releases
+	// unaffected; remove it when an authenticated successor passes the k3d
+	// configuration regression.
+	github.com/k3d-io/k3d/v5 v5.9.0 => github.com/k3d-io/k3d/v5 v5.9.0-rc.0.0.20260602135457-2a0cb9f9a5c1
+
 	// image-factory v1.3.0 transitively pulls in grype v0.112.0 (via go-vex),
 	// which added a *DistroAlertData parameter to models.NewDocument. kubescape
 	// v3.0.48 still calls the 10-argument form and will not compile against
