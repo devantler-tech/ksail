@@ -1,0 +1,25 @@
+name: k3d source regression
+
+on:
+  push:
+    branches: [codex/ksail-advisory-guards-7432]
+
+permissions: {}
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: Verify the actual selected source
+        run: go test ./internal/ciharness -run '^TestK3dUsesAuthenticatedImmutableSource$' -count=1 -v
+      - name: Exercise the real k3d configuration transformation
+        run: go test ./pkg/cli/cmd/cluster -run '^TestSetupK3dCNI_CiliumDisablesFlannelNetworkPolicyAndTraefik$' -count=1 -v
