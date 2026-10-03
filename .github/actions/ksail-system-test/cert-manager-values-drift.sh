@@ -3,8 +3,8 @@
 set -euo pipefail
 
 fail() {
-  echo "cert-manager values trial: $*" >&2
-  exit 1
+	echo "cert-manager values trial: $*" >&2
+	exit 1
 }
 log_dir="${SYSTEM_TEST_LOG_DIR:-/tmp/ksail-system-test-logs}/cert-manager-values-drift"
 mkdir -p "$log_dir"
@@ -21,40 +21,40 @@ kubeconfig_file="$HOME/.kube/config"
 name_count=0
 kubeconfig_count=0
 for ((index = 0; index < ${#create_args[@]}; index++)); do
-  case "${create_args[index]}" in
-  --name)
-    index=$((index + 1))
-    [[ $index -lt ${#create_args[@]} ]] || fail 'explicit create-time cluster name is required'
-    cluster_name="${create_args[index]}"
-    name_count=$((name_count + 1))
-    ;;
-  --name=*)
-    cluster_name="${create_args[index]#--name=}"
-    name_count=$((name_count + 1))
-    ;;
-  --kubeconfig)
-    index=$((index + 1))
-    [[ $index -lt ${#create_args[@]} ]] || fail 'create-time kubeconfig path is missing'
-    kubeconfig_file="${create_args[index]}"
-    kubeconfig_count=$((kubeconfig_count + 1))
-    ;;
-  --kubeconfig=*)
-    kubeconfig_file="${create_args[index]#--kubeconfig=}"
-    kubeconfig_count=$((kubeconfig_count + 1))
-    ;;
-  esac
+	case "${create_args[index]}" in
+	--name)
+		index=$((index + 1))
+		[[ $index -lt ${#create_args[@]} ]] || fail 'explicit create-time cluster name is required'
+		cluster_name="${create_args[index]}"
+		name_count=$((name_count + 1))
+		;;
+	--name=*)
+		cluster_name="${create_args[index]#--name=}"
+		name_count=$((name_count + 1))
+		;;
+	--kubeconfig)
+		index=$((index + 1))
+		[[ $index -lt ${#create_args[@]} ]] || fail 'create-time kubeconfig path is missing'
+		kubeconfig_file="${create_args[index]}"
+		kubeconfig_count=$((kubeconfig_count + 1))
+		;;
+	--kubeconfig=*)
+		kubeconfig_file="${create_args[index]#--kubeconfig=}"
+		kubeconfig_count=$((kubeconfig_count + 1))
+		;;
+	esac
 done
 [[ $name_count == 1 && "$cluster_name" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || fail 'explicit create-time cluster name is required'
 [[ $kubeconfig_count -le 1 && -n "$kubeconfig_file" ]] || fail 'create-time kubeconfig path is ambiguous'
 if [[ "$kubeconfig_file" == \~/* ]]; then
-  kubeconfig_file="$HOME/${kubeconfig_file#\~/}"
+	kubeconfig_file="$HOME/${kubeconfig_file#\~/}"
 fi
 [[ -f "$kubeconfig_file" ]] || fail 'create-time kubeconfig file is missing'
 target_context="kind-$cluster_name"
 cli_target_args=(--kubeconfig "$kubeconfig_file" --context "$target_context")
 helm_target_args=(--kubeconfig "$kubeconfig_file" --kube-context "$target_context")
 kubectl config view --minify --output json "${cli_target_args[@]}" |
-  jq -e --arg target "$target_context" '
+	jq -e --arg target "$target_context" '
     .["current-context"] == $target and
     (.contexts | length) == 1 and .contexts[0].name == $target and
     .contexts[0].context.cluster == $target and
@@ -66,14 +66,14 @@ kubectl config view --minify --output json "${cli_target_args[@]}" |
 # cluster identity and desired components; diff does not accept creation flags.
 read -r -a version_args <<<"$K8S_VERSION_FLAG"
 [[ ${#version_args[@]} == 2 && ${version_args[0]} == --kubernetes-version &&
-  ${version_args[1]} =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]] || fail 'missing create-time Kubernetes version pin'
+	${version_args[1]} =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]] || fail 'missing create-time Kubernetes version pin'
 
 release_state() {
-  local phase="$1"
-  helm list --all --namespace cert-manager --output json "${helm_target_args[@]}" >"$log_dir/$phase-release.json" || fail 'could not read latest Helm release'
-  # --all includes the latest failed/pending revision. A deployed-only query could
-  # hide a second attempted upgrade and falsely report convergence.
-  jq -er 'map(select(.name == "cert-manager")) |
+	local phase="$1"
+	helm list --all --namespace cert-manager --output json "${helm_target_args[@]}" >"$log_dir/$phase-release.json" || fail 'could not read latest Helm release'
+	# --all includes the latest failed/pending revision. A deployed-only query could
+	# hide a second attempted upgrade and falsely report convergence.
+	jq -er 'map(select(.name == "cert-manager")) |
     select(length == 1) | .[0] |
     select(.status == "deployed" and (.revision | tostring | test("^[1-9][0-9]*$")) and
       (.chart | test("^cert-manager-v?[0-9]+\\.[0-9]+\\.[0-9]+([-+][0-9A-Za-z.-]+)?$"))) |
@@ -81,16 +81,16 @@ release_state() {
 }
 
 read_values() {
-  local phase="$1" revision="$2"
-  helm get values cert-manager --namespace cert-manager --revision "$revision" --output json "${helm_target_args[@]}" |
-    jq -eS 'select(type == "object")' >"$log_dir/$phase-values.json" || fail 'release values are not an object'
+	local phase="$1" revision="$2"
+	helm get values cert-manager --namespace cert-manager --revision "$revision" --output json "${helm_target_args[@]}" |
+		jq -eS 'select(type == "object")' >"$log_dir/$phase-values.json" || fail 'release values are not an object'
 }
 
 assert_ownership() {
-  local revision="$1"
-  kubectl get secrets --namespace cert-manager --selector owner=helm,name=cert-manager \
-    --request-timeout=30s --output json "${cli_target_args[@]}" >"$log_dir/storage.json"
-  jq -e --arg revision "$revision" '
+	local revision="$1"
+	kubectl get secrets --namespace cert-manager --selector owner=helm,name=cert-manager \
+		--request-timeout=30s --output json "${cli_target_args[@]}" >"$log_dir/storage.json"
+	jq -e --arg revision "$revision" '
     .items | map(.metadata.labels) |
     select(length > 0 and all(.[]; (.version | test("^[1-9][0-9]*$")))) |
     max_by(.version | tonumber) |
@@ -101,21 +101,21 @@ assert_ownership() {
 }
 
 assert_diff() {
-  local phase="$1" expected="$2" status=0
-  ksail cluster diff --config "$config_file" --output json --exit-code \
-    "${cli_target_args[@]}" \
-    >"$log_dir/$phase.stdout" 2>"$log_dir/$phase.stderr" || status=$?
-  if [[ "$expected" == 1 ]]; then
-    [[ "$status" == 2 ]] || fail 'values drift did not exit exactly 2'
-    assert_values_change "$log_dir/$phase.stdout"
-  else
-    [[ "$status" == 0 ]] || fail "$phase diff did not exit exactly 0"
-    assert_no_changes "$log_dir/$phase.stdout"
-  fi
+	local phase="$1" expected="$2" status=0
+	ksail cluster diff --config "$config_file" --output json --exit-code \
+		"${cli_target_args[@]}" \
+		>"$log_dir/$phase.stdout" 2>"$log_dir/$phase.stderr" || status=$?
+	if [[ "$expected" == 1 ]]; then
+		[[ "$status" == 2 ]] || fail 'values drift did not exit exactly 2'
+		assert_values_change "$log_dir/$phase.stdout"
+	else
+		[[ "$status" == 0 ]] || fail "$phase diff did not exit exactly 0"
+		assert_no_changes "$log_dir/$phase.stdout"
+	fi
 }
 
 assert_values_change() {
-  jq -e -s 'length == 1 and (.[0] |
+	jq -e -s 'length == 1 and (.[0] |
     type == "object" and .totalChanges == 1 and
     (.inPlaceChanges | length == 1) and
     .inPlaceChanges[0].field == "cluster.certManager.chartValues" and
@@ -125,39 +125,39 @@ assert_values_change() {
 }
 
 assert_no_changes() {
-  jq -e -s 'length == 1 and (.[0] |
+	jq -e -s 'length == 1 and (.[0] |
     type == "object" and .totalChanges == 0 and .inPlaceChanges == [] and
     .rebootRequired == [] and .recreateRequired == [] and .rollingRecreate == [] and
     .wipeRequired == [] and .unknownBaseline == [])' "$1" >/dev/null || fail 'expected exactly one JSON document with no changes'
 }
 
 update_cluster() {
-  local phase="$1"
-  ksail cluster update --config "$config_file" --yes --output json "${version_args[@]}" "${cli_target_args[@]}" \
-    >"$log_dir/$phase.stdout" 2>"$log_dir/$phase.stderr" || fail 'cluster update failed'
+	local phase="$1"
+	ksail cluster update --config "$config_file" --yes --output json "${version_args[@]}" "${cli_target_args[@]}" \
+		>"$log_dir/$phase.stdout" 2>"$log_dir/$phase.stderr" || fail 'cluster update failed'
 }
 
 original_revision=$(release_state original)
 assert_ownership "$original_revision"
 read_values original "$original_revision"
 jq -e '.installCRDs == true and (.startupapicheck.timeout | type == "string")' \
-  "$log_dir/original-values.json" >/dev/null || fail 'initial KSail values are missing'
+	"$log_dir/original-values.json" >/dev/null || fail 'initial KSail values are missing'
 assert_diff initial 0
 chart_version=$(jq -er 'map(select(.name == "cert-manager")) | .[0].chart |
   sub("^cert-manager-"; "")' "$log_dir/original-release.json")
 seed_timeout=12m0s
 if [[ $(jq -r '.startupapicheck.timeout' "$log_dir/original-values.json") == "$seed_timeout" ]]; then
-  seed_timeout=13m0s
+	seed_timeout=13m0s
 fi
 jq -eS --arg timeout "$seed_timeout" '.startupapicheck.timeout = $timeout' \
-  "$log_dir/original-values.json" >"$log_dir/expected-seed-values.json"
+	"$log_dir/original-values.json" >"$log_dir/expected-seed-values.json"
 
 # Helm --set stores booleans as actual booleans, matching real release storage.
 # Only the timeout changes; KSail's declared spec remains byte-for-byte identical.
 helm upgrade cert-manager cert-manager --repo https://charts.jetstack.io \
-  --namespace cert-manager --version "$chart_version" --reuse-values \
-  --set installCRDs=true --set "startupapicheck.timeout=$seed_timeout" \
-  --atomic --wait --wait-for-jobs --timeout 10m "${helm_target_args[@]}" >"$log_dir/seed-upgrade.log" 2>&1
+	--namespace cert-manager --version "$chart_version" --reuse-values \
+	--set installCRDs=true --set "startupapicheck.timeout=$seed_timeout" \
+	--atomic --wait --wait-for-jobs --timeout 10m "${helm_target_args[@]}" >"$log_dir/seed-upgrade.log" 2>&1
 seed_revision=$(release_state seeded)
 [[ "$seed_revision" == "$((original_revision + 1))" ]] || fail 'seeding did not create exactly one revision'
 assert_ownership "$seed_revision"
@@ -174,8 +174,8 @@ assert_ownership "$updated_revision"
 read_values updated "$updated_revision"
 cmp -s "$log_dir/original-values.json" "$log_dir/updated-values.json" || fail 'reconciliation did not restore the desired values'
 for deployment in cert-manager cert-manager-webhook cert-manager-cainjector; do
-  kubectl rollout status "deployment/$deployment" --namespace cert-manager \
-    --timeout=600s --request-timeout=30s "${cli_target_args[@]}" >"$log_dir/$deployment-readiness.log" 2>&1 || fail "$deployment is not ready"
+	kubectl rollout status "deployment/$deployment" --namespace cert-manager \
+		--timeout=600s --request-timeout=30s "${cli_target_args[@]}" >"$log_dir/$deployment-readiness.log" 2>&1 || fail "$deployment is not ready"
 done
 
 assert_diff repeated 0
