@@ -241,7 +241,8 @@ func resolveDimensionTarget(
 		cmd.Context(), resolver, dimension.imageRef, dimension.currentVersion, dimension.suffix,
 	)
 	if err != nil {
-		if errors.Is(err, versionresolver.ErrNoUpgradesAvailable) && dimension.imagePlanner != nil {
+		if errors.Is(err, versionresolver.ErrNoUpgradesAvailable) &&
+			dimension.label == distributionLabel && dimension.imagePlanner != nil {
 			return dimension.currentVersion, "current stable version", true
 		}
 

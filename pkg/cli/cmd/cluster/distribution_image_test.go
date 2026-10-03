@@ -9,6 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/versionresolver"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -160,4 +161,38 @@ func TestDistributionImageDriftUnavailable(t *testing.T) {
 	require.True(t, result.HasUnknownBaseline(), "unreadable image must not look clean")
 	assert.Empty(t, result.RebootRequired)
 	assert.Empty(t, prov.upgrades)
+}
+
+type currentImageResolver struct{}
+
+func (currentImageResolver) ListVersions(context.Context, string) ([]versionresolver.Version, error) {
+	return versionresolver.ParseTags([]string{"v1.13.10"}), nil
+}
+
+func TestCurrentVersionFallbackIsDistributionOnly(t *testing.T) {
+	t.Parallel()
+
+	for _, label := range []string{"distribution", "Kubernetes"} {
+		t.Run(label, func(t *testing.T) {
+			t.Parallel()
+
+			cmd := &cobra.Command{}
+			cmd.SetContext(t.Context())
+			cmd.SetErr(io.Discard)
+			planner := &imageUpgraderFake{changed: true}
+			target, reason, ok := cluster.ExportResolveDimensionTarget(
+				cmd, currentImageResolver{}, label, "v1.13.10", planner,
+			)
+			if label == "distribution" {
+				require.True(t, ok)
+				assert.Equal(t, "v1.13.10", target)
+				assert.Equal(t, "current stable version", reason)
+			} else {
+				assert.False(t, ok, "an image planner must not invent a Kubernetes target")
+				assert.Empty(t, target)
+				assert.Empty(t, reason)
+			}
+			assert.Zero(t, planner.reads, "target discovery must remain read-only")
+		})
+	}
 }
