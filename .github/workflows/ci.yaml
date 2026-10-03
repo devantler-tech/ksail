@@ -137,6 +137,7 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
       dependency-test-graph: ${{ steps.filter.outputs.dependency-test-graph }}
       govuln-allowlist: ${{ steps.filter.outputs.govuln-allowlist }}
+      release-graph-audit: ${{ steps.filter.outputs.release-graph-audit }}
       todos-contract: ${{ steps.filter.outputs.todos-contract }}
       system-test: ${{ steps.filter.outputs.system-test }}
       schema: ${{ steps.filter.outputs.schema }}
@@ -208,6 +209,21 @@ jobs:
               - '.github/workflows/ci.yaml'
             govuln-allowlist:
               - '.govulncheck-allow.txt'
+            # Release inputs are outside Go's cache and the shared Go source filter.
+            release-graph-audit:
+              - '.goreleaser.yaml'
+              - '.goreleaser.desktop.yaml'
+              - '.github/workflows/cd.yaml'
+              - '.github/actions/setup-desktop-build/**'
+              - '.github/actions/free-disk-space/**'
+              - 'scripts/stage-webui.sh'
+              - 'pkg/client/kubescape/**'
+              - 'desktop/**'
+              - 'internal/ciharness/**'
+              - 'go.mod'
+              - 'go.sum'
+              - '.govulncheck-allow.txt'
+              - '.github/workflows/ci.yaml'
             system-test:
               # NOTE: Do not use negative patterns (!) here.
               # dorny/paths-filter v4 uses picomatch where negated patterns
@@ -558,6 +574,9 @@ jobs:
     with:
       scan-default-branch: true
       test-default-branch: true
+      # The org-required direct run is the sole signed-fix writer for a PR.
+      # Keep this additional invocation read-only while retaining its checks.
+      apply-signed-fixes: false
     permissions:
       contents: write
       issues: write
@@ -664,6 +683,11 @@ jobs:
 
       - name: 🔐 Verify reviewed upstream bytes
         run: .github/scripts/verify-go-archive-parity.sh
+
+      - name: 🔐 Verify OTel logging adapter provenance
+        run: |
+          .github/scripts/verify-otelzap-parity.sh
+          .github/scripts/verify-otelzap-parity.test.sh
 
   build-artifact:
     name: 🏗️ Build KSail Binary
@@ -1854,6 +1878,36 @@ jobs:
             exit 1
           fi
 
+  release-graph-audit:
+    name: 🔐 Audit Shipped Dependency Graphs
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [changes]
+    if: needs.changes.outputs.release-graph-audit == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: 🧹 Free disk space
+        env:
+          DOCKER_PRUNE: "false"
+        run: bash .github/actions/free-disk-space/free-disk-space.sh
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: 🔐 Audit Shipped Dependency Graphs
+        # Release files are outside Go's test-cache inputs; always execute the audit.
+        run: go test ./pkg/client/kubescape/... -count=1
+
   require-checks-in-pr:
     name: CI - Required Checks
     runs-on: ubuntu-latest
@@ -1882,6 +1936,7 @@ jobs:
         validate-calico-chart,
         verify-dependency-test-graph,
         verify-todos-workflow-contract,
+        release-graph-audit,
         cask-pr-handoff,
         k3k-sentinel-scripts,
         rate-limit-gate-script,
@@ -1915,6 +1970,7 @@ jobs:
             ${{ needs.validate-calico-chart.result }}
             ${{ needs.verify-dependency-test-graph.result }}
             ${{ needs.verify-todos-workflow-contract.result }}
+            ${{ needs.release-graph-audit.result }}
             ${{ needs.cask-pr-handoff.result }}
             ${{ needs.k3k-sentinel-scripts.result }}
             ${{ needs.rate-limit-gate-script.result }}
