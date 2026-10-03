@@ -15,6 +15,8 @@ predicate expected(string path, string name) {
   or path = "third_party/kyverno-jmespath/api.go" and name = "Search"
   or path = "third_party/jmespath/api.go" and name = "Search"
   or path = "third_party/ansi/width.go" and name = "Strip"
+  or path = "third_party/redisotel/tracing.go" and name = "InstrumentTracing"
+  or path = "third_party/rediscmd/rediscmd.go" and name = "CmdString"
 }
 
 from string path, string name

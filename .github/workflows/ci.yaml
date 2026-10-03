@@ -207,6 +207,8 @@ jobs:
               - 'third_party/kyverno-jmespath/**'
               - 'third_party/jmespath/**'
               - 'third_party/ansi/**'
+              - 'third_party/redisotel/**'
+              - 'third_party/rediscmd/**'
               - '.gitattributes'
               - '.mega-linter.yml'
               - '.jscpd.json'

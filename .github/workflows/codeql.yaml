@@ -14,7 +14,7 @@ name: 🔍 CodeQL
 # Go uses `autobuild`, which the Go extractor resolves to standalone extraction: it reads
 # the module graph with `go list` and takes types from source, so it needs no compiler and
 # covers the root (CLI plus tagged desktop), `third_party/go-archive/` and the
-# `third_party/otelzap/` compatibility module, plus all six authenticated dependency
+# `third_party/otelzap/` compatibility module, plus all eight authenticated dependency
 # source modules in one job. `none` is rejected for Go, and `manual` runs a traced compile that exceeds the
 # runner's memory alongside the extractor.
 #

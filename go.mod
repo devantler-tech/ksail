@@ -1127,6 +1127,10 @@ replace (
 	// reintroducing the break described above.
 	github.com/opencontainers/runc => github.com/opencontainers/runc v1.3.6
 
+	// Authenticate the selected Redis instrumentation source and its companion.
+	github.com/redis/go-redis/extra/rediscmd/v9 v9.5.3 => ./third_party/rediscmd
+	github.com/redis/go-redis/extra/redisotel/v9 v9.5.3 => ./third_party/redisotel
+
 	// Compatibility adapter for the fixed OTel logging API. See
 	// third_party/otelzap/KSail-PATCH.md for provenance and removal conditions.
 	github.com/uptrace/opentelemetry-go-extra/otelzap => ./third_party/otelzap

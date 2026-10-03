@@ -47,8 +47,8 @@ func TestAnalysisSourceIntegrityRunsForEveryCopiedByte(t *testing.T) {
 		)
 	}
 
-	for _, directory := range []string{"cel-go", "glamour", "go-macholibre", "kyverno-jmespath", "jmespath", "ansi"} {
-		assertAnalysisSourceFilter(t, patterns, directory)
+	for _, source := range authenticatedAnalysisSources() {
+		assertAnalysisSourceFilter(t, patterns, source.directory)
 	}
 }
 
@@ -69,6 +69,10 @@ func TestAnalysisSourceClassificationKeepsOwnedCodeChecked(t *testing.T) {
 		"third_party/kyverno-jmespath/api.go":           true,
 		"third_party/jmespath/api.go":                   true,
 		"third_party/ansi/truncate.go":                  true,
+		"third_party/redisotel/tracing.go":              true,
+		"third_party/rediscmd/rediscmd.go":              true,
+		"third_party/redisotel-owned/main.go":           false,
+		"third_party/rediscmd-owned/main.go":            false,
 		"third_party/ansi-owned/main.go":                false,
 		"third_party/cel-golang/main.go":                false,
 		"third_party/go-archive/compat_legacy.go":       false,

@@ -22,10 +22,16 @@ type analysisSource struct {
 	relocatedDependabot bool
 	relocatedGithub     bool
 	patchedGoMod        bool
+	patchedGoSum        bool
 }
 
 // authenticatedAnalysisSources declares exact release bytes and metadata patches.
 func authenticatedAnalysisSources() []analysisSource {
+	return append(authenticatedPrimaryAnalysisSources(), authenticatedTransitiveAnalysisSources()...)
+}
+
+// authenticatedPrimaryAnalysisSources binds the selected analyzer dependencies.
+func authenticatedPrimaryAnalysisSources() []analysisSource {
 	return []analysisSource{
 		{
 			module:           "github.com/google/cel-go",
@@ -57,6 +63,12 @@ func authenticatedAnalysisSources() []analysisSource {
 			upstreamAttributes: "**/test-fixtures/cache/**/* filter=lfs diff=lfs merge=lfs -text\n" +
 				"**/test-fixtures/assets/**/* filter=lfs diff=lfs merge=lfs -text",
 		},
+	}
+}
+
+// authenticatedTransitiveAnalysisSources includes standalone dependency graphs.
+func authenticatedTransitiveAnalysisSources() []analysisSource {
+	return []analysisSource{
 		{
 			module:           "github.com/kyverno/go-jmespath",
 			version:          "v0.4.1-0.20231124160150-95e59c162877",
@@ -80,6 +92,24 @@ func authenticatedAnalysisSources() []analysisSource {
 			checksum:         "h1:ith2ArZS0CJG30cIUfID1LXN7ZFXRCww6RUvAPA+Pzw=",
 			checkoutChecksum: "h1:ith2ArZS0CJG30cIUfID1LXN7ZFXRCww6RUvAPA+Pzw=",
 		},
+		{
+			module:           "github.com/redis/go-redis/extra/redisotel/v9",
+			version:          "v9.5.3",
+			directory:        "redisotel",
+			checksum:         "h1:kuvuJL/+MZIEdvtb/kTBRiRgYaOmx1l+lYJyVdrRUOs=",
+			checkoutChecksum: "h1:/yV0keEo4cOJoQ8Hk5I2GqFHVYpqxkrLpavcVHxjuNQ=",
+			patchedGoMod:     true,
+			patchedGoSum:     true,
+		},
+		{
+			module:           "github.com/redis/go-redis/extra/rediscmd/v9",
+			version:          "v9.5.3",
+			directory:        "rediscmd",
+			checksum:         "h1:1/BDligzCa40GTllkDnY3Y5DTHuKCONbB2JcRyIfl20=",
+			checkoutChecksum: "h1:10lRBylgtszT0W+LJh04lF13JQafvUx2HoPhoblO/pI=",
+			patchedGoMod:     true,
+			patchedGoSum:     true,
+		},
 	}
 }
 
@@ -97,20 +127,59 @@ func TestAnalysisDependenciesUseAuthenticatedSource(t *testing.T) {
 }
 
 // TestAnalysisStandaloneReplacementPreservesRootVersion ensures the source
-// required by Glamour's standalone analysis cannot downgrade the CLI's graph.
+// required by standalone analysis cannot downgrade the CLI's graph.
 func TestAnalysisStandaloneReplacementPreservesRootVersion(t *testing.T) {
 	t.Parallel()
+
+	for module, version := range map[string]string{
+		"github.com/charmbracelet/x/ansi": "v0.11.7",
+		"github.com/redis/go-redis/v9":    "v9.20.1",
+	} {
+		t.Run(module, func(t *testing.T) {
+			t.Parallel()
+			verifyUnreplacedRootVersion(t, module, version)
+		})
+	}
+}
+
+func verifyUnreplacedRootVersion(t *testing.T, module, version string) {
+	t.Helper()
 
 	var selected struct {
 		Version string          `json:"Version"` //nolint:tagliatelle // Go command output contract.
 		Replace json.RawMessage `json:"Replace"` //nolint:tagliatelle // Go command output contract.
 	}
 	require.NoError(t, json.Unmarshal(
-		authenticatedSourceGoOutput(t, "list", "-m", "-json", "github.com/charmbracelet/x/ansi"),
+		authenticatedSourceGoOutput(t, "list", "-m", "-json", module),
 		&selected,
 	))
-	require.Equal(t, "v0.11.7", selected.Version)
+	require.Equal(t, version, selected.Version)
 	require.Empty(t, selected.Replace, "the root graph must retain its selected upstream version")
+}
+
+// TestAnalysisRedisStandaloneUsesAuthenticatedCompanion checks both independent
+// modules without replacing the root graph's newer Redis client.
+func TestAnalysisRedisStandaloneUsesAuthenticatedCompanion(t *testing.T) {
+	t.Parallel()
+
+	for _, source := range authenticatedAnalysisSources() {
+		if source.directory == "rediscmd" {
+			source.moduleDirectory = "third_party/redisotel"
+			verifyAnalysisSource(t, source)
+		}
+	}
+
+	for _, directory := range []string{"third_party/redisotel", "third_party/rediscmd"} {
+		var selected struct {
+			Version string          `json:"Version"` //nolint:tagliatelle // Go command output contract.
+			Replace json.RawMessage `json:"Replace"` //nolint:tagliatelle // Go command output contract.
+		}
+		require.NoError(t, json.Unmarshal(authenticatedSourceGoOutput(t,
+			"-C", directory, "list", "-m", "-json", "github.com/redis/go-redis/v9",
+		), &selected))
+		require.Equal(t, "v9.5.3", selected.Version)
+		require.Empty(t, selected.Replace, "standalone graphs must select the published Redis client")
+	}
 }
 
 func verifyAnalysisSource(t *testing.T, source analysisSource) {
@@ -171,12 +240,7 @@ func verifyPublishedAnalysisSource(t *testing.T, source analysisSource, director
 		))
 	}
 
-	if source.patchedGoMod {
-		require.NoError(t, os.Remove(filepath.Join(snapshot, "go.mod")))
-		require.NoError(t, os.Rename(
-			filepath.Join(snapshot, "upstream-go.mod"), filepath.Join(snapshot, "go.mod"),
-		))
-	}
+	restorePublishedModuleMetadata(t, source, snapshot)
 
 	if source.upstreamAttributes != "" {
 		require.NoError(t, os.WriteFile(
@@ -204,4 +268,17 @@ func verifyPublishedAnalysisSource(t *testing.T, source analysisSource, director
 	require.NoError(t, moduleintegrity.Verify(
 		snapshot, source.module+"@"+source.version, source.checksum,
 	), "restoring declared metadata must reproduce every authenticated upstream byte")
+}
+
+func restorePublishedModuleMetadata(t *testing.T, source analysisSource, snapshot string) {
+	t.Helper()
+
+	for filename, patched := range map[string]bool{"go.mod": source.patchedGoMod, "go.sum": source.patchedGoSum} {
+		if patched {
+			require.NoError(t, os.Remove(filepath.Join(snapshot, filename)))
+			require.NoError(t, os.Rename(
+				filepath.Join(snapshot, "upstream-"+filename), filepath.Join(snapshot, filename),
+			))
+		}
+	}
 }

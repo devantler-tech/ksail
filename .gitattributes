@@ -9,3 +9,5 @@ third_party/go-macholibre/** text=auto eol=lf
 third_party/kyverno-jmespath/** -filter -text
 third_party/jmespath/** -filter -text
 third_party/ansi/** -filter -text
+third_party/redisotel/** -filter -text
+third_party/rediscmd/** -filter -text
