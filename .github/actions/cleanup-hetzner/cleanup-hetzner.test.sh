@@ -21,6 +21,7 @@ cat >"${fake_bin}/hcloud" <<'FAKE'
 set -euo pipefail
 kind="$1" verb="$2" id=""
 [[ "${verb}" == list ]] || id="${3:-}"
+shift 2
 printf '%s %s %s\n' "${kind}" "${verb}" "${id}" >>"${FAKE_HCLOUD_STATE}/calls"
 call="${kind} ${verb}${id:+ ${id}}"
 while IFS= read -r rule; do
@@ -40,7 +41,39 @@ state="${FAKE_HCLOUD_STATE}/${kind}"
 case "${verb}" in
 list)
 	echo "warning: simulated deprecation notice" >&2
-	[[ -f "${state}" ]] && cat "${state}"
+	[[ -f "${state}" ]] || exit 0
+	selector=""
+	while [[ "$#" -gt 0 ]]; do
+		case "$1" in
+		-l)
+			selector="$2"
+			shift 2
+			;;
+		*) shift ;;
+		esac
+	done
+	while IFS= read -r resource_id; do
+		[[ -n "${resource_id}" ]] || continue
+		labels=""
+		while IFS='|' read -r labelled_id resource_labels; do
+			if [[ "${labelled_id}" == "${resource_id}" ]]; then
+				labels="${resource_labels}"
+				break
+			fi
+		done <"${state}.labels"
+		matches=1
+		terms="${selector},"
+		while [[ -n "${terms}" ]]; do
+			term="${terms%%,*}"
+			terms="${terms#*,}"
+			[[ -n "${term}" ]] || continue
+			if [[ ",${labels}," != *",${term},"* ]]; then
+				matches=0
+				break
+			fi
+		done
+		[[ "${matches}" -eq 0 ]] || printf '%s\n' "${resource_id}"
+	done <"${state}"
 	;;
 delete)
 	grep -vx -- "${id}" "${state}" >"${state}.next" || true
@@ -70,12 +103,18 @@ run_case() {
 
 	local state="${tmp_dir}/${name}"
 	mkdir -p "${state}"
-	local resource kind ids
+	local resource kind ids id
 	for resource in "$@"; do
 		kind="${resource%%=*}"
 		ids="${resource#*=}"
 		tr ',' '\n' <<<"${ids}" >"${state}/${kind}"
+		while IFS= read -r id; do
+			printf '%s|ksail.cluster.name=test,ksail.owned=true\n' "${id}"
+		done <"${state}/${kind}" >"${state}/${kind}.labels"
 	done
+	if [[ -n "${CASE_FLOATING_IP_LABELS:-}" ]]; then
+		printf '%s\n' "${CASE_FLOATING_IP_LABELS}" >"${state}/floating-ip.labels"
+	fi
 
 	local output status=0
 	output="$(PATH="${fake_bin}:${PATH}" FAKE_HCLOUD_STATE="${state}" FAKE_HCLOUD_FAIL="${fail_rules}" \
@@ -129,6 +168,26 @@ run_case firewall-recheck-fails 1 "❌ Failed to list firewall resources" \
 
 if ! grep -q 'network delete 51' "${tmp_dir}/firewall-recheck-fails/calls"; then
 	echo 'FAIL: firewall-recheck-fails: networks were not cleaned after the firewall list failed' >&2
+	exit 1
+fi
+pass_count=$((pass_count + 1))
+
+CASE_FLOATING_IP_LABELS='21|ksail.owned=true,ksail.cluster.name=test
+22|ksail.cluster.name=test
+23|ksail.owned=true,ksail.cluster.name=other
+24|ksail.owned=false,ksail.cluster.name=test' \
+	CASE_REMAINING='floating-ip=22 floating-ip=23 floating-ip=24 ' \
+	run_case preserves-unowned-floating-ips 0 "Unassigning floating-ip 21 before retrying" \
+	"once:floating-ip delete 21" floating-ip=21,22,23,24
+
+if grep -Eq '^floating-ip (delete|unassign) (22|23|24)$' "${tmp_dir}/preserves-unowned-floating-ips/calls"; then
+	echo 'FAIL: cleanup modified a floating IP outside its ownership and cluster scope' >&2
+	exit 1
+fi
+pass_count=$((pass_count + 1))
+
+if ! grep -q '^floating-ip unassign 21$' "${tmp_dir}/preserves-unowned-floating-ips/calls"; then
+	echo 'FAIL: the selected owned floating IP did not exercise unassignment/retry' >&2
 	exit 1
 fi
 pass_count=$((pass_count + 1))
