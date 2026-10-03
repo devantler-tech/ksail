@@ -126,7 +126,11 @@ type goValidationCheckCase struct {
 	present, allowed                        bool
 }
 
-func runGoValidationChecks(t *testing.T, script, head string, test goValidationCheckCase) (string, error) {
+func runGoValidationChecks(
+	t *testing.T,
+	script, head string,
+	test goValidationCheckCase,
+) (string, error) {
 	t.Helper()
 
 	present := "false"
