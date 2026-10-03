@@ -251,7 +251,12 @@ test.use({ viewport: { width: 320, height: 800 } });
 
 test("operator views remain usable without horizontal overflow on a phone", async ({ page }) => {
   await mockOperatorApi(page);
+  // Layout checks begin after the fixture bundle loads, including lazy externals.
+  const pluginBundle = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/v1/plugins/wide-action/main.js",
+  );
   await page.goto("/");
+  await (await pluginBundle).finished();
 
   const pageTitle = page.getByRole("heading", { name: "Clusters", level: 1 });
   await expect(pageTitle).toBeVisible();
