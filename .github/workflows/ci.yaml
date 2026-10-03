@@ -756,7 +756,8 @@ jobs:
           GOVULNCHECK_BIN: ${{ runner.temp }}/vulnerability-scanner/govulncheck
         run: |
           scanner_module_cache="$(go env GOMODCACHE)"
-          export GOVULNCHECK_TEST_DB="file://$scanner_module_cache/golang.org/x/vuln@v1.8.0/internal/client/testdata/vulndb-v1"
+          printf -v GOVULNCHECK_TEST_DB '%s:%s%s/golang.org/x/vuln@v1.8.0/internal/client/testdata/vulndb-v1' file // "$scanner_module_cache"
+          export GOVULNCHECK_TEST_DB
           go test -tags integration ./internal/vulnidentity/... -count=1
 
       - name: 🔐 Query every published local-source identity
