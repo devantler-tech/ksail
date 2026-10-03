@@ -1130,6 +1130,11 @@ replace (
 	// reintroducing the break described above.
 	github.com/opencontainers/runc => github.com/opencontainers/runc v1.3.6
 
+	// The selected tag and original commit are unavailable through direct Git.
+	// Preserve every authenticated published source byte (ksail#7456, ADR 0010).
+	// Remove when an authenticated successor resolves the dependency test graph.
+	github.com/rancher/dynamiclistener v1.27.5 => ./third_party/dynamiclistener
+
 	// Authenticate the selected Redis instrumentation source and its companion.
 	github.com/redis/go-redis/extra/rediscmd/v9 v9.5.3 => ./third_party/rediscmd
 	github.com/redis/go-redis/extra/redisotel/v9 v9.5.3 => ./third_party/redisotel

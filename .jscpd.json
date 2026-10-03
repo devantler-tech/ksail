@@ -37,6 +37,7 @@
     "**/third_party/ansi-runtime/**",
     "**/third_party/redisotel/**",
     "**/third_party/rediscmd/**",
+    "**/third_party/dynamiclistener/**",
     "!**/third_party/go-archive/compat_legacy.go",
     "!**/third_party/go-archive/compat_legacy_test.go",
     "**/zz_generated*.go",

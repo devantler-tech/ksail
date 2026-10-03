@@ -33,7 +33,19 @@ func authenticatedAnalysisSources() []analysisSource {
 		authenticatedTransitiveAnalysisSources()...,
 	)
 
-	return append(sources, authenticatedRuntimeANSISource())
+	return append(sources, authenticatedRuntimeANSISource(), authenticatedDynamicListenerSource())
+}
+
+// authenticatedDynamicListenerSource preserves unavailable dependency test source.
+func authenticatedDynamicListenerSource() analysisSource {
+	return analysisSource{
+		module:           "github.com/rancher/dynamiclistener",
+		version:          "v1.27.5",
+		directory:        "dynamiclistener",
+		checksum:         "h1:FA/s9vbQzGz1Au3BuFvdbBfBBUmHGXGR3xoliwR4qfY=",
+		checkoutChecksum: "h1:06Oa4xfsjUJA3Z7x95wr0AsUYafuIY7MuYpR8JJoXqg=",
+		relocatedGithub:  true,
+	}
 }
 
 // authenticatedRuntimeANSISource keeps the shipped parser on its selected version.

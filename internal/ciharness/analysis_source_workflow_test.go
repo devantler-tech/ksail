@@ -73,6 +73,8 @@ func TestAnalysisSourceClassificationKeepsOwnedCodeChecked(t *testing.T) {
 		"third_party/ansi-runtime-owned/main.go":        false,
 		"third_party/redisotel/tracing.go":              true,
 		"third_party/rediscmd/rediscmd.go":              true,
+		"third_party/dynamiclistener/cert/cert.go":      true,
+		"third_party/dynamiclistener-owned/main.go":     false,
 		"third_party/redisotel-owned/main.go":           false,
 		"third_party/rediscmd-owned/main.go":            false,
 		"third_party/ansi-owned/main.go":                false,

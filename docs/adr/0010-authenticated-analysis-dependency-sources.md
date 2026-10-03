@@ -6,7 +6,7 @@
 
 ## Context
 
-Managed Go analysis resolves dependencies directly from upstream Git repositories. CEL's selected tag cannot be resolved through that path; Glamour, go-macholibre and Glamour's standalone ANSI dependency require unavailable LFS downloads. Concurrent shallow Git fetches also fail to validate both selected JMESPath pseudo-versions. Redis instrumentation and its command companion have selected nested tags that direct Git resolution cannot find. These failures prevent complete extraction even though Go's published module archives supply the selected versions.
+Managed Go analysis resolves dependencies directly from upstream Git repositories. CEL's selected tag cannot be resolved through that path; Glamour, go-macholibre and Glamour's standalone ANSI dependency require unavailable LFS downloads. Concurrent shallow Git fetches also fail to validate both selected JMESPath pseudo-versions. Redis instrumentation and its command companion have selected nested tags that direct Git resolution cannot find. DynamicListener's selected tag and original commit are also unavailable through direct Git access, preventing resolution of Wharfie's dependency test graph. These failures prevent complete extraction even though Go's published module archives supply the selected versions.
 
 The CLI and desktop need reproducible dependency source without changing APIs or reducing analysis coverage. Cached download metadata alone does not authenticate an extracted source directory.
 
@@ -25,6 +25,7 @@ Use complete copies of the published modules as version-qualified local replacem
 | github.com/charmbracelet/x/ansi              | v0.11.7                              | `h1:kzv1kJvjg2S3r9KHo8hDdHFQLEqn4RBCb39dAYC84jI=` |
 | github.com/redis/go-redis/extra/redisotel/v9 | v9.5.3                               | `h1:kuvuJL/+MZIEdvtb/kTBRiRgYaOmx1l+lYJyVdrRUOs=` |
 | github.com/redis/go-redis/extra/rediscmd/v9  | v9.5.3                               | `h1:1/BDligzCa40GTllkDnY3Y5DTHuKCONbB2JcRyIfl20=` |
+| github.com/rancher/dynamiclistener           | v1.27.5                              | `h1:FA/s9vbQzGz1Au3BuFvdbBfBBUmHGXGR3xoliwR4qfY=` |
 
 Glamour and go-macholibre use `* -filter -text` in their attribute files so a normal checkout preserves module archive bytes without contacting KSail's LFS endpoint. CEL's archive contains a vendor manifest without its vendor packages; preserve that manifest at `upstream-vendor/modules.txt` so Go resolves dependencies through the module graph.
 
@@ -36,9 +37,11 @@ Both ANSI versions accept color components only when they contain one through fo
 
 Redis instrumentation's standalone module selects its command companion v9.5.3 through a version-qualified sibling replacement. Both Redis modules select the original Redis client v9.5.3 from its published module, with the upstream repository-relative replacements removed and that client's authenticated checksums recorded. Each original module and checksum file is preserved as `upstream-go.mod` and `upstream-go.sum` and restored privately for authentication. KSail's root graph retains Redis client v9.20.1.
 
-Required source-integrity tests bind each selected version to its complete local directory and fixed checkout checksum. They restore the original attributes, vendor manifest, module metadata and explicitly named source files in a private snapshot, then require the published checksum above. Both the repaired checkout and reconstructed upstream are authenticated: every other byte must match the upstream module. CEL's incomplete vendor directory must remain absent. CodeQL autobuild discovers every module and its evidence guard requires 17 function bodies from these dependencies as well as the CLI and Linux desktop across all 12 module projects. A failed module extraction remains a failure.
+DynamicListener retains its complete published source and module metadata without patches. Its upstream automation is archived under `upstream-github/` and restored privately to authenticate the complete published archive. The certificate and factory implementations remain part of the mandatory analysis evidence.
 
-Every change to these nine source trees, root attributes or their lint classification selects the required integrity harness, including non-Go data files. Mutating formatters and duplication checks classify only these exact trees as foreign source. KSail's maintained code, compatibility modules and integrity guards remain checked; CodeQL still extracts and analyzes all modules.
+Required source-integrity tests bind each selected version to its complete local directory and fixed checkout checksum. They restore the original attributes, vendor manifest, module metadata and explicitly named source files in a private snapshot, then require the published checksum above. Both the repaired checkout and reconstructed upstream are authenticated: every other byte must match the upstream module. CEL's incomplete vendor directory must remain absent. CodeQL autobuild discovers every module and its evidence guard requires 19 function bodies from these dependencies as well as the CLI and Linux desktop across all 13 module projects. A failed module extraction remains a failure.
+
+Every change to these ten source trees, root attributes or their lint classification selects the required integrity harness, including non-Go data files. Mutating formatters and duplication checks classify only these exact trees as foreign source. KSail's maintained code, compatibility modules and integrity guards remain checked; CodeQL still extracts and analyzes all modules.
 
 ## Consequences
 

@@ -210,6 +210,7 @@ jobs:
               - 'third_party/ansi-runtime/**'
               - 'third_party/redisotel/**'
               - 'third_party/rediscmd/**'
+              - 'third_party/dynamiclistener/**'
               - '.gitattributes'
               - '.mega-linter.yml'
               - '.jscpd.json'
