@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
@@ -24,6 +25,12 @@ var (
 	errEKSOwnershipRebindProvider = errors.New(
 		"EKS ownership rebind requires provider AWS",
 	)
+	errEKSRecoveryTargetRequired = errors.New(
+		"EKS recovery without local target evidence requires explicit --name and --provider AWS",
+	)
+	errEKSRecoveryStateConflict = errors.New(
+		"local state belongs to a different distribution or provider",
+	)
 )
 
 // NewRebindEKSOwnershipCmd creates the explicit, non-destructive legacy-state migration path. The
@@ -42,16 +49,18 @@ func NewRebindEKSOwnershipCmd() *cobra.Command {
 
 	cmd = lifecycle.NewSimpleLifecycleCmd(lifecycle.SimpleLifecycleConfig{
 		Use:   "eks-bind",
-		Short: "Bind legacy EKS state to the current immutable AWS identity",
-		Long: `Bind legacy local EKS state to the exact cluster selected by the current AWS credentials.
+		Short: "Recover or bind EKS state to the current immutable AWS identity",
+		Long: `Recover missing local EKS state or bind legacy state to the exact cluster selected by AWS credentials.
 
 The command performs read-only AWS and eksctl queries, prints the account, ARN, region, and creation
 time for review, and writes only local KSail state. Run once without --yes to review the target, then
-repeat with --yes to confirm. It never deletes or scales AWS resources.`,
+repeat with --yes to confirm. Without local target evidence, pass --name and --provider AWS explicitly
+and select the region with AWS_REGION or your AWS profile. It never deletes or scales AWS resources.`,
 		TitleEmoji:   "🔐",
 		TitleContent: "Rebind EKS ownership...",
 		Activity:     "binding immutable ownership for",
 		Success:      "EKS ownership identity rebound",
+		Prepare:      discardOtherClusterAWSOptions,
 		Guard: func(ctx context.Context, resolved *lifecycle.ResolvedClusterInfo) error {
 			if resolved.Provider != v1alpha1.ProviderAWS {
 				return fmt.Errorf(
@@ -61,7 +70,12 @@ repeat with --yes to confirm. It never deletes or scales AWS resources.`,
 				)
 			}
 
-			identityClient, err := resolveAWSOwnershipTarget(ctx, resolved, false)
+			err := validateEKSRecoveryTarget(cmd, resolved)
+			if err != nil {
+				return err
+			}
+
+			identityClient, err := queryAWSOwnershipTarget(ctx, resolved)
 			if err != nil {
 				return err
 			}
@@ -119,4 +133,59 @@ repeat with --yes to confirm. It never deletes or scales AWS resources.`,
 	)
 
 	return experimental.Guard(cmd)
+}
+
+// validateEKSRecoveryTarget permits explicit recovery without prior local intent, while keeping
+// unreadable state and another distribution's same-named state from being overwritten or hidden.
+func validateEKSRecoveryTarget(cmd *cobra.Command, resolved *lifecycle.ResolvedClusterInfo) error {
+	err := validateExplicitEKSRecoveryName(cmd)
+	if err != nil {
+		return err
+	}
+
+	spec, err := state.LoadClusterSpec(resolved.ClusterName)
+	if err != nil && !errors.Is(err, state.ErrStateNotFound) {
+		return fmt.Errorf("read local state before EKS recovery: %w", err)
+	}
+
+	if err == nil &&
+		(spec.Distribution != v1alpha1.DistributionEKS || spec.Provider != v1alpha1.ProviderAWS) {
+		return fmt.Errorf(
+			"%w: %s/%s",
+			errEKSRecoveryStateConflict,
+			spec.Distribution,
+			spec.Provider,
+		)
+	}
+
+	if !hasLocalKSailEKSTargetEvidence(resolved) &&
+		(!cmd.Flags().Changed("name") || !cmd.Flags().Changed("provider")) {
+		return errEKSRecoveryTargetRequired
+	}
+
+	return nil
+}
+
+func validateExplicitEKSRecoveryName(cmd *cobra.Command) error {
+	if !cmd.Flags().Changed("name") {
+		return nil
+	}
+
+	name, err := cmd.Flags().GetString("name")
+	if err != nil || strings.TrimSpace(name) == "" {
+		return errEKSRecoveryTargetRequired
+	}
+
+	return nil
+}
+
+// Explicit recovery of another target must use its own ambient selection,
+// never credential aliases or a region borrowed from the loaded project. A nameless
+// project config is also unrelated when the recovery target is explicitly named.
+func discardOtherClusterAWSOptions(resolved *lifecycle.ResolvedClusterInfo) {
+	if resolved.ConfigSource && resolved.ConfigClusterName != resolved.ClusterName {
+		resolved.AWSOpts = v1alpha1.OptionsAWS{}
+		resolved.AWSRegion = lifecycle.ResolveAWSRegion(resolved.AWSOpts, nil)
+		resolved.AWSRegionFromConfig = false
+	}
 }

@@ -391,6 +391,19 @@ func (r AWSResolution) IsFrozen() bool {
 	return r.frozen
 }
 
+// WithRegion pins a region selected after credential freezing without resolving
+// the identity provider again. It also updates the frozen SDK configuration.
+func (r AWSResolution) WithRegion(region string) AWSResolution {
+	r.Region = strings.TrimSpace(region)
+	if r.sdkConfig != nil {
+		config := cloneAWSConfig(*r.sdkConfig)
+		config.Region = r.Region
+		r.sdkConfig = &config
+	}
+
+	return r
+}
+
 // OptionsForAWSResolution maps a resolved AWS identity into a consumer's
 // option type. Custom source names add the consumer's fail-closed option so an
 // unset alias cannot silently fall back to an unrelated ambient identity.
