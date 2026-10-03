@@ -422,3 +422,60 @@ func TestMirrorArtifactIdentityGuardsDownload(t *testing.T) {
 		})
 	}
 }
+
+func runMirrorVolumeImport(t *testing.T, registry, stage string) (string, error) {
+	t.Helper()
+	action := readCompositeAction(t, ".github/actions/restore-mirror-cache/action.yaml")
+	step := findHarnessStep(t, action.Runs.Steps, "📦 Import mirror volumes")
+	directory := mirrorArchiveFixture(t)
+	bin := t.TempDir()
+	writeExecutableStub(t, filepath.Join(bin, "docker"), `#!/bin/bash
+set -euo pipefail
+if [[ "$1" == volume && "$2" == create && "$3" == "$FAIL_REGISTRY" && "$FAIL_STAGE" == create ]]; then
+  exit 99
+fi
+if [[ "$1" == run && "$FAIL_STAGE" == import ]]; then
+  for argument in "$@"; do
+    [[ "$argument" != "$FAIL_REGISTRY:/volume" ]] || exit 99
+  done
+fi
+exit 0
+`)
+	command := exec.CommandContext(t.Context(), "bash", "-e", "-o", "pipefail")
+	command.Stdin = strings.NewReader(
+		strings.ReplaceAll(step.Run, "/tmp/mirror-cache", `"$FIXTURE_MIRROR_DIR"`),
+	)
+
+	command.Env = append(os.Environ(), "FAIL_REGISTRY="+registry, "FAIL_STAGE="+stage,
+		"FIXTURE_MIRROR_DIR="+directory.Name(),
+		"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	output, err := command.CombinedOutput()
+
+	return string(output), err
+}
+
+func TestMirrorConsumerStopsOnFailedVolumeImport(t *testing.T) {
+	t.Parallel()
+
+	for _, registry := range []string{"docker.io", "ghcr.io", "quay.io", "registry.k8s.io", "ecr-public.aws.com"} {
+		for _, stage := range []string{"create", "import"} {
+			t.Run(registry+"/"+stage, func(t *testing.T) {
+				t.Parallel()
+				output, err := runMirrorVolumeImport(t, registry, stage)
+				require.Error(t, err,
+					"a failed mirror restore must stop before cluster creation: %s", output)
+				assert.NotContains(t, output, "✅ Restored "+registry+" mirror cache")
+			})
+		}
+	}
+}
+
+func TestMirrorConsumerImportsAllVolumes(t *testing.T) {
+	t.Parallel()
+	output, err := runMirrorVolumeImport(t, "", "")
+	require.NoError(t, err, output)
+
+	for _, registry := range []string{"docker.io", "ghcr.io", "quay.io", "registry.k8s.io", "ecr-public.aws.com"} {
+		assert.Contains(t, output, "✅ Restored "+registry+" mirror cache")
+	}
+}
