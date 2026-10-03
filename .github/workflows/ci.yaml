@@ -586,23 +586,44 @@ jobs:
     secrets:
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
 
-  # Gate: wait for the org-wide Required Workflow "✅ Validate Go Project" to
-  # finish before starting expensive system tests. On workflow_dispatch the
-  # required workflow does not run, so this job is skipped.
+  # Gate: wait for the invoked Go workflow, then retain the independent check
+  # verification before starting expensive system tests. Organization-required
+  # checks remain enforced separately. This gate does not run on workflow_dispatch.
   wait-for-validate-go:
     name: ⏳ Wait for Go Validation
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [changes]
+    needs: [changes, ci-go]
     if: >-
-      github.event_name == 'pull_request'
+      !cancelled()
+      && github.event_name == 'pull_request'
       && needs.changes.outputs.system-test == 'true'
       && github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       checks: read
     steps:
+      - name: Verify invoked Go validation result
+        env:
+          GO_VALIDATION_RESULT: ${{ needs.ci-go.result }}
+          GO_VALIDATION_SELECTED: ${{ needs.changes.outputs.govuln-allowlist }}
+        run: |
+          case "$GO_VALIDATION_RESULT:$GO_VALIDATION_SELECTED" in
+            success:true|success:false)
+              echo 'Invoked Go validation passed.'
+              ;;
+            skipped:false)
+              echo 'Go validation invocation was deliberately unselected.'
+              ;;
+            *)
+              echo "::error::Unverified Go validation result: $GO_VALIDATION_RESULT (selected=$GO_VALIDATION_SELECTED)"
+              exit 1
+              ;;
+          esac
+
       - name: Wait for ✅ Validate Go Project
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          GO_VALIDATION_SELECTED: ${{ needs.changes.outputs.govuln-allowlist }}
         with:
           script: |
             const sha = context.payload.pull_request.head.sha;
@@ -644,16 +665,16 @@ jobs:
               await new Promise(r => setTimeout(r, poll));
             }
 
-            // On timeout, succeed gracefully if no checks ever appeared
-            // (required workflow may not be configured for this repo).
+            // An absent invoked check set is accepted only when the change
+            // filter explicitly proves that the invocation was unselected.
             const { data: final } = await github.rest.checks.listForRef({
               owner, repo, ref: sha, per_page: 100,
             });
             const remaining = final.check_runs.filter(cr =>
               cr.name.startsWith(prefix)
             );
-            if (remaining.length === 0) {
-              core.warning('No Go validation checks found — required workflow may not apply to this repo');
+            if (remaining.length === 0 && process.env.GO_VALIDATION_SELECTED === 'false') {
+              core.info('No invoked Go validation checks were required for these changes');
               return;
             }
             core.setFailed('Timed out waiting for Go validation checks to complete');
