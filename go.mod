@@ -360,7 +360,7 @@ require (
 	github.com/chainguard-dev/git-urls v1.0.2 // indirect
 	github.com/charithe/durationcheck v0.0.11 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
-	github.com/charmbracelet/x/ansi v0.11.7 // indirect
+	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect
 	github.com/charmbracelet/x/exp/slice v0.0.0-20260122224438-b01af16209d9 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
@@ -538,7 +538,7 @@ require (
 	github.com/golangci/unconvert v0.0.0-20250410112200-a129a6e6413e // indirect
 	github.com/goodhosts/hostsfile v0.1.7 // indirect
 	github.com/google/btree v1.1.3 // indirect
-	github.com/google/cel-go v0.31.0 // indirect
+	github.com/google/cel-go v0.31.0
 	github.com/google/certificate-transparency-go v1.3.3 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
@@ -1058,6 +1058,9 @@ replace (
 	// Same source authentication and removal condition as ADR 0010, without
 	// replacing newer Glamour releases.
 	github.com/charmbracelet/glamour v1.0.0 => ./third_party/glamour
+
+	// Preserve the selected runtime version with validated protocol parsing.
+	github.com/charmbracelet/x/ansi v0.11.7 => ./third_party/ansi-runtime
 
 	// k3d v5.9.0-rc.0 uses docker/docker monolith types. docker/cli v29 migrated
 	// to the new moby/moby/api and moby/moby/client split modules whose types are

@@ -23,11 +23,29 @@ type analysisSource struct {
 	relocatedGithub     bool
 	patchedGoMod        bool
 	patchedGoSum        bool
+	sourcePatches       []string
 }
 
-// authenticatedAnalysisSources declares exact release bytes and metadata patches.
+// authenticatedAnalysisSources declares exact release bytes and bounded repairs.
 func authenticatedAnalysisSources() []analysisSource {
-	return append(authenticatedPrimaryAnalysisSources(), authenticatedTransitiveAnalysisSources()...)
+	sources := append(
+		authenticatedPrimaryAnalysisSources(),
+		authenticatedTransitiveAnalysisSources()...,
+	)
+
+	return append(sources, authenticatedRuntimeANSISource())
+}
+
+// authenticatedRuntimeANSISource keeps the shipped parser on its selected version.
+func authenticatedRuntimeANSISource() analysisSource {
+	return analysisSource{
+		module:           "github.com/charmbracelet/x/ansi",
+		version:          "v0.11.7",
+		directory:        "ansi-runtime",
+		checksum:         "h1:kzv1kJvjg2S3r9KHo8hDdHFQLEqn4RBCb39dAYC84jI=",
+		checkoutChecksum: "h1:iPNezCZy0sBOmu2IBDjEwzq44xcFUsrqoESVJDQdl9o=",
+		sourcePatches:    []string{"util.go", "kitty/options.go"},
+	}
 }
 
 // authenticatedPrimaryAnalysisSources binds the selected analyzer dependencies.
@@ -38,9 +56,10 @@ func authenticatedPrimaryAnalysisSources() []analysisSource {
 			version:          "v0.31.0",
 			directory:        "cel-go",
 			checksum:         "h1:H0bhpFTqOvmHrBGrWKp7ZlhBm5Hh8PYUEXnwxT1LL7A=",
-			checkoutChecksum: "h1:yIEGEbDuDDCD69FZPTdzlltOihVGY66yEyOvyQqnYac=",
+			checkoutChecksum: "h1:+VHNRo4gLsD4ooDPIzatZQ/3272EZ2X5FeSpbnu6NLM=",
 			relocatedVendor:  true,
 			relocatedGithub:  true,
+			sourcePatches:    []string{"common/types/unknown.go"},
 		},
 		{
 			module:              "github.com/charmbracelet/glamour",
@@ -90,7 +109,8 @@ func authenticatedTransitiveAnalysisSources() []analysisSource {
 			directory:        "ansi",
 			moduleDirectory:  "third_party/glamour",
 			checksum:         "h1:ith2ArZS0CJG30cIUfID1LXN7ZFXRCww6RUvAPA+Pzw=",
-			checkoutChecksum: "h1:ith2ArZS0CJG30cIUfID1LXN7ZFXRCww6RUvAPA+Pzw=",
+			checkoutChecksum: "h1:QQEiaO2CuAzsS4wIq7nyf0DvjvwmjWrodGjGtZOC4Fs=",
+			sourcePatches:    []string{"util.go", "kitty/options.go"},
 		},
 		{
 			module:           "github.com/redis/go-redis/extra/redisotel/v9",
@@ -132,14 +152,27 @@ func TestAnalysisStandaloneReplacementPreservesRootVersion(t *testing.T) {
 	t.Parallel()
 
 	for module, version := range map[string]string{
-		"github.com/charmbracelet/x/ansi": "v0.11.7",
-		"github.com/redis/go-redis/v9":    "v9.20.1",
+		"github.com/redis/go-redis/v9": "v9.20.1",
 	} {
 		t.Run(module, func(t *testing.T) {
 			t.Parallel()
 			verifyUnreplacedRootVersion(t, module, version)
 		})
 	}
+
+	verifyAnalysisSource(t, authenticatedRuntimeANSISource())
+}
+
+// TestAnalysisStandaloneANSIProtocol applies the owned regression suite to
+// Glamour's independently selected ANSI version as well as the root parser.
+func TestAnalysisStandaloneANSIProtocol(t *testing.T) {
+	t.Parallel()
+
+	regressions, err := filepath.Abs("ansi_protocol_test.go")
+	require.NoError(t, err)
+	authenticatedSourceGoOutput(t,
+		"-C", "third_party/ansi", "test", "-count=1", regressions,
+	)
 }
 
 func verifyUnreplacedRootVersion(t *testing.T, module, version string) {
@@ -178,7 +211,11 @@ func TestAnalysisRedisStandaloneUsesAuthenticatedCompanion(t *testing.T) {
 			"-C", directory, "list", "-m", "-json", "github.com/redis/go-redis/v9",
 		), &selected))
 		require.Equal(t, "v9.5.3", selected.Version)
-		require.Empty(t, selected.Replace, "standalone graphs must select the published Redis client")
+		require.Empty(
+			t,
+			selected.Replace,
+			"standalone graphs must select the published Redis client",
+		)
 	}
 }
 
@@ -211,11 +248,11 @@ func verifyAnalysisSource(t *testing.T, source analysisSource) {
 	require.Equal(t, expected, selected.Replace.Dir)
 	require.NoError(t, moduleintegrity.Verify(
 		selected.Replace.Dir, source.module+"@"+source.version, source.checkoutChecksum,
-	), "every selected byte must match the authenticated source with its metadata patch")
+	), "every selected byte must match the authenticated source with its declared repairs")
 	verifyPublishedAnalysisSource(t, source, selected.Replace.Dir)
 }
 
-// verifyPublishedAnalysisSource restores only declared checkout metadata and
+// verifyPublishedAnalysisSource restores only declared metadata and source repairs and
 // binds all remaining source bytes to the independently published checksum.
 func verifyPublishedAnalysisSource(t *testing.T, source analysisSource, directory string) {
 	t.Helper()
@@ -241,6 +278,7 @@ func verifyPublishedAnalysisSource(t *testing.T, source analysisSource, director
 	}
 
 	restorePublishedModuleMetadata(t, source, snapshot)
+	restorePublishedSourcePatches(t, source, snapshot)
 
 	if source.upstreamAttributes != "" {
 		require.NoError(t, os.WriteFile(
@@ -267,7 +305,20 @@ func verifyPublishedAnalysisSource(t *testing.T, source analysisSource, director
 
 	require.NoError(t, moduleintegrity.Verify(
 		snapshot, source.module+"@"+source.version, source.checksum,
-	), "restoring declared metadata must reproduce every authenticated upstream byte")
+	), "restoring declared repairs must reproduce every authenticated upstream byte")
+}
+
+func restorePublishedSourcePatches(t *testing.T, source analysisSource, snapshot string) {
+	t.Helper()
+
+	for _, relative := range source.sourcePatches {
+		require.True(t, filepath.IsLocal(relative))
+		require.NoError(t, os.Remove(filepath.Join(snapshot, relative)))
+		require.NoError(t, os.Rename(
+			filepath.Join(snapshot, "upstream-source", relative+".source"),
+			filepath.Join(snapshot, relative),
+		))
+	}
 }
 
 func restorePublishedModuleMetadata(t *testing.T, source analysisSource, snapshot string) {

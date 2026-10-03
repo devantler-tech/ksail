@@ -22,6 +22,7 @@ cat >"${scratch}/positive.json" <<'JSON'
 ["third_party/kyverno-jmespath/api.go","Search",1],
 ["third_party/jmespath/api.go","Search",1],
 ["third_party/ansi/width.go","Strip",1],
+["third_party/ansi-runtime/width.go","Strip",1],
 ["third_party/redisotel/tracing.go","InstrumentTracing",1],
 ["third_party/rediscmd/rediscmd.go","CmdString",1]
 ]}}
@@ -38,7 +39,7 @@ reject() {
 	fi
 }
 
-for index in {0..15}; do
+for index in {0..16}; do
 	jq --argjson i "${index}" '."#select".tuples[$i][2] = 0' "${scratch}/positive.json" >"${scratch}/zero.json"
 	reject zero
 	jq --argjson i "${index}" 'del(."#select".tuples[$i])' "${scratch}/positive.json" >"${scratch}/missing.json"
@@ -111,7 +112,7 @@ run_database
 run_database false diagnostics
 
 # A killed module must fail despite all sampled CLI/desktop bodies surviving.
-for project in . third_party/go-archive third_party/otelzap third_party/cel-go third_party/glamour third_party/go-macholibre third_party/kyverno-jmespath third_party/jmespath third_party/ansi third_party/redisotel third_party/rediscmd; do
+for project in . third_party/go-archive third_party/otelzap third_party/cel-go third_party/glamour third_party/go-macholibre third_party/kyverno-jmespath third_party/jmespath third_party/ansi third_party/ansi-runtime third_party/redisotel third_party/rediscmd; do
 	for severity in warning error note; do
 		jq -n --arg project "${project}" --arg severity "${severity}" '[{
     source: {id: "go/autobuilder/extraction-failed-for-project", name: "Extraction failed"},

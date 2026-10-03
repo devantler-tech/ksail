@@ -318,6 +318,9 @@ func (o *Options) UnmarshalText(text []byte) error {
 			case "i":
 				o.ID = v
 			case "q":
+				if v < 0 || v > 2 {
+					continue
+				}
 				o.Quite = byte(v)
 			case "p":
 				o.PlacementID = v

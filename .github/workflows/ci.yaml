@@ -207,6 +207,7 @@ jobs:
               - 'third_party/kyverno-jmespath/**'
               - 'third_party/jmespath/**'
               - 'third_party/ansi/**'
+              - 'third_party/ansi-runtime/**'
               - 'third_party/redisotel/**'
               - 'third_party/rediscmd/**'
               - '.gitattributes'

@@ -9,7 +9,7 @@ verify_results() {
 	jq -e '
     .["#select"].tuples as $rows |
     ($rows | type == "array") and
-    ($rows | length == 16) and
+    ($rows | length == 17) and
     ($rows | all(length == 3 and
       (.[2] | type == "number" and . > 0 and floor == .))) and
     ([$rows[] | .[0:2]] | sort) == ([
@@ -27,6 +27,7 @@ verify_results() {
       ["third_party/kyverno-jmespath/api.go", "Search"],
       ["third_party/jmespath/api.go", "Search"],
       ["third_party/ansi/width.go", "Strip"],
+      ["third_party/ansi-runtime/width.go", "Strip"],
       ["third_party/redisotel/tracing.go", "InstrumentTracing"],
       ["third_party/rediscmd/rediscmd.go", "CmdString"]
     ] | sort)

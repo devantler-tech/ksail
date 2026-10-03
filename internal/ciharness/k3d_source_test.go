@@ -86,7 +86,7 @@ func TestK3dUsesAuthenticatedImmutableSource(t *testing.T) {
 func authenticatedSourceGoOutput(t *testing.T, args ...string) []byte {
 	t.Helper()
 
-	//nolint:gosec // The callers use fixed Go module inspection subcommands.
+	//nolint:gosec // The callers use fixed module inspection and owned regression subcommands.
 	command := exec.CommandContext(t.Context(), "go", args...)
 	command.Dir = filepath.Join("..", "..")
 

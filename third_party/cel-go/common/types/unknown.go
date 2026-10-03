@@ -296,7 +296,7 @@ func MergeUnknowns(unk1, unk2 *Unknown) *Unknown {
 		return unk1
 	}
 	out := &Unknown{
-		attributeTrails: make(map[int64][]*AttributeTrail, len(unk1.attributeTrails)+len(unk2.attributeTrails)),
+		attributeTrails: make(map[int64][]*AttributeTrail, max(len(unk1.attributeTrails), len(unk2.attributeTrails))),
 	}
 	maps.Copy(out.attributeTrails, unk1.attributeTrails)
 	for id, ats := range unk2.attributeTrails {
