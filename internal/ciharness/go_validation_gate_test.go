@@ -3,6 +3,7 @@ package ciharness_test
 import (
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -68,6 +69,7 @@ func TestGoValidationGateRejectsUnverifiedResults(t *testing.T) {
 
 func TestGoValidationGateRetainsCheckVerification(t *testing.T) {
 	t.Parallel()
+	requireGoValidationExecutable(t, "node")
 
 	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
 	gate := workflow.Jobs["wait-for-validate-go"]
@@ -106,42 +108,43 @@ func TestGoValidationGateRetainsCheckVerification(t *testing.T) {
 		{"deliberately unselected checks absent", "", "", "false", false, true},
 	}
 	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			requireTestExecutable(t, "node")
+		for _, prefix := range []string{"a", "b"} {
+			t.Run(test.name+"/"+prefix, func(t *testing.T) {
+				t.Parallel()
 
-			present := "false"
-			if test.present {
-				present = "true"
-			}
-			//nolint:gosec // Executes repository-owned workflow source with fixed mocked check results.
-			command := exec.CommandContext(t.Context(), "node", "-e", goValidationCheckHarness,
-				script, test.checkStatus, test.conclusion, present)
-			command.Env = append(os.Environ(), "GO_VALIDATION_SELECTED="+test.selected)
+				present := "false"
+				if test.present {
+					present = "true"
+				}
+				//nolint:gosec // Executes repository-owned workflow source with fixed mocked check results.
+				command := exec.CommandContext(t.Context(), "node", "-e", goValidationCheckHarness,
+					script, test.checkStatus, test.conclusion, present, strings.Repeat(prefix, 40))
+				command.Env = append(os.Environ(), "GO_VALIDATION_SELECTED="+test.selected)
 
-			output, err := command.CombinedOutput()
-			if test.allowed {
-				require.NoError(t, err, string(output))
-			} else {
-				require.Error(t, err, string(output))
-				assert.Contains(t, string(output), "::error::")
-			}
-		})
+				output, err := command.CombinedOutput()
+				if test.allowed {
+					require.NoError(t, err, string(output))
+				} else {
+					require.Error(t, err, string(output))
+					assert.Contains(t, string(output), "::error::")
+				}
+			})
+		}
 	}
 }
 
 const goValidationCheckHarness = `
-const [script, status, conclusion, present] = process.argv.slice(1);
+const [script, status, conclusion, present, headSHA] = process.argv.slice(1);
 let now = 0;
 Date.now = () => now;
 global.setTimeout = (callback, milliseconds) => { now += milliseconds; callback(); };
 const check = {name: '✅ Validate Go Project / 🧪 Test', status, conclusion};
 const github = {rest: {checks: {listForRef: async ({ref}) => {
-  if (ref !== 'a'.repeat(40)) throw new Error('wrong head');
+  if (ref !== headSHA) throw new Error('wrong head');
   return {data: {check_runs: present === 'true' ? [check] : []}};
 }}}};
 const context = {repo: {owner: 'devantler-tech', repo: 'ksail'},
-  payload: {pull_request: {head: {sha: 'a'.repeat(40)}}}};
+  payload: {pull_request: {head: {sha: headSHA}}}};
 const core = {info() {}, warning() {}, setFailed(message) {
   console.error('::error::' + message); process.exitCode = 1;
 }};
@@ -152,7 +155,7 @@ new AsyncFunction('github', 'context', 'core', script)(github, context, core)
 
 func runGoValidationGate(t *testing.T, script, result, selected string) (string, error) {
 	t.Helper()
-	requireTestExecutable(t, "bash")
+	requireGoValidationExecutable(t, "bash")
 
 	//nolint:gosec // Executes repository-owned workflow source with fixed test inputs.
 	command := exec.CommandContext(t.Context(), "bash", "-e", "-o", "pipefail", "-c", script)
@@ -165,4 +168,12 @@ func runGoValidationGate(t *testing.T, script, result, selected string) (string,
 	output, err := command.CombinedOutput()
 
 	return string(output), err
+}
+
+// requireGoValidationExecutable prevents a missing runtime from silently skipping a gate contract.
+func requireGoValidationExecutable(t *testing.T, name string) {
+	t.Helper()
+
+	_, err := exec.LookPath(name)
+	require.NoError(t, err, "Go validation contract requires %s", name)
 }
