@@ -14,13 +14,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// harnessPathLiteral matches a quoted repository path under the three .github trees this
-// package reads: workflows, composite actions and scripts. Tests that execute a script do so
+// harnessPathLiteral matches a quoted repository path under the four .github trees this
+// package reads: workflows, composite actions, scripts and fixtures. Tests that execute a script do so
 // from this package's directory, so a literal may carry leading ../ segments; the capture group
 // drops them so every match is repository-relative. Glob characters are excluded so a pattern
 // written in a test (like the filter entries below) is never mistaken for a read path.
 var harnessPathLiteral = regexp.MustCompile(
-	`"(?:\.\./)*(\.github/(?:workflows|actions|scripts)/[^"*?\[\]{}]+)"`,
+	`"(?:\.\./)*(\.github/(?:workflows|actions|scripts|fixtures)/[^"*?\[\]{}]+)"`,
 )
 
 // TestWorkflowContractFilterCoversEveryFileTheHarnessReads keeps the CI gate for this package
@@ -78,6 +78,21 @@ func TestWorkflowContractFilterCoversEveryFileTheHarnessReads(t *testing.T) {
 	)
 }
 
+func TestWorkflowContractFilterSelectsCleanupFixtureChanges(t *testing.T) {
+	t.Parallel()
+
+	const fixturePath = ".github/fixtures/workflow-run-cleanup/fake-bin/gh"
+
+	patterns := workflowContractFilterPatterns(t)
+	assert.True(t, contractFilterMatches(t, patterns, fixturePath),
+		"a cleanup-fixture-only change must select the required workflow contract job")
+	withoutFixtures := slices.DeleteFunc(slices.Clone(patterns), func(pattern string) bool {
+		return pattern == ".github/fixtures/workflow-run-cleanup/**"
+	})
+	assert.False(t, contractFilterMatches(t, withoutFixtures, fixturePath),
+		"negative control: removing fixture coverage must stop selecting a fixture-only change")
+}
+
 // Known paths used to guard discovery, built by concatenation on purpose. These test sources are
 // themselves scanned for path literals, and other files in this package quote the EKS workflow in
 // full, so a check against the merged list could be satisfied by the scanner alone.
@@ -85,6 +100,7 @@ const (
 	knownWorkflowPath = ".github/workflows/" + "system-test-eks.yaml"
 	knownScriptPath   = ".github/scripts/" + "delete-old-workflow-runs.test.sh"
 	knownSourcePath   = "internal/ciharness/" + "ci_contract_filter_test.go"
+	knownFixturePath  = ".github/fixtures/workflow-run-cleanup/" + "fake-bin/gh"
 )
 
 // harnessDependencyPaths lists every file this package depends on, sorted and de-duplicated. Each
@@ -95,6 +111,7 @@ func harnessDependencyPaths(t *testing.T) []string {
 	globbed := globbedWorkflowPaths(t)
 	scanned := scannedLiteralPaths(t)
 	sources := harnessSourcePaths(t)
+	fixtures := cleanupFixturePaths(t)
 
 	require.Contains(
 		t,
@@ -114,11 +131,40 @@ func harnessDependencyPaths(t *testing.T) []string {
 		knownSourcePath,
 		"source discovery must find this package's own test files",
 	)
+	require.Contains(t, fixtures, knownFixturePath,
+		"fixture discovery must find the CLI executed by the cleanup contract")
 
-	paths := slices.Concat(globbed, scanned, sources)
+	paths := slices.Concat(globbed, scanned, sources, fixtures)
 	slices.Sort(paths)
 
 	return slices.Compact(paths)
+}
+
+// The cleanup Bash contract reads these files indirectly; scanning Go literals
+// cannot discover every nested fixture on that execution path.
+func cleanupFixturePaths(t *testing.T) []string {
+	t.Helper()
+
+	const fixtureRoot = ".github/fixtures/workflow-run-cleanup"
+
+	repo := os.DirFS(filepath.Join("..", ".."))
+
+	var paths []string
+
+	err := fs.WalkDir(repo, fixtureRoot, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+
+		if !entry.IsDir() {
+			paths = append(paths, path)
+		}
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	return paths
 }
 
 // harnessSourcePaths lists this package's own test sources as repository-relative paths.
@@ -206,8 +252,8 @@ func scannedLiteralPaths(t *testing.T) []string {
 		require.NoError(t, readErr)
 
 		for _, match := range harnessPathLiteral.FindAllStringSubmatch(string(contents), -1) {
-			_, statErr := fs.Stat(repo, match[1])
-			if statErr == nil {
+			entry, statErr := fs.Stat(repo, match[1])
+			if statErr == nil && !entry.IsDir() {
 				paths = append(paths, match[1])
 			}
 		}

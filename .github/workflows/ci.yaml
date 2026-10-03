@@ -137,6 +137,7 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
       dependency-test-graph: ${{ steps.filter.outputs.dependency-test-graph }}
       govuln-allowlist: ${{ steps.filter.outputs.govuln-allowlist }}
+      release-graph-audit: ${{ steps.filter.outputs.release-graph-audit }}
       todos-contract: ${{ steps.filter.outputs.todos-contract }}
       release-config: ${{ steps.filter.outputs.release-config }}
       system-test: ${{ steps.filter.outputs.system-test }}
@@ -198,6 +199,7 @@ jobs:
               - '.github/workflows/**'
               - '.github/actions/**'
               - '.github/scripts/**'
+              - '.github/fixtures/workflow-run-cleanup/**'
               - 'internal/ciharness/**'
             # The release build configuration is the subject of Go tests too: the OTel
             # reachability guard in pkg/client/kubescape pins a digest of every file below, and
@@ -226,6 +228,21 @@ jobs:
               - '.github/workflows/ci.yaml'
             govuln-allowlist:
               - '.govulncheck-allow.txt'
+            # Release inputs are outside Go's cache and the shared Go source filter.
+            release-graph-audit:
+              - '.goreleaser.yaml'
+              - '.goreleaser.desktop.yaml'
+              - '.github/workflows/cd.yaml'
+              - '.github/actions/setup-desktop-build/**'
+              - '.github/actions/free-disk-space/**'
+              - 'scripts/stage-webui.sh'
+              - 'pkg/client/kubescape/**'
+              - 'desktop/**'
+              - 'internal/ciharness/**'
+              - 'go.mod'
+              - 'go.sum'
+              - '.govulncheck-allow.txt'
+              - '.github/workflows/ci.yaml'
             system-test:
               # NOTE: Do not use negative patterns (!) here.
               # dorny/paths-filter v4 uses picomatch where negated patterns
@@ -576,6 +593,9 @@ jobs:
     with:
       scan-default-branch: true
       test-default-branch: true
+      # The org-required direct run is the sole signed-fix writer for a PR.
+      # Keep this additional invocation read-only while retaining its checks.
+      apply-signed-fixes: false
     permissions:
       contents: write
       issues: write
@@ -584,23 +604,44 @@ jobs:
     secrets:
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
 
-  # Gate: wait for the org-wide Required Workflow "✅ Validate Go Project" to
-  # finish before starting expensive system tests. On workflow_dispatch the
-  # required workflow does not run, so this job is skipped.
+  # Gate: wait for the invoked Go workflow, then retain the independent check
+  # verification before starting expensive system tests. Organization-required
+  # checks remain enforced separately. This gate does not run on workflow_dispatch.
   wait-for-validate-go:
     name: ⏳ Wait for Go Validation
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [changes]
+    needs: [changes, ci-go]
     if: >-
-      github.event_name == 'pull_request'
+      !cancelled()
+      && github.event_name == 'pull_request'
       && needs.changes.outputs.system-test == 'true'
       && github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       checks: read
     steps:
+      - name: Verify invoked Go validation result
+        env:
+          GO_VALIDATION_RESULT: ${{ needs.ci-go.result }}
+          GO_VALIDATION_SELECTED: ${{ needs.changes.outputs.govuln-allowlist }}
+        run: |
+          case "$GO_VALIDATION_RESULT:$GO_VALIDATION_SELECTED" in
+            success:true|success:false)
+              echo 'Invoked Go validation passed.'
+              ;;
+            skipped:false)
+              echo 'Go validation invocation was deliberately unselected.'
+              ;;
+            *)
+              echo "::error::Unverified Go validation result: $GO_VALIDATION_RESULT (selected=$GO_VALIDATION_SELECTED)"
+              exit 1
+              ;;
+          esac
+
       - name: Wait for ✅ Validate Go Project
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          GO_VALIDATION_SELECTED: ${{ needs.changes.outputs.govuln-allowlist }}
         with:
           script: |
             const sha = context.payload.pull_request.head.sha;
@@ -642,16 +683,16 @@ jobs:
               await new Promise(r => setTimeout(r, poll));
             }
 
-            // On timeout, succeed gracefully if no checks ever appeared
-            // (required workflow may not be configured for this repo).
+            // An absent invoked check set is accepted only when the change
+            // filter explicitly proves that the invocation was unselected.
             const { data: final } = await github.rest.checks.listForRef({
               owner, repo, ref: sha, per_page: 100,
             });
             const remaining = final.check_runs.filter(cr =>
               cr.name.startsWith(prefix)
             );
-            if (remaining.length === 0) {
-              core.warning('No Go validation checks found — required workflow may not apply to this repo');
+            if (remaining.length === 0 && process.env.GO_VALIDATION_SELECTED === 'false') {
+              core.info('No invoked Go validation checks were required for these changes');
               return;
             }
             core.setFailed('Timed out waiting for Go validation checks to complete');
@@ -682,6 +723,11 @@ jobs:
 
       - name: 🔐 Verify reviewed upstream bytes
         run: .github/scripts/verify-go-archive-parity.sh
+
+      - name: 🔐 Verify OTel logging adapter provenance
+        run: |
+          .github/scripts/verify-otelzap-parity.sh
+          .github/scripts/verify-otelzap-parity.test.sh
 
   build-artifact:
     name: 🏗️ Build KSail Binary
@@ -1847,6 +1893,13 @@ jobs:
       # -count=1 is load-bearing: this test's real subject is a YAML file the Go build graph
       # cannot see, so a cached PASS from an earlier run would be replayed over a changed
       # workflow and report success without executing anything.
+      - name: 🧹 Check workflow cleanup scripts
+        run: |
+          shellcheck \
+            .github/scripts/delete-old-workflow-runs.sh \
+            .github/scripts/delete-old-workflow-runs.test.sh \
+            .github/fixtures/workflow-run-cleanup/fake-bin/gh
+
       - name: 🧾 Verify workflow contracts
         run: |
           if ! go test ./internal/ciharness/... -count=1; then
@@ -1885,6 +1938,35 @@ jobs:
       # so a cached PASS from an earlier run would be replayed over the changed configuration.
       - name: 🧪 Test
         run: go test ./... -count=1
+  release-graph-audit:
+    name: 🔐 Audit Shipped Dependency Graphs
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [changes]
+    if: needs.changes.outputs.release-graph-audit == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: 🧹 Free disk space
+        env:
+          DOCKER_PRUNE: "false"
+        run: bash .github/actions/free-disk-space/free-disk-space.sh
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: 🔐 Audit Shipped Dependency Graphs
+        # Release files are outside Go's test-cache inputs; always execute the audit.
+        run: go test ./pkg/client/kubescape/... -count=1
 
   require-checks-in-pr:
     name: CI - Required Checks
@@ -1915,6 +1997,7 @@ jobs:
         verify-dependency-test-graph,
         verify-todos-workflow-contract,
         test-release-config,
+        release-graph-audit,
         cask-pr-handoff,
         k3k-sentinel-scripts,
         rate-limit-gate-script,
@@ -1949,6 +2032,7 @@ jobs:
             ${{ needs.verify-dependency-test-graph.result }}
             ${{ needs.verify-todos-workflow-contract.result }}
             ${{ needs.test-release-config.result }}
+            ${{ needs.release-graph-audit.result }}
             ${{ needs.cask-pr-handoff.result }}
             ${{ needs.k3k-sentinel-scripts.result }}
             ${{ needs.rate-limit-gate-script.result }}

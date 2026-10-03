@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -715,19 +716,21 @@ func TestDebounceState_CancelIsSafe(t *testing.T) {
 func TestDebounceState_CancelAfterSchedule(t *testing.T) {
 	t.Parallel()
 
-	state := workload.ExportNewDebounceState()
-	applyCh := make(chan string, 1)
+	synctest.Test(t, func(t *testing.T) {
+		state := workload.ExportNewDebounceState()
+		applyCh := make(chan string, 1)
 
-	workload.ExportScheduleApply(state, "file.yaml", applyCh)
-	workload.ExportCancelPendingDebounce(state)
+		workload.ExportScheduleApply(state, "file.yaml", applyCh)
+		workload.ExportCancelPendingDebounce(state)
+		time.Sleep(workload.ExportDebounceInterval * 2)
+		synctest.Wait()
 
-	// After canceling, the debounce should not fire
-	select {
-	case <-applyCh:
-		t.Fatal("should not have received message after cancel")
-	case <-time.After(workload.ExportDebounceInterval + 200*time.Millisecond):
-		// expected
-	}
+		select {
+		case file := <-applyCh:
+			t.Fatalf("canceled debounce enqueued %q", file)
+		default:
+		}
+	})
 }
 
 // ===========================================================================
