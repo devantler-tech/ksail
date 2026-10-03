@@ -10,12 +10,12 @@ log_dir="${SYSTEM_TEST_LOG_DIR:-/tmp/ksail-system-test-logs}/cert-manager-values
 mkdir -p "$log_dir"
 command -v helm >/dev/null || fail 'Helm CLI is required to seed the live release'
 helm version --short >"$log_dir/helm-version.txt"
-cp ksail.yaml "$log_dir/ksail-before.yaml"
+config_file="$PWD/ksail.yaml"
+cp "$config_file" "$log_dir/ksail-before.yaml"
 
 # Keep the create-time Kubernetes pin; changing upstream tags must not turn this
-# values-only trial into a distribution upgrade. Init-only flags are not accepted.
-update_args_text=$(printf '%s' "$ARGS" | sed 's/--image-verification [^ ]*//g')
-read -r -a update_args <<<"$update_args_text"
+# values-only trial into a distribution upgrade. The saved config contains the
+# cluster identity and desired components; diff does not accept creation flags.
 read -r -a version_args <<<"$K8S_VERSION_FLAG"
 [[ ${#version_args[@]} == 2 && ${version_args[0]} == --kubernetes-version &&
 	${version_args[1]} =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]] || fail 'missing create-time Kubernetes version pin'
@@ -54,13 +54,13 @@ assert_ownership() {
 
 assert_diff() {
 	local phase="$1" expected="$2" status=0
-	ksail cluster diff --output json --exit-code --distribution "$DISTRIBUTION" \
-		--provider "$PROVIDER" "${update_args[@]}" >"$log_dir/$phase.stdout" 2>"$log_dir/$phase.stderr" || status=$?
+	ksail cluster diff --config "$config_file" --output json --exit-code \
+		>"$log_dir/$phase.stdout" 2>"$log_dir/$phase.stderr" || status=$?
 	if [[ "$expected" == 1 ]]; then
 		[[ "$status" == 2 ]] || fail 'values drift did not exit exactly 2'
 		assert_values_change "$log_dir/$phase.stdout"
 	else
-		[[ "$status" == 0 ]] || fail 'repeated diff did not exit exactly 0'
+		[[ "$status" == 0 ]] || fail "$phase diff did not exit exactly 0"
 		assert_no_changes "$log_dir/$phase.stdout"
 	fi
 }
@@ -84,8 +84,7 @@ assert_no_changes() {
 
 update_cluster() {
 	local phase="$1"
-	ksail cluster update --force --output json --distribution "$DISTRIBUTION" \
-		--provider "$PROVIDER" "${update_args[@]}" "${version_args[@]}" \
+	ksail cluster update --config "$config_file" --yes --output json "${version_args[@]}" \
 		>"$log_dir/$phase.stdout" 2>"$log_dir/$phase.stderr" || fail 'cluster update failed'
 }
 

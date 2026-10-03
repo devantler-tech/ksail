@@ -71,6 +71,20 @@ esac
 const certManagerKSailStub = `#!/usr/bin/env bash
 set -euo pipefail
 printf 'ksail %s\n' "$*" >> "$FIXTURE_CALLS"
+validate_config() {
+  local config_count=0
+  while (( $# > 0 )); do
+    if [[ "$1" == --config ]]; then
+      [[ $# -ge 2 && "$2" == "$PWD/ksail.yaml" && -f "$2" ]] || exit 64
+      config_count=$((config_count + 1))
+      shift 2
+    else
+      shift
+    fi
+  done
+  [[ "$config_count" == 1 ]] || exit 64
+}
+validate_config "$@"
 revision=$(cat "$FIXTURE_REVISION")
 empty='"rebootRequired":[],"recreateRequired":[],"rollingRecreate":[],"wipeRequired":[],"unknownBaseline":[]'
 drift='{"totalChanges":1,"inPlaceChanges":[{"field":"cluster.certManager.chartValues","category":"in-place"}],'
@@ -79,6 +93,15 @@ noop='{"totalChanges":0,"inPlaceChanges":[],'
 noop+="$empty}"
 case "$2" in
   diff)
+    # Diff reads the saved desired configuration; it has no creation flags.
+    shift 2
+    while (( $# > 0 )); do
+      case "$1" in
+        --config|--output|--name|--context|--kubeconfig) shift 2 ;;
+        --exit-code|--include-version-drift) shift ;;
+        *) echo "unknown flag: $1" >&2; exit 64 ;;
+      esac
+    done
     if [[ "$FIXTURE_MODE" == missing_drift || "$revision" != 2 ]]; then
       printf '%s\n' "$noop"
     else
@@ -91,6 +114,9 @@ case "$2" in
     fi
     ;;
   update)
+    [[ " $* " == *' --yes '* && " $* " != *' --force '* && " $* " != *' --force-drain '* ]] || {
+      echo 'trial must skip prompts without authorizing destructive drains' >&2; exit 64;
+    }
     if [[ "$revision" == 2 ]]; then
       case "$FIXTURE_MODE" in
         no_upgrade) ;;
