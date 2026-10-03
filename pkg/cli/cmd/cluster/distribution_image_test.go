@@ -165,7 +165,10 @@ func TestDistributionImageDriftUnavailable(t *testing.T) {
 
 type currentImageResolver struct{}
 
-func (currentImageResolver) ListVersions(context.Context, string) ([]versionresolver.Version, error) {
+func (currentImageResolver) ListVersions(
+	context.Context,
+	string,
+) ([]versionresolver.Version, error) {
 	return versionresolver.ParseTags([]string{"v1.13.10"}), nil
 }
 
@@ -179,7 +182,9 @@ func TestCurrentVersionFallbackIsDistributionOnly(t *testing.T) {
 			cmd := &cobra.Command{}
 			cmd.SetContext(t.Context())
 			cmd.SetErr(io.Discard)
+
 			planner := &imageUpgraderFake{changed: true}
+
 			target, reason, targetResolved := cluster.ExportResolveDimensionTarget(
 				cmd, currentImageResolver{}, label, "v1.13.10", planner,
 			)
@@ -188,10 +193,15 @@ func TestCurrentVersionFallbackIsDistributionOnly(t *testing.T) {
 				assert.Equal(t, "v1.13.10", target)
 				assert.Equal(t, "current stable version", reason)
 			} else {
-				assert.False(t, targetResolved, "an image planner must not invent a Kubernetes target")
+				assert.False(
+					t,
+					targetResolved,
+					"an image planner must not invent a Kubernetes target",
+				)
 				assert.Empty(t, target)
 				assert.Empty(t, reason)
 			}
+
 			assert.Zero(t, planner.reads, "target discovery must remain read-only")
 		})
 	}
