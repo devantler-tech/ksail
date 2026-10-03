@@ -1,7 +1,6 @@
 package ciharness_test
 
 import (
-	"regexp"
 	"strings"
 	"testing"
 
@@ -18,28 +17,26 @@ type todosWorkflow struct {
 		Uses    string            `yaml:"uses"`
 		RunsOn  string            `yaml:"runs-on"`
 		Steps   []map[string]any  `yaml:"steps"`
-		With    map[string]string `yaml:"with"`
+		With    map[string]any    `yaml:"with"`
 		Secrets map[string]string `yaml:"secrets"`
 	} `yaml:"jobs"`
 }
 
-// Pins the shared scanner's delegation and the blast radius of its ignore pattern.
+// Pins the shared scanner's delegation and the reviewed vendor-filter option.
 //
 // This comment deliberately does not open with the function's own name, the way a doc comment
 // normally would: that name embeds the uppercase marker, and the scanner keys on the marker
 // wherever it appears in a comment. See TestCIFilterCommentDoesNotSpellTheScannerMarker below,
 // which pins the same trap after it fired once for real.
 //
-// KSail calls the shared scanner in devantler-tech/actions instead of carrying its own copy, so the
+// KSail calls the shared scanner in devantler-tech/.github instead of carrying its own copy, so the
 // job must stay a bare reusable-workflow call: a runs-on or steps key here would mean the
 // implementation had been forked and could drift from the reviewed one. The pin is required to be an
 // immutable 40-character commit that keeps its release annotation, so the workflow KSail runs is
 // always the workflow that was reviewed.
 //
-// The ignore pattern is asserted exactly rather than loosely, because widening it fails silently: a
-// pattern that also swallowed first-party paths would leave real to-do comments unscanned with no
-// check going red anywhere. third_party/ is vendored source KSail does not own; internal/ is its own
-// code and must stay covered.
+// The native consumer proof exercises the pinned scanner with the inputs read from this caller.
+// It excludes root vendor directories while retaining owned, nested and nearby paths.
 func TestTODOScannerExcludesOnlyVendoredSources(t *testing.T) {
 	t.Parallel()
 
@@ -50,26 +47,24 @@ func TestTODOScannerExcludesOnlyVendoredSources(t *testing.T) {
 
 	job, found := workflow.Jobs["todos"]
 	require.True(t, found, "TODO workflow must define the todos job")
-	require.Regexp(
-		t,
-		`^devantler-tech/actions/\.github/workflows/scan-for-todo-comments\.yaml@[0-9a-f]{40}$`,
-		job.Uses,
-		"shared scanner must use the reviewed workflow pinned to an immutable commit",
+	require.Equal(t,
+		"devantler-tech/.github/.github/workflows/scan-for-todo-comments.yaml@"+
+			"30882cccda9e41c622f6493e21e7eb6f3339b91f", job.Uses,
+		"shared scanner must use the reviewed canonical release",
 	)
 	assert.Empty(t, job.RunsOn, "reusable workflow callers cannot configure runs-on")
 	assert.Empty(t, job.Steps, "KSail must not copy the shared scanner implementation")
 	assert.Equal(t, "${{ secrets.APP_PRIVATE_KEY }}", job.Secrets["APP_PRIVATE_KEY"])
 
-	ignorePattern := job.With["ignore"]
-	assert.Equal(t, `^third_party/`, ignorePattern)
-
-	compiled, err := regexp.Compile(ignorePattern)
-	require.NoError(t, err)
-	assert.True(t, compiled.MatchString("third_party/go-archive/archive/tar/reader.go"))
-	assert.False(t, compiled.MatchString("internal/maintenance/todos.go"))
+	assert.Equal(
+		t,
+		map[string]any{"exclude-vendored": true},
+		job.With,
+		"the consumer must use the shared filter without changing project or authentication defaults",
+	)
 	assert.Regexp(
 		t,
-		`(?m)^\s*uses:\s+devantler-tech/actions/\.github/workflows/`+
+		`(?m)^\s*uses:\s+devantler-tech/\.github/\.github/workflows/`+
 			`scan-for-todo-comments\.yaml@[0-9a-f]{40}\s+# v\d+\.\d+\.\d+\s*$`,
 		string(contents),
 		"workflow pin must retain its release annotation",
