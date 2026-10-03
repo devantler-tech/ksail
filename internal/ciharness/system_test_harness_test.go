@@ -81,12 +81,14 @@ type compositeAction struct {
 type ciWorkflow struct {
 	Env  map[string]string `yaml:"env"`
 	Jobs map[string]struct {
-		TimeoutMinutes int               `yaml:"timeout-minutes"`
-		Permissions    map[string]string `yaml:"permissions"`
-		Steps          []harnessStep     `yaml:"steps"`
-		If             string            `yaml:"if"`
-		Needs          []string          `yaml:"needs"`
-		Uses           string            `yaml:"uses"`
+		TimeoutMinutes  int               `yaml:"timeout-minutes"`
+		Permissions     map[string]string `yaml:"permissions"`
+		Outputs         map[string]string `yaml:"outputs"`
+		Steps           []harnessStep     `yaml:"steps"`
+		ContinueOnError bool              `yaml:"continue-on-error"`
+		If              string            `yaml:"if"`
+		Needs           []string          `yaml:"needs"`
+		Uses            string            `yaml:"uses"`
 	} `yaml:"jobs"`
 }
 

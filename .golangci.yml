@@ -106,6 +106,8 @@ linters:
     gomoddirectives:
       replace-local: true
       replace-allow-list:
+        # Select the authenticated original source of the moved v5.9.0 tag (#6781).
+        - github.com/k3d-io/k3d/v5
         - github.com/docker/docker
         - github.com/docker/cli
         - github.com/opencontainers/runtime-spec
@@ -178,6 +180,12 @@ linters:
             - github.com/spf13/pflag
             - github.com/spf13/viper
             - github.com/stretchr/testify
+            # Exercise Kubescape's existing adapter through the fixed logging modules.
+            - github.com/uptrace/opentelemetry-go-extra/otelzap
+            - go.opentelemetry.io/otel
+            - go.opentelemetry.io/proto/otlp/collector/logs/v1
+            - go.opentelemetry.io/proto/otlp/common/v1
+            - go.uber.org/zap
             - github.com/siderolabs
             # bbolt reads the etcd snapshot database to verify its integrity and membership before a
             # guarded single-node replacement (#7168). Already linked transitively via etcd.
