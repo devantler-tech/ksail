@@ -592,6 +592,9 @@ jobs:
     with:
       scan-default-branch: true
       test-default-branch: true
+      # The org-required direct run is the sole signed-fix writer for a PR.
+      # Keep this additional invocation read-only while retaining its checks.
+      apply-signed-fixes: false
     permissions:
       contents: write
       issues: write
