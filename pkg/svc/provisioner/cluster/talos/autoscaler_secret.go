@@ -125,7 +125,7 @@ func (p *Provisioner) propagateAutoscalerBaseline(
 ) error {
 	switch {
 	case autoscalerRecycleRequired(diff, imageChanged):
-		return p.recycleAutoscalerNodes(ctx, clusterName)
+		return p.recycleAutoscalerNodes(ctx, clusterName, result)
 	case autoscalerRebootRequired(diff):
 		return p.rollingRebootAutoscalerNodes(ctx, clusterName, result)
 	default:

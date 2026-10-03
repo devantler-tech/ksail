@@ -694,8 +694,18 @@ func SortServersByNameForTest(servers []*hcloud.Server) []*hcloud.Server {
 func (p *Provisioner) RecycleAutoscalerNodesForTest(
 	ctx context.Context,
 	clusterName string,
+	result *clusterupdate.UpdateResult,
 ) error {
-	return p.recycleAutoscalerNodes(ctx, clusterName)
+	return p.recycleAutoscalerNodes(ctx, clusterName, result)
+}
+
+// ListAutoscalerServersForTest exposes listAutoscalerServers for unit testing.
+func (p *Provisioner) ListAutoscalerServersForTest(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) ([]*hcloud.Server, error) {
+	return p.listAutoscalerServers(ctx, clusterName, result)
 }
 
 // WaitForAutoscalerRolloutForTest exposes waitForAutoscalerRollout for unit testing.
