@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/internal/testutil/homeenv"
@@ -2101,18 +2102,36 @@ func TestScheduleApply(t *testing.T) {
 	t.Run("enqueues_file_after_debounce_interval", func(t *testing.T) {
 		t.Parallel()
 
-		state := workload.ExportNewDebounceState()
-		applyCh := make(chan string, 1)
-
-		workload.ExportScheduleApply(state, "apply.yaml", applyCh)
-
-		select {
-		case got := <-applyCh:
-			require.Equal(t, "apply.yaml", got)
-		case <-time.After(workload.ExportDebounceInterval + 500*time.Millisecond):
-			t.Fatal("expected apply.yaml in channel within debounce interval")
-		}
+		synctest.Test(t, assertApplyAtDebounceDeadline)
 	})
+}
+
+func assertApplyAtDebounceDeadline(t *testing.T) {
+	t.Helper()
+
+	state := workload.ExportNewDebounceState()
+	applyCh := make(chan string, 1)
+
+	workload.ExportScheduleApply(state, "apply.yaml", applyCh)
+
+	time.Sleep(workload.ExportDebounceInterval - time.Nanosecond)
+	synctest.Wait()
+
+	select {
+	case got := <-applyCh:
+		t.Fatalf("file %q was enqueued before the debounce deadline", got)
+	default:
+	}
+
+	time.Sleep(time.Nanosecond)
+	synctest.Wait()
+
+	select {
+	case got := <-applyCh:
+		require.Equal(t, "apply.yaml", got)
+	default:
+		t.Fatal("expected apply.yaml at the debounce deadline")
+	}
 }
 
 func TestEnqueueIfCurrent(t *testing.T) {
