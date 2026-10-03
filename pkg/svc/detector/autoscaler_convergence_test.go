@@ -86,6 +86,8 @@ func TestAutoscalerScaleDownUnneededTimeConverges(t *testing.T) {
 	}
 }
 
+// nodeAutoscalerWithScaleDown returns an enabled node autoscaler configuration with one pool and
+// the given scale-down duration; an empty duration means the setting is omitted.
 func nodeAutoscalerWithScaleDown(scaleDownUnneededTime string) v1alpha1.NodeAutoscalerConfig {
 	return v1alpha1.NodeAutoscalerConfig{
 		Enabled: v1alpha1.NodeAutoscalerEnabledEnabled,
