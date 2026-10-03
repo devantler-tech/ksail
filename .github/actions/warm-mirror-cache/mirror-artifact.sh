@@ -25,9 +25,16 @@ if [[ "$mode" == check ]]; then
 	exit 0
 fi
 
+checksum=(sha256sum)
+if ! command -v sha256sum >/dev/null 2>&1; then
+	checksum=(shasum -a 256)
+fi
+
 if [[ "$mode" == prepare ]]; then
+	# Replace restored metadata links before creating producer-owned regular files.
+	rm -f -- "$directory/cache-key" "$directory/SHA256SUMS"
 	printf '%s\n' "$key" >"$directory/cache-key"
-	(cd "$directory" && sha256sum -- "${archives[@]}" cache-key) >"$directory/SHA256SUMS"
+	(cd "$directory" && "${checksum[@]}" -- "${archives[@]}" cache-key) >"$directory/SHA256SUMS"
 else
 	for metadata in cache-key SHA256SUMS; do
 		if [[ ! -f "$directory/$metadata" || -L "$directory/$metadata" || ! -s "$directory/$metadata" ]]; then
@@ -39,7 +46,7 @@ else
 		echo "Mirror artifact does not match the validated producer key" >&2
 		exit 1
 	fi
-	actual=$(cd "$directory" && sha256sum -- "${archives[@]}" cache-key)
+	actual=$(cd "$directory" && "${checksum[@]}" -- "${archives[@]}" cache-key)
 	if [[ "$(cat "$directory/SHA256SUMS")" != "$actual" ]]; then
 		echo "Mirror artifact checksum mismatch" >&2
 		exit 1

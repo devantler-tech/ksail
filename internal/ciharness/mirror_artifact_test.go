@@ -283,20 +283,15 @@ func TestMirrorProducerSealsCompleteArtifact(t *testing.T) {
 	key, err := directory.ReadFile("cache-key")
 	require.NoError(t, err, "validated artifact must carry its exact producer key")
 	assert.Equal(t, "mirror-fixture\n", string(key))
-	command := exec.CommandContext(t.Context(), "sha256sum", "--check", "SHA256SUMS")
-	command.Dir = directory.Name()
-	verification, err := command.CombinedOutput()
-	require.NoError(t, err, string(verification))
 
-	for _, name := range mirrorArchiveNames() {
-		assert.Contains(t, string(verification), name+": OK")
-	}
+	manifest, err := directory.ReadFile("SHA256SUMS")
+	require.NoError(t, err)
+	assert.Equal(t, expectedMirrorManifest(t, directory), string(manifest))
 }
 
-func sealedMirrorFixture(t *testing.T) *os.Root {
+// expectedMirrorManifest computes the archive identity independently of shell tools.
+func expectedMirrorManifest(t *testing.T, directory *os.Root) string {
 	t.Helper()
-	directory := mirrorArchiveFixture(t)
-	require.NoError(t, directory.WriteFile("cache-key", []byte("mirror-fixture\n"), 0o600))
 
 	var manifest strings.Builder
 
@@ -306,9 +301,94 @@ func sealedMirrorFixture(t *testing.T) *os.Root {
 		fmt.Fprintf(&manifest, "%x  %s\n", sha256.Sum256(contents), name)
 	}
 
-	require.NoError(t, directory.WriteFile("SHA256SUMS", []byte(manifest.String()), 0o600))
+	return manifest.String()
+}
+
+func sealedMirrorFixture(t *testing.T) *os.Root {
+	t.Helper()
+	directory := mirrorArchiveFixture(t)
+	require.NoError(t, directory.WriteFile("cache-key", []byte("mirror-fixture\n"), 0o600))
+	require.NoError(t, directory.WriteFile(
+		"SHA256SUMS", []byte(expectedMirrorManifest(t, directory)), 0o600,
+	))
 
 	return directory
+}
+
+// runMirrorArtifact executes the tracked sealing script with an optional restricted PATH.
+func runMirrorArtifact(t *testing.T, directory *os.Root, mode, path string) (string, error) {
+	t.Helper()
+
+	const parameters = `set -- "$FIXTURE_MIRROR_MODE" "$FIXTURE_MIRROR_DIR" mirror-fixture` + "\n"
+
+	script := readRepoFile(t, ".github/actions/warm-mirror-cache/mirror-artifact.sh")
+	command := exec.CommandContext(t.Context(), "bash", "-e", "-o", "pipefail")
+	command.Stdin = strings.NewReader(parameters + string(script))
+
+	command.Env = append(os.Environ(),
+		"FIXTURE_MIRROR_MODE="+mode, "FIXTURE_MIRROR_DIR="+directory.Name())
+
+	if path != "" {
+		command.Env = append(command.Env, "PATH="+path)
+	}
+
+	output, err := command.CombinedOutput()
+
+	return string(output), err
+}
+
+func TestMirrorArtifactWorksWithoutGNUChecksumTool(t *testing.T) {
+	t.Parallel()
+	directory := mirrorArchiveFixture(t)
+	bin := t.TempDir()
+
+	for _, name := range []string{"tar", "cat", "rm", "shasum"} {
+		tool, err := exec.LookPath(name)
+		require.NoError(t, err)
+		require.NoError(t, os.Symlink(tool, filepath.Join(bin, name)))
+	}
+
+	output, err := runMirrorArtifact(t, directory, "prepare", bin)
+	require.NoError(t, err, output)
+	manifest, err := directory.ReadFile("SHA256SUMS")
+	require.NoError(t, err)
+	assert.Equal(t, expectedMirrorManifest(t, directory), string(manifest))
+	output, err = runMirrorArtifact(t, directory, "verify", bin)
+	require.NoError(t, err, output)
+}
+
+func TestMirrorSealingReplacesRestoredMetadataSymlinks(t *testing.T) {
+	t.Parallel()
+
+	for _, metadata := range []string{"cache-key", "SHA256SUMS"} {
+		t.Run(metadata, func(t *testing.T) {
+			t.Parallel()
+			directory := mirrorArchiveFixture(t)
+			target, err := os.OpenRoot(t.TempDir())
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, target.Close()) })
+			require.NoError(
+				t,
+				target.WriteFile("untouched", []byte("outside archive directory"), 0o600),
+			)
+			require.NoError(
+				t,
+				directory.Symlink(filepath.Join(target.Name(), "untouched"), metadata),
+			)
+
+			output, err := runMirrorArtifact(t, directory, "prepare", "")
+			require.NoError(t, err, output)
+			contents, err := target.ReadFile("untouched")
+			require.NoError(t, err)
+			assert.Equal(t, "outside archive directory", string(contents))
+
+			info, err := directory.Lstat(metadata)
+			require.NoError(t, err)
+			assert.True(t, info.Mode().IsRegular(), "sealing must replace restored metadata")
+			output, err = runMirrorArtifact(t, directory, "verify", "")
+			require.NoError(t, err, output)
+		})
+	}
 }
 
 func runMirrorConsumerValidation(t *testing.T, directory *os.Root, key string) (string, error) {
