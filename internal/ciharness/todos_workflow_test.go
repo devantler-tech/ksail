@@ -56,8 +56,12 @@ func TestTODOScannerExcludesOnlyVendoredSources(t *testing.T) {
 	assert.Empty(t, job.Steps, "KSail must not copy the shared scanner implementation")
 	assert.Equal(t, "${{ secrets.APP_PRIVATE_KEY }}", job.Secrets["APP_PRIVATE_KEY"])
 
-	assert.Equal(t, map[string]any{"exclude-vendored": true}, job.With,
-		"the consumer must use the shared filter without changing project or authentication defaults")
+	assert.Equal(
+		t,
+		map[string]any{"exclude-vendored": true},
+		job.With,
+		"the consumer must use the shared filter without changing project or authentication defaults",
+	)
 	assert.Regexp(
 		t,
 		`(?m)^\s*uses:\s+devantler-tech/\.github/\.github/workflows/`+
