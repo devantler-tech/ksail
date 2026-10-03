@@ -13,9 +13,32 @@ import (
 
 const certManagerTrialStep = "🧪 cert-manager values drift — one upgrade then no-op"
 
+const certManagerTargetGuard = `
+validate_target() {
+  local file_count=0 context_count=0
+  while (( $# > 0 )); do
+    if [[ "$1" == --kubeconfig ]]; then
+      [[ $# -ge 2 && "$2" == "$FIXTURE_KUBECONFIG" ]] || exit 65
+      file_count=$((file_count + 1))
+      shift 2
+    elif [[ "$1" == "$context_flag" ]]; then
+      [[ $# -ge 2 && "$2" == kind-fixture-cluster ]] || exit 65
+      context_count=$((context_count + 1))
+      shift 2
+    else
+      shift
+    fi
+  done
+  [[ "$file_count" == 1 && "$context_count" == 1 ]] || exit 65
+}
+`
+
 const certManagerHelmStub = `#!/usr/bin/env bash
 set -euo pipefail
 printf 'helm %s\n' "$*" >> "$FIXTURE_CALLS"
+` + certManagerTargetGuard + `
+context_flag=--kube-context
+[[ "$1" == version ]] || validate_target "$@"
 revision=$(cat "$FIXTURE_REVISION")
 case "$1 $2" in
   'version --short') printf 'v3.19.1\n' ;;
@@ -51,7 +74,19 @@ esac
 const certManagerKubectlStub = `#!/usr/bin/env bash
 set -euo pipefail
 printf 'kubectl %s\n' "$*" >> "$FIXTURE_CALLS"
+` + certManagerTargetGuard + `
+context_flag=--context
+validate_target "$@"
 case "$1" in
+  config)
+    target=kind-fixture-cluster
+    [[ "$FIXTURE_MODE" != wrong_target ]] || target=kind-unrelated
+    cat <<JSON
+{"current-context":"$target",
+"contexts":[{"name":"$target","context":{"cluster":"$target"}}],
+"clusters":[{"name":"$target"}]}
+JSON
+    ;;
   get)
     revision=$(cat "$FIXTURE_REVISION")
     if [[ "$FIXTURE_MODE" == gitops_owned ]]; then
@@ -71,6 +106,9 @@ esac
 const certManagerKSailStub = `#!/usr/bin/env bash
 set -euo pipefail
 printf 'ksail %s\n' "$*" >> "$FIXTURE_CALLS"
+` + certManagerTargetGuard + `
+context_flag=--context
+validate_target "$@"
 validate_config() {
   local config_count=0
   while (( $# > 0 )); do
@@ -145,6 +183,9 @@ func runCertManagerTrial(t *testing.T, mode string) (string, string, error) {
 	callsFile := filepath.Join(dir, "calls")
 
 	require.NoError(t, os.WriteFile(revisionFile, []byte("1"), 0o600))
+
+	kubeconfigFile := filepath.Join(dir, "kubeconfig")
+	require.NoError(t, os.WriteFile(kubeconfigFile, []byte("fixture: private\n"), 0o600))
 	require.NoError(
 		t,
 		os.WriteFile(filepath.Join(dir, "ksail.yaml"), []byte("fixture: unchanged\n"), 0o600),
@@ -152,6 +193,12 @@ func runCertManagerTrial(t *testing.T, mode string) (string, string, error) {
 	writeExecutableStub(t, filepath.Join(dir, "helm"), certManagerHelmStub)
 	writeExecutableStub(t, filepath.Join(dir, "kubectl"), certManagerKubectlStub)
 	writeExecutableStub(t, filepath.Join(dir, "ksail"), certManagerKSailStub)
+
+	args := "--name fixture-cluster --kubeconfig " + kubeconfigFile +
+		" --cert-manager Enabled --image-verification Disabled"
+	if mode == "missing_name" {
+		args = "--kubeconfig " + kubeconfigFile + " --cert-manager Enabled"
+	}
 
 	command := exec.CommandContext(t.Context(), "bash")
 	command.Stdin = strings.NewReader(step.Run)
@@ -161,12 +208,13 @@ func runCertManagerTrial(t *testing.T, mode string) (string, string, error) {
 		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"GITHUB_WORKSPACE="+repositoryRootForCertTrial(t),
 		"DISTRIBUTION=Vanilla", "PROVIDER=Docker",
-		"ARGS=--cert-manager Enabled --image-verification Disabled",
+		"ARGS="+args,
 		"K8S_VERSION_FLAG=--kubernetes-version v1.36.2",
 		"SYSTEM_TEST_LOG_DIR="+dir,
 		"FIXTURE_REVISION="+revisionFile,
 		"FIXTURE_CALLS="+callsFile,
 		"FIXTURE_MODE="+mode,
+		"FIXTURE_KUBECONFIG="+kubeconfigFile,
 	)
 	output, err := command.CombinedOutput()
 	fixtureRoot, openErr := os.OpenRoot(dir)
@@ -227,6 +275,24 @@ func TestCertManagerValuesTrialRejectsIncompleteProof(t *testing.T) {
 			output, _, err := runCertManagerTrial(t, testCase.mode)
 			require.Error(t, err, output)
 			assert.Contains(t, output, testCase.want)
+		})
+	}
+}
+
+func TestCertManagerValuesTrialRejectsUnboundTargetsBeforeMutation(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct{ mode, want string }{
+		{mode: "wrong_target", want: "target identity differs from the created cluster"},
+		{mode: "missing_name", want: "explicit create-time cluster name is required"},
+	} {
+		t.Run(testCase.mode, func(t *testing.T) {
+			t.Parallel()
+			output, calls, err := runCertManagerTrial(t, testCase.mode)
+			require.Error(t, err, output)
+			assert.Contains(t, output, testCase.want)
+			assert.NotContains(t, calls, "helm upgrade ")
+			assert.NotContains(t, calls, "ksail cluster update ")
 		})
 	}
 }
