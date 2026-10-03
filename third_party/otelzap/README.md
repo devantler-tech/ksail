@@ -3,8 +3,9 @@
 # Zap OpenTelemetry instrumentation
 
 [Zap OpenTelemetry instrumentation](https://uptrace.dev/get/instrument/opentelemetry-zap.html)
-records Zap log messages as events on the existing span that must be passed in a `context.Context`
-as a first argument. It does not record anything if the context does not contain a span.
+emits Zap log messages as OTel log records when they meet `WithMinLevel`.
+Log emission does not require a recording span. A `context.Context` can carry an active span; when
+it is recording, messages at or above `WithErrorStatusLevel` also set its error status.
 
 ## Installation
 
@@ -48,6 +49,7 @@ Just like Zap, otelzap provides a global logger that can be set with `otelzap.Re
 package main
 
 import (
+ "context"
  "go.uber.org/zap"
  "github.com/uptrace/opentelemetry-go-extra/otelzap"
 )

@@ -57,6 +57,15 @@ done
 # Retain valid cached checksum metadata while changing the extracted source and
 # adapter together. Byte parity alone must not authenticate this undeclared edit.
 repo_root="$(cd -- "${script_dir}/../.." && pwd -P)"
+grep -Fq 'Log emission does not require a recording span.' \
+	"${repo_root}/third_party/otelzap/README.md" || {
+	printf 'otelzap README still says log emission requires a recording span\n' >&2
+	exit 1
+}
+grep -Fq ' "context"' "${repo_root}/third_party/otelzap/README.md" || {
+	printf 'otelzap README standalone example does not import context\n' >&2
+	exit 1
+}
 real_go="$(command -v go)"
 resolved="$(go mod download -json github.com/uptrace/opentelemetry-go-extra/otelzap@v0.3.2)"
 cp -R "$(jq -er '.Dir' <<<"${resolved}")" "${temporary}/cached"
