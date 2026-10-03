@@ -123,6 +123,7 @@ func replacementDirectory(root, directory, path string) (string, error) {
 
 func selectedVersion(ctx context.Context, directory, path string) (string, error) {
 	// The module path is an argument after --; no shell or executable is selected by it.
+	//nolint:gosec // The executable is fixed; the module path follows --.
 	command := exec.CommandContext(
 		ctx,
 		"go",
@@ -132,7 +133,7 @@ func selectedVersion(ctx context.Context, directory, path string) (string, error
 		"-json",
 		"--",
 		path,
-	) //nolint:gosec
+	)
 	command.Dir = directory
 	// Resolve the parsed module, independently of an ambient workspace or modfile.
 	command.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=")
