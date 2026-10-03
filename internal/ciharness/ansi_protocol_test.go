@@ -60,7 +60,9 @@ func TestANSIQuietModeRejectsOutOfRangeValues(t *testing.T) {
 			t.Parallel()
 
 			options := kitty.Options{Quite: 1}
-			if err := options.UnmarshalText([]byte("i=42," + input + ",p=21")); err != nil {
+
+			err := options.UnmarshalText([]byte("i=42," + input + ",p=21"))
+			if err != nil {
 				t.Fatal(err)
 			}
 

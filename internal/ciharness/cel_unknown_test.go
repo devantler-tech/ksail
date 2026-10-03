@@ -25,6 +25,7 @@ func TestCELUnknownMergePreservesValues(t *testing.T) {
 	merged := celtypes.MergeUnknowns(left, right)
 	merged = celtypes.MergeUnknowns(merged, left)
 	merged = celtypes.MergeUnknowns(merged, merged)
+
 	merged = celtypes.MergeUnknowns(merged, celtypes.NewUnknown(3, nil))
 	if !slices.Equal(merged.IDs(), []int64{3, 7}) {
 		t.Fatalf("incorrect union of expression IDs: %v", merged.IDs())
