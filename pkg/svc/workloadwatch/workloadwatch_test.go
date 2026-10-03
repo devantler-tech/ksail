@@ -71,7 +71,16 @@ func TestScheduleApplyResetsDebounceDeadline(t *testing.T) {
 		default:
 		}
 
-		time.Sleep(workloadwatch.DebounceInterval / 2)
+		time.Sleep(workloadwatch.DebounceInterval/2 - time.Nanosecond)
+		synctest.Wait()
+
+		select {
+		case got := <-applyCh:
+			t.Fatalf("file %q was enqueued before the replacement deadline", got)
+		default:
+		}
+
+		time.Sleep(time.Nanosecond)
 		synctest.Wait()
 
 		select {
