@@ -18,7 +18,8 @@ import (
 
 const (
 	eksSmokeBoundaryFixture = "arn:aws-us-gov:iam::123456789012:policy/eks-ci-smoke-boundary"
-	eksSmokeConfigFixture   = `apiVersion: eksctl.io/v1alpha5
+	eksSmokeConfigFixture   = `# Keep this scaffold explanation for failed-run diagnostics.
+apiVersion: eksctl.io/v1alpha5
 kind: ClusterConfig
 metadata:
   name: fixture
@@ -32,6 +33,7 @@ managedNodeGroups:
     desiredCapacity: 3
     minSize: 2
     maxSize: 4
+    # Preserve user nodegroup settings when changing capacity.
     labels:
       workload: keep
     iam:
@@ -488,30 +490,12 @@ func TestEKSSmokeConfigBoundsEveryCreatedIAMRole(t *testing.T) {
 		"${{ steps.permissions-boundary.outputs.arn }}",
 		initStep.Env["AWS_PERMISSIONS_BOUNDARY_ARN"],
 	)
-	assert.Contains(
-		t,
-		initStep.Run,
-		`boundary = ENV.fetch("AWS_PERMISSIONS_BOUNDARY_ARN")`,
-	)
-	assert.Contains(
-		t,
-		initStep.Run,
-		`data.fetch("iam")["serviceRolePermissionsBoundary"] = boundary`,
-	)
-	assert.Contains(t, initStep.Run, `nodegroup["iam"] ||= {}`)
-	assert.Contains(
-		t,
-		initStep.Run,
-		`nodegroup["iam"]["instanceRolePermissionsBoundary"] = boundary`,
-	)
-	assert.Contains(t, initStep.Run, `%w[vpc-cni aws-ebs-csi-driver]`)
-	assert.Contains(t, initStep.Run, `addon["permissionsBoundary"] = boundary`)
 }
 
 func TestEKSSmokeConfigBoundaryMutationSemantics(t *testing.T) {
 	t.Parallel()
 	requireTestExecutable(t, "bash")
-	requireTestExecutable(t, "ruby")
+	requireTestExecutable(t, "yq")
 
 	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
 	smokeJob, ok := workflow.Jobs["smoke-test"]
@@ -527,6 +511,175 @@ func TestEKSSmokeConfigBoundaryMutationSemantics(t *testing.T) {
 	initStep := findHarnessStep(t, smokeJob.Steps, "🔧 Initialize EKS project")
 	config := runEmbeddedEKSSmokeMutation(t, initStep.Run)
 	assertEKSSmokeMutation(t, config)
+}
+
+func TestEKSSmokeInitPreservesScaffoldComments(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
+	step := findHarnessStep(t, workflow.Jobs["smoke-test"].Steps, "🔧 Initialize EKS project")
+	mutated, output, err := executeEKSSmokeConfigMutation(t, step.Run, eksSmokeConfigFixture, nil)
+	require.NoErrorf(t, err, "EKS initialization failed: %s", output)
+	assert.Contains(
+		t,
+		string(mutated),
+		"# Keep this scaffold explanation for failed-run diagnostics.",
+	)
+	assert.Contains(
+		t,
+		string(mutated),
+		"# Preserve user nodegroup settings when changing capacity.",
+	)
+}
+
+func TestEKSSmokeInitRejectsEmptyBoundaryWithoutWriting(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
+	step := findHarnessStep(t, workflow.Jobs["smoke-test"].Steps, "🔧 Initialize EKS project")
+	mutated, _, err := executeEKSSmokeConfigMutation(t, step.Run, eksSmokeConfigFixture,
+		[]string{"AWS_PERMISSIONS_BOUNDARY_ARN="})
+	require.Error(t, err)
+	assert.Equal(t, eksSmokeConfigFixture, string(mutated))
+}
+
+func TestEKSSmokeScalePreservesCommentsAndNumericCapacity(t *testing.T) {
+	t.Parallel()
+
+	const fixture = `# Keep the scale diagnostic.
+metadata:
+  name: fixture
+managedNodeGroups:
+  - name: primary
+    desiredCapacity: 1
+    minSize: 1
+    maxSize: 1
+    labels:
+      workload: keep
+`
+
+	script := eksSmokeCapacityFunction(t)
+	scaled, output, err := executeEKSSmokeConfigMutation(
+		t,
+		script+"\nset_nodegroup_capacity 2 1 2\n",
+		fixture,
+		nil,
+	)
+	require.NoErrorf(t, err, "scale up failed: %s", output)
+	assert.Contains(t, string(scaled), "# Keep the scale diagnostic.")
+	assertEKSSmokeCapacity(t, scaled, 2, 1, 2)
+
+	scaled, output, err = executeEKSSmokeConfigMutation(
+		t,
+		script+"\nset_nodegroup_capacity 1 1 1\n",
+		string(scaled),
+		nil,
+	)
+	require.NoErrorf(t, err, "scale down failed: %s", output)
+	assert.Contains(t, string(scaled), "# Keep the scale diagnostic.")
+	assertEKSSmokeCapacity(t, scaled, 1, 1, 1)
+}
+
+func TestEKSSmokeScaleRejectsInvalidInputWithoutWriting(t *testing.T) {
+	t.Parallel()
+
+	testCases := map[string]struct {
+		fixture string
+		args    string
+	}{
+		"missing nodegroups":  {fixture: "metadata:\n  name: fixture\n", args: "2 1 2"},
+		"empty nodegroups":    {fixture: "managedNodeGroups: []\n", args: "2 1 2"},
+		"multiple nodegroups": {fixture: eksSmokeConfigFixture, args: "2 1 2"},
+		"non-integer capacity": {
+			fixture: "managedNodeGroups:\n  - name: primary\n",
+			args:    "not-a-number 1 2",
+		},
+	}
+
+	script := eksSmokeCapacityFunction(t)
+	for name, testCase := range testCases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			mutated, _, err := executeEKSSmokeConfigMutation(t,
+				script+"\nset_nodegroup_capacity "+testCase.args+"\n", testCase.fixture, nil)
+			require.Error(t, err)
+			assert.Equal(t, testCase.fixture, string(mutated))
+		})
+	}
+}
+
+func eksSmokeCapacityFunction(t *testing.T) string {
+	t.Helper()
+	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
+	step := findHarnessStep(
+		t,
+		workflow.Jobs["smoke-test"].Steps,
+		"🧪 ksail cluster update scales EKS nodes",
+	)
+	start := strings.Index(step.Run, "set_nodegroup_capacity() {")
+	require.NotEqual(t, -1, start)
+	end := strings.Index(step.Run[start:], "\nwait_for_capacity() {")
+	require.NotEqual(t, -1, end)
+
+	return "set -euo pipefail\n" + step.Run[start:start+end]
+}
+
+func assertEKSSmokeCapacity(t *testing.T, contents []byte, desired, minSize, maxSize int) {
+	t.Helper()
+
+	var config map[string]any
+	require.NoError(t, yaml.Unmarshal(contents, &config))
+	groups := requireAnySlice(t, config["managedNodeGroups"])
+	require.Len(t, groups, 1)
+	group := requireStringMap(t, groups[0])
+	assert.Equal(t, desired, group["desiredCapacity"])
+	assert.Equal(t, minSize, group["minSize"])
+	assert.Equal(t, maxSize, group["maxSize"])
+	assert.Equal(t, "keep", requireStringMap(t, group["labels"])["workload"])
+}
+
+func executeEKSSmokeConfigMutation(
+	t *testing.T,
+	script string,
+	fixture string,
+	extraEnv []string,
+) ([]byte, string, error) {
+	t.Helper()
+	requireTestExecutable(t, "bash")
+
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "eks.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(fixture), 0o600))
+
+	fakeBin := filepath.Join(tempDir, "bin")
+	require.NoError(t, os.Mkdir(fakeBin, 0o700))
+	// Project creation is outside this mutation's boundary. Run the real workflow
+	// against a scaffold fixture, without creating or contacting a cloud cluster.
+	//nolint:gosec // Test-owned executable fixture.
+	require.NoError(t, os.WriteFile(filepath.Join(fakeBin, "ksail"),
+		[]byte("#!/bin/bash\nexit 0\n"), 0o700))
+
+	command := exec.CommandContext( //nolint:gosec // Repository-owned workflow script.
+		t.Context(),
+		"bash",
+		"-c",
+		script,
+	)
+	command.Dir = tempDir
+	command.Env = append(os.Environ(),
+		"PATH="+fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"KSAIL_EKS_WORKDIR="+tempDir,
+		"KSAIL_EKS_CLUSTER_NAME=fixture",
+		"GITOPS_ENGINE=None",
+		"AWS_REGION=us-gov-west-1",
+		"AWS_PERMISSIONS_BOUNDARY_ARN="+eksSmokeBoundaryFixture,
+	)
+	command.Env = append(command.Env, extraEnv...)
+	output, commandErr := command.CombinedOutput()
+	mutated, err := os.ReadFile(configPath) //nolint:gosec // Test-owned temporary path.
+	require.NoError(t, err)
+
+	return mutated, string(output), commandErr
 }
 
 func TestEKSSmokeConfigBoundaryRejectsInvalidIdentity(t *testing.T) {
@@ -921,35 +1074,13 @@ func assertEKSSmokeAddons(t *testing.T, rawAddons any) {
 func runEmbeddedEKSSmokeMutation(t *testing.T, workflowRun string) map[string]any {
 	t.Helper()
 
-	const rubyPrefix = "ruby -ryaml -e '\n"
-
-	start := strings.Index(workflowRun, rubyPrefix)
-	require.NotEqual(t, -1, start, "embedded Ruby mutation is missing")
-	remainder := workflowRun[start+len(rubyPrefix):]
-	end := strings.Index(remainder, "\n'")
-	require.NotEqual(t, -1, end, "embedded Ruby mutation is unterminated")
-	rubyScript := remainder[:end]
-
-	tempDir := t.TempDir()
-	configPath := filepath.Join(tempDir, "eks.yaml")
-	require.NoError(t, os.WriteFile(configPath, []byte(eksSmokeConfigFixture), 0o600))
-
-	// The command and script both come from this repository's owned workflow.
-	command := exec.CommandContext( //nolint:gosec
-		t.Context(), "ruby", "-ryaml", "-e", rubyScript,
+	mutated, output, err := executeEKSSmokeConfigMutation(
+		t,
+		workflowRun,
+		eksSmokeConfigFixture,
+		nil,
 	)
-	command.Dir = tempDir
-
-	command.Env = append(
-		os.Environ(),
-		"AWS_REGION=us-gov-west-1",
-		"AWS_PERMISSIONS_BOUNDARY_ARN="+eksSmokeBoundaryFixture,
-	)
-	output, err := command.CombinedOutput()
-	require.NoErrorf(t, err, "embedded Ruby mutation failed:\n%s", output)
-
-	mutated, err := os.ReadFile(configPath) //nolint:gosec // Test-owned temporary path.
-	require.NoError(t, err)
+	require.NoErrorf(t, err, "EKS config mutation failed:\n%s", output)
 
 	var config map[string]any
 	require.NoError(t, yaml.Unmarshal(mutated, &config))
