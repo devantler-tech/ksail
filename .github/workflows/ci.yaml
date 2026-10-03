@@ -197,6 +197,7 @@ jobs:
               - '.github/workflows/**'
               - '.github/actions/**'
               - '.github/scripts/**'
+              - '.github/fixtures/workflow-run-cleanup/**'
               - 'internal/ciharness/**'
             # Deliberately NARROWER than `code`: the job resolves a module graph, so only the
             # module files matter — not every .go file. It also includes THIS workflow, because
@@ -1829,6 +1830,13 @@ jobs:
       # -count=1 is load-bearing: this test's real subject is a YAML file the Go build graph
       # cannot see, so a cached PASS from an earlier run would be replayed over a changed
       # workflow and report success without executing anything.
+      - name: 🧹 Check workflow cleanup scripts
+        run: |
+          shellcheck \
+            .github/scripts/delete-old-workflow-runs.sh \
+            .github/scripts/delete-old-workflow-runs.test.sh \
+            .github/fixtures/workflow-run-cleanup/fake-bin/gh
+
       - name: 🧾 Verify workflow contracts
         run: |
           if ! go test ./internal/ciharness/... -count=1; then
