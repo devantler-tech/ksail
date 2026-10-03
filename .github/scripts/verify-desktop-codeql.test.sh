@@ -15,7 +15,9 @@ cat >"${scratch}/positive.json" <<'JSON'
 ["desktop/menu.go","installApplicationMenu",1],
 ["desktop/deeplink.go","handleDeepLink",1],
 ["desktop/notify.go","watchClusterStatus",1],
-["desktop/window_state.go","trackWindowState",1]
+["desktop/window_state.go","trackWindowState",1],
+["third_party/otelzap/otelzap.go","log",1],
+["third_party/otelzap/logvalue.go","logValue",1]
 ]}}
 JSON
 
@@ -30,7 +32,7 @@ reject() {
 	fi
 }
 
-for index in {0..7}; do
+for index in {0..9}; do
 	jq --argjson i "${index}" '."#select".tuples[$i][2] = 0' "${scratch}/positive.json" >"${scratch}/zero.json"
 	reject zero
 	jq --argjson i "${index}" 'del(."#select".tuples[$i])' "${scratch}/positive.json" >"${scratch}/missing.json"
@@ -103,7 +105,7 @@ run_database
 run_database false diagnostics
 
 # A killed module must fail despite all sampled CLI/desktop bodies surviving.
-for project in . third_party/go-archive; do
+for project in . third_party/go-archive third_party/otelzap; do
 	for severity in warning error note; do
 		jq -n --arg project "${project}" --arg severity "${severity}" '[{
     source: {id: "go/autobuilder/extraction-failed-for-project", name: "Extraction failed"},
