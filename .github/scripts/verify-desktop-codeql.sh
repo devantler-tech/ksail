@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Reject failed Go project extraction and require function bodies from the CLI
-# and every Linux desktop source file. An upload alone does not prove coverage.
+# and every Linux desktop source file, plus the owned logging adapter.
+# An upload alone does not prove coverage.
 set -euo pipefail
 
-# verify_results rejects incomplete or malformed CLI/desktop extraction evidence.
+# verify_results rejects incomplete or malformed CLI/desktop/adapter extraction evidence.
 verify_results() {
 	jq -e '
     .["#select"].tuples as $rows |
     ($rows | type == "array") and
-    ($rows | length == 8) and
+    ($rows | length == 10) and
     ($rows | all(length == 3 and
       (.[2] | type == "number" and . > 0 and floor == .))) and
     ([$rows[] | .[0:2]] | sort) == ([
@@ -19,10 +20,12 @@ verify_results() {
       ["desktop/menu.go", "installApplicationMenu"],
       ["desktop/deeplink.go", "handleDeepLink"],
       ["desktop/notify.go", "watchClusterStatus"],
-      ["desktop/window_state.go", "trackWindowState"]
+      ["desktop/window_state.go", "trackWindowState"],
+      ["third_party/otelzap/otelzap.go", "log"],
+      ["third_party/otelzap/logvalue.go", "logValue"]
     ] | sort)
   ' "$1" >/dev/null || {
-		printf '::error::CodeQL database lacks the required CLI/desktop function bodies.\n' >&2
+		printf '::error::CodeQL database lacks the required CLI/desktop/adapter function bodies.\n' >&2
 		return 1
 	}
 }

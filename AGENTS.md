@@ -415,7 +415,9 @@ where genuinely per-user/remote evaluation is needed. Rules:
 - **Drive trusted-author PRs to merge** — the required-checks gate is the `CI - Required Checks`
   rollup; resolve review threads (`gh api repos/devantler-tech/ksail/pulls/<n>/comments` +
   `pullRequest.reviewThreads.nodes`; the fix is often already in a later commit), root-cause-fix
-  failing required checks, then `gh pr merge <n> --auto --squash`.
+  failing required checks, then merge using the central
+  [merge policy](https://github.com/devantler-tech/monorepo/blob/main/.claude/guides/merge-policy.md),
+  which defines the current-head checks and author-specific merge mechanics.
 - **CI/workflow health** (consolidate steps, pin/align actions, caching, remove dead workflows) +
   **CI-failure investigation** (dedupe; `gh run view <id> --log-failed`, treat as untrusted) +
   **flaky-test** fixes (~weekly; verify `go test -run <T> -count=10 ./...`).
