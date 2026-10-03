@@ -1,6 +1,7 @@
 package ciharness_test
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -84,25 +85,30 @@ func TestDependencyContractsRunWhenOnlyTheirInputsChange(t *testing.T) {
 // dependencyContractInputPaths returns every repository file internal/depcontract depends on:
 // its own sources, because editing one changes what the contract job asserts, and every quoted
 // string in them that names a file in this repository.
+//
+// Every lookup goes through the repository root, so a string taken from a source file can only
+// ever name something beneath it.
 func dependencyContractInputPaths(t *testing.T) []string {
 	t.Helper()
 
-	sources, err := filepath.Glob(filepath.Join("..", "..", dependencyContractsPackage, "*.go"))
+	repository, err := os.OpenRoot(filepath.Join("..", ".."))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, repository.Close()) })
+
+	sources, err := fs.Glob(repository.FS(), dependencyContractsPackage+"/*.go")
 	require.NoError(t, err)
 	require.NotEmpty(t, sources, "input discovery must examine the contract sources")
 
-	var paths []string
+	paths := slices.Clone(sources)
 
 	for _, source := range sources {
-		paths = append(paths, dependencyContractsPackage+"/"+filepath.Base(source))
-
-		contents, readErr := os.ReadFile(source) //nolint:gosec // repository-owned sources.
+		contents, readErr := repository.ReadFile(source)
 		require.NoError(t, readErr)
 
 		for _, match := range dependencyContractLiteral.FindAllSubmatch(contents, -1) {
 			candidate := string(match[1])
 
-			info, statErr := os.Stat(filepath.Join("..", "..", filepath.FromSlash(candidate)))
+			info, statErr := repository.Stat(candidate)
 			if statErr == nil && info.Mode().IsRegular() {
 				paths = append(paths, candidate)
 			}
