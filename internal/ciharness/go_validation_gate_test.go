@@ -94,10 +94,7 @@ func TestGoValidationGateRetainsCheckVerification(t *testing.T) {
 		"the existing check verification deadline is retained",
 	)
 
-	tests := []struct {
-		name, checkStatus, conclusion, selected string
-		present, allowed                        bool
-	}{
+	tests := []goValidationCheckCase{
 		{"successful checks", "completed", "success", "true", true, true},
 		{"failed checks", "completed", "failure", "true", true, false},
 		{"cancelled checks", "completed", "cancelled", "true", true, false},
@@ -112,25 +109,37 @@ func TestGoValidationGateRetainsCheckVerification(t *testing.T) {
 			t.Run(test.name+"/"+prefix, func(t *testing.T) {
 				t.Parallel()
 
-				present := "false"
-				if test.present {
-					present = "true"
-				}
-				//nolint:gosec // Executes repository-owned workflow source with fixed mocked check results.
-				command := exec.CommandContext(t.Context(), "node", "-e", goValidationCheckHarness,
-					script, test.checkStatus, test.conclusion, present, strings.Repeat(prefix, 40))
-				command.Env = append(os.Environ(), "GO_VALIDATION_SELECTED="+test.selected)
-
-				output, err := command.CombinedOutput()
+				output, err := runGoValidationChecks(t, script, strings.Repeat(prefix, 40), test)
 				if test.allowed {
-					require.NoError(t, err, string(output))
+					require.NoError(t, err, output)
 				} else {
-					require.Error(t, err, string(output))
-					assert.Contains(t, string(output), "::error::")
+					require.Error(t, err, output)
+					assert.Contains(t, output, "::error::")
 				}
 			})
 		}
 	}
+}
+
+type goValidationCheckCase struct {
+	name, checkStatus, conclusion, selected string
+	present, allowed                        bool
+}
+
+func runGoValidationChecks(t *testing.T, script, head string, test goValidationCheckCase) (string, error) {
+	t.Helper()
+
+	present := "false"
+	if test.present {
+		present = "true"
+	}
+	//nolint:gosec // Executes repository-owned workflow source with fixed mocked check results.
+	command := exec.CommandContext(t.Context(), "node", "-e", goValidationCheckHarness,
+		script, test.checkStatus, test.conclusion, present, head)
+	command.Env = append(os.Environ(), "GO_VALIDATION_SELECTED="+test.selected)
+	output, err := command.CombinedOutput()
+
+	return string(output), err
 }
 
 const goValidationCheckHarness = `
