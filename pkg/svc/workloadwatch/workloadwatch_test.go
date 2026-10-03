@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/flux"
@@ -22,36 +23,86 @@ const (
 func TestScheduleApplyEnqueuesAfterDebounce(t *testing.T) {
 	t.Parallel()
 
-	state := &workloadwatch.DebounceState{}
-	applyCh := make(chan string, 1)
+	synctest.Test(t, func(t *testing.T) {
+		state := &workloadwatch.DebounceState{}
+		applyCh := make(chan string, 1)
 
-	workloadwatch.ScheduleApply(state, "file.yaml", applyCh)
+		workloadwatch.ScheduleApply(state, "file.yaml", applyCh)
 
-	select {
-	case got := <-applyCh:
-		if got != "file.yaml" {
-			t.Fatalf("got %q, want file.yaml", got)
+		time.Sleep(workloadwatch.DebounceInterval - time.Nanosecond)
+		synctest.Wait()
+
+		select {
+		case got := <-applyCh:
+			t.Fatalf("file %q was enqueued before the debounce deadline", got)
+		default:
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("debounce timer did not enqueue the file")
-	}
+
+		time.Sleep(time.Nanosecond)
+		synctest.Wait()
+
+		select {
+		case got := <-applyCh:
+			if got != "file.yaml" {
+				t.Fatalf("got %q, want file.yaml", got)
+			}
+		default:
+			t.Fatal("debounce timer did not enqueue the file at its deadline")
+		}
+	})
+}
+
+func TestScheduleApplyResetsDebounceDeadline(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		state := &workloadwatch.DebounceState{}
+		applyCh := make(chan string, 1)
+
+		workloadwatch.ScheduleApply(state, "first.yaml", applyCh)
+		time.Sleep(workloadwatch.DebounceInterval / 2)
+		workloadwatch.ScheduleApply(state, "latest.yaml", applyCh)
+		time.Sleep(workloadwatch.DebounceInterval / 2)
+		synctest.Wait()
+
+		select {
+		case got := <-applyCh:
+			t.Fatalf("file %q was enqueued at the superseded deadline", got)
+		default:
+		}
+
+		time.Sleep(workloadwatch.DebounceInterval / 2)
+		synctest.Wait()
+
+		select {
+		case got := <-applyCh:
+			if got != "latest.yaml" {
+				t.Fatalf("got %q, want latest.yaml", got)
+			}
+		default:
+			t.Fatal("debounce timer did not enqueue the latest file at its deadline")
+		}
+	})
 }
 
 func TestCancelPendingDebounceInvalidatesCallback(t *testing.T) {
 	t.Parallel()
 
-	state := &workloadwatch.DebounceState{}
-	applyCh := make(chan string, 1)
+	synctest.Test(t, func(t *testing.T) {
+		state := &workloadwatch.DebounceState{}
+		applyCh := make(chan string, 1)
 
-	workloadwatch.ScheduleApply(state, "file.yaml", applyCh)
-	workloadwatch.CancelPendingDebounce(state)
+		workloadwatch.ScheduleApply(state, "file.yaml", applyCh)
+		workloadwatch.CancelPendingDebounce(state)
+		time.Sleep(workloadwatch.DebounceInterval * 2)
+		synctest.Wait()
 
-	select {
-	case got := <-applyCh:
-		t.Fatalf("expected no enqueue after cancel, got %q", got)
-	case <-time.After(workloadwatch.DebounceInterval * 2):
-		// Expected: cancellation bumped the generation so the callback no-ops.
-	}
+		select {
+		case got := <-applyCh:
+			t.Fatalf("expected no enqueue after cancel, got %q", got)
+		default:
+		}
+	})
 }
 
 func TestEnqueueIfCurrentRespectsGeneration(t *testing.T) {
