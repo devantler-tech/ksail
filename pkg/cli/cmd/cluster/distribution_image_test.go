@@ -180,15 +180,15 @@ func TestCurrentVersionFallbackIsDistributionOnly(t *testing.T) {
 			cmd.SetContext(t.Context())
 			cmd.SetErr(io.Discard)
 			planner := &imageUpgraderFake{changed: true}
-			target, reason, ok := cluster.ExportResolveDimensionTarget(
+			target, reason, targetResolved := cluster.ExportResolveDimensionTarget(
 				cmd, currentImageResolver{}, label, "v1.13.10", planner,
 			)
 			if label == "distribution" {
-				require.True(t, ok)
+				require.True(t, targetResolved)
 				assert.Equal(t, "v1.13.10", target)
 				assert.Equal(t, "current stable version", reason)
 			} else {
-				assert.False(t, ok, "an image planner must not invent a Kubernetes target")
+				assert.False(t, targetResolved, "an image planner must not invent a Kubernetes target")
 				assert.Empty(t, target)
 				assert.Empty(t, reason)
 			}
