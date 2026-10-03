@@ -1493,6 +1493,7 @@ jobs:
       contents: read
     outputs:
       cache-key: ${{ steps.warm.outputs.cache-key }}
+      artifact-id: ${{ steps.mirror-artifact.outputs.artifact-id }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1543,6 +1544,19 @@ jobs:
         id: warm
         uses: ./.github/actions/warm-mirror-cache
 
+      - name: 📤 Publish validated mirror artifact
+        id: mirror-artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: mirror-cache-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.warm.outputs.archive-path }}/*.tar
+            ${{ steps.warm.outputs.archive-path }}/cache-key
+            ${{ steps.warm.outputs.archive-path }}/SHA256SUMS
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
   # Docker-based system tests run in full parallelism with no concurrency
   # constraints — each job gets its own runner with local Docker containers.
   system-test-docker:
@@ -1562,6 +1576,7 @@ jobs:
       ]
     if: >-
       !cancelled()
+      && needs.warm-mirror-cache.result == 'success'
       && (needs.wait-for-validate-go.result == 'success' || needs.wait-for-validate-go.result == 'skipped')
       && (
         (github.event_name == 'pull_request'
@@ -1690,6 +1705,8 @@ jobs:
         uses: ./.github/actions/restore-mirror-cache
         with:
           cache-key: ${{ needs.warm-mirror-cache.outputs.cache-key }}
+          artifact-id: ${{ needs.warm-mirror-cache.outputs.artifact-id }}
+          require-artifact: "true"
 
       - name: 📥 Pre-pull registry image for offline ECR check
         if: ${{ matrix.ecr-public-offline == 'true' }}
