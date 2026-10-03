@@ -423,10 +423,11 @@ func TestMirrorArtifactIdentityGuardsDownload(t *testing.T) {
 	}
 }
 
-func runMirrorVolumeImport(t *testing.T, registry, stage string) (string, error) {
+func runMirrorVolumeImport(t *testing.T, registry, stage, artifact string) (string, error) {
 	t.Helper()
 	action := readCompositeAction(t, ".github/actions/restore-mirror-cache/action.yaml")
 	step := findHarnessStep(t, action.Runs.Steps, "📦 Import mirror volumes")
+	require.Equal(t, "${{ inputs.artifact-id }}", step.Env["ARTIFACT_ID"])
 	directory := mirrorArchiveFixture(t)
 	bin := t.TempDir()
 	writeExecutableStub(t, filepath.Join(bin, "docker"), `#!/bin/bash
@@ -447,6 +448,7 @@ exit 0
 	)
 
 	command.Env = append(os.Environ(), "FAIL_REGISTRY="+registry, "FAIL_STAGE="+stage,
+		"ARTIFACT_ID="+artifact,
 		"FIXTURE_MIRROR_DIR="+directory.Name(),
 		"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	output, err := command.CombinedOutput()
@@ -461,7 +463,7 @@ func TestMirrorConsumerStopsOnFailedVolumeImport(t *testing.T) {
 		for _, stage := range []string{"create", "import"} {
 			t.Run(registry+"/"+stage, func(t *testing.T) {
 				t.Parallel()
-				output, err := runMirrorVolumeImport(t, registry, stage)
+				output, err := runMirrorVolumeImport(t, registry, stage, "123456")
 				require.Error(t, err,
 					"a failed mirror restore must stop before cluster creation: %s", output)
 				assert.NotContains(t, output, "✅ Restored "+registry+" mirror cache")
@@ -472,10 +474,27 @@ func TestMirrorConsumerStopsOnFailedVolumeImport(t *testing.T) {
 
 func TestMirrorConsumerImportsAllVolumes(t *testing.T) {
 	t.Parallel()
-	output, err := runMirrorVolumeImport(t, "", "")
+	output, err := runMirrorVolumeImport(t, "", "", "123456")
 	require.NoError(t, err, output)
 
 	for _, registry := range []string{"docker.io", "ghcr.io", "quay.io", "registry.k8s.io", "ecr-public.aws.com"} {
 		assert.Contains(t, output, "✅ Restored "+registry+" mirror cache")
+	}
+}
+
+func TestStandaloneMirrorConsumerRetainsLivePullFallback(t *testing.T) {
+	t.Parallel()
+
+	for _, registry := range []string{"docker.io", "ghcr.io", "quay.io", "registry.k8s.io"} {
+		for _, stage := range []string{"create", "import"} {
+			t.Run(registry+"/"+stage, func(t *testing.T) {
+				t.Parallel()
+				output, err := runMirrorVolumeImport(t, registry, stage, "")
+				require.NoError(t, err,
+					"standalone cache callers retain their live-pull fallback: %s", output)
+				assert.NotContains(t, output, "✅ Restored "+registry+" mirror cache")
+				assert.Contains(t, output, "✅ Restored ecr-public.aws.com mirror cache")
+			})
+		}
 	}
 }

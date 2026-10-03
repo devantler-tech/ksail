@@ -206,6 +206,8 @@ runs:
     - name: 📦 Import mirror volumes
       if: steps.verify-artifact.outputs.cache-hit == 'true' || steps.restore-cache.outputs.cache-hit == 'true'
       shell: bash
+      env:
+        ARTIFACT_ID: ${{ inputs.artifact-id }}
       run: |
         echo "📦 Importing mirror registry volumes..."
 
@@ -217,61 +219,27 @@ runs:
         # manifests, so the upstream digest can't be pinned through it — we pin
         # by tag, exactly like registry:3 in pull-registry-image.sh.
 
-        # Import docker.io mirror volume
-        if [ -f "/tmp/mirror-cache/docker.io.tar" ]; then
-          docker volume create docker.io
-          docker run --rm \
-            -v docker.io:/volume \
+        import_mirror() {
+          local registry="$1"
+          [ -f "/tmp/mirror-cache/$registry.tar" ] || return 0
+          if ! docker volume create "$registry" || ! docker run --rm \
+            -v "$registry:/volume" \
             -v /tmp/mirror-cache:/backup:ro \
             mirror.gcr.io/library/busybox:1.37 \
-            sh -c "cd /volume && tar -xf /backup/docker.io.tar" || {
-              echo "❌ Failed to import docker.io mirror" >&2
+            sh -c "cd /volume && tar -xf /backup/$registry.tar"; then
+            echo "⚠️ Failed to import $registry mirror" >&2
+            # Producer-dependent jobs require every validated archive to import.
+            # Independent cache callers can still refill these mirrors upstream.
+            if [ -n "$ARTIFACT_ID" ]; then
               exit 1
-            }
-          echo "✅ Restored docker.io mirror cache"
-        fi
-
-        # Import ghcr.io mirror volume
-        if [ -f "/tmp/mirror-cache/ghcr.io.tar" ]; then
-          docker volume create ghcr.io
-          docker run --rm \
-            -v ghcr.io:/volume \
-            -v /tmp/mirror-cache:/backup:ro \
-            mirror.gcr.io/library/busybox:1.37 \
-            sh -c "cd /volume && tar -xf /backup/ghcr.io.tar" || {
-              echo "❌ Failed to import ghcr.io mirror" >&2
-              exit 1
-            }
-          echo "✅ Restored ghcr.io mirror cache"
-        fi
-
-        # Import quay.io mirror volume
-        if [ -f "/tmp/mirror-cache/quay.io.tar" ]; then
-          docker volume create quay.io
-          docker run --rm \
-            -v quay.io:/volume \
-            -v /tmp/mirror-cache:/backup:ro \
-            mirror.gcr.io/library/busybox:1.37 \
-            sh -c "cd /volume && tar -xf /backup/quay.io.tar" || {
-              echo "❌ Failed to import quay.io mirror" >&2
-              exit 1
-            }
-          echo "✅ Restored quay.io mirror cache"
-        fi
-
-        # Import registry.k8s.io mirror volume
-        if [ -f "/tmp/mirror-cache/registry.k8s.io.tar" ]; then
-          docker volume create registry.k8s.io
-          docker run --rm \
-            -v registry.k8s.io:/volume \
-            -v /tmp/mirror-cache:/backup:ro \
-            mirror.gcr.io/library/busybox:1.37 \
-            sh -c "cd /volume && tar -xf /backup/registry.k8s.io.tar" || {
-              echo "❌ Failed to import registry.k8s.io mirror" >&2
-              exit 1
-            }
-          echo "✅ Restored registry.k8s.io mirror cache"
-        fi
+            fi
+            return 0
+          fi
+          echo "✅ Restored $registry mirror cache"
+        }
+        for registry in docker.io ghcr.io quay.io registry.k8s.io; do
+          import_mirror "$registry"
+        done
 
         # Import ecr-public.aws.com mirror volume. The ECR Public proxy cannot refill an empty or partial
         # volume (its upstream blob HEAD requests are rejected), so a failed
