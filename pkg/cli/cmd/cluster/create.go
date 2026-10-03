@@ -666,6 +666,7 @@ func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
 // creation. Talos is handled separately because renaming it must regenerate its PKI-bearing bundle.
 // EKS is deliberately excluded: eksctl creates from the unchanged on-disk eks.yaml, so changing only
 // EKSConfig.Name would make later state and deletion target a cluster that was never created.
+// GKE and AKS submit their cluster spec from memory, so their configuration is renamed with it.
 func applyDirectClusterNameOverrides(ctx *localregistry.Context, name string) {
 	if ctx.KindConfig != nil {
 		ctx.KindConfig.Name = name
@@ -681,6 +682,38 @@ func applyDirectClusterNameOverrides(ctx *localregistry.Context, name string) {
 
 	if ctx.KWOKConfig != nil {
 		ctx.KWOKConfig.Name = name
+	}
+
+	renameGKEConfig(ctx.GKEConfig, name)
+	renameAKSConfig(ctx.AKSConfig, name)
+}
+
+// renameGKEConfig renames the GKE configuration and the cluster spec it submits on creation. GKE
+// creates the cluster the spec names, whatever name the command passes, so a spec left behind
+// would create one cluster while diff, update and state track another.
+func renameGKEConfig(config *clusterprovisioner.GKEConfig, name string) {
+	if config == nil {
+		return
+	}
+
+	config.Name = name
+
+	if config.ClusterSpec != nil {
+		config.ClusterSpec.Name = name
+	}
+}
+
+// renameAKSConfig renames the AKS configuration and the cluster spec it submits on creation, so
+// the name in the request body matches the name the cluster is created under.
+func renameAKSConfig(config *clusterprovisioner.AKSConfig, name string) {
+	if config == nil {
+		return
+	}
+
+	config.Name = name
+
+	if config.ClusterSpec != nil {
+		config.ClusterSpec.Name = &name
 	}
 }
 
@@ -751,10 +784,10 @@ func resolveClusterNameFromContext(ctx *localregistry.Context) string {
 		return resolveKWOKName(ctx)
 	case v1alpha1.DistributionEKS:
 		return resolveEKSName(ctx)
-	case v1alpha1.DistributionGKE, v1alpha1.DistributionAKS:
-		// GKE/AKS configs are owned by their cloud tooling and not cached on the local registry
-		// context; fall back to the cluster-level name.
-		return resolveFallbackName(ctx)
+	case v1alpha1.DistributionGKE:
+		return resolveGKEName(ctx)
+	case v1alpha1.DistributionAKS:
+		return resolveAKSName(ctx)
 	default:
 		return resolveFallbackName(ctx)
 	}
@@ -763,6 +796,28 @@ func resolveClusterNameFromContext(ctx *localregistry.Context) string {
 func resolveEKSName(ctx *localregistry.Context) string {
 	if ctx.EKSConfig != nil && strings.TrimSpace(ctx.EKSConfig.Name) != "" {
 		return strings.TrimSpace(ctx.EKSConfig.Name)
+	}
+
+	return resolveFallbackName(ctx)
+}
+
+// resolveGKEName returns the cluster name the GKE configuration holds: the name in gke.yaml, the
+// name parsed from a gcloud context when the configuration loaded, or a name override. The context
+// itself is not the name, because gcloud qualifies it with the project and location.
+func resolveGKEName(ctx *localregistry.Context) string {
+	if ctx.GKEConfig != nil && strings.TrimSpace(ctx.GKEConfig.Name) != "" {
+		return strings.TrimSpace(ctx.GKEConfig.Name)
+	}
+
+	return resolveFallbackName(ctx)
+}
+
+// resolveAKSName returns the cluster name the AKS configuration holds: the name in aks.yaml, the
+// context when no file names the cluster, or a name override. The context alone is not the name,
+// because admin credentials are written to a "<name>-admin" context.
+func resolveAKSName(ctx *localregistry.Context) string {
+	if ctx.AKSConfig != nil && strings.TrimSpace(ctx.AKSConfig.Name) != "" {
+		return strings.TrimSpace(ctx.AKSConfig.Name)
 	}
 
 	return resolveFallbackName(ctx)
