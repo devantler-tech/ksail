@@ -57,6 +57,15 @@ done
 # Retain valid cached checksum metadata while changing the extracted source and
 # adapter together. Byte parity alone must not authenticate this undeclared edit.
 repo_root="$(cd -- "${script_dir}/../.." && pwd -P)"
+grep -Fq 'Log emission does not require a recording span.' \
+	"${repo_root}/third_party/otelzap/README.md" || {
+	printf 'otelzap README still says log emission requires a recording span\n' >&2
+	exit 1
+}
+grep -Fq ' "context"' "${repo_root}/third_party/otelzap/README.md" || {
+	printf 'otelzap README standalone example does not import context\n' >&2
+	exit 1
+}
 real_go="$(command -v go)"
 resolved="$(go mod download -json github.com/uptrace/opentelemetry-go-extra/otelzap@v0.3.2)"
 cp -R "$(jq -er '.Dir' <<<"${resolved}")" "${temporary}/cached"
@@ -82,6 +91,22 @@ verify_cached() {
 		--local-dir "${temporary}/adapter" >"${temporary}/cached-result" 2>&1
 }
 verify_cached
+
+# A download response that does not carry the reviewed checksum must fail with
+# an actionable diagnostic, not jq's empty-result exit alone.
+jq '.Sum = "h1:unexpected"' "${temporary}/metadata.json" >"${temporary}/wrong-sum.json"
+if PATH="${temporary}/bin:${PATH}" KS_SOURCE_METADATA="${temporary}/wrong-sum.json" \
+	KS_SOURCE_GO="${real_go}" bash "${script_dir}/verify-otelzap-parity.sh" \
+	--local-dir "${temporary}/adapter" >"${temporary}/wrong-sum-result" 2>&1; then
+	printf 'provenance guard accepted a download with the wrong checksum\n' >&2
+	exit 1
+fi
+grep -Fq 'otelzap download did not resolve the reviewed checksum h1:cj/Z6FKTTYBnstI0Lni9PA+k2foounKIPUmj1LBwNiQ=' \
+	"${temporary}/wrong-sum-result" || {
+	cat "${temporary}/wrong-sum-result" >&2
+	exit 1
+}
+
 printf '// undeclared cached source edit\n' >>"${temporary}/cached/global.go"
 printf '// undeclared cached source edit\n' >>"${temporary}/adapter/global.go"
 if verify_cached; then

@@ -26,7 +26,9 @@ cat >"${scratch}/positive.json" <<'JSON'
 ["third_party/redisotel/tracing.go","InstrumentTracing",1],
 ["third_party/rediscmd/rediscmd.go","CmdString",1],
 ["third_party/dynamiclistener/cert/cert.go","NewPrivateKey",1],
-["third_party/dynamiclistener/factory/cert_utils.go","ParseCertPEM",1]
+["third_party/dynamiclistener/factory/cert_utils.go","ParseCertPEM",1],
+["third_party/otelzap/otelzap.go","log",1],
+["third_party/otelzap/logvalue.go","logValue",1]
 ]}}
 JSON
 
@@ -41,12 +43,21 @@ reject() {
 	fi
 }
 
-for index in {0..18}; do
+for index in {0..20}; do
 	jq --argjson i "${index}" '."#select".tuples[$i][2] = 0' "${scratch}/positive.json" >"${scratch}/zero.json"
 	reject zero
 	jq --argjson i "${index}" 'del(."#select".tuples[$i])' "${scratch}/positive.json" >"${scratch}/missing.json"
 	reject missing
 done
+
+# Neither the adapter-only baseline nor dependency-only evidence can satisfy
+# the combined coverage floor after integrating the independent security fix.
+jq '."#select".tuples |= map(select(.[0] | startswith("third_party/otelzap/") | not))' \
+	"${scratch}/positive.json" >"${scratch}/missing-adapter.json"
+reject missing-adapter
+jq '."#select".tuples |= map(select((.[0] | startswith("third_party/") | not) or (.[0] | startswith("third_party/otelzap/"))))' \
+	"${scratch}/positive.json" >"${scratch}/missing-dependencies.json"
+reject missing-dependencies
 
 jq '."#select".tuples[1] = ."#select".tuples[0]' "${scratch}/positive.json" >"${scratch}/duplicate.json"
 reject duplicate

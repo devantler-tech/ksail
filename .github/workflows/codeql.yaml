@@ -14,7 +14,7 @@ name: 🔍 CodeQL
 # Go uses `autobuild`, which the Go extractor resolves to standalone extraction: it reads
 # the module graph with `go list` and takes types from source, so it needs no compiler and
 # covers the root (CLI plus tagged desktop), `third_party/go-archive/` and the
-# `third_party/otelzap/` compatibility module, plus all nine authenticated dependency
+# `third_party/otelzap/` compatibility module, plus all ten authenticated dependency
 # source modules in one job. `none` is rejected for Go, and `manual` runs a traced compile that exceeds the
 # runner's memory alongside the extractor.
 #
@@ -30,7 +30,7 @@ name: 🔍 CodeQL
 # so CodeQL's own budget matches the default setup this replaces. Re-running a failed job
 # remains available because the workflow is owned here.
 # The Go evidence guard rejects failed-project extraction diagnostics even when
-# Autobuild and analysis succeed, then requires real CLI, desktop and authenticated
+# Autobuild and analysis succeed, then requires real CLI, desktop, adapter and authenticated
 # dependency function bodies.
 #
 # Same languages and suite as the default setup it replaces: actions, Go and

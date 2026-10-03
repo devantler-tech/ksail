@@ -3,8 +3,9 @@
 # Zap OpenTelemetry instrumentation
 
 [Zap OpenTelemetry instrumentation](https://uptrace.dev/get/instrument/opentelemetry-zap.html)
-records Zap log messages as events on the existing span that must be passed in a `context.Context`
-as a first argument. It does not record anything if the context does not contain a span.
+emits Zap log messages as OTel log records when they meet `WithMinLevel`.
+Log emission does not require a recording span. A `context.Context` can carry an active span; when
+it is recording, messages at or above `WithErrorStatusLevel` also set its error status.
 
 ## Installation
 
@@ -48,6 +49,7 @@ Just like Zap, otelzap provides a global logger that can be set with `otelzap.Re
 package main
 
 import (
+ "context"
  "go.uber.org/zap"
  "github.com/uptrace/opentelemetry-go-extra/otelzap"
 )
@@ -94,10 +96,10 @@ sugar.InfofContext(ctx, "Failed to fetch URL: %s", url)
 [otelzap.New](https://pkg.go.dev/github.com/uptrace/opentelemetry-go-extra/otelzap#New) accepts a
 couple of [options](https://pkg.go.dev/github.com/uptrace/opentelemetry-go-extra/otelzap#Option):
 
-- `otelzap.WithMinLevel(zap.WarnLevel)` sets the minimal zap logging level on which the log message
-  is recorded on the span.
+- `otelzap.WithMinLevel(zap.WarnLevel)` sets the minimum zap logging level emitted as an OTel log
+  record. It does not control the span's error-status threshold.
 - `otelzap.WithErrorStatusLevel(zap.ErrorLevel)` sets the minimal zap logging level on which the
-  span status is set to codes.Error.
+  status of a recording span is set to `codes.Error`, independently of `WithMinLevel`.
 - `otelzap.WithCaller(true)` configures the logger to annotate each event with the filename, line
   number, and function name of the caller. Enabled by default.
 - `otelzap.WithCallerDepth(0)` sets the depth of the caller stack to skip when annotating each
@@ -106,6 +108,3 @@ couple of [options](https://pkg.go.dev/github.com/uptrace/opentelemetry-go-extra
   by default.
 - `otelzap.WithExtraFields(true)` configures the logger to add the given fields to structured log
   messages and to span log events.
-- `otelzap.WithTraceIDField(true)` configures the logger to add `trace_id` field to structured log
-  messages. This option is only useful with backends that don't support OTLP and instead parse log
-  messages to extract structured information.

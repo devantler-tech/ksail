@@ -226,8 +226,7 @@ jobs:
               - '.github/workflows/ci.yaml'
             govuln-allowlist:
               - '.govulncheck-allow.txt'
-            # The shared validator skips tests on release-only changes. Every input pinned by
-            # the shipped dependency audit therefore needs this separate pre-merge gate.
+            # Release inputs are outside Go's cache and the shared Go source filter.
             release-graph-audit:
               - '.goreleaser.yaml'
               - '.goreleaser.desktop.yaml'
@@ -1865,7 +1864,7 @@ jobs:
           go-version-file: go.mod
 
       - name: 🔐 Audit Shipped Dependency Graphs
-        # Release YAML and scripts are outside Go's cache inputs, so always execute the tests.
+        # Release files are outside Go's test-cache inputs; always execute the audit.
         run: go test ./pkg/client/kubescape/... -count=1
 
   require-checks-in-pr:

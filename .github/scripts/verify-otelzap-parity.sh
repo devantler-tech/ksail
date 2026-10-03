@@ -38,7 +38,10 @@ effective_dir="$(jq -er '.Replace.Dir' <<<"${metadata}")"
 if [[ -z "${upstream_dir}" ]]; then
 	resolved="$(go mod download -json "${module}@${version}")"
 	upstream_dir="$(jq -er --arg sum "${checksum}" \
-		'select(.Sum == $sum and (.Error // "") == "") | .Dir' <<<"${resolved}")"
+		'select(.Sum == $sum and (.Error // "") == "") | .Dir' <<<"${resolved}")" || {
+		printf 'otelzap download did not resolve the reviewed checksum %s\n' "${checksum}" >&2
+		exit 1
+	}
 	authenticate_source=true
 fi
 
