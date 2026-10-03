@@ -58,8 +58,6 @@ type Provisioner struct {
 	requireCredentialValues bool
 	// ownershipVerifier rechecks immutable identity immediately before EKS mutations.
 	ownershipVerifier eksidentity.Verifier
-	// upgradeCredentials is the same frozen credential snapshot used by the EKS client.
-	upgradeCredentials aws.CredentialsProvider
 	// awsMu guards the lazy awsClient resolution.
 	awsMu sync.Mutex
 }
@@ -79,7 +77,6 @@ func WithAWSClusterAPI(api AWSClusterAPI) Option {
 // AWS-SDK DescribeCluster/STS client without mutating process environment.
 func WithCredentialValues(profile, accessKeyID, secretAccessKey, sessionToken string) Option {
 	return func(p *Provisioner) {
-		p.upgradeCredentials = nil
 		p.eksClientOptions = []eksclient.Option{
 			eksclient.WithCredentialValues(profile, accessKeyID, secretAccessKey, sessionToken),
 		}
@@ -91,7 +88,6 @@ func WithCredentialValues(profile, accessKeyID, secretAccessKey, sessionToken st
 func WithAWSConfig(config aws.Config) Option {
 	return func(p *Provisioner) {
 		p.eksClientOptions = []eksclient.Option{eksclient.WithAWSConfig(config)}
-		p.upgradeCredentials = config.Credentials
 	}
 }
 
