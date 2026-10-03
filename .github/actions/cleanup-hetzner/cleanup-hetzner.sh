@@ -11,12 +11,16 @@ set -uo pipefail
 
 failed=0
 
-# list_ids KIND — print the IDs of KIND resources matching LABEL_SELECTOR. It runs inside a command
-# substitution, so a failed list call reports on stderr and returns 1; the caller records the failure.
+# list_ids KIND — print matching IDs. Floating IPs also require explicit KSail ownership because
+# user-managed addresses may carry the same cluster label. A failed list call reports on stderr
+# and returns 1; the caller records the failure.
 list_ids() {
-	local kind="$1" ids err_file
+	local kind="$1" ids err_file selector="${LABEL_SELECTOR}"
+	if [[ "${kind}" == floating-ip ]]; then
+		selector="ksail.owned=true,${selector}"
+	fi
 	err_file=$(mktemp)
-	if ! ids=$(hcloud "${kind}" list -o noheader -o columns=id -l "${LABEL_SELECTOR}" 2>"${err_file}"); then
+	if ! ids=$(hcloud "${kind}" list -o noheader -o columns=id -l "${selector}" 2>"${err_file}"); then
 		echo "❌ Failed to list ${kind} resources: $(<"${err_file}")" >&2
 		rm -f "${err_file}"
 		return 1

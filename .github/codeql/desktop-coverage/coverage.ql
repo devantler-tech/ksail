@@ -9,6 +9,8 @@ predicate expected(string path, string name) {
   or path = "desktop/deeplink.go" and name = "handleDeepLink"
   or path = "desktop/notify.go" and name = "watchClusterStatus"
   or path = "desktop/window_state.go" and name = "trackWindowState"
+  or path = "third_party/otelzap/otelzap.go" and name = "log"
+  or path = "third_party/otelzap/logvalue.go" and name = "logValue"
 }
 
 from string path, string name
