@@ -136,6 +136,7 @@ jobs:
     outputs:
       code: ${{ steps.filter.outputs.code }}
       dependency-test-graph: ${{ steps.filter.outputs.dependency-test-graph }}
+      dependency-contracts: ${{ steps.filter.outputs.dependency-contracts }}
       govuln-allowlist: ${{ steps.filter.outputs.govuln-allowlist }}
       release-graph-audit: ${{ steps.filter.outputs.release-graph-audit }}
       todos-contract: ${{ steps.filter.outputs.todos-contract }}
@@ -205,6 +206,19 @@ jobs:
             # the check lives here and a workflow-only PR would otherwise be able to weaken or
             # delete it without ever running it.
             dependency-test-graph:
+              - 'go.mod'
+              - 'go.sum'
+              - '.github/workflows/ci.yaml'
+            # The contracts in internal/depcontract read two files the Go build cannot see: the
+            # Dependabot configuration and the Cilium chart pin. A change to either one alone
+            # skips the shared Go tests, for the reason todos-contract gives above, and would
+            # merge with its contract unexecuted. This filter feeds a job of its own for that
+            # class of change. TestDependencyContractsRunWhenOnlyTheirInputsChange fails if a
+            # file those contracts read is ever left out of it.
+            dependency-contracts:
+              - 'internal/depcontract/**'
+              - 'pkg/svc/installer/cni/cilium/Dockerfile'
+              - '.github/dependabot.yaml'
               - 'go.mod'
               - 'go.sum'
               - '.github/workflows/ci.yaml'
@@ -1850,6 +1864,38 @@ jobs:
           fi
           echo "Dependency test graph resolves."
 
+  verify-dependency-contracts:
+    name: 🔗 Verify Dependency Contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [changes]
+    if: needs.changes.outputs.dependency-contracts == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # The contracts keep the Gateway API CRDs KSail installs on the line the pinned Cilium
+      # release is built against, and keep the module carrying their version tracked by
+      # Dependabot (ksail#7472). Two of their inputs, the Cilium chart pin and the Dependabot
+      # configuration, are not Go sources, so a pull request changing only one of them reaches
+      # no other test run.
+      # -count=1 is load-bearing for the same reason: those inputs are outside Go's test cache,
+      # so a cached PASS could be replayed over a changed pin.
+      - name: 🔗 Verify dependency contracts
+        run: go test ./internal/depcontract/... -count=1
+
   verify-todos-workflow-contract:
     name: 🧾 Verify Workflow Contracts
     runs-on: ubuntu-latest
@@ -1947,6 +1993,7 @@ jobs:
         operator-chart-e2e,
         validate-calico-chart,
         verify-dependency-test-graph,
+        verify-dependency-contracts,
         verify-todos-workflow-contract,
         release-graph-audit,
         cask-pr-handoff,
@@ -1981,6 +2028,7 @@ jobs:
             ${{ needs.operator-chart-e2e.result }}
             ${{ needs.validate-calico-chart.result }}
             ${{ needs.verify-dependency-test-graph.result }}
+            ${{ needs.verify-dependency-contracts.result }}
             ${{ needs.verify-todos-workflow-contract.result }}
             ${{ needs.release-graph-audit.result }}
             ${{ needs.cask-pr-handoff.result }}

@@ -253,7 +253,7 @@ func TestGatewayAPICRDsURL_NonEmpty(t *testing.T) {
 	t.Parallel()
 
 	// We test parseGatewayAPICRDs via the exported function to check URL is non-empty.
-	// The URL is derived from the embedded Dockerfile.gateway-api and must contain
+	// The URL is derived from the linked sigs.k8s.io/gateway-api release and must contain
 	// a version string. We verify this indirectly by checking the fetch function
 	// accepts a non-empty URL without panicking.
 	crds, err := ciliuminstaller.ParseGatewayAPICRDs([]byte(""))
