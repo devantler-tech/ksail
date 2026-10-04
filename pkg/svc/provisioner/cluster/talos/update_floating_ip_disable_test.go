@@ -337,3 +337,34 @@ func TestUpdateApplySteps_FloatingIPDisableRepointsAfterMidUpdateRelease(t *test
 	assert.Equal(t, []string{"203.0.113.5"}, saved.Contexts["fip-cluster"].Endpoints,
 		"talosctl must stop dialing the address released mid-update")
 }
+
+// TestUpdateApplySteps_FloatingIPDisableMovesKubeconfigBeforeNodeChanges proves
+// the kubeconfig leaves the floating IP before any node is touched: a partly
+// failed push skips the later refresh, and a rerun must still reach the API to
+// finish the transition instead of dialing an address no node answers on.
+//
+//nolint:paralleltest // the fixture sets the Hetzner token with t.Setenv.
+func TestUpdateApplySteps_FloatingIPDisableMovesKubeconfigBeforeNodeChanges(t *testing.T) {
+	fixture := newFloatingIPDisableFixture(t)
+	result := clusterupdate.NewEmptyUpdateResult()
+
+	fixture.runStep(t, "reconcile floating IP endpoint", result)
+
+	written, err := os.ReadFile(fixture.kubeconfigPath)
+	require.NoError(t, err, "the kubeconfig must be rewritten before node changes")
+	assert.Contains(t, string(written), "https://203.0.113.5:6443")
+	assert.NotContains(t, string(written), "192.0.2.10")
+
+	result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
+		Field: talosprovisioner.MachineConfigField,
+	})
+	fixture.runStep(t, "refresh floating IP kubeconfig", result)
+	fixture.runStep(t, "release disabled floating IP", result)
+
+	written, err = os.ReadFile(fixture.kubeconfigPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(written), "https://203.0.113.5:6443",
+		"a failed push must leave the kubeconfig on the node endpoint")
+	assert.Equal(t, int32(0), fixture.calls.del.Load(),
+		"the address is kept after failed changes")
+}

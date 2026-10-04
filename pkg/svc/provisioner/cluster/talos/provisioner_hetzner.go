@@ -489,6 +489,14 @@ func (p *Provisioner) prepareFloatingIPEndpointBeforeNodeChanges(
 		return err
 	}
 
+	// The disable transition moves the kubeconfig to the node endpoint before any
+	// node drops the VIP. A partly failed push skips the later refresh, and the
+	// autoscaler Secret step below already needs the Kubernetes API: both would
+	// otherwise dial an address no node answers on, on this run and every rerun.
+	if p.revertFloatingIPEndpoint {
+		return p.moveKubeconfigToNodeEndpoint(ctx, clusterName)
+	}
+
 	// A topology-only refresh means live detection proved every node already uses
 	// the floating endpoint. Persist it before createK8sClient starts a destructive
 	// roll. Drift repairs wait for the in-place push before switching kubeconfig.
@@ -644,6 +652,30 @@ func (p *Provisioner) refreshFloatingIPKubeconfig(ctx context.Context, clusterNa
 	kubernetesEndpoint := "https://" + net.JoinHostPort(verifiedIP, "6443")
 
 	return p.fetchAndWriteKubeconfigForCP(ctx, talosEndpoint, kubernetesEndpoint)
+}
+
+// moveKubeconfigToNodeEndpoint persists the first control-plane node as the
+// Kubernetes API endpoint. The node address is always in the serving
+// certificate, so this is safe while the floating IP still answers and keeps the
+// kubeconfig usable once it no longer does.
+func (p *Provisioner) moveKubeconfigToNodeEndpoint(ctx context.Context, clusterName string) error {
+	if p.options == nil || p.options.KubeconfigPath == "" {
+		return nil
+	}
+
+	controlPlaneServers, err := p.kubeconfigRefreshControlPlanes(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
+	nodeAddress, err := hetznerNodeTalosAddress(controlPlaneServers[0])
+	if err != nil {
+		return err
+	}
+
+	return p.fetchAndWriteKubeconfigForCP(
+		ctx, nodeAddress, "https://"+net.JoinHostPort(nodeAddress, "6443"),
+	)
 }
 
 // kubeconfigRefreshControlPlanes lists the cluster's live control-plane
