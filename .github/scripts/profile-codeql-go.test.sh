@@ -91,3 +91,64 @@ printf 'PASS: measured all four commands, retained failure, and rejected escapin
 	if source_matches_head "$successor_sha"; then exit 1; fi
 )
 printf 'PASS: source verification rejects dirty, moved, and untracked source\n'
+
+# Git ignores do not constrain Go package discovery.
+mkdir -p "$scratch/ignored-source/tmp/extra"
+(
+	cd "$scratch/ignored-source"
+	printf 'module example.invalid/profile-source\n\ngo 1.26.1\n' >go.mod
+	printf 'package source\n' >source.go
+	printf 'tmp/\nbin/\n' >.gitignore
+	git init -q
+	git add go.mod source.go .gitignore
+	git -c user.name=Fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false commit -qm fixture
+	measured_sha="$(git rev-parse HEAD)"
+	source_matches_head "$measured_sha"
+	printf 'package extra\n' >tmp/extra/extra.go
+	git check-ignore -q tmp/extra/extra.go
+	packages="$(GOWORK=off go list ./...)"
+	[[ "$packages" == *$'\nexample.invalid/profile-source/tmp/extra' ]] || {
+		printf 'FAIL: Go discovery did not include the ignored package\n' >&2
+		exit 1
+	}
+	if source_matches_head "$measured_sha"; then
+		printf 'FAIL: ignored Go input certified the measured revision\n' >&2
+		exit 1
+	fi
+	rm tmp/extra/extra.go
+	for input in go.mod go.sum; do
+		touch "tmp/$input"
+		git check-ignore -q "tmp/$input"
+		if source_matches_head "$measured_sha"; then
+			printf 'FAIL: ignored %s certified the measured revision\n' "$input" >&2
+			exit 1
+		fi
+		rm "tmp/$input"
+	done
+	printf '{}\n' >tmp/report.json
+	source_matches_head "$measured_sha"
+
+	# Failed Git reads cannot establish the measured revision or clean inputs.
+	git() {
+		if [[ "$1" == "$failed_command" ]]; then
+			if [[ "$read_mode" == partial ]]; then
+				if [[ "$1" == rev-parse ]]; then
+					printf '%s\n' "$measured_sha"
+				else
+					printf 'tmp/extra/extra.go\n'
+				fi
+			fi
+			return 23
+		fi
+		command git "$@"
+	}
+	for failed_command in ls-files rev-parse; do
+		for read_mode in silent partial; do
+			if source_matches_head "$measured_sha"; then
+				printf 'FAIL: %s failed %s read certified the measured revision\n' "$read_mode" "$failed_command" >&2
+				exit 1
+			fi
+		done
+	done
+)
+printf 'PASS: source verification rejects ignored inputs and failed reads; report-only output remains usable\n'
