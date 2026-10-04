@@ -38,6 +38,11 @@ rejects deletion during an update, which can continue after the CLI stops
 waiting. A failed settling wait still runs deletion and leaves the job failed;
 inspect cleanup and resolve any remaining resources before declaring completion.
 
+The existing cleanup helper accepts an EKS `DELETING` response as a delete that
+started. A green cleanup step therefore does not prove completed teardown.
+Independently confirm the cluster and associated resources are absent before
+recording successful evaluation; credentials and account identifiers stay private.
+
 The local command-double controls run through `go test ./internal/ciharness/...`.
 They establish that the driver rejects false success and cleans up credentials;
 they do not replace a successful workflow run on real AWS.
