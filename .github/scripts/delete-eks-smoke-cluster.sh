@@ -63,7 +63,7 @@ if [[ -z "${cluster_name}" || -z "${region}" || -z "${workdir}" ]]; then
 	exit 2
 fi
 
-# Returns 0 only when the cluster is gone or is irreversibly on its way out.
+# Returns 0 only when AWS explicitly confirms that the cluster is gone.
 cluster_absent() {
 	local output
 	local status=0
@@ -75,19 +75,21 @@ cluster_absent() {
 		--output text 2>&1)" || status=$?
 
 	if ((status == 0)); then
-		# Teardown is asynchronous, so a cluster still reporting DELETING is a
-		# delete that took effect rather than a leak. Treating it as one would
-		# just move the false alarm from failed creates to successful deletes.
-		if [[ "${output}" == "DELETING" ]]; then
-			printf 'Cluster %s is already tearing down in %s.\n' "${cluster_name}" "${region}"
-			return 0
-		fi
-
+		# DELETING still describes an existing cluster. Leave the waiting
+		# fallback and final absence check responsible for completion.
 		return 1
 	fi
 
+	# AWS CLI surrounds service errors with newlines; newer versions also
+	# prepend a fixed error label. Remove only those formatting bytes so a
+	# partial response or unrelated diagnostic cannot become absence proof.
+	while [[ "${output}" == $'\n'* ]]; do
+		output="${output#$'\n'}"
+	done
+	output="${output#'aws: [ERROR]: '}"
+
 	case "${output}" in
-	*ResourceNotFoundException*)
+	'An error occurred (ResourceNotFoundException) when calling the DescribeCluster operation:'*)
 		return 0
 		;;
 	*)
