@@ -240,6 +240,14 @@ func ExportEnsureClusterManaged(
 	)
 }
 
+// ExportUnmanagedClusterGuard exercises the production provider selection in tests.
+func ExportUnmanagedClusterGuard(
+	ctx context.Context,
+	resolved *lifecycle.ResolvedClusterInfo,
+) error {
+	return unmanagedClusterGuard(ctx, resolved)
+}
+
 // ExportParseEksctlContextTarget exports parseEksctlContextTarget for testing.
 func ExportParseEksctlContextTarget(contextName string) (string, string, bool) {
 	return parseEksctlContextTarget(contextName)

@@ -561,13 +561,13 @@ jobs:
           .github/scripts/cask-pr-handoff-workflow.test.sh
 
   ci-go:
-    name: ✅ Validate Go Project
+    name: ✅ Validate Main Go and Allowlist Changes
     needs: [changes]
     # The two arms below cover what the ORG-REQUIRED workflow does not, and nothing
     # more. validate-go-project.yaml carries its own `pull_request:` / `merge_group:`
     # triggers alongside its `workflow_call` interface, so GitHub already runs the
     # complete Go suite directly on every pull request here, with no help from this
-    # file. That direct run publishes its checks WITHOUT the `✅ Validate Go Project /`
+    # file. That direct run publishes its checks WITHOUT this caller's name
     # prefix, which is why a prefix-filtered read of a pull request shows "skipped"
     # over a suite that has in fact passed (ksail#6563, ksail#6564 — both closed as
     # measurement errors of exactly that shape).
@@ -588,7 +588,7 @@ jobs:
       || (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
       && needs.changes.outputs.govuln-allowlist == 'true')
-    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@bd0035dd8f41fcf1459b878882b8897443f8dc59 # v4.9.4
+    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@0600006235510307a04efebcac1ac1f363f5f862 # v6.0.1
     # The canonical defaults make a default-branch run answer "did the check run" rather than
     # "did the diff touch a Go file". On main the branch's green IS the protection
     # signal, so a path filter that skips the suite or the scan leaves main green
@@ -651,7 +651,7 @@ jobs:
               ;;
           esac
 
-      - name: Wait for ✅ Validate Go Project
+      - name: Wait for invoked Go validation checks
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           GO_VALIDATION_SELECTED: ${{ needs.changes.outputs.govuln-allowlist }}
@@ -660,7 +660,7 @@ jobs:
             const sha = context.payload.pull_request.head.sha;
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const prefix = '✅ Validate Go Project';
+            const prefix = '✅ Validate Main Go and Allowlist Changes';
             const maxWait = 25 * 60 * 1000; // 25 minutes
             const poll = 30 * 1000; // 30 seconds
             const start = Date.now();
@@ -741,6 +741,41 @@ jobs:
         run: |
           .github/scripts/verify-otelzap-parity.sh
           .github/scripts/verify-otelzap-parity.test.sh
+
+  verify-vulnerability-identities:
+    name: 🔐 Verify Local Source Vulnerability Identities
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: 📦 Install pinned vulnerability scanner
+        env:
+          GOBIN: ${{ runner.temp }}/vulnerability-scanner
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+
+      - name: 🧪 Verify actual scanner positive and negative controls
+        env:
+          GOVULNCHECK_BIN: ${{ runner.temp }}/vulnerability-scanner/govulncheck
+        run: |
+          scanner_module_cache="$(go env GOMODCACHE)"
+          printf -v GOVULNCHECK_TEST_DB '%s:%s%s/golang.org/x/vuln@v1.8.0/internal/client/testdata/vulndb-v1' file // "$scanner_module_cache"
+          export GOVULNCHECK_TEST_DB
+          go test -tags integration ./internal/vulnidentity/... -count=1
+
+      - name: 🔐 Query every published local-source identity
+        run: go run ./internal/vulnidentity/cmd/vulnidentity -scanner "$RUNNER_TEMP/vulnerability-scanner/govulncheck"
 
   build-artifact:
     name: 🏗️ Build KSail Binary
@@ -2041,6 +2076,7 @@ jobs:
         ci-go,
         wait-for-validate-go,
         verify-go-archive,
+        verify-vulnerability-identities,
         build-artifact,
         generate,
         auto-commit,
@@ -2069,7 +2105,7 @@ jobs:
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/actions/aggregate-job-checks@df7fd4f83edade31c121a9de563d9a7b9b1f900d # v13.10.3
+      - uses: devantler-tech/actions/aggregate-job-checks@1d726483facb9340655489913f609082677be8f5 # v13.10.6
         with:
           job-results: >-
             ${{ needs.rate-limit-gate.result }}
@@ -2077,6 +2113,7 @@ jobs:
             ${{ needs.ci-go.result }}
             ${{ needs.wait-for-validate-go.result }}
             ${{ needs.verify-go-archive.result }}
+            ${{ needs.verify-vulnerability-identities.result }}
             ${{ needs.build-artifact.result }}
             ${{ needs.generate.result }}
             ${{ needs.auto-commit.result }}

@@ -151,7 +151,7 @@ const [script, status, conclusion, present, headSHA] = process.argv.slice(1);
 let now = 0;
 Date.now = () => now;
 global.setTimeout = (callback, milliseconds) => { now += milliseconds; callback(); };
-const check = {name: '✅ Validate Go Project / 🧪 Test', status, conclusion};
+const check = {name: '✅ Validate Main Go and Allowlist Changes / 🧪 Test', status, conclusion};
 const github = {rest: {checks: {listForRef: async ({ref}) => {
   if (ref !== headSHA) throw new Error('wrong head');
   return {data: {check_runs: present === 'true' ? [check] : []}};
