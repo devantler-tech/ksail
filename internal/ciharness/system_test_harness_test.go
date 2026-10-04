@@ -101,7 +101,7 @@ type ciWorkflow struct {
 //
 // devantler-tech/actions/.github/workflows/validate-go-project.yaml declares its own
 // pull_request: trigger as well as workflow_call, so it already runs org-required on every
-// pull request in this repository, publishing its checks without the "✅ Validate Go Project /"
+// pull request in this repository, publishing its checks without the ci-go caller's
 // prefix. ci-go's pull-request arm therefore adds nothing on a Go diff. What it uniquely adds
 // is the scan-default-branch: true behaviour on an allowlist-only pull request, which the
 // required run — taking that input's false default — does not perform.
