@@ -320,3 +320,89 @@ func rebootRequiredDiff() *clusterupdate.UpdateResult {
 
 	return diff
 }
+
+// TestReconcileAutoscalerNodes_ReportsUnconfiguredPoolOnEveryUpdate pins that a
+// server of a removed pool is reported on every update, not only on the one that
+// rewrites the autoscaler Secret. The update that removes the pool changes the Secret
+// and reports the server while propagating; a later update leaves the Secret
+// unchanged, propagates nothing, and must still report the server — exactly once in
+// both cases, and without a request that acts on any server.
+func TestReconcileAutoscalerNodes_ReportsUnconfiguredPoolOnEveryUpdate(t *testing.T) {
+	t.Parallel()
+
+	updates := []struct {
+		name          string
+		secretChanged bool
+	}{
+		{"secret changed", true},
+		{"secret unchanged", false},
+	}
+
+	poolSets := []struct {
+		name  string
+		pools []string
+	}{
+		{"removed pool", []string{configuredPool}},
+		{"last pool removed", nil},
+	}
+
+	for _, update := range updates {
+		for _, poolSet := range poolSets {
+			t.Run(update.name+"/"+poolSet.name, func(t *testing.T) {
+				t.Parallel()
+
+				hzProvider, api := newAutoscalerHcloudAPI(t, removedPoolAndOtherClusterServers()...)
+
+				var logs bytes.Buffer
+
+				prov := autoscalerProvisioner(hzProvider, &logs, poolSet.pools...)
+				result := clusterupdate.NewEmptyUpdateResult()
+
+				err := prov.ReconcileAutoscalerNodesForTest(
+					context.Background(),
+					autoscalerFakeCluster,
+					inPlaceDiff(),
+					update.secretChanged,
+					false,
+					result,
+				)
+				require.NoError(t, err)
+
+				reasons := failedChangeReasons(result)
+				require.Len(t, reasons, 1, "the leftover server is reported exactly once")
+				assert.Contains(t, reasons[0], "as-removed-1")
+				assert.Contains(t, reasons[0], `"`+removedPool+`"`)
+				assert.NotContains(t, reasons[0], "other-pool-a")
+				assert.Zero(t, api.unexpected.Load(), "no request may act on a server")
+				assert.Equal(t, 1, strings.Count(
+					logs.String(), "Autoscaler node as-removed-1 is left untouched",
+				))
+			})
+		}
+	}
+}
+
+// TestReconcileAutoscalerNodes_UnchangedSecretLeavesConfiguredServersAlone pins that
+// the audit an unchanged Secret runs only reports: a server of a configured pool is
+// neither reported nor converged, so an update that changes nothing stays a no-op.
+func TestReconcileAutoscalerNodes_UnchangedSecretLeavesConfiguredServersAlone(t *testing.T) {
+	t.Parallel()
+
+	hzProvider, api := newAutoscalerHcloudAPI(t,
+		autoscalerServerSchema(1, "as-pool-a-1", configuredPool, autoscalerFakeNetworkID),
+	)
+
+	var logs bytes.Buffer
+
+	prov := autoscalerProvisioner(hzProvider, &logs, configuredPool)
+	result := clusterupdate.NewEmptyUpdateResult()
+
+	err := prov.ReconcileAutoscalerNodesForTest(
+		context.Background(), autoscalerFakeCluster, inPlaceDiff(), false, false, result,
+	)
+	require.NoError(t, err)
+
+	assert.Empty(t, result.FailedChanges)
+	assert.Zero(t, api.unexpected.Load(), "no request may act on a server")
+	assert.Empty(t, logs.String())
+}

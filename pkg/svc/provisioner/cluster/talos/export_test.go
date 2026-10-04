@@ -1216,3 +1216,17 @@ func (p *Provisioner) GetLowestRunningKubernetesVersionForTest(
 func (p *KubernetesProvisioner) ProgressWriterForTest() io.Writer {
 	return p.progressWriter()
 }
+
+// ReconcileAutoscalerNodesForTest exposes reconcileAutoscalerNodes for unit testing —
+// the step that follows the autoscaler Secret refresh: propagation when the Secret
+// changed, the removed-pool audit alone when it did not.
+func (p *Provisioner) ReconcileAutoscalerNodesForTest(
+	ctx context.Context,
+	clusterName string,
+	diff *clusterupdate.UpdateResult,
+	secretChanged bool,
+	imageChanged bool,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.reconcileAutoscalerNodes(ctx, clusterName, diff, secretChanged, imageChanged, result)
+}

@@ -90,15 +90,35 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 		return err
 	}
 
-	// The refreshed Secret alone only fixes newly provisioned nodes; existing
-	// autoscaler nodes are not KSail-owned, so the in-place rolling apply and
-	// rolling reboot never touch them. Bring them to the new baseline only when
-	// the Secret actually changed. A no-op when nothing changed.
-	if !changed {
-		return nil
-	}
-
 	imageChanged := prevImageID != "" && prevImageID != strconv.FormatInt(snapshotImageID, 10)
+
+	return p.reconcileAutoscalerNodes(ctx, clusterName, diff, changed, imageChanged, result)
+}
+
+// reconcileAutoscalerNodes follows the autoscaler Secret refresh. The refreshed Secret
+// alone only fixes newly provisioned nodes; existing autoscaler nodes are not
+// KSail-owned, so the in-place rolling apply and rolling reboot never touch them.
+// They are brought to the new baseline only when the Secret actually changed.
+//
+// A server of a pool that is no longer configured is reported on every update, not
+// only on the one that rewrites the Secret: removing a pool changes the Secret once,
+// so a later update would otherwise succeed while the server keeps running
+// unreported. Propagation lists the servers itself and reports such a server as it
+// does, so the audit runs only when nothing is propagated and each server is
+// reported once per update.
+func (p *Provisioner) reconcileAutoscalerNodes(
+	ctx context.Context,
+	clusterName string,
+	diff *clusterupdate.UpdateResult,
+	secretChanged bool,
+	imageChanged bool,
+	result *clusterupdate.UpdateResult,
+) error {
+	if !secretChanged {
+		_, err := p.listAutoscalerServers(ctx, clusterName, result)
+
+		return err
+	}
 
 	return p.propagateAutoscalerBaseline(ctx, clusterName, diff, imageChanged, result)
 }
