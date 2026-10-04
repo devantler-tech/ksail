@@ -213,41 +213,41 @@ EOF
 chmod +x "${work}/bin/gh" "${work}/bin/date" "${work}/bin/sleep"
 
 fail() {
-  printf 'FAIL: %s\n' "$1" >&2
-  exit 1
+	printf 'FAIL: %s\n' "$1" >&2
+	exit 1
 }
 run_case() {
-  local scenario="$1" success="$2" promotes="$3" merges="$4" code=0
-  local state="${work}/${scenario}"
-  mkdir -p "${state}"
-  : >"${state}/mutations"
-  PATH="${work}/bin:${PATH}" FINISH_FIXTURE="${fixture}" FINISH_STATE="${state}" FINISH_SCENARIO="${scenario}" \
-    bash "${script_dir}/finish-cask-pr-handoff.sh" \
-    --tap devantler-tech/homebrew-tap --pr 42 --cask-name ksail --source-repo devantler-tech/ksail \
-    --tag v7.166.1 --attempts 2 --interval 0 >"${state}/output" 2>&1 || code=$?
-  if [[ "${success}" == true && "${code}" -ne 0 ]] || [[ "${success}" == false && "${code}" -eq 0 ]]; then
-    cat "${state}/output" >&2
-    fail "${scenario}: expected success=${success}, exit=${code}"
-  fi
-  if [[ "$(grep -c '^promote$' "${state}/mutations" || true)" -ne "${promotes}" ]]; then
-    cat "${state}/output" >&2
-    fail "${scenario}: wrong promotion count"
-  fi
-  if [[ "$(grep -c '^merge ' "${state}/mutations" || true)" -ne "${merges}" ]]; then
-    cat "${state}/output" >&2
-    fail "${scenario}: wrong direct merge count"
-  fi
-  if [[ "${success}" == true ]]; then
-    grep -q '1111111111111111111111111111111111111111' "${state}/output" || fail "${scenario}: verified head missing from delivery result"
-    [[ -f "${state}/merged" ]] || fail "${scenario}: readiness incorrectly counted as delivered"
-  fi
-  if [[ "${scenario}" == async-timeout || "${scenario}" == async-pending-success ]]; then
-    [[ "$(<"${state}/async-polls")" -eq 2 ]] || fail "${scenario}: result polling did not honor its independent bound"
-  fi
-  if [[ "${scenario}" == async-conflict || "${scenario}" == async-initial-* ]]; then
-    [[ ! -f "${state}/async-polls" ]] || fail "${scenario}: adopted an unverified request"
-  fi
-  printf 'PASS: %s\n' "${scenario}"
+	local scenario="$1" success="$2" promotes="$3" merges="$4" code=0
+	local state="${work}/${scenario}"
+	mkdir -p "${state}"
+	: >"${state}/mutations"
+	PATH="${work}/bin:${PATH}" FINISH_FIXTURE="${fixture}" FINISH_STATE="${state}" FINISH_SCENARIO="${scenario}" \
+		bash "${script_dir}/finish-cask-pr-handoff.sh" \
+		--tap devantler-tech/homebrew-tap --pr 42 --cask-name ksail --source-repo devantler-tech/ksail \
+		--tag v7.166.1 --attempts 2 --interval 0 >"${state}/output" 2>&1 || code=$?
+	if [[ "${success}" == true && "${code}" -ne 0 ]] || [[ "${success}" == false && "${code}" -eq 0 ]]; then
+		cat "${state}/output" >&2
+		fail "${scenario}: expected success=${success}, exit=${code}"
+	fi
+	if [[ "$(grep -c '^promote$' "${state}/mutations" || true)" -ne "${promotes}" ]]; then
+		cat "${state}/output" >&2
+		fail "${scenario}: wrong promotion count"
+	fi
+	if [[ "$(grep -c '^merge ' "${state}/mutations" || true)" -ne "${merges}" ]]; then
+		cat "${state}/output" >&2
+		fail "${scenario}: wrong direct merge count"
+	fi
+	if [[ "${success}" == true ]]; then
+		grep -q '1111111111111111111111111111111111111111' "${state}/output" || fail "${scenario}: verified head missing from delivery result"
+		[[ -f "${state}/merged" ]] || fail "${scenario}: readiness incorrectly counted as delivered"
+	fi
+	if [[ "${scenario}" == async-timeout || "${scenario}" == async-pending-success ]]; then
+		[[ "$(<"${state}/async-polls")" -eq 2 ]] || fail "${scenario}: result polling did not honor its independent bound"
+	fi
+	if [[ "${scenario}" == async-conflict || "${scenario}" == async-initial-* ]]; then
+		[[ ! -f "${state}/async-polls" ]] || fail "${scenario}: adopted an unverified request"
+	fi
+	printf 'PASS: %s\n' "${scenario}"
 }
 
 # Removing the direct merge, SHA pin, post-promotion audit, or immutable readback breaks these.
@@ -260,25 +260,25 @@ run_case admin-capable true 1 1
 run_case async-pending-success true 1 1
 run_case async-already-merged true 1 1
 for scenario in draft-release unpublished-release wrong-release-tag release-read-error digest-mismatch \
-  no-required failed-required missing-required-flag pending-required state-read-error checks-read-error \
-  graphql-errors partial-checks later-page-failure cursor-error later-unresolved later-negative-review \
-  partial-threads changes-requested auto-armed conflict adaptation-commit head-moved-during-collection \
-  head-moved-before-promotion wrong-check-commit status-commit-mismatch; do
-  run_case "${scenario}" false 0 0
+	no-required failed-required missing-required-flag pending-required state-read-error checks-read-error \
+	graphql-errors partial-checks later-page-failure cursor-error later-unresolved later-negative-review \
+	partial-threads changes-requested auto-armed conflict adaptation-commit head-moved-during-collection \
+	head-moved-before-promotion wrong-check-commit status-commit-mismatch; do
+	run_case "${scenario}" false 0 0
 done
 for scenario in missing-audit stale-aggregate stale-audit head-moved-after-promotion promotion-error \
-  postpromotion-blocked digest-changed-after-promotion release-changed-after-promotion final-release-digest-race; do
-  run_case "${scenario}" false 1 0
+	postpromotion-blocked digest-changed-after-promotion release-changed-after-promotion final-release-digest-race; do
+	run_case "${scenario}" false 1 0
 done
 for scenario in merge-rejected merge-false readback-error readback-wrong-head; do
-  run_case "${scenario}" false 1 1
+	run_case "${scenario}" false 1 1
 done
 for scenario in async-conflict async-failed async-enqueued async-unknown async-missing-details async-malformed \
-  async-lost-read async-timeout async-wrong-uuid async-different-uuid async-wrong-head async-wrong-method \
-  async-wrong-action async-bypass async-string-bypass async-missing-options async-initial-wrong-uuid \
-  async-initial-wrong-head async-initial-wrong-method async-initial-wrong-action async-initial-bypass \
-  async-initial-missing-options async-final-wrong-head async-final-wrong-uuid async-final-missing-sha; do
-  run_case "${scenario}" false 1 1
+	async-lost-read async-timeout async-wrong-uuid async-different-uuid async-wrong-head async-wrong-method \
+	async-wrong-action async-bypass async-string-bypass async-missing-options async-initial-wrong-uuid \
+	async-initial-wrong-head async-initial-wrong-method async-initial-wrong-action async-initial-bypass \
+	async-initial-missing-options async-final-wrong-head async-final-wrong-uuid async-final-missing-sha; do
+	run_case "${scenario}" false 1 1
 done
 
 printf 'All exact-head cask delivery behavior tests passed.\n'
