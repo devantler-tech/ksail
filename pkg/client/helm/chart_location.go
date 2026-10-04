@@ -121,7 +121,7 @@ func (c *Client) loadChartAndValues(
 		return nil, nil, err
 	}
 
-	vals, err := c.mergeValues(spec, chartPath)
+	vals, err := mergeValues(spec, chartPath)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -34,6 +34,11 @@ const FluxVerifyField = "cluster.workload.flux.verify"
 // Helm upgrade as every other autoscaler field.
 const AutoscalerValuesField = "cluster.autoscaler.node.chartValues"
 
+// CertManagerValuesField is the diff key for cert-manager chart values that
+// differ from the ones this KSail version renders. Reconciliation routes it to
+// the same cert-manager Helm upgrade as a cluster.certManager change.
+const CertManagerValuesField = "cluster.certManager.chartValues"
+
 // fluxVerifyDriftedDisplay is the old value rendered for verify drift. The
 // detector receives a single boolean covering both an absent spec.verify block
 // and one that is present but differs, so this names the disjunction rather than
@@ -215,15 +220,26 @@ func (e *Engine) CheckRegistryCredential(
 
 // CheckAutoscalerValues appends an in-place change when the installed Cluster
 // Autoscaler release carries values other than the ones this KSail version
-// renders. This is the only signal a KSail upgrade that changes the rendered
-// values produces: the structural diff compares cluster specs, so a new CPU
-// limit (ksail#7145) with an unchanged spec yields no field change, and
-// `cluster update` reported success while the cluster kept the old values
-// (ksail#7366).
-//
-// drifted is decided by the autoscaler installer, which renders the values
-// and reads the deployed ones.
+// renders. See CheckChartValues.
 func (e *Engine) CheckAutoscalerValues(
+	drifted bool,
+	result *clusterupdate.UpdateResult,
+) {
+	e.CheckChartValues(AutoscalerValuesField, "cluster-autoscaler", drifted, result)
+}
+
+// CheckChartValues appends an in-place change under field when the installed
+// Helm release of a KSail-managed component carries values other than the
+// ones this KSail version renders. This is the only signal a KSail upgrade that
+// changes the rendered values produces: the structural diff compares cluster
+// specs, so a new autoscaler CPU limit (ksail#7145) with an unchanged spec
+// yields no field change, and `cluster update` reported success while the
+// cluster kept the old values (ksail#7366).
+//
+// drifted is decided by the component's installer, which renders the values
+// and reads the deployed ones. component names the release in the reason.
+func (e *Engine) CheckChartValues(
+	field, component string,
 	drifted bool,
 	result *clusterupdate.UpdateResult,
 ) {
@@ -232,11 +248,14 @@ func (e *Engine) CheckAutoscalerValues(
 	}
 
 	routeChange(result, clusterupdate.Change{
-		Field:    AutoscalerValuesField,
+		Field:    field,
 		OldValue: "deployed",
 		NewValue: "rendered by this KSail version",
 		Category: clusterupdate.ChangeCategoryInPlace,
-		Reason:   "the autoscaler release can be upgraded in-place to the values this KSail version renders",
+		Reason: fmt.Sprintf(
+			"the %s release can be upgraded in-place to the values this KSail version renders",
+			component,
+		),
 	})
 }
 
