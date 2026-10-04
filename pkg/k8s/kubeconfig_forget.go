@@ -35,7 +35,8 @@ func forgetContextWithWrite(
 		return false, ErrExplicitConnectionRequired
 	}
 
-	if err := ctx.Err(); err != nil {
+	err := ctx.Err()
+	if err != nil {
 		return false, fmt.Errorf("forget local context: %w", err)
 	}
 
@@ -52,13 +53,15 @@ func forgetContextWithWrite(
 	// Match client-go's ModifyConfig protocol. Hold the canonical-path lock
 	// through reading and replacement; never steal another writer's lock.
 	lockPath := canonical + ".lock"
-	lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL, kubeconfigFileMode) //nolint:gosec // canonical-path exclusive lock.
+	//nolint:gosec // canonical-path exclusive lock.
+	lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL, kubeconfigFileMode)
 	if err != nil {
 		return false, fmt.Errorf("lock kubeconfig; wait for the other writer to finish: %w", err)
 	}
 	defer func() { _ = os.Remove(lockPath) }()
 
-	if err := lock.Close(); err != nil {
+	err = lock.Close()
+	if err != nil {
 		return false, fmt.Errorf("close kubeconfig lock: %w", err)
 	}
 
@@ -106,7 +109,8 @@ func forgetLockedContext(
 		return false, fmt.Errorf("encode kubeconfig: %w", err)
 	}
 
-	if err := ctx.Err(); err != nil {
+	err = ctx.Err()
+	if err != nil {
 		return false, fmt.Errorf("forget local context: %w", err)
 	}
 
@@ -156,7 +160,8 @@ func replaceUnchangedKubeconfig(
 		return fmt.Errorf("check kubeconfig write access: %w", err)
 	}
 
-	if err := file.Close(); err != nil {
+	err = file.Close()
+	if err != nil {
 		return fmt.Errorf("close kubeconfig write check: %w", err)
 	}
 

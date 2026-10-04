@@ -2117,12 +2117,20 @@ jobs:
         run: |
           set -euo pipefail
           go test ./... -count=1 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/go-test.log"
-      - name: 🔍 Validate with the module-pinned linter
+      - name: ⚙️ Install the canonical CI linter
+        if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.11.4
+          install-only: true
+          verify: false
+      - name: 🔍 Validate with the canonical CI linter
         if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
         shell: bash
         run: |
           set -euo pipefail
-          go tool golangci-lint run --fix --timeout 15m 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/lint.log"
+          golangci-lint version | tee "$RUNNER_TEMP/local-recovery-evidence/lint-version.log"
+          golangci-lint run --fix --timeout 15m 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/lint.log"
       - name: ⚙️ Setup Node.js for canonical generation
         if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0

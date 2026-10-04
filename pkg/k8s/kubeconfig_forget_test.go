@@ -2,7 +2,7 @@ package k8s_test
 
 import (
 	"context"
-	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -99,7 +99,6 @@ func TestForgetContextBlocksConcurrentKubectlWrite(t *testing.T) {
 	config.AuthInfos["shared"] = &clientcmdapi.AuthInfo{Token: "keep"}
 	config.Contexts["chosen"] = &clientcmdapi.Context{Cluster: "shared", AuthInfo: "shared"}
 	require.NoError(t, clientcmd.WriteToFile(*config, path))
-	writingStopped := errors.New("intercepted before atomic replacement")
 	_, err := k8s.ForgetContextWithWriteForTest(t.Context(), path, "chosen",
 		func(_ string, _ []byte, _ os.FileMode) error {
 			// A normal kubectl writer cannot add a new shared reference after our snapshot.
@@ -110,9 +109,9 @@ func TestForgetContextBlocksConcurrentKubectlWrite(t *testing.T) {
 			err := clientcmd.ModifyConfig(access, *config, false)
 			assert.Error(t, err, "hold the client-go lock through the final atomic write")
 
-			return writingStopped
+			return io.ErrShortWrite
 		})
-	require.ErrorIs(t, err, writingStopped)
+	require.ErrorIs(t, err, io.ErrShortWrite)
 	assert.NoFileExists(t, path+".lock", "release our lock on failure")
 }
 
@@ -211,14 +210,13 @@ func TestForgetContextWriteFailurePreservesFile(t *testing.T) {
 	require.NoError(t, clientcmd.WriteToFile(*config, path))
 	before, err := os.ReadFile(path)
 	require.NoError(t, err)
-	failure := errors.New("atomic replace failed")
 	changed, err := k8s.ForgetContextWithWriteForTest(t.Context(), path, "chosen",
 		func(_ string, _ []byte, mode os.FileMode) error {
 			assert.Equal(t, os.FileMode(0o600), mode)
 
-			return failure
+			return io.ErrShortWrite
 		})
-	require.ErrorIs(t, err, failure)
+	require.ErrorIs(t, err, io.ErrShortWrite)
 	assert.False(t, changed)
 	after, err := os.ReadFile(path)
 	require.NoError(t, err)
