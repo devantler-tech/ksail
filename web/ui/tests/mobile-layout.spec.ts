@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { mockApi } from "./mock-api.ts";
 
 const CLUSTER_NAME = "production-observability-control-plane-with-a-very-long-generated-cluster-name";
 const NAMESPACE = "n".repeat(63);
@@ -55,7 +56,13 @@ const node = {
     capacity: { cpu: "8", memory: "16Gi", pods: "110" },
     allocatable: { cpu: "7500m", memory: "15Gi", pods: "110" },
     nodeInfo: { kubeletVersion: "v1.37.0", osImage: "Talos Linux v1.12.0" },
-    conditions: [{ type: "Ready", status: "True", lastTransitionTime: "2026-08-29T16:00:00Z" }],
+    conditions: [
+      {
+        type: "Ready",
+        status: "True",
+        lastTransitionTime: "2026-08-29T16:00:00Z",
+      },
+    ],
   },
 };
 
@@ -68,7 +75,12 @@ const pod = {
     creationTimestamp: "2026-08-29T12:00:00Z",
   },
   spec: {
-    containers: [{ name: "metrics-exporter", resources: { requests: { cpu: "250m", memory: "256Mi" } } }],
+    containers: [
+      {
+        name: "metrics-exporter",
+        resources: { requests: { cpu: "250m", memory: "256Mi" } },
+      },
+    ],
   },
   status: {
     phase: "Running",
@@ -89,7 +101,11 @@ const event = {
   reason: "BackOffBecauseAContainerWithAnExceptionallyLongNameCouldNotStart",
   message:
     "The workload reported an intentionally long diagnostic message without natural break opportunities: abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789.",
-  involvedObject: { kind: "Pod", name: POD_NAME, namespace: pod.metadata.namespace },
+  involvedObject: {
+    kind: "Pod",
+    name: POD_NAME,
+    namespace: pod.metadata.namespace,
+  },
   count: 12345,
   lastTimestamp: "2026-08-29T15:55:00Z",
 };
@@ -99,7 +115,12 @@ function resources(kind: string) {
   if (kind === "Pod") return [pod];
   if (kind === "Event") return [event];
   if (kind === "NodeMetrics") {
-    return [{ metadata: { name: node.metadata.name }, usage: { cpu: "3200m", memory: "8Gi" } }];
+    return [
+      {
+        metadata: { name: node.metadata.name },
+        usage: { cpu: "3200m", memory: "8Gi" },
+      },
+    ];
   }
   if (kind === "PodMetrics") {
     return [
@@ -113,114 +134,112 @@ function resources(kind: string) {
 }
 
 async function mockOperatorApi(page: Page) {
-  await page.route("**/api/v1/**", async (route) => {
-    const url = new URL(route.request().url());
+  await mockApi(
+    page,
+    {
+      mode: "operator",
+      capabilities: {
+        clusterUpdate: true,
+        workloadRead: true,
+        workloadWrite: true,
+        kubeconfigDownload: true,
+        applyManifests: true,
+        secretsCipher: false,
+        workloadLogs: true,
+        workloadExec: true,
+        clusterStartStop: false,
+        componentsInstall: true,
+        plugins: true,
+        aiChat: false,
+        kubeProxy: false,
+        pluginInstall: false,
+        aiChatWrite: false,
+        pluginCatalog: false,
+        kubeWatch: false,
+        wsMultiplexer: false,
+      },
+    },
+    async (route, url) => {
+      if (url.pathname === "/api/v1/plugins") {
+        await route.fulfill({
+          json: { plugins: [{ name: "wide-action", main: "main.js" }] },
+        });
+        return true;
+      }
 
-    if (url.pathname === "/api/v1/config") {
-      await route.fulfill({
-        json: {
-          readOnly: false,
-          authEnabled: false,
-          mode: "operator",
-          capabilities: {
-            clusterUpdate: true,
-            workloadRead: true,
-            workloadWrite: true,
-            kubeconfigDownload: true,
-            applyManifests: true,
-            secretsCipher: false,
-            workloadLogs: true,
-            workloadExec: true,
-            clusterStartStop: false,
-            componentsInstall: true,
-            plugins: true,
-            aiChat: false,
-            kubeProxy: false,
-            pluginInstall: false,
-            aiChatWrite: false,
-            pluginCatalog: false,
-            kubeWatch: false,
-            wsMultiplexer: false,
+      if (url.pathname === "/api/v1/plugins/wide-action/main.js") {
+        await route.fulfill({
+          contentType: "application/javascript",
+          body: PLUGIN_ACTION_LABELS.map(
+            (label) =>
+              `window.pluginLib.registerAppBarAction(window.pluginLib.React.createElement("button", { type: "button", "aria-label": "${label}" }, "${label}"));`,
+          ).join("\n"),
+        });
+        return true;
+      }
+
+      if (url.pathname === "/api/v1/meta") {
+        await route.fulfill({
+          json: {
+            distributions: ["VCluster"],
+            providers: { VCluster: ["Kubernetes"] },
+            components: [],
+            resourceKinds: ["Pod", "Deployment", "StatefulSet", "DaemonSet", "Event", "Node", "Namespace"].map(
+              (kind) => ({
+                kind,
+                namespaced: !["Node", "Namespace"].includes(kind),
+                scalable: ["Deployment", "StatefulSet"].includes(kind),
+                restartable: ["Deployment", "StatefulSet", "DaemonSet"].includes(kind),
+                reconcilable: false,
+                deletable: !["Node", "Namespace"].includes(kind),
+                browsable: true,
+              }),
+            ),
           },
-        },
-      });
-      return;
-    }
+        });
+        return true;
+      }
 
-    if (url.pathname === "/api/v1/plugins") {
-      await route.fulfill({ json: { plugins: [{ name: "wide-action", main: "main.js" }] } });
-      return;
-    }
+      if (url.pathname === "/api/v1/clusters") {
+        await route.fulfill({ json: { items: [cluster] } });
+        return true;
+      }
 
-    if (url.pathname === "/api/v1/plugins/wide-action/main.js") {
-      await route.fulfill({
-        contentType: "application/javascript",
-        body: PLUGIN_ACTION_LABELS.map(
-          (label) =>
-            `window.pluginLib.registerAppBarAction(window.pluginLib.React.createElement("button", { type: "button", "aria-label": "${label}" }, "${label}"));`,
-        ).join("\n"),
-      });
-      return;
-    }
-
-    if (url.pathname === "/api/v1/meta") {
-      await route.fulfill({
-        json: {
-          distributions: ["VCluster"],
-          providers: { VCluster: ["Kubernetes"] },
-          components: [],
-          resourceKinds: ["Pod", "Deployment", "StatefulSet", "DaemonSet", "Event", "Node", "Namespace"].map(
-            (kind) => ({
-              kind,
-              namespaced: !["Node", "Namespace"].includes(kind),
-              scalable: ["Deployment", "StatefulSet"].includes(kind),
-              restartable: ["Deployment", "StatefulSet", "DaemonSet"].includes(kind),
-              reconcilable: false,
-              deletable: !["Node", "Namespace"].includes(kind),
-              browsable: true,
-            }),
-          ),
-        },
-      });
-      return;
-    }
-
-    if (url.pathname === "/api/v1/clusters") {
-      await route.fulfill({ json: { items: [cluster] } });
-      return;
-    }
-
-    if (url.pathname.endsWith("/resources")) {
-      await route.fulfill({ json: { items: resources(url.searchParams.get("kind") ?? "") } });
-      return;
-    }
-
-    if (url.pathname === "/api/v1/events") {
-      await route.fulfill({ status: 204 });
-      return;
-    }
-
-    await route.fulfill({ status: 404, json: { error: `No mock route for ${url.pathname}` } });
-  });
+      if (url.pathname.endsWith("/resources")) {
+        await route.fulfill({
+          json: { items: resources(url.searchParams.get("kind") ?? "") },
+        });
+        return true;
+      }
+      return false;
+    },
+  );
 }
 
 async function expectPageAndTableToFit(page: Page) {
   await expect(page.locator("table")).toBeVisible();
+  await expectPageAndElementToFit(page, "table", true);
+}
 
-  const widths = await page.evaluate(() => {
-    const table = document.querySelector("table");
-    const scroller = table?.parentElement;
-
-    return {
-      documentClientWidth: document.documentElement.clientWidth,
-      documentScrollWidth: document.documentElement.scrollWidth,
-      tableScrollerClientWidth: scroller?.clientWidth ?? 0,
-      tableScrollerScrollWidth: scroller?.scrollWidth ?? 0,
-    };
-  });
+// Measure document and content overflow through the same browser read for each view.
+async function expectPageAndElementToFit(page: Page, selector: string, useParent = false) {
+  const widths = await page.evaluate(
+    ({ selector, useParent }) => {
+      const selected = document.querySelector<HTMLElement>(selector);
+      const element = useParent ? selected?.parentElement : selected;
+      if (!element) throw new Error(`Missing layout measurement element: ${selector}`);
+      return {
+        documentClientWidth: document.documentElement.clientWidth,
+        documentScrollWidth: document.documentElement.scrollWidth,
+        elementClientWidth: element.clientWidth,
+        elementScrollWidth: element.scrollWidth,
+      };
+    },
+    { selector, useParent },
+  );
 
   expect(widths.documentScrollWidth).toBe(widths.documentClientWidth);
-  expect(widths.tableScrollerScrollWidth).toBe(widths.tableScrollerClientWidth);
+  expect(widths.elementScrollWidth).toBe(widths.elementClientWidth);
 }
 
 async function navigateFromDrawer(page: Page, label: "Resources" | "Events") {
@@ -267,17 +286,7 @@ test("operator views remain usable without horizontal overflow on a phone", asyn
   await conditionsCard.scrollIntoViewIfNeeded();
   await expect(conditionsCard).toBeInViewport({ ratio: 1 });
 
-  const overviewWidth = await page.evaluate(() => {
-    const mainContent = document.querySelector<HTMLElement>("#main-content")!;
-    return {
-      documentClientWidth: document.documentElement.clientWidth,
-      documentScrollWidth: document.documentElement.scrollWidth,
-      mainClientWidth: mainContent.clientWidth,
-      mainScrollWidth: mainContent.scrollWidth,
-    };
-  });
-  expect(overviewWidth.documentScrollWidth).toBe(overviewWidth.documentClientWidth);
-  expect(overviewWidth.mainScrollWidth).toBe(overviewWidth.mainClientWidth);
+  await expectPageAndElementToFit(page, "#main-content");
 
   await navigateFromDrawer(page, "Resources");
   await expect(page.getByText(POD_NAME, { exact: true })).toBeVisible();
