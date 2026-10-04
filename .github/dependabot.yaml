@@ -75,6 +75,15 @@ updates:
       # freezing their minors would suppress good updates for no benefit.
       - dependency-name: "sigs.k8s.io/controller-runtime"
         update-types: ["version-update:semver-minor"]
+      # sigs.k8s.io/gateway-api decides which Gateway API CRDs KSail installs for
+      # Cilium: the installer reads the release from this module. Cilium is built
+      # against one Gateway API line per release (v1.20 against v1.6), so a new line
+      # arrives with the Cilium release that supports it and is held back until then
+      # (ksail#7472). Patch and security updates are unaffected. The contract tests
+      # in internal/depcontract fail a release off that line, and fail this rule if
+      # it ever ignores more than minors.
+      - dependency-name: "sigs.k8s.io/gateway-api"
+        update-types: ["version-update:semver-minor"]
       # k3k v1.2.0 splits pkg/apis into its own module but publishes a go.mod that
       # requires it at v0.0.0-00010101000000-000000000000, resolved only by k3k's OWN
       # `replace ... => ./pkg/apis`. Go honours replace only in the main module, so every
