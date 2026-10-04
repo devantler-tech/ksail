@@ -22,7 +22,7 @@ mkdir -p "$fixture/mirror-cache" "$fixture/contents/docker/registry/v2/repositor
 printf 'sha256:present-tag-only\n' >"$fixture/contents/docker/registry/v2/repositories/docker/library/redis/_manifests/tags/8.6.4-alpine/current/link"
 tar -cf "$fixture/mirror-cache/ecr-public.aws.com.tar" -C "$fixture/contents" .
 for registry in docker.io ghcr.io quay.io registry.k8s.io; do
-	: >"$fixture/mirror-cache/$registry.tar"
+	tar -cf "$fixture/mirror-cache/$registry.tar" -C "$fixture/contents" .
 done
 printf 'ecr-public.aws.com/docker/library/redis:8.6.4-alpine\n' >"$fixture/all-images.txt"
 
@@ -61,6 +61,7 @@ sed "s#/tmp/mirror-cache#$fixture/mirror-cache#g; s#/tmp/all-images.txt#$fixture
 	"$fixture/raw.sh" >"$fixture/check.sh"
 PATH="$fixture/bin:$PATH" GITHUB_OUTPUT="$fixture/output" DOCKER_CALLS="$fixture/docker-calls" \
 	GITHUB_RUN_ID=17 GITHUB_RUN_ATTEMPT=2 CACHE_KEY=mirror-test \
+	GITHUB_ACTION_PATH="$action_dir" \
 	bash "$fixture/check.sh" >"$fixture/log" 2>&1
 
 if ! grep -qx 'complete=false' "$fixture/output"; then
