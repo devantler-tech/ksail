@@ -103,6 +103,16 @@ const (
 	DefaultTalosISO int64 = 125127
 )
 
+// Cluster Autoscaler default values — canonical source shared by the chart
+// renderer and the update diff, so an omitted setting compares as the value
+// KSail actually installs.
+const (
+	// DefaultScaleDownUnneededTime is how long a node must be unneeded before
+	// the Cluster Autoscaler may remove it when
+	// NodeAutoscalerConfig.ScaleDownUnneededTime is unset.
+	DefaultScaleDownUnneededTime = "10m"
+)
+
 // ApplyHetznerDefaults returns opts with every unset Hetzner option filled with its
 // default. Every distribution that runs on Hetzner servers applies it before
 // provisioning, because the Hetzner API rejects a server with no server type.
