@@ -13,7 +13,7 @@ on:
         type: boolean
         default: true
       run_local_recovery_trial:
-        description: "Run only the provider-free local connection recovery acceptance trial"
+        description: "Run the provider-free local recovery trial and always-on security checks"
         required: false
         type: boolean
         default: false
@@ -39,6 +39,7 @@ concurrency:
   #
   # Pull requests and merge-queue entries keep the ref-keyed group, so superseded
   # runs there still cancel exactly as before.
+  # An opted-in local recovery trial cannot cancel ordinary CI on the same ref.
   group: "ci-ksail-${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}${{ inputs.run_local_recovery_trial && '-local-recovery-trial' || '' }}"
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
@@ -717,7 +718,6 @@ jobs:
 
   verify-go-archive:
     name: 🔐 Verify go-archive Provenance
-    if: ${{ !inputs.run_local_recovery_trial }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -750,7 +750,6 @@ jobs:
 
   verify-vulnerability-identities:
     name: 🔐 Verify Local Source Vulnerability Identities
-    if: ${{ !inputs.run_local_recovery_trial }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -2119,17 +2118,42 @@ jobs:
           set -euo pipefail
           go test ./... -count=1 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/go-test.log"
       - name: 🔍 Validate with the module-pinned linter
-        shell: bash
-        run: |
-          set -euo pipefail
-          go tool golangci-lint run --fix --timeout 15m 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/lint.log"
-      - name: 📝 Regenerate CLI and embedded documentation
         if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
         shell: bash
         run: |
           set -euo pipefail
-          go generate ./docs/... ./pkg/svc/chat/... 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/generate.log"
+          go tool golangci-lint run --fix --timeout 15m 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/lint.log"
+      - name: ⚙️ Setup Node.js for canonical generation
+        if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+      - name: 📝 Regenerate all maintained artifacts
+        if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          go install github.com/vektra/mockery/v3@v3.5.4
+          make generate 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/generate.log"
+      - name: 📚 Build the documentation
+        if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm --prefix docs ci
+          npm --prefix docs run build 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/docs-build.log"
+      - name: 🔐 Require the tested source to remain unchanged
+        if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
           git diff --binary > "$RUNNER_TEMP/local-recovery-evidence/generated.patch"
+          git status --porcelain --untracked-files=all > "$RUNNER_TEMP/local-recovery-evidence/working-tree.txt"
+          if [[ -s "$RUNNER_TEMP/local-recovery-evidence/working-tree.txt" ]]; then
+            cat "$RUNNER_TEMP/local-recovery-evidence/working-tree.txt"
+            echo '::error::Lint or generation changed the tested source. Apply the retained output and rerun acceptance at the resulting commit.'
+            exit 1
+          fi
       - name: 📤 Preserve exact-head acceptance evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
