@@ -50,7 +50,6 @@ cleanup() {
 }
 trap cleanup EXIT
 head="" base="" draft="" node="" boundary="" merge_state=""
-remaining="${attempts}"
 blocked() { printf 'BLOCKED: %s\n' "$1" >&2; }
 
 published_release() {
@@ -328,7 +327,7 @@ screen() {
 }
 
 wait_screen() {
-	local code
+	local code remaining="${attempts}"
 	while ((remaining > 0)); do
 		code=0
 		screen || code=$?

@@ -712,9 +712,10 @@ jobs:
     # casks on macOS for the same reason (devantler-tech/homebrew-tap `ci.yaml`).
     runs-on: macos-latest
     # `brew style` can bootstrap rubocop on a cold runner. Keep enough room for two clones and style
-    # passes plus bounded waits for the tap's online audits. An incomplete cask delivery fails
-    # this job without deleting the already-published release.
-    timeout-minutes: 30
+    # passes plus both casks' three independent five-minute wait bounds (checks, online audit,
+    # and async merge). Reserve ten more minutes for preparation. An incomplete cask delivery
+    # fails this job without deleting the already-published release.
+    timeout-minutes: 40
     needs: [publish-release]
     permissions:
       contents: read
@@ -866,21 +867,30 @@ jobs:
               # before skipping — it re-verifies identity, scope, base, current-version content, and
               # title. Only a validated ready PR is treated as done; otherwise it is left for the
               # maintainer and the rerun stays red.
-              if validation="$(validate_handoff "$pr" "$name" "$evidence" prepared-ready 2>&1)" \
-                  && .github/scripts/finish-cask-pr-handoff.sh \
-                    --tap "$TAP" --pr "$pr" --cask-name "$name" \
-                    --source-repo "$GITHUB_REPOSITORY" --tag "$TAG"; then
-                echo "${TAP}#${pr} delivered for ${TAG} (ready retry, revalidated and merged)"
-                printf -- '- %s#%s delivered for %s (idempotent retry)\n' \
-                  "$TAP" "$pr" "$TAG" >>"$GITHUB_STEP_SUMMARY"
+              if ! validation="$(validate_handoff "$pr" "$name" "$evidence" prepared-ready 2>&1)"; then
+                validation="${validation//$'\n'/; }"
+                echo "::warning::${TAP}#${pr} is ready and titled but failed prepared revalidation: ${validation}"
+                printf -- '- %s#%s ready but revalidation failed: %s\n' \
+                  "$TAP" "$pr" "$validation" >>"$GITHUB_STEP_SUMMARY"
+                reconcile_merged_handoff "$name" \
+                  "${TAP}#${pr} failed ready-PR revalidation"
                 continue
               fi
-              validation="${validation//$'\n'/; }"
-              echo "::warning::${TAP}#${pr} is ready and titled but failed prepared revalidation: ${validation}"
-              printf -- '- %s#%s ready but revalidation failed: %s\n' \
-                "$TAP" "$pr" "$validation" >>"$GITHUB_STEP_SUMMARY"
-              reconcile_merged_handoff "$name" \
-                "${TAP}#${pr} failed ready-PR revalidation"
+              if ! delivery="$(.github/scripts/finish-cask-pr-handoff.sh \
+                  --tap "$TAP" --pr "$pr" --cask-name "$name" \
+                  --source-repo "$GITHUB_REPOSITORY" --tag "$TAG" 2>&1)"; then
+                delivery="${delivery//$'\n'/; }"
+                echo "::warning::${TAP}#${pr} revalidated but guarded direct delivery failed: ${delivery}"
+                printf -- '- %s#%s ready retry: guarded direct delivery failed: %s\n' \
+                  "$TAP" "$pr" "$delivery" >>"$GITHUB_STEP_SUMMARY"
+                reconcile_merged_handoff "$name" \
+                  "${TAP}#${pr} could not be delivered after ready-PR revalidation"
+                continue
+              fi
+              echo "$delivery"
+              echo "${TAP}#${pr} delivered for ${TAG} (ready retry, revalidated and merged)"
+              printf -- '- %s#%s delivered for %s (idempotent retry)\n' \
+                "$TAP" "$pr" "$TAG" >>"$GITHUB_STEP_SUMMARY"
               continue
             fi
 

@@ -104,8 +104,115 @@ chmod +x "${race_root}/.github/scripts/find-merged-cask-pr-handoff.sh"
 	[[ "$(<"${RECONCILE_RACE_STATE}")" -eq 2 ]] || exit 1
 ) || fail 'merged reconciliation must retry a just-merged PR before recording failure'
 
+# Run the workflow's actual ready-retry block. A completed validation and a failed
+# merge are different outcomes: the operator must receive the delivery failure.
+ready_retry_block="${tmp_dir}/ready-retry.sh"
+awk '
+  /if \[ "\$pr_is_draft" = "false" \] &&/ { in_retry = 1 }
+  in_retry && /# The cask-checkpoint job re-drafted/ { exit }
+  in_retry { line = $0; sub(/^          /, "", line); print line }
+' "${homebrew_block}" >"${ready_retry_block}"
+retry_root="${tmp_dir}/ready-retry"
+mkdir -p "${retry_root}/.github/scripts"
+cat >"${retry_root}/.github/scripts/finish-cask-pr-handoff.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'called\n' >>"${READY_RETRY_CALLS}"
+if [[ "${READY_RETRY_SCENARIO}" == delivery-failed ]]; then
+	printf 'BLOCKED: asynchronous result read unavailable\n' >&2
+	exit 1
+fi
+printf 'PASS: verified exact-head merge completed\n'
+EOF
+chmod +x "${retry_root}/.github/scripts/finish-cask-pr-handoff.sh"
+for retry_case in validation-failed delivery-failed delivered; do
+	retry_log="${tmp_dir}/${retry_case}.log"
+	retry_summary="${tmp_dir}/${retry_case}.summary"
+	(
+		cd "${retry_root}"
+		READY_RETRY_SCENARIO="${retry_case}"
+		READY_RETRY_CALLS="${tmp_dir}/${retry_case}.calls"
+		export READY_RETRY_SCENARIO READY_RETRY_CALLS
+		TAP="devantler-tech/homebrew-tap" TAG="v7.175.1" pr=42
+		GITHUB_REPOSITORY="devantler-tech/ksail" GITHUB_STEP_SUMMARY="${retry_summary}"
+		pr_is_draft=false
+		evidence="${tmp_dir}/unused-evidence.json" handoff_failed=0
+		export TAP TAG pr GITHUB_REPOSITORY GITHUB_STEP_SUMMARY pr_is_draft evidence
+		: >"${READY_RETRY_CALLS}"
+		: >"${GITHUB_STEP_SUMMARY}"
+		# shellcheck disable=SC2317,SC2329 # Invoked by the actual sourced workflow block.
+		validate_handoff() {
+			if [[ "${READY_RETRY_SCENARIO}" == validation-failed ]]; then
+				printf 'scope mismatch\n' >&2
+				return 1
+			fi
+			printf 'validation fixture passed\n'
+		}
+		# shellcheck disable=SC2317,SC2329 # Invoked by the actual sourced workflow block.
+		reconcile_merged_handoff() {
+			printf 'reconciled: %s\n' "$2"
+			handoff_failed=1
+		}
+		for name in ksail ksail-desktop; do
+			pr_title="chore(cask): update ${name} to ${TAG}"
+			export pr_title
+			# shellcheck source=/dev/null
+			source "${ready_retry_block}"
+		done
+		if [[ "${READY_RETRY_SCENARIO}" == delivered ]]; then
+			[[ "${handoff_failed}" -eq 0 ]] || exit 1
+		else
+			[[ "${handoff_failed}" -eq 1 ]] || exit 1
+		fi
+		if [[ "${READY_RETRY_SCENARIO}" == validation-failed ]]; then
+			[[ ! -s "${READY_RETRY_CALLS}" ]] || exit 1
+		else
+			[[ "$(wc -l <"${READY_RETRY_CALLS}" | tr -d ' ')" -eq 2 ]] || exit 1
+		fi
+	) >"${retry_log}" 2>&1 || fail "ready retry ${retry_case} must retain its actual outcome"
+	case "${retry_case}" in
+	validation-failed)
+		assert_contains 'failed prepared revalidation: scope mismatch' "${retry_log}" \
+			'validation failure must retain its scope diagnostic'
+		assert_contains 'scope mismatch' "${retry_summary}" \
+			'validation failure must reach the step summary'
+		;;
+	delivery-failed)
+		assert_contains 'asynchronous result read unavailable' "${retry_log}" \
+			'delivery failure must retain the finisher diagnostic'
+		assert_contains 'asynchronous result read unavailable' "${retry_summary}" \
+			'delivery failure must reach the step summary'
+		assert_not_contains 'revalidation failed' "${retry_summary}" \
+			'a successful validation must not be reported as failed'
+		assert_not_contains 'validation fixture passed' "${retry_summary}" \
+			'successful validation output must not become the delivery failure reason'
+		;;
+	delivered)
+		assert_contains 'delivered for v7.175.1' "${retry_log}" \
+			'successful ready retry must still report completed delivery'
+		assert_contains 'delivered for v7.175.1' "${retry_summary}" \
+			'successful ready retry must reach the step summary'
+		assert_not_contains 'reconciled:' "${retry_log}" \
+			'a completed delivery must not enter failure reconciliation'
+		;;
+	esac
+done
+
 assert_contains 'name: 🍺 Deliver Homebrew cask PRs' "${homebrew_block}" \
 	'release job must complete cask delivery'
+# Both casks can consume the full pre-promotion, online-audit, and async-merge wait
+# bounds. Leave ten minutes for checkout, evidence collection, and cold brew style.
+finisher="${repo_root}/.github/scripts/finish-cask-pr-handoff.sh"
+poll_attempts="$(sed -nE 's/^attempts=([0-9]+) interval=[0-9]+$/\1/p' "${finisher}")"
+poll_interval="$(sed -nE 's/^attempts=[0-9]+ interval=([0-9]+)$/\1/p' "${finisher}")"
+job_minutes="$(awk '/timeout-minutes:/ { print $2 }' "${homebrew_block}")"
+for budget in "${poll_attempts}" "${poll_interval}" "${job_minutes}"; do
+	[[ "${budget}" =~ ^[1-9][0-9]*$ ]] || fail 'cask delivery wait budget is not completely observed'
+done
+required_seconds=$((2 * 3 * poll_attempts * poll_interval + 10 * 60))
+if ((job_minutes * 60 < required_seconds)); then
+	fail 'release job timeout cannot accommodate both casks full independent wait bounds and setup'
+fi
 assert_contains 'validate-cask-pr-handoff.sh' "${homebrew_block}" \
 	'release job must validate generated PR identity and file scope'
 assert_contains 'collect-cask-pr-handoff.sh' "${homebrew_block}" \
@@ -137,8 +244,8 @@ assert_not_contains 'handoff_failed=1' "${selected_open_block}" \
 	'no failure after selecting an open PR may bypass merged-current-main reconciliation'
 reconciliation_calls="$(grep -Fc -- 'reconcile_merged_handoff "$name"' \
 	"${selected_open_block}" || true)"
-if [[ "${reconciliation_calls}" -ne 9 ]]; then
-	fail "every selected-open failure must reconcile an auto-merge race; expected 9 call sites, found ${reconciliation_calls}"
+if [[ "${reconciliation_calls}" -ne 10 ]]; then
+	fail "every selected-open failure must reconcile an auto-merge race; expected 10 call sites, found ${reconciliation_calls}"
 fi
 for context in \
 	'failed ready-PR revalidation' \

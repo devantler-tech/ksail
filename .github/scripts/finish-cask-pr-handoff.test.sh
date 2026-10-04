@@ -144,12 +144,12 @@ case "${line}" in
 	 (if $scenario == "no-required" then .nodes |= map(.isRequired=false)
 	 elif $scenario == "failed-required" then .nodes[0].conclusion="FAILURE"
 	 elif $scenario == "missing-required-flag" then del(.nodes[0].isRequired)
-	 elif $scenario == "pending-required" or ($scenario == "pending-then-pass" and ($ready|not) and $n == 1) then .nodes[0].status="IN_PROGRESS" | .nodes[0].conclusion=null
+	 elif $scenario == "pending-required" or (($scenario == "pending-then-pass" or $scenario == "both-phases-then-pass") and ($ready|not) and $n == 1) then .nodes[0].status="IN_PROGRESS" | .nodes[0].conclusion=null
 	 elif $scenario == "missing-audit" and $ready then .nodes[1].conclusion="SKIPPED"
 	 elif $scenario == "stale-audit" and $ready then .nodes[1].startedAt="2029-01-01T00:00:00Z"
 	 elif $scenario == "wrong-check-commit" then .nodes[0].checkSuite.commit.oid="2222222222222222222222222222222222222222"
 	 elif $scenario == "stale-aggregate" and $ready then .nodes[0].startedAt="2029-01-01T00:00:00Z"
-	 elif $scenario == "audit-then-pass" and $ready and $n == 1 then .nodes[1].status="IN_PROGRESS" | .nodes[1].conclusion=null
+	 elif ($scenario == "audit-then-pass" or $scenario == "both-phases-then-pass") and $ready and $n == 1 then .nodes[1].status="IN_PROGRESS" | .nodes[1].conclusion=null
 	 elif $scenario == "partial-checks" then .totalCount=3
 	 elif $scenario == "paginated-success" then
 	   if $cursor == "next" then .nodes=[.nodes[1]]
@@ -247,10 +247,15 @@ run_case() {
 	if [[ "${scenario}" == async-conflict || "${scenario}" == async-initial-* ]]; then
 		[[ ! -f "${state}/async-polls" ]] || fail "${scenario}: adopted an unverified request"
 	fi
+	if [[ "${scenario}" == both-phases-then-pass ]]; then
+		[[ "$(<"${state}/checks-false")" -eq 2 && "$(<"${state}/checks-true")" -eq 3 ]] ||
+			fail "${scenario}: both readiness phases must retry before the final merge check"
+	fi
 	printf 'PASS: %s\n' "${scenario}"
 }
 
 # Removing the direct merge, SHA pin, post-promotion audit, or immutable readback breaks these.
+run_case both-phases-then-pass true 1 1
 run_case draft-success true 1 1
 run_case ready-retry true 0 1
 run_case pending-then-pass true 1 1
