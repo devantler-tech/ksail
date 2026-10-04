@@ -26,13 +26,15 @@ type cloudClusterRecorder struct {
 
 	distribution v1alpha1.Distribution
 	provider     v1alpha1.Provider
+	// expectedName is the only cluster name the stand-in cloud API knows.
+	expectedName string
 	names        []string
 }
 
 func (r *cloudClusterRecorder) Exists(_ context.Context, name string) (bool, error) {
 	r.names = append(r.names, name)
 
-	return name == cloudClusterName, nil
+	return name == r.expectedName, nil
 }
 
 func (r *cloudClusterRecorder) GetCurrentConfig(
@@ -80,6 +82,16 @@ type cloudProject struct {
 	configFile    string
 	configContent string
 	metadataName  string
+}
+
+// expectedName is the name the cloud API knows the project's cluster by: a
+// configured metadata.name, and otherwise the name the configuration holds.
+func (p cloudProject) expectedName() string {
+	if p.metadataName != "" {
+		return p.metadataName
+	}
+
+	return cloudClusterName
 }
 
 func cloudProjects() []cloudProject {
@@ -188,6 +200,7 @@ func runCloudCommand(t *testing.T, project cloudProject, command string) []strin
 	recorder := &cloudClusterRecorder{
 		distribution: project.distribution,
 		provider:     project.provider,
+		expectedName: project.expectedName(),
 	}
 
 	t.Cleanup(cluster.SetProvisionerFactoryForTests(cloudClusterRecorderFactory{recorder}))
@@ -255,6 +268,34 @@ func TestCloudClusterUpdateResolvesConfigurationName(t *testing.T) {
 			names := runCloudCommand(t, project, "update")
 
 			assert.Equal(t, []string{cloudClusterName}, slices.Compact(names))
+		})
+	}
+}
+
+// A configured metadata.name overrides the name in the GKE or AKS
+// configuration, and `ksail cluster update` must carry that override to the
+// managed-target guard and the provisioner. The name differs from the one in
+// the configuration file, so dropping the override on the way is visible, and
+// the kubeconfig holds the connection context that name derives.
+//
+//nolint:paralleltest // uses t.Chdir and replaces the process's stdout/stderr.
+func TestCloudClusterUpdateResolvesMetadataName(t *testing.T) {
+	const metadataName = "renamed"
+
+	for _, project := range cloudProjects() {
+		if project.metadataName == "" {
+			continue
+		}
+
+		project.metadataName = metadataName
+		project.context = cluster.ExportResolveCreatedContextName(
+			project.distribution, project.provider, metadataName,
+		)
+
+		t.Run(project.name, func(t *testing.T) {
+			names := runCloudCommand(t, project, "update")
+
+			assert.Equal(t, []string{metadataName}, slices.Compact(names))
 		})
 	}
 }
