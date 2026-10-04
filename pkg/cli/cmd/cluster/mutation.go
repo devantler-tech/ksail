@@ -42,6 +42,29 @@ var (
 
 const explicitEKSContextHint = "set spec.cluster.connection.context explicitly"
 
+// clusterConfigTarget says whether a command builds the configured cluster or acts on one that
+// already exists. It decides whether a configured metadata.name may replace an explicit
+// spec.cluster.connection.context.
+type clusterConfigTarget int
+
+const (
+	// newClusterTarget is create: the new cluster's kubeconfig context is the one its distribution
+	// derives from the cluster name, so post-creation setup must target that context.
+	newClusterTarget clusterConfigTarget = iota
+	// existingClusterTarget is diff and update: an explicit context says how to reach a cluster
+	// that already exists, such as a custom or OIDC context, so a configured metadata.name keeps it.
+	existingClusterTarget
+)
+
+// clusterNameOverride is the cluster name a command applies to the distribution configs, and
+// where it came from.
+type clusterNameOverride struct {
+	name string
+	// fromFlag marks --name, an explicit command-line request to retarget the cluster. It always
+	// replaces the configured context with the one derived from the new name.
+	fromFlag bool
+}
+
 const eksKubeconfigDirMode = 0o700
 
 // defaultClusterMutationFieldSelectors returns the full set of field selectors
@@ -132,11 +155,13 @@ func setupMutationCmdFlags(cmd *cobra.Command) *ksailconfigmanager.ConfigManager
 }
 
 // loadAndValidateClusterConfig loads configuration, applies name override, and validates
-// the distribution x provider combination. This shared sequence is used by both
-// create and update commands.
+// the distribution x provider combination. This shared sequence is used by the create,
+// update and diff commands; target says whether the command builds the cluster or inspects
+// an existing one.
 func loadAndValidateClusterConfig(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	deps lifecycle.Deps,
+	target clusterConfigTarget,
 ) (*localregistry.Context, string, error) {
 	outputTimer := deps.Timer
 
@@ -150,11 +175,9 @@ func loadAndValidateClusterConfig(
 		return nil, "", err
 	}
 
-	if nameOverride != "" {
-		err = applyClusterNameOverride(ctx, nameOverride)
-		if err != nil {
-			return nil, "", err
-		}
+	err = applyResolvedNameOverride(ctx, nameOverride, target)
+	if err != nil {
+		return nil, "", err
 	}
 
 	// Validate distribution x provider combination
@@ -199,28 +222,127 @@ func loadAndValidateClusterConfig(
 func resolveMutationNameOverride(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	ctx *localregistry.Context,
-) (string, error) {
+) (clusterNameOverride, error) {
 	explicitName := cfgManager.Viper.GetString("name")
 	if explicitName != "" {
 		err := validateMutationClusterName(explicitName)
 		if err != nil {
-			return "", err
+			return clusterNameOverride{}, err
 		}
 
 		err = validateEKSNameOverride(ctx, explicitName)
 		if err != nil {
-			return "", err
+			return clusterNameOverride{}, err
 		}
 
-		return explicitName, nil
+		return clusterNameOverride{name: explicitName, fromFlag: true}, nil
 	}
 
 	metadataName := ctx.ClusterCfg.Name
 	if metadataName == "" {
-		return "", nil
+		return clusterNameOverride{}, nil
 	}
 
-	return metadataName, validateMutationClusterName(metadataName)
+	return clusterNameOverride{name: metadataName}, validateMutationClusterName(metadataName)
+}
+
+// applyResolvedNameOverride applies a resolved cluster name override to the distribution configs.
+// On create, and for --name, the context derived from the name replaces
+// spec.cluster.connection.context. Diff and update keep a custom context when the name comes
+// from metadata.name: the name identifies the cluster, and the context says how to reach it, so
+// replacing it would inspect a context the user never selected. A blank context, and one that
+// follows the distribution's naming convention, is still derived from the name.
+func applyResolvedNameOverride(
+	ctx *localregistry.Context,
+	override clusterNameOverride,
+	target clusterConfigTarget,
+) error {
+	if override.name == "" {
+		return nil
+	}
+
+	err := renameDistributionConfigs(ctx, override.name)
+	if err != nil {
+		return err
+	}
+
+	if !keepsConfiguredContext(ctx, override, target) {
+		retargetConnectionContext(ctx, override.name)
+	}
+
+	return nil
+}
+
+// recreatedClusterContext returns the context update recreates a cluster under, applying create's
+// rule: a named cluster is recreated under the context derived from its name, which
+// keepsConfiguredContext may have set aside while the old cluster was inspected. A cluster with no
+// name override, and EKS, keep the configured context, as before.
+func recreatedClusterContext(
+	cfgManager *ksailconfigmanager.ConfigManager,
+	ctx *localregistry.Context,
+) (string, error) {
+	configuredContext := ctx.ClusterCfg.Spec.Cluster.Connection.Context
+	if cfgManager == nil {
+		return configuredContext, nil
+	}
+
+	override, err := resolveMutationNameOverride(cfgManager, ctx)
+	if err != nil {
+		return "", err
+	}
+
+	if override.name == "" {
+		return configuredContext, nil
+	}
+
+	if createdContext, derived := createdContextName(ctx.ClusterCfg, override.name); derived {
+		return createdContext, nil
+	}
+
+	return configuredContext, nil
+}
+
+// keepsConfiguredContext reports whether diff or update keeps the configured context for a cluster
+// name from metadata.name. It holds only for a custom context: a blank one is derived from the
+// name, and one that follows the distribution's naming convention (kind-<name>, admin@<name>, …)
+// is a context KSail derives from a name, such as the one `project env add` writes, so it follows
+// a renamed metadata.name rather than pinning the old cluster. GKE and AKS read their cluster
+// name back from the context, so a context that does not resolve to the name is not kept either.
+// Call it after renameDistributionConfigs, which the name check reads.
+func keepsConfiguredContext(
+	ctx *localregistry.Context,
+	override clusterNameOverride,
+	target clusterConfigTarget,
+) bool {
+	if override.fromFlag || target != existingClusterTarget {
+		return false
+	}
+
+	configuredContext := strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context)
+	if configuredContext == "" ||
+		followsContextConvention(ctx.ClusterCfg.Spec.Cluster, configuredContext) {
+		return false
+	}
+
+	return resolveClusterNameFromContext(ctx) == override.name
+}
+
+// followsContextConvention reports whether contextName has the shape the distribution's tooling
+// gives the contexts it writes for some cluster name: the prefix and suffix of the context a
+// created cluster is written to, around a non-empty name.
+func followsContextConvention(spec v1alpha1.ClusterSpec, contextName string) bool {
+	const placeholder = "\x00"
+
+	pattern := resolveCreatedContextName(spec.Distribution, spec.Provider, placeholder)
+
+	prefix, suffix, found := strings.Cut(pattern, placeholder)
+	if !found {
+		return false
+	}
+
+	return len(contextName) > len(prefix)+len(suffix) &&
+		strings.HasPrefix(contextName, prefix) &&
+		strings.HasSuffix(contextName, suffix)
 }
 
 func validateMutationClusterName(name string) error {

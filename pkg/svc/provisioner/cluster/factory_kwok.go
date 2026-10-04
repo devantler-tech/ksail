@@ -47,7 +47,7 @@ func (f DefaultFactory) createKWOKKubernetesProvisioner(
 	}
 
 	// Use kwokConfig.Name as the cluster name — it's always set correctly
-	// by applyClusterNameOverride, while cluster.Name may be empty
+	// by the cluster name override, while cluster.Name may be empty
 	// when using --name flag without a ksail.yaml file.
 	clusterName := kwokConfig.Name
 
