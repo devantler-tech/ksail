@@ -186,6 +186,13 @@ func harnessSourcePaths(t *testing.T) []string {
 func workflowContractFilterPatterns(t *testing.T) []string {
 	t.Helper()
 
+	return changesFilterPatterns(t, "todos-contract")
+}
+
+// changesFilterPatterns returns the named path filter's entries from ci.yaml's changes job.
+func changesFilterPatterns(t *testing.T, filter string) []string {
+	t.Helper()
+
 	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
 	changesJob, found := workflow.Jobs["changes"]
 	require.True(t, found, "changes job is missing")
@@ -195,8 +202,8 @@ func workflowContractFilterPatterns(t *testing.T) []string {
 	var filters map[string][]string
 	require.NoError(t, yaml.Unmarshal([]byte(stringValue(filterStep.With["filters"])), &filters))
 
-	patterns := filters["todos-contract"]
-	require.NotEmpty(t, patterns, "ci.yaml must define a non-empty todos-contract filter")
+	patterns := filters[filter]
+	require.NotEmptyf(t, patterns, "ci.yaml must define a non-empty %s filter", filter)
 
 	return patterns
 }
@@ -268,7 +275,7 @@ func contractFilterMatches(t *testing.T, patterns []string, path string) bool {
 		require.False(
 			t,
 			strings.ContainsAny(prefix, "*?[]{}!"),
-			"unsupported todos-contract pattern %q: use an exact path or a dir/** prefix",
+			"unsupported path filter pattern %q: use an exact path or a dir/** prefix",
 			pattern,
 		)
 

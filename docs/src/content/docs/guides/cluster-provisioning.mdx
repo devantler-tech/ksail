@@ -108,9 +108,9 @@ spec:
 > [!NOTE]
 > Other distributions currently ignore this setting; it is only active for Talos.
 
-For a KSail-managed Cluster Autoscaler on Talos with Hetzner, `cluster diff` also compares the installed Helm values with the values rendered by the current KSail version. A mismatch appears as `cluster.autoscaler.node.chartValues`; `cluster update` applies it even when `ksail.yaml` has not changed. Both operations use the resolved cluster context. Releases managed by Flux or Argo CD are excluded from this check and remain under GitOps control.
+For a KSail-managed Cluster Autoscaler on Talos with Hetzner, `cluster diff` also compares the installed Helm values with the values rendered by the current KSail version. A mismatch appears as `cluster.autoscaler.node.chartValues`; `cluster update` applies it even when `ksail.yaml` has not changed. KSail runs the same check for cert-manager when `spec.cluster.certManager` is `Enabled`, and reports a mismatch as `cluster.certManager.chartValues`. Both operations use the resolved cluster context. Releases managed by Flux or Argo CD are excluded from this check and remain under GitOps control.
 
-If the release cannot be inspected, KSail prints a warning and continues with the other diff checks. Resolve that warning before treating the absence of a chart-values change as confirmation that the autoscaler settings match.
+If a release cannot be inspected, KSail prints a warning and continues with the other diff checks. Resolve that warning before treating the absence of a chart-values change as confirmation that the component's settings match.
 
 ## Version Upgrades
 
