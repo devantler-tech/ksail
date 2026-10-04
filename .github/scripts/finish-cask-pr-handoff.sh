@@ -325,7 +325,7 @@ screen() {
 	      (.checkSuite.workflowRun.runNumber | numbered) and
 	      (.checkSuite.workflowRun.event | text) and (.checkSuite.workflowRun.workflow.id | text)
 	     else .checkSuite.app.slug != "github-actions" end))) then
-	   [.[] | select(workflow | not)] +
+	   [.[] | select(workflow | not)] as $independent |
 	   ([.[] | select(workflow)] |
 	    group_by([.checkSuite.app.id,.checkSuite.workflowRun.workflow.id,.checkSuite.workflowRun.event]) |
 	    map(. as $history |
@@ -334,20 +334,27 @@ screen() {
 	      if ($current | map(.checkSuite.workflowRun.id) | unique | length) != 1 then
 	        error("ambiguous current workflow execution")
 	      elif all($history[]; . as $previous | .isRequired != true or
-	        any($current[]; .name == $previous.name and .isRequired == true)) then $current
-	      else error("current execution has not reported every required check") end) | add // [])
+	        all($current[]; .name != $previous.name or .isRequired == true)) then
+	        {checks:$current, pendingRequired:any($history[]; . as $previous |
+	          .isRequired == true and all($current[]; .name != $previous.name))}
+	      else error("current execution withdrew a required check") end)) |
+	   {checks:($independent + (map(.checks) | add // [])),
+	    pendingRequired:any(.[]; .pendingRequired)}
 	 else error("check execution identity is incomplete") end
 	' "${work}/checks.json" >"${work}/current-checks.json"; then
 		blocked 'current check executions are absent, ambiguous or incompletely observed'
 		return 1
 	fi
-	mv "${work}/current-checks.json" "${work}/checks.json"
+	if ! jq '.checks' "${work}/current-checks.json" >"${work}/checks.json"; then return 1; fi
 	if jq -e 'any(.[];
 	 if .__typename == "CheckRun" then .status == "COMPLETED" and (.conclusion != "SUCCESS" and .conclusion != "NEUTRAL" and .conclusion != "SKIPPED")
 	 else .state != "SUCCESS" and .state != "PENDING" end)' "${work}/checks.json" >/dev/null; then
 		blocked 'a current-head check failed'
 		return 1
 	fi
+	# A dependent aggregate may not exist yet in a newly started workflow. Keep this
+	# observation pending without inventing a check result or ignoring a current failure.
+	if jq -e '.pendingRequired == true' "${work}/current-checks.json" >/dev/null; then return 3; fi
 	if ! jq -e 'all(.[]; if .__typename == "CheckRun" then .status == "COMPLETED" else .state == "SUCCESS" end)' "${work}/checks.json" >/dev/null; then
 		return 3
 	fi
