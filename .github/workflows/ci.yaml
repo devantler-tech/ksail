@@ -140,6 +140,7 @@ jobs:
       govuln-allowlist: ${{ steps.filter.outputs.govuln-allowlist }}
       release-graph-audit: ${{ steps.filter.outputs.release-graph-audit }}
       todos-contract: ${{ steps.filter.outputs.todos-contract }}
+      release-config: ${{ steps.filter.outputs.release-config }}
       system-test: ${{ steps.filter.outputs.system-test }}
       schema: ${{ steps.filter.outputs.schema }}
       cli: ${{ steps.filter.outputs.cli }}
@@ -201,6 +202,23 @@ jobs:
               - '.github/scripts/**'
               - '.github/fixtures/workflow-run-cleanup/**'
               - 'internal/ciharness/**'
+            # The release build configuration is the subject of Go tests too: the OTel
+            # reachability guard in pkg/client/kubescape pins a digest of every file below, and
+            # other tests read the GoReleaser files and the CD workflow. The org-required Go
+            # validation skips its test job when no Go file changed, so a pull request changing
+            # only these files would merge with those assertions unexecuted and the mismatch
+            # would surface on the next unrelated Go change (ksail#7400). This filter feeds a
+            # job that runs the suite for that class of change; it includes THIS workflow for
+            # the same reason todos-contract does. TestReleaseConfigFilterCoversTheReleaseFiles
+            # fails if a release file is dropped from it.
+            release-config:
+              - '.goreleaser.yaml'
+              - '.goreleaser.desktop.yaml'
+              - '.github/workflows/cd.yaml'
+              - '.github/actions/setup-desktop-build/**'
+              - '.github/actions/free-disk-space/**'
+              - 'scripts/stage-webui.sh'
+              - '.github/workflows/ci.yaml'
             # Deliberately NARROWER than `code`: the job resolves a module graph, so only the
             # module files matter — not every .go file. It also includes THIS workflow, because
             # the check lives here and a workflow-only PR would otherwise be able to weaken or
@@ -570,8 +588,8 @@ jobs:
       || (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
       && needs.changes.outputs.govuln-allowlist == 'true')
-    uses: devantler-tech/actions/.github/workflows/validate-go-project.yaml@df7fd4f83edade31c121a9de563d9a7b9b1f900d # v13.10.3
-    # Both inputs make a default-branch run answer "did the check run" rather than
+    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@bd0035dd8f41fcf1459b878882b8897443f8dc59 # v4.9.4
+    # The canonical defaults make a default-branch run answer "did the check run" rather than
     # "did the diff touch a Go file". On main the branch's green IS the protection
     # signal, so a path filter that skips the suite or the scan leaves main green
     # over breakage it never looked at:
@@ -583,12 +601,11 @@ jobs:
     #   * test-default-branch — a Go test may read a non-Go file as its subject, so
     #     a commit touching only those files skips the suite while breaking it.
     #
-    # Both ship default-false in the reusable workflow so consumers adopt them one
-    # at a time; ksail is its only caller, so this completes the rollout and both
-    # inputs can then be retired (devantler-tech/actions#788, ksail#6373).
+    # Both default true at this immutable canonical revision, so the caller
+    # inherits the corrected coverage without redundant arguments. Scan input
+    # retirement remains tracked in devantler-tech/.github#285; the separate
+    # default-branch maintenance pilot is tracked in #276.
     with:
-      scan-default-branch: true
-      test-default-branch: true
       # The org-required direct run is the sole signed-fix writer for a PR.
       # Keep this additional invocation read-only while retaining its checks.
       apply-signed-fixes: false
@@ -1490,6 +1507,7 @@ jobs:
       contents: read
     outputs:
       cache-key: ${{ steps.warm.outputs.cache-key }}
+      artifact-id: ${{ steps.mirror-artifact.outputs.artifact-id }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1540,6 +1558,19 @@ jobs:
         id: warm
         uses: ./.github/actions/warm-mirror-cache
 
+      - name: 📤 Publish validated mirror artifact
+        id: mirror-artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: mirror-cache-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.warm.outputs.archive-path }}/*.tar
+            ${{ steps.warm.outputs.archive-path }}/cache-key
+            ${{ steps.warm.outputs.archive-path }}/SHA256SUMS
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
   # Docker-based system tests run in full parallelism with no concurrency
   # constraints — each job gets its own runner with local Docker containers.
   system-test-docker:
@@ -1559,6 +1590,7 @@ jobs:
       ]
     if: >-
       !cancelled()
+      && needs.warm-mirror-cache.result == 'success'
       && (needs.wait-for-validate-go.result == 'success' || needs.wait-for-validate-go.result == 'skipped')
       && (
         (github.event_name == 'pull_request'
@@ -1687,6 +1719,8 @@ jobs:
         uses: ./.github/actions/restore-mirror-cache
         with:
           cache-key: ${{ needs.warm-mirror-cache.outputs.cache-key }}
+          artifact-id: ${{ needs.warm-mirror-cache.outputs.artifact-id }}
+          require-artifact: "true"
 
       - name: 📥 Pre-pull registry image for offline ECR check
         if: ${{ matrix.ecr-public-offline == 'true' }}
@@ -1936,6 +1970,36 @@ jobs:
             exit 1
           fi
 
+  # Runs the Go suite when only the release build configuration changed. The org-required Go
+  # validation skips its test job on such a pull request, because no Go file changed, while
+  # Go tests assert on exactly these files (see the release-config filter, ksail#7400).
+  # Pull requests only: on main, ci-go already runs the whole suite on every push
+  # (test-default-branch).
+  test-release-config:
+    name: 🧪 Test Release Configuration
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [changes]
+    if: github.event_name == 'pull_request' && needs.changes.outputs.release-config == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      # -count=1 is load-bearing: the files under test are invisible to the Go build graph,
+      # so a cached PASS from an earlier run would be replayed over the changed configuration.
+      - name: 🧪 Test
+        run: go test ./... -count=1
   release-graph-audit:
     name: 🔐 Audit Shipped Dependency Graphs
     runs-on: ubuntu-latest
@@ -1995,6 +2059,7 @@ jobs:
         verify-dependency-test-graph,
         verify-dependency-contracts,
         verify-todos-workflow-contract,
+        test-release-config,
         release-graph-audit,
         cask-pr-handoff,
         k3k-sentinel-scripts,
@@ -2030,6 +2095,7 @@ jobs:
             ${{ needs.verify-dependency-test-graph.result }}
             ${{ needs.verify-dependency-contracts.result }}
             ${{ needs.verify-todos-workflow-contract.result }}
+            ${{ needs.test-release-config.result }}
             ${{ needs.release-graph-audit.result }}
             ${{ needs.cask-pr-handoff.result }}
             ${{ needs.k3k-sentinel-scripts.result }}
