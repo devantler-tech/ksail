@@ -37,7 +37,8 @@ for argument in "$@"; do
     exit 97
   fi
 done
-printf '%s\n' "$*" >> "$FIXTURE_CALLS"
+printf '%s\037' "$@" >> "$FIXTURE_CALLS"
+printf '\n' >> "$FIXTURE_CALLS"
 if [[ " $* " == *" --output json "* ]]; then
   printf '{"totalChanges":0}\n'
   echo 'No changes detected' >&2
@@ -160,13 +161,13 @@ func TestSystemTestTalosUpgradeObservesTargetAndRepeatsNoop(t *testing.T) {
 	t.Parallel()
 	output, calls, err := runVersionStep(t, "🧪 Talos Kubernetes upgrade — known version path", nil)
 	require.NoError(t, err, output)
-	assert.Equal(t, 2, strings.Count(calls, "cluster update"), calls)
+	assert.Equal(t, 2, strings.Count(calls, "cluster\x1fupdate\x1f"), calls)
 
 	for line := range strings.SplitSeq(strings.TrimSpace(calls), "\n") {
-		assert.Contains(t, line, "--kubernetes-version v1.37.1")
+		assert.Contains(t, line, "--kubernetes-version\x1fv1.37.1\x1f")
 	}
 
-	assert.Contains(t, calls, "--output json")
+	assert.Contains(t, calls, "--output\x1fjson\x1f")
 	assert.Contains(t, output, "v1.36.2 → v1.37.1")
 }
 
@@ -178,11 +179,11 @@ func TestSystemTestTalosUpgradePreservesUpdateArguments(t *testing.T) {
 		map[string]string{"ARGS": "--name fixture --kubernetes-version=v1.36.2"},
 	)
 	require.NoError(t, err, output)
-	assert.Equal(t, 2, strings.Count(calls, "cluster update"), calls)
+	assert.Equal(t, 2, strings.Count(calls, "cluster\x1fupdate\x1f"), calls)
 
 	for line := range strings.SplitSeq(strings.TrimSpace(calls), "\n") {
-		assert.Contains(t, line, "--name fixture")
-		assert.Contains(t, line, "--kubernetes-version v1.37.1")
+		assert.Contains(t, line, "--name\x1ffixture\x1f")
+		assert.Contains(t, line, "--kubernetes-version\x1fv1.37.1\x1f")
 		assert.NotContains(t, line, "v1.36.2")
 	}
 }
@@ -196,7 +197,7 @@ func TestSystemTestTalosUpgradeEmptyArgumentsUnderBash32(t *testing.T) {
 		requireBash32(t),
 	)
 	require.NoError(t, err, output)
-	assert.Equal(t, 2, strings.Count(calls, "cluster update"), calls)
+	assert.Equal(t, 2, strings.Count(calls, "cluster\x1fupdate\x1f"), calls)
 }
 
 func TestSystemTestTalosUpgradeRejectsWrongLiveState(t *testing.T) {
