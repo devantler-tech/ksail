@@ -557,24 +557,29 @@ func TestInstallPostCNIComponents_HetznerWithoutOptionalComponentsInitializesNod
 			wantOrder: []string{"controller", "nodes"},
 		},
 	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			var order []string
 			cmd := &cobra.Command{Use: "test"}
 			cmd.SetOut(io.Discard)
-			factories := nodeInitializationTestFactories(t, &order, tc.installErr, tc.waitErr)
+			factories := nodeInitializationTestFactories(
+				t,
+				&order,
+				testCase.installErr,
+				testCase.waitErr,
+			)
 			err := InstallPostCNIComponents(cmd, clusterCfg, factories, timer.New(), true)
 			switch {
-			case tc.installErr != nil:
-				require.ErrorIs(t, err, tc.installErr)
-			case tc.waitErr != nil:
-				require.ErrorIs(t, err, tc.waitErr)
+			case testCase.installErr != nil:
+				require.ErrorIs(t, err, testCase.installErr)
+			case testCase.waitErr != nil:
+				require.ErrorIs(t, err, testCase.waitErr)
 			default:
 				require.NoError(t, err)
 			}
-			assert.Equal(t, tc.wantOrder, order)
+			assert.Equal(t, testCase.wantOrder, order)
 		})
 	}
 }
