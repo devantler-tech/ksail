@@ -114,7 +114,7 @@ func (f DefaultFactory) createTalosKubernetesProvisioner(
 
 	opts := cluster.Spec.Provider.Kubernetes
 
-	// Derive cluster name from Talos config (set by applyClusterNameOverride).
+	// Derive cluster name from Talos config (set by the cluster name override).
 	clusterName := f.DistributionConfig.Talos.GetClusterName()
 	if clusterName == "" {
 		clusterName = cluster.Name

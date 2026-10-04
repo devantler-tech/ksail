@@ -962,8 +962,12 @@ func (e *Engine) checkAutoscalerNodeScalarsChange(
 		"expander strategy can be updated via Helm chart upgrade",
 		clusterupdate.ChangeCategoryInPlace)
 
+	// The installer renders the default when the setting is omitted, so an
+	// omitted desired value compares as that default rather than as empty —
+	// otherwise the installed default reads as a change no update can apply.
 	appendChange(result, "cluster.autoscaler.node.scaleDownUnneededTime",
-		oldNode.ScaleDownUnneededTime, newNode.ScaleDownUnneededTime, "",
+		oldNode.ScaleDownUnneededTime, newNode.ScaleDownUnneededTime,
+		v1alpha1.DefaultScaleDownUnneededTime,
 		"scaleDownUnneededTime can be updated via Helm chart upgrade",
 		clusterupdate.ChangeCategoryInPlace)
 
