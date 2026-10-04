@@ -153,6 +153,12 @@ case "${line}" in
 	 elif $scenario == "wrong-check-commit" then .nodes[0].checkSuite.commit.oid="2222222222222222222222222222222222222222"
 	 elif $scenario == "stale-aggregate" and $ready then .nodes[0].startedAt="2029-01-01T00:00:00Z"
 	 elif ($scenario == "audit-then-pass" or $scenario == "both-phases-then-pass") and $ready and $n == 1 then .nodes[1].status="IN_PROGRESS" | .nodes[1].conclusion=null
+	 elif ($scenario == "delayed-current-aggregate" or $scenario == "missing-postpromotion-aggregate" or $scenario == "failed-current-audit-before-aggregate") and $ready then
+	   .nodes as $old |
+	   [$old[] | .checkSuite.workflowRun.id="RUN_3" | .checkSuite.workflowRun.runNumber=3] as $current |
+	   if ($scenario == "delayed-current-aggregate" and $n > 1) then .nodes=($old+$current)
+	   else .nodes=($old+[($current[1] | if $scenario == "failed-current-audit-before-aggregate" then .conclusion="FAILURE" else . end)]) end |
+	   .totalCount=(.nodes|length)
 	 elif $scenario == "partial-checks" then .totalCount=3
 	 elif $scenario == "paginated-success" then
 	   if $cursor == "next" then .nodes=[.nodes[1]]
@@ -284,6 +290,18 @@ run_case() {
 		[[ "$(<"${state}/checks-false")" -eq 2 && "$(<"${state}/checks-true")" -eq 3 ]] ||
 			fail "${scenario}: both readiness phases must retry before the final merge check"
 	fi
+	if [[ "${scenario}" == delayed-current-aggregate ]]; then
+		[[ "$(<"${state}/checks-true")" -eq 3 ]] ||
+			fail "${scenario}: missing aggregate must retry before the final merge check"
+	fi
+	if [[ "${scenario}" == missing-postpromotion-aggregate ]]; then
+		[[ "$(<"${state}/checks-true")" -eq 2 ]] ||
+			fail "${scenario}: absent aggregate must exhaust the bounded wait without merging"
+	fi
+	if [[ "${scenario}" == failed-current-audit-before-aggregate ]]; then
+		[[ "$(<"${state}/checks-true")" -eq 1 ]] ||
+			fail "${scenario}: current failure must stop immediately despite the missing aggregate"
+	fi
 	printf 'PASS: %s\n' "${scenario}"
 }
 
@@ -296,6 +314,7 @@ run_case draft-success true 1 1
 run_case ready-retry true 0 1
 run_case pending-then-pass true 1 1
 run_case audit-then-pass true 1 1
+run_case delayed-current-aggregate true 1 1
 run_case paginated-success true 1 1
 run_case admin-capable true 1 1
 run_case async-pending-success true 1 1
@@ -314,6 +333,8 @@ for scenario in missing-audit stale-aggregate stale-audit head-moved-after-promo
 	postpromotion-blocked digest-changed-after-promotion release-changed-after-promotion final-release-digest-race; do
 	run_case "${scenario}" false 1 0
 done
+run_case missing-postpromotion-aggregate false 1 0
+run_case failed-current-audit-before-aggregate false 1 0
 for scenario in merge-rejected merge-false readback-error readback-wrong-head; do
 	run_case "${scenario}" false 1 1
 done
