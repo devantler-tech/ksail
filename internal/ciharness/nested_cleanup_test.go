@@ -47,6 +47,16 @@ if [[ "$FIXTURE_MODE" == create-error && "$2" == create && "$*" == *nested-vanil
 fi
 `
 
+const nestedCleanupTimeoutStub = `#!/usr/bin/env bash
+set -euo pipefail
+printf 'timeout %s\n' "$*" >> "$FIXTURE_CALLS"
+shift
+if [[ "$FIXTURE_MODE" == query-timeout && "$1" == kubectl ]]; then
+  exit 124
+fi
+exec "$@"
+`
+
 func runNestedCleanup(t *testing.T, mode string) (string, string, error) {
 	t.Helper()
 	version, err := exec.CommandContext(t.Context(), "bash", "-c", `printf '%s' "${BASH_VERSINFO[0]}"`).
@@ -68,11 +78,7 @@ func runNestedCleanup(t *testing.T, mode string) (string, string, error) {
 
 	writeExecutableStub(t, filepath.Join(dir, "kubectl"), nestedCleanupKubectlStub)
 	writeExecutableStub(t, filepath.Join(dir, "ksail"), nestedCleanupKSailStub)
-	writeExecutableStub(
-		t,
-		filepath.Join(dir, "timeout"),
-		"#!/usr/bin/env bash\nshift\nexec \"$@\"\n",
-	)
+	writeExecutableStub(t, filepath.Join(dir, "timeout"), nestedCleanupTimeoutStub)
 	command := exec.CommandContext(t.Context(), "bash")
 	command.Stdin = strings.NewReader(script)
 	command.Dir = filepath.Join("..", "..")
@@ -105,6 +111,7 @@ func TestNestedCleanupRejectsFailedOrUnverifiedCleanup(t *testing.T) {
 	}{
 		{mode: "delete-error"},
 		{mode: "query-error", stop: true},
+		{mode: "query-timeout", stop: true},
 		{mode: "pending", stop: true},
 		{mode: "host-error", stop: true},
 	} {
@@ -137,6 +144,7 @@ func TestNestedCleanupReadsOnlyExactNamespacesOnOriginalHost(t *testing.T) {
 			require.NoError(t, err, output)
 			assert.Contains(t, output, "All Kubernetes provider tests passed")
 			assert.Contains(t, calls, "ksail cluster create --distribution K3s")
+			assert.Regexp(t, `timeout [1-9][0-9]*s kubectl --context fixture-host`, calls)
 
 			for _, name := range []string{"vanilla", "k3s"} {
 				assert.Contains(t, calls, "kubectl --context fixture-host get namespace "+

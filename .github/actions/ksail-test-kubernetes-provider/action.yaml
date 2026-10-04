@@ -224,9 +224,13 @@ runs:
           SETTLE_DEADLINE=$((SECONDS + 120))
           drained=false
           while [ "$SECONDS" -lt "$SETTLE_DEADLINE" ]; do
-            if ! remaining=$(kubectl --context "$HOST_CONTEXT" get namespace \
+            remaining_seconds=$((SETTLE_DEADLINE - SECONDS))
+            if [ "$remaining_seconds" -le 0 ]; then
+              break
+            fi
+            if ! remaining=$(timeout "${remaining_seconds}s" kubectl --context "$HOST_CONTEXT" get namespace \
               "ksail-$NESTED_NAME" "k3k-$NESTED_NAME" "vcluster-$NESTED_NAME" \
-              --ignore-not-found -o name); then
+              --ignore-not-found -o name --request-timeout=15s); then
               echo "  ❌ $DIST namespace verification FAILED"
               break
             fi
