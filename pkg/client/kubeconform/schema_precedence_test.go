@@ -42,14 +42,57 @@ spec:
 // TestValidateBytesSchemaPrecedence exercises the production client against
 // isolated cached registries. A stale catalogue must not mask a supplied CRD
 // schema, while invalid resources and missing schemas must still fail.
+//
+//nolint:paralleltest // seedSchemaCache mutates cache environment variables with t.Setenv.
 func TestValidateBytesSchemaPrecedence(t *testing.T) {
-	cases := []struct {
-		name     string
-		catalog  string
-		supplied string
-		manifest string
-		wantErr  bool
-	}{
+	for _, scenario := range schemaPrecedenceCases() {
+		t.Run(scenario.name, func(t *testing.T) {
+			seedSchemaCache(t, map[string]string{
+				// A null cached response exercises kubeconform's absent-schema
+				// fallback without reaching either public registry over the network.
+				"https://raw.githubusercontent.com/yannh/kubernetes-json-schema/master/" +
+					"master-standalone-strict/widgetthing-example-v1.json": "null",
+				"https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/" +
+					"example.com/widgetthing_v1.json": scenario.catalog,
+			})
+
+			opts := &kubeconform.ValidationOptions{Strict: true}
+
+			if scenario.supplied != "" {
+				location := filepath.Join(
+					t.TempDir(),
+					"{{.ResourceKind}}_{{.ResourceAPIVersion}}.json",
+				)
+
+				opts.SchemaLocations = []string{location}
+				if scenario.supplied != "missing" {
+					writeSchemaFixture(
+						t,
+						filepath.Join(filepath.Dir(location), "widgetthing_v1.json"),
+						scenario.supplied,
+					)
+				}
+			}
+
+			err := kubeconform.NewClient().
+				ValidateBytes(context.Background(), "widget.yaml", []byte(scenario.manifest), opts)
+			if (err != nil) != scenario.wantErr {
+				t.Fatalf("validation error = %v; want error = %v", err, scenario.wantErr)
+			}
+		})
+	}
+}
+
+type schemaPrecedenceCase struct {
+	name     string
+	catalog  string
+	supplied string
+	manifest string
+	wantErr  bool
+}
+
+func schemaPrecedenceCases() []schemaPrecedenceCase {
+	return []schemaPrecedenceCase{
 		{
 			name:    "current supplied CRD wins over stale catalogue",
 			catalog: widgetCRDSchema, supplied: currentWidgetSchema,
@@ -79,35 +122,12 @@ func TestValidateBytesSchemaPrecedence(t *testing.T) {
 			manifest: validWidgetCR, wantErr: true,
 		},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			seedSchemaCache(t, map[string]string{
-				// A null cached response exercises kubeconform's absent-schema
-				// fallback without reaching either public registry over the network.
-				"https://raw.githubusercontent.com/yannh/kubernetes-json-schema/master/" +
-					"master-standalone-strict/widgetthing-example-v1.json": "null",
-				"https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/" +
-					"example.com/widgetthing_v1.json": tc.catalog,
-			})
-			opts := &kubeconform.ValidationOptions{Strict: true}
-			if tc.supplied != "" {
-				location := filepath.Join(t.TempDir(), "{{.ResourceKind}}_{{.ResourceAPIVersion}}.json")
-				opts.SchemaLocations = []string{location}
-				if tc.supplied != "missing" {
-					writeSchemaFixture(t, filepath.Join(filepath.Dir(location), "widgetthing_v1.json"), tc.supplied)
-				}
-			}
-
-			err := kubeconform.NewClient().ValidateBytes(context.Background(), "widget.yaml", []byte(tc.manifest), opts)
-			if (err != nil) != tc.wantErr {
-				t.Fatalf("validation error = %v; want error = %v", err, tc.wantErr)
-			}
-		})
-	}
 }
 
 // TestValidateBytesBuiltinSchemaKeepsPriority prevents supplied CRD schemas
 // from overriding validation of built-in Kubernetes resources.
+//
+//nolint:paralleltest // seedSchemaCache mutates cache environment variables with t.Setenv.
 func TestValidateBytesBuiltinSchemaKeepsPriority(t *testing.T) {
 	seedSchemaCache(t, map[string]string{
 		"https://raw.githubusercontent.com/yannh/kubernetes-json-schema/master/" +
@@ -119,11 +139,26 @@ func TestValidateBytesBuiltinSchemaKeepsPriority(t *testing.T) {
 	location := filepath.Join(t.TempDir(), "namespace_v1.json")
 	writeSchemaFixture(t, location, `{}`)
 	opts := &kubeconform.ValidationOptions{Strict: true, SchemaLocations: []string{location}}
+
 	client := kubeconform.NewClient()
-	if err := client.ValidateBytes(context.Background(), "namespace.yaml", []byte(validNamespaceYAML), opts); err != nil {
+
+	err := client.ValidateBytes(
+		context.Background(),
+		"namespace.yaml",
+		[]byte(validNamespaceYAML),
+		opts,
+	)
+	if err != nil {
 		t.Fatalf("valid built-in resource failed: %v", err)
 	}
-	if err := client.ValidateBytes(context.Background(), "namespace.yaml", []byte(validNamespaceYAML+"bogus: true\n"), opts); err == nil {
+
+	err = client.ValidateBytes(
+		context.Background(),
+		"namespace.yaml",
+		[]byte(validNamespaceYAML+"bogus: true\n"),
+		opts,
+	)
+	if err == nil {
 		t.Fatal("permissive supplied schema bypassed the built-in schema")
 	}
 }
@@ -132,21 +167,28 @@ func TestValidateBytesBuiltinSchemaKeepsPriority(t *testing.T) {
 // deterministic registry responses consumed by the real validation client.
 func seedSchemaCache(t *testing.T, schemas map[string]string) {
 	t.Helper()
+
 	dir := t.TempDir()
 	for _, key := range []string{"HOME", "USERPROFILE", "XDG_CACHE_HOME", "LOCALAPPDATA"} {
 		t.Setenv(key, dir)
 	}
+
 	base, err := os.UserCacheDir()
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	cacheDir := filepath.Join(base, "ksail", "kubeconform")
-	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
+
+	err = os.MkdirAll(cacheDir, 0o700)
+	if err != nil {
 		t.Fatal(err)
 	}
+
 	registryCache := cache.NewOnDiskCache(cacheDir)
 	for url, schema := range schemas {
-		if err := registryCache.Set(url, []byte(schema)); err != nil {
+		err := registryCache.Set(url, []byte(schema))
+		if err != nil {
 			t.Fatalf("seed schema cache: %v", err)
 		}
 	}
@@ -155,7 +197,9 @@ func seedSchemaCache(t *testing.T, schemas map[string]string) {
 // writeSchemaFixture creates a private schema file for validation fixtures.
 func writeSchemaFixture(t *testing.T, path, schema string) {
 	t.Helper()
-	if err := os.WriteFile(path, []byte(schema), 0o600); err != nil {
+
+	err := os.WriteFile(path, []byte(schema), 0o600)
+	if err != nil {
 		t.Fatal(err)
 	}
 }
