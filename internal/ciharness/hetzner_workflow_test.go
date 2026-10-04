@@ -178,6 +178,7 @@ func assertHetznerSchematicRolloutScenario(
 ) {
 	t.Helper()
 	fixture := newSchematicRolloutFixture(t)
+
 	liveVersion := scenario.liveVersion
 	if liveVersion == "" {
 		liveVersion = "v1.12.4"
@@ -213,12 +214,14 @@ func assertHetznerSchematicRolloutScenario(
 	calls, readErr := os.ReadFile(fixture.callsFile)
 	require.NoError(t, readErr)
 	assert.Contains(t, string(calls), "workload get nodes -o json")
+
 	if scenario.wantNoPlan {
 		assert.NotContains(t, string(calls), "cluster update --dry-run")
 	} else {
 		assert.Contains(t, string(calls), "cluster update --dry-run")
 		assert.Contains(t, string(calls), "--name schematic-trial")
 	}
+
 	assert.NotContains(t, string(calls), "--image-verification")
 
 	if scenario.wantNoApply {
