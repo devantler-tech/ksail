@@ -406,3 +406,120 @@ func TestReconcileAutoscalerNodes_UnchangedSecretLeavesConfiguredServersAlone(t 
 	assert.Zero(t, api.unexpected.Load(), "no request may act on a server")
 	assert.Empty(t, logs.String())
 }
+
+// disabledAutoscalerProvisioner returns a provisioner with the node autoscaler
+// disabled and the given pools still listed in the configuration, backed by
+// hzProvider.
+func disabledAutoscalerProvisioner(
+	hzProvider *hetzner.Provider,
+	logWriter io.Writer,
+	pools ...string,
+) *talosprovisioner.Provisioner {
+	nodePools := make([]v1alpha1.NodePool, 0, len(pools))
+	for _, pool := range pools {
+		nodePools = append(nodePools, v1alpha1.NodePool{Name: pool})
+	}
+
+	return talosprovisioner.NewProvisioner(nil, nil).
+		WithLogWriter(logWriter).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{
+			NodeAutoscalerEnabled:   false,
+			AutoscalerNodePoolNames: pools,
+			AutoscalerNodePools:     nodePools,
+		}).
+		WithInfraProvider(hzProvider)
+}
+
+// TestEnsureAutoscalerSecretIfNeeded_ReportsServersWhileAutoscalerDisabled pins that
+// disabling the node autoscaler does not hide the servers it created. Nothing manages
+// them any more — whether or not their pool is still listed — so each is reported
+// exactly once as a failed change that names the disabled autoscaler, and none is
+// acted on. A server of another cluster is neither touched nor reported.
+func TestEnsureAutoscalerSecretIfNeeded_ReportsServersWhileAutoscalerDisabled(t *testing.T) {
+	t.Parallel()
+
+	poolSets := []struct {
+		name  string
+		pools []string
+	}{
+		{"pool removed", nil},
+		{"pool still listed", []string{removedPool}},
+	}
+
+	for _, poolSet := range poolSets {
+		t.Run(poolSet.name, func(t *testing.T) {
+			t.Parallel()
+
+			hzProvider, api := newAutoscalerHcloudAPI(t, removedPoolAndOtherClusterServers()...)
+
+			var logs bytes.Buffer
+
+			prov := disabledAutoscalerProvisioner(hzProvider, &logs, poolSet.pools...)
+			result := clusterupdate.NewEmptyUpdateResult()
+
+			err := prov.EnsureAutoscalerSecretIfNeededWithResultForTest(
+				context.Background(), autoscalerFakeCluster, result,
+			)
+			require.NoError(t, err)
+
+			reasons := failedChangeReasons(result)
+			require.Len(t, reasons, 1, "the leftover server is reported exactly once")
+			assert.Contains(t, reasons[0], "as-removed-1")
+			assert.Contains(t, reasons[0], "node autoscaler is disabled")
+			assert.NotContains(t, reasons[0], "other-pool-a")
+			assert.Zero(t, api.unexpected.Load(), "no request may act on a server")
+			assert.Equal(t, 1, strings.Count(
+				logs.String(), "Autoscaler node as-removed-1 is left untouched",
+			))
+		})
+	}
+}
+
+// TestEnsureAutoscalerSecretIfNeeded_SilentWithoutAutoscalerServers pins that a
+// cluster that never used the node autoscaler is unaffected by the disabled-autoscaler
+// audit: on Hetzner an empty listing reports and logs nothing, and with another
+// infrastructure provider the Hetzner API is not consulted at all.
+func TestEnsureAutoscalerSecretIfNeeded_SilentWithoutAutoscalerServers(t *testing.T) {
+	t.Parallel()
+
+	t.Run("hetzner cluster without autoscaler servers", func(t *testing.T) {
+		t.Parallel()
+
+		hzProvider, api := newAutoscalerHcloudAPI(t,
+			autoscalerServerSchema(2, "other-pool-a", configuredPool, otherClusterNetworkID),
+		)
+
+		var logs bytes.Buffer
+
+		prov := disabledAutoscalerProvisioner(hzProvider, &logs)
+		result := clusterupdate.NewEmptyUpdateResult()
+
+		err := prov.EnsureAutoscalerSecretIfNeededWithResultForTest(
+			context.Background(), autoscalerFakeCluster, result,
+		)
+		require.NoError(t, err)
+
+		assert.Empty(t, result.FailedChanges)
+		assert.Empty(t, logs.String())
+		assert.Zero(t, api.unexpected.Load())
+	})
+
+	t.Run("provider is not hetzner", func(t *testing.T) {
+		t.Parallel()
+
+		var logs bytes.Buffer
+
+		prov := talosprovisioner.NewProvisioner(nil, nil).
+			WithLogWriter(&logs).
+			WithHetznerOptions(v1alpha1.OptionsHetzner{})
+		result := clusterupdate.NewEmptyUpdateResult()
+
+		err := prov.EnsureAutoscalerSecretIfNeededWithResultForTest(
+			context.Background(), autoscalerFakeCluster, result,
+		)
+		require.NoError(t, err)
+
+		assert.Empty(t, result.FailedChanges)
+		assert.Empty(t, logs.String())
+	})
+}

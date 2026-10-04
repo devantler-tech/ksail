@@ -1230,3 +1230,14 @@ func (p *Provisioner) ReconcileAutoscalerNodesForTest(
 ) error {
 	return p.reconcileAutoscalerNodes(ctx, clusterName, diff, secretChanged, imageChanged, result)
 }
+
+// EnsureAutoscalerSecretIfNeededWithResultForTest exposes
+// ensureAutoscalerSecretIfNeeded with a caller-owned result, so the failed changes
+// the step records can be asserted.
+func (p *Provisioner) EnsureAutoscalerSecretIfNeededWithResultForTest(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.ensureAutoscalerSecretIfNeeded(ctx, clusterName, nil, result)
+}

@@ -2,9 +2,11 @@ package talosprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
@@ -33,9 +35,11 @@ func (p *Provisioner) syncHetznerFirewallRules(
 }
 
 // ensureAutoscalerSecretIfNeeded creates or updates the cluster-autoscaler-config
-// Secret when the node autoscaler is enabled on Hetzner. It is a no-op when
-// autoscaling is disabled, the provider is not Hetzner, or the config bundle
-// is unavailable. Returns ErrAutoscalerRequiresSchematic early when no
+// Secret when the node autoscaler is enabled on Hetzner. It manages no Secret when
+// autoscaling is disabled, the provider is not Hetzner, or the config bundle is
+// unavailable; with autoscaling disabled on Hetzner it still reports the servers the
+// autoscaler left behind (reportServersOfDisabledAutoscaler). Returns
+// ErrAutoscalerRequiresSchematic early when no
 // schematic is configured, before performing any side effects.
 //
 // When the Secret changes it brings existing autoscaler nodes to the new baseline
@@ -51,7 +55,7 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 	result *clusterupdate.UpdateResult,
 ) error {
 	if !p.autoscalerSecretApplicable() {
-		return nil
+		return p.reportServersOfDisabledAutoscaler(ctx, clusterName, result)
 	}
 
 	configBundle := p.talosConfigs.Bundle()
@@ -93,6 +97,56 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 	imageChanged := prevImageID != "" && prevImageID != strconv.FormatInt(snapshotImageID, 10)
 
 	return p.reconcileAutoscalerNodes(ctx, clusterName, diff, changed, imageChanged, result)
+}
+
+// errAutoscalerDisabled reports a server the cluster autoscaler created that outlived
+// the autoscaler: nothing scales it down or replaces it, and KSail does not own it.
+var errAutoscalerDisabled = errors.New(
+	"the node autoscaler is disabled, so nothing manages the servers it created",
+)
+
+// reportServersOfDisabledAutoscaler reports every server the cluster autoscaler
+// created for the cluster while the node autoscaler is disabled. Disabling it
+// uninstalls the autoscaler but leaves its servers running: no update path converges
+// them, so without this report they would keep running unnoticed, whether or not
+// their pool is still listed. Each server is recorded as a failed change and left
+// untouched; the user resolves it by re-enabling the autoscaler or by draining the
+// node and deleting its server.
+//
+// It is report-only and independent of listAutoscalerServers, whose disabled-guard
+// keeps the recycle, reboot and in-place paths from acting on servers while the
+// autoscaler is off. It is a silent no-op when the autoscaler is enabled, when the
+// infrastructure provider is not Hetzner, and when the cluster has no such servers.
+func (p *Provisioner) reportServersOfDisabledAutoscaler(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	if p.hetznerOpts == nil || p.hetznerOpts.NodeAutoscalerEnabled {
+		return nil
+	}
+
+	hzProvider, ok := p.infraProvider.(*hetzner.Provider)
+	if !ok {
+		return nil
+	}
+
+	servers, err := hzProvider.ListClusterAutoscalerNodes(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("listing autoscaler nodes: %w", err)
+	}
+
+	for _, server := range sortServersByName(servers) {
+		_, _ = fmt.Fprintf(p.logWriter,
+			"  ⚠ Autoscaler node %s is left untouched: %v\n", server.Name, errAutoscalerDisabled)
+
+		recordFailedChange(result, RoleWorker, server.Name, fmt.Errorf(
+			"%w; re-enable the autoscaler, or drain the node and delete its server",
+			errAutoscalerDisabled,
+		))
+	}
+
+	return nil
 }
 
 // reconcileAutoscalerNodes follows the autoscaler Secret refresh. The refreshed Secret
