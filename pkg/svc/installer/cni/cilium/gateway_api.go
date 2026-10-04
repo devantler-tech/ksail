@@ -4,25 +4,22 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
-	"github.com/devantler-tech/ksail/v7/pkg/svc/image/parser"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/yaml"
+	gatewayapiconsts "sigs.k8s.io/gateway-api/pkg/consts"
 )
-
-//go:embed Dockerfile.gateway-api
-var gatewayAPIDockerfile string
 
 const (
 	// Retry Gateway API bundle downloads on transient GitHub/network failures in CI.
@@ -32,20 +29,20 @@ const (
 	maxGatewayAPICRDResponseSize = 10 << 20
 )
 
-// gatewayAPICRDsVersion returns the pinned Gateway API version extracted from the embedded Dockerfile.
+// gatewayAPICRDsVersion returns the Gateway API release whose CRDs KSail installs: the release
+// of the sigs.k8s.io/gateway-api module this binary links, without its v prefix.
+//
+// That module is a direct requirement in go.mod, so Dependabot proposes its releases, and Cilium
+// requires it too, at the Gateway API release each Cilium version is built against. The tests in
+// internal/depcontract keep it on the line the pinned Cilium chart supports (ksail#7472).
 func gatewayAPICRDsVersion() string {
-	return parser.ParseImageFromDockerfile(
-		gatewayAPIDockerfile,
-		`FROM\s+registry\.k8s\.io/gateway-api/admission-server:v([^\s]+)`,
-		"gateway-api",
-	)
+	return strings.TrimPrefix(gatewayapiconsts.BundleVersion, "v")
 }
 
 // gatewayAPICRDsURL returns the URL for the experimental Gateway API CRDs bundle.
-// The experimental bundle is required because Cilium's gateway controller uses TLSRoute
-// (gateway.networking.k8s.io/v1alpha2), which is in the experimental channel and absent
-// from standard-install.yaml. Without it, Cilium 1.15+ crashes on startup when
-// gatewayAPI.enabled is true.
+// The experimental channel holds everything in the standard one and also serves the older
+// alpha versions of TLSRoute, TCPRoute and UDPRoute, which the standard channel stops serving
+// once those resources reach v1. Manifests written against those versions keep working with it.
 func gatewayAPICRDsURL() string {
 	return "https://github.com/kubernetes-sigs/gateway-api/releases/download/v" +
 		gatewayAPICRDsVersion() + "/experimental-install.yaml"
@@ -53,7 +50,7 @@ func gatewayAPICRDsURL() string {
 
 // installGatewayAPICRDs installs the experimental Gateway API CRDs required by Cilium.
 // Cilium requires these CRDs to be pre-installed when gatewayAPI.enabled is true.
-// See: https://docs.cilium.io/en/v1.19/network/servicemesh/gateway-api/gateway-api/#prerequisites
+// See: https://docs.cilium.io/en/stable/network/servicemesh/gateway-api/gateway-api/#prerequisites
 func (c *Installer) installGatewayAPICRDs(ctx context.Context) error {
 	crds, err := fetchGatewayAPICRDs(ctx, gatewayAPICRDsURL(), c.GetTimeout())
 	if err != nil {
