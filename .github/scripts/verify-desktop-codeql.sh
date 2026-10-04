@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Reject failed Go project extraction and require function bodies from the CLI
-# and every Linux desktop source file, plus the owned logging adapter.
-# An upload alone does not prove coverage.
+# and every Linux desktop source file, the owned logging adapter, and authenticated dependency modules. An
+# upload alone does not prove coverage.
 set -euo pipefail
 
-# verify_results rejects incomplete or malformed CLI/desktop/adapter extraction evidence.
+# verify_results rejects incomplete or malformed extraction evidence.
 verify_results() {
 	jq -e '
     .["#select"].tuples as $rows |
     ($rows | type == "array") and
-    ($rows | length == 10) and
+    ($rows | length == 21) and
     ($rows | all(length == 3 and
       (.[2] | type == "number" and . > 0 and floor == .))) and
     ([$rows[] | .[0:2]] | sort) == ([
@@ -21,11 +21,22 @@ verify_results() {
       ["desktop/deeplink.go", "handleDeepLink"],
       ["desktop/notify.go", "watchClusterStatus"],
       ["desktop/window_state.go", "trackWindowState"],
+      ["third_party/cel-go/cel/env.go", "NewEnv"],
+      ["third_party/glamour/glamour.go", "NewTermRenderer"],
+      ["third_party/go-macholibre/universal_binary.go", "ExtractReaders"],
+      ["third_party/kyverno-jmespath/api.go", "Search"],
+      ["third_party/jmespath/api.go", "Search"],
+      ["third_party/ansi/width.go", "Strip"],
+      ["third_party/ansi-runtime/width.go", "Strip"],
+      ["third_party/redisotel/tracing.go", "InstrumentTracing"],
+      ["third_party/rediscmd/rediscmd.go", "CmdString"],
+      ["third_party/dynamiclistener/cert/cert.go", "NewPrivateKey"],
+      ["third_party/dynamiclistener/factory/cert_utils.go", "ParseCertPEM"],
       ["third_party/otelzap/otelzap.go", "log"],
       ["third_party/otelzap/logvalue.go", "logValue"]
     ] | sort)
   ' "$1" >/dev/null || {
-		printf '::error::CodeQL database lacks the required CLI/desktop/adapter function bodies.\n' >&2
+		printf '::error::CodeQL database lacks required CLI, desktop, adapter, or dependency function bodies.\n' >&2
 		return 1
 	}
 }

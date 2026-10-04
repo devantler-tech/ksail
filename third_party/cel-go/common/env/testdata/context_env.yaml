@@ -1,0 +1,62 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: "context-env"
+container: "google.expr"
+imports:
+  - name: "google.expr.proto3.test.TestAllTypes"
+stdlib:
+  include_macros:
+    - has
+  include_functions:
+    - name: "_==_"
+    - name: "_!=_"
+    - name: "!_"
+    - name: "_<_"
+    - name: "_<=_"
+    - name: "_>_"
+    - name: "_>=_"
+extensions:
+  - name: "optional"
+    version: "latest"
+  - name: "strings"
+    version: 1
+context_variable:
+  type_name: "google.expr.proto3.test.TestAllTypes"
+functions:
+  - name: "coalesce"
+    description: "Converts a potentially null wrapper-type to a default value."
+    overloads:
+      - id: "coalesce_wrapped_int"
+        examples:
+          - "coalesce(null, 1) // 1"
+          - "coalesce(2, 1) // 2"
+        args:
+          - "google.protobuf.Int64Value"
+          - "int"
+        return: "int"
+      - id: "coalesce_wrapped_double"
+        examples:
+          - "coalesce(null, 1.3) // 1.3"
+        args:
+          - "google.protobuf.DoubleValue"
+          - "double"
+        return: "double"
+      - id: "coalesce_wrapped_uint"
+        examples:
+          - "coalesce(null, 14u) // 14u"
+        args:
+          - "google.protobuf.UInt64Value"
+          - "uint"
+        return: "uint"
