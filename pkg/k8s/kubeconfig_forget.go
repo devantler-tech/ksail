@@ -13,10 +13,14 @@ import (
 )
 
 // ErrExplicitConnectionRequired indicates an attempt to forget an implicit local connection.
-var ErrExplicitConnectionRequired = errors.New("an explicit kubeconfig file and exact context name are required")
+var ErrExplicitConnectionRequired = errors.New(
+	"an explicit kubeconfig file and exact context name are required",
+)
 
 // ErrKubeconfigChanged refuses to replace a connection file changed since it was read.
-var ErrKubeconfigChanged = errors.New("kubeconfig changed during recovery; retry after the other writer finishes")
+var ErrKubeconfigChanged = errors.New(
+	"kubeconfig changed during recovery; retry after the other writer finishes",
+)
 
 // ForgetContext removes exactly one local context and its unreferenced connection records.
 // It never loads a REST client, executes credential plugins, or infers resource ownership.
@@ -58,6 +62,7 @@ func forgetContextWithWrite(
 	if err != nil {
 		return false, fmt.Errorf("lock kubeconfig; wait for the other writer to finish: %w", err)
 	}
+
 	defer func() { _ = os.Remove(lockPath) }()
 
 	err = lock.Close()
@@ -174,6 +179,7 @@ func removeUnreferencedConnection(config *clientcmdapi.Config, selected *clientc
 	}
 
 	clusterUsed, authUsed := false, false
+
 	for _, remaining := range config.Contexts {
 		if remaining != nil {
 			clusterUsed = clusterUsed || remaining.Cluster == selected.Cluster

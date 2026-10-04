@@ -40,7 +40,10 @@ KUBECONFIG environment default is selected implicitly.`,
 			}
 
 			if changed {
-				cmd.Printf("Forgot local context %q. Cluster resources were not checked or changed.\n", contextName)
+				cmd.Printf(
+					"Forgot local context %q. Cluster resources were not checked or changed.\n",
+					contextName,
+				)
 			} else {
 				cmd.Printf("Local context %q is already absent. No changes made.\n", contextName)
 			}
@@ -48,7 +51,8 @@ KUBECONFIG environment default is selected implicitly.`,
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&kubeconfigPath, "kubeconfig", "", "one explicit kubeconfig file to update locally")
+	cmd.Flags().
+		StringVar(&kubeconfigPath, "kubeconfig", "", "one explicit kubeconfig file to update locally")
 	cmd.Flags().StringVar(&contextName, "context", "", "exact local context to forget")
 	_ = cmd.MarkFlagRequired("kubeconfig")
 	_ = cmd.MarkFlagRequired("context")

@@ -25,13 +25,18 @@ func TestForgetContextPreservesIndependentReferences(t *testing.T) {
 			config := clientcmdapi.NewConfig()
 			config.Clusters["connection"] = &clientcmdapi.Cluster{Server: "https://unused.invalid"}
 			config.AuthInfos["credential"] = &clientcmdapi.AuthInfo{Token: "preserve-me"}
-			config.Contexts["chosen"] = &clientcmdapi.Context{Cluster: "connection", AuthInfo: "credential"}
+			config.Contexts["chosen"] = &clientcmdapi.Context{
+				Cluster:  "connection",
+				AuthInfo: "credential",
+			}
+
 			config.Contexts["chosen-prefix"] = &clientcmdapi.Context{Namespace: "keep-me"}
 			if shared == "cluster" {
 				config.Contexts["chosen-prefix"].Cluster = "connection"
 			} else {
 				config.Contexts["chosen-prefix"].AuthInfo = "credential"
 			}
+
 			config.CurrentContext = "chosen-prefix"
 			config.Extensions["preserve"] = &runtime.Unknown{Raw: []byte(`{"value":"keep-me"}`)}
 			path := filepath.Join(t.TempDir(), "config")
@@ -39,6 +44,7 @@ func TestForgetContextPreservesIndependentReferences(t *testing.T) {
 			expected, err := clientcmd.LoadFromFile(path)
 			require.NoError(t, err)
 			delete(expected.Contexts, "chosen")
+
 			if shared == "cluster" {
 				delete(expected.AuthInfos, "credential")
 			} else {
@@ -48,6 +54,7 @@ func TestForgetContextPreservesIndependentReferences(t *testing.T) {
 			changed, err := k8s.ForgetContext(t.Context(), path, "chosen")
 			require.NoError(t, err)
 			assert.True(t, changed)
+
 			actual, err := clientcmd.LoadFromFile(path)
 			require.NoError(t, err)
 			assert.Equal(t, expected, actual)
@@ -63,12 +70,13 @@ func TestForgetContextRefusesReadOnlyFile(t *testing.T) {
 	config.Contexts["chosen"] = &clientcmdapi.Context{}
 	require.NoError(t, clientcmd.WriteToFile(*config, path))
 	require.NoError(t, os.Chmod(path, 0o400))
-	before, err := os.ReadFile(path)
+	before, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
 	changed, err := k8s.ForgetContext(t.Context(), path, "chosen")
 	require.Error(t, err)
 	assert.False(t, changed)
-	after, err := os.ReadFile(path)
+
+	after, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
 	assert.Equal(t, before, after)
 }
@@ -84,6 +92,7 @@ func TestForgetContextHonorsKubeconfigLock(t *testing.T) {
 	changed, err := k8s.ForgetContext(t.Context(), path, "chosen")
 	require.Error(t, err)
 	assert.False(t, changed)
+
 	after, err := clientcmd.LoadFromFile(path)
 	require.NoError(t, err)
 	assert.Contains(t, after.Contexts, "chosen")
@@ -102,7 +111,10 @@ func TestForgetContextBlocksConcurrentKubectlWrite(t *testing.T) {
 	_, err := k8s.ForgetContextWithWriteForTest(t.Context(), path, "chosen",
 		func(_ string, _ []byte, _ os.FileMode) error {
 			// A normal kubectl writer cannot add a new shared reference after our snapshot.
-			config.Contexts["new-host-context"] = &clientcmdapi.Context{Cluster: "shared", AuthInfo: "shared"}
+			config.Contexts["new-host-context"] = &clientcmdapi.Context{
+				Cluster:  "shared",
+				AuthInfo: "shared",
+			}
 			access := clientcmd.NewDefaultPathOptions()
 			access.GlobalFile = path
 			access.LoadingRules.ExplicitPath = path
@@ -127,6 +139,7 @@ func TestForgetContextRejectsChangedSnapshot(t *testing.T) {
 			require.NoError(t, os.WriteFile(path, previous, 0o600))
 			info, err := os.Stat(path)
 			require.NoError(t, err)
+
 			expected := previous
 			if change == "content" {
 				expected = []byte("another writer added a shared host context")
@@ -136,16 +149,23 @@ func TestForgetContextRejectsChangedSnapshot(t *testing.T) {
 				require.NoError(t, os.WriteFile(path+".replacement", expected, 0o600))
 				require.NoError(t, os.Rename(path+".replacement", path))
 			}
+
 			called := false
-			err = k8s.ReplaceUnchangedKubeconfigForTest(path, info, previous, []byte("stale replacement"),
+			err = k8s.ReplaceUnchangedKubeconfigForTest(
+				path,
+				info,
+				previous,
+				[]byte("stale replacement"),
 				func(_ string, _ []byte, _ os.FileMode) error {
 					called = true
 
 					return nil
-				})
+				},
+			)
 			require.ErrorIs(t, err, k8s.ErrKubeconfigChanged)
 			assert.False(t, called)
-			actual, err := os.ReadFile(path)
+
+			actual, err := os.ReadFile(filepath.Clean(path))
 			require.NoError(t, err)
 			assert.Equal(t, expected, actual)
 		})
@@ -164,6 +184,7 @@ func TestForgetContextReadErrorsPreserveFile(t *testing.T) {
 			changed, err := k8s.ForgetContext(t.Context(), path, "chosen")
 			require.Error(t, err)
 			assert.False(t, changed)
+
 			after, err := os.ReadFile(path)
 			require.NoError(t, err)
 			assert.Equal(t, contents, string(after))
@@ -193,9 +214,11 @@ func TestForgetContextCancellationPreservesFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, contents, 0o600))
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
+
 	changed, err := k8s.ForgetContext(ctx, path, "chosen")
 	require.ErrorIs(t, err, context.Canceled)
 	assert.False(t, changed)
+
 	after, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, contents, after)
@@ -218,6 +241,7 @@ func TestForgetContextWriteFailurePreservesFile(t *testing.T) {
 		})
 	require.ErrorIs(t, err, io.ErrShortWrite)
 	assert.False(t, changed)
+
 	after, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, before, after)

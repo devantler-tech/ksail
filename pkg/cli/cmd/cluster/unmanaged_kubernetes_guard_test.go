@@ -227,8 +227,11 @@ func TestKubernetesCleanup_DeletesOnlyVerifiedNamespace(t *testing.T) {
 func TestKubernetesCleanup_PartialDeletionRequiresExplicitLocalRecovery(t *testing.T) {
 	t.Parallel()
 
-	var requests, deletes atomic.Int32
-	var failLaterRead atomic.Bool
+	var (
+		requests, deletes atomic.Int32
+		failLaterRead     atomic.Bool
+	)
+
 	failLaterRead.Store(true)
 	host := partialNestedDeletionHost(t, &requests, &deletes, &failLaterRead)
 	path := filepath.Join(t.TempDir(), "config")
@@ -239,18 +242,24 @@ func TestKubernetesCleanup_PartialDeletionRequiresExplicitLocalRecovery(t *testi
 		KubernetesOpts: v1alpha1.OptionsKubernetes{Kubeconfig: path, Context: "host"},
 	}
 	require.NoError(t, cluster.ExportUnmanagedClusterGuard(t.Context(), resolved))
-	provisioner, err := lifecycle.CreateMinimalProvisionerForProvider(t.Context(), &clusterdetector.Info{
-		ClusterName: "nested", Provider: v1alpha1.ProviderKubernetes, KubeconfigPath: path,
-	}, lifecycle.MinimalProvisionerOptions{KubernetesOpts: resolved.KubernetesOpts})
+	provisioner, err := lifecycle.CreateMinimalProvisionerForProvider(
+		t.Context(),
+		&clusterdetector.Info{
+			ClusterName: "nested", Provider: v1alpha1.ProviderKubernetes, KubeconfigPath: path,
+		},
+		lifecycle.MinimalProvisionerOptions{KubernetesOpts: resolved.KubernetesOpts},
+	)
 	require.NoError(t, err)
 	err = provisioner.Delete(t.Context(), "nested")
 	require.ErrorContains(t, err, "later ownership read denied")
 	assert.EqualValues(t, 1, deletes.Load())
+
 	afterFailure, err := clientcmd.LoadFromFile(path)
 	require.NoError(t, err)
 	assert.Contains(t, afterFailure.Contexts, "kind-nested")
 
 	failLaterRead.Store(false)
+
 	err = cluster.ExportUnmanagedClusterGuard(t.Context(), resolved)
 	require.ErrorIs(t, err, cluster.ErrUnmanagedCluster)
 	require.ErrorContains(t, err, "cluster forget")
@@ -259,6 +268,7 @@ func TestKubernetesCleanup_PartialDeletionRequiresExplicitLocalRecovery(t *testi
 	_, err = executeForget(t, "--experimental", "--kubeconfig", path, "--context", "kind-nested")
 	require.NoError(t, err)
 	assert.Equal(t, beforeRecovery, requests.Load(), "recovery must make no API requests")
+
 	afterRecovery, err := clientcmd.LoadFromFile(path)
 	require.NoError(t, err)
 	assert.NotContains(t, afterRecovery.Contexts, "kind-nested")
@@ -274,42 +284,57 @@ func partialNestedDeletionHost(
 
 	var namespaceDeleted atomic.Bool
 
-	host := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		requests.Add(1)
-		writer.Header().Set("Content-Type", "application/json")
-		if request.Method == http.MethodDelete {
-			assert.Equal(t, "/api/v1/namespaces/ksail-nested", request.URL.Path)
-			deletes.Add(1)
-			namespaceDeleted.Store(true)
-			_ = json.NewEncoder(writer).Encode(metav1.Status{Status: "Success"})
+	host := httptest.NewServer(
+		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			requests.Add(1)
+			writer.Header().Set("Content-Type", "application/json")
 
-			return
-		}
-		if request.URL.Path == "/api/v1/namespaces/ksail-nested" && !namespaceDeleted.Load() {
-			_ = json.NewEncoder(writer).Encode(corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
-				Name: "ksail-nested", Labels: nestedGuardOwnedLabels(), UID: "owned-uid", ResourceVersion: "42",
-			}})
+			if request.Method == http.MethodDelete {
+				assert.Equal(t, "/api/v1/namespaces/ksail-nested", request.URL.Path)
+				deletes.Add(1)
+				namespaceDeleted.Store(true)
 
-			return
-		}
-		if request.URL.Path == "/api/v1/namespaces/k3k-nested" && failLaterRead.Load() {
-			writer.WriteHeader(http.StatusForbidden)
-			_ = json.NewEncoder(writer).Encode(metav1.Status{TypeMeta: metav1.TypeMeta{Kind: "Status", APIVersion: "v1"},
-				Status: "Failure", Reason: metav1.StatusReasonForbidden,
-				Message: "later ownership read denied", Code: http.StatusForbidden})
+				_ = json.NewEncoder(writer).Encode(metav1.Status{Status: "Success"})
 
-			return
-		}
-		// A same-named but unowned namespace remains outside the deletion grant.
-		if request.URL.Path == "/api/v1/namespaces/vcluster-nested" {
-			_ = json.NewEncoder(writer).Encode(corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "vcluster-nested"}})
+				return
+			}
 
-			return
-		}
-		writer.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(writer).Encode(metav1.Status{Status: "Failure", Reason: metav1.StatusReasonNotFound,
-			Code: http.StatusNotFound})
-	}))
+			if request.URL.Path == "/api/v1/namespaces/ksail-nested" && !namespaceDeleted.Load() {
+				_ = json.NewEncoder(writer).Encode(corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+					Name:            "ksail-nested",
+					Labels:          nestedGuardOwnedLabels(),
+					UID:             "owned-uid",
+					ResourceVersion: "42",
+				}})
+
+				return
+			}
+
+			if request.URL.Path == "/api/v1/namespaces/k3k-nested" && failLaterRead.Load() {
+				writer.WriteHeader(http.StatusForbidden)
+				_ = json.NewEncoder(writer).Encode(metav1.Status{
+					TypeMeta: metav1.TypeMeta{Kind: "Status", APIVersion: "v1"},
+					Status:   "Failure", Reason: metav1.StatusReasonForbidden,
+					Message: "later ownership read denied", Code: http.StatusForbidden,
+				})
+
+				return
+			}
+			// A same-named but unowned namespace remains outside the deletion grant.
+			if request.URL.Path == "/api/v1/namespaces/vcluster-nested" {
+				_ = json.NewEncoder(writer).
+					Encode(corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "vcluster-nested"}})
+
+				return
+			}
+
+			writer.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(writer).Encode(metav1.Status{
+				Status: "Failure", Reason: metav1.StatusReasonNotFound,
+				Code: http.StatusNotFound,
+			})
+		}),
+	)
 	t.Cleanup(host.Close)
 
 	return host
