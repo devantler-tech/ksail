@@ -71,9 +71,11 @@ func runVersionStepWithShell(
 	callsFile := filepath.Join(dir, "calls")
 
 	require.NoError(t, os.WriteFile(versionFile, []byte("v1.36.2"), 0o600))
+
 	if shell != "bash" {
 		require.NoError(t, os.Symlink(shell, filepath.Join(dir, "bash")))
 	}
+
 	writeExecutableStub(t, filepath.Join(dir, "kubectl"), versionStub)
 	writeExecutableStub(t, filepath.Join(dir, "ksail"), updateStub)
 	writeExecutableStub(
@@ -120,6 +122,7 @@ func requireBash32(t *testing.T) string {
 	t.Helper()
 
 	const shell = "/bin/bash"
+
 	version, err := exec.CommandContext(t.Context(), shell, "--version").CombinedOutput()
 	require.NoError(t, err, string(version))
 
