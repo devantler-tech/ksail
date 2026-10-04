@@ -36,6 +36,26 @@ netstat -ano | findstr :5000
 taskkill /PID <id> /F
 ```
 
+## Incomplete Nested Cluster Deletion
+
+Deleting a nested cluster can remove its final owned namespace and then fail on a later host API
+read. KSail keeps the local connection and reports the failure. A retry refuses resource deletion
+when ownership can no longer be proven, even if a familiar context name remains.
+
+Investigate the reported API error and any remaining host resources separately. If you only want
+to retire the stale **local connection**, the experimental recovery command accepts one exact
+context in one explicit file:
+
+```bash
+ksail cluster forget --kubeconfig ./nested.config --context kind-nested --experimental
+```
+
+This command makes no API requests, runs no credential plugins, and never deletes cluster or host
+resources. It does not prove deletion completed or repair the reported API failure. Other contexts
+and shared cluster/user entries in the selected file are kept. The current context is cleared only
+if it is the one forgotten. Repeating the command for an absent context makes no changes. Missing,
+unreadable or malformed files remain errors; `KUBECONFIG` and current-context defaults are not used.
+
 ## GitOps Workflow Issues
 
 ### Registry Access and Image Push Failures

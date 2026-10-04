@@ -224,6 +224,83 @@ func TestKubernetesCleanup_DeletesOnlyVerifiedNamespace(t *testing.T) {
 	assert.NotContains(t, config.Contexts, "kind-nested")
 }
 
+func TestKubernetesCleanup_PartialDeletionRequiresExplicitLocalRecovery(t *testing.T) {
+	t.Parallel()
+
+	var requests, deletes atomic.Int32
+	var namespaceDeleted, failLaterRead atomic.Bool
+	failLaterRead.Store(true)
+	host := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodDelete {
+			assert.Equal(t, "/api/v1/namespaces/ksail-nested", r.URL.Path)
+			deletes.Add(1)
+			namespaceDeleted.Store(true)
+			_ = json.NewEncoder(w).Encode(metav1.Status{Status: "Success"})
+
+			return
+		}
+		if r.URL.Path == "/api/v1/namespaces/ksail-nested" && !namespaceDeleted.Load() {
+			_ = json.NewEncoder(w).Encode(corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+				Name: "ksail-nested", Labels: nestedGuardOwnedLabels(), UID: "owned-uid", ResourceVersion: "42",
+			}})
+
+			return
+		}
+		if r.URL.Path == "/api/v1/namespaces/k3k-nested" && failLaterRead.Load() {
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(metav1.Status{TypeMeta: metav1.TypeMeta{Kind: "Status", APIVersion: "v1"},
+				Status: "Failure", Reason: metav1.StatusReasonForbidden,
+				Message: "later ownership read denied", Code: http.StatusForbidden})
+
+			return
+		}
+		// A same-named but unowned namespace remains outside the deletion grant.
+		if r.URL.Path == "/api/v1/namespaces/vcluster-nested" {
+			_ = json.NewEncoder(w).Encode(corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "vcluster-nested"}})
+
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(metav1.Status{Status: "Failure", Reason: metav1.StatusReasonNotFound,
+			Code: http.StatusNotFound})
+	}))
+	t.Cleanup(host.Close)
+	path := filepath.Join(t.TempDir(), "config")
+	config := forgetFixture(host.URL, filepath.Join(t.TempDir(), "exec-plugin-ran"), false)
+	require.NoError(t, clientcmd.WriteToFile(*config, path))
+	resolved := &lifecycle.ResolvedClusterInfo{
+		ClusterName: "nested", Provider: v1alpha1.ProviderKubernetes, KubeconfigPath: path,
+		KubernetesOpts: v1alpha1.OptionsKubernetes{Kubeconfig: path, Context: "host"},
+	}
+	require.NoError(t, cluster.ExportUnmanagedClusterGuard(t.Context(), resolved))
+	provisioner, err := lifecycle.CreateMinimalProvisionerForProvider(t.Context(), &clusterdetector.Info{
+		ClusterName: "nested", Provider: v1alpha1.ProviderKubernetes, KubeconfigPath: path,
+	}, lifecycle.MinimalProvisionerOptions{KubernetesOpts: resolved.KubernetesOpts})
+	require.NoError(t, err)
+	err = provisioner.Delete(t.Context(), "nested")
+	require.ErrorContains(t, err, "later ownership read denied")
+	assert.EqualValues(t, 1, deletes.Load())
+	afterFailure, err := clientcmd.LoadFromFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, afterFailure.Contexts, "kind-nested")
+
+	failLaterRead.Store(false)
+	err = cluster.ExportUnmanagedClusterGuard(t.Context(), resolved)
+	require.ErrorIs(t, err, cluster.ErrUnmanagedCluster)
+	require.ErrorContains(t, err, "cluster forget")
+	assert.EqualValues(t, 1, deletes.Load(), "retry must not delete the unowned namespace")
+	beforeRecovery := requests.Load()
+	_, err = executeForget(t, "--experimental", "--kubeconfig", path, "--context", "kind-nested")
+	require.NoError(t, err)
+	assert.Equal(t, beforeRecovery, requests.Load(), "recovery must make no API requests")
+	afterRecovery, err := clientcmd.LoadFromFile(path)
+	require.NoError(t, err)
+	assert.NotContains(t, afterRecovery.Contexts, "kind-nested")
+	assert.Contains(t, afterRecovery.Contexts, "host")
+}
+
 func nestedCleanupHost(t *testing.T, deletes *atomic.Int32) *httptest.Server {
 	t.Helper()
 
