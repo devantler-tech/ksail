@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -107,7 +106,7 @@ func TestUnmanagedClusterGuard_KubernetesHostFailures(t *testing.T) {
 			)
 			err := cluster.ExportUnmanagedClusterGuard(t.Context(), resolved)
 			require.Error(t, err)
-			assert.NotErrorIs(t, err, cluster.ErrUnmanagedCluster)
+			require.NotErrorIs(t, err, cluster.ErrUnmanagedCluster)
 			assert.Positive(t, hostReads.Load())
 		})
 	}
@@ -122,7 +121,7 @@ func TestUnmanagedClusterGuard_KubernetesHostFailures(t *testing.T) {
 		resolved.KubernetesOpts.Kubeconfig = filepath.Join(t.TempDir(), "missing")
 		err := cluster.ExportUnmanagedClusterGuard(t.Context(), resolved)
 		require.Error(t, err)
-		assert.NotErrorIs(t, err, cluster.ErrUnmanagedCluster)
+		require.NotErrorIs(t, err, cluster.ErrUnmanagedCluster)
 		assert.Zero(t, hostReads.Load())
 	})
 
@@ -136,7 +135,7 @@ func TestUnmanagedClusterGuard_KubernetesHostFailures(t *testing.T) {
 		resolved.KubernetesOpts.Context = "unknown"
 		err := cluster.ExportUnmanagedClusterGuard(t.Context(), resolved)
 		require.Error(t, err)
-		assert.NotErrorIs(t, err, cluster.ErrUnmanagedCluster)
+		require.NotErrorIs(t, err, cluster.ErrUnmanagedCluster)
 		assert.Zero(t, hostReads.Load())
 	})
 }
@@ -189,6 +188,38 @@ func TestKubernetesCleanup_NamespaceReadFailureStopsDeletion(t *testing.T) {
 func TestKubernetesCleanup_DeletesOnlyVerifiedNamespace(t *testing.T) {
 	t.Parallel()
 	var deletes atomic.Int32
+	host := nestedCleanupHost(t, &deletes)
+	kubeconfig := filepath.Join(t.TempDir(), "host-config")
+	require.NoError(t, clientcmd.WriteToFile(clientcmdapi.Config{
+		Clusters:       map[string]*clientcmdapi.Cluster{"host": {Server: host.URL}},
+		Contexts:       map[string]*clientcmdapi.Context{"host": {Cluster: "host"}},
+		CurrentContext: "host",
+	}, kubeconfig))
+	nestedKubeconfig := writeKubeconfigWithContext(t, t.TempDir(), "kind-nested")
+	resolved := &lifecycle.ResolvedClusterInfo{
+		ClusterName: "nested", Provider: v1alpha1.ProviderKubernetes,
+		KubeconfigPath: nestedKubeconfig,
+		KubernetesOpts: v1alpha1.OptionsKubernetes{Kubeconfig: kubeconfig, Context: "host"},
+	}
+	require.NoError(t, cluster.ExportUnmanagedClusterGuard(t.Context(), resolved))
+	provisioner, err := lifecycle.CreateMinimalProvisionerForProvider(
+		t.Context(),
+		&clusterdetector.Info{
+			ClusterName: resolved.ClusterName, Provider: resolved.Provider,
+			KubeconfigPath: nestedKubeconfig,
+		},
+		lifecycle.MinimalProvisionerOptions{KubernetesOpts: resolved.KubernetesOpts},
+	)
+	require.NoError(t, err)
+	require.NoError(t, provisioner.Delete(t.Context(), resolved.ClusterName))
+	assert.EqualValues(t, 1, deletes.Load())
+	config, err := clientcmd.LoadFromFile(nestedKubeconfig)
+	require.NoError(t, err)
+	assert.NotContains(t, config.Contexts, "kind-nested")
+}
+
+func nestedCleanupHost(t *testing.T, deletes *atomic.Int32) *httptest.Server {
+	t.Helper()
 	host := httptest.NewServer(
 		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			writer.Header().Set("Content-Type", "application/json")
@@ -226,44 +257,22 @@ func TestKubernetesCleanup_DeletesOnlyVerifiedNamespace(t *testing.T) {
 		}),
 	)
 	t.Cleanup(host.Close)
-	kubeconfig := filepath.Join(t.TempDir(), "host-config")
-	require.NoError(t, clientcmd.WriteToFile(clientcmdapi.Config{
-		Clusters:       map[string]*clientcmdapi.Cluster{"host": {Server: host.URL}},
-		Contexts:       map[string]*clientcmdapi.Context{"host": {Cluster: "host"}},
-		CurrentContext: "host",
-	}, kubeconfig))
-	nestedKubeconfig := writeKubeconfigWithContext(t, t.TempDir(), "kind-nested")
-	resolved := &lifecycle.ResolvedClusterInfo{
-		ClusterName: "nested", Provider: v1alpha1.ProviderKubernetes,
-		KubeconfigPath: nestedKubeconfig,
-		KubernetesOpts: v1alpha1.OptionsKubernetes{Kubeconfig: kubeconfig, Context: "host"},
-	}
-	require.NoError(t, cluster.ExportUnmanagedClusterGuard(t.Context(), resolved))
-	provisioner, err := lifecycle.CreateMinimalProvisionerForProvider(
-		t.Context(),
-		&clusterdetector.Info{
-			ClusterName: resolved.ClusterName, Provider: resolved.Provider,
-			KubeconfigPath: nestedKubeconfig,
-		},
-		lifecycle.MinimalProvisionerOptions{KubernetesOpts: resolved.KubernetesOpts},
-	)
-	require.NoError(t, err)
-	require.NoError(t, provisioner.Delete(t.Context(), resolved.ClusterName))
-	assert.EqualValues(t, 1, deletes.Load())
-	config, err := clientcmd.LoadFromFile(nestedKubeconfig)
-	require.NoError(t, err)
-	assert.NotContains(t, config.Contexts, "kind-nested")
+
+	return host
 }
 
 func isolateNestedGuardProviders(t *testing.T) {
 	t.Helper()
-	socketDir, err := os.MkdirTemp("", "kg-")
-	require.NoError(t, err)
-	t.Cleanup(func() { assert.NoError(t, os.RemoveAll(socketDir)) })
+	docker := httptest.NewServer(
+		http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+			writer.WriteHeader(http.StatusServiceUnavailable)
+		}),
+	)
+	t.Cleanup(docker.Close)
 	t.Setenv("HCLOUD_TOKEN", "")
 	t.Setenv("OMNI_ENDPOINT", "")
 	t.Setenv("OMNI_SERVICE_ACCOUNT_KEY", "")
-	t.Setenv("DOCKER_HOST", "unix://"+filepath.Join(socketDir, "docker.sock"))
+	t.Setenv("DOCKER_HOST", strings.Replace(docker.URL, "http://", "tcp://", 1))
 	t.Setenv("KSAIL_HOST_KUBECONFIG", "/invalid/default/host")
 	t.Setenv("KSAIL_HOST_CONTEXT", "invalid-default-host")
 }
