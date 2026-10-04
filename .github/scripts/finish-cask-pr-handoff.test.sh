@@ -133,7 +133,8 @@ case "${line}" in
 	jq -n --arg head "${head}" --arg base "${base}" --argjson ready "${promoted}" '
 	 def check($name;$required;$result;$time):
 	 {__typename:"CheckRun",name:$name,isRequired:$required,status:"COMPLETED",conclusion:$result,startedAt:$time,
-	 checkSuite:{commit:{oid:$head},app:{slug:"github-actions"},workflowRun:{event:"pull_request"}}};
+	 checkSuite:{commit:{oid:$head},app:{id:"APP_ACTIONS",slug:"github-actions"},
+	 workflowRun:{id:"RUN_2",runNumber:2,event:"pull_request",workflow:{id:"WORKFLOW_CI"}}}};
 	 {data:{repository:{pullRequest:{headRefOid:$head,baseRefOid:$base,commits:{nodes:[{commit:{oid:$head,statusCheckRollup:{contexts:{
 	 totalCount:2,pageInfo:{hasNextPage:false,endCursor:null},nodes:[
 	 check("CI - Required Checks";true;"SUCCESS";(if $ready then "2030-01-01T00:00:01Z" else "2029-01-01T00:00:00Z" end)),
@@ -157,6 +158,34 @@ case "${line}" in
 	 elif $scenario == "later-page-failure" then
 	   if $cursor == "next" then .nodes=[(.nodes[0]|.name="later required"|.conclusion="FAILURE")] | .totalCount=2
 	   else .nodes=[.nodes[0]] | .totalCount=2 | .pageInfo={hasNextPage:true,endCursor:"next"} end
+	 elif $scenario == "recovered-checks" or $scenario == "recovered-later-page" or $scenario == "old-check-wrong-commit" then
+	   .nodes as $current |
+	   [$current[] | .conclusion="FAILURE" | .checkSuite.workflowRun.id="RUN_1" | .checkSuite.workflowRun.runNumber=1 |
+	     if $scenario == "old-check-wrong-commit" then .checkSuite.commit.oid="2222222222222222222222222222222222222222" else . end] as $old |
+	   if $scenario != "recovered-later-page" then .nodes=($old+$current) | .totalCount=4
+	   elif $cursor == "next" then .nodes=$current | .totalCount=4
+	   else .nodes=$old | .totalCount=4 | .pageInfo={hasNextPage:true,endCursor:"next"} end
+	 elif $scenario == "newer-failed" or $scenario == "newer-pending" then
+	   .nodes += [(.nodes[0] | .checkSuite.workflowRun.id="RUN_3" | .checkSuite.workflowRun.runNumber=3 |
+	     if $scenario == "newer-failed" then .conclusion="FAILURE" else .status="QUEUED" | .conclusion=null end)] | .totalCount=3
+	 elif $scenario == "other-workflow-failed" or $scenario == "other-app-failed" or $scenario == "other-event-failed" then
+	   .nodes += [(.nodes[0] | .conclusion="FAILURE" | .checkSuite.workflowRun.id="RUN_1" | .checkSuite.workflowRun.runNumber=1 |
+	     if $scenario == "other-workflow-failed" then .checkSuite.workflowRun.workflow.id="WORKFLOW_OTHER"
+	     elif $scenario == "other-app-failed" then .checkSuite.app.id="APP_OTHER"
+	     else .checkSuite.workflowRun.event="push" end)] | .totalCount=3
+	 elif $scenario == "ambiguous-execution" or $scenario == "same-run-failure" then
+	   .nodes += [(.nodes[0] | .conclusion="FAILURE" |
+	     if $scenario == "ambiguous-execution" then .checkSuite.workflowRun.id="RUN_CONFLICT" else . end)] | .totalCount=3
+	 elif $scenario == "missing-workflow-identity" then del(.nodes[0].checkSuite.workflowRun.workflow.id)
+	 elif $scenario == "missing-app-identity" then del(.nodes[0].checkSuite.app.id)
+	 elif $scenario == "missing-run-identity" then del(.nodes[0].checkSuite.workflowRun.id)
+	 elif $scenario == "invalid-run-number" then .nodes[0].checkSuite.workflowRun.runNumber="3"
+	 elif $scenario == "missing-current-required" or $scenario == "withdrawn-current-required" then
+	   .nodes += [(.nodes[0] | .checkSuite.workflowRun.id="RUN_3" | .checkSuite.workflowRun.runNumber=3 |
+	     if $scenario == "missing-current-required" then .name="new optional" | .isRequired=false else .isRequired=false end)] | .totalCount=3
+	 elif $scenario == "non-actions-success" or $scenario == "non-actions-failure" then
+	   .nodes += [(.nodes[0] | .checkSuite.app={id:"APP_SECURITY",slug:"github-advanced-security"} | .checkSuite.workflowRun=null |
+	     if $scenario == "non-actions-failure" then .conclusion="FAILURE" else . end)] | .totalCount=3
 	 elif $scenario == "cursor-error" then .pageInfo={hasNextPage:true,endCursor:null}
 	 else . end) |
 	 if $scenario == "status-commit-mismatch" then .data.repository.pullRequest.commits.nodes[0].commit.oid="2222222222222222222222222222222222222222" else . end' ;;
@@ -256,6 +285,9 @@ run_case() {
 
 # Removing the direct merge, SHA pin, post-promotion audit, or immutable readback breaks these.
 run_case both-phases-then-pass true 1 1
+run_case recovered-checks true 1 1
+run_case recovered-later-page true 1 1
+run_case non-actions-success true 1 1
 run_case draft-success true 1 1
 run_case ready-retry true 0 1
 run_case pending-then-pass true 1 1
@@ -268,7 +300,10 @@ for scenario in draft-release unpublished-release wrong-release-tag release-read
 	no-required failed-required missing-required-flag pending-required state-read-error checks-read-error \
 	graphql-errors partial-checks later-page-failure cursor-error later-unresolved later-negative-review \
 	partial-threads changes-requested auto-armed conflict adaptation-commit head-moved-during-collection \
-	head-moved-before-promotion wrong-check-commit status-commit-mismatch; do
+	head-moved-before-promotion wrong-check-commit status-commit-mismatch newer-failed newer-pending \
+	other-workflow-failed other-app-failed other-event-failed ambiguous-execution same-run-failure \
+	missing-workflow-identity missing-app-identity missing-run-identity invalid-run-number \
+	missing-current-required withdrawn-current-required old-check-wrong-commit non-actions-failure; do
 	run_case "${scenario}" false 0 0
 done
 for scenario in missing-audit stale-aggregate stale-audit head-moved-after-promotion promotion-error \

@@ -204,7 +204,7 @@ checks_query='query CaskChecks($owner:String!,$name:String!,$number:Int!,$cursor
  commits(last:1) { nodes { commit { oid statusCheckRollup { contexts(first:100,after:$cursor) {
  totalCount pageInfo { hasNextPage endCursor } nodes { __typename
  ... on CheckRun { name status conclusion startedAt isRequired(pullRequestNumber:$number)
- checkSuite { commit { oid } app { slug } workflowRun { event } } }
+ checkSuite { commit { oid } app { id slug } workflowRun { id runNumber event workflow { id } } } }
  ... on StatusContext { context state createdAt isRequired(pullRequestNumber:$number) }
  } } } } } } } } }'
 # shellcheck disable=SC2016 # Literal GraphQL variables.
@@ -301,6 +301,36 @@ screen() {
 		blocked 'required checks are absent or incompletely observed'
 		return 1
 	fi
+	# The rollup contains earlier executions at this same commit. Select a newer execution
+	# only inside its exact App/workflow/event identity; different analysis workflows must
+	# never clear one another. Ambiguous same-run results remain independently blocking.
+	if ! jq '
+	 def text: type == "string" and length > 0;
+	 def numbered: type == "number" and . > 0 and . == floor;
+	 def workflow: .__typename == "CheckRun" and .checkSuite.workflowRun != null;
+	 if all(.[]; .__typename != "CheckRun" or
+	   ((.checkSuite.app.id | text) and (.checkSuite.app.slug | text) and
+	    (if workflow then (.checkSuite.workflowRun.id | text) and
+	      (.checkSuite.workflowRun.runNumber | numbered) and
+	      (.checkSuite.workflowRun.event | text) and (.checkSuite.workflowRun.workflow.id | text)
+	     else .checkSuite.app.slug != "github-actions" end))) then
+	   [.[] | select(workflow | not)] +
+	   ([.[] | select(workflow)] |
+	    group_by([.checkSuite.app.id,.checkSuite.workflowRun.workflow.id,.checkSuite.workflowRun.event]) |
+	    map(. as $history |
+	      (map(.checkSuite.workflowRun.runNumber) | max) as $latest |
+	      map(select(.checkSuite.workflowRun.runNumber == $latest)) as $current |
+	      if ($current | map(.checkSuite.workflowRun.id) | unique | length) != 1 then
+	        error("ambiguous current workflow execution")
+	      elif all($history[]; . as $previous | .isRequired != true or
+	        any($current[]; .name == $previous.name and .isRequired == true)) then $current
+	      else error("current execution has not reported every required check") end) | add // [])
+	 else error("check execution identity is incomplete") end
+	' "${work}/checks.json" >"${work}/current-checks.json"; then
+		blocked 'current check executions are absent, ambiguous or incompletely observed'
+		return 1
+	fi
+	mv "${work}/current-checks.json" "${work}/checks.json"
 	if jq -e 'any(.[];
 	 if .__typename == "CheckRun" then .status == "COMPLETED" and (.conclusion != "SUCCESS" and .conclusion != "NEUTRAL" and .conclusion != "SKIPPED")
 	 else .state != "SUCCESS" and .state != "PENDING" end)' "${work}/checks.json" >/dev/null; then
