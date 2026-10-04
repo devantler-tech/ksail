@@ -36,11 +36,15 @@ deleting)
 	echo 'DELETING'
 	exit 0
 	;;
-until-fallback)
+until-fallback | deleting-until-fallback)
 	# Present until eksctl runs, so the eksctl path is only reached if the
 	# script probes AWS rather than trusting ksail's exit status.
 	if [[ ! -f "${FAKE_STATE_DIR}/eksctl-ran" ]]; then
-		echo 'ACTIVE'
+		if [[ "${FAKE_AWS_DESCRIBE_MODE}" == "deleting-until-fallback" ]]; then
+			echo 'DELETING'
+		else
+			echo 'ACTIVE'
+		fi
 		exit 0
 	fi
 	echo 'An error occurred (ResourceNotFoundException) when calling the DescribeCluster operation: No cluster found for name: st-eks-1-1.' >&2
@@ -49,6 +53,14 @@ until-fallback)
 denied)
 	echo 'An error occurred (AccessDeniedException) when calling the DescribeCluster operation: not authorized' >&2
 	exit 254
+	;;
+partial-deleting-error)
+	echo 'DELETING'
+	echo 'An error occurred (AccessDeniedException) when calling the DescribeCluster operation: not authorized' >&2
+	exit 254
+	;;
+empty)
+	exit 0
 	;;
 *)
 	echo 'An error occurred (ResourceNotFoundException) when calling the DescribeCluster operation: No cluster found for name: st-eks-1-1.' >&2
@@ -65,6 +77,7 @@ EOF
 cat >"${fake_bin}/eksctl" <<'EOF'
 #!/usr/bin/env bash
 touch "${FAKE_STATE_DIR}/eksctl-ran"
+printf '%s\n' "$*" > "${FAKE_STATE_DIR}/eksctl-args"
 exit "${FAKE_EKSCTL_DELETE_STATUS:-0}"
 EOF
 
@@ -86,6 +99,7 @@ run_case() {
 	local scenario="$1" expected_status="$2" expected_output="$3"
 	local describe_mode="$4" ksail_status="$5" eksctl_status="$6" case_workdir="$7"
 	local attempted="${8:-true}"
+	local expected_fallback="${9:-}"
 	local output status state_dir="${tmp_dir}/state-${scenario}"
 
 	mkdir -p "${state_dir}"
@@ -106,6 +120,17 @@ run_case() {
 
 	expect_status "${scenario}" "${expected_status}" "${status}" "${output}" || return 1
 	expect_substring "${scenario}" "${expected_output}" "${output}" || return 1
+	if [[ "${expected_status}" == "1" && "${output}" == *"No cluster st-eks-1-1 remains"* ]]; then
+		printf 'FAIL: %s claimed absence despite incomplete cleanup.\n' "${scenario}" >&2
+		return 1
+	fi
+	if [[ "${expected_fallback}" == "yes" ]]; then
+		if [[ ! -f "${state_dir}/eksctl-ran" ]]; then
+			printf 'FAIL: %s skipped the waiting fallback.\n' "${scenario}" >&2
+			return 1
+		fi
+		expect_substring "${scenario}" '--wait' "$(cat "${state_dir}/eksctl-args")" || return 1
+	fi
 
 	pass_count=$((pass_count + 1))
 	printf 'PASS: %s\n' "${scenario}"
@@ -121,20 +146,23 @@ run_case nothing-to-clean 0 'No cluster st-eks-1-1 remains' not-found 1 1 "${wor
 run_case deleted-by-ksail 0 'No cluster st-eks-1-1 remains' not-found 0 0 "${workdir}"
 
 # ksail fails, the eksctl fallback succeeds, and absence is confirmed.
-run_case deleted-by-eksctl-fallback 0 'No cluster st-eks-1-1 remains' not-found 1 0 "${workdir}"
+run_case deleted-by-eksctl-fallback 0 'No cluster st-eks-1-1 remains' until-fallback 1 0 "${workdir}" true yes
 
 # The case that must stay red: every delete "succeeded" but the cluster is still there, so it is
 # still accruing cost and a human has to look.
 run_case still-present 1 'may be billable' found 0 0 "${workdir}"
 
-# EKS teardown is asynchronous, so a delete that has taken effect can still report DELETING for a
-# while. That is not a leak, and calling it one would just move the false alarm from failed creates
-# onto successful deletes.
-run_case deleting-in-progress 0 'already tearing down' deleting 0 0 "${workdir}"
+# A deleting cluster still exists. The waiting fallback must run, and an unchanged
+# post-condition remains a failure even when both delete commands report success.
+run_case deleting-still-present 1 'may be billable' deleting 0 0 "${workdir}" true yes
+run_case deleting-until-fallback 0 'No cluster st-eks-1-1 remains' deleting-until-fallback 0 0 "${workdir}" true yes
+run_case deleting-with-failed-fallback 1 'may be billable' deleting 0 1 "${workdir}" true yes
 
 # Fail closed. A probe that cannot prove absence (denied, throttled, unreachable) must never be
 # reported as a clean teardown, because that is what strands a billable cluster silently.
 run_case probe-inconclusive 1 'Could not determine whether cluster' denied 0 0 "${workdir}"
+run_case partial-deleting-probe 1 'Could not determine whether cluster' partial-deleting-error 0 0 "${workdir}" true yes
+run_case empty-probe 1 'may be billable' empty 0 0 "${workdir}" true yes
 
 # A zero exit from ksail does not prove deletion. AWS keeps reporting the cluster until eksctl
 # actually runs, so this only passes if the fallback is driven by the probe rather than by ksail's
