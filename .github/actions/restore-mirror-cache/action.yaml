@@ -1,12 +1,17 @@
 name: Restore Mirror Cache
 description: |
-  Restores the pre-warmed mirror cache volumes created by warm-mirror-cache.
-  Use this in system test jobs to benefit from the warmed cache.
-
-  The cache key is computed by extracting the same image list and hashing it,
-  ensuring restore jobs can find the cache created by warm-mirror-cache.
+  Imports validated mirror archives from a producer artifact, or restores
+  cached mirror volumes for independent callers without a warm producer.
 
 inputs:
+  artifact-id:
+    description: Exact current-run artifact ID emitted by the successful warm job
+    required: false
+    default: ""
+  require-artifact:
+    description: Refuse cache fallback when the producer artifact ID is missing
+    required: false
+    default: "false"
   cache-key:
     description: Exact validated mirror cache key emitted by warm-mirror-cache
     required: false
@@ -19,12 +24,26 @@ inputs:
 
 outputs:
   cache-hit:
-    description: Whether the cache was found and restored
-    value: ${{ steps.restore-cache.outputs.cache-hit || 'false' }}
+    description: Whether validated mirror archives were restored
+    value: ${{ steps.verify-artifact.outputs.cache-hit || steps.restore-cache.outputs.cache-hit || 'false' }}
 
 runs:
   using: composite
   steps:
+    - name: 🔍 Require producer artifact
+      shell: bash
+      env:
+        ARTIFACT_ID: ${{ inputs.artifact-id }}
+        REQUIRE_ARTIFACT: ${{ inputs.require-artifact }}
+        CACHE_KEY: ${{ inputs.cache-key }}
+      run: |
+        if [[ "$REQUIRE_ARTIFACT" == true || -n "$ARTIFACT_ID" ]]; then
+          if [[ ! "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ || -z "$CACHE_KEY" ]]; then
+            echo "Expected the exact producer artifact ID and validated mirror key" >&2
+            exit 1
+          fi
+        fi
+
     - name: 📋 Extract images for cache key computation
       id: extract-images
       shell: bash
@@ -130,6 +149,7 @@ runs:
 
     - name: 📥 Restore mirror cache
       id: restore-cache
+      if: inputs.artifact-id == ''
       uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
       with:
         path: /tmp/mirror-cache
@@ -138,11 +158,29 @@ runs:
           mirror-cache-${{ inputs.cache-version }}-m7-
 
     - name: 🔍 Require validated mirror cache
-      if: inputs.cache-key != '' && steps.restore-cache.outputs.cache-hit != 'true'
+      if: inputs.artifact-id == '' && inputs.cache-key != '' && steps.restore-cache.outputs.cache-hit != 'true'
       shell: bash
       run: |
         echo "Expected the exact validated mirror cache from the warm job" >&2
         exit 1
+
+    - name: 📥 Download validated mirror artifact
+      if: inputs.artifact-id != ''
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      with:
+        artifact-ids: ${{ inputs.artifact-id }}
+        path: /tmp/mirror-cache
+        merge-multiple: true
+
+    - name: 🔍 Verify producer mirror artifact
+      id: verify-artifact
+      if: inputs.artifact-id != ''
+      shell: bash
+      env:
+        CACHE_KEY: ${{ inputs.cache-key }}
+      run: |
+        bash "$GITHUB_ACTION_PATH/../warm-mirror-cache/mirror-artifact.sh" verify /tmp/mirror-cache "$CACHE_KEY"
+        echo "cache-hit=true" >> "$GITHUB_OUTPUT"
 
     - name: 📥 Restore KWOK control plane cache
       id: restore-kwok-cache
@@ -166,8 +204,10 @@ runs:
         key: ${{ steps.generate-key.outputs.dist-node-cache-key }}
 
     - name: 📦 Import mirror volumes
-      if: steps.restore-cache.outputs.cache-hit == 'true'
+      if: steps.verify-artifact.outputs.cache-hit == 'true' || steps.restore-cache.outputs.cache-hit == 'true'
       shell: bash
+      env:
+        ARTIFACT_ID: ${{ inputs.artifact-id }}
       run: |
         echo "📦 Importing mirror registry volumes..."
 
@@ -179,56 +219,33 @@ runs:
         # manifests, so the upstream digest can't be pinned through it — we pin
         # by tag, exactly like registry:3 in pull-registry-image.sh.
 
-        # Import docker.io mirror volume
-        if [ -f "/tmp/mirror-cache/docker.io.tar" ]; then
-          docker volume create docker.io 2>/dev/null || true
-          docker run --rm \
-            -v docker.io:/volume \
+        import_mirror() {
+          local registry="$1"
+          [ -f "/tmp/mirror-cache/$registry.tar" ] || return 0
+          if ! docker volume create "$registry" || ! docker run --rm \
+            -v "$registry:/volume" \
             -v /tmp/mirror-cache:/backup:ro \
             mirror.gcr.io/library/busybox:1.37 \
-            sh -c "cd /volume && tar -xf /backup/docker.io.tar" || echo "⚠️ Failed to import docker.io mirror"
-          echo "✅ Restored docker.io mirror cache"
-        fi
+            sh -c "cd /volume && tar -xf /backup/$registry.tar"; then
+            echo "⚠️ Failed to import $registry mirror" >&2
+            # Producer-dependent jobs require every validated archive to import.
+            # Independent cache callers can still refill these mirrors upstream.
+            if [ -n "$ARTIFACT_ID" ]; then
+              exit 1
+            fi
+            return 0
+          fi
+          echo "✅ Restored $registry mirror cache"
+        }
+        for registry in docker.io ghcr.io quay.io registry.k8s.io; do
+          import_mirror "$registry"
+        done
 
-        # Import ghcr.io mirror volume
-        if [ -f "/tmp/mirror-cache/ghcr.io.tar" ]; then
-          docker volume create ghcr.io 2>/dev/null || true
-          docker run --rm \
-            -v ghcr.io:/volume \
-            -v /tmp/mirror-cache:/backup:ro \
-            mirror.gcr.io/library/busybox:1.37 \
-            sh -c "cd /volume && tar -xf /backup/ghcr.io.tar" || echo "⚠️ Failed to import ghcr.io mirror"
-          echo "✅ Restored ghcr.io mirror cache"
-        fi
-
-        # Import quay.io mirror volume
-        if [ -f "/tmp/mirror-cache/quay.io.tar" ]; then
-          docker volume create quay.io 2>/dev/null || true
-          docker run --rm \
-            -v quay.io:/volume \
-            -v /tmp/mirror-cache:/backup:ro \
-            mirror.gcr.io/library/busybox:1.37 \
-            sh -c "cd /volume && tar -xf /backup/quay.io.tar" || echo "⚠️ Failed to import quay.io mirror"
-          echo "✅ Restored quay.io mirror cache"
-        fi
-
-        # Import registry.k8s.io mirror volume
-        if [ -f "/tmp/mirror-cache/registry.k8s.io.tar" ]; then
-          docker volume create registry.k8s.io 2>/dev/null || true
-          docker run --rm \
-            -v registry.k8s.io:/volume \
-            -v /tmp/mirror-cache:/backup:ro \
-            mirror.gcr.io/library/busybox:1.37 \
-            sh -c "cd /volume && tar -xf /backup/registry.k8s.io.tar" || echo "⚠️ Failed to import registry.k8s.io mirror"
-          echo "✅ Restored registry.k8s.io mirror cache"
-        fi
-
-        # Import ecr-public.aws.com mirror volume. Fatal on failure, unlike the
-        # mirrors above: the ECR Public proxy cannot refill an empty or partial
+        # Import ecr-public.aws.com mirror volume. The ECR Public proxy cannot refill an empty or partial
         # volume (its upstream blob HEAD requests are rejected), so a failed
         # restore would only surface later as an Argo CD Redis pull failure.
         if [ -f "/tmp/mirror-cache/ecr-public.aws.com.tar" ]; then
-          docker volume create ecr-public.aws.com 2>/dev/null || true
+          docker volume create ecr-public.aws.com
           if ! docker run --rm \
             -v ecr-public.aws.com:/volume \
             -v /tmp/mirror-cache:/backup:ro \
@@ -345,7 +362,7 @@ runs:
         done
 
     - name: ℹ️ Cache miss notice
-      if: steps.restore-cache.outputs.cache-hit != 'true'
+      if: inputs.artifact-id == '' && steps.restore-cache.outputs.cache-hit != 'true'
       shell: bash
       run: |
         echo "⚠️ Mirror cache not found. Images will be pulled directly."
