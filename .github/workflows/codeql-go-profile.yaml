@@ -7,12 +7,14 @@ on:
     paths:
       - .github/workflows/codeql-go-profile.yaml
       - .github/scripts/profile-codeql-go*
+      - .github/scripts/codeql-source.sh
       - internal/codeqlprofile/**
   push:
     branches: [main]
     paths:
       - .github/workflows/codeql-go-profile.yaml
       - .github/scripts/profile-codeql-go*
+      - .github/scripts/codeql-source.sh
       - internal/codeqlprofile/**
   workflow_dispatch:
     inputs:

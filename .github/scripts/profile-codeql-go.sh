@@ -2,6 +2,9 @@
 # Measure each standalone Go extraction, then independently verify database
 # coverage. Only normalized measurements are exported; the database stays local.
 set -euo pipefail
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source-path=SCRIPTDIR
+source "$script_dir/codeql-source.sh"
 
 publish_report() {
   local inventory="$1" metrics="$2" status=0
@@ -11,11 +14,6 @@ publish_report() {
   jq -e '(.complete | type == "boolean") and (.records | type == "array")' "$metrics/current.json" >/dev/null
   jq -s '.[0] + .[1]' "$KSAIL_CODEQL_CONTEXT" "$metrics/current.json" >"$KSAIL_CODEQL_REPORT_PATH.tmp"
   mv "$KSAIL_CODEQL_REPORT_PATH.tmp" "$KSAIL_CODEQL_REPORT_PATH"
-}
-
-source_matches_head() {
-  git diff --quiet HEAD -- '*.go' '*go.mod' '*go.sum' '.github/scripts' '.github/codeql' &&
-    [[ -z "$(git ls-files --others --exclude-standard -- '*.go' '*go.mod' '*go.sum')" ]]
 }
 
 extract_projects() {
@@ -62,12 +60,11 @@ fi
 : "${GOMEMLIMIT:?The extraction heap limit must be explicit}"
 [[ -x "$CODEQL_CLI" ]]
 export GOWORK=off
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source_root="$(git rev-parse --show-toplevel)"
 cd "$source_root"
 # A resource observation must name the bytes actually measured.
-source_matches_head
 source_sha="$(git rev-parse HEAD)"
+source_matches_head "$source_sha"
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
 mkdir -p "$1" "$scratch/metrics"
@@ -135,7 +132,7 @@ else
   trace_status=$?
 fi
 source_verified=false
-if source_matches_head; then source_verified=true; fi
+if source_matches_head "$source_sha"; then source_verified=true; fi
 jq --argjson traceExitCode "$trace_status" --argjson finalizeExitCode "$finalize_status" \
   --argjson coverage "$coverage" --argjson source "$source_verified" \
   '. + {traceExitCode: $traceExitCode, finalizeExitCode: $finalizeExitCode,

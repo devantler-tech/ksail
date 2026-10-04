@@ -3,6 +3,8 @@
 # replaced by a fixture command. No CodeQL database or network is needed.
 set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source-path=SCRIPTDIR
+source "$script_dir/codeql-source.sh"
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
 mkdir -p "$scratch/source/third_party/fails" "$scratch/source/third_party/passes" "$scratch/metrics"
@@ -66,3 +68,26 @@ if (cd "$scratch/source" && bash "$script_dir/profile-codeql-go.sh" --extract \
   exit 1
 fi
 printf 'PASS: measured all four commands, retained failure, and rejected escaping paths\n'
+
+# A clean successor commit must not certify measurements from its predecessor.
+(
+  cd "$scratch/source"
+  git init -q
+  git -c user.name=Fixture -c user.email=fixture@example.invalid add go.mod third_party/fails/go.mod third_party/passes/go.mod
+  git -c user.name=Fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false commit -qm fixture
+  measured_sha="$(git rev-parse HEAD)"
+  source_matches_head "$measured_sha"
+  printf 'module changed\n' >go.mod
+  if source_matches_head "$measured_sha"; then exit 1; fi
+  git add go.mod
+  git -c user.name=Fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false commit -qm successor
+  if source_matches_head "$measured_sha"; then
+    printf 'FAIL: a clean successor certified the measured revision\n' >&2
+    exit 1
+  fi
+  successor_sha="$(git rev-parse HEAD)"
+  source_matches_head "$successor_sha"
+  touch untracked.go
+  if source_matches_head "$successor_sha"; then exit 1; fi
+)
+printf 'PASS: source verification rejects dirty, moved, and untracked source\n'
