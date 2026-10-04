@@ -59,18 +59,19 @@ func TestUnmanagedClusterGuard_KubernetesOwnership(t *testing.T) {
 				testCase.labels,
 				http.StatusOK,
 			)
+
 			err := cluster.ExportUnmanagedClusterGuard(t.Context(), resolved)
 			if testCase.wantOwned {
 				require.NoError(t, err)
 			} else {
 				require.ErrorIs(t, err, cluster.ErrUnmanagedCluster)
 			}
+
 			assert.Positive(t, hostReads.Load(), "ownership must be verified on the selected host")
 		})
 	}
 }
 
-//nolint:paralleltest // changes environment-variable aliases for the host connection.
 func TestUnmanagedClusterGuard_KubernetesHostAliases(t *testing.T) {
 	isolateNestedGuardProviders(t)
 	resolved, hostReads := nestedGuardHost(
@@ -81,6 +82,7 @@ func TestUnmanagedClusterGuard_KubernetesHostAliases(t *testing.T) {
 	)
 	t.Setenv("KSAIL_TEST_NESTED_HOST_FILE", resolved.KubernetesOpts.Kubeconfig)
 	t.Setenv("KSAIL_TEST_NESTED_HOST_CONTEXT", "host")
+
 	resolved.KubernetesOpts = v1alpha1.OptionsKubernetes{
 		Kubeconfig:       "/invalid/direct/fallback",
 		KubeconfigEnvVar: "KSAIL_TEST_NESTED_HOST_FILE",
@@ -175,6 +177,7 @@ func TestKubernetesCleanup_NamespaceReadFailureStopsDeletion(t *testing.T) {
 		hostReads.Load(),
 		"a failed ownership read must stop cleanup immediately",
 	)
+
 	kubeconfig, err := clientcmd.LoadFromFile(resolved.KubeconfigPath)
 	require.NoError(t, err)
 	assert.Contains(
@@ -187,7 +190,9 @@ func TestKubernetesCleanup_NamespaceReadFailureStopsDeletion(t *testing.T) {
 
 func TestKubernetesCleanup_DeletesOnlyVerifiedNamespace(t *testing.T) {
 	t.Parallel()
+
 	var deletes atomic.Int32
+
 	host := nestedCleanupHost(t, &deletes)
 	kubeconfig := filepath.Join(t.TempDir(), "host-config")
 	require.NoError(t, clientcmd.WriteToFile(clientcmdapi.Config{
@@ -213,6 +218,7 @@ func TestKubernetesCleanup_DeletesOnlyVerifiedNamespace(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, provisioner.Delete(t.Context(), resolved.ClusterName))
 	assert.EqualValues(t, 1, deletes.Load())
+
 	config, err := clientcmd.LoadFromFile(nestedKubeconfig)
 	require.NoError(t, err)
 	assert.NotContains(t, config.Contexts, "kind-nested")
@@ -220,20 +226,26 @@ func TestKubernetesCleanup_DeletesOnlyVerifiedNamespace(t *testing.T) {
 
 func nestedCleanupHost(t *testing.T, deletes *atomic.Int32) *httptest.Server {
 	t.Helper()
+
 	host := httptest.NewServer(
 		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			writer.Header().Set("Content-Type", "application/json")
+
 			if request.URL.Path != "/api/v1/namespaces/ksail-nested" {
 				writer.WriteHeader(http.StatusNotFound)
 				assert.NoError(
 					t,
 					json.NewEncoder(writer).Encode(metav1.Status{Code: http.StatusNotFound}),
 				)
+
 				return
 			}
+
 			if request.Method == http.MethodDelete {
 				deletes.Add(1)
+
 				var options metav1.DeleteOptions
+
 				body, err := io.ReadAll(request.Body)
 				assert.NoError(t, err)
 				assert.NoError(
@@ -244,8 +256,10 @@ func nestedCleanupHost(t *testing.T, deletes *atomic.Int32) *httptest.Server {
 					UID: new(types.UID("owned-uid")), ResourceVersion: new("42"),
 				}, options.Preconditions, "deletion must pin the namespace version whose ownership was checked")
 				assert.NoError(t, json.NewEncoder(writer).Encode(metav1.Status{Status: "Success"}))
+
 				return
 			}
+
 			assert.Equal(t, http.MethodGet, request.Method)
 			assert.NoError(t, json.NewEncoder(writer).Encode(corev1.Namespace{
 				TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
@@ -263,6 +277,7 @@ func nestedCleanupHost(t *testing.T, deletes *atomic.Int32) *httptest.Server {
 
 func isolateNestedGuardProviders(t *testing.T) {
 	t.Helper()
+
 	docker := httptest.NewServer(
 		http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 			writer.WriteHeader(http.StatusServiceUnavailable)
@@ -288,26 +303,31 @@ func nestedGuardHost(
 	status int,
 ) (*lifecycle.ResolvedClusterInfo, *atomic.Int32) {
 	t.Helper()
+
 	reads := &atomic.Int32{}
 	host := httptest.NewServer(
 		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			reads.Add(1)
 			assert.Equal(t, http.MethodGet, request.Method, "the guard must never mutate the host")
 			writer.Header().Set("Content-Type", "application/json")
+
 			name := strings.TrimPrefix(request.URL.Path, "/api/v1/namespaces/")
 			if status != http.StatusOK || name != ownedNamespace {
 				responseStatus := status
 				if responseStatus == http.StatusOK {
 					responseStatus = http.StatusNotFound
 				}
+
 				writer.WriteHeader(responseStatus)
 				assert.NoError(t, json.NewEncoder(writer).Encode(metav1.Status{
 					TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Status"},
 					Status:   "Failure", Code: int32(responseStatus),
 					Reason: metav1.StatusReason(http.StatusText(responseStatus)),
 				}))
+
 				return
 			}
+
 			assert.NoError(t, json.NewEncoder(writer).Encode(corev1.Namespace{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
 				ObjectMeta: metav1.ObjectMeta{Name: name, Labels: labels},
