@@ -146,7 +146,7 @@ func (f DefaultFactory) createKindKubernetesProvisioner(
 ) (Provisioner, any, error) {
 	opts := cluster.Spec.Provider.Kubernetes
 
-	// Use kindConfig.Name — it's set by applyClusterNameOverride,
+	// Use kindConfig.Name — it's set by the cluster name override,
 	// while cluster.Name may be empty with --name flag.
 	clusterName := kindConfig.Name
 
