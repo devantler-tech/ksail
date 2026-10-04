@@ -28,7 +28,13 @@ case "$1 $2" in
   case "$TRIAL_SCENARIO" in
   cleanup-updating | cleanup-wait-error) echo UPDATING; exit 0 ;;
   cleanup-active) echo ACTIVE; exit 0 ;;
-  cleanup-missing) echo 'An error occurred (ResourceNotFoundException) when calling the DescribeCluster operation'; exit 1 ;;
+  cleanup-missing) echo 'An error occurred (ResourceNotFoundException) when calling the DescribeCluster operation: No cluster found'; exit 1 ;;
+  cleanup-missing-leading-newline) printf '\nAn error occurred (ResourceNotFoundException) when calling the DescribeCluster operation: No cluster found\n' >&2; exit 1 ;;
+  cleanup-missing-cli-prefix) printf '\naws: [ERROR]: An error occurred (ResourceNotFoundException) when calling the DescribeCluster operation: No cluster found\n' >&2; exit 1 ;;
+  cleanup-partial-not-found) printf 'UPDATING\nAn error occurred (ResourceNotFoundException) when calling the DescribeCluster operation: No cluster found\n' >&2; exit 1 ;;
+  cleanup-profile-not-found) echo 'The config profile ((ResourceNotFoundException) when calling the DescribeCluster operation) could not be found' >&2; exit 1 ;;
+  cleanup-missing-error-prefix) echo '(ResourceNotFoundException) when calling the DescribeCluster operation: No cluster found' >&2; exit 1 ;;
+  cleanup-wrong-operation) echo 'An error occurred (ResourceNotFoundException) when calling the DescribeNodegroup operation: No nodegroup found' >&2; exit 1 ;;
   cleanup-query-error) echo 'AccessDeniedException' >&2; exit 1 ;;
   cleanup-empty) echo None; exit 0 ;;
   esac
@@ -163,7 +169,10 @@ echo 'PASS: version inputs fail closed and default off'
 
 # Cleanup must remain usable after the trial fails, without its private session
 # files, version inputs, project directory, or OIDC request environment.
-for scenario in cleanup-updating cleanup-wait-error cleanup-active cleanup-missing cleanup-query-error cleanup-empty; do
+for scenario in cleanup-updating cleanup-wait-error cleanup-active cleanup-missing \
+	cleanup-missing-leading-newline cleanup-missing-cli-prefix cleanup-partial-not-found \
+	cleanup-profile-not-found cleanup-missing-error-prefix cleanup-wrong-operation \
+	cleanup-query-error cleanup-empty; do
 	state="$scratch/$scenario"
 	mkdir -p "$state"
 	status=0
@@ -173,7 +182,8 @@ for scenario in cleanup-updating cleanup-wait-error cleanup-active cleanup-missi
 		bash "$trial" --wait-before-cleanup >"$state/output" 2>&1 || status=$?
 	expected=0
 	case "$scenario" in
-	cleanup-wait-error | cleanup-query-error | cleanup-empty) expected=1 ;;
+	cleanup-wait-error | cleanup-query-error | cleanup-empty | cleanup-partial-not-found | \
+		cleanup-profile-not-found | cleanup-missing-error-prefix | cleanup-wrong-operation) expected=1 ;;
 	esac
 	if [[ "$status" != "$expected" ]]; then
 		cat "$state/output" >&2

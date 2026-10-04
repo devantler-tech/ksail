@@ -17,7 +17,13 @@ if [[ "${1:-}" == --wait-before-cleanup ]]; then
 	export AWS_PAGER='' AWS_MAX_ATTEMPTS=3
 	if ! status="$(aws eks describe-cluster --name "$KSAIL_EKS_CLUSTER_NAME" --region "$AWS_REGION" \
 		--query 'cluster.status' --output text --cli-connect-timeout 10 --cli-read-timeout 30 2>&1)"; then
-		if [[ "$status" == *'(ResourceNotFoundException) when calling the DescribeCluster operation'* ]]; then
+		# Accept the CLI's fixed error formatting, but preserve partial output
+		# and unrelated diagnostics as an unknown observation.
+		while [[ "$status" == $'\n'* ]]; do
+			status="${status#$'\n'}"
+		done
+		status="${status#'aws: [ERROR]: '}"
+		if [[ "$status" == 'An error occurred (ResourceNotFoundException) when calling the DescribeCluster operation:'* ]]; then
 			echo 'Cluster does not exist; no update to wait for.'
 			exit 0
 		fi
