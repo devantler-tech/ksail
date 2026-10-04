@@ -2173,7 +2173,7 @@ jobs:
           retention-days: 14
 
   require-checks-in-pr:
-    name: CI - Required Checks
+    name: ${{ github.event_name == 'workflow_dispatch' && inputs.run_local_recovery_trial && 'Local Recovery Trial - Checks' || 'CI - Required Checks' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs:
