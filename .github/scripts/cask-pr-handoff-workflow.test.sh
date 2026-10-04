@@ -50,16 +50,19 @@ awk '
   in_function && /^          }[[:space:]]*$/ { exit }
 ' "${homebrew_block}" >"${reconcile_function}"
 
+# Stop the workflow contract harness when an expected behavior is missing.
 fail() {
 	printf 'FAIL: %s\n' "$1" >&2
 	exit 1
 }
 
+# Require a workflow fragment that preserves the release handoff contract.
 assert_contains() {
 	local pattern="$1" file="$2" message="$3"
 	grep -Fq -- "${pattern}" "${file}" || fail "${message}"
 }
 
+# Reject a workflow fragment that would contradict the release handoff contract.
 assert_not_contains() {
 	local pattern="$1" file="$2" message="$3"
 	if grep -Fq -- "${pattern}" "${file}"; then

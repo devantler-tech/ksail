@@ -32,6 +32,7 @@ cursor=null
 for arg in "$@"; do
 	[[ "${arg}" == cursor=* ]] && cursor="${arg#cursor=}"
 done
+# Track transport calls so scenarios can detect forbidden promotion or merge attempts.
 count() {
 	local name="$1" n=0
 	[[ ! -f "${state}/${name}" ]] || n="$(<"${state}/${name}")"
@@ -39,6 +40,7 @@ count() {
 	printf '%s\n' "${n}" >"${state}/${name}"
 	printf '%s' "${n}"
 }
+# Represent an accepted asynchronous request whose merge has not completed yet.
 pending_result() {
 	jq -n --arg scenario "${scenario}" --arg phase "$1" '
 	 {status:"pending",details:{message:"Merge request is in progress.",uuid:"630b9d5e-3f2a-4f7e-8b0c-2d5f9a8c1e42",
@@ -241,10 +243,12 @@ esac
 EOF
 chmod +x "${work}/bin/gh" "${work}/bin/date" "${work}/bin/sleep"
 
+# Stop the regression harness with the scenario's diagnostic message.
 fail() {
 	printf 'FAIL: %s\n' "$1" >&2
 	exit 1
 }
+# Exercise the production handoff and assert its verdict and exact mutation counts.
 run_case() {
 	local scenario="$1" success="$2" promotes="$3" merges="$4" code=0
 	local state="${work}/${scenario}"

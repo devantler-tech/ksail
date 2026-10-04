@@ -5,6 +5,7 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 tap="" pr="" name="" tag="" source_repo="devantler-tech/ksail"
 attempts=30 interval=10
+# Describe the fixed release identity and bounded wait arguments accepted by this command.
 usage() {
 	printf 'Usage: finish-cask-pr-handoff.sh --tap OWNER/REPO --pr NUMBER --cask-name NAME --tag TAG [--source-repo OWNER/REPO] [--attempts 1..30] [--interval 0..10]\n' >&2
 }
@@ -36,6 +37,7 @@ if [[ "${tap}" != devantler-tech/homebrew-tap || "${source_repo}" != devantler-t
 fi
 work="$(mktemp -d)"
 handoff_delivered=false
+# Remove only this invocation's temporary evidence directory on exit.
 cleanup() {
 	local code=$?
 	trap - EXIT
@@ -50,8 +52,10 @@ cleanup() {
 }
 trap cleanup EXIT
 head="" base="" draft="" node="" boundary="" merge_state=""
+# Report a refusal without converting missing or invalid evidence into delivery success.
 blocked() { printf 'BLOCKED: %s\n' "$1" >&2; }
 
+# Require the requested source tag to identify a published, non-draft release.
 published_release() {
 	if ! gh api "repos/${source_repo}/releases/tags/${tag}" >"${work}/release.json"; then
 		blocked 'release read failed; publication is unknown'
@@ -70,6 +74,7 @@ published_release() {
 
 # The programmed no-review path is deliberately narrower than merely a trusted PR author.
 # These identities/messages mirror the canonical monorepo programmed-bot exemption's cask arm.
+# Admit only the programmed cask updater's expected author and commit sequence.
 provenance() {
 	if ! gh api --paginate --slurp "repos/${tap}/pulls/${pr}/commits?per_page=100" >"${work}/commits.json"; then
 		blocked 'commit provenance read failed'
@@ -99,6 +104,7 @@ provenance() {
 	fi
 }
 
+# Verify the captured PR identity and metadata still describe the same head and base.
 rebind_rest() {
 	if ! gh api "repos/${tap}/pulls/${pr}" >"${work}/rebound-pr.json"; then
 		blocked 'PR rebind read failed'
@@ -114,6 +120,7 @@ rebind_rest() {
 	fi
 }
 
+# Collect and validate release contents, then capture the identity used by every later gate.
 capture() {
 	if ! "${script_dir}/collect-cask-pr-handoff.sh" --tap "${tap}" --pr "${pr}" \
 		--source-repo "${source_repo}" --tag "${tag}" --output "${work}/evidence.json"; then
@@ -139,6 +146,7 @@ capture() {
 	fi
 }
 
+# Fetch one readiness page and reject API failures, GraphQL errors, or a missing PR.
 graphql() {
 	local query="$1" cursor="${2:-null}"
 	# Keep the array nonempty: Bash 3.2 treats an empty array expansion as unset
@@ -170,6 +178,7 @@ state_query='query CaskState($owner:String!,$name:String!,$number:Int!) {
  mergeable mergeStateStatus reviewDecision autoMergeRequest { enabledAt }
  commits(last:1) { nodes { commit { oid } } }
  } } }'
+# Recheck exact-head mergeability, review state, and the absence of armed auto-merge.
 read_state() {
 	if ! graphql "${state_query}"; then return 1; fi
 	if ! jq -e --arg head "${head}" --arg base "${base}" --arg tap "${tap}" --arg branch "goreleaser/${name}" --argjson pr "${pr}" '
@@ -218,6 +227,7 @@ reviews_query='query CaskReviews($owner:String!,$name:String!,$number:Int!,$curs
  latestReviews(first:100,after:$cursor) { totalCount pageInfo { hasNextPage endCursor } nodes { state } }
  } } }'
 
+# Join bounded, complete readiness pages while refusing head, base, total, or cursor drift.
 connection() {
 	local kind="$1" query path cursor=null seen='|' total=-1 actual page
 	case "${kind}" in
@@ -284,6 +294,7 @@ connection() {
 	return 1
 }
 
+# Return success only for complete review/check evidence; return 3 while valid checks settle.
 screen() {
 	if ! read_state || ! connection checks || ! connection threads || ! connection reviews; then return 1; fi
 	if ! jq -e 'all(.[]; (.isResolved | type == "boolean") and .isResolved == true)' "${work}/threads.json" >/dev/null ||
@@ -356,6 +367,7 @@ screen() {
 	return 0
 }
 
+# Give each readiness phase its own wait budget; terminal refusals never consume retry loops.
 wait_screen() {
 	local code remaining="${attempts}"
 	while ((remaining > 0)); do
@@ -401,6 +413,7 @@ if ! screen || ! read_state || [[ "${merge_state}" != CLEAN ]] || ! rebind_rest 
 # for privileged actors. Accepted requests are not delivery; only the merged result and exact
 # PR readback can complete this handoff. https://docs.github.com/en/rest/pulls/pulls#merge-a-pull-request-asynchronously
 merge_sha="" merge_uuid=""
+# Confirm the asynchronous request actually merged the captured head before reporting delivery.
 merge_result() {
 	local endpoint="repos/${tap}/pulls/${pr}/merge-async" status polls=0
 	if ! gh api -X PUT "${endpoint}" \
