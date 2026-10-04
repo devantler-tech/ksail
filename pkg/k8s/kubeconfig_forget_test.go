@@ -185,7 +185,7 @@ func TestForgetContextReadErrorsPreserveFile(t *testing.T) {
 			require.Error(t, err)
 			assert.False(t, changed)
 
-			after, err := os.ReadFile(path)
+			after, err := os.ReadFile(filepath.Clean(path))
 			require.NoError(t, err)
 			assert.Equal(t, contents, string(after))
 		})
@@ -219,7 +219,7 @@ func TestForgetContextCancellationPreservesFile(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	assert.False(t, changed)
 
-	after, err := os.ReadFile(path)
+	after, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
 	assert.Equal(t, contents, after)
 }
@@ -231,7 +231,7 @@ func TestForgetContextWriteFailurePreservesFile(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.Contexts["chosen"] = &clientcmdapi.Context{}
 	require.NoError(t, clientcmd.WriteToFile(*config, path))
-	before, err := os.ReadFile(path)
+	before, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
 	changed, err := k8s.ForgetContextWithWriteForTest(t.Context(), path, "chosen",
 		func(_ string, _ []byte, mode os.FileMode) error {
@@ -242,7 +242,7 @@ func TestForgetContextWriteFailurePreservesFile(t *testing.T) {
 	require.ErrorIs(t, err, io.ErrShortWrite)
 	assert.False(t, changed)
 
-	after, err := os.ReadFile(path)
+	after, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
 	assert.Equal(t, before, after)
 }

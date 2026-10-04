@@ -70,30 +70,31 @@ func TestForgetCommandLocalRecovery(t *testing.T) {
 				before.CurrentContext = ""
 				assert.Equal(t, before, actual)
 
-				contents, err := os.ReadFile(path)
-				require.NoError(t, err)
-				output, err = executeForget(
-					t,
-					"--experimental",
-					"--kubeconfig",
-					path,
-					"--context",
-					"kind-nested",
-				)
-				require.NoError(t, err)
-				assert.Contains(t, output, "already absent")
-
-				afterRetry, err := os.ReadFile(path)
-				require.NoError(t, err)
-				assert.Equal(
-					t,
-					contents,
-					afterRetry,
-					"an idempotent retry must not rewrite the file",
-				)
+				assertForgetRetryUnchanged(t, path)
 			},
 		)
 	}
+}
+
+func assertForgetRetryUnchanged(t *testing.T, path string) {
+	t.Helper()
+
+	contents, err := os.ReadFile(filepath.Clean(path))
+	require.NoError(t, err)
+	output, err := executeForget(
+		t,
+		"--experimental",
+		"--kubeconfig",
+		path,
+		"--context",
+		"kind-nested",
+	)
+	require.NoError(t, err)
+	assert.Contains(t, output, "already absent")
+
+	afterRetry, err := os.ReadFile(filepath.Clean(path))
+	require.NoError(t, err)
+	assert.Equal(t, contents, afterRetry, "an idempotent retry must not rewrite the file")
 }
 
 func TestForgetCommandDisabledPreservesKubeconfig(t *testing.T) {
@@ -104,11 +105,11 @@ func TestForgetCommandDisabledPreservesKubeconfig(t *testing.T) {
 		t,
 		clientcmd.WriteToFile(*forgetFixture("https://unused.invalid", "unused", false), path),
 	)
-	before, err := os.ReadFile(path)
+	before, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
 	_, err = executeForget(t, "--kubeconfig", path, "--context", "kind-nested")
 	require.ErrorIs(t, err, experimental.ErrDisabled)
-	after, err := os.ReadFile(path)
+	after, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
 	assert.Equal(t, before, after)
 
@@ -125,7 +126,7 @@ func TestForgetCommandRequiresExplicitFlags(t *testing.T) {
 		clientcmd.WriteToFile(*forgetFixture("https://unused.invalid", "unused", false), path),
 	)
 	t.Setenv("KUBECONFIG", path)
-	before, err := os.ReadFile(path)
+	before, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
 
 	for _, args := range [][]string{
@@ -141,7 +142,7 @@ func TestForgetCommandRequiresExplicitFlags(t *testing.T) {
 		assert.NotContains(t, output, "Forgot local context")
 	}
 
-	after, err := os.ReadFile(path)
+	after, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
 	assert.Equal(t, before, after)
 }

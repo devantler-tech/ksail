@@ -311,12 +311,7 @@ func partialNestedDeletionHost(
 			}
 
 			if request.URL.Path == "/api/v1/namespaces/k3k-nested" && failLaterRead.Load() {
-				writer.WriteHeader(http.StatusForbidden)
-				_ = json.NewEncoder(writer).Encode(metav1.Status{
-					TypeMeta: metav1.TypeMeta{Kind: "Status", APIVersion: "v1"},
-					Status:   "Failure", Reason: metav1.StatusReasonForbidden,
-					Message: "later ownership read denied", Code: http.StatusForbidden,
-				})
+				writePartialDeletionDenied(writer)
 
 				return
 			}
@@ -338,6 +333,15 @@ func partialNestedDeletionHost(
 	t.Cleanup(host.Close)
 
 	return host
+}
+
+func writePartialDeletionDenied(writer http.ResponseWriter) {
+	writer.WriteHeader(http.StatusForbidden)
+	_ = json.NewEncoder(writer).Encode(metav1.Status{
+		TypeMeta: metav1.TypeMeta{Kind: "Status", APIVersion: "v1"},
+		Status:   "Failure", Reason: metav1.StatusReasonForbidden,
+		Message: "later ownership read denied", Code: http.StatusForbidden,
+	})
 }
 
 func nestedCleanupHost(t *testing.T, deletes *atomic.Int32) *httptest.Server {

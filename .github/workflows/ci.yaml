@@ -2130,7 +2130,8 @@ jobs:
         run: |
           set -euo pipefail
           golangci-lint version | tee "$RUNNER_TEMP/local-recovery-evidence/lint-version.log"
-          golangci-lint run --fix --timeout 15m 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/lint.log"
+          golangci-lint run --fix --timeout 15m \
+            --max-issues-per-linter 0 --max-same-issues 0 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/lint.log"
       - name: ⚙️ Setup Node.js for canonical generation
         if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
