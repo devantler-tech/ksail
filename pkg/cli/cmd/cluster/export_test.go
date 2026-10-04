@@ -951,13 +951,33 @@ func ExportReportEKSUpgraded(cmd *cobra.Command, version string) {
 	reportEKSUpgraded(cmd, version)
 }
 
-// ExportCheckAutoscalerValuesDrift exports checkAutoscalerValuesDrift for testing.
+// ExportCheckAutoscalerValuesDrift runs only the Cluster Autoscaler's
+// chart-values drift probe, for testing.
 func ExportCheckAutoscalerValuesDrift(
 	cmd *cobra.Command,
 	ctx *localregistry.Context,
 	diff *clusterupdate.UpdateResult,
 ) {
-	checkAutoscalerValuesDrift(
+	checkComponentValuesDrift(
+		cmd,
+		ctx,
+		specdiff.NewEngine(
+			ctx.ClusterCfg.Spec.Cluster.Distribution,
+			ctx.ClusterCfg.Spec.Cluster.Provider,
+		),
+		diff,
+		autoscalerValuesProbe(),
+	)
+}
+
+// ExportCheckChartValuesDrift exports checkChartValuesDrift, which runs every
+// component's chart-values drift probe, for testing.
+func ExportCheckChartValuesDrift(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	diff *clusterupdate.UpdateResult,
+) {
+	checkChartValuesDrift(
 		cmd,
 		ctx,
 		specdiff.NewEngine(
@@ -966,4 +986,17 @@ func ExportCheckAutoscalerValuesDrift(
 		),
 		diff,
 	)
+}
+
+// ExportChartValuesDriftFields lists the diff field of every chart-values
+// drift probe, so tests can pin that each one is reconciled in place.
+func ExportChartValuesDriftFields() []string {
+	probes := chartValuesDriftProbes()
+	fields := make([]string, 0, len(probes))
+
+	for _, probe := range probes {
+		fields = append(fields, probe.field)
+	}
+
+	return fields
 }
