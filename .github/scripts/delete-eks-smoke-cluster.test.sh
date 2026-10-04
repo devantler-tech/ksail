@@ -59,6 +59,19 @@ partial-deleting-error)
 	echo 'An error occurred (AccessDeniedException) when calling the DescribeCluster operation: not authorized' >&2
 	exit 254
 	;;
+profile-not-found-token)
+	echo 'The config profile (ResourceNotFoundException) could not be found' >&2
+	exit 255
+	;;
+wrong-operation-not-found)
+	echo 'An error occurred (ResourceNotFoundException) when calling the DescribeNodegroup operation: No nodegroup found' >&2
+	exit 254
+	;;
+partial-not-found)
+	echo 'DELETING'
+	echo 'An error occurred (ResourceNotFoundException) when calling the DescribeCluster operation: No cluster found' >&2
+	exit 254
+	;;
 empty)
 	exit 0
 	;;
@@ -162,6 +175,9 @@ run_case deleting-with-failed-fallback 1 'may be billable' deleting 0 1 "${workd
 # reported as a clean teardown, because that is what strands a billable cluster silently.
 run_case probe-inconclusive 1 'Could not determine whether cluster' denied 0 0 "${workdir}"
 run_case partial-deleting-probe 1 'Could not determine whether cluster' partial-deleting-error 0 0 "${workdir}" true yes
+run_case unrelated-not-found-token 1 'Could not determine whether cluster' profile-not-found-token 0 0 "${workdir}" true yes
+run_case wrong-operation-not-found 1 'Could not determine whether cluster' wrong-operation-not-found 0 0 "${workdir}" true yes
+run_case partial-not-found 1 'Could not determine whether cluster' partial-not-found 0 0 "${workdir}" true yes
 run_case empty-probe 1 'may be billable' empty 0 0 "${workdir}" true yes
 
 # A zero exit from ksail does not prove deletion. AWS keeps reporting the cluster until eksctl

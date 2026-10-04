@@ -81,7 +81,7 @@ cluster_absent() {
 	fi
 
 	case "${output}" in
-	*ResourceNotFoundException*)
+	'An error occurred (ResourceNotFoundException) when calling the DescribeCluster operation:'*)
 		return 0
 		;;
 	*)
