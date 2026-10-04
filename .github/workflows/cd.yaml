@@ -700,25 +700,21 @@ jobs:
   # GoReleaser opens the Homebrew cask PRs during the build (CLI in `goreleaser`, macOS in
   # `desktop-macos`) as DRAFTS, so the tap cannot merge them while the cask still points at a draft
   # (not-yet-public, 404) release. Now that `publish-release` has made the release public, this job
-  # style-cleans and normalizes both PRs, then leaves them as drafts for the maintainer checkpoint.
-  #
-  # Promotion and merge are intentionally outside this privileged release job. Review threads,
-  # reviewer verdicts, and editable pre-merge summaries cannot be atomically bound to a client-side
-  # `gh pr merge` call, so even a final poll can race a new negative review without changing the head
-  # SHA. The standard maintainer lane promotes and merges only after its live pentad is green. This job
-  # validates the trusted same-repository draft and exact cask-only scope before and after its style
-  # mutation, normalizes metadata, and records the pending handoff without failing an already-published
-  # release. Branches mirror `.goreleaser*.yaml` (`goreleaser/<project>` — evergreen, version-less:
+  # style-cleans and normalizes both PRs, then completes head-pinned direct merges. Published assets,
+  # provenance and settled checks gate promotion; a fresh online audit gates the subsequent merge.
+  # A moved head or incomplete evidence stops delivery for reevaluation. Normal tap protections
+  # remain authoritative at the merge endpoint. Branches mirror `.goreleaser*.yaml` (evergreen:
   # each release updates the ONE open cask PR in place instead of superseding it, tap#1172). See #6067.
   homebrew:
-    name: 🍺 Prepare Homebrew cask PRs
+    name: 🍺 Deliver Homebrew cask PRs
     # Homebrew is preinstalled on the macOS images and NOT on ubuntu — on ubuntu every `brew style`
     # here failed with `brew: command not found`, so the casks were never style-cleaned. The tap audits
     # casks on macOS for the same reason (devantler-tech/homebrew-tap `ci.yaml`).
     runs-on: macos-latest
     # `brew style` can bootstrap rubocop on a cold runner. Keep enough room for two clones and style
-    # passes; every GitHub mutation below is fail-soft because the release is already public.
-    timeout-minutes: 20
+    # passes plus bounded waits for the tap's online audits. An incomplete cask delivery fails
+    # this job without deleting the already-published release.
+    timeout-minutes: 30
     needs: [publish-release]
     permissions:
       contents: read
@@ -728,7 +724,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: 🍺 Style-clean and prepare cask PR handoffs
+      - name: 🍺 Style-clean and deliver cask PRs
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
           TAP: devantler-tech/homebrew-tap
@@ -870,9 +866,12 @@ jobs:
               # before skipping — it re-verifies identity, scope, base, current-version content, and
               # title. Only a validated ready PR is treated as done; otherwise it is left for the
               # maintainer and the rerun stays red.
-              if validation="$(validate_handoff "$pr" "$name" "$evidence" prepared-ready 2>&1)"; then
-                echo "${TAP}#${pr} already handed off for ${TAG} (ready, titled, and revalidated); nothing to do"
-                printf -- '- %s#%s already handed off for %s (idempotent retry, revalidated)\n' \
+              if validation="$(validate_handoff "$pr" "$name" "$evidence" prepared-ready 2>&1)" \
+                  && .github/scripts/finish-cask-pr-handoff.sh \
+                    --tap "$TAP" --pr "$pr" --cask-name "$name" \
+                    --source-repo "$GITHUB_REPOSITORY" --tag "$TAG"; then
+                echo "${TAP}#${pr} delivered for ${TAG} (ready retry, revalidated and merged)"
+                printf -- '- %s#%s delivered for %s (idempotent retry)\n' \
                   "$TAP" "$pr" "$TAG" >>"$GITHUB_STEP_SUMMARY"
                 continue
               fi
@@ -995,30 +994,24 @@ jobs:
               continue
             fi
 
-            # Cask PRs are a trusted programmed release path: no review and no maintainer
-            # promotion step (maintainer direction, ksail#6095, 2026-07-13). With identity, scope,
-            # current-version content, title, and labels all validated above — and the release
-            # assets now public — mark it ready so the tap's own automation arms auto-merge and its
-            # checks gate the merge. Fail-soft: a draft left behind is handed to the maintainer.
-            # Same reason as the title/label calls above: the gh promote subcommand needs a scope the tap
-            # token does not have, so drive the mutation directly off the PR's node id.
-            pr_node="$(gh api "repos/${TAP}/pulls/${pr}" --jq .node_id 2>/dev/null || true)"
-            # `\$id` is escaped so the shell leaves it literal: it is a GraphQL variable, not a shell one.
-            ready_mutation="mutation(\$id: ID!) { markPullRequestReadyForReview(input: { pullRequestId: \$id }) { pullRequest { isDraft } } }"
-            if [ -n "$pr_node" ] && gh api graphql \
-                -f query="$ready_mutation" \
-                -F id="$pr_node" >/dev/null; then
-              echo "::notice::${TAP}#${pr} validated and marked ready — the tap's checks gate its auto-merge"
-              printf -- '- %s#%s validated and marked ready for check-gated auto-merge\n' \
+            # Trusted programmed casks do not require an AI review. The helper rebinds provenance,
+            # release ripeness and actual required checks before promotion, then waits for a fresh
+            # online audit and merges directly with the exact SHA. Evergreen branches must never
+            # arm auto-merge: a later release can replace the head behind an earlier decision.
+            if .github/scripts/finish-cask-pr-handoff.sh \
+                --tap "$TAP" --pr "$pr" --cask-name "$name" \
+                --source-repo "$GITHUB_REPOSITORY" --tag "$TAG"; then
+              echo "::notice::${TAP}#${pr} delivered through its validated exact-head merge"
+              printf -- '- %s#%s delivered through an exact-head merge\n' \
                 "$TAP" "$pr" >>"$GITHUB_STEP_SUMMARY"
             else
               # A cask PR that never leaves draft means the tap silently stops tracking releases, so this
               # must be loud rather than a buried warning on an otherwise-green release.
-              echo "::error::Could not mark ${TAP}#${pr} ready; it remains draft and the tap will NOT pick up ${TAG}"
-              printf -- '- %s#%s remains draft/open: could not mark it ready after validation\n' \
+              echo "::error::Could not complete ${TAP}#${pr}; the cask remains pending reevaluation"
+              printf -- '- %s#%s remains pending: guarded direct delivery did not complete\n' \
                 "$TAP" "$pr" >>"$GITHUB_STEP_SUMMARY"
               reconcile_merged_handoff "$name" \
-                "${TAP}#${pr} could not be marked ready"
+                "${TAP}#${pr} could not be delivered"
             fi
           done
 

@@ -25,6 +25,7 @@ awk '1' \
 	"${repo_root}/.github/scripts/collect-cask-pr-handoff.sh" \
 	"${repo_root}/.github/scripts/find-merged-cask-pr-handoff.sh" \
 	"${repo_root}/.github/scripts/validate-cask-pr-handoff.sh" \
+	"${repo_root}/.github/scripts/finish-cask-pr-handoff.sh" \
 	"${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
 	>"${execution_surface}"
 
@@ -103,8 +104,8 @@ chmod +x "${race_root}/.github/scripts/find-merged-cask-pr-handoff.sh"
 	[[ "$(<"${RECONCILE_RACE_STATE}")" -eq 2 ]] || exit 1
 ) || fail 'merged reconciliation must retry a just-merged PR before recording failure'
 
-assert_contains 'name: 🍺 Prepare Homebrew cask PRs' "${homebrew_block}" \
-	'release job must be a prepare-and-handoff step'
+assert_contains 'name: 🍺 Deliver Homebrew cask PRs' "${homebrew_block}" \
+	'release job must complete cask delivery'
 assert_contains 'validate-cask-pr-handoff.sh' "${homebrew_block}" \
 	'release job must validate generated PR identity and file scope'
 assert_contains 'collect-cask-pr-handoff.sh' "${homebrew_block}" \
@@ -122,8 +123,8 @@ assert_contains 'head.repo.full_name == $full' "${homebrew_block}" \
 # re-validated against the DRAFT requirement (which would fail the rerun forever). But "ready + right
 # title" is not proof the tap will merge the correct cask, so the rerun re-runs the non-draft
 # (`prepared`) validator first; only a revalidated ready PR is skipped. See #6134.
-assert_contains 'already handed off for ${TAG} (ready, titled, and revalidated)' "${homebrew_block}" \
-	'release job must treat a REVALIDATED already-promoted cask PR for this tag as an idempotent retry, not a failure'
+assert_contains 'delivered for ${TAG} (ready retry, revalidated and merged)' "${homebrew_block}" \
+	'release job must complete an already-ready retry through validated merging'
 assert_contains 'failed prepared revalidation' "${homebrew_block}" \
 	'release job must fail the rerun red when an already-ready cask PR no longer passes prepared revalidation'
 # A partial rerun may find the first cask ALREADY MERGED by the tap auto-merge; the open-only query
@@ -148,7 +149,7 @@ for context in \
 	'could not receive normalized metadata' \
 	'metadata could not be completed' \
 	'failed prepared validation' \
-	'could not be marked ready'; do
+	'could not be delivered'; do
 	assert_contains "${context}" "${selected_open_block}" \
 		"selected-open failure is missing merged reconciliation context: ${context}"
 done
@@ -178,35 +179,43 @@ assert_contains '.github/scripts/style-clean-cask-branch.test.sh' "${ci_workflow
 assert_contains '--source-repo "$GITHUB_REPOSITORY"' "${homebrew_block}" \
 	'release job must collect release-asset digest evidence for the sha256 handoff check'
 # Cask PRs are a trusted programmed release path (maintainer direction ksail#6095): after full
-# validation the job marks the PR ready so the tap's checks gate its auto-merge — but ONLY after
-# the prepared validation, and never by merging or bypassing anything itself.
+# validation the job promotes, verifies the actual online audit and completes an exact-head merge.
+# Server-side rules must remain enforced even for a token with administrative bypass capability.
 # The handoff drives `markPullRequestReadyForReview` directly rather than `gh pr ready`: that
 # subcommand resolves the viewer's `login`, a scope the tap token does not have, so it failed on every
 # release and stranded each cask PR as a draft (#6134). Assert the mechanism that actually promotes.
-assert_contains 'markPullRequestReadyForReview' "${homebrew_block}" \
-	'release job must hand the validated cask PR to the tap check-gated auto-merge path'
-assert_not_contains 'gh pr ready' "${homebrew_block}" \
+assert_contains 'markPullRequestReadyForReview' "${execution_surface}" \
+	'release job must promote through the guarded completion helper'
+assert_not_contains 'gh pr ready' "${execution_surface}" \
 	'release job must not promote via `gh pr ready` (needs a login scope the tap token lacks; see #6134)'
-assert_contains 'marked ready for check-gated auto-merge' "${homebrew_block}" \
-	'release job must record the ready-for-auto-merge handoff'
-assert_not_contains 'gh pr merge' "${execution_surface}" \
-	'release job and its helpers must never merge a generated cask PR'
+assert_contains '.github/scripts/finish-cask-pr-handoff.sh' "${homebrew_block}" \
+	'release job must complete a validated cask through the guarded exact-head merge helper'
+assert_contains '.github/scripts/finish-cask-pr-handoff.test.sh' "${ci_workflow}" \
+	'CI must execute the guarded cask completion behavior tests'
 assert_not_contains '--auto' "${execution_surface}" \
 	'release job and its helpers must never arm auto-merge themselves'
 assert_not_contains '--admin' "${execution_surface}" \
 	'release job and its helpers must never bypass branch protections'
+assert_contains '/merge-async' "${execution_surface}" \
+	'cask delivery must use the merge endpoint with explicit rule enforcement'
+assert_contains '-F bypass_rules=false' "${execution_surface}" \
+	'cask delivery must explicitly refuse administrative rule bypass'
+assert_contains 'merge_action=direct_merge' "${execution_surface}" \
+	'cask delivery must request a direct merge rather than an enduring queue decision'
+assert_contains 'X-GitHub-Api-Version: 2026-03-10' "${execution_surface}" \
+	'cask delivery must select the documented async merge API version'
 
 validator_calls="$(grep -Fc -- 'validate_handoff "$pr"' "${homebrew_block}" || true)"
 if [ "${validator_calls}" -lt 3 ]; then
 	fail "expected pre-style, post-style, and prepared validation; found ${validator_calls} calls"
 fi
-ready_line="$(grep -Fn -- 'markPullRequestReadyForReview' "${homebrew_block}" | head -1 | cut -d: -f1)"
+ready_line="$(grep -Fn -- '.github/scripts/finish-cask-pr-handoff.sh' "${homebrew_block}" | tail -1 | cut -d: -f1)"
 # There are now two `prepared` calls — the idempotency-rerun revalidation and the final pre-promotion
 # validation. The invariant guards the LATTER: the ready mutation must come after the FINAL prepared
 # validation, so key on the last match.
 prepared_line="$(grep -Fn -- '"$evidence" prepared' "${homebrew_block}" | tail -1 | cut -d: -f1)"
 if [ -z "${ready_line}" ] || [ -z "${prepared_line}" ] || [ "${ready_line}" -le "${prepared_line}" ]; then
-	fail 'the ready-for-auto-merge handoff must come after the final prepared validation'
+	fail 'guarded cask completion must come after the final prepared validation'
 fi
 
 # The pre-release checkpoint: a reused, still-promoted evergreen PR is demoted BEFORE GoReleaser
