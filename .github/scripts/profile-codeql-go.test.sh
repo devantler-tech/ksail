@@ -7,6 +7,63 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$script_dir/codeql-source.sh"
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
+
+# Exercise inventory discovery through the production entry point. Go is only a
+# sentinel: no build or CodeQL execution may follow an unsuccessful Git read.
+verify_inventory_reads() {
+	local read_mode status observed real_git
+	real_git="$(command -v git)"
+	mkdir -p "$scratch/inventory-source/third_party/sample" "$scratch/inventory-bin"
+	(
+		cd "$scratch/inventory-source"
+		printf 'module example.invalid/inventory\n\ngo 1.26.1\n' >go.mod
+		printf 'module example.invalid/sample\n\ngo 1.26.1\n' >third_party/sample/go.mod
+		git init -q
+		git add go.mod third_party/sample/go.mod
+		git -c user.name=Fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false commit -qm fixture
+	)
+	printf '#!/usr/bin/env bash\nexit 97\n' >"$scratch/unexpected-codeql"
+	cat >"$scratch/inventory-bin/git" <<'GIT'
+#!/usr/bin/env bash
+if [[ "$1" == ls-files && "$2" == -- && "$PROFILE_TEST_INVENTORY_MODE" != success ]]; then
+  if [[ "$PROFILE_TEST_INVENTORY_MODE" == partial ]]; then printf 'go.mod\n'; fi
+  exit 23
+fi
+exec "$PROFILE_TEST_REAL_GIT" "$@"
+GIT
+	cat >"$scratch/inventory-bin/go" <<'GO'
+#!/usr/bin/env bash
+printf '%s\n' "$1" >"$PROFILE_TEST_INVENTORY_OBSERVED"
+exit 97
+GO
+	chmod +x "$scratch/unexpected-codeql" "$scratch/inventory-bin/git" "$scratch/inventory-bin/go"
+	local failures=0
+	for read_mode in success silent partial; do
+		observed="$scratch/inventory-$read_mode.observed"
+		status=0
+		(
+			cd "$scratch/inventory-source"
+			PATH="$scratch/inventory-bin:$PATH" PROFILE_TEST_REAL_GIT="$real_git" \
+				PROFILE_TEST_INVENTORY_MODE="$read_mode" PROFILE_TEST_INVENTORY_OBSERVED="$observed" \
+				CODEQL_CLI="$scratch/unexpected-codeql" GOMEMLIMIT=8GiB \
+				bash "$script_dir/profile-codeql-go.sh" "$scratch/inventory-$read_mode-output"
+		) >"$scratch/inventory-$read_mode.log" 2>&1 || status=$?
+		if [[ "$read_mode" == success ]]; then
+			if [[ "$status" == 97 && -f "$observed" && "$(cat "$observed")" == build ]]; then continue; fi
+		elif [[ "$status" == 23 && ! -e "$observed" ]]; then
+			continue
+		fi
+		printf 'FAIL: %s module listing reached status %s (Go invoked: %s)\n' \
+			"$read_mode" "$status" "$(if [[ -e "$observed" ]]; then printf yes; else printf no; fi)" >&2
+		failures=$((failures + 1))
+	done
+	[[ "$failures" == 0 ]] || return 1
+	printf 'PASS: production inventory rejects silent and partial failed reads; successful listing reaches the build\n'
+}
+
+verify_inventory_reads
+if [[ "${1:-}" == --inventory-only ]]; then exit; fi
+
 mkdir -p "$scratch/source/third_party/fails" "$scratch/source/third_party/passes" "$scratch/metrics"
 touch "$scratch/source/go.mod" "$scratch/source/third_party/fails/go.mod" "$scratch/source/third_party/passes/go.mod"
 printf '%s\n' root third_party/fails third_party/passes root-desktop >"$scratch/inventory"

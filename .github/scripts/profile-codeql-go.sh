@@ -71,13 +71,14 @@ mkdir -p "$1" "$scratch/metrics"
 output="$(cd "$1" && pwd)"
 inventory="$scratch/inventory"
 # Exact basenames exclude authenticated upstream-go.mod archive copies.
+modules="$(git ls-files -- go.mod '*/go.mod')"
 while IFS= read -r module; do
 	if [[ "$module" == go.mod ]]; then
 		printf 'root\n'
 	elif [[ "${module##*/}" == go.mod ]]; then
 		printf '%s\n' "${module%/go.mod}"
 	fi
-done < <(git ls-files -- go.mod '*/go.mod') >"$inventory"
+done <<<"$modules" >"$inventory"
 printf 'root-desktop\n' >>"$inventory"
 go build -o "$scratch/report" ./internal/codeqlprofile/cmd
 
