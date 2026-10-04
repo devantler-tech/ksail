@@ -27,23 +27,29 @@ elif [[ "$1 $2" == "cluster info" ]]; then
 	echo 'Ready: 1/1 (ready/total)'
 elif [[ "$1 $2 $3" == "workload get nodes" ]]; then
 	case "$SCENARIO" in
-		mixed-version)
-			echo '{"items":[{"status":{"nodeInfo":{"osImage":"Talos (v1.13.10)"},"conditions":[{"type":"Ready","status":"True"}]}},{"status":{"nodeInfo":{"osImage":"Talos (v1.14.2)"},"conditions":[{"type":"Ready","status":"True"}]}}]}' ;;
-		missing-version)
-			echo '{"items":[{"status":{"nodeInfo":{},"conditions":[{"type":"Ready","status":"True"}]}}]}' ;;
-		non-talos)
-			echo '{"items":[{"status":{"nodeInfo":{"osImage":"Ubuntu 24.04"},"conditions":[{"type":"Ready","status":"True"}]}}]}' ;;
-		mixed-missing-version)
-			echo '{"items":[{"status":{"nodeInfo":{"osImage":"Talos (v1.14.2)"},"conditions":[{"type":"Ready","status":"True"}]}},{"status":{"nodeInfo":{},"conditions":[{"type":"Ready","status":"True"}]}}]}' ;;
-		mixed-non-talos)
-			echo '{"items":[{"status":{"nodeInfo":{"osImage":"Talos (v1.14.2)"},"conditions":[{"type":"Ready","status":"True"}]}},{"status":{"nodeInfo":{"osImage":"Ubuntu 24.04"},"conditions":[{"type":"Ready","status":"True"}]}}]}' ;;
-		no-nodes) echo '{"items":[]}' ;;
-		nodes-query-failed) exit 9 ;;
-		malformed-nodes) echo '{' ;;
-		*)
-			ready=True
-			[[ "$SCENARIO" != not-ready ]] || ready=False
-			printf '{"items":[{"status":{"nodeInfo":{"osImage":"Talos (%s)"},"conditions":[{"type":"Ready","status":"%s"}]}}]}\n' "$LIVE_TALOS_VERSION" "$ready" ;;
+	mixed-version)
+		echo '{"items":[{"status":{"nodeInfo":{"osImage":"Talos (v1.13.10)"},"conditions":[{"type":"Ready","status":"True"}]}},{"status":{"nodeInfo":{"osImage":"Talos (v1.14.2)"},"conditions":[{"type":"Ready","status":"True"}]}}]}'
+		;;
+	missing-version)
+		echo '{"items":[{"status":{"nodeInfo":{},"conditions":[{"type":"Ready","status":"True"}]}}]}'
+		;;
+	non-talos)
+		echo '{"items":[{"status":{"nodeInfo":{"osImage":"Ubuntu 24.04"},"conditions":[{"type":"Ready","status":"True"}]}}]}'
+		;;
+	mixed-missing-version)
+		echo '{"items":[{"status":{"nodeInfo":{"osImage":"Talos (v1.14.2)"},"conditions":[{"type":"Ready","status":"True"}]}},{"status":{"nodeInfo":{},"conditions":[{"type":"Ready","status":"True"}]}}]}'
+		;;
+	mixed-non-talos)
+		echo '{"items":[{"status":{"nodeInfo":{"osImage":"Talos (v1.14.2)"},"conditions":[{"type":"Ready","status":"True"}]}},{"status":{"nodeInfo":{"osImage":"Ubuntu 24.04"},"conditions":[{"type":"Ready","status":"True"}]}}]}'
+		;;
+	no-nodes) echo '{"items":[]}' ;;
+	nodes-query-failed) exit 9 ;;
+	malformed-nodes) echo '{' ;;
+	*)
+		ready=True
+		[[ "$SCENARIO" != not-ready ]] || ready=False
+		printf '{"items":[{"status":{"nodeInfo":{"osImage":"Talos (%s)"},"conditions":[{"type":"Ready","status":"%s"}]}}]}\n' "$LIVE_TALOS_VERSION" "$ready"
+		;;
 	esac
 else
 	exit 1
