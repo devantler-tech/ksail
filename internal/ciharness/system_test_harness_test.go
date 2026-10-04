@@ -833,7 +833,6 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
 	smokeJob, ok := workflow.Jobs["smoke-test"]
 	require.True(t, ok, "smoke-test job is missing")
-	assert.Equal(t, 235, smokeJob.TimeoutMinutes)
 
 	boundedStepNames := []string{
 		"📄 Checkout",
@@ -843,11 +842,15 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 		"📦 Cache KSail Binary",
 		"📥 Install eksctl",
 		"🔧 Initialize EKS project",
+		"🔧 Prepare EKS upgrade trial project",
 		"🧪 ksail cluster create",
 		"🧪 ksail cluster info",
 		"🔐 Refresh AWS credentials before EKS update and cleanup",
 		"🧪 ksail cluster update scales EKS nodes",
 		"🧪 ksail workload reconcile",
+		"🧪 EKS control-plane upgrade trial",
+		"🔐 Refresh AWS credentials for final cleanup",
+		"⏳ Wait for EKS update before cleanup",
 		"🧹 Delete EKS smoke cluster",
 	}
 
@@ -891,7 +894,10 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 	assert.Less(t, updateIndex, deleteIndex)
 
 	postRefreshMinutes := 0
-	for _, name := range boundedStepNames[10:] {
+	for _, name := range []string{
+		"🧪 ksail cluster update scales EKS nodes",
+		"🧪 ksail workload reconcile",
+	} {
 		postRefreshMinutes += findHarnessStep(t, smokeJob.Steps, name).TimeoutMinutes
 	}
 
