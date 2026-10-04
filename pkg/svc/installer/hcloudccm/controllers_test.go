@@ -29,7 +29,9 @@ func TestNewInstaller_LoadBalancerControllerSelection(t *testing.T) {
 					client.EXPECT().
 						AddRepository(mock.Anything, mock.Anything, mock.Anything).
 						Return(nil)
+
 					var values map[string]any
+
 					client.EXPECT().
 						InstallOrUpgradeChart(mock.Anything, mock.Anything).
 						Run(func(_ context.Context, spec *helm.ChartSpec) {
@@ -41,6 +43,7 @@ func TestNewInstaller_LoadBalancerControllerSelection(t *testing.T) {
 					if disabled {
 						opts = append(opts, hcloudccminstaller.WithLoadBalancersDisabled())
 					}
+
 					ccm := hcloudccminstaller.NewInstaller(
 						client,
 						"",
@@ -72,11 +75,13 @@ func checkControllerValues(
 	} else {
 		assert.NotContains(t, values, "args", "existing default controllers must be unchanged")
 	}
+
 	if haEnabled {
 		assert.EqualValues(t, 2, values["replicaCount"])
 	} else {
 		assert.NotContains(t, values, "replicaCount")
 	}
+
 	if networkName != "" {
 		assert.Equal(t, map[string]any{
 			"enabled": true, "clusterCIDR": hcloudccminstaller.DefaultClusterCIDR,
@@ -91,9 +96,11 @@ func testControllerCaseName(disabled, haEnabled bool, networkName string) string
 	if disabled {
 		name = "load balancers disabled"
 	}
+
 	if haEnabled {
 		name += "/HA"
 	}
+
 	if networkName != "" {
 		name += "/networking"
 	}

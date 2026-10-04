@@ -562,8 +562,10 @@ func TestInstallPostCNIComponents_HetznerWithoutOptionalComponentsInitializesNod
 			t.Parallel()
 
 			var order []string
+
 			cmd := &cobra.Command{Use: "test"}
 			cmd.SetOut(io.Discard)
+
 			factories := nodeInitializationTestFactories(
 				t,
 				&order,
@@ -571,6 +573,7 @@ func TestInstallPostCNIComponents_HetznerWithoutOptionalComponentsInitializesNod
 				testCase.waitErr,
 			)
 			err := InstallPostCNIComponents(cmd, clusterCfg, factories, timer.New(), true)
+
 			switch {
 			case testCase.installErr != nil:
 				require.ErrorIs(t, err, testCase.installErr)
@@ -579,6 +582,7 @@ func TestInstallPostCNIComponents_HetznerWithoutOptionalComponentsInitializesNod
 			default:
 				require.NoError(t, err)
 			}
+
 			assert.Equal(t, testCase.wantOrder, order)
 		})
 	}
@@ -595,6 +599,7 @@ func nodeInitializationTestFactories(
 		ClusterStabilityCheck: func(context.Context, *v1alpha1.Cluster, bool) error { return nil },
 		CloudProviderInitInstall: func(_ context.Context, cfg *v1alpha1.Cluster, _ *InstallerFactories) error {
 			assert.Equal(t, v1alpha1.LoadBalancerDisabled, cfg.Spec.Cluster.LoadBalancer)
+
 			*order = append(*order, "controller")
 
 			return installErr
