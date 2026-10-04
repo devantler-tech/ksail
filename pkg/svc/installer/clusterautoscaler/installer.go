@@ -16,8 +16,7 @@ const (
 	repoURL   = "https://kubernetes.github.io/autoscaler"
 	namespace = "kube-system"
 
-	defaultScaleDownUnneededTime = "10m"
-	defaultOkTotalUnreadyCount   = 3
+	defaultOkTotalUnreadyCount = 3
 
 	// ReleaseName is the Helm release name for the cluster-autoscaler chart, which
 	// the chart also stamps as the app.kubernetes.io/instance label value. The Talos
@@ -285,7 +284,7 @@ func buildChartValues(
 ) chartValues {
 	scaleDownTime := cfg.ScaleDownUnneededTime
 	if scaleDownTime == "" {
-		scaleDownTime = defaultScaleDownUnneededTime
+		scaleDownTime = v1alpha1.DefaultScaleDownUnneededTime
 	}
 
 	groups := buildAutoscalingGroups(cfg.Pools)
