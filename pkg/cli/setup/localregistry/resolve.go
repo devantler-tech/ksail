@@ -120,7 +120,11 @@ func resolveAuxDistributionName(
 
 		return trimOrDefault(name, "vcluster-default")
 	case v1alpha1.DistributionKWOK:
-		return trimOrDefault(parseKWOKContext(kubeContext), "kwok-default")
+		// A named cluster reached through a custom context keeps its configured name.
+		return trimOrDefault(
+			parseKWOKContext(kubeContext),
+			trimOrDefault(clusterCfg.Name, "kwok-default"),
+		)
 	case v1alpha1.DistributionEKS:
 		return trimOrDefault(parseEKSContext(kubeContext), "eks-default")
 	case v1alpha1.DistributionGKE:

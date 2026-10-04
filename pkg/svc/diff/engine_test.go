@@ -1788,6 +1788,65 @@ func TestEngine_AutoscalerNoChange(t *testing.T) {
 	}
 }
 
+// TestEngine_AutoscalerScaleDownUnneededTimeUsesEffectiveDefault verifies that
+// an omitted scaleDownUnneededTime compares as the default the installer renders
+// (ksail#7383), while explicit changes and removals stay visible.
+func TestEngine_AutoscalerScaleDownUnneededTimeUsesEffectiveDefault(t *testing.T) {
+	t.Parallel()
+
+	const field = "cluster.autoscaler.node.scaleDownUnneededTime"
+
+	tests := []struct {
+		name             string
+		oldVal, newVal   string
+		wantOld, wantNew string
+	}{
+		{name: "omitted desired against the installed default", oldVal: "10m"},
+		{name: "explicit default against an omitted baseline", newVal: "10m"},
+		{name: "both omitted"},
+		{
+			name:    "explicit change from the installed default",
+			oldVal:  "10m",
+			newVal:  "15m",
+			wantOld: "10m",
+			wantNew: "15m",
+		},
+		{
+			name:    "removing an explicit value requests the default",
+			oldVal:  "15m",
+			wantOld: "15m",
+			wantNew: "10m",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			old := newBaseSpec()
+			old.Autoscaler.Node.Enabled = v1alpha1.NodeAutoscalerEnabledEnabled
+			old.Autoscaler.Node.ScaleDownUnneededTime = testCase.oldVal
+			newer := clone(old)
+			newer.Autoscaler.Node.ScaleDownUnneededTime = testCase.newVal
+
+			engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+			result := engine.ComputeDiff(old, newer, nil, nil)
+
+			if testCase.wantNew == "" {
+				if change := findChange(result.AllChanges(), field); change != nil {
+					t.Errorf("expected no %s change, got %q -> %q",
+						field, change.OldValue, change.NewValue)
+				}
+
+				return
+			}
+
+			assertSingleChange(t, result.InPlaceChanges, field,
+				testCase.wantOld, testCase.wantNew, clusterupdate.ChangeCategoryInPlace)
+		})
+	}
+}
+
 func TestEngine_TalosNodeCountDetected_WhenAutoscalerNodeEnabled(t *testing.T) {
 	t.Parallel()
 
@@ -1832,8 +1891,9 @@ func TestEngine_TalosNodeCountDetected_WhenAutoscalerNodeEnabled(t *testing.T) {
 // Default-value substitution: appendChange replaces empty-string old/new values with defaultVal
 // before comparing. Fields with a non-empty defaultVal will therefore show the default as OldValue
 // when the old spec has a zero-value field (e.g. false for "enabled").
-// Setting Expander to AutoscalerExpanderPrice (not the default LeastWaste) ensures that the
-// expander change is actually detectable.
+// Setting Expander to AutoscalerExpanderPrice (not the default LeastWaste) and
+// ScaleDownUnneededTime to 15m (not the default 10m) ensures that both changes are
+// actually detectable.
 func TestEngine_AutoscalerFullConfigChange(t *testing.T) {
 	t.Parallel()
 
@@ -1846,7 +1906,7 @@ func TestEngine_AutoscalerFullConfigChange(t *testing.T) {
 			Expander: v1alpha1.AutoscalerExpanderList{
 				v1alpha1.AutoscalerExpanderPrice,
 			},
-			ScaleDownUnneededTime:         "10m",
+			ScaleDownUnneededTime:         "15m",
 			ScaleDownUtilizationThreshold: "0.7",
 			Pools: []v1alpha1.NodePool{
 				{Name: "workers-fsn1", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
@@ -1874,8 +1934,9 @@ func TestEngine_AutoscalerFullConfigChange(t *testing.T) {
 	// "LeastWaste" is the defaultVal; using Price ensures old("LeastWaste") != new("Price").
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.expander",
 		"LeastWaste", "Price", clusterupdate.ChangeCategoryInPlace)
+	// "10m" is the defaultVal the installer renders when the setting is omitted.
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.scaleDownUnneededTime",
-		"", "10m", clusterupdate.ChangeCategoryInPlace)
+		"10m", "15m", clusterupdate.ChangeCategoryInPlace)
 	assertSingleChange(
 		t,
 		result.InPlaceChanges,

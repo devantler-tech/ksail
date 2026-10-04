@@ -65,3 +65,8 @@ var RegistryHostNetworkNameForTest = registryHostNetworkName
 
 // DefaultTalosNetworkNameForTest exports defaultTalosNetworkName for testing.
 const DefaultTalosNetworkNameForTest = defaultTalosNetworkName
+
+// ResolveClusterNameFromContextForTest exports resolveClusterNameFromContext for testing.
+//
+//nolint:gochecknoglobals // Standard Go export_test.go pattern.
+var ResolveClusterNameFromContextForTest = resolveClusterNameFromContext
