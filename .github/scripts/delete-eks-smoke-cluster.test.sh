@@ -67,6 +67,22 @@ wrong-operation-not-found)
 	echo 'An error occurred (ResourceNotFoundException) when calling the DescribeNodegroup operation: No nodegroup found' >&2
 	exit 254
 	;;
+not-found-leading-newline)
+	printf '\nAn error occurred (ResourceNotFoundException) when calling the DescribeCluster operation: No cluster found\n' >&2
+	exit 254
+	;;
+not-found-cli-prefix)
+	printf '\naws: [ERROR]: An error occurred (ResourceNotFoundException) when calling the DescribeCluster operation: No cluster found\n' >&2
+	exit 254
+	;;
+partial-not-found-leading-newline)
+	printf '\nDELETING\n\nAn error occurred (ResourceNotFoundException) when calling the DescribeCluster operation: No cluster found\n' >&2
+	exit 254
+	;;
+profile-cli-prefix)
+	printf '\naws: [ERROR]: The config profile (ResourceNotFoundException) could not be found\n' >&2
+	exit 255
+	;;
 partial-not-found)
 	echo 'DELETING'
 	echo 'An error occurred (ResourceNotFoundException) when calling the DescribeCluster operation: No cluster found' >&2
@@ -157,6 +173,8 @@ run_case nothing-to-clean 0 'No cluster st-eks-1-1 remains' not-found 1 1 "${wor
 
 # The ordinary success path: ksail tears the cluster down and AWS confirms it is gone.
 run_case deleted-by-ksail 0 'No cluster st-eks-1-1 remains' not-found 0 0 "${workdir}"
+run_case aws-cli-leading-newline 0 'No cluster st-eks-1-1 remains' not-found-leading-newline 0 0 "${workdir}"
+run_case aws-cli-error-prefix 0 'No cluster st-eks-1-1 remains' not-found-cli-prefix 0 0 "${workdir}"
 
 # ksail fails, the eksctl fallback succeeds, and absence is confirmed.
 run_case deleted-by-eksctl-fallback 0 'No cluster st-eks-1-1 remains' until-fallback 1 0 "${workdir}" true yes
@@ -178,6 +196,8 @@ run_case partial-deleting-probe 1 'Could not determine whether cluster' partial-
 run_case unrelated-not-found-token 1 'Could not determine whether cluster' profile-not-found-token 0 0 "${workdir}" true yes
 run_case wrong-operation-not-found 1 'Could not determine whether cluster' wrong-operation-not-found 0 0 "${workdir}" true yes
 run_case partial-not-found 1 'Could not determine whether cluster' partial-not-found 0 0 "${workdir}" true yes
+run_case partial-not-found-leading-newline 1 'Could not determine whether cluster' partial-not-found-leading-newline 0 0 "${workdir}" true yes
+run_case unrelated-cli-prefix 1 'Could not determine whether cluster' profile-cli-prefix 0 0 "${workdir}" true yes
 run_case empty-probe 1 'may be billable' empty 0 0 "${workdir}" true yes
 
 # A zero exit from ksail does not prove deletion. AWS keeps reporting the cluster until eksctl

@@ -80,6 +80,14 @@ cluster_absent() {
 		return 1
 	fi
 
+	# AWS CLI surrounds service errors with newlines; newer versions also
+	# prepend a fixed error label. Remove only those formatting bytes so a
+	# partial response or unrelated diagnostic cannot become absence proof.
+	while [[ "${output}" == $'\n'* ]]; do
+		output="${output#$'\n'}"
+	done
+	output="${output#'aws: [ERROR]: '}"
+
 	case "${output}" in
 	'An error occurred (ResourceNotFoundException) when calling the DescribeCluster operation:'*)
 		return 0
