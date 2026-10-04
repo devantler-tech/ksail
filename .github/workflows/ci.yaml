@@ -12,6 +12,11 @@ on:
         required: false
         type: boolean
         default: true
+      run_local_recovery_trial:
+        description: "Run only the provider-free local connection recovery acceptance trial"
+        required: false
+        type: boolean
+        default: false
 
 env:
   # Comma, not pipe: Go falls back to direct only when the proxy answers 404/410. A pipe also
@@ -34,7 +39,7 @@ concurrency:
   #
   # Pull requests and merge-queue entries keep the ref-keyed group, so superseded
   # runs there still cancel exactly as before.
-  group: "ci-ksail-${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}"
+  group: "ci-ksail-${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}${{ inputs.run_local_recovery_trial && '-local-recovery-trial' || '' }}"
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions: {}
@@ -106,7 +111,7 @@ jobs:
   # Wait for sufficient GitHub API rate limit before proceeding
   rate-limit-gate:
     name: ⏳ Rate Limit Gate
-    if: github.event_name != 'merge_group'
+    if: github.event_name != 'merge_group' && !inputs.run_local_recovery_trial
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -712,6 +717,7 @@ jobs:
 
   verify-go-archive:
     name: 🔐 Verify go-archive Provenance
+    if: ${{ !inputs.run_local_recovery_trial }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -744,6 +750,7 @@ jobs:
 
   verify-vulnerability-identities:
     name: 🔐 Verify Local Source Vulnerability Identities
+    if: ${{ !inputs.run_local_recovery_trial }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -1450,6 +1457,7 @@ jobs:
     # Local images only — no secrets/GHCR — so this also runs on fork PRs.
     if: >-
       !cancelled()
+      && !inputs.run_local_recovery_trial
       && (
         (github.event_name == 'pull_request' && needs.changes.outputs.operator-chart == 'true')
         || github.event_name == 'workflow_dispatch'
@@ -1489,7 +1497,7 @@ jobs:
         (github.event_name == 'pull_request'
         && needs.changes.outputs.system-test == 'true'
         && github.event.pull_request.head.repo.full_name == github.repository)
-        || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
+        || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
       )
     permissions:
       contents: read
@@ -1536,7 +1544,7 @@ jobs:
         (github.event_name == 'pull_request'
         && needs.changes.outputs.system-test == 'true'
         && github.event.pull_request.head.repo.full_name == github.repository)
-        || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
+        || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
       )
     permissions:
       contents: read
@@ -1631,7 +1639,7 @@ jobs:
         (github.event_name == 'pull_request'
         && needs.changes.outputs.system-test == 'true'
         && github.event.pull_request.head.repo.full_name == github.repository)
-        || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
+        || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
       )
     permissions:
       contents: read
@@ -2065,6 +2073,70 @@ jobs:
         # Release files are outside Go's test-cache inputs; always execute the audit.
         run: go test ./pkg/client/kubescape/... -count=1
 
+  local-recovery-trial:
+    name: 🧪 Local Connection Recovery Acceptance
+    if: github.event_name == 'workflow_dispatch' && inputs.run_local_recovery_trial
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      GOMAXPROCS: "2"
+      GOMEMLIMIT: "4GiB"
+      GOFLAGS: "-p=2"
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: 🧹 Free runner disk
+        uses: ./.github/actions/free-disk-space
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: 🧪 Reproduce local safety and partial-deletion cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/local-recovery-evidence"
+          printf '%s\n' "$GITHUB_SHA" > "$RUNNER_TEMP/local-recovery-evidence/head.txt"
+          go test ./pkg/k8s ./pkg/cli/cmd/cluster -run 'TestForget|TestKubernetesCleanup_PartialDeletion' -count=1 -v 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/regressions.log"
+      - name: 🏗️ Build the actual CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          go build -o "$RUNNER_TEMP/ksail-local-recovery" . 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/build.log"
+      - name: 🧪 Exercise the actual CLI with local files and a recording API
+        shell: bash
+        run: |
+          set -euo pipefail
+          go run .github/scripts/local-connection-recovery-trial.go "$RUNNER_TEMP/ksail-local-recovery" 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/cli-trial.log"
+      - name: 🧪 Validate the complete Go suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test ./... -count=1 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/go-test.log"
+      - name: 🔍 Validate with the module-pinned linter
+        shell: bash
+        run: |
+          set -euo pipefail
+          go tool golangci-lint run --timeout 15m 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/lint.log"
+      - name: 📝 Regenerate CLI and embedded documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          go generate ./docs/... ./pkg/svc/chat/... 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/generate.log"
+          git diff --binary > "$RUNNER_TEMP/local-recovery-evidence/generated.patch"
+      - name: 📤 Preserve exact-head acceptance evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: local-recovery-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/local-recovery-evidence
+          if-no-files-found: error
+          retention-days: 14
+
   require-checks-in-pr:
     name: CI - Required Checks
     runs-on: ubuntu-latest
@@ -2102,6 +2174,7 @@ jobs:
         rate-limit-gate-script,
         hetzner-cleanup-script,
         gitops-assert-scripts,
+        local-recovery-trial,
       ]
     if: ${{ always() }}
     steps:
@@ -2139,3 +2212,4 @@ jobs:
             ${{ needs.rate-limit-gate-script.result }}
             ${{ needs.hetzner-cleanup-script.result }}
             ${{ needs.gitops-assert-scripts.result }}
+            ${{ needs.local-recovery-trial.result }}
