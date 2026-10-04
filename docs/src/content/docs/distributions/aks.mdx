@@ -64,6 +64,8 @@ properties:
 
 Creating a cluster **requires** this file; operations on an existing cluster — read-only ones (`list`, `info`) and lifecycle ones (`start`, `stop`, `delete`) — work without it. Store it next to `ksail.yaml`, or point `spec.cluster.distributionConfig` at a custom path.
 
+`ksail cluster create`, `ksail cluster diff` and `ksail cluster update` take the cluster name from `name` in `aks.yaml`; `metadata.name` in `ksail.yaml` and the `--name` flag take priority over it. `spec.cluster.connection.context` only says how to reach the cluster. Without a name from any of these, the context is used as the name, so name the cluster when the two differ — for example with the `<name>-admin` context that `az aks get-credentials --admin` writes.
+
 ### 3. Set Credentials and Create the Cluster
 
 ```bash
