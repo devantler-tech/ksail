@@ -762,6 +762,13 @@ func (p *Provisioner) updateApplySteps(
 			return wrapStepErr(p.syncSecretsFromCluster(ctx, clusterName, oldSpec, newSpec, result),
 				"failed to sync cluster secrets")
 		}},
+		{"move kubeconfig off disabled floating IP", func(ctx context.Context) error {
+			// Before the first step that builds a Kubernetes client from the saved
+			// kubeconfig: a rerun may start from one that still names an address no
+			// node answers on, and the wipe below would fail on it every time.
+			return wrapStepErr(p.moveKubeconfigOffDisabledFloatingIP(ctx, clusterName, diff),
+				"failed to move kubeconfig off the disabled floating IP")
+		}},
 		{"apply wipe-required changes", func(ctx context.Context) error {
 			// PrepareUpdate already blocks wipe-required changes without --force.
 			if !result.HasWipeRequired() {

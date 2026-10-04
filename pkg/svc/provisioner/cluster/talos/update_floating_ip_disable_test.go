@@ -2,8 +2,10 @@ package talosprovisioner_test
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -348,7 +350,7 @@ func TestUpdateApplySteps_FloatingIPDisableMovesKubeconfigBeforeNodeChanges(t *t
 	fixture := newFloatingIPDisableFixture(t)
 	result := clusterupdate.NewEmptyUpdateResult()
 
-	fixture.runStep(t, "reconcile floating IP endpoint", result)
+	fixture.runStep(t, "move kubeconfig off disabled floating IP", result)
 
 	written, err := os.ReadFile(fixture.kubeconfigPath)
 	require.NoError(t, err, "the kubeconfig must be rewritten before node changes")
@@ -367,4 +369,43 @@ func TestUpdateApplySteps_FloatingIPDisableMovesKubeconfigBeforeNodeChanges(t *t
 		"a failed push must leave the kubeconfig on the node endpoint")
 	assert.Equal(t, int32(0), fixture.calls.del.Load(),
 		"the address is kept after failed changes")
+}
+
+// TestUpdateApplySteps_FloatingIPDisableMovesKubeconfigBeforeWipe pins the
+// kubeconfig move ahead of the first Kubernetes API consumer. A wipe-required
+// change builds its client from the saved kubeconfig, so a rerun started from a
+// kubeconfig that still names an address no node answers on (another machine, a
+// CI runner) could otherwise never get past the wipe to finish the transition.
+func TestUpdateApplySteps_FloatingIPDisableMovesKubeconfigBeforeWipe(t *testing.T) {
+	t.Parallel()
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
+	names := provisioner.UpdateApplyStepNamesForTest()
+
+	moveIdx := slices.Index(names, "move kubeconfig off disabled floating IP")
+	secretsIdx := slices.Index(names, "sync cluster secrets")
+	wipeIdx := slices.Index(names, "apply wipe-required changes")
+
+	require.NotEqual(t, -1, moveIdx, "the kubeconfig move step must be present")
+	assert.Less(t, moveIdx, wipeIdx,
+		"the kubeconfig must leave the floating IP before the wipe dials the Kubernetes API")
+	assert.Equal(t, secretsIdx+1, moveIdx,
+		"nothing between secret sync and the move may need the Kubernetes API")
+}
+
+// TestUpdateApplySteps_KubeconfigMoveSkippedWithoutDisableTransition proves the
+// early move only acts on the disable transition: an update with no floating-IP
+// change leaves the saved kubeconfig alone.
+//
+//nolint:paralleltest // the fixture sets the Hetzner token with t.Setenv.
+func TestUpdateApplySteps_KubeconfigMoveSkippedWithoutDisableTransition(t *testing.T) {
+	fixture := newFloatingIPDisableFixture(t)
+	fixture.diff = clusterupdate.NewEmptyUpdateResult()
+
+	fixture.runStep(t, "move kubeconfig off disabled floating IP",
+		clusterupdate.NewEmptyUpdateResult())
+
+	_, err := os.Stat(fixture.kubeconfigPath)
+	require.ErrorIs(t, err, os.ErrNotExist,
+		"an update without the disable transition must not rewrite the kubeconfig")
 }

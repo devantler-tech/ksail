@@ -489,14 +489,6 @@ func (p *Provisioner) prepareFloatingIPEndpointBeforeNodeChanges(
 		return err
 	}
 
-	// The disable transition moves the kubeconfig to the node endpoint before any
-	// node drops the VIP. A partly failed push skips the later refresh, and the
-	// autoscaler Secret step below already needs the Kubernetes API: both would
-	// otherwise dial an address no node answers on, on this run and every rerun.
-	if p.revertFloatingIPEndpoint {
-		return p.moveKubeconfigToNodeEndpoint(ctx, clusterName)
-	}
-
 	// A topology-only refresh means live detection proved every node already uses
 	// the floating endpoint. Persist it before createK8sClient starts a destructive
 	// roll. Drift repairs wait for the in-place push before switching kubeconfig.
@@ -676,6 +668,24 @@ func (p *Provisioner) moveKubeconfigToNodeEndpoint(ctx context.Context, clusterN
 	return p.fetchAndWriteKubeconfigForCP(
 		ctx, nodeAddress, "https://"+net.JoinHostPort(nodeAddress, "6443"),
 	)
+}
+
+// moveKubeconfigOffDisabledFloatingIP moves the kubeconfig to the node endpoint
+// at the start of the disable transition, before any node drops the VIP and
+// before any step needs the Kubernetes API. A partly failed push skips the later
+// refresh, and a rerun can start from a kubeconfig that still names the floating
+// IP (another machine, a CI runner): the wipe and autoscaler Secret steps would
+// otherwise dial an address no node answers on, on that run and every rerun.
+func (p *Provisioner) moveKubeconfigOffDisabledFloatingIP(
+	ctx context.Context,
+	clusterName string,
+	diff *clusterupdate.UpdateResult,
+) error {
+	if p.hetznerOpts == nil || p.floatingIPEnabled() || !hasFloatingIPChange(diff) {
+		return nil
+	}
+
+	return p.moveKubeconfigToNodeEndpoint(ctx, clusterName)
 }
 
 // kubeconfigRefreshControlPlanes lists the cluster's live control-plane

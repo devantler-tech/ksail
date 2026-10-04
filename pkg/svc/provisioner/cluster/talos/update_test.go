@@ -223,6 +223,7 @@ func TestUpdateApplyStepOrder_AutoscalerBeforeScaling(t *testing.T) {
 		"sync Hetzner firewall rules",
 		"refresh Omni configs",
 		"sync cluster secrets",
+		"move kubeconfig off disabled floating IP",
 		"apply wipe-required changes",
 		"reconcile floating IP endpoint",
 		"ensure autoscaler config secret",
