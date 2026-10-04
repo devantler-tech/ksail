@@ -240,7 +240,7 @@ jobs:
           path: vsce/ksail_*.vsix
           if-no-files-found: error
 
-  # The macOS desktop app ships as a Homebrew cask. The desktop app is a separate Go module that
+  # The macOS desktop app ships as a Homebrew cask. The desktop app is a tagged entry point in the shared Go module that
   # links a system webview via CGO and cannot be cross-compiled in the main release, so this job runs
   # a second GoReleaser config on a macOS runner: it builds the darwin binary, packages it as a
   # KSail.app bundle and opens a *draft* cask PR on the homebrew tap (the `homebrew` job style-cleans,
@@ -329,7 +329,7 @@ jobs:
 
       - name: 🏗️ Build desktop app
         shell: bash
-        run: cd desktop && go build -ldflags "-s -w" -o "ksail-desktop${{ matrix.ext }}" .
+        run: cd desktop && go build -tags desktop -ldflags "-s -w" -o "ksail-desktop${{ matrix.ext }}" .
 
       # Package so the artifact extracts to the name the `ksail open desktop` launcher looks for: a
       # ksail-desktop binary the user puts on their PATH. Naming mirrors the main GoReleaser archives.

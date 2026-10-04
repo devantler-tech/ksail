@@ -1,6 +1,6 @@
 # GoReleaser config for the macOS KSail desktop app.
 #
-# The desktop app is a separate Go module (desktop/) that links a system webview via CGO, so it
+# The desktop entry point shares the root Go module and links a system webview via CGO, so it
 # cannot be cross-compiled in the main release; this config runs on a macOS runner and builds the
 # darwin binary natively. It packages the binary into a KSail.app bundle, archives it, and publishes
 # a Homebrew cask to the same tap as the main `ksail` cask.
@@ -27,8 +27,8 @@ before:
 
 builds:
   - id: ksail-desktop
-    dir: desktop
-    main: .
+    main: ./desktop
+    tags: [desktop]
     # Build straight into the bundle layout so the archive contains a valid KSail.app.
     binary: KSail.app/Contents/MacOS/ksail-desktop
     goos: [darwin]

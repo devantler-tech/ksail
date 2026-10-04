@@ -7,6 +7,13 @@ export function clusterKey(cluster: Cluster): string {
   return `${cluster.metadata.namespace ?? "default"}/${cluster.metadata.name}`;
 }
 
+// clusterInstanceKey separates cached facts from the namespace/name used for navigation and API
+// requests. A Kubernetes UID survives updates but changes on replacement. Discovered/older
+// backends may omit it; use their creation time when available, otherwise retain address identity.
+export function clusterInstanceKey(cluster: Cluster): string {
+  return JSON.stringify([clusterKey(cluster), cluster.metadata.uid || cluster.metadata.creationTimestamp || ""]);
+}
+
 export function splitClusterKey(key: string): [string, string] {
   const slash = key.indexOf("/");
 

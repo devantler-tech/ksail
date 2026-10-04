@@ -259,30 +259,16 @@ jobs:
 
           ksail "${args[@]}"
 
-          ruby -ryaml -e '
-            path = "eks.yaml"
-            data = YAML.load_file(path)
-            boundary = ENV.fetch("AWS_PERMISSIONS_BOUNDARY_ARN")
-            raise "AWS permissions boundary ARN is empty" if boundary.empty?
-
-            data.fetch("metadata")["region"] = ENV.fetch("AWS_REGION")
-            data.fetch("iam")["serviceRolePermissionsBoundary"] = boundary
-            Array(data["managedNodeGroups"]).each do |nodegroup|
-              nodegroup["desiredCapacity"] = 1
-              nodegroup["minSize"] = 1
-              nodegroup["maxSize"] = 1
-              nodegroup["iam"] ||= {}
-              nodegroup["iam"]["instanceRolePermissionsBoundary"] = boundary
-            end
-
-            role_addons = %w[vpc-cni aws-ebs-csi-driver]
-            Array(data["addons"]).each do |addon|
-              next unless role_addons.include?(addon["name"])
-
-              addon["permissionsBoundary"] = boundary
-            end
-            File.write(path, data.to_yaml)
-          '
+          : "${AWS_PERMISSIONS_BOUNDARY_ARN:?AWS permissions boundary ARN is empty}"
+          yq -i '
+            .metadata.region = strenv(AWS_REGION) |
+            .iam.serviceRolePermissionsBoundary = strenv(AWS_PERMISSIONS_BOUNDARY_ARN) |
+            (.managedNodeGroups[].desiredCapacity) = 1 |
+            (.managedNodeGroups[].minSize) = 1 |
+            (.managedNodeGroups[].maxSize) = 1 |
+            (.managedNodeGroups[].iam.instanceRolePermissionsBoundary) = strenv(AWS_PERMISSIONS_BOUNDARY_ARN) |
+            (.addons[] | select(.name == "vpc-cni" or .name == "aws-ebs-csi-driver") | .permissionsBoundary) = strenv(AWS_PERMISSIONS_BOUNDARY_ARN)
+          ' eks.yaml
 
       - name: 🔧 Prepare EKS upgrade trial project
         if: inputs.upgrade_from_version != ''
@@ -354,30 +340,22 @@ jobs:
             local desired="$1"
             local min_size="$2"
             local max_size="$3"
-            DESIRED="$desired" MIN_SIZE="$min_size" MAX_SIZE="$max_size" ruby -ryaml -e '
-              path = "eks.yaml"
-              data = YAML.load_file(path)
-              nodegroups = Array(data["managedNodeGroups"])
-              raise "eks.yaml has no managed node groups" if nodegroups.empty?
-
-              # wait_for_capacity is given one ABSOLUTE Ready-node total, so scaling
-              # N groups to the same desiredCapacity would target N x desired nodes
-              # and never converge — it would poll to its 10m budget and report a
-              # timeout instead of the real cause. The scaffolded EKS config has
-              # exactly one managed node group; say so loudly if that ever changes.
-              if nodegroups.length > 1
-                raise "eks.yaml declares #{nodegroups.length} managed node groups; " \
-                      "this smoke test scales them uniformly against a single absolute " \
-                      "Ready-node target and assumes exactly one"
-              end
-
-              nodegroups.each do |nodegroup|
-                nodegroup["desiredCapacity"] = Integer(ENV.fetch("DESIRED"))
-                nodegroup["minSize"] = Integer(ENV.fetch("MIN_SIZE"))
-                nodegroup["maxSize"] = Integer(ENV.fetch("MAX_SIZE"))
-              end
-              File.write(path, data.to_yaml)
-            '
+            local nodegroup_count
+            nodegroup_count="$(yq '.managedNodeGroups | length' eks.yaml)"
+            # The absolute Ready-node target assumes exactly one managed group.
+            if [ "$nodegroup_count" != 1 ]; then
+              echo "::error::eks.yaml must declare exactly one managed node group (found $nodegroup_count)."
+              return 1
+            fi
+            if [[ ! "$desired" =~ ^[0-9]+$ || ! "$min_size" =~ ^[0-9]+$ || ! "$max_size" =~ ^[0-9]+$ ]]; then
+              echo "::error::EKS nodegroup capacities must be non-negative integers."
+              return 1
+            fi
+            DESIRED="$desired" MIN_SIZE="$min_size" MAX_SIZE="$max_size" yq -i '
+              .managedNodeGroups[0].desiredCapacity = env(DESIRED) |
+              .managedNodeGroups[0].minSize = env(MIN_SIZE) |
+              .managedNodeGroups[0].maxSize = env(MAX_SIZE)
+            ' eks.yaml
           }
 
           wait_for_capacity() {

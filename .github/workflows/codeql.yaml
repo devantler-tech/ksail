@@ -13,8 +13,9 @@ name: 🔍 CodeQL
 #
 # Go uses `autobuild`, which the Go extractor resolves to standalone extraction: it reads
 # the module graph with `go list` and takes types from source, so it needs no compiler and
-# covers every `go.mod` in the workspace — root, `desktop/` and `third_party/go-archive/` —
-# in one job. `none` is rejected for Go, and `manual` runs a traced compile that exceeds the
+# covers all three modules — root (CLI plus tagged desktop), `third_party/go-archive/`
+# and the `third_party/otelzap/` compatibility adapter — in one job.
+# `none` is rejected for Go, and `manual` runs a traced compile that exceeds the
 # runner's memory alongside the extractor.
 #
 # The autobuilder runs one `go-extractor` per `go.mod`, one after another, so the job's peak
@@ -28,6 +29,8 @@ name: 🔍 CodeQL
 # cost of a longer extraction (about 9 minutes instead of 6). No `ram` or `threads` cap is set,
 # so CodeQL's own budget matches the default setup this replaces. Re-running a failed job
 # remains available because the workflow is owned here.
+# The Go evidence guard rejects failed-project extraction diagnostics even when
+# Autobuild and analysis succeed, then requires real CLI/desktop/adapter function bodies.
 #
 # Same languages and suite as the default setup it replaces: actions, Go and
 # JavaScript/TypeScript with the security-extended queries. This satisfies the "Require
@@ -69,21 +72,47 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: 🧪 Verify desktop coverage evidence guard
+        if: matrix.language == 'go'
+        run: bash .github/scripts/verify-desktop-codeql.test.sh
+
+      - name: 🐧 Install desktop extraction headers
+        if: matrix.language == 'go'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+
       - name: 🔍 Initialize CodeQL
-        uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        id: init
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
+          db-location: ${{ runner.temp }}/codeql-databases
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.language == 'go' && 'autobuild' || 'none' }}
           queries: security-extended
 
       - name: 🏗️ Autobuild
         if: matrix.language == 'go'
-        uses: github/codeql-action/autobuild@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        uses: github/codeql-action/autobuild@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         env:
           # Soft heap limit for the Go extractor (a Go program), measured in #7131.
           GOMEMLIMIT: 8GiB
+          # Include the native entry point in standalone Go package extraction.
+          GOFLAGS: -tags=desktop
+
+      - name: 🔎 Reject failed Go extraction before analysis
+        if: matrix.language == 'go'
+        env:
+          CODEQL_CLI: ${{ steps.init.outputs.codeql-path }}
+        run: bash .github/scripts/verify-desktop-codeql.sh --diagnostics-only "$RUNNER_TEMP/codeql-databases/go"
 
       - name: 🔬 Perform CodeQL analysis
-        uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           category: /language:${{ matrix.language }}
+
+      - name: 🔎 Require complete Go extraction and CLI/desktop function bodies
+        if: matrix.language == 'go'
+        env:
+          CODEQL_CLI: ${{ steps.init.outputs.codeql-path }}
+        run: bash .github/scripts/verify-desktop-codeql.sh "$RUNNER_TEMP/codeql-databases/go"
