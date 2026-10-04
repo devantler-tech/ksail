@@ -451,7 +451,6 @@ func TestNeedsCloudProviderInitPhase(t *testing.T) {
 	tests := []struct {
 		name     string
 		cluster  *v1alpha1.Cluster
-		reqs     ComponentRequirements
 		expected bool
 	}{
 		{
@@ -464,7 +463,6 @@ func TestNeedsCloudProviderInitPhase(t *testing.T) {
 					},
 				},
 			},
-			reqs:     ComponentRequirements{NeedsLoadBalancer: true},
 			expected: true,
 		},
 		{
@@ -477,7 +475,6 @@ func TestNeedsCloudProviderInitPhase(t *testing.T) {
 					},
 				},
 			},
-			reqs:     ComponentRequirements{NeedsLoadBalancer: true},
 			expected: false,
 		},
 		{
@@ -490,21 +487,20 @@ func TestNeedsCloudProviderInitPhase(t *testing.T) {
 					},
 				},
 			},
-			reqs:     ComponentRequirements{NeedsLoadBalancer: true},
 			expected: false,
 		},
 		{
-			name: "Talos x Hetzner without load-balancer does not need pre-phase",
+			name: "Talos x Hetzner without load-balancer still needs node initialization",
 			cluster: &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
 						Distribution: v1alpha1.DistributionTalos,
 						Provider:     v1alpha1.ProviderHetzner,
+						LoadBalancer: v1alpha1.LoadBalancerDisabled,
 					},
 				},
 			},
-			reqs:     ComponentRequirements{NeedsLoadBalancer: false},
-			expected: false,
+			expected: true,
 		},
 		{
 			name: "Talos x Omni does not need pre-phase",
@@ -516,7 +512,6 @@ func TestNeedsCloudProviderInitPhase(t *testing.T) {
 					},
 				},
 			},
-			reqs:     ComponentRequirements{NeedsLoadBalancer: true},
 			expected: false,
 		},
 	}
@@ -525,9 +520,85 @@ func TestNeedsCloudProviderInitPhase(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := needsCloudProviderInitPhase(tc.cluster, tc.reqs)
+			result := needsCloudProviderInitPhase(tc.cluster)
 			assert.Equal(t, tc.expected, result)
 		})
+	}
+}
+
+func TestInstallPostCNIComponents_HetznerWithoutOptionalComponentsInitializesNodes(t *testing.T) {
+	t.Parallel()
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution:  v1alpha1.DistributionTalos,
+				Provider:      v1alpha1.ProviderHetzner,
+				CNI:           v1alpha1.CNICalico,
+				LoadBalancer:  v1alpha1.LoadBalancerDisabled,
+				CSI:           v1alpha1.CSIDisabled,
+				MetricsServer: v1alpha1.MetricsServerDisabled,
+				PolicyEngine:  v1alpha1.PolicyEngineNone,
+			},
+		},
+	}
+	require.Zero(t, GetComponentRequirements(clusterCfg).Count())
+
+	testCases := []struct {
+		name                string
+		installErr, waitErr error
+		wantOrder           []string
+	}{
+		{name: "initializes nodes", wantOrder: []string{"controller", "nodes"}},
+		{name: "controller fails", installErr: errNotStable, wantOrder: []string{"controller"}},
+		{
+			name:      "node initialization fails",
+			waitErr:   errNodesNotReady,
+			wantOrder: []string{"controller", "nodes"},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var order []string
+			cmd := &cobra.Command{Use: "test"}
+			cmd.SetOut(io.Discard)
+			factories := nodeInitializationTestFactories(t, &order, tc.installErr, tc.waitErr)
+			err := InstallPostCNIComponents(cmd, clusterCfg, factories, timer.New(), true)
+			switch {
+			case tc.installErr != nil:
+				require.ErrorIs(t, err, tc.installErr)
+			case tc.waitErr != nil:
+				require.ErrorIs(t, err, tc.waitErr)
+			default:
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tc.wantOrder, order)
+		})
+	}
+}
+
+func nodeInitializationTestFactories(
+	t *testing.T,
+	order *[]string,
+	installErr, waitErr error,
+) *InstallerFactories {
+	t.Helper()
+
+	return &InstallerFactories{
+		ClusterStabilityCheck: func(context.Context, *v1alpha1.Cluster, bool) error { return nil },
+		CloudProviderInitInstall: func(_ context.Context, cfg *v1alpha1.Cluster, _ *InstallerFactories) error {
+			assert.Equal(t, v1alpha1.LoadBalancerDisabled, cfg.Spec.Cluster.LoadBalancer)
+			*order = append(*order, "controller")
+
+			return installErr
+		},
+		NodeSchedulabilityWait: func(context.Context, *v1alpha1.Cluster) error {
+			*order = append(*order, "nodes")
+
+			return waitErr
+		},
 	}
 }
 

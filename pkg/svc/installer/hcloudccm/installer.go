@@ -31,6 +31,19 @@ type Installer = hetzner.Installer
 // in ipam.mode=kubernetes for node pod CIDR allocation.
 const DefaultClusterCIDR = "10.244.0.0/16"
 
+type options struct {
+	loadBalancersDisabled bool
+}
+
+// Option configures optional cloud controller behavior.
+type Option func(*options)
+
+// WithLoadBalancersDisabled keeps node and network initialization enabled while
+// disabling the service controller that provisions Hetzner load balancers.
+func WithLoadBalancersDisabled() Option {
+	return func(cfg *options) { cfg.loadBalancersDisabled = true }
+}
+
 // NewInstaller creates a new Hetzner Cloud Controller Manager installer instance.
 // The networkName parameter specifies the Hetzner Cloud private network name
 // that CCM uses to look up servers by their private IPs. If empty, networking
@@ -48,13 +61,14 @@ func NewInstaller(
 	timeout time.Duration,
 	networkName string,
 	haEnabled bool,
+	opts ...Option,
 ) *Installer {
 	return hetzner.NewInstaller(client, kubeconfig, context, timeout, hetzner.ChartConfig{
 		Name:        "hcloud-ccm",
 		ReleaseName: "hcloud-cloud-controller-manager",
 		ChartName:   "hcloud/hcloud-cloud-controller-manager",
 		Version:     chartVersion(),
-		ValuesYaml:  buildValuesYaml(networkName, haEnabled),
+		ValuesYaml:  buildValuesYaml(networkName, haEnabled, opts...),
 		SecretData:  hetzner.BuildNetworkSecretData(networkName),
 	})
 }
@@ -65,8 +79,17 @@ func NewInstaller(
 // stored in the "hcloud" Kubernetes secret (key "network") and read by the
 // chart's default valueFrom.secretKeyRef — no inline value override is needed.
 // When haEnabled is true an extra standby replica is configured.
-func buildValuesYaml(networkName string, haEnabled bool) string {
+func buildValuesYaml(networkName string, haEnabled bool, opts ...Option) string {
+	cfg := options{}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	var parts []string
+
+	if cfg.loadBalancersDisabled {
+		parts = append(parts, "args:\n  controllers: \"*,-service\"")
+	}
 
 	if networkName != "" {
 		parts = append(parts, "networking:\n  enabled: true\n  clusterCIDR: "+DefaultClusterCIDR)
