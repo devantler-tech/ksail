@@ -2096,6 +2096,7 @@ jobs:
         with:
           go-version-file: go.mod
       - name: 🧪 Reproduce local safety and partial-deletion cases
+        id: local-safety
         shell: bash
         run: |
           set -euo pipefail
@@ -2121,8 +2122,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          go tool golangci-lint run --timeout 15m 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/lint.log"
+          go tool golangci-lint run --fix --timeout 15m 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/lint.log"
       - name: 📝 Regenerate CLI and embedded documentation
+        if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
         shell: bash
         run: |
           set -euo pipefail

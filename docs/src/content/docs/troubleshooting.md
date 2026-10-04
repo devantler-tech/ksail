@@ -55,6 +55,9 @@ resources. It does not prove deletion completed or repair the reported API failu
 and shared cluster/user entries in the selected file are kept. The current context is cleared only
 if it is the one forgotten. Repeating the command for an absent context makes no changes. Missing,
 unreadable or malformed files remain errors; `KUBECONFIG` and current-context defaults are not used.
+Read-only files and files locked by another writer are also refused. Use the same canonical file
+path as other kubeconfig writers, and avoid simultaneous edits from tools that do not honor
+client-go's `.lock` convention. Do not remove another writer's lock to force recovery.
 
 ## GitOps Workflow Issues
 

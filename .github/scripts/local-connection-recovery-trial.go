@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -58,10 +59,14 @@ func trial(binary string) error {
 	if err := clientcmd.WriteToFile(*config, path); err != nil {
 		return err
 	}
+	if err := writeOmniFixture(dir); err != nil {
+		return err
+	}
 	before, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
+	providerHookCalled := false
 	run := func(args ...string) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
@@ -69,6 +74,7 @@ func trial(binary string) error {
 		command.Dir = dir
 		command.Env = append(os.Environ(), "KUBECONFIG="+path, "OMNI_ENDPOINT=", "OMNI_SERVICE_ACCOUNT_KEY=")
 		output, runErr := command.CombinedOutput()
+		providerHookCalled = providerHookCalled || strings.Contains(string(output), "Omni")
 		fmt.Print(string(output))
 		return runErr
 	}
@@ -120,11 +126,26 @@ func trial(binary string) error {
 	if requests.Load() != 0 {
 		return fmt.Errorf("local recovery contacted the recording API %d times", requests.Load())
 	}
+	if providerHookCalled {
+		return errors.New("a refused local recovery invocation entered the Omni provider hook")
+	}
 	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("credential execution tripwire was not absent: %v", err)
 	}
 	fmt.Println("PASS: actual CLI default-off, explicit selection, shared preservation, retry and read-only refusal; API requests=0, credential executions=0")
 	return nil
+}
+
+func writeOmniFixture(dir string) error {
+	talos := "version: v1alpha1\nmachine:\n  type: controlplane\n" +
+		"cluster:\n  clusterName: local-only\n  controlPlane:\n    endpoint: https://unused.invalid:6443\n"
+	if err := os.WriteFile(filepath.Join(dir, "talos.yaml"), []byte(talos), 0o600); err != nil {
+		return err
+	}
+	config := "apiVersion: ksail.io/v1alpha1\nkind: Cluster\nspec:\n  cluster:\n" +
+		"    distribution: Talos\n    provider: Omni\n    distributionConfig: talos.yaml\n" +
+		"    connection:\n      kubeconfig: " + filepath.Join(dir, "missing-omni-config") + "\n"
+	return os.WriteFile(filepath.Join(dir, "ksail.yaml"), []byte(config), 0o600)
 }
 
 func unchanged(path string, expected []byte) error {

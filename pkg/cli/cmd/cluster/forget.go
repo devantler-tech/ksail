@@ -27,6 +27,9 @@ references them. Other contexts and shared entries are preserved. No current con
 KUBECONFIG environment default is selected implicitly.`,
 		Example: `  ksail cluster forget --kubeconfig ./nested.config --context kind-nested --experimental`,
 		Args:    cobra.NoArgs,
+		// Recovery must bypass the root's connection refresh even before Cobra
+		// validates required flags or the experimental guard runs.
+		PersistentPreRunE: func(_ *cobra.Command, _ []string) error { return nil },
 		Annotations: map[string]string{
 			annotations.AnnotationPermission: permissionWrite,
 		},

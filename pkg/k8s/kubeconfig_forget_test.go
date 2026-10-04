@@ -116,6 +116,43 @@ func TestForgetContextBlocksConcurrentKubectlWrite(t *testing.T) {
 	assert.NoFileExists(t, path+".lock", "release our lock on failure")
 }
 
+func TestForgetContextRejectsChangedSnapshot(t *testing.T) {
+	t.Parallel()
+
+	for _, change := range []string{"content", "identity"} {
+		t.Run(change, func(t *testing.T) {
+			t.Parallel()
+
+			path := filepath.Join(t.TempDir(), "config")
+			previous := []byte("original context snapshot")
+			require.NoError(t, os.WriteFile(path, previous, 0o600))
+			info, err := os.Stat(path)
+			require.NoError(t, err)
+			expected := previous
+			if change == "content" {
+				expected = []byte("another writer added a shared host context")
+				require.NoError(t, os.WriteFile(path, expected, 0o600))
+			} else {
+				// Identical bytes in a replacement file still change snapshot identity.
+				require.NoError(t, os.WriteFile(path+".replacement", expected, 0o600))
+				require.NoError(t, os.Rename(path+".replacement", path))
+			}
+			called := false
+			err = k8s.ReplaceUnchangedKubeconfigForTest(path, info, previous, []byte("stale replacement"),
+				func(_ string, _ []byte, _ os.FileMode) error {
+					called = true
+
+					return nil
+				})
+			require.ErrorIs(t, err, k8s.ErrKubeconfigChanged)
+			assert.False(t, called)
+			actual, err := os.ReadFile(path)
+			require.NoError(t, err)
+			assert.Equal(t, expected, actual)
+		})
+	}
+}
+
 func TestForgetContextReadErrorsPreserveFile(t *testing.T) {
 	t.Parallel()
 
