@@ -31,6 +31,12 @@ esac
 
 const updateStub = `#!/usr/bin/env bash
 set -euo pipefail
+for argument in "$@"; do
+  if [[ -z "$argument" ]]; then
+    echo 'unexpected empty update argument' >&2
+    exit 97
+  fi
+done
 printf '%s\n' "$*" >> "$FIXTURE_CALLS"
 if [[ " $* " == *" --output json "* ]]; then
   printf '{"totalChanges":0}\n'
@@ -128,6 +134,23 @@ func TestSystemTestTalosUpgradeObservesTargetAndRepeatsNoop(t *testing.T) {
 
 	assert.Contains(t, calls, "--output json")
 	assert.Contains(t, output, "v1.36.2 → v1.37.1")
+}
+
+func TestSystemTestTalosUpgradePreservesUpdateArguments(t *testing.T) {
+	t.Parallel()
+	output, calls, err := runVersionStep(
+		t,
+		"🧪 Talos Kubernetes upgrade — known version path",
+		map[string]string{"ARGS": "--name fixture --kubernetes-version=v1.36.2"},
+	)
+	require.NoError(t, err, output)
+	assert.Equal(t, 2, strings.Count(calls, "cluster update"), calls)
+
+	for line := range strings.SplitSeq(strings.TrimSpace(calls), "\n") {
+		assert.Contains(t, line, "--name fixture")
+		assert.Contains(t, line, "--kubernetes-version v1.37.1")
+		assert.NotContains(t, line, "v1.36.2")
+	}
 }
 
 func TestSystemTestTalosUpgradeRejectsWrongLiveState(t *testing.T) {
