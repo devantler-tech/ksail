@@ -2029,7 +2029,7 @@ jobs:
 
       - name: 🧪 Verify empty arguments under Bash 3.2
         env:
-          KSAIL_REQUIRE_BASH32: 'true'
+          KSAIL_REQUIRE_BASH32: "true"
         run: go test ./internal/ciharness -run '^TestSystemTestTalosUpgradeEmptyArgumentsUnderBash32$' -count=1
 
   # Runs the Go suite when only the release build configuration changed. The org-required Go
