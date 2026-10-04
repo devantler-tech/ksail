@@ -22,6 +22,10 @@ predicate expected(string path, string name) {
   or path = "third_party/dynamiclistener/factory/cert_utils.go" and name = "ParseCertPEM"
   or path = "third_party/otelzap/otelzap.go" and name = "log"
   or path = "third_party/otelzap/logvalue.go" and name = "logValue"
+  or path = "internal/codeqlprofile/metrics.go" and name = "ParseTime"
+  or path = "internal/codeqlprofile/metrics.go" and name = "Summarize"
+  or path = "internal/codeqlprofile/files.go" and name = "ReadMeasurements"
+  or path = "internal/codeqlprofile/cmd/main.go" and name = "main"
 }
 
 from string path, string name

@@ -28,7 +28,11 @@ cat >"${scratch}/positive.json" <<'JSON'
 ["third_party/dynamiclistener/cert/cert.go","NewPrivateKey",1],
 ["third_party/dynamiclistener/factory/cert_utils.go","ParseCertPEM",1],
 ["third_party/otelzap/otelzap.go","log",1],
-["third_party/otelzap/logvalue.go","logValue",1]
+["third_party/otelzap/logvalue.go","logValue",1],
+["internal/codeqlprofile/metrics.go","ParseTime",1],
+["internal/codeqlprofile/metrics.go","Summarize",1],
+["internal/codeqlprofile/files.go","ReadMeasurements",1],
+["internal/codeqlprofile/cmd/main.go","main",1]
 ]}}
 JSON
 
@@ -43,7 +47,7 @@ reject() {
 	fi
 }
 
-for index in {0..20}; do
+for index in {0..24}; do
 	jq --argjson i "${index}" '."#select".tuples[$i][2] = 0' "${scratch}/positive.json" >"${scratch}/zero.json"
 	reject zero
 	jq --argjson i "${index}" 'del(."#select".tuples[$i])' "${scratch}/positive.json" >"${scratch}/missing.json"

@@ -9,7 +9,7 @@ verify_results() {
 	jq -e '
     .["#select"].tuples as $rows |
     ($rows | type == "array") and
-    ($rows | length == 21) and
+    ($rows | length == 25) and
     ($rows | all(length == 3 and
       (.[2] | type == "number" and . > 0 and floor == .))) and
     ([$rows[] | .[0:2]] | sort) == ([
@@ -33,7 +33,11 @@ verify_results() {
       ["third_party/dynamiclistener/cert/cert.go", "NewPrivateKey"],
       ["third_party/dynamiclistener/factory/cert_utils.go", "ParseCertPEM"],
       ["third_party/otelzap/otelzap.go", "log"],
-      ["third_party/otelzap/logvalue.go", "logValue"]
+      ["third_party/otelzap/logvalue.go", "logValue"],
+      ["internal/codeqlprofile/metrics.go", "ParseTime"],
+      ["internal/codeqlprofile/metrics.go", "Summarize"],
+      ["internal/codeqlprofile/files.go", "ReadMeasurements"],
+      ["internal/codeqlprofile/cmd/main.go", "main"]
     ] | sort)
   ' "$1" >/dev/null || {
 		printf '::error::CodeQL database lacks required CLI, desktop, adapter, or dependency function bodies.\n' >&2
