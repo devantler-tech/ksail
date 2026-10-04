@@ -2,11 +2,16 @@ package talosprovisioner_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
+	"sync/atomic"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -23,6 +28,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -784,6 +791,126 @@ func TestEnsureAutoscalerSecretIfNeeded_ErrorWhenNoSchematic(t *testing.T) {
 	)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, talosprovisioner.ErrAutoscalerRequiresSchematic)
+}
+
+// A failed read of the existing boot image must stop the update before it can
+// report success with autoscaled nodes still on an unknown image.
+func TestEnsureAutoscalerSecretIfNeeded_RejectsUnreadableImageBaseline(t *testing.T) {
+	t.Setenv(v1alpha1.DefaultHetznerTokenEnvVar, "test-token")
+
+	hcloudSecret, err := json.Marshal(&corev1.Secret{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
+		ObjectMeta: metav1.ObjectMeta{Name: "hcloud", Namespace: "kube-system"},
+		Data: map[string][]byte{
+			"token":   []byte("test-token"),
+			"network": []byte("test-network"),
+		},
+	})
+	require.NoError(t, err)
+	malformedSecret, err := json.Marshal(&corev1.Secret{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster-autoscaler-config", Namespace: "kube-system"},
+		Data:       map[string][]byte{"hcloud_cluster_config": []byte("not base64!!")},
+	})
+	require.NoError(t, err)
+
+	for _, testCase := range []struct {
+		name     string
+		status   int
+		response []byte
+		wantErr  bool
+	}{
+		{"failed Secret read", http.StatusServiceUnavailable, nil, true},
+		{"malformed existing Secret", http.StatusOK, malformedSecret, true},
+		{"absent Secret is a new baseline", http.StatusNotFound, nil, false},
+	} {
+		server, baselineReads := autoscalerBaselineServer(
+			t,
+			hcloudSecret,
+			testCase.status,
+			testCase.response,
+		)
+		kubeconfigPath := autoscalerBaselineKubeconfig(t, server.URL)
+
+		configs, configErr := talosconfigmanager.NewDefaultConfigs()
+		require.NoError(t, configErr, testCase.name)
+
+		provisioner := talosprovisioner.NewProvisioner(
+			nil, talosprovisioner.NewOptions().WithKubeconfigPath(kubeconfigPath),
+		).
+			WithHetznerOptions(v1alpha1.OptionsHetzner{
+				NodeAutoscalerEnabled: true,
+				NetworkName:           "test-network",
+			}).
+			WithTalosOptsForTest(&v1alpha1.OptionsTalos{SchematicID: "test-schematic-id"}).
+			WithTalosConfigsForTest(configs).
+			WithLogWriter(io.Discard)
+
+		updateErr := provisioner.EnsureAutoscalerSecretIfNeededForTest(t.Context(), "test-cluster")
+		if testCase.wantErr {
+			require.ErrorContains(t, updateErr, "autoscaler snapshot", testCase.name)
+		} else {
+			require.NoError(t, updateErr, testCase.name)
+		}
+
+		assert.EqualValues(t, 1, baselineReads.Load(), testCase.name)
+	}
+}
+
+func autoscalerBaselineServer(
+	t *testing.T,
+	hcloudSecret []byte,
+	status int,
+	response []byte,
+) (*httptest.Server, *atomic.Int32) {
+	t.Helper()
+
+	baselineReads := &atomic.Int32{}
+	server := httptest.NewServer(
+		http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
+			responseWriter.Header().Set("Content-Type", "application/json")
+
+			switch request.URL.Path {
+			case "/api/v1/namespaces/kube-system/secrets/hcloud":
+				_, _ = responseWriter.Write(hcloudSecret)
+			case "/api/v1/namespaces/kube-system/secrets/cluster-autoscaler-config":
+				baselineReads.Add(1)
+				responseWriter.WriteHeader(status)
+				_, _ = responseWriter.Write(response)
+			default:
+				t.Errorf("unexpected Kubernetes request: %s %s", request.Method, request.URL.Path)
+				http.NotFound(responseWriter, request)
+			}
+		}),
+	)
+	t.Cleanup(server.Close)
+
+	return server, baselineReads
+}
+
+func autoscalerBaselineKubeconfig(t *testing.T, serverURL string) string {
+	t.Helper()
+
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+	kubeconfig := fmt.Sprintf(`apiVersion: v1
+kind: Config
+clusters:
+- name: test
+  cluster:
+    server: %s
+contexts:
+- name: test
+  context:
+    cluster: test
+    user: test
+current-context: test
+users:
+- name: test
+  user: {}
+`, serverURL)
+	require.NoError(t, os.WriteFile(kubeconfigPath, []byte(kubeconfig), 0o600))
+
+	return kubeconfigPath
 }
 
 //nolint:funlen // Table-driven test with multiple node topology scenarios is clearer as single function

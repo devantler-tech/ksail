@@ -102,3 +102,41 @@ func TestPropagateAutoscalerBaseline_Routing(t *testing.T) {
 		})
 	}
 }
+
+// Image replacement must finish before classified configuration reaches surviving
+// target-image servers. A retry must keep the selective image path for reboot-only
+// changes, which do not require deleting a server.
+func TestPropagateAutoscalerBaseline_ImageWithConfiguration(t *testing.T) {
+	t.Parallel()
+
+	reboot := clusterupdate.NewEmptyUpdateResult()
+	reboot.RebootRequired = append(reboot.RebootRequired, clusterupdate.Change{})
+
+	for _, testCase := range []struct {
+		name    string
+		diff    *clusterupdate.UpdateResult
+		wantMsg string
+	}{
+		{"unclassified config retry", nil, inPlaceNoopMsg},
+		{"in-place config", inPlaceDiff(), inPlaceNoopMsg},
+		{"reboot config", reboot, rebootNoopMsg},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+
+			prov := talosprovisioner.NewProvisioner(nil, nil).
+				WithLogWriter(&buf).
+				WithHetznerOptions(v1alpha1.OptionsHetzner{NodeAutoscalerEnabled: true})
+
+			err := prov.PropagateAutoscalerBaselineForTest(
+				t.Context(), "test-cluster", testCase.diff, true,
+				clusterupdate.NewEmptyUpdateResult(),
+			)
+			require.NoError(t, err)
+			assert.Contains(t, buf.String(), recycleNoopMsg)
+			assert.Contains(t, buf.String(), testCase.wantMsg)
+		})
+	}
+}

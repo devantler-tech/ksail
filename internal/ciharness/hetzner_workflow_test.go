@@ -61,6 +61,195 @@ func TestHetznerWorkflowAllowsManualDirectProviderSmoke(t *testing.T) {
 	assert.Contains(t, args.Run, `matrix.smoke != true`)
 }
 
+func TestHetznerManualSchematicRolloutIsOptInAndKeepsCleanup(t *testing.T) {
+	t.Parallel()
+
+	var workflow hetznerWorkflow
+	require.NoError(t, yaml.Unmarshal(
+		readRepoFile(t, ".github/workflows/system-test-hetzner.yaml"), &workflow,
+	))
+
+	selector, found := workflow.On.WorkflowDispatch.Inputs["test_schematic_rollout"]
+	require.True(t, found, "manual dispatch must expose the schematic rollout trial")
+	assert.Equal(t, "boolean", selector.Type)
+	assert.Equal(t, false, selector.Default)
+
+	systemTest, found := workflow.Jobs["system-test"]
+	require.True(t, found, "Hetzner system-test job is missing")
+	run := findHarnessStep(t, systemTest.Steps, "🧪 Run KSail System Test")
+	selection := findHarnessStep(t, systemTest.Steps, "✅ Validate Talos schematic trial selection")
+	assert.Contains(t, selection.If, "inputs.test_schematic_rollout")
+	assert.Contains(t, selection.Run, "Talos")
+	assert.Contains(t, selection.Run, "INIT")
+	assert.Contains(t, selection.Run, "RESIZE_TYPE")
+	assert.Less(t,
+		harnessStepIndex(t, systemTest.Steps, selection.Name),
+		harnessStepIndex(t, systemTest.Steps, run.Name),
+	)
+	assert.Equal(t,
+		"${{ github.event_name == 'workflow_dispatch' && inputs.test_schematic_rollout || false }}",
+		run.With["test-talos-schematic-rollout"],
+	)
+
+	var action compositeAction
+	require.NoError(t, yaml.Unmarshal(
+		readRepoFile(t, ".github/actions/ksail-system-test/action.yaml"), &action,
+	))
+	rollout := findHarnessStep(
+		t,
+		action.Runs.Steps,
+		"🧪 ksail cluster update — same-version Talos schematic",
+	)
+	assert.Contains(t, rollout.If, "inputs.provider == 'Hetzner'")
+	assert.Contains(t, rollout.If, "inputs.distribution == 'Talos'")
+	assert.Contains(t, rollout.If, "inputs.test-talos-schematic-rollout == 'true'")
+	assert.Contains(t, rollout.Run, "Would reconcile distribution image")
+	assert.Contains(t, rollout.Run, "No changes detected")
+	assert.Greater(t,
+		harnessStepIndex(t, action.Runs.Steps, rollout.Name),
+		harnessStepIndex(t, action.Runs.Steps, "🧪 ksail cluster update"),
+	)
+	assert.Less(t,
+		harnessStepIndex(t, action.Runs.Steps, rollout.Name),
+		harnessStepIndex(t, action.Runs.Steps, "🧪 ksail cluster stop"),
+	)
+
+	cleanup, found := workflow.Jobs["cleanup"]
+	require.True(t, found, "workflow-level fallback cleanup is missing")
+	assert.Contains(t, cleanup.If, "always()")
+}
+
+type hetznerSchematicScenario struct {
+	name        string
+	wantSuccess bool
+	wantNoApply bool
+}
+
+type schematicRolloutFixture struct {
+	project      string
+	fakeBin      string
+	logDir       string
+	callsFile    string
+	dryCountFile string
+}
+
+func TestHetznerSchematicRolloutRequiresLiveDriftAndReadback(t *testing.T) {
+	t.Parallel()
+
+	var action compositeAction
+	require.NoError(t, yaml.Unmarshal(
+		readRepoFile(t, ".github/actions/ksail-system-test/action.yaml"), &action,
+	))
+	rollout := findHarnessStep(
+		t,
+		action.Runs.Steps,
+		"🧪 ksail cluster update — same-version Talos schematic",
+	)
+
+	for _, scenario := range []hetznerSchematicScenario{
+		{name: "converged", wantSuccess: true},
+		{name: "pre-missing", wantNoApply: true},
+		{name: "pre-config-drift", wantNoApply: true},
+		{name: "not-ready"},
+		{name: "post-drift"},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			assertHetznerSchematicRolloutScenario(t, rollout.Run, scenario)
+		})
+	}
+}
+
+func assertHetznerSchematicRolloutScenario(
+	t *testing.T,
+	rollout string,
+	scenario hetznerSchematicScenario,
+) {
+	t.Helper()
+	fixture := newSchematicRolloutFixture(t)
+
+	commandContext, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	command := exec.CommandContext( //nolint:gosec // Reviewed action body.
+		commandContext,
+		"bash",
+		"-c",
+		rollout,
+	)
+	command.Dir = fixture.project
+	command.Env = append(os.Environ(),
+		"PATH="+fixture.fakeBin+":"+os.Getenv("PATH"),
+		"ARGS=--name schematic-trial --image-verification cosign",
+		"SCENARIO="+scenario.name,
+		"CALLS_FILE="+fixture.callsFile,
+		"DRY_COUNT_FILE="+fixture.dryCountFile,
+		"KSAIL_SYSTEM_TEST_LOG_DIR="+fixture.logDir,
+	)
+
+	output, err := command.CombinedOutput()
+	if scenario.wantSuccess {
+		require.NoErrorf(t, err, "rollout failed:\n%s", output)
+	} else {
+		require.Errorf(t, err, "rollout accepted missing live evidence:\n%s", output)
+	}
+
+	calls, readErr := os.ReadFile(fixture.callsFile)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(calls), "cluster update --dry-run")
+	assert.Contains(t, string(calls), "--name schematic-trial")
+	assert.NotContains(t, string(calls), "--image-verification")
+
+	if scenario.wantNoApply {
+		assert.NotContains(t, string(calls), "cluster update --force")
+	} else {
+		assert.Contains(t, string(calls), "cluster update --force")
+	}
+
+	if scenario.wantSuccess {
+		config, readErr := os.ReadFile(filepath.Join(fixture.project, "ksail.yaml"))
+		require.NoError(t, readErr)
+		assert.Contains(t, string(config), "v1.12.4")
+		assert.Contains(t, string(config), "siderolabs/iscsi-tools")
+	}
+}
+
+func newSchematicRolloutFixture(t *testing.T) schematicRolloutFixture {
+	t.Helper()
+	fixture := schematicRolloutFixture{
+		project:      t.TempDir(),
+		fakeBin:      t.TempDir(),
+		logDir:       t.TempDir(),
+		callsFile:    filepath.Join(t.TempDir(), "calls"),
+		dryCountFile: filepath.Join(t.TempDir(), "dry-count"),
+	}
+	defaultsDir := filepath.Join(fixture.project, "pkg", "apis", "cluster", "v1alpha1")
+	require.NoError(t, os.MkdirAll(defaultsDir, 0o700))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(defaultsDir, "defaults.go"),
+		[]byte("package v1alpha1\nconst (\n\tDefaultHetznerTalosVersion = \"v1.12.4\"\n)\n"),
+		0o600,
+	))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(fixture.project, "ksail.yaml"),
+		[]byte("spec:\n  cluster:\n    distribution: Talos\n    provider: Hetzner\n"),
+		0o600,
+	))
+	writeSchematicFakeKSail(t, filepath.Join(fixture.fakeBin, "ksail"))
+	writeExecutable(t, filepath.Join(fixture.fakeBin, "sleep"), "#!/usr/bin/env bash\nexit 0\n")
+
+	return fixture
+}
+
+func writeSchematicFakeKSail(t *testing.T, path string) {
+	t.Helper()
+	writeExecutable(
+		t,
+		path,
+		string(readRepoFile(t, "internal/ciharness/testdata/schematic_fake_ksail.sh")),
+	)
+}
+
 func TestHetznerWorkflowSmokesK3sAndVanilla(t *testing.T) {
 	t.Parallel()
 

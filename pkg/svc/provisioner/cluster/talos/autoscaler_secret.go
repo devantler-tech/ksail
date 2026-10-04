@@ -80,7 +80,14 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 
 	// Read the snapshot image existing nodes booted from before the Secret is
 	// overwritten, so a Talos OS bump (new boot image) can be detected below.
-	prevImageID := p.currentAutoscalerSnapshotImageID(ctx)
+	prevImageID, pendingImage, err := p.currentAutoscalerSnapshotBaseline(ctx)
+	if err != nil {
+		return fmt.Errorf("reading autoscaler snapshot baseline: %w", err)
+	}
+
+	if pendingImage && snapshotImageID <= 0 {
+		return errAutoscalerSnapshotImageUnavailable
+	}
 
 	// Restart the autoscaler when the config changed so it reloads the new
 	// Kubernetes version / snapshot baked into the Secret (read as env vars,
@@ -90,22 +97,69 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 		return err
 	}
 
+	desiredImageID := strconv.FormatInt(snapshotImageID, 10)
+	imageChanged := autoscalerImageChanged(changed, pendingImage, prevImageID, desiredImageID)
+
+	return p.convergeAutoscalerBaseline(
+		ctx,
+		clusterName,
+		diff,
+		result,
+		changed,
+		imageChanged,
+		desiredImageID,
+	)
+}
+
+func (p *Provisioner) convergeAutoscalerBaseline(
+	ctx context.Context,
+	clusterName string,
+	diff, result *clusterupdate.UpdateResult,
+	changed, imageChanged bool,
+	desiredImageID string,
+) error {
+	if imageChanged {
+		err := p.activateAutoscalerImage(ctx, !changed)
+		if err != nil {
+			return err
+		}
+	}
+
 	// The refreshed Secret alone only fixes newly provisioned nodes; existing
-	// autoscaler nodes are not KSail-owned, so the in-place rolling apply and
-	// rolling reboot never touch them. Bring them to the new baseline only when
-	// the Secret actually changed. A no-op when nothing changed.
-	if !changed {
+	// autoscaler nodes are not KSail-owned, so the static-node update never
+	// touches them. A same-version image roll may have refreshed this Secret
+	// before the regular update computed its diff. Even if the Secret is now
+	// unchanged, classified configuration changes must still reach those
+	// nodes; the earlier unclassified pass could only apply NO_REBOOT.
+	if !shouldPropagateAutoscalerBaseline(changed || imageChanged, diff) {
 		return nil
 	}
 
-	imageChanged := prevImageID != "" && prevImageID != strconv.FormatInt(snapshotImageID, 10)
+	err := p.propagateAutoscalerBaseline(ctx, clusterName, diff, imageChanged, result)
+	if err != nil || !imageChanged {
+		return err
+	}
 
-	return p.propagateAutoscalerBaseline(ctx, clusterName, diff, imageChanged, result)
+	if result != nil && result.HasFailedChanges() {
+		return fmt.Errorf("autoscaler image convergence: %d changes failed: %w",
+			len(result.FailedChanges), errAutoscalerNodeConfigurationChangesFailed)
+	}
+
+	return p.completeAutoscalerImageBaseline(ctx, desiredImageID)
+}
+
+func shouldPropagateAutoscalerBaseline(changed bool, diff *clusterupdate.UpdateResult) bool {
+	if changed || autoscalerRecycleRequired(diff, false) || autoscalerRebootRequired(diff) {
+		return true
+	}
+
+	return diff != nil && diff.HasInPlaceChanges()
 }
 
 // propagateAutoscalerBaseline brings existing autoscaler nodes to the refreshed
 // baseline, choosing the least disruptive mechanism the change allows. The three
-// paths are checked most-disruptive first:
+// Configuration requiring fresh servers takes priority. Otherwise, changed images
+// selectively replace stale servers before configuration reaches the survivors:
 //
 //   - recycle (drain → delete → the autoscaler re-provisions a fresh node from the
 //     new template) — only when a fresh server is unavoidable: a new boot image
@@ -123,14 +177,22 @@ func (p *Provisioner) propagateAutoscalerBaseline(
 	imageChanged bool,
 	result *clusterupdate.UpdateResult,
 ) error {
-	switch {
-	case autoscalerRecycleRequired(diff, imageChanged):
+	if autoscalerRecycleRequired(diff, false) {
 		return p.recycleAutoscalerNodes(ctx, clusterName)
-	case autoscalerRebootRequired(diff):
-		return p.rollingRebootAutoscalerNodes(ctx, clusterName, result)
-	default:
-		return p.applyInPlaceToAutoscalerNodes(ctx, clusterName, result)
 	}
+
+	if imageChanged {
+		err := p.recycleAutoscalerImageNodes(ctx, clusterName)
+		if err != nil {
+			return err
+		}
+	}
+
+	if autoscalerRebootRequired(diff) {
+		return p.rollingRebootAutoscalerNodes(ctx, clusterName, result)
+	}
+
+	return p.applyInPlaceToAutoscalerNodes(ctx, clusterName, result)
 }
 
 // autoscalerRecycleRequired reports whether the refreshed baseline can only reach
@@ -145,8 +207,8 @@ func (p *Provisioner) propagateAutoscalerBaseline(
 // an already-booted server can adopt it via an in-place reboot of the SAME server
 // (autoscalerRebootRequired → rollingRebootAutoscalerNodes) — no fresh server, so a
 // capacity-constrained project at its Hetzner server limit still converges (#5219).
-// Recycle is checked before the reboot path in propagateAutoscalerBaseline, so a
-// change that needs BOTH a fresh server and a reboot still recycles.
+// Wipe/recreate-class configuration replaces the entire tier. An image-only
+// replacement filters out completed target-image servers before the reboot path.
 func autoscalerRecycleRequired(diff *clusterupdate.UpdateResult, imageChanged bool) bool {
 	if imageChanged {
 		return true
@@ -163,9 +225,8 @@ func autoscalerRecycleRequired(diff *clusterupdate.UpdateResult, imageChanged bo
 // autoscalerRebootRequired reports whether the refreshed baseline carries a
 // reboot-required change (CNI swap, disk-quota toggle) that an in-place NO_REBOOT
 // apply cannot land but an in-place reboot of the SAME server can — no fresh server
-// needed. Gated below autoscalerRecycleRequired in propagateAutoscalerBaseline, so a
-// change that ALSO needs a fresh server (image/wipe/recreate/rolling-recreate) still
-// recycles instead.
+// needed. Wipe/recreate-class configuration takes precedence. A changed image
+// selectively replaces stale servers first, then this path updates the survivors.
 func autoscalerRebootRequired(diff *clusterupdate.UpdateResult) bool {
 	return diff != nil && diff.HasRebootRequired()
 }
