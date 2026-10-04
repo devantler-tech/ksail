@@ -604,17 +604,24 @@ runs:
         PRE_LOG="$LOG_DIR/talos-schematic-before.log"
         APPLY_LOG="$LOG_DIR/talos-schematic-apply.log"
         POST_LOG="$LOG_DIR/talos-schematic-after.log"
-        # The unpinned Hetzner ISO boots this version. Read the repository's
-        # tracked default so a later ISO bump cannot silently turn this into a
-        # version upgrade test.
-        talos_version=$(sed -nE 's/^[[:space:]]*DefaultHetznerTalosVersion[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' pkg/apis/cluster/v1alpha1/defaults.go)
-        if [[ ! "$talos_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-          echo "❌ Cannot determine the tracked Hetzner Talos version" >&2
+        # The preceding update test can upgrade beyond the ISO's default.
+        # Use every node's running version so this changes only the boot image.
+        if ! talos_version=$(ksail workload get nodes -o json | jq -er '
+          .items
+          | if type != "array" or length == 0 then error("no nodes") else . end
+          | map(.status.nodeInfo.osImage
+              | if type != "string" then error("missing Talos version")
+                elif test("^Talos \\(v[0-9]+\\.[0-9]+\\.[0-9]+\\)$") then
+                  capture("^Talos \\((?<version>v[0-9]+\\.[0-9]+\\.[0-9]+)\\)$").version
+                else error("invalid Talos version") end)
+          | unique
+          | if length == 1 then .[0] else error("mixed Talos versions") end
+        '); then
+          echo "❌ Cannot determine one running Talos version across all nodes" >&2
           exit 1
         fi
 
-        # Project init leaves Talos unpinned; pin the version it already runs,
-        # then change only the desired boot image.
+        # Pin the version the cluster already runs, then change the boot image.
         yq -i ".spec.cluster.talos.version = \"${talos_version}\" | .spec.cluster.talos.extensions = [\"siderolabs/iscsi-tools\"]" ksail.yaml
         UPDATE_ARGS=$ARGS
         if [[ "$UPDATE_ARGS" =~ --image-verification[[:space:]][^[:space:]]* ]]; then

@@ -121,8 +121,10 @@ func TestHetznerManualSchematicRolloutIsOptInAndKeepsCleanup(t *testing.T) {
 
 type hetznerSchematicScenario struct {
 	name        string
+	liveVersion string
 	wantSuccess bool
 	wantNoApply bool
+	wantNoPlan  bool
 }
 
 type schematicRolloutFixture struct {
@@ -148,10 +150,19 @@ func TestHetznerSchematicRolloutRequiresLiveDriftAndReadback(t *testing.T) {
 
 	for _, scenario := range []hetznerSchematicScenario{
 		{name: "converged", wantSuccess: true},
+		{name: "converged-upgraded", liveVersion: "v1.14.2", wantSuccess: true},
 		{name: "pre-missing", wantNoApply: true},
 		{name: "pre-config-drift", wantNoApply: true},
 		{name: "not-ready"},
 		{name: "post-drift"},
+		{name: "mixed-version", wantNoPlan: true, wantNoApply: true},
+		{name: "missing-version", wantNoPlan: true, wantNoApply: true},
+		{name: "non-talos", wantNoPlan: true, wantNoApply: true},
+		{name: "mixed-missing-version", wantNoPlan: true, wantNoApply: true},
+		{name: "mixed-non-talos", wantNoPlan: true, wantNoApply: true},
+		{name: "no-nodes", wantNoPlan: true, wantNoApply: true},
+		{name: "nodes-query-failed", wantNoPlan: true, wantNoApply: true},
+		{name: "malformed-nodes", wantNoPlan: true, wantNoApply: true},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			t.Parallel()
@@ -167,6 +178,10 @@ func assertHetznerSchematicRolloutScenario(
 ) {
 	t.Helper()
 	fixture := newSchematicRolloutFixture(t)
+	liveVersion := scenario.liveVersion
+	if liveVersion == "" {
+		liveVersion = "v1.12.4"
+	}
 
 	commandContext, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
@@ -182,6 +197,7 @@ func assertHetznerSchematicRolloutScenario(
 		"PATH="+fixture.fakeBin+":"+os.Getenv("PATH"),
 		"ARGS=--name schematic-trial --image-verification cosign",
 		"SCENARIO="+scenario.name,
+		"LIVE_TALOS_VERSION="+liveVersion,
 		"CALLS_FILE="+fixture.callsFile,
 		"DRY_COUNT_FILE="+fixture.dryCountFile,
 		"KSAIL_SYSTEM_TEST_LOG_DIR="+fixture.logDir,
@@ -196,8 +212,13 @@ func assertHetznerSchematicRolloutScenario(
 
 	calls, readErr := os.ReadFile(fixture.callsFile)
 	require.NoError(t, readErr)
-	assert.Contains(t, string(calls), "cluster update --dry-run")
-	assert.Contains(t, string(calls), "--name schematic-trial")
+	assert.Contains(t, string(calls), "workload get nodes -o json")
+	if scenario.wantNoPlan {
+		assert.NotContains(t, string(calls), "cluster update --dry-run")
+	} else {
+		assert.Contains(t, string(calls), "cluster update --dry-run")
+		assert.Contains(t, string(calls), "--name schematic-trial")
+	}
 	assert.NotContains(t, string(calls), "--image-verification")
 
 	if scenario.wantNoApply {
@@ -209,7 +230,7 @@ func assertHetznerSchematicRolloutScenario(
 	if scenario.wantSuccess {
 		config, readErr := os.ReadFile(filepath.Join(fixture.project, "ksail.yaml"))
 		require.NoError(t, readErr)
-		assert.Contains(t, string(config), "v1.12.4")
+		assert.Contains(t, string(config), liveVersion)
 		assert.Contains(t, string(config), "siderolabs/iscsi-tools")
 	}
 }
