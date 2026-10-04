@@ -742,6 +742,41 @@ jobs:
           .github/scripts/verify-otelzap-parity.sh
           .github/scripts/verify-otelzap-parity.test.sh
 
+  verify-vulnerability-identities:
+    name: 🔐 Verify Local Source Vulnerability Identities
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: 📦 Install pinned vulnerability scanner
+        env:
+          GOBIN: ${{ runner.temp }}/vulnerability-scanner
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+
+      - name: 🧪 Verify actual scanner positive and negative controls
+        env:
+          GOVULNCHECK_BIN: ${{ runner.temp }}/vulnerability-scanner/govulncheck
+        run: |
+          scanner_module_cache="$(go env GOMODCACHE)"
+          printf -v GOVULNCHECK_TEST_DB '%s:%s%s/golang.org/x/vuln@v1.8.0/internal/client/testdata/vulndb-v1' file // "$scanner_module_cache"
+          export GOVULNCHECK_TEST_DB
+          go test -tags integration ./internal/vulnidentity/... -count=1
+
+      - name: 🔐 Query every published local-source identity
+        run: go run ./internal/vulnidentity/cmd/vulnidentity -scanner "$RUNNER_TEMP/vulnerability-scanner/govulncheck"
+
   build-artifact:
     name: 🏗️ Build KSail Binary
     runs-on: ubuntu-latest
@@ -2041,6 +2076,7 @@ jobs:
         ci-go,
         wait-for-validate-go,
         verify-go-archive,
+        verify-vulnerability-identities,
         build-artifact,
         generate,
         auto-commit,
@@ -2077,6 +2113,7 @@ jobs:
             ${{ needs.ci-go.result }}
             ${{ needs.wait-for-validate-go.result }}
             ${{ needs.verify-go-archive.result }}
+            ${{ needs.verify-vulnerability-identities.result }}
             ${{ needs.build-artifact.result }}
             ${{ needs.generate.result }}
             ${{ needs.auto-commit.result }}
