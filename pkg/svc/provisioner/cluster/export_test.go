@@ -1,6 +1,7 @@
 package clusterprovisioner
 
 import (
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	kindprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kind"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
@@ -24,6 +25,11 @@ func SetKindProvisionerFactory(factory KindProvisionerFactory) func() {
 // ExportWrapK3kServerArgs exposes wrapK3kServerArgs for testing.
 func ExportWrapK3kServerArgs(args []string) []string {
 	return wrapK3kServerArgs(args)
+}
+
+// ExportK3kClusterName exposes k3kClusterName for testing.
+func ExportK3kClusterName(cluster *v1alpha1.Cluster) string {
+	return k3kClusterName(cluster)
 }
 
 // ExportApplyK3dNodeCounts exposes applyK3dNodeCounts for testing.

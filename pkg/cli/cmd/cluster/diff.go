@@ -121,7 +121,7 @@ func handleDiffRunE(
 	deps lifecycle.Deps,
 	opts diffOptions,
 ) error {
-	ctx, _, err := loadAndValidateClusterConfig(cfgManager, deps)
+	ctx, _, err := loadAndValidateClusterConfig(cfgManager, deps, existingClusterTarget)
 	if err != nil {
 		return err
 	}

@@ -29,6 +29,28 @@ func wrapK3kServerArgs(args []string) []string {
 	return []string{"'" + strings.Join(args, " ") + "'"}
 }
 
+// k3kClusterName returns the k3k cluster (and namespace) name for K3s on the Kubernetes
+// provider. resolveClusterNameFromContext normally extracts it from k3dConfig.Name, but k3d config
+// is skipped for this path, so it is derived from the connection context, which a name override
+// sets: the Kubernetes provider writes a "k3k-<name>" context (via the k3k operator) and standalone
+// paths use "k3d-<name>", so whichever prefix is present is stripped. A custom context, which
+// diff and update keep for a named cluster, carries no name, so metadata.name is used instead;
+// with neither, the context itself is used as before.
+func k3kClusterName(cluster *v1alpha1.Cluster) string {
+	contextName := cluster.Spec.Cluster.Connection.Context
+
+	name := strings.TrimPrefix(strings.TrimPrefix(contextName, "k3k-"), "k3d-")
+	if name != "" && name != contextName {
+		return name
+	}
+
+	if name := strings.TrimSpace(cluster.Name); name != "" {
+		return name
+	}
+
+	return contextName
+}
+
 // createK3dKubernetesProvisioner creates a K3s provisioner that runs inside
 // a host Kubernetes cluster using the k3k operator.
 func (f DefaultFactory) createK3dKubernetesProvisioner(
@@ -36,17 +58,7 @@ func (f DefaultFactory) createK3dKubernetesProvisioner(
 ) (Provisioner, any, error) {
 	opts := cluster.Spec.Provider.Kubernetes
 
-	// resolveClusterNameFromContext normally extracts from k3dConfig.Name, but k3d
-	// config is skipped for the Kubernetes provider path. Derive from the connection
-	// context (set by applyClusterNameOverride). The Kubernetes provider writes a
-	// "k3k-<name>" context (via the k3k operator); standalone paths use "k3d-<name>".
-	// Strip whichever prefix is present so the k3k cluster/namespace name is correct.
-	clusterName := strings.TrimPrefix(cluster.Spec.Cluster.Connection.Context, "k3k-")
-	clusterName = strings.TrimPrefix(clusterName, "k3d-")
-
-	if clusterName == "" {
-		clusterName = cluster.Name
-	}
+	clusterName := k3kClusterName(cluster)
 
 	hostClient, restConfig, dynClient, k8sProvider, err := buildKubernetesInfra(opts)
 	if err != nil {
