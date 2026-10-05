@@ -2,10 +2,14 @@ package talosprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
@@ -90,6 +94,140 @@ func (p *Provisioner) saveTalosconfig(configBundle *bundle.Bundle) error {
 	_, _ = fmt.Fprintf(p.logWriter, "Talosconfig saved to %s\n", talosconfigPath)
 
 	return nil
+}
+
+// repointTalosconfigEndpoint replaces fromIP with toIP in the endpoints and nodes
+// of every saved talosconfig context belonging to clusterName, so talosctl stops
+// dialing an address that is about to be released (#6032). Only this cluster's
+// contexts are touched (see isClusterTalosContext), and a missing talosconfig is
+// not an error: there is nothing stale to repoint.
+func (p *Provisioner) repointTalosconfigEndpoint(clusterName, fromIP, toIP string) error {
+	if p.options == nil || fromIP == "" || toIP == "" {
+		return nil
+	}
+
+	talosconfigPath, err := canonicalTalosconfigPath(p.options.TalosconfigPath)
+	if err != nil || talosconfigPath == "" {
+		return err
+	}
+
+	existing, err := clientconfig.Open(talosconfigPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+
+		return fmt.Errorf("failed to open existing talosconfig: %w", err)
+	}
+
+	if !repointClusterContexts(existing, clusterName, fromIP, toIP) {
+		return nil
+	}
+
+	err = existing.Save(talosconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to save repointed talosconfig: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Talosconfig endpoints moved from %s to %s\n", fromIP, toIP)
+
+	return nil
+}
+
+// canonicalTalosconfigPath expands and canonicalizes a configured talosconfig
+// path. It returns "" for an unconfigured path and for one that does not exist
+// (even when its parent directory is gone): there is then nothing to rewrite.
+func canonicalTalosconfigPath(path string) (string, error) {
+	if path == "" {
+		return "", nil
+	}
+
+	expanded, err := fsutil.ExpandHomePath(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to expand talosconfig path: %w", err)
+	}
+
+	_, err = os.Lstat(expanded)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", nil
+	}
+
+	canonical, err := fsutil.EvalCanonicalPath(expanded)
+	if err != nil {
+		return "", fmt.Errorf("failed to canonicalize talosconfig path: %w", err)
+	}
+
+	return canonical, nil
+}
+
+// repointClusterContexts moves every context of clusterName from fromIP to toIP
+// and reports whether any context changed.
+func repointClusterContexts(config *clientconfig.Config, clusterName, fromIP, toIP string) bool {
+	changed := false
+
+	for name, talosContext := range config.Contexts {
+		if !isClusterTalosContext(name, talosContext, clusterName) {
+			continue
+		}
+
+		endpoints, endpointsChanged := replaceAddress(talosContext.Endpoints, fromIP, toIP)
+		nodes, nodesChanged := replaceAddress(talosContext.Nodes, fromIP, toIP)
+
+		talosContext.Endpoints = endpoints
+		talosContext.Nodes = nodes
+		changed = changed || endpointsChanged || nodesChanged
+	}
+
+	return changed
+}
+
+// isClusterTalosContext reports whether a saved talosconfig context belongs to
+// clusterName: it records the cluster, carries its name, or carries the name
+// Talos's Merge gives it on a collision (`<name>-<n>`). Generated contexts do not
+// record a cluster, so a merge-renamed context is only recognisable by name.
+func isClusterTalosContext(
+	name string,
+	talosContext *clientconfig.Context,
+	clusterName string,
+) bool {
+	if talosContext == nil {
+		return false
+	}
+
+	if name == clusterName || talosContext.Cluster == clusterName {
+		return true
+	}
+
+	suffix, renamed := strings.CutPrefix(name, clusterName+"-")
+	if !renamed || suffix == "" {
+		return false
+	}
+
+	_, err := strconv.ParseUint(suffix, 10, 64)
+
+	return err == nil
+}
+
+// replaceAddress returns addresses with every fromIP replaced by toIP, dropping
+// the duplicate when toIP is already listed, and whether anything changed.
+func replaceAddress(addresses []string, fromIP, toIP string) ([]string, bool) {
+	if !slices.Contains(addresses, fromIP) {
+		return addresses, false
+	}
+
+	result := make([]string, 0, len(addresses))
+
+	for _, address := range addresses {
+		if address == fromIP {
+			address = toIP
+		}
+
+		if !slices.Contains(result, address) {
+			result = append(result, address)
+		}
+	}
+
+	return result, true
 }
 
 // mergeTalosconfigBytes merges raw talosconfig bytes into an existing talosconfig file.
