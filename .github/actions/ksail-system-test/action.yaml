@@ -137,6 +137,10 @@ inputs:
       schematic and the cluster is healthy. Intended for a manual dispatch.
     required: false
     default: "false"
+  talos-schematic-server-type:
+    description: Explicit Hetzner class for an initialized Talos schematic trial (cx23, cx33 or cpx22). Empty keeps defaults.
+    required: false
+    default: ""
   floating-ip-toggle:
     description: |
       Hetzner + Talos only. When 'true', runs an additional step that enables
@@ -237,11 +241,16 @@ runs:
         UPGRADE_FROM: ${{ inputs.kubernetes-upgrade-from }}
         UPGRADE_TO: ${{ inputs.kubernetes-upgrade-to }}
         SCHEMATIC_TRIAL: ${{ inputs.test-talos-schematic-rollout }}
+        SERVER_TYPE: ${{ inputs.talos-schematic-server-type }}
         INIT: ${{ inputs.init }}
       run: |
         set -euo pipefail
         # Inject GHCR credentials into --local-registry if it contains ghcr.io
         RESOLVED_ARGS="$ARGS"
+        if [[ -n "${SERVER_TYPE:-}" && "${SCHEMATIC_TRIAL:-false}" != true ]]; then
+          echo "❌ ERROR: a server class override requires the schematic trial" >&2
+          exit 1
+        fi
         if [[ "$ARGS" == *"--local-registry"* ]] && [[ "$ARGS" == *"ghcr.io"* ]] && [[ -n "$GHCR_USER" ]] && [[ -n "$GHCR_TOKEN" ]]; then
           # Replace 'ghcr.io/' with 'user:token@ghcr.io/'
           RESOLVED_ARGS="${ARGS//ghcr.io\//${GHCR_USER}:${GHCR_TOKEN}@ghcr.io/}"
@@ -298,6 +307,7 @@ runs:
       with:
         distribution: ${{ inputs.distribution }}
         provider: ${{ inputs.provider }}
+        hetzner-server-type: ${{ inputs.talos-schematic-server-type }}
         args: ${{ steps.resolve-args.outputs.args }}
         # KSail's four default mirrors plus ECR Public, where Argo CD's chart pulls
         # Redis. The warm-mirror-cache action caches the same five registries, so
