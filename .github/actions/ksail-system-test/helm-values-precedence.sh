@@ -39,19 +39,35 @@ verify_observation() {
 	observation_matches "$@" || fail 'native Flux observation is incomplete or differs'
 }
 
+read_observation() {
+	local output="$1" deadline="$2" remaining
+	remaining=$((deadline - SECONDS - 1))
+	shift 2
+	# Reserve the termination grace inside the total observation deadline.
+	((remaining > 0)) || return 1
+	if ((remaining > 10)); then remaining=10; fi
+	timeout --kill-after=1s "${remaining}s" kubectl get "$@" "${target[@]}" \
+		--request-timeout="${remaining}s" >"$output"
+}
+
 wait_for_observation() {
 	# Ready may be set before Flux writes its final observed generation and clears
 	# Reconciling. Read both objects again until the complete strict check passes.
 	local directory="$1" namespace="$2" attempt deadline=$((SECONDS + 120))
 	for ((attempt = 0; attempt < 60 && SECONDS < deadline; attempt++)); do
-		if kubectl get helmrelease/values-probe --namespace "$namespace" --output json \
-			"${target[@]}" --request-timeout=10s >"$directory/observed-release.json" &&
-			kubectl get configmap/values-probe --namespace "$namespace" --output json \
-				"${target[@]}" --request-timeout=10s >"$directory/observed-child.json" &&
+		if read_observation "$directory/observed-release.json" "$deadline" \
+			helmrelease/values-probe --namespace "$namespace" --output json &&
+			read_observation "$directory/observed-child.json" "$deadline" \
+				configmap/values-probe --namespace "$namespace" --output json &&
 			observation_matches "$directory/expected.json" "$directory/observed-release.json" "$directory/observed-child.json"; then
 			return 0
 		fi
-		sleep 2
+		if ((SECONDS >= deadline)); then break; fi
+		if ((deadline - SECONDS < 2)); then
+			sleep 1
+		else
+			sleep 2
+		fi
 	done
 	fail 'native Flux observation is incomplete or differs after the bounded wait'
 }
@@ -65,7 +81,7 @@ fi
 [[ "${DISTRIBUTION:-}" == Vanilla && "${PROVIDER:-}" == Docker && "${INIT:-}" == true ]] ||
 	fail 'only the existing Docker/Vanilla initialized job is permitted'
 
-for executable in kubectl helm jq docker; do
+for executable in kubectl helm jq docker timeout; do
 	command -v "$executable" >/dev/null || fail "$executable is required"
 done
 log_dir="${SYSTEM_TEST_LOG_DIR:-/tmp/ksail-system-test-logs}/helm-values-precedence"

@@ -52,6 +52,8 @@ Before you begin developing, ensure you have the following installed:
 - [golangci-lint](https://golangci-lint.run/docs/welcome/install/)
 - [mega-linter](https://github.com/oxsecurity/megalinter/tree/main/mega-linter-runner#installation)
 - [Node.js (v24+)](https://nodejs.org/en/download/) — Required for building documentation (matches CI)
+- GNU coreutils — The CI harness uses GNU `timeout` to test hanging processes. On macOS, install
+  `coreutils`; the harness also recognizes its `gtimeout` command.
 
 ### Code Style
 
