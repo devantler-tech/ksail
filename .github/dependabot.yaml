@@ -17,7 +17,7 @@ registries:
 updates:
   # Other ecosystems retain the default five version-update PR slots. Go has
   # four standing compatibility upgrades, so ten slots leave six for unrelated
-  # updates instead of one (ksail#7135). Security updates have a separate limit.
+  # updates instead of one (ksail#7135). Security updates are not subject to this limit.
   # CLI and desktop share this manifest. Tidy includes tagged desktop dependencies,
   # so the bot owns every required dependency edit without a foreign sync commit.
   - package-ecosystem: gomod
