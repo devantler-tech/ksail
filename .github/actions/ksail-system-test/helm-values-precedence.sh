@@ -7,7 +7,7 @@ fail() {
 	exit 1
 }
 
-verify_observation() {
+observation_matches() {
 	# Require one complete document from each reader, fresh reconciliation of the
 	# exact created release, Helm ownership, and equal values including JSON types.
 	jq -e -n --slurpfile expected "$1" --slurpfile release "$2" --slurpfile child "$3" '
@@ -32,7 +32,28 @@ verify_observation() {
       $rendered.metadata.annotations["meta.helm.sh/release-name"] == $want.release and
       $rendered.metadata.annotations["meta.helm.sh/release-namespace"] == $want.namespace and
       ($rendered.data["values.json"] | fromjson) == $want.values)
-  ' >/dev/null || fail 'native Flux observation is incomplete or differs'
+  ' >/dev/null
+}
+
+verify_observation() {
+	observation_matches "$@" || fail 'native Flux observation is incomplete or differs'
+}
+
+wait_for_observation() {
+	# Ready may be set before Flux writes its final observed generation and clears
+	# Reconciling. Read both objects again until the complete strict check passes.
+	local directory="$1" namespace="$2" attempt deadline=$((SECONDS + 120))
+	for ((attempt = 0; attempt < 60 && SECONDS < deadline; attempt++)); do
+		if kubectl get helmrelease/values-probe --namespace "$namespace" --output json \
+			"${target[@]}" --request-timeout=10s >"$directory/observed-release.json" &&
+			kubectl get configmap/values-probe --namespace "$namespace" --output json \
+				"${target[@]}" --request-timeout=10s >"$directory/observed-child.json" &&
+			observation_matches "$directory/expected.json" "$directory/observed-release.json" "$directory/observed-child.json"; then
+			return 0
+		fi
+		sleep 2
+	done
+	fail 'native Flux observation is incomplete or differs after the bounded wait'
 }
 
 if [[ "${1:-}" == --verify-observation ]]; then
@@ -329,9 +350,7 @@ nested: {flag: true, zero: 9, empty: later, list: [2]}
     uid:.metadata.uid,generation:.metadata.generation,values:$values}' \
 		"$directory/created-release.json" >"$directory/expected.json"
 	kubectl wait --for=condition=Ready helmrelease/values-probe --namespace "$namespace" --timeout=300s "${target[@]}"
-	kubectl get helmrelease/values-probe --namespace "$namespace" --output json "${target[@]}" >"$directory/observed-release.json"
-	kubectl get configmap/values-probe --namespace "$namespace" --output json "${target[@]}" >"$directory/observed-child.json"
-	verify_observation "$directory/expected.json" "$directory/observed-release.json" "$directory/observed-child.json"
+	wait_for_observation "$directory" "$namespace"
 	echo "Native Flux values confirmed: $kind / $family"
 }
 
