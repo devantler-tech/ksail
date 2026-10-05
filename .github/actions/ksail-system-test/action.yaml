@@ -365,6 +365,21 @@ runs:
         gitops-path: ${{ inputs.gitops-path }}
         distribution: ${{ inputs.distribution }}
 
+    - name: 🧪 Native Flux Helm values precedence
+      if: >-
+        inputs.provider == 'Docker' && inputs.distribution == 'Vanilla' && inputs.init == 'true' &&
+        contains(inputs.args, '--gitops-engine Flux') && contains(inputs.args, '--name system-test-cluster')
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        INIT: ${{ inputs.init }}
+        ARGS: ${{ steps.resolve-args.outputs.args }}
+      run: |
+        set -euo pipefail
+        bash "$GITHUB_WORKSPACE/.github/actions/ksail-system-test/helm-values-precedence.sh" 2>&1 |
+          tee /tmp/ksail-system-test-logs/helm-values-precedence.log
+
     - name: 🧪 Workload Mirror Tests
       id: workload-mirror-tests
       if: inputs.provider == 'Docker' && inputs.test-workload-mirror == 'true'

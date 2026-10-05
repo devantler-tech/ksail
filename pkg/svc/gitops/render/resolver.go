@@ -274,18 +274,29 @@ func applyHelmRepository(
 	spec.ChartName = chartName
 }
 
-// buildValues merges spec.values with any in-repo valuesFrom sources and returns
-// the result as YAML for ChartSpec.ValuesYaml. The stream is already
-// Flux-substituted before Expand is called, so no substitution happens here.
+// buildValues merges references in list order, with inline values taking
+// precedence until a resolved targetPath reference overwrites them. The stream
+// is already Flux-substituted before Expand, so no substitution happens here.
 func buildValues(helmRelease *helmv2.HelmRelease, sources SourceIndex) (string, error) {
-	values := helmRelease.GetValues()
-	if values == nil {
-		values = map[string]any{}
-	}
+	values := map[string]any{}
+	inlineValues := helmRelease.GetValues()
 
 	for index := range helmRelease.Spec.ValuesFrom {
-		applyValuesFrom(values, helmRelease.Spec.ValuesFrom[index], helmRelease.Namespace, sources)
+		ref := helmRelease.Spec.ValuesFrom[index]
+		if ref.TargetPath != "" {
+			if _, resolved := lookupValuesRef(ref, helmRelease.Namespace, sources); resolved {
+				// Inline values precede a target assignment, which keeps its list
+				// position relative to later references. A missing optional target
+				// must not consume inline precedence.
+				mergeValues(values, inlineValues)
+				inlineValues = nil
+			}
+		}
+
+		applyValuesFrom(values, ref, helmRelease.Namespace, sources)
 	}
+
+	mergeValues(values, inlineValues)
 
 	if len(values) == 0 {
 		return "", nil

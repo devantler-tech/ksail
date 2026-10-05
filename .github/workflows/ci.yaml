@@ -297,6 +297,7 @@ jobs:
               - 'pkg/svc/diff/**'
               - 'pkg/svc/image/**'
               - 'pkg/svc/installer/**'
+              - 'pkg/svc/gitops/render/**'
               - 'pkg/svc/provider/**'
               - 'pkg/svc/provisioner/**'
               - 'pkg/svc/registryresolver/**'
@@ -405,6 +406,7 @@ jobs:
               - '.github/scripts/assert-gitops-deployed.sh'
               - '.github/scripts/assert-gitops-deployed.test.sh'
               - '.github/actions/ksail-test-workload/**'
+              - '.github/actions/ksail-system-test/helm-values-precedence.sh'
               - '.github/workflows/ci.yaml'
 
   eks-smoke-scripts:
@@ -513,7 +515,8 @@ jobs:
             .github/actions/ksail-test-workload/install-with-recovery.sh \
             .github/actions/ksail-test-workload/install-with-recovery.test.sh \
             .github/scripts/assert-gitops-deployed.sh \
-            .github/scripts/assert-gitops-deployed.test.sh
+            .github/scripts/assert-gitops-deployed.test.sh \
+            .github/actions/ksail-system-test/helm-values-precedence.sh
           .github/scripts/assert-gitops-deployed.test.sh
           .github/actions/ksail-test-workload/remote-resource-guard.test.sh
           .github/actions/ksail-test-workload/install-with-recovery.test.sh
