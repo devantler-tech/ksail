@@ -125,9 +125,9 @@ With `--skip-helm-render`, schema discovery uses only CRDs present in the source
 
 For HelmReleases, values from in-repository ConfigMaps and Secrets are combined in their declared
 order. Inline values take precedence over ordinary references, including explicit `false`, zero
-and empty values. A resolved `targetPath` reference overrides the values before it, including inline
-values; references after that assignment still follow their declared order. Literal target values
-retain their contents. Missing references remain subject to the rendering coverage warnings.
+and empty values. Target references follow the pinned Flux controller's merge stages, including
+the final inline merge. Unquoted target scalars use Helm's typed parsing; quoted and literal target
+values remain strings. Literal target values retain their contents. Missing references remain subject to the rendering coverage warnings.
 
 ## Move images around
 

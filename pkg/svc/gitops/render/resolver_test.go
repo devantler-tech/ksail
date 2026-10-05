@@ -241,8 +241,8 @@ func TestBuildChartSpecValuesFromTargetPath(t *testing.T) {
 	values := unmarshalValues(t, spec.ValuesYaml)
 	image, ok := values["image"].(map[string]any)
 	require.True(t, ok, "the value should be set at the nested targetPath")
-	// --set-string semantics: the flat value stays a string, never coerced to a number.
-	assert.Equal(t, "123", image["tag"])
+	// Native Flux uses Helm typed parsing for an unquoted target scalar.
+	assert.Equal(t, float64(123), image["tag"])
 }
 
 func TestBuildChartSpecValuesFromTargetPathLiteral(t *testing.T) {

@@ -274,9 +274,9 @@ func applyHelmRepository(
 	spec.ChartName = chartName
 }
 
-// buildValues merges references in list order, with inline values taking
-// precedence until a resolved targetPath reference overwrites them. The stream
-// is already Flux-substituted before Expand, so no substitution happens here.
+// buildValues follows the merge stages of the pinned native Flux controller:
+// references in list order, inline before each resolved target, and inline again
+// at the end. The stream is already Flux-substituted before Expand.
 func buildValues(helmRelease *helmv2.HelmRelease, sources SourceIndex) (string, error) {
 	values := map[string]any{}
 	inlineValues := helmRelease.GetValues()
@@ -285,18 +285,14 @@ func buildValues(helmRelease *helmv2.HelmRelease, sources SourceIndex) (string, 
 		ref := helmRelease.Spec.ValuesFrom[index]
 		if ref.TargetPath != "" {
 			if _, resolved := lookupValuesRef(ref, helmRelease.Namespace, sources); resolved {
-				// Inline values precede a target assignment, which keeps its list
-				// position relative to later references. A missing optional target
-				// must not consume inline precedence.
-				mergeValues(values, inlineValues)
-				inlineValues = nil
+				values = mergeValues(values, inlineValues)
 			}
 		}
 
-		applyValuesFrom(values, ref, helmRelease.Namespace, sources)
+		values = applyValuesFrom(values, ref, helmRelease.Namespace, sources)
 	}
 
-	mergeValues(values, inlineValues)
+	values = mergeValues(values, inlineValues)
 
 	if len(values) == 0 {
 		return "", nil
@@ -370,44 +366,48 @@ func applyValuesFrom(
 	ref meta.ValuesReference,
 	namespace string,
 	sources SourceIndex,
-) {
+) map[string]any {
 	raw, ok := lookupValuesRef(ref, namespace, sources)
 	if !ok {
-		return
+		return values
 	}
 
 	if ref.TargetPath != "" {
 		applyTargetPathValue(values, ref, raw)
 
-		return
+		return values
 	}
 
 	var parsed map[string]any
 
 	if yaml.Unmarshal([]byte(raw), &parsed) != nil {
-		return
+		return values
 	}
 
-	mergeValues(values, parsed)
+	return mergeValues(values, parsed)
 }
 
 // applyTargetPathValue merges a single flat value at ref.TargetPath, mirroring
 // helm-controller's valuesFrom targetPath handling so the offline render matches
-// what Flux applies. A non-literal reference uses Helm's --set-string semantics
-// (the target path is interpreted but the value stays a string); a literal
+// what Flux applies. An unquoted non-literal value uses Helm's typed --set
+// parsing; quoted values use --set-string. A literal
 // reference uses --set-literal semantics (the value is injected verbatim, with
 // no comma/bracket/dot/equals interpretation — the safe path for config files,
 // JSON blobs and multi-line strings). A malformed assignment is skipped rather
 // than failing the whole offline render, matching the root-merge branch.
 func applyTargetPathValue(values map[string]any, ref meta.ValuesReference, raw string) {
-	assignment := fmt.Sprintf("%s=%s", ref.TargetPath, raw)
-
-	parse := helmv4strvals.ParseIntoString
+	parse := helmv4strvals.ParseInto
 	if ref.Literal {
 		parse = helmv4strvals.ParseLiteralInto
+	} else if strings.HasPrefix(raw, "\"") && strings.HasSuffix(raw, "\"") {
+		raw = strings.Trim(raw, "\"")
+		parse = helmv4strvals.ParseIntoString
+	} else if strings.HasPrefix(raw, "'") && strings.HasSuffix(raw, "'") {
+		raw = strings.Trim(raw, "'")
+		parse = helmv4strvals.ParseIntoString
 	}
 
-	_ = parse(assignment, values)
+	_ = parse(fmt.Sprintf("%s=%s", ref.TargetPath, raw), values)
 }
 
 // sourceKey builds the "namespace/name" lookup key, defaulting an empty
@@ -422,17 +422,25 @@ func sourceKey(refNamespace, refName, defaultNamespace string) string {
 	return namespace + "/" + refName
 }
 
-// mergeValues deep-merges src into dst (src wins on conflicts).
-func mergeValues(dst, src map[string]any) {
+// mergeValues returns a new map with src winning conflicts, matching Flux.
+// Untouched nested values retain their identity for target-path assignments.
+func mergeValues(dst, src map[string]any) map[string]any {
+	merged := make(map[string]any, len(dst))
+	for key, value := range dst {
+		merged[key] = value
+	}
+
 	for key, srcValue := range src {
 		if srcMap, ok := srcValue.(map[string]any); ok {
-			if dstMap, ok := dst[key].(map[string]any); ok {
-				mergeValues(dstMap, srcMap)
+			if dstMap, ok := merged[key].(map[string]any); ok {
+				merged[key] = mergeValues(dstMap, srcMap)
 
 				continue
 			}
 		}
 
-		dst[key] = srcValue
+		merged[key] = srcValue
 	}
+
+	return merged
 }

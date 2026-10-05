@@ -116,8 +116,8 @@ func TestBuildChartSpecLiteralTargetOverridesInline(t *testing.T) {
 	}
 }
 
-// A target assignment keeps its position in the reference list. Applying all
-// target assignments in a second pass would incorrectly win over a later root.
+// Native helm-controller v1.6.5 merges inline values again after references.
+// A scalar inline conflict therefore wins with either target/root ordering.
 func TestBuildChartSpecTargetReferenceOrder(t *testing.T) {
 	t.Parallel()
 
@@ -127,20 +127,20 @@ func TestBuildChartSpecTargetReferenceOrder(t *testing.T) {
 		want       any
 	}{
 		{
-			name: "target overrides inline",
+			name: "inline scalar overrides last target",
 			references: []fluxmeta.ValuesReference{
 				{Kind: "ConfigMap", Name: "root"},
 				{Kind: "Secret", Name: "target", ValuesKey: "count", TargetPath: "replicaCount"},
 			},
-			want: "4",
+			want: float64(3),
 		},
 		{
-			name: "later root overrides earlier target",
+			name: "inline scalar overrides target before root",
 			references: []fluxmeta.ValuesReference{
 				{Kind: "Secret", Name: "target", ValuesKey: "count", TargetPath: "replicaCount"},
 				{Kind: "ConfigMap", Name: "root"},
 			},
-			want: float64(2),
+			want: float64(3),
 		},
 		{
 			name: "missing optional target preserves inline precedence",
@@ -171,6 +171,43 @@ func TestBuildChartSpecTargetReferenceOrder(t *testing.T) {
 			values := unmarshalValues(t, spec.ValuesYaml)
 			require.Contains(t, values, "replicaCount")
 			assert.Equal(t, test.want, values["replicaCount"])
+		})
+	}
+}
+
+// Without an inline conflict, target values retain Helm's typed scalar parsing.
+func TestBuildChartSpecTargetScalarTypes(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name string
+		raw  string
+		want any
+	}{
+		{name: "number", raw: "123", want: float64(123)},
+		{name: "false", raw: "false", want: false},
+		{name: "zero", raw: "0", want: float64(0)},
+		{name: "null", raw: "null", want: nil},
+		{name: "empty", raw: "", want: ""},
+		{name: "single quoted number", raw: "'123'", want: "123"},
+		{name: "double quoted false", raw: "\"false\"", want: "false"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			helmRelease := chartRefRelease()
+			helmRelease.Spec.ValuesFrom = []fluxmeta.ValuesReference{
+				{Kind: "ConfigMap", Name: "scalar", ValuesKey: "value", TargetPath: "scalar"},
+			}
+			sources := ociIndex(&sourcev1.OCIRepositoryRef{Tag: "6.5.0"})
+			sources.ConfigMaps = map[string]map[string]string{
+				"flux-system/scalar": {"value": test.raw},
+			}
+
+			spec := resolveSpec(t, helmRelease, sources)
+			values := unmarshalValues(t, spec.ValuesYaml)
+			require.Contains(t, values, "scalar")
+			assert.Equal(t, test.want, values["scalar"])
 		})
 	}
 }

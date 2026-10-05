@@ -279,15 +279,15 @@ nested: {flag: true, zero: 9, empty: later, list: [2]}
 		;;
 	target-first | target-last | optional-target)
 		# Keep order cases independent of other chart values and YAML merge tests.
-		printf 'replicaCount: 2\n' >"$directory/first/values.yaml"
+		printf 'replicaCount: 2\notherCount: 2\n' >"$directory/first/values.yaml"
 		if [[ "$family" == target-first ]]; then
-			expected='{"replicaCount":2}'
-			refs=$(jq -cn --arg kind "$kind" '[{kind:$kind,name:"target",valuesKey:"count",targetPath:"replicaCount"},{kind:$kind,name:"first"}]')
+			expected='{"replicaCount":3,"otherCount":2}'
+			refs=$(jq -cn --arg kind "$kind" '[{kind:$kind,name:"target",valuesKey:"count",targetPath:"replicaCount"},{kind:$kind,name:"target",valuesKey:"count",targetPath:"otherCount"},{kind:$kind,name:"first"}]')
 		elif [[ "$family" == target-last ]]; then
-			expected='{"replicaCount":"4"}'
-			refs=$(jq -cn --arg kind "$kind" '[{kind:$kind,name:"first"},{kind:$kind,name:"target",valuesKey:"count",targetPath:"replicaCount"}]')
+			expected='{"replicaCount":3,"otherCount":4}'
+			refs=$(jq -cn --arg kind "$kind" '[{kind:$kind,name:"first"},{kind:$kind,name:"target",valuesKey:"count",targetPath:"replicaCount"},{kind:$kind,name:"target",valuesKey:"count",targetPath:"otherCount"}]')
 		else
-			expected='{"replicaCount":3}'
+			expected='{"replicaCount":3,"otherCount":2}'
 			refs=$(jq -cn --arg kind "$kind" '[{kind:$kind,name:"absent",valuesKey:"count",targetPath:"replicaCount",optional:true},{kind:$kind,name:"first"}]')
 		fi
 		;;
