@@ -1454,12 +1454,14 @@ func (o *updateOrchestrator) auditUnchangedUpdate(updater clusterprovisioner.Upd
 	}
 
 	result := clusterupdate.NewEmptyUpdateResult()
+
 	err := auditor.AuditUpdate(o.cmd.Context(), o.clusterName, result)
 	if err != nil {
 		return fmt.Errorf("audit unchanged cluster update: %w", err)
 	}
 
 	reportFailedChanges(o.cmd, result)
+
 	if result.HasFailedChanges() {
 		return errUpdateChangesFailed
 	}

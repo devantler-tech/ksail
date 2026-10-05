@@ -579,6 +579,7 @@ func TestAuditUpdate_ReportsDisabledAutoscalerServers(t *testing.T) {
 			t.Parallel()
 
 			hzProvider, api := newAutoscalerHcloudAPI(t, removedPoolAndOtherClusterServers()...)
+
 			pools := []string{}
 			if retainPool {
 				pools = append(pools, removedPool)
