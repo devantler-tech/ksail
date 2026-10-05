@@ -12,6 +12,11 @@ on:
         required: false
         type: boolean
         default: true
+      run_local_recovery_trial:
+        description: "Run the provider-free local recovery trial and always-on security checks"
+        required: false
+        type: boolean
+        default: false
 
 env:
   # Comma, not pipe: Go falls back to direct only when the proxy answers 404/410. A pipe also
@@ -34,7 +39,8 @@ concurrency:
   #
   # Pull requests and merge-queue entries keep the ref-keyed group, so superseded
   # runs there still cancel exactly as before.
-  group: "ci-ksail-${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}"
+  # An opted-in local recovery trial cannot cancel ordinary CI on the same ref.
+  group: "ci-ksail-${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}${{ inputs.run_local_recovery_trial && '-local-recovery-trial' || '' }}"
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions: {}
@@ -106,7 +112,7 @@ jobs:
   # Wait for sufficient GitHub API rate limit before proceeding
   rate-limit-gate:
     name: ⏳ Rate Limit Gate
-    if: github.event_name != 'merge_group'
+    if: github.event_name != 'merge_group' && !inputs.run_local_recovery_trial
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -1467,6 +1473,7 @@ jobs:
     # Local images only — no secrets/GHCR — so this also runs on fork PRs.
     if: >-
       !cancelled()
+      && !inputs.run_local_recovery_trial
       && (
         (github.event_name == 'pull_request' && needs.changes.outputs.operator-chart == 'true')
         || github.event_name == 'workflow_dispatch'
@@ -1506,7 +1513,7 @@ jobs:
         (github.event_name == 'pull_request'
         && needs.changes.outputs.system-test == 'true'
         && github.event.pull_request.head.repo.full_name == github.repository)
-        || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
+        || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
       )
     permissions:
       contents: read
@@ -1553,7 +1560,7 @@ jobs:
         (github.event_name == 'pull_request'
         && needs.changes.outputs.system-test == 'true'
         && github.event.pull_request.head.repo.full_name == github.repository)
-        || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
+        || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
       )
     permissions:
       contents: read
@@ -1648,7 +1655,7 @@ jobs:
         (github.event_name == 'pull_request'
         && needs.changes.outputs.system-test == 'true'
         && github.event.pull_request.head.repo.full_name == github.repository)
-        || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
+        || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
       )
     permissions:
       contents: read
@@ -2082,8 +2089,108 @@ jobs:
         # Release files are outside Go's test-cache inputs; always execute the audit.
         run: go test ./pkg/client/kubescape/... -count=1
 
+  local-recovery-trial:
+    name: 🧪 Local Connection Recovery Acceptance
+    if: github.event_name == 'workflow_dispatch' && inputs.run_local_recovery_trial
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      GOMAXPROCS: "2"
+      GOMEMLIMIT: "4GiB"
+      GOFLAGS: "-p=2"
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: 🧹 Free runner disk
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@c4f3a6d4d348c8195c0e44a0ef9b84fb0408ad29
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: 🧪 Reproduce local safety and partial-deletion cases
+        id: local-safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/local-recovery-evidence"
+          printf '%s\n' "$GITHUB_SHA" > "$RUNNER_TEMP/local-recovery-evidence/head.txt"
+          go test ./pkg/k8s ./pkg/cli/cmd/cluster -run 'TestForget|TestKubernetesCleanup_PartialDeletion' -count=1 -v 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/regressions.log"
+      - name: 🏗️ Build the actual CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          go build -o "$RUNNER_TEMP/ksail-local-recovery" . 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/build.log"
+      - name: 🧪 Exercise the actual CLI with local files and a recording API
+        shell: bash
+        run: |
+          set -euo pipefail
+          go run .github/scripts/local-connection-recovery-trial.go "$RUNNER_TEMP/ksail-local-recovery" 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/cli-trial.log"
+      - name: 🧪 Validate the complete Go suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test ./... -count=1 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/go-test.log"
+      - name: ⚙️ Install the canonical CI linter
+        if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.11.4
+          install-only: true
+          verify: false
+      - name: 🔍 Validate with the canonical CI linter
+        if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          golangci-lint version | tee "$RUNNER_TEMP/local-recovery-evidence/lint-version.log"
+          golangci-lint run --fix --timeout 15m \
+            --max-issues-per-linter 0 --max-same-issues 0 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/lint.log"
+      - name: ⚙️ Setup Node.js for canonical generation
+        if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+      - name: 📝 Regenerate all maintained artifacts
+        if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          go install github.com/vektra/mockery/v3@v3.5.4
+          make generate 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/generate.log"
+      - name: 📚 Build the documentation
+        if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm --prefix docs ci
+          npm --prefix docs run build 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/docs-build.log"
+      - name: 🔐 Require the tested source to remain unchanged
+        if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --binary > "$RUNNER_TEMP/local-recovery-evidence/generated.patch"
+          git status --porcelain --untracked-files=all > "$RUNNER_TEMP/local-recovery-evidence/working-tree.txt"
+          if [[ -s "$RUNNER_TEMP/local-recovery-evidence/working-tree.txt" ]]; then
+            cat "$RUNNER_TEMP/local-recovery-evidence/working-tree.txt"
+            echo '::error::Lint or generation changed the tested source. Apply the retained output and rerun acceptance at the resulting commit.'
+            exit 1
+          fi
+      - name: 📤 Preserve exact-head acceptance evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: local-recovery-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/local-recovery-evidence
+          if-no-files-found: error
+          retention-days: 14
+
   require-checks-in-pr:
-    name: CI - Required Checks
+    name: ${{ github.event_name == 'workflow_dispatch' && inputs.run_local_recovery_trial && 'Local Recovery Trial - Checks' || 'CI - Required Checks' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs:
@@ -2119,6 +2226,7 @@ jobs:
         rate-limit-gate-script,
         hetzner-cleanup-script,
         gitops-assert-scripts,
+        local-recovery-trial,
       ]
     if: ${{ always() }}
     steps:
@@ -2156,3 +2264,4 @@ jobs:
             ${{ needs.rate-limit-gate-script.result }}
             ${{ needs.hetzner-cleanup-script.result }}
             ${{ needs.gitops-assert-scripts.result }}
+            ${{ needs.local-recovery-trial.result }}
