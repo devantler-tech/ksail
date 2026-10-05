@@ -50,4 +50,11 @@ runs:
           echo "Producer KSail binary checksum mismatch" >&2
           exit 1
         fi
-        install -m 0755 "$binary" "$OUTPUT_PATH"
+        case "$OUTPUT_PATH" in
+          /usr/*|/opt/*|/bin/*|/sbin/*)
+            sudo install -m 0755 "$binary" "$OUTPUT_PATH"
+            ;;
+          *)
+            install -m 0755 "$binary" "$OUTPUT_PATH"
+            ;;
+        esac

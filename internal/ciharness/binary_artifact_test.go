@@ -244,6 +244,78 @@ func TestKSailBinaryArtifactInstallation(t *testing.T) {
 	}
 }
 
+func TestKSailBinaryArtifactInstallationPrivileges(t *testing.T) {
+	t.Parallel()
+	action := readCompositeAction(t, ".github/actions/restore-ksail-binary/action.yaml")
+	verify := findHarnessStep(t, action.Runs.Steps, "🔍 Verify and install producer binary")
+
+	for _, testCase := range []struct {
+		name, fixture, installer string
+		protected                bool
+	}{
+		{name: "protected-system-target", fixture: "valid", installer: "sudo\ninstall", protected: true},
+		{name: "writable-target", fixture: "valid", installer: "install"},
+		{name: "corrupt-system-target", fixture: "corrupt", protected: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			directory, payload := prepareBinaryArtifactFixture(t, testCase.fixture)
+			spies := prepareBinaryInstallSpies(t)
+			target := filepath.Join(spies.Name(), "installed-ksail")
+
+			if testCase.protected {
+				target = action.Inputs["output-path"].Default
+			}
+
+			output, err := runBinaryArtifactStep(t, verify,
+				"BINARY_DIR="+directory,
+				fmt.Sprintf("BINARY_SHA256=%x", sha256.Sum256([]byte(payload))),
+				"OUTPUT_PATH="+target,
+				"INSTALL_LOG="+filepath.Join(spies.Name(), "install-log"),
+				"PATH="+spies.Name()+string(os.PathListSeparator)+os.Getenv("PATH"),
+			)
+			if testCase.fixture == "corrupt" {
+				require.Error(t, err, output)
+
+				_, readErr := spies.ReadFile("install-log")
+				assert.ErrorIs(t, readErr, os.ErrNotExist, "corrupt input must not invoke any installer")
+
+				return
+			}
+
+			require.NoError(t, err, output)
+			invocation, err := spies.ReadFile("install-log")
+			require.NoError(t, err)
+			assert.Equal(t, fmt.Sprintf("%s\n-m\n0755\n%s/ksail\n%s\n",
+				testCase.installer, directory, target), string(invocation))
+		})
+	}
+}
+
+func prepareBinaryInstallSpies(t *testing.T) *os.Root {
+	t.Helper()
+	directory := t.TempDir()
+	writeExecutableStub(t, filepath.Join(directory, "install"), `#!/bin/sh
+printf 'install\n' > "$INSTALL_LOG"
+printf '%s\n' "$@" >> "$INSTALL_LOG"
+case "$4" in
+  /usr/*|/opt/*|/bin/*|/sbin/*)
+    echo "Unprivileged system installation rejected" >&2
+    exit 1
+    ;;
+esac
+`)
+	writeExecutableStub(t, filepath.Join(directory, "sudo"), `#!/bin/sh
+printf 'sudo\n' > "$INSTALL_LOG"
+printf '%s\n' "$@" >> "$INSTALL_LOG"
+`)
+	root, err := os.OpenRoot(directory)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, root.Close()) })
+
+	return root
+}
+
 func prepareBinaryArtifactFixture(t *testing.T, invalid string) (string, string) {
 	t.Helper()
 	directory := t.TempDir()
