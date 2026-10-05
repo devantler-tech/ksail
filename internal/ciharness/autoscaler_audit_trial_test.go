@@ -39,10 +39,11 @@ func TestAutoscalerAuditTrialRejectsFalseAcceptance(t *testing.T) {
 			)
 			require.NoError(t, pathErr)
 
+			//nolint:gosec // Executes the repository-owned trial entry point with fixed fixture inputs.
 			cmd := exec.CommandContext(
 				ctx,
 				script,
-			) //nolint:gosec // Executes the repository-owned trial entry point.
+			)
 			cmd.Dir = state
 			require.NoError(
 				t,
@@ -63,17 +64,7 @@ func TestAutoscalerAuditTrialRejectsFalseAcceptance(t *testing.T) {
 			assert.NotContains(t, string(output), "must-never-reach-evidence")
 
 			if mode == "complete" {
-				require.NoError(t, err, string(output))
-				assert.Contains(
-					t,
-					string(output),
-					"PASS: foreign network excluded; both unchanged updates failed; server preserved; probe absent",
-				)
-				//nolint:gosec // Reads a call record written by the test's stub into its own temporary directory.
-				calls, readErr := os.ReadFile(filepath.Join(state, "ksail-calls"))
-				require.NoError(t, readErr)
-				assert.Equal(t, 3, strings.Count(strings.TrimSpace(string(calls)), "\n")+1)
-				assert.NotContains(t, string(calls), "cluster delete")
+				assertAutoscalerAuditAccepted(t, state, output, err)
 			} else {
 				require.Error(t, err, string(output))
 				assert.NotContains(t, string(output), "PASS:")
@@ -85,6 +76,21 @@ func TestAutoscalerAuditTrialRejectsFalseAcceptance(t *testing.T) {
 			}
 		})
 	}
+}
+
+func assertAutoscalerAuditAccepted(t *testing.T, state string, output []byte, trialErr error) {
+	t.Helper()
+	require.NoError(t, trialErr, string(output))
+	assert.Contains(
+		t,
+		string(output),
+		"PASS: foreign network excluded; both unchanged updates failed; server preserved; probe absent",
+	)
+	//nolint:gosec // Reads a call record written by the test's stub into its own temporary directory.
+	calls, readErr := os.ReadFile(filepath.Join(state, "ksail-calls"))
+	require.NoError(t, readErr)
+	assert.Equal(t, 3, strings.Count(strings.TrimSpace(string(calls)), "\n")+1)
+	assert.NotContains(t, string(calls), "cluster delete")
 }
 
 func prepareAutoscalerAuditFixture(t *testing.T) (string, string) {
