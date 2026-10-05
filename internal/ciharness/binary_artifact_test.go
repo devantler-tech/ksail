@@ -55,7 +55,9 @@ func TestKSailBinaryArtifactDockerConsumer(t *testing.T) {
 	consumer := workflow.Jobs["system-test-docker"]
 	assert.Contains(t, consumer.Needs, "build-artifact")
 	restore := findHarnessStep(t, consumer.Steps, "📥 Restore KSail binary")
-	assert.Equal(t, "./.github/actions/restore-ksail-binary", restore.Uses)
+	assert.Equal(t,
+		"devantler-tech/ksail/.github/actions/restore-ksail-binary@"+
+			"e08268ac4d9a54352487fc77a2a68186ba68a217", restore.Uses)
 	assert.Equal(
 		t,
 		"${{ needs.build-artifact.outputs.artifact-id }}",
@@ -80,6 +82,16 @@ func TestKSailBinaryArtifactDockerConsumer(t *testing.T) {
 			"consumers must not rebuild when shared cache entries disappear",
 		)
 	}
+}
+
+func TestKSailBinaryRestorePinnedSourceMatchesCandidate(t *testing.T) {
+	t.Parallel()
+
+	// The published action is pinned while actionlint lacks self-repository syntax.
+	// A changed candidate must update that pin, rather than test different action bytes.
+	contents := readRepoFile(t, ".github/actions/restore-ksail-binary/action.yaml")
+	assert.Equal(t, "f1c049de4094024f62b97f5f70c98ababf6ed639ee59a16065c9814cffa61176",
+		fmt.Sprintf("%x", sha256.Sum256(contents)))
 }
 
 func TestKSailBinaryProducerChecksum(t *testing.T) {
