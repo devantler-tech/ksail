@@ -128,6 +128,32 @@ printf '[{"source":{"id":"go/extractor/warning","name":"Recoverable warning"},"s
 run_database
 run_database false diagnostics
 
+# Native warnings can leave imported definitions unresolved or hide later
+# failures even when every sampled function body remains present.
+# Keep the IDs tied to CodeQL 2.27.1's extractor diagnostics.go.
+incomplete_accepted=0
+for diagnostic in package-not-found diagnostic-limit-reached; do
+	jq -n --arg id "go/autobuilder/${diagnostic}" '[{
+    source: {id: $id, name: "Incomplete extraction"},
+    severity: "warning", plaintextMessage: "Coverage remains incomplete"
+  }]' >"${scratch}/diagnostics.json"
+	for mode in full diagnostics; do
+		if run_database false "${mode}"; then
+			printf 'FAIL: accepted %s with valid body evidence (%s)\n' "${diagnostic}" "${mode}" >&2
+			incomplete_accepted=$((incomplete_accepted + 1))
+		fi
+	done
+done
+if [[ "${incomplete_accepted}" != 0 ]]; then exit 1; fi
+
+# Native extraction errors and future error IDs cannot certify full coverage.
+for diagnostic in newer-go-version-needed go-files-found-but-not-processed relative-import-paths newer-system-go-version-required unknown-extraction-error; do
+	jq -n --arg id "go/autobuilder/${diagnostic}" '[{
+    source: {id: $id, name: "Extraction error"}, severity: "error"
+  }]' >"${scratch}/diagnostics.json"
+	reject_database "${diagnostic} with valid body evidence"
+done
+
 # A killed module must fail despite all sampled CLI/desktop bodies surviving.
 for project in . third_party/go-archive third_party/otelzap third_party/cel-go third_party/glamour third_party/go-macholibre third_party/kyverno-jmespath third_party/jmespath third_party/ansi third_party/ansi-runtime third_party/redisotel third_party/rediscmd third_party/dynamiclistener; do
 	for severity in warning error note; do
