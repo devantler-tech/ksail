@@ -12,6 +12,11 @@ on:
         required: false
         type: boolean
         default: true
+      run_local_recovery_trial:
+        description: "Run the provider-free local recovery trial and always-on security checks"
+        required: false
+        type: boolean
+        default: false
 
 env:
   # Comma, not pipe: Go falls back to direct only when the proxy answers 404/410. A pipe also
@@ -34,7 +39,8 @@ concurrency:
   #
   # Pull requests and merge-queue entries keep the ref-keyed group, so superseded
   # runs there still cancel exactly as before.
-  group: "ci-ksail-${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}"
+  # An opted-in local recovery trial cannot cancel ordinary CI on the same ref.
+  group: "ci-ksail-${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}${{ inputs.run_local_recovery_trial && '-local-recovery-trial' || '' }}"
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions: {}
@@ -106,7 +112,7 @@ jobs:
   # Wait for sufficient GitHub API rate limit before proceeding
   rate-limit-gate:
     name: ⏳ Rate Limit Gate
-    if: github.event_name != 'merge_group'
+    if: github.event_name != 'merge_group' && !inputs.run_local_recovery_trial
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -136,6 +142,7 @@ jobs:
     outputs:
       code: ${{ steps.filter.outputs.code }}
       dependency-test-graph: ${{ steps.filter.outputs.dependency-test-graph }}
+      dependency-contracts: ${{ steps.filter.outputs.dependency-contracts }}
       govuln-allowlist: ${{ steps.filter.outputs.govuln-allowlist }}
       release-graph-audit: ${{ steps.filter.outputs.release-graph-audit }}
       todos-contract: ${{ steps.filter.outputs.todos-contract }}
@@ -226,6 +233,19 @@ jobs:
               - 'go.mod'
               - 'go.sum'
               - '.github/workflows/ci.yaml'
+            # The contracts in internal/depcontract read two files the Go build cannot see: the
+            # Dependabot configuration and the Cilium chart pin. A change to either one alone
+            # skips the shared Go tests, for the reason todos-contract gives above, and would
+            # merge with its contract unexecuted. This filter feeds a job of its own for that
+            # class of change. TestDependencyContractsRunWhenOnlyTheirInputsChange fails if a
+            # file those contracts read is ever left out of it.
+            dependency-contracts:
+              - 'internal/depcontract/**'
+              - 'pkg/svc/installer/cni/cilium/Dockerfile'
+              - '.github/dependabot.yaml'
+              - 'go.mod'
+              - 'go.sum'
+              - '.github/workflows/ci.yaml'
             govuln-allowlist:
               - '.govulncheck-allow.txt'
             # Release inputs are outside Go's cache and the shared Go source filter.
@@ -283,6 +303,7 @@ jobs:
               - 'pkg/svc/diff/**'
               - 'pkg/svc/image/**'
               - 'pkg/svc/installer/**'
+              - 'pkg/svc/gitops/render/**'
               - 'pkg/svc/provider/**'
               - 'pkg/svc/provisioner/**'
               - 'pkg/svc/registryresolver/**'
@@ -391,6 +412,7 @@ jobs:
               - '.github/scripts/assert-gitops-deployed.sh'
               - '.github/scripts/assert-gitops-deployed.test.sh'
               - '.github/actions/ksail-test-workload/**'
+              - '.github/actions/ksail-system-test/helm-values-precedence.sh'
               - '.github/workflows/ci.yaml'
 
   eks-smoke-scripts:
@@ -499,7 +521,8 @@ jobs:
             .github/actions/ksail-test-workload/install-with-recovery.sh \
             .github/actions/ksail-test-workload/install-with-recovery.test.sh \
             .github/scripts/assert-gitops-deployed.sh \
-            .github/scripts/assert-gitops-deployed.test.sh
+            .github/scripts/assert-gitops-deployed.test.sh \
+            .github/actions/ksail-system-test/helm-values-precedence.sh
           .github/scripts/assert-gitops-deployed.test.sh
           .github/actions/ksail-test-workload/remote-resource-guard.test.sh
           .github/actions/ksail-test-workload/install-with-recovery.test.sh
@@ -547,13 +570,13 @@ jobs:
           .github/scripts/cask-pr-handoff-workflow.test.sh
 
   ci-go:
-    name: ✅ Validate Go Project
+    name: ✅ Validate Main Go and Allowlist Changes
     needs: [changes]
     # The two arms below cover what the ORG-REQUIRED workflow does not, and nothing
     # more. validate-go-project.yaml carries its own `pull_request:` / `merge_group:`
     # triggers alongside its `workflow_call` interface, so GitHub already runs the
     # complete Go suite directly on every pull request here, with no help from this
-    # file. That direct run publishes its checks WITHOUT the `✅ Validate Go Project /`
+    # file. That direct run publishes its checks WITHOUT this caller's name
     # prefix, which is why a prefix-filtered read of a pull request shows "skipped"
     # over a suite that has in fact passed (ksail#6563, ksail#6564 — both closed as
     # measurement errors of exactly that shape).
@@ -574,7 +597,7 @@ jobs:
       || (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
       && needs.changes.outputs.govuln-allowlist == 'true')
-    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@bd0035dd8f41fcf1459b878882b8897443f8dc59 # v4.9.4
+    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@0600006235510307a04efebcac1ac1f363f5f862 # v6.0.1
     # The canonical defaults make a default-branch run answer "did the check run" rather than
     # "did the diff touch a Go file". On main the branch's green IS the protection
     # signal, so a path filter that skips the suite or the scan leaves main green
@@ -637,7 +660,7 @@ jobs:
               ;;
           esac
 
-      - name: Wait for ✅ Validate Go Project
+      - name: Wait for invoked Go validation checks
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           GO_VALIDATION_SELECTED: ${{ needs.changes.outputs.govuln-allowlist }}
@@ -646,7 +669,7 @@ jobs:
             const sha = context.payload.pull_request.head.sha;
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const prefix = '✅ Validate Go Project';
+            const prefix = '✅ Validate Main Go and Allowlist Changes';
             const maxWait = 25 * 60 * 1000; // 25 minutes
             const poll = 30 * 1000; // 30 seconds
             const start = Date.now();
@@ -727,6 +750,41 @@ jobs:
         run: |
           .github/scripts/verify-otelzap-parity.sh
           .github/scripts/verify-otelzap-parity.test.sh
+
+  verify-vulnerability-identities:
+    name: 🔐 Verify Local Source Vulnerability Identities
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: 📦 Install pinned vulnerability scanner
+        env:
+          GOBIN: ${{ runner.temp }}/vulnerability-scanner
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+
+      - name: 🧪 Verify actual scanner positive and negative controls
+        env:
+          GOVULNCHECK_BIN: ${{ runner.temp }}/vulnerability-scanner/govulncheck
+        run: |
+          scanner_module_cache="$(go env GOMODCACHE)"
+          printf -v GOVULNCHECK_TEST_DB '%s:%s%s/golang.org/x/vuln@v1.8.0/internal/client/testdata/vulndb-v1' file // "$scanner_module_cache"
+          export GOVULNCHECK_TEST_DB
+          go test -tags integration ./internal/vulnidentity/... -count=1
+
+      - name: 🔐 Query every published local-source identity
+        run: go run ./internal/vulnidentity/cmd/vulnidentity -scanner "$RUNNER_TEMP/vulnerability-scanner/govulncheck"
 
   build-artifact:
     name: 🏗️ Build KSail Binary
@@ -1401,6 +1459,7 @@ jobs:
     # Local images only — no secrets/GHCR — so this also runs on fork PRs.
     if: >-
       !cancelled()
+      && !inputs.run_local_recovery_trial
       && (
         (github.event_name == 'pull_request' && needs.changes.outputs.operator-chart == 'true')
         || github.event_name == 'workflow_dispatch'
@@ -1440,7 +1499,7 @@ jobs:
         (github.event_name == 'pull_request'
         && needs.changes.outputs.system-test == 'true'
         && github.event.pull_request.head.repo.full_name == github.repository)
-        || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
+        || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
       )
     permissions:
       contents: read
@@ -1487,7 +1546,7 @@ jobs:
         (github.event_name == 'pull_request'
         && needs.changes.outputs.system-test == 'true'
         && github.event.pull_request.head.repo.full_name == github.repository)
-        || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
+        || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
       )
     permissions:
       contents: read
@@ -1582,7 +1641,7 @@ jobs:
         (github.event_name == 'pull_request'
         && needs.changes.outputs.system-test == 'true'
         && github.event.pull_request.head.repo.full_name == github.repository)
-        || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
+        || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
       )
     permissions:
       contents: read
@@ -1884,6 +1943,38 @@ jobs:
           fi
           echo "Dependency test graph resolves."
 
+  verify-dependency-contracts:
+    name: 🔗 Verify Dependency Contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [changes]
+    if: needs.changes.outputs.dependency-contracts == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # The contracts keep the Gateway API CRDs KSail installs on the line the pinned Cilium
+      # release is built against, and keep the module carrying their version tracked by
+      # Dependabot (ksail#7472). Two of their inputs, the Cilium chart pin and the Dependabot
+      # configuration, are not Go sources, so a pull request changing only one of them reaches
+      # no other test run.
+      # -count=1 is load-bearing for the same reason: those inputs are outside Go's test cache,
+      # so a cached PASS could be replayed over a changed pin.
+      - name: 🔗 Verify dependency contracts
+        run: go test ./internal/depcontract/... -count=1
+
   verify-todos-workflow-contract:
     name: 🧾 Verify Workflow Contracts
     runs-on: ubuntu-latest
@@ -1984,8 +2075,108 @@ jobs:
         # Release files are outside Go's test-cache inputs; always execute the audit.
         run: go test ./pkg/client/kubescape/... -count=1
 
+  local-recovery-trial:
+    name: 🧪 Local Connection Recovery Acceptance
+    if: github.event_name == 'workflow_dispatch' && inputs.run_local_recovery_trial
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      GOMAXPROCS: "2"
+      GOMEMLIMIT: "4GiB"
+      GOFLAGS: "-p=2"
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: 🧹 Free runner disk
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@c4f3a6d4d348c8195c0e44a0ef9b84fb0408ad29
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: 🧪 Reproduce local safety and partial-deletion cases
+        id: local-safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/local-recovery-evidence"
+          printf '%s\n' "$GITHUB_SHA" > "$RUNNER_TEMP/local-recovery-evidence/head.txt"
+          go test ./pkg/k8s ./pkg/cli/cmd/cluster -run 'TestForget|TestKubernetesCleanup_PartialDeletion' -count=1 -v 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/regressions.log"
+      - name: 🏗️ Build the actual CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          go build -o "$RUNNER_TEMP/ksail-local-recovery" . 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/build.log"
+      - name: 🧪 Exercise the actual CLI with local files and a recording API
+        shell: bash
+        run: |
+          set -euo pipefail
+          go run .github/scripts/local-connection-recovery-trial.go "$RUNNER_TEMP/ksail-local-recovery" 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/cli-trial.log"
+      - name: 🧪 Validate the complete Go suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test ./... -count=1 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/go-test.log"
+      - name: ⚙️ Install the canonical CI linter
+        if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.11.4
+          install-only: true
+          verify: false
+      - name: 🔍 Validate with the canonical CI linter
+        if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          golangci-lint version | tee "$RUNNER_TEMP/local-recovery-evidence/lint-version.log"
+          golangci-lint run --fix --timeout 15m \
+            --max-issues-per-linter 0 --max-same-issues 0 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/lint.log"
+      - name: ⚙️ Setup Node.js for canonical generation
+        if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+      - name: 📝 Regenerate all maintained artifacts
+        if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          go install github.com/vektra/mockery/v3@v3.5.4
+          make generate 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/generate.log"
+      - name: 📚 Build the documentation
+        if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm --prefix docs ci
+          npm --prefix docs run build 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/docs-build.log"
+      - name: 🔐 Require the tested source to remain unchanged
+        if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --binary > "$RUNNER_TEMP/local-recovery-evidence/generated.patch"
+          git status --porcelain --untracked-files=all > "$RUNNER_TEMP/local-recovery-evidence/working-tree.txt"
+          if [[ -s "$RUNNER_TEMP/local-recovery-evidence/working-tree.txt" ]]; then
+            cat "$RUNNER_TEMP/local-recovery-evidence/working-tree.txt"
+            echo '::error::Lint or generation changed the tested source. Apply the retained output and rerun acceptance at the resulting commit.'
+            exit 1
+          fi
+      - name: 📤 Preserve exact-head acceptance evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: local-recovery-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/local-recovery-evidence
+          if-no-files-found: error
+          retention-days: 14
+
   require-checks-in-pr:
-    name: CI - Required Checks
+    name: ${{ github.event_name == 'workflow_dispatch' && inputs.run_local_recovery_trial && 'Local Recovery Trial - Checks' || 'CI - Required Checks' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs:
@@ -1995,6 +2186,7 @@ jobs:
         ci-go,
         wait-for-validate-go,
         verify-go-archive,
+        verify-vulnerability-identities,
         build-artifact,
         generate,
         auto-commit,
@@ -2011,6 +2203,7 @@ jobs:
         operator-chart-e2e,
         validate-calico-chart,
         verify-dependency-test-graph,
+        verify-dependency-contracts,
         verify-todos-workflow-contract,
         test-release-config,
         release-graph-audit,
@@ -2019,10 +2212,11 @@ jobs:
         rate-limit-gate-script,
         hetzner-cleanup-script,
         gitops-assert-scripts,
+        local-recovery-trial,
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/actions/aggregate-job-checks@df7fd4f83edade31c121a9de563d9a7b9b1f900d # v13.10.3
+      - uses: devantler-tech/actions/aggregate-job-checks@1d726483facb9340655489913f609082677be8f5 # v13.10.6
         with:
           job-results: >-
             ${{ needs.rate-limit-gate.result }}
@@ -2030,6 +2224,7 @@ jobs:
             ${{ needs.ci-go.result }}
             ${{ needs.wait-for-validate-go.result }}
             ${{ needs.verify-go-archive.result }}
+            ${{ needs.verify-vulnerability-identities.result }}
             ${{ needs.build-artifact.result }}
             ${{ needs.generate.result }}
             ${{ needs.auto-commit.result }}
@@ -2046,6 +2241,7 @@ jobs:
             ${{ needs.operator-chart-e2e.result }}
             ${{ needs.validate-calico-chart.result }}
             ${{ needs.verify-dependency-test-graph.result }}
+            ${{ needs.verify-dependency-contracts.result }}
             ${{ needs.verify-todos-workflow-contract.result }}
             ${{ needs.test-release-config.result }}
             ${{ needs.release-graph-audit.result }}
@@ -2054,3 +2250,4 @@ jobs:
             ${{ needs.rate-limit-gate-script.result }}
             ${{ needs.hetzner-cleanup-script.result }}
             ${{ needs.gitops-assert-scripts.result }}
+            ${{ needs.local-recovery-trial.result }}
