@@ -27,6 +27,10 @@ name: "System Test - EKS"
 on:
   workflow_dispatch:
     inputs:
+      preflight_only:
+        description: "Verify existing OIDC identity and session lifetime without creating resources"
+        type: boolean
+        default: false
       gitops_engine:
         description: "GitOps engine to bootstrap and reconcile"
         required: false
@@ -99,12 +103,65 @@ jobs:
 
           echo "available=true" >> "$GITHUB_OUTPUT"
 
+  auth-preflight:
+    name: 🔐 Read-only EKS OIDC Preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [preflight]
+    if: inputs.preflight_only && needs.preflight.outputs.aws-credentials == 'true'
+    environment: ci
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: 📄 Checkout
+        timeout-minutes: 2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        timeout-minutes: 5
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: 🔐 Check existing AWS OIDC role
+        id: oidc
+        timeout-minutes: 3
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.AWS_OIDC_ROLE_ARN }}
+          role-session-name: ksail-eks-preflight-${{ github.run_id }}
+          aws-region: ${{ inputs.region }}
+          role-duration-seconds: 7200
+          action-timeout-s: 120
+          retry-max-attempts: 3
+          mask-aws-account-id: true
+          output-credentials: true
+          # Intersect session permissions with the existing role so this job
+          # can only observe its identity, even if later code changes.
+          inline-session-policy: '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["sts:GetCallerIdentity"],"Resource":"*"}]}'
+
+      - name: 🔎 Verify OIDC identity and actual expiration
+        timeout-minutes: 2
+        shell: bash
+        env:
+          AWS_PREFLIGHT_SESSION: ksail-eks-preflight-${{ github.run_id }}
+          AWS_SESSION_EXPIRATION: ${{ steps.oidc.outputs.aws-expiration }}
+        run: |
+          set -euo pipefail
+          trap 'rm -f "$RUNNER_TEMP/eks-auth-error"' EXIT
+          aws sts get-caller-identity --output json 2>"$RUNNER_TEMP/eks-auth-error" |
+            go run ./internal/ciharness/cmd/eksauthpreflight
+
   build-artifact:
     name: 🏗️ Build KSail Binary
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [preflight]
-    if: needs.preflight.outputs.aws-credentials == 'true'
+    if: "!inputs.preflight_only && needs.preflight.outputs.aws-credentials == 'true'"
     permissions:
       contents: read
     steps:
@@ -134,7 +191,7 @@ jobs:
     # The ciharness tests sum the actual budgets and enforce the hosted-job cap.
     timeout-minutes: 360
     needs: [preflight, build-artifact]
-    if: needs.preflight.outputs.aws-credentials == 'true'
+    if: "!inputs.preflight_only && needs.preflight.outputs.aws-credentials == 'true'"
     environment: ci
     permissions:
       contents: read
