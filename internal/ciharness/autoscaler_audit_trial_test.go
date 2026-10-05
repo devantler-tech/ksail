@@ -19,6 +19,7 @@ func TestAutoscalerAuditTrialRejectsFalseAcceptance(t *testing.T) {
 
 	modes := []string{
 		"complete", "foreign-reported", "retry-success", "mutated", "cleanup-failed", "cleanup-retained",
+		"cancelled",
 	}
 	for _, mode := range modes {
 		t.Run(mode, func(t *testing.T) {
@@ -38,7 +39,10 @@ func TestAutoscalerAuditTrialRejectsFalseAcceptance(t *testing.T) {
 			)
 			require.NoError(t, pathErr)
 
-			cmd := exec.CommandContext(ctx, "bash", script) //nolint:gosec
+			cmd := exec.CommandContext(
+				ctx,
+				script,
+			) //nolint:gosec // Executes the repository-owned trial entry point.
 			cmd.Dir = state
 			require.NoError(
 				t,
@@ -73,6 +77,11 @@ func TestAutoscalerAuditTrialRejectsFalseAcceptance(t *testing.T) {
 			} else {
 				require.Error(t, err, string(output))
 				assert.NotContains(t, string(output), "PASS:")
+
+				if mode == "cancelled" {
+					_, statErr := os.Stat(filepath.Join(state, "deleted"))
+					require.NoError(t, statErr, "termination must still remove the owned probe")
+				}
 			}
 		})
 	}
@@ -108,6 +117,10 @@ set -euo pipefail
 printf '%s\n' "$*" >> "$STATE/ksail-calls"
 count=0; [[ ! -f "$STATE/count" ]] || count=$(cat "$STATE/count")
 count=$((count+1)); echo "$count" > "$STATE/count"
+if [[ "$MODE" == cancelled && "$count" -eq 2 ]]; then
+  kill -TERM "$PPID"
+  exit 143
+fi
 if [[ ! -f "$STATE/attached" && "$MODE" != foreign-reported ]] || \
    [[ "$count" -eq 3 && "$MODE" == retry-success ]]; then
   echo 'No changes detected'; exit 0

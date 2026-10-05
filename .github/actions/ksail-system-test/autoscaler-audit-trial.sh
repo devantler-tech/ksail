@@ -59,6 +59,8 @@ finish() {
   exit "$status"
 }
 trap finish EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # Refuse reuse of an earlier invocation; cleanup still owns this exact run/name.
 [[ -z "$(probe_ids)" ]] || {

@@ -1062,7 +1062,6 @@ runs:
     - name: 🧪 Hetzner autoscaler inventory — unchanged update and retry
       if: inputs.test-autoscaler-inventory == 'true'
       shell: bash
-      timeout-minutes: 20
       env:
         DISTRIBUTION: ${{ inputs.distribution }}
         PROVIDER: ${{ inputs.provider }}
@@ -1072,7 +1071,7 @@ runs:
         set -euo pipefail
         [[ "$DISTRIBUTION" == Talos && "$PROVIDER" == Hetzner && "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
         export K8S_VERSION="${K8S_VERSION_FLAG#--kubernetes-version }"
-        bash "$GITHUB_WORKSPACE/.github/actions/ksail-system-test/autoscaler-audit-trial.sh"
+        timeout --kill-after=6m 20m bash "$GITHUB_WORKSPACE/.github/actions/ksail-system-test/autoscaler-audit-trial.sh"
 
     # ── Phase 7 — Cleanup ────────────────────────────────────────────
 
