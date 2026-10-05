@@ -10,8 +10,9 @@ no privilege escalation. Its writable runner home and temporary directory
 must allow execution of the copied listener and compiler output.
 
 Only a verified push to main publishes
-`ghcr.io/devantler-tech/ksail-analysis-runner:<commit>`. The workflow signs the
-published digest and verifies the exact certificate identity:
+`ghcr.io/devantler-tech/ksail-analysis-runner:<commit>`. The workflow also runs
+the smoke test against that published digest before signing it, then verifies
+the exact certificate identity:
 
 ```text
 https://github.com/devantler-tech/ksail/.github/workflows/publish-ksail-analysis-runner.yaml@refs/heads/main

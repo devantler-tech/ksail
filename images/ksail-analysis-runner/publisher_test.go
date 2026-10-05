@@ -126,6 +126,38 @@ func TestPublicationSignsAndVerifiesExactDigestAndIdentity(t *testing.T) {
 	)
 }
 
+func TestPublicationExercisesThePublishedDigestBeforeSigning(t *testing.T) {
+	t.Parallel()
+
+	publish := value(t, readWorkflow(t), "jobs", "publish")
+	smokeIndex, signatureIndex := -1, -1
+
+	for index, step := range steps(t, publish) {
+		switch step["name"] {
+		case "Verify published runtime":
+			smokeIndex = index
+
+			require.Equal(t, "${{ steps.build.outputs.digest }}", value(t, step, "env", "DIGEST"))
+
+			run := value(t, step, "run")
+			for _, expected := range []string{
+				"--read-only", "--user 1001:1001", "--cap-drop ALL",
+				"--security-opt no-new-privileges",
+				"--tmpfs /runner-data:rw,exec,nosuid,nodev,uid=1001,gid=1001,size=2g",
+				"--tmpfs /tmp:rw,exec,nosuid,nodev,uid=1001,gid=1001,size=1g",
+				`"${IMAGE}@${DIGEST}" /usr/local/bin/ksail-analysis-smoke`,
+			} {
+				require.Contains(t, run, expected)
+			}
+		case "Sign and verify published digest":
+			signatureIndex = index
+		}
+	}
+
+	require.GreaterOrEqual(t, smokeIndex, 0)
+	require.Greater(t, signatureIndex, smokeIndex)
+}
+
 func readWorkflow(t *testing.T) map[string]any {
 	t.Helper()
 
