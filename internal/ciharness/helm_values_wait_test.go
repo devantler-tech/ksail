@@ -104,6 +104,7 @@ func runHelmValuesWaitFixture(t *testing.T, mode string) (string, string, error)
 	dir := fixtureRoot.Name()
 	writeHelmValuesWaitFixture(t, dir, mode)
 	path := filepath.Join(dir, "observe.sh")
+
 	require.NoError(t, fixtureRoot.WriteFile(
 		"observe.sh", []byte(helmValuesWaitCallSite(t)), 0o600,
 	))
