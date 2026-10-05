@@ -2177,12 +2177,64 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  retired-repo-links:
+    name: Retired repository links
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Check active documentation
+        id: links
+        uses: devantler-tech/.github/actions/validate-retired-repo-links@bd0035dd8f41fcf1459b878882b8897443f8dc59 # v4.9.4
+        with:
+          enabled: "true"
+      - name: Require a completed scan
+        env:
+          VALIDATED: ${{ steps.links.outputs.validated }}
+        run: test "$VALIDATED" = true
+      - name: Check out the exact validator for refusal controls
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6.0.2
+        with:
+          repository: devantler-tech/.github
+          ref: bd0035dd8f41fcf1459b878882b8897443f8dc59 # v4.9.4
+          path: .retired-link-validator-source
+          persist-credentials: false
+      - name: Prove retired links and incomplete scans fail
+        env:
+          GOWORK: off
+          GOFLAGS: ""
+          GOTOOLCHAIN: local
+        run: |
+          set -euo pipefail
+          control=$(mktemp -d "$RUNNER_TEMP/retired-links.XXXXXX")
+          trap 'rm -rf "$control"' EXIT
+          mkdir "$control/.github"
+          cp .github/retired-repo-links.json "$control/.github/"
+          cp README.md AGENTS.md "$control/"
+          go -C .retired-link-validator-source/actions/validate-retired-repo-links build -mod=readonly -trimpath -o "$control/validator" .
+          printf '\nhttps://github.com/devantler-tech/reusable-workflows\n' >>"$control/README.md"
+          status=0
+          "$control/validator" --root "$control" >"$control/negative.log" 2>&1 || status=$?
+          test "$status" = 1 || { cat "$control/negative.log"; exit 1; }
+          grep -Eq '^README.md:[0-9]+: link targets retired repository devantler-tech/reusable-workflows$' "$control/negative.log"
+          rm "$control/.github/retired-repo-links.json"
+          status=0
+          "$control/validator" --root "$control" >"$control/missing.log" 2>&1 || status=$?
+          test "$status" = 2 || { cat "$control/missing.log"; exit 1; }
+          grep -q '^Invalid configuration:' "$control/missing.log"
+          echo 'PASS: clean scan, seeded retired link rejection, and missing configuration refusal'
+
   require-checks-in-pr:
     name: ${{ github.event_name == 'workflow_dispatch' && inputs.run_local_recovery_trial && 'Local Recovery Trial - Checks' || 'CI - Required Checks' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs:
       [
+        retired-repo-links,
         rate-limit-gate,
         changes,
         ci-go,
@@ -2221,6 +2273,7 @@ jobs:
       - uses: devantler-tech/actions/aggregate-job-checks@1d726483facb9340655489913f609082677be8f5 # v13.10.6
         with:
           job-results: >-
+            ${{ needs.retired-repo-links.result }}
             ${{ needs.rate-limit-gate.result }}
             ${{ needs.changes.result }}
             ${{ needs.ci-go.result }}
