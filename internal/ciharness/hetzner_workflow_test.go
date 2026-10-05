@@ -3,6 +3,7 @@ package ciharness_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -100,6 +101,15 @@ func TestHetznerManualSchematicRolloutIsOptInAndKeepsCleanup(t *testing.T) {
 		"${{ github.event_name == 'workflow_dispatch' && inputs.test_schematic_rollout || false }}",
 		run.With["test-talos-schematic-rollout"],
 	)
+	assertSchematicRolloutActionSelection(t)
+
+	cleanup, found := workflow.Jobs["cleanup"]
+	require.True(t, found, "workflow-level fallback cleanup is missing")
+	assert.Contains(t, cleanup.If, "always()")
+}
+
+func assertSchematicRolloutActionSelection(t *testing.T) {
+	t.Helper()
 
 	var action compositeAction
 	require.NoError(t, yaml.Unmarshal(
@@ -124,10 +134,6 @@ func TestHetznerManualSchematicRolloutIsOptInAndKeepsCleanup(t *testing.T) {
 		harnessStepIndex(t, action.Runs.Steps, rollout.Name),
 		harnessStepIndex(t, action.Runs.Steps, "🧪 ksail cluster stop"),
 	)
-
-	cleanup, found := workflow.Jobs["cleanup"]
-	require.True(t, found, "workflow-level fallback cleanup is missing")
-	assert.Contains(t, cleanup.If, "always()")
 }
 
 func TestHetznerFallbackCleanupSurvivesCancellation(t *testing.T) {
@@ -239,38 +245,7 @@ func assertHetznerSchematicRolloutScenario(
 		before = loadRenderedSchematicConfigs(t, fixture.project)
 	}
 
-	kubernetesFlag := "--kubernetes-version v1.35.0"
-
-	switch scenario.name {
-	case "missing-kubernetes-pin":
-		kubernetesFlag = ""
-	case "invalid-kubernetes-pin":
-		kubernetesFlag = "--kubernetes-version latest"
-	}
-
-	commandContext, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
-
-	command := exec.CommandContext( //nolint:gosec // Reviewed action body.
-		commandContext,
-		"bash",
-		"-c",
-		rollout,
-	)
-	command.Dir = fixture.project
-	command.Env = append(os.Environ(),
-		"PATH="+fixture.fakeBin+":"+os.Getenv("PATH"),
-		"ARGS=--name schematic-trial --image-verification cosign",
-		"SCENARIO="+scenario.name,
-		"LIVE_TALOS_VERSION="+liveVersion,
-		"K8S_VERSION_FLAG="+kubernetesFlag,
-		"GITHUB_WORKSPACE="+repositoryRootForSchematicTrial(t),
-		"CALLS_FILE="+fixture.callsFile,
-		"DRY_COUNT_FILE="+fixture.dryCountFile,
-		"KSAIL_SYSTEM_TEST_LOG_DIR="+fixture.logDir,
-	)
-
-	output, err := command.CombinedOutput()
+	output, err := runSchematicRolloutScenario(t, fixture, rollout, scenario.name, liveVersion)
 	if scenario.wantSuccess {
 		require.NoErrorf(t, err, "rollout failed:\n%s", output)
 	} else {
@@ -293,6 +268,52 @@ func assertHetznerSchematicRolloutScenario(
 		assert.NotContains(t, string(config), "extensions:")
 		assertSchematicRenderUnchanged(t, before, loadRenderedSchematicConfigs(t, fixture.project))
 	}
+}
+
+func runSchematicRolloutScenario(
+	t *testing.T,
+	fixture schematicRolloutFixture,
+	rollout, scenario, liveVersion string,
+) ([]byte, error) {
+	t.Helper()
+
+	kubernetesFlag := "--kubernetes-version v1.35.0"
+
+	switch scenario {
+	case "missing-kubernetes-pin":
+		kubernetesFlag = ""
+	case "invalid-kubernetes-pin":
+		kubernetesFlag = "--kubernetes-version latest"
+	}
+
+	commandContext, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	command := exec.CommandContext( //nolint:gosec // Reviewed action body.
+		commandContext,
+		"bash",
+		"-c",
+		rollout,
+	)
+	command.Dir = fixture.project
+	command.Env = append(os.Environ(),
+		"PATH="+fixture.fakeBin+":"+os.Getenv("PATH"),
+		"ARGS=--name schematic-trial --image-verification cosign",
+		"SCENARIO="+scenario,
+		"LIVE_TALOS_VERSION="+liveVersion,
+		"K8S_VERSION_FLAG="+kubernetesFlag,
+		"GITHUB_WORKSPACE="+repositoryRootForSchematicTrial(t),
+		"CALLS_FILE="+fixture.callsFile,
+		"DRY_COUNT_FILE="+fixture.dryCountFile,
+		"KSAIL_SYSTEM_TEST_LOG_DIR="+fixture.logDir,
+	)
+
+	output, err := command.CombinedOutput()
+	if err != nil {
+		return output, fmt.Errorf("execute schematic rollout fixture: %w", err)
+	}
+
+	return output, nil
 }
 
 func loadRenderedSchematicConfigs(t *testing.T, project string) *talosconfig.Configs {
