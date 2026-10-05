@@ -141,7 +141,8 @@ func TestHetznerFallbackCleanupSurvivesCancellation(t *testing.T) {
 				return
 			}
 
-			assert.Equal(t, "./.github/actions/cleanup-hetzner", step.Uses)
+			assert.Equal(t, "$/.github/actions/cleanup-hetzner", step.Uses,
+				"self-repository actions must resolve at the workflow's exact commit")
 			readRepoFile(t, "./.github/actions/cleanup-hetzner/action.yaml")
 			assert.Contains(t, step.With["label-selector"], "${{ github.run_id }}",
 				"cleanup must stay scoped to this run's owned resources")
@@ -574,7 +575,7 @@ func assertHetznerFallbackCleanup(t *testing.T, steps []harnessStep) {
 
 	for _, want := range expected {
 		step := findHarnessStep(t, steps, want.name)
-		assert.Equal(t, "./.github/actions/cleanup-hetzner", step.Uses)
+		assert.Equal(t, "$/.github/actions/cleanup-hetzner", step.Uses)
 		assert.Equal(t, want.selector, step.With["label-selector"])
 	}
 }
