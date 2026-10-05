@@ -206,27 +206,46 @@ runs:
             2>&1 | tee "$DELETE_LOG"; then
             echo "  ✅ $DIST delete succeeded"
           else
-            echo "  ⚠️ $DIST delete failed (best-effort cleanup)"
+            echo "  ❌ $DIST delete FAILED"
+            FAILED=$((FAILED + 1))
           fi
 
           # Restore host context in case nested cluster creation changed it.
-          kubectl config use-context "$HOST_CONTEXT" 2>/dev/null || true
+          if ! kubectl config use-context "$HOST_CONTEXT"; then
+            echo "  ❌ $DIST host context restoration FAILED; stopping nested tests"
+            FAILED=$((FAILED + 1))
+            break
+          fi
 
-          # Settle (bounded, best-effort, non-fatal): wait for the deleted cluster's
-          # namespaces to finish terminating before the next create. `ksail cluster
-          # delete` issues an async namespace delete (k3k-/vcluster-/ksail-<name>,
-          # each a suffix of $NESTED_NAME) and returns before finalizers complete;
-          # without this the prior cluster's still-terminating pods bleed load into the
-          # next nested create and can push k3k/vCluster readiness past its deadline (#4891).
+          # Deletion is asynchronous. Verify the exact cluster namespaces on the
+          # original host before starting another create; failures or a timeout
+          # leave cleanup unverified and must never pass the provider trial.
           echo "  ⏳ Waiting for $DIST resources to drain..."
           SETTLE_DEADLINE=$((SECONDS + 120))
+          drained=false
           while [ "$SECONDS" -lt "$SETTLE_DEADLINE" ]; do
-            if [ -z "$(kubectl get ns -o name 2>/dev/null | grep -iF "$NESTED_NAME" || true)" ]; then
+            remaining_seconds=$((SETTLE_DEADLINE - SECONDS))
+            if [ "$remaining_seconds" -le 0 ]; then
+              break
+            fi
+            if ! remaining=$(timeout "${remaining_seconds}s" kubectl --context "$HOST_CONTEXT" get namespace \
+              "ksail-$NESTED_NAME" "k3k-$NESTED_NAME" "vcluster-$NESTED_NAME" \
+              --ignore-not-found -o name --request-timeout=15s); then
+              echo "  ❌ $DIST namespace verification FAILED"
+              break
+            fi
+            if [ -z "$remaining" ]; then
+              drained=true
               echo "  ✅ $DIST resources drained"
               break
             fi
             sleep 5
           done
+          if [ "$drained" != true ]; then
+            echo "  ❌ $DIST cleanup was not verified; stopping nested tests"
+            FAILED=$((FAILED + 1))
+            break
+          fi
 
           echo ""
         done
