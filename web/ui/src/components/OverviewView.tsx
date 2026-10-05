@@ -27,7 +27,7 @@ import { EventList } from "./EventList.tsx";
 import { ResourceUsagePanel } from "./ResourceUsage.tsx";
 import { IdentityValue } from "./IdentityValue.tsx";
 import { HostBadge, StatusBadge, StatusDot } from "./StatusBadge.tsx";
-import { EmptyState } from "./states.tsx";
+import { EmptyState, ErrorBanner } from "./states.tsx";
 import { Button } from "./ui.tsx";
 import { useToast } from "./Toast.tsx";
 
@@ -120,8 +120,6 @@ export function OverviewView({
     let cancelled = false;
     setLoading(true);
 
-    // loadHealth never rejects — each per-kind fetch swallows its own error (see listKind) so one
-    // missing/forbidden kind degrades to empty cards rather than failing the whole dashboard.
     loadHealth(namespace, name)
       .then((result) => {
         if (!cancelled) {
@@ -155,7 +153,9 @@ export function OverviewView({
   const hostCluster = isHostCluster(cluster);
   const { distribution, provider } = displayIdentity(cluster, health?.identity ?? detected);
   const secret = status?.kubeconfigSecretRef;
-  const nodesHealthy = health ? health.nodesTotal > 0 && health.nodesReady === health.nodesTotal : false;
+  const nodesTotal = health?.nodesTotal;
+  const nodesReady = health?.nodesReady;
+  const nodesHealthy = nodesTotal !== undefined && nodesTotal > 0 && nodesReady === nodesTotal;
 
   // The local surface discovers clusters and only knows their distribution/provider; a spec carrying
   // node counts or component choices is a managed one (operator CR or form submission) whose
@@ -164,7 +164,9 @@ export function OverviewView({
   const specManaged =
     spec !== undefined &&
     (spec.controlPlanes !== undefined || spec.workers !== undefined || meta.components.some((component) => spec[component.key]));
-  const liveWorkers = health ? health.nodesTotal - health.controlPlanes : undefined;
+  const liveWorkers = nodesTotal !== undefined && health?.controlPlanes !== undefined
+    ? nodesTotal - health.controlPlanes
+    : undefined;
 
   const crConditions = status?.conditions ?? [];
   const shownConditions = crConditions.length > 0 ? crConditions : (health?.derivedConditions ?? []);
@@ -229,6 +231,24 @@ export function OverviewView({
         </div>
       </div>
 
+      {health && health.errors.length > 0 ? (
+        <div className="space-y-2">
+          <ErrorBanner
+            message={`Some cluster data is unavailable (${health.errors.map((error) => error.kind).join(", ")}). Check the connection and kubeconfig credentials, then Refresh. ${health.errors[0].message}`}
+          />
+          <details className="text-sm text-slate-600 dark:text-slate-300">
+            <summary className="cursor-pointer">Failed resource reads</summary>
+            <ul className="mt-2 space-y-1">
+              {health.errors.map((error) => (
+                <li key={error.kind} className="break-words">
+                  <strong>{error.kind}:</strong> {error.message}
+                </li>
+              ))}
+            </ul>
+          </details>
+        </div>
+      ) : null}
+
       {/* Live health (workload-read only). */}
       {canBrowse ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -240,7 +260,7 @@ export function OverviewView({
                   nodesHealthy ? "text-slate-900 dark:text-white" : "text-amber-600 dark:text-amber-400",
                 )}
               >
-                {health ? `${health.nodesReady}/${health.nodesTotal}` : "—"}
+                {nodesReady !== undefined && nodesTotal !== undefined ? `${nodesReady}/${nodesTotal}` : "—"}
               </span>
               <span className="text-xs text-slate-500 dark:text-slate-400">ready</span>
             </div>
@@ -251,17 +271,21 @@ export function OverviewView({
                   nodesHealthy ? "bg-emerald-500" : "bg-amber-500",
                 )}
                 style={{
-                  width: health && health.nodesTotal > 0 ? `${(health.nodesReady / health.nodesTotal) * 100}%` : "0%",
+                  width: nodesReady !== undefined && nodesTotal !== undefined && nodesTotal > 0
+                    ? `${(nodesReady / nodesTotal) * 100}%`
+                    : "0%",
                 }}
               />
             </div>
           </Card>
 
           <Card title="Pod health" icon={<Activity className="size-3.5" aria-hidden />}>
-            {health ? (
+            {health?.podsTotal !== undefined ? (
               <PodHealth segments={health.segments} total={health.podsTotal} />
             ) : (
-              <p className="text-sm text-slate-500 dark:text-slate-400">Loading…</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {health ? "Pod health is unavailable." : "Loading…"}
+              </p>
             )}
           </Card>
 
@@ -317,8 +341,8 @@ export function OverviewView({
             <Field label="Nodes">
               {status?.nodesTotal !== undefined
                 ? `${status.nodesReady ?? 0} / ${status.nodesTotal} ready`
-                : health
-                  ? `${health.nodesReady} / ${health.nodesTotal} ready`
+                : nodesReady !== undefined && nodesTotal !== undefined
+                  ? `${nodesReady} / ${nodesTotal} ready`
                   : "—"}
             </Field>
             <Field label="Created">
@@ -380,7 +404,9 @@ export function OverviewView({
           <Card title="Recent warnings" icon={<TriangleAlert className="size-3.5" aria-hidden />} className="lg:col-span-3">
             {loading && !health ? (
               <p className="text-sm text-slate-500 dark:text-slate-400">Loading…</p>
-            ) : (health?.warnings.length ?? 0) === 0 ? (
+            ) : health?.warnings === undefined ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">Recent warnings are unavailable.</p>
+            ) : health.warnings.length === 0 ? (
               <p className="text-sm text-slate-500 dark:text-slate-400">No recent warnings.</p>
             ) : (
               <EventList events={health?.warnings ?? []} />

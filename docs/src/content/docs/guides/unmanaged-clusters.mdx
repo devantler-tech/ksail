@@ -22,6 +22,20 @@ The web UI and desktop app mark these clusters `Unmanaged` too, and identify the
 
 In the web UI and desktop app, every row acts on its own context, even when two contexts share a cluster name. With unmanaged contexts `prod` and `kind-prod`, the `prod` row targets `prod` and the `kind-prod` row targets `kind-prod`; only when KSail manages a cluster named `prod` does that name mean `kind-prod`. A name that several contexts share and none owns outright, such as `kind-prod` and `k3d-prod` for a managed `prod`, is refused as ambiguous rather than guessed.
 
+## Troubleshooting monitoring access
+
+KSail uses the credentials and external authentication command configured in the selected kubeconfig context. For cloud or SSO-backed contexts, that command must be installed and its login session must be valid. The desktop app imports the macOS login-shell environment on startup so those commands can be found.
+
+Check the connection without changing cluster resources or your active context:
+
+```sh
+ksail workload get --context my-cloud-context --request-timeout=10s --raw=/version
+```
+
+If the authentication command reports an expired session, renew it with your provider's normal login procedure. A forbidden resource read instead means your current identity cannot read that resource.
+
+The overview reports failed reads and shows unavailable counts as `—`, not zero. Expand **Failed resource reads** for details. Data from successful reads remains visible; if live metrics cannot be read, resource-usage charts use requested resources only when both nodes and pods were read successfully. After restoring access, select **Refresh** to reload monitoring data.
+
 ## Operating within limits
 
 Much of KSail's read/operate surface is client-go-backed, so it works against the **selected kubeconfig context** — managed or not. Switch to the unmanaged cluster first, then use it like any other:
