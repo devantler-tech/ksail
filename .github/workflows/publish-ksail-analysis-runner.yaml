@@ -128,12 +128,13 @@ jobs:
       - name: Sign and verify published digest
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
+          SIGNING_WORKFLOW: .github/workflows/publish-ksail-analysis-runner.yaml
         run: |
           set -euo pipefail
           test -n "${DIGEST}"
           cosign sign --yes "${IMAGE}@${DIGEST}"
           cosign verify \
-            --certificate-identity "https://github.com/devantler-tech/ksail/.github/workflows/publish-ksail-analysis-runner.yaml@refs/heads/main" \
+            --certificate-identity "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/${SIGNING_WORKFLOW}@refs/heads/main" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             "${IMAGE}@${DIGEST}"
           printf 'Published signed image: %s@%s\n' "${IMAGE}" "${DIGEST}"

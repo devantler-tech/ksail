@@ -110,14 +110,15 @@ func TestPublicationSignsAndVerifiesExactDigestAndIdentity(t *testing.T) {
 	require.Equal(t, true, value(t, build, "with", "sbom"))
 	require.NotNil(t, signature)
 	require.Equal(t, "${{ steps.build.outputs.digest }}", value(t, signature, "env", "DIGEST"))
+	require.Equal(t, ".github/workflows/publish-ksail-analysis-runner.yaml",
+		value(t, signature, "env", "SIGNING_WORKFLOW"))
 	run := value(t, signature, "run")
 	require.Contains(t, run, `cosign sign --yes "${IMAGE}@${DIGEST}"`)
 	require.Contains(t, run, "cosign verify")
 	require.Contains(
 		t,
 		run,
-		`--certificate-identity "https://github.com/devantler-tech/ksail/`+
-			`.github/workflows/publish-ksail-analysis-runner.yaml@refs/heads/main"`,
+		`--certificate-identity "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/${SIGNING_WORKFLOW}@refs/heads/main"`,
 	)
 	require.Contains(
 		t,
