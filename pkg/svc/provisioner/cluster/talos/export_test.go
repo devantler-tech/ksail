@@ -178,6 +178,36 @@ func (p *Provisioner) WithAPIEndpointReachabilityCheckForTest(
 	return p
 }
 
+// WithAPIServerServingCheckForTest overrides the kube-apiserver settle wait so
+// unit tests can pin the post-endpoint-change restart gate (#6032) without real
+// network I/O.
+func (p *Provisioner) WithAPIServerServingCheckForTest(
+	fn func(ctx context.Context, ip, serverName string, caPEM []byte) error,
+) *Provisioner {
+	p.apiServerServingCheck = fn
+
+	return p
+}
+
+// WaitForServingCertificateForTest exposes waitForServingCertificate for unit
+// testing against a local TLS server.
+func WaitForServingCertificateForTest(
+	ctx context.Context,
+	address, serverName string,
+	caPEM []byte,
+	timeout, stableWindow, interval time.Duration,
+) error {
+	return waitForServingCertificate(
+		ctx,
+		address,
+		serverName,
+		caPEM,
+		timeout,
+		stableWindow,
+		interval,
+	)
+}
+
 // VerifiedEndpointIPForTest exposes verifiedEndpointIP for unit testing.
 func (p *Provisioner) VerifiedEndpointIPForTest(
 	ctx context.Context,

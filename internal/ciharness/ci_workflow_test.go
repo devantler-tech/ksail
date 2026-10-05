@@ -176,8 +176,11 @@ func TestMayCancelDefaultBranchRuns(t *testing.T) {
 // approvedGroupExpression is the only concurrency group allowed for ci.yaml. It
 // gives main a run-unique key while leaving every other ref — pull requests and
 // merge-queue entries — sharing the ref-keyed group so superseded runs cancel.
+// The default-off manual recovery trial gets a suffix to protect ordinary CI on
+// its ref. Main remains run-unique and the suffix is absent on PR and queue events.
 const approvedGroupExpression = "ci-ksail-${{ github.workflow }}-" +
-	"${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}"
+	"${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}" +
+	"${{ inputs.run_local_recovery_trial && '-local-recovery-trial' || '' }}"
 
 // runsOnDefaultBranch reports whether a workflow's triggers admit a push to
 // main. It FAILS OPEN toward inclusion: anything that might run there is

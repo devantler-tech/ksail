@@ -213,28 +213,33 @@ func assertHetznerSchematicRolloutScenario(
 
 	calls, readErr := os.ReadFile(fixture.callsFile)
 	require.NoError(t, readErr)
-	assert.Contains(t, string(calls), "workload get nodes -o json")
-
-	if scenario.wantNoPlan {
-		assert.NotContains(t, string(calls), "cluster update --dry-run")
-	} else {
-		assert.Contains(t, string(calls), "cluster update --dry-run")
-		assert.Contains(t, string(calls), "--name schematic-trial")
-	}
-
-	assert.NotContains(t, string(calls), "--image-verification")
-
-	if scenario.wantNoApply {
-		assert.NotContains(t, string(calls), "cluster update --force")
-	} else {
-		assert.Contains(t, string(calls), "cluster update --force")
-	}
+	assertSchematicRolloutCalls(t, string(calls), scenario)
 
 	if scenario.wantSuccess {
 		config, readErr := os.ReadFile(filepath.Join(fixture.project, "ksail.yaml"))
 		require.NoError(t, readErr)
 		assert.Contains(t, string(config), liveVersion)
 		assert.Contains(t, string(config), "siderolabs/iscsi-tools")
+	}
+}
+
+func assertSchematicRolloutCalls(t *testing.T, calls string, scenario hetznerSchematicScenario) {
+	t.Helper()
+	assert.Contains(t, calls, "workload get nodes -o json")
+
+	if scenario.wantNoPlan {
+		assert.NotContains(t, calls, "cluster update --dry-run")
+	} else {
+		assert.Contains(t, calls, "cluster update --dry-run")
+		assert.Contains(t, calls, "--name schematic-trial")
+	}
+
+	assert.NotContains(t, calls, "--image-verification")
+
+	if scenario.wantNoApply {
+		assert.NotContains(t, calls, "cluster update --force")
+	} else {
+		assert.Contains(t, calls, "cluster update --force")
 	}
 }
 

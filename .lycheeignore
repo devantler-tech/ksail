@@ -92,3 +92,7 @@ https://www.gnu.org/licenses/
 # GitHub Actions OIDC issuer (identity-provider URL value; serves only
 # /.well-known/* — a bare GET of the root returns 404 by design)
 https://token.actions.githubusercontent.com/
+
+# Hetzner Cloud API (authenticated REST endpoint called by the system test with a
+# bearer token; an unauthenticated link check gets 401 by design)
+https://api.hetzner.cloud/

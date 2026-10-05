@@ -137,6 +137,15 @@ inputs:
       schematic and the cluster is healthy. Intended for a manual dispatch.
     required: false
     default: "false"
+  floating-ip-toggle:
+    description: |
+      Hetzner + Talos only. When 'true', runs an additional step that enables
+      floatingIPEnabled in ksail.yaml and applies it via `ksail cluster update
+      --force`, asserts the ksail-owned floating IP exists and is the kubeconfig
+      API endpoint, then disables it again and asserts the address is released
+      and the API is reachable on the node address. Needs an explicit --name.
+    required: false
+    default: "false"
   upload-artifacts:
     description: |
       Upload diagnostics and logs from inside this composite action. Callers
@@ -817,6 +826,88 @@ runs:
         fi
         echo "✅ Rolling server-type resize completed"
 
+    - name: 🧪 ksail cluster update — floating IP enable then disable
+      id: cluster-update-floating-ip-toggle
+      if: inputs.provider == 'Hetzner' && inputs.distribution == 'Talos' && inputs.floating-ip-toggle == 'true'
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ steps.resolve-args.outputs.args }}
+        K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
+      run: |
+        set -euo pipefail
+        LOG_DIR="/tmp/ksail-system-test-logs"
+        CLUSTER_NAME=$(echo "$ARGS" | grep -oP '(?<=--name\s)\S+' || true)
+        if [ -z "$CLUSTER_NAME" ]; then
+          echo "❌ ERROR: the floating IP toggle needs an explicit --name in the args"
+          exit 1
+        fi
+        # Strip init-only flags that cluster update does not accept.
+        UPDATE_ARGS=$(echo "$ARGS" | sed 's/--image-verification [^ ]*//')
+
+        # Prints the address of the cluster's ksail-owned floating IP, or nothing.
+        owned_floating_ip() {
+          local body
+          body=$(curl -fsS -H "Authorization: Bearer ${HCLOUD_TOKEN}" \
+            "https://api.hetzner.cloud/v1/floating_ips?label_selector=ksail.cluster.name%3D${CLUSTER_NAME}%2Cksail.owned%3Dtrue")
+          jq -r '[.floating_ips[].ip] | first // empty' <<<"$body"
+        }
+        kubeconfig_server() {
+          kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}'
+        }
+        # Prints the kubeconfig server's host, without scheme, port or IPv6 brackets.
+        kubeconfig_host() {
+          local host
+          host=$(kubeconfig_server)
+          host=${host#*://}
+          host=${host%%/*}
+          if [[ "$host" == \[* ]]; then
+            host=${host#[}
+            host=${host%%]*}
+          else
+            host=${host%:*}
+          fi
+          printf '%s' "$host"
+        }
+
+        echo "=== Enabling the floating IP ==="
+        yq -i '.spec.provider.hetzner.floatingIPEnabled = true' ksail.yaml
+        # shellcheck disable=SC2086
+        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG \
+          2>&1 | tee "$LOG_DIR/cluster-update-floating-ip-enable.log"
+        FLOATING_IP=$(owned_floating_ip)
+        if [ -z "$FLOATING_IP" ]; then
+          echo "❌ ERROR: no ksail-owned floating IP exists after enabling it"
+          exit 1
+        fi
+        SERVER=$(kubeconfig_server)
+        if [[ "$(kubeconfig_host)" != "$FLOATING_IP" ]]; then
+          echo "❌ ERROR: kubeconfig server ${SERVER} does not use the floating IP ${FLOATING_IP}"
+          exit 1
+        fi
+        ksail cluster info
+        echo "✅ Floating IP ${FLOATING_IP} is the API endpoint"
+
+        echo "=== Disabling the floating IP ==="
+        yq -i '.spec.provider.hetzner.floatingIPEnabled = false' ksail.yaml
+        # shellcheck disable=SC2086
+        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG \
+          2>&1 | tee "$LOG_DIR/cluster-update-floating-ip-disable.log"
+        REMAINING=$(owned_floating_ip)
+        if [ -n "$REMAINING" ]; then
+          echo "❌ ERROR: floating IP ${REMAINING} was not released after disabling it"
+          exit 1
+        fi
+        SERVER=$(kubeconfig_server)
+        if [[ "$(kubeconfig_host)" == "$FLOATING_IP" ]]; then
+          echo "❌ ERROR: kubeconfig server ${SERVER} still points at the released floating IP"
+          exit 1
+        fi
+        ksail cluster info
+        kubectl get nodes -o wide
+        echo "✅ Floating IP released; API reachable at ${SERVER}"
+
     # ── Phase 4b — Lifecycle tests (stop/start) ──────────────────────
     # Exercise stop/start on the freshly-created cluster BEFORE the heavy
     # nested-provider suite. Running it here keeps single-node etcd recovery
@@ -929,6 +1020,7 @@ runs:
         || steps.cluster-update.outcome == 'failure'
         || steps.cluster-update-schematic.outcome == 'failure'
         || steps.cluster-update-rolling-resize.outcome == 'failure'
+        || steps.cluster-update-floating-ip-toggle.outcome == 'failure'
         || steps.kubernetes-provider-tests.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
