@@ -22,6 +22,7 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/versionresolver"
 	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
@@ -44,6 +45,27 @@ func ExportReconcileClusterVersions(
 	}
 
 	return orchestrator.reconcileClusterVersions(provisioner)
+}
+
+// ExportExecuteVersionUpgrade exercises discovery and rolling steps with an injected registry.
+func ExportExecuteVersionUpgrade(
+	cmd *cobra.Command,
+	upgrader clusterupdate.Upgrader,
+	resolver versionresolver.Resolver,
+	upgradeType, currentVersion string,
+	dryRun bool,
+) (bool, error) {
+	orchestrator := &updateOrchestrator{cmd: cmd, clusterName: "demo", dryRun: dryRun}
+
+	apply := upgrader.UpgradeKubernetes
+	if upgradeType == distributionLabel {
+		apply = upgrader.UpgradeDistribution
+	}
+
+	return orchestrator.executeVersionUpgrade(versionUpgradeParams{
+		upgrader: upgrader, resolver: resolver, upgradeType: upgradeType,
+		imageRef: "registry.invalid/ksail/node", currentVersion: currentVersion, applyFn: apply,
+	})
 }
 
 // ExportSetupMutationCmdFlags exposes the command's real configuration/flag bindings.
@@ -218,6 +240,14 @@ func ExportEnsureClusterManaged(
 	)
 }
 
+// ExportUnmanagedClusterGuard exercises the production provider selection in tests.
+func ExportUnmanagedClusterGuard(
+	ctx context.Context,
+	resolved *lifecycle.ResolvedClusterInfo,
+) error {
+	return unmanagedClusterGuard(ctx, resolved)
+}
+
 // ExportParseEksctlContextTarget exports parseEksctlContextTarget for testing.
 func ExportParseEksctlContextTarget(contextName string) (string, string, bool) {
 	return parseEksctlContextTarget(contextName)
@@ -242,9 +272,29 @@ func ExportPrepareEKSCreateConfig(ctx *localregistry.Context) error {
 	return prepareEKSCreateConfig(ctx)
 }
 
-// ExportApplyClusterNameOverride exports applyClusterNameOverride for testing.
+// ExportApplyClusterNameOverride applies a create-time name override, as `cluster create` does with
+// metadata.name or --name: the distribution configs are renamed and the context retargeted.
 func ExportApplyClusterNameOverride(ctx *localregistry.Context, name string) error {
-	return applyClusterNameOverride(ctx, name)
+	return applyResolvedNameOverride(ctx, clusterNameOverride{name: name}, newClusterTarget)
+}
+
+// ExportApplyResolvedNameOverride exports applyResolvedNameOverride for testing. fromFlag marks
+// a --name override; existingCluster selects the diff/update target instead of create.
+func ExportApplyResolvedNameOverride(
+	ctx *localregistry.Context,
+	name string,
+	fromFlag, existingCluster bool,
+) error {
+	target := newClusterTarget
+	if existingCluster {
+		target = existingClusterTarget
+	}
+
+	return applyResolvedNameOverride(
+		ctx,
+		clusterNameOverride{name: name, fromFlag: fromFlag},
+		target,
+	)
 }
 
 // ExportResolveConsent exports resolveConsent for testing.
@@ -909,13 +959,33 @@ func ExportReportEKSUpgraded(cmd *cobra.Command, version string) {
 	reportEKSUpgraded(cmd, version)
 }
 
-// ExportCheckAutoscalerValuesDrift exports checkAutoscalerValuesDrift for testing.
+// ExportCheckAutoscalerValuesDrift runs only the Cluster Autoscaler's
+// chart-values drift probe, for testing.
 func ExportCheckAutoscalerValuesDrift(
 	cmd *cobra.Command,
 	ctx *localregistry.Context,
 	diff *clusterupdate.UpdateResult,
 ) {
-	checkAutoscalerValuesDrift(
+	checkComponentValuesDrift(
+		cmd,
+		ctx,
+		specdiff.NewEngine(
+			ctx.ClusterCfg.Spec.Cluster.Distribution,
+			ctx.ClusterCfg.Spec.Cluster.Provider,
+		),
+		diff,
+		autoscalerValuesProbe(),
+	)
+}
+
+// ExportCheckChartValuesDrift exports checkChartValuesDrift, which runs every
+// component's chart-values drift probe, for testing.
+func ExportCheckChartValuesDrift(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	diff *clusterupdate.UpdateResult,
+) {
+	checkChartValuesDrift(
 		cmd,
 		ctx,
 		specdiff.NewEngine(
@@ -924,4 +994,17 @@ func ExportCheckAutoscalerValuesDrift(
 		),
 		diff,
 	)
+}
+
+// ExportChartValuesDriftFields lists the diff field of every chart-values
+// drift probe, so tests can pin that each one is reconciled in place.
+func ExportChartValuesDriftFields() []string {
+	probes := chartValuesDriftProbes()
+	fields := make([]string, 0, len(probes))
+
+	for _, probe := range probes {
+		fields = append(fields, probe.field)
+	}
+
+	return fields
 }

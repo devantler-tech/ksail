@@ -5,7 +5,7 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 validator="${script_dir}/verify-go-archive-parity.sh"
 tmp_dir="$(mktemp -d)"
-trap 'rm -rf "${tmp_dir}"' EXIT
+trap 'chmod -R u+w "${tmp_dir}/cached" 2>/dev/null || true; rm -rf "${tmp_dir}"' EXIT
 
 upstream="${tmp_dir}/upstream"
 local_copy="${tmp_dir}/local"
@@ -219,40 +219,91 @@ rm -f -- "${newline_path}"
 # relocated copy reads the manifests beside it and no tracked file is ever
 # mutated (a test that edits real manifests leaves them corrupted if it aborts).
 fake_repo="${tmp_dir}/fake-repo"
-mkdir -p "${fake_repo}/.github/scripts" "${fake_repo}/desktop"
+mkdir -p "${fake_repo}/.github/scripts"
 cp "${validator}" "${fake_repo}/.github/scripts/"
 fake_validator="${fake_repo}/.github/scripts/${validator##*/}"
 
+# write_fake_manifests creates a shared-module fixture with the requested pin.
 write_fake_manifests() {
 	printf 'module fake\n\nrequire (\n\tgithub.com/moby/go-archive %s // indirect\n)\n' "$1" \
 		>"${fake_repo}/go.mod"
-	printf 'module fake/desktop\n\nrequire (\n\tgithub.com/moby/go-archive %s // indirect\n)\n' "$2" \
-		>"${fake_repo}/desktop/go.mod"
 }
 
-# POSITIVE CONTROL first: with both manifests on the reviewed pin the relocated
-# validator passes, so the two rejections below are attributable to the version
+# POSITIVE CONTROL first: with the shared manifest on the reviewed pin the relocated
+# validator passes, so the rejection below is attributable to the version
 # and not to the fake tree merely being unusable.
-write_fake_manifests 'v0.3.0' 'v0.3.0'
+write_fake_manifests 'v0.3.0'
 if ! "${fake_validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}" >/dev/null 2>&1; then
 	printf 'FAIL: relocated validator rejected manifests that are on the reviewed pin\n' >&2
 	exit 1
 fi
 
-# Each manifest is asserted separately: a check covering only the other one
-# would still pass here.
-write_fake_manifests 'v0.2.0' 'v0.3.0'
+# Reject a superseded shared pin; the metadata must describe the reviewed bytes.
+write_fake_manifests 'v0.2.0'
 if "${fake_validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}" >/dev/null 2>&1; then
 	printf 'FAIL: go.mod requiring a superseded version passed parity validation\n' >&2
 	exit 1
 fi
 
-write_fake_manifests 'v0.3.0' 'v0.2.0'
-if "${fake_validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}" >/dev/null 2>&1; then
-	printf 'FAIL: desktop/go.mod requiring a superseded version passed parity validation\n' >&2
+"${validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}"
+
+# A cached download checksum authenticates the zip, not its extracted files.
+# Change the cached and local source together while retaining authentic download
+# metadata: ordinary parity must not authenticate this correlated mutation.
+repo_root="$(cd -- "${script_dir}/../.." && pwd -P)"
+real_go="$(command -v go)"
+resolved="$(go mod download -json github.com/moby/go-archive@v0.3.0)"
+cp -R "$(jq -er '.Dir' <<<"${resolved}")" "${tmp_dir}/cached"
+cp -R "${repo_root}/third_party/go-archive" "${tmp_dir}/archive"
+chmod -R u+w "${tmp_dir}/cached" "${tmp_dir}/archive"
+jq --arg dir "${tmp_dir}/cached" '.Dir = $dir' <<<"${resolved}" >"${tmp_dir}/metadata.json"
+mkdir "${tmp_dir}/bin"
+cat >"${tmp_dir}/bin/go" <<'GO'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ $# -eq 4 && "$1" == mod && "$2" == download && "$3" == -json &&
+	"$4" == github.com/moby/go-archive@v0.3.0 ]]; then
+	cat "${KS_SOURCE_METADATA}"
+else
+	exec "${KS_SOURCE_GO}" "$@"
+fi
+GO
+chmod +x "${tmp_dir}/bin/go"
+
+# verify_cached uses the default download path with a private extracted cache.
+verify_cached() {
+	PATH="${tmp_dir}/bin:${PATH}" KS_SOURCE_METADATA="${tmp_dir}/metadata.json" \
+		KS_SOURCE_GO="${real_go}" "${validator}" \
+		--local-dir "${tmp_dir}/archive" >"${tmp_dir}/cached-result" 2>&1
+}
+chmod -R a-w "${tmp_dir}/cached"
+verify_cached || {
+	cat "${tmp_dir}/cached-result" >&2
+	exit 1
+}
+chmod -R u+w "${tmp_dir}/cached"
+printf '// undeclared cached source edit\n' >>"${tmp_dir}/cached/archive.go"
+printf '// undeclared cached source edit\n' >>"${tmp_dir}/archive/archive.go"
+if verify_cached; then
+	printf 'FAIL: archive guard accepted changed source with unchanged cached checksum metadata\n' >&2
 	exit 1
 fi
+grep -q 'module source checksum mismatch' "${tmp_dir}/cached-result" || {
+	cat "${tmp_dir}/cached-result" >&2
+	exit 1
+}
 
-"${validator}" --upstream-dir "${upstream}" --local-dir "${local_copy}"
+# Declared parity exceptions still belong to the authenticated upstream tree.
+cp "$(jq -er '.Dir' <<<"${resolved}")/archive.go" "${tmp_dir}/cached/archive.go"
+cp "$(jq -er '.Dir' <<<"${resolved}")/archive.go" "${tmp_dir}/archive/archive.go"
+printf 'undeclared metadata edit\n' >>"${tmp_dir}/cached/.gitignore"
+if verify_cached; then
+	printf 'FAIL: archive guard accepted modified excepted upstream metadata\n' >&2
+	exit 1
+fi
+grep -q 'module source checksum mismatch' "${tmp_dir}/cached-result" || {
+	cat "${tmp_dir}/cached-result" >&2
+	exit 1
+}
 
 printf 'All go-archive parity cases passed.\n'

@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:goconst // Repeated literals keep the test cases explicit.
 func TestExecuteTool_SimpleCommand(t *testing.T) {
 	t.Parallel()
 

@@ -95,6 +95,8 @@ func (f DefaultFactory) createTalosProvisioner(
 		provisioner.WithComponentDetector(f.ComponentDetector)
 	}
 
+	f.applyLogWriter(provisioner)
+
 	return provisioner, f.DistributionConfig.Talos, nil
 }
 
@@ -112,7 +114,7 @@ func (f DefaultFactory) createTalosKubernetesProvisioner(
 
 	opts := cluster.Spec.Provider.Kubernetes
 
-	// Derive cluster name from Talos config (set by applyClusterNameOverride).
+	// Derive cluster name from Talos config (set by the cluster name override).
 	clusterName := f.DistributionConfig.Talos.GetClusterName()
 	if clusterName == "" {
 		clusterName = cluster.Name
@@ -123,22 +125,9 @@ func (f DefaultFactory) createTalosKubernetesProvisioner(
 		return nil, nil, err
 	}
 
-	// Create a full inner Talos Provisioner (Docker provider type).
-	// The Docker client will be injected at Create() time after DinD is ready.
-	talosOpts := talosOptsFromCluster(cluster)
-
-	innerProvisioner, err := talosprovisioner.CreateProvisioner(
-		f.DistributionConfig.Talos,
-		cluster.Spec.Cluster.Connection.Kubeconfig,
-		"",
-		v1alpha1.ProviderDocker,
-		talosOpts,
-		v1alpha1.OptionsHetzner{},
-		v1alpha1.OptionsOmni{},
-		true, // skipCNIChecks — same as normal Docker path
-	)
+	innerProvisioner, err := f.createInnerTalosProvisioner(cluster)
 	if err != nil {
-		return nil, nil, fmt.Errorf("create inner Talos provisioner: %w", err)
+		return nil, nil, err
 	}
 
 	// jscpd:ignore-start
@@ -166,4 +155,37 @@ func (f DefaultFactory) createTalosKubernetesProvisioner(
 	}
 
 	return provisioner, nil, nil
+}
+
+// applyLogWriter points a Talos provisioner's progress output at the factory's
+// LogWriter, when one is set; otherwise the provisioner keeps its default.
+func (f DefaultFactory) applyLogWriter(provisioner *talosprovisioner.Provisioner) {
+	if f.LogWriter != nil {
+		provisioner.WithLogWriter(f.LogWriter)
+	}
+}
+
+// createInnerTalosProvisioner creates the full Talos provisioner (Docker
+// provider type) that a Kubernetes-hosted Talos cluster runs inside its DinD
+// pod. The Docker client is injected at Create() time after DinD is ready.
+func (f DefaultFactory) createInnerTalosProvisioner(
+	cluster *v1alpha1.Cluster,
+) (*talosprovisioner.Provisioner, error) {
+	innerProvisioner, err := talosprovisioner.CreateProvisioner(
+		f.DistributionConfig.Talos,
+		cluster.Spec.Cluster.Connection.Kubeconfig,
+		"",
+		v1alpha1.ProviderDocker,
+		talosOptsFromCluster(cluster),
+		v1alpha1.OptionsHetzner{},
+		v1alpha1.OptionsOmni{},
+		true, // skipCNIChecks — same as normal Docker path
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create inner Talos provisioner: %w", err)
+	}
+
+	f.applyLogWriter(innerProvisioner)
+
+	return innerProvisioner, nil
 }

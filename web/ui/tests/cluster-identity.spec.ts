@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { Cluster, K8sObject } from "../src/api.ts";
 import { detectDistribution, detectProvider, displayIdentity } from "../src/lib/clusterIdentity.ts";
+import { mockApi } from "./mock-api.ts";
 
 type NodeShape = {
   osImage?: string;
@@ -10,11 +11,21 @@ type NodeShape = {
   annotations?: Record<string, string>;
 };
 
-function node({ osImage = "", kubeletVersion = "v1.36.4", providerID, labels = {}, annotations = {} }: NodeShape): K8sObject {
+function node({
+  osImage = "",
+  kubeletVersion = "v1.36.4",
+  providerID,
+  labels = {},
+  annotations = {},
+}: NodeShape): K8sObject {
   return {
     apiVersion: "v1",
     kind: "Node",
-    metadata: { name: `node-${Math.random().toString(36).slice(2, 8)}`, labels, annotations },
+    metadata: {
+      name: `node-${Math.random().toString(36).slice(2, 8)}`,
+      labels,
+      annotations,
+    },
     spec: providerID === undefined ? {} : { providerID },
     status: {
       nodeInfo: { osImage, kubeletVersion },
@@ -34,10 +45,22 @@ test.describe("detectDistribution", () => {
     expect(detectDistribution([node({ kubeletVersion: "v1.29.3-eks-ae9a62a" })])).toBe("EKS");
     expect(detectDistribution([node({ kubeletVersion: "v1.29.4-gke.1043002" })])).toBe("GKE");
     expect(detectDistribution([node({ labels: { "kubernetes.azure.com/cluster": "rg" } })])).toBe("AKS");
-    expect(detectDistribution([node({ kubeletVersion: "fake", annotations: { "kwok.x-k8s.io/node": "fake" } })])).toBe("KWOK");
-    expect(detectDistribution([node({ osImage: "Debian GNU/Linux 12", providerID: "kind://docker/dev/dev-control-plane" })])).toBe(
-      "Vanilla",
-    );
+    expect(
+      detectDistribution([
+        node({
+          kubeletVersion: "fake",
+          annotations: { "kwok.x-k8s.io/node": "fake" },
+        }),
+      ]),
+    ).toBe("KWOK");
+    expect(
+      detectDistribution([
+        node({
+          osImage: "Debian GNU/Linux 12",
+          providerID: "kind://docker/dev/dev-control-plane",
+        }),
+      ]),
+    ).toBe("Vanilla");
   });
 
   test("says nothing when the nodes disagree or carry no signal", () => {
@@ -72,7 +95,10 @@ test.describe("detectProvider", () => {
 
 test.describe("displayIdentity", () => {
   const withSpec = (spec?: { distribution?: string; provider?: string }): Cluster =>
-    ({ metadata: { name: "c" }, spec: spec ? { cluster: spec } : undefined }) as Cluster;
+    ({
+      metadata: { name: "c" },
+      spec: spec ? { cluster: spec } : undefined,
+    }) as Cluster;
 
   test("the spec wins over the nodes, and only node-supplied values are marked detected", () => {
     const shown = displayIdentity(withSpec({ distribution: "K3s", provider: "Docker" }), {
@@ -84,7 +110,10 @@ test.describe("displayIdentity", () => {
   });
 
   test("the nodes fill fields the spec leaves empty", () => {
-    const shown = displayIdentity(withSpec(), { distribution: "Talos", provider: "Hetzner" });
+    const shown = displayIdentity(withSpec(), {
+      distribution: "Talos",
+      provider: "Hetzner",
+    });
     expect(shown.distribution).toEqual({ value: "Talos", detected: true });
     expect(shown.provider).toEqual({ value: "Hetzner", detected: true });
   });
@@ -99,7 +128,11 @@ test.describe("displayIdentity", () => {
 // unmanaged builds a kubeconfig context ksail did not create: the backend sends it with no spec.
 function unmanaged(name: string): Cluster {
   return {
-    metadata: { name, namespace: "default", annotations: { "ksail.io/unmanaged": "true" } },
+    metadata: {
+      name,
+      namespace: "default",
+      annotations: { "ksail.io/unmanaged": "true" },
+    },
     status: {
       endpoint: `https://${name.replace(/[^a-z0-9]/g, "-")}.example.invalid:6443`,
       conditions: [
@@ -123,25 +156,17 @@ const managedKind = {
 type MockOptions = {
   clusters: Cluster[];
   // nodesFor returns the Nodes a cluster serves, or "error" to fail its Node read.
-  nodesFor: (cluster: string) => K8sObject[] | "error";
+  nodesFor: (cluster: string) => K8sObject[] | "error" | Promise<K8sObject[] | "error">;
   delayMs?: number;
+  mode?: "local" | "operator";
 };
 
 // mockDesktopApi serves the local (desktop) surface and records how many Node reads were in flight
 // at once, so a test can prove the store bounds them.
-async function mockDesktopApi(page: Page, { clusters, nodesFor, delayMs = 0 }: MockOptions) {
+async function mockDesktopApi(page: Page, { clusters, nodesFor, delayMs = 0, mode = "local" }: MockOptions) {
   const nodeReads = { total: 0, inFlight: 0, maxInFlight: 0 };
 
-  await page.route("**/api/v1/**", async (route) => {
-    const url = new URL(route.request().url());
-
-    if (url.pathname === "/api/v1/config") {
-      await route.fulfill({
-        json: { readOnly: false, authEnabled: false, mode: "local", capabilities: { workloadRead: true } },
-      });
-      return;
-    }
-
+  await mockApi(page, { mode, capabilities: { workloadRead: true } }, async (route, url) => {
     if (url.pathname === "/api/v1/meta") {
       // Vanilla/Docker come first in the create-form catalogue, as on the real desktop surface. No
       // surface may show them for a cluster whose nodes say otherwise.
@@ -161,19 +186,19 @@ async function mockDesktopApi(page: Page, { clusters, nodesFor, delayMs = 0 }: M
           })),
         },
       });
-      return;
+      return true;
     }
 
     if (url.pathname === "/api/v1/clusters") {
       await route.fulfill({ json: { items: clusters } });
-      return;
+      return true;
     }
 
     if (url.pathname.endsWith("/resources")) {
       const kind = url.searchParams.get("kind") ?? "";
       if (kind !== "Node") {
         await route.fulfill({ json: { items: [] } });
-        return;
+        return true;
       }
 
       const name = decodeURIComponent(url.pathname.split("/").at(-2) ?? "");
@@ -183,21 +208,20 @@ async function mockDesktopApi(page: Page, { clusters, nodesFor, delayMs = 0 }: M
       if (delayMs > 0) {
         await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
-      nodeReads.inFlight -= 1;
-
-      const nodes = nodesFor(name);
-      await (nodes === "error"
-        ? route.fulfill({ status: 502, json: { error: "cluster unreachable" } })
-        : route.fulfill({ json: { items: nodes } }));
-      return;
+      try {
+        const nodes = await nodesFor(name);
+        await (nodes === "error"
+          ? route.fulfill({
+              status: 502,
+              json: { error: "cluster unreachable" },
+            })
+          : route.fulfill({ json: { items: nodes } }));
+      } finally {
+        nodeReads.inFlight -= 1;
+      }
+      return true;
     }
-
-    if (url.pathname === "/api/v1/events") {
-      await route.fulfill({ status: 204 });
-      return;
-    }
-
-    await route.fulfill({ status: 404, json: { error: `No mock route for ${url.pathname}` } });
+    return false;
   });
 
   return nodeReads;
@@ -206,9 +230,199 @@ async function mockDesktopApi(page: Page, { clusters, nodesFor, delayMs = 0 }: M
 async function openOverview(page: Page, name: string) {
   await page.goto("/");
   await page.getByText(name, { exact: true }).first().click();
+  const main = page.locator("#main-content");
+  return {
+    main,
+    nodes: main.getByText("Nodes", { exact: true }).first().locator(".."),
+  };
+}
+
+// Observe the existing two-node cards before enabling and requesting fresh reads.
+async function refreshOverview(page: Page, name: string, beforeRefresh: () => void) {
+  const overview = await openOverview(page, name);
+  await expect(overview.nodes).toContainText("2/2");
+  beforeRefresh();
+  await overview.main.getByRole("button", { name: "Refresh", exact: true }).click();
+  return overview;
+}
+
+// Register the response listener before releasing the request, then let both rendering frames finish.
+async function finishReleasedNodeRead(page: Page, release: () => void) {
+  const response = page.waitForResponse((received) => received.url().includes("kind=Node"));
+  release();
+  await (await response).finished();
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
 const DETECTED = "Detected from the cluster's nodes";
+
+// Keep the app's stream handler real and control only the external event feed.
+async function mockClusterStream(page: Page) {
+  await page.addInitScript(() => {
+    class ClusterStream extends EventTarget {
+      private receive = (event: Event) => {
+        this.dispatchEvent(new MessageEvent("clusters", { data: (event as CustomEvent).detail }));
+      };
+
+      constructor() {
+        super();
+        window.addEventListener("test-clusters", this.receive);
+      }
+
+      close() {
+        window.removeEventListener("test-clusters", this.receive);
+      }
+    }
+
+    window.EventSource = ClusterStream as unknown as typeof EventSource;
+  });
+
+  return async (clusters: Cluster[]) => {
+    await page.evaluate((items) => {
+      window.dispatchEvent(new CustomEvent("test-clusters", { detail: JSON.stringify({ items }) }));
+    }, clusters);
+  };
+}
+
+function instance(uid: string): Cluster {
+  const cluster = unmanaged("prod");
+
+  return { ...cluster, metadata: { ...cluster.metadata, uid } } as Cluster;
+}
+
+function gate() {
+  let release!: () => void;
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  return { promise, release };
+}
+
+test("a same-named replacement clears the old identity and health before its reads finish", async ({ page }) => {
+  const replacementReady = gate();
+  let replaced = false;
+  await mockDesktopApi(page, {
+    mode: "operator",
+    clusters: [instance("first-uid")],
+    nodesFor: async () => {
+      if (!replaced) return [talosHetzner(1), talosHetzner(2)];
+      await replacementReady.promise;
+      return [k3sNode()];
+    },
+  });
+  const publish = await mockClusterStream(page);
+  const { main, nodes } = await openOverview(page, "prod");
+  await expect(main.getByText("Talos · Hetzner · namespace default", { exact: true })).toBeVisible();
+  await expect(nodes).toContainText("2/2");
+
+  replaced = true;
+  const replacement = instance("second-uid");
+  replacement.status!.endpoint = "https://replacement.example.invalid:6443";
+  await publish([replacement]);
+  await expect(main.getByText(replacement.status!.endpoint!, { exact: true })).toBeVisible();
+
+  // The fresh requests cannot finish until released: inspect the replacement's loading frame.
+  expect(await main.innerText()).not.toContain("Talos");
+  expect(await main.innerText()).not.toContain("Hetzner");
+  expect(await nodes.innerText()).not.toContain("2/2");
+  expect(await page.getByRole("button", { name: /prod/ }).first().innerText()).not.toContain("Hetzner");
+
+  replacementReady.release();
+  await expect(main.getByText("K3s · — · namespace default", { exact: true })).toBeVisible();
+  await expect(nodes).toContainText("1/1");
+});
+
+test("a late detection for a deleted instance cannot overwrite its replacement's identity", async ({ page }) => {
+  const oldRead = gate();
+  const oldStarted = gate();
+  let replaced = false;
+  await mockDesktopApi(page, {
+    mode: "operator",
+    clusters: [instance("first-uid")],
+    nodesFor: async () => {
+      if (replaced) return [k3sNode()];
+      oldStarted.release();
+      await oldRead.promise;
+      return [talosHetzner(1)];
+    },
+  });
+  const publish = await mockClusterStream(page);
+  await page.goto("/");
+  await oldStarted.promise;
+  replaced = true;
+  await publish([instance("second-uid")]);
+  const row = page.getByRole("button", { name: "View prod", exact: true });
+  await expect(row.getByTitle(DETECTED).filter({ hasText: "K3s" })).toBeVisible();
+
+  await finishReleasedNodeRead(page, oldRead.release);
+  await expect(row.getByTitle(DETECTED).filter({ hasText: "K3s" })).toBeVisible();
+  await expect(row.getByText("Talos", { exact: true })).toHaveCount(0);
+});
+
+test("a late health refresh for a deleted instance cannot restore its old cards", async ({ page }) => {
+  const oldRead = gate();
+  const oldStarted = gate();
+  let state: "initial" | "refresh" | "replacement" = "initial";
+  await mockDesktopApi(page, {
+    mode: "operator",
+    clusters: [instance("first-uid")],
+    nodesFor: async () => {
+      if (state === "replacement") return [k3sNode()];
+      if (state === "refresh") {
+        oldStarted.release();
+        await oldRead.promise;
+      }
+      return [talosHetzner(1), talosHetzner(2)];
+    },
+  });
+  const publish = await mockClusterStream(page);
+  const { main, nodes } = await refreshOverview(page, "prod", () => {
+    state = "refresh";
+  });
+  await oldStarted.promise;
+  state = "replacement";
+  await publish([instance("second-uid")]);
+  await expect(main.getByText("K3s · — · namespace default", { exact: true })).toBeVisible();
+  await expect(nodes).toContainText("1/1");
+
+  await finishReleasedNodeRead(page, oldRead.release);
+  expect(await main.innerText()).not.toContain("Talos");
+  expect(await nodes.innerText()).toContain("1/1");
+  expect(await page.getByRole("button", { name: /prod/ }).first().innerText()).not.toContain("Hetzner");
+});
+
+test("refreshing the same instance keeps its identity and health cards while reloading", async ({ page }) => {
+  const refreshReady = gate();
+  const refreshStarted = gate();
+  let refreshing = false;
+  await mockDesktopApi(page, {
+    mode: "operator",
+    clusters: [instance("first-uid")],
+    nodesFor: async () => {
+      if (refreshing) {
+        refreshStarted.release();
+        await refreshReady.promise;
+      }
+      return refreshing ? [talosHetzner(1), talosHetzner(2), talosHetzner(3)] : [talosHetzner(1), talosHetzner(2)];
+    },
+  });
+  const publish = await mockClusterStream(page);
+  const { main, nodes } = await refreshOverview(page, "prod", () => {
+    refreshing = true;
+  });
+  await refreshStarted.promise;
+  const updated = instance("first-uid");
+  updated.status!.endpoint = "https://updated.example.invalid:6443";
+  await publish([updated]);
+  await expect(main.getByText(updated.status!.endpoint!, { exact: true })).toBeVisible();
+
+  expect(await main.innerText()).toContain("Talos · Hetzner · namespace default");
+  expect(await nodes.innerText()).toContain("2/2");
+  refreshReady.release();
+  await expect(main.getByRole("button", { name: "Refresh", exact: true })).toBeEnabled();
+  await expect(nodes).toContainText("3/3");
+});
 
 test("an unmanaged Talos cluster on Hetzner is identified from its nodes on every surface", async ({ page }) => {
   await mockDesktopApi(page, {
@@ -236,7 +450,10 @@ test("an unmanaged Talos cluster on Hetzner is identified from its nodes on ever
 });
 
 test("an unmanaged cluster with no conclusive node evidence is not guessed", async ({ page }) => {
-  await mockDesktopApi(page, { clusters: [unmanaged("oidc@prod")], nodesFor: () => [ubuntu()] });
+  await mockDesktopApi(page, {
+    clusters: [unmanaged("oidc@prod")],
+    nodesFor: () => [ubuntu()],
+  });
   await openOverview(page, "oidc@prod");
 
   await expect(page.getByText("— · — · namespace default", { exact: true })).toBeVisible();
@@ -260,7 +477,10 @@ test("switching clusters never shows the previous cluster's identity while the n
 
   // Switch through the sidebar switcher, which is the path that keeps this view mounted — returning
   // to the cluster list and coming back would remount it and reset the state under test.
-  await page.getByRole("button", { name: /oidc@prod/ }).first().click();
+  await page
+    .getByRole("button", { name: /oidc@prod/ })
+    .first()
+    .click();
   await page.getByRole("menuitem").filter({ hasText: "k3s@edge" }).click();
 
   // A snapshot, deliberately not a retrying assertion: the point is what the page reads DURING the
@@ -273,7 +493,10 @@ test("switching clusters never shows the previous cluster's identity while the n
 test("the switcher drops the separator when only the distribution is known", async ({ page }) => {
   // The sidebar line is compact: a known distribution beside an unknown provider reads "K3s", not
   // "K3s · —". The Overview is the surface that spells an unknown field out as a dash.
-  await mockDesktopApi(page, { clusters: [unmanaged("k3s@edge")], nodesFor: () => [k3sNode(), k3sNode()] });
+  await mockDesktopApi(page, {
+    clusters: [unmanaged("k3s@edge")],
+    nodesFor: () => [k3sNode(), k3sNode()],
+  });
   await openOverview(page, "k3s@edge");
 
   await expect(page.locator("#main-content").getByText("K3s · — · namespace default", { exact: true })).toBeVisible();
@@ -283,7 +506,9 @@ test("the switcher drops the separator when only the distribution is known", asy
   await expect(switcher).not.toContainText("·");
 });
 
-test("the clusters table identifies unmanaged clusters, keeps configured ones, and bounds its reads", async ({ page }) => {
+test("the clusters table identifies unmanaged clusters, keeps configured ones, and bounds its reads", async ({
+  page,
+}) => {
   const talos = Array.from({ length: 6 }, (_, index) => unmanaged(`talos-${index}`));
   const clusters = [managedKind, ...talos, unmanaged("unreachable")];
   const reads = await mockDesktopApi(page, {

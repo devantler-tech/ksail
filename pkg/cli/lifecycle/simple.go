@@ -831,6 +831,32 @@ func newKubernetesCleanupProvisioner(
 	}, nil
 }
 
+// KubernetesClusterIsManaged verifies exact namespace ownership on the same host
+// connection used by nested-cluster cleanup. Host/API failures do not grant ownership.
+func KubernetesClusterIsManaged(
+	ctx context.Context,
+	clusterName string,
+	opts v1alpha1.OptionsKubernetes,
+) (bool, error) {
+	provisioner, err := newKubernetesCleanupProvisioner(clusterName, opts, "")
+	if err != nil {
+		return false, err
+	}
+
+	for _, prefix := range []string{namespaceKsailPrefix, namespaceK3kPrefix, namespaceVClusterPrefix} {
+		owned, _, err := provisioner.namespaceOwnership(ctx, prefix+clusterName)
+		if err != nil {
+			return false, err
+		}
+
+		if owned {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 func (p *kubernetesCleanupProvisioner) Create(_ context.Context, _ string) error {
 	return fmt.Errorf("create: %w", clustererr.ErrOperationNotSupported)
 }
@@ -919,32 +945,47 @@ func (p *kubernetesCleanupProvisioner) List(ctx context.Context) ([]string, erro
 	return names, nil
 }
 
-// verifyAndDeleteNamespace checks if a namespace is KSail-managed and deletes it if so.
-// It returns nil if the namespace was successfully deleted or does not exist.
-// It returns an error only if deletion fails for a KSail-managed namespace.
+func (p *kubernetesCleanupProvisioner) namespaceOwnership(
+	ctx context.Context,
+	namespaceName string,
+) (bool, *metav1.Preconditions, error) {
+	namespace, err := p.clientset.CoreV1().Namespaces().Get(ctx, namespaceName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return false, nil, nil
+	}
+
+	if err != nil {
+		return false, nil, fmt.Errorf("verify namespace %s ownership: %w", namespaceName, err)
+	}
+
+	owned := namespace.Labels["ksail.io/managed-by"] == "ksail" &&
+		namespace.Labels["ksail.io/cluster"] == p.clusterName
+
+	return owned, &metav1.Preconditions{
+		UID: &namespace.UID, ResourceVersion: &namespace.ResourceVersion,
+	}, nil
+}
+
+// verifyAndDeleteNamespace rechecks exact ownership before deleting. Missing or
+// unowned namespaces are left untouched; a failed ownership read stops cleanup.
 func (p *kubernetesCleanupProvisioner) verifyAndDeleteNamespace(
 	ctx context.Context,
 	namespaceName string,
 ) error {
-	namespace, err := p.clientset.CoreV1().Namespaces().Get(ctx, namespaceName, metav1.GetOptions{})
+	owned, identity, err := p.namespaceOwnership(ctx, namespaceName)
 	if err != nil {
-		if apierrors.IsNotFound(err) {
-			// Namespace doesn't exist, nothing to do
-			return nil
-		}
-		// On other errors, skip this prefix
+		return err
+	}
+
+	if !owned {
 		return nil
 	}
 
-	// Verify that this namespace is KSail-managed before deleting
-	if namespace.Labels != nil &&
-		namespace.Labels["ksail.io/managed-by"] == "ksail" &&
-		namespace.Labels["ksail.io/cluster"] == p.clusterName {
-		// This is a KSail-managed namespace, safe to delete
-		err := p.clientset.CoreV1().Namespaces().Delete(ctx, namespaceName, metav1.DeleteOptions{})
-		if err != nil && !apierrors.IsNotFound(err) {
-			return fmt.Errorf("delete namespace %s: %w", namespaceName, err)
-		}
+	err = p.clientset.CoreV1().Namespaces().Delete(ctx, namespaceName, metav1.DeleteOptions{
+		Preconditions: identity,
+	})
+	if err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("delete namespace %s: %w", namespaceName, err)
 	}
 
 	return nil

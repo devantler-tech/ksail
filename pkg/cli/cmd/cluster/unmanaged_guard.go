@@ -696,11 +696,33 @@ func unmanagedClusterError(clusterName string) error {
 	)
 }
 
-// unmanagedClusterGuard is the SimpleLifecycleConfig.Guard shared by start and stop. AWS uses the
-// exact fail-closed ownership query; other providers retain the existing cross-provider guard.
+// unmanagedClusterGuard is the SimpleLifecycleConfig.Guard shared by start and stop. AWS and
+// Kubernetes use exact provider ownership queries; other providers keep cross-provider discovery.
 func unmanagedClusterGuard(ctx context.Context, resolved *lifecycle.ResolvedClusterInfo) error {
 	if resolved.Provider == v1alpha1.ProviderAWS {
 		return ensureAWSClusterManaged(ctx, resolved)
+	}
+
+	if resolved.Provider == v1alpha1.ProviderKubernetes {
+		owned, err := lifecycle.KubernetesClusterIsManaged(
+			ctx,
+			resolved.ClusterName,
+			resolved.KubernetesOpts,
+		)
+		if err != nil {
+			return fmt.Errorf("verify nested cluster ownership: %w", err)
+		}
+
+		if owned || !kubeconfigHasClusterContext(resolved.KubeconfigPath, resolved.ClusterName) {
+			return nil
+		}
+
+		return fmt.Errorf(
+			"%w; to retire only a local connection, use "+
+				"ksail cluster forget --kubeconfig <file> --context <exact-context> --experimental; "+
+				"this does not check or delete host resources",
+			unmanagedClusterError(resolved.ClusterName),
+		)
 	}
 
 	return ensureClusterManaged(ctx, resolved, discoverManagedClusters)

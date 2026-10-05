@@ -1,0 +1,48 @@
+name: Verify comment scanner adoption
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/todos.yaml
+      - .github/workflows/verify-comment-scan.yaml
+      - .github/scripts/verify-vendored-comment-scan.sh
+      - internal/ciharness/todos_workflow_test.go
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/todos.yaml
+      - .github/workflows/verify-comment-scan.yaml
+      - .github/scripts/verify-vendored-comment-scan.sh
+      - internal/ciharness/todos_workflow_test.go
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-consumer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+      - name: Checkout consumer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Checkout the consumer's released catalogue
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: devantler-tech/.github
+          ref: 0600006235510307a04efebcac1ac1f363f5f862 # v6.0.1
+          path: .comment-scan-catalogue
+          persist-credentials: false
+      - name: Set up native fixture Go toolchain
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: .comment-scan-catalogue/.github/tests/todo-scanner/go.mod
+          cache: false
+      - name: Verify the actual scanner with no network or live credentials
+        run: bash .github/scripts/verify-vendored-comment-scan.sh .comment-scan-catalogue

@@ -16,10 +16,10 @@ build: ui ## Build the ksail binary with the web UI embedded.
 	go build -o ksail .
 
 desktop: ui ## Build the KSail desktop app (CGO + a system webview required); output: ./ksail-desktop.
-	cd $(DESKTOP_DIR) && go build -o ../ksail-desktop .
+	cd $(DESKTOP_DIR) && go build -tags desktop -o ../ksail-desktop .
 
 desktop-app: ui ## Build the macOS KSail.app bundle (macOS only); output: ./KSail.app.
-	cd $(DESKTOP_DIR) && go build -ldflags "-s -w" -o ksail-desktop .
+	cd $(DESKTOP_DIR) && go build -tags desktop -ldflags "-s -w" -o ksail-desktop .
 	bash $(DESKTOP_DIR)/scripts/make-macos-app.sh "$(DESKTOP_DIR)/ksail-desktop" "KSail.app" "$(VERSION)"
 
 test: ## Run the Go unit tests.

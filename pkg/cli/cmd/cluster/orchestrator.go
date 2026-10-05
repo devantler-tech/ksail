@@ -160,6 +160,10 @@ func (o *updateOrchestrator) runWithoutUpdater() error {
 		return nil
 	}
 
+	// Show what the recreation is for, as the Updater path does before it
+	// applies; under --output json this is the run's one document.
+	displayChangesSummary(o.cmd, specDiff)
+
 	return o.executeRecreateFlow()
 }
 
@@ -410,10 +414,8 @@ func (o *updateOrchestrator) applyVersionUpgradePath(
 
 	// Rolling upgrade (Talos): first step already applied by the probe, continue with the rest.
 	if probeErr != nil {
-		return false, fmt.Errorf(
-			"%s upgrade failed at step 1/%d (%s → %s), cluster is still running %s: %w",
-			params.upgradeType, len(path), params.currentVersion, path[0].Version.Original,
-			params.currentVersion, probeErr,
+		return o.reportFailedUpgradeStep(
+			params, 1, len(path), params.currentVersion, path[0].Version.Original, probeErr,
 		)
 	}
 
@@ -449,14 +451,8 @@ func (o *updateOrchestrator) applyRemainingUpgradeSteps(
 			o.cmd.Context(), o.clusterName, prevVersion, step.Version.Original,
 		)
 		if applyErr != nil {
-			notify.Warningf(o.cmd.OutOrStderr(),
-				"%s upgrade to %s failed (cluster is at %s): %v",
-				params.upgradeType, step.Version.Original, prevVersion, applyErr)
-
-			return false, fmt.Errorf(
-				"%s upgrade failed at step %d/%d (%s → %s), cluster is running %s: %w",
-				params.upgradeType, stepIdx+1, len(path), prevVersion, step.Version.Original,
-				prevVersion, applyErr,
+			return o.reportFailedUpgradeStep(
+				params, stepIdx+1, len(path), prevVersion, step.Version.Original, applyErr,
 			)
 		}
 
@@ -495,6 +491,20 @@ func (o *updateOrchestrator) handleRecreationUpgrade(
 		),
 		Writer: o.cmd.OutOrStdout(),
 	})
+
+	// Under --output json the recreation is the run's result: record it as the
+	// one document, in the shape `cluster diff --include-version-drift` reports.
+	if getOutputFormat(o.cmd) == outputFormatJSON {
+		emitDiffJSON(o.cmd, &clusterupdate.UpdateResult{
+			RecreateRequired: []clusterupdate.Change{{
+				Field:    strings.ToLower(upgradeType) + ".version",
+				OldValue: currentVersion,
+				NewValue: targetVersion,
+				Category: clusterupdate.ChangeCategoryRecreateRequired,
+				Reason:   "version upgrade requires cluster recreation",
+			}},
+		})
+	}
 
 	return o.executeRecreateFlow()
 }
@@ -960,9 +970,9 @@ func (o *updateOrchestrator) computeUpdateDiff(
 	// that never reached the live OCIRepository)
 	checkFluxVerifyDrift(o.cmd, o.ctx, diffEngine, diff)
 
-	// Check for autoscaler chart-values drift (values a KSail upgrade renders
+	// Check for component chart-values drift (values a KSail upgrade renders
 	// differently behind an unchanged spec)
-	checkAutoscalerValuesDrift(o.cmd, o.ctx, diffEngine, diff)
+	checkChartValuesDrift(o.cmd, o.ctx, diffEngine, diff)
 
 	promoteUnsupportedInPlaceChanges(updater, diff)
 
@@ -1062,9 +1072,9 @@ func computeSpecOnlyDiff(
 	// `ksail cluster diff` and every provisioner without an Updater need this check to see it.
 	checkRegistryCredentialDrift(cmd, ctx, diffEngine, diff)
 
-	// Check for autoscaler chart-values drift, so `ksail cluster diff` previews the
-	// upgrade `cluster update` applies.
-	checkAutoscalerValuesDrift(cmd, ctx, diffEngine, diff)
+	// Check for component chart-values drift, so `ksail cluster diff` previews the
+	// upgrades `cluster update` applies.
+	checkChartValuesDrift(cmd, ctx, diffEngine, diff)
 
 	return diff
 }
@@ -1359,70 +1369,6 @@ func checkFluxVerifyDrift(
 	diffEngine.CheckFluxVerify(drifted, gitOpsEngine, diff)
 }
 
-// autoscalerValuesDriftChecker is implemented by the Cluster Autoscaler
-// installer. Asserting it on the factory's result keeps the check on the exact
-// installer the reconciler would run, so detection and application render the
-// same values.
-type autoscalerValuesDriftChecker interface {
-	ValuesDrifted(ctx context.Context) (bool, error)
-}
-
-// checkAutoscalerValuesDrift compares the installed Cluster Autoscaler
-// release's values against the values this KSail version renders, and appends
-// an in-place change when they differ.
-//
-// This is the only signal a KSail upgrade that changes the rendered values
-// produces: the structural diff compares cluster specs, so ksail#7145's CPU
-// limit reached new clusters only, and `cluster update` on an existing one
-// reported success while the autoscaler kept running without it (ksail#7366).
-// Errors are logged as warnings and skipped — they should not block the rest of
-// the update.
-func checkAutoscalerValuesDrift(
-	cmd *cobra.Command,
-	ctx *localregistry.Context,
-	diffEngine *specdiff.Engine,
-	diff *clusterupdate.UpdateResult,
-) {
-	if !setup.NeedsClusterAutoscalerInstall(ctx.ClusterCfg) {
-		return
-	}
-
-	factories := getInstallerFactories()
-	if factories.ClusterAutoscaler == nil {
-		return
-	}
-
-	// Pin the probe to the context the other drift probes resolve. Without it
-	// the Helm client falls back to the kubeconfig's current-context, and the
-	// check would read (and schedule an upgrade from) whatever cluster that
-	// points at.
-	probeCfg := *ctx.ClusterCfg
-	probeCfg.Spec.Cluster.Connection.Context = resolveKubeContext(ctx)
-
-	inst, err := factories.ClusterAutoscaler(&probeCfg)
-	if err != nil {
-		notify.Warningf(cmd.ErrOrStderr(),
-			"Cannot build the cluster-autoscaler installer for values drift detection: %v", err)
-
-		return
-	}
-
-	checker, ok := inst.(autoscalerValuesDriftChecker)
-	if !ok {
-		return
-	}
-
-	drifted, err := checker.ValuesDrifted(cmd.Context())
-	if err != nil {
-		notify.Warningf(cmd.ErrOrStderr(),
-			"Cannot compare cluster-autoscaler values for drift detection: %v", err)
-
-		return
-	}
-
-	diffEngine.CheckAutoscalerValues(drifted, diff)
-}
-
 // getCurrentArgoCDTargetRevision queries the ArgoCD Application for its current
 // targetRevision. Returns empty string if the Application does not exist.
 func getCurrentArgoCDTargetRevision(
@@ -1685,6 +1631,23 @@ func (o *updateOrchestrator) executeRecreateFlow() error {
 		return fmt.Errorf("reverify EKS ownership before cluster recreation: %w", err)
 	}
 
+	// Resolve the recreated cluster's context before anything is deleted, so a failure here
+	// cannot leave the cluster deleted and not recreated.
+	createdContext, err := recreatedClusterContext(o.cfgManager, o.ctx)
+	if err != nil {
+		return err
+	}
+
+	err = o.deleteForRecreation(outputTimer)
+	if err != nil {
+		return err
+	}
+
+	return o.createRecreatedCluster(createdContext)
+}
+
+// deleteForRecreation deletes the existing cluster as the first half of a recreation.
+func (o *updateOrchestrator) deleteForRecreation(outputTimer timer.Timer) error {
 	// Create provisioner for delete
 	factory := newProvisionerFactory(o.ctx)
 
@@ -1718,6 +1681,15 @@ func (o *updateOrchestrator) executeRecreateFlow() error {
 		Timer:   outputTimer,
 		Writer:  o.cmd.OutOrStdout(),
 	})
+
+	return nil
+}
+
+// createRecreatedCluster runs the create half of a recreation under createdContext. Recreation is
+// creation: the new cluster is written to the context derived from its name, so a custom context
+// kept to inspect the old cluster gives way to it, exactly as on create.
+func (o *updateOrchestrator) createRecreatedCluster(createdContext string) error {
+	o.ctx.ClusterCfg.Spec.Cluster.Connection.Context = createdContext
 
 	// Execute create using shared workflow.
 	controllerReconciliationStarted, creationErr := runClusterCreationWorkflow(

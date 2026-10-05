@@ -131,14 +131,17 @@ func newFloatingIPTestProvisionerWithOptions(
 	require.NotNil(t, configs)
 
 	// The floating-IP fixtures use TEST-NET addresses nothing answers on, so
-	// pin the endpoint reachability probe to success here; the verified-
-	// endpoint fallback itself is covered by the dedicated endpoint_probe and
-	// fallback tests.
+	// pin the endpoint reachability probe and the kube-apiserver settle wait to
+	// success here; the verified-endpoint fallback and the settle wait are
+	// covered by their dedicated tests.
 	return talosprovisioner.NewProvisioner(nil, options).
 		WithHetznerOptions(hetznerOpts).
 		WithTalosConfigsForTest(configs).
 		WithAPIEndpointReachabilityCheckForTest(
 			func(context.Context, string, time.Duration) error { return nil },
+		).
+		WithAPIServerServingCheckForTest(
+			func(context.Context, string, string, []byte) error { return nil },
 		).
 		WithLogWriter(io.Discard)
 }

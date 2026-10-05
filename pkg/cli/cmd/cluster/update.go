@@ -6,6 +6,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -77,14 +78,39 @@ Use --output json to emit a machine-readable diff for CI/MCP consumption.`,
 	cmd.Flags().String("output", outputFormatText,
 		"Output format: text (default) or json (machine-readable, for CI/MCP)")
 
-	runUpdate := lifecycle.WrapHandler(cfgManager, handleUpdateRunE)
-	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		routeConfigLoadingProgress(cmd, cfgManager)
-
-		return runUpdate(cmd, args)
-	}
+	cmd.RunE = newUpdateRunE(cfgManager)
 
 	return cmd
+}
+
+// newUpdateRunE wraps the update handler so that under --output json the run's
+// real stdout carries exactly one JSON document and everything else goes to
+// stderr.
+func newUpdateRunE(
+	cfgManager *ksailconfigmanager.ConfigManager,
+) func(*cobra.Command, []string) error {
+	runUpdate := lifecycle.WrapHandler(cfgManager, handleUpdateRunE)
+
+	return func(cmd *cobra.Command, args []string) error {
+		routeConfigLoadingProgress(cmd, cfgManager)
+
+		doc, restore := reserveStdoutForJSONDocument(cmd)
+		defer restore()
+
+		err := runUpdate(cmd, args)
+		if err != nil {
+			return err
+		}
+
+		// Every successful --output json run leaves exactly one document on
+		// stdout. A run that found nothing to apply reported that as text, so
+		// it still owes its (empty) change summary.
+		if doc != nil && !doc.emitted {
+			emitDiffJSON(cmd, &clusterupdate.UpdateResult{})
+		}
+
+		return nil
+	}
 }
 
 // registerUpdateConsentFlags registers the split consent/disruption flags for
@@ -142,7 +168,7 @@ func handleUpdateRunE(
 	outputTimer := flags.MaybeTimer(cmd, deps.Timer)
 
 	// Load and validate configuration using shared helper
-	ctx, clusterName, err := loadAndValidateClusterConfig(cfgManager, deps)
+	ctx, clusterName, err := loadAndValidateClusterConfig(cfgManager, deps, existingClusterTarget)
 	if err != nil {
 		return err
 	}
@@ -165,6 +191,12 @@ func handleUpdateRunE(
 
 	ctx.AWSResolution = awsResolution
 	ctx.AWSOwnershipVerifier = awsOwnershipVerifier
+
+	// Provisioners that write progress straight to the process's stdout (Talos)
+	// would otherwise interleave it with the --output json document.
+	if getOutputFormat(cmd) == outputFormatJSON {
+		ctx.ProvisionerLogWriter = cmd.ErrOrStderr()
+	}
 
 	clusterflags.ApplyClusterMutationFlags(cmd, ctx.ClusterCfg)
 

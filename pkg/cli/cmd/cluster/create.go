@@ -85,7 +85,7 @@ func handleCreateRunE(
 ) error {
 	deps.Timer.Start()
 
-	ctx, clusterName, err := loadAndValidateClusterConfig(cfgManager, deps)
+	ctx, clusterName, err := loadAndValidateClusterConfig(cfgManager, deps, newClusterTarget)
 	if err != nil {
 		return err
 	}
@@ -199,6 +199,7 @@ func defaultProvisionerFactory(ctx *localregistry.Context) clusterprovisioner.De
 			AKS:         ctx.AKSConfig,
 			MirrorSpecs: ctx.MirrorSpecs,
 		},
+		LogWriter: ctx.ProvisionerLogWriter,
 	}
 }
 
@@ -620,17 +621,14 @@ func setupVClusterCNI(
 	vclusterConfig.DisableFlannel = true
 }
 
-// applyClusterNameOverride updates distribution configs with the cluster name override.
-// This function mutates the distribution config pointers in ctx to apply the --name flag value.
-// The name override takes highest priority over distribution config or context-derived names.
+// renameDistributionConfigs applies a cluster name override (the --name flag or metadata.name) to
+// the distribution configs without touching the connection context; the name takes priority over
+// distribution config or context-derived names. applyResolvedNameOverride decides separately
+// whether the context follows the name.
 //
 // For Talos, this regenerates the config bundle with the new cluster name because
 // the cluster name is embedded in PKI certificates and the kubeconfig context name.
-func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
-	if name == "" {
-		return nil
-	}
-
+func renameDistributionConfigs(ctx *localregistry.Context, name string) error {
 	applyDirectClusterNameOverrides(ctx, name)
 
 	// Update Talos config - must regenerate bundle for new cluster name
@@ -644,27 +642,39 @@ func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
 		ctx.TalosConfig = newConfig
 	}
 
-	// Update the ksail.yaml context to match the pattern the created cluster uses.
-	// Must be provider-aware: the Kubernetes (k3k) provider writes a "k3k-<name>"
-	// context for K3s rather than the standalone "k3d-<name>", so post-creation CNI
-	// install can resolve it. eksctl adds the creating AWS identity to EKS context
-	// names, so that context is resolved from the written kubeconfig after creation.
-	if ctx.ClusterCfg != nil &&
-		ctx.ClusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS {
-		ctx.ClusterCfg.Spec.Cluster.Connection.Context = resolveCreatedContextName(
-			ctx.ClusterCfg.Spec.Cluster.Distribution,
-			ctx.ClusterCfg.Spec.Cluster.Provider,
-			name,
-		)
+	return nil
+}
+
+// retargetConnectionContext sets the ksail.yaml context to the one a cluster created under name
+// is written to, leaving it unchanged where createdContextName derives none.
+func retargetConnectionContext(ctx *localregistry.Context, name string) {
+	if createdContext, derived := createdContextName(ctx.ClusterCfg, name); derived {
+		ctx.ClusterCfg.Spec.Cluster.Connection.Context = createdContext
+	}
+}
+
+// createdContextName returns the context a cluster created under name is written to. Must be
+// provider-aware: the Kubernetes (k3k) provider writes a "k3k-<name>" context for K3s rather than
+// the standalone "k3d-<name>", so post-creation CNI install can resolve it. It derives none (false)
+// for EKS: eksctl adds the creating AWS identity to EKS context names, so that context is resolved
+// from the written kubeconfig after creation instead.
+func createdContextName(clusterCfg *v1alpha1.Cluster, name string) (string, bool) {
+	if clusterCfg == nil || clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS {
+		return "", false
 	}
 
-	return nil
+	return resolveCreatedContextName(
+		clusterCfg.Spec.Cluster.Distribution,
+		clusterCfg.Spec.Cluster.Provider,
+		name,
+	), true
 }
 
 // applyDirectClusterNameOverrides updates in-memory distribution configs whose names directly drive
 // creation. Talos is handled separately because renaming it must regenerate its PKI-bearing bundle.
 // EKS is deliberately excluded: eksctl creates from the unchanged on-disk eks.yaml, so changing only
 // EKSConfig.Name would make later state and deletion target a cluster that was never created.
+// GKE and AKS submit their cluster spec from memory, so their configuration is renamed with it.
 func applyDirectClusterNameOverrides(ctx *localregistry.Context, name string) {
 	if ctx.KindConfig != nil {
 		ctx.KindConfig.Name = name
@@ -680,6 +690,38 @@ func applyDirectClusterNameOverrides(ctx *localregistry.Context, name string) {
 
 	if ctx.KWOKConfig != nil {
 		ctx.KWOKConfig.Name = name
+	}
+
+	renameGKEConfig(ctx.GKEConfig, name)
+	renameAKSConfig(ctx.AKSConfig, name)
+}
+
+// renameGKEConfig renames the GKE configuration and the cluster spec it submits on creation. GKE
+// creates the cluster the spec names, whatever name the command passes, so a spec left behind
+// would create one cluster while diff, update and state track another.
+func renameGKEConfig(config *clusterprovisioner.GKEConfig, name string) {
+	if config == nil {
+		return
+	}
+
+	config.Name = name
+
+	if config.ClusterSpec != nil {
+		config.ClusterSpec.Name = name
+	}
+}
+
+// renameAKSConfig renames the AKS configuration and the cluster spec it submits on creation, so
+// the name in the request body matches the name the cluster is created under.
+func renameAKSConfig(config *clusterprovisioner.AKSConfig, name string) {
+	if config == nil {
+		return
+	}
+
+	config.Name = name
+
+	if config.ClusterSpec != nil {
+		config.ClusterSpec.Name = &name
 	}
 }
 
@@ -750,10 +792,10 @@ func resolveClusterNameFromContext(ctx *localregistry.Context) string {
 		return resolveKWOKName(ctx)
 	case v1alpha1.DistributionEKS:
 		return resolveEKSName(ctx)
-	case v1alpha1.DistributionGKE, v1alpha1.DistributionAKS:
-		// GKE/AKS configs are owned by their cloud tooling and not cached on the local registry
-		// context; fall back to the cluster-level name.
-		return resolveFallbackName(ctx)
+	case v1alpha1.DistributionGKE:
+		return resolveGKEName(ctx)
+	case v1alpha1.DistributionAKS:
+		return resolveAKSName(ctx)
 	default:
 		return resolveFallbackName(ctx)
 	}
@@ -762,6 +804,28 @@ func resolveClusterNameFromContext(ctx *localregistry.Context) string {
 func resolveEKSName(ctx *localregistry.Context) string {
 	if ctx.EKSConfig != nil && strings.TrimSpace(ctx.EKSConfig.Name) != "" {
 		return strings.TrimSpace(ctx.EKSConfig.Name)
+	}
+
+	return resolveFallbackName(ctx)
+}
+
+// resolveGKEName returns the cluster name the GKE configuration holds: the name in gke.yaml, the
+// name parsed from a gcloud context when the configuration loaded, or a name override. The context
+// itself is not the name, because gcloud qualifies it with the project and location.
+func resolveGKEName(ctx *localregistry.Context) string {
+	if ctx.GKEConfig != nil && strings.TrimSpace(ctx.GKEConfig.Name) != "" {
+		return strings.TrimSpace(ctx.GKEConfig.Name)
+	}
+
+	return resolveFallbackName(ctx)
+}
+
+// resolveAKSName returns the cluster name the AKS configuration holds: the name in aks.yaml, the
+// context when no file names the cluster, or a name override. The context alone is not the name,
+// because admin credentials are written to a "<name>-admin" context.
+func resolveAKSName(ctx *localregistry.Context) string {
+	if ctx.AKSConfig != nil && strings.TrimSpace(ctx.AKSConfig.Name) != "" {
+		return strings.TrimSpace(ctx.AKSConfig.Name)
 	}
 
 	return resolveFallbackName(ctx)
@@ -784,7 +848,8 @@ func resolveKWOKName(ctx *localregistry.Context) string {
 }
 
 func resolveFallbackName(ctx *localregistry.Context) string {
-	// Connection context takes priority because --name flag updates it via applyClusterNameOverride
+	// Connection context takes priority because a name override retargets it to the derived
+	// context (GKE and AKS always follow the name; see keepsConfiguredContext)
 	if name := strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context); name != "" {
 		return name
 	}

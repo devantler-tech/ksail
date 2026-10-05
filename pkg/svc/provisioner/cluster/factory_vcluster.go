@@ -42,7 +42,7 @@ func (f DefaultFactory) createVClusterKubernetesProvisioner(
 ) (Provisioner, any, error) {
 	opts := cluster.Spec.Provider.Kubernetes
 
-	// Use VCluster config name (set by applyClusterNameOverride).
+	// Use VCluster config name (set by the cluster name override).
 	vclusterConfig := f.DistributionConfig.VCluster
 
 	clusterName := ""

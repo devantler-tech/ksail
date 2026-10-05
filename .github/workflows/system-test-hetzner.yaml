@@ -71,6 +71,11 @@ on:
         required: false
         type: string
         default: ""
+      floating_ip_toggle:
+        description: "Talos only: enable the floating IP via cluster update, then disable it and assert the address is released."
+        required: false
+        type: boolean
+        default: false
   schedule:
     # Weekly: Sunday 03:00 UTC, one hour before the Omni system test, so real clusters are
     # created at most once a day. The scheduled run starts with the two direct-provider smoke
@@ -308,6 +313,7 @@ jobs:
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
           test-kubernetes-provider: ${{ matrix.suffix == 'default-init' && 'true' || 'false' }}
           rolling-resize-server-type: ${{ github.event_name == 'workflow_dispatch' && inputs.rolling_resize_server_type || '' }}
+          floating-ip-toggle: ${{ github.event_name == 'workflow_dispatch' && inputs.floating_ip_toggle || false }}
 
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}
@@ -328,6 +334,7 @@ jobs:
           persist-credentials: false
 
       - name: 🧹 Cleanup Hetzner resources (default-init)
+        if: ${{ !cancelled() }}
         uses: ./.github/actions/cleanup-hetzner
         with:
           label-selector: "ksail.cluster.name=st-hetzner-default-init-${{ github.run_id }}"
@@ -335,6 +342,7 @@ jobs:
           HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
 
       - name: 🧹 Cleanup Hetzner resources (default-noinit)
+        if: ${{ !cancelled() }}
         uses: ./.github/actions/cleanup-hetzner
         with:
           label-selector: "ksail.cluster.name=st-hetzner-default-noinit-${{ github.run_id }}"
@@ -342,6 +350,7 @@ jobs:
           HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
 
       - name: 🧹 Cleanup Hetzner resources (fullstack)
+        if: ${{ !cancelled() }}
         uses: ./.github/actions/cleanup-hetzner
         with:
           label-selector: "ksail.cluster.name=st-hetzner-fullstack-${{ github.run_id }}"
@@ -349,6 +358,7 @@ jobs:
           HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
 
       - name: 🧹 Cleanup Hetzner resources (altstack)
+        if: ${{ !cancelled() }}
         uses: ./.github/actions/cleanup-hetzner
         with:
           label-selector: "ksail.cluster.name=st-hetzner-altstack-${{ github.run_id }}"
@@ -356,6 +366,7 @@ jobs:
           HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
 
       - name: 🧹 Cleanup Hetzner resources (K3s smoke)
+        if: ${{ !cancelled() }}
         uses: $/.github/actions/cleanup-hetzner
         with:
           label-selector: "ksail.cluster.name=st-hetzner-k3s-smoke-${{ github.run_id }}"
@@ -363,6 +374,7 @@ jobs:
           HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
 
       - name: 🧹 Cleanup Hetzner resources (Vanilla smoke)
+        if: ${{ !cancelled() }}
         uses: $/.github/actions/cleanup-hetzner
         with:
           label-selector: "ksail.cluster.name=st-hetzner-vanilla-smoke-${{ github.run_id }}"
@@ -370,6 +382,7 @@ jobs:
           HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
 
       - name: 🧹 Cleanup Hetzner resources (dispatch)
+        if: ${{ !cancelled() }}
         uses: ./.github/actions/cleanup-hetzner
         with:
           label-selector: "ksail.cluster.name=st-hetzner-dispatch-${{ github.run_id }}"

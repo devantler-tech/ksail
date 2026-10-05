@@ -37,13 +37,14 @@ require (
 	golang.org/x/sync v0.23.0
 	golang.org/x/term v0.46.0
 	helm.sh/helm/v4 v4.2.4
-	k8s.io/api v0.36.4
-	k8s.io/apiextensions-apiserver v0.36.4
-	k8s.io/apimachinery v0.36.4
-	k8s.io/cli-runtime v0.36.4
-	k8s.io/client-go v0.36.4
-	k8s.io/kubectl v0.36.4
+	k8s.io/api v0.36.5
+	k8s.io/apiextensions-apiserver v0.36.5
+	k8s.io/apimachinery v0.36.5
+	k8s.io/cli-runtime v0.36.5
+	k8s.io/client-go v0.36.5
+	k8s.io/kubectl v0.36.5
 	sigs.k8s.io/controller-runtime v0.24.1
+	sigs.k8s.io/gateway-api v1.6.2
 	sigs.k8s.io/kind v0.33.0
 	sigs.k8s.io/kustomize/api v0.21.1
 	sigs.k8s.io/kustomize/kyaml v0.21.1
@@ -102,6 +103,7 @@ require (
 	github.com/siderolabs/omni/client v1.9.1
 	github.com/sigstore/sigstore v1.10.11
 	github.com/sigstore/sigstore-go v1.3.0
+	github.com/wailsapp/wails/v3 v3.0.0-alpha.98
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.56.0
 	golang.org/x/mod v0.41.0
@@ -120,6 +122,7 @@ require (
 	connectrpc.com/connect v1.20.0 // indirect
 	cuelabs.dev/go/oci/ociregistry v0.0.0-20251212221603-3adeb8663819 // indirect
 	cuelang.org/go v0.16.1 // indirect
+	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
 	github.com/Azure/go-ntlmssp v0.1.1 // indirect
 	github.com/IGLOU-EU/go-wildcard v1.0.3 // indirect
 	github.com/alibabacloud-go/tea-utils/v2 v2.0.7 // indirect
@@ -134,8 +137,10 @@ require (
 	github.com/go-asn1-ber/asn1-ber v1.5.7 // indirect
 	github.com/go-ldap/ldap/v3 v3.4.10 // indirect
 	github.com/go-logr/zerologr v1.2.3 // indirect
+	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-20260224031529-85f2bf5f7303 // indirect
 	github.com/google/go-github/v88 v88.0.0 // indirect
+	github.com/jchv/go-winloader v0.0.0-20250406163304-c1995be93bd1 // indirect
 	github.com/jellydator/ttlcache/v3 v3.4.1 // indirect
 	github.com/jmoiron/jsonq v0.0.0-20150511023944-e874b168d07e // indirect
 	github.com/kubernetes-csi/external-snapshotter/client/v8 v8.2.0 // indirect
@@ -162,6 +167,7 @@ require (
 	github.com/sigstore/sigstore/pkg/signature/kms/hashivault v1.10.9 // indirect
 	github.com/tektoncd/chains v0.22.0 // indirect
 	github.com/veraison/go-cose v1.3.0 // indirect
+	github.com/wailsapp/wails/webview2 v1.0.24 // indirect
 	github.com/zach-klippenstein/goregen v0.0.0-20160303162051-795b5e3961ea // indirect
 	go.opentelemetry.io/otel/exporters/prometheus v0.66.0 // indirect
 	k8s.io/pod-security-admission v0.36.2 // indirect
@@ -231,7 +237,7 @@ require (
 	github.com/Masterminds/squirrel v1.5.4 // indirect
 	github.com/Microsoft/go-winio v0.6.3-0.20251027160822-ad3df93bed29 // indirect
 	github.com/Microsoft/hcsshim v0.15.0-rc.1 // indirect
-	github.com/MirrexOne/unqueryvet v1.4.0 // indirect
+	github.com/MirrexOne/unqueryvet v1.5.4 // indirect
 	github.com/NYTimes/gziphandler v1.1.1 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
 	github.com/OpenPeeDeeP/depguard/v2 v2.2.1 // indirect
@@ -357,7 +363,7 @@ require (
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/x/ansi v0.11.7 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect
-	github.com/charmbracelet/x/exp/slice v0.0.0-20250327172914-2fdc97757edf // indirect
+	github.com/charmbracelet/x/exp/slice v0.0.0-20260122224438-b01af16209d9 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/chrismellard/docker-credential-acr-env v0.0.0-20230304212654-82a0ddb27589 // indirect
 	github.com/cilium/ebpf v0.22.0 // indirect
@@ -840,7 +846,7 @@ require (
 	github.com/sigstore/rekor-tiles/v2 v2.3.0 // indirect
 	github.com/sigstore/timestamp-authority/v2 v2.1.3 // indirect
 	github.com/sivchari/containedctx v1.0.3 // indirect
-	github.com/skeema/knownhosts v1.3.1 // indirect
+	github.com/skeema/knownhosts v1.3.2 // indirect
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966 // indirect
 	github.com/smallnest/ringbuffer v0.0.0-20241116012123-461381446e3d // indirect
 	github.com/smallstep/pkcs7 v0.1.1 // indirect
@@ -890,8 +896,7 @@ require (
 	github.com/ulikunitz/xz v0.5.15 // indirect
 	github.com/ultraware/funlen v0.2.0 // indirect
 	github.com/ultraware/whitespace v0.2.0 // indirect
-	github.com/uptrace/opentelemetry-go-extra/otelutil v0.3.2 // indirect
-	github.com/uptrace/opentelemetry-go-extra/otelzap v0.3.2 // indirect
+	github.com/uptrace/opentelemetry-go-extra/otelzap v0.3.2
 	github.com/uptrace/uptrace-go v1.37.0 // indirect
 	github.com/urfave/cli v1.22.17 // indirect
 	github.com/uudashr/gocognit v1.2.0 // indirect
@@ -952,27 +957,27 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace v0.69.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.62.0 // indirect
-	go.opentelemetry.io/otel v1.45.0 // indirect
-	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.19.0 // indirect
+	go.opentelemetry.io/otel v1.45.0
+	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.21.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.44.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.44.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.45.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.45.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.45.0 // indirect
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.45.0 // indirect
-	go.opentelemetry.io/otel/log v0.19.0 // indirect
+	go.opentelemetry.io/otel/log v0.21.0
 	go.opentelemetry.io/otel/metric v1.45.0 // indirect
-	go.opentelemetry.io/otel/sdk v1.45.0 // indirect
-	go.opentelemetry.io/otel/sdk/log v0.19.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.45.0
+	go.opentelemetry.io/otel/sdk/log v0.21.0
 	go.opentelemetry.io/otel/sdk/metric v1.45.0 // indirect
-	go.opentelemetry.io/otel/trace v1.45.0 // indirect
-	go.opentelemetry.io/proto/otlp v1.11.0 // indirect
+	go.opentelemetry.io/otel/trace v1.45.0
+	go.opentelemetry.io/proto/otlp v1.11.0
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/dig v1.17.1 // indirect
 	go.uber.org/mock v0.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.28.0 // indirect
+	go.uber.org/zap v1.28.0
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.6 // indirect
@@ -1003,10 +1008,10 @@ require (
 	gorm.io/gorm v1.31.1 // indirect
 	helm.sh/helm/v3 v3.20.2 // indirect
 	honnef.co/go/tools v0.7.0 // indirect
-	k8s.io/apiserver v0.36.4
+	k8s.io/apiserver v0.36.5
 	k8s.io/cluster-bootstrap v0.36.0 // indirect
-	k8s.io/component-base v0.36.4 // indirect
-	k8s.io/component-helpers v0.36.4 // indirect
+	k8s.io/component-base v0.36.5 // indirect
+	k8s.io/component-helpers v0.36.5 // indirect
 	k8s.io/cri-api v0.36.3 // indirect
 	k8s.io/cri-client v0.36.3 // indirect
 	k8s.io/kube-aggregator v0.36.3 // indirect
@@ -1014,20 +1019,19 @@ require (
 	k8s.io/kube-proxy v0.36.2 // indirect
 	k8s.io/kubelet v0.36.2 // indirect
 	k8s.io/kubernetes v1.36.0 // indirect
-	k8s.io/metrics v0.36.4 // indirect
-	k8s.io/streaming v0.36.4 // indirect
+	k8s.io/metrics v0.36.5 // indirect
+	k8s.io/streaming v0.36.5 // indirect
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 // indirect
 	modernc.org/libc v1.73.4 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.53.0 // indirect
 	mvdan.cc/gofumpt v0.9.2 // indirect
-	mvdan.cc/sh/v3 v3.10.0 // indirect
+	mvdan.cc/sh/v3 v3.12.0 // indirect
 	mvdan.cc/unparam v0.0.0-20251027182757-5beb8c8f8f15 // indirect
 	oras.land/oras-go/v2 v2.6.2 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.34.0 // indirect
 	sigs.k8s.io/cli-utils v0.37.2 // indirect
-	sigs.k8s.io/gateway-api v1.6.1 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/knftables v0.0.21 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
@@ -1053,6 +1057,12 @@ replace (
 	// everything on the monolith type system.
 	github.com/docker/cli => github.com/docker/cli v28.3.1+incompatible
 	github.com/docker/docker => github.com/docker/docker v28.5.2+incompatible
+	// The v5.9.0 tag moved after Go's checksum database recorded its original
+	// source. Select that authenticated commit without accepting changed tag
+	// bytes (ksail#6781). This qualified replacement leaves future releases
+	// unaffected; remove it when an authenticated successor passes the k3d
+	// configuration regression.
+	github.com/k3d-io/k3d/v5 v5.9.0 => github.com/k3d-io/k3d/v5 v5.9.0-rc.0.0.20260602135457-2a0cb9f9a5c1
 
 	// kubescape v3.0.48 (the latest v3 tag) calls
 	// authprovider.DockerAuthProviderConfig{ConfigFile: ...} in core/core/patch.go,
@@ -1101,6 +1111,10 @@ replace (
 	// longer imports libcontainer/user) — bumping it cannot go past v1.3.6 without
 	// reintroducing the break described above.
 	github.com/opencontainers/runc => github.com/opencontainers/runc v1.3.6
+
+	// Compatibility adapter for the fixed OTel logging API. See
+	// third_party/otelzap/KSail-PATCH.md for provenance and removal conditions.
+	github.com/uptrace/opentelemetry-go-extra/otelzap => ./third_party/otelzap
 
 	// Kyverno's policy engine (pkg/svc/gitops/kyvernopolicy) compiles its Pod Security
 	// checks against Kyverno's fork of pod-security-admission, which keeps the

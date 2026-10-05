@@ -266,7 +266,9 @@ func (p *Provisioner) buildDesiredNodeConfig(
 	// made the desired bundle authoritative by pairing its endpoint with an
 	// HCloud VIP. Replacing that endpoint with the stale running direct-node IP
 	// would undo the reconcile immediately before the in-place push (#5947).
-	if !p.hasDesiredHetznerFloatingIPEndpoint() {
+	// The disable transition is the mirror case: the desired direct-node
+	// endpoint must replace the running floating IP (#6032).
+	if !p.hasDesiredHetznerFloatingIPEndpoint() && !p.revertFloatingIPEndpoint {
 		endpointIP := running.Cluster().Endpoint().Hostname()
 		if endpointIP != "" {
 			aligned, err = aligned.WithEndpoint(endpointIP)
@@ -297,7 +299,7 @@ func (p *Provisioner) buildDesiredNodeConfig(
 		return nil, fmt.Errorf("%w: %s", errNoRoleConfig, role)
 	}
 
-	grafted, err := graftNodeManagedSections(desired, running)
+	grafted, err := graftNodeManagedSectionsFor(desired, running, !p.revertFloatingIPEndpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -458,9 +460,23 @@ func (p *Provisioner) alignKubernetesVersion(
 // hostname is a separate-document transform, so it is grafted in graftNodeHostname
 // rather than here.
 //
-//nolint:staticcheck // MachineRegistries is deprecated but still functional in Talos v1.x
+// graftNodeManagedSections is graftNodeManagedSectionsFor with the runtime HCloud
+// VIP preserved, the behaviour every update needs except the floating-IP disable
+// transition.
 func graftNodeManagedSections(
 	desired, running talosconfig.Provider,
+) (talosconfig.Provider, error) {
+	return graftNodeManagedSectionsFor(desired, running, true)
+}
+
+// graftNodeManagedSectionsFor grafts the node-managed sections, including the
+// runtime HCloud VIP only when preserveHCloudVIP is set. The floating-IP disable
+// transition (#6032) passes false so the in-place push strips the VIP.
+//
+//nolint:staticcheck // MachineRegistries is deprecated but still functional in Talos v1.x
+func graftNodeManagedSectionsFor(
+	desired, running talosconfig.Provider,
+	preserveHCloudVIP bool,
 ) (talosconfig.Provider, error) {
 	runningRaw := running.RawV1Alpha1()
 	if runningRaw == nil || runningRaw.MachineConfig == nil {
@@ -491,7 +507,9 @@ func graftNodeManagedSections(
 			return err
 		}
 
-		graftHCloudVIP(cfg.MachineConfig, runningRaw.MachineConfig)
+		if preserveHCloudVIP {
+			graftHCloudVIP(cfg.MachineConfig, runningRaw.MachineConfig)
+		}
 
 		return nil
 	})

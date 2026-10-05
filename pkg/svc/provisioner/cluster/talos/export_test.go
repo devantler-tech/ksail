@@ -137,6 +137,36 @@ func (p *Provisioner) WithAPIEndpointReachabilityCheckForTest(
 	return p
 }
 
+// WithAPIServerServingCheckForTest overrides the kube-apiserver settle wait so
+// unit tests can pin the post-endpoint-change restart gate (#6032) without real
+// network I/O.
+func (p *Provisioner) WithAPIServerServingCheckForTest(
+	fn func(ctx context.Context, ip, serverName string, caPEM []byte) error,
+) *Provisioner {
+	p.apiServerServingCheck = fn
+
+	return p
+}
+
+// WaitForServingCertificateForTest exposes waitForServingCertificate for unit
+// testing against a local TLS server.
+func WaitForServingCertificateForTest(
+	ctx context.Context,
+	address, serverName string,
+	caPEM []byte,
+	timeout, stableWindow, interval time.Duration,
+) error {
+	return waitForServingCertificate(
+		ctx,
+		address,
+		serverName,
+		caPEM,
+		timeout,
+		stableWindow,
+		interval,
+	)
+}
+
 // VerifiedEndpointIPForTest exposes verifiedEndpointIP for unit testing.
 func (p *Provisioner) VerifiedEndpointIPForTest(
 	ctx context.Context,
@@ -1179,4 +1209,30 @@ func RegisterSchematicForTest(
 	computed talosconfigmanager.Schematic,
 ) (string, error) {
 	return registerSchematic(ctx, baseURL, timeout, computed)
+}
+
+// WithKubernetesVersionDetectorForTest overrides the running Kubernetes version
+// detector so unit tests can drive version planning without real Talos and
+// Kubernetes API connectivity.
+func (p *Provisioner) WithKubernetesVersionDetectorForTest(
+	fn func(ctx context.Context, cpNodeIP string) (string, error),
+) *Provisioner {
+	p.kubernetesVersionDetector = fn
+
+	return p
+}
+
+// GetLowestRunningKubernetesVersionForTest exposes getLowestRunningKubernetesVersion
+// for unit testing.
+func (p *Provisioner) GetLowestRunningKubernetesVersionForTest(
+	ctx context.Context,
+	nodes []NodeWithRoleForTest,
+) (string, error) {
+	return p.getLowestRunningKubernetesVersion(ctx, nodes)
+}
+
+// ProgressWriterForTest exposes the writer KubernetesProvisioner.Create reports
+// its progress to.
+func (p *KubernetesProvisioner) ProgressWriterForTest() io.Writer {
+	return p.progressWriter()
 }

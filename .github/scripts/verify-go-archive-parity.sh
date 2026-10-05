@@ -9,7 +9,9 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "${script_dir}/../.." && pwd)"
 local_dir="${repo_root}/third_party/go-archive"
 upstream_dir=''
+authenticate_source=false
 
+# usage prints the supported local and upstream source-directory overrides.
 usage() {
 	printf 'Usage: %s [--upstream-dir DIR] [--local-dir DIR]\n' "${0##*/}" >&2
 }
@@ -47,9 +49,9 @@ done
 # manifest that requires the module.
 readonly module_manifests=(
 	'go.mod'
-	'desktop/go.mod'
 )
 
+# require_manifest_pin binds dependency metadata to the reviewed source version.
 require_manifest_pin() {
 	local manifest="$1" path required count
 	path="${repo_root}/${manifest}"
@@ -91,6 +93,7 @@ if [[ -z "${upstream_dir}" ]]; then
 		printf 'go-archive download did not resolve the reviewed checksum %s\n' "${expected_sum}" >&2
 		exit 1
 	}
+	authenticate_source=true
 fi
 
 [[ -d "${upstream_dir}" ]] || {
@@ -154,6 +157,7 @@ readonly parity_exceptions=(
 	'compat_legacy_test.go'
 )
 
+# is_excepted matches approved parity exceptions and their directory descendants.
 is_excepted() {
 	local rel="$1" exception
 	for exception in "${parity_exceptions[@]}"; do
@@ -203,6 +207,16 @@ list_comparable_files() {
 
 list_dir="$(mktemp -d)"
 trap 'rm -rf "${list_dir}"' EXIT
+# Hash and compare one private snapshot so neither operation trusts mutable
+# extracted-cache files. Authenticate all bytes before parity exceptions apply.
+cp -R "${upstream_dir}/." "${list_dir}/source"
+chmod -R u+w "${list_dir}/source"
+upstream_dir="${list_dir}/source"
+if [[ "${authenticate_source}" == true ]]; then
+	(cd -- "${repo_root}" && GOFLAGS='' GOENV=off GOWORK=off \
+		go run ./internal/moduleintegrity/cmd/verify \
+		"${upstream_dir}" "${module}@${version}" "${expected_sum}")
+fi
 list_comparable_files "${upstream_dir}" >"${list_dir}/upstream"
 list_comparable_files "${local_dir}" >"${list_dir}/local"
 

@@ -1,25 +1,14 @@
 name: NPM Audit and Fix
-description: Run npm audit, attempt automatic fixes, and commit changes using a GitHub App token.
+description: Audit npm dependencies and prepare scoped repair patches without branch writes.
 author: Devantler Tech Platform Team
 
 inputs:
   working-directory:
     description: Directory containing package.json (e.g., 'docs' or 'vsce').
     required: true
-  client-id:
-    description: GitHub App Client ID for generating commit token.
-    required: false
-  app-private-key:
-    description: GitHub App private key for generating commit token.
-    required: false
-  commit-message:
-    description: Commit message for fixed vulnerabilities.
-    required: false
-    default: "chore: fix npm audit vulnerabilities"
-  commit-user-name:
-    description: Git user name for commits.
-    required: false
-    default: "security-bot"
+  patch-artifact-name:
+    description: Unique repair artifact name ending in '-patch' for the signed correction job.
+    required: true
   audit-level:
     description: Minimum vulnerability level to report (low, moderate, high, critical).
     required: false
@@ -27,29 +16,49 @@ inputs:
 
 outputs:
   audit-passed:
-    description: Whether the audit passed without vulnerabilities ('true' or 'false').
+    description: Whether the source audit passed before any proposed repair ('true' or 'false').
     value: ${{ steps.final-result.outputs.passed }}
+  repair-passed:
+    description: Whether a proposed repair passed its re-audit ('true' or 'false').
+    value: ${{ steps.fix.outputs.changes_made == 'true' && steps.reaudit.outcome == 'success' }}
+  patch-created:
+    description: Whether a repair patch was uploaded for the signed correction job ('true' or 'false').
+    value: ${{ steps.fix.outputs.changes_made == 'true' && steps.upload.outcome == 'success' }}
   changes-committed:
-    description: Whether changes were committed and pushed ('true' or 'false').
-    value: ${{ steps.set-committed.outputs.committed }}
+    description: Always false; the auditor never commits or pushes changes.
+    value: "false"
 
 runs:
   using: composite
   steps:
-    - name: 🔑 Generate GitHub App Token
-      uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
-      id: generate-token
-      if: ${{ inputs.client-id != '' && inputs.app-private-key != '' }}
-      with:
-        client-id: ${{ inputs.client-id }}
-        private-key: ${{ inputs.app-private-key }}
+    - name: 🛡️ Select audit mode
+      id: policy
+      shell: bash
+      env:
+        AUDIT_EVENT: ${{ github.event_name }}
+        AUDIT_REF: ${{ github.ref }}
+        AUDIT_PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        AUDIT_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        AUDIT_REPOSITORY: ${{ github.repository }}
+      run: |
+        repair_allowed=false
+        if [ "$AUDIT_EVENT" = "push" ] && [ "$AUDIT_REF" = "refs/heads/main" ]; then
+          repair_allowed=true
+        elif [ "$AUDIT_EVENT" = "pull_request" ] \
+          && [ -n "$AUDIT_REPOSITORY" ] && [ "$AUDIT_HEAD_REPO" = "$AUDIT_REPOSITORY" ] \
+          && [ -n "$AUDIT_PR_AUTHOR" ]; then
+          case "$AUDIT_PR_AUTHOR" in
+            'dependabot[bot]'|'renovate[bot]') ;;
+            *) repair_allowed=true ;;
+          esac
+        fi
+        printf 'repair-allowed=%s\n' "$repair_allowed" >> "$GITHUB_OUTPUT"
 
     - name: 📄 Checkout
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
-        ref: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name == github.repository && github.head_ref || github.event.pull_request.head.sha) || github.ref }}
-        persist-credentials: ${{ steps.generate-token.outputs.token != '' }}
-        token: ${{ steps.generate-token.outputs.token || github.token }}
+        ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        persist-credentials: false
 
     - name: ⚙️ Setup Node.js
       uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
@@ -74,40 +83,25 @@ runs:
 
     - name: 🔧 Attempt automatic fix
       id: fix
-      if: steps.audit.outcome == 'failure' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
+      if: steps.audit.outcome == 'failure' && steps.policy.outputs.repair-allowed == 'true'
       shell: bash
       working-directory: ${{ inputs.working-directory }}
+      env:
+        REPAIR_ALLOWED: ${{ steps.policy.outputs.repair-allowed }}
+        PATCH_PATH: ${{ runner.temp }}/npm-audit-${{ github.job }}.patch
       run: |
+        if [ "$REPAIR_ALLOWED" != "true" ]; then
+          echo "changes_made=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
         npm audit fix --force
-        if [ -n "$(git status --porcelain)" ]; then
+        git diff --binary -- package.json package-lock.json > "$PATCH_PATH"
+        if [ -s "$PATCH_PATH" ]; then
           echo "changes_made=true" >> "$GITHUB_OUTPUT"
         else
           echo "changes_made=false" >> "$GITHUB_OUTPUT"
         fi
       continue-on-error: true
-
-    - name: 📤 Commit and push fixes
-      id: commit
-      if: steps.fix.outputs.changes_made == 'true' && github.event_name != 'merge_group' && steps.generate-token.outputs.token != ''
-      uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
-      with:
-        commit_message: ${{ inputs.commit-message }}
-        commit_user_name: ${{ inputs.commit-user-name }}
-        commit_user_email: ${{ inputs.commit-user-name }}@users.noreply.github.com
-        file_pattern: "${{ inputs.working-directory }}/package*.json"
-
-    - name: 📊 Set changes-committed output
-      id: set-committed
-      shell: bash
-      env:
-        COMMIT_OUTCOME: ${{ steps.commit.outcome }}
-        CHANGES_DETECTED: ${{ steps.commit.outputs.changes_detected }}
-      run: |
-        if [ "$COMMIT_OUTCOME" = "success" ] && [ "$CHANGES_DETECTED" = "true" ]; then
-          echo "committed=true" >> "$GITHUB_OUTPUT"
-        else
-          echo "committed=false" >> "$GITHUB_OUTPUT"
-        fi
 
     - name: 🔍 Re-audit after fix
       id: reaudit
@@ -119,6 +113,15 @@ runs:
       run: npm audit --audit-level="$AUDIT_LEVEL"
       continue-on-error: true
 
+    - name: 📤 Upload proposed repair
+      id: upload
+      if: steps.fix.outputs.changes_made == 'true' && steps.reaudit.outcome == 'success'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      with:
+        name: ${{ inputs.patch-artifact-name }}
+        path: ${{ runner.temp }}/npm-audit-${{ github.job }}.patch
+        if-no-files-found: error
+
     - name: 📊 Determine final result
       id: final-result
       shell: bash
@@ -129,10 +132,16 @@ runs:
       run: |
         if [ "$AUDIT_OUTCOME" = "success" ]; then
           echo "passed=true" >> "$GITHUB_OUTPUT"
-        elif [ "$FIX_CHANGES_MADE" = "true" ] && [ "$REAUDIT_OUTCOME" = "success" ]; then
-          echo "passed=true" >> "$GITHUB_OUTPUT"
         else
           echo "passed=false" >> "$GITHUB_OUTPUT"
+        fi
+        if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+          {
+            printf '### npm audit\n\nSource audit: `%s`.\n\n' "$AUDIT_OUTCOME"
+            printf 'Repair patch proposed: `%s`; proposed repair audit: `%s`.\n\n' \
+              "${FIX_CHANGES_MADE:-false}" "${REAUDIT_OUTCOME:-not run}"
+            printf 'The auditor never commits changes. A patch requires delivery through the signed correction job.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
         fi
 
     - name: ❌ Fail if vulnerabilities remain
@@ -140,7 +149,6 @@ runs:
         github.event_name == 'push' && github.ref == 'refs/heads/main'
         && steps.final-result.outputs.passed == 'false'
       shell: bash
-      working-directory: ${{ inputs.working-directory }}
-      env:
-        AUDIT_LEVEL: ${{ inputs.audit-level }}
-      run: npm audit --audit-level="$AUDIT_LEVEL"
+      run: |
+        echo "::error::The source npm audit failed. Any proposed repair must be committed and rechecked."
+        exit 1
