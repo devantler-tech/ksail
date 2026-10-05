@@ -99,6 +99,19 @@ func TestHetznerFallbackCleanupSurvivesCancellation(t *testing.T) {
 				"checkout and cleanup must remain eligible after failure or cancellation")
 		})
 	}
+
+	var action struct {
+		Runs struct {
+			Steps []harnessStep `yaml:"steps"`
+		} `yaml:"runs"`
+	}
+	require.NoError(t, yaml.Unmarshal(readRepoFile(t, ".github/actions/cleanup-hetzner/action.yaml"), &action))
+	require.Len(t, action.Runs.Steps, 2)
+
+	for _, step := range action.Runs.Steps {
+		assert.Equal(t, "always()", step.If,
+			"nested setup and cleanup must also remain eligible after cancellation")
+	}
 }
 
 func TestHetznerSmokeReadinessRetriesTransientFailures(t *testing.T) {
