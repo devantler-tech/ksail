@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -178,6 +179,13 @@ type Provisioner struct {
 	// be a dead address (ksail#6070). Defaults to a bounded TCP dial loop;
 	// tests override it via export_test.go to avoid real network I/O.
 	apiEndpointReachabilityCheck func(ctx context.Context, ip string, timeout time.Duration) error
+	// apiServerServingCheck waits until the kube-apiserver at ip:kubernetesAPIPort
+	// has served a certificate valid for serverName, chaining to caPEM, for a whole
+	// stable window. It gates the kubeconfig refresh after an in-place endpoint
+	// change, which restarts kube-apiserver (#6032). Defaults to
+	// waitForServingCertificate; tests override it via export_test.go to avoid real
+	// network I/O.
+	apiServerServingCheck func(ctx context.Context, ip, serverName string, caPEM []byte) error
 	// nodeConfigFetcher returns the running Talos machine config for a node by IP.
 	// Defaults to fetchNodeConfig; tests override it via export_test.go to inject a
 	// known running config without real Talos API connectivity (used by the per-node
@@ -213,6 +221,20 @@ type Provisioner struct {
 	// and read by drainNode. The provisioner is created per command invocation and
 	// used sequentially, so a field is safe here.
 	drainForce bool
+	// revertFloatingIPEndpoint, when true, makes the desired node configs
+	// authoritative over the running floating-IP endpoint and HCloud VIP, so the
+	// in-place push of a `floatingIPEnabled: true`→`false` update actually strips
+	// them instead of grafting them back from the running config (#6032). It is
+	// request-scoped like drainForce: set by the floating-IP reconcile step of an
+	// update and read by buildDesiredNodeConfig.
+	revertFloatingIPEndpoint bool
+	// staleFloatingIPAddress is the HCloud VIP address running control planes
+	// still carry after their ksail-owned floating IP was released outside KSail
+	// while `floatingIPEnabled` is false, or the address a planned disable
+	// transition releases. Detection records it so the disable
+	// transition can move the talosconfig off it; it is request-scoped like
+	// revertFloatingIPEndpoint.
+	staleFloatingIPAddress string
 }
 
 // NewProvisioner creates a new Provisioner.
@@ -251,6 +273,15 @@ func NewProvisioner(
 		ctx context.Context, ip string, timeout time.Duration,
 	) error {
 		return dialTCPUntilReachable(ctx, ip, kubernetesAPIPort, timeout, retryInterval)
+	}
+
+	prov.apiServerServingCheck = func(
+		ctx context.Context, ip, serverName string, caPEM []byte,
+	) error {
+		return waitForServingCertificate(
+			ctx, net.JoinHostPort(ip, strconv.Itoa(kubernetesAPIPort)), serverName, caPEM,
+			apiServerRestartTimeout, apiServerStableWindow, apiServerProbeInterval,
+		)
 	}
 
 	prov.nodeConfigFetcher = prov.fetchNodeConfig

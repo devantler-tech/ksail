@@ -479,6 +479,11 @@ func (p *Provisioner) prepareFloatingIPEndpointBeforeNodeChanges(
 		return err
 	}
 
+	// A drift change while management is disabled is the disable transition:
+	// the regenerated node-IP endpoint without a VIP must win over the running
+	// floating-IP state when the in-place push rebuilds each node's config.
+	p.revertFloatingIPEndpoint = hasEndpointDrift && !p.floatingIPEnabled()
+
 	err = p.applyFloatingIPEndpointConfig(ctx, clusterName)
 	if err != nil {
 		return err
@@ -565,14 +570,23 @@ func (p *Provisioner) runningFloatingIPEndpointIsClean(
 // refreshFloatingIPKubeconfigAfterChanges persists the stable endpoint after
 // endpoint drift has been pushed to running nodes or control-plane topology has
 // changed. The operation is idempotent and skipped for unrelated updates.
+//
+// The disable transition takes the same path: the reconciled bundle's endpoint
+// is then the first control-plane node, so the kubeconfig moves off the
+// floating IP before that address is released.
 func (p *Provisioner) refreshFloatingIPKubeconfigAfterChanges(
 	ctx context.Context,
 	clusterName string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	diff, result *clusterupdate.UpdateResult,
 ) error {
-	if p.hetznerOpts == nil || !p.hetznerOpts.FloatingIPEnabled ||
-		(!hasFloatingIPChange(diff) && !hasControlPlaneTopologyChange(oldSpec, newSpec, result)) {
+	if p.hetznerOpts == nil {
+		return nil
+	}
+
+	topologyRefresh := p.floatingIPEnabled() &&
+		hasControlPlaneTopologyChange(oldSpec, newSpec, result)
+	if !hasFloatingIPChange(diff) && !topologyRefresh {
 		return nil
 	}
 
@@ -601,16 +615,20 @@ func (p *Provisioner) refreshFloatingIPKubeconfig(ctx context.Context, clusterNa
 		return errFloatingIPConfigsUnavailable
 	}
 
-	_, controlPlaneServers, err := p.hetznerNodesForRole(ctx, clusterName, RoleControlPlane)
+	controlPlaneServers, err := p.kubeconfigRefreshControlPlanes(ctx, clusterName)
 	if err != nil {
-		return fmt.Errorf("list control-plane servers for kubeconfig refresh: %w", err)
-	}
-
-	if len(controlPlaneServers) == 0 {
-		return fmt.Errorf("%w: cluster %q", ErrNoControlPlaneForRefresh, clusterName)
+		return err
 	}
 
 	talosEndpoint, err := hetznerNodeTalosAddress(controlPlaneServers[0])
+	if err != nil {
+		return err
+	}
+
+	// The endpoint change restarts kube-apiserver; persisting and using the
+	// kubeconfig before that restart has finished hits `connection refused`
+	// (#6032).
+	err = p.waitForAPIServersServingEndpoint(ctx, controlPlaneServers, endpointIP)
 	if err != nil {
 		return err
 	}
@@ -626,6 +644,158 @@ func (p *Provisioner) refreshFloatingIPKubeconfig(ctx context.Context, clusterNa
 	kubernetesEndpoint := "https://" + net.JoinHostPort(verifiedIP, "6443")
 
 	return p.fetchAndWriteKubeconfigForCP(ctx, talosEndpoint, kubernetesEndpoint)
+}
+
+// moveKubeconfigToNodeEndpoint persists the first control-plane node as the
+// Kubernetes API endpoint. The node address is always in the serving
+// certificate, so this is safe while the floating IP still answers and keeps the
+// kubeconfig usable once it no longer does.
+func (p *Provisioner) moveKubeconfigToNodeEndpoint(ctx context.Context, clusterName string) error {
+	if p.options == nil || p.options.KubeconfigPath == "" {
+		return nil
+	}
+
+	controlPlaneServers, err := p.kubeconfigRefreshControlPlanes(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
+	nodeAddress, err := hetznerNodeTalosAddress(controlPlaneServers[0])
+	if err != nil {
+		return err
+	}
+
+	return p.fetchAndWriteKubeconfigForCP(
+		ctx, nodeAddress, "https://"+net.JoinHostPort(nodeAddress, "6443"),
+	)
+}
+
+// moveKubeconfigOffDisabledFloatingIP moves the kubeconfig to the node endpoint
+// at the start of the disable transition, before any node drops the VIP and
+// before any step needs the Kubernetes API. A partly failed push skips the later
+// refresh, and a rerun can start from a kubeconfig that still names the floating
+// IP (another machine, a CI runner): the wipe and autoscaler Secret steps would
+// otherwise dial an address no node answers on, on that run and every rerun.
+func (p *Provisioner) moveKubeconfigOffDisabledFloatingIP(
+	ctx context.Context,
+	clusterName string,
+	diff *clusterupdate.UpdateResult,
+) error {
+	if p.hetznerOpts == nil || p.floatingIPEnabled() || !hasFloatingIPChange(diff) {
+		return nil
+	}
+
+	return p.moveKubeconfigToNodeEndpoint(ctx, clusterName)
+}
+
+// kubeconfigRefreshControlPlanes lists the cluster's live control-plane
+// servers, failing with ErrNoControlPlaneForRefresh when there are none.
+func (p *Provisioner) kubeconfigRefreshControlPlanes(
+	ctx context.Context,
+	clusterName string,
+) ([]*hcloud.Server, error) {
+	_, controlPlaneServers, err := p.hetznerNodesForRole(ctx, clusterName, RoleControlPlane)
+	if err != nil {
+		return nil, fmt.Errorf("list control-plane servers for kubeconfig refresh: %w", err)
+	}
+
+	if len(controlPlaneServers) == 0 {
+		return nil, fmt.Errorf("%w: cluster %q", ErrNoControlPlaneForRefresh, clusterName)
+	}
+
+	return controlPlaneServers, nil
+}
+
+// disableTransitionSucceeded reports whether this update carried the disable
+// transition and every change succeeded, logging why the address is kept when
+// a change failed.
+func (p *Provisioner) disableTransitionSucceeded(diff, result *clusterupdate.UpdateResult) bool {
+	if p.hetznerOpts == nil || p.hetznerOpts.FloatingIPEnabled || !hasFloatingIPChange(diff) {
+		return false
+	}
+
+	if result != nil && result.HasFailedChanges() {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  ⚠ Keeping the floating IP because the update had failed changes;"+
+				" re-run cluster update to finish disabling it\n",
+		)
+
+		return false
+	}
+
+	return true
+}
+
+// desiredControlPlaneEndpoint returns the host of the reconciled control-plane
+// endpoint, or "" when no control-plane config is loaded.
+func (p *Provisioner) desiredControlPlaneEndpoint() string {
+	if p.talosConfigs == nil || p.talosConfigs.ControlPlane() == nil ||
+		p.talosConfigs.ControlPlane().Cluster().Endpoint() == nil {
+		return ""
+	}
+
+	return p.talosConfigs.ControlPlane().Cluster().Endpoint().Hostname()
+}
+
+// floatingIPEnabled reports whether Hetzner floating-IP management is enabled.
+func (p *Provisioner) floatingIPEnabled() bool {
+	return p.hetznerOpts != nil && p.hetznerOpts.FloatingIPEnabled
+}
+
+// releaseDisabledFloatingIP completes the disable transition (#6032) by
+// moving the saved talosconfig off the cluster's ksail-owned floating IP and
+// then releasing it. It is the last update step, so it runs only after every
+// other fallible step succeeded, the in-place push has moved every node off the
+// address, and the kubeconfig has been rewritten — and never when any change
+// failed: releasing an address cannot be undone, so a partial update keeps it
+// and the next `cluster update` re-detects the transition and retries the whole
+// idempotent sequence.
+func (p *Provisioner) releaseDisabledFloatingIP(
+	ctx context.Context,
+	clusterName string,
+	diff, result *clusterupdate.UpdateResult,
+) error {
+	if !p.disableTransitionSucceeded(diff, result) {
+		return nil
+	}
+
+	hzProvider, isHetzner := p.infraProvider.(*hetzner.Provider)
+	if !isHetzner {
+		return nil
+	}
+
+	name := p.resolveClusterName(clusterName)
+
+	floatingIP, err := hzProvider.GetOwnedFloatingIP(ctx, name)
+	if err != nil {
+		return fmt.Errorf("look up floating IP before release: %w", err)
+	}
+
+	if floatingIP == nil {
+		// Released outside KSail: only the talosconfig still names the address.
+		return p.repointTalosconfigEndpoint(
+			name, p.staleFloatingIPAddress, p.desiredControlPlaneEndpoint(),
+		)
+	}
+
+	if floatingIP.IP != nil {
+		err = p.repointTalosconfigEndpoint(
+			name, floatingIP.IP.String(), p.desiredControlPlaneEndpoint(),
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = hzProvider.ReleaseFloatingIP(ctx, name)
+	if err != nil {
+		return fmt.Errorf("release floating IP: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Floating IP %s released\n", name+hetzner.FloatingIPSuffix)
+
+	return nil
 }
 
 // refreshFloatingIPEndpointAfterNodeChanges rebuilds the floating-IP endpoint,
