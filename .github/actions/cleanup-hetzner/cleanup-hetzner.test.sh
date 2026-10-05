@@ -76,6 +76,9 @@ list)
 	done <"${state}"
 	;;
 delete)
+	# A provider can acknowledge a deletion before the resource disappears.
+	# A successful command alone must not be accepted as absence evidence.
+	[[ "${FAKE_HCLOUD_KEEP:-}" != "${kind}" ]] || exit 0
 	grep -vx -- "${id}" "${state}" >"${state}.next" || true
 	mv "${state}.next" "${state}"
 	;;
@@ -118,6 +121,7 @@ run_case() {
 
 	local output status=0
 	output="$(PATH="${fake_bin}:${PATH}" FAKE_HCLOUD_STATE="${state}" FAKE_HCLOUD_FAIL="${fail_rules}" \
+		FAKE_HCLOUD_KEEP="${CASE_KEEP_KIND:-}" \
 		LABEL_SELECTOR="ksail.cluster.name=test" bash "${cleanup}" 2>&1)" || status=$?
 
 	local remaining
@@ -139,6 +143,12 @@ run_case nothing-to-delete 0 "✅ Hetzner Cloud cleanup complete!" ""
 
 run_case deletes-every-kind 0 "✅ Hetzner Cloud cleanup complete!" "" \
 	server=11,12 floating-ip=21 placement-group=31 firewall=41 network=51
+
+for retained_kind in server floating-ip placement-group network; do
+	CASE_KEEP_KIND="${retained_kind}" CASE_REMAINING="${retained_kind}=11 " \
+		run_case "acknowledged-${retained_kind}-still-present" 1 \
+		"❌ ${retained_kind} resources still present after cleanup: 11" "" "${retained_kind}=11"
+done
 
 run_case unreachable-api 1 "❌ Failed to access Hetzner Cloud: hcloud: location list failed" \
 	"location list"
