@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -36,6 +37,7 @@ const (
 // a server, so it is counted as unexpected and refused.
 type autoscalerHcloudAPI struct {
 	servers    []schema.Server
+	listStatus atomic.Int32
 	unexpected atomic.Int32
 }
 
@@ -63,6 +65,12 @@ func newAutoscalerHcloudAPI(
 	})
 
 	mux.HandleFunc("GET /servers", func(writer http.ResponseWriter, request *http.Request) {
+		if status := api.listStatus.Load(); status != 0 {
+			http.Error(writer, "provider inventory unavailable", int(status))
+
+			return
+		}
+
 		selector := request.URL.Query().Get("label_selector")
 
 		writeHcloudJSON(t, writer, schema.ServerListResponse{Servers: api.matching(selector)})
@@ -522,4 +530,109 @@ func TestEnsureAutoscalerSecretIfNeeded_SilentWithoutAutoscalerServers(t *testin
 		assert.Empty(t, result.FailedChanges)
 		assert.Empty(t, logs.String())
 	})
+}
+
+// TestAuditUpdate_ReportsOnlyUnconfiguredServers exercises the public capability
+// the no-diff command uses, including the last removed pool and foreign networks.
+func TestAuditUpdate_ReportsOnlyUnconfiguredServers(t *testing.T) {
+	t.Parallel()
+
+	testCases := append(autoscalerDiscoveryCases(), autoscalerDiscoveryCase{
+		name:  "configured servers are left untouched",
+		pools: []string{configuredPool},
+		servers: []schema.Server{
+			autoscalerServerSchema(1, "as-pool-a-1", configuredPool, autoscalerFakeNetworkID),
+		},
+	})
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			hzProvider, api := newAutoscalerHcloudAPI(t, testCase.servers...)
+			prov := autoscalerProvisioner(hzProvider, io.Discard, testCase.pools...)
+			result := clusterupdate.NewEmptyUpdateResult()
+
+			err := prov.AuditUpdate(t.Context(), autoscalerFakeCluster, result)
+			require.NoError(t, err)
+
+			reasons := failedChangeReasons(result)
+			require.Len(t, reasons, len(testCase.wantReported))
+
+			for index, serverName := range testCase.wantReported {
+				assert.Contains(t, reasons[index], serverName)
+				assert.Contains(t, reasons[index], "\""+removedPool+"\"")
+			}
+
+			assert.Zero(t, api.unexpected.Load(), "inventory audit must never mutate a server")
+		})
+	}
+}
+
+// Disabling the autoscaler must not hide its servers, whether their pool remains
+// in the config or has been removed.
+func TestAuditUpdate_ReportsDisabledAutoscalerServers(t *testing.T) {
+	t.Parallel()
+
+	for _, retainPool := range []bool{false, true} {
+		t.Run(strconv.FormatBool(retainPool), func(t *testing.T) {
+			t.Parallel()
+
+			hzProvider, api := newAutoscalerHcloudAPI(t, removedPoolAndOtherClusterServers()...)
+			pools := []string{}
+			if retainPool {
+				pools = append(pools, removedPool)
+			}
+
+			prov := disabledAutoscalerProvisioner(hzProvider, io.Discard, pools...)
+			result := clusterupdate.NewEmptyUpdateResult()
+
+			err := prov.AuditUpdate(t.Context(), autoscalerFakeCluster, result)
+			require.NoError(t, err)
+
+			reasons := failedChangeReasons(result)
+			require.Len(t, reasons, 1)
+			assert.Contains(t, reasons[0], "as-removed-1")
+			assert.Contains(t, reasons[0], "node autoscaler is disabled")
+			assert.NotContains(t, reasons[0], "other-pool-a")
+			assert.Zero(t, api.unexpected.Load(), "inventory audit must never mutate a server")
+		})
+	}
+}
+
+func TestAuditUpdate_InventoryFailureIsNotSuccessfulAudit(t *testing.T) {
+	t.Parallel()
+
+	for _, enabled := range []bool{false, true} {
+		t.Run(strconv.FormatBool(enabled), func(t *testing.T) {
+			t.Parallel()
+
+			hzProvider, api := newAutoscalerHcloudAPI(t)
+			api.listStatus.Store(http.StatusForbidden)
+
+			prov := disabledAutoscalerProvisioner(hzProvider, io.Discard)
+			if enabled {
+				prov = autoscalerProvisioner(hzProvider, io.Discard)
+			}
+
+			err := prov.AuditUpdate(
+				t.Context(), autoscalerFakeCluster, clusterupdate.NewEmptyUpdateResult(),
+			)
+			require.ErrorContains(t, err, "listing autoscaler nodes")
+			assert.Zero(t, api.unexpected.Load())
+		})
+	}
+}
+
+func TestAuditUpdate_NoHetznerOptionsRequiresNoInventory(t *testing.T) {
+	t.Parallel()
+
+	hzProvider, api := newAutoscalerHcloudAPI(t, removedPoolAndOtherClusterServers()...)
+	prov := talosprovisioner.NewProvisioner(nil, nil).WithInfraProvider(hzProvider)
+	result := clusterupdate.NewEmptyUpdateResult()
+
+	err := prov.AuditUpdate(t.Context(), autoscalerFakeCluster, result)
+	require.NoError(t, err)
+	assert.Empty(t, result.FailedChanges)
+	assert.Zero(t, api.unexpected.Load())
 }

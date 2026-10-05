@@ -3,6 +3,7 @@ package cluster_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"testing"
 
@@ -14,6 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var errAuditInventoryUnavailable = errors.New("provider inventory unavailable")
 
 // auditedUpdateFake models a live configuration that converges on the first
 // apply while a removed pool's server remains in the provider inventory.
@@ -92,7 +95,12 @@ func executeAuditUpdateCommand(t *testing.T, args ...string) (string, error) {
 	stderr, err := os.ReadFile(stderrPath) //nolint:gosec // path is under t.TempDir
 	require.NoError(t, err)
 
-	return string(stdout) + "\n" + string(stderr), execErr
+	output := string(stdout) + "\n" + string(stderr)
+	if execErr != nil {
+		return output, fmt.Errorf("execute update command: %w", execErr)
+	}
+
+	return output, nil
 }
 
 // The first apply may refresh Helm/Secret state before it reports the leftover.
@@ -135,7 +143,7 @@ func TestUpdateCommandReportsLeftoverServerAfterConfigConverges(t *testing.T) {
 
 //nolint:paralleltest // changes HOME, working directory and process output.
 func TestUpdateCommandNoChangeAuditReportsInventoryFailure(t *testing.T) {
-	provisioner := &auditedUpdateFake{auditErr: errors.New("provider inventory unavailable")}
+	provisioner := &auditedUpdateFake{auditErr: errAuditInventoryUnavailable}
 	prepareAuditUpdateCommand(t, provisioner)
 
 	output, err := executeAuditUpdateCommand(t, "--yes")
@@ -159,7 +167,7 @@ func TestUpdateCommandNoChangeAuditAcceptsCleanInventory(t *testing.T) {
 
 //nolint:paralleltest // changes HOME, working directory and process output.
 func TestUpdateCommandDryRunDoesNotAuditProviderInventory(t *testing.T) {
-	provisioner := &auditedUpdateFake{auditErr: errors.New("must not audit a dry run")}
+	provisioner := &auditedUpdateFake{auditErr: errAuditInventoryUnavailable}
 	prepareAuditUpdateCommand(t, provisioner)
 
 	_, err := executeAuditUpdateCommand(t, "--dry-run")
