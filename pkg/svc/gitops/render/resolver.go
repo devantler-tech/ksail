@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 
@@ -397,6 +398,7 @@ func applyValuesFrom(
 // than failing the whole offline render, matching the root-merge branch.
 func applyTargetPathValue(values map[string]any, ref meta.ValuesReference, raw string) {
 	parse := helmv4strvals.ParseInto
+
 	switch {
 	case ref.Literal:
 		parse = helmv4strvals.ParseLiteralInto
@@ -427,9 +429,7 @@ func sourceKey(refNamespace, refName, defaultNamespace string) string {
 // Untouched nested values retain their identity for target-path assignments.
 func mergeValues(dst, src map[string]any) map[string]any {
 	merged := make(map[string]any, len(dst))
-	for key, value := range dst {
-		merged[key] = value
-	}
+	maps.Copy(merged, dst)
 
 	for key, srcValue := range src {
 		if srcMap, ok := srcValue.(map[string]any); ok {
