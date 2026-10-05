@@ -50,6 +50,8 @@ func NewServer() *api.Server {
 	manager, secureStorageAvailable := newCredentialManager()
 	if manager != nil {
 		service.UseCredentials(manager)
+
+		server.AWSSSORenewalEnabled = func() bool { return manager.AppSettings().AWSSSORenewal }
 		server.Settings = settingsService{
 			manager:                manager,
 			secureStorageAvailable: secureStorageAvailable,

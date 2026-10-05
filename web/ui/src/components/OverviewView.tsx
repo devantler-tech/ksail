@@ -30,6 +30,7 @@ import { HostBadge, StatusBadge, StatusDot } from "./StatusBadge.tsx";
 import { EmptyState, ErrorBanner } from "./states.tsx";
 import { Button } from "./ui.tsx";
 import { useToast } from "./Toast.tsx";
+import { ClusterSignIn } from "./ClusterSignIn.tsx";
 
 // WORKLOAD_PLACEHOLDERS keeps the Workloads card's layout stable while live health is still loading
 // (counts render as an em dash instead of a blank card).
@@ -78,6 +79,7 @@ function conditionIcon(status: Condition["status"]) {
 export function OverviewView({
   cluster,
   canBrowse,
+  canAuthenticate = false,
   canEdit,
   canDelete,
   canDownloadKubeconfig,
@@ -88,6 +90,7 @@ export function OverviewView({
   // canBrowse gates the live-health cards (node/pod/workload counts + warnings) on the workload-read
   // API; the cluster's own spec/status/conditions render regardless.
   canBrowse: boolean;
+  canAuthenticate?: boolean;
   canEdit: boolean;
   canDelete: boolean;
   canDownloadKubeconfig: boolean;
@@ -246,6 +249,10 @@ export function OverviewView({
               ))}
             </ul>
           </details>
+          {canAuthenticate ? (
+            <ClusterSignIn key={instanceKey} namespace={namespace} name={cluster.metadata.name}
+              onSignedIn={() => setNonce((value) => value + 1)} />
+          ) : null}
         </div>
       ) : null}
 

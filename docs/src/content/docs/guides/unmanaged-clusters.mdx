@@ -32,7 +32,16 @@ Check the connection without changing cluster resources or your active context:
 ksail workload get --context my-cloud-context --request-timeout=10s --raw=/version
 ```
 
-If the authentication command reports an expired session, renew it with your provider's normal login procedure. A forbidden resource read instead means your current identity cannot read that resource.
+For a direct AWS SSO profile, KSail can start the provider's browser sign-in without a separate terminal login command. This recovery is experimental and opt-in:
+
+- **Desktop / local web UI:** enable **AWS SSO renewal (experimental)** in **Settings → Credentials**. When the selected context's SSO session expires, choose **Sign in to AWS SSO** on its overview. Complete AWS sign-in in your browser; KSail then refreshes monitoring. **Cancel sign-in** stops the pending flow.
+- **Interactive CLI:** pass `--experimental` to a read command such as `workload get`, `describe`, `logs`, `explain` or `wait`. If its selected AWS SSO session is expired, KSail asks for confirmation, starts browser sign-in and then performs the original read without switching contexts:
+
+  ```sh
+  ksail workload get --experimental --context my-cloud-context pods
+  ```
+
+Both legacy SSO profiles and profiles using a named `sso-session` are supported when the kubeconfig directly invokes `aws eks get-token`. The configured AWS CLI must be installed. Custom wrappers, assume-role/source-profile chains and static credentials retain their normal authentication path; they are not automatically renewed. Background monitoring, scripts and CI never initiate sign-in. A forbidden resource read means your identity lacks permission for that resource, not that SSO needs renewal.
 
 The overview reports failed reads and shows unavailable counts as `—`, not zero. Expand **Failed resource reads** for details. Data from successful reads remains visible; if live metrics cannot be read, resource-usage charts use requested resources only when both nodes and pods were read successfully. After restoring access, select **Refresh** to reload monitoring data.
 

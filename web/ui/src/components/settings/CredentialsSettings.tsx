@@ -3,10 +3,13 @@ import { useCallback, useEffect, useState } from "react";
 import {
   errorMessage,
   getSettings,
+  getAppSettings,
+  updateAppSettings,
   testCredential,
   updateSettings,
   type CredentialSetting,
   type CredentialUpdate,
+  type AppSettings,
 } from "../../api.ts";
 import { cx } from "../../lib/cx.ts";
 import { envVarError } from "../../lib/envVar.ts";
@@ -120,14 +123,17 @@ export function CredentialsSettings({ onSaved }: { onSaved?: () => void }) {
   // reveal tracks which secret inputs are shown in plain text; testing tracks per-provider test calls.
   const [reveal, setReveal] = useState<Record<string, boolean>>({});
   const [testing, setTesting] = useState<Record<string, boolean>>({});
+  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+  const [savingSSO, setSavingSSO] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const response = await getSettings();
+      const [response, app] = await Promise.all([getSettings(), getAppSettings()]);
       setCredentials(response.credentials);
       setDrafts(initDrafts(response.credentials));
       setSecureStorage(response.secureStorageAvailable);
       setError(null);
+      setAppSettings(app);
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -174,10 +180,26 @@ export function CredentialsSettings({ onSaved }: { onSaved?: () => void }) {
       } else {
         toast.error(`${provider}: ${result.message}`);
       }
+
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
       setTesting((current) => ({ ...current, [provider]: false }));
+    }
+  }
+
+  async function saveSSORenewal(enabled: boolean) {
+    if (!appSettings) return;
+    setSavingSSO(true);
+    try {
+      const current = await getAppSettings();
+      setAppSettings(await updateAppSettings({ ...current, awsSsoRenewal: enabled }));
+      toast.success("AWS SSO preference saved");
+      onSaved?.();
+    } catch (err: unknown) {
+      toast.error(errorMessage(err));
+    } finally {
+      setSavingSSO(false);
     }
   }
 
@@ -200,6 +222,19 @@ export function CredentialsSettings({ onSaved }: { onSaved?: () => void }) {
 
   return (
     <div className="space-y-6">
+      {error ? <ErrorBanner message={error} onRetry={() => void load()} /> : null}
+      <section className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={appSettings?.awsSsoRenewal ?? false}
+            disabled={!appSettings || savingSSO}
+            onChange={(event) => void saveSSORenewal(event.target.checked)} />
+          AWS SSO renewal (experimental)
+        </label>
+        <p className="mt-2 text-sm text-slate-500">
+          Offer browser sign-in for an expired AWS SSO session on the selected cluster.
+          Background monitoring never starts sign-in.
+        </p>
+      </section>
       <p className="text-sm text-slate-500 dark:text-slate-400">
         Configure the credentials KSail uses to reach cloud and AI providers. Each credential resolves
         from a stored value when set, otherwise from the named environment variable.
