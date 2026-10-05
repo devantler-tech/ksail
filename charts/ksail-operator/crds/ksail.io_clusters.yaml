@@ -874,7 +874,10 @@ spec:
                           change — no user-provided machine-config patch is needed. The hcloud API token
                           (from the configured tokenEnvVar) is embedded in the rendered control-plane machine
                           config, the trust surface Talos' hcloud VIP support prescribes. Defaults to false
-                          (no floating IP; rendered configs are unchanged).
+                          (no floating IP; rendered configs are unchanged). Switching it from true to false on
+                          a running cluster makes `cluster update` remove the VIP block, move every node and the
+                          kubeconfig back to the first control-plane node's address without reboot, and then
+                          release the ksail-owned floating IP.
                         type: boolean
                       floatingIPLocation:
                         description: |-
