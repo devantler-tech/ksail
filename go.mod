@@ -82,7 +82,7 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.5
 	github.com/google/go-github/v72 v72.0.0
 	github.com/googleapis/gax-go/v2 v2.24.1
-	github.com/gopacket/gopacket v1.7.1
+	github.com/gopacket/gopacket v1.7.3
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/hetznercloud/hcloud-go/v2 v2.47.0
 	github.com/invopop/jsonschema v0.14.0
