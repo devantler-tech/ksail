@@ -397,12 +397,13 @@ func applyValuesFrom(
 // than failing the whole offline render, matching the root-merge branch.
 func applyTargetPathValue(values map[string]any, ref meta.ValuesReference, raw string) {
 	parse := helmv4strvals.ParseInto
-	if ref.Literal {
+	switch {
+	case ref.Literal:
 		parse = helmv4strvals.ParseLiteralInto
-	} else if strings.HasPrefix(raw, "\"") && strings.HasSuffix(raw, "\"") {
+	case strings.HasPrefix(raw, "\"") && strings.HasSuffix(raw, "\""):
 		raw = strings.Trim(raw, "\"")
 		parse = helmv4strvals.ParseIntoString
-	} else if strings.HasPrefix(raw, "'") && strings.HasSuffix(raw, "'") {
+	case strings.HasPrefix(raw, "'") && strings.HasSuffix(raw, "'"):
 		raw = strings.Trim(raw, "'")
 		parse = helmv4strvals.ParseIntoString
 	}

@@ -242,7 +242,8 @@ func TestBuildChartSpecValuesFromTargetPath(t *testing.T) {
 	image, ok := values["image"].(map[string]any)
 	require.True(t, ok, "the value should be set at the nested targetPath")
 	// Native Flux uses Helm typed parsing for an unquoted target scalar.
-	assert.Equal(t, float64(123), image["tag"])
+	require.IsType(t, float64(0), image["tag"])
+	assert.InDelta(t, 123, image["tag"], 0)
 }
 
 func TestBuildChartSpecValuesFromTargetPathLiteral(t *testing.T) {
