@@ -130,6 +130,10 @@ inputs:
       Leave empty to skip.
     required: false
     default: ""
+  test-autoscaler-inventory:
+    description: Run the optional Talos/Hetzner orphaned-server audit with one powered-off probe.
+    required: false
+    default: "false"
   upload-artifacts:
     description: |
       Upload diagnostics and logs from inside this composite action. Callers
@@ -943,6 +947,25 @@ runs:
         path: /tmp/system-test-diagnostics/
         retention-days: 7
         if-no-files-found: ignore
+
+    - name: 📦 Setup hcloud for autoscaler inventory trial
+      if: inputs.test-autoscaler-inventory == 'true'
+      uses: hetznercloud/setup-hcloud@4ff9bbeda4053fb69dd7fa1fcbdfcce7e648bf33 # v1
+
+    - name: 🧪 Hetzner autoscaler inventory — unchanged update and retry
+      if: inputs.test-autoscaler-inventory == 'true'
+      shell: bash
+      timeout-minutes: 20
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        CLUSTER_NAME: st-hetzner-dispatch-${{ github.run_id }}
+        K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
+      run: |
+        set -euo pipefail
+        [[ "$DISTRIBUTION" == Talos && "$PROVIDER" == Hetzner && "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
+        export K8S_VERSION="${K8S_VERSION_FLAG#--kubernetes-version }"
+        bash "$GITHUB_WORKSPACE/.github/actions/ksail-system-test/autoscaler-audit-trial.sh"
 
     # ── Phase 7 — Cleanup ────────────────────────────────────────────
 

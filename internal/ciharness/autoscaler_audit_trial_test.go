@@ -1,0 +1,133 @@
+package ciharness_test
+
+import (
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
+)
+
+func TestAutoscalerAuditTrialRejectsFalseAcceptance(t *testing.T) {
+	t.Parallel()
+
+	for _, mode := range []string{"complete", "foreign-reported", "retry-success", "mutated", "cleanup-failed", "cleanup-retained"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+
+			state, bin := t.TempDir(), t.TempDir()
+			writeExecutable(t, filepath.Join(bin, "timeout"), "#!/usr/bin/env bash\nshift 2\nexec \"$@\"\n")
+			writeExecutable(t, filepath.Join(bin, "hcloud"), `#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "$STATE/hcloud-calls"
+case "$1 $2" in
+"server list") [[ ! -f "$STATE/created" || -f "$STATE/deleted" ]] || echo 42 ;;
+"server create") touch "$STATE/created"; echo '{"server":{"id":42},"root_password":"must-never-reach-evidence"}' ;;
+"server attach-to-network") touch "$STATE/attached" ;;
+"server describe")
+  status=off; [[ ! -f "$STATE/mutated" ]] || status=running
+  jq -cn --arg name "$CLUSTER_NAME-audit-removed" --arg run "$GITHUB_RUN_ID" --arg status "$status" \
+    '{id:42,name:$name,created:"2026-10-05T00:00:00Z",status:$status,server_type:{id:1},image:{id:2},labels:{"ksail.trial.run":$run,"hcloud/node-group":"removed-pool"}}'
+  ;;
+"server delete")
+  [[ "$MODE" != cleanup-failed ]] || exit 1
+  [[ "$MODE" == cleanup-retained ]] || touch "$STATE/deleted"
+  ;;
+*) echo 'unexpected hcloud operation' >&2; exit 2 ;;
+esac
+`)
+			writeExecutable(t, filepath.Join(bin, "ksail"), `#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "$STATE/ksail-calls"
+count=0; [[ ! -f "$STATE/count" ]] || count=$(cat "$STATE/count")
+count=$((count+1)); echo "$count" > "$STATE/count"
+if [[ ! -f "$STATE/attached" && "$MODE" != foreign-reported ]] || \
+   [[ "$count" -eq 3 && "$MODE" == retry-success ]]; then
+  echo 'No changes detected'; exit 0
+fi
+[[ "$MODE" != mutated ]] || touch "$STATE/mutated"
+echo "Autoscaler node $CLUSTER_NAME-audit-removed is left untouched: node autoscaler is disabled"
+echo '1 changes failed to apply:'
+exit 1
+`)
+			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+			defer cancel()
+			script, pathErr := filepath.Abs(filepath.Join("..", "..", ".github/actions/ksail-system-test/autoscaler-audit-trial.sh"))
+			require.NoError(t, pathErr)
+			cmd := exec.CommandContext(ctx, "bash", script) //nolint:gosec
+			cmd.Dir = state
+			require.NoError(t, os.WriteFile(filepath.Join(state, "ksail.yaml"), []byte("unchanged"), 0o600))
+			cmd.Env = append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"),
+				"STATE="+state, "MODE="+mode, "GITHUB_RUN_ID=1234", "CLUSTER_NAME=st-hetzner-dispatch-1234",
+				"K8S_VERSION=v1.36.2", "HCLOUD_TOKEN=fixture", "EVIDENCE_DIR="+filepath.Join(state, "evidence"))
+			output, err := cmd.CombinedOutput()
+			assert.NotContains(t, string(output), "must-never-reach-evidence")
+			if mode == "complete" {
+				require.NoError(t, err, string(output))
+				assert.Contains(t, string(output), "PASS: foreign network excluded; both unchanged updates failed; server preserved; probe absent")
+				calls, readErr := os.ReadFile(filepath.Join(state, "ksail-calls"))
+				require.NoError(t, readErr)
+				assert.Equal(t, 3, strings.Count(strings.TrimSpace(string(calls)), "\n")+1)
+				assert.NotContains(t, string(calls), "cluster delete")
+			} else {
+				require.Error(t, err, string(output))
+				assert.NotContains(t, string(output), "PASS:")
+			}
+		})
+	}
+}
+
+func TestAutoscalerAuditTrialAdmitsOnlyBoundedDispatch(t *testing.T) {
+	t.Parallel()
+
+	var workflow hetznerWorkflow
+	require.NoError(t, yaml.Unmarshal(readRepoFile(t, ".github/workflows/system-test-hetzner.yaml"), &workflow))
+	input, found := workflow.On.WorkflowDispatch.Inputs["autoscaler_inventory_trial"]
+	require.True(t, found)
+	assert.Equal(t, false, input.Default)
+	steps := workflow.Jobs["system-test"].Steps
+	guard := findHarnessStep(t, steps, "✅ Validate bounded autoscaler inventory trial")
+	guardIndex := -1
+	for index, step := range steps {
+		if step.Name == guard.Name {
+			guardIndex = index
+		}
+		if strings.Contains(step.Uses, "/ksail-cluster") || strings.Contains(step.Uses, "/ksail-system-test") {
+			require.GreaterOrEqual(t, guardIndex, 0, "admission must precede every provisioning action")
+			require.Less(t, guardIndex, index)
+		}
+	}
+
+	for _, tc := range []struct {
+		name, distribution, init, cp, workers, resize string
+		accepted                                      bool
+	}{
+		{"one Talos node", "Talos", "true", "1", "0", "", true},
+		{"direct provider", "K3s", "true", "1", "0", "", false},
+		{"no init", "Talos", "false", "1", "0", "", false},
+		{"extra control planes", "Talos", "true", "3", "0", "", false},
+		{"extra workers", "Talos", "true", "1", "1", "", false},
+		{"rolling replacement", "Talos", "true", "1", "0", "cx33", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, "bash", "-c", guard.Run) //nolint:gosec
+			cmd.Env = append(os.Environ(), "DISTRIBUTION="+tc.distribution, "INIT="+tc.init,
+				"CONTROL_PLANES="+tc.cp, "WORKERS="+tc.workers, "ROLLING_RESIZE="+tc.resize)
+			output, err := cmd.CombinedOutput()
+			if tc.accepted {
+				require.NoError(t, err, string(output))
+			} else {
+				require.Error(t, err, string(output))
+			}
+		})
+	}
+}
