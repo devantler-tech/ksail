@@ -224,22 +224,23 @@ func (p *Provisioner) waitForK8sNodeReady(
 	ctx context.Context,
 	clientset kubernetes.Interface,
 	nodeName string,
-	timeout time.Duration,
 ) error {
-	pollErr := readiness.PollForReadiness(ctx, timeout, func(ctx context.Context) (bool, error) {
-		node, err := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
-		if err != nil {
-			return false, nil //nolint:nilerr // returning nil to continue polling
-		}
-
-		for _, cond := range node.Status.Conditions {
-			if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue {
-				return true, nil
+	pollErr := readiness.PollForReadiness(
+		ctx, nodeReadinessTimeout, func(ctx context.Context) (bool, error) {
+			node, err := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+			if err != nil {
+				return false, nil //nolint:nilerr // returning nil to continue polling
 			}
-		}
 
-		return false, nil
-	})
+			for _, cond := range node.Status.Conditions {
+				if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue {
+					return true, nil
+				}
+			}
+
+			return false, nil
+		},
+	)
 	if pollErr != nil {
 		return fmt.Errorf("wait for node %s readiness: %w", nodeName, pollErr)
 	}
@@ -436,7 +437,7 @@ func (p *Provisioner) rollingRebootSingleNode(
 
 	_, _ = fmt.Fprintf(p.logWriter, "    Waiting for %s to become ready...\n", nodeName)
 
-	waitErr := p.waitForK8sNodeReady(ctx, clientset, nodeName, nodeReadinessTimeout)
+	waitErr := p.waitForK8sNodeReady(ctx, clientset, nodeName)
 	if waitErr != nil {
 		return fmt.Errorf("wait for ready: %w", waitErr)
 	}

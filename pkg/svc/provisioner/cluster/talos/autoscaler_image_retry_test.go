@@ -27,6 +27,45 @@ import (
 
 const autoscalerRetryEnvironmentVariable = "KSAIL_TEST_IMAGE"
 
+func TestAutoscalerImageRefreshMigratesLegacySecret(t *testing.T) {
+	t.Setenv(autoscalerRetryEnvironmentVariable, "test-token")
+
+	client := autoscalerImageRetryClient(t)
+	secret, err := client.CoreV1().Secrets("kube-system").Get(
+		t.Context(), "cluster-autoscaler-config", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+
+	secret.Data = map[string][]byte{
+		"hcloud_image":      []byte("1"),
+		"hcloud_cloud_init": []byte("legacy-config"),
+		"extra_key":         []byte("preserved"),
+	}
+	_, err = client.CoreV1().Secrets("kube-system").Update(
+		t.Context(), secret, metav1.UpdateOptions{},
+	)
+	require.NoError(t, err)
+
+	serverLists := &atomic.Int32{}
+	serverLists.Store(3)
+	server := autoscalerImageRetryServer(t, client, serverLists, false)
+	require.NoError(t, newAutoscalerImageRetryProvisioner(t, server.URL).
+		EnsureAutoscalerSecretIfNeededForTest(t.Context(), "test-cluster"))
+
+	migrated, err := client.CoreV1().Secrets("kube-system").Get(
+		t.Context(), secret.Name, metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+	image, err := talosprovisioner.SnapshotImageIDFromSecretForTest(migrated)
+	require.NoError(t, err)
+	assert.Equal(t, "2", image)
+	assert.Equal(t, secret.Data["hcloud_image"], migrated.Data["hcloud_image"])
+	assert.Equal(t, secret.Data["hcloud_cloud_init"], migrated.Data["hcloud_cloud_init"])
+	assert.Equal(t, secret.Data["extra_key"], migrated.Data["extra_key"])
+	assert.Greater(t, serverLists.Load(), int32(3), "migration must converge existing capacity")
+	assert.NotContains(t, migrated.Annotations, "ksail.io/autoscaler-image-rollout-pending")
+}
+
 // Propagation can return nil while recording individual node failures. Such an
 // attempt must keep a durable retry signal even after its Secret is up to date.
 func TestAutoscalerImageRefreshRetainsPendingOnRecordedFailure(t *testing.T) {

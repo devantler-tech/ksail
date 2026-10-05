@@ -243,10 +243,15 @@ func buildClusterConfigSecretValue(
 // in a cluster-autoscaler-config Secret's HCLOUD_CLUSTER_CONFIG value. It is used
 // to detect a Talos OS bump (a new boot image) across an update: a changed image
 // ID means existing autoscaler nodes booted from an older snapshot and can only
-// adopt the new one by being replaced. An existing but unreadable baseline is an
-// error: treating it as unchanged could report success while nodes retain the old image.
+// adopt the new one by being replaced. A complete pre-migration legacy Secret is
+// also a baseline; an unreadable modern value must never fall back to legacy data.
 func snapshotImageIDFromSecret(secret *corev1.Secret) (string, error) {
-	raw := secret.Data[clusterautoscalerinstaller.AutoscalerConfigHcloudClusterConfigKey]
+	raw, modern := secret.Data[clusterautoscalerinstaller.AutoscalerConfigHcloudClusterConfigKey]
+	if !modern &&
+		len(secret.Data["hcloud_image"]) > 0 && len(secret.Data["hcloud_cloud_init"]) > 0 {
+		return string(secret.Data["hcloud_image"]), nil
+	}
+
 	if len(raw) == 0 {
 		return "", ErrAutoscalerClusterConfigMissing
 	}

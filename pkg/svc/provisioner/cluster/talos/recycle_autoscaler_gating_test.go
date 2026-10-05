@@ -109,9 +109,23 @@ func TestSnapshotImageIDFromSecret_RejectsUnreadable(t *testing.T) {
 			&corev1.Secret{Data: map[string][]byte{"other": []byte("x")}},
 		},
 		{
+			"incomplete legacy baseline",
+			&corev1.Secret{Data: map[string][]byte{"hcloud_image": []byte("1")}},
+		},
+		{
+			"empty modern key must not fall back to legacy",
+			&corev1.Secret{Data: map[string][]byte{
+				clusterConfigSecretKey: nil,
+				"hcloud_image":         []byte("1"),
+				"hcloud_cloud_init":    []byte("legacy-config"),
+			}},
+		},
+		{
 			"invalid base64",
 			&corev1.Secret{Data: map[string][]byte{
 				clusterConfigSecretKey: []byte("not base64!!"),
+				"hcloud_image":         []byte("1"),
+				"hcloud_cloud_init":    []byte("legacy-config"),
 			}},
 		},
 	}

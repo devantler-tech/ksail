@@ -60,6 +60,16 @@ func recoverCases() []recoverCase {
 			node: upgradedNode(false, corev1.ConditionTrue), nodeIP: recoverNodeIP,
 		},
 		{
+			name: "schedulable but never Ready fails the roll",
+			node: upgradedNode(false, corev1.ConditionFalse), nodeIP: recoverNodeIP,
+			cancelled: true, wantErr: true,
+		},
+		{
+			name: "intentional cordon on never Ready node fails the roll",
+			node: upgradedNode(true, corev1.ConditionFalse), nodeIP: recoverNodeIP,
+			cancelled: true, wantErr: true, wantCordoned: true,
+		},
+		{
 			name: "unresolved node is left alone",
 			node: upgradedNode(true, corev1.ConditionTrue), nodeIP: "10.0.0.99", wantCordoned: true,
 		},

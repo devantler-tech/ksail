@@ -627,9 +627,9 @@ func (p *Provisioner) finishImageUpgradeStorageGate(
 // recoverUpgradedNode finishes the upgrade of a node that already runs the target
 // image but is still cordoned, which is how an earlier attempt leaves it when it times
 // out waiting for the node to become Ready. Skipping such a node would leave it
-// unschedulable. A node that is schedulable, or that is absent from the Kubernetes API
-// (so it was never cordoned), needs nothing; a failure to read the node list fails the
-// roll, because the node's cordon state is then unknown.
+// unschedulable. Every resolved node must be Ready before the roll advances, even
+// when schedulable or cordoned by another actor. An absent node was never cordoned;
+// a failure to read the node list fails the roll because its cordon state is unknown.
 func (p *Provisioner) recoverUpgradedNode(
 	ctx context.Context,
 	clientset kubernetes.Interface,
@@ -662,19 +662,15 @@ func (p *Provisioner) recoverUpgradedNode(
 		return fmt.Errorf("reading node %s: %w", nodeName, getErr)
 	}
 
-	if !k8sNode.Spec.Unschedulable {
-		// A previous attempt may have uncordoned this node before the storage
-		// gate failed. Recheck it before the roll advances to another node.
-		storageErr := p.finishImageUpgradeStorageGate(ctx, clientset, nodeName, prober)
-		if storageErr != nil {
-			return fmt.Errorf("storage health gate: %w", storageErr)
+	if !k8sNode.Spec.Unschedulable ||
+		k8sNode.Annotations[imageUpgradeCordonAnnotation] != labelValueTrue {
+		// Check readiness without changing another actor's cordon. A previous
+		// attempt may also have uncordoned this node before its storage gate failed.
+		readyErr := p.waitForK8sNodeReady(ctx, clientset, nodeName)
+		if readyErr != nil {
+			return fmt.Errorf("node %s did not report Ready after upgrade: %w", nodeName, readyErr)
 		}
 
-		return nil
-	}
-
-	if k8sNode.Annotations[imageUpgradeCordonAnnotation] != labelValueTrue {
-		// Another actor cordoned this node. Never make it schedulable on their behalf.
 		storageErr := p.finishImageUpgradeStorageGate(ctx, clientset, nodeName, prober)
 		if storageErr != nil {
 			return fmt.Errorf("storage health gate: %w", storageErr)
@@ -702,7 +698,7 @@ func (p *Provisioner) uncordonAfterUpgrade(
 	clientset kubernetes.Interface,
 	nodeName string,
 ) error {
-	readyErr := p.waitForK8sNodeReady(ctx, clientset, nodeName, nodeReadinessTimeout)
+	readyErr := p.waitForK8sNodeReady(ctx, clientset, nodeName)
 	if readyErr != nil {
 		return fmt.Errorf("node %s did not report Ready after upgrade: %w", nodeName, readyErr)
 	}
