@@ -1,13 +1,40 @@
 package analysisrunner_test
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestImageSmokeRegistrationFixturesAreRunnerCompatibleJSON(t *testing.T) {
+	t.Parallel()
+
+	script, err := os.ReadFile("smoke.sh")
+	require.NoError(t, err)
+
+	fixtures := regexp.MustCompile(`printf '([^']*)\\n' >"\$\{HOME\}/\.(runner|credentials)"`).
+		FindAllSubmatch(script, -1)
+	require.Len(t, fixtures, 3, "both live sentinels and the bootstrap registration")
+
+	for _, fixture := range fixtures {
+		var configuration map[string]any
+		require.NoError(t, json.Unmarshal(fixture[1], &configuration), "%s fixture", fixture[2])
+
+		if string(fixture[2]) == "credentials" {
+			require.IsType(
+				t,
+				map[string]any{},
+				configuration["data"],
+				"runner HostContext reads Data before command dispatch",
+			)
+		}
+	}
+}
 
 func TestLiveSmokePreservesRunnerConfiguration(t *testing.T) {
 	t.Parallel()

@@ -9,11 +9,11 @@ case "${1:-}" in
     # Image-only verification: the writable home must be the disposable mount.
     test "${HOME}" = /runner-data
     "$0"
-    printf 'preserve-runner-configuration\n' >"${HOME}/.runner"
-    printf 'preserve-runner-credentials\n' >"${HOME}/.credentials"
+    printf '{"agentName":"preserve-runner-configuration"}\n' >"${HOME}/.runner"
+    printf '{"scheme":"ksail-smoke","data":{"marker":"preserve-runner-credentials"}}\n' >"${HOME}/.credentials"
     "$0" --live-runner
-    test "$(cat "${HOME}/.runner")" = preserve-runner-configuration
-    test "$(cat "${HOME}/.credentials")" = preserve-runner-credentials
+    test "$(cat "${HOME}/.runner")" = '{"agentName":"preserve-runner-configuration"}'
+    test "$(cat "${HOME}/.credentials")" = '{"scheme":"ksail-smoke","data":{"marker":"preserve-runner-credentials"}}'
     printf 'PASS: live smoke preserves active runner configuration\n'
     exit 0
     ;;
