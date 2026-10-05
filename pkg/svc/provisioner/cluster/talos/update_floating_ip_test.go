@@ -36,6 +36,10 @@ const floatingIPEnabledField = "provider.hetzner.floatingIPEnabled"
 // tests inject for an unreachable Kubernetes API endpoint.
 var errEndpointProbeFailed = errors.New("kubernetes api endpoint unreachable")
 
+// errAPIServerStillRestarting is the canned settle-wait failure for a
+// kube-apiserver that never settles on the floating IP (#6032).
+var errAPIServerStillRestarting = errors.New("kube-apiserver still restarting")
+
 // withUnreachableEndpointProbe overrides the endpoint reachability probe to
 // always fail, simulating a floating IP that was attached but never claimed
 // on the node (ksail#6070).
@@ -52,6 +56,7 @@ func withUnreachableEndpointProbe(p *talosprovisioner.Provisioner) {
 type fipUpdateCalls struct {
 	create atomic.Int32
 	assign atomic.Int32
+	del    atomic.Int32
 }
 
 // fipUpdateOwnedFloatingIPJSON is the canned owned floating IP the update
@@ -122,57 +127,76 @@ func fipUpdateTestServerWithServers(
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc(
-		"/floating_ips",
-		func(responseWriter http.ResponseWriter, request *http.Request) {
-			responseWriter.Header().Set("Content-Type", "application/json")
-
-			if request.Method == http.MethodPost {
-				calls.create.Add(1)
-
-				_, _ = responseWriter.Write([]byte(
-					`{"floating_ip":` + fipUpdateOwnedFloatingIPJSON + `,"action":null}`,
-				))
-
-				return
-			}
-
-			list := ""
-			if floatingIPPresent {
-				list = fipUpdateOwnedFloatingIPJSON
-			}
-
-			_, _ = responseWriter.Write([]byte(`{"floating_ips":[` + list + `]}`))
-		},
-	)
-
+	mux.HandleFunc("/floating_ips", fipUpdateFloatingIPsHandler(floatingIPPresent, calls))
 	mux.HandleFunc("/floating_ips/7/actions/assign", fipUpdateAssignHandler(calls))
-	mux.HandleFunc(
-		"/servers",
-		func(responseWriter http.ResponseWriter, request *http.Request) {
-			responseWriter.Header().Set("Content-Type", "application/json")
-
-			selected := serversJSON
-			if name := request.URL.Query().Get("name"); name != "" {
-				selected = nil
-
-				for _, candidate := range serversJSON {
-					if strings.Contains(candidate, `"name":"`+name+`"`) {
-						selected = append(selected, candidate)
-					}
-				}
-			}
-
-			_, _ = responseWriter.Write(
-				[]byte(`{"servers":[` + strings.Join(selected, ",") + `]}`),
-			)
-		},
-	)
+	mux.HandleFunc("/floating_ips/7", fipUpdateDeleteHandler(calls))
+	mux.HandleFunc("/servers", fipUpdateServersHandler(serversJSON))
 
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 
 	return server
+}
+
+// fipUpdateFloatingIPsHandler lists the owned floating IP when present and
+// counts creations.
+func fipUpdateFloatingIPsHandler(floatingIPPresent bool, calls *fipUpdateCalls) http.HandlerFunc {
+	return func(responseWriter http.ResponseWriter, request *http.Request) {
+		responseWriter.Header().Set("Content-Type", "application/json")
+
+		if request.Method == http.MethodPost {
+			calls.create.Add(1)
+
+			_, _ = responseWriter.Write([]byte(
+				`{"floating_ip":` + fipUpdateOwnedFloatingIPJSON + `,"action":null}`,
+			))
+
+			return
+		}
+
+		list := ""
+		if floatingIPPresent {
+			list = fipUpdateOwnedFloatingIPJSON
+		}
+
+		_, _ = responseWriter.Write([]byte(`{"floating_ips":[` + list + `]}`))
+	}
+}
+
+// fipUpdateDeleteHandler counts deletions of the owned floating IP.
+func fipUpdateDeleteHandler(calls *fipUpdateCalls) http.HandlerFunc {
+	return func(responseWriter http.ResponseWriter, request *http.Request) {
+		if request.Method == http.MethodDelete {
+			calls.del.Add(1)
+			responseWriter.WriteHeader(http.StatusNoContent)
+
+			return
+		}
+
+		http.NotFound(responseWriter, request)
+	}
+}
+
+// fipUpdateServersHandler serves serversJSON, filtered by the name query.
+func fipUpdateServersHandler(serversJSON []string) http.HandlerFunc {
+	return func(responseWriter http.ResponseWriter, request *http.Request) {
+		responseWriter.Header().Set("Content-Type", "application/json")
+
+		selected := serversJSON
+		if name := request.URL.Query().Get("name"); name != "" {
+			selected = nil
+
+			for _, candidate := range serversJSON {
+				if strings.Contains(candidate, `"name":"`+name+`"`) {
+					selected = append(selected, candidate)
+				}
+			}
+		}
+
+		_, _ = responseWriter.Write(
+			[]byte(`{"servers":[` + strings.Join(selected, ",") + `]}`),
+		)
+	}
 }
 
 // fipUpdateInventoryFailureTestServer returns a control plane from the label
@@ -547,28 +571,51 @@ func TestAllControlPlanesHaveHetznerFloatingIPConfig_RequiresEveryNode(t *testin
 	))
 }
 
-// TestMergeFloatingIPChanges_DisabledWithPresentIPWarnsOnly verifies that the
-// deferred disable transition is visible without claiming a reconcile.
-func TestMergeFloatingIPChanges_DisabledWithPresentIPWarnsOnly(t *testing.T) {
+// TestMergeFloatingIPChanges_DisabledWithPresentIPAddsDisableChange verifies
+// that switching floatingIPEnabled off while the ksail-owned address still
+// exists surfaces the disable transition as one in-place change that names the
+// address it will release (#6032), and that detection stays read-only.
+func TestMergeFloatingIPChanges_DisabledWithPresentIPAddsDisableChange(t *testing.T) {
 	t.Parallel()
 
 	calls := &fipUpdateCalls{}
 	server := fipUpdateTestServer(t, true, calls)
 
-	var log bytes.Buffer
-
 	provisioner := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{
 		FloatingIPLocation: "fsn1",
-	}).WithInfraProvider(newFipUpdateProvider(server.URL)).WithLogWriter(&log)
+	}).WithInfraProvider(newFipUpdateProvider(server.URL))
 
 	diff := &clusterupdate.UpdateResult{}
 	require.NoError(t,
 		provisioner.MergeFloatingIPChangesForTest(t.Context(), "fip-cluster", diff))
 
-	assert.Empty(t, diff.InPlaceChanges,
-		"the disable transition is deferred (#6032) and must not claim a reconcile")
-	assert.Contains(t, log.String(), "does not reconcile the disable transition",
-		"the deferred disable transition must warn instead of staying silent")
+	require.Len(t, diff.InPlaceChanges, 1)
+	change := diff.InPlaceChanges[0]
+	assert.Equal(t, floatingIPEnabledField, change.Field)
+	assert.Equal(t, "true", change.OldValue)
+	assert.Equal(t, "false", change.NewValue)
+	assert.Equal(t, clusterupdate.ChangeCategoryInPlace, change.Category)
+	assert.Contains(t, change.Reason, "192.0.2.10",
+		"the preflight must name the address the update releases")
+	assert.Equal(t, int32(0), calls.del.Load(), "detection must be read-only")
+}
+
+// TestMergeFloatingIPChanges_DisabledWithoutIPIsNoop verifies a cluster that
+// never had (or has already released) its floating IP reports no change.
+func TestMergeFloatingIPChanges_DisabledWithoutIPIsNoop(t *testing.T) {
+	t.Parallel()
+
+	calls := &fipUpdateCalls{}
+	server := fipUpdateTestServer(t, false, calls)
+
+	provisioner := newFloatingIPTestProvisioner(t, v1alpha1.OptionsHetzner{}).
+		WithInfraProvider(newFipUpdateProvider(server.URL))
+
+	diff := &clusterupdate.UpdateResult{}
+	require.NoError(t,
+		provisioner.MergeFloatingIPChangesForTest(t.Context(), "fip-cluster", diff))
+
+	assert.Empty(t, diff.InPlaceChanges)
 }
 
 // TestMergeFloatingIPChanges_DisabledIgnoresUnownedCollision verifies external
@@ -1145,6 +1192,69 @@ func TestUpdateApplyStep_RefreshesFloatingIPKubeconfig(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(written), "https://192.0.2.10:6443",
 		"the persisted Kubernetes endpoint must use the floating IP")
+}
+
+// TestUpdateApplyStep_WaitsForAPIServerBeforeKubeconfigRefresh verifies the
+// refresh waits for every control plane's kube-apiserver to serve the floating
+// IP, verified against the cluster CA, before it fetches and persists the
+// kubeconfig (#6032).
+//
+//nolint:paralleltest // helper uses t.Setenv.
+func TestUpdateApplyStep_WaitsForAPIServerBeforeKubeconfigRefresh(t *testing.T) {
+	calls := &fipUpdateCalls{}
+	server := fipUpdateTestServer(t, true, calls)
+	provisioner, _, capture := newFloatingIPKubeconfigTestProvisioner(t, server.URL)
+	wantCA := provisioner.TalosConfigsForTest().ControlPlane().Cluster().IssuingCA().Crt
+
+	var waited []string
+
+	provisioner.WithAPIServerServingCheckForTest(
+		func(_ context.Context, ip, serverName string, caPEM []byte) error {
+			assert.Zero(t, capture.calls, "the kubeconfig must not be fetched before the wait")
+			assert.Equal(t, "192.0.2.10", serverName)
+			assert.Equal(t, wantCA, caPEM)
+
+			waited = append(waited, ip)
+
+			return nil
+		},
+	)
+
+	spec := &v1alpha1.ClusterSpec{ControlPlanes: 1}
+
+	require.NoError(t, provisioner.RunUpdateApplyStepForTest(
+		t.Context(), "refresh floating IP kubeconfig", "fip-cluster",
+		spec, spec, floatingIPChangeResult(), clusterupdate.NewEmptyUpdateResult(),
+	))
+	assert.Equal(t, []string{"203.0.113.5"}, waited)
+	assert.Equal(t, 1, capture.calls)
+}
+
+// TestUpdateApplyStep_KubeconfigNotRefreshedWhenAPIServerNotSettled verifies a
+// kube-apiserver that never settles on the floating IP fails the update
+// instead of persisting a kubeconfig the next command cannot use (#6032).
+//
+//nolint:paralleltest // helper uses t.Setenv.
+func TestUpdateApplyStep_KubeconfigNotRefreshedWhenAPIServerNotSettled(t *testing.T) {
+	calls := &fipUpdateCalls{}
+	server := fipUpdateTestServer(t, true, calls)
+	provisioner, kubeconfigPath, capture := newFloatingIPKubeconfigTestProvisioner(t, server.URL)
+
+	provisioner.WithAPIServerServingCheckForTest(
+		func(context.Context, string, string, []byte) error { return errAPIServerStillRestarting },
+	)
+
+	spec := &v1alpha1.ClusterSpec{ControlPlanes: 1}
+
+	err := provisioner.RunUpdateApplyStepForTest(
+		t.Context(), "refresh floating IP kubeconfig", "fip-cluster",
+		spec, spec, floatingIPChangeResult(), clusterupdate.NewEmptyUpdateResult(),
+	)
+	require.ErrorIs(t, err, errAPIServerStillRestarting)
+	assert.Zero(t, capture.calls)
+
+	_, statErr := os.Stat(kubeconfigPath)
+	assert.ErrorIs(t, statErr, os.ErrNotExist)
 }
 
 // TestUpdateApplyStep_DoesNotRefreshKubeconfigAfterPartialApply verifies a
