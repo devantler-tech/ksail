@@ -240,6 +240,14 @@ func ExportEnsureClusterManaged(
 	)
 }
 
+// ExportUnmanagedClusterGuard exercises the production provider selection in tests.
+func ExportUnmanagedClusterGuard(
+	ctx context.Context,
+	resolved *lifecycle.ResolvedClusterInfo,
+) error {
+	return unmanagedClusterGuard(ctx, resolved)
+}
+
 // ExportParseEksctlContextTarget exports parseEksctlContextTarget for testing.
 func ExportParseEksctlContextTarget(contextName string) (string, string, bool) {
 	return parseEksctlContextTarget(contextName)
@@ -264,9 +272,29 @@ func ExportPrepareEKSCreateConfig(ctx *localregistry.Context) error {
 	return prepareEKSCreateConfig(ctx)
 }
 
-// ExportApplyClusterNameOverride exports applyClusterNameOverride for testing.
+// ExportApplyClusterNameOverride applies a create-time name override, as `cluster create` does with
+// metadata.name or --name: the distribution configs are renamed and the context retargeted.
 func ExportApplyClusterNameOverride(ctx *localregistry.Context, name string) error {
-	return applyClusterNameOverride(ctx, name)
+	return applyResolvedNameOverride(ctx, clusterNameOverride{name: name}, newClusterTarget)
+}
+
+// ExportApplyResolvedNameOverride exports applyResolvedNameOverride for testing. fromFlag marks
+// a --name override; existingCluster selects the diff/update target instead of create.
+func ExportApplyResolvedNameOverride(
+	ctx *localregistry.Context,
+	name string,
+	fromFlag, existingCluster bool,
+) error {
+	target := newClusterTarget
+	if existingCluster {
+		target = existingClusterTarget
+	}
+
+	return applyResolvedNameOverride(
+		ctx,
+		clusterNameOverride{name: name, fromFlag: fromFlag},
+		target,
+	)
 }
 
 // ExportResolveConsent exports resolveConsent for testing.

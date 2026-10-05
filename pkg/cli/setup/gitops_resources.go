@@ -39,9 +39,10 @@ func ShouldPushOCIArtifact(clusterCfg *v1alpha1.Cluster) bool {
 // resolveClusterNameFromContext resolves the cluster name from the cluster config.
 // It first attempts to parse the cluster name from Connection.Context
 // (e.g., "k3d-system-test-cluster" -> "system-test-cluster").
-// Falls back to the distribution's default cluster name if context is not set or parsing fails.
+// When the context is not set or does not follow a distribution's naming convention (a custom
+// or OIDC context), it falls back to metadata.name, then to the distribution's default name.
 // The cluster name is used for constructing registry container names
-// (e.g., system-test-cluster-local-registry).
+// (e.g., system-test-cluster-local-registry) and the Talos × Hetzner network name.
 func resolveClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
 	if clusterCfg == nil {
 		return kindconfigmanager.DefaultClusterName
@@ -54,6 +55,11 @@ func resolveClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
 		if err == nil && clusterName != "" {
 			return clusterName
 		}
+	}
+
+	// A named cluster reached through a custom context keeps its configured name.
+	if name := strings.TrimSpace(clusterCfg.Name); name != "" {
+		return name
 	}
 
 	// Fall back to default cluster name for the distribution

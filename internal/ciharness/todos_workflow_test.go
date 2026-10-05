@@ -49,7 +49,7 @@ func TestTODOScannerExcludesOnlyVendoredSources(t *testing.T) {
 	require.True(t, found, "TODO workflow must define the todos job")
 	require.Equal(t,
 		"devantler-tech/.github/.github/workflows/scan-for-todo-comments.yaml@"+
-			"30882cccda9e41c622f6493e21e7eb6f3339b91f", job.Uses,
+			"0600006235510307a04efebcac1ac1f363f5f862", job.Uses,
 		"shared scanner must use the reviewed canonical release",
 	)
 	assert.Empty(t, job.RunsOn, "reusable workflow callers cannot configure runs-on")
