@@ -236,6 +236,8 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         UPGRADE_FROM: ${{ inputs.kubernetes-upgrade-from }}
         UPGRADE_TO: ${{ inputs.kubernetes-upgrade-to }}
+        SCHEMATIC_TRIAL: ${{ inputs.test-talos-schematic-rollout }}
+        INIT: ${{ inputs.init }}
       run: |
         set -euo pipefail
         # Inject GHCR credentials into --local-registry if it contains ghcr.io
@@ -256,6 +258,21 @@ runs:
             exit 1
           fi
           RESOLVED_ARGS="$RESOLVED_ARGS --kubernetes-version $UPGRADE_FROM"
+        fi
+        if [[ "${SCHEMATIC_TRIAL:-false}" == true ]]; then
+          if [[ "$DISTRIBUTION" != Talos || "$PROVIDER" != Hetzner || "$INIT" != true ]] ||
+             [[ " $RESOLVED_ARGS " == *" --distribution-version "* || " $RESOLVED_ARGS " == *" --distribution-version="* ]]; then
+            echo "❌ ERROR: the schematic trial requires initialized Hetzner/Talos without a version override" >&2
+            exit 1
+          fi
+          # Match the tracked bootstrap ISO before init generates the configuration.
+          # Pinning a newer running version after create changes the render contract.
+          baseline_version=$(sed -nE 's/^[[:space:]]*DefaultHetznerTalosVersion = "([^"]+)"$/\1/p' pkg/apis/cluster/v1alpha1/defaults.go)
+          if [[ ! "$baseline_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ ERROR: cannot resolve one stable Talos bootstrap baseline" >&2
+            exit 1
+          fi
+          RESOLVED_ARGS="$RESOLVED_ARGS --distribution-version $baseline_version"
         fi
         echo "args=$RESOLVED_ARGS" >> "$GITHUB_OUTPUT"
 
@@ -620,6 +637,7 @@ runs:
       shell: bash
       env:
         ARGS: ${{ steps.resolve-args.outputs.args }}
+        K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
       run: |
         set -euo pipefail
         LOG_DIR=${KSAIL_SYSTEM_TEST_LOG_DIR:-/tmp/ksail-system-test-logs}
@@ -628,8 +646,7 @@ runs:
         PRE_LOG="$LOG_DIR/talos-schematic-before.log"
         APPLY_LOG="$LOG_DIR/talos-schematic-apply.log"
         POST_LOG="$LOG_DIR/talos-schematic-after.log"
-        # The preceding update test can upgrade beyond the ISO's default.
-        # Use every node's running version so this changes only the boot image.
+        # All nodes must still run the version declared before project init.
         if ! talos_version=$(ksail workload get nodes -o json | jq -er '
           .items
           | if type != "array" or length == 0 then error("no nodes") else . end
@@ -645,8 +662,26 @@ runs:
           exit 1
         fi
 
-        # Pin the version the cluster already runs, then change the boot image.
-        yq -i ".spec.cluster.talos.version = \"${talos_version}\" | .spec.cluster.talos.extensions = [\"siderolabs/iscsi-tools\"]" ksail.yaml
+        declared_version=$(yq -r '.spec.cluster.talos.version // ""' ksail.yaml)
+        if [[ ! "$declared_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ || "$declared_version" != "$talos_version" ]]; then
+          echo "❌ Running Talos version differs from the declared trial baseline" >&2
+          exit 1
+        fi
+        if [[ ! "${K8S_VERSION_FLAG:-}" =~ ^--kubernetes-version[[:space:]]v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "❌ Missing stable Kubernetes version pin for the schematic trial" >&2
+          exit 1
+        fi
+        # Use the explicit schematic path used by platform upgrades. Extensions
+        # would also rewrite machine.install.image, so they are not image-only.
+        expected_schematic=c9078f9419961640c712a8bf2bb9174933dfcf1da383fd8ea2b7dc21493f8bac
+        schematic=$(curl --fail --silent --show-error --max-time 30 --retry 2 \
+          --data-binary @"$GITHUB_WORKSPACE/.github/fixtures/talos-schematic-trial.yaml" \
+          https://factory.talos.dev/schematics | jq -er '.id')
+        if [[ "$schematic" != "$expected_schematic" ]]; then
+          echo "❌ Image Factory returned an unexpected schematic identity" >&2
+          exit 1
+        fi
+        yq -i ".spec.cluster.talos.schematicId = \"${schematic}\"" ksail.yaml
         UPDATE_ARGS=$ARGS
         if [[ "$UPDATE_ARGS" =~ --image-verification[[:space:]][^[:space:]]* ]]; then
           UPDATE_ARGS=${UPDATE_ARGS/"${BASH_REMATCH[0]}"/}
@@ -654,7 +689,7 @@ runs:
 
         # The pre-update plan must detect the live node's different boot image.
         # shellcheck disable=SC2086
-        ksail cluster update --dry-run --distribution Talos --provider Hetzner $UPDATE_ARGS 2>&1 | tee "$PRE_LOG" | tee "$LOG_FILE"
+        ksail cluster update --dry-run --distribution Talos --provider Hetzner $UPDATE_ARGS $K8S_VERSION_FLAG 2>&1 | tee "$PRE_LOG" | tee "$LOG_FILE"
         if ! grep -Fq "Would reconcile distribution image" "$PRE_LOG"; then
           echo "❌ Live Talos image change was not detected" >&2
           exit 1
@@ -665,7 +700,7 @@ runs:
         fi
 
         # shellcheck disable=SC2086
-        ksail cluster update --force --distribution Talos --provider Hetzner $UPDATE_ARGS 2>&1 | tee "$APPLY_LOG" | tee -a "$LOG_FILE"
+        ksail cluster update --force --distribution Talos --provider Hetzner $UPDATE_ARGS $K8S_VERSION_FLAG 2>&1 | tee "$APPLY_LOG" | tee -a "$LOG_FILE"
         if ! grep -Fq "Distribution image reconciled at" "$APPLY_LOG"; then
           echo "❌ The Talos image upgrade path did not run" >&2
           exit 1
@@ -689,7 +724,7 @@ runs:
         # The configuration summary can be clean while the image still drifts.
         # Require both a clean plan and no further image reconciliation.
         # shellcheck disable=SC2086
-        ksail cluster update --dry-run --distribution Talos --provider Hetzner $UPDATE_ARGS 2>&1 | tee "$POST_LOG" | tee -a "$LOG_FILE"
+        ksail cluster update --dry-run --distribution Talos --provider Hetzner $UPDATE_ARGS $K8S_VERSION_FLAG 2>&1 | tee "$POST_LOG" | tee -a "$LOG_FILE"
         if grep -Fq "Would reconcile distribution image" "$POST_LOG" ||
           ! grep -Fq "No changes detected" "$POST_LOG"; then
           echo "❌ Running Talos image did not converge" >&2

@@ -233,6 +233,19 @@ jobs:
           echo "value=${ARGS}" >> "$GITHUB_OUTPUT"
           echo "Args: ${ARGS}"
 
+      - name: ✅ Validate Talos schematic trial selection
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.test_schematic_rollout }}
+        shell: bash
+        env:
+          DISTRIBUTION: ${{ matrix.distribution }}
+          INIT: ${{ matrix.init }}
+          RESIZE_TYPE: ${{ inputs.rolling_resize_server_type }}
+        run: |
+          if [[ "$DISTRIBUTION" != Talos || "$INIT" != true || -n "$RESIZE_TYPE" ]]; then
+            echo "The schematic trial requires Talos, project init, and no rolling resize." >&2
+            exit 1
+          fi
+
       - name: 🧪 Create Hetzner Smoke Cluster
         if: ${{ matrix.smoke == true }}
         uses: $/.github/actions/ksail-cluster
@@ -304,19 +317,6 @@ jobs:
           distribution: ${{ matrix.distribution }}
           provider: Hetzner
           args: ${{ steps.args.outputs.value }}
-
-      - name: ✅ Validate Talos schematic trial selection
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.test_schematic_rollout }}
-        shell: bash
-        env:
-          DISTRIBUTION: ${{ matrix.distribution }}
-          INIT: ${{ matrix.init }}
-          RESIZE_TYPE: ${{ inputs.rolling_resize_server_type }}
-        run: |
-          if [[ "$DISTRIBUTION" != Talos || "$INIT" != true || -n "$RESIZE_TYPE" ]]; then
-            echo "The schematic trial requires Talos, project init, and no rolling resize." >&2
-            exit 1
-          fi
 
       - name: 🧪 Run KSail System Test
         if: ${{ matrix.smoke != true }}

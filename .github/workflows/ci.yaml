@@ -207,6 +207,7 @@ jobs:
               - '.github/actions/**'
               - '.github/scripts/**'
               - '.github/fixtures/workflow-run-cleanup/**'
+              - '.github/fixtures/talos-schematic-trial.yaml'
               - 'internal/ciharness/**'
             # The release build configuration is the subject of Go tests too: the OTel
             # reachability guard in pkg/client/kubescape pins a digest of every file below, and
