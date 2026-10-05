@@ -75,6 +75,11 @@ on:
         required: false
         type: string
         default: ""
+      floating_ip_toggle:
+        description: "Talos only: enable the floating IP via cluster update, then disable it and assert the address is released."
+        required: false
+        type: boolean
+        default: false
   schedule:
     # Weekly: Sunday 03:00 UTC, one hour before the Omni system test, so real clusters are
     # created at most once a day. The scheduled run starts with the two direct-provider smoke
@@ -329,6 +334,7 @@ jobs:
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
           test-kubernetes-provider: ${{ matrix.suffix == 'default-init' && 'true' || 'false' }}
           rolling-resize-server-type: ${{ github.event_name == 'workflow_dispatch' && inputs.rolling_resize_server_type || '' }}
+          floating-ip-toggle: ${{ github.event_name == 'workflow_dispatch' && inputs.floating_ip_toggle || false }}
 
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}

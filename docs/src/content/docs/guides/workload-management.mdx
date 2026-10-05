@@ -123,6 +123,12 @@ an unreadable or unsupported CRD schema is reported as a warning. Rendered manif
 only in memory until validation consumes them, so the next invocation reads your current files.
 With `--skip-helm-render`, schema discovery uses only CRDs present in the source files.
 
+For HelmReleases, values from in-repository ConfigMaps and Secrets are combined in their declared
+order. Inline values take precedence over ordinary references, including explicit `false`, zero
+and empty values. Target references follow the pinned Flux controller's merge stages, including
+the final inline merge. Unquoted target scalars use Helm's typed parsing; quoted and literal target
+values remain strings. Literal target values retain their contents. Missing references remain subject to the rendering coverage warnings.
+
 ## Move images around
 
 Beyond `push`/`reconcile`, the workload family also handles container images and secrets:
