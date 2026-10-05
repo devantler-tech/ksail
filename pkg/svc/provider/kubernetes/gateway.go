@@ -521,7 +521,8 @@ func (p *Provider) waitForLoadBalancer(ctx context.Context, namespace string) (s
 
 // pickNodeAddress chooses a host-reachable node address for NodePort exposure.
 // Precedence: a node ExternalIP, then the host derived from the host REST config
-// (known-reachable since KSail uses it), then a node InternalIP.
+// (unless it is loopback or unspecified), then a node InternalIP. A tunnel to
+// the host API does not imply that NodePorts are published on that same address.
 func (p *Provider) pickNodeAddress(ctx context.Context, hostAddress string) (string, error) {
 	nodes, listErr := p.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if listErr == nil {
@@ -531,10 +532,7 @@ func (p *Provider) pickNodeAddress(ctx context.Context, hostAddress string) (str
 	}
 
 	if host := hostnameOnly(hostAddress); host != "" {
-		// Skip unspecified (wildcard) addresses like 0.0.0.0 or :: — they are valid
-		// bind addresses for the host cluster's API server but are not routable from
-		// clients that load the nested kubeconfig.
-		if ip := net.ParseIP(host); ip == nil || !ip.IsUnspecified() {
+		if usableNodePortHost(host) {
 			return host, nil
 		}
 	}
@@ -550,6 +548,16 @@ func (p *Provider) pickNodeAddress(ctx context.Context, hostAddress string) (str
 	}
 
 	return "", ErrNoNodeAddress
+}
+
+func usableNodePortHost(host string) bool {
+	if strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") {
+		return false
+	}
+
+	ip := net.ParseIP(host)
+
+	return ip == nil || (!ip.IsUnspecified() && !ip.IsLoopback())
 }
 
 // firstNodeAddress returns the first node address of the given type, or "".

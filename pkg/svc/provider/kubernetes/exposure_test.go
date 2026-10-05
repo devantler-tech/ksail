@@ -2,6 +2,7 @@ package kubernetes_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -20,6 +21,8 @@ const (
 	testNodeInternalIP = "10.0.0.1"
 	testExposureNS     = "ksail-demo"
 )
+
+var errNodeObservationUnavailable = errors.New("node observation unavailable")
 
 func newTestProvider(t *testing.T, objects ...runtime.Object) *kubeprovider.Provider {
 	t.Helper()
@@ -106,10 +109,10 @@ func TestPickNodeAddress(t *testing.T) {
 		addr, err := kubeprovider.PickNodeAddressForTest(
 			prov,
 			context.Background(),
-			"https://127.0.0.1:6443",
+			"https://10.0.0.99:6443",
 		)
 		require.NoError(t, err)
-		assert.Equal(t, "127.0.0.1", addr)
+		assert.Equal(t, "10.0.0.99", addr)
 	})
 
 	t.Run("falls_back_to_internal_ip", func(t *testing.T) {
@@ -141,6 +144,83 @@ func TestPickNodeAddress(t *testing.T) {
 		)
 		require.NoError(t, err)
 		assert.Equal(t, testNodeInternalIP, addr)
+	})
+}
+
+func TestNodePortExposureSkipsLoopbackRESTHost(t *testing.T) {
+	t.Parallel()
+
+	for _, host := range []string{
+		"https://127.0.0.1:6443",
+		"https://127.0.0.2:6443",
+		"https://[::1]:6443",
+		"https://localhost:6443",
+		"https://LOCALHOST.:6443",
+	} {
+		t.Run(host, func(t *testing.T) {
+			t.Parallel()
+
+			client := fake.NewClientset(nodeWithAddresses(
+				corev1.NodeAddress{Type: corev1.NodeInternalIP, Address: testNodeInternalIP},
+			))
+			client.PrependReactor("create", "services", func(action k8stesting.Action) (
+				bool, runtime.Object, error,
+			) {
+				createAction, ok := action.(k8stesting.CreateAction)
+				require.True(t, ok)
+
+				svc, ok := createAction.GetObject().(*corev1.Service)
+				require.True(t, ok)
+
+				svc.Spec.Ports[0].NodePort = 31234
+
+				return false, nil, nil
+			})
+
+			prov, err := kubeprovider.NewProvider(client, v1alpha1.OptionsKubernetes{})
+			require.NoError(t, err)
+
+			spec := nodePortSpec()
+			spec.HostAddress = host
+			result, err := kubeprovider.ExposeViaNodePortForTest(prov, context.Background(), spec)
+			require.NoError(t, err)
+			assert.Equal(t, "https://10.0.0.1:31234", result.ServerURL())
+		})
+	}
+}
+
+func TestNodePortLoopbackHostRequiresNodeObservation(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no_address", func(t *testing.T) {
+		t.Parallel()
+
+		addr, err := kubeprovider.PickNodeAddressForTest(
+			newTestProvider(t), context.Background(), "https://127.0.0.1:6443",
+		)
+		require.ErrorIs(t, err, kubeprovider.ErrNoNodeAddress)
+		assert.Empty(t, addr)
+	})
+
+	t.Run("read_failure", func(t *testing.T) {
+		t.Parallel()
+
+		client := fake.NewClientset()
+		client.PrependReactor(
+			"list",
+			"nodes",
+			func(k8stesting.Action) (bool, runtime.Object, error) {
+				return true, nil, errNodeObservationUnavailable
+			},
+		)
+		prov, err := kubeprovider.NewProvider(client, v1alpha1.OptionsKubernetes{})
+		require.NoError(t, err)
+
+		addr, err := kubeprovider.PickNodeAddressForTest(
+			prov, context.Background(), "https://localhost:6443",
+		)
+		require.ErrorIs(t, err, errNodeObservationUnavailable)
+		assert.Empty(t, addr)
 	})
 }
 

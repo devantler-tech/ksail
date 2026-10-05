@@ -19,6 +19,7 @@ import (
 	check "github.com/siderolabs/talos/pkg/cluster/check"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
+	"github.com/siderolabs/talos/pkg/provision"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -1235,4 +1236,33 @@ func (p *Provisioner) GetLowestRunningKubernetesVersionForTest(
 // its progress to.
 func (p *KubernetesProvisioner) ProgressWriterForTest() io.Writer {
 	return p.progressWriter()
+}
+
+// DiscoverMappedPortsForTest exercises the production bootstrap port selection.
+func (p *KubernetesProvisioner) DiscoverMappedPortsForTest(
+	ctx context.Context,
+	clusterName string,
+) (int, int, error) {
+	return p.discoverMappedPorts(ctx, clusterName)
+}
+
+// ProvisionNestedClusterForTest exercises the SDK request without bootstrap tunnels.
+func (p *KubernetesProvisioner) ProvisionNestedClusterForTest(
+	ctx context.Context,
+	clusterName string,
+) (provision.Cluster, error) {
+	podIP, err := p.nestedAPIHost(ctx, clusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	return p.provisionNestedCluster(ctx, clusterName, p.inner.talosConfigs.Bundle(), podIP)
+}
+
+// DiscoverServicePortForTest exercises the exact PodIP binding used by the Service.
+func (p *KubernetesProvisioner) DiscoverServicePortForTest(
+	ctx context.Context,
+	clusterName, podIP string,
+) (int, error) {
+	return p.discoverServicePort(ctx, clusterName, podIP)
 }
