@@ -393,6 +393,31 @@ jobs:
             fi
           }
 
+          nodegroup_identity() {
+            aws eks describe-nodegroup \
+              --cluster-name "$KSAIL_EKS_CLUSTER_NAME" \
+              --nodegroup-name "$nodegroup_name" \
+              --region "$AWS_REGION" \
+              --query 'nodegroup.[nodegroupArn,createdAt]' \
+              --output json |
+              jq -ce --arg cluster "$KSAIL_EKS_CLUSTER_NAME" --arg group "$nodegroup_name" '
+                select(type == "array" and length == 2 and
+                  (.[0] | type == "string" and
+                    test("^arn:aws(-[a-z0-9-]+)?:eks:[a-z0-9-]+:[0-9]{12}:nodegroup/") and
+                    (split(":")[5] | startswith("nodegroup/" + $cluster + "/" + $group + "/"))) and
+                  (.[1] | (type == "number" and . > 0) or
+                    (type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T"))))'
+          }
+
+          assert_same_nodegroup() {
+            local expected="$1" actual
+            actual="$(nodegroup_identity)" || return 1
+            if [[ "$actual" != "$expected" ]]; then
+              echo "::error::EKS managed node group identity changed during update."
+              return 1
+            fi
+          }
+
           set_nodegroup_capacity() {
             local desired="$1"
             local min_size="$2"
@@ -457,16 +482,24 @@ jobs:
           }
 
           cluster_identity="$(cluster_identity)"
+          nodegroup_name="$(yq -r '.managedNodeGroups | select(length == 1) | .[0].name' eks.yaml)"
+          if [[ ! "$nodegroup_name" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]]; then
+            echo "::error::EKS smoke requires one named managed node group."
+            exit 1
+          fi
+          nodegroup_identity="$(nodegroup_identity)"
 
           set_nodegroup_capacity 2 1 2
           ksail cluster update --yes
           wait_for_capacity 2 1 2 2
           assert_same_cluster "$cluster_identity"
+          assert_same_nodegroup "$nodegroup_identity"
 
           set_nodegroup_capacity 1 1 1
           ksail cluster update --yes
           wait_for_capacity 1 1 1 1
           assert_same_cluster "$cluster_identity"
+          assert_same_nodegroup "$nodegroup_identity"
 
       - name: 🧪 ksail workload reconcile
         if: inputs.gitops_engine != 'None'
