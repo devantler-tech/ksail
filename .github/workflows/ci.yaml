@@ -797,6 +797,9 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && (needs.changes.outputs.code == 'true' || needs.changes.outputs.cli == 'true' || needs.changes.outputs.system-test == 'true'))
     permissions:
       contents: read
+    outputs:
+      artifact-id: ${{ steps.binary-artifact.outputs.artifact-id }}
+      binary-sha256: ${{ steps.binary-checksum.outputs.binary-sha256 }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -816,11 +819,34 @@ jobs:
           go-version-file: go.mod
 
       - name: 📦 Cache KSail Binary
+        id: binary
         uses: ./.github/actions/cache-ksail-binary
         with:
           go-version: ${{ steps.setup-go.outputs.go-version }}
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
+
+      - name: 🔍 Seal prepared KSail binary
+        id: binary-checksum
+        env:
+          BINARY_PATH: ${{ steps.binary.outputs.binary-path }}
+        run: |
+          if [[ ! -f "$BINARY_PATH" || -L "$BINARY_PATH" || ! -s "$BINARY_PATH" ]]; then
+            echo "Missing or invalid prepared KSail binary" >&2
+            exit 1
+          fi
+          checksum=$(sha256sum "$BINARY_PATH" | cut -d ' ' -f 1)
+          echo "binary-sha256=$checksum" >> "$GITHUB_OUTPUT"
+
+      - name: 📤 Publish KSail binary
+        id: binary-artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ksail-binary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.binary.outputs.binary-path }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
 
   generate:
     name: 📝 Generate Schema, CRD & Docs
@@ -1752,13 +1778,11 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      - name: 📦 Cache KSail Binary
-        uses: ./.github/actions/cache-ksail-binary
+      - name: 📥 Restore KSail binary
+        uses: ./.github/actions/restore-ksail-binary
         with:
-          go-version: ${{ steps.setup-go.outputs.go-version }}
-          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
-          output-path: /usr/local/bin/ksail
-          save: "false"
+          artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
+          binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
 
       - name: 📥 Restore Helm Cache
         uses: ./.github/actions/restore-helm-cache
