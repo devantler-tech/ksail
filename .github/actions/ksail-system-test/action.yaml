@@ -274,7 +274,7 @@ runs:
 
     - name: 🧪 ksail cluster create
       id: cluster-create
-      uses: ./.github/actions/ksail-cluster
+      uses: $/.github/actions/ksail-cluster
       with:
         distribution: ${{ inputs.distribution }}
         provider: ${{ inputs.provider }}
@@ -366,7 +366,7 @@ runs:
 
     - name: 🧪 Workload Lifecycle Tests
       id: workload-tests
-      uses: ./.github/actions/ksail-test-workload
+      uses: $/.github/actions/ksail-test-workload
       with:
         test-workload-name: ${{ inputs.test-workload-name }}
         test-workload-image: ${{ inputs.test-workload-image }}
@@ -396,7 +396,7 @@ runs:
     - name: 🧪 Workload Mirror Tests
       id: workload-mirror-tests
       if: inputs.provider == 'Docker' && inputs.test-workload-mirror == 'true'
-      uses: ./.github/actions/ksail-test-workload-mirror
+      uses: $/.github/actions/ksail-test-workload-mirror
       with:
         distribution: ${{ inputs.distribution }}
         workload-timeout: ${{ inputs.workload-timeout }}
@@ -404,7 +404,7 @@ runs:
     - name: 🧪 Image Export/Import Tests
       id: image-export-import-tests
       if: inputs.distribution == 'Vanilla' || inputs.distribution == 'K3s'
-      uses: ./.github/actions/ksail-test-image-export-import
+      uses: $/.github/actions/ksail-test-image-export-import
       with:
         test-workload-name: ${{ inputs.test-workload-name }}
         test-workload-image: ${{ inputs.test-workload-image }}
@@ -412,7 +412,7 @@ runs:
 
     - name: 🧪 Workload Watch Tests
       id: workload-watch-tests
-      uses: ./.github/actions/ksail-test-workload-watch
+      uses: $/.github/actions/ksail-test-workload-watch
       with:
         workload-timeout: ${{ inputs.workload-timeout }}
 
@@ -462,7 +462,7 @@ runs:
 
     - name: 🧪 Backup & Restore Tests
       id: backup-restore-tests
-      uses: ./.github/actions/ksail-test-backup-restore
+      uses: $/.github/actions/ksail-test-backup-restore
       with:
         workload-timeout: ${{ inputs.workload-timeout }}
 
@@ -925,7 +925,7 @@ runs:
     - name: 🧪 Kubernetes Provider Tests (nested clusters)
       id: kubernetes-provider-tests
       if: inputs.test-kubernetes-provider == 'true'
-      uses: ./.github/actions/ksail-test-kubernetes-provider
+      uses: $/.github/actions/ksail-test-kubernetes-provider
       with:
         distributions: ${{ inputs.kubernetes-provider-distributions }}
         cni: ${{ inputs.kubernetes-provider-cni }}
@@ -951,7 +951,7 @@ runs:
         || steps.cluster-update-rolling-resize.outcome == 'failure'
         || steps.cluster-update-floating-ip-toggle.outcome == 'failure'
         || steps.kubernetes-provider-tests.outcome == 'failure')
-      uses: ./.github/actions/debug-kubernetes-failure
+      uses: $/.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
 
@@ -1078,7 +1078,7 @@ runs:
 
     - name: 🧪 Cleanup KSail System Test
       if: always() && inputs.cleanup == 'true'
-      uses: ./.github/actions/ksail-system-test-cleanup
+      uses: $/.github/actions/ksail-system-test-cleanup
       with:
         distribution: ${{ inputs.distribution }}
         provider: ${{ inputs.provider }}

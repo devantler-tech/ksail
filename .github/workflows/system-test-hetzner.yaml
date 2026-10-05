@@ -198,6 +198,33 @@ jobs:
             exit 1
           fi
 
+      - name: ⚙️ Setup bounded inventory trial admission
+        if: inputs.autoscaler_inventory_trial
+        uses: hetznercloud/setup-hcloud@4ff9bbeda4053fb69dd7fa1fcbdfcce7e648bf33 # v1
+
+      - name: ✅ Verify inventory trial starts without run-owned resources
+        if: inputs.autoscaler_inventory_trial
+        shell: bash
+        timeout-minutes: 3
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+        run: |
+          set -euo pipefail
+          : "${HCLOUD_TOKEN:?Hetzner trial credential is required}"
+          [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ ]] || exit 1
+          selector="ksail.cluster.name=st-hetzner-dispatch-${GITHUB_RUN_ID}"
+          for kind in server floating-ip placement-group firewall network; do
+            if ! ids=$(timeout --kill-after=10s 20s hcloud "$kind" list -o noheader -o columns=id -l "$selector"); then
+              echo "ERROR: cannot verify empty run-owned $kind inventory" >&2
+              exit 1
+            fi
+            if [[ -n "$ids" ]]; then
+              echo "ERROR: run-owned $kind resources already exist; refusing new provisioning" >&2
+              exit 1
+            fi
+          done
+          echo 'PASS: all five run-owned resource inventories are empty before provisioning'
+
       - name: 🔐 Login to Docker Hub
         if: vars.DOCKERHUB_USERNAME != ''
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
