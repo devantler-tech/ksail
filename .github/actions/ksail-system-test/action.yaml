@@ -674,13 +674,18 @@ runs:
         # Use the explicit schematic path used by platform upgrades. Extensions
         # would also rewrite machine.install.image, so they are not image-only.
         expected_schematic=c9078f9419961640c712a8bf2bb9174933dfcf1da383fd8ea2b7dc21493f8bac
-        schematic=$(curl --fail --silent --show-error --max-time 30 --retry 2 \
-          --data-binary @"$GITHUB_WORKSPACE/.github/fixtures/talos-schematic-trial.yaml" \
-          https://factory.talos.dev/schematics | jq -er '.id')
-        if [[ "$schematic" != "$expected_schematic" ]]; then
-          echo "❌ Image Factory returned an unexpected schematic identity" >&2
+        # The fixture identity is checked offline; read back the already-published
+        # schematic so this trial needs no Image Factory registration write.
+        published_schematic=$(curl --fail --silent --show-error --max-time 30 --retry 2 \
+          https://factory.talos.dev/schematics/c9078f9419961640c712a8bf2bb9174933dfcf1da383fd8ea2b7dc21493f8bac \
+          | yq -o=json -I=0 '.' | jq -cS '.')
+        fixture_schematic=$(yq -o=json -I=0 '.' \
+          "$GITHUB_WORKSPACE/.github/fixtures/talos-schematic-trial.yaml" | jq -cS '.')
+        if [[ "$published_schematic" != "$fixture_schematic" ]]; then
+          echo "❌ Published schematic differs from the reviewed fixture" >&2
           exit 1
         fi
+        schematic=$expected_schematic
         yq -i ".spec.cluster.talos.schematicId = \"${schematic}\"" ksail.yaml
         UPDATE_ARGS=$ARGS
         if [[ "$UPDATE_ARGS" =~ --image-verification[[:space:]][^[:space:]]* ]]; then

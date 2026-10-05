@@ -79,6 +79,28 @@ func TestHetznerSchematicTrialFixtureIdentity(t *testing.T) {
 	assert.Equal(t, *talosconfig.NewSchematic([]string{"siderolabs/iscsi-tools"}, nil), schematic)
 }
 
+func TestHetznerSchematicTrialReadsPublishedFixture(t *testing.T) {
+	t.Parallel()
+
+	var action compositeAction
+	require.NoError(t, yaml.Unmarshal(
+		readRepoFile(t, ".github/actions/ksail-system-test/action.yaml"), &action,
+	))
+	rollout := findHarnessStep(
+		t,
+		action.Runs.Steps,
+		"🧪 ksail cluster update — same-version Talos schematic",
+	)
+	assert.Contains(
+		t,
+		rollout.Run,
+		"https://factory.talos.dev/schematics/c9078f9419961640c712a8bf2bb9174933dfcf1da383fd8ea2b7dc21493f8bac",
+	)
+	assert.NotContains(t, rollout.Run, "--data-binary")
+	assert.Contains(t, rollout.Run, "published_schematic")
+	assert.Contains(t, rollout.Run, "fixture_schematic")
+}
+
 func TestHetznerSchematicTrialRejectsInvalidBaseline(t *testing.T) {
 	t.Parallel()
 

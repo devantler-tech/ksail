@@ -435,9 +435,10 @@ func newSchematicRolloutFixture(t *testing.T) schematicRolloutFixture {
 	))
 	writeSchematicFakeKSail(t, filepath.Join(fixture.fakeBin, "ksail"))
 	writeExecutable(t, filepath.Join(fixture.fakeBin, "curl"), `#!/usr/bin/env bash
+echo "curl $*" >> "$CALLS_FILE"
 if [[ "$SCENARIO" == factory-failed ]]; then exit 22; fi
-if [[ "$SCENARIO" == factory-mismatch ]]; then echo '{"id":"different"}'; exit 0; fi
-echo '{"id":"c9078f9419961640c712a8bf2bb9174933dfcf1da383fd8ea2b7dc21493f8bac"}'
+if [[ "$SCENARIO" == factory-mismatch ]]; then echo 'customization: {}'; exit 0; fi
+cat "$GITHUB_WORKSPACE/.github/fixtures/talos-schematic-trial.yaml"
 `)
 	writeExecutable(t, filepath.Join(fixture.fakeBin, "sleep"), "#!/usr/bin/env bash\nexit 0\n")
 
