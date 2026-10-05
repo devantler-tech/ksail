@@ -3,22 +3,22 @@
 set -euo pipefail
 
 [[ "${DISTRIBUTION:-}" == Talos && "${PROVIDER:-}" == Hetzner && "${INIT:-}" == true ]] || {
-  echo 'ERROR: inventory capacity requires initialized Talos on Hetzner' >&2
-  exit 1
+	echo 'ERROR: inventory capacity requires initialized Talos on Hetzner' >&2
+	exit 1
 }
 case "${TRIAL_SERVER_TYPE:-}" in
 cx23 | cx33) ;;
 *)
-  echo 'ERROR: inventory capacity permits only cx23 or cx33' >&2
-  exit 1
-  ;;
+	echo 'ERROR: inventory capacity permits only cx23 or cx33' >&2
+	exit 1
+	;;
 esac
 case "${TRIAL_LOCATION:-}" in
 fsn1 | nbg1 | hel1) ;;
 *)
-  echo 'ERROR: inventory capacity requires an approved European location' >&2
-  exit 1
-  ;;
+	echo 'ERROR: inventory capacity requires an approved European location' >&2
+	exit 1
+	;;
 esac
 
 config="${CONFIG:-ksail.yaml}"
