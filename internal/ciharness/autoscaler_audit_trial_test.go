@@ -35,36 +35,7 @@ func TestAutoscalerAuditTrialRejectsFalseAcceptance(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 			defer cancel()
 
-			script, pathErr := filepath.Abs(
-				filepath.Join(
-					"..",
-					"..",
-					".github/actions/ksail-system-test/autoscaler-audit-trial.sh",
-				),
-			)
-			require.NoError(t, pathErr)
-
-			//nolint:gosec // Executes the repository-owned trial entry point with fixed fixture inputs.
-			cmd := exec.CommandContext(
-				ctx,
-				script,
-			)
-			cmd.Dir = state
-			require.NoError(
-				t,
-				os.WriteFile(filepath.Join(state, "ksail.yaml"), []byte("unchanged"), 0o600),
-			)
-			cmd.Env = append(
-				os.Environ(),
-				"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"),
-				"STATE="+state,
-				"MODE="+mode,
-				"GITHUB_RUN_ID=1234",
-				"CLUSTER_NAME=st-hetzner-dispatch-1234",
-				"K8S_VERSION=v1.36.2",
-				"HCLOUD_TOKEN=fixture",
-				"EVIDENCE_DIR="+filepath.Join(state, "evidence"),
-			)
+			cmd := autoscalerAuditTrialCommand(t, ctx, state, bin, mode)
 			output, err := cmd.CombinedOutput()
 			assert.NotContains(t, string(output), "must-never-reach-evidence")
 
@@ -81,6 +52,35 @@ func TestAutoscalerAuditTrialRejectsFalseAcceptance(t *testing.T) {
 			}
 		})
 	}
+}
+
+func autoscalerAuditTrialCommand(
+	t *testing.T, ctx context.Context, state, bin, mode string,
+) *exec.Cmd {
+	t.Helper()
+
+	script, pathErr := filepath.Abs(
+		filepath.Join("..", "..", ".github/actions/ksail-system-test/autoscaler-audit-trial.sh"),
+	)
+	require.NoError(t, pathErr)
+
+	//nolint:gosec // Executes the repository-owned trial entry point with fixed fixture inputs.
+	cmd := exec.CommandContext(ctx, script)
+	cmd.Dir = state
+	require.NoError(t, os.WriteFile(filepath.Join(state, "ksail.yaml"), []byte("unchanged"), 0o600))
+	cmd.Env = append(
+		os.Environ(),
+		"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"STATE="+state,
+		"MODE="+mode,
+		"GITHUB_RUN_ID=1234",
+		"CLUSTER_NAME=st-hetzner-dispatch-1234",
+		"K8S_VERSION=v1.36.2",
+		"HCLOUD_TOKEN=fixture",
+		"EVIDENCE_DIR="+filepath.Join(state, "evidence"),
+	)
+
+	return cmd
 }
 
 func assertAutoscalerAuditAccepted(t *testing.T, state string, output []byte, trialErr error) {
