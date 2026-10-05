@@ -35,7 +35,7 @@ func TestAutoscalerAuditTrialRejectsFalseAcceptance(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 			defer cancel()
 
-			cmd := autoscalerAuditTrialCommand(t, ctx, state, bin, mode)
+			cmd := autoscalerAuditTrialCommand(ctx, t, state, bin, mode)
 			output, err := cmd.CombinedOutput()
 			assert.NotContains(t, string(output), "must-never-reach-evidence")
 
@@ -55,7 +55,7 @@ func TestAutoscalerAuditTrialRejectsFalseAcceptance(t *testing.T) {
 }
 
 func autoscalerAuditTrialCommand(
-	t *testing.T, ctx context.Context, state, bin, mode string,
+	ctx context.Context, t *testing.T, state, bin, mode string,
 ) *exec.Cmd {
 	t.Helper()
 
