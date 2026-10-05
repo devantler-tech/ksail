@@ -18,7 +18,12 @@ func TestAutoscalerAuditTrialRejectsFalseAcceptance(t *testing.T) {
 	t.Parallel()
 
 	modes := []string{
-		"complete", "foreign-reported", "retry-success", "mutated", "cleanup-failed", "cleanup-retained",
+		"complete",
+		"foreign-reported",
+		"retry-success",
+		"mutated",
+		"cleanup-failed",
+		"cleanup-retained",
 		"cancelled",
 	}
 	for _, mode := range modes {
