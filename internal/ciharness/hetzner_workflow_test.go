@@ -87,7 +87,10 @@ func TestHetznerFallbackCleanupSurvivesCancellation(t *testing.T) {
 	t.Parallel()
 
 	var workflow hetznerWorkflow
-	require.NoError(t, yaml.Unmarshal(readRepoFile(t, ".github/workflows/system-test-hetzner.yaml"), &workflow))
+	require.NoError(
+		t,
+		yaml.Unmarshal(readRepoFile(t, ".github/workflows/system-test-hetzner.yaml"), &workflow),
+	)
 	cleanup, found := workflow.Jobs["cleanup"]
 	require.True(t, found)
 	require.Contains(t, cleanup.If, "always()")
@@ -95,6 +98,8 @@ func TestHetznerFallbackCleanupSurvivesCancellation(t *testing.T) {
 
 	for _, step := range cleanup.Steps {
 		t.Run(step.Name, func(t *testing.T) {
+			t.Parallel()
+
 			assert.Equal(t, "${{ always() }}", step.If,
 				"checkout and cleanup must remain eligible after failure or cancellation")
 		})
@@ -105,7 +110,10 @@ func TestHetznerFallbackCleanupSurvivesCancellation(t *testing.T) {
 			Steps []harnessStep `yaml:"steps"`
 		} `yaml:"runs"`
 	}
-	require.NoError(t, yaml.Unmarshal(readRepoFile(t, ".github/actions/cleanup-hetzner/action.yaml"), &action))
+	require.NoError(
+		t,
+		yaml.Unmarshal(readRepoFile(t, ".github/actions/cleanup-hetzner/action.yaml"), &action),
+	)
 	require.Len(t, action.Runs.Steps, 2)
 
 	for _, step := range action.Runs.Steps {
