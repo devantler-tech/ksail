@@ -619,6 +619,8 @@ jobs:
     # retirement remains tracked in devantler-tech/.github#285; the separate
     # default-branch maintenance pilot is tracked in #276.
     with:
+      # Run module hygiene and dead-code checks on main without enabling fixes.
+      maintenance-default-branch: true
       # The org-required direct run is the sole signed-fix writer for a PR.
       # Keep this additional invocation read-only while retaining its checks.
       apply-signed-fixes: false
