@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reject failed Go project extraction and require function bodies from the CLI
+# Reject failed or partial Go extraction and require function bodies from the CLI
 # and every Linux desktop source file, the owned logging adapter, and authenticated dependency modules. An
 # upload alone does not prove coverage.
 set -euo pipefail
@@ -45,8 +45,11 @@ verify_results() {
 	}
 }
 
-# verify_diagnostics rejects module failures even when sampled bodies survived.
+# verify_diagnostics rejects partial extraction even when sampled bodies survived.
 verify_diagnostics() {
+	# CodeQL 2.27.1 reports missing import semantics and truncated diagnostics as
+	# warnings. Either invalidates complete coverage; unrelated warnings do not.
+	local incomplete_diagnostics
 	jq -se '
     length == 1 and (.[0] | type == "array" and all(.[];
       .source.id | type == "string" and length > 0))
@@ -54,13 +57,21 @@ verify_diagnostics() {
 		printf '::error::CodeQL extraction diagnostics are malformed.\n' >&2
 		return 1
 	}
-	if jq -e 'any(.[]; .source.id == "go/autobuilder/extraction-failed-for-project")' "$1" >/dev/null; then
+	incomplete_diagnostics="$(jq -c '[.[] | select(
+      .severity == "error" or
+      (.source.id as $id | [
+        "go/autobuilder/extraction-failed-for-project",
+        "go/autobuilder/package-not-found",
+        "go/autobuilder/diagnostic-limit-reached"
+      ] | index($id) != null)
+    )]' "$1")"
+	if [[ "${incomplete_diagnostics}" != '[]' ]]; then
 		# Legacy workflow commands can match anywhere in a log line. Unicode-escape
 		# hashes after JSON encoding so diagnostic text remains data in both parsers.
-		jq -r '.[] | select(.source.id == "go/autobuilder/extraction-failed-for-project") |
+		jq -r '.[] |
       {source: .source.id, message: (.plaintextMessage // .source.name)} |
-      tojson | gsub("#"; "\\u0023")' "$1"
-		printf '::error::CodeQL failed to extract a Go project; the database is incomplete.\n' >&2
+      tojson | gsub("#"; "\\u0023")' <<<"${incomplete_diagnostics}"
+		printf '::error::CodeQL reported failed or partial Go extraction; the database is incomplete.\n' >&2
 		return 1
 	fi
 }
