@@ -119,6 +119,36 @@ func TestHetznerManualSchematicRolloutIsOptInAndKeepsCleanup(t *testing.T) {
 	assert.Contains(t, cleanup.If, "always()")
 }
 
+func TestHetznerFallbackCleanupSurvivesCancellation(t *testing.T) {
+	t.Parallel()
+
+	var workflow hetznerWorkflow
+	require.NoError(t, yaml.Unmarshal(
+		readRepoFile(t, ".github/workflows/system-test-hetzner.yaml"), &workflow,
+	))
+	cleanup, found := workflow.Jobs["cleanup"]
+	require.True(t, found, "workflow-level fallback cleanup is missing")
+	assert.Equal(t, "always()", cleanup.If)
+	require.NotEmpty(t, cleanup.Steps)
+
+	for _, step := range cleanup.Steps {
+		t.Run(step.Name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, "${{ always() }}", step.If,
+				"fallback steps must remain eligible after cancellation")
+
+			if strings.HasPrefix(step.Uses, "actions/checkout@") {
+				return
+			}
+
+			assert.Equal(t, "./.github/actions/cleanup-hetzner", step.Uses)
+			readRepoFile(t, "./.github/actions/cleanup-hetzner/action.yaml")
+			assert.Contains(t, step.With["label-selector"], "${{ github.run_id }}",
+				"cleanup must stay scoped to this run's owned resources")
+		})
+	}
+}
+
 type hetznerSchematicScenario struct {
 	name        string
 	liveVersion string
@@ -544,7 +574,7 @@ func assertHetznerFallbackCleanup(t *testing.T, steps []harnessStep) {
 
 	for _, want := range expected {
 		step := findHarnessStep(t, steps, want.name)
-		assert.Equal(t, "$/.github/actions/cleanup-hetzner", step.Uses)
+		assert.Equal(t, "./.github/actions/cleanup-hetzner", step.Uses)
 		assert.Equal(t, want.selector, step.With["label-selector"])
 	}
 }
