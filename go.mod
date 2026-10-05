@@ -77,7 +77,7 @@ require (
 	github.com/siderolabs/go-retry v0.3.3
 	github.com/siderolabs/image-factory v1.6.2-0.20260904131343-4520b38a89a6
 	github.com/siderolabs/omni/client v1.12.2
-	github.com/siderolabs/talos v1.15.0-alpha.0
+	github.com/siderolabs/talos v1.15.0-alpha.0.0.20260908133727-5c5fd29e95f7
 	github.com/siderolabs/talos/pkg/machinery v1.15.0-alpha.0.0.20260908133727-5c5fd29e95f7
 	github.com/sigstore/sigstore v1.10.11
 	github.com/sigstore/sigstore-go v1.3.0
