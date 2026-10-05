@@ -13,6 +13,11 @@ fake_bin="${tmp_dir}/fake-bin"
 workdir="${tmp_dir}/workdir"
 pass_count=0
 
+# Use a real process deadline, shortened only at the external timeout boundary.
+# The cleaner itself keeps its production budgets; the outer guard catches a
+# missing deadline without leaving a hung fixture behind.
+real_timeout="$(command -v timeout || command -v gtimeout)"
+
 mkdir -p "${fake_bin}" "${workdir}" "${unenterable_workdir}"
 chmod 000 "${unenterable_workdir}"
 
@@ -27,6 +32,15 @@ fi
 
 cat >"${fake_bin}/aws" <<'EOF'
 #!/usr/bin/env bash
+printf 'probe\n' >> "${FAKE_STATE_DIR}/probes"
+if [[ "${FAKE_AWS_DESCRIBE_MODE:-}" == hung ||
+	("${FAKE_AWS_DESCRIBE_MODE:-}" == hung-until-fallback && ! -f "${FAKE_STATE_DIR}/eksctl-ran") ]]; then
+	exec sleep 60
+fi
+if [[ "${FAKE_AWS_DESCRIBE_MODE:-}" == hung-not-found ]]; then
+	echo 'An error occurred (ResourceNotFoundException) when calling the DescribeCluster operation: No cluster found' >&2
+	exec sleep 60
+fi
 case "${FAKE_AWS_DESCRIBE_MODE:-not-found}" in
 found)
 	echo 'ACTIVE'
@@ -36,7 +50,7 @@ deleting)
 	echo 'DELETING'
 	exit 0
 	;;
-until-fallback | deleting-until-fallback)
+until-fallback | deleting-until-fallback | hung-until-fallback)
 	# Present until eksctl runs, so the eksctl path is only reached if the
 	# script probes AWS rather than trusting ksail's exit status.
 	if [[ ! -f "${FAKE_STATE_DIR}/eksctl-ran" ]]; then
@@ -100,6 +114,7 @@ EOF
 
 cat >"${fake_bin}/ksail" <<'EOF'
 #!/usr/bin/env bash
+[[ "${FAKE_KSAIL_DELETE_STATUS:-0}" != hung ]] || exec sleep 60
 exit "${FAKE_KSAIL_DELETE_STATUS:-0}"
 EOF
 
@@ -107,10 +122,25 @@ cat >"${fake_bin}/eksctl" <<'EOF'
 #!/usr/bin/env bash
 touch "${FAKE_STATE_DIR}/eksctl-ran"
 printf '%s\n' "$*" > "${FAKE_STATE_DIR}/eksctl-args"
+[[ "${FAKE_EKSCTL_DELETE_STATUS:-0}" != hung ]] || exec sleep 60
 exit "${FAKE_EKSCTL_DELETE_STATUS:-0}"
 EOF
 
-chmod +x "${fake_bin}/aws" "${fake_bin}/ksail" "${fake_bin}/eksctl"
+cat >"${fake_bin}/timeout" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1" =~ ^--kill-after=([1-9][0-9]*)s$ ]] || exit 99
+grace="${BASH_REMATCH[1]}"
+shift
+[[ "$1" =~ ^([1-9][0-9]*)([sm])$ ]] || exit 99
+seconds="${BASH_REMATCH[1]}"
+[[ "${BASH_REMATCH[2]}" != m ]] || seconds=$((seconds * 60))
+shift
+printf '%s\n' "$((seconds + grace))" >> "${FAKE_STATE_DIR}/budgets"
+exec "${REAL_TIMEOUT}" --kill-after=0.1s 1s "$@"
+EOF
+
+chmod +x "${fake_bin}/aws" "${fake_bin}/ksail" "${fake_bin}/eksctl" "${fake_bin}/timeout"
 
 expect_status() {
 	[[ "$3" == "$2" ]] && return 0
@@ -139,6 +169,8 @@ run_case() {
 		FAKE_KSAIL_DELETE_STATUS="${ksail_status}" \
 		FAKE_EKSCTL_DELETE_STATUS="${eksctl_status}" \
 		FAKE_STATE_DIR="${state_dir}" \
+		REAL_TIMEOUT="${real_timeout}" \
+		"${real_timeout}" --kill-after=1s 10s \
 		"${cleaner}" \
 		--cluster-name st-eks-1-1 \
 		--region us-east-1 \
@@ -159,6 +191,14 @@ run_case() {
 			return 1
 		fi
 		expect_substring "${scenario}" '--wait' "$(cat "${state_dir}/eksctl-args")" || return 1
+	fi
+	if [[ "${scenario}" == hung-* ]]; then
+		local budget total=0
+		while read -r budget; do total=$((total + budget)); done <"${state_dir}/budgets"
+		if ((total >= 45 * 60)) || [[ "$(wc -l <"${state_dir}/probes" | tr -d ' ')" != 2 ]]; then
+			printf 'FAIL: %s did not reserve time for fallback and final absence verification.\n' "${scenario}" >&2
+			return 1
+		fi
 	fi
 
 	pass_count=$((pass_count + 1))
@@ -204,6 +244,14 @@ run_case empty-probe 1 'may be billable' empty 0 0 "${workdir}" true yes
 # actually runs, so this only passes if the fallback is driven by the probe rather than by ksail's
 # status — otherwise cleanup spends one of its two teardown attempts and then gives up.
 run_case fallback-after-silent-ksail-noop 0 'No cluster st-eks-1-1 remains' until-fallback 0 0 "${workdir}"
+
+# A stalled command must not consume the workflow's whole cleanup window. The
+# actual deadline kills it, then fallback and the explicit final probe still run.
+run_case hung-primary-delete 0 'No cluster st-eks-1-1 remains' until-fallback hung 0 "${workdir}" true yes
+run_case hung-fallback-delete 1 'may be billable' found 1 hung "${workdir}" true yes
+run_case hung-initial-probe 0 'No cluster st-eks-1-1 remains' hung-until-fallback 0 0 "${workdir}" true yes
+run_case hung-final-probe 1 'Could not determine whether cluster' hung 0 0 "${workdir}" true yes
+run_case hung-not-found-output 1 'Could not determine whether cluster' hung-not-found 0 0 "${workdir}" true yes
 
 # ksail needs the scaffolded project directory but eksctl does not, so a missing workdir must not
 # skip verification: a cluster can still be running with no local trace of it.
