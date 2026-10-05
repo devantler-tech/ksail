@@ -270,7 +270,10 @@ type OptionsHetzner struct {
 	// change — no user-provided machine-config patch is needed. The hcloud API token
 	// (from the configured tokenEnvVar) is embedded in the rendered control-plane machine
 	// config, the trust surface Talos' hcloud VIP support prescribes. Defaults to false
-	// (no floating IP; rendered configs are unchanged).
+	// (no floating IP; rendered configs are unchanged). Switching it from true to false on
+	// a running cluster makes `cluster update` remove the VIP block, move every node and the
+	// kubeconfig back to the first control-plane node's address without reboot, and then
+	// release the ksail-owned floating IP.
 	FloatingIPEnabled bool `json:"floatingIPEnabled,omitzero" jsonschema_description:"Provision a Hetzner floating IP and render it as the stable Kubernetes/Talos API endpoint (endpoint + certificate SANs + a control-plane Talos VIP block for leader ownership handover; the hcloud API token is embedded in the control-plane machine config). Defaults to false."` //nolint:lll,tagliatelle // floatingIP casing matches the sibling *PublicIPv4 fields
 	// FloatingIPLocation is the Hetzner location the floating IP is homed in. Homing only
 	// affects routing latency, not which servers the IP can be assigned to. Defaults to the

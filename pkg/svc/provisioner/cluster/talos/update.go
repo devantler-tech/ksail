@@ -185,8 +185,9 @@ const floatingIPEnabledField = "provider.hetzner.floatingIPEnabled"
 // in-place reconcile change, so a retry can recover when a prior update created
 // the address but failed before pushing Talos config (#5947). Cloud state is
 // read live because introspection echoes the desired flag and cannot reveal
-// address drift. The disable transition is warned about but remains deferred to
-// #6032. Ownership collisions propagate as errors rather than being swallowed.
+// address drift. A `floatingIPEnabled: false` configuration whose ksail-owned
+// address still exists merges the disable change (#6032). Ownership collisions
+// propagate as errors rather than being swallowed.
 func (p *Provisioner) mergeFloatingIPChanges(
 	ctx context.Context,
 	name string,
@@ -209,7 +210,9 @@ func (p *Provisioner) mergeFloatingIPChanges(
 		return nil
 	}
 
-	exists := floatingIP != nil
+	if !p.hetznerOpts.FloatingIPEnabled && floatingIP == nil {
+		return p.mergeStaleFloatingIPConfig(ctx, name, diff)
+	}
 
 	configured, configDetected, configErr := p.detectHetznerFloatingIPConfig(
 		ctx, name, floatingIP,
@@ -222,17 +225,22 @@ func (p *Provisioner) mergeFloatingIPChanges(
 		return nil
 	}
 
-	p.mergeDetectedFloatingIPChanges(diff, exists, configured)
+	p.mergeDetectedFloatingIPChanges(diff, floatingIP, configured)
 
 	return nil
 }
 
-// mergeDetectedFloatingIPChanges records the enabled-state repair or warns
-// about the separately tracked disable transition after live detection.
+// mergeDetectedFloatingIPChanges records the enabled-state repair or the
+// disable transition after live detection. The disable change names the
+// address in its reason because applying it releases that address, which
+// cannot be undone, so the preflight diff is where the user sees it first.
 func (p *Provisioner) mergeDetectedFloatingIPChanges(
 	diff *clusterupdate.UpdateResult,
-	exists, configured bool,
+	floatingIP *hcloud.FloatingIP,
+	configured bool,
 ) {
+	exists := floatingIP != nil
+
 	if p.hetznerOpts.FloatingIPEnabled {
 		if exists && configured {
 			return
@@ -249,15 +257,144 @@ func (p *Provisioner) mergeDetectedFloatingIPChanges(
 		return
 	}
 
-	if exists {
-		_, _ = fmt.Fprintf(
-			p.logWriter,
-			"  ⚠ floatingIPEnabled is false but the cluster's ksail-owned floating IP"+
-				" still exists; cluster update does not reconcile the disable transition"+
-				" yet (#6032) — detach and release it via the Hetzner console or CLI if"+
-				" it is no longer wanted\n",
-		)
+	if !exists {
+		return
 	}
+
+	// Keep the planned address: if the floating IP is released outside KSail
+	// before the release step, its lookup finds nothing, and this is then the
+	// only record of the address the talosconfig must move off.
+	if floatingIP.IP != nil {
+		p.staleFloatingIPAddress = floatingIP.IP.String()
+	}
+
+	diff.InPlaceChanges = append(diff.InPlaceChanges, clusterupdate.Change{
+		Field:    floatingIPEnabledField,
+		OldValue: strconv.FormatBool(true),
+		NewValue: strconv.FormatBool(false),
+		Category: clusterupdate.ChangeCategoryInPlace,
+		Reason:   floatingIPDisableReason(floatingIP),
+	})
+}
+
+// floatingIPDisableReason describes the disable transition, naming the
+// ksail-owned address it releases.
+func floatingIPDisableReason(floatingIP *hcloud.FloatingIP) string {
+	address := floatingIP.Name
+	if floatingIP.IP != nil {
+		address = floatingIP.IP.String()
+	}
+
+	return "control planes drop the VIP config and move back to the first " +
+		"control-plane node's endpoint without reboot, then the ksail-owned " +
+		"floating IP " + address + " is released"
+}
+
+// mergeStaleFloatingIPConfig merges the disable transition when the cluster's
+// floating IP is already gone (released outside KSail) but running control
+// planes still carry its HCloud VIP. Introspection echoes the desired flag and
+// normal drift detection keeps the running endpoint and VIP, so without this
+// the nodes, kubeconfig and talosconfig would keep pointing at a deleted
+// address. A node whose config cannot be fetched leaves the state unproven, so
+// nothing is merged and the next update retries.
+func (p *Provisioner) mergeStaleFloatingIPConfig(
+	ctx context.Context,
+	name string,
+	diff *clusterupdate.UpdateResult,
+) error {
+	staleIP, err := p.detectStaleHCloudVIP(ctx, p.resolveClusterName(name))
+	if err != nil || staleIP == "" {
+		return err
+	}
+
+	p.staleFloatingIPAddress = staleIP
+
+	diff.InPlaceChanges = append(diff.InPlaceChanges, clusterupdate.Change{
+		Field:    floatingIPEnabledField,
+		OldValue: strconv.FormatBool(true),
+		NewValue: strconv.FormatBool(false),
+		Category: clusterupdate.ChangeCategoryInPlace,
+		Reason: "control planes drop the stale VIP config for the already released " +
+			"floating IP " + staleIP + " and move back to the first control-plane " +
+			"node's endpoint without reboot",
+	})
+
+	return nil
+}
+
+// detectStaleHCloudVIP returns the address of a KSail-shaped HCloud VIP that a
+// running control plane still carries, or "" when there is none to clean up.
+// Only control planes carry the VIP, so workers are not fetched and an
+// unreachable worker cannot hide the proof. A VIP counts as KSail's residue only
+// when it is also the node's cluster endpoint (the way KSail configures it) and
+// the desired configuration declares no HCloud VIP: a VIP the user supplies
+// through a Talos patch is theirs to keep.
+func (p *Provisioner) detectStaleHCloudVIP(
+	ctx context.Context,
+	clusterName string,
+) (string, error) {
+	if p.desiredDeclaresHCloudVIP() {
+		return "", nil
+	}
+
+	nodes, err := p.getNodesByRole(ctx, clusterName)
+	if err != nil {
+		return "", fmt.Errorf("failed to inventory nodes for stale VIP detection: %w", err)
+	}
+
+	for _, node := range nodes {
+		if node.Role != RoleControlPlane {
+			continue
+		}
+
+		config, fetched, err := p.fetchFloatingIPNodeConfig(ctx, node)
+		if err != nil {
+			return "", err
+		}
+
+		if staleIP := ksailHCloudVIP(config); fetched && staleIP != "" {
+			return staleIP, nil
+		}
+	}
+
+	return "", nil
+}
+
+// ksailHCloudVIP returns the HCloud VIP address config carries when it is also
+// the config's cluster endpoint, the shape KSail's floating-IP patch produces.
+func ksailHCloudVIP(config talosconfig.Provider) string {
+	if config == nil || config.Cluster().Endpoint() == nil {
+		return ""
+	}
+
+	endpoint := config.Cluster().Endpoint().Hostname()
+
+	for _, device := range config.Machine().Network().Devices() {
+		vip := device.VIPConfig()
+		if vip != nil && vip.HCloud() != nil && vip.IP() != "" && vip.IP() == endpoint {
+			return vip.IP()
+		}
+	}
+
+	return ""
+}
+
+// desiredDeclaresHCloudVIP reports whether the desired control-plane
+// configuration declares an HCloud VIP itself, or cannot be read: either way a
+// running VIP cannot be proven to be KSail's residue.
+//
+//nolint:staticcheck // Talos v1alpha1 machine networking remains the active config API
+func (p *Provisioner) desiredDeclaresHCloudVIP() bool {
+	if p.talosConfigs == nil || p.talosConfigs.ControlPlane() == nil {
+		return true
+	}
+
+	raw := p.talosConfigs.ControlPlane().RawV1Alpha1()
+	if raw == nil || raw.MachineConfig == nil {
+		return true
+	}
+
+	return machineNetworkHasHCloudVIP(raw.MachineConfig.MachineNetwork)
 }
 
 // detectHetznerFloatingIPConfig detects running endpoint/VIP state only when
@@ -625,6 +762,13 @@ func (p *Provisioner) updateApplySteps(
 			return wrapStepErr(p.syncSecretsFromCluster(ctx, clusterName, oldSpec, newSpec, result),
 				"failed to sync cluster secrets")
 		}},
+		{"move kubeconfig off disabled floating IP", func(ctx context.Context) error {
+			// Before the first step that builds a Kubernetes client from the saved
+			// kubeconfig: a rerun may start from one that still names an address no
+			// node answers on, and the wipe below would fail on it every time.
+			return wrapStepErr(p.moveKubeconfigOffDisabledFloatingIP(ctx, clusterName, diff),
+				"failed to move kubeconfig off the disabled floating IP")
+		}},
 		{"apply wipe-required changes", func(ctx context.Context) error {
 			// PrepareUpdate already blocks wipe-required changes without --force.
 			if !result.HasWipeRequired() {
@@ -683,6 +827,13 @@ func (p *Provisioner) updateApplySteps(
 		{"apply reboot-required changes", func(ctx context.Context) error {
 			return wrapStepErr(p.applyRebootChangesIfNeeded(ctx, clusterName, result, diff, opts),
 				"failed to apply reboot-required changes")
+		}},
+		{"release disabled floating IP", func(ctx context.Context) error {
+			// Always the LAST step: a release cannot be undone, so it runs only once
+			// every fallible step has succeeded and nodes, kubeconfig and talosconfig
+			// have left the address (#6032).
+			return wrapStepErr(p.releaseDisabledFloatingIP(ctx, clusterName, diff, result),
+				"failed to release disabled floating IP")
 		}},
 	}
 }

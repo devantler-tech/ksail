@@ -128,6 +128,12 @@ CRD schemas are checked before the public CRD catalogue, so the current CRD sche
 fields missing from an older catalogue entry. The catalogue remains a fallback for kinds without
 a supplied schema; strict validation still rejects fields outside the selected schema.
 
+For HelmReleases, values from in-repository ConfigMaps and Secrets are combined in their declared
+order. Inline values take precedence over ordinary references, including explicit `false`, zero
+and empty values. Target references follow the pinned Flux controller's merge stages, including
+the final inline merge. Unquoted target scalars use Helm's typed parsing; quoted and literal target
+values remain strings. Literal target values retain their contents. Missing references remain subject to the rendering coverage warnings.
+
 ## Move images around
 
 Beyond `push`/`reconcile`, the workload family also handles container images and secrets:
