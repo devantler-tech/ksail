@@ -134,6 +134,12 @@ inputs:
     description: Run the optional Talos/Hetzner orphaned-server audit with one powered-off probe.
     required: false
     default: "false"
+  inventory-trial-server-type:
+    description: Initial server type shared by the cluster and powered-off inventory probe.
+    default: "cx23"
+  inventory-trial-location:
+    description: Location shared by the cluster and powered-off inventory probe.
+    default: "fsn1"
   floating-ip-toggle:
     description: |
       Hetzner + Talos only. When 'true', runs an additional step that enables
@@ -276,6 +282,8 @@ runs:
       id: cluster-create
       uses: $/.github/actions/ksail-cluster
       with:
+        inventory-trial-server-type: ${{ inputs.test-autoscaler-inventory == 'true' && inputs.inventory-trial-server-type || '' }}
+        inventory-trial-location: ${{ inputs.test-autoscaler-inventory == 'true' && inputs.inventory-trial-location || '' }}
         distribution: ${{ inputs.distribution }}
         provider: ${{ inputs.provider }}
         args: ${{ steps.resolve-args.outputs.args }}
@@ -1066,6 +1074,8 @@ runs:
         DISTRIBUTION: ${{ inputs.distribution }}
         PROVIDER: ${{ inputs.provider }}
         CLUSTER_NAME: st-hetzner-dispatch-${{ github.run_id }}
+        TRIAL_SERVER_TYPE: ${{ inputs.inventory-trial-server-type }}
+        TRIAL_LOCATION: ${{ inputs.inventory-trial-location }}
         K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
       run: |
         set -euo pipefail

@@ -7,6 +7,16 @@ on:
         description: Audit an orphaned autoscaler server and retry (Talos only; one extra powered-off server)
         type: boolean
         default: false
+      inventory_trial_server_type:
+        description: Initial cluster and powered-off probe type (inventory trial only)
+        type: choice
+        options: [cx23, cx33]
+        default: cx23
+      inventory_trial_location:
+        description: Cluster and probe location (inventory trial only)
+        type: choice
+        options: [fsn1, nbg1, hel1]
+        default: fsn1
       distribution:
         description: "Kubernetes distribution"
         required: false
@@ -354,6 +364,8 @@ jobs:
           HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
         with:
           test-autoscaler-inventory: ${{ inputs.autoscaler_inventory_trial && 'true' || 'false' }}
+          inventory-trial-server-type: ${{ inputs.inventory_trial_server_type || 'cx23' }}
+          inventory-trial-location: ${{ inputs.inventory_trial_location || 'fsn1' }}
           distribution: ${{ matrix.distribution }}
           provider: Hetzner
           init: ${{ matrix.init }}
