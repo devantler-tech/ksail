@@ -158,6 +158,26 @@ func TestPublicationExercisesThePublishedDigestBeforeSigning(t *testing.T) {
 	require.Greater(t, signatureIndex, smokeIndex)
 }
 
+func TestPublisherExercisesBothSmokeModesInTheRealImage(t *testing.T) {
+	t.Parallel()
+
+	workflow := readWorkflow(t)
+
+	for _, name := range []string{"verify", "publish"} {
+		found := false
+
+		for _, step := range steps(t, value(t, workflow, "jobs", name)) {
+			if run, ok := step["run"].(string); ok && strings.Contains(run, "docker run") {
+				require.Contains(t, run, "/usr/local/bin/ksail-analysis-smoke --verify-modes")
+
+				found = true
+			}
+		}
+
+		require.True(t, found, "%s must exercise the real image", name)
+	}
+}
+
 func readWorkflow(t *testing.T) map[string]any {
 	t.Helper()
 

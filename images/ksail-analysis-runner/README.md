@@ -4,10 +4,12 @@ This image supplies Go, Node.js and the GTK/WebKit development libraries needed
 for complete CLI and Linux desktop extraction on the platform's ARC pool.
 The base image, package snapshot and downloaded toolchains are pinned.
 
-The publisher verifies the actual Linux image with a non-root runner listener
-and cgo compilation, using a read-only root filesystem, no capabilities and
+The publisher verifies the actual Linux image by executing the non-root runner
+listener binary and compiling cgo, using a read-only root filesystem, no capabilities and
 no privilege escalation. Its writable runner home and temporary directory
 must allow execution of the copied listener and compiler output.
+This binary check does not prove registration or job delivery; the actual ARC
+preflight below provides that proof after Platform activation.
 
 Only a verified push to main publishes
 `ghcr.io/devantler-tech/ksail-analysis-runner:<commit>`. The workflow also runs
@@ -21,3 +23,13 @@ https://github.com/devantler-tech/ksail/.github/workflows/publish-ksail-analysis
 Platform owns registration, capacity, network and admission policy. It must
 verify and pin the published digest before activation. Image validation does
 not establish complete managed extraction or runner cleanup.
+
+After Platform proves live admission, capacity and network isolation, the
+main-only `Verify KSail ARC Delivery` workflow can be manually enabled to
+exercise one real ARC job. It defaults to disabled and does not change managed
+Code Quality's runner selection. Its `--live-runner` smoke mode preserves the
+active listener and registration files while checking the desktop toolchain,
+read-only root, zero capabilities and disabled privilege escalation. The job
+also checks external connectivity, absence of an API-token mount and the bounded
+container memory limit. Platform must join that job to the actual runner pod,
+verify its pinned image and cleanup, then perform the complete managed analyses.
