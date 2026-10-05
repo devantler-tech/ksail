@@ -2184,7 +2184,7 @@ jobs:
       contents: read
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Check active documentation
@@ -2197,7 +2197,7 @@ jobs:
           VALIDATED: ${{ steps.links.outputs.validated }}
         run: test "$VALIDATED" = true
       - name: Check out the exact validator for refusal controls
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devantler-tech/.github
           ref: bd0035dd8f41fcf1459b878882b8897443f8dc59 # v4.9.4
