@@ -290,7 +290,12 @@ func TestKSailBinaryArtifactInstallationPrivileges(t *testing.T) {
 				require.Error(t, err, output)
 
 				_, readErr := spies.ReadFile("install-log")
-				assert.ErrorIs(t, readErr, os.ErrNotExist, "corrupt input must not invoke any installer")
+				assert.ErrorIs(
+					t,
+					readErr,
+					os.ErrNotExist,
+					"corrupt input must not invoke any installer",
+				)
 
 				return
 			}
