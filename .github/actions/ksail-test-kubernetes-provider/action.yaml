@@ -137,6 +137,14 @@ runs:
         for DIST in "${DIST_ARRAY[@]}"; do
           DIST=$(echo "$DIST" | xargs) # trim whitespace
           NESTED_NAME="nested-${DIST,,}"  # lowercase
+          case "${DIST,,}" in
+            vanilla) NESTED_CONTEXT="kind-$NESTED_NAME" ;;
+            k3s) NESTED_CONTEXT="k3k-$NESTED_NAME" ;;
+            vcluster) NESTED_CONTEXT="vcluster-$NESTED_NAME" ;;
+            talos) NESTED_CONTEXT="admin@$NESTED_NAME" ;;
+            kwok) NESTED_CONTEXT="kwok-$NESTED_NAME" ;;
+            *) echo "❌ Unsupported nested distribution: $DIST"; exit 64 ;;
+          esac
           echo "──────────────────────────────────────────────────────"
           echo "🧪 Testing: $DIST on Kubernetes provider (name: $NESTED_NAME)"
           echo "──────────────────────────────────────────────────────"
@@ -167,9 +175,16 @@ runs:
           # Verify with cluster info (only if create succeeded)
           if [ "$create_ok" = "true" ]; then
             echo "  ⏳ Verifying $DIST cluster info..."
-            if ksail cluster info --name "$NESTED_NAME" --provider Kubernetes 2>&1 | tee "$INFO_LOG"; then
-              echo "  ✅ $DIST info succeeded"
-              PASSED=$((PASSED + 1))
+            if timeout --kill-after=1s 30s ksail cluster info --name "$NESTED_NAME" --provider Kubernetes 2>&1 | tee "$INFO_LOG"; then
+              # Info may succeed with provider metadata while the API is unreachable.
+              # A healthy host must never satisfy this nested-cluster readiness read.
+              if NESTED_READY=$(timeout --kill-after=1s 20s kubectl --context "$NESTED_CONTEXT" get --raw=/readyz --request-timeout=15s) && [ "$NESTED_READY" = ok ]; then
+                echo "  ✅ $DIST info and nested API readiness succeeded"
+                PASSED=$((PASSED + 1))
+              else
+                echo "  ❌ $DIST nested API readiness FAILED"
+                FAILED=$((FAILED + 1))
+              fi
             else
               echo "  ❌ $DIST info FAILED"
               FAILED=$((FAILED + 1))
