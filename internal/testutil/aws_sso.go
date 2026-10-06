@@ -3,7 +3,9 @@ package testutil
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -24,8 +26,8 @@ func NewSyntheticSSO(t *testing.T, profile string) SyntheticSSO {
 	require.NoError(t, os.WriteFile(config, []byte(syntheticSSOProfiles), syntheticPrivateFileMode))
 
 	command := filepath.Join(root, "aws")
+	writeSyntheticExecutable(t, command, syntheticAWSCommand)
 
-	require.NoError(t, os.WriteFile(command, []byte(syntheticAWSCommand), syntheticExecutableMode))
 	provider := &clientcmdapi.ExecConfig{
 		Command:         command,
 		Args:            []string{"eks", "get-token", "--cluster-name", "synthetic"},
@@ -51,7 +53,6 @@ func NewSyntheticSSO(t *testing.T, profile string) SyntheticSSO {
 
 const (
 	syntheticPrivateFileMode = 0o600
-	syntheticExecutableMode  = 0o700
 	syntheticSSOProfiles     = `[profile legacy]
 sso_start_url = https://example.invalid/start
 sso_region = us-east-1
@@ -94,3 +95,26 @@ fi
 echo '{"apiVersion":"client.authentication.k8s.io/v1beta1","kind":"ExecCredential","status":{"token":"synthetic-only"}}'
 `
 )
+
+// writeSyntheticExecutable writes the plugin without this process ever holding a write
+// descriptor on it.
+//
+// The tests using this fixture run in parallel and start subprocesses constantly. On Linux a
+// child forked while another goroutine still holds a file open for writing inherits that
+// descriptor until its own exec completes, and executing the file inside that window fails with
+// ETXTBSY. os.WriteFile closes before it returns, but it cannot stop a concurrent fork from
+// copying the descriptor first. Writing through a short-lived child shell moves the write
+// descriptor into a process nothing here forks from, so the file is closed for good by the time
+// the child has exited (same approach as the CI harness stubs, #6199).
+func writeSyntheticExecutable(t *testing.T, path, content string) {
+	t.Helper()
+
+	//nolint:gosec // path is a test-owned temp file; the shell fragment is a constant.
+	command := exec.CommandContext(
+		t.Context(), "sh", "-c", `umask 077 && cat >"$1" && chmod 0700 "$1"`, "sh", path,
+	)
+	command.Stdin = strings.NewReader(content)
+
+	output, err := command.CombinedOutput()
+	require.NoError(t, err, "write synthetic AWS command: %s", output)
+}
