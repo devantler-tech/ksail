@@ -2,7 +2,7 @@
 # Replay the released scanner using inputs derived from this repository's caller.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
-catalogue="${1:?catalogue checkout required}"
+catalogue="${1:?catalogue checkout or --print-revision required}"
 mode="${2:-native}"
 [[ "$mode" == native || "$mode" == --check-fixtures ]] || exit 2
 work="$(mktemp -d)"
@@ -23,6 +23,10 @@ reference="$(jq -er '.jobs.todos.uses' "$work/caller.json")"
 [[ "$reference" =~ ^devantler-tech/\.github/\.github/workflows/scan-for-todo-comments\.yaml@([0-9a-f]{40})$ ]] ||
 	fail 'Consumer must use the immutable canonical workflow'
 revision="${BASH_REMATCH[1]}"
+if [[ "$catalogue" == --print-revision ]]; then
+	printf '%s\n' "$revision"
+	exit 0
+fi
 [[ "$(git -C "$catalogue" rev-parse HEAD)" == "$revision" ]] || fail 'Catalogue checkout does not match consumer revision'
 status="$(git -C "$catalogue" status --porcelain)" || fail 'Could not establish catalogue checkout status'
 [[ -z "$status" ]] || fail 'Catalogue checkout must be clean'
