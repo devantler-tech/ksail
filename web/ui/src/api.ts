@@ -413,6 +413,7 @@ export interface ChatSettings {
 export interface AppSettings {
   editor: string;
   chat: ChatSettings;
+  awsSsoRenewal?: boolean;
 }
 
 export function getAppSettings(): Promise<AppSettings> {
@@ -449,6 +450,26 @@ export function testCredential(provider: string): Promise<CredentialTestResult> 
 // and would otherwise split or cut the URL.
 export function clusterPath(namespace: string, name: string): string {
   return `/api/v1/clusters/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`;
+}
+
+export interface ClusterAuthentication {
+  enabled: boolean;
+  supported: boolean;
+  required: boolean;
+  message?: string;
+}
+
+export function getClusterAuthentication(namespace: string, name: string): Promise<ClusterAuthentication> {
+  return request<ClusterAuthentication>(`${clusterPath(namespace, name)}/authentication`);
+}
+
+export function renewClusterAuthentication(namespace: string, name: string, signal?: AbortSignal): Promise<void> {
+  return request<void>(`${clusterPath(namespace, name)}/authentication/renew`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+    signal,
+  });
 }
 
 export function listClusters(): Promise<ClusterList> {
