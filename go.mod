@@ -53,7 +53,7 @@ require (
 
 require (
 	cel.dev/cel-go v0.32.0
-	cloud.google.com/go/container v1.54.0
+	cloud.google.com/go/container v1.55.0
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.1
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.14.1
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v7 v7.3.0
