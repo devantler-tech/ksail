@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - .github/workflows/publish-ksail-analysis-runner.yaml
+      - .github/workflows/verify-ksail-arc-delivery.yaml
       - images/ksail-analysis-runner/**
   push:
     branches: [main]
     paths:
       - .github/workflows/publish-ksail-analysis-runner.yaml
+      - .github/workflows/verify-ksail-arc-delivery.yaml
       - images/ksail-analysis-runner/**
   workflow_dispatch:
 

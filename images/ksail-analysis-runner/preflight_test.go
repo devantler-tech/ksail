@@ -9,6 +9,16 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func TestPreflightPolicyChangesRunTheirAcceptanceChecks(t *testing.T) {
+	t.Parallel()
+
+	workflow := readWorkflow(t)
+	for _, event := range []string{"pull_request", "push"} {
+		require.Contains(t, value(t, workflow, "on", event, "paths"),
+			".github/workflows/verify-ksail-arc-delivery.yaml", event)
+	}
+}
+
 func TestARCPreflightRequiresExplicitMainBranchEnablement(t *testing.T) {
 	t.Parallel()
 
