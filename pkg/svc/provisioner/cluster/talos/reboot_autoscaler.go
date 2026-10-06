@@ -44,7 +44,7 @@ func (p *Provisioner) rollingRebootAutoscalerNodes(
 	result *clusterupdate.UpdateResult,
 ) error {
 	clientset, ordered, ok, err := p.prepareAutoscalerNodeConvergence(
-		ctx, clusterName, "  ⓘ No autoscaler nodes to reboot\n",
+		ctx, clusterName, "  ⓘ No autoscaler nodes to reboot\n", result,
 	)
 	if err != nil || !ok {
 		return err

@@ -67,6 +67,13 @@ type Updater interface {
 	) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error)
 }
 
+// UpdateAuditor is an optional capability for inspecting provider resources when
+// the desired configuration already matches the live configuration. It reports
+// unresolved resources without mutating cluster, provider or persisted state.
+type UpdateAuditor interface {
+	AuditUpdate(ctx context.Context, name string, result *clusterupdate.UpdateResult) error
+}
+
 // InPlaceFieldSupport is an optional capability for updaters that implement a
 // deliberately narrow subset of the spec-level in-place diff vocabulary. The
 // orchestrator promotes any unhandled field to recreate-required rather than

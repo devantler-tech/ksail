@@ -13,9 +13,11 @@ runs:
   using: composite
   steps:
     - name: 📦 Setup hcloud CLI
+      if: always()
       uses: hetznercloud/setup-hcloud@4ff9bbeda4053fb69dd7fa1fcbdfcce7e648bf33 # v1
 
     - name: 🧹 Cleanup all KSail-owned Hetzner resources
+      if: always()
       shell: bash
       env:
         LABEL_SELECTOR: ${{ inputs.label-selector }}
