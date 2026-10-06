@@ -210,7 +210,7 @@ jobs:
 
       - name: ⚙️ Setup bounded inventory trial admission
         if: inputs.autoscaler_inventory_trial
-        uses: hetznercloud/setup-hcloud@4ff9bbeda4053fb69dd7fa1fcbdfcce7e648bf33 # v1
+        uses: hetznercloud/setup-hcloud@28cdd3fc4a4a8013e86d57c7254be72df92fcc02 # v2.0.1
 
       - name: ✅ Verify inventory trial starts without run-owned resources
         if: inputs.autoscaler_inventory_trial
