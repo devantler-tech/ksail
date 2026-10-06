@@ -38,12 +38,18 @@ func mergeReadyVClusterKubeconfig(
 
 	var lastProbeErr error
 
-	err = wait.PollUntilContextTimeout(ctx, interval, timeout, true, func(ctx context.Context) (bool, error) {
-		body, probeErr := client.Discovery().RESTClient().Get().AbsPath("/readyz").DoRaw(ctx)
-		lastProbeErr = probeErr
+	err = wait.PollUntilContextTimeout(
+		ctx,
+		interval,
+		timeout,
+		true,
+		func(ctx context.Context) (bool, error) {
+			body, probeErr := client.Discovery().RESTClient().Get().AbsPath("/readyz").DoRaw(ctx)
+			lastProbeErr = probeErr
 
-		return probeErr == nil && strings.TrimSpace(string(body)) == "ok", nil
-	})
+			return probeErr == nil && strings.TrimSpace(string(body)) == "ok", nil
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("wait for vCluster API server: %w", errors.Join(err, lastProbeErr))
 	}
