@@ -32,11 +32,16 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Resolve the consumer's immutable scanner revision
+        id: scanner
+        run: |
+          revision="$(bash .github/scripts/verify-vendored-comment-scan.sh --print-revision)"
+          printf 'revision=%s\n' "$revision" >> "$GITHUB_OUTPUT"
       - name: Checkout the consumer's released catalogue
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devantler-tech/.github
-          ref: 0600006235510307a04efebcac1ac1f363f5f862 # v6.0.1
+          ref: ${{ steps.scanner.outputs.revision }}
           path: .comment-scan-catalogue
           persist-credentials: false
       - name: Set up native fixture Go toolchain
