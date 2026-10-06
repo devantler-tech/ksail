@@ -91,7 +91,7 @@ require (
 	github.com/kyverno/api v0.0.1-alpha.3.0.20260723090831-fb2785727f98
 	github.com/kyverno/kyverno v1.19.1
 	github.com/loft-sh/log v0.0.0-20260812120051-874a69680b18
-	github.com/loft-sh/vcluster v0.37.1
+	github.com/loft-sh/vcluster v0.37.2
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/rancher/k3k v1.1.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
