@@ -20,6 +20,14 @@ the exact certificate identity:
 https://github.com/devantler-tech/ksail/.github/workflows/publish-ksail-analysis-runner.yaml@refs/heads/main
 ```
 
+Publication also requires an anonymous pull and signature verification of that
+exact digest using a separate empty registry configuration. The publisher's
+login cannot satisfy this gate. GHCR initially creates packages as private;
+the package owner must set this public image's visibility to public after its
+first publication. The workflow does not change package access or permissions.
+If that prerequisite is missing, publication acceptance fails and Platform must
+not activate the digest.
+
 Platform owns registration, capacity, network and admission policy. It must
 verify and pin the published digest before activation. Image validation does
 not establish complete managed extraction or runner cleanup.

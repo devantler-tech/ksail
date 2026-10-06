@@ -137,4 +137,21 @@ jobs:
             --certificate-identity "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/${SIGNING_WORKFLOW}@refs/heads/main" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             "${IMAGE}@${DIGEST}"
-          printf 'Published signed image: %s@%s\n' "${IMAGE}" "${DIGEST}"
+
+      - name: Verify anonymous image and signature access
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          SIGNING_WORKFLOW: .github/workflows/publish-ksail-analysis-runner.yaml
+        run: |
+          set -euo pipefail
+          [[ "${DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]] || exit 1
+          anonymous_config=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/ksail-public.XXXXXXXXXX")
+          trap 'rm -rf "$anonymous_config"' EXIT
+          export DOCKER_CONFIG="$anonymous_config"
+          printf '%s\n' '{"auths":{}}' > "$DOCKER_CONFIG/config.json"
+          timeout 180s docker pull "${IMAGE}@${DIGEST}"
+          timeout 90s cosign verify \
+            --certificate-identity "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/${SIGNING_WORKFLOW}@refs/heads/main" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${IMAGE}@${DIGEST}"
+          printf 'Published public signed image: %s@%s\n' "${IMAGE}" "${DIGEST}"
