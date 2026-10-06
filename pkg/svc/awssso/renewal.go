@@ -469,7 +469,7 @@ func hasAmbientCredentials(values map[string]string) bool {
 }
 
 func effectiveProfile(explicit string, values map[string]string) string {
-	for _, profile := range []string{explicit, values["AWS_DEFAULT_PROFILE"], values["AWS_PROFILE"]} {
+	for _, profile := range []string{explicit, values["AWS_PROFILE"], values["AWS_DEFAULT_PROFILE"]} {
 		if profile != "" {
 			return profile
 		}

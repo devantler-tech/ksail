@@ -237,7 +237,7 @@ export function OverviewView({
       {health && health.errors.length > 0 ? (
         <div className="space-y-2">
           <ErrorBanner
-            message={`Some cluster data is unavailable (${health.errors.map((error) => error.kind).join(", ")}). Check the connection and kubeconfig credentials, then Refresh. ${health.errors[0].message}`}
+            message={`Some cluster data is unavailable (${health.errors.map((error) => error.kind).join(", ")}). Refresh to try again. ${health.errors[0].message}`}
           />
           <details className="text-sm text-slate-600 dark:text-slate-300">
             <summary className="cursor-pointer">Failed resource reads</summary>

@@ -323,3 +323,23 @@ func TestDeviceCodeSignInShowsInstructionsOnlyOnTheTerminal(t *testing.T) {
 		assert.NotContains(t, string(logins), "--use-device-code")
 	})
 }
+
+func TestProfileEnvironmentFollowsAWSCLIPrecedence(t *testing.T) {
+	t.Parallel()
+	fixture := testutil.NewSyntheticSSO(t, "modern")
+	// The AWS CLI reads AWS_PROFILE first and AWS_DEFAULT_PROFILE only as its fallback.
+	fixture.Provider.Env = append(
+		fixture.Provider.Env,
+		clientcmdapi.ExecEnvVar{Name: "AWS_DEFAULT_PROFILE", Value: "other"},
+	)
+	target, err := awssso.Resolve(t.Context(), fixture.Provider)
+	require.NoError(t, err, "the non-SSO fallback profile must not be the one selected")
+
+	var manager awssso.Manager
+
+	require.NoError(t, manager.Renew(t.Context(), target))
+
+	logins, err := os.ReadFile(filepath.Join(fixture.Root, "logins"))
+	require.NoError(t, err)
+	assert.Contains(t, string(logins), "--profile=modern")
+}
