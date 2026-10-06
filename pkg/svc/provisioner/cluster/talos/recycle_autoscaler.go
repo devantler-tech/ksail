@@ -43,10 +43,16 @@ const autoscalerRolloutTimeout = 5 * time.Minute
 // nodes gracefully (cordon + drain via the eviction API, honoring PodDisruption
 // Budgets) and lets the autoscaler bring up fresh nodes from the new template on
 // demand. Compute-only autoscaler nodes hold no persistent storage and no etcd
-// membership, so replace-by-recreation is the idiomatic, lossless path.
-func (p *Provisioner) recycleAutoscalerNodes(ctx context.Context, clusterName string) error {
+// membership, so replace-by-recreation is the idiomatic, lossless path. A server of a
+// pool that is no longer configured has no autoscaler to replace it, so it is reported
+// on result and never drained or deleted (listAutoscalerServers).
+func (p *Provisioner) recycleAutoscalerNodes(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
 	clientset, ordered, ok, err := p.prepareAutoscalerNodeConvergence(
-		ctx, clusterName, "  ⓘ No autoscaler nodes to recycle\n",
+		ctx, clusterName, "  ⓘ No autoscaler nodes to recycle\n", result,
 	)
 	if err != nil || !ok {
 		return err
@@ -60,16 +66,23 @@ func (p *Provisioner) recycleAutoscalerNodes(ctx context.Context, clusterName st
 	return p.recycleAutoscalerServers(ctx, clientset, hzProvider, ordered)
 }
 
-// listAutoscalerServers returns the running autoscaler-managed servers for the
-// cluster, or nil when the node autoscaler is disabled or no pools are configured.
-// Both the recycle and in-place propagation paths enumerate nodes this way, so the
-// disabled-guard and per-pool lookup live in one place.
+// listAutoscalerServers returns the running autoscaler-managed servers of the
+// cluster's configured pools, or nil when the node autoscaler is disabled. The
+// recycle, rolling-reboot and in-place propagation paths all enumerate nodes this
+// way, so the disabled-guard, the discovery and the unconfigured-pool guard live in
+// one place.
+//
+// Discovery is cluster-wide rather than per configured pool: every server carrying
+// the autoscaler's node-group label in the cluster's private network is found, so a
+// pool removed from the configuration — including the last one — cannot hide its
+// servers from the update. Each server of an unconfigured pool is reported on
+// result and left out of the returned list (see excludeUnconfiguredPoolServers).
 func (p *Provisioner) listAutoscalerServers(
 	ctx context.Context,
 	clusterName string,
+	result *clusterupdate.UpdateResult,
 ) ([]*hcloud.Server, error) {
-	if p.hetznerOpts == nil || !p.hetznerOpts.NodeAutoscalerEnabled ||
-		len(p.hetznerOpts.AutoscalerNodePoolNames) == 0 {
+	if p.hetznerOpts == nil || !p.hetznerOpts.NodeAutoscalerEnabled {
 		return nil, nil
 	}
 
@@ -78,29 +91,69 @@ func (p *Provisioner) listAutoscalerServers(
 		return nil, err
 	}
 
-	servers, err := hzProvider.ListAutoscalerNodes(
-		ctx, clusterName, p.hetznerOpts.AutoscalerNodePoolNames,
-	)
+	servers, err := hzProvider.ListClusterAutoscalerNodes(ctx, clusterName)
 	if err != nil {
 		return nil, fmt.Errorf("listing autoscaler nodes: %w", err)
 	}
 
-	return servers, nil
+	return p.excludeUnconfiguredPoolServers(servers, result), nil
+}
+
+// excludeUnconfiguredPoolServers returns the servers whose pool is still in
+// spec.cluster.autoscaler.node.pools. A server of any other pool is reported as a
+// failed change and left untouched, before anything drains, reboots, reconfigures or
+// deletes it: KSail cannot rebuild the config it booted from, and the cluster
+// autoscaler no longer manages it, so it would otherwise keep running unnoticed.
+// The user resolves it by restoring the pool or by draining the node and deleting
+// its server.
+//
+// A server of a node group the user declared in autoscalerNodePoolNames without a
+// KSail pool belongs to an autoscaler they run themselves: it is left out of the
+// result and is not reported.
+func (p *Provisioner) excludeUnconfiguredPoolServers(
+	servers []*hcloud.Server,
+	result *clusterupdate.UpdateResult,
+) []*hcloud.Server {
+	configured := make([]*hcloud.Server, 0, len(servers))
+
+	for _, server := range sortServersByName(servers) {
+		if p.externallyManagedNodeGroup(server.Labels[hetzner.LabelAutoscalerNodeGroup]) {
+			continue
+		}
+
+		_, poolErr := p.autoscalerNodePool(server.Labels[hetzner.LabelAutoscalerNodeGroup])
+		if poolErr != nil {
+			_, _ = fmt.Fprintf(p.logWriter,
+				"  ⚠ Autoscaler node %s is left untouched: %v\n", server.Name, poolErr)
+
+			recordFailedChange(result, RoleWorker, server.Name, fmt.Errorf(
+				"%w; restore the pool, or drain the node and delete its server", poolErr,
+			))
+
+			continue
+		}
+
+		configured = append(configured, server)
+	}
+
+	return configured
 }
 
 // prepareAutoscalerNodeConvergence lists the cluster's autoscaler servers and, when
 // any exist, creates a Kubernetes client and waits for the refreshed cluster-
 // autoscaler rollout — so a scale-up a subsequent drain triggers is served by the
 // autoscaler pod already carrying the new template, not the pre-restart one. It
-// returns ok=false (after logging noneMsg) when there are no autoscaler nodes, so the
-// caller no-ops. The returned servers are sorted by name for deterministic,
-// one-at-a-time processing. Shared by the recycle and rolling-reboot paths.
+// returns ok=false (after logging noneMsg) when there are no autoscaler nodes of a
+// configured pool, so the caller no-ops. The returned servers are sorted by name for
+// deterministic, one-at-a-time processing. Shared by the recycle and rolling-reboot
+// paths.
 func (p *Provisioner) prepareAutoscalerNodeConvergence(
 	ctx context.Context,
 	clusterName string,
 	noneMsg string,
+	result *clusterupdate.UpdateResult,
 ) (kubernetes.Interface, []*hcloud.Server, bool, error) {
-	servers, err := p.listAutoscalerServers(ctx, clusterName)
+	servers, err := p.listAutoscalerServers(ctx, clusterName, result)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -135,15 +188,16 @@ func (p *Provisioner) prepareAutoscalerNodeConvergence(
 // role-scoped worker patches onto the node's *running* config and gives the result
 // its pool's autoscaler worker shape (buildDesiredConfigForNode) — keeping its
 // server-name hostname, the autoscaled marker and pool labels/taints while still
-// landing the new patch. A server of an unconfigured pool is recorded as failed and
-// left untouched. Per-node failures are recorded on result (surfacing as a failed update)
-// rather than aborting the loop, so one unreachable node does not block the rest.
+// landing the new patch. A server of an unconfigured pool is reported as failed and
+// left untouched (listAutoscalerServers). Per-node failures are recorded on result
+// (surfacing as a failed update) rather than aborting the loop, so one unreachable
+// node does not block the rest.
 func (p *Provisioner) applyInPlaceToAutoscalerNodes(
 	ctx context.Context,
 	clusterName string,
 	result *clusterupdate.UpdateResult,
 ) error {
-	servers, err := p.listAutoscalerServers(ctx, clusterName)
+	servers, err := p.listAutoscalerServers(ctx, clusterName, result)
 	if err != nil {
 		return err
 	}
