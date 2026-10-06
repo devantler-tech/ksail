@@ -397,6 +397,8 @@ jobs:
             eks-smoke-scripts:
               - '.github/scripts/delete-eks-smoke-cluster.sh'
               - '.github/scripts/delete-eks-smoke-cluster.test.sh'
+              - '.github/scripts/report-eks-create-failure.sh'
+              - '.github/scripts/report-eks-create-failure.test.sh'
               - '.github/workflows/system-test-eks.yaml'
               - '.github/workflows/ci.yaml'
             k3k-sentinel-scripts:
@@ -437,6 +439,13 @@ jobs:
             .github/scripts/delete-eks-smoke-cluster.sh \
             .github/scripts/delete-eks-smoke-cluster.test.sh
           .github/scripts/delete-eks-smoke-cluster.test.sh
+
+      - name: 🔎 Verify the EKS create-failure report only reads and never fails
+        run: |
+          shellcheck \
+            .github/scripts/report-eks-create-failure.sh \
+            .github/scripts/report-eks-create-failure.test.sh
+          .github/scripts/report-eks-create-failure.test.sh
 
   k3k-sentinel-scripts:
     name: 🔐 Validate k3k Sentinel Scripts
