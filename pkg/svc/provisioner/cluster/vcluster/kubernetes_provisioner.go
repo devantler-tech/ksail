@@ -228,12 +228,16 @@ func (p *KubernetesProvisioner) Create(
 		return fmt.Errorf("rewrite vCluster kubeconfig: %w", err)
 	}
 
-	// Step 5: Merge kubeconfig into the host kubeconfig file
-	if p.kubeconfigPath != "" {
-		err := k8s.MergeKubeconfig(p.kubeconfigPath, rewrittenKubeconfig)
-		if err != nil {
-			return fmt.Errorf("merge kubeconfig: %w", err)
-		}
+	// Step 5: Verify the saved endpoint is ready before publishing its kubeconfig.
+	_, _ = fmt.Fprintln(os.Stdout, "► waiting for vCluster API server")
+
+	err = mergeReadyVClusterKubeconfig(
+		ctx, p.kubeconfigPath, rewrittenKubeconfig, vclusterWaitInterval, vclusterReadyTimeout(),
+	)
+	if err != nil {
+		p.dumpNestedVClusterFailureDiagnostics(ctx, namespace)
+
+		return fmt.Errorf("publish vCluster kubeconfig: %w", err)
 	}
 
 	_, _ = fmt.Fprintf(os.Stdout, "✓ vCluster %q ready (context: %s)\n", clusterName, contextName)

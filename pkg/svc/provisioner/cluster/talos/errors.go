@@ -46,6 +46,8 @@ var (
 	ErrNoControlPlane = errors.New("no control plane container found")
 	// ErrNoPortMapping is returned when no port mapping is found for a required port.
 	ErrNoPortMapping = errors.New("no port mapping found")
+	// ErrInvalidDinDAPIHost rejects a pod that cannot safely host a nested API binding.
+	ErrInvalidDinDAPIHost = errors.New("DinD pod has no owned, ready IPv4 API binding address")
 	// ErrHetznerProviderRequired is returned when the Hetzner provider is expected but not available.
 	ErrHetznerProviderRequired = errors.New("hetzner provider required for this operation")
 	// ErrOmniProviderRequired is returned when the Omni provider is expected but not available.

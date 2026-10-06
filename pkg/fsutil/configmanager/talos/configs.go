@@ -299,6 +299,53 @@ func (c *Configs) WithCertSANs(sans []string) (*Configs, error) {
 	})
 }
 
+// WithKubernetesNetwork sets the pod and service networks for both node roles,
+// preserving the existing PKI and Docker node network. Later exposure rewrites
+// retain these final role-specific patches, which override earlier network
+// patches without replacing unrelated settings. The original Configs is not modified.
+func (c *Configs) WithKubernetesNetwork(podCIDR, serviceCIDR string) (*Configs, error) {
+	_, err := netip.ParsePrefix(podCIDR)
+	if err != nil {
+		return nil, fmt.Errorf("invalid Talos pod CIDR: %w", err)
+	}
+
+	_, err = netip.ParsePrefix(serviceCIDR)
+	if err != nil {
+		return nil, fmt.Errorf("invalid Talos service CIDR: %w", err)
+	}
+
+	content := fmt.Sprintf(
+		"cluster:\n  network:\n    podSubnets:\n      - %q\n    serviceSubnets:\n      - %q\n",
+		podCIDR,
+		serviceCIDR,
+	)
+	if c.versionContract != nil && c.versionContract.MultidocKubernetesConfigSupported() {
+		content = fmt.Sprintf(
+			"apiVersion: v1alpha1\nkind: KubeNetworkConfig\npodSubnets:\n  - %q\nserviceSubnets:\n  - %q\n",
+			podCIDR,
+			serviceCIDR,
+		)
+	}
+
+	return c.regenerate(func(params *regenParams) error {
+		params.patches = append(
+			slices.Clone(c.patches),
+			Patch{
+				Path:    "ksail-nested-control-plane-network",
+				Scope:   PatchScopeControlPlane,
+				Content: []byte(content),
+			},
+			Patch{
+				Path:    "ksail-nested-worker-network",
+				Scope:   PatchScopeWorker,
+				Content: []byte(content),
+			},
+		)
+
+		return c.preserveSecrets(params)
+	})
+}
+
 // buildCertSANsPatch builds a cluster-scope patch that sets the API server and
 // machine certificate SANs. Talos 1.14 uses KubeAPIServerConfig for the API
 // server values; older contracts use cluster.apiServer. The machine SANs remain
