@@ -177,7 +177,22 @@ runs:
           # A healthy host must never satisfy this nested-cluster readiness read.
           if [ "$create_ok" = "true" ]; then
             echo "  ⏳ Verifying $DIST nested API readiness..."
-            if NESTED_READY=$(timeout --kill-after=1s 20s kubectl --context "$NESTED_CONTEXT" get --raw=/readyz --request-timeout=15s) && [ "$NESTED_READY" = ok ]; then
+            # A nested API can answer not-ready for a moment after create returns.
+            # Poll until an overall deadline and judge the last answer, so one
+            # early failure does not delete a cluster that was about to be ready.
+            nested_ready=false
+            ready_deadline=$((SECONDS + 60))
+            while true; do
+              if NESTED_READY=$(timeout --kill-after=1s 20s kubectl --context "$NESTED_CONTEXT" get --raw=/readyz --request-timeout=15s) && [ "$NESTED_READY" = ok ]; then
+                nested_ready=true
+                break
+              fi
+              if [ "$SECONDS" -ge "$ready_deadline" ]; then
+                break
+              fi
+              sleep 5
+            done
+            if [ "$nested_ready" = "true" ]; then
               echo "  ⏳ Verifying $DIST cluster info..."
               if timeout --kill-after=1s 30s ksail cluster info --name "$NESTED_NAME" --provider Kubernetes 2>&1 | tee "$INFO_LOG"; then
                 echo "  ✅ $DIST info and nested API readiness succeeded"

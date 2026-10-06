@@ -297,7 +297,9 @@ func warnNodePortReachability(result *ExposureResult) {
 // (case-insensitive), which pickNodeAddress may return from the host REST
 // config and which net.ParseIP cannot classify.
 func isLoopbackAddress(addr string) bool {
-	if strings.EqualFold(addr, "localhost") {
+	// RFC 6761 reserves localhost and every name beneath it for loopback.
+	name := strings.ToLower(addr)
+	if name == "localhost" || strings.HasSuffix(name, ".localhost") {
 		return true
 	}
 

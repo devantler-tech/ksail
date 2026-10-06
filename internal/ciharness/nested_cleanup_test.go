@@ -26,6 +26,14 @@ if [[ "${1:-}" == --context ]]; then
       ready-ok-error) echo ok; exit 1 ;;
       ready-hang) echo ok; trap '' TERM; exec sleep 60 ;;
       ready-invalid) echo 'not ready' ;;
+      ready-flaky)
+        if [[ -e "$FIXTURE_CALLS.ready-seen" ]]; then
+          echo ok
+        else
+          : > "$FIXTURE_CALLS.ready-seen"
+          echo 'fixture nested API not ready yet' >&2
+          exit 1
+        fi ;;
       *) echo ok ;;
     esac
     exit 0
@@ -179,6 +187,21 @@ func TestNestedReadinessRejectsUnreachableAPIDespiteInfoSuccess(t *testing.T) {
 			assert.Contains(t, output, "nested API readiness FAILED")
 		})
 	}
+}
+
+func TestNestedReadinessRetriesATransientFailure(t *testing.T) {
+	t.Parallel()
+
+	output, calls, err := runNestedCleanup(t, "ready-flaky")
+	require.NoError(t, err, output)
+	assert.Contains(t, output, "All Kubernetes provider tests passed")
+	assert.NotContains(t, output, "nested API readiness FAILED")
+	assert.Equal(
+		t,
+		2,
+		strings.Count("\n"+calls, "\nkubectl --context kind-nested-vanilla get --raw=/readyz"),
+		"one failed read must be followed by exactly one retry",
+	)
 }
 
 func TestNestedReadinessBindsEachDistributionContext(t *testing.T) {
