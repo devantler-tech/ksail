@@ -50,21 +50,17 @@ func mergeReadyVClusterKubeconfig(
 		true,
 		func(ctx context.Context) (bool, error) {
 			body, probeErr := client.Discovery().RESTClient().Get().AbsPath("/readyz").DoRaw(ctx)
-			if probeErr != nil {
-				lastProbeErr = probeErr
+			lastProbeErr = probeErr
+			if probeErr == nil {
+				got := strings.TrimSpace(string(body))
+				if got == "ok" {
+					return true, nil
+				}
 
-				return false, nil
-			}
-
-			got := strings.TrimSpace(string(body))
-			if got != "ok" {
-				lastProbeErr = nil
 				lastResponseErr = fmt.Errorf("%w: %q", errUnexpectedReadyzResponse, got)
-
-				return false, nil
 			}
 
-			return true, nil
+			return false, nil
 		},
 	)
 	if err != nil {
