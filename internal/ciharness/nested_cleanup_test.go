@@ -36,6 +36,11 @@ case "$1 $2" in
   'config current-context') echo fixture-host ;;
   'config use-context') [[ "$FIXTURE_MODE" != host-error ]] ;;
   'get --raw=/readyz') echo ok ;;
+  '-n ksail-nested-talos')
+    case "${3:-}" in
+      get|exec) echo 'fixture endpoint diagnostics' ;;
+      *) exit 99 ;;
+    esac ;;
   'get ns'|'get namespace')
     case "$FIXTURE_MODE" in
       query-error) echo 'Forbidden: fixture namespace read' >&2; exit 1 ;;
@@ -190,6 +195,45 @@ func TestNestedReadinessBindsEachDistributionContext(t *testing.T) {
 	}
 
 	assert.NotContains(t, calls, "kubectl --context fixture-host get --raw=/readyz")
+}
+
+func TestNestedReadinessReportsAPIErrorBeforeInfo(t *testing.T) {
+	t.Parallel()
+	output, calls, err := runNestedCleanup(t, "ready-error", "Talos")
+	require.Error(t, err, output)
+	assert.Contains(t, output, "fixture nested API unreachable")
+	assert.Contains(t, calls, "kubectl --context admin@nested-talos get --raw=/readyz")
+	assert.NotContains(t, calls, "ksail cluster info",
+		"an unreachable API must be diagnosed before info can hang and hide its error")
+	assert.Contains(
+		t,
+		calls,
+		"ksail cluster delete --provider Kubernetes --name nested-talos --force",
+	)
+	assert.Contains(t, output, "Talos resources drained")
+	assert.NotContains(t, output, "All Kubernetes provider tests passed")
+}
+
+func TestNestedReadinessCapturesOnlyEndpointEvidenceBeforeDeletion(t *testing.T) {
+	t.Parallel()
+	output, calls, err := runNestedCleanup(t, "ready-error", "Talos")
+	require.Error(t, err, output)
+
+	diagnosticCall := "kubectl --context fixture-host -n ksail-nested-talos exec dind -c dind -- " +
+		"docker inspect --type container --format {{json .NetworkSettings.Ports}} nested-talos-control-plane-1"
+	assert.Contains(t, calls, diagnosticCall)
+	assert.Contains(t, calls, "get service apiserver")
+	assert.Contains(t, calls, "get endpointslices -l kubernetes.io/service-name=apiserver")
+	diagnosticIndex := strings.Index(calls, diagnosticCall)
+	deleteIndex := strings.Index(calls, "ksail cluster delete")
+
+	require.NotEqual(t, -1, diagnosticIndex)
+	require.NotEqual(t, -1, deleteIndex)
+	assert.Less(t, diagnosticIndex, deleteIndex)
+	assert.NotContains(t, calls, ".Config.Env")
+	assert.NotContains(t, calls, "config view")
+	assert.NotContains(t, calls, "get secret")
+	assert.NotContains(t, output, "All Kubernetes provider tests passed")
 }
 
 func TestNestedReadinessBoundsInfoAndStillCleansUp(t *testing.T) {
