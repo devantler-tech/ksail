@@ -647,48 +647,13 @@ func TestAuditUpdate_NoHetznerOptionsRequiresNoInventory(t *testing.T) {
 func TestAuditUpdate_LeavesExternallyManagedGroupsUnreported(t *testing.T) {
 	t.Parallel()
 
-	const externalPool = "self-managed"
-
 	servers := []schema.Server{
 		autoscalerServerSchema(1, "as-external-1", externalPool, autoscalerFakeNetworkID),
 		autoscalerServerSchema(2, "as-removed-1", removedPool, autoscalerFakeNetworkID),
 		autoscalerServerSchema(3, "as-pool-a-1", configuredPool, autoscalerFakeNetworkID),
 	}
 
-	testCases := []struct {
-		name         string
-		options      v1alpha1.OptionsHetzner
-		wantReported []string
-	}{
-		{
-			name: "node autoscaler disabled",
-			options: v1alpha1.OptionsHetzner{
-				NodeAutoscalerEnabled:   false,
-				AutoscalerNodePoolNames: []string{externalPool},
-			},
-			wantReported: []string{"as-pool-a-1", "as-removed-1"},
-		},
-		{
-			name: "node autoscaler enabled",
-			options: v1alpha1.OptionsHetzner{
-				NodeAutoscalerEnabled:   true,
-				AutoscalerNodePoolNames: []string{configuredPool, externalPool},
-				AutoscalerNodePools:     []v1alpha1.NodePool{{Name: configuredPool}},
-			},
-			wantReported: []string{"as-removed-1"},
-		},
-		{
-			name: "a name that is also a KSail pool is not externally managed",
-			options: v1alpha1.OptionsHetzner{
-				NodeAutoscalerEnabled:   false,
-				AutoscalerNodePoolNames: []string{externalPool},
-				AutoscalerNodePools:     []v1alpha1.NodePool{{Name: externalPool}},
-			},
-			wantReported: []string{"as-external-1", "as-pool-a-1", "as-removed-1"},
-		},
-	}
-
-	for _, testCase := range testCases {
+	for _, testCase := range externallyManagedGroupCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -740,4 +705,47 @@ func TestEnsureAutoscalerSecretIfNeeded_ReportsUnconfiguredPoolWithoutBundle(t *
 	require.Len(t, reasons, 1)
 	assert.Contains(t, reasons[0], "as-removed-1")
 	assert.Zero(t, api.unexpected.Load(), "the report must never mutate a server")
+}
+
+// externalPool is a node group declared only in autoscalerNodePoolNames.
+const externalPool = "self-managed"
+
+type externallyManagedGroupCase struct {
+	name         string
+	options      v1alpha1.OptionsHetzner
+	wantReported []string
+}
+
+// externallyManagedGroupCases returns the configurations
+// TestAuditUpdate_LeavesExternallyManagedGroupsUnreported audits, with the servers
+// each must still report in name order.
+func externallyManagedGroupCases() []externallyManagedGroupCase {
+	return []externallyManagedGroupCase{
+		{
+			name: "node autoscaler disabled",
+			options: v1alpha1.OptionsHetzner{
+				NodeAutoscalerEnabled:   false,
+				AutoscalerNodePoolNames: []string{externalPool},
+			},
+			wantReported: []string{"as-pool-a-1", "as-removed-1"},
+		},
+		{
+			name: "node autoscaler enabled",
+			options: v1alpha1.OptionsHetzner{
+				NodeAutoscalerEnabled:   true,
+				AutoscalerNodePoolNames: []string{configuredPool, externalPool},
+				AutoscalerNodePools:     []v1alpha1.NodePool{{Name: configuredPool}},
+			},
+			wantReported: []string{"as-removed-1"},
+		},
+		{
+			name: "a name that is also a KSail pool is not externally managed",
+			options: v1alpha1.OptionsHetzner{
+				NodeAutoscalerEnabled:   false,
+				AutoscalerNodePoolNames: []string{externalPool},
+				AutoscalerNodePools:     []v1alpha1.NodePool{{Name: externalPool}},
+			},
+			wantReported: []string{"as-external-1", "as-pool-a-1", "as-removed-1"},
+		},
+	}
 }
