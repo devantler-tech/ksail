@@ -58,10 +58,11 @@ type Manager struct {
 
 // flight is one shared sign-in. It outlives any single caller, but not the last one waiting.
 type flight struct {
-	cancel  context.CancelFunc
-	done    chan struct{}
-	err     error
-	waiters int
+	// abandoned is closed when the last waiting caller leaves.
+	abandoned chan struct{}
+	done      chan struct{}
+	err       error
+	waiters   int
 }
 
 // Resolve selects the exact exec profile and shared files without retrieving SDK credentials.
@@ -204,8 +205,7 @@ func (manager *Manager) join(
 	current, found := manager.flights[key]
 	if !found {
 		// The sign-in owns its context: the caller that started it may leave while others still wait.
-		flightCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), loginTimeout)
-		current = &flight{cancel: cancel, done: make(chan struct{})}
+		current = &flight{abandoned: make(chan struct{}), done: make(chan struct{})}
 
 		if manager.flights == nil {
 			manager.flights = make(map[string]*flight)
@@ -213,7 +213,7 @@ func (manager *Manager) join(
 
 		manager.flights[key] = current
 
-		go manager.complete(flightCtx, key, current, target, terminal)
+		go manager.complete(context.WithoutCancel(ctx), key, current, target, terminal)
 	}
 
 	current.waiters++
@@ -228,12 +228,22 @@ func (manager *Manager) complete(
 	target *Target,
 	terminal io.Writer,
 ) {
+	ctx, cancel := context.WithTimeout(ctx, loginTimeout)
+	defer cancel()
+
+	go func() {
+		select {
+		case <-current.abandoned:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
 	err := target.signIn(ctx, terminal)
 
 	manager.forget(key, current)
 
 	current.err = err
-	current.cancel()
 	close(current.done)
 }
 
@@ -247,7 +257,7 @@ func (manager *Manager) leave(key string, current *flight) {
 		return
 	}
 
-	current.cancel()
+	close(current.abandoned)
 
 	if manager.flights[key] == current {
 		delete(manager.flights, key)
