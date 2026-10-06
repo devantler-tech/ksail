@@ -106,6 +106,10 @@ func (p *Provisioner) listAutoscalerServers(
 // autoscaler no longer manages it, so it would otherwise keep running unnoticed.
 // The user resolves it by restoring the pool or by draining the node and deleting
 // its server.
+//
+// A server of a node group the user declared in autoscalerNodePoolNames without a
+// KSail pool belongs to an autoscaler they run themselves: it is left out of the
+// result and is not reported.
 func (p *Provisioner) excludeUnconfiguredPoolServers(
 	servers []*hcloud.Server,
 	result *clusterupdate.UpdateResult,
@@ -113,6 +117,10 @@ func (p *Provisioner) excludeUnconfiguredPoolServers(
 	configured := make([]*hcloud.Server, 0, len(servers))
 
 	for _, server := range sortServersByName(servers) {
+		if p.externallyManagedNodeGroup(server.Labels[hetzner.LabelAutoscalerNodeGroup]) {
+			continue
+		}
+
 		_, poolErr := p.autoscalerNodePool(server.Labels[hetzner.LabelAutoscalerNodeGroup])
 		if poolErr != nil {
 			_, _ = fmt.Fprintf(p.logWriter,

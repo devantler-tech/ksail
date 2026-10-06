@@ -60,7 +60,16 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 
 	configBundle := p.talosConfigs.Bundle()
 	if configBundle == nil {
-		return nil
+		// Nothing can be converged without a config bundle, but a server of a pool
+		// that is no longer configured must still be reported on this update. Without
+		// a Hetzner provider there is no inventory to read, as before.
+		if _, ok := p.infraProvider.(*hetzner.Provider); !ok {
+			return nil
+		}
+
+		_, err := p.listAutoscalerServers(ctx, clusterName, result)
+
+		return err
 	}
 
 	// Fail fast: check that a schematic is available before performing
@@ -113,6 +122,9 @@ var errAutoscalerDisabled = errors.New(
 // untouched; the user resolves it by re-enabling the autoscaler or by draining the
 // node and deleting its server.
 //
+// A server of a node group the user declared in autoscalerNodePoolNames without a
+// KSail pool is not reported: an autoscaler the user runs themselves manages it.
+//
 // It is report-only and independent of listAutoscalerServers, whose disabled-guard
 // keeps the recycle, reboot and in-place paths from acting on servers while the
 // autoscaler is off. It is a silent no-op when the autoscaler is enabled, when the
@@ -137,6 +149,10 @@ func (p *Provisioner) reportServersOfDisabledAutoscaler(
 	}
 
 	for _, server := range sortServersByName(servers) {
+		if p.externallyManagedNodeGroup(server.Labels[hetzner.LabelAutoscalerNodeGroup]) {
+			continue
+		}
+
 		_, _ = fmt.Fprintf(p.logWriter,
 			"  ⚠ Autoscaler node %s is left untouched: %v\n", server.Name, errAutoscalerDisabled)
 

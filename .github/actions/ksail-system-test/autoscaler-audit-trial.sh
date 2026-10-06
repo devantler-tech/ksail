@@ -63,7 +63,13 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 # Refuse reuse of an earlier invocation; cleanup still owns this exact run/name.
-[[ -z "$(probe_ids)" ]] || {
+# The read is taken as its own command: inside [[ $(...) ]] a failed listing
+# would read as "no probe exists".
+existing_probe_ids=$(probe_ids) || {
+	echo 'ERROR: could not read the probe inventory before creating one' >&2
+	exit 1
+}
+[[ -z "$existing_probe_ids" ]] || {
 	echo 'ERROR: trial probe already exists' >&2
 	exit 1
 }

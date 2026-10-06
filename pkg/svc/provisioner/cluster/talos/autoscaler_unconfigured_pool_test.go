@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
@@ -636,4 +637,107 @@ func TestAuditUpdate_NoHetznerOptionsRequiresNoInventory(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, result.FailedChanges)
 	assert.Zero(t, api.unexpected.Load())
+}
+
+// TestAuditUpdate_LeavesExternallyManagedGroupsUnreported pins that a node group the
+// user declared in autoscalerNodePoolNames without a KSail pool — the group of an
+// autoscaler they run themselves — is neither reported nor acted on, with KSail's
+// node autoscaler disabled or enabled. A server of an undeclared group in the same
+// cluster is still reported, so the declaration cannot hide a real leftover.
+func TestAuditUpdate_LeavesExternallyManagedGroupsUnreported(t *testing.T) {
+	t.Parallel()
+
+	const externalPool = "self-managed"
+
+	servers := []schema.Server{
+		autoscalerServerSchema(1, "as-external-1", externalPool, autoscalerFakeNetworkID),
+		autoscalerServerSchema(2, "as-removed-1", removedPool, autoscalerFakeNetworkID),
+		autoscalerServerSchema(3, "as-pool-a-1", configuredPool, autoscalerFakeNetworkID),
+	}
+
+	testCases := []struct {
+		name         string
+		options      v1alpha1.OptionsHetzner
+		wantReported []string
+	}{
+		{
+			name: "node autoscaler disabled",
+			options: v1alpha1.OptionsHetzner{
+				NodeAutoscalerEnabled:   false,
+				AutoscalerNodePoolNames: []string{externalPool},
+			},
+			wantReported: []string{"as-pool-a-1", "as-removed-1"},
+		},
+		{
+			name: "node autoscaler enabled",
+			options: v1alpha1.OptionsHetzner{
+				NodeAutoscalerEnabled:   true,
+				AutoscalerNodePoolNames: []string{configuredPool, externalPool},
+				AutoscalerNodePools:     []v1alpha1.NodePool{{Name: configuredPool}},
+			},
+			wantReported: []string{"as-removed-1"},
+		},
+		{
+			name: "a name that is also a KSail pool is not externally managed",
+			options: v1alpha1.OptionsHetzner{
+				NodeAutoscalerEnabled:   false,
+				AutoscalerNodePoolNames: []string{externalPool},
+				AutoscalerNodePools:     []v1alpha1.NodePool{{Name: externalPool}},
+			},
+			wantReported: []string{"as-external-1", "as-pool-a-1", "as-removed-1"},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			hzProvider, api := newAutoscalerHcloudAPI(t, servers...)
+			prov := talosprovisioner.NewProvisioner(nil, nil).
+				WithLogWriter(io.Discard).
+				WithHetznerOptions(testCase.options).
+				WithInfraProvider(hzProvider)
+			result := clusterupdate.NewEmptyUpdateResult()
+
+			err := prov.AuditUpdate(t.Context(), autoscalerFakeCluster, result)
+			require.NoError(t, err)
+
+			reasons := failedChangeReasons(result)
+			require.Len(t, reasons, len(testCase.wantReported))
+
+			for index, serverName := range testCase.wantReported {
+				assert.Contains(t, reasons[index], serverName)
+			}
+
+			assert.Zero(t, api.unexpected.Load(), "inventory audit must never mutate a server")
+		})
+	}
+}
+
+// TestEnsureAutoscalerSecretIfNeeded_ReportsUnconfiguredPoolWithoutBundle pins that
+// an update which cannot converge autoscaler nodes because no config bundle is
+// loaded still reports a server of a pool that is no longer configured.
+func TestEnsureAutoscalerSecretIfNeeded_ReportsUnconfiguredPoolWithoutBundle(t *testing.T) {
+	t.Parallel()
+
+	hzProvider, api := newAutoscalerHcloudAPI(t, removedPoolAndOtherClusterServers()...)
+	prov := talosprovisioner.NewProvisioner(&talosconfigmanager.Configs{}, nil).
+		WithLogWriter(io.Discard).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{
+			NodeAutoscalerEnabled:   true,
+			AutoscalerNodePoolNames: []string{configuredPool},
+			AutoscalerNodePools:     []v1alpha1.NodePool{{Name: configuredPool}},
+		}).
+		WithInfraProvider(hzProvider)
+	result := clusterupdate.NewEmptyUpdateResult()
+
+	err := prov.EnsureAutoscalerSecretIfNeededWithResultForTest(
+		context.Background(), autoscalerFakeCluster, result,
+	)
+	require.NoError(t, err)
+
+	reasons := failedChangeReasons(result)
+	require.Len(t, reasons, 1)
+	assert.Contains(t, reasons[0], "as-removed-1")
+	assert.Zero(t, api.unexpected.Load(), "the report must never mutate a server")
 }
