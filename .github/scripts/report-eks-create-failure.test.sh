@@ -53,10 +53,18 @@ fake_dir=""
 output=""
 status=0
 
+# A stack id as list-stacks returns it: it carries the account number, which
+# the report must never print.
+readonly fake_account='123456789012'
+stack_id() {
+	printf 'arn:aws:cloudformation:us-east-1:%s:stack/%s/%s0000000-0000-0000-0000-000000000000' \
+		"${fake_account}" "$1" "$2"
+}
+
 reset() {
 	fake_dir="${tmp_dir}/case-${pass_count}-${RANDOM}"
 	mkdir -p "${fake_dir}"
-	printf 'eksctl-st-eks-1-1-cluster\teksctl-st-eks-1-1-nodegroup-default\n' >"${fake_dir}/stacks"
+	printf '%s\t%s\n' "$(stack_id eksctl-st-eks-1-1-cluster 1)" "$(stack_id eksctl-st-eks-1-1-nodegroup-default 2)" >"${fake_dir}/stacks"
 	printf 'ROLLBACK_COMPLETE\tThe following resource(s) failed to create: [ManagedNodeGroup].\n' >"${fake_dir}/stack-status"
 	# Newest first, as AWS returns them.
 	printf '%s\n' \
@@ -123,9 +131,14 @@ if grep -E '^cloudformation describe-stacks ' "${fake_dir}/calls.log" | grep -Fv
 	fail 'stacks must be described by name only'
 fi
 refute_text 'The stack list could not be read.' 'the stack list must be readable with the role the smoke test has'
+# Each stack is read by the id the list returned, and that id stays out of the log.
+grep -Fq -- "--stack-name $(stack_id eksctl-st-eks-1-1-nodegroup-default 2) " "${fake_dir}/calls.log" ||
+	fail 'each stack must be read by its id'
+refute_text "${fake_account}" 'the account number in a stack id must not be printed'
+refute_text 'arn:aws' 'a stack id must not be printed'
 # The queries decide what is read and in which column order, so they are pinned.
 for query in \
-	"StackSummaries[?starts_with(StackName, 'eksctl-st-eks-1-1-') && StackStatus != 'DELETE_COMPLETE'].StackName" \
+	"StackSummaries[?starts_with(StackName, 'eksctl-st-eks-1-1-')].StackId" \
 	"StackEvents[?contains(ResourceStatus, 'FAILED')].[Timestamp, LogicalResourceId, ResourceType, ResourceStatus, ResourceStatusReason]" \
 	'Stacks[0].[StackStatus, StackStatusReason]' \
 	'nodegroup.status' \
@@ -215,14 +228,36 @@ pass 'an unreadable node group list is not reported as empty'
 
 # --- names AWS returns are checked before they reach a command line ----------
 reset
-printf 'eksctl-st-eks-1-1-cluster\t--endpoint-url=http://x\n' >"${fake_dir}/stacks"
+printf '%s\t%s\t%s\t%s\n' "$(stack_id eksctl-st-eks-1-1-cluster 1)" '--endpoint-url=http://x' \
+	'eksctl-st-eks-1-1-nodegroup-default' "$(stack_id some-other-stack 3)" >"${fake_dir}/stacks"
 printf 'default\t--profile=x\n' >"${fake_dir}/nodegroups"
 run --cluster-name st-eks-1-1 --region us-east-1
 expect_status 0 'an odd returned name must not fail the script'
 if grep -Eq -- '--stack-name --|--nodegroup-name --' "${fake_dir}/calls.log"; then
 	fail 'a returned name that looks like an option must not be passed on'
 fi
+if grep -Fq -- 'some-other-stack' "${fake_dir}/calls.log"; then
+	fail "a stack id for another cluster's stack must not be read"
+fi
+if grep -Fq -- '--stack-name eksctl-st-eks-1-1-nodegroup-default ' "${fake_dir}/calls.log"; then
+	fail 'a bare name is not a stack id and must not be read'
+fi
+expect_text 'Stack eksctl-st-eks-1-1-cluster: status' 'the one well-formed id must still be reported'
 pass 'a returned name that is not a plain name is skipped'
+
+# --- a stack deleted before the report runs still gives its reason -----------
+# A deleted stack is listed and keeps its events, readable only by id.
+reset
+printf '%s\n' "$(stack_id eksctl-st-eks-1-1-nodegroup-default 2)" >"${fake_dir}/stacks"
+printf 'DELETE_COMPLETE\tNone\n' >"${fake_dir}/stack-status"
+: >"${fake_dir}/nodegroups"
+run --cluster-name st-eks-1-1 --region us-east-1
+expect_status 0 'a deleted stack must exit 0'
+expect_text 'DELETE_COMPLETE' 'a deleted stack must be reported, not left out'
+expect_text 'NodeCreationFailure: Instances failed to join the kubernetes cluster' "a deleted stack's failure reason must be printed"
+grep -Fq -- "describe-stack-events --region us-east-1 --stack-name $(stack_id eksctl-st-eks-1-1-nodegroup-default 2) " "${fake_dir}/calls.log" ||
+	fail "a deleted stack's events must be read by its id"
+pass 'a stack already deleted is read by its id'
 
 # --- long output is bounded ---------------------------------------------------
 reset

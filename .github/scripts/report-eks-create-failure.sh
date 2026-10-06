@@ -98,28 +98,38 @@ set -f
 # The names come from list-stacks, not from an unscoped describe-stacks: the
 # smoke-test role may describe only its own eksctl-st-eks-* stacks, so a
 # describe with no stack name is denied, while listing is allowed on every
-# stack. A deleted stack stays listed for months and can no longer be described
-# by name, so it is left out.
-stacks=""
-if ! stacks="$(aws cloudformation list-stacks --region "${region}" \
-	--query "StackSummaries[?starts_with(StackName, 'eksctl-${cluster_name}-') && StackStatus != 'DELETE_COMPLETE'].StackName" \
+# stack.
+#
+# Each stack is then read by its id, not its name. A stack already deleted when
+# this runs keeps its events, which may be the only record of the failure, but
+# it can be read only by id. The id holds the account number, so it is passed
+# to the reads and never printed; the report shows the stack's name.
+stack_ids=""
+if ! stack_ids="$(aws cloudformation list-stacks --region "${region}" \
+	--query "StackSummaries[?starts_with(StackName, 'eksctl-${cluster_name}-')].StackId" \
 	--output text 2>/dev/null)"; then
 	printf 'The stack list could not be read.\n'
-	stacks=""
+	stack_ids=""
 fi
 
+readonly stack_id_pattern='^arn:aws[a-z-]*:cloudformation:[a-z0-9-]+:[0-9]{12}:stack/([A-Za-z][A-Za-z0-9-]{0,127})/[0-9a-f-]{36}$'
 stack_count=0
-for stack in ${stacks}; do
-	# A name AWS returned goes on a command line next; keep to stack-name characters.
-	if [[ ! "${stack}" =~ ^[A-Za-z][A-Za-z0-9-]{0,127}$ ]]; then
+for stack_id in ${stack_ids}; do
+	# An id AWS returned goes on a command line next; accept only a stack id for
+	# one of this cluster's stacks.
+	if [[ ! "${stack_id}" =~ ${stack_id_pattern} ]]; then
+		continue
+	fi
+	stack="${BASH_REMATCH[1]}"
+	if [[ "${stack}" != "eksctl-${cluster_name}-"* ]]; then
 		continue
 	fi
 	stack_count=$((stack_count + 1))
 	report "Stack ${stack}: status" '(no status)' plain \
-		aws cloudformation describe-stacks --region "${region}" --stack-name "${stack}" \
+		aws cloudformation describe-stacks --region "${region}" --stack-name "${stack_id}" \
 		--query 'Stacks[0].[StackStatus, StackStatusReason]' --output text
 	report "Stack ${stack}: failed resources, earliest first" '(no failed resource events)' sorted \
-		aws cloudformation describe-stack-events --region "${region}" --stack-name "${stack}" \
+		aws cloudformation describe-stack-events --region "${region}" --stack-name "${stack_id}" \
 		--query "StackEvents[?contains(ResourceStatus, 'FAILED')].[Timestamp, LogicalResourceId, ResourceType, ResourceStatus, ResourceStatusReason]" \
 		--output text
 done
