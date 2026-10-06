@@ -177,19 +177,3 @@ func TestApplyInPlaceToAutoscalerNodes_NoopWhenAutoscalerDisabled(t *testing.T) 
 	)
 	require.NoError(t, err)
 }
-
-func TestApplyInPlaceToAutoscalerNodes_NoopWhenNoPools(t *testing.T) {
-	t.Parallel()
-
-	prov := talosprovisioner.NewProvisioner(nil, nil).
-		WithLogWriter(io.Discard).
-		WithHetznerOptions(v1alpha1.OptionsHetzner{
-			NodeAutoscalerEnabled:   true,
-			AutoscalerNodePoolNames: nil,
-		})
-
-	err := prov.ApplyInPlaceToAutoscalerNodesForTest(
-		context.Background(), "test-cluster", clusterupdate.NewEmptyUpdateResult(),
-	)
-	require.NoError(t, err)
-}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
@@ -167,8 +168,9 @@ func TestAutoscalerImageRefreshRetriesInterruptedConvergence(t *testing.T) {
 	client := autoscalerImageRetryClient(t)
 	serverLists := &atomic.Int32{}
 	server := autoscalerImageRetryServer(t, client, serverLists, false)
+	configs := loadConfigs(t)
 	newProvisioner := func() *talosprovisioner.Provisioner {
-		return newAutoscalerImageRetryProvisioner(t, server.URL)
+		return newAutoscalerImageRetryPoolProvisioner(t, server.URL, configs)
 	}
 
 	err := newProvisioner().EnsureAutoscalerSecretIfNeededForTest(t.Context(), "test-cluster")
@@ -200,11 +202,14 @@ func TestAutoscalerImageRefreshRetriesInterruptedConvergence(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, secret.Annotations, "ksail.io/autoscaler-image-rollout-pending")
 	assert.Equal(t, "external", secret.Annotations["example.com/preserved"])
+	// Nothing is propagated any more, so the only request is the per-update audit of
+	// servers whose pool is no longer configured: one listing, not the two a recycle
+	// followed by a configuration pass makes.
 	require.NoError(
 		t,
 		newProvisioner().EnsureAutoscalerSecretIfNeededForTest(t.Context(), "test-cluster"),
 	)
-	assert.EqualValues(t, 4, serverLists.Load())
+	assert.EqualValues(t, 5, serverLists.Load())
 }
 
 func TestAutoscalerImageRefreshRetriesInterruptedRestart(t *testing.T) {
@@ -213,12 +218,13 @@ func TestAutoscalerImageRefreshRetriesInterruptedRestart(t *testing.T) {
 	client := autoscalerImageRetryClient(t)
 	serverLists := &atomic.Int32{}
 	server := autoscalerImageRetryServer(t, client, serverLists, true)
-	err := newAutoscalerImageRetryProvisioner(t, server.URL).
+	configs := loadConfigs(t)
+	err := newAutoscalerImageRetryPoolProvisioner(t, server.URL, configs).
 		EnsureAutoscalerSecretIfNeededForTest(t.Context(), "test-cluster")
 	require.ErrorContains(t, err, "restarting cluster-autoscaler")
 	assert.Zero(t, serverLists.Load(), "failed restart must not drain any nodes")
 
-	err = newAutoscalerImageRetryProvisioner(t, server.URL).
+	err = newAutoscalerImageRetryPoolProvisioner(t, server.URL, configs).
 		EnsureAutoscalerSecretIfNeededForTest(t.Context(), "test-cluster")
 	require.ErrorContains(t, err, "resolving address for old-worker")
 	assert.EqualValues(
@@ -232,21 +238,28 @@ func TestAutoscalerImageRefreshRetriesInterruptedRestart(t *testing.T) {
 func TestAutoscalerImageRefreshWithoutSnapshotManagerDoesNotRecycle(t *testing.T) {
 	t.Setenv(autoscalerRetryEnvironmentVariable, "test-token")
 
+	// Start past the fixture's interrupted and old-capacity listings: every listing
+	// below reports no autoscaler servers.
 	serverLists := &atomic.Int32{}
+	serverLists.Store(3)
+
 	client := autoscalerImageRetryClient(t)
 	server := autoscalerImageRetryServer(t, client, serverLists, false)
 	err := newAutoscalerImageRetryProvisioner(t, server.URL).WithSnapshotManager(nil).
 		EnsureAutoscalerSecretIfNeededForTest(t.Context(), "test-cluster")
 	require.NoError(t, err)
-	assert.Zero(t, serverLists.Load(), "an unavailable image must not trigger node recycling")
+	assert.EqualValues(t, 4, serverLists.Load(),
+		"an unavailable image must not trigger node recycling: the only listing is "+
+			"the per-update audit of servers whose pool is no longer configured")
 
 	_, err = talosprovisioner.ApplyAutoscalerConfigSecret(t.Context(), client, "2", nil)
 	require.NoError(t, err)
 	err = newAutoscalerImageRetryProvisioner(t, server.URL).WithSnapshotManager(nil).
 		EnsureAutoscalerSecretIfNeededForTest(t.Context(), "test-cluster")
 	require.ErrorContains(t, err, "autoscaler snapshot image is unavailable")
-	assert.Zero(
+	assert.EqualValues(
 		t,
+		4,
 		serverLists.Load(),
 		"a pending rollout must fail before draining without a valid image",
 	)
@@ -300,6 +313,29 @@ func newAutoscalerImageRetryProvisioner(
 		WithInfraProvider(hetzner.NewProvider(cloudClient)).
 		WithSnapshotManager(hetzner.NewSnapshotManager(cloudClient, io.Discard)).
 		WithLogWriter(io.Discard)
+}
+
+// newAutoscalerImageRetryPoolProvisioner also defines the fixture's "workers" pool,
+// so convergence may act on that pool's servers: discovery is cluster-wide and a
+// server of a pool that is not configured is left untouched. The pool's worker
+// config is part of the Secret, so the invocations of one test share a config
+// bundle, the way secret sync aligns a fresh invocation with the running cluster.
+func newAutoscalerImageRetryPoolProvisioner(
+	t *testing.T,
+	serverURL string,
+	configs *talosconfigmanager.Configs,
+) *talosprovisioner.Provisioner {
+	t.Helper()
+
+	return newAutoscalerImageRetryProvisioner(t, serverURL).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{
+			NodeAutoscalerEnabled:   true,
+			NetworkName:             "test-network",
+			TokenEnvVar:             autoscalerRetryEnvironmentVariable,
+			AutoscalerNodePoolNames: []string{"workers"},
+			AutoscalerNodePools:     []v1alpha1.NodePool{{Name: "workers"}},
+		}).
+		WithTalosConfigsForTest(configs)
 }
 
 func autoscalerImageRetryServer(
@@ -422,7 +458,8 @@ func serveAutoscalerRetryServers(writer http.ResponseWriter, count int32, interr
 	if (!interruptRestart && count == 2) || (interruptRestart && count == 1) {
 		_, _ = io.WriteString(
 			writer,
-			`{"servers":[{"id":7,"name":"old-worker","private_net":[{"network":42}]}]}`,
+			`{"servers":[{"id":7,"name":"old-worker",`+
+				`"labels":{"hcloud/node-group":"workers"},"private_net":[{"network":42}]}]}`,
 		)
 
 		return

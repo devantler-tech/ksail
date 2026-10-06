@@ -5,9 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
-	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -70,10 +68,9 @@ func propagateRoutingCases() []propagateRoutingCase {
 }
 
 // TestPropagateAutoscalerBaseline_Routing pins the #5219 dispatcher: each diff shape
-// must reach the correct convergence path. With the autoscaler enabled but no pools
-// configured, listAutoscalerServers short-circuits to zero servers without ever
-// contacting Hetzner, so each route reaches its distinctive no-op log line — which is
-// how the routing decision is identified deterministically.
+// must reach the correct convergence path. The fake Hetzner API holds no autoscaler
+// servers, so each route reaches its distinctive no-op log line — which is how the
+// routing decision is identified deterministically.
 func TestPropagateAutoscalerBaseline_Routing(t *testing.T) {
 	t.Parallel()
 
@@ -83,12 +80,8 @@ func TestPropagateAutoscalerBaseline_Routing(t *testing.T) {
 
 			var buf bytes.Buffer
 
-			prov := talosprovisioner.NewProvisioner(nil, nil).
-				WithLogWriter(&buf).
-				WithHetznerOptions(v1alpha1.OptionsHetzner{
-					NodeAutoscalerEnabled:   true,
-					AutoscalerNodePoolNames: nil,
-				})
+			hzProvider, _ := newAutoscalerHcloudAPI(t)
+			prov := autoscalerProvisioner(hzProvider, &buf, configuredPool)
 
 			err := prov.PropagateAutoscalerBaselineForTest(
 				context.Background(),
@@ -126,9 +119,8 @@ func TestPropagateAutoscalerBaseline_ImageWithConfiguration(t *testing.T) {
 
 			var buf bytes.Buffer
 
-			prov := talosprovisioner.NewProvisioner(nil, nil).
-				WithLogWriter(&buf).
-				WithHetznerOptions(v1alpha1.OptionsHetzner{NodeAutoscalerEnabled: true})
+			hzProvider, _ := newAutoscalerHcloudAPI(t)
+			prov := autoscalerProvisioner(hzProvider, &buf, configuredPool)
 
 			err := prov.PropagateAutoscalerBaselineForTest(
 				t.Context(), "test-cluster", testCase.diff, true,

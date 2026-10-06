@@ -379,6 +379,8 @@ jobs:
               - '.github/scripts/cask-pr-handoff-workflow.test.sh'
               - '.github/scripts/collect-cask-pr-handoff.sh'
               - '.github/scripts/collect-cask-pr-handoff.test.sh'
+              - '.github/scripts/finish-cask-pr-handoff.sh'
+              - '.github/scripts/finish-cask-pr-handoff.test.sh'
               - '.github/scripts/find-merged-cask-pr-handoff.sh'
               - '.github/scripts/find-merged-cask-pr-handoff.test.sh'
               - '.github/scripts/redraft-evergreen-cask-prs.sh'
@@ -548,6 +550,8 @@ jobs:
             .github/fixtures/cask-pr-handoff/fake-bin/gh \
             .github/scripts/collect-cask-pr-handoff.sh \
             .github/scripts/collect-cask-pr-handoff.test.sh \
+            .github/scripts/finish-cask-pr-handoff.sh \
+            .github/scripts/finish-cask-pr-handoff.test.sh \
             .github/scripts/find-merged-cask-pr-handoff.sh \
             .github/scripts/find-merged-cask-pr-handoff.test.sh \
             .github/scripts/redraft-evergreen-cask-prs.sh \
@@ -562,6 +566,7 @@ jobs:
             .github/scripts/validate-cask-pr-handoff.test.sh \
             .github/scripts/cask-pr-handoff-workflow.test.sh
           .github/scripts/collect-cask-pr-handoff.test.sh
+          .github/scripts/finish-cask-pr-handoff.test.sh
           .github/scripts/find-merged-cask-pr-handoff.test.sh
           .github/scripts/redraft-evergreen-cask-prs.test.sh
           .github/scripts/resolve-release-publish-state.test.sh
@@ -2043,6 +2048,33 @@ jobs:
             exit 1
           fi
 
+  verify-bash-32-workflow-contract:
+    name: 🧪 Verify Bash 3.2 Workflow Contract
+    runs-on: macos-latest
+    timeout-minutes: 10
+    needs: [changes]
+    if: github.event_name != 'merge_group' && needs.changes.outputs.todos-contract == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: 🧪 Verify empty arguments under Bash 3.2
+        env:
+          KSAIL_REQUIRE_BASH32: "true"
+        run: go test ./internal/ciharness -run '^TestSystemTestTalosUpgradeEmptyArgumentsUnderBash32$' -count=1
+
   # Runs the Go suite when only the release build configuration changed. The org-required Go
   # validation skips its test job on such a pull request, because no Go file changed, while
   # Go tests assert on exactly these files (see the release-config filter, ksail#7400).
@@ -2233,6 +2265,7 @@ jobs:
         verify-dependency-test-graph,
         verify-dependency-contracts,
         verify-todos-workflow-contract,
+        verify-bash-32-workflow-contract,
         test-release-config,
         release-graph-audit,
         cask-pr-handoff,
@@ -2271,6 +2304,7 @@ jobs:
             ${{ needs.verify-dependency-test-graph.result }}
             ${{ needs.verify-dependency-contracts.result }}
             ${{ needs.verify-todos-workflow-contract.result }}
+            ${{ needs.verify-bash-32-workflow-contract.result }}
             ${{ needs.test-release-config.result }}
             ${{ needs.release-graph-audit.result }}
             ${{ needs.cask-pr-handoff.result }}

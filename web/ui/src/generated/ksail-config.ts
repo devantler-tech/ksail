@@ -897,7 +897,7 @@ export interface KSailClusterConfiguration {
          */
         skipKinds?: string[];
         /**
-         * Additional kubeconform schema locations (local directories or URL templates) for 'ksail workload validate'. Appended after the built-in Kubernetes schemas and the CRDs-catalog, so CRDs absent from the catalog can be validated against a supplied schema instead of being skipped via skipKinds. A directory is searched using kubeconform's default '{{.ResourceKind}}{{.KindSuffix}}.json' layout; a URL/path template (e.g. 'schemas/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json') is used verbatim. Merged with --schema-location.
+         * Additional kubeconform schema locations (local directories or URL templates) for 'ksail workload validate'. Consulted after built-in Kubernetes schemas but before the CRDs-catalog, so CRDs with missing or stale catalogue entries can be validated against a supplied schema instead of being skipped via skipKinds. A directory is searched using kubeconform's default '{{.ResourceKind}}{{.KindSuffix}}.json' layout; a URL/path template (e.g. 'schemas/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json') is used verbatim. Merged with --schema-location.
          */
         schemaLocations?: string[];
         /**

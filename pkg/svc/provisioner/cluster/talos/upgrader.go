@@ -161,7 +161,7 @@ func (p *Provisioner) reconcileAutoscalerImageBaseline(
 		return fmt.Errorf("syncing cluster identity for autoscaler image baseline: %w", err)
 	}
 
-	err = p.ensureAutoscalerSecretIfNeeded(ctx, clusterName, nil, result)
+	err = p.refreshAutoscalerBaseline(ctx, clusterName, nil, result, false)
 	if err != nil {
 		return fmt.Errorf("reconciling autoscaler image baseline: %w", err)
 	}

@@ -19,6 +19,25 @@ import (
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
 )
 
+// AuditUpdate reports autoscaler servers that no longer have a configured pool,
+// or all leftover autoscaler servers when the autoscaler is disabled. This is
+// inventory-only: it does not refresh Secrets, converge nodes or change state.
+func (p *Provisioner) AuditUpdate(
+	ctx context.Context,
+	name string,
+	result *clusterupdate.UpdateResult,
+) error {
+	clusterName := p.resolveClusterName(name)
+
+	if p.hetznerOpts != nil && p.hetznerOpts.NodeAutoscalerEnabled {
+		_, err := p.listAutoscalerServers(ctx, clusterName, result)
+
+		return err
+	}
+
+	return p.reportServersOfDisabledAutoscaler(ctx, clusterName, result)
+}
+
 // Update applies configuration changes to all nodes in a running Talos cluster.
 // It implements the ClusterUpdater interface.
 func (p *Provisioner) Update(

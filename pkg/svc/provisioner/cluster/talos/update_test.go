@@ -19,6 +19,7 @@ import (
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/detector"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	omniprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
@@ -857,6 +858,7 @@ func TestEnsureAutoscalerSecretIfNeeded_RejectsUnreadableImageBaseline(t *testin
 				NodeAutoscalerEnabled: true,
 				NetworkName:           "test-network",
 			}).
+			WithInfraProvider(emptyAutoscalerInventory(t)).
 			WithTalosOptsForTest(&v1alpha1.OptionsTalos{SchematicID: "test-schematic-id"}).
 			WithTalosConfigsForTest(configs).
 			WithLogWriter(io.Discard)
@@ -870,6 +872,17 @@ func TestEnsureAutoscalerSecretIfNeeded_RejectsUnreadableImageBaseline(t *testin
 
 		assert.EqualValues(t, 1, baselineReads.Load(), testCase.name)
 	}
+}
+
+// emptyAutoscalerInventory returns a Hetzner provider for a cluster without
+// autoscaler servers. A new baseline is propagated to the existing autoscaler
+// servers, which lists the cluster's inventory.
+func emptyAutoscalerInventory(t *testing.T) *hetzner.Provider {
+	t.Helper()
+
+	hzProvider, _ := newAutoscalerHcloudAPI(t)
+
+	return hzProvider
 }
 
 func autoscalerBaselineServer(
