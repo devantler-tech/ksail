@@ -3,6 +3,7 @@ package analysisrunner_test
 import (
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -19,14 +20,75 @@ func TestPreflightPolicyChangesRunTheirAcceptanceChecks(t *testing.T) {
 	}
 }
 
-func TestARCPreflightRequiresExplicitMainBranchEnablement(t *testing.T) {
+func TestARCPreflightRequiresCheckoutIsolationConnectivityAndMemoryProof(t *testing.T) {
 	t.Parallel()
+
+	job := value(t, readPreflightWorkflow(t), "jobs", "preflight")
+	checkout := preflightStep(t, job, "Check out exact main revision")
+	uses, ok := value(t, checkout, "uses").(string)
+	require.True(t, ok)
+	require.True(t, strings.HasPrefix(uses, "actions/checkout@"))
+	require.Equal(t, "${{ github.sha }}", value(t, checkout, "with", "ref"))
+	require.Equal(t, false, value(t, checkout, "with", "persist-credentials"))
+
+	isolation := preflightStep(t, job, "Verify actual runner isolation and external connectivity")
+	require.Equal(t, "${{ runner.environment }}", value(t, isolation, "env", "RUNNER_ENVIRONMENT"))
+
+	for _, required := range []string{
+		`test "${RUNNER_ENVIRONMENT}" = self-hosted`,
+		"test ! -e /var/run/secrets/kubernetes.io/serviceaccount/token",
+		"curl --proto '=https' --tlsv1.2 --fail", "--max-time 20",
+		"https://api.github.com/zen",
+	} {
+		require.Contains(t, value(t, isolation, "run"), required)
+	}
+
+	memory := preflightStep(t, job, "Record bounded container memory proof")
+	for _, required := range []string{
+		"limit=$(cat /sys/fs/cgroup/memory.max)", "peak=$(cat /sys/fs/cgroup/memory.peak)",
+		`test "${limit}" = 15032385536`, `test "${peak}" -gt 0`,
+		`test "${peak}" -le "${limit}"`,
+	} {
+		require.Contains(t, value(t, memory, "run"), required)
+	}
+}
+
+func preflightStep(t *testing.T, job any, name string) map[string]any {
+	t.Helper()
+
+	var selected map[string]any
+
+	for _, step := range steps(t, job) {
+		if step["name"] == name {
+			require.Nil(t, selected, "duplicate required preflight step")
+			selected = step
+		}
+	}
+
+	require.NotNil(t, selected, "missing required preflight step: %s", name)
+	require.NotContains(t, selected, "if")
+	require.NotContains(t, selected, "continue-on-error")
+
+	return selected
+}
+
+func readPreflightWorkflow(t *testing.T) map[string]any {
+	t.Helper()
 
 	content, err := os.ReadFile("../../.github/workflows/verify-ksail-arc-delivery.yaml")
 	require.NoError(t, err)
 
 	var workflow map[string]any
+
 	require.NoError(t, yaml.Unmarshal(content, &workflow))
+
+	return workflow
+}
+
+func TestARCPreflightRequiresExplicitMainBranchEnablement(t *testing.T) {
+	t.Parallel()
+
+	workflow := readPreflightWorkflow(t)
 	require.Empty(t, value(t, workflow, "permissions"))
 	require.Len(t, value(t, workflow, "on"), 1, "no automatic ARC job triggers")
 	require.Equal(

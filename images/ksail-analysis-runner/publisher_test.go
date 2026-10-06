@@ -12,6 +12,30 @@ import (
 
 const imageRepository = "ghcr.io/devantler-tech/ksail-analysis-runner"
 
+func TestPublicationConcurrencyKeepsEachCommitAndManualVerificationSeparate(t *testing.T) {
+	t.Parallel()
+
+	workflow := readWorkflow(t)
+	group, ok := value(t, workflow, "concurrency", "group").(string)
+	require.True(t, ok)
+	require.Equal(t, false, value(t, workflow, "concurrency", "cancel-in-progress"))
+
+	key := func(event, sha string) string {
+		return strings.NewReplacer(
+			"${{ github.workflow }}", "Publish KSail Analysis Runner",
+			"${{ github.ref }}", "refs/heads/main",
+			"${{ github.event_name }}", event,
+			"${{ github.sha }}", sha,
+		).Replace(group)
+	}
+
+	first := key("push", strings.Repeat("a", 40))
+	require.NotEqual(t, first, key("push", strings.Repeat("b", 40)),
+		"a later main commit replaces a pending publication")
+	require.NotEqual(t, first, key("workflow_dispatch", strings.Repeat("a", 40)),
+		"manual verification shares the main publication queue")
+}
+
 func TestPublisherRequiresVerifiedMainPush(t *testing.T) {
 	t.Parallel()
 
