@@ -131,7 +131,10 @@ export function CredentialsSettings({ onSaved }: { onSaved?: () => void }) {
     const [settings, app] = await Promise.allSettled([getSettings(), getAppSettings()]);
     if (settings.status === "fulfilled") {
       setCredentials(settings.value.credentials);
-      setDrafts(initDrafts(settings.value.credentials));
+      // A retry after a failed preference read must not discard credential edits in progress.
+      setDrafts((current) =>
+        Object.keys(current).length > 0 ? current : initDrafts(settings.value.credentials),
+      );
       setSecureStorage(settings.value.secureStorageAvailable);
     }
     // Without a successful read the preference is unknown, so its checkbox stays disabled.

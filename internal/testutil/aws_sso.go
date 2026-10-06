@@ -75,7 +75,8 @@ region = us-east-1
 set -eu
 if [ "$1" = "sso" ]; then
   printf '%s\n' "$*" >> "$FAKE_ROOT/logins"
-  if [ "${FAKE_LOGIN_BLOCK:-}" = yes ]; then exec sleep 10; fi
+  if [ "${FAKE_LOGIN_BLOCK:-}" = yes ]; then echo "$$" >> "$FAKE_ROOT/pids"; exec sleep 600; fi
+  if [ "${FAKE_LOGIN_GATE:-}" = yes ]; then while [ ! -f "$FAKE_ROOT/release" ]; do sleep 0.02; done; fi
   if [ "${FAKE_LOGIN_FAIL:-}" = yes ]; then echo "SENSITIVE-DIAGNOSTIC" >&2; exit 1; fi
   sleep "${FAKE_LOGIN_DELAY:-0.05}"
   touch "$FAKE_ROOT/ready"

@@ -3,10 +3,13 @@ package awssso_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -185,7 +188,7 @@ func TestSharedSignInSurvivesItsFirstCallerLeaving(t *testing.T) {
 	fixture := testutil.NewSyntheticSSO(t, "legacy")
 	fixture.Provider.Env = append(
 		fixture.Provider.Env,
-		clientcmdapi.ExecEnvVar{Name: "FAKE_LOGIN_DELAY", Value: "0.5"},
+		clientcmdapi.ExecEnvVar{Name: "FAKE_LOGIN_GATE", Value: "yes"},
 	)
 	target, err := awssso.Resolve(t.Context(), fixture.Provider)
 	require.NoError(t, err)
@@ -205,15 +208,17 @@ func TestSharedSignInSurvivesItsFirstCallerLeaving(t *testing.T) {
 		_, statErr := os.Stat(logins)
 
 		return statErr == nil
-	}, 10*time.Second, 10*time.Millisecond, "the first caller starts the provider sign-in")
+	}, time.Minute, 10*time.Millisecond, "the first caller starts the provider sign-in")
 
 	go func() { second <- manager.Renew(t.Context(), target) }()
 
-	// Give the second caller time to join before the caller that started the sign-in leaves.
-	time.Sleep(100 * time.Millisecond)
+	require.Eventually(t, func() bool { return manager.Waiters(target) == 2 },
+		time.Minute, 10*time.Millisecond, "the second caller joins the sign-in in progress")
 	leave()
-
 	require.ErrorIs(t, <-first, context.Canceled)
+
+	// The provider only finishes now, after the caller that started the sign-in has left.
+	require.NoError(t, os.WriteFile(filepath.Join(fixture.Root, "release"), nil, 0o600))
 	require.NoError(t, <-second, "a remaining caller still receives the completed sign-in")
 
 	recorded, err := os.ReadFile(logins) //nolint:gosec // Test-created fixture path.
@@ -233,18 +238,35 @@ func TestSignInNobodyAwaitsIsStoppedAndNotReused(t *testing.T) {
 
 	var manager awssso.Manager
 
-	for range 2 {
-		ctx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
-		err = manager.Renew(ctx, target)
+	pids := filepath.Join(fixture.Root, "pids")
+
+	for attempt := 1; attempt <= 2; attempt++ {
+		ctx, cancel := context.WithCancel(t.Context())
+		result := make(chan error, 1)
+
+		go func() { result <- manager.Renew(ctx, target) }()
+
+		var started []string
+
+		require.Eventually(t, func() bool {
+			recorded, _ := os.ReadFile(pids) //nolint:gosec // Test-created fixture path.
+			started = strings.Fields(string(recorded))
+
+			return len(started) == attempt
+		}, time.Minute, 10*time.Millisecond,
+			"each request starts its own sign-in instead of joining an abandoned one")
 
 		cancel()
-		require.ErrorIs(t, err, context.DeadlineExceeded)
-	}
+		require.ErrorIs(t, <-result, context.Canceled)
 
-	recorded, err := os.ReadFile(filepath.Join(fixture.Root, "logins"))
-	require.NoError(t, err)
-	assert.Equal(t, 2, strings.Count(string(recorded), "\n"),
-		"a later request starts its own sign-in instead of joining an abandoned one")
+		pid, err := strconv.Atoi(started[attempt-1])
+		require.NoError(t, err)
+		process, err := os.FindProcess(pid)
+		require.NoError(t, err)
+		require.Eventually(t, func() bool {
+			return errors.Is(process.Signal(syscall.Signal(0)), os.ErrProcessDone)
+		}, 20*time.Second, 10*time.Millisecond, "the provider process nobody awaits is stopped")
+	}
 }
 
 func TestDeviceCodeSignInShowsInstructionsOnlyOnTheTerminal(t *testing.T) {
