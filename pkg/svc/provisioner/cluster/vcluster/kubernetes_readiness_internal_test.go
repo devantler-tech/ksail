@@ -118,10 +118,12 @@ func TestMergeReadyVClusterKubeconfigRejectsInvalidResponse(t *testing.T) {
 		context.Background(),
 		path,
 		readinessNestedKubeconfig(t, server.URL),
-		time.Millisecond,
+		10*time.Millisecond,
 		30*time.Millisecond,
 	)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.ErrorIs(t, err, errUnexpectedReadyzResponse)
+	require.ErrorContains(t, err, `"not ready"`)
 
 	//nolint:gosec // G304: path is created by the test (temp directory).
 	after, err := os.ReadFile(path)

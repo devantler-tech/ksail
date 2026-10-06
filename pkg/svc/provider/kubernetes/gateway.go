@@ -551,13 +551,14 @@ func (p *Provider) pickNodeAddress(ctx context.Context, hostAddress string) (str
 }
 
 func usableNodePortHost(host string) bool {
-	if strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") {
+	host = strings.TrimSuffix(host, ".")
+	if isLoopbackAddress(host) {
 		return false
 	}
 
 	ip := net.ParseIP(host)
 
-	return ip == nil || (!ip.IsUnspecified() && !ip.IsLoopback())
+	return ip == nil || !ip.IsUnspecified()
 }
 
 // firstNodeAddress returns the first node address of the given type, or "".

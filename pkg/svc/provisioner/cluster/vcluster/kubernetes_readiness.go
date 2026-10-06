@@ -15,6 +15,9 @@ import (
 
 const vclusterAPIRequestTimeout = 15 * time.Second
 
+// errUnexpectedReadyzResponse reports a successful readiness request whose body was not "ok".
+var errUnexpectedReadyzResponse = errors.New("unexpected /readyz response")
+
 // mergeReadyVClusterKubeconfig verifies the rewritten endpoint using the generated
 // credentials before publishing it. A populated Secret alone does not establish
 // that the NodePort or Gateway is ready to serve the next command.
@@ -36,7 +39,9 @@ func mergeReadyVClusterKubeconfig(
 		return fmt.Errorf("create vCluster API client: %w", err)
 	}
 
-	var lastProbeErr error
+	// The final probe is usually cut short by the deadline, so the last answer the
+	// endpoint actually gave is kept apart from the last transport error.
+	var lastProbeErr, lastResponseErr error
 
 	err = wait.PollUntilContextTimeout(
 		ctx,
@@ -45,13 +50,28 @@ func mergeReadyVClusterKubeconfig(
 		true,
 		func(ctx context.Context) (bool, error) {
 			body, probeErr := client.Discovery().RESTClient().Get().AbsPath("/readyz").DoRaw(ctx)
-			lastProbeErr = probeErr
+			if probeErr != nil {
+				lastProbeErr = probeErr
 
-			return probeErr == nil && strings.TrimSpace(string(body)) == "ok", nil
+				return false, nil
+			}
+
+			got := strings.TrimSpace(string(body))
+			if got != "ok" {
+				lastProbeErr = nil
+				lastResponseErr = fmt.Errorf("%w: %q", errUnexpectedReadyzResponse, got)
+
+				return false, nil
+			}
+
+			return true, nil
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("wait for vCluster API server: %w", errors.Join(err, lastProbeErr))
+		return fmt.Errorf(
+			"wait for vCluster API server: %w",
+			errors.Join(err, lastProbeErr, lastResponseErr),
+		)
 	}
 
 	if path == "" {
