@@ -64,25 +64,36 @@ fi
 readonly max_lines=40
 
 # Runs one read and prints its output indented, or a one-line note when it
-# fails or is empty. Never fails the script.
+# fails or is empty. Never fails the script. With order "sorted" the lines are
+# ordered by their leading timestamp: events arrive newest first, and the
+# earliest failure is the cause.
 report() {
-	local title="$1" empty_note="$2" output
-	shift 2
+	local title="$1" empty_note="$2" order="$3" output
+	shift 3
 	printf '%s\n' "${title}"
 	if ! output="$("$@" 2>/dev/null)"; then
 		printf '  (could not be read)\n'
 		return 0
 	fi
-	if [[ -z "${output//[[:space:]]/}" ]]; then
+	# The CLI prints a null result as the literal None.
+	if [[ ! "${output}" =~ [^[:space:]] || "${output}" == None ]]; then
 		printf '  %s\n' "${empty_note}"
 		return 0
 	fi
-	# Events arrive newest first; the earliest failure is the cause, so sort by
-	# the leading timestamp. Lines without one keep their order.
-	sort -s -k1,1 <<<"${output}" | head -n "${max_lines}" | sed 's/^/  /'
+	if [[ "${order}" == sorted ]]; then
+		output="$(sort -s -k1,1 <<<"${output}")" || true
+	fi
+	# awk reads to the end, so nothing closes the pipe early.
+	awk -v limit="${max_lines}" 'NR <= limit { print "  " $0 }' <<<"${output}" || true
 }
 
 printf '::group::Why the EKS create failed (%s)\n' "${cluster_name}"
+# What follows quotes text AWS wrote. Stop the runner reading any of it as a
+# workflow command until the matching token.
+fence="report-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+printf '::stop-commands::%s\n' "${fence}"
+# The lists below are split on whitespace; never expand a returned name as a glob.
+set -f
 
 stacks=""
 if ! stacks="$(aws cloudformation describe-stacks --region "${region}" \
@@ -99,10 +110,10 @@ for stack in ${stacks}; do
 		continue
 	fi
 	stack_count=$((stack_count + 1))
-	report "Stack ${stack}: status" '(no status)' \
+	report "Stack ${stack}: status" '(no status)' plain \
 		aws cloudformation describe-stacks --region "${region}" --stack-name "${stack}" \
 		--query 'Stacks[0].[StackStatus, StackStatusReason]' --output text
-	report "Stack ${stack}: failed resources, earliest first" '(no failed resource events)' \
+	report "Stack ${stack}: failed resources, earliest first" '(no failed resource events)' sorted \
 		aws cloudformation describe-stack-events --region "${region}" --stack-name "${stack}" \
 		--query "StackEvents[?contains(ResourceStatus, 'FAILED')].[Timestamp, LogicalResourceId, ResourceType, ResourceStatus, ResourceStatusReason]" \
 		--output text
@@ -121,12 +132,13 @@ for nodegroup in ${nodegroups}; do
 	if [[ ! "${nodegroup}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$ ]]; then
 		continue
 	fi
-	report "Node group ${nodegroup}: status" '(no status)' \
+	report "Node group ${nodegroup}: status" '(no status)' plain \
 		aws eks describe-nodegroup --region "${region}" --cluster-name "${cluster_name}" \
 		--nodegroup-name "${nodegroup}" --query 'nodegroup.status' --output text
-	report "Node group ${nodegroup}: health issues" '(none reported)' \
+	report "Node group ${nodegroup}: health issues" '(none reported)' plain \
 		aws eks describe-nodegroup --region "${region}" --cluster-name "${cluster_name}" \
 		--nodegroup-name "${nodegroup}" --query 'nodegroup.health.issues[].[code, message]' --output text
 done
 
+printf '::%s::\n' "${fence}"
 printf '::endgroup::\n'

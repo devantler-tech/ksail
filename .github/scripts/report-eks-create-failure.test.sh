@@ -114,6 +114,23 @@ if grep -Ev '^(cloudformation (describe-stacks|describe-stack-events)|eks (list-
 	"${fake_dir}/calls.log" >/dev/null; then
 	fail 'only describe and list calls may be issued'
 fi
+# The queries decide what is read and in which column order, so they are pinned.
+for query in \
+	"StackEvents[?contains(ResourceStatus, 'FAILED')].[Timestamp, LogicalResourceId, ResourceType, ResourceStatus, ResourceStatusReason]" \
+	'Stacks[0].[StackStatus, StackStatusReason]' \
+	'nodegroup.status' \
+	'nodegroup.health.issues[].[code, message]' \
+	'nodegroups[]'; do
+	grep -Fq -- "--query ${query} --output text" "${fake_dir}/calls.log" ||
+		fail "the read must use the query: ${query}"
+done
+[[ "$(head -n 1 <<<"${output}")" == '::group::Why the EKS create failed (st-eks-1-1)' ]] ||
+	fail 'the report must open a log group'
+fence="$(sed -n '2s/^::stop-commands::\(report-[0-9a-f]\{32\}\)$/\1/p' <<<"${output}")"
+[[ -n "${fence}" ]] || fail 'quoted provider text must be fenced off from workflow commands'
+[[ "$(tail -n 2 <<<"${output}" | head -n 1)" == "::${fence}::" ]] ||
+	fail 'the command fence must be closed with its own token'
+[[ "$(tail -n 1 <<<"${output}")" == '::endgroup::' ]] || fail 'the report must close its log group'
 pass 'prints stack failures earliest first and node group health'
 
 # --- diagnostic only: failed reads never fail the script ---------------------
@@ -145,6 +162,23 @@ expect_text '(none reported)' 'an empty issue list must be said'
 pass 'empty results are stated, not left blank'
 
 reset
+printf 'None\n' >"${fake_dir}/nodegroup-issues"
+run --cluster-name st-eks-1-1 --region us-east-1
+expect_status 0 'a null result must exit 0'
+expect_text '(none reported)' 'a null issue list must read as none reported'
+pass 'a null result is stated as empty'
+
+# Only events are ordered by time; other reports keep the order AWS gave.
+reset
+printf 'Zeta\tfirst issue\nAlpha\tsecond issue\n' >"${fake_dir}/nodegroup-issues"
+run --cluster-name st-eks-1-1 --region us-east-1
+expect_status 0 'two issues must exit 0'
+zeta_line="$(grep -n 'first issue' <<<"${output}" | cut -d: -f1)"
+alpha_line="$(grep -n 'second issue' <<<"${output}" | cut -d: -f1)"
+[[ "${zeta_line}" -lt "${alpha_line}" ]] || fail 'health issues must keep their given order'
+pass 'reports other than events keep their order'
+
+reset
 : >"${fake_dir}/stacks"
 : >"${fake_dir}/nodegroups"
 run --cluster-name st-eks-1-1 --region us-east-1
@@ -173,6 +207,17 @@ expect_status 0 'long output must exit 0'
 [[ "$(grep -c 'CREATE_FAILED	reason' <<<"${output}")" -eq 80 ]] ||
 	fail 'each stack report must be capped at 40 lines (two stacks here)'
 pass 'each report is capped'
+
+# Far more than a pipe holds: the cap must not end the script through a closed pipe.
+reset
+for index in $(seq 1 4000); do
+	printf '2026-10-06T17:%02d:00Z\tResource%s\tAWS::EKS::Nodegroup\tCREATE_FAILED\t%0120d\n' "$((index % 60))" "${index}" 0
+done >"${fake_dir}/events"
+run --cluster-name st-eks-1-1 --region us-east-1
+expect_status 0 'very long output must still exit 0'
+expect_text 'Node group default: health issues' 'the reports after a very long one must still be printed'
+[[ "$(tail -n 1 <<<"${output}")" == '::endgroup::' ]] || fail 'a very long report must still close its log group'
+pass 'output larger than a pipe buffer is capped without ending the script'
 
 # --- usage --------------------------------------------------------------------
 usage_case() {

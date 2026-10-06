@@ -294,7 +294,7 @@ jobs:
         # and masks the diagnostic wait_for_capacity would have printed. Budget:
         # wait_for_capacity polls 30 x 20s = 10m and runs twice (20m), leaving 20m
         # for the two `ksail cluster update` invocations and the identity asserts.
-        # The harness test caps this step at 45m via the post-refresh budget.
+        # The harness test caps this step at 47m via the post-refresh budget.
         timeout-minutes: 40
         shell: bash
         run: |
