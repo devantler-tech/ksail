@@ -77,9 +77,12 @@ if [ "$1" = "sso" ]; then
   printf '%s\n' "$*" >> "$FAKE_ROOT/logins"
   if [ "${FAKE_LOGIN_BLOCK:-}" = yes ]; then exec sleep 10; fi
   if [ "${FAKE_LOGIN_FAIL:-}" = yes ]; then echo "SENSITIVE-DIAGNOSTIC" >&2; exit 1; fi
-  sleep 0.05
+  sleep "${FAKE_LOGIN_DELAY:-0.05}"
   touch "$FAKE_ROOT/ready"
-  echo "SENSITIVE-LOGIN-OUTPUT"
+  case " $* " in
+    *" --use-device-code "*) echo "Open https://example.invalid/device and enter SYNTHETIC-CODE" ;;
+    *) echo "SENSITIVE-LOGIN-OUTPUT" ;;
+  esac
   exit 0
 fi
 if [ "${FAKE_PROBE_FAILURE:-}" = yes ]; then echo "AccessDenied SENSITIVE-DIAGNOSTIC" >&2; exit 1; fi

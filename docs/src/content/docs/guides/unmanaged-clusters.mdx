@@ -35,7 +35,7 @@ ksail workload get --context my-cloud-context --request-timeout=10s --raw=/versi
 For a direct AWS SSO profile, KSail can start the provider's browser sign-in without a separate terminal login command. This recovery is experimental and opt-in:
 
 - **Desktop / local web UI:** enable **AWS SSO renewal (experimental)** in **Settings → Credentials**. When the selected context's SSO session expires, choose **Sign in to AWS SSO** on its overview. Complete AWS sign-in in your browser; KSail then refreshes monitoring. **Cancel sign-in** stops the pending flow.
-- **Interactive CLI:** pass `--experimental` to a read command such as `workload get`, `describe`, `logs`, `explain` or `wait`. If its selected AWS SSO session is expired, KSail asks for confirmation, starts browser sign-in and then performs the original read without switching contexts:
+- **Interactive CLI:** pass `--experimental` to a read command such as `workload get`, `describe`, `logs`, `explain` or `wait`. If its selected AWS SSO session is expired, KSail asks for confirmation, starts AWS sign-in and then performs the original read without switching contexts. The terminal shows the AWS CLI's sign-in address and code, so you can finish from another device when the terminal's machine has no browser; this needs AWS CLI 2.22 or newer and a terminal for both input and error output:
 
   ```sh
   ksail workload get --experimental --context my-cloud-context pods

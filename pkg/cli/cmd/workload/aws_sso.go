@@ -3,6 +3,8 @@ package workload
 import (
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"slices"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
@@ -10,6 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/awssso"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 func maybeRenewAWSSSO(cmd *cobra.Command) error {
@@ -18,12 +21,23 @@ func maybeRenewAWSSSO(cmd *cobra.Command) error {
 		return fmt.Errorf("read experimental setting: %w", err)
 	}
 
-	if !enabled || !confirm.IsTTY() ||
+	// The confirmation and the provider's sign-in instructions are written to stderr, so both ends
+	// of the exchange must be a terminal: redirected output would hide them from the user.
+	if !enabled || !confirm.IsTTY() || !isTerminal(cmd.ErrOrStderr()) ||
 		!slices.Contains([]string{"get", "describe", "logs", "explain", "wait"}, cmd.Name()) {
 		return nil
 	}
 
 	return renewSelectedAWSSSO(cmd)
+}
+
+// isTerminal reports whether the writer is a terminal. Tests replace it, as they capture output.
+//
+//nolint:gochecknoglobals // Test seam for terminal detection, like the confirmation input seams.
+var isTerminal = func(writer io.Writer) bool {
+	file, ok := writer.(*os.File)
+
+	return ok && term.IsTerminal(int(file.Fd()))
 }
 
 func commandSSOTarget(cmd *cobra.Command) (*awssso.Target, error) {
@@ -83,7 +97,8 @@ func renewSelectedAWSSSO(cmd *cobra.Command) error {
 
 	var manager awssso.Manager
 
-	err = manager.Renew(cmd.Context(), target)
+	// A terminal may be remote or headless, so use the flow that can finish on another device.
+	err = manager.RenewWithDeviceCode(cmd.Context(), target, cmd.ErrOrStderr())
 	if err != nil {
 		return fmt.Errorf("renew selected context authentication: %w", err)
 	}

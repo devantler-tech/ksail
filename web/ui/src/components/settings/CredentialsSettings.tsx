@@ -127,16 +127,17 @@ export function CredentialsSettings({ onSaved }: { onSaved?: () => void }) {
   const [savingSSO, setSavingSSO] = useState(false);
 
   const load = useCallback(async () => {
-    try {
-      const [response, app] = await Promise.all([getSettings(), getAppSettings()]);
-      setCredentials(response.credentials);
-      setDrafts(initDrafts(response.credentials));
-      setSecureStorage(response.secureStorageAvailable);
-      setError(null);
-      setAppSettings(app);
-    } catch (err) {
-      setError(errorMessage(err));
+    // The two reads are independent: a failed preference read must not hide the credential editor.
+    const [settings, app] = await Promise.allSettled([getSettings(), getAppSettings()]);
+    if (settings.status === "fulfilled") {
+      setCredentials(settings.value.credentials);
+      setDrafts(initDrafts(settings.value.credentials));
+      setSecureStorage(settings.value.secureStorageAvailable);
     }
+    // Without a successful read the preference is unknown, so its checkbox stays disabled.
+    setAppSettings(app.status === "fulfilled" ? app.value : null);
+    const failed = settings.status === "rejected" ? settings : app.status === "rejected" ? app : null;
+    setError(failed ? errorMessage(failed.reason) : null);
   }, []);
 
   useEffect(() => {

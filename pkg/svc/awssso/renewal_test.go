@@ -1,6 +1,7 @@
 package awssso_test
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -177,4 +178,126 @@ func TestFailedAndCancelledLoginIsExplicitAndPrivate(t *testing.T) {
 			assert.NotContains(t, err.Error(), "SENSITIVE")
 		})
 	}
+}
+
+func TestSharedSignInSurvivesItsFirstCallerLeaving(t *testing.T) {
+	t.Parallel()
+	fixture := testutil.NewSyntheticSSO(t, "legacy")
+	fixture.Provider.Env = append(
+		fixture.Provider.Env,
+		clientcmdapi.ExecEnvVar{Name: "FAKE_LOGIN_DELAY", Value: "0.5"},
+	)
+	target, err := awssso.Resolve(t.Context(), fixture.Provider)
+	require.NoError(t, err)
+
+	var manager awssso.Manager
+
+	firstCtx, leave := context.WithCancel(t.Context())
+	defer leave()
+
+	first, second := make(chan error, 1), make(chan error, 1)
+
+	go func() { first <- manager.Renew(firstCtx, target) }()
+
+	logins := filepath.Join(fixture.Root, "logins")
+
+	require.Eventually(t, func() bool {
+		_, statErr := os.Stat(logins)
+
+		return statErr == nil
+	}, 10*time.Second, 10*time.Millisecond, "the first caller starts the provider sign-in")
+
+	go func() { second <- manager.Renew(t.Context(), target) }()
+
+	// Give the second caller time to join before the caller that started the sign-in leaves.
+	time.Sleep(100 * time.Millisecond)
+	leave()
+
+	require.ErrorIs(t, <-first, context.Canceled)
+	require.NoError(t, <-second, "a remaining caller still receives the completed sign-in")
+
+	recorded, err := os.ReadFile(logins) //nolint:gosec // Test-created fixture path.
+	require.NoError(t, err)
+	assert.Equal(t, 1, strings.Count(string(recorded), "\n"), "both callers shared one sign-in")
+}
+
+func TestSignInNobodyAwaitsIsStoppedAndNotReused(t *testing.T) {
+	t.Parallel()
+	fixture := testutil.NewSyntheticSSO(t, "legacy")
+	fixture.Provider.Env = append(
+		fixture.Provider.Env,
+		clientcmdapi.ExecEnvVar{Name: "FAKE_LOGIN_BLOCK", Value: "yes"},
+	)
+	target, err := awssso.Resolve(t.Context(), fixture.Provider)
+	require.NoError(t, err)
+
+	var manager awssso.Manager
+
+	for range 2 {
+		ctx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
+		err = manager.Renew(ctx, target)
+
+		cancel()
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+	}
+
+	recorded, err := os.ReadFile(filepath.Join(fixture.Root, "logins"))
+	require.NoError(t, err)
+	assert.Equal(t, 2, strings.Count(string(recorded), "\n"),
+		"a later request starts its own sign-in instead of joining an abandoned one")
+}
+
+func TestDeviceCodeSignInShowsInstructionsOnlyOnTheTerminal(t *testing.T) {
+	t.Parallel()
+	t.Run("renewed", func(t *testing.T) {
+		t.Parallel()
+		fixture := testutil.NewSyntheticSSO(t, "legacy")
+		target, err := awssso.Resolve(t.Context(), fixture.Provider)
+		require.NoError(t, err)
+
+		var (
+			manager  awssso.Manager
+			terminal bytes.Buffer
+		)
+
+		require.NoError(t, manager.RenewWithDeviceCode(t.Context(), target, &terminal))
+		assert.Contains(t, terminal.String(), "SYNTHETIC-CODE")
+
+		logins, err := os.ReadFile(filepath.Join(fixture.Root, "logins"))
+		require.NoError(t, err)
+		assert.Contains(t, string(logins), "--use-device-code")
+	})
+	t.Run("failed", func(t *testing.T) {
+		t.Parallel()
+		fixture := testutil.NewSyntheticSSO(t, "legacy")
+		fixture.Provider.Env = append(
+			fixture.Provider.Env,
+			clientcmdapi.ExecEnvVar{Name: "FAKE_LOGIN_FAIL", Value: "yes"},
+		)
+		target, err := awssso.Resolve(t.Context(), fixture.Provider)
+		require.NoError(t, err)
+
+		var (
+			manager  awssso.Manager
+			terminal bytes.Buffer
+		)
+
+		err = manager.RenewWithDeviceCode(t.Context(), target, &terminal)
+		require.ErrorIs(t, err, awssso.ErrLoginFailed)
+		assert.NotContains(t, err.Error(), "SENSITIVE", "provider output stays on the terminal")
+	})
+	t.Run("browser flow", func(t *testing.T) {
+		t.Parallel()
+		fixture := testutil.NewSyntheticSSO(t, "legacy")
+		target, err := awssso.Resolve(t.Context(), fixture.Provider)
+		require.NoError(t, err)
+
+		var manager awssso.Manager
+
+		require.NoError(t, manager.Renew(t.Context(), target))
+
+		logins, err := os.ReadFile(filepath.Join(fixture.Root, "logins"))
+		require.NoError(t, err)
+		assert.NotContains(t, string(logins), "--use-device-code")
+	})
 }

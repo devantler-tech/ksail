@@ -7,15 +7,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
-	"golang.org/x/sync/singleflight"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
@@ -51,7 +52,16 @@ type Target struct {
 
 // Manager coalesces concurrent authorized renewals of the same SSO session.
 type Manager struct {
-	flights singleflight.Group
+	mutex   sync.Mutex
+	flights map[string]*flight
+}
+
+// flight is one shared sign-in. It outlives any single caller, but not the last one waiting.
+type flight struct {
+	cancel  context.CancelFunc
+	done    chan struct{}
+	err     error
+	waiters int
 }
 
 // Resolve selects the exact exec profile and shared files without retrieving SDK credentials.
@@ -148,52 +158,161 @@ func (target *Target) Expired(ctx context.Context) (bool, error) {
 // Renew initiates the AWS CLI browser flow only after the caller has obtained user consent.
 // Callers must gate this operation on their explicit local/interactive experimental setting.
 func (manager *Manager) Renew(ctx context.Context, target *Target) error {
-	result := manager.flights.DoChan(target.key, func() (any, error) {
-		loginCtx, cancel := context.WithTimeout(ctx, loginTimeout)
-		defer cancel()
+	return manager.renew(ctx, target, nil)
+}
 
-		expired, err := target.Expired(loginCtx)
-		if err != nil || !expired {
-			return struct{}{}, err
-		}
+// RenewWithDeviceCode is Renew for a caller that owns a terminal: the AWS CLI's device-code
+// instructions go to that terminal, so sign-in can be completed from another device. The provider
+// output is written to the terminal only and never becomes part of the returned error.
+// It requires AWS CLI 2.22 or newer.
+func (manager *Manager) RenewWithDeviceCode(
+	ctx context.Context,
+	target *Target,
+	terminal io.Writer,
+) error {
+	return manager.renew(ctx, target, terminal)
+}
 
-		args := []string{
-			"sso", "login", "--profile=" + target.profile, "--no-cli-pager", "--no-cli-auto-prompt",
-		}
-		if target.caBundle != "" {
-			args = append(args, "--ca-bundle="+target.caBundle)
-		}
+func (manager *Manager) renew(ctx context.Context, target *Target, terminal io.Writer) error {
+	key := target.key
+	if terminal != nil {
+		key = "device-code\x00" + key
+	}
 
-		_, _, err = target.run(loginCtx, args)
-		if err != nil {
-			if loginCtx.Err() != nil {
-				return nil, fmt.Errorf("provider sign-in cancelled: %w", loginCtx.Err())
-			}
-
-			return nil, ErrLoginFailed
-		}
-
-		expired, err = target.Expired(loginCtx)
-		if err != nil || expired {
-			return nil, ErrStillExpired
-		}
-
-		return struct{}{}, nil
-	})
+	current := manager.join(ctx, key, target, terminal)
 
 	select {
+	case <-current.done:
+		return current.err
 	case <-ctx.Done():
+		manager.leave(key, current)
+
 		return fmt.Errorf("AWS sign-in cancelled: %w", ctx.Err())
-	case outcome := <-result:
-		return outcome.Err
 	}
 }
 
+// join adds the caller to the session's sign-in, starting one when none is in progress.
+func (manager *Manager) join(
+	ctx context.Context,
+	key string,
+	target *Target,
+	terminal io.Writer,
+) *flight {
+	manager.mutex.Lock()
+	defer manager.mutex.Unlock()
+
+	current, found := manager.flights[key]
+	if !found {
+		// The sign-in owns its context: the caller that started it may leave while others still wait.
+		flightCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), loginTimeout)
+		current = &flight{cancel: cancel, done: make(chan struct{})}
+
+		if manager.flights == nil {
+			manager.flights = make(map[string]*flight)
+		}
+
+		manager.flights[key] = current
+
+		go manager.complete(flightCtx, key, current, target, terminal)
+	}
+
+	current.waiters++
+
+	return current
+}
+
+func (manager *Manager) complete(
+	ctx context.Context,
+	key string,
+	current *flight,
+	target *Target,
+	terminal io.Writer,
+) {
+	err := target.signIn(ctx, terminal)
+
+	manager.forget(key, current)
+
+	current.err = err
+	current.cancel()
+	close(current.done)
+}
+
+// leave removes a cancelled caller and stops a sign-in nobody is waiting for any more.
+func (manager *Manager) leave(key string, current *flight) {
+	manager.mutex.Lock()
+	defer manager.mutex.Unlock()
+
+	current.waiters--
+	if current.waiters > 0 {
+		return
+	}
+
+	current.cancel()
+
+	if manager.flights[key] == current {
+		delete(manager.flights, key)
+	}
+}
+
+func (manager *Manager) forget(key string, current *flight) {
+	manager.mutex.Lock()
+	defer manager.mutex.Unlock()
+
+	if manager.flights[key] == current {
+		delete(manager.flights, key)
+	}
+}
+
+func (target *Target) signIn(ctx context.Context, terminal io.Writer) error {
+	expired, err := target.Expired(ctx)
+	if err != nil || !expired {
+		return err
+	}
+
+	args := []string{
+		"sso", "login", "--profile=" + target.profile, "--no-cli-pager", "--no-cli-auto-prompt",
+	}
+	if target.caBundle != "" {
+		args = append(args, "--ca-bundle="+target.caBundle)
+	}
+
+	if terminal != nil {
+		// The default flow redirects to the signing-in host, so it cannot finish from another device.
+		args = append(args, "--use-device-code")
+	}
+
+	err = target.login(ctx, args, terminal)
+	if err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("provider sign-in cancelled: %w", ctx.Err())
+		}
+
+		return ErrLoginFailed
+	}
+
+	expired, err = target.Expired(ctx)
+	if err != nil || expired {
+		return ErrStillExpired
+	}
+
+	return nil
+}
+
+func (target *Target) login(ctx context.Context, args []string, terminal io.Writer) error {
+	if terminal == nil {
+		_, _, err := target.run(ctx, args)
+
+		return err
+	}
+
+	command := target.prepare(ctx, args)
+	command.Stdout, command.Stderr = terminal, terminal
+
+	return command.Run() //nolint:wrapcheck // signIn replaces this with a sanitized error.
+}
+
 func (target *Target) run(ctx context.Context, args []string) ([]byte, string, error) {
-	//nolint:gosec // The executable and args are frozen from the user's selected AWS exec configuration.
-	command := exec.CommandContext(ctx, target.command, args...)
-	command.Env = target.env
-	command.WaitDelay = time.Second
+	command := target.prepare(ctx, args)
 	stdout, stderr := &boundedOutput{}, &boundedOutput{}
 	command.Stdout, command.Stderr = stdout, stderr
 	err := command.Run()
@@ -203,6 +322,15 @@ func (target *Target) run(ctx context.Context, args []string) ([]byte, string, e
 	}
 
 	return stdout.Bytes(), stderr.String(), err
+}
+
+func (target *Target) prepare(ctx context.Context, args []string) *exec.Cmd {
+	//nolint:gosec // The executable and args are frozen from the user's selected AWS exec configuration.
+	command := exec.CommandContext(ctx, target.command, args...)
+	command.Env = target.env
+	command.WaitDelay = time.Second
+
+	return command
 }
 
 type boundedOutput struct {

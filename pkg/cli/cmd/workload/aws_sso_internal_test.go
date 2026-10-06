@@ -3,6 +3,7 @@ package workload
 import (
 	"bytes"
 	"encoding/pem"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -60,6 +61,8 @@ func TestWiredCLIReadRenewsSelectedLegacySSO(t *testing.T) {
 	restoreInput := confirm.SetStdinReaderForTests(strings.NewReader("yes\n"))
 	defer restoreInput()
 
+	defer overrideTerminal(true)()
+
 	root.SetArgs(
 		[]string{
 			"get",
@@ -75,6 +78,8 @@ func TestWiredCLIReadRenewsSelectedLegacySSO(t *testing.T) {
 	assert.Contains(t, output.String(), "v1.36.0-synthetic")
 	assert.Equal(t, int32(1), requests.Load(), "only the explicit selected context's read is sent")
 	assert.NotContains(t, stderr.String(), "SENSITIVE")
+	assert.Contains(t, stderr.String(), "SYNTHETIC-CODE",
+		"the terminal shows the provider's instructions for signing in from another device")
 
 	//nolint:gosec // Verify the same test-created kubeconfig was not rewritten by renewal.
 	after, err := os.ReadFile(path)
@@ -88,6 +93,8 @@ func TestCLIRecoveryDisabledOrNoninteractiveNeverProbesOrLogsIn(t *testing.T) {
 		t.Run(
 			map[bool]string{false: "noninteractive", true: "disabled"}[interactive],
 			func(t *testing.T) {
+				defer overrideTerminal(true)()
+
 				fixture := testutil.NewSyntheticSSO(t, "legacy")
 				command := &cobra.Command{Use: "get"}
 				command.Flags().Bool(flags.ExperimentalFlagName, !interactive, "")
@@ -102,6 +109,34 @@ func TestCLIRecoveryDisabledOrNoninteractiveNeverProbesOrLogsIn(t *testing.T) {
 			},
 		)
 	}
+}
+
+//nolint:paralleltest // This test overrides the shared terminal seams.
+func TestCLIRecoveryWithRedirectedOutputNeverProbesOrLogsIn(t *testing.T) {
+	fixture := testutil.NewSyntheticSSO(t, "legacy")
+	command := &cobra.Command{Use: "get"}
+	command.Flags().Bool(flags.ExperimentalFlagName, true, "")
+	// No kubeconfig flags: reaching resolution would fail, proving the gate precedes probes.
+	restore := confirm.SetTTYCheckerForTests(func() bool { return true })
+	defer restore()
+
+	var stderr bytes.Buffer
+
+	command.SetErr(&stderr) // A captured stream is not a terminal.
+
+	require.NoError(t, maybeRenewAWSSSO(command))
+	assert.Empty(t, stderr.String(), "no confirmation is written where the user cannot see it")
+
+	_, err := os.Stat(filepath.Join(fixture.Root, "logins"))
+	assert.ErrorIs(t, err, os.ErrNotExist)
+}
+
+// overrideTerminal replaces terminal detection and returns the function that restores it.
+func overrideTerminal(terminal bool) func() {
+	previous := isTerminal
+	isTerminal = func(io.Writer) bool { return terminal }
+
+	return func() { isTerminal = previous }
 }
 
 func syntheticReadKubeconfig(
