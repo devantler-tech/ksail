@@ -95,9 +95,14 @@ printf '::stop-commands::%s\n' "${fence}"
 # The lists below are split on whitespace; never expand a returned name as a glob.
 set -f
 
+# The names come from list-stacks, not from an unscoped describe-stacks: the
+# smoke-test role may describe only its own eksctl-st-eks-* stacks, so a
+# describe with no stack name is denied, while listing is allowed on every
+# stack. A deleted stack stays listed for months and can no longer be described
+# by name, so it is left out.
 stacks=""
-if ! stacks="$(aws cloudformation describe-stacks --region "${region}" \
-	--query "Stacks[?starts_with(StackName, 'eksctl-${cluster_name}-')].StackName" \
+if ! stacks="$(aws cloudformation list-stacks --region "${region}" \
+	--query "StackSummaries[?starts_with(StackName, 'eksctl-${cluster_name}-') && StackStatus != 'DELETE_COMPLETE'].StackName" \
 	--output text 2>/dev/null)"; then
 	printf 'The stack list could not be read.\n'
 	stacks=""
@@ -123,15 +128,19 @@ if [[ "${stack_count}" -eq 0 ]]; then
 fi
 
 nodegroups=""
+nodegroups_read=true
 if ! nodegroups="$(aws eks list-nodegroups --region "${region}" --cluster-name "${cluster_name}" \
 	--query 'nodegroups[]' --output text 2>/dev/null)"; then
 	printf 'The node group list could not be read (the cluster may not exist yet).\n'
 	nodegroups=""
+	nodegroups_read=false
 fi
+nodegroup_count=0
 for nodegroup in ${nodegroups}; do
 	if [[ ! "${nodegroup}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$ ]]; then
 		continue
 	fi
+	nodegroup_count=$((nodegroup_count + 1))
 	report "Node group ${nodegroup}: status" '(no status)' plain \
 		aws eks describe-nodegroup --region "${region}" --cluster-name "${cluster_name}" \
 		--nodegroup-name "${nodegroup}" --query 'nodegroup.status' --output text
@@ -139,6 +148,11 @@ for nodegroup in ${nodegroups}; do
 		aws eks describe-nodegroup --region "${region}" --cluster-name "${cluster_name}" \
 		--nodegroup-name "${nodegroup}" --query 'nodegroup.health.issues[].[code, message]' --output text
 done
+# A node group that failed to create is deleted by its stack's rollback, so an
+# empty list is a finding, not a blank: the stack events above are then the record.
+if [[ "${nodegroups_read}" == true && "${nodegroup_count}" -eq 0 ]]; then
+	printf 'No node group was found for the cluster.\n'
+fi
 
 printf '::%s::\n' "${fence}"
 printf '::endgroup::\n'

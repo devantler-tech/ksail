@@ -13,15 +13,18 @@ mkdir -p "${fake_bin}"
 
 # Fake aws. Every call is logged. Answers come from files named after the call
 # in ${FAKE_DIR}; a missing file is a failed call, as an AccessDenied would be.
+# Like the smoke-test role, it lets every stack be listed but only a named stack
+# be described: a describe-stacks with no stack name is always denied.
 cat >"${fake_bin}/aws" <<'FAKE'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"${FAKE_DIR}/calls.log"
 case "$1 $2" in
+'cloudformation list-stacks') key="stacks" ;;
 'cloudformation describe-stacks')
 	if [[ "$*" == *'--stack-name '* ]]; then
 		key="stack-status"
 	else
-		key="stacks"
+		key="denied-unscoped-describe"
 	fi
 	;;
 'cloudformation describe-stack-events') key="events" ;;
@@ -110,12 +113,19 @@ late_line="$(grep -n 'late consequence' <<<"${output}" | head -n 1 | cut -d: -f1
 	fail 'the earliest failure must be printed before later ones'
 grep -q "starts_with(StackName, 'eksctl-st-eks-1-1-')" "${fake_dir}/calls.log" ||
 	fail 'the stack list must be limited to this cluster'
-if grep -Ev '^(cloudformation (describe-stacks|describe-stack-events)|eks (list-nodegroups|describe-nodegroup)) ' \
+if grep -Ev '^(cloudformation (list-stacks|describe-stacks|describe-stack-events)|eks (list-nodegroups|describe-nodegroup)) ' \
 	"${fake_dir}/calls.log" >/dev/null; then
 	fail 'only describe and list calls may be issued'
 fi
+# The role may describe only its own named stacks, so a describe with no stack
+# name is denied and would leave the whole report empty.
+if grep -E '^cloudformation describe-stacks ' "${fake_dir}/calls.log" | grep -Fv -- '--stack-name ' >/dev/null; then
+	fail 'stacks must be described by name only'
+fi
+refute_text 'The stack list could not be read.' 'the stack list must be readable with the role the smoke test has'
 # The queries decide what is read and in which column order, so they are pinned.
 for query in \
+	"StackSummaries[?starts_with(StackName, 'eksctl-st-eks-1-1-') && StackStatus != 'DELETE_COMPLETE'].StackName" \
 	"StackEvents[?contains(ResourceStatus, 'FAILED')].[Timestamp, LogicalResourceId, ResourceType, ResourceStatus, ResourceStatusReason]" \
 	'Stacks[0].[StackStatus, StackStatusReason]' \
 	'nodegroup.status' \
@@ -184,7 +194,24 @@ reset
 run --cluster-name st-eks-1-1 --region us-east-1
 expect_status 0 'no stacks must exit 0'
 expect_text 'No stack named eksctl-st-eks-1-1-* was found.' 'a missing stack must be said'
+expect_text 'No node group was found for the cluster.' 'a missing node group must be said'
 pass 'a create that failed before any stack existed says so'
+
+# A failed node group is deleted by its stack's rollback before the report runs.
+reset
+: >"${fake_dir}/nodegroups"
+run --cluster-name st-eks-1-1 --region us-east-1
+expect_status 0 'a rolled-back node group must exit 0'
+expect_text 'NodeCreationFailure: Instances failed to join the kubernetes cluster' 'the stack events must still name the cause'
+expect_text 'No node group was found for the cluster.' 'an empty node group list must be said, not left blank'
+pass 'a node group already rolled back is stated and the stack events still explain it'
+
+reset
+rm "${fake_dir}/nodegroups"
+run --cluster-name st-eks-1-1 --region us-east-1
+expect_status 0 'an unreadable node group list must exit 0'
+refute_text 'No node group was found for the cluster.' 'an unreadable list must not be reported as an empty one'
+pass 'an unreadable node group list is not reported as empty'
 
 # --- names AWS returns are checked before they reach a command line ----------
 reset
