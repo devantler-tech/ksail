@@ -347,7 +347,7 @@ func TestSystemTestHarnessBoundsReservedSandboxRecovery(t *testing.T) {
 		systemAction.Runs.Steps,
 		"🧪 Cleanup KSail System Test",
 	)
-	assert.Equal(t, "./.github/actions/ksail-system-test-cleanup", cleanupStep.Uses)
+	assert.Equal(t, "$/.github/actions/ksail-system-test-cleanup", cleanupStep.Uses)
 	assert.Contains(t, cleanupStep.If, "inputs.cleanup == 'true'")
 	assert.Equal(t, "${{ inputs.args }}", stringValue(cleanupStep.With["args"]))
 

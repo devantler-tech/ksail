@@ -146,7 +146,7 @@ func addValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 		"schema-location",
 		nil,
 		"Additional kubeconform schema locations (local directory or URL/path template) for CRDs "+
-			"absent from the CRDs-catalog, so they are validated against a supplied schema instead "+
+			"with missing or stale CRDs-catalog entries, so they are validated against a supplied schema instead "+
 			"of skipped (merged with spec.workload.validation.schemaLocations from ksail.yaml)",
 	)
 	cmd.Flags().BoolVar(

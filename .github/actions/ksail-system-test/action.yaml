@@ -130,6 +130,16 @@ inputs:
       Leave empty to skip.
     required: false
     default: ""
+  test-autoscaler-inventory:
+    description: Run the optional Talos/Hetzner orphaned-server audit with one powered-off probe.
+    required: false
+    default: "false"
+  inventory-trial-server-type:
+    description: Initial server type shared by the cluster and powered-off inventory probe.
+    default: "cx23"
+  inventory-trial-location:
+    description: Location shared by the cluster and powered-off inventory probe.
+    default: "fsn1"
   floating-ip-toggle:
     description: |
       Hetzner + Talos only. When 'true', runs an additional step that enables
@@ -270,8 +280,10 @@ runs:
 
     - name: 🧪 ksail cluster create
       id: cluster-create
-      uses: ./.github/actions/ksail-cluster
+      uses: $/.github/actions/ksail-cluster
       with:
+        inventory-trial-server-type: ${{ inputs.test-autoscaler-inventory == 'true' && inputs.inventory-trial-server-type || '' }}
+        inventory-trial-location: ${{ inputs.test-autoscaler-inventory == 'true' && inputs.inventory-trial-location || '' }}
         distribution: ${{ inputs.distribution }}
         provider: ${{ inputs.provider }}
         args: ${{ steps.resolve-args.outputs.args }}
@@ -362,7 +374,7 @@ runs:
 
     - name: 🧪 Workload Lifecycle Tests
       id: workload-tests
-      uses: ./.github/actions/ksail-test-workload
+      uses: $/.github/actions/ksail-test-workload
       with:
         test-workload-name: ${{ inputs.test-workload-name }}
         test-workload-image: ${{ inputs.test-workload-image }}
@@ -392,7 +404,7 @@ runs:
     - name: 🧪 Workload Mirror Tests
       id: workload-mirror-tests
       if: inputs.provider == 'Docker' && inputs.test-workload-mirror == 'true'
-      uses: ./.github/actions/ksail-test-workload-mirror
+      uses: $/.github/actions/ksail-test-workload-mirror
       with:
         distribution: ${{ inputs.distribution }}
         workload-timeout: ${{ inputs.workload-timeout }}
@@ -400,7 +412,7 @@ runs:
     - name: 🧪 Image Export/Import Tests
       id: image-export-import-tests
       if: inputs.distribution == 'Vanilla' || inputs.distribution == 'K3s'
-      uses: ./.github/actions/ksail-test-image-export-import
+      uses: $/.github/actions/ksail-test-image-export-import
       with:
         test-workload-name: ${{ inputs.test-workload-name }}
         test-workload-image: ${{ inputs.test-workload-image }}
@@ -408,7 +420,7 @@ runs:
 
     - name: 🧪 Workload Watch Tests
       id: workload-watch-tests
-      uses: ./.github/actions/ksail-test-workload-watch
+      uses: $/.github/actions/ksail-test-workload-watch
       with:
         workload-timeout: ${{ inputs.workload-timeout }}
 
@@ -458,7 +470,7 @@ runs:
 
     - name: 🧪 Backup & Restore Tests
       id: backup-restore-tests
-      uses: ./.github/actions/ksail-test-backup-restore
+      uses: $/.github/actions/ksail-test-backup-restore
       with:
         workload-timeout: ${{ inputs.workload-timeout }}
 
@@ -921,7 +933,7 @@ runs:
     - name: 🧪 Kubernetes Provider Tests (nested clusters)
       id: kubernetes-provider-tests
       if: inputs.test-kubernetes-provider == 'true'
-      uses: ./.github/actions/ksail-test-kubernetes-provider
+      uses: $/.github/actions/ksail-test-kubernetes-provider
       with:
         distributions: ${{ inputs.kubernetes-provider-distributions }}
         cni: ${{ inputs.kubernetes-provider-cni }}
@@ -947,7 +959,7 @@ runs:
         || steps.cluster-update-rolling-resize.outcome == 'failure'
         || steps.cluster-update-floating-ip-toggle.outcome == 'failure'
         || steps.kubernetes-provider-tests.outcome == 'failure')
-      uses: ./.github/actions/debug-kubernetes-failure
+      uses: $/.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
 
@@ -1051,11 +1063,31 @@ runs:
         retention-days: 7
         if-no-files-found: ignore
 
+    - name: 📦 Setup hcloud for autoscaler inventory trial
+      if: inputs.test-autoscaler-inventory == 'true'
+      uses: hetznercloud/setup-hcloud@4ff9bbeda4053fb69dd7fa1fcbdfcce7e648bf33 # v1
+
+    - name: 🧪 Hetzner autoscaler inventory — unchanged update and retry
+      if: inputs.test-autoscaler-inventory == 'true'
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        CLUSTER_NAME: st-hetzner-dispatch-${{ github.run_id }}
+        TRIAL_SERVER_TYPE: ${{ inputs.inventory-trial-server-type }}
+        TRIAL_LOCATION: ${{ inputs.inventory-trial-location }}
+        K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
+      run: |
+        set -euo pipefail
+        [[ "$DISTRIBUTION" == Talos && "$PROVIDER" == Hetzner && "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
+        export K8S_VERSION="${K8S_VERSION_FLAG#--kubernetes-version }"
+        timeout --kill-after=6m 20m bash "$GITHUB_WORKSPACE/.github/actions/ksail-system-test/autoscaler-audit-trial.sh"
+
     # ── Phase 7 — Cleanup ────────────────────────────────────────────
 
     - name: 🧪 Cleanup KSail System Test
       if: always() && inputs.cleanup == 'true'
-      uses: ./.github/actions/ksail-system-test-cleanup
+      uses: $/.github/actions/ksail-system-test-cleanup
       with:
         distribution: ${{ inputs.distribution }}
         provider: ${{ inputs.provider }}

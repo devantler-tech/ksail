@@ -1963,7 +1963,7 @@ workload_write
         "type": "string"
       },
       "schema-location": {
-        "description": "Additional kubeconform schema locations (local directory or URL/path template) for CRDs absent from the CRDs-catalog... (applies to: validate)",
+        "description": "Additional kubeconform schema locations (local directory or URL/path template) for CRDs with missing or stale CRDs-catalog entries... (applies to: validate)",
         "items": {
           "type": "string"
         },
