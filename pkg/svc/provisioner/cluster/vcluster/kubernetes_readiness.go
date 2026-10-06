@@ -50,6 +50,7 @@ func mergeReadyVClusterKubeconfig(
 		true,
 		func(ctx context.Context) (bool, error) {
 			body, probeErr := client.Discovery().RESTClient().Get().AbsPath("/readyz").DoRaw(ctx)
+
 			lastProbeErr = probeErr
 			if probeErr == nil {
 				got := strings.TrimSpace(string(body))
