@@ -88,6 +88,8 @@ type Server struct {
 	// Only the local UI backend sets it; the operator leaves it nil (credentials are managed
 	// in-cluster), so the settings routes are not registered and the Settings page stays hidden.
 	Settings SettingsService
+	// AWSSSORenewalEnabled is a default-off local preference, checked again for every sign-in.
+	AWSSSORenewalEnabled func() bool
 
 	// StaticFS, when non-nil, serves the embedded web UI (SPA) for any route the API does not handle,
 	// falling back to index.html for client-side routing. The operator leaves it nil (nginx serves
@@ -383,6 +385,16 @@ func (s *Server) registerCapabilityRoutes(mux *http.ServeMux) {
 // serving, the AI assistant, and the read-only kube-apiserver proxy — each gated on the backend
 // implementing the matching interface, so the operator's API-only surface is unchanged.
 func (s *Server) registerExtensionRoutes(mux *http.ServeMux) {
+	if _, ok := s.Service.(ClusterAuthenticationService); ok && s.Mode == ModeLocal {
+		mux.HandleFunc(
+			"GET /api/v1/clusters/{namespace}/{name}/authentication",
+			s.handleClusterAuthentication,
+		)
+		mux.HandleFunc(
+			"POST /api/v1/clusters/{namespace}/{name}/authentication/renew",
+			s.handleRenewClusterAuthentication,
+		)
+	}
 	// Web UI plugins (PluginService): list installed plugins and serve their static bundles so the SPA
 	// can load Headlamp-compatible extensions. Both are GETs (reads), so the read-only guard does not
 	// apply — plugins extend the UI surface, they do not mutate the cluster. The {file...} wildcard

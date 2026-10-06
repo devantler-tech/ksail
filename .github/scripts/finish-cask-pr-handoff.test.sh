@@ -112,7 +112,7 @@ case "${line}" in
 *'query CaskState'*)
 	n="$(count state-reads)"
 	[[ "${scenario}" != state-read-error ]] || exit 1
-	if [[ "${scenario}" == head-moved-before-promotion && "${n}" -ge 2 ]] ||
+	if [[ ( "${scenario}" == head-moved-before-promotion || "${scenario}" == head-moved-waiting-for-required ) && "${n}" -ge 2 ]] ||
 		[[ "${scenario}" == head-moved-after-promotion && "${promoted}" == true ]]; then
 		head=2222222222222222222222222222222222222222
 	fi
@@ -144,7 +144,12 @@ case "${line}" in
 	 ]}}}}]}}}}}' |
 	 jq --arg scenario "${scenario}" --arg cursor "${cursor}" --argjson n "${n}" --argjson ready "${promoted}" '
 	 .data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts |=
-	 (if $scenario == "no-required" then .nodes |= map(.isRequired=false)
+	 (if $scenario == "no-required" or $scenario == "failed-before-required" or
+	     (($scenario == "first-required-then-pass" or $scenario == "head-moved-waiting-for-required") and ($ready|not) and $n == 1) then
+	   .nodes |= map(.isRequired=false) |
+	   if $scenario == "failed-before-required" then .nodes[1].conclusion="FAILURE" else . end
+	 elif $scenario == "no-checks" or ($scenario == "first-checks-then-pass" and ($ready|not) and $n == 1) then
+	   .nodes=[] | .totalCount=0
 	 elif $scenario == "failed-required" then .nodes[0].conclusion="FAILURE"
 	 elif $scenario == "missing-required-flag" then del(.nodes[0].isRequired)
 	 elif $scenario == "pending-required" or (($scenario == "pending-then-pass" or $scenario == "both-phases-then-pass") and ($ready|not) and $n == 1) then .nodes[0].status="IN_PROGRESS" | .nodes[0].conclusion=null
@@ -302,11 +307,25 @@ run_case() {
 		[[ "$(<"${state}/checks-true")" -eq 1 ]] ||
 			fail "${scenario}: current failure must stop immediately despite the missing aggregate"
 	fi
+	if [[ "${scenario}" == first-required-then-pass || "${scenario}" == first-checks-then-pass ]]; then
+		[[ "$(<"${state}/checks-false")" -eq 2 ]] ||
+			fail "${scenario}: publication must be observed before promotion"
+	fi
+	if [[ "${scenario}" == no-required || "${scenario}" == no-checks ]]; then
+		[[ "$(<"${state}/checks-false")" -eq 2 ]] ||
+			fail "${scenario}: publication must exhaust the bounded wait without promotion"
+	fi
+	if [[ "${scenario}" == failed-before-required || "${scenario}" == missing-required-flag ]]; then
+		[[ "$(<"${state}/checks-false")" -eq 1 ]] ||
+			fail "${scenario}: failure or malformed evidence must stop immediately"
+	fi
 	printf 'PASS: %s\n' "${scenario}"
 }
 
 # Removing the direct merge, SHA pin, post-promotion audit, or immutable readback breaks these.
 run_case both-phases-then-pass true 1 1
+run_case first-required-then-pass true 1 1
+run_case first-checks-then-pass true 1 1
 run_case recovered-checks true 1 1
 run_case recovered-later-page true 1 1
 run_case non-actions-success true 1 1
@@ -320,10 +339,10 @@ run_case admin-capable true 1 1
 run_case async-pending-success true 1 1
 run_case async-already-merged true 1 1
 for scenario in draft-release unpublished-release wrong-release-tag release-read-error digest-mismatch \
-	no-required failed-required missing-required-flag pending-required state-read-error checks-read-error \
+	no-required no-checks failed-before-required failed-required missing-required-flag pending-required state-read-error checks-read-error \
 	graphql-errors partial-checks later-page-failure cursor-error later-unresolved later-negative-review \
 	partial-threads changes-requested auto-armed conflict adaptation-commit head-moved-during-collection \
-	head-moved-before-promotion wrong-check-commit status-commit-mismatch newer-failed newer-pending \
+	head-moved-before-promotion head-moved-waiting-for-required wrong-check-commit status-commit-mismatch newer-failed newer-pending \
 	other-workflow-failed other-app-failed other-event-failed ambiguous-execution same-run-failure \
 	missing-workflow-identity missing-app-identity missing-run-identity invalid-run-number \
 	missing-current-required withdrawn-current-required old-check-wrong-commit non-actions-failure; do
