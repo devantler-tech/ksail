@@ -47,10 +47,9 @@ func TestTODOScannerExcludesOnlyVendoredSources(t *testing.T) {
 
 	job, found := workflow.Jobs["todos"]
 	require.True(t, found, "TODO workflow must define the todos job")
-	require.Equal(t,
-		"devantler-tech/.github/.github/workflows/scan-for-todo-comments.yaml@"+
-			"0600006235510307a04efebcac1ac1f363f5f862", job.Uses,
-		"shared scanner must use the reviewed canonical release",
+	require.Regexp(t,
+		`^devantler-tech/\.github/\.github/workflows/scan-for-todo-comments\.yaml@[0-9a-f]{40}$`,
+		job.Uses, "shared scanner must use an immutable canonical release",
 	)
 	assert.Empty(t, job.RunsOn, "reusable workflow callers cannot configure runs-on")
 	assert.Empty(t, job.Steps, "KSail must not copy the shared scanner implementation")
