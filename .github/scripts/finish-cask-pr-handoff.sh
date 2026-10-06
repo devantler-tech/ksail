@@ -303,13 +303,12 @@ screen() {
 		return 1
 	fi
 	if ! jq -e --arg head "${head}" '
-	 length > 0 and any(.[]; .isRequired == true)
-	 and all(.[]; (.isRequired | type == "boolean") and
+	 all(.[]; (.isRequired | type == "boolean") and
 	   (if .__typename == "CheckRun" then (.name | type == "string" and length > 0) and (.status | type == "string") and .checkSuite.commit.oid == $head
 	    elif .__typename == "StatusContext" then (.context | type == "string" and length > 0) and (.state | type == "string")
 	    else false end))
 	' "${work}/checks.json" >/dev/null; then
-		blocked 'required checks are absent or incompletely observed'
+		blocked 'check metadata is malformed or incompletely observed'
 		return 1
 	fi
 	# The rollup contains earlier executions at this same commit. Select a newer execution
@@ -351,6 +350,13 @@ screen() {
 	 else .state != "SUCCESS" and .state != "PENDING" end)' "${work}/checks.json" >/dev/null; then
 		blocked 'a current-head check failed'
 		return 1
+	fi
+	# GitHub creates the dependent required aggregate after its prerequisite jobs.
+	# A complete read can therefore contain no required check yet. Keep the draft
+	# pending inside the existing bound; never promote until a real required check
+	# has appeared and settled. Failed reads and malformed metadata remain terminal.
+	if ! jq -e 'length > 0 and any(.[]; .isRequired == true)' "${work}/checks.json" >/dev/null; then
+		return 3
 	fi
 	# A dependent aggregate may not exist yet in a newly started workflow. Keep this
 	# observation pending without inventing a check result or ignoring a current failure.
