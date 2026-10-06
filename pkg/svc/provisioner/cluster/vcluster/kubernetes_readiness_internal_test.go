@@ -30,6 +30,7 @@ func TestMergeReadyVClusterKubeconfigDoesNotPublishUnreadyEndpoint(t *testing.T)
 	err := mergeReadyVClusterKubeconfig(context.Background(), path, config, time.Millisecond, 30*time.Millisecond)
 	require.Error(t, err, "creation must not publish an endpoint that never became ready")
 
+	//nolint:gosec // G304: path is created by the test (temp directory).
 	after, readErr := os.ReadFile(path)
 	require.NoError(t, readErr)
 	require.Equal(t, original, after, "a failed readiness check must not change the host kubeconfig")
@@ -40,20 +41,20 @@ func TestMergeReadyVClusterKubeconfigRetriesRewrittenAuthenticatedEndpoint(t *te
 
 	var calls atomic.Int32
 
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/readyz" || r.Header.Get("Authorization") != "Bearer fixture-token" {
-			w.WriteHeader(http.StatusUnauthorized)
+			writer.WriteHeader(http.StatusUnauthorized)
 
 			return
 		}
 
 		if calls.Add(1) == 1 {
-			w.WriteHeader(http.StatusServiceUnavailable)
+			writer.WriteHeader(http.StatusServiceUnavailable)
 
 			return
 		}
 
-		_, _ = w.Write([]byte("ok\n"))
+		_, _ = writer.Write([]byte("ok\n"))
 	}))
 	t.Cleanup(server.Close)
 
@@ -91,6 +92,7 @@ func TestMergeReadyVClusterKubeconfigRejectsInvalidResponse(t *testing.T) {
 	)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 
+	//nolint:gosec // G304: path is created by the test (temp directory).
 	after, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, original, after)
@@ -109,6 +111,7 @@ func TestMergeReadyVClusterKubeconfigRejectsRefusedConnection(t *testing.T) {
 	)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 
+	//nolint:gosec // G304: path is created by the test (temp directory).
 	after, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, original, after)
@@ -128,6 +131,7 @@ func TestMergeReadyVClusterKubeconfigBoundsBlockedRequest(t *testing.T) {
 	)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 
+	//nolint:gosec // G304: path is created by the test (temp directory).
 	after, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, original, after)
@@ -148,6 +152,7 @@ func TestMergeReadyVClusterKubeconfigHonorsCancellation(t *testing.T) {
 	err := mergeReadyVClusterKubeconfig(ctx, path, readinessNestedKubeconfig(t, server.URL), time.Millisecond, time.Second)
 	require.ErrorIs(t, err, context.Canceled)
 
+	//nolint:gosec // G304: path is created by the test (temp directory).
 	after, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, original, after)
@@ -174,6 +179,7 @@ func TestMergeReadyVClusterKubeconfigRejectsInvalidConfig(t *testing.T) {
 	err := mergeReadyVClusterKubeconfig(context.Background(), path, []byte("invalid"), time.Millisecond, time.Second)
 	require.Error(t, err)
 
+	//nolint:gosec // G304: path is created by the test (temp directory).
 	after, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, original, after)
