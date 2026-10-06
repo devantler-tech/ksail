@@ -21,23 +21,25 @@ func maybeRenewAWSSSO(cmd *cobra.Command) error {
 		return fmt.Errorf("read experimental setting: %w", err)
 	}
 
-	// The confirmation and the provider's sign-in instructions are written to stderr, so both ends
-	// of the exchange must be a terminal: redirected output would hide them from the user.
-	if !enabled || !confirm.IsTTY() || !isTerminal(cmd.ErrOrStderr()) ||
+	// Both ends of the exchange must be a terminal: redirected output would hide the confirmation
+	// and the provider's sign-in instructions from the user.
+	terminal, interactive := signInTerminal()
+	if !enabled || !confirm.IsTTY() || !interactive ||
 		!slices.Contains([]string{"get", "describe", "logs", "explain", "wait"}, cmd.Name()) {
 		return nil
 	}
 
-	return renewSelectedAWSSSO(cmd)
+	return renewSelectedAWSSSO(cmd, terminal)
 }
 
-// isTerminal reports whether the writer is a terminal. Tests replace it, as they capture output.
+// signInTerminal returns the stream the sign-in exchange is shown on and whether it is a terminal.
+// It is the process's own error stream, not the command's: the command's is captured until the
+// command ends, so a confirmation written there would only be seen after it was needed.
+// Tests replace it, as they capture output.
 //
 //nolint:gochecknoglobals // Test seam for terminal detection, like the confirmation input seams.
-var isTerminal = func(writer io.Writer) bool {
-	file, ok := writer.(*os.File)
-
-	return ok && term.IsTerminal(int(file.Fd()))
+var signInTerminal = func() (io.Writer, bool) {
+	return os.Stderr, term.IsTerminal(int(os.Stderr.Fd()))
 }
 
 func commandSSOTarget(cmd *cobra.Command) (*awssso.Target, error) {
@@ -66,7 +68,7 @@ func commandSSOTarget(cmd *cobra.Command) (*awssso.Target, error) {
 
 var errSSOSignInCancelled = errors.New("AWS SSO sign-in cancelled")
 
-func renewSelectedAWSSSO(cmd *cobra.Command) error {
+func renewSelectedAWSSSO(cmd *cobra.Command, terminal io.Writer) error {
 	target, err := commandSSOTarget(cmd)
 	if errors.Is(err, awssso.ErrUnsupported) {
 		return nil // Other credential plugins retain their normal execution path.
@@ -85,20 +87,20 @@ func renewSelectedAWSSSO(cmd *cobra.Command) error {
 		return nil
 	}
 
-	_, err = fmt.Fprint(cmd.ErrOrStderr(),
+	_, err = fmt.Fprint(terminal,
 		"AWS SSO has expired for the selected context. Type \"yes\" to open AWS sign-in: ")
 	if err != nil {
 		return fmt.Errorf("show AWS sign-in confirmation: %w", err)
 	}
 
-	if !confirm.PromptForConfirmation(cmd.ErrOrStderr()) {
+	if !confirm.PromptForConfirmation(terminal) {
 		return errSSOSignInCancelled
 	}
 
 	var manager awssso.Manager
 
 	// A terminal may be remote or headless, so use the flow that can finish on another device.
-	err = manager.RenewWithDeviceCode(cmd.Context(), target, cmd.ErrOrStderr())
+	err = manager.RenewWithDeviceCode(cmd.Context(), target, terminal)
 	if err != nil {
 		return fmt.Errorf("renew selected context authentication: %w", err)
 	}
