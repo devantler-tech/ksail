@@ -218,7 +218,7 @@ func (p *Provisioner) applyInPlaceToAutoscalerNodes(
 	secretsSource := p.fetchSecretsSource(ctx, clusterName)
 
 	for _, server := range sortServersByName(servers) {
-		serverIP, addrErr := hetznerNodeTalosAddress(server)
+		serverIP, addrErr := p.hetznerNodeAddress(server)
 		if addrErr != nil {
 			p.recordNodeConfigFailure(
 				nodeWithRole{IP: server.Name, Role: RoleWorker}, result,
@@ -279,7 +279,7 @@ func (p *Provisioner) recycleSingleAutoscalerNode(
 	hzProvider *hetzner.Provider,
 	server *hcloud.Server,
 ) error {
-	serverIP, addrErr := hetznerNodeTalosAddress(server)
+	serverIP, addrErr := p.hetznerNodeAddress(server)
 	if addrErr != nil {
 		return fmt.Errorf("resolving address for %s: %w", server.Name, addrErr)
 	}

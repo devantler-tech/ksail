@@ -61,12 +61,36 @@ func (p *Provisioner) Update(
 		diff, diffErr, opts, clustererr.ErrRecreationRequired,
 	)
 	if !proceed {
-		return result, prepErr //nolint:wrapcheck // error context added in PrepareUpdate
+		return result, p.addressMask.Error(prepErr)
 	}
 
 	clusterName := p.resolveClusterName(name)
 
-	return p.applyUpdateChanges(ctx, clusterName, oldSpec, newSpec, diff, result, opts)
+	result, err := p.applyUpdateChanges(ctx, clusterName, oldSpec, newSpec, diff, result, opts)
+
+	p.maskUpdateResult(result)
+
+	return result, p.addressMask.Error(err)
+}
+
+// maskUpdateResult hides server addresses in the applied and failed change
+// records an update hands back, because the caller prints them in its summary.
+// Those two lists are only ever reported. The planned-change lists are left
+// untouched: the caller reconciles components from their values.
+func (p *Provisioner) maskUpdateResult(result *clusterupdate.UpdateResult) {
+	if result == nil || p.addressMask == nil {
+		return
+	}
+
+	for _, changes := range [][]clusterupdate.Change{
+		result.AppliedChanges, result.FailedChanges,
+	} {
+		for index := range changes {
+			changes[index].OldValue = p.addressMask.Mask(changes[index].OldValue)
+			changes[index].NewValue = p.addressMask.Mask(changes[index].NewValue)
+			changes[index].Reason = p.addressMask.Mask(changes[index].Reason)
+		}
+	}
 }
 
 // mergeDisruptiveChanges detects disruptive config changes (encryption, CNI, disk quota)
@@ -878,6 +902,17 @@ func wrapStepErr(err error, msg string) error {
 // the only place drift in them surfaces — including patch removals — both in the
 // change summary and as the trigger for re-pushing config to existing nodes.
 func (p *Provisioner) DiffConfig(
+	ctx context.Context,
+	name string,
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+) (*clusterupdate.UpdateResult, error) {
+	result, err := p.diffConfig(ctx, name, oldSpec, newSpec)
+
+	return result, p.addressMask.Error(err)
+}
+
+// diffConfig computes the diff; DiffConfig hides server addresses in its error.
+func (p *Provisioner) diffConfig(
 	ctx context.Context,
 	name string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,

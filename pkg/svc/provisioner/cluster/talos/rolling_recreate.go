@@ -223,7 +223,7 @@ func (p *Provisioner) rollingReplaceSingleNode(
 	oldServer *hcloud.Server,
 	infra HetznerInfra,
 ) error {
-	oldIP, addrErr := hetznerNodeTalosAddress(oldServer)
+	oldIP, addrErr := p.hetznerNodeAddress(oldServer)
 	if addrErr != nil {
 		return fmt.Errorf("resolving address for %s: %w", oldServer.Name, addrErr)
 	}
@@ -633,7 +633,7 @@ func (p *Provisioner) waitForReplacementNodeReady(
 	clientset kubernetes.Interface,
 	server *hcloud.Server,
 ) error {
-	serverIP, addrErr := hetznerNodeTalosAddress(server)
+	serverIP, addrErr := p.hetznerNodeAddress(server)
 	if addrErr != nil {
 		return fmt.Errorf("resolving address for %s: %w", server.Name, addrErr)
 	}
