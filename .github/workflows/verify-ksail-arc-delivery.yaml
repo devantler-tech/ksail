@@ -18,7 +18,7 @@ jobs:
   preflight:
     name: Verify actual restricted ARC job delivery
     if: github.ref == 'refs/heads/main' && inputs.enable_arc
-    runs-on: ksail-code-quality
+    runs-on: platform-linux
     timeout-minutes: 15
     permissions:
       contents: read
