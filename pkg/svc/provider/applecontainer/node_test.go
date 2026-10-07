@@ -183,6 +183,7 @@ func writeScript(t *testing.T, body string) string {
 }
 
 func writeExecutableScriptFile(ctx context.Context, path, content string) error {
+	// #nosec G204 -- constant shell program; test-owned path is positional-only.
 	command := exec.CommandContext(
 		ctx, "sh", "-c", `umask 077 && cat >"$1" && chmod 0700 "$1"`, "sh", path,
 	)
