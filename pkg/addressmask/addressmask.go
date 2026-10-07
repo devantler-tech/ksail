@@ -78,6 +78,31 @@ func (m *Masker) Mask(text string) string {
 	return m.maskFrom(text, 0)
 }
 
+// Error returns an error whose text has server addresses replaced. The original
+// error stays reachable, so errors.Is and errors.As behave as before.
+func (m *Masker) Error(err error) error {
+	if err == nil || m == nil || !m.enabled {
+		return err
+	}
+
+	return &maskedError{err: err, masker: m}
+}
+
+// Writer wraps a writer so everything written through it is masked, including
+// an address that reaches it split across two writes. See maskingWriter for how
+// a partial line is handled.
+func (m *Masker) Writer(writer io.Writer) io.Writer {
+	if writer == nil {
+		return nil
+	}
+
+	if masked, ok := writer.(*maskingWriter); ok && masked.masker == m {
+		return writer
+	}
+
+	return &maskingWriter{masker: m, writer: writer, flushAfter: heldTailFlushDelay}
+}
+
 // maskFrom returns text[from:] with every server address replaced. The text
 // before from was printed earlier and is only read: it decides what a literal
 // touches on its left, and whether a literal that begins in it is an address.
@@ -121,31 +146,6 @@ func (m *Masker) maskFrom(text string, from int) string {
 	masked.WriteString(text[last:])
 
 	return masked.String()
-}
-
-// Error returns an error whose text has server addresses replaced. The original
-// error stays reachable, so errors.Is and errors.As behave as before.
-func (m *Masker) Error(err error) error {
-	if err == nil || m == nil || !m.enabled {
-		return err
-	}
-
-	return &maskedError{err: err, masker: m}
-}
-
-// Writer wraps a writer so everything written through it is masked, including
-// an address that reaches it split across two writes. See maskingWriter for how
-// a partial line is handled.
-func (m *Masker) Writer(writer io.Writer) io.Writer {
-	if writer == nil {
-		return nil
-	}
-
-	if masked, ok := writer.(*maskingWriter); ok && masked.masker == m {
-		return writer
-	}
-
-	return &maskingWriter{masker: m, writer: writer, flushAfter: heldTailFlushDelay}
 }
 
 // maskRange masks text[start:end], one pattern match or what is left of one.

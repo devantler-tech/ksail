@@ -90,6 +90,16 @@ func (w *maskingWriter) Write(payload []byte) (int, error) {
 	return len(payload), nil
 }
 
+// Flush passes on whatever is held, at once. Call it when the output is
+// complete, so the end of a last partial line is not left to the timer.
+func (w *maskingWriter) Flush() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.cancelFlush()
+	w.flushHeld()
+}
+
 // emit masks text and passes it on. What was written just before it — the last
 // run of address characters and the byte in front of that run — is put back in
 // front for the masking only, so a literal is judged whole even when its first
@@ -150,16 +160,6 @@ func (w *maskingWriter) scheduleFlush() {
 			w.flushHeld()
 		}
 	})
-}
-
-// Flush passes on whatever is held, at once. Call it when the output is
-// complete, so the end of a last partial line is not left to the timer.
-func (w *maskingWriter) Flush() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	w.cancelFlush()
-	w.flushHeld()
 }
 
 // flushHeld passes on whatever is held. The sink's error has no caller to go

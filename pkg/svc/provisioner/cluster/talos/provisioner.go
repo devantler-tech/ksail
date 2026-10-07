@@ -459,25 +459,7 @@ func (p *Provisioner) TalosConfigs() *talosconfigmanager.Configs {
 func (p *Provisioner) Create(ctx context.Context, name string) error {
 	defer addressmask.Flush(p.logWriter)
 
-	return p.addressMask.Error(p.createUnmasked(ctx, name))
-}
-
-// createUnmasked is Create before server addresses are taken out of its error.
-func (p *Provisioner) createUnmasked(ctx context.Context, name string) error {
-	clusterName := p.resolveClusterName(name)
-
-	// Route to Hetzner-based provisioning if Hetzner options are set
-	if p.hetznerOpts != nil {
-		return p.createHetznerCluster(ctx, clusterName)
-	}
-
-	// Route to Omni-based provisioning if Omni options are set
-	if p.omniOpts != nil {
-		return p.createOmniCluster(ctx, clusterName)
-	}
-
-	// Docker-based provisioning (default)
-	return p.createDockerCluster(ctx, clusterName)
+	return p.addressMask.Error(p.createUnmasked(ctx, name)) //nolint:wrapcheck // addressmask.Error transparently masks error text while preserving unwrapping
 }
 
 // Delete deletes a Talos cluster.
@@ -487,25 +469,7 @@ func (p *Provisioner) createUnmasked(ctx context.Context, name string) error {
 func (p *Provisioner) Delete(ctx context.Context, name string) error {
 	defer addressmask.Flush(p.logWriter)
 
-	return p.addressMask.Error(p.deleteUnmasked(ctx, name))
-}
-
-// deleteUnmasked is Delete before server addresses are taken out of its error.
-func (p *Provisioner) deleteUnmasked(ctx context.Context, name string) error {
-	clusterName := p.resolveClusterName(name)
-
-	// Route to Hetzner-based deletion if Hetzner options are set
-	if p.hetznerOpts != nil {
-		return p.deleteHetznerCluster(ctx, clusterName)
-	}
-
-	// Route to Omni-based deletion if Omni options are set
-	if p.omniOpts != nil {
-		return p.deleteOmniCluster(ctx, clusterName)
-	}
-
-	// Docker-based deletion (default)
-	return p.deleteDockerCluster(ctx, clusterName)
+	return p.addressMask.Error(p.deleteUnmasked(ctx, name)) //nolint:wrapcheck // addressmask.Error transparently masks error text while preserving unwrapping
 }
 
 // Exists checks if a Talos cluster exists.
@@ -585,7 +549,53 @@ func (p *Provisioner) List(ctx context.Context) ([]string, error) {
 func (p *Provisioner) Start(ctx context.Context, name string) error {
 	defer addressmask.Flush(p.logWriter)
 
-	return p.addressMask.Error(p.startUnmasked(ctx, name))
+	return p.addressMask.Error(p.startUnmasked(ctx, name)) //nolint:wrapcheck // addressmask.Error transparently masks error text while preserving unwrapping
+}
+
+// Stop stops a running Talos-in-Docker cluster.
+// If name is non-empty, it overrides the configured cluster name.
+// Node stop is delegated to the infrastructure provider.
+// The returned error names no server address unless the operator opted in.
+func (p *Provisioner) Stop(ctx context.Context, name string) error {
+	defer addressmask.Flush(p.logWriter)
+
+	return p.addressMask.Error(p.stopUnmasked(ctx, name)) //nolint:wrapcheck // addressmask.Error transparently masks error text while preserving unwrapping
+}
+
+// createUnmasked is Create before server addresses are taken out of its error.
+func (p *Provisioner) createUnmasked(ctx context.Context, name string) error {
+	clusterName := p.resolveClusterName(name)
+
+	// Route to Hetzner-based provisioning if Hetzner options are set
+	if p.hetznerOpts != nil {
+		return p.createHetznerCluster(ctx, clusterName)
+	}
+
+	// Route to Omni-based provisioning if Omni options are set
+	if p.omniOpts != nil {
+		return p.createOmniCluster(ctx, clusterName)
+	}
+
+	// Docker-based provisioning (default)
+	return p.createDockerCluster(ctx, clusterName)
+}
+
+// deleteUnmasked is Delete before server addresses are taken out of its error.
+func (p *Provisioner) deleteUnmasked(ctx context.Context, name string) error {
+	clusterName := p.resolveClusterName(name)
+
+	// Route to Hetzner-based deletion if Hetzner options are set
+	if p.hetznerOpts != nil {
+		return p.deleteHetznerCluster(ctx, clusterName)
+	}
+
+	// Route to Omni-based deletion if Omni options are set
+	if p.omniOpts != nil {
+		return p.deleteOmniCluster(ctx, clusterName)
+	}
+
+	// Docker-based deletion (default)
+	return p.deleteDockerCluster(ctx, clusterName)
 }
 
 // startUnmasked is Start before server addresses are taken out of its error.
@@ -619,16 +629,6 @@ func (p *Provisioner) startUnmasked(ctx context.Context, name string) error {
 	_, _ = fmt.Fprintf(p.logWriter, "Successfully started Talos cluster %q\n", clusterName)
 
 	return nil
-}
-
-// Stop stops a running Talos-in-Docker cluster.
-// If name is non-empty, it overrides the configured cluster name.
-// Node stop is delegated to the infrastructure provider.
-// The returned error names no server address unless the operator opted in.
-func (p *Provisioner) Stop(ctx context.Context, name string) error {
-	defer addressmask.Flush(p.logWriter)
-
-	return p.addressMask.Error(p.stopUnmasked(ctx, name))
 }
 
 // stopUnmasked is Stop before server addresses are taken out of its error.
