@@ -2174,7 +2174,7 @@ jobs:
         with:
           persist-credentials: false
       - name: 🧹 Free runner disk
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@88dd33181bb0d601999fc218bf1ea729dc1e76b3
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@32f92acde3dcf290d21d50639a805f0cf42b7b30
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
