@@ -1,0 +1,57 @@
+name: "EKS Account Capacity"
+
+# Reads what is using EC2 launch capacity in the EKS smoke-test account, with
+# the same OIDC role the smoke test assumes (see system-test-eks.yaml for the
+# AWS-side setup). It creates nothing and costs nothing: run it before spending
+# a smoke-test run when node groups fail to launch for an account limit.
+
+on:
+  workflow_dispatch:
+    inputs:
+      region:
+        description: "AWS region to read"
+        required: false
+        type: string
+        default: us-east-1
+
+env:
+  AWS_OIDC_ROLE_ARN: "arn:aws:iam::939001610192:role/eks-ci"
+
+concurrency:
+  group: eks-account-capacity
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  report:
+    name: 🔎 Report EC2 Launch Capacity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ci
+    permissions:
+      contents: read
+      id-token: write # Required to exchange GitHub's OIDC token for the scoped AWS role.
+    steps:
+      - name: 📄 Checkout
+        timeout-minutes: 5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 🔐 Configure AWS credentials (OIDC)
+        timeout-minutes: 5
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.AWS_OIDC_ROLE_ARN }}
+          role-session-name: ksail-eks-account-capacity-${{ github.run_id }}
+          aws-region: ${{ inputs.region }}
+          role-duration-seconds: 900
+
+      - name: 🔎 Report what is using EC2 launch capacity
+        timeout-minutes: 3
+        shell: bash
+        env:
+          AWS_REGION: ${{ inputs.region }}
+        run: |
+          "$GITHUB_WORKSPACE/.github/scripts/report-eks-account-capacity.sh" --region "$AWS_REGION"

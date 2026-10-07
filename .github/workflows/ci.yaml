@@ -399,6 +399,9 @@ jobs:
               - '.github/scripts/delete-eks-smoke-cluster.test.sh'
               - '.github/scripts/report-eks-create-failure.sh'
               - '.github/scripts/report-eks-create-failure.test.sh'
+              - '.github/scripts/report-eks-account-capacity.sh'
+              - '.github/scripts/report-eks-account-capacity.test.sh'
+              - '.github/workflows/eks-account-capacity.yaml'
               - '.github/workflows/system-test-eks.yaml'
               - '.github/workflows/ci.yaml'
             k3k-sentinel-scripts:
@@ -446,6 +449,13 @@ jobs:
             .github/scripts/report-eks-create-failure.sh \
             .github/scripts/report-eks-create-failure.test.sh
           .github/scripts/report-eks-create-failure.test.sh
+
+      - name: 🔎 Verify the EKS account capacity report only reads and prints no identifier
+        run: |
+          shellcheck \
+            .github/scripts/report-eks-account-capacity.sh \
+            .github/scripts/report-eks-account-capacity.test.sh
+          .github/scripts/report-eks-account-capacity.test.sh
 
   k3k-sentinel-scripts:
     name: 🔐 Validate k3k Sentinel Scripts
