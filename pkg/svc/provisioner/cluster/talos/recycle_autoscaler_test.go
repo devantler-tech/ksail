@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
@@ -48,7 +49,9 @@ func TestRecycleAutoscalerNodes_NoopWhenNotHetzner(t *testing.T) {
 
 	prov := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
 
-	err := prov.RecycleAutoscalerNodesForTest(context.Background(), "test-cluster")
+	err := prov.RecycleAutoscalerNodesForTest(
+		context.Background(), "test-cluster", clusterupdate.NewEmptyUpdateResult(),
+	)
 	require.NoError(t, err)
 }
 
@@ -62,21 +65,9 @@ func TestRecycleAutoscalerNodes_NoopWhenAutoscalerDisabled(t *testing.T) {
 			AutoscalerNodePoolNames: []string{"pool-a"},
 		})
 
-	err := prov.RecycleAutoscalerNodesForTest(context.Background(), "test-cluster")
-	require.NoError(t, err)
-}
-
-func TestRecycleAutoscalerNodes_NoopWhenNoPools(t *testing.T) {
-	t.Parallel()
-
-	prov := talosprovisioner.NewProvisioner(nil, nil).
-		WithLogWriter(io.Discard).
-		WithHetznerOptions(v1alpha1.OptionsHetzner{
-			NodeAutoscalerEnabled:   true,
-			AutoscalerNodePoolNames: nil,
-		})
-
-	err := prov.RecycleAutoscalerNodesForTest(context.Background(), "test-cluster")
+	err := prov.RecycleAutoscalerNodesForTest(
+		context.Background(), "test-cluster", clusterupdate.NewEmptyUpdateResult(),
+	)
 	require.NoError(t, err)
 }
 

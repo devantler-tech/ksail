@@ -27,6 +27,12 @@ const (
 	// (matches `default:"~/.kube/config"` on Connection.Kubeconfig and
 	// OptionsKubernetes.Kubeconfig struct tags).
 	DefaultKubeconfigPath = "~/.kube/config"
+	// DefaultKubernetesPodCIDR is the nested provider's pod network.
+	// Matches the OptionsKubernetes.PodCIDR default tag.
+	DefaultKubernetesPodCIDR = "10.64.0.0/16"
+	// DefaultKubernetesServiceCIDR is the nested provider's service network.
+	// Matches the OptionsKubernetes.ServiceCIDR default tag.
+	DefaultKubernetesServiceCIDR = "10.128.0.0/16"
 	// DefaultLocalRegistryPort is the default port for the local registry.
 	DefaultLocalRegistryPort int32 = 5050
 )

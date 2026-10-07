@@ -123,6 +123,11 @@ an unreadable or unsupported CRD schema is reported as a warning. Rendered manif
 only in memory until validation consumes them, so the next invocation reads your current files.
 With `--skip-helm-render`, schema discovery uses only CRDs present in the source files.
 
+Built-in Kubernetes schemas take priority. Explicit `--schema-location` values and discovered
+CRD schemas are checked before the public CRD catalogue, so the current CRD schema can validate
+fields missing from an older catalogue entry. The catalogue remains a fallback for kinds without
+a supplied schema; strict validation still rejects fields outside the selected schema.
+
 For HelmReleases, values from in-repository ConfigMaps and Secrets are combined in their declared
 order. Inline values take precedence over ordinary references, including explicit `false`, zero
 and empty values. Target references follow the pinned Flux controller's merge stages, including

@@ -37,7 +37,8 @@ for argument in "$@"; do
     exit 97
   fi
 done
-printf '%s\n' "$*" >> "$FIXTURE_CALLS"
+printf '%s\037' "$@" >> "$FIXTURE_CALLS"
+printf '\n' >> "$FIXTURE_CALLS"
 if [[ " $* " == *" --output json "* ]]; then
   printf '{"totalChanges":0}\n'
   echo 'No changes detected' >&2
@@ -52,6 +53,17 @@ fi
 
 func runVersionStep(t *testing.T, stepName string, env map[string]string) (string, string, error) {
 	t.Helper()
+
+	return runVersionStepWithShell(t, stepName, env, "bash")
+}
+
+func runVersionStepWithShell(
+	t *testing.T,
+	stepName string,
+	env map[string]string,
+	shell string,
+) (string, string, error) {
+	t.Helper()
 	action := readCompositeAction(t, ".github/actions/ksail-system-test/action.yaml")
 	step := findHarnessStep(t, action.Runs.Steps, stepName)
 	dir := t.TempDir()
@@ -60,6 +72,11 @@ func runVersionStep(t *testing.T, stepName string, env map[string]string) (strin
 	callsFile := filepath.Join(dir, "calls")
 
 	require.NoError(t, os.WriteFile(versionFile, []byte("v1.36.2"), 0o600))
+
+	if shell != "bash" {
+		require.NoError(t, os.Symlink(shell, filepath.Join(dir, "bash")))
+	}
+
 	writeExecutableStub(t, filepath.Join(dir, "kubectl"), versionStub)
 	writeExecutableStub(t, filepath.Join(dir, "ksail"), updateStub)
 	writeExecutableStub(
@@ -68,7 +85,7 @@ func runVersionStep(t *testing.T, stepName string, env map[string]string) (strin
 		"#!/usr/bin/env bash\nshift 2\nexec \"$@\"\n",
 	)
 
-	command := exec.CommandContext(t.Context(), "bash")
+	command := exec.CommandContext(t.Context(), shell)
 	command.Stdin = strings.NewReader(step.Run)
 	command.Dir = filepath.Join("..", "..")
 
@@ -102,6 +119,24 @@ func runVersionStep(t *testing.T, stepName string, env map[string]string) (strin
 	return string(output) + string(outputs), string(calls), err
 }
 
+func requireBash32(t *testing.T) string {
+	t.Helper()
+
+	const shell = "/bin/bash"
+
+	version, err := exec.CommandContext(t.Context(), shell, "--version").CombinedOutput()
+	require.NoError(t, err, string(version))
+
+	isBash32 := strings.Contains(string(version), "GNU bash, version 3.2.")
+	if os.Getenv("KSAIL_REQUIRE_BASH32") == "true" {
+		require.True(t, isBash32, "%s must provide Bash 3.2, got:\n%s", shell, version)
+	} else if !isBash32 {
+		t.Skipf("%s is not Bash 3.2: %s", shell, strings.SplitN(string(version), "\n", 2)[0])
+	}
+
+	return shell
+}
+
 func readOptionalVersionFixture(t *testing.T, root *os.Root, name string) []byte {
 	t.Helper()
 
@@ -126,13 +161,13 @@ func TestSystemTestTalosUpgradeObservesTargetAndRepeatsNoop(t *testing.T) {
 	t.Parallel()
 	output, calls, err := runVersionStep(t, "🧪 Talos Kubernetes upgrade — known version path", nil)
 	require.NoError(t, err, output)
-	assert.Equal(t, 2, strings.Count(calls, "cluster update"), calls)
+	assert.Equal(t, 2, strings.Count(calls, "cluster\x1fupdate\x1f"), calls)
 
 	for line := range strings.SplitSeq(strings.TrimSpace(calls), "\n") {
-		assert.Contains(t, line, "--kubernetes-version v1.37.1")
+		assert.Contains(t, line, "--kubernetes-version\x1fv1.37.1\x1f")
 	}
 
-	assert.Contains(t, calls, "--output json")
+	assert.Contains(t, calls, "--output\x1fjson\x1f")
 	assert.Contains(t, output, "v1.36.2 → v1.37.1")
 }
 
@@ -144,13 +179,25 @@ func TestSystemTestTalosUpgradePreservesUpdateArguments(t *testing.T) {
 		map[string]string{"ARGS": "--name fixture --kubernetes-version=v1.36.2"},
 	)
 	require.NoError(t, err, output)
-	assert.Equal(t, 2, strings.Count(calls, "cluster update"), calls)
+	assert.Equal(t, 2, strings.Count(calls, "cluster\x1fupdate\x1f"), calls)
 
 	for line := range strings.SplitSeq(strings.TrimSpace(calls), "\n") {
-		assert.Contains(t, line, "--name fixture")
-		assert.Contains(t, line, "--kubernetes-version v1.37.1")
+		assert.Contains(t, line, "--name\x1ffixture\x1f")
+		assert.Contains(t, line, "--kubernetes-version\x1fv1.37.1\x1f")
 		assert.NotContains(t, line, "v1.36.2")
 	}
+}
+
+func TestSystemTestTalosUpgradeEmptyArgumentsUnderBash32(t *testing.T) {
+	t.Parallel()
+	output, calls, err := runVersionStepWithShell(
+		t,
+		"🧪 Talos Kubernetes upgrade — known version path",
+		nil,
+		requireBash32(t),
+	)
+	require.NoError(t, err, output)
+	assert.Equal(t, 2, strings.Count(calls, "cluster\x1fupdate\x1f"), calls)
 }
 
 func TestSystemTestTalosUpgradeRejectsWrongLiveState(t *testing.T) {

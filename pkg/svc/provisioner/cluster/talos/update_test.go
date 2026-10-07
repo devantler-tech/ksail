@@ -850,6 +850,10 @@ func TestEnsureAutoscalerSecretIfNeeded_RejectsUnreadableImageBaseline(t *testin
 		configs, configErr := talosconfigmanager.NewDefaultConfigs()
 		require.NoError(t, configErr, testCase.name)
 
+		// An empty provider inventory: the update that follows the Secret refresh
+		// lists the autoscaler servers and finds none.
+		hzProvider, _ := newAutoscalerHcloudAPI(t)
+
 		provisioner := talosprovisioner.NewProvisioner(
 			nil, talosprovisioner.NewOptions().WithKubeconfigPath(kubeconfigPath),
 		).
@@ -859,6 +863,7 @@ func TestEnsureAutoscalerSecretIfNeeded_RejectsUnreadableImageBaseline(t *testin
 			}).
 			WithTalosOptsForTest(&v1alpha1.OptionsTalos{SchematicID: "test-schematic-id"}).
 			WithTalosConfigsForTest(configs).
+			WithInfraProvider(hzProvider).
 			WithLogWriter(io.Discard)
 
 		updateErr := provisioner.EnsureAutoscalerSecretIfNeededForTest(t.Context(), "test-cluster")

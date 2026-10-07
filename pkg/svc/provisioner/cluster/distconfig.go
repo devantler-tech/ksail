@@ -128,5 +128,10 @@ func newTalosDistributionConfig(
 		return nil, fmt.Errorf("build talos distribution config: %w", err)
 	}
 
+	named, err = named.WithProviderNetworks(cluster)
+	if err != nil {
+		return nil, fmt.Errorf("configure nested Talos networks: %w", err)
+	}
+
 	return &DistributionConfig{Talos: named}, nil
 }

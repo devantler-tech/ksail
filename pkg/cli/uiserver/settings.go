@@ -98,6 +98,7 @@ func (s settingsService) UpdateAppSettings(
 ) (api.AppSettings, error) {
 	err := s.manager.UpdateAppSettings(credentials.AppSettings{
 		Editor:              request.Editor,
+		AWSSSORenewal:       request.AWSSSORenewal,
 		ChatProvider:        v1alpha1.AIProvider(request.Chat.Provider),
 		ChatModel:           request.Chat.Model,
 		ChatReasoningEffort: request.Chat.ReasoningEffort,
@@ -157,7 +158,8 @@ func (s settingsService) TestConnection(
 
 func toAPIAppSettings(app credentials.AppSettings) api.AppSettings {
 	return api.AppSettings{
-		Editor: app.Editor,
+		Editor:        app.Editor,
+		AWSSSORenewal: app.AWSSSORenewal,
 		Chat: api.ChatSettings{
 			Provider:        string(app.ChatProvider),
 			Model:           app.ChatModel,

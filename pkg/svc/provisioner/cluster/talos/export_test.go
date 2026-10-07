@@ -20,6 +20,7 @@ import (
 	check "github.com/siderolabs/talos/pkg/cluster/check"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
+	"github.com/siderolabs/talos/pkg/provision"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -775,8 +776,18 @@ func SortServersByNameForTest(servers []*hcloud.Server) []*hcloud.Server {
 func (p *Provisioner) RecycleAutoscalerNodesForTest(
 	ctx context.Context,
 	clusterName string,
+	result *clusterupdate.UpdateResult,
 ) error {
-	return p.recycleAutoscalerNodes(ctx, clusterName)
+	return p.recycleAutoscalerNodes(ctx, clusterName, result)
+}
+
+// ListAutoscalerServersForTest exposes listAutoscalerServers for unit testing.
+func (p *Provisioner) ListAutoscalerServersForTest(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) ([]*hcloud.Server, error) {
+	return p.listAutoscalerServers(ctx, clusterName, result)
 }
 
 // WaitForAutoscalerRolloutForTest exposes waitForAutoscalerRollout for unit testing.
@@ -1317,4 +1328,58 @@ func (p *Provisioner) GetLowestRunningKubernetesVersionForTest(
 // its progress to.
 func (p *KubernetesProvisioner) ProgressWriterForTest() io.Writer {
 	return p.progressWriter()
+}
+
+// DiscoverMappedPortsForTest exercises the production bootstrap port selection.
+func (p *KubernetesProvisioner) DiscoverMappedPortsForTest(
+	ctx context.Context,
+	clusterName string,
+) (int, int, error) {
+	return p.discoverMappedPorts(ctx, clusterName)
+}
+
+// ProvisionNestedClusterForTest exercises the SDK request without bootstrap tunnels.
+func (p *KubernetesProvisioner) ProvisionNestedClusterForTest(
+	ctx context.Context,
+	clusterName string,
+) (provision.Cluster, error) {
+	podIP, err := p.nestedAPIHost(ctx, clusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	return p.provisionNestedCluster(ctx, clusterName, p.inner.talosConfigs.Bundle(), podIP)
+}
+
+// DiscoverServicePortForTest exercises the exact PodIP binding used by the Service.
+func (p *KubernetesProvisioner) DiscoverServicePortForTest(
+	ctx context.Context,
+	clusterName, podIP string,
+) (int, error) {
+	return p.discoverServicePort(ctx, clusterName, podIP)
+}
+
+// ReconcileAutoscalerNodesForTest exposes reconcileAutoscalerNodes for unit testing —
+// the step that follows the autoscaler Secret refresh: propagation when the Secret
+// changed, the removed-pool audit alone when it did not.
+func (p *Provisioner) ReconcileAutoscalerNodesForTest(
+	ctx context.Context,
+	clusterName string,
+	diff *clusterupdate.UpdateResult,
+	secretChanged bool,
+	imageChanged bool,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.reconcileAutoscalerNodes(ctx, clusterName, diff, secretChanged, imageChanged, result)
+}
+
+// EnsureAutoscalerSecretIfNeededWithResultForTest exposes
+// ensureAutoscalerSecretIfNeeded with a caller-owned result, so the failed changes
+// the step records can be asserted.
+func (p *Provisioner) EnsureAutoscalerSecretIfNeededWithResultForTest(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.ensureAutoscalerSecretIfNeeded(ctx, clusterName, nil, result)
 }

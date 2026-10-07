@@ -131,6 +131,12 @@ func fipUpdateTestServerWithServers(
 	mux.HandleFunc("/floating_ips/7/actions/assign", fipUpdateAssignHandler(calls))
 	mux.HandleFunc("/floating_ips/7", fipUpdateDeleteHandler(calls))
 	mux.HandleFunc("/servers", fipUpdateServersHandler(serversJSON))
+	// No cluster network: autoscaler-server discovery has nothing to match.
+	mux.HandleFunc("/networks", func(responseWriter http.ResponseWriter, _ *http.Request) {
+		responseWriter.Header().Set("Content-Type", "application/json")
+
+		_, _ = responseWriter.Write([]byte(`{"networks":[]}`))
+	})
 
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)

@@ -260,7 +260,7 @@ export function ResourceUsagePanel({
         <div className="space-y-4">
           {!usage.metricsAvailable ? (
             <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
-              Live usage is unavailable on this cluster (no metrics API serving metrics.k8s.io) — gauges and bars
+              Live usage is unavailable on this cluster — gauges and bars
               show requested resources instead.
             </p>
           ) : null}

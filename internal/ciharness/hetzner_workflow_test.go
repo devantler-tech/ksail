@@ -136,7 +136,7 @@ func assertSchematicRolloutActionSelection(t *testing.T) {
 	)
 }
 
-func TestHetznerFallbackCleanupSurvivesCancellation(t *testing.T) {
+func TestHetznerFallbackCleanupStaysScopedToItsRun(t *testing.T) {
 	t.Parallel()
 
 	var workflow hetznerWorkflow
@@ -471,6 +471,48 @@ func TestHetznerWorkflowSmokesK3sAndVanilla(t *testing.T) {
 	require.True(t, found, "workflow-level Hetzner cleanup job is missing")
 	assert.Contains(t, fallback.If, "always()")
 	assertHetznerFallbackCleanup(t, fallback.Steps)
+}
+
+// A job-level always() does not make its steps eligible after cancellation.
+// The fallback must still check out and clean every run-owned selector when an
+// interrupted test cannot complete its composite cleanup.
+func TestHetznerFallbackCleanupSurvivesCancellation(t *testing.T) {
+	t.Parallel()
+
+	var workflow hetznerWorkflow
+	require.NoError(
+		t,
+		yaml.Unmarshal(readRepoFile(t, ".github/workflows/system-test-hetzner.yaml"), &workflow),
+	)
+	cleanup, found := workflow.Jobs["cleanup"]
+	require.True(t, found)
+	require.Contains(t, cleanup.If, "always()")
+	require.Len(t, cleanup.Steps, 8)
+
+	for _, step := range cleanup.Steps {
+		t.Run(step.Name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, "${{ always() }}", step.If,
+				"checkout and cleanup must remain eligible after failure or cancellation")
+		})
+	}
+
+	var action struct {
+		Runs struct {
+			Steps []harnessStep `yaml:"steps"`
+		} `yaml:"runs"`
+	}
+	require.NoError(
+		t,
+		yaml.Unmarshal(readRepoFile(t, ".github/actions/cleanup-hetzner/action.yaml"), &action),
+	)
+	require.Len(t, action.Runs.Steps, 2)
+
+	for _, step := range action.Runs.Steps {
+		assert.Equal(t, "always()", step.If,
+			"nested setup and cleanup must also remain eligible after cancellation")
+	}
 }
 
 func TestHetznerSmokeReadinessRetriesTransientFailures(t *testing.T) {

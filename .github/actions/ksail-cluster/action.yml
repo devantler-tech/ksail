@@ -20,6 +20,12 @@ inputs:
   init:
     description: "Whether to run ksail project init before create"
     default: "true"
+  inventory-trial-server-type:
+    description: Bounded initial server type for the optional Talos/Hetzner inventory trial.
+    default: ""
+  inventory-trial-location:
+    description: European location for the optional inventory trial.
+    default: ""
   mirror-registry:
     description: "Comma-separated mirror registry specs passed as --mirror-registry to project init and cluster create (VCluster scaffolds no mirror config at init, so create needs the flag too). Replaces KSail's default mirror list, so include every registry to mirror. Kept apart from args because workload images does not accept the flag."
     default: ""
@@ -409,6 +415,18 @@ runs:
         yq -e '.spec.cluster.distribution == "Talos" and .spec.cluster.provider == "Hetzner"' "$config_path" > /dev/null
         # Keep the generated image, OS version and every other setting unchanged.
         yq --inplace '.spec.provider.hetzner.controlPlaneServerType = strenv(SERVER_TYPE) | .spec.provider.hetzner.workerServerType = strenv(SERVER_TYPE)' "$config_path"
+
+    - name: 🔧 Configure bounded Hetzner inventory capacity
+      if: inputs.inventory-trial-server-type != '' || inputs.inventory-trial-location != ''
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        INIT: ${{ inputs.init }}
+        CONFIG: ${{ inputs.config }}
+        TRIAL_SERVER_TYPE: ${{ inputs.inventory-trial-server-type }}
+        TRIAL_LOCATION: ${{ inputs.inventory-trial-location }}
+      run: bash "$GITHUB_ACTION_PATH/hetzner-inventory-config.sh"
 
     - name: 🧹 Validate manifests
       if: inputs.validate == 'true'

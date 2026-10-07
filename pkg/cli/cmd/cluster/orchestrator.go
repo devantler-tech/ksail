@@ -1419,7 +1419,12 @@ func (o *updateOrchestrator) applyOrReportChanges(
 	}
 
 	if !diff.HasInPlaceChanges() && !diff.HasRebootRequired() && !diff.HasRollingRecreate() {
-		err := o.repairEKSComponentState()
+		err := o.auditUnchangedUpdate(updater)
+		if err != nil {
+			return err
+		}
+
+		err = o.repairEKSComponentState()
 		if err != nil {
 			return err
 		}
@@ -1452,6 +1457,30 @@ func (o *updateOrchestrator) eksRegion() string {
 	}
 
 	return o.ctx.EKSConfig.Region
+}
+
+// auditUnchangedUpdate checks unresolved provider resources without entering the
+// update mutation path or persisting a new configuration baseline.
+func (o *updateOrchestrator) auditUnchangedUpdate(updater clusterprovisioner.Updater) error {
+	auditor, ok := updater.(clusterprovisioner.UpdateAuditor)
+	if !ok {
+		return nil
+	}
+
+	result := clusterupdate.NewEmptyUpdateResult()
+
+	err := auditor.AuditUpdate(o.cmd.Context(), o.clusterName, result)
+	if err != nil {
+		return fmt.Errorf("audit unchanged cluster update: %w", err)
+	}
+
+	reportFailedChanges(o.cmd, result)
+
+	if result.HasFailedChanges() {
+		return errUpdateChangesFailed
+	}
+
+	return nil
 }
 
 // repairEKSComponentState restores verified controller ownership when an

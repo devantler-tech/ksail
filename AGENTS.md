@@ -293,6 +293,7 @@ For a deeper dive into KSail's design and internals, refer to:
   - `docker.Provider`: Runs Kubernetes nodes as Docker containers
   - `hetzner.Provider`: Runs Kubernetes nodes as Hetzner Cloud servers
   - `omni.Provider`: Manages Talos cluster nodes through the Sidero Omni SaaS API
+  - `applecontainer.Provider`: Runs Talos nodes as containers on Apple's `container` runtime (macOS) by driving its CLI; not yet selectable as a `spec.cluster.provider` value
   - `aws.Provider`: Manages EKS clusters on Amazon Web Services
 - **Provisioners** (`pkg/svc/provisioner/`) configure and manage Kubernetes distributions
   - `KindClusterProvisioner` (`pkg/svc/provisioner/cluster/kind/`): Uses Kind SDK for standard upstream Kubernetes

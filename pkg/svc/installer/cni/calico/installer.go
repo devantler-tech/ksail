@@ -20,6 +20,7 @@ type Installer struct {
 
 	distribution v1alpha1.Distribution
 	haEnabled    bool
+	podCIDR      string
 	// apiServerChecker is called before Helm operations to ensure the API server
 	// is stable. It defaults to WaitForAPIServerStability and can be overridden
 	// in tests to avoid needing a real cluster.
@@ -46,6 +47,27 @@ const (
 	calicoChartsRepoURL = "https://docs.tigera.io/calico/charts"
 )
 
+// Option configures a Calico installer.
+type Option func(*Installer)
+
+// WithKubernetesProviderNetwork keeps Talos Calico IPAM in the same nested pod
+// network as the node configuration. Other providers keep their existing pool.
+func WithKubernetesProviderNetwork(
+	provider v1alpha1.Provider,
+	network v1alpha1.OptionsKubernetes,
+) Option {
+	return func(inst *Installer) {
+		if provider != v1alpha1.ProviderKubernetes {
+			return
+		}
+
+		inst.podCIDR = network.PodCIDR
+		if inst.podCIDR == "" {
+			inst.podCIDR = v1alpha1.DefaultKubernetesPodCIDR
+		}
+	}
+}
+
 // NewInstaller creates a new Calico installer with distribution-specific configuration.
 // When haEnabled is true the chart is configured with HA defaults
 // for the Typha control plane (controlPlaneReplicas).
@@ -55,11 +77,16 @@ func NewInstaller(
 	timeout time.Duration,
 	distribution v1alpha1.Distribution,
 	haEnabled bool,
+	opts ...Option,
 ) *Installer {
 	calicoInstaller := &Installer{
 		distribution: distribution,
 		haEnabled:    haEnabled,
 	}
+	for _, opt := range opts {
+		opt(calicoInstaller)
+	}
+
 	calicoInstaller.InstallerBase = cni.NewInstallerBase(
 		client,
 		kubeconfig,
@@ -345,6 +372,10 @@ func (c *Installer) getCalicoValues() map[string]string {
 	case v1alpha1.DistributionTalos:
 		// Talos-specific settings from https://docs.siderolabs.com/kubernetes-guides/cni/deploy-calico
 		maps.Copy(values, talosCalicoValues())
+
+		if c.podCIDR != "" {
+			values["installation.calicoNetwork.ipPools[0].cidr"] = fmt.Sprintf("%q", c.podCIDR)
+		}
 	case v1alpha1.DistributionVanilla,
 		v1alpha1.DistributionK3s,
 		v1alpha1.DistributionVCluster,

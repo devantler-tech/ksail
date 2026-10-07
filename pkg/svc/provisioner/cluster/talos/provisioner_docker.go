@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"slices"
 	"time"
 
 	docker "github.com/devantler-tech/ksail/v7/pkg/client/docker"
@@ -445,6 +446,7 @@ func (p *Provisioner) provisionCluster(
 	ctx context.Context,
 	clusterName string,
 	configBundle *bundle.Bundle,
+	extraPortMappings ...string,
 ) (provision.Cluster, error) {
 	// Create Talos provisioner
 	talosProvisioner, err := p.provisionerFactory(ctx)
@@ -458,6 +460,16 @@ func (p *Provisioner) provisionCluster(
 	clusterRequest, err := p.buildClusterRequest(clusterName, configBundle)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build cluster request: %w", err)
+	}
+
+	if len(extraPortMappings) > 0 {
+		if len(clusterRequest.Nodes) == 0 {
+			return nil, ErrNoControlPlane
+		}
+
+		clusterRequest.Nodes[0].Ports = append(
+			slices.Clone(clusterRequest.Nodes[0].Ports), extraPortMappings...,
+		)
 	}
 
 	// Create the cluster using Talos provisioner
@@ -694,6 +706,7 @@ func (p *Provisioner) getMappedPortEndpoint(
 	ctx context.Context,
 	clusterName string,
 	containerPort int,
+	bindingAddress string,
 ) (string, error) {
 	if p.dockerClient == nil {
 		return "", ErrDockerNotAvailable
@@ -715,12 +728,64 @@ func (p *Provisioner) getMappedPortEndpoint(
 
 	portKey := nat.Port(fmt.Sprintf("%d/tcp", containerPort))
 
+	if inspect.NetworkSettings == nil {
+		return "", fmt.Errorf("%w: missing container network settings", ErrNoPortMapping)
+	}
+
 	bindings, ok := inspect.NetworkSettings.Ports[portKey]
 	if !ok || len(bindings) == 0 {
 		return "", fmt.Errorf("%w for port %d", ErrNoPortMapping, containerPort)
 	}
 
-	return net.JoinHostPort("127.0.0.1", bindings[0].HostPort), nil
+	return mappedPortEndpoint(bindings, bindingAddress)
+}
+
+// mappedPortEndpoint preserves ordinary Docker's host access when no address is
+// specified. Pod port-forward uses an explicit loopback binding when available,
+// otherwise the SDK's non-Linux wildcard default. Service traffic requires the
+// exact pod IP. Both nested paths require an unambiguous, valid mapped port.
+func mappedPortEndpoint(bindings []nat.PortBinding, bindingAddress string) (string, error) {
+	if bindingAddress == "" {
+		return net.JoinHostPort("127.0.0.1", bindings[0].HostPort), nil
+	}
+
+	bindingAddress = preferredMappedAddress(bindings, bindingAddress)
+
+	var endpoint string
+
+	for _, binding := range bindings {
+		if binding.HostIP != bindingAddress {
+			continue
+		}
+
+		if endpoint != "" {
+			return "", fmt.Errorf("%w: ambiguous binding on %s", ErrNoPortMapping, bindingAddress)
+		}
+
+		endpoint = net.JoinHostPort(bindingAddress, binding.HostPort)
+
+		_, err := parsePort(endpoint)
+		if err != nil {
+			return "", fmt.Errorf("invalid mapped API port: %w", err)
+		}
+	}
+
+	if endpoint == "" {
+		return "", fmt.Errorf("%w on %s", ErrNoPortMapping, bindingAddress)
+	}
+
+	return endpoint, nil
+}
+
+func preferredMappedAddress(bindings []nat.PortBinding, bindingAddress string) string {
+	if bindingAddress == "127.0.0.1" &&
+		!slices.ContainsFunc(bindings, func(binding nat.PortBinding) bool {
+			return binding.HostIP == "127.0.0.1"
+		}) {
+		return "0.0.0.0"
+	}
+
+	return bindingAddress
 }
 
 // getMappedTalosAPIEndpoint returns the host-mapped endpoint for the Talos API (port 50000).
@@ -728,7 +793,7 @@ func (p *Provisioner) getMappedTalosAPIEndpoint(
 	ctx context.Context,
 	clusterName string,
 ) (string, error) {
-	return p.getMappedPortEndpoint(ctx, clusterName, talosAPIPort)
+	return p.getMappedPortEndpoint(ctx, clusterName, talosAPIPort, "")
 }
 
 // getMappedK8sAPIEndpoint returns the host-mapped endpoint for the Kubernetes API (port 6443).
@@ -736,7 +801,7 @@ func (p *Provisioner) getMappedK8sAPIEndpoint(
 	ctx context.Context,
 	clusterName string,
 ) (string, error) {
-	return p.getMappedPortEndpoint(ctx, clusterName, k8sAPIPort)
+	return p.getMappedPortEndpoint(ctx, clusterName, k8sAPIPort, "")
 }
 
 // patchTalosConfigEndpoint updates the active context's Talos API endpoint in cfg.
