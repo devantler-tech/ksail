@@ -95,26 +95,41 @@ printf '::stop-commands::%s\n' "${fence}"
 # The lists below are split on whitespace; never expand a returned name as a glob.
 set -f
 
-stacks=""
-if ! stacks="$(aws cloudformation describe-stacks --region "${region}" \
-	--query "Stacks[?starts_with(StackName, 'eksctl-${cluster_name}-')].StackName" \
+# The names come from list-stacks, not from an unscoped describe-stacks: the
+# smoke-test role may describe only its own eksctl-st-eks-* stacks, so a
+# describe with no stack name is denied, while listing is allowed on every
+# stack.
+#
+# Each stack is then read by its id, not its name. A stack already deleted when
+# this runs keeps its events, which may be the only record of the failure, but
+# it can be read only by id. The id holds the account number, so it is passed
+# to the reads and never printed; the report shows the stack's name.
+stack_ids=""
+if ! stack_ids="$(aws cloudformation list-stacks --region "${region}" \
+	--query "StackSummaries[?starts_with(StackName, 'eksctl-${cluster_name}-')].StackId" \
 	--output text 2>/dev/null)"; then
 	printf 'The stack list could not be read.\n'
-	stacks=""
+	stack_ids=""
 fi
 
+readonly stack_id_pattern='^arn:aws[a-z-]*:cloudformation:[a-z0-9-]+:[0-9]{12}:stack/([A-Za-z][A-Za-z0-9-]{0,127})/[0-9a-f-]{36}$'
 stack_count=0
-for stack in ${stacks}; do
-	# A name AWS returned goes on a command line next; keep to stack-name characters.
-	if [[ ! "${stack}" =~ ^[A-Za-z][A-Za-z0-9-]{0,127}$ ]]; then
+for stack_id in ${stack_ids}; do
+	# An id AWS returned goes on a command line next; accept only a stack id for
+	# one of this cluster's stacks.
+	if [[ ! "${stack_id}" =~ ${stack_id_pattern} ]]; then
+		continue
+	fi
+	stack="${BASH_REMATCH[1]}"
+	if [[ "${stack}" != "eksctl-${cluster_name}-"* ]]; then
 		continue
 	fi
 	stack_count=$((stack_count + 1))
 	report "Stack ${stack}: status" '(no status)' plain \
-		aws cloudformation describe-stacks --region "${region}" --stack-name "${stack}" \
+		aws cloudformation describe-stacks --region "${region}" --stack-name "${stack_id}" \
 		--query 'Stacks[0].[StackStatus, StackStatusReason]' --output text
 	report "Stack ${stack}: failed resources, earliest first" '(no failed resource events)' sorted \
-		aws cloudformation describe-stack-events --region "${region}" --stack-name "${stack}" \
+		aws cloudformation describe-stack-events --region "${region}" --stack-name "${stack_id}" \
 		--query "StackEvents[?contains(ResourceStatus, 'FAILED')].[Timestamp, LogicalResourceId, ResourceType, ResourceStatus, ResourceStatusReason]" \
 		--output text
 done
@@ -123,15 +138,19 @@ if [[ "${stack_count}" -eq 0 ]]; then
 fi
 
 nodegroups=""
+nodegroups_read=true
 if ! nodegroups="$(aws eks list-nodegroups --region "${region}" --cluster-name "${cluster_name}" \
 	--query 'nodegroups[]' --output text 2>/dev/null)"; then
 	printf 'The node group list could not be read (the cluster may not exist yet).\n'
 	nodegroups=""
+	nodegroups_read=false
 fi
+nodegroup_count=0
 for nodegroup in ${nodegroups}; do
 	if [[ ! "${nodegroup}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$ ]]; then
 		continue
 	fi
+	nodegroup_count=$((nodegroup_count + 1))
 	report "Node group ${nodegroup}: status" '(no status)' plain \
 		aws eks describe-nodegroup --region "${region}" --cluster-name "${cluster_name}" \
 		--nodegroup-name "${nodegroup}" --query 'nodegroup.status' --output text
@@ -139,6 +158,11 @@ for nodegroup in ${nodegroups}; do
 		aws eks describe-nodegroup --region "${region}" --cluster-name "${cluster_name}" \
 		--nodegroup-name "${nodegroup}" --query 'nodegroup.health.issues[].[code, message]' --output text
 done
+# A node group that failed to create is deleted by its stack's rollback, so an
+# empty list is a finding, not a blank: the stack events above are then the record.
+if [[ "${nodegroups_read}" == true && "${nodegroup_count}" -eq 0 ]]; then
+	printf 'No node group was found for the cluster.\n'
+fi
 
 printf '::%s::\n' "${fence}"
 printf '::endgroup::\n'
