@@ -1,4 +1,6 @@
-package talosprovisioner
+// Package addressmask keeps server addresses out of text meant for an operator's
+// terminal or a CI log.
+package addressmask
 
 import (
 	"io"
@@ -16,8 +18,8 @@ import (
 // part of the cluster's layout without the operator choosing to publish it.
 const ShowAddressesEnvVar = "KSAIL_SHOW_ADDRESSES"
 
-// hiddenAddressLabel replaces an address the provisioner has no name for.
-const hiddenAddressLabel = "<address hidden>"
+// HiddenLabel replaces an address nobody registered a name for.
+const HiddenLabel = "<address hidden>"
 
 // addressCandidatePattern finds text that may be an IP literal. Every match is
 // then parsed, so the pattern only has to be generous: two or more colon-ended
@@ -29,24 +31,24 @@ var addressCandidatePattern = regexp.MustCompile(
 		`|(?:[0-9]{1,3}\.){3}[0-9]{1,3}`,
 )
 
-// addressMasker rewrites server addresses out of text meant for an operator's
+// Masker rewrites server addresses out of text meant for an operator's
 // terminal or a CI log. An address registered with a name is replaced by that
 // name, so a line still says which node it concerns; any other publicly
 // routable address is replaced by a fixed placeholder. Loopback, private and
 // link-local addresses that were never registered are left alone: they are the
 // local endpoints of container-based clusters and name no server.
-type addressMasker struct {
+type Masker struct {
 	mu      sync.RWMutex
 	labels  map[netip.Addr]string
 	enabled bool
 }
 
-// newAddressMasker returns a masker that hides addresses unless the operator
+// New returns a masker that hides addresses unless the operator
 // opted back in through ShowAddressesEnvVar.
-func newAddressMasker() *addressMasker {
+func New() *Masker {
 	show, _ := strconv.ParseBool(strings.TrimSpace(os.Getenv(ShowAddressesEnvVar)))
 
-	return &addressMasker{
+	return &Masker{
 		labels:  make(map[netip.Addr]string),
 		enabled: !show,
 	}
@@ -55,7 +57,7 @@ func newAddressMasker() *addressMasker {
 // Register names an address, so later output reports the name instead. An
 // unparsable address or an empty name is ignored: the address then falls back
 // to the generic rule, which never prints it when it is publicly routable.
-func (m *addressMasker) Register(address, name string) {
+func (m *Masker) Register(address, name string) {
 	if m == nil || name == "" {
 		return
 	}
@@ -72,38 +74,13 @@ func (m *addressMasker) Register(address, name string) {
 }
 
 // Mask returns text with every server address replaced.
-func (m *addressMasker) Mask(text string) string {
-	if m == nil || !m.enabled || text == "" {
-		return text
-	}
-
-	matches := addressCandidatePattern.FindAllStringIndex(text, -1)
-	if matches == nil {
-		return text
-	}
-
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	var masked strings.Builder
-
-	last := 0
-
-	for _, match := range matches {
-		masked.WriteString(text[last:match[0]])
-		masked.WriteString(m.maskRange(text, match[0], match[1]))
-
-		last = match[1]
-	}
-
-	masked.WriteString(text[last:])
-
-	return masked.String()
+func (m *Masker) Mask(text string) string {
+	return m.maskFrom(text, 0)
 }
 
 // Error returns an error whose text has server addresses replaced. The original
 // error stays reachable, so errors.Is and errors.As behave as before.
-func (m *addressMasker) Error(err error) error {
+func (m *Masker) Error(err error) error {
 	if err == nil || m == nil || !m.enabled {
 		return err
 	}
@@ -111,27 +88,71 @@ func (m *addressMasker) Error(err error) error {
 	return &maskedError{err: err, masker: m}
 }
 
-// Writer wraps a writer so everything written through it is masked. Each write
-// is masked on its own: the provisioner formats every progress line in full
-// before writing it. A third-party writer that splits one address across two
-// writes is not covered.
-func (m *addressMasker) Writer(writer io.Writer) io.Writer {
+// Writer wraps a writer so everything written through it is masked, including
+// an address that reaches it split across two writes. See maskingWriter for how
+// a partial line is handled.
+func (m *Masker) Writer(writer io.Writer) io.Writer {
 	if writer == nil {
 		return nil
 	}
 
-	if masked, ok := writer.(*addressMaskingWriter); ok && masked.masker == m {
+	if masked, ok := writer.(*maskingWriter); ok && masked.masker == m {
 		return writer
 	}
 
-	return &addressMaskingWriter{masker: m, writer: writer}
+	return &maskingWriter{masker: m, writer: writer, flushAfter: heldTailFlushDelay}
+}
+
+// maskFrom returns text[from:] with every server address replaced. The text
+// before from was printed earlier and is only read: it decides what a literal
+// touches on its left, and whether a literal that begins in it is an address.
+// Such a literal cannot be taken back, so when it needs hiding its replacement
+// is printed in place of the part that is still to come.
+func (m *Masker) maskFrom(text string, from int) string {
+	if m == nil || !m.enabled || from >= len(text) {
+		return text[min(from, len(text)):]
+	}
+
+	matches := addressCandidatePattern.FindAllStringIndex(text, -1)
+	if matches == nil {
+		return text[from:]
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var masked strings.Builder
+
+	last := from
+
+	for _, match := range matches {
+		start, end := match[0], match[1]
+		if end <= last {
+			continue
+		}
+
+		replaced := m.maskRange(text, start, end)
+
+		if start >= last {
+			masked.WriteString(text[last:start])
+			masked.WriteString(replaced)
+		} else {
+			masked.WriteString(strings.TrimPrefix(replaced, text[start:last]))
+		}
+
+		last = end
+	}
+
+	masked.WriteString(text[last:])
+
+	return masked.String()
 }
 
 // maskRange masks text[start:end], one pattern match or what is left of one.
 // The match can hold more than the address — a label and a colon before it, a
 // port after it — so the longest part that parses as an address is replaced and
 // the remainders are searched again. The caller holds the read lock.
-func (m *addressMasker) maskRange(text string, start, end int) string {
+func (m *Masker) maskRange(text string, start, end int) string {
 	if start >= end {
 		return ""
 	}
@@ -148,7 +169,7 @@ func (m *addressMasker) maskRange(text string, start, end int) string {
 
 // replacement picks what to print for a parsed address. The caller holds the
 // read lock.
-func (m *addressMasker) replacement(addr netip.Addr, literal string) string {
+func (m *Masker) replacement(addr netip.Addr, literal string) string {
 	addr = addr.Unmap()
 
 	if name, ok := m.labels[addr]; ok {
@@ -156,7 +177,7 @@ func (m *addressMasker) replacement(addr netip.Addr, literal string) string {
 	}
 
 	if isPublicAddress(addr) {
-		return hiddenAddressLabel
+		return HiddenLabel
 	}
 
 	return literal
@@ -221,28 +242,9 @@ func isPublicAddress(addr netip.Addr) bool {
 // maskedError prints an error with server addresses replaced.
 type maskedError struct {
 	err    error
-	masker *addressMasker
+	masker *Masker
 }
 
 func (e *maskedError) Error() string { return e.masker.Mask(e.err.Error()) }
 
 func (e *maskedError) Unwrap() error { return e.err }
-
-// addressMaskingWriter masks each write before passing it on.
-type addressMaskingWriter struct {
-	masker *addressMasker
-	writer io.Writer
-}
-
-// Write masks the payload and reports the caller's byte count on success, as
-// io.Writer requires even though the masked payload may differ in length.
-func (w *addressMaskingWriter) Write(payload []byte) (int, error) {
-	masked := w.masker.Mask(string(payload))
-
-	_, err := io.WriteString(w.writer, masked)
-	if err != nil {
-		return 0, err //nolint:wrapcheck // a transparent writer returns the sink's error as is
-	}
-
-	return len(payload), nil
-}

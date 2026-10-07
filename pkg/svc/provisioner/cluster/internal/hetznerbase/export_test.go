@@ -1,6 +1,9 @@
 package hetznerbase
 
-import "context"
+import (
+	"context"
+	"io"
+)
 
 // PublishConnectorKubeconfigForTest exposes publishConnectorKubeconfig for unit testing.
 func (b *Base) PublishConnectorKubeconfigForTest(
@@ -22,3 +25,8 @@ func (b *Base) ConnectorSecretNameForTest(clusterName string) string {
 // BootstrapErrorLinePatternForTest exposes the pattern that selects kubeadm's
 // error lines from a node's bootstrap logs.
 const BootstrapErrorLinePatternForTest = bootstrapErrorLinePattern
+
+// ProgressForTest exposes the writer every progress line is written to.
+func (b *Base) ProgressForTest() io.Writer {
+	return b.progress()
+}

@@ -154,7 +154,7 @@ func (b *Base) RunCreateMultiNode(
 	}
 
 	_, _ = fmt.Fprintf(
-		b.LogWriter,
+		b.progress(),
 		"Cluster %q control plane is up at %s; joining nodes are registering; "+
 			"kubeconfig merged into %q\n",
 		clusterName, endpoint, persistedPath,

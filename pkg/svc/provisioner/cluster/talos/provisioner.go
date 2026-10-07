@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/addressmask"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
@@ -207,7 +208,7 @@ type Provisioner struct {
 	logWriter                 io.Writer
 	// addressMask hides server addresses in everything written to logWriter and in
 	// the change records an update returns, naming a node where one is known.
-	addressMask       *addressMasker
+	addressMask       *addressmask.Masker
 	logMu             sync.Mutex
 	componentDetector *detector.ComponentDetector
 	// imagePullRetry controls retry behavior for Docker image pulls.
@@ -256,7 +257,7 @@ func NewProvisioner(
 		options = NewOptions()
 	}
 
-	addressMask := newAddressMasker()
+	addressMask := addressmask.New()
 
 	prov := &Provisioner{
 		talosConfigs: talosConfigs,
@@ -318,10 +319,10 @@ func (p *Provisioner) WithProvisionerFactory(
 
 // WithLogWriter sets the log writer for provisioning output. Output
 // written through it has server addresses hidden unless the operator opted back
-// in through ShowAddressesEnvVar.
+// in through addressmask.ShowAddressesEnvVar.
 func (p *Provisioner) WithLogWriter(w io.Writer) *Provisioner {
 	if p.addressMask == nil {
-		p.addressMask = newAddressMasker()
+		p.addressMask = addressmask.New()
 	}
 
 	p.logWriter = p.addressMask.Writer(w)
@@ -458,41 +459,21 @@ func (p *Provisioner) TalosConfigs() *talosconfigmanager.Configs {
 // Create creates a Talos cluster.
 // If name is non-empty, it overrides the cluster name from talosConfigs.
 // Routes to Docker-based, Hetzner-based, or Omni-based provisioning based on configuration.
+// The returned error names no server address unless the operator opted in.
 func (p *Provisioner) Create(ctx context.Context, name string) error {
-	clusterName := p.resolveClusterName(name)
+	defer addressmask.Flush(p.logWriter)
 
-	// Route to Hetzner-based provisioning if Hetzner options are set
-	if p.hetznerOpts != nil {
-		return p.createHetznerCluster(ctx, clusterName)
-	}
-
-	// Route to Omni-based provisioning if Omni options are set
-	if p.omniOpts != nil {
-		return p.createOmniCluster(ctx, clusterName)
-	}
-
-	// Docker-based provisioning (default)
-	return p.createDockerCluster(ctx, clusterName)
+	return p.maskErr(p.createUnmasked(ctx, name))
 }
 
 // Delete deletes a Talos cluster.
 // If name is non-empty, it overrides the configured cluster name.
 // Routes to Docker-based, Hetzner-based, or Omni-based deletion based on configuration.
+// The returned error names no server address unless the operator opted in.
 func (p *Provisioner) Delete(ctx context.Context, name string) error {
-	clusterName := p.resolveClusterName(name)
+	defer addressmask.Flush(p.logWriter)
 
-	// Route to Hetzner-based deletion if Hetzner options are set
-	if p.hetznerOpts != nil {
-		return p.deleteHetznerCluster(ctx, clusterName)
-	}
-
-	// Route to Omni-based deletion if Omni options are set
-	if p.omniOpts != nil {
-		return p.deleteOmniCluster(ctx, clusterName)
-	}
-
-	// Docker-based deletion (default)
-	return p.deleteDockerCluster(ctx, clusterName)
+	return p.maskErr(p.deleteUnmasked(ctx, name))
 }
 
 // Exists checks if a Talos cluster exists.
@@ -568,7 +549,61 @@ func (p *Provisioner) List(ctx context.Context) ([]string, error) {
 // If name is non-empty, it overrides the configured cluster name.
 // Node start is delegated to the infrastructure provider; readiness waiting is
 // then specialized per provider type.
+// The returned error names no server address unless the operator opted in.
 func (p *Provisioner) Start(ctx context.Context, name string) error {
+	defer addressmask.Flush(p.logWriter)
+
+	return p.maskErr(p.startUnmasked(ctx, name))
+}
+
+// Stop stops a running Talos-in-Docker cluster.
+// If name is non-empty, it overrides the configured cluster name.
+// Node stop is delegated to the infrastructure provider.
+// The returned error names no server address unless the operator opted in.
+func (p *Provisioner) Stop(ctx context.Context, name string) error {
+	defer addressmask.Flush(p.logWriter)
+
+	return p.maskErr(p.stopUnmasked(ctx, name))
+}
+
+// createUnmasked is Create before server addresses are taken out of its error.
+func (p *Provisioner) createUnmasked(ctx context.Context, name string) error {
+	clusterName := p.resolveClusterName(name)
+
+	// Route to Hetzner-based provisioning if Hetzner options are set
+	if p.hetznerOpts != nil {
+		return p.createHetznerCluster(ctx, clusterName)
+	}
+
+	// Route to Omni-based provisioning if Omni options are set
+	if p.omniOpts != nil {
+		return p.createOmniCluster(ctx, clusterName)
+	}
+
+	// Docker-based provisioning (default)
+	return p.createDockerCluster(ctx, clusterName)
+}
+
+// deleteUnmasked is Delete before server addresses are taken out of its error.
+func (p *Provisioner) deleteUnmasked(ctx context.Context, name string) error {
+	clusterName := p.resolveClusterName(name)
+
+	// Route to Hetzner-based deletion if Hetzner options are set
+	if p.hetznerOpts != nil {
+		return p.deleteHetznerCluster(ctx, clusterName)
+	}
+
+	// Route to Omni-based deletion if Omni options are set
+	if p.omniOpts != nil {
+		return p.deleteOmniCluster(ctx, clusterName)
+	}
+
+	// Docker-based deletion (default)
+	return p.deleteDockerCluster(ctx, clusterName)
+}
+
+// startUnmasked is Start before server addresses are taken out of its error.
+func (p *Provisioner) startUnmasked(ctx context.Context, name string) error {
 	clusterName, infraProvider, err := p.beginNodeLifecycleOp(name, "Starting")
 	if err != nil {
 		return err
@@ -600,10 +635,8 @@ func (p *Provisioner) Start(ctx context.Context, name string) error {
 	return nil
 }
 
-// Stop stops a running Talos-in-Docker cluster.
-// If name is non-empty, it overrides the configured cluster name.
-// Node stop is delegated to the infrastructure provider.
-func (p *Provisioner) Stop(ctx context.Context, name string) error {
+// stopUnmasked is Stop before server addresses are taken out of its error.
+func (p *Provisioner) stopUnmasked(ctx context.Context, name string) error {
 	clusterName, infraProvider, err := p.beginNodeLifecycleOp(name, "Stopping")
 	if err != nil {
 		return err
@@ -771,6 +804,12 @@ func (p *Provisioner) logf(format string, args ...any) {
 // Use this whenever p.logWriter is passed to a component that will write from multiple goroutines.
 func (p *Provisioner) syncLogWriter() io.Writer {
 	return &syncWriter{mu: &p.logMu, w: p.logWriter}
+}
+
+// maskErr hides server addresses in the text of err and keeps its chain intact.
+func (p *Provisioner) maskErr(err error) error {
+	//nolint:wrapcheck // the masker rewrites the text only; wrapping would add nothing
+	return p.addressMask.Error(err)
 }
 
 // syncWriter wraps an io.Writer with a mutex to make Write goroutine-safe.

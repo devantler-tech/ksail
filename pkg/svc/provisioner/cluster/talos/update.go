@@ -61,7 +61,7 @@ func (p *Provisioner) Update(
 		diff, diffErr, opts, clustererr.ErrRecreationRequired,
 	)
 	if !proceed {
-		return result, p.addressMask.Error(prepErr)
+		return result, p.maskErr(prepErr)
 	}
 
 	clusterName := p.resolveClusterName(name)
@@ -70,7 +70,7 @@ func (p *Provisioner) Update(
 
 	p.maskUpdateResult(result)
 
-	return result, p.addressMask.Error(err)
+	return result, p.maskErr(err)
 }
 
 // maskUpdateResult hides server addresses in the applied and failed change
@@ -908,7 +908,7 @@ func (p *Provisioner) DiffConfig(
 ) (*clusterupdate.UpdateResult, error) {
 	result, err := p.diffConfig(ctx, name, oldSpec, newSpec)
 
-	return result, p.addressMask.Error(err)
+	return result, p.maskErr(err)
 }
 
 // diffConfig computes the diff; DiffConfig hides server addresses in its error.
