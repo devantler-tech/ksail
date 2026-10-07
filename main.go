@@ -13,7 +13,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd"
 	"github.com/devantler-tech/ksail/v7/pkg/client/klogutil"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
-	"github.com/spf13/cobra"
 )
 
 func main() {
@@ -28,7 +27,10 @@ func main() {
 func runSafely(args []string, runner func([]string) int, errWriter io.Writer) (exitCode int) {
 	defer func() {
 		if r := recover(); r != nil {
-			panicMessage := fmt.Sprintf("panic recovered: %v\n%s", r, debug.Stack())
+			// A panic value can quote a server address just as an error can.
+			panicMessage := addressmask.New().Mask(
+				fmt.Sprintf("panic recovered: %v\n%s", r, debug.Stack()),
+			)
 			notify.WriteMessage(notify.Message{
 				Type:    notify.ErrorType,
 				Content: panicMessage,
@@ -82,7 +84,7 @@ func runWithArgs(args []string) int {
 		}
 
 		// For actual errors, print and return exit code 1.
-		notify.Errorf(rootCmd.ErrOrStderr(), "%s", failureText(rootCmd, args, err))
+		notify.Errorf(rootCmd.ErrOrStderr(), "%s", failureText(err))
 
 		return 1
 	}
@@ -90,27 +92,12 @@ func runWithArgs(args []string) int {
 	return 0
 }
 
-// clusterCommandName is the command group whose failures name no server address.
-const clusterCommandName = "cluster"
-
-// failureText returns what to print for a failed command. A cluster command's
-// error often quotes the address of the server it could not reach, and a failed
-// run's output is routinely captured by public CI logs, so publicly routable
-// addresses are taken out of it unless the operator opted back in through
-// addressmask.ShowAddressesEnvVar. The error itself is left as it is.
-func failureText(rootCmd *cobra.Command, args []string, err error) string {
-	text := err.Error()
-
-	invoked, _, findErr := rootCmd.Find(args)
-	if findErr != nil {
-		return text
-	}
-
-	for command := invoked; command != nil; command = command.Parent() {
-		if command.Name() == clusterCommandName && command.Parent() == rootCmd {
-			return addressmask.New().Mask(text)
-		}
-	}
-
-	return text
+// failureText returns what to print for a failed command. An error often quotes
+// the address of the server it could not reach, and a failed run's output is
+// routinely captured by public CI logs and by the assistants that run KSail as
+// a tool, so publicly routable addresses are taken out of it for every command
+// unless the operator opted back in through addressmask.ShowAddressesEnvVar.
+// The error itself is left as it is.
+func failureText(err error) string {
+	return addressmask.New().Mask(err.Error())
 }
