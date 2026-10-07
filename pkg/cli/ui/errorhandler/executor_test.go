@@ -344,3 +344,62 @@ func commandErrorString(err *errorhandler.CommandError) string {
 
 	return err.Error()
 }
+
+// warningWithAddress quotes a documentation-range address (RFC 5737), which the
+// address mask treats exactly like a public server address.
+const warningWithAddress = "heads up: 203.0.113.10:6443 answered slowly"
+
+func warningCommand(result error) *cobra.Command {
+	return &cobra.Command{
+		Use:           "test",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		RunE: func(c *cobra.Command, _ []string) error {
+			_, _ = fmt.Fprintln(c.ErrOrStderr(), warningWithAddress)
+
+			return result
+		},
+	}
+}
+
+// TestExecutorExecuteHidesAddressesInReplayedWarnings covers both replay paths:
+// a warning is captured during the run and written out afterwards, to the same
+// public logs a failed command's error reaches.
+func TestExecutorExecuteHidesAddressesInReplayedWarnings(t *testing.T) {
+	t.Setenv("KSAIL_SHOW_ADDRESSES", "")
+
+	results := map[string]error{"success": nil, "exit code": &exitCodeError{code: 2}}
+
+	for name, result := range results {
+		var stderr bytes.Buffer
+
+		cmd := warningCommand(result)
+		cmd.SetErr(&stderr)
+
+		_ = errorhandler.NewExecutor().Execute(cmd)
+
+		got := stderr.String()
+		if !strings.Contains(got, "heads up: <address hidden>:6443 answered slowly") {
+			t.Fatalf("%s: expected the warning with its address hidden, got %q", name, got)
+		}
+
+		if strings.Contains(got, "203.0.113.10") {
+			t.Fatalf("%s: the replayed warning still names the address: %q", name, got)
+		}
+	}
+}
+
+func TestExecutorExecuteShowsAddressesInReplayedWarningsWhenOptedIn(t *testing.T) {
+	t.Setenv("KSAIL_SHOW_ADDRESSES", "true")
+
+	var stderr bytes.Buffer
+
+	cmd := warningCommand(nil)
+	cmd.SetErr(&stderr)
+
+	_ = errorhandler.NewExecutor().Execute(cmd)
+
+	if got := stderr.String(); !strings.Contains(got, warningWithAddress) {
+		t.Fatalf("expected the warning unchanged, got %q", got)
+	}
+}

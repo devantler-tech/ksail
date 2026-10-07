@@ -8,7 +8,6 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/internal/buildmeta"
 	snapshottest "github.com/devantler-tech/ksail/v7/internal/testutil/snapshottest"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/assert"
 )
@@ -196,37 +195,45 @@ func TestExitCodeFromErrorReturnsFalseForPlainErrors(t *testing.T) {
 // address mask treats exactly like a public server address.
 var errTestUnreachable = errors.New("dial tcp 203.0.113.10:6443: connect: connection refused")
 
-func TestFailureTextHidesAddressesForClusterCommands(t *testing.T) {
+func TestFailureTextHidesAddressesForEveryCommand(t *testing.T) {
 	t.Setenv("KSAIL_SHOW_ADDRESSES", "")
 
-	const hidden = "dial tcp <address hidden>:6443: connect: connection refused"
-
-	shown := errTestUnreachable.Error()
-
-	tests := []struct {
-		name string
-		args []string
-		want string
-	}{
-		{name: "cluster create", args: []string{"cluster", "create"}, want: hidden},
-		{name: "flag after", args: []string{"cluster", "delete", "--force"}, want: hidden},
-		{name: "flag before", args: []string{"--experimental", "cluster", "stop"}, want: hidden},
-		{name: "another command group", args: []string{"workload", "get"}, want: shown},
-		{name: "unknown command", args: []string{"no-such-command"}, want: shown},
-	}
-
-	for _, test := range tests {
-		rootCmd := cmd.NewRootCmd("test", "test", "test")
-
-		assert.Equal(t, test.want, failureText(rootCmd, test.args, errTestUnreachable), test.name)
-	}
+	assert.Equal(
+		t,
+		"dial tcp <address hidden>:6443: connect: connection refused",
+		failureText(errTestUnreachable),
+	)
 }
 
 func TestFailureTextShowsAddressesWhenOptedIn(t *testing.T) {
 	t.Setenv("KSAIL_SHOW_ADDRESSES", "true")
 
-	rootCmd := cmd.NewRootCmd("test", "test", "test")
-	got := failureText(rootCmd, []string{"cluster", "create"}, errTestUnreachable)
+	assert.Equal(t, errTestUnreachable.Error(), failureText(errTestUnreachable))
+}
 
-	assert.Equal(t, errTestUnreachable.Error(), got)
+func TestRunSafelyHidesAddressesInPanicOutput(t *testing.T) {
+	t.Setenv("KSAIL_SHOW_ADDRESSES", "")
+
+	var output bytes.Buffer
+
+	exitCode := runSafely(nil, func([]string) int {
+		panic(errTestUnreachable)
+	}, &output)
+
+	assert.Equal(t, 1, exitCode)
+	assert.Contains(t, output.String(), "dial tcp <address hidden>:6443")
+	assert.NotContains(t, output.String(), "203.0.113.10")
+	assert.Contains(t, output.String(), "TestRunSafelyHidesAddressesInPanicOutput")
+}
+
+func TestRunSafelyShowsAddressesInPanicOutputWhenOptedIn(t *testing.T) {
+	t.Setenv("KSAIL_SHOW_ADDRESSES", "true")
+
+	var output bytes.Buffer
+
+	runSafely(nil, func([]string) int {
+		panic(errTestUnreachable)
+	}, &output)
+
+	assert.Contains(t, output.String(), "203.0.113.10:6443")
 }
