@@ -13,7 +13,7 @@ When AWS refuses to launch a node group's instances for an account limit, the
 refusal does not say whether the limit is low or whether something left behind
 is using it up. This prints what could be using it: fleets, Spot fleet
 requests, instances and Auto Scaling groups in the region, counted by state,
-and the fleet-related limits when the role may read them.
+and the fleet, On-Demand and Spot launch limits when the role may read them.
 
 It only reads and it creates nothing, so it can be run without a cluster. It
 prints states, types and counts, never an identifier. A read that fails is
@@ -94,9 +94,9 @@ count 'Instances not terminated, by state and type' \
 count 'Auto Scaling groups, by desired capacity' \
 	aws autoscaling describe-auto-scaling-groups --region "${region}" \
 	--query 'AutoScalingGroups[].[DesiredCapacity]' --output text
-count 'Fleet and instance limits, by name and value' \
+count 'Fleet, On-Demand and Spot limits, by name and value' \
 	aws service-quotas list-service-quotas --region "${region}" --service-code ec2 \
-	--query "Quotas[?contains(QuotaName, 'Fleet') || contains(QuotaName, 'On-Demand Standard')].[QuotaName, Value]" \
+	--query "Quotas[?contains(QuotaName, 'Fleet') || contains(QuotaName, 'On-Demand Standard') || contains(QuotaName, 'Standard (A, C, D, H, I, M, R, T, Z) Spot')].[QuotaName, Value]" \
 	--output text
 
 printf '::%s::\n' "${fence}"

@@ -47,7 +47,10 @@ reset() {
 	: >"${fake_dir}/spot-instances"
 	printf 'running\tm5.large\nrunning\tm5.large\nstopped\tt3.micro\n' >"${fake_dir}/instances"
 	printf '2\n' >"${fake_dir}/groups"
-	printf 'Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances\t5.0\n' >"${fake_dir}/quotas"
+	printf '%s\t%s\n' \
+		'Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances' '5.0' \
+		'All Standard (A, C, D, H, I, M, R, T, Z) Spot Instance Requests' '0.0' \
+		>"${fake_dir}/quotas"
 }
 
 # shellcheck source=eks-report-test-lib.sh
@@ -66,8 +69,9 @@ expect_text 'Spot instance requests, by state: 0' 'an empty list must read as ze
 expect_text 'Instances not terminated, by state and type: 3' 'instances must be counted'
 expect_text '2 running	m5.large' 'instances must be grouped by state and type'
 expect_text 'Auto Scaling groups, by desired capacity: 1' 'Auto Scaling groups must be counted'
-expect_text 'Fleet and instance limits, by name and value: 1' 'readable limits must be printed'
+expect_text 'Fleet, On-Demand and Spot limits, by name and value: 2' 'readable limits must be printed'
 expect_text '5.0' 'the limit value must be printed'
+expect_text 'Spot Instance Requests	0.0' 'the Spot launch limit must be printed'
 [[ "$(wc -l <"${fake_dir}/calls.log" | tr -d ' ')" -eq 6 ]] || fail 'exactly six reads must be issued'
 if grep -Ev '^(ec2 describe-(fleets|spot-fleet-requests|spot-instance-requests|instances)|autoscaling describe-auto-scaling-groups|service-quotas list-service-quotas) ' \
 	"${fake_dir}/calls.log" >/dev/null; then
@@ -83,7 +87,7 @@ for query in \
 	'SpotInstanceRequests[].[State]' \
 	'Reservations[].Instances[].[State.Name, InstanceType]' \
 	'AutoScalingGroups[].[DesiredCapacity]' \
-	"Quotas[?contains(QuotaName, 'Fleet') || contains(QuotaName, 'On-Demand Standard')].[QuotaName, Value]"; do
+	"Quotas[?contains(QuotaName, 'Fleet') || contains(QuotaName, 'On-Demand Standard') || contains(QuotaName, 'Standard (A, C, D, H, I, M, R, T, Z) Spot')].[QuotaName, Value]"; do
 	grep -Fq -- "--query ${query} --output text" "${fake_dir}/calls.log" ||
 		fail "the read must use the query: ${query}"
 done
@@ -98,7 +102,7 @@ rm "${fake_dir}/quotas" "${fake_dir}/fleets"
 run --region us-east-1
 expect_status 0 'a refused read must still exit 0'
 expect_text 'EC2 fleets, by state and type: (could not be read)' 'a refused read must be said'
-expect_text 'Fleet and instance limits, by name and value: (could not be read)' 'refused limits must be said'
+expect_text 'Fleet, On-Demand and Spot limits, by name and value: (could not be read)' 'refused limits must be said'
 expect_text 'Instances not terminated, by state and type: 3' 'readable sections must still be printed'
 refute_text 'not authorized' "the provider's error text must not be printed"
 refute_text '000000000000' "the provider's error text must not be printed"
