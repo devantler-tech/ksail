@@ -9,9 +9,11 @@ import (
 	"runtime/debug"
 
 	"github.com/devantler-tech/ksail/v7/internal/buildmeta"
+	"github.com/devantler-tech/ksail/v7/pkg/addressmask"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd"
 	"github.com/devantler-tech/ksail/v7/pkg/client/klogutil"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
+	"github.com/spf13/cobra"
 )
 
 func main() {
@@ -80,10 +82,35 @@ func runWithArgs(args []string) int {
 		}
 
 		// For actual errors, print and return exit code 1.
-		notify.Errorf(rootCmd.ErrOrStderr(), "%v", err)
+		notify.Errorf(rootCmd.ErrOrStderr(), "%s", failureText(rootCmd, args, err))
 
 		return 1
 	}
 
 	return 0
+}
+
+// clusterCommandName is the command group whose failures name no server address.
+const clusterCommandName = "cluster"
+
+// failureText returns what to print for a failed command. A cluster command's
+// error often quotes the address of the server it could not reach, and a failed
+// run's output is routinely captured by public CI logs, so publicly routable
+// addresses are taken out of it unless the operator opted back in through
+// addressmask.ShowAddressesEnvVar. The error itself is left as it is.
+func failureText(rootCmd *cobra.Command, args []string, err error) string {
+	text := err.Error()
+
+	invoked, _, findErr := rootCmd.Find(args)
+	if findErr != nil {
+		return text
+	}
+
+	for command := invoked; command != nil; command = command.Parent() {
+		if command.Name() == clusterCommandName && command.Parent() == rootCmd {
+			return addressmask.New().Mask(text)
+		}
+	}
+
+	return text
 }

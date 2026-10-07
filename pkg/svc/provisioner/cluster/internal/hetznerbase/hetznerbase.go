@@ -137,7 +137,8 @@ type Base struct {
 	// is merged into after a successful bring-up (the cluster spec's
 	// connection.kubeconfig, e.g. "~/.kube/config").
 	KubeconfigPath string
-	// LogWriter receives the provisioner's progress output.
+	// LogWriter receives the provisioner's progress output. It is written to
+	// through [Base.progress], which hides server addresses.
 	LogWriter io.Writer
 	// Strategy supplies the distro-specific halves of the create flow ([Create]):
 	// per-node composition, the remote kubeconfig path, the distribution label,
@@ -344,7 +345,7 @@ func (b *Base) Delete(ctx context.Context, name string) error {
 	if err != nil {
 		// The cluster itself is gone; a leftover Secret must not fail the delete.
 		// Surface it on the progress output instead.
-		_, _ = fmt.Fprintf(b.LogWriter, "warning: %v\n", err)
+		_, _ = fmt.Fprintf(b.progress(), "warning: %v\n", err)
 	}
 
 	return nil
@@ -593,7 +594,7 @@ func (b *Base) bringUpFromPlan(
 	}
 
 	_, _ = fmt.Fprintf(
-		b.LogWriter,
+		b.progress(),
 		"Cluster %q is up at %s; kubeconfig merged into %q\n",
 		clusterName, endpoint, persistedPath,
 	)

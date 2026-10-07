@@ -142,6 +142,7 @@ go run main.go --help
 │   ├── controller/         # controller-runtime reconcilers for the KSail operator (Cluster CRs)
 │   └── testutil/           # Shared test utilities (home-env isolation, root checks, snapshot helpers)
 ├── pkg/                    # Core packages
+│   ├── addressmask/        # Keeps server addresses out of progress output and error text
 │   ├── toolgen/            # Tool generation for AI assistants
 │   ├── apis/               # API types and schemas
 │   ├── cli/                # CLI wiring, UI, and Cobra commands

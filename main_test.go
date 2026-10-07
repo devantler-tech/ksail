@@ -8,6 +8,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/internal/buildmeta"
 	snapshottest "github.com/devantler-tech/ksail/v7/internal/testutil/snapshottest"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/assert"
 )
@@ -189,4 +190,40 @@ func TestExitCodeFromErrorReturnsFalseForPlainErrors(t *testing.T) {
 
 	assert.False(t, ok)
 	assert.Equal(t, 0, code)
+}
+
+// errTestUnreachable quotes a documentation-range address (RFC 5737), which the
+// address mask treats exactly like a public server address.
+var errTestUnreachable = errors.New("dial tcp 203.0.113.10:6443: connect: connection refused")
+
+func TestFailureTextHidesAddressesForClusterCommands(t *testing.T) {
+	const hidden = "dial tcp <address hidden>:6443: connect: connection refused"
+
+	tests := []struct {
+		name string
+		show string
+		args []string
+		want string
+	}{
+		{name: "cluster create", args: []string{"cluster", "create"}, want: hidden},
+		{name: "cluster delete with flags", args: []string{"cluster", "delete", "--force"}, want: hidden},
+		{
+			name: "opted in",
+			show: "true",
+			args: []string{"cluster", "create"},
+			want: errTestUnreachable.Error(),
+		},
+		{name: "another command group", args: []string{"workload", "get"}, want: errTestUnreachable.Error()},
+		{name: "unknown command", args: []string{"no-such-command"}, want: errTestUnreachable.Error()},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("KSAIL_SHOW_ADDRESSES", test.show)
+
+			rootCmd := cmd.NewRootCmd("test", "test", "test")
+
+			assert.Equal(t, test.want, failureText(rootCmd, test.args, errTestUnreachable))
+		})
+	}
 }
