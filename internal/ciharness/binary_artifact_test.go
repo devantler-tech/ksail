@@ -57,7 +57,7 @@ func TestKSailBinaryArtifactDockerConsumer(t *testing.T) {
 	restore := findHarnessStep(t, consumer.Steps, "📥 Restore KSail binary")
 	assert.Equal(t,
 		"devantler-tech/ksail/.github/actions/restore-ksail-binary@"+
-			"e08268ac4d9a54352487fc77a2a68186ba68a217", restore.Uses)
+			"f9172ab810fdcb94b47351d04d70708f6878e10a", restore.Uses)
 	assert.Equal(
 		t,
 		"${{ needs.build-artifact.outputs.artifact-id }}",
