@@ -61,7 +61,7 @@ func (p *Provisioner) Update(
 		diff, diffErr, opts, clustererr.ErrRecreationRequired,
 	)
 	if !proceed {
-		return result, prepErr //nolint:wrapcheck // error context added in PrepareUpdate
+		return result, p.addressMask.Error(prepErr)
 	}
 
 	clusterName := p.resolveClusterName(name)
@@ -70,7 +70,7 @@ func (p *Provisioner) Update(
 
 	p.maskUpdateResult(result)
 
-	return result, err
+	return result, p.addressMask.Error(err)
 }
 
 // maskUpdateResult hides server addresses in the applied and failed change
@@ -902,6 +902,17 @@ func wrapStepErr(err error, msg string) error {
 // the only place drift in them surfaces — including patch removals — both in the
 // change summary and as the trigger for re-pushing config to existing nodes.
 func (p *Provisioner) DiffConfig(
+	ctx context.Context,
+	name string,
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+) (*clusterupdate.UpdateResult, error) {
+	result, err := p.diffConfig(ctx, name, oldSpec, newSpec)
+
+	return result, p.addressMask.Error(err)
+}
+
+// diffConfig computes the diff; DiffConfig hides server addresses in its error.
+func (p *Provisioner) diffConfig(
 	ctx context.Context,
 	name string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,

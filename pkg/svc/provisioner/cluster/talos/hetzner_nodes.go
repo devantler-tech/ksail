@@ -213,12 +213,10 @@ func (p *Provisioner) collectCreatedHetznerServers(
 		// hetznerNodeTalosAddress only fails when the server has neither a public
 		// IPv4 nor a private-network IP (or the address is not yet populated), so the
 		// placeholder must not claim a specific cause.
-		addr, addrErr := hetznerNodeTalosAddress(res.server)
+		addr, addrErr := p.hetznerNodeAddress(res.server)
 		if addrErr != nil {
 			addr = "address unavailable"
 		}
-
-		p.addressMask.Register(addr, res.name)
 
 		_, _ = fmt.Fprintf(
 			p.logWriter,
@@ -257,7 +255,7 @@ func (p *Provisioner) waitForHetznerTalosAPI(
 	servers []*hcloud.Server,
 ) error {
 	return runParallelOnServers(ctx, servers, len(servers), func(server *hcloud.Server) error {
-		serverIP, addrErr := hetznerNodeTalosAddress(server)
+		serverIP, addrErr := p.hetznerNodeAddress(server)
 		if addrErr != nil {
 			return addrErr
 		}
@@ -438,7 +436,7 @@ func (p *Provisioner) waitForServerReachable(
 	ctx context.Context,
 	server *hcloud.Server,
 ) error {
-	serverIP, addrErr := hetznerNodeTalosAddress(server)
+	serverIP, addrErr := p.hetznerNodeAddress(server)
 	if addrErr != nil {
 		return addrErr
 	}
@@ -530,7 +528,7 @@ func (p *Provisioner) applyConfigToNode(
 	server *hcloud.Server,
 	config talosconfig.Provider,
 ) error {
-	serverIP, addrErr := hetznerNodeTalosAddress(server)
+	serverIP, addrErr := p.hetznerNodeAddress(server)
 	if addrErr != nil {
 		return addrErr
 	}

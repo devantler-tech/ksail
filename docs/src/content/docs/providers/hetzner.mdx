@@ -445,7 +445,7 @@ To see the addresses while debugging, opt back in for that run:
 KSAIL_SHOW_ADDRESSES=true ksail cluster update
 ```
 
-Error messages are not covered: a failed command can still name the address it could not reach.
+The error of a failed `ksail cluster update` is treated the same way. Errors from other commands, such as `ksail cluster create` and `ksail cluster delete`, can still name the address they could not reach.
 
 ### Deploy with LoadBalancer
 

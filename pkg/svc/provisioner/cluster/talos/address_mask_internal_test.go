@@ -2,6 +2,8 @@ package talosprovisioner
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"net/netip"
 	"strings"
 	"testing"
@@ -61,6 +63,16 @@ func maskCases() []maskCase {
 			name: "local endpoints are left alone",
 			in:   "► Talos API → 127.0.0.1:50000, bridge 10.5.0.2, link fe80::1, any ::",
 			want: "► Talos API → 127.0.0.1:50000, bridge 10.5.0.2, link fe80::1, any ::",
+		},
+		{
+			name: "address glued to a label or a port",
+			in:   "addr:2001:db8:1:2:3:4:5:6 2001:db8:1:2:3:4:5:6:50000 tcp:10:198.51.100.7",
+			want: "addr:<address hidden> <address hidden>:50000 tcp:10:<address hidden>",
+		},
+		{
+			name: "scope operators and digests are not addresses",
+			in:   "std::bad_alloc node::default sha256:deadbeef:cafe",
+			want: "std::bad_alloc node::default sha256:deadbeef:cafe",
 		},
 		{
 			name: "clock times, hardware addresses and versions are not addresses",
@@ -272,4 +284,36 @@ func portless(field string) string {
 	host, _, _ := strings.Cut(field, ":")
 
 	return host
+}
+
+// TestAddressMaskerErrorKeepsTheCause pins that hiding an address in an error's
+// text does not hide the error itself from errors.Is and errors.As.
+func TestAddressMaskerErrorKeepsTheCause(t *testing.T) {
+	t.Setenv(ShowAddressesEnvVar, "")
+
+	masker := newAddressMasker()
+	masker.Register(testNodeAddressV4, "prod-control-plane-1")
+
+	cause := fmt.Errorf("rebooting node %s: %w", testNodeAddressV4, errTestDial)
+	masked := masker.Error(cause)
+
+	want := "rebooting node prod-control-plane-1: dial tcp " + hiddenAddressLabel +
+		":50000: connect: connection refused"
+	if masked.Error() != want {
+		t.Fatalf("got %q, want %q", masked.Error(), want)
+	}
+
+	var dial *addressBearingError
+	if !errors.Is(masked, cause) || !errors.As(masked, &dial) {
+		t.Fatal("the masked error no longer exposes its cause")
+	}
+
+	if masker.Error(nil) != nil {
+		t.Fatal("a nil error must stay nil")
+	}
+
+	wrapped := fmt.Errorf("failed to apply updates: %w", masked)
+	if found := addressesIn(wrapped.Error()); len(found) > 0 {
+		t.Fatalf("a wrapped masked error names %v", found)
+	}
 }

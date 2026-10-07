@@ -77,15 +77,44 @@ func (m *addressMasker) Mask(text string) string {
 		return text
 	}
 
+	matches := addressCandidatePattern.FindAllStringIndex(text, -1)
+	if matches == nil {
+		return text
+	}
+
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	return addressCandidatePattern.ReplaceAllStringFunc(text, m.maskCandidate)
+	var masked strings.Builder
+
+	last := 0
+
+	for _, match := range matches {
+		masked.WriteString(text[last:match[0]])
+		masked.WriteString(m.maskRange(text, match[0], match[1]))
+
+		last = match[1]
+	}
+
+	masked.WriteString(text[last:])
+
+	return masked.String()
+}
+
+// Error returns an error whose text has server addresses replaced. The original
+// error stays reachable, so errors.Is and errors.As behave as before.
+func (m *addressMasker) Error(err error) error {
+	if err == nil || m == nil || !m.enabled {
+		return err
+	}
+
+	return &maskedError{err: err, masker: m}
 }
 
 // Writer wraps a writer so everything written through it is masked. Each write
-// is masked on its own, which is sufficient for the provisioner's progress
-// output: every line is formatted in full before it is written.
+// is masked on its own: the provisioner formats every progress line in full
+// before writing it. A third-party writer that splits one address across two
+// writes is not covered.
 func (m *addressMasker) Writer(writer io.Writer) io.Writer {
 	if writer == nil {
 		return nil
@@ -98,26 +127,23 @@ func (m *addressMasker) Writer(writer io.Writer) io.Writer {
 	return &addressMaskingWriter{masker: m, writer: writer}
 }
 
-// maskCandidate replaces one pattern match when it really is an address that
-// must not be printed, and returns it unchanged otherwise. A candidate that
-// ends in a separator colon ("from 2001:db8::1:") is retried without it.
-func (m *addressMasker) maskCandidate(candidate string) string {
-	suffix := ""
-	literal := candidate
-
-	for {
-		addr, err := netip.ParseAddr(literal)
-		if err == nil {
-			return m.replacement(addr, literal) + suffix
-		}
-
-		if !strings.HasSuffix(literal, ":") || strings.HasSuffix(literal, "::") {
-			return candidate
-		}
-
-		literal = strings.TrimSuffix(literal, ":")
-		suffix = ":" + suffix
+// maskRange masks text[start:end], one pattern match or what is left of one.
+// The match can hold more than the address — a label and a colon before it, a
+// port after it — so the longest part that parses as an address is replaced and
+// the remainders are searched again. The caller holds the read lock.
+func (m *addressMasker) maskRange(text string, start, end int) string {
+	if start >= end {
+		return ""
 	}
+
+	spanStart, spanEnd, addr, found := longestAddress(text, start, end)
+	if !found {
+		return text[start:end]
+	}
+
+	return m.maskRange(text, start, spanStart) +
+		m.replacement(addr, text[spanStart:spanEnd]) +
+		m.maskRange(text, spanEnd, end)
 }
 
 // replacement picks what to print for a parsed address. The caller holds the
@@ -136,11 +162,71 @@ func (m *addressMasker) replacement(addr netip.Addr, literal string) string {
 	return literal
 }
 
+// longestAddress finds the longest part of text[start:end] that is an IP
+// literal, cutting only at colons. An IPv6 literal that touches a letter, digit
+// or underscore outside itself is not an address but a fragment of a longer
+// word ("std::bad_alloc"), and is skipped.
+func longestAddress(text string, start, end int) (int, int, netip.Addr, bool) {
+	cuts := []int{start, end}
+
+	for index := start; index < end; index++ {
+		if text[index] == ':' {
+			cuts = append(cuts, index, index+1)
+		}
+	}
+
+	var (
+		bestStart, bestEnd int
+		bestAddr           netip.Addr
+		found              bool
+	)
+
+	for _, from := range cuts {
+		for _, until := range cuts {
+			if until-from <= bestEnd-bestStart || until > end {
+				continue
+			}
+
+			addr, err := netip.ParseAddr(text[from:until])
+			if err != nil || (addr.Is6() && touchesWord(text, from, until)) {
+				continue
+			}
+
+			bestStart, bestEnd, bestAddr, found = from, until, addr, true
+		}
+	}
+
+	return bestStart, bestEnd, bestAddr, found
+}
+
+// touchesWord reports whether text[from:until] is directly preceded or followed
+// by a letter, digit or underscore.
+func touchesWord(text string, from, until int) bool {
+	return (from > 0 && isWordByte(text[from-1])) || (until < len(text) && isWordByte(text[until]))
+}
+
+func isWordByte(char byte) bool {
+	return char == '_' ||
+		(char >= '0' && char <= '9') ||
+		(char >= 'a' && char <= 'z') ||
+		(char >= 'A' && char <= 'Z')
+}
+
 // isPublicAddress reports whether an address is routable beyond the local
 // machine or a private network.
 func isPublicAddress(addr netip.Addr) bool {
 	return addr.IsGlobalUnicast() && !addr.IsPrivate()
 }
+
+// maskedError prints an error with server addresses replaced.
+type maskedError struct {
+	err    error
+	masker *addressMasker
+}
+
+func (e *maskedError) Error() string { return e.masker.Mask(e.err.Error()) }
+
+func (e *maskedError) Unwrap() error { return e.err }
 
 // addressMaskingWriter masks each write before passing it on.
 type addressMaskingWriter struct {
