@@ -401,6 +401,8 @@ jobs:
               - '.github/scripts/report-eks-create-failure.test.sh'
               - '.github/scripts/report-eks-account-capacity.sh'
               - '.github/scripts/report-eks-account-capacity.test.sh'
+              - '.github/scripts/eks-report-test-lib.sh'
+              - '.shellcheckrc'
               - '.github/workflows/eks-account-capacity.yaml'
               - '.github/workflows/system-test-eks.yaml'
               - '.github/workflows/ci.yaml'
@@ -447,6 +449,7 @@ jobs:
         run: |
           shellcheck \
             .github/scripts/report-eks-create-failure.sh \
+            .github/scripts/eks-report-test-lib.sh \
             .github/scripts/report-eks-create-failure.test.sh
           .github/scripts/report-eks-create-failure.test.sh
 
