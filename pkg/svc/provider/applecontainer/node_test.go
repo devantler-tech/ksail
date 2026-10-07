@@ -73,14 +73,18 @@ func TestCreateNode_RefusesExistingName(t *testing.T) {
 	// The name is taken by a container this provider does not own; nothing may be created, and
 	// above all nothing may be deleted.
 	for _, name := range []string{"buildkit", "dev-worker-1"} {
-		cli := newFakeCLI()
-		spec := workerSpec()
-		spec.Name = name
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-		err := applecontainer.NewProvider(cli).CreateNode(context.Background(), spec)
+			cli := newFakeCLI()
+			spec := workerSpec()
+			spec.Name = name
 
-		require.ErrorIs(t, err, applecontainer.ErrNodeExists)
-		assert.Empty(t, cli.mutations())
+			err := applecontainer.NewProvider(cli).CreateNode(context.Background(), spec)
+
+			require.ErrorIs(t, err, applecontainer.ErrNodeExists)
+			assert.Empty(t, cli.mutations())
+		})
 	}
 }
 
@@ -154,7 +158,7 @@ func TestCreateNode_RejectsInvalidSpec(t *testing.T) {
 			err := applecontainer.NewProvider(cli).CreateNode(context.Background(), spec)
 
 			require.ErrorIs(t, err, applecontainer.ErrInvalidNodeSpec)
-			assert.Empty(t, cli.calls, "an invalid spec must not reach the CLI")
+			assert.Empty(t, cli.allCalls(), "an invalid spec must not reach the CLI")
 		})
 	}
 }

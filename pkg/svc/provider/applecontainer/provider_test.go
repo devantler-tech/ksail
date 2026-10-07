@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/netip"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -93,6 +94,14 @@ func (f *fakeCLI) Run(_ context.Context, args ...string) ([]byte, error) {
 	}
 }
 
+// allCalls returns a copy of every recorded invocation.
+func (f *fakeCLI) allCalls() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return slices.Clone(f.calls)
+}
+
 // mutations returns the recorded invocations that change state (everything but the two lists).
 func (f *fakeCLI) mutations() []string {
 	f.mu.Lock()
@@ -149,7 +158,7 @@ func TestCheckAvailable(t *testing.T) {
 
 		require.NoError(t, prov.CheckAvailable(context.Background()))
 		assert.True(t, prov.IsAvailable())
-		assert.Contains(t, cli.calls, "system status")
+		assert.Contains(t, cli.allCalls(), "system status")
 	})
 
 	t.Run("CLIMissing", func(t *testing.T) {

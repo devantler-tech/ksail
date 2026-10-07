@@ -334,6 +334,10 @@ func (p *Provider) listContainers(ctx context.Context) ([]containerEntry, error)
 
 // deleteVolumes removes every volume labelled as belonging to the cluster.
 func (p *Provider) deleteVolumes(ctx context.Context, clusterName string) error {
+	if p.runner == nil {
+		return provider.ErrProviderUnavailable
+	}
+
 	output, err := p.runner.Run(ctx, "volume", "list", "--format", "json")
 	if err != nil {
 		return fmt.Errorf("failed to list volumes: %w", err)
