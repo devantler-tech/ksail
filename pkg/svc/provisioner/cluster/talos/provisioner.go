@@ -459,7 +459,7 @@ func (p *Provisioner) TalosConfigs() *talosconfigmanager.Configs {
 func (p *Provisioner) Create(ctx context.Context, name string) error {
 	defer addressmask.Flush(p.logWriter)
 
-	return p.addressMask.Error(p.createUnmasked(ctx, name)) //nolint:wrapcheck // addressmask.Error transparently masks error text while preserving unwrapping
+	return p.maskErr(p.createUnmasked(ctx, name))
 }
 
 // Delete deletes a Talos cluster.
@@ -469,7 +469,7 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 func (p *Provisioner) Delete(ctx context.Context, name string) error {
 	defer addressmask.Flush(p.logWriter)
 
-	return p.addressMask.Error(p.deleteUnmasked(ctx, name)) //nolint:wrapcheck // addressmask.Error transparently masks error text while preserving unwrapping
+	return p.maskErr(p.deleteUnmasked(ctx, name))
 }
 
 // Exists checks if a Talos cluster exists.
@@ -549,7 +549,7 @@ func (p *Provisioner) List(ctx context.Context) ([]string, error) {
 func (p *Provisioner) Start(ctx context.Context, name string) error {
 	defer addressmask.Flush(p.logWriter)
 
-	return p.addressMask.Error(p.startUnmasked(ctx, name)) //nolint:wrapcheck // addressmask.Error transparently masks error text while preserving unwrapping
+	return p.maskErr(p.startUnmasked(ctx, name))
 }
 
 // Stop stops a running Talos-in-Docker cluster.
@@ -559,7 +559,7 @@ func (p *Provisioner) Start(ctx context.Context, name string) error {
 func (p *Provisioner) Stop(ctx context.Context, name string) error {
 	defer addressmask.Flush(p.logWriter)
 
-	return p.addressMask.Error(p.stopUnmasked(ctx, name)) //nolint:wrapcheck // addressmask.Error transparently masks error text while preserving unwrapping
+	return p.maskErr(p.stopUnmasked(ctx, name))
 }
 
 // createUnmasked is Create before server addresses are taken out of its error.
@@ -800,6 +800,12 @@ func (p *Provisioner) logf(format string, args ...any) {
 // Use this whenever p.logWriter is passed to a component that will write from multiple goroutines.
 func (p *Provisioner) syncLogWriter() io.Writer {
 	return &syncWriter{mu: &p.logMu, w: p.logWriter}
+}
+
+// maskErr hides server addresses in the text of err and keeps its chain intact.
+func (p *Provisioner) maskErr(err error) error {
+	//nolint:wrapcheck // the masker rewrites the text only; wrapping would add nothing
+	return p.addressMask.Error(err)
 }
 
 // syncWriter wraps an io.Writer with a mutex to make Write goroutine-safe.
