@@ -151,6 +151,10 @@ type Provisioner struct {
 	// address. saveHetznerKubeconfig rewrites the saved kubeconfig to it so the
 	// file survives control-plane replacement when the endpoint is stable.
 	clusterEndpointIP string
+	// autoscalerSecretRefreshedEarly records that a pass of the current update which
+	// ran before the config diff existed changed the autoscaler Secret (see
+	// autoscalerSecretChangedThisUpdate). The classified pass reads and clears it.
+	autoscalerSecretRefreshedEarly bool
 	// omniOpts holds Omni-specific options when using the Omni provider.
 	omniOpts           *v1alpha1.OptionsOmni
 	provisionerFactory func(ctx context.Context) (provision.Provisioner, error)

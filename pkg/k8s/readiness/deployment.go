@@ -11,8 +11,9 @@ import (
 )
 
 // deploymentReadyCheck returns a poll function that checks whether a Deployment is ready.
-// A Deployment is considered ready when it has at least one replica and all replicas
-// are updated and available. NotFound errors are tolerated (returns false to continue polling).
+// A Deployment is ready when its observed capacity reaches the desired replica
+// count, with at least one replica, and all replicas are updated and available.
+// NotFound errors are tolerated (returns false to continue polling).
 func deploymentReadyCheck(
 	clientset kubernetes.Interface,
 	namespace, name string,
@@ -40,6 +41,15 @@ func deploymentReadyCheck(
 			return false, nil
 		}
 
+		desiredReplicas := int32(1) // Kubernetes defaults an omitted replica count to one.
+		if deployment.Spec.Replicas != nil {
+			desiredReplicas = *deployment.Spec.Replicas
+		}
+
+		if deployment.Status.Replicas < desiredReplicas {
+			return false, nil
+		}
+
 		if deployment.Status.UpdatedReplicas < deployment.Status.Replicas {
 			return false, nil
 		}
@@ -57,6 +67,7 @@ func deploymentReadyCheck(
 // This function polls the specified Deployment until it is ready or the deadline is reached.
 // A Deployment is considered ready when:
 //   - It has at least one replica
+//   - Its observed capacity reaches the desired replica count
 //   - All replicas have been updated
 //   - All replicas are available
 //

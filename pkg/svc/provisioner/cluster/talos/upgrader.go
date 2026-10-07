@@ -2,6 +2,7 @@ package talosprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -32,6 +33,10 @@ const (
 	// exhaust manifest reconciliation while its API server restarts and
 	// kube-proxy rolls out.
 	kubernetesUpgradeReconcileTimeout = 5 * time.Minute
+)
+
+var errAutoscalerNodeConfigurationChangesFailed = errors.New(
+	"autoscaler node configuration changes failed",
 )
 
 // kubernetesUpgradeOptions supplies the defaults that talosctl normally adds
@@ -116,6 +121,17 @@ func (p *Provisioner) UpgradeDistribution(
 		return err
 	}
 
+	// A same-version image roll runs before the regular config diff. Explicit
+	// schematic IDs are absent from rendered Talos configs, so that diff may be
+	// clean and skip the usual autoscaler Secret refresh. Establish the new
+	// snapshot baseline and recycle old autoscaler nodes before static nodes roll.
+	if runningVersionMatchesTarget(fromVersion, toVersion) {
+		err = p.reconcileAutoscalerImageBaseline(ctx, clusterName)
+		if err != nil {
+			return err
+		}
+	}
+
 	_, _ = fmt.Fprintf(p.logWriter,
 		"  Upgrading Talos from %s to %s...\n", fromVersion, toVersion,
 	)
@@ -128,6 +144,38 @@ func (p *Provisioner) UpgradeDistribution(
 	_, _ = fmt.Fprintf(p.logWriter,
 		"  ✓ Talos upgraded to %s\n", toVersion,
 	)
+
+	return nil
+}
+
+func (p *Provisioner) reconcileAutoscalerImageBaseline(
+	ctx context.Context,
+	clusterName string,
+) error {
+	result := clusterupdate.NewEmptyUpdateResult()
+	// Start clean: an earlier update on this provisioner may have failed before its
+	// classified pass consumed the marker.
+	p.autoscalerSecretRefreshedEarly = false
+
+	// A fresh invocation has newly generated PKI. The normal Update path syncs
+	// from a running control plane before writing the autoscaler Secret; the
+	// same-version image path must do so as well, including its live endpoint.
+	err := p.syncSecretsFromCluster(ctx, clusterName, nil, nil, result)
+	if err != nil {
+		return fmt.Errorf("syncing cluster identity for autoscaler image baseline: %w", err)
+	}
+
+	err = p.ensureAutoscalerSecretIfNeeded(ctx, clusterName, nil, result)
+	if err != nil {
+		return fmt.Errorf("reconciling autoscaler image baseline: %w", err)
+	}
+
+	// Inventory reports (a server of a removed pool or of a disabled autoscaler) do
+	// not stop the static nodes from rolling; the regular update reports them.
+	if failed := autoscalerConvergenceFailures(result); failed > 0 {
+		return fmt.Errorf("reconciling autoscaler image baseline: %d changes failed: %w",
+			failed, errAutoscalerNodeConfigurationChangesFailed)
+	}
 
 	return nil
 }
