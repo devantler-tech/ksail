@@ -808,12 +808,12 @@ func TestEnsureAutoscalerSecretIfNeeded_ErrorWhenNoSchematic(t *testing.T) {
 	assert.ErrorIs(t, err, talosprovisioner.ErrAutoscalerRequiresSchematic)
 }
 
-// A failed read of the existing boot image must stop the update before it can
-// report success with autoscaled nodes still on an unknown image.
-func TestEnsureAutoscalerSecretIfNeeded_RejectsUnreadableImageBaseline(t *testing.T) {
-	t.Setenv(v1alpha1.DefaultHetznerTokenEnvVar, "test-token")
+// autoscalerBaselineHcloudSecret returns the encoded hcloud Secret the autoscaler
+// Secret refresh reads.
+func autoscalerBaselineHcloudSecret(t *testing.T) []byte {
+	t.Helper()
 
-	hcloudSecret, err := json.Marshal(&corev1.Secret{
+	secret, err := json.Marshal(&corev1.Secret{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
 		ObjectMeta: metav1.ObjectMeta{Name: "hcloud", Namespace: "kube-system"},
 		Data: map[string][]byte{
@@ -822,6 +822,16 @@ func TestEnsureAutoscalerSecretIfNeeded_RejectsUnreadableImageBaseline(t *testin
 		},
 	})
 	require.NoError(t, err)
+
+	return secret
+}
+
+// A failed read of the existing boot image must stop the update before it can
+// report success with autoscaled nodes still on an unknown image.
+func TestEnsureAutoscalerSecretIfNeeded_RejectsUnreadableImageBaseline(t *testing.T) {
+	t.Setenv(v1alpha1.DefaultHetznerTokenEnvVar, "test-token")
+
+	hcloudSecret := autoscalerBaselineHcloudSecret(t)
 	malformedSecret, err := json.Marshal(&corev1.Secret{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
 		ObjectMeta: metav1.ObjectMeta{Name: "cluster-autoscaler-config", Namespace: "kube-system"},
