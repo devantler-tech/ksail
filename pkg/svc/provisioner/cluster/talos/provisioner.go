@@ -201,8 +201,11 @@ type Provisioner struct {
 	// to avoid real Talos and Kubernetes API connectivity.
 	kubernetesVersionDetector func(ctx context.Context, cpNodeIP string) (string, error)
 	logWriter                 io.Writer
-	logMu                     sync.Mutex
-	componentDetector         *detector.ComponentDetector
+	// addressMask hides server addresses in everything written to logWriter and in
+	// the change records an update returns, naming a node where one is known.
+	addressMask       *addressMasker
+	logMu             sync.Mutex
+	componentDetector *detector.ComponentDetector
 	// imagePullRetry controls retry behavior for Docker image pulls.
 	// Tests can override this via WithImagePullRetryConfig to use near-zero delays.
 	imagePullRetry imagePullRetryConfig
@@ -249,6 +252,8 @@ func NewProvisioner(
 		options = NewOptions()
 	}
 
+	addressMask := newAddressMasker()
+
 	prov := &Provisioner{
 		talosConfigs: talosConfigs,
 		options:      options,
@@ -256,7 +261,8 @@ func NewProvisioner(
 			return providers.Factory(ctx, TalosProviderName)
 		},
 		kernelModuleLoader: kernelmod.EnsureBrNetfilter,
-		logWriter:          os.Stdout,
+		addressMask:        addressMask,
+		logWriter:          addressMask.Writer(os.Stdout),
 		imagePullRetry:     defaultImagePullRetryConfig(),
 		talosAPIRetry:      defaultTalosAPIRetryConfig(),
 	}
@@ -306,9 +312,15 @@ func (p *Provisioner) WithProvisionerFactory(
 	return p
 }
 
-// WithLogWriter sets the log writer for provisioning output.
+// WithLogWriter sets the log writer for provisioning output. Output
+// written through it has server addresses hidden unless the operator opted back
+// in through ShowAddressesEnvVar.
 func (p *Provisioner) WithLogWriter(w io.Writer) *Provisioner {
-	p.logWriter = w
+	if p.addressMask == nil {
+		p.addressMask = newAddressMasker()
+	}
+
+	p.logWriter = p.addressMask.Writer(w)
 
 	return p
 }

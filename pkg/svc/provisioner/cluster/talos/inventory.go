@@ -70,12 +70,14 @@ func (p *Provisioner) getHetznerNodesByRole(
 		// Fail closed: a node with no reachable address would otherwise be silently
 		// dropped from the set used for config reconcile, upgrade, wipe, and version
 		// introspection, risking an inconsistent update that reports success.
-		ip, addrErr := hetznerNodeTalosAddress(server)
+		nodeIP, addrErr := hetznerNodeTalosAddress(server)
 		if addrErr != nil {
 			return nil, fmt.Errorf("resolving address for node %s: %w", node.Name, addrErr)
 		}
 
-		nodes = append(nodes, nodeWithRole{IP: ip, Role: node.Role})
+		p.addressMask.Register(nodeIP, node.Name)
+
+		nodes = append(nodes, nodeWithRole{IP: nodeIP, Role: node.Role})
 	}
 
 	return nodes, nil

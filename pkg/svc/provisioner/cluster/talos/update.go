@@ -66,7 +66,31 @@ func (p *Provisioner) Update(
 
 	clusterName := p.resolveClusterName(name)
 
-	return p.applyUpdateChanges(ctx, clusterName, oldSpec, newSpec, diff, result, opts)
+	result, err := p.applyUpdateChanges(ctx, clusterName, oldSpec, newSpec, diff, result, opts)
+
+	p.maskUpdateResult(result)
+
+	return result, err
+}
+
+// maskUpdateResult hides server addresses in the applied and failed change
+// records an update hands back, because the caller prints them in its summary.
+// Those two lists are only ever reported. The planned-change lists are left
+// untouched: the caller reconciles components from their values.
+func (p *Provisioner) maskUpdateResult(result *clusterupdate.UpdateResult) {
+	if result == nil || p.addressMask == nil {
+		return
+	}
+
+	for _, changes := range [][]clusterupdate.Change{
+		result.AppliedChanges, result.FailedChanges,
+	} {
+		for index := range changes {
+			changes[index].OldValue = p.addressMask.Mask(changes[index].OldValue)
+			changes[index].NewValue = p.addressMask.Mask(changes[index].NewValue)
+			changes[index].Reason = p.addressMask.Mask(changes[index].Reason)
+		}
+	}
 }
 
 // mergeDisruptiveChanges detects disruptive config changes (encryption, CNI, disk quota)

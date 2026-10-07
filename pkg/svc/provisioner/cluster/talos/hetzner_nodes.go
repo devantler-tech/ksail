@@ -218,6 +218,8 @@ func (p *Provisioner) collectCreatedHetznerServers(
 			addr = "address unavailable"
 		}
 
+		p.addressMask.Register(addr, res.name)
+
 		_, _ = fmt.Fprintf(
 			p.logWriter,
 			"  ✓ %s node %s created (IP: %s)\n",
