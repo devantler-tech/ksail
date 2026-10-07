@@ -370,22 +370,25 @@ func TestExecutorExecuteHidesAddressesInReplayedWarnings(t *testing.T) {
 
 	results := map[string]error{"success": nil, "exit code": &exitCodeError{code: 2}}
 
+	// Serial subtests: t.Setenv rules out t.Parallel, and each path reports on its own.
 	for name, result := range results {
-		var stderr bytes.Buffer
+		t.Run(name, func(t *testing.T) {
+			var stderr bytes.Buffer
 
-		cmd := warningCommand(result)
-		cmd.SetErr(&stderr)
+			cmd := warningCommand(result)
+			cmd.SetErr(&stderr)
 
-		_ = errorhandler.NewExecutor().Execute(cmd)
+			_ = errorhandler.NewExecutor().Execute(cmd)
 
-		got := stderr.String()
-		if !strings.Contains(got, "heads up: <address hidden>:6443 answered slowly") {
-			t.Fatalf("%s: expected the warning with its address hidden, got %q", name, got)
-		}
+			got := stderr.String()
+			if !strings.Contains(got, "heads up: <address hidden>:6443 answered slowly") {
+				t.Fatalf("expected the warning with its address hidden, got %q", got)
+			}
 
-		if strings.Contains(got, "203.0.113.10") {
-			t.Fatalf("%s: the replayed warning still names the address: %q", name, got)
-		}
+			if strings.Contains(got, "203.0.113.10") {
+				t.Fatalf("the replayed warning still names the address: %q", got)
+			}
+		})
 	}
 }
 

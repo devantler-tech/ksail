@@ -223,7 +223,7 @@ func TestRunSafelyHidesAddressesInPanicOutput(t *testing.T) {
 	assert.Equal(t, 1, exitCode)
 	assert.Contains(t, output.String(), "dial tcp <address hidden>:6443")
 	assert.NotContains(t, output.String(), "203.0.113.10")
-	assert.Contains(t, output.String(), "TestRunSafelyHidesAddressesInPanicOutput")
+	assert.Contains(t, output.String(), "runSafely")
 }
 
 func TestRunSafelyShowsAddressesInPanicOutputWhenOptedIn(t *testing.T) {
