@@ -445,7 +445,7 @@ To see the addresses while debugging, opt back in for that run:
 KSAIL_SHOW_ADDRESSES=true ksail cluster update
 ```
 
-The error a failed `ksail cluster` command prints is treated the same way: a publicly routable address in it is shown as `<address hidden>`, or as the server name where KSail knows it. Other command groups, such as `ksail workload`, print their errors unchanged.
+The error a failed command prints is treated the same way, for every command group: a publicly routable address in it is shown as `<address hidden>`, or as the server name where KSail knows it. So are warnings printed after a command finishes and the message of an unexpected crash. Because the assistant and MCP tools run the same commands, the errors they return are covered too. Output you asked for, such as a node listing from `ksail workload get nodes -o wide`, is not changed.
 
 ### Deploy with LoadBalancer
 

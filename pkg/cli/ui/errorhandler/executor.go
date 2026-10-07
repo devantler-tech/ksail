@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v7/pkg/addressmask"
 	"github.com/spf13/cobra"
 )
 
@@ -67,8 +68,15 @@ func (e *Executor) Execute(cmd *cobra.Command) error {
 // that write nothing are unaffected.
 func flushWarnings(w io.Writer, buf *bytes.Buffer) {
 	if buf.Len() > 0 {
-		_, _ = w.Write(buf.Bytes())
+		_, _ = w.Write(maskAddresses(buf.Bytes()))
 	}
+}
+
+// maskAddresses hides publicly routable server addresses in replayed warning
+// text, which reaches the same public logs as a failed command's error. The
+// operator opts back in through addressmask.ShowAddressesEnvVar.
+func maskAddresses(text []byte) []byte {
+	return []byte(addressmask.New().Mask(string(text)))
 }
 
 // flushExitCodeWarnings forwards the stderr an exit-code result captured, minus the
@@ -88,7 +96,7 @@ func flushExitCodeWarnings(writer io.Writer, buf *bytes.Buffer, err error) {
 	}
 
 	if len(out) > 0 {
-		_, _ = writer.Write(out)
+		_, _ = writer.Write(maskAddresses(out))
 	}
 }
 
