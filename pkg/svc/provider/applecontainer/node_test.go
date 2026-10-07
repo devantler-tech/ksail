@@ -2,8 +2,13 @@ package applecontainer_test
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/applecontainer"
@@ -163,17 +168,89 @@ func TestCreateNode_RejectsInvalidSpec(t *testing.T) {
 	}
 }
 
-// writeScript writes an executable stand-in for the `container` CLI.
+// writeScript writes an executable stand-in for the `container` CLI without
+// leaving this process with a writable descriptor that a concurrent fork can
+// inherit.
 func writeScript(t *testing.T, body string) string {
 	t.Helper()
 
 	path := filepath.Join(t.TempDir(), "container")
-
-	//nolint:gosec // the stand-in CLI must be executable
-	err := os.WriteFile(path, []byte("#!/bin/sh\n"+body+"\n"), 0o700)
-	require.NoError(t, err)
+	require.NoError(t, writeExecutableScriptFile(
+		t.Context(), path, "#!/bin/sh\n"+body+"\n",
+	))
 
 	return path
+}
+
+func writeExecutableScriptFile(ctx context.Context, path, content string) error {
+	command := exec.CommandContext(
+		ctx, "sh", "-c", `umask 077 && cat >"$1" && chmod 0700 "$1"`, "sh", path,
+	)
+	command.Stdin = strings.NewReader(content)
+
+	output, err := command.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("write executable script %s: %w (%s)", path, err, output)
+	}
+
+	return nil
+}
+
+func TestWriteExecutableScriptFile_ProducesRunnableOwnerOnlyScript(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "container")
+	content := "#!/bin/sh\nprintf 'ready %s\\n' \"$1\"\n"
+
+	require.NoError(t, writeExecutableScriptFile(t.Context(), path, content))
+
+	written, err := os.ReadFile(path) //nolint:gosec // Test-owned temporary path.
+	require.NoError(t, err)
+	assert.Equal(t, content, string(written))
+
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o700), info.Mode().Perm())
+
+	//nolint:gosec // path is a test-owned temporary executable.
+	output, err := exec.CommandContext(t.Context(), path, "now").CombinedOutput()
+	require.NoError(t, err, "script must execute immediately: %s", output)
+	assert.Equal(t, "ready now\n", string(output))
+}
+
+func TestWriteExecutableScriptFile_AvoidsTextFileBusy(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS != "linux" {
+		t.Skip("ETXTBSY on exec of a file open for writing is Linux semantics")
+	}
+
+	const content = "#!/bin/sh\nexit 0\n"
+
+	heldPath := filepath.Join(t.TempDir(), "held-open")
+	require.NoError(t, os.WriteFile(heldPath, []byte(content), 0o600))
+	//nolint:gosec // Owner execute is required for this test-owned temporary script.
+	require.NoError(t, os.Chmod(heldPath, 0o700))
+
+	// This is the failure mechanism from the coverage run: Linux refuses to
+	// execute a test stub while this process owns a writable descriptor for it.
+	//nolint:gosec // heldPath is a test-owned temporary executable.
+	writer, err := os.OpenFile(heldPath, os.O_WRONLY, 0)
+	require.NoError(t, err)
+
+	//nolint:gosec // heldPath is a test-owned temporary executable.
+	output, err := exec.CommandContext(t.Context(), heldPath).CombinedOutput()
+	require.ErrorIs(t, err, syscall.ETXTBSY, "exec must expose the exact failure: %s", output)
+	require.NoError(t, writer.Close())
+
+	// The writer used by writeScript must leave no writable descriptor in this
+	// process for a concurrent fork to inherit.
+	safePath := filepath.Join(t.TempDir(), "fork-safe")
+	require.NoError(t, writeExecutableScriptFile(t.Context(), safePath, content))
+
+	//nolint:gosec // safePath is a test-owned temporary executable.
+	output, err = exec.CommandContext(t.Context(), safePath).CombinedOutput()
+	require.NoError(t, err, "fork-safe stub must execute immediately: %s", output)
 }
 
 func TestExecRunner(t *testing.T) {
