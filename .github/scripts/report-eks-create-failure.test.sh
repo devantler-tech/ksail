@@ -50,8 +50,6 @@ FAKE
 chmod +x "${fake_bin}/aws"
 
 fake_dir=""
-output=""
-status=0
 
 # A stack id as list-stacks returns it: it carries the account number, which
 # the report must never print.
@@ -76,34 +74,8 @@ reset() {
 	printf 'NodeCreationFailure\tInstances failed to join the kubernetes cluster\n' >"${fake_dir}/nodegroup-issues"
 }
 
-run() {
-	status=0
-	output="$(FAKE_DIR="${fake_dir}" PATH="${fake_bin}:${PATH}" "${reporter}" "$@" 2>&1)" || status=$?
-}
-
-fail() {
-	printf 'FAIL: %s\n--- output (status %s) ---\n%s\n---\n' "$1" "${status}" "${output}" >&2
-	exit 1
-}
-
-expect_status() {
-	[[ "${status}" -eq "$1" ]] || fail "$2 (expected status $1)"
-}
-
-expect_text() {
-	grep -Fq -- "$1" <<<"${output}" || fail "$2"
-}
-
-refute_text() {
-	if grep -Fq -- "$1" <<<"${output}"; then
-		fail "$2"
-	fi
-}
-
-pass() {
-	pass_count=$((pass_count + 1))
-	printf 'ok %s\n' "$1"
-}
+# shellcheck source=eks-report-test-lib.sh
+source "${script_dir}/eks-report-test-lib.sh"
 
 # --- the cause is printed, earliest first ------------------------------------
 reset
@@ -147,13 +119,7 @@ for query in \
 	grep -Fq -- "--query ${query} --output text" "${fake_dir}/calls.log" ||
 		fail "the read must use the query: ${query}"
 done
-[[ "$(head -n 1 <<<"${output}")" == '::group::Why the EKS create failed (st-eks-1-1)' ]] ||
-	fail 'the report must open a log group'
-fence="$(sed -n '2s/^::stop-commands::\(report-[0-9a-f]\{32\}\)$/\1/p' <<<"${output}")"
-[[ -n "${fence}" ]] || fail 'quoted provider text must be fenced off from workflow commands'
-[[ "$(tail -n 2 <<<"${output}" | head -n 1)" == "::${fence}::" ]] ||
-	fail 'the command fence must be closed with its own token'
-[[ "$(tail -n 1 <<<"${output}")" == '::endgroup::' ]] || fail 'the report must close its log group'
+expect_fenced_group 'Why the EKS create failed (st-eks-1-1)' report
 pass 'prints stack failures earliest first and node group health'
 
 # --- diagnostic only: failed reads never fail the script ---------------------
