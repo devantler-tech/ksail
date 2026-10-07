@@ -65,7 +65,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.33.4
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.6
 	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.81.1
-	github.com/aws/aws-sdk-go-v2/service/eks v1.99.0
+	github.com/aws/aws-sdk-go-v2/service/eks v1.102.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.1
 	github.com/aws/smithy-go v1.28.2
 	github.com/charmbracelet/bubbles v1.0.0
