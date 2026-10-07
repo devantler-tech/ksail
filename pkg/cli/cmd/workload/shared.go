@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/addressmask"
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
@@ -404,10 +405,12 @@ func waitBeforeRetry(
 
 	delay := netretry.ExponentialDelay(attempt, baseWait, maxWait)
 
+	// The retry notice quotes the error, which can name the server it could not
+	// reach; hide a public address in it as a failed command's error does.
 	notify.Warningf(
 		cmd.OutOrStdout(),
-		"attempt %d/%d failed (retrying in %s): %v",
-		attempt, maxAttempts, delay, lastErr,
+		"attempt %d/%d failed (retrying in %s): %s",
+		attempt, maxAttempts, delay, addressmask.New().Mask(lastErr.Error()),
 	)
 
 	retryTimer := time.NewTimer(delay)
