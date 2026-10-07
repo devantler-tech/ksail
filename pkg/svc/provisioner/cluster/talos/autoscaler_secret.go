@@ -61,16 +61,7 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 
 	configBundle := p.talosConfigs.Bundle()
 	if configBundle == nil {
-		// Nothing can be converged without a config bundle, but a server of a pool
-		// that is no longer configured must still be reported on this update. Without
-		// a Hetzner provider there is no inventory to read, as before.
-		if _, ok := p.infraProvider.(*hetzner.Provider); !ok {
-			return nil
-		}
-
-		_, err := p.listAutoscalerServers(ctx, clusterName, result)
-
-		return err
+		return p.auditAutoscalerServersWithoutBundle(ctx, clusterName, result)
 	}
 
 	// Fail fast: check that a schematic is available before performing
@@ -403,4 +394,22 @@ func autoscalerConvergenceFailures(result *clusterupdate.UpdateResult) int {
 func isAutoscalerInventoryReport(change clusterupdate.Change) bool {
 	return strings.Contains(change.Reason, errUnknownAutoscalerPool.Error()) ||
 		strings.Contains(change.Reason, errAutoscalerDisabled.Error())
+}
+
+// auditAutoscalerServersWithoutBundle runs the removed-pool audit when no config
+// bundle is loaded. Nothing can be converged without a bundle, but a server of a pool
+// that is no longer configured must still be reported on this update. Without a
+// Hetzner provider there is no inventory to read.
+func (p *Provisioner) auditAutoscalerServersWithoutBundle(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	if _, ok := p.infraProvider.(*hetzner.Provider); !ok {
+		return nil
+	}
+
+	_, err := p.listAutoscalerServers(ctx, clusterName, result)
+
+	return err
 }

@@ -816,10 +816,7 @@ func TestEnsureAutoscalerSecretIfNeeded_RejectsUnreadableImageBaseline(t *testin
 	hcloudSecret, err := json.Marshal(&corev1.Secret{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
 		ObjectMeta: metav1.ObjectMeta{Name: "hcloud", Namespace: "kube-system"},
-		Data: map[string][]byte{
-			"token":   []byte("test-token"),
-			"network": []byte("test-network"),
-		},
+		Data:       map[string][]byte{"token": []byte("test-token"), "network": []byte("test-network")},
 	})
 	require.NoError(t, err)
 	malformedSecret, err := json.Marshal(&corev1.Secret{
@@ -850,8 +847,6 @@ func TestEnsureAutoscalerSecretIfNeeded_RejectsUnreadableImageBaseline(t *testin
 		configs, configErr := talosconfigmanager.NewDefaultConfigs()
 		require.NoError(t, configErr, testCase.name)
 
-		// An empty provider inventory: the update that follows the Secret refresh
-		// lists the autoscaler servers and finds none.
 		hzProvider, _ := newAutoscalerHcloudAPI(t)
 
 		provisioner := talosprovisioner.NewProvisioner(
