@@ -20,6 +20,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/awssso"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
@@ -89,6 +90,8 @@ type Service struct {
 	// shared with the operator backend rather than reimplemented. Wired to point at the Service in
 	// NewService.
 	api.ResourceAdapter
+
+	ssoRenewal awssso.Manager
 
 	newFactory FactoryFunc
 

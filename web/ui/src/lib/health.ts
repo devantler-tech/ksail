@@ -3,7 +3,7 @@
 // read-only resource endpoints. Mirrors the repo's model-in-lib convention (see lib/usage.ts), so the
 // derivation is unit-testable without rendering the view.
 
-import { listResources, type Condition, type K8sObject } from "../api.ts";
+import { errorMessage, listResources, type Condition, type K8sObject } from "../api.ts";
 import {
   nodeIsControlPlane,
   nodeProblems,
@@ -26,21 +26,22 @@ export type PodSegment = { key: string; label: string; count: number; bar: strin
 // pod health, workload counts, live facts (version, OS, creation time) the cluster object itself does
 // not carry on the local surface, resource usage, and recent warnings.
 export interface LiveHealth {
-  nodesReady: number;
-  nodesTotal: number;
-  controlPlanes: number;
+  nodesReady?: number;
+  nodesTotal?: number;
+  controlPlanes?: number;
   kubernetesVersion: string;
   osImage: string;
   // identity is the distribution and provider the nodes prove, for a cluster whose spec carries none.
   identity: ClusterIdentity;
   createdAt?: string;
   segments: PodSegment[];
-  podsTotal: number;
-  workloads: { label: string; count: number }[];
-  warnings: EventFields[];
+  podsTotal?: number;
+  workloads: { label: string; count?: number }[];
+  warnings?: EventFields[];
   derivedConditions: Condition[];
-  usage: ClusterUsage;
-  topPods: PodConsumption[];
+  usage: ClusterUsage | null;
+  topPods: PodConsumption[] | null;
+  errors: { kind: string; message: string }[];
 }
 
 export const MAX_WARNINGS = 8;
@@ -74,15 +75,18 @@ export function categorizePods(pods: K8sObject[]): PodSegment[] {
   ];
 }
 
-// listKind lists a kind for a cluster, returning [] on error so one missing/forbidden kind never blanks
-// the whole dashboard.
-async function listKind(namespace: string, name: string, kind: string): Promise<K8sObject[]> {
+type KindRead =
+  | { kind: string; items: K8sObject[]; error?: never }
+  | { kind: string; items?: never; error: string };
+
+// A failed read is distinct from a successful empty list; other kinds can still supply health facts.
+async function listKind(namespace: string, name: string, kind: string): Promise<KindRead> {
   try {
     const result = await listResources(namespace, name, kind);
 
-    return result.items ?? [];
-  } catch {
-    return [];
+    return { kind, items: result.items ?? [] };
+  } catch (err: unknown) {
+    return { kind, error: errorMessage(err) };
   }
 }
 
@@ -172,9 +176,7 @@ export function deriveHealthConditions(
   return conditions;
 }
 
-// loadHealth composes the LiveHealth model by listing the dashboard's kinds in parallel (each fetch
-// swallows its own error via listKind, so one missing/forbidden kind degrades to empty rather than
-// failing the whole dashboard) and deriving node/pod/workload/usage/warning facts from them.
+// loadHealth preserves per-kind failures and derives facts only from successful reads.
 export async function loadHealth(namespace: string, name: string): Promise<LiveHealth> {
   const [nodes, pods, deployments, statefulSets, daemonSets, events, namespaces, nodeMetrics, podMetrics] =
     await Promise.all([
@@ -189,31 +191,31 @@ export async function loadHealth(namespace: string, name: string): Promise<LiveH
       listKind(namespace, name, "PodMetrics"),
     ]);
 
-  const warnings = recentEvents(events, { type: "Warning", limit: MAX_WARNINGS });
-
-  const segments = categorizePods(pods);
-  const nodesReady = nodes.filter(nodeReady).length;
-  const systemInfos = nodes.map(nodeSystemInfo);
+  const reads = [nodes, pods, deployments, statefulSets, daemonSets, events, namespaces, nodeMetrics, podMetrics];
+  const segments = categorizePods(pods.items ?? []);
+  const nodesReady = nodes.items?.filter(nodeReady).length;
+  const systemInfos = (nodes.items ?? []).map(nodeSystemInfo);
 
   return {
     nodesReady,
-    nodesTotal: nodes.length,
-    controlPlanes: nodes.filter(nodeIsControlPlane).length,
+    nodesTotal: nodes.items?.length,
+    controlPlanes: nodes.items?.filter(nodeIsControlPlane).length,
     kubernetesVersion: distinctSummary(systemInfos.map((info) => info.kubeletVersion)),
     osImage: distinctSummary(systemInfos.map((info) => info.osImage)),
-    identity: detectClusterIdentity(nodes),
-    createdAt: clusterCreatedAt(namespaces),
+    identity: detectClusterIdentity(nodes.items ?? []),
+    createdAt: clusterCreatedAt(namespaces.items ?? []),
     segments,
-    podsTotal: pods.length,
+    podsTotal: pods.items?.length,
     workloads: [
-      { label: "Deployments", count: deployments.length },
-      { label: "StatefulSets", count: statefulSets.length },
-      { label: "DaemonSets", count: daemonSets.length },
-      { label: "Pods", count: pods.length },
+      { label: "Deployments", count: deployments.items?.length },
+      { label: "StatefulSets", count: statefulSets.items?.length },
+      { label: "DaemonSets", count: daemonSets.items?.length },
+      { label: "Pods", count: pods.items?.length },
     ],
-    warnings,
-    derivedConditions: deriveHealthConditions(nodes, segments, nodesReady, pods.length),
-    usage: buildClusterUsage(nodes, pods, nodeMetrics),
-    topPods: buildPodConsumption(podMetrics),
+    warnings: events.items ? recentEvents(events.items, { type: "Warning", limit: MAX_WARNINGS }) : undefined,
+    derivedConditions: deriveHealthConditions(nodes.items ?? [], segments, nodesReady ?? 0, pods.items?.length ?? 0),
+    usage: nodes.items && pods.items ? buildClusterUsage(nodes.items, pods.items, nodeMetrics.items ?? []) : null,
+    topPods: podMetrics.items ? buildPodConsumption(podMetrics.items) : null,
+    errors: reads.flatMap((read) => read.error === undefined ? [] : [{ kind: read.kind, message: read.error }]),
   };
 }

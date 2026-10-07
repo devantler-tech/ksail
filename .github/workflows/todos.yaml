@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   todos:
-    uses: devantler-tech/.github/.github/workflows/scan-for-todo-comments.yaml@498fb4b11f129928d3af9a90e9c5a46f1c4dbd77 # v7.0.0
+    uses: devantler-tech/.github/.github/workflows/scan-for-todo-comments.yaml@2fa404276b0ce5c0527683b080e39045045c4e42 # v7.2.10
     with:
       exclude-vendored: true
     secrets:

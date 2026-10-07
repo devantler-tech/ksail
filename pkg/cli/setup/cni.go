@@ -159,6 +159,10 @@ func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		setup.timeout,
 		clusterCfg.Spec.Cluster.Distribution,
 		installer.IsHAEnabled(clusterCfg.Spec.Cluster.TotalNodeCount()),
+		calicoinstaller.WithKubernetesProviderNetwork(
+			clusterCfg.Spec.Cluster.Provider,
+			clusterCfg.Spec.Provider.Kubernetes,
+		),
 	)
 
 	return runCNIInstallation(

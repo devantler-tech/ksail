@@ -191,6 +191,11 @@ func wrapWithKubeconfigResolution(cmd *cobra.Command) {
 			}
 		}
 
+		err := maybeRenewAWSSSO(child)
+		if err != nil {
+			return err
+		}
+
 		if origPersistentPreRunE != nil {
 			return origPersistentPreRunE(child, args)
 		}
