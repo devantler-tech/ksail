@@ -762,16 +762,20 @@ func TestAutoscalerConvergenceFailures_IgnoresInventoryReports(t *testing.T) {
 		name   string
 		record func(*hetzner.Provider, *clusterupdate.UpdateResult) error
 	}{
-		{"disabled autoscaler", func(hz *hetzner.Provider, result *clusterupdate.UpdateResult) error {
-			return disabledAutoscalerProvisioner(hz, io.Discard).
-				EnsureAutoscalerSecretIfNeededWithResultForTest(
-					context.Background(), autoscalerFakeCluster, result,
-				)
-		}},
+		{
+			"disabled autoscaler",
+			func(hz *hetzner.Provider, result *clusterupdate.UpdateResult) error {
+				return disabledAutoscalerProvisioner(hz, io.Discard).
+					EnsureAutoscalerSecretIfNeededWithResultForTest(
+						context.Background(), autoscalerFakeCluster, result,
+					)
+			},
+		},
 		{"removed pool", func(hz *hetzner.Provider, result *clusterupdate.UpdateResult) error {
 			return autoscalerProvisioner(hz, io.Discard, configuredPool).
 				ReconcileAutoscalerNodesForTest(
-					context.Background(), autoscalerFakeCluster, inPlaceDiff(), false, false, result,
+					context.Background(),
+					autoscalerFakeCluster, inPlaceDiff(), false, false, result,
 				)
 		}},
 	}
