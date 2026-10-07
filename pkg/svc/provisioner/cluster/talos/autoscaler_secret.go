@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
@@ -147,9 +148,9 @@ func (p *Provisioner) convergeAutoscalerBaseline(
 		return err
 	}
 
-	if result != nil && result.HasFailedChanges() {
+	if failed := autoscalerConvergenceFailures(result); failed > 0 {
 		return fmt.Errorf("autoscaler image convergence: %d changes failed: %w",
-			len(result.FailedChanges), errAutoscalerNodeConfigurationChangesFailed)
+			failed, errAutoscalerNodeConfigurationChangesFailed)
 	}
 
 	return p.completeAutoscalerImageBaseline(ctx, desiredImageID)
@@ -372,4 +373,34 @@ func (p *Provisioner) autoscalerSecretApplicable() bool {
 // via talosConfigs.SchematicID()).
 func (p *Provisioner) hasSchematicConfigured() bool {
 	return p.resolveSchematicID() != ""
+}
+
+// autoscalerConvergenceFailures counts the failed changes that mean a node KSail
+// converges did not reach the baseline. The inventory reports — a server of a removed
+// pool, a server that outlived a disabled autoscaler — are failed changes too, so the
+// update that carries them fails, but KSail never converges those servers: they must
+// not hold a boot-image rollout of the managed nodes pending, nor stop the static
+// nodes from rolling.
+func autoscalerConvergenceFailures(result *clusterupdate.UpdateResult) int {
+	if result == nil {
+		return 0
+	}
+
+	failed := 0
+
+	for _, change := range result.FailedChanges {
+		if !isAutoscalerInventoryReport(change) {
+			failed++
+		}
+	}
+
+	return failed
+}
+
+// isAutoscalerInventoryReport reports whether a failed change is one of the two
+// report-only inventory findings (excludeUnconfiguredPoolServers,
+// reportServersOfDisabledAutoscaler).
+func isAutoscalerInventoryReport(change clusterupdate.Change) bool {
+	return strings.Contains(change.Reason, errUnknownAutoscalerPool.Error()) ||
+		strings.Contains(change.Reason, errAutoscalerDisabled.Error())
 }

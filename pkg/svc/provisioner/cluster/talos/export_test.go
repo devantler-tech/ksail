@@ -1383,3 +1383,9 @@ func (p *Provisioner) EnsureAutoscalerSecretIfNeededWithResultForTest(
 ) error {
 	return p.ensureAutoscalerSecretIfNeeded(ctx, clusterName, nil, result)
 }
+
+// AutoscalerConvergenceFailuresForTest exposes autoscalerConvergenceFailures for unit
+// testing — the failed changes that hold a boot-image rollout pending.
+func AutoscalerConvergenceFailuresForTest(result *clusterupdate.UpdateResult) int {
+	return autoscalerConvergenceFailures(result)
+}
