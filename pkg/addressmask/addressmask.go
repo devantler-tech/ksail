@@ -75,13 +75,22 @@ func (m *Masker) Register(address, name string) {
 
 // Mask returns text with every server address replaced.
 func (m *Masker) Mask(text string) string {
-	if m == nil || !m.enabled || text == "" {
-		return text
+	return m.maskFrom(text, 0)
+}
+
+// maskFrom returns text[from:] with every server address replaced. The text
+// before from was printed earlier and is only read: it decides what a literal
+// touches on its left, and whether a literal that begins in it is an address.
+// Such a literal cannot be taken back, so when it needs hiding its replacement
+// is printed in place of the part that is still to come.
+func (m *Masker) maskFrom(text string, from int) string {
+	if m == nil || !m.enabled || from >= len(text) {
+		return text[min(from, len(text)):]
 	}
 
 	matches := addressCandidatePattern.FindAllStringIndex(text, -1)
 	if matches == nil {
-		return text
+		return text[from:]
 	}
 
 	m.mu.RLock()
@@ -89,13 +98,24 @@ func (m *Masker) Mask(text string) string {
 
 	var masked strings.Builder
 
-	last := 0
+	last := from
 
 	for _, match := range matches {
-		masked.WriteString(text[last:match[0]])
-		masked.WriteString(m.maskRange(text, match[0], match[1]))
+		start, end := match[0], match[1]
+		if end <= last {
+			continue
+		}
 
-		last = match[1]
+		replaced := m.maskRange(text, start, end)
+
+		if start >= last {
+			masked.WriteString(text[last:start])
+			masked.WriteString(replaced)
+		} else {
+			masked.WriteString(strings.TrimPrefix(replaced, text[start:last]))
+		}
+
+		last = end
 	}
 
 	masked.WriteString(text[last:])

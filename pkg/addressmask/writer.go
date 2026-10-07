@@ -15,8 +15,8 @@ const (
 	heldTailFlushDelay = 50 * time.Millisecond
 
 	// maxHeldTail bounds the held text. A longer run of address characters is
-	// an encoded blob, not an address, so only what could still begin an
-	// address is held.
+	// an encoded blob, not the start of an address, so it is masked as it
+	// stands and nothing of it is held.
 	maxHeldTail = 4096
 
 	// longestAddressText is more than the longest textual IP literal (45 bytes).
@@ -50,6 +50,7 @@ type maskingWriter struct {
 	held       string
 	before     string
 	timer      *time.Timer
+	generation uint64
 	flushAfter time.Duration
 }
 
@@ -68,62 +69,103 @@ func (w *maskingWriter) Write(payload []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
+	// The pending flush is cancelled before anything is written: a slow sink
+	// must not let it run against text this write is about to hold.
+	w.cancelFlush()
+
 	text := w.held + string(payload)
 	cut := heldTailStart(text)
+	w.held = text[cut:]
 
 	err := w.emit(text[:cut])
+
+	// The wait for the completing write starts once this one is through the
+	// sink, however long the sink took.
+	w.scheduleFlush()
+
 	if err != nil {
 		return 0, err
 	}
 
-	w.held = text[cut:]
-	w.scheduleFlush()
-
 	return len(payload), nil
 }
 
-// emit masks text and passes it on. The byte written just before it, unless it
-// could itself be part of an address, is put back
-// in front for the masking only, so a literal is still judged by what it
-// touches on its left. The caller holds the lock.
+// emit masks text and passes it on. What was written just before it — the last
+// run of address characters and the byte in front of that run — is put back in
+// front for the masking only, so a literal is judged whole even when its first
+// part was already passed on. The caller holds the lock.
 func (w *maskingWriter) emit(text string) error {
 	if text == "" {
 		return nil
 	}
 
-	masked := w.masker.Mask(w.before + text)[len(w.before):]
-	w.before = ""
-
-	if last := text[len(text)-1]; !isAddressByte(last) {
-		w.before = text[len(text)-1:]
-	}
+	seen := w.before + text
+	masked := w.masker.maskFrom(seen, len(w.before))
+	w.before = seen[contextStart(seen):]
 
 	_, err := io.WriteString(w.writer, masked)
 
 	return err //nolint:wrapcheck // a transparent writer returns the sink's error as is
 }
 
-// scheduleFlush arranges for held text to be passed on if no write completes
-// it. The caller holds the lock.
-func (w *maskingWriter) scheduleFlush() {
+// contextStart returns where the part of printed text begins that a later write
+// can still belong to: its trailing run of address characters, no longer than
+// an address, and the one byte before that run.
+func contextStart(text string) int {
+	start := len(text)
+
+	for start > 0 && len(text)-start < longestAddressText && isAddressByte(text[start-1]) {
+		start--
+	}
+
+	return max(start-1, 0)
+}
+
+// cancelFlush withdraws the pending flush. Stopping the timer is not enough: a
+// timer that already fired is waiting for the lock, so it is also outdated by
+// number. The caller holds the lock.
+func (w *maskingWriter) cancelFlush() {
+	w.generation++
+
 	if w.timer != nil {
 		w.timer.Stop()
 		w.timer = nil
 	}
+}
 
+// scheduleFlush arranges for held text to be passed on if no write completes
+// it. The caller holds the lock and has cancelled the previous flush.
+func (w *maskingWriter) scheduleFlush() {
 	if w.held == "" {
 		return
 	}
 
-	w.timer = time.AfterFunc(w.flushAfter, w.flush)
+	generation := w.generation
+
+	w.timer = time.AfterFunc(w.flushAfter, func() {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+
+		if w.generation == generation {
+			w.flushHeld()
+		}
+	})
 }
 
-// flush passes on whatever is held. The sink's error has no caller to go to;
-// the write that follows reports it again if the sink is broken.
-func (w *maskingWriter) flush() {
+// Flush passes on whatever is held, at once. Call it when the output is
+// complete, so the end of a last partial line is not left to the timer.
+func (w *maskingWriter) Flush() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
+	w.cancelFlush()
+	w.flushHeld()
+}
+
+// flushHeld passes on whatever is held. The sink's error has no caller to go
+// to; the write that follows reports it again if the sink is broken. The caller
+// holds the lock.
+func (w *maskingWriter) flushHeld() {
 	held := w.held
 	w.held = ""
 
@@ -139,13 +181,19 @@ func heldTailStart(text string) int {
 	}
 
 	if len(text)-start > maxHeldTail {
-		return len(text) - longestAddressText
+		return len(text)
 	}
 
 	// No address holds two dots in a row, so nothing up to the last such pair
 	// can belong to one that is still arriving: "Waiting..." holds nothing.
 	if dots := strings.LastIndex(text[start:], ".."); dots >= 0 {
 		start += dots + len("..")
+	}
+
+	// Letters alone ("created", "added") are the end of a word far more often
+	// than the first half of an address group, so they are not held.
+	if !strings.ContainsAny(text[start:], "0123456789:.") {
+		return len(text)
 	}
 
 	return start
@@ -156,4 +204,12 @@ func isAddressByte(char byte) bool {
 		(char >= '0' && char <= '9') ||
 		(char >= 'a' && char <= 'f') ||
 		(char >= 'A' && char <= 'F')
+}
+
+// Flush passes on, at once, whatever a writer returned by Masker.Writer still
+// holds. It does nothing for any other writer.
+func Flush(writer io.Writer) {
+	if masked, ok := writer.(*maskingWriter); ok {
+		masked.Flush()
+	}
 }

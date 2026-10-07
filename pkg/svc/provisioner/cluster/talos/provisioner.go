@@ -457,6 +457,8 @@ func (p *Provisioner) TalosConfigs() *talosconfigmanager.Configs {
 // Routes to Docker-based, Hetzner-based, or Omni-based provisioning based on configuration.
 // The returned error names no server address unless the operator opted in.
 func (p *Provisioner) Create(ctx context.Context, name string) error {
+	defer addressmask.Flush(p.logWriter)
+
 	return p.addressMask.Error(p.createUnmasked(ctx, name))
 }
 
@@ -483,6 +485,8 @@ func (p *Provisioner) createUnmasked(ctx context.Context, name string) error {
 // Routes to Docker-based, Hetzner-based, or Omni-based deletion based on configuration.
 // The returned error names no server address unless the operator opted in.
 func (p *Provisioner) Delete(ctx context.Context, name string) error {
+	defer addressmask.Flush(p.logWriter)
+
 	return p.addressMask.Error(p.deleteUnmasked(ctx, name))
 }
 
@@ -579,6 +583,8 @@ func (p *Provisioner) List(ctx context.Context) ([]string, error) {
 // then specialized per provider type.
 // The returned error names no server address unless the operator opted in.
 func (p *Provisioner) Start(ctx context.Context, name string) error {
+	defer addressmask.Flush(p.logWriter)
+
 	return p.addressMask.Error(p.startUnmasked(ctx, name))
 }
 
@@ -620,6 +626,8 @@ func (p *Provisioner) startUnmasked(ctx context.Context, name string) error {
 // Node stop is delegated to the infrastructure provider.
 // The returned error names no server address unless the operator opted in.
 func (p *Provisioner) Stop(ctx context.Context, name string) error {
+	defer addressmask.Flush(p.logWriter)
+
 	return p.addressMask.Error(p.stopUnmasked(ctx, name))
 }
 

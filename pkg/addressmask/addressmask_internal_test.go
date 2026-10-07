@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -248,7 +249,7 @@ func TestMaskingWriterJoinsAnAddressSplitAcrossWrites(t *testing.T) {
 				writer := splitWriter(t, sink)
 
 				writeAll(t, writer, test.in[:split], test.in[split:])
-				writer.flush()
+				writer.Flush()
 
 				if got := sink.String(); got != maskedWhole(test.in) {
 					t.Fatalf("split at %d\n got: %q\nwant: %q", split, got, maskedWhole(test.in))
@@ -262,7 +263,7 @@ func TestMaskingWriterJoinsAnAddressSplitAcrossWrites(t *testing.T) {
 				writeAll(t, writer, test.in[index:index+1])
 			}
 
-			writer.flush()
+			writer.Flush()
 
 			if got := sink.String(); got != maskedWhole(test.in) {
 				t.Fatalf("byte-wise\n got: %q\nwant: %q", got, maskedWhole(test.in))
@@ -337,5 +338,153 @@ func TestMaskingWriterOptInWritesThrough(t *testing.T) {
 
 	if got := sink.String(); got != "endpoint "+testOtherAddressV4 {
 		t.Fatalf("got %q", got)
+	}
+}
+
+// slowSink takes a while over every write, as a pipe to a busy reader does.
+type slowSink struct {
+	syncBuffer
+
+	delay time.Duration
+}
+
+func (s *slowSink) Write(payload []byte) (int, error) {
+	time.Sleep(s.delay)
+
+	return s.syncBuffer.Write(payload)
+}
+
+// TestMaskingWriterOutdatedFlushLeavesNewTextHeld pins that a flush which came
+// due while a later write was busy with a slow sink does not pass on the half
+// address that write went on to hold.
+func TestMaskingWriterOutdatedFlushLeavesNewTextHeld(t *testing.T) {
+	t.Parallel()
+
+	sink := &slowSink{delay: 40 * time.Millisecond}
+
+	masker := &Masker{labels: make(map[netip.Addr]string), enabled: true}
+
+	writer, ok := masker.Writer(sink).(*maskingWriter)
+	if !ok {
+		t.Fatal("Writer did not return a masking writer")
+	}
+
+	// The flush of the first write comes due while the second is still busy
+	// with the sink; it must not pass on what the second went on to hold.
+	writer.flushAfter = 50 * time.Millisecond
+
+	writeAll(t, writer, "step 1")
+	time.Sleep(30 * time.Millisecond)
+	writeAll(t, writer, " node 203.0.113.")
+	time.Sleep(5 * time.Millisecond)
+	writeAll(t, writer, "10 ready\n")
+	writer.Flush()
+
+	want := "step 1 node " + HiddenLabel + " ready\n"
+	if got := sink.String(); got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+// TestMaskingWriterEdges pins the smaller rules of what is held back.
+func TestMaskingWriterEdges(t *testing.T) {
+	t.Parallel()
+
+	blob := strings.Repeat("f", maxHeldTail)
+
+	tests := []struct {
+		name   string
+		writes []string
+		// immediate is what must have been passed on before any flush.
+		immediate string
+		final     string
+	}{
+		{
+			name:      "letters alone are not held",
+			writes:    []string{"Cluster created"},
+			immediate: "Cluster created",
+			final:     "Cluster created",
+		},
+		{
+			name:      "an address inside an oversized run is still hidden",
+			writes:    []string{blob + " " + testOtherAddressV4 + "." + blob, "\n"},
+			immediate: blob + " " + HiddenLabel + "." + blob + "\n",
+			final:     blob + " " + HiddenLabel + "." + blob + "\n",
+		},
+		{
+			name:      "an address whose first letters were already passed on",
+			writes:    []string{"link fe", "80::1 and fd", "00::5\n"},
+			immediate: "link fe80::1 and fd00::5\n",
+			final:     "link fe80::1 and fd00::5\n",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			sink := &syncBuffer{}
+			writer := splitWriter(t, sink)
+
+			writeAll(t, writer, test.writes...)
+
+			if got := sink.String(); got != test.immediate {
+				t.Fatalf("before the flush\n got: %q\nwant: %q", got, test.immediate)
+			}
+
+			Flush(writer)
+
+			if got := sink.String(); got != test.final {
+				t.Fatalf("after the flush\n got: %q\nwant: %q", got, test.final)
+			}
+		})
+	}
+}
+
+var errTestSink = errors.New("sink closed")
+
+// failingSink refuses its first write.
+type failingSink struct {
+	syncBuffer
+
+	failed bool
+}
+
+func (s *failingSink) Write(payload []byte) (int, error) {
+	if !s.failed {
+		s.failed = true
+
+		return 0, errTestSink
+	}
+
+	return s.syncBuffer.Write(payload)
+}
+
+// TestMaskingWriterSinkErrorKeepsItsState pins that a refused write is reported
+// and does not make a later one repeat or lose held text.
+func TestMaskingWriterSinkErrorKeepsItsState(t *testing.T) {
+	t.Parallel()
+
+	sink := &failingSink{}
+
+	masker := &Masker{labels: make(map[netip.Addr]string), enabled: true}
+
+	writer, ok := masker.Writer(sink).(*maskingWriter)
+	if !ok {
+		t.Fatal("Writer did not return a masking writer")
+	}
+
+	writer.flushAfter = time.Hour
+
+	_, err := writer.Write([]byte("lost line, then 203.0.113."))
+	if !errors.Is(err, errTestSink) {
+		t.Fatalf("got %v, want the sink's error", err)
+	}
+
+	writeAll(t, writer, "10 ready\n")
+
+	want := HiddenLabel + " ready\n"
+	if got := sink.String(); got != want {
+		t.Fatalf("got %q, want %q", got, want)
 	}
 }

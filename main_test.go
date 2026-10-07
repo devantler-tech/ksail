@@ -197,33 +197,36 @@ func TestExitCodeFromErrorReturnsFalseForPlainErrors(t *testing.T) {
 var errTestUnreachable = errors.New("dial tcp 203.0.113.10:6443: connect: connection refused")
 
 func TestFailureTextHidesAddressesForClusterCommands(t *testing.T) {
+	t.Setenv("KSAIL_SHOW_ADDRESSES", "")
+
 	const hidden = "dial tcp <address hidden>:6443: connect: connection refused"
+
+	shown := errTestUnreachable.Error()
 
 	tests := []struct {
 		name string
-		show string
 		args []string
 		want string
 	}{
 		{name: "cluster create", args: []string{"cluster", "create"}, want: hidden},
-		{name: "cluster delete with flags", args: []string{"cluster", "delete", "--force"}, want: hidden},
-		{
-			name: "opted in",
-			show: "true",
-			args: []string{"cluster", "create"},
-			want: errTestUnreachable.Error(),
-		},
-		{name: "another command group", args: []string{"workload", "get"}, want: errTestUnreachable.Error()},
-		{name: "unknown command", args: []string{"no-such-command"}, want: errTestUnreachable.Error()},
+		{name: "flag after", args: []string{"cluster", "delete", "--force"}, want: hidden},
+		{name: "flag before", args: []string{"--experimental", "cluster", "stop"}, want: hidden},
+		{name: "another command group", args: []string{"workload", "get"}, want: shown},
+		{name: "unknown command", args: []string{"no-such-command"}, want: shown},
 	}
 
 	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Setenv("KSAIL_SHOW_ADDRESSES", test.show)
+		rootCmd := cmd.NewRootCmd("test", "test", "test")
 
-			rootCmd := cmd.NewRootCmd("test", "test", "test")
-
-			assert.Equal(t, test.want, failureText(rootCmd, test.args, errTestUnreachable))
-		})
+		assert.Equal(t, test.want, failureText(rootCmd, test.args, errTestUnreachable), test.name)
 	}
+}
+
+func TestFailureTextShowsAddressesWhenOptedIn(t *testing.T) {
+	t.Setenv("KSAIL_SHOW_ADDRESSES", "true")
+
+	rootCmd := cmd.NewRootCmd("test", "test", "test")
+	got := failureText(rootCmd, []string{"cluster", "create"}, errTestUnreachable)
+
+	assert.Equal(t, errTestUnreachable.Error(), got)
 }

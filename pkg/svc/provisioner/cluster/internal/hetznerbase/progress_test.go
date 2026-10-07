@@ -16,9 +16,8 @@ import (
 // address mask treats exactly like a public server address.
 const testPublicEndpoint = "203.0.113.10"
 
-func writeUpLine(t *testing.T, show string) string {
+func writeUpLine(t *testing.T) string {
 	t.Helper()
-	t.Setenv(addressmask.ShowAddressesEnvVar, show)
 
 	var output bytes.Buffer
 
@@ -36,7 +35,9 @@ func writeUpLine(t *testing.T, show string) string {
 }
 
 func TestProgressOutputNamesNoEndpointAddress(t *testing.T) {
-	got := writeUpLine(t, "")
+	t.Setenv(addressmask.ShowAddressesEnvVar, "")
+
+	got := writeUpLine(t)
 
 	assert.Empty(t, addressmasktest.PublicAddressesIn(got))
 	assert.Equal(t,
@@ -47,7 +48,9 @@ func TestProgressOutputNamesNoEndpointAddress(t *testing.T) {
 }
 
 func TestProgressOutputShowsTheEndpointWhenOptedIn(t *testing.T) {
-	assert.Contains(t, writeUpLine(t, "true"), testPublicEndpoint)
+	t.Setenv(addressmask.ShowAddressesEnvVar, "true")
+
+	assert.Contains(t, writeUpLine(t), testPublicEndpoint)
 }
 
 func TestProgressOutputWithoutAWriterIsDiscarded(t *testing.T) {

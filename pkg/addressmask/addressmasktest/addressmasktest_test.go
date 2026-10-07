@@ -13,7 +13,7 @@ func TestPublicAddressesIn(t *testing.T) {
 
 	found := map[string]int{
 		"dial tcp 203.0.113.10:50000: connect: connection refused": 1,
-		"endpoint (203.0.113.10) and [2001:db8::10]:6443.":          2,
+		"endpoint (203.0.113.10) and [2001:db8::10]:6443.":         2,
 		"https://203.0.113.10:6443; next":                          1,
 		"from ::ffff:203.0.113.10":                                 1,
 		"local 127.0.0.1:50000, 10.5.0.2, fe80::1, 03:44:37":       0,
