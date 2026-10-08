@@ -1,6 +1,7 @@
 package workload_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -1230,4 +1231,41 @@ func TestRunHooks_StdoutAndStderrForwarded(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, outBuf.String(), "hello-stdout")
 	assert.Contains(t, errBuf.String(), "hello-stderr")
+}
+
+// errRetryWithAddress is retryable and quotes a documentation-range address
+// (RFC 5737), which the address mask treats like a public server address.
+var errRetryWithAddress = errors.New(
+	"dial tcp 203.0.113.10:6443: connection reset by peer",
+)
+
+func retryNoticeFor(t *testing.T) string {
+	t.Helper()
+
+	var out bytes.Buffer
+
+	cmd := &cobra.Command{}
+	cmd.SetOut(&out)
+
+	_ = workload.ExportRetryOnTransientError(
+		t.Context(), cmd, 2, 0, 0,
+		func() error { return errRetryWithAddress },
+	)
+
+	return out.String()
+}
+
+func TestRetryOnTransientError_RetryNoticeHidesAddress(t *testing.T) {
+	t.Setenv("KSAIL_SHOW_ADDRESSES", "")
+
+	notice := retryNoticeFor(t)
+
+	assert.Contains(t, notice, "dial tcp <address hidden>:6443")
+	assert.NotContains(t, notice, "203.0.113.10")
+}
+
+func TestRetryOnTransientError_RetryNoticeShowsAddressWhenOptedIn(t *testing.T) {
+	t.Setenv("KSAIL_SHOW_ADDRESSES", "true")
+
+	assert.Contains(t, retryNoticeFor(t), "dial tcp 203.0.113.10:6443")
 }

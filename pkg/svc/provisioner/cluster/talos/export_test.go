@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/cosi-project/runtime/pkg/state"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
@@ -19,6 +20,7 @@ import (
 	check "github.com/siderolabs/talos/pkg/cluster/check"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
+	"github.com/siderolabs/talos/pkg/provision"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -27,6 +29,46 @@ import (
 )
 
 var errUpdateApplyStepNotFoundForTest = errors.New("update apply step not found")
+
+// SchematicFromStateForTest exposes the running-image resource decoder.
+func SchematicFromStateForTest(ctx context.Context, resourceState state.State) (string, error) {
+	return schematicFromState(ctx, resourceState)
+}
+
+// SchematicsChangedForTest exposes the all-node image preflight.
+func SchematicsChangedForTest(
+	ctx context.Context, nodes []NodeWithRoleForTest, desired string,
+	read func(context.Context, string) (string, error),
+) (bool, error) {
+	return schematicsChanged(ctx, nodes, desired, read)
+}
+
+// DistributionImageChangedForTest exposes interrupted-roll detection.
+func DistributionImageChangedForTest(
+	ctx context.Context, nodes []NodeWithRoleForTest, desired string,
+	read func(context.Context, string) (string, error),
+	newClient func() (kubernetes.Interface, error),
+	autoscalerEnabled ...bool,
+) (bool, error) {
+	enabled := len(autoscalerEnabled) == 0 || autoscalerEnabled[0]
+
+	return distributionImageChanged(ctx, nodes, desired, read, newClient, enabled)
+}
+
+// SelectAutoscalerImageServersForTest exposes the pre-drain live-image census.
+func SelectAutoscalerImageServersForTest(
+	ctx context.Context, servers []*hcloud.Server,
+	imageMatches func(context.Context, string) (bool, error),
+) ([]*hcloud.Server, error) {
+	return selectAutoscalerImageServers(ctx, servers, imageMatches)
+}
+
+// RunningImageMatchesTargetForTest exposes the shared pre/post-upgrade image check.
+func RunningImageMatchesTargetForTest(
+	ctx context.Context, st state.State, running, desired, schematic string,
+) (bool, error) {
+	return runningImageMatchesTarget(ctx, st, running, desired, schematic)
+}
 
 // EtcdMembershipClientForTest exposes the membership transport boundary.
 type EtcdMembershipClientForTest = etcdMembershipClient
@@ -602,6 +644,16 @@ func (p *Provisioner) EnsureAutoscalerSecretIfNeededForTest(
 	)
 }
 
+// EnsureAutoscalerSecretWithResultForTest retains recorded per-node failures in
+// the real unclassified image-convergence path.
+func (p *Provisioner) EnsureAutoscalerSecretWithResultForTest(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.ensureAutoscalerSecretIfNeeded(ctx, clusterName, nil, result)
+}
+
 // AutoscalerRecycleRequiredForTest exposes autoscalerRecycleRequired for unit testing.
 func AutoscalerRecycleRequiredForTest(diff *clusterupdate.UpdateResult, imageChanged bool) bool {
 	return autoscalerRecycleRequired(diff, imageChanged)
@@ -662,13 +714,13 @@ func (p *Provisioner) RunUpdateApplyStepForTest(
 }
 
 // SnapshotImageIDFromSecretForTest exposes snapshotImageIDFromSecret for unit testing.
-func SnapshotImageIDFromSecretForTest(secret *corev1.Secret) string {
+func SnapshotImageIDFromSecretForTest(secret *corev1.Secret) (string, error) {
 	return snapshotImageIDFromSecret(secret)
 }
 
 // CurrentAutoscalerSnapshotImageIDForTest exposes currentAutoscalerSnapshotImageID
 // for unit testing.
-func (p *Provisioner) CurrentAutoscalerSnapshotImageIDForTest(ctx context.Context) string {
+func (p *Provisioner) CurrentAutoscalerSnapshotImageIDForTest(ctx context.Context) (string, error) {
 	return p.currentAutoscalerSnapshotImageID(ctx)
 }
 
@@ -724,8 +776,18 @@ func SortServersByNameForTest(servers []*hcloud.Server) []*hcloud.Server {
 func (p *Provisioner) RecycleAutoscalerNodesForTest(
 	ctx context.Context,
 	clusterName string,
+	result *clusterupdate.UpdateResult,
 ) error {
-	return p.recycleAutoscalerNodes(ctx, clusterName)
+	return p.recycleAutoscalerNodes(ctx, clusterName, result)
+}
+
+// ListAutoscalerServersForTest exposes listAutoscalerServers for unit testing.
+func (p *Provisioner) ListAutoscalerServersForTest(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) ([]*hcloud.Server, error) {
+	return p.listAutoscalerServers(ctx, clusterName, result)
 }
 
 // WaitForAutoscalerRolloutForTest exposes waitForAutoscalerRollout for unit testing.
@@ -1174,6 +1236,37 @@ func (p *Provisioner) AutoscalerNodeForTest(
 	return p.autoscalerNode(server, talosAddress)
 }
 
+// RecoverUpgradedNodeForTest exposes recoverUpgradedNode for unit testing, with the
+// storage-health gate disabled.
+func (p *Provisioner) RecoverUpgradedNodeForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeIP string,
+) error {
+	return p.recoverUpgradedNode(ctx, clientset, nodeWithRole{IP: nodeIP, Role: RoleWorker}, nil)
+}
+
+// RecoverUpgradedNodeWithStorageGateForTest exercises recovery while the
+// between-node storage gate is active.
+func (p *Provisioner) RecoverUpgradedNodeWithStorageGateForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeIP string,
+	prober StorageHealthProberForTest,
+) error {
+	return p.recoverUpgradedNode(ctx, clientset, nodeWithRole{IP: nodeIP, Role: RoleWorker}, prober)
+}
+
+// MarkImageUpgradeCordonForTest exercises the cordon ownership boundary before
+// an image upgrade drains the node.
+func (p *Provisioner) MarkImageUpgradeCordonForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeName string,
+) error {
+	return p.markImageUpgradeCordon(ctx, clientset, nodeName)
+}
+
 // BuildAutoscalerPoolConfigsForTest exposes buildAutoscalerPoolConfigs, the step that turns the
 // configured pools and the cluster's worker config into the configs the autoscaler Secret stores.
 func (p *Provisioner) BuildAutoscalerPoolConfigsForTest(
@@ -1235,4 +1328,64 @@ func (p *Provisioner) GetLowestRunningKubernetesVersionForTest(
 // its progress to.
 func (p *KubernetesProvisioner) ProgressWriterForTest() io.Writer {
 	return p.progressWriter()
+}
+
+// DiscoverMappedPortsForTest exercises the production bootstrap port selection.
+func (p *KubernetesProvisioner) DiscoverMappedPortsForTest(
+	ctx context.Context,
+	clusterName string,
+) (int, int, error) {
+	return p.discoverMappedPorts(ctx, clusterName)
+}
+
+// ProvisionNestedClusterForTest exercises the SDK request without bootstrap tunnels.
+func (p *KubernetesProvisioner) ProvisionNestedClusterForTest(
+	ctx context.Context,
+	clusterName string,
+) (provision.Cluster, error) {
+	podIP, err := p.nestedAPIHost(ctx, clusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	return p.provisionNestedCluster(ctx, clusterName, p.inner.talosConfigs.Bundle(), podIP)
+}
+
+// DiscoverServicePortForTest exercises the exact PodIP binding used by the Service.
+func (p *KubernetesProvisioner) DiscoverServicePortForTest(
+	ctx context.Context,
+	clusterName, podIP string,
+) (int, error) {
+	return p.discoverServicePort(ctx, clusterName, podIP)
+}
+
+// ReconcileAutoscalerNodesForTest exposes reconcileAutoscalerNodes for unit testing —
+// the step that follows the autoscaler Secret refresh: propagation when the Secret
+// changed, the removed-pool audit alone when it did not.
+func (p *Provisioner) ReconcileAutoscalerNodesForTest(
+	ctx context.Context,
+	clusterName string,
+	diff *clusterupdate.UpdateResult,
+	secretChanged bool,
+	imageChanged bool,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.reconcileAutoscalerNodes(ctx, clusterName, diff, secretChanged, imageChanged, result)
+}
+
+// EnsureAutoscalerSecretIfNeededWithResultForTest exposes
+// ensureAutoscalerSecretIfNeeded with a caller-owned result, so the failed changes
+// the step records can be asserted.
+func (p *Provisioner) EnsureAutoscalerSecretIfNeededWithResultForTest(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.ensureAutoscalerSecretIfNeeded(ctx, clusterName, nil, result)
+}
+
+// AutoscalerConvergenceFailuresForTest exposes autoscalerConvergenceFailures for unit
+// testing — the failed changes that hold a boot-image rollout pending.
+func AutoscalerConvergenceFailuresForTest(result *clusterupdate.UpdateResult) int {
+	return autoscalerConvergenceFailures(result)
 }

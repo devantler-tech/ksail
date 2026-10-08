@@ -11,12 +11,21 @@ inputs:
   provider:
     description: "Infrastructure provider (Docker, Hetzner, Omni). Cloud providers require credentials via env vars: HCLOUD_TOKEN for Hetzner, OMNI_SERVICE_ACCOUNT_KEY and OMNI_ENDPOINT for Omni."
     default: "Docker"
+  hetzner-server-type:
+    description: "Optional server class for initialized Hetzner/Talos clusters (cx23, cx33 or cpx22). Empty keeps the generated defaults; availability checks remain mandatory. Requires yq."
+    default: ""
   args:
     description: "Additional CLI arguments passed to project init (and create when init is skipped)"
     default: ""
   init:
     description: "Whether to run ksail project init before create"
     default: "true"
+  inventory-trial-server-type:
+    description: Bounded initial server type for the optional Talos/Hetzner inventory trial.
+    default: ""
+  inventory-trial-location:
+    description: European location for the optional inventory trial.
+    default: ""
   mirror-registry:
     description: "Comma-separated mirror registry specs passed as --mirror-registry to project init and cluster create (VCluster scaffolds no mirror config at init, so create needs the flag too). Replaces KSail's default mirror list, so include every registry to mirror. Kept apart from args because workload images does not accept the flag."
     default: ""
@@ -359,6 +368,26 @@ runs:
         fi
         ksail cipher import "$AGE_KEY"
 
+    - name: ✅ Validate Hetzner server class
+      if: inputs.hetzner-server-type != ''
+      shell: bash
+      env:
+        SERVER_TYPE: ${{ inputs.hetzner-server-type }}
+        PROVIDER: ${{ inputs.provider }}
+        DISTRIBUTION: ${{ inputs.distribution }}
+        INIT: ${{ inputs.init }}
+      run: |
+        set -euo pipefail
+        [[ -z "$SERVER_TYPE" ]] && exit 0
+        if [[ "$PROVIDER" != Hetzner || "$DISTRIBUTION" != Talos || "$INIT" != true ]]; then
+          echo "A server class override requires initialized Hetzner/Talos." >&2
+          exit 1
+        fi
+        case "$SERVER_TYPE" in
+          cx23|cx33|cpx22) ;;
+          *) echo "Unsupported trial server class." >&2; exit 1 ;;
+        esac
+
     - name: 🏗️ Initialize Project
       if: inputs.init == 'true'
       shell: bash
@@ -373,6 +402,31 @@ runs:
         mkdir -p /tmp/ksail-system-test-logs
         # shellcheck disable=SC2086
         ksail ${CONFIG:+--config "$CONFIG"} project init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS ${MIRROR_REGISTRY:+--mirror-registry "$MIRROR_REGISTRY"} --force 2>&1 | tee /tmp/ksail-system-test-logs/cluster-init.log
+
+    - name: 🔧 Select Hetzner server class
+      if: inputs.hetzner-server-type != ''
+      shell: bash
+      env:
+        SERVER_TYPE: ${{ inputs.hetzner-server-type }}
+        CONFIG: ${{ inputs.config }}
+      run: |
+        set -euo pipefail
+        config_path="${CONFIG:-ksail.yaml}"
+        yq -e '.spec.cluster.distribution == "Talos" and .spec.cluster.provider == "Hetzner"' "$config_path" > /dev/null
+        # Keep the generated image, OS version and every other setting unchanged.
+        yq --inplace '.spec.provider.hetzner.controlPlaneServerType = strenv(SERVER_TYPE) | .spec.provider.hetzner.workerServerType = strenv(SERVER_TYPE)' "$config_path"
+
+    - name: 🔧 Configure bounded Hetzner inventory capacity
+      if: inputs.inventory-trial-server-type != '' || inputs.inventory-trial-location != ''
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        INIT: ${{ inputs.init }}
+        CONFIG: ${{ inputs.config }}
+        TRIAL_SERVER_TYPE: ${{ inputs.inventory-trial-server-type }}
+        TRIAL_LOCATION: ${{ inputs.inventory-trial-location }}
+      run: bash "$GITHUB_ACTION_PATH/hetzner-inventory-config.sh"
 
     - name: 🧹 Validate manifests
       if: inputs.validate == 'true'

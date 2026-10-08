@@ -169,8 +169,8 @@ func TestRetryTransientTalosAPICall_SucceedsAfterTransientFailures(t *testing.T)
 
 	require.NoError(t, err)
 	assert.Equal(t, testRetryMaxAttempts, calls)
-	assert.Contains(t, logBuf.String(), "Config apply attempt 1/3 failed on 1.2.3.4")
-	assert.Contains(t, logBuf.String(), "Config apply attempt 2/3 failed on 1.2.3.4")
+	assert.Contains(t, logBuf.String(), "Config apply attempt 1/3 failed on <address hidden>")
+	assert.Contains(t, logBuf.String(), "Config apply attempt 2/3 failed on <address hidden>")
 }
 
 func TestRetryTransientTalosAPICall_RetriesDeadlineExceeded(t *testing.T) {
@@ -232,7 +232,7 @@ func TestRetryTransientTalosAPICall_ExhaustsAttempts(t *testing.T) {
 	require.ErrorIs(t, err, talosprovisioner.ErrRetriesExhaustedForTest)
 	require.ErrorIs(t, err, transientErr)
 	assert.Equal(t, testRetryMaxAttempts, calls)
-	assert.Contains(t, logBuf.String(), "Config apply attempt 2/3 failed on 1.2.3.4")
+	assert.Contains(t, logBuf.String(), "Config apply attempt 2/3 failed on <address hidden>")
 }
 
 func TestRetryTransientTalosAPICall_StopsWhenContextCancelled(t *testing.T) {

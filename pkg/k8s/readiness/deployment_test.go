@@ -69,3 +69,52 @@ func TestWaitForDeploymentReadyIfExists_ObservedGenerationCaughtUp(t *testing.T)
 
 	require.NoError(t, err, "current-generation ready deployment must read as ready")
 }
+
+// A healthy observed subset does not establish the requested Deployment capacity.
+func TestWaitForDeploymentReadyIfExists_DesiredCapacity(t *testing.T) {
+	t.Parallel()
+
+	const namespace, name = "kube-system", "cluster-autoscaler"
+
+	for _, testCase := range []struct {
+		name     string
+		desired  *int32
+		observed int32
+		wantErr  bool
+	}{
+		{"desired three observed one", new(int32(3)), 1, true},
+		{"desired three observed three", new(int32(3)), 3, false},
+		{"default desired one observed one", nil, 1, false},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			client := fake.NewClientset(&appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Generation: 2},
+				Spec:       appsv1.DeploymentSpec{Replicas: testCase.desired},
+				Status: appsv1.DeploymentStatus{
+					ObservedGeneration: 2,
+					Replicas:           testCase.observed,
+					UpdatedReplicas:    testCase.observed,
+					AvailableReplicas:  testCase.observed,
+				},
+			})
+			ctx, cancel := context.WithTimeout(t.Context(), 150*time.Millisecond)
+
+			defer cancel()
+
+			err := readiness.WaitForDeploymentReadyIfExists(
+				ctx,
+				client,
+				namespace,
+				name,
+				time.Second,
+			)
+			if testCase.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}

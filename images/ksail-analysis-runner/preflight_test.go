@@ -105,7 +105,7 @@ func TestARCPreflightRequiresExplicitMainBranchEnablement(t *testing.T) {
 
 	job := value(t, workflow, "jobs", "preflight")
 	require.Equal(t, "github.ref == 'refs/heads/main' && inputs.enable_arc", value(t, job, "if"))
-	require.Equal(t, "ksail-code-quality", value(t, job, "runs-on"))
+	require.Equal(t, "platform-linux", value(t, job, "runs-on"))
 	require.Equal(t, 15, value(t, job, "timeout-minutes"))
 	require.Equal(t, map[string]any{"contents": "read"}, value(t, job, "permissions"))
 

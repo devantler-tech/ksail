@@ -138,15 +138,9 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	defer restoreContext()
 
-	// Step 1: Ensure namespace + DinD pod
-	err = p.setupDinD(ctx, clusterName)
-	if err != nil {
-		return err
-	}
-
-	// Step 1b: Resolve a stable, server-side exposure and bake its address into the API server
+	// Step 1: Ensure the DinD pod and resolve stable server-side exposure for the API server
 	// cert SANs (the Service target port is corrected once the DinD-mapped K8s port is known).
-	exposure, err := p.prepareExposure(ctx, clusterName)
+	exposure, podIP, err := p.prepareNestedAPI(ctx, clusterName)
 	if err != nil {
 		return err
 	}
@@ -223,7 +217,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	provisionStart := time.Now()
 
-	cluster, err := p.inner.provisionCluster(ctx, clusterName, configBundle)
+	cluster, err := p.provisionNestedCluster(ctx, clusterName, configBundle, podIP)
 	if err != nil {
 		return fmt.Errorf("provision cluster: %w", err)
 	}
@@ -235,6 +229,11 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	// Discover the host ports the Talos API and K8s API are mapped to inside DinD.
 	talosPort, k8sPort, err := p.discoverMappedPorts(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
+	servicePort, err := p.discoverServicePort(ctx, clusterName, podIP)
 	if err != nil {
 		return err
 	}
@@ -307,7 +306,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	// Point the exposure Service at the DinD-mapped K8s API port (only known now).
 	//nolint:gosec // port value is bounded within TCP port range (1-65535)
-	err = p.k8sProvider.UpdateAPIServiceTargetPort(ctx, clusterName, int32(k8sPort))
+	err = p.k8sProvider.UpdateAPIServiceTargetPort(ctx, clusterName, int32(servicePort))
 	if err != nil {
 		return fmt.Errorf("update API exposure target port: %w", err)
 	}
@@ -501,7 +500,7 @@ func (p *KubernetesProvisioner) discoverMappedPorts(
 	ctx context.Context,
 	clusterName string,
 ) (int, int, error) {
-	talosEndpoint, err := p.inner.getMappedTalosAPIEndpoint(ctx, clusterName)
+	talosEndpoint, err := p.inner.getMappedPortEndpoint(ctx, clusterName, talosAPIPort, "127.0.0.1")
 	if err != nil {
 		return 0, 0, fmt.Errorf("get Talos API endpoint: %w", err)
 	}
@@ -511,7 +510,7 @@ func (p *KubernetesProvisioner) discoverMappedPorts(
 		return 0, 0, fmt.Errorf("parse Talos API port: %w", err)
 	}
 
-	k8sEndpoint, err := p.inner.getMappedK8sAPIEndpoint(ctx, clusterName)
+	k8sEndpoint, err := p.inner.getMappedPortEndpoint(ctx, clusterName, k8sAPIPort, "127.0.0.1")
 	if err != nil {
 		return 0, 0, fmt.Errorf("get K8s API endpoint: %w", err)
 	}

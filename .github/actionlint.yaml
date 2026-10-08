@@ -11,3 +11,5 @@ self-hosted-runner:
   labels:
     # Repository-scoped ARC scale set; used only by explicit analysis preflight.
     - ksail-code-quality
+    # Platform-owned ARC pool; used only by the main-only delivery preflight.
+    - platform-linux

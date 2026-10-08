@@ -192,6 +192,11 @@ func newTalosConfig(
 		return nil, fmt.Errorf("build Talos config: %w", err)
 	}
 
+	config, err = config.WithProviderNetworks(cluster)
+	if err != nil {
+		return nil, fmt.Errorf("apply Talos provider networks: %w", err)
+	}
+
 	return config, nil
 }
 

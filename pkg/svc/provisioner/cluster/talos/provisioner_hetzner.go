@@ -162,7 +162,7 @@ func (p *Provisioner) updateConfigsWithEndpoint(
 	// 2. KSail reaches Hetzner nodes via their public IPv4, or their private-network
 	//    IP when the node is IPv4-less
 	// 3. The endpoint IP is embedded in certificates and must match
-	firstCPIP, addrErr := hetznerNodeTalosAddress(controlPlaneServers[0])
+	firstCPIP, addrErr := p.hetznerNodeAddress(controlPlaneServers[0])
 	if addrErr != nil {
 		return addrErr
 	}
@@ -620,7 +620,7 @@ func (p *Provisioner) refreshFloatingIPKubeconfig(ctx context.Context, clusterNa
 		return err
 	}
 
-	talosEndpoint, err := hetznerNodeTalosAddress(controlPlaneServers[0])
+	talosEndpoint, err := p.hetznerNodeAddress(controlPlaneServers[0])
 	if err != nil {
 		return err
 	}
@@ -660,7 +660,7 @@ func (p *Provisioner) moveKubeconfigToNodeEndpoint(ctx context.Context, clusterN
 		return err
 	}
 
-	nodeAddress, err := hetznerNodeTalosAddress(controlPlaneServers[0])
+	nodeAddress, err := p.hetznerNodeAddress(controlPlaneServers[0])
 	if err != nil {
 		return err
 	}

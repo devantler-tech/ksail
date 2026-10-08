@@ -44,7 +44,7 @@ func (p *Provisioner) rollingRebootAutoscalerNodes(
 	result *clusterupdate.UpdateResult,
 ) error {
 	clientset, ordered, ok, err := p.prepareAutoscalerNodeConvergence(
-		ctx, clusterName, "  ⓘ No autoscaler nodes to reboot\n",
+		ctx, clusterName, "  ⓘ No autoscaler nodes to reboot\n", result,
 	)
 	if err != nil || !ok {
 		return err
@@ -86,7 +86,7 @@ func (p *Provisioner) rollingRebootAutoscalerServers(
 		"Rolling reboot of %d autoscaler node(s) in place (same servers)...\n", len(ordered))
 
 	for idx, server := range ordered {
-		serverIP, addrErr := hetznerNodeTalosAddress(server)
+		serverIP, addrErr := p.hetznerNodeAddress(server)
 		if addrErr != nil {
 			// No usable private address is a real misconfiguration, not a transient
 			// half-joined node: abort rather than silently skip (a skipped node stays

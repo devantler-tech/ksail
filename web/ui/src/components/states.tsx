@@ -34,7 +34,7 @@ export function ErrorBanner({ message, onRetry }: { message: string; onRetry?: (
       className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"
     >
       <CircleAlert className="mt-0.5 size-5 shrink-0 text-red-500" aria-hidden />
-      <p className="flex-1 break-words">{message}</p>
+      <p className="min-w-0 flex-1 break-words">{message}</p>
       {onRetry ? (
         <Button variant="secondary" size="sm" onClick={onRetry}>
           Retry

@@ -23,7 +23,7 @@ func (p *Provisioner) bootstrapHetznerCluster(
 	bootstrapNode *hcloud.Server,
 	configBundle *bundle.Bundle,
 ) error {
-	nodeIP, addrErr := hetznerNodeTalosAddress(bootstrapNode)
+	nodeIP, addrErr := p.hetznerNodeAddress(bootstrapNode)
 	if addrErr != nil {
 		return addrErr
 	}
@@ -184,7 +184,7 @@ func (p *Provisioner) saveHetznerKubeconfig(
 	controlPlaneNode *hcloud.Server,
 	configBundle *bundle.Bundle,
 ) error {
-	nodeIP, addrErr := hetznerNodeTalosAddress(controlPlaneNode)
+	nodeIP, addrErr := p.hetznerNodeAddress(controlPlaneNode)
 	if addrErr != nil {
 		return addrErr
 	}
@@ -243,7 +243,7 @@ func (p *Provisioner) newHetznerClusterWithEndpoint(
 	controlPlaneServers []*hcloud.Server,
 	workerServers []*hcloud.Server,
 ) (*HetznerClusterResult, error) {
-	cpIP, addrErr := hetznerNodeTalosAddress(controlPlaneServers[0])
+	cpIP, addrErr := p.hetznerNodeAddress(controlPlaneServers[0])
 	if addrErr != nil {
 		return nil, addrErr
 	}

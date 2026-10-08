@@ -82,7 +82,8 @@ func validAIWireAPI(wireAPI string) bool {
 // environment-variable name a credential resolves from, plus local UI app preferences (editor
 // command, chat model/effort). Secret values live in the Store, never here.
 type settings struct {
-	EnvVars map[Key]string `json:"envVars,omitempty"`
+	EnvVars       map[Key]string `json:"envVars,omitempty"`
+	AWSSSORenewal bool           `json:"awsSsoRenewal,omitempty"`
 	// Editor is the command used for interactive editor flows (e.g. "code --wait"). Exported to the
 	// EDITOR environment variable by Overlay so KSail's editor resolution and subprocesses honor it.
 	Editor string `json:"editor,omitempty"`
@@ -105,6 +106,7 @@ type chatPrefs struct {
 // persisted alongside the env-var overrides in ui-settings.json.
 type AppSettings struct {
 	Editor              string
+	AWSSSORenewal       bool
 	ChatProvider        v1alpha1.AIProvider
 	ChatModel           string
 	ChatReasoningEffort string
@@ -399,8 +401,9 @@ func (m *Manager) UpdateAppSettings(next AppSettings) error {
 
 	m.mu.Lock()
 
-	prevEditor, prevChat := m.settings.Editor, m.settings.Chat
+	prevEditor, prevChat, prevSSO := m.settings.Editor, m.settings.Chat, m.settings.AWSSSORenewal
 	m.settings.Editor = next.Editor
+	m.settings.AWSSSORenewal = next.AWSSSORenewal
 
 	if next.chatIsEmpty() {
 		m.settings.Chat = nil
@@ -421,6 +424,7 @@ func (m *Manager) UpdateAppSettings(next AppSettings) error {
 		// Roll back the in-memory mutation so a failed persist doesn't leave rejected values live (a
 		// later successful write would otherwise commit them).
 		m.settings.Editor, m.settings.Chat = prevEditor, prevChat
+		m.settings.AWSSSORenewal = prevSSO
 		m.mu.Unlock()
 
 		return saveErr
@@ -539,7 +543,7 @@ func (m *Manager) applyEnvVarOverrides(updates []CredentialUpdate) error {
 
 // appSettings projects the persisted settings onto the public AppSettings shape.
 func (s settings) appSettings() AppSettings {
-	out := AppSettings{Editor: s.Editor}
+	out := AppSettings{Editor: s.Editor, AWSSSORenewal: s.AWSSSORenewal}
 	if s.Chat != nil {
 		out.ChatProvider = s.Chat.Provider
 		out.ChatModel = s.Chat.Model
