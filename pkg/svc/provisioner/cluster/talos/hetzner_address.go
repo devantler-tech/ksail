@@ -55,3 +55,15 @@ func diagnoseUnreachableNode(server *hcloud.Server, err error) error {
 		ErrPrivateNetworkUnreachable, server.Name, err,
 	)
 }
+
+// hetznerNodeAddress resolves the address KSail reaches a server's Talos API on
+// and records the server's name for it, so progress output can name the server
+// instead of printing the address.
+func (p *Provisioner) hetznerNodeAddress(server *hcloud.Server) (string, error) {
+	address, err := hetznerNodeTalosAddress(server)
+	if err == nil && server != nil {
+		p.addressMask.Register(address, server.Name)
+	}
+
+	return address, err
+}

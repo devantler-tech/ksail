@@ -749,3 +749,55 @@ func externallyManagedGroupCases() []externallyManagedGroupCase {
 		},
 	}
 }
+
+// TestAutoscalerConvergenceFailures_IgnoresInventoryReports pins that the two
+// report-only inventory findings fail the update but are not convergence failures: a
+// server KSail never converges must not hold a boot-image rollout pending or stop the
+// static nodes of a same-version image roll. A failure of a node KSail does converge
+// still counts.
+func TestAutoscalerConvergenceFailures_IgnoresInventoryReports(t *testing.T) {
+	t.Parallel()
+
+	reports := []struct {
+		name   string
+		record func(*hetzner.Provider, *clusterupdate.UpdateResult) error
+	}{
+		{
+			"disabled autoscaler",
+			func(hz *hetzner.Provider, result *clusterupdate.UpdateResult) error {
+				return disabledAutoscalerProvisioner(hz, io.Discard).
+					EnsureAutoscalerSecretIfNeededWithResultForTest(
+						context.Background(), autoscalerFakeCluster, result,
+					)
+			},
+		},
+		{"removed pool", func(hz *hetzner.Provider, result *clusterupdate.UpdateResult) error {
+			return autoscalerProvisioner(hz, io.Discard, configuredPool).
+				ReconcileAutoscalerNodesForTest(
+					context.Background(),
+					autoscalerFakeCluster, inPlaceDiff(), false, false, result,
+				)
+		}},
+	}
+
+	for _, report := range reports {
+		t.Run(report.name, func(t *testing.T) {
+			t.Parallel()
+
+			hzProvider, _ := newAutoscalerHcloudAPI(t, removedPoolAndOtherClusterServers()...)
+			result := clusterupdate.NewEmptyUpdateResult()
+
+			require.NoError(t, report.record(hzProvider, result))
+			require.Len(t, result.FailedChanges, 1, "the leftover server still fails the update")
+			assert.Zero(t, talosprovisioner.AutoscalerConvergenceFailuresForTest(result))
+
+			result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
+				Field:  "cluster.workers",
+				Reason: "failed to manage worker node as-pool-a-1: apply config: timeout",
+			})
+			assert.Equal(t, 1, talosprovisioner.AutoscalerConvergenceFailuresForTest(result))
+		})
+	}
+
+	assert.Zero(t, talosprovisioner.AutoscalerConvergenceFailuresForTest(nil))
+}

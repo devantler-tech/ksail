@@ -185,11 +185,7 @@ func emitKWOKUnsupportedComponentWarnings(cmd *cobra.Command, clusterCfg *v1alph
 // node.cloudprovider.kubernetes.io/uninitialized:NoSchedule taint) before any
 // other infrastructure component can schedule pods. Currently this applies to
 // Talos × Hetzner clusters where hcloud-ccm is the external CCM.
-func needsCloudProviderInitPhase(
-	clusterCfg *v1alpha1.Cluster,
-	reqs ComponentRequirements,
-) bool {
+func needsCloudProviderInitPhase(clusterCfg *v1alpha1.Cluster) bool {
 	return clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos &&
-		clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderHetzner &&
-		reqs.NeedsLoadBalancer
+		clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderHetzner
 }

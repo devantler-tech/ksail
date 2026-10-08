@@ -107,6 +107,14 @@ func hetznerDefaultTagConstCases() []defaultTagConstCase {
 
 func miscDefaultTagConstCases() []defaultTagConstCase {
 	return []defaultTagConstCase{
+		{
+			"OptionsKubernetes.PodCIDR", &v1alpha1.OptionsKubernetes{},
+			"PodCIDR", v1alpha1.DefaultKubernetesPodCIDR,
+		},
+		{
+			"OptionsKubernetes.ServiceCIDR", &v1alpha1.OptionsKubernetes{},
+			"ServiceCIDR", v1alpha1.DefaultKubernetesServiceCIDR,
+		},
 		{"SOPS.AgeKeyEnvVar", &v1alpha1.SOPS{}, "AgeKeyEnvVar", v1alpha1.DefaultSOPSAgeKeyEnvVar},
 		{
 			"Talos.ISO", &v1alpha1.OptionsTalos{},

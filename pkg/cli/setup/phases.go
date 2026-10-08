@@ -141,7 +141,7 @@ func InstallPostCNIComponents(
 
 	emitKWOKUnsupportedComponentWarnings(cmd, clusterCfg)
 
-	if reqs.Count() == 0 {
+	if reqs.Count() == 0 && !needsCloudProviderInitPhase(clusterCfg) {
 		return nil
 	}
 
@@ -210,7 +210,7 @@ func installComponentsInPhases(
 	// external cloud controller manager (hcloud-ccm) initializes them. Install
 	// hcloud-ccm first and wait for nodes to become schedulable before any other
 	// infrastructure component, otherwise all pods fail with FailedScheduling.
-	if needsCloudProviderInitPhase(clusterCfg, reqs) {
+	if needsCloudProviderInitPhase(clusterCfg) {
 		var err error
 
 		reqs, cniInstalled, err = runCloudProviderInitAndClearReqs(

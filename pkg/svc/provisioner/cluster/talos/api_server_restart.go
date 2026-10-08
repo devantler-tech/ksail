@@ -78,7 +78,7 @@ func (p *Provisioner) waitForAPIServersServingEndpoint(
 	group, groupCtx := errgroup.WithContext(ctx)
 
 	for _, server := range controlPlaneServers {
-		nodeIP, err := hetznerNodeTalosAddress(server)
+		nodeIP, err := p.hetznerNodeAddress(server)
 		if err != nil {
 			return err
 		}

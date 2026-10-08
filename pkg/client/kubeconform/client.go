@@ -262,7 +262,7 @@ type ValidationOptions struct {
 	// SkipKinds is a list of Kubernetes kinds to skip during validation (e.g., "Secret").
 	SkipKinds []string
 	// SchemaLocations lists additional kubeconform schema locations (local directories
-	// or URL templates) appended after the built-in Kubernetes schemas and the
+	// or URL templates) consulted after built-in Kubernetes schemas but before the
 	// CRDs-catalog. They let a repo validate CRDs that are absent from (or stale in)
 	// the catalog against a supplied schema instead of skipping the kind entirely.
 	SchemaLocations []string
@@ -281,19 +281,16 @@ type ValidationOptions struct {
 
 // createValidator creates a kubeconform validator with the given options.
 func (c *Client) createValidator(opts *ValidationOptions) (validator.Validator, error) {
-	// Create schema locations. Caller-supplied locations are appended last so they
-	// act as a fallback for CRDs absent from the catalog (the catalog URL 404s and
-	// kubeconform falls through to these) without changing precedence for kinds
-	// already covered.
+	// Preserve built-in Kubernetes validation, then prefer the caller's CRD schemas
+	// over potentially older catalogue entries. Keep the catalogue as a fallback.
 	schemaLocations := make([]string, 0, builtinSchemaLocationCount+len(opts.SchemaLocations))
+	schemaLocations = append(schemaLocations, "default")
+	schemaLocations = append(schemaLocations, opts.SchemaLocations...)
 	schemaLocations = append(schemaLocations,
-		// Default Kubernetes schemas
-		"default",
 		// Add Datree CRDs catalog for additional CRD schemas
 		"https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/"+
 			"{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json",
 	)
-	schemaLocations = append(schemaLocations, opts.SchemaLocations...)
 
 	// Convert skip kinds to map
 	skipKinds := make(map[string]struct{})

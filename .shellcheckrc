@@ -1,0 +1,3 @@
+# Let shellcheck follow a helper a script sources from its own directory.
+external-sources=true
+source-path=SCRIPTDIR

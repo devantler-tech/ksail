@@ -211,6 +211,7 @@ jobs:
               - '.github/actions/**'
               - '.github/scripts/**'
               - '.github/fixtures/workflow-run-cleanup/**'
+              - '.github/fixtures/talos-schematic-trial.yaml'
               - 'internal/ciharness/**'
             # The release build configuration is the subject of Go tests too: the OTel
             # reachability guard in pkg/client/kubescape pins a digest of every file below, and
@@ -382,6 +383,8 @@ jobs:
               - '.github/scripts/cask-pr-handoff-workflow.test.sh'
               - '.github/scripts/collect-cask-pr-handoff.sh'
               - '.github/scripts/collect-cask-pr-handoff.test.sh'
+              - '.github/scripts/finish-cask-pr-handoff.sh'
+              - '.github/scripts/finish-cask-pr-handoff.test.sh'
               - '.github/scripts/find-merged-cask-pr-handoff.sh'
               - '.github/scripts/find-merged-cask-pr-handoff.test.sh'
               - '.github/scripts/redraft-evergreen-cask-prs.sh'
@@ -399,6 +402,13 @@ jobs:
             eks-smoke-scripts:
               - '.github/scripts/delete-eks-smoke-cluster.sh'
               - '.github/scripts/delete-eks-smoke-cluster.test.sh'
+              - '.github/scripts/report-eks-create-failure.sh'
+              - '.github/scripts/report-eks-create-failure.test.sh'
+              - '.github/scripts/report-eks-account-capacity.sh'
+              - '.github/scripts/report-eks-account-capacity.test.sh'
+              - '.github/scripts/eks-report-test-lib.sh'
+              - '.shellcheckrc'
+              - '.github/workflows/eks-account-capacity.yaml'
               - '.github/workflows/system-test-eks.yaml'
               - '.github/workflows/ci.yaml'
             k3k-sentinel-scripts:
@@ -439,6 +449,21 @@ jobs:
             .github/scripts/delete-eks-smoke-cluster.sh \
             .github/scripts/delete-eks-smoke-cluster.test.sh
           .github/scripts/delete-eks-smoke-cluster.test.sh
+
+      - name: 🔎 Verify the EKS create-failure report only reads and never fails
+        run: |
+          shellcheck \
+            .github/scripts/report-eks-create-failure.sh \
+            .github/scripts/eks-report-test-lib.sh \
+            .github/scripts/report-eks-create-failure.test.sh
+          .github/scripts/report-eks-create-failure.test.sh
+
+      - name: 🔎 Verify the EKS account capacity report only reads and prints no identifier
+        run: |
+          shellcheck \
+            .github/scripts/report-eks-account-capacity.sh \
+            .github/scripts/report-eks-account-capacity.test.sh
+          .github/scripts/report-eks-account-capacity.test.sh
 
   k3k-sentinel-scripts:
     name: 🔐 Validate k3k Sentinel Scripts
@@ -551,6 +576,8 @@ jobs:
             .github/fixtures/cask-pr-handoff/fake-bin/gh \
             .github/scripts/collect-cask-pr-handoff.sh \
             .github/scripts/collect-cask-pr-handoff.test.sh \
+            .github/scripts/finish-cask-pr-handoff.sh \
+            .github/scripts/finish-cask-pr-handoff.test.sh \
             .github/scripts/find-merged-cask-pr-handoff.sh \
             .github/scripts/find-merged-cask-pr-handoff.test.sh \
             .github/scripts/redraft-evergreen-cask-prs.sh \
@@ -565,6 +592,7 @@ jobs:
             .github/scripts/validate-cask-pr-handoff.test.sh \
             .github/scripts/cask-pr-handoff-workflow.test.sh
           .github/scripts/collect-cask-pr-handoff.test.sh
+          .github/scripts/finish-cask-pr-handoff.test.sh
           .github/scripts/find-merged-cask-pr-handoff.test.sh
           .github/scripts/redraft-evergreen-cask-prs.test.sh
           .github/scripts/resolve-release-publish-state.test.sh
@@ -601,7 +629,7 @@ jobs:
       || (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
       && needs.changes.outputs.govuln-allowlist == 'true')
-    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@498fb4b11f129928d3af9a90e9c5a46f1c4dbd77 # v7.0.0
+    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@ef34177c48310d4e8d6605233cb7218b926dcc55 # v7.2.11
     # The canonical defaults make a default-branch run answer "did the check run" rather than
     # "did the diff touch a Go file". On main the branch's green IS the protection
     # signal, so a path filter that skips the suite or the scan leaves main green
@@ -800,6 +828,9 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && (needs.changes.outputs.code == 'true' || needs.changes.outputs.cli == 'true' || needs.changes.outputs.system-test == 'true' || needs.changes.outputs.kubeconform-cancellation == 'true'))
     permissions:
       contents: read
+    outputs:
+      artifact-id: ${{ steps.binary-artifact.outputs.artifact-id }}
+      binary-sha256: ${{ steps.binary-checksum.outputs.binary-sha256 }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -819,6 +850,7 @@ jobs:
           go-version-file: go.mod
 
       - name: 📦 Cache KSail Binary
+        id: binary
         uses: ./.github/actions/cache-ksail-binary
         with:
           go-version: ${{ steps.setup-go.outputs.go-version }}
@@ -850,6 +882,28 @@ jobs:
           path: ${{ runner.temp }}/kubeconform-cancellation.json
           if-no-files-found: error
           retention-days: 14
+
+      - name: 🔍 Seal prepared KSail binary
+        id: binary-checksum
+        env:
+          BINARY_PATH: ${{ steps.binary.outputs.binary-path }}
+        run: |
+          if [[ ! -f "$BINARY_PATH" || -L "$BINARY_PATH" || ! -s "$BINARY_PATH" ]]; then
+            echo "Missing or invalid prepared KSail binary" >&2
+            exit 1
+          fi
+          checksum=$(sha256sum "$BINARY_PATH" | cut -d ' ' -f 1)
+          echo "binary-sha256=$checksum" >> "$GITHUB_OUTPUT"
+
+      - name: 📤 Publish KSail binary
+        id: binary-artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ksail-binary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.binary.outputs.binary-path }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
 
   generate:
     name: 📝 Generate Schema, CRD & Docs
@@ -1781,13 +1835,12 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      - name: 📦 Cache KSail Binary
-        uses: ./.github/actions/cache-ksail-binary
+      - name: 📥 Restore KSail binary
+        # Pin the identical published action until actionlint supports $/ references.
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@f9172ab810fdcb94b47351d04d70708f6878e10a
         with:
-          go-version: ${{ steps.setup-go.outputs.go-version }}
-          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
-          output-path: /usr/local/bin/ksail
-          save: "false"
+          artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
+          binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
 
       - name: 📥 Restore Helm Cache
         uses: ./.github/actions/restore-helm-cache
@@ -2047,6 +2100,33 @@ jobs:
             exit 1
           fi
 
+  verify-bash-32-workflow-contract:
+    name: 🧪 Verify Bash 3.2 Workflow Contract
+    runs-on: macos-latest
+    timeout-minutes: 10
+    needs: [changes]
+    if: github.event_name != 'merge_group' && needs.changes.outputs.todos-contract == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: 🧪 Verify empty arguments under Bash 3.2
+        env:
+          KSAIL_REQUIRE_BASH32: "true"
+        run: go test ./internal/ciharness -run '^TestSystemTestTalosUpgradeEmptyArgumentsUnderBash32$' -count=1
+
   # Runs the Go suite when only the release build configuration changed. The org-required Go
   # validation skips its test job on such a pull request, because no Go file changed, while
   # Go tests assert on exactly these files (see the release-config filter, ksail#7400).
@@ -2124,7 +2204,7 @@ jobs:
         with:
           persist-credentials: false
       - name: 🧹 Free runner disk
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@0005615a8fcb9a791e86d50d4de6d310be707df9
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@32f92acde3dcf290d21d50639a805f0cf42b7b30
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -2237,6 +2317,7 @@ jobs:
         verify-dependency-test-graph,
         verify-dependency-contracts,
         verify-todos-workflow-contract,
+        verify-bash-32-workflow-contract,
         test-release-config,
         release-graph-audit,
         cask-pr-handoff,
@@ -2275,6 +2356,7 @@ jobs:
             ${{ needs.verify-dependency-test-graph.result }}
             ${{ needs.verify-dependency-contracts.result }}
             ${{ needs.verify-todos-workflow-contract.result }}
+            ${{ needs.verify-bash-32-workflow-contract.result }}
             ${{ needs.test-release-config.result }}
             ${{ needs.release-graph-audit.result }}
             ${{ needs.cask-pr-handoff.result }}

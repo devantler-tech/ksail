@@ -665,6 +665,7 @@ export function App() {
           <OverviewView
             cluster={activeCluster}
             canBrowse={canBrowse}
+            canAuthenticate={config?.mode === "local" && !!config.settingsEnabled && !readOnly}
             canEdit={canEdit}
             canDelete={!readOnly}
             canDownloadKubeconfig={canKubeconfig}

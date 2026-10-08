@@ -98,7 +98,7 @@ func (f *Factory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) (map[string]I
 	haEnabled := IsHAEnabled(spec.TotalNodeCount())
 
 	f.addGitOpsInstaller(installers, spec, cfg.Spec.Workload.Flux.OperatorVersion, haEnabled)
-	f.addCNIInstaller(installers, spec, haEnabled)
+	f.addCNIInstaller(installers, cfg, haEnabled)
 	f.addPolicyEngineInstaller(installers, spec, haEnabled)
 	f.addCertManagerInstaller(installers, spec, haEnabled)
 	f.addMetricsServerInstaller(installers, spec, haEnabled)
@@ -182,9 +182,11 @@ func (f *Factory) addGitOpsInstaller(
 
 func (f *Factory) addCNIInstaller(
 	installers map[string]Installer,
-	spec v1alpha1.ClusterSpec,
+	cfg *v1alpha1.Cluster,
 	haEnabled bool,
 ) {
+	spec := cfg.Spec.Cluster
+
 	switch spec.CNI {
 	case v1alpha1.CNICilium:
 		installers["cilium"] = ciliuminstaller.NewInstaller(
@@ -193,8 +195,16 @@ func (f *Factory) addCNIInstaller(
 		)
 	case v1alpha1.CNICalico:
 		installers["calico"] = calicoinstaller.NewInstaller(
-			f.helmClient, f.kubeconfig, f.kubecontext,
-			max(f.timeout, CalicoInstallTimeout), f.distribution, haEnabled,
+			f.helmClient,
+			f.kubeconfig,
+			f.kubecontext,
+			max(f.timeout, CalicoInstallTimeout),
+			f.distribution,
+			haEnabled,
+			calicoinstaller.WithKubernetesProviderNetwork(
+				spec.Provider,
+				cfg.Spec.Provider.Kubernetes,
+			),
 		)
 	case v1alpha1.CNIDefault:
 		// Default CNI - no explicit installer needed

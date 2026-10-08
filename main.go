@@ -9,6 +9,7 @@ import (
 	"runtime/debug"
 
 	"github.com/devantler-tech/ksail/v7/internal/buildmeta"
+	"github.com/devantler-tech/ksail/v7/pkg/addressmask"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd"
 	"github.com/devantler-tech/ksail/v7/pkg/client/klogutil"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
@@ -26,7 +27,10 @@ func main() {
 func runSafely(args []string, runner func([]string) int, errWriter io.Writer) (exitCode int) {
 	defer func() {
 		if r := recover(); r != nil {
-			panicMessage := fmt.Sprintf("panic recovered: %v\n%s", r, debug.Stack())
+			// A panic value can quote a server address just as an error can.
+			panicMessage := addressmask.New().Mask(
+				fmt.Sprintf("panic recovered: %v\n%s", r, debug.Stack()),
+			)
 			notify.WriteMessage(notify.Message{
 				Type:    notify.ErrorType,
 				Content: panicMessage,
@@ -80,10 +84,20 @@ func runWithArgs(args []string) int {
 		}
 
 		// For actual errors, print and return exit code 1.
-		notify.Errorf(rootCmd.ErrOrStderr(), "%v", err)
+		notify.Errorf(rootCmd.ErrOrStderr(), "%s", failureText(err))
 
 		return 1
 	}
 
 	return 0
+}
+
+// failureText returns what to print for a failed command. An error often quotes
+// the address of the server it could not reach, and a failed run's output is
+// routinely captured by public CI logs and by the assistants that run KSail as
+// a tool, so publicly routable addresses are taken out of it for every command
+// unless the operator opted back in through addressmask.ShowAddressesEnvVar.
+// The error itself is left as it is.
+func failureText(err error) string {
+	return addressmask.New().Mask(err.Error())
 }

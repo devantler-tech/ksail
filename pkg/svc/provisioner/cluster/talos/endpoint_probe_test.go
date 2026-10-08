@@ -74,6 +74,7 @@ func TestVerifiedEndpointIP_UnreachableCandidateFallsBackWithWarning(t *testing.
 	)
 
 	assert.Equal(t, "203.0.113.5", got)
-	assert.Contains(t, logs.String(), "192.0.2.10")
-	assert.Contains(t, logs.String(), "203.0.113.5")
+	assert.Contains(t, logs.String(), "does not answer on port")
+	assert.NotContains(t, logs.String(), "192.0.2.10", "addresses stay out of default output")
+	assert.NotContains(t, logs.String(), "203.0.113.5", "addresses stay out of default output")
 }
