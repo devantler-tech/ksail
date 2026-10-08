@@ -226,6 +226,7 @@ jobs:
               - '.goreleaser.yaml'
               - '.goreleaser.desktop.yaml'
               - '.github/workflows/cd.yaml'
+              - '.github/scripts/publish-operator-chart.sh'
               - '.github/actions/setup-desktop-build/**'
               - '.github/actions/free-disk-space/**'
               - 'scripts/stage-webui.sh'
@@ -629,7 +630,7 @@ jobs:
       || (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
       && needs.changes.outputs.govuln-allowlist == 'true')
-    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@ef34177c48310d4e8d6605233cb7218b926dcc55 # v7.2.11
+    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@fca583ac795d56928c5b542944b6e0963ea1e270 # v7.8.5
     # The canonical defaults make a default-branch run answer "did the check run" rather than
     # "did the diff touch a Go file". On main the branch's green IS the protection
     # signal, so a path filter that skips the suite or the scan leaves main green
@@ -1837,7 +1838,7 @@ jobs:
 
       - name: 📥 Restore KSail binary
         # Pin the identical published action until actionlint supports $/ references.
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@f9172ab810fdcb94b47351d04d70708f6878e10a
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@3115397431e2bdf31d911930908a9002a93a4340
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2204,7 +2205,7 @@ jobs:
         with:
           persist-credentials: false
       - name: 🧹 Free runner disk
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@32f92acde3dcf290d21d50639a805f0cf42b7b30
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@3115397431e2bdf31d911930908a9002a93a4340
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
