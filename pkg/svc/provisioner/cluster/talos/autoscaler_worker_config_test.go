@@ -20,6 +20,7 @@ import (
 	x509 "github.com/siderolabs/crypto/x509"
 	"github.com/siderolabs/talos/pkg/machinery/config/configloader"
 	taloscontainer "github.com/siderolabs/talos/pkg/machinery/config/container"
+	talosmeta "github.com/siderolabs/talos/pkg/machinery/config/types/meta"
 	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -222,6 +223,102 @@ func TestGenerateAutoscalerWorkerConfig_StampsAutoscaledMarker(t *testing.T) {
 		"true",
 		rawCfg.MachineConfig.MachineNodeLabels[talosprovisioner.LabelAutoscaled],
 	)
+}
+
+type kubeletStorageLabelCase struct {
+	name   string
+	labels string
+	want   string
+	list   bool
+}
+
+func kubeletStorageLabelCases() []kubeletStorageLabelCase {
+	return []kubeletStorageLabelCase{
+		{name: "only storage label", labels: "node.longhorn.io/create-default-disk=true"},
+		{
+			name:   "storage label first",
+			labels: "node.longhorn.io/create-default-disk=true,workload=batch",
+			want:   "workload=batch",
+		},
+		{
+			name:   "storage label last",
+			labels: "workload=batch,node.longhorn.io/create-default-disk=false",
+			want:   "workload=batch",
+		},
+		{
+			name:   "repeated storage label",
+			labels: longhornDefaultDiskLabel + "=true,workload=batch," + longhornDefaultDiskLabel + "=false",
+			want:   "workload=batch",
+		},
+		{name: "unrelated label", labels: "workload=batch", want: "workload=batch"},
+		{
+			name:   "similar key",
+			labels: "node.longhorn.io/create-default-disk-extra=true",
+			want:   "node.longhorn.io/create-default-disk-extra=true",
+		},
+		{
+			name:   "list of arguments",
+			labels: "node.longhorn.io/create-default-disk=true,workload=batch",
+			want:   "workload=batch",
+			list:   true,
+		},
+		{
+			name:   "multiple remaining arguments",
+			labels: longhornDefaultDiskLabel + "=true,workload=batch,zone=west",
+			want:   "workload=batch,zone=west",
+			list:   true,
+		},
+		{
+			name:   "unrelated list",
+			labels: "workload=batch,zone=west",
+			want:   "workload=batch,zone=west",
+			list:   true,
+		},
+	}
+}
+
+func TestGenerateAutoscalerWorkerConfig_StripsKubeletStorageLabel(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range kubeletStorageLabelCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			provider := newTestWorkerProvider()
+
+			labelArg := talosmeta.NewArgValue(testCase.labels, nil)
+			if testCase.list {
+				labelArg = talosmeta.NewArgValue("", strings.Split(testCase.labels, ","))
+			}
+
+			provider.RawV1Alpha1().MachineConfig.MachineKubelet.KubeletExtraArgs = talosmeta.Args{
+				"node-labels": labelArg,
+				"max-pods":    talosmeta.NewArgValue("110", nil),
+			}
+
+			cfg := generateAndParseAutoscalerConfig(t, provider, nil, nil)
+			args := cfg.MachineConfig.MachineKubelet.KubeletExtraArgs.ToMap()
+			assert.Equal(t, []string{"110"}, args["max-pods"])
+
+			if testCase.want == "" {
+				assert.NotContains(t, args, "node-labels")
+			} else {
+				wantValues := []string{testCase.want}
+				if testCase.list {
+					wantValues = strings.Split(testCase.want, ",")
+				}
+
+				assert.Equal(t, wantValues, args["node-labels"])
+			}
+
+			assert.Equal(
+				t,
+				labelArg,
+				provider.RawV1Alpha1().MachineConfig.MachineKubelet.KubeletExtraArgs["node-labels"],
+				"the static worker's registration labels must stay unchanged",
+			)
+		})
+	}
 }
 
 func TestGenerateAutoscalerWorkerConfig_AppliesPoolLabelsAndTaints(t *testing.T) {
