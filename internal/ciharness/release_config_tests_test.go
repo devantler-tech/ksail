@@ -20,6 +20,7 @@ func releaseConfigFiles() []string {
 		".goreleaser.yaml",
 		".goreleaser.desktop.yaml",
 		".github/workflows/cd.yaml",
+		".github/scripts/publish-operator-chart.sh",
 		".github/actions/setup-desktop-build/action.yml",
 		".github/actions/free-disk-space/free-disk-space.sh",
 		"scripts/stage-webui.sh",
