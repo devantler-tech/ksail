@@ -832,6 +832,8 @@ jobs:
     outputs:
       artifact-id: ${{ steps.binary-artifact.outputs.artifact-id }}
       binary-sha256: ${{ steps.binary-checksum.outputs.binary-sha256 }}
+      calico-baseline-artifact-id: ${{ steps.calico-baseline-artifact.outputs.artifact-id }}
+      calico-baseline-sha256: ${{ steps.calico-baseline-build.outputs.binary-sha256 }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -902,6 +904,41 @@ jobs:
         with:
           name: ksail-binary-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ steps.binary.outputs.binary-path }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+      - name: 📄 Checkout Calico 3.32.2 baseline
+        if: needs.changes.outputs.system-test == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Reviewed protected-main source immediately before this migration fix.
+          ref: 66ba54d8de006cac38575c3697c863f453fc0f1b
+          path: calico-legacy-source
+          persist-credentials: false
+
+      - name: 🏗️ Build Calico migration baseline
+        id: calico-baseline-build
+        if: needs.changes.outputs.system-test == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
+        env:
+          GOMEMLIMIT: 6GiB
+          GOPROXY: https://proxy.golang.org,direct
+        run: |
+          set -euo pipefail
+          test "$(git -C calico-legacy-source rev-parse HEAD)" = 66ba54d8de006cac38575c3697c863f453fc0f1b
+          grep -Fxq 'FROM docker.io/calico/node:v3.32.2@sha256:99b03fe91e8bfbcb153ae65ef4b701b24ce541ffdd74ff314eb041096008f7fd' calico-legacy-source/pkg/svc/installer/cni/calico/Dockerfile
+          mkdir -p "$RUNNER_TEMP/calico-legacy-bin"
+          (cd calico-legacy-source && go build -trimpath -ldflags='-s -w' -o "$RUNNER_TEMP/calico-legacy-bin/ksail" .)
+          checksum=$(sha256sum "$RUNNER_TEMP/calico-legacy-bin/ksail" | cut -d ' ' -f 1)
+          echo "binary-sha256=$checksum" >> "$GITHUB_OUTPUT"
+
+      - name: 📤 Publish Calico migration baseline
+        id: calico-baseline-artifact
+        if: needs.changes.outputs.system-test == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: calico-legacy-binary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/calico-legacy-bin/ksail
           if-no-files-found: error
           compression-level: 0
           retention-days: 1
@@ -1808,6 +1845,23 @@ jobs:
             test-kubernetes-provider: "true"
             kubernetes-provider-distributions: "K3s"
             kubernetes-provider-cni: "Calico"
+          # Keep the fresh 3.33 installations above, and also create these with
+          # the immutable 3.32.2 CLI before the candidate's unchanged-config update.
+          - distribution: Vanilla
+            provider: Docker
+            init: true
+            args: "--name calico-migration --cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine None --gitops-engine None"
+            calico-migration: "true"
+          - distribution: K3s
+            provider: Docker
+            init: true
+            args: "--name calico-migration --cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine None --gitops-engine None"
+            calico-migration: "true"
+          - distribution: VCluster
+            provider: Docker
+            init: true
+            args: "--name calico-migration --cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine None --gitops-engine None"
+            calico-migration: "true"
           # NOTE: KWOK excluded — simulated nodes cannot run real workloads (DinD pods)
     steps:
       - name: 📄 Checkout
@@ -1843,6 +1897,24 @@ jobs:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
 
+      - name: 🔍 Require Calico migration baseline artifact
+        if: ${{ matrix.calico-migration == 'true' }}
+        env:
+          ARTIFACT_ID: ${{ needs.build-artifact.outputs.calico-baseline-artifact-id }}
+          BINARY_SHA256: ${{ needs.build-artifact.outputs.calico-baseline-sha256 }}
+        run: |
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ && "$BINARY_SHA256" =~ ^[a-f0-9]{64}$ ]] || {
+            echo 'Missing exact Calico baseline artifact identity' >&2
+            exit 1
+          }
+
+      - name: 📥 Download Calico migration baseline
+        if: ${{ matrix.calico-migration == 'true' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.build-artifact.outputs.calico-baseline-artifact-id }}
+          path: ${{ runner.temp }}/calico-legacy-download
+
       - name: 📥 Restore Helm Cache
         uses: ./.github/actions/restore-helm-cache
 
@@ -1870,6 +1942,8 @@ jobs:
           provider: ${{ matrix.provider }}
           init: ${{ matrix.init }}
           args: ${{ matrix.args }}
+          calico-migration-binary: ${{ matrix.calico-migration == 'true' && format('{0}/calico-legacy-download/ksail', runner.temp) || '' }}
+          calico-migration-sha256: ${{ matrix.calico-migration == 'true' && needs.build-artifact.outputs.calico-baseline-sha256 || '' }}
           kubernetes-upgrade-from: ${{ matrix.kubernetes-upgrade-from || '' }}
           kubernetes-upgrade-to: ${{ matrix.kubernetes-upgrade-to || '' }}
           ecr-public-upstream: ${{ steps.offline-ecr.outputs.remote-url || 'https://ecr-public.aws.com' }}
