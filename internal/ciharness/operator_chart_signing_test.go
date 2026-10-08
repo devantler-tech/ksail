@@ -166,9 +166,9 @@ case "$1" in
   *) exit 99 ;;
 esac
 `)
-	//nolint:gosec // Runs a fixed repository-owned publisher with test-owned inputs.
-	command := exec.CommandContext(t.Context(), "bash", script)
-	command.Dir = directory
+	command := exec.CommandContext(t.Context(), "bash", ".github/scripts/publish-operator-chart.sh")
+	command.Dir = filepath.Clean(filepath.Join(filepath.Dir(script), "../.."))
+
 	command.Env = append(envWithoutReleaseRef(),
 		"PATH="+directory+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"GITHUB_REF="+testCase.ref,
