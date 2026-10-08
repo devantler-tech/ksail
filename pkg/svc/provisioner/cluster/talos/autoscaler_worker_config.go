@@ -12,6 +12,7 @@ import (
 	"io"
 	"maps"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 
@@ -20,6 +21,7 @@ import (
 	x509 "github.com/siderolabs/crypto/x509"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/configloader"
+	talosmeta "github.com/siderolabs/talos/pkg/machinery/config/types/meta"
 	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -43,6 +45,7 @@ const (
 	// user_data, so that value must stay within this limit or Hetzner rejects every
 	// scale-up with "invalid input in field 'user_data'".
 	hetznerUserDataLimitBytes = 32768
+	longhornDefaultDiskLabel  = "node.longhorn.io/create-default-disk"
 )
 
 // LabelAutoscaled is a Kubernetes node label stamped on every
@@ -50,8 +53,9 @@ const (
 // downstream workloads a discriminator to key node affinity off of (e.g. a soft
 // preference for baseline nodes so autoscaler nodes stay empty and scale down).
 //
-// It is applied via the worker config's machine.nodeLabels (kubelet
-// --node-labels) so it lands on the real Node object. The Hetzner cluster
+// Talos applies the worker config's machine.nodeLabels to the real Node object
+// through its node-labels controller, separately from kubelet registration labels.
+// The Hetzner cluster
 // autoscaler deliberately does NOT push its per-pool nodeConfigs[].labels to the
 // kubelet — those only seed the in-memory scheduling-simulation template — so
 // stamping the label in the worker cloud-init is the canonical mechanism (see
@@ -66,7 +70,8 @@ const labelValueTrue = "true"
 // GenerateAutoscalerWorkerConfig generates a stripped Talos worker config
 // suitable for autoscaler-provisioned compute-only nodes. It sets
 // machine.install.wipe to true, removes machine.disks (autoscaler nodes have
-// no attached Hetzner Volumes), removes the Longhorn storage node label while
+// no attached Hetzner Volumes), removes the Longhorn storage node label from both
+// machine.nodeLabels and kubelet registration arguments while
 // preserving machine.kubelet.extraMounts for CSI consumer access, and stamps the
 // LabelAutoscaled marker node label so workloads can tell autoscaler nodes apart
 // from static baseline workers.
@@ -127,7 +132,8 @@ func shapeAutoscalerWorker(
 
 		maps.Copy(cfg.MachineConfig.MachineNodeLabels, poolLabels)
 
-		delete(cfg.MachineConfig.MachineNodeLabels, "node.longhorn.io/create-default-disk")
+		delete(cfg.MachineConfig.MachineNodeLabels, longhornDefaultDiskLabel)
+		stripKubeletStorageLabel(cfg.MachineConfig.MachineKubelet)
 		cfg.MachineConfig.MachineNodeLabels[LabelAutoscaled] = labelValueTrue
 
 		applyPoolTaints(cfg, poolTaints)
@@ -139,6 +145,51 @@ func shapeAutoscalerWorker(
 	}
 
 	return patched, nil
+}
+
+// Kubelet registration labels are independent of machine.nodeLabels. Static workers
+// may set the Longhorn label here so storage can schedule immediately on first boot.
+// Remove it from every argument value when shaping compute-only autoscaler workers.
+func stripKubeletStorageLabel(kubelet *v1alpha1.KubeletConfig) {
+	if kubelet == nil {
+		return
+	}
+
+	values, ok := kubelet.KubeletExtraArgs.ToMap()["node-labels"]
+	if !ok {
+		return
+	}
+
+	filtered := make([]string, 0, len(values))
+	changed := false
+
+	for _, value := range values {
+		labels := strings.Split(value, ",")
+
+		kept := slices.DeleteFunc(labels, func(label string) bool {
+			key, _, _ := strings.Cut(label, "=")
+
+			return key == longhornDefaultDiskLabel
+		})
+		changed = changed || len(kept) != len(labels)
+
+		if len(kept) > 0 {
+			filtered = append(filtered, strings.Join(kept, ","))
+		}
+	}
+
+	if !changed {
+		return
+	}
+
+	switch len(filtered) {
+	case 0:
+		delete(kubelet.KubeletExtraArgs, "node-labels")
+	case 1:
+		kubelet.KubeletExtraArgs["node-labels"] = talosmeta.NewArgValue(filtered[0], nil)
+	default:
+		kubelet.KubeletExtraArgs["node-labels"] = talosmeta.NewArgValue("", filtered)
+	}
 }
 
 // applyPoolTaints writes the pool's taints into machine.nodeTaints. Talos encodes
