@@ -399,6 +399,27 @@ func (plan *prerequisitePlan) save(ctx context.Context) error {
 	return nil
 }
 
+func (c *Installer) loadPrerequisitePlan(
+	ctx context.Context,
+) (*prerequisitePlan, metadata.Interface, error) {
+	client, core, meta, err := c.prerequisiteClients()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	inventory, state, err := readPrerequisiteState(ctx, core)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return &prerequisitePlan{
+		client:    client,
+		core:      core,
+		inventory: inventory,
+		state:     state,
+	}, meta, nil
+}
+
 func (c *Installer) planPrerequisites(
 	ctx context.Context,
 	manifest string,
@@ -408,23 +429,12 @@ func (c *Installer) planPrerequisites(
 		return nil, err
 	}
 
-	client, core, meta, err := c.prerequisiteClients()
+	plan, meta, err := c.loadPrerequisitePlan(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	inventory, state, err := readPrerequisiteState(ctx, core)
-	if err != nil {
-		return nil, err
-	}
-
-	plan := &prerequisitePlan{
-		client:    client,
-		core:      core,
-		objects:   objects,
-		inventory: inventory,
-		state:     state,
-	}
+	plan.objects = objects
 	// Validate the entire bundle before any namespace, inventory or object write.
 	for _, object := range objects {
 		err = plan.inspectTarget(ctx, object)

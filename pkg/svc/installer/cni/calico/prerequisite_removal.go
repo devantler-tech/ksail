@@ -34,7 +34,7 @@ func (r *prerequisiteRemoval) record(ctx context.Context) error {
 }
 
 func (c *Installer) planPrerequisiteRemoval(ctx context.Context) (*prerequisiteRemoval, error) {
-	client, core, meta, err := c.prerequisiteClients()
+	plan, meta, err := c.loadPrerequisitePlan(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -43,13 +43,6 @@ func (c *Installer) planPrerequisiteRemoval(ctx context.Context) (*prerequisiteR
 	if err != nil {
 		return nil, err
 	}
-
-	inventory, state, err := readPrerequisiteState(ctx, core)
-	if err != nil {
-		return nil, err
-	}
-
-	plan := &prerequisitePlan{client: client, core: core, state: state, inventory: inventory}
 
 	err = plan.captureLegacy(ctx, meta)
 	if err != nil {

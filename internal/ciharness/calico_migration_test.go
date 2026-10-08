@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCalicoMigrationUsesImmutableBaselineOnlyForCreate(t *testing.T) {
+func TestCalicoMigrationPublishesImmutableBaseline(t *testing.T) {
 	t.Parallel()
 
 	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
@@ -28,7 +28,12 @@ func TestCalicoMigrationUsesImmutableBaselineOnlyForCreate(t *testing.T) {
 		producer.Outputs["calico-baseline-sha256"],
 		"calico-baseline-build.outputs.binary-sha256",
 	)
+}
 
+func TestCalicoMigrationUsesImmutableBaselineOnlyForCreate(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
 	consumer := workflow.Jobs["system-test-docker"]
 	download := findHarnessStep(t, consumer.Steps, "📥 Download Calico migration baseline")
 	assert.Equal(t, "${{ matrix.calico-migration == 'true' }}", download.If)
