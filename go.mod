@@ -103,7 +103,7 @@ require (
 	github.com/siderolabs/omni/client v1.9.1
 	github.com/sigstore/sigstore v1.10.11
 	github.com/sigstore/sigstore-go v1.3.0
-	github.com/wailsapp/wails/v3 v3.0.0-beta.26
+	github.com/wailsapp/wails/v3 v3.0.0-beta.27
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.57.0
 	golang.org/x/mod v0.41.0
