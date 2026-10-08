@@ -93,8 +93,11 @@ func operatorChartPublisherCases() []operatorChartPublisherCase {
 			pushExit: 1, reason: "push failed", wantCalls: 2,
 		},
 		{
-			name: "missing digest", ref: "refs/tags/v7.202.4", receipt: "Pushed: " + operatorChartRepository + ":7.202.4\n",
-			reason: "Invalid chart push receipt", wantCalls: 2,
+			name:      "missing digest",
+			ref:       "refs/tags/v7.202.4",
+			receipt:   "Pushed: " + operatorChartRepository + ":7.202.4\n",
+			reason:    "Invalid chart push receipt",
+			wantCalls: 2,
 		},
 		{
 			name: "malformed digest", ref: "refs/tags/v7.202.4",
@@ -102,8 +105,11 @@ func operatorChartPublisherCases() []operatorChartPublisherCase {
 			reason:  "Invalid chart push receipt", wantCalls: 2,
 		},
 		{
-			name: "ambiguous digest", ref: "refs/tags/v7.202.4", receipt: receipt + "Digest: " + digest + "\n",
-			reason: "Invalid chart push receipt", wantCalls: 2,
+			name:      "ambiguous digest",
+			ref:       "refs/tags/v7.202.4",
+			receipt:   receipt + "Digest: " + digest + "\n",
+			reason:    "Invalid chart push receipt",
+			wantCalls: 2,
 		},
 		{
 			name: "wrong artifact", ref: "refs/tags/v7.202.4",
