@@ -70,7 +70,9 @@ target_version=$(sed -nE 's/^FROM docker.io\/calico\/node:(v[0-9]+\.[0-9]+\.[0-9
 printf 'apiVersion: ksail.io/v1alpha1\nkind: Cluster\nspec:\n  cluster:\n    connection:\n      kubeconfig: %s/calico-migration.kubeconfig\n' "$fixture" >"$fixture/project/ksail.yaml"
 printf 'fixture kubeconfig\n' >"$fixture/calico-migration.kubeconfig"
 jq -n '{"current-context":"fixture",contexts:[{name:"fixture",context:{cluster:"fixture"}}],clusters:[{name:"fixture"}]}' >"$fixture/target.json"
-jq -n '{items:[range(1;40) | {kind:"CustomResourceDefinition",metadata:{name:("fixture-" + tostring),uid:("uid-" + tostring),annotations:{"meta.helm.sh/release-name":"calico-crds","meta.helm.sh/release-namespace":"tigera-operator"}}}]}' >"$fixture/identities.json"
+# Calico 3.32.2 has 31 CRDs and six admission prerequisites. The candidate
+# adds two prerequisites; its complete inventory below must still contain 39.
+jq -n '{items:[range(1;38) | {kind:"CustomResourceDefinition",metadata:{name:("fixture-" + tostring),uid:("uid-" + tostring),annotations:{"meta.helm.sh/release-name":"calico-crds","meta.helm.sh/release-namespace":"tigera-operator"}}}]}' >"$fixture/identities.json"
 jq -n '{serverVersion:{gitVersion:"v1.37.1"}}' >"$fixture/version.json"
 jq -n '[{name:"calico",status:"deployed",chart:"tigera-operator-v3.32.2"},{name:"calico-crds",status:"deployed",chart:"projectcalico.org.v3-v3.32.2"}]' >"$fixture/before-releases.json"
 jq -n --arg version "$target_version" '[{name:"calico",status:"deployed",chart:("tigera-operator-" + $version)},{name:"calico-crds",status:"deployed",chart:"projectcalico.org.v3-v3.32.2"}]' >"$fixture/after-releases.json"
@@ -92,7 +94,11 @@ case "$1 $2" in
   if [[ -f "$FIXTURE/updated" && "$CASE" == history-replaced ]]; then uid=replacement; fi
   printf 'Secret\tsh.helm.release.v1.calico-crds.v1\t%s\n' "$uid" ;;
 'get customresourcedefinitions.'*)
-  if [[ -f "$FIXTURE/updated" && "$CASE" == uid ]]; then
+  if [[ "$CASE" == legacy-incomplete ]]; then
+    jq '.items |= .[0:-1]' "$FIXTURE/identities.json"
+  elif [[ "$CASE" == legacy-extra ]]; then
+    jq '.items += [.items[0] | .metadata.name = "extra" | .metadata.uid = "extra"]' "$FIXTURE/identities.json"
+  elif [[ -f "$FIXTURE/updated" && "$CASE" == uid ]]; then
     jq '.items[0].metadata.uid = "replacement"' "$FIXTURE/identities.json"
   else cat "$FIXTURE/identities.json"; fi ;;
 'get configmap')
@@ -100,6 +106,8 @@ case "$1 $2" in
     jq '.data["inventory.json"] |= (fromjson | .resources |= map(select(.storage != true)) | tojson)' "$FIXTURE/inventory.json"
   elif [[ "$CASE" == incomplete ]]; then
     jq '.data["inventory.json"] |= (fromjson | .complete = false | tojson)' "$FIXTURE/inventory.json"
+  elif [[ "$CASE" == inventory-short ]]; then
+    jq '.data["inventory.json"] |= (fromjson | .resources |= map(select(.uid != "uid-39")) | tojson)' "$FIXTURE/inventory.json"
   else cat "$FIXTURE/inventory.json"; fi ;;
 'get daemonset') cat "$FIXTURE/node.json" ;;
 'version --request-timeout=30s')
@@ -143,7 +151,7 @@ esac
 SH
 chmod +x "$fixture/bin/kubectl" "$fixture/bin/helm" "$fixture/bin/ksail"
 
-for scenario in valid k3s vcluster baseline incomplete uid config history-missing history-replaced history-unrecorded diff-status; do
+for scenario in valid k3s vcluster baseline legacy-incomplete legacy-extra incomplete inventory-short uid config history-missing history-replaced history-unrecorded diff-status; do
   rm -f "$fixture/updated"
   printf 'apiVersion: ksail.io/v1alpha1\nkind: Cluster\nspec:\n  cluster:\n    connection:\n      kubeconfig: %s/calico-migration.kubeconfig\n' "$fixture" >"$fixture/project/ksail.yaml"
   status=0
@@ -170,7 +178,7 @@ for scenario in valid k3s vcluster baseline incomplete uid config history-missin
       exit 1
     }
   fi
-  if [[ "$scenario" == baseline ]]; then
+  if [[ "$scenario" == baseline || "$scenario" == legacy-incomplete || "$scenario" == legacy-extra ]]; then
     [[ ! -f "$fixture/updated" ]] || {
       echo 'FAIL: candidate updated an unverified baseline' >&2
       exit 1

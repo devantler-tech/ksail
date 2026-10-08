@@ -72,7 +72,9 @@ read_prerequisites() {
       select(length > 0 and all(.[]; (.uid | type == "string" and length > 0))) | sort_by(.kind, .name)'
 }
 read_prerequisites >"$log_dir/before-identities.json"
-jq -e 'length == 39' "$log_dir/before-identities.json" >/dev/null || fail 'legacy prerequisite capture is incomplete'
+# The pinned 3.32.2 chart has 31 CRDs and six admission prerequisites. The
+# candidate adds two admission prerequisites, verified in its 39-object inventory.
+jq -e 'length == 37' "$log_dir/before-identities.json" >/dev/null || fail 'legacy prerequisite capture is incomplete'
 cp "$config_file" "$log_dir/before-config.yaml"
 kubectl version --request-timeout=30s --output json "${cli_target[@]}" >"$log_dir/before-version.json"
 version=$(jq -er '.serverVersion.gitVersion | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+([-+][0-9A-Za-z.-]+)?$"))' "$log_dir/before-version.json")
