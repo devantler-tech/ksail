@@ -84,11 +84,15 @@ func validateGoMaintenanceIdentity(workflow ciWorkflow, caller todosWorkflow) er
 	// Reviewed catalogue revisions preserve the read-only maintenance boundary.
 	// One adds test-mode caches and the latest only moves the signed-fix pins; the caller still
 	// disables signed-fix jobs.
+	// v7.8.5 (fca583ac) adds opt-in disk measurement and an opt-in cleanup budget, both off by
+	// default, turns the default-branch maintenance input on by default (this caller already sets
+	// it), and moves the signed-fix pins again. It changes no permission, secret or job.
 	// Keep explicit reviewed identities: a syntactically valid SHA alone is insufficient.
 	reviewed := job.Uses == prefix+"0600006235510307a04efebcac1ac1f363f5f862" ||
 		job.Uses == prefix+"498fb4b11f129928d3af9a90e9c5a46f1c4dbd77" ||
 		job.Uses == prefix+"2fa404276b0ce5c0527683b080e39045045c4e42" ||
-		job.Uses == prefix+"ef34177c48310d4e8d6605233cb7218b926dcc55"
+		job.Uses == prefix+"ef34177c48310d4e8d6605233cb7218b926dcc55" ||
+		job.Uses == prefix+"fca583ac795d56928c5b542944b6e0963ea1e270"
 	if !found || !reviewed || len(job.Steps) != 0 ||
 		caller.Jobs["ci-go"].RunsOn != "" || !reflect.DeepEqual(job.Needs, []string{"changes"}) {
 		return errGoMaintenanceIdentity
@@ -130,6 +134,7 @@ func TestGoMaintenanceCallerAcceptsReviewedReleaseRevisions(t *testing.T) {
 		"498fb4b11f129928d3af9a90e9c5a46f1c4dbd77",
 		"2fa404276b0ce5c0527683b080e39045045c4e42",
 		"ef34177c48310d4e8d6605233cb7218b926dcc55",
+		"fca583ac795d56928c5b542944b6e0963ea1e270",
 	} {
 		t.Run(revision, func(t *testing.T) {
 			t.Parallel()
