@@ -37,6 +37,18 @@ helm install ksail-operator charts/ksail-operator --namespace ksail-system --cre
 
 Helm installs the bundled `Cluster` CRD automatically. Override any value with `--set key=value` or a `-f values.yaml` file (see [Configuration](#configuration)).
 
+### Verifying the chart
+
+The release job signs the chart's immutable manifest with GitHub Actions OIDC and verifies the signature before release publication succeeds. No stored signing key is used. Verify a selected chart version with:
+
+```sh
+cosign verify "ghcr.io/devantler-tech/charts/ksail-operator:<version>" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity "https://github.com/devantler-tech/ksail/.github/workflows/cd.yaml@refs/tags/v<version>"
+```
+
+Historical charts are not backfilled with signatures. Verify the chosen version before adopting it in a signature-verifying Flux source.
+
 ## Uninstalling
 
 ```sh

@@ -4,7 +4,6 @@ package vulnidentity_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -126,20 +125,28 @@ func verifyFailedActualQuery(
 	cleanOutput, err := clean.Output()
 	require.NoError(t, err)
 
-	failed := filepath.Join(root, "failed-scanner")
-	writeFixture(t, root, "clean.json", string(cleanOutput))
-	writeFixture(
-		t,
-		root,
-		"failed-scanner",
-		"#!/bin/bash\ncat \"$(dirname \"$0\")/clean.json\"\nexit 1\n",
+	writeFixture(t, root, "clean.json.fail", string(cleanOutput))
+
+	fixtureScanner, err := os.Executable()
+	require.NoError(t, err)
+	_, err = vulnidentity.Query(
+		t.Context(),
+		fixtureScanner,
+		filepath.Join(root, "clean.json.fail"),
+		identities,
 	)
-	// Only this test fixture's owner can execute it.
-	require.NoError(t, os.Chmod(failed, 0o700)) //nolint:gosec
-	_, err = vulnidentity.Query(context.Background(), failed, database, identities)
-	require.Error(t, err)
+
+	var processError *exec.ExitError
+	require.ErrorAs(t, err, &processError)
+	require.Equal(t, 3, processError.ExitCode())
+	require.NotErrorIs(
+		t,
+		err,
+		vulnidentity.ErrObservation,
+		"failed process cannot masquerade as parser rejection",
+	)
 
 	truncated := bytes.TrimSpace(cleanOutput)
 	_, err = runQueryFixture(t, string(truncated[:len(truncated)-1]), identities)
-	require.Error(t, err)
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
 }

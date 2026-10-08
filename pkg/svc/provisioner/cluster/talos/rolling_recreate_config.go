@@ -16,7 +16,7 @@ func (p *Provisioner) addReplacementCertSAN(newServer *hcloud.Server, role strin
 		return nil
 	}
 
-	address, err := hetznerNodeTalosAddress(newServer)
+	address, err := p.hetznerNodeAddress(newServer)
 	if err != nil {
 		return err
 	}

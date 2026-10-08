@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"sync"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
@@ -34,12 +36,56 @@ func schemaServer(id int64, name string, networkID int64) schema.Server {
 	}
 }
 
+// poolSelector is the label selector that matches the servers of one node-group pool.
+func poolSelector(pool string) string {
+	return hetzner.LabelAutoscalerNodeGroup + "=" + pool
+}
+
 // newAutoscalerNodesTestServer mocks the Hetzner network-lookup and server-list
 // endpoints ListAutoscalerNodes depends on. serversByPool maps a node-group pool
 // name to the servers returned for its label selector.
 func newAutoscalerNodesTestServer(
 	t *testing.T,
 	serversByPool map[string][]schema.Server,
+) *httptest.Server {
+	t.Helper()
+
+	serversBySelector := make(map[string][]schema.Server, len(serversByPool))
+	for pool, servers := range serversByPool {
+		serversBySelector[poolSelector(pool)] = servers
+	}
+
+	return newAutoscalerSelectorTestServer(t, serversBySelector, &selectorLog{})
+}
+
+// selectorLog records the label selectors the provider sends, safe for the test
+// server's handler goroutines.
+type selectorLog struct {
+	mu        sync.Mutex
+	selectors []string
+}
+
+func (l *selectorLog) add(selector string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	l.selectors = append(l.selectors, selector)
+}
+
+func (l *selectorLog) all() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	return slices.Clone(l.selectors)
+}
+
+// newAutoscalerSelectorTestServer mocks the Hetzner network-lookup and server-list
+// endpoints. serversBySelector maps an exact label selector to the servers returned
+// for it; every selector the provider sends is recorded on selectors.
+func newAutoscalerSelectorTestServer(
+	t *testing.T,
+	serversBySelector map[string][]schema.Server,
+	selectors *selectorLog,
 ) *httptest.Server {
 	t.Helper()
 
@@ -56,18 +102,13 @@ func newAutoscalerNodesTestServer(
 
 	mux.HandleFunc("GET /servers", func(writer http.ResponseWriter, request *http.Request) {
 		selector := request.URL.Query().Get("label_selector")
+		selectors.add(selector)
 
-		resp := schema.ServerListResponse{}
-
-		for pool, servers := range serversByPool {
-			if selector == hetzner.LabelAutoscalerNodeGroup+"="+pool {
-				resp.Servers = servers
-
-				break
-			}
-		}
-
-		writeJSONResponse(t, writer, resp)
+		writeJSONResponse(
+			t,
+			writer,
+			schema.ServerListResponse{Servers: serversBySelector[selector]},
+		)
 	})
 
 	srv := httptest.NewServer(mux)
@@ -147,6 +188,73 @@ func TestListAutoscalerNodes_FiltersByNetworkAndDedupes(t *testing.T) {
 	}
 
 	assert.ElementsMatch(t, []string{"as-1", "as-3", "as-4"}, names)
+}
+
+// inPool labels a server schema with the node-group pool the cluster autoscaler
+// created it for.
+func inPool(server schema.Server, pool string) schema.Server {
+	server.Labels = map[string]string{hetzner.LabelAutoscalerNodeGroup: pool}
+
+	return server
+}
+
+// TestListClusterAutoscalerNodes_FindsEveryPoolInClusterNetwork pins #7327: the
+// cluster-wide listing selects on the node-group label key alone, so a server of a
+// pool that is no longer configured is found, while a server of another cluster's
+// network stays out even when it uses the same pool name.
+func TestListClusterAutoscalerNodes_FindsEveryPoolInClusterNetwork(t *testing.T) {
+	t.Parallel()
+
+	const otherNetworkID = int64(999)
+
+	selectors := &selectorLog{}
+	srv := newAutoscalerSelectorTestServer(t, map[string][]schema.Server{
+		hetzner.LabelAutoscalerNodeGroup: {
+			inPool(schemaServer(1, "as-pool-a", autoscalerNetworkID), autoscalerPoolA),
+			inPool(schemaServer(2, "as-removed-pool", autoscalerNetworkID), "removed-pool"),
+			inPool(schemaServer(3, "as-other-cluster", otherNetworkID), autoscalerPoolA),
+		},
+	}, selectors)
+	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
+
+	servers, err := prov.ListClusterAutoscalerNodes(context.Background(), autoscalerTestCluster)
+
+	require.NoError(t, err)
+
+	names := make([]string, 0, len(servers))
+	for _, server := range servers {
+		names = append(names, server.Name)
+	}
+
+	assert.ElementsMatch(t, []string{"as-pool-a", "as-removed-pool"}, names)
+	assert.Equal(t, []string{hetzner.LabelAutoscalerNodeGroup}, selectors.all(),
+		"the listing must select on the label key, not on configured pool names")
+}
+
+func TestListClusterAutoscalerNodes_MissingNetworkReturnsNothing(t *testing.T) {
+	t.Parallel()
+
+	srv := newAutoscalerSelectorTestServer(t, map[string][]schema.Server{
+		hetzner.LabelAutoscalerNodeGroup: {
+			inPool(schemaServer(1, "as-1", autoscalerNetworkID), autoscalerPoolA),
+		},
+	}, &selectorLog{})
+	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
+
+	servers, err := prov.ListClusterAutoscalerNodes(context.Background(), "absent-cluster")
+
+	require.NoError(t, err)
+	assert.Empty(t, servers)
+}
+
+func TestListClusterAutoscalerNodes_NilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := hetzner.NewProvider(nil)
+
+	_, err := prov.ListClusterAutoscalerNodes(context.Background(), autoscalerTestCluster)
+
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }
 
 func TestServerInNetwork(t *testing.T) {

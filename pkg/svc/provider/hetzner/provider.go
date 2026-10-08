@@ -336,59 +336,30 @@ func (p *Provider) ListAutoscalerNodes(
 		return nil, nil
 	}
 
-	if p.client == nil {
-		return nil, provider.ErrProviderUnavailable
-	}
-
-	networkName := clusterName + NetworkSuffix
-
-	// Resolve the cluster network's ID for the membership guard. Servers returned
-	// by a list call carry only the private network's ID (the API omits its name),
-	// so the guard must compare IDs, not names. A missing network means the cluster
-	// is gone — there is nothing to match.
-	network, _, err := p.client.Network.GetByName(ctx, networkName)
-	if err != nil {
-		return nil, fmt.Errorf("getting cluster network %s: %w", networkName, err)
-	}
-
-	if network == nil {
-		return nil, nil
-	}
-
-	seen := make(map[int64]struct{})
-
-	var autoscalerServers []*hcloud.Server
-
+	selectors := make([]string, 0, len(poolNames))
 	for _, poolName := range poolNames {
-		labelSelector := fmt.Sprintf("%s=%s", LabelAutoscalerNodeGroup, poolName)
-
-		servers, listErr := p.listServersByLabelSelector(ctx, labelSelector)
-		if listErr != nil {
-			return nil, fmt.Errorf(
-				"failed to list autoscaler servers for pool %s: %w",
-				poolName,
-				listErr,
-			)
-		}
-
-		for _, server := range servers {
-			// Guard: only include servers that belong to this cluster's network to
-			// avoid touching servers from another cluster that happens to use the
-			// same pool name in the same Hetzner project.
-			if !serverInNetwork(server, network.ID) {
-				continue
-			}
-
-			if _, dup := seen[server.ID]; dup {
-				continue
-			}
-
-			seen[server.ID] = struct{}{}
-			autoscalerServers = append(autoscalerServers, server)
-		}
+		selectors = append(selectors, fmt.Sprintf("%s=%s", LabelAutoscalerNodeGroup, poolName))
 	}
 
-	return autoscalerServers, nil
+	return p.listAutoscalerNodesInNetwork(ctx, clusterName, selectors)
+}
+
+// ListClusterAutoscalerNodes returns every server the Kubernetes Cluster
+// Autoscaler created for the given cluster, whatever its pool: every server that
+// carries the hcloud/node-group label AND is a member of the cluster's private
+// network (<clusterName>-network). Unlike ListAutoscalerNodes it does not depend
+// on the configured pool names, so it also finds the servers of a pool that has
+// since been removed from the configuration.
+//
+// The network guard keeps the servers of every other cluster in the same Hetzner
+// project out of the result, whatever their pool names.
+func (p *Provider) ListClusterAutoscalerNodes(
+	ctx context.Context,
+	clusterName string,
+) ([]*hcloud.Server, error) {
+	// A bare label key selects every server that carries the label, whatever its
+	// value.
+	return p.listAutoscalerNodesInNetwork(ctx, clusterName, []string{LabelAutoscalerNodeGroup})
 }
 
 // DeleteAutoscalerNodes deletes all servers created by the Kubernetes Cluster
@@ -610,6 +581,67 @@ func (p *Provider) GetServerByName(ctx context.Context, name string) (*hcloud.Se
 // IsAvailable returns true if the provider is ready for use.
 func (p *Provider) IsAvailable() bool {
 	return p.client != nil
+}
+
+// listAutoscalerNodesInNetwork returns the servers matched by any of the label
+// selectors that are members of the cluster's private network, each server once.
+// A missing network means the cluster is gone, so it returns no servers.
+func (p *Provider) listAutoscalerNodesInNetwork(
+	ctx context.Context,
+	clusterName string,
+	labelSelectors []string,
+) ([]*hcloud.Server, error) {
+	if p.client == nil {
+		return nil, provider.ErrProviderUnavailable
+	}
+
+	networkName := clusterName + NetworkSuffix
+
+	// Resolve the cluster network's ID for the membership guard. Servers returned
+	// by a list call carry only the private network's ID (the API omits its name),
+	// so the guard must compare IDs, not names. A missing network means the cluster
+	// is gone — there is nothing to match.
+	network, _, err := p.client.Network.GetByName(ctx, networkName)
+	if err != nil {
+		return nil, fmt.Errorf("getting cluster network %s: %w", networkName, err)
+	}
+
+	if network == nil {
+		return nil, nil
+	}
+
+	seen := make(map[int64]struct{})
+
+	var autoscalerServers []*hcloud.Server
+
+	for _, labelSelector := range labelSelectors {
+		servers, listErr := p.listServersByLabelSelector(ctx, labelSelector)
+		if listErr != nil {
+			return nil, fmt.Errorf(
+				"failed to list autoscaler servers matching %s: %w",
+				labelSelector,
+				listErr,
+			)
+		}
+
+		for _, server := range servers {
+			// Guard: only include servers that belong to this cluster's network to
+			// avoid touching servers from another cluster that happens to use the
+			// same pool name in the same Hetzner project.
+			if !serverInNetwork(server, network.ID) {
+				continue
+			}
+
+			if _, dup := seen[server.ID]; dup {
+				continue
+			}
+
+			seen[server.ID] = struct{}{}
+			autoscalerServers = append(autoscalerServers, server)
+		}
+	}
+
+	return autoscalerServers, nil
 }
 
 // forEachServer executes an action on each server in the cluster.

@@ -25,6 +25,7 @@ awk '1' \
 	"${repo_root}/.github/scripts/collect-cask-pr-handoff.sh" \
 	"${repo_root}/.github/scripts/find-merged-cask-pr-handoff.sh" \
 	"${repo_root}/.github/scripts/validate-cask-pr-handoff.sh" \
+	"${repo_root}/.github/scripts/finish-cask-pr-handoff.sh" \
 	"${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
 	>"${execution_surface}"
 
@@ -49,16 +50,19 @@ awk '
   in_function && /^          }[[:space:]]*$/ { exit }
 ' "${homebrew_block}" >"${reconcile_function}"
 
+# Stop the workflow contract harness when an expected behavior is missing.
 fail() {
 	printf 'FAIL: %s\n' "$1" >&2
 	exit 1
 }
 
+# Require a workflow fragment that preserves the release handoff contract.
 assert_contains() {
 	local pattern="$1" file="$2" message="$3"
 	grep -Fq -- "${pattern}" "${file}" || fail "${message}"
 }
 
+# Reject a workflow fragment that would contradict the release handoff contract.
 assert_not_contains() {
 	local pattern="$1" file="$2" message="$3"
 	if grep -Fq -- "${pattern}" "${file}"; then
@@ -103,8 +107,115 @@ chmod +x "${race_root}/.github/scripts/find-merged-cask-pr-handoff.sh"
 	[[ "$(<"${RECONCILE_RACE_STATE}")" -eq 2 ]] || exit 1
 ) || fail 'merged reconciliation must retry a just-merged PR before recording failure'
 
-assert_contains 'name: 🍺 Prepare Homebrew cask PRs' "${homebrew_block}" \
-	'release job must be a prepare-and-handoff step'
+# Run the workflow's actual ready-retry block. A completed validation and a failed
+# merge are different outcomes: the operator must receive the delivery failure.
+ready_retry_block="${tmp_dir}/ready-retry.sh"
+awk '
+  /if \[ "\$pr_is_draft" = "false" \] &&/ { in_retry = 1 }
+  in_retry && /# The cask-checkpoint job re-drafted/ { exit }
+  in_retry { line = $0; sub(/^          /, "", line); print line }
+' "${homebrew_block}" >"${ready_retry_block}"
+retry_root="${tmp_dir}/ready-retry"
+mkdir -p "${retry_root}/.github/scripts"
+cat >"${retry_root}/.github/scripts/finish-cask-pr-handoff.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'called\n' >>"${READY_RETRY_CALLS}"
+if [[ "${READY_RETRY_SCENARIO}" == delivery-failed ]]; then
+	printf 'BLOCKED: asynchronous result read unavailable\n' >&2
+	exit 1
+fi
+printf 'PASS: verified exact-head merge completed\n'
+EOF
+chmod +x "${retry_root}/.github/scripts/finish-cask-pr-handoff.sh"
+for retry_case in validation-failed delivery-failed delivered; do
+	retry_log="${tmp_dir}/${retry_case}.log"
+	retry_summary="${tmp_dir}/${retry_case}.summary"
+	(
+		cd "${retry_root}"
+		READY_RETRY_SCENARIO="${retry_case}"
+		READY_RETRY_CALLS="${tmp_dir}/${retry_case}.calls"
+		export READY_RETRY_SCENARIO READY_RETRY_CALLS
+		TAP="devantler-tech/homebrew-tap" TAG="v7.175.1" pr=42
+		GITHUB_REPOSITORY="devantler-tech/ksail" GITHUB_STEP_SUMMARY="${retry_summary}"
+		pr_is_draft=false
+		evidence="${tmp_dir}/unused-evidence.json" handoff_failed=0
+		export TAP TAG pr GITHUB_REPOSITORY GITHUB_STEP_SUMMARY pr_is_draft evidence
+		: >"${READY_RETRY_CALLS}"
+		: >"${GITHUB_STEP_SUMMARY}"
+		# shellcheck disable=SC2317,SC2329 # Invoked by the actual sourced workflow block.
+		validate_handoff() {
+			if [[ "${READY_RETRY_SCENARIO}" == validation-failed ]]; then
+				printf 'scope mismatch\n' >&2
+				return 1
+			fi
+			printf 'validation fixture passed\n'
+		}
+		# shellcheck disable=SC2317,SC2329 # Invoked by the actual sourced workflow block.
+		reconcile_merged_handoff() {
+			printf 'reconciled: %s\n' "$2"
+			handoff_failed=1
+		}
+		for name in ksail ksail-desktop; do
+			pr_title="chore(cask): update ${name} to ${TAG}"
+			export pr_title
+			# shellcheck source=/dev/null
+			source "${ready_retry_block}"
+		done
+		if [[ "${READY_RETRY_SCENARIO}" == delivered ]]; then
+			[[ "${handoff_failed}" -eq 0 ]] || exit 1
+		else
+			[[ "${handoff_failed}" -eq 1 ]] || exit 1
+		fi
+		if [[ "${READY_RETRY_SCENARIO}" == validation-failed ]]; then
+			[[ ! -s "${READY_RETRY_CALLS}" ]] || exit 1
+		else
+			[[ "$(wc -l <"${READY_RETRY_CALLS}" | tr -d ' ')" -eq 2 ]] || exit 1
+		fi
+	) >"${retry_log}" 2>&1 || fail "ready retry ${retry_case} must retain its actual outcome"
+	case "${retry_case}" in
+	validation-failed)
+		assert_contains 'failed prepared revalidation: scope mismatch' "${retry_log}" \
+			'validation failure must retain its scope diagnostic'
+		assert_contains 'scope mismatch' "${retry_summary}" \
+			'validation failure must reach the step summary'
+		;;
+	delivery-failed)
+		assert_contains 'asynchronous result read unavailable' "${retry_log}" \
+			'delivery failure must retain the finisher diagnostic'
+		assert_contains 'asynchronous result read unavailable' "${retry_summary}" \
+			'delivery failure must reach the step summary'
+		assert_not_contains 'revalidation failed' "${retry_summary}" \
+			'a successful validation must not be reported as failed'
+		assert_not_contains 'validation fixture passed' "${retry_summary}" \
+			'successful validation output must not become the delivery failure reason'
+		;;
+	delivered)
+		assert_contains 'delivered for v7.175.1' "${retry_log}" \
+			'successful ready retry must still report completed delivery'
+		assert_contains 'delivered for v7.175.1' "${retry_summary}" \
+			'successful ready retry must reach the step summary'
+		assert_not_contains 'reconciled:' "${retry_log}" \
+			'a completed delivery must not enter failure reconciliation'
+		;;
+	esac
+done
+
+assert_contains 'name: 🍺 Deliver Homebrew cask PRs' "${homebrew_block}" \
+	'release job must complete cask delivery'
+# Both casks can consume the full pre-promotion, online-audit, and async-merge wait
+# bounds. Leave ten minutes for checkout, evidence collection, and cold brew style.
+finisher="${repo_root}/.github/scripts/finish-cask-pr-handoff.sh"
+poll_attempts="$(sed -nE 's/^attempts=([0-9]+) interval=[0-9]+$/\1/p' "${finisher}")"
+poll_interval="$(sed -nE 's/^attempts=[0-9]+ interval=([0-9]+)$/\1/p' "${finisher}")"
+job_minutes="$(awk '/timeout-minutes:/ { print $2 }' "${homebrew_block}")"
+for budget in "${poll_attempts}" "${poll_interval}" "${job_minutes}"; do
+	[[ "${budget}" =~ ^[1-9][0-9]*$ ]] || fail 'cask delivery wait budget is not completely observed'
+done
+required_seconds=$((2 * 3 * poll_attempts * poll_interval + 10 * 60))
+if ((job_minutes * 60 < required_seconds)); then
+	fail 'release job timeout cannot accommodate both casks full independent wait bounds and setup'
+fi
 assert_contains 'validate-cask-pr-handoff.sh' "${homebrew_block}" \
 	'release job must validate generated PR identity and file scope'
 assert_contains 'collect-cask-pr-handoff.sh' "${homebrew_block}" \
@@ -122,8 +233,8 @@ assert_contains 'head.repo.full_name == $full' "${homebrew_block}" \
 # re-validated against the DRAFT requirement (which would fail the rerun forever). But "ready + right
 # title" is not proof the tap will merge the correct cask, so the rerun re-runs the non-draft
 # (`prepared`) validator first; only a revalidated ready PR is skipped. See #6134.
-assert_contains 'already handed off for ${TAG} (ready, titled, and revalidated)' "${homebrew_block}" \
-	'release job must treat a REVALIDATED already-promoted cask PR for this tag as an idempotent retry, not a failure'
+assert_contains 'delivered for ${TAG} (ready retry, revalidated and merged)' "${homebrew_block}" \
+	'release job must complete an already-ready retry through validated merging'
 assert_contains 'failed prepared revalidation' "${homebrew_block}" \
 	'release job must fail the rerun red when an already-ready cask PR no longer passes prepared revalidation'
 # A partial rerun may find the first cask ALREADY MERGED by the tap auto-merge; the open-only query
@@ -136,8 +247,8 @@ assert_not_contains 'handoff_failed=1' "${selected_open_block}" \
 	'no failure after selecting an open PR may bypass merged-current-main reconciliation'
 reconciliation_calls="$(grep -Fc -- 'reconcile_merged_handoff "$name"' \
 	"${selected_open_block}" || true)"
-if [[ "${reconciliation_calls}" -ne 9 ]]; then
-	fail "every selected-open failure must reconcile an auto-merge race; expected 9 call sites, found ${reconciliation_calls}"
+if [[ "${reconciliation_calls}" -ne 10 ]]; then
+	fail "every selected-open failure must reconcile an auto-merge race; expected 10 call sites, found ${reconciliation_calls}"
 fi
 for context in \
 	'failed ready-PR revalidation' \
@@ -148,7 +259,7 @@ for context in \
 	'could not receive normalized metadata' \
 	'metadata could not be completed' \
 	'failed prepared validation' \
-	'could not be marked ready'; do
+	'could not be delivered'; do
 	assert_contains "${context}" "${selected_open_block}" \
 		"selected-open failure is missing merged reconciliation context: ${context}"
 done
@@ -178,35 +289,43 @@ assert_contains '.github/scripts/style-clean-cask-branch.test.sh' "${ci_workflow
 assert_contains '--source-repo "$GITHUB_REPOSITORY"' "${homebrew_block}" \
 	'release job must collect release-asset digest evidence for the sha256 handoff check'
 # Cask PRs are a trusted programmed release path (maintainer direction ksail#6095): after full
-# validation the job marks the PR ready so the tap's checks gate its auto-merge — but ONLY after
-# the prepared validation, and never by merging or bypassing anything itself.
+# validation the job promotes, verifies the actual online audit and completes an exact-head merge.
+# Server-side rules must remain enforced even for a token with administrative bypass capability.
 # The handoff drives `markPullRequestReadyForReview` directly rather than `gh pr ready`: that
 # subcommand resolves the viewer's `login`, a scope the tap token does not have, so it failed on every
 # release and stranded each cask PR as a draft (#6134). Assert the mechanism that actually promotes.
-assert_contains 'markPullRequestReadyForReview' "${homebrew_block}" \
-	'release job must hand the validated cask PR to the tap check-gated auto-merge path'
-assert_not_contains 'gh pr ready' "${homebrew_block}" \
+assert_contains 'markPullRequestReadyForReview' "${execution_surface}" \
+	'release job must promote through the guarded completion helper'
+assert_not_contains 'gh pr ready' "${execution_surface}" \
 	'release job must not promote via `gh pr ready` (needs a login scope the tap token lacks; see #6134)'
-assert_contains 'marked ready for check-gated auto-merge' "${homebrew_block}" \
-	'release job must record the ready-for-auto-merge handoff'
-assert_not_contains 'gh pr merge' "${execution_surface}" \
-	'release job and its helpers must never merge a generated cask PR'
+assert_contains '.github/scripts/finish-cask-pr-handoff.sh' "${homebrew_block}" \
+	'release job must complete a validated cask through the guarded exact-head merge helper'
+assert_contains '.github/scripts/finish-cask-pr-handoff.test.sh' "${ci_workflow}" \
+	'CI must execute the guarded cask completion behavior tests'
 assert_not_contains '--auto' "${execution_surface}" \
 	'release job and its helpers must never arm auto-merge themselves'
 assert_not_contains '--admin' "${execution_surface}" \
 	'release job and its helpers must never bypass branch protections'
+assert_contains '/merge-async' "${execution_surface}" \
+	'cask delivery must use the merge endpoint with explicit rule enforcement'
+assert_contains '-F bypass_rules=false' "${execution_surface}" \
+	'cask delivery must explicitly refuse administrative rule bypass'
+assert_contains 'merge_action=direct_merge' "${execution_surface}" \
+	'cask delivery must request a direct merge rather than an enduring queue decision'
+assert_contains 'X-GitHub-Api-Version: 2026-03-10' "${execution_surface}" \
+	'cask delivery must select the documented async merge API version'
 
 validator_calls="$(grep -Fc -- 'validate_handoff "$pr"' "${homebrew_block}" || true)"
 if [ "${validator_calls}" -lt 3 ]; then
 	fail "expected pre-style, post-style, and prepared validation; found ${validator_calls} calls"
 fi
-ready_line="$(grep -Fn -- 'markPullRequestReadyForReview' "${homebrew_block}" | head -1 | cut -d: -f1)"
+ready_line="$(grep -Fn -- '.github/scripts/finish-cask-pr-handoff.sh' "${homebrew_block}" | tail -1 | cut -d: -f1)"
 # There are now two `prepared` calls — the idempotency-rerun revalidation and the final pre-promotion
 # validation. The invariant guards the LATTER: the ready mutation must come after the FINAL prepared
 # validation, so key on the last match.
 prepared_line="$(grep -Fn -- '"$evidence" prepared' "${homebrew_block}" | tail -1 | cut -d: -f1)"
 if [ -z "${ready_line}" ] || [ -z "${prepared_line}" ] || [ "${ready_line}" -le "${prepared_line}" ]; then
-	fail 'the ready-for-auto-merge handoff must come after the final prepared validation'
+	fail 'guarded cask completion must come after the final prepared validation'
 fi
 
 # The pre-release checkpoint: a reused, still-promoted evergreen PR is demoted BEFORE GoReleaser

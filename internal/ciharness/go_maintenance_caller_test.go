@@ -78,9 +78,19 @@ func validateGoMaintenanceCaller(contents []byte) error {
 }
 
 func validateGoMaintenanceIdentity(workflow ciWorkflow, caller todosWorkflow) error {
+	const prefix = "devantler-tech/.github/.github/workflows/validate-go-project.yaml@"
+
 	job, found := workflow.Jobs["ci-go"]
-	if !found || job.Uses != "devantler-tech/.github/.github/workflows/validate-go-project.yaml@"+
-		"0600006235510307a04efebcac1ac1f363f5f862" || len(job.Steps) != 0 ||
+	// Reviewed catalogue revisions preserve the read-only maintenance boundary.
+	// The latest adds opt-in disk measurements and capacity-based cleanup. This
+	// caller keeps their defaults and still explicitly disables signed-fix jobs.
+	// Keep explicit reviewed identities: a syntactically valid SHA alone is insufficient.
+	reviewed := job.Uses == prefix+"0600006235510307a04efebcac1ac1f363f5f862" ||
+		job.Uses == prefix+"498fb4b11f129928d3af9a90e9c5a46f1c4dbd77" ||
+		job.Uses == prefix+"2fa404276b0ce5c0527683b080e39045045c4e42" ||
+		job.Uses == prefix+"ef34177c48310d4e8d6605233cb7218b926dcc55" ||
+		job.Uses == prefix+"fca583ac795d56928c5b542944b6e0963ea1e270"
+	if !found || !reviewed || len(job.Steps) != 0 ||
 		caller.Jobs["ci-go"].RunsOn != "" || !reflect.DeepEqual(job.Needs, []string{"changes"}) {
 		return errGoMaintenanceIdentity
 	}
@@ -113,10 +123,87 @@ func TestGoMaintenanceCallerUsesReadOnlyPilot(t *testing.T) {
 	require.NoError(t, validateGoMaintenanceCaller(readRepoFile(t, ".github/workflows/ci.yaml")))
 }
 
+func TestGoMaintenanceCallerAcceptsReviewedReleaseRevisions(t *testing.T) {
+	t.Parallel()
+
+	for _, revision := range []string{
+		"0600006235510307a04efebcac1ac1f363f5f862",
+		"498fb4b11f129928d3af9a90e9c5a46f1c4dbd77",
+		"2fa404276b0ce5c0527683b080e39045045c4e42",
+		"ef34177c48310d4e8d6605233cb7218b926dcc55",
+		"fca583ac795d56928c5b542944b6e0963ea1e270",
+	} {
+		t.Run(revision, func(t *testing.T) {
+			t.Parallel()
+
+			var document map[string]any
+			require.NoError(
+				t,
+				yaml.Unmarshal(readRepoFile(t, ".github/workflows/ci.yaml"), &document),
+			)
+			job := goMaintenanceMap(t, goMaintenanceMap(t, document, "jobs"), "ci-go")
+			job["uses"] = "devantler-tech/.github/.github/workflows/validate-go-project.yaml@" + revision
+			contents, err := yaml.Marshal(document)
+			require.NoError(t, err)
+			require.NoError(t, validateGoMaintenanceCaller(contents))
+		})
+	}
+}
+
+func TestGoMaintenanceCallerRejectsUnreviewedImplementations(t *testing.T) {
+	t.Parallel()
+
+	const prefix = "devantler-tech/.github/.github/workflows/validate-go-project.yaml@"
+
+	for _, identity := range []string{
+		prefix + strings.Repeat("a", 40),
+		prefix + "v7.0.0",
+		prefix + "main",
+		prefix + "498fb4b",
+		"other-owner/.github/.github/workflows/validate-go-project.yaml@" +
+			"498fb4b11f129928d3af9a90e9c5a46f1c4dbd77",
+	} {
+		t.Run(identity, func(t *testing.T) {
+			t.Parallel()
+
+			var document map[string]any
+			require.NoError(
+				t,
+				yaml.Unmarshal(readRepoFile(t, ".github/workflows/ci.yaml"), &document),
+			)
+			job := goMaintenanceMap(t, goMaintenanceMap(t, document, "jobs"), "ci-go")
+			job["uses"] = identity
+			contents, err := yaml.Marshal(document)
+			require.NoError(t, err)
+			require.ErrorIs(t, validateGoMaintenanceCaller(contents), errGoMaintenanceIdentity)
+		})
+	}
+}
+
 type goMaintenanceMutation struct {
 	name   string
 	mutate func(*testing.T, map[string]any)
 	want   string
+}
+
+func goMaintenanceIdentityMutations() []goMaintenanceMutation {
+	return []goMaintenanceMutation{
+		{"runner introduced", func(t *testing.T, job map[string]any) {
+			t.Helper()
+
+			job["runs-on"] = "ubuntu-latest"
+		}, "reviewed bare reusable call"},
+		{"dependency removed", func(t *testing.T, job map[string]any) {
+			t.Helper()
+
+			delete(job, "needs")
+		}, "reviewed bare reusable call"},
+		{"dependency added", func(t *testing.T, job map[string]any) {
+			t.Helper()
+
+			job["needs"] = []any{"changes", "ci"}
+		}, "reviewed bare reusable call"},
+	}
 }
 
 func goMaintenanceAdmissionMutations() []goMaintenanceMutation {
@@ -252,6 +339,7 @@ func TestGoMaintenanceCallerRejectsBoundaryWidening(t *testing.T) {
 
 	cases := append(goMaintenanceAdmissionMutations(), goMaintenanceInputMutations()...)
 	cases = append(cases, goMaintenanceEnvelopeMutations()...)
+	cases = append(cases, goMaintenanceIdentityMutations()...)
 
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {

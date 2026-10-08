@@ -340,7 +340,7 @@ func (p *Provisioner) removeHetznerNodes(
 
 		// Address resolution and etcd cleanup must succeed before destruction.
 		if role == RoleControlPlane {
-			serverIP, cleanupErr := hetznerNodeTalosAddress(server)
+			serverIP, cleanupErr := p.hetznerNodeAddress(server)
 			if cleanupErr == nil {
 				cleanupErr = p.etcdCleanupBeforeRemoval(ctx, serverIP)
 			}

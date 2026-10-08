@@ -121,6 +121,19 @@ done
 
 delete_kind network networks
 
+# Read the provider again after all delete calls. Acknowledged deletion is not
+# evidence that a resource is absent, and a failed verification list must never
+# be mistaken for an empty result. Inspect every kind even if an earlier one
+# failed, using the same ownership selector as deletion.
+for kind in server floating-ip placement-group firewall network; do
+	if ! remaining_ids=$(list_ids "${kind}"); then
+		failed=1
+	elif [[ -n "${remaining_ids}" ]]; then
+		echo "❌ ${kind} resources still present after cleanup: ${remaining_ids//$'\n'/ }" >&2
+		failed=1
+	fi
+done
+
 if [[ ${failed} -ne 0 ]]; then
 	echo "❌ Hetzner Cloud cleanup incomplete for ${LABEL_SELECTOR}: see the errors above"
 	exit 1
