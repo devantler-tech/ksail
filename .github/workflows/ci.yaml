@@ -824,7 +824,9 @@ jobs:
   build-artifact:
     name: 🏗️ Build KSail Binary
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Also build the immutable migration baseline; dependency churn can make
+    # that second build miss the candidate's warmed cache.
+    timeout-minutes: 40
     needs: [changes]
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && (needs.changes.outputs.code == 'true' || needs.changes.outputs.cli == 'true' || needs.changes.outputs.system-test == 'true' || needs.changes.outputs.kubeconform-cancellation == 'true'))
     permissions:
