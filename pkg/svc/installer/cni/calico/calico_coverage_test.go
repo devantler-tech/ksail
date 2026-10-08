@@ -153,8 +153,8 @@ func TestInstaller_Uninstall_ContextCanceled(t *testing.T) {
 	cancel()
 
 	client.EXPECT().
-		UninstallRelease(mock.Anything, "calico", "tigera-operator").
-		Return(ctx.Err())
+		GetReleaseStorageLabels(mock.Anything, "calico", "tigera-operator").
+		Return(nil, ctx.Err())
 
 	err := installer.Uninstall(ctx)
 
@@ -172,7 +172,7 @@ func newCovInstallerWithDistribution(
 	client := helm.NewMockInterface(t)
 	installer := calicoinstaller.NewInstaller(
 		client,
-		"/path/to/kubeconfig",
+		calicoinstaller.PrerequisiteKubeconfigForTest(t),
 		"test-context",
 		2*time.Minute,
 		distribution,

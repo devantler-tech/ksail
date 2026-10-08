@@ -107,6 +107,9 @@ func TestInstaller_Install_RepoError(t *testing.T) {
 		GetReleaseStorageLabels(mock.Anything, "calico", "tigera-operator").
 		Return(nil, nil)
 	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "calico-crds", "tigera-operator").
+		Return(nil, nil)
+	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(assert.AnError)
 
@@ -150,14 +153,9 @@ func TestInstaller_Uninstall_Success(t *testing.T) {
 	t.Parallel()
 
 	installer, client := newInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
+	expectCalicoOwnership(client)
 	client.EXPECT().
 		UninstallRelease(mock.Anything, "calico", "tigera-operator").
-		Return(nil)
-	client.EXPECT().
-		ReleaseExists(mock.Anything, "calico-crds", "tigera-operator").
-		Return(true, nil)
-	client.EXPECT().
-		UninstallRelease(mock.Anything, "calico-crds", "tigera-operator").
 		Return(nil)
 
 	err := installer.Uninstall(context.Background())
@@ -169,14 +167,10 @@ func TestInstaller_Uninstall_SkipsMissingCRDsRelease(t *testing.T) {
 	t.Parallel()
 
 	installer, client := newInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
+	expectCalicoOwnership(client)
 	client.EXPECT().
 		UninstallRelease(mock.Anything, "calico", "tigera-operator").
 		Return(nil)
-	// The calico-crds release does not exist (e.g. cluster predates the two-phase
-	// install): uninstall must skip it rather than fail.
-	client.EXPECT().
-		ReleaseExists(mock.Anything, "calico-crds", "tigera-operator").
-		Return(false, nil)
 
 	err := installer.Uninstall(context.Background())
 
@@ -187,6 +181,7 @@ func TestInstaller_Uninstall_Error(t *testing.T) {
 	t.Parallel()
 
 	installer, client := newInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
+	expectCalicoOwnership(client)
 	client.EXPECT().
 		UninstallRelease(mock.Anything, "calico", "tigera-operator").
 		Return(assert.AnError)
@@ -217,6 +212,15 @@ func TestInstaller_Uninstall_NilClient(t *testing.T) {
 
 // --- test helpers ---
 
+func expectCalicoOwnership(client *helm.MockInterface) {
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "calico", "tigera-operator").
+		Return(nil, nil)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "calico-crds", "tigera-operator").
+		Return(nil, nil)
+}
+
 func newInstallerWithDistribution(
 	t *testing.T,
 	distribution v1alpha1.Distribution,
@@ -226,7 +230,7 @@ func newInstallerWithDistribution(
 	client := helm.NewMockInterface(t)
 	installer := calicoinstaller.NewInstaller(
 		client,
-		"/path/to/kubeconfig",
+		calicoinstaller.PrerequisiteKubeconfigForTest(t),
 		"test-context",
 		2*time.Minute,
 		distribution,
@@ -321,8 +325,12 @@ func expectCalicoCRDPhase(client *helm.MockInterface) {
 // a regression that drops the retry-triggered refresh is caught.
 func expectCalicoCRDPhaseWithRefreshes(client *helm.MockInterface, refreshes int) {
 	client.EXPECT().
-		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isCalicoCRDSpec)).
+		GetReleaseStorageLabels(mock.Anything, "calico-crds", "tigera-operator").
 		Return(nil, nil).
+		Once()
+	client.EXPECT().
+		TemplateChart(mock.Anything, mock.MatchedBy(isCalicoCRDSpec)).
+		Return(calicoinstaller.PrerequisiteManifestForTest, nil).
 		Once()
 	client.EXPECT().
 		RefreshDiscovery().

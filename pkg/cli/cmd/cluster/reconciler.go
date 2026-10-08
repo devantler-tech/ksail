@@ -168,6 +168,7 @@ func (r *componentReconciler) handlerForField(
 	handlers[specdiff.RegistryCredentialField] = r.reconcileRegistryCredentials
 	handlers[specdiff.FluxVerifyField] = r.reconcileFluxVerify
 	handlers[specdiff.CertManagerValuesField] = r.reconcileCertManagerValues
+	handlers[specdiff.CalicoPrerequisitesField] = r.reconcileCNI
 
 	if handler, ok := handlers[field]; ok {
 		return handler, true
@@ -198,7 +199,8 @@ func isComponentReconcileField(field string) bool {
 		specdiff.EKSLoadBalancerControllerField,
 		specdiff.RegistryCredentialField,
 		specdiff.FluxVerifyField,
-		specdiff.CertManagerValuesField:
+		specdiff.CertManagerValuesField,
+		specdiff.CalicoPrerequisitesField:
 		return true
 	default:
 		return strings.HasPrefix(field, "cluster.autoscaler.node.")

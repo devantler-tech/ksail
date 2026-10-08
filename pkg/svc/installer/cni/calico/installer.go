@@ -133,34 +133,59 @@ func (c *Installer) Install(ctx context.Context) error {
 	return nil
 }
 
-// Uninstall removes the Helm release for Calico.
+// Uninstall removes Calico and its positively owned prerequisites. Deleting
+// CRDs also deletes their custom resources; identities are checked before the
+// operator is removed, and replacement objects are never deleted.
 func (c *Installer) Uninstall(ctx context.Context) error {
 	client, err := c.GetClient()
 	if err != nil {
 		return fmt.Errorf("get helm client: %w", err)
 	}
 
-	err = client.UninstallRelease(ctx, "calico", "tigera-operator")
+	skipped, err := c.CheckGitOpsOwnership(ctx, "calico", "calico", prerequisiteNamespace)
 	if err != nil {
-		return fmt.Errorf("failed to uninstall calico release: %w", err)
+		return fmt.Errorf("check calico ownership: %w", err)
 	}
 
-	// Since Calico v3.30 the CRDs are managed by a separate release (see
-	// crdChartSpec). Remove it after the operator release so uninstall is symmetric
-	// with install; this deletes the operator.tigera.io and projectcalico.org CRDs and
-	// any remaining custom resources of those kinds. Guard with ReleaseExists so
-	// uninstall stays a no-op on clusters created before the two-phase install (or where
-	// the CRD install never completed) rather than failing on a missing release.
-	crdsExist, existsErr := client.ReleaseExists(ctx, "calico-crds", "tigera-operator")
-	if existsErr != nil {
-		return fmt.Errorf("check calico CRDs release: %w", existsErr)
+	if skipped {
+		return nil
 	}
 
-	if crdsExist {
-		err = client.UninstallRelease(ctx, "calico-crds", "tigera-operator")
-		if err != nil {
-			return fmt.Errorf("failed to uninstall calico CRDs release: %w", err)
-		}
+	skipped, err = c.CheckGitOpsOwnership(
+		ctx,
+		"calico prerequisites",
+		"calico-crds",
+		prerequisiteNamespace,
+	)
+	if err != nil {
+		return fmt.Errorf("check calico prerequisites ownership: %w", err)
+	}
+
+	if skipped {
+		return nil
+	}
+
+	removal, err := c.planPrerequisiteRemoval(ctx)
+	if err != nil {
+		return fmt.Errorf("prepare calico removal: %w", err)
+	}
+
+	err = removal.record(ctx)
+	if err != nil {
+		return err
+	}
+
+	err = removal.removeOperator(ctx, client)
+	if err != nil {
+		return err
+	}
+
+	removeCtx, cancel := context.WithTimeout(ctx, c.GetTimeout())
+	defer cancel()
+
+	err = removal.remove(removeCtx, c.GetTimeout())
+	if err != nil {
+		return fmt.Errorf("remove calico prerequisites: %w", err)
 	}
 
 	return nil
@@ -233,6 +258,20 @@ func (c *Installer) helmInstallOrUpgradeCalico(ctx context.Context) error {
 		return nil
 	}
 
+	skipped, ownershipErr = c.CheckGitOpsOwnership(
+		ctx,
+		"calico prerequisites",
+		"calico-crds",
+		"tigera-operator",
+	)
+	if ownershipErr != nil {
+		return fmt.Errorf("check calico prerequisites ownership: %w", ownershipErr)
+	}
+
+	if skipped {
+		return nil
+	}
+
 	return c.installCalico(ctx)
 }
 
@@ -254,10 +293,29 @@ func (c *Installer) installCalico(ctx context.Context) error {
 		return fmt.Errorf("add calico repository: %w", addErr)
 	}
 
-	// Phase 1: install the CRDs (separate projectcalico.org.v3 chart since v3.30).
-	crdErr := c.runInstallWithRetry(ctx, client, c.crdChartSpec())
-	if crdErr != nil {
-		return fmt.Errorf("install calico CRDs: %w", crdErr)
+	// Apply the complete prerequisite chart without storing its large CRD
+	// schemas in a Helm release. Retain legacy release records and resource UIDs.
+	manifest, err := client.TemplateChart(ctx, c.crdChartSpec())
+	if err != nil {
+		return fmt.Errorf("render calico prerequisites: %w", err)
+	}
+
+	plan, err := c.planPrerequisites(ctx, manifest)
+	if err != nil {
+		return fmt.Errorf("prepare calico prerequisites: %w", err)
+	}
+
+	applyCtx, cancel := context.WithTimeout(ctx, c.GetTimeout())
+	defer cancel()
+
+	err = plan.apply(applyCtx)
+	if err != nil {
+		return err
+	}
+
+	err = plan.established(applyCtx, c.GetTimeout())
+	if err != nil {
+		return err
 	}
 
 	// Phase 2: refresh Helm's cached API discovery so the operator chart install
@@ -273,6 +331,13 @@ func (c *Installer) installCalico(ctx context.Context) error {
 	operatorErr := c.runInstallWithRetry(ctx, client, c.chartSpec())
 	if operatorErr != nil {
 		return fmt.Errorf("install or upgrade calico: %w", operatorErr)
+	}
+
+	plan.state.Complete = true
+
+	err = plan.save(ctx)
+	if err != nil {
+		return err
 	}
 
 	return nil

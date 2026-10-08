@@ -39,6 +39,13 @@ const AutoscalerValuesField = "cluster.autoscaler.node.chartValues"
 // the same cert-manager Helm upgrade as a cluster.certManager change.
 const CertManagerValuesField = "cluster.certManager.chartValues"
 
+// CalicoPrerequisitesField schedules an in-place CNI upgrade when its installed
+// prerequisite chart version, migration inventory or operator values drift.
+const CalicoPrerequisitesField = "cluster.cni.calico.prerequisites"
+
+// CNIField names the component change that also reconciles CNI prerequisites.
+const CNIField = "cluster.cni"
+
 // fluxVerifyDriftedDisplay is the old value rendered for verify drift. The
 // detector receives a single boolean covering both an absent spec.verify block
 // and one that is present but differs, so this names the disjunction rather than
