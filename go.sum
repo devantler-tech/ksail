@@ -2588,8 +2588,8 @@ github.com/wagoodman/go-presenter v0.0.0-20211015174752-f9c01afc824b h1:uWNQ0khA
 github.com/wagoodman/go-presenter v0.0.0-20211015174752-f9c01afc824b/go.mod h1:ewlIKbKV8l+jCj8rkdXIs361ocR5x3qGyoCSca47Gx8=
 github.com/wagoodman/go-progress v0.0.0-20260303201901-10176f79b2c0 h1:EHsPe0Q0ANoLOZff1dBLAyeWLTA4sbPTpGI+2zb0FnM=
 github.com/wagoodman/go-progress v0.0.0-20260303201901-10176f79b2c0/go.mod h1:g/D9uEUFp5YLyciwCpVsSOZOm56hfv4rzGJod6MlqIM=
-github.com/wailsapp/wails/v3 v3.0.0-beta.26 h1:Cs7E3wSD6kouJGDzbbvqeFBIbNOzuUMjf0kto3/a7Oc=
-github.com/wailsapp/wails/v3 v3.0.0-beta.26/go.mod h1:5DR/EG5FHU8+BNV7tQYQ/rJMjoFsVlYpM+0gp1+gcTI=
+github.com/wailsapp/wails/v3 v3.0.0-beta.27 h1:GpjEHi/lutVxBk7QAIqwLnygKyAhg5qBhr6IfOe+Obc=
+github.com/wailsapp/wails/v3 v3.0.0-beta.27/go.mod h1:5DR/EG5FHU8+BNV7tQYQ/rJMjoFsVlYpM+0gp1+gcTI=
 github.com/wzshiming/ctc v1.2.3 h1:q+hW3IQNsjIlOFBTGZZZeIXTElFM4grF4spW/errh/c=
 github.com/wzshiming/ctc v1.2.3/go.mod h1:2tVAtIY7SUyraSk0JxvwmONNPFL4ARavPuEsg5+KA28=
 github.com/wzshiming/httpseek v0.6.1 h1:nmrpxl7SNtj8KmmZ8XRMCnKVfOvj1yNAGXNYtPfeRoA=
