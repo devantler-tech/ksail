@@ -40,7 +40,8 @@ func fluxOwnershipFixtures() map[string]fluxOwnershipFixture {
 		},
 		"composed default release name": {
 			item:      `{"metadata":{"name":"manager","namespace":"flux-system"},"spec":{"targetNamespace":"cert"}}`,
-			namespace: "cert", wantOwner: true,
+			namespace: "cert",
+			wantOwner: true,
 		},
 		"shortened declared release name without history": {
 			item: `{"metadata":{"name":"controller","namespace":"cert-manager"},
