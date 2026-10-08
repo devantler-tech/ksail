@@ -11,56 +11,56 @@ chmod +x "$fixture/baseline/ksail"
 checksum=$(shasum -a 256 "$fixture/baseline/ksail" | cut -d ' ' -f 1)
 
 prepare() {
-  BASELINE_BINARY="$fixture/baseline/ksail" BASELINE_SHA256="$1" \
-    DISTRIBUTION="$2" PROVIDER=Docker INIT=true RUNNER_TEMP="$fixture" \
-    GITHUB_OUTPUT="$fixture/output" \
-    bash "$subject" prepare
+	BASELINE_BINARY="$fixture/baseline/ksail" BASELINE_SHA256="$1" \
+		DISTRIBUTION="$2" PROVIDER=Docker INIT=true RUNNER_TEMP="$fixture" \
+		GITHUB_OUTPUT="$fixture/output" \
+		bash "$subject" prepare
 }
 
 [[ -f "$subject" ]] || {
-  echo 'FAIL: Calico migration helper is missing' >&2
-  exit 1
+	echo 'FAIL: Calico migration helper is missing' >&2
+	exit 1
 }
 prepare "$checksum" Vanilla
 grep -Fxq "path=$fixture/baseline:$PATH" "$fixture/output"
 for distribution in K3s VCluster; do prepare "$checksum" "$distribution"; done
 
 for invalid in checksum unsupported empty symlink; do
-  rm -f "$fixture/output"
-  case "$invalid" in
-  checksum)
-    candidate_checksum=$(printf '%064d' 0)
-    distribution=Vanilla
-    ;;
-  unsupported)
-    candidate_checksum="$checksum"
-    distribution=Talos
-    ;;
-  empty)
-    candidate_checksum="$checksum"
-    distribution=Vanilla
-    cp "$fixture/baseline/ksail" "$fixture/saved"
-    : >"$fixture/baseline/ksail"
-    ;;
-  symlink)
-    candidate_checksum="$checksum"
-    distribution=Vanilla
-    mv "$fixture/baseline/ksail" "$fixture/saved"
-    ln -s "$fixture/saved" "$fixture/baseline/ksail"
-    ;;
-  esac
-  if prepare "$candidate_checksum" "$distribution" >"$fixture/$invalid.log" 2>&1; then
-    echo "FAIL: invalid baseline accepted: $invalid" >&2
-    exit 1
-  fi
-  [[ ! -e "$fixture/output" ]] || {
-    echo 'FAIL: invalid baseline selected creation PATH' >&2
-    exit 1
-  }
-  if [[ "$invalid" == empty || "$invalid" == symlink ]]; then
-    rm "$fixture/baseline/ksail"
-    mv "$fixture/saved" "$fixture/baseline/ksail"
-  fi
+	rm -f "$fixture/output"
+	case "$invalid" in
+	checksum)
+		candidate_checksum=$(printf '%064d' 0)
+		distribution=Vanilla
+		;;
+	unsupported)
+		candidate_checksum="$checksum"
+		distribution=Talos
+		;;
+	empty)
+		candidate_checksum="$checksum"
+		distribution=Vanilla
+		cp "$fixture/baseline/ksail" "$fixture/saved"
+		: >"$fixture/baseline/ksail"
+		;;
+	symlink)
+		candidate_checksum="$checksum"
+		distribution=Vanilla
+		mv "$fixture/baseline/ksail" "$fixture/saved"
+		ln -s "$fixture/saved" "$fixture/baseline/ksail"
+		;;
+	esac
+	if prepare "$candidate_checksum" "$distribution" >"$fixture/$invalid.log" 2>&1; then
+		echo "FAIL: invalid baseline accepted: $invalid" >&2
+		exit 1
+	fi
+	[[ ! -e "$fixture/output" ]] || {
+		echo 'FAIL: invalid baseline selected creation PATH' >&2
+		exit 1
+	}
+	if [[ "$invalid" == empty || "$invalid" == symlink ]]; then
+		rm "$fixture/baseline/ksail"
+		mv "$fixture/saved" "$fixture/baseline/ksail"
+	fi
 done
 echo 'PASS: Calico baseline identity is checked before selecting the creation binary'
 
@@ -144,37 +144,37 @@ SH
 chmod +x "$fixture/bin/kubectl" "$fixture/bin/helm" "$fixture/bin/ksail"
 
 for scenario in valid k3s vcluster baseline incomplete uid config history-missing history-replaced history-unrecorded diff-status; do
-  rm -f "$fixture/updated"
-  printf 'apiVersion: ksail.io/v1alpha1\nkind: Cluster\nspec:\n  cluster:\n    connection:\n      kubeconfig: %s/calico-migration.kubeconfig\n' "$fixture" >"$fixture/project/ksail.yaml"
-  status=0
-  distribution=Vanilla
-  if [[ "$scenario" == k3s ]]; then distribution=K3s; fi
-  if [[ "$scenario" == vcluster ]]; then distribution=VCluster; fi
-  (cd "$fixture/project" && PATH="$fixture/bin:$PATH" FIXTURE="$fixture" CASE="$scenario" \
-    RUNNER_TEMP="$fixture" KUBECONFIG="$fixture/calico-migration.kubeconfig" \
-    DISTRIBUTION="$distribution" GITHUB_WORKSPACE="$action_dir/../../.." \
-    SYSTEM_TEST_LOG_DIR="$fixture/logs-$scenario" bash "$subject" migrate) \
-    >"$fixture/migrate-$scenario.log" 2>&1 || status=$?
-  if [[ "$scenario" == valid || "$scenario" == k3s || "$scenario" == vcluster ]]; then
-    [[ "$status" == 0 ]] || {
-      cat "$fixture/migrate-$scenario.log" >&2
-      exit 1
-    }
-  else
-    [[ "$status" != 0 ]] || {
-      echo "FAIL: accepted invalid migration: $scenario" >&2
-      exit 1
-    }
-    grep -q 'Calico migration trial:' "$fixture/migrate-$scenario.log" || {
-      cat "$fixture/migrate-$scenario.log" >&2
-      exit 1
-    }
-  fi
-  if [[ "$scenario" == baseline ]]; then
-    [[ ! -f "$fixture/updated" ]] || {
-      echo 'FAIL: candidate updated an unverified baseline' >&2
-      exit 1
-    }
-  fi
+	rm -f "$fixture/updated"
+	printf 'apiVersion: ksail.io/v1alpha1\nkind: Cluster\nspec:\n  cluster:\n    connection:\n      kubeconfig: %s/calico-migration.kubeconfig\n' "$fixture" >"$fixture/project/ksail.yaml"
+	status=0
+	distribution=Vanilla
+	if [[ "$scenario" == k3s ]]; then distribution=K3s; fi
+	if [[ "$scenario" == vcluster ]]; then distribution=VCluster; fi
+	(cd "$fixture/project" && PATH="$fixture/bin:$PATH" FIXTURE="$fixture" CASE="$scenario" \
+		RUNNER_TEMP="$fixture" KUBECONFIG="$fixture/calico-migration.kubeconfig" \
+		DISTRIBUTION="$distribution" GITHUB_WORKSPACE="$action_dir/../../.." \
+		SYSTEM_TEST_LOG_DIR="$fixture/logs-$scenario" bash "$subject" migrate) \
+		>"$fixture/migrate-$scenario.log" 2>&1 || status=$?
+	if [[ "$scenario" == valid || "$scenario" == k3s || "$scenario" == vcluster ]]; then
+		[[ "$status" == 0 ]] || {
+			cat "$fixture/migrate-$scenario.log" >&2
+			exit 1
+		}
+	else
+		[[ "$status" != 0 ]] || {
+			echo "FAIL: accepted invalid migration: $scenario" >&2
+			exit 1
+		}
+		grep -q 'Calico migration trial:' "$fixture/migrate-$scenario.log" || {
+			cat "$fixture/migrate-$scenario.log" >&2
+			exit 1
+		}
+	fi
+	if [[ "$scenario" == baseline ]]; then
+		[[ ! -f "$fixture/updated" ]] || {
+			echo 'FAIL: candidate updated an unverified baseline' >&2
+			exit 1
+		}
+	fi
 done
 echo 'PASS: migration verifies the legacy release, scoped target, unchanged config, complete inventory and preserved UIDs'
