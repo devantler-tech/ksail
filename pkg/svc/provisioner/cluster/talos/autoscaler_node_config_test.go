@@ -31,9 +31,10 @@ func autoscalerNodeFixture(
 	t.Helper()
 
 	configs, err := talosconfigmanager.NewDefaultConfigsWithPatches([]talosconfigmanager.Patch{{
-		Path:    "workers/longhorn.yaml",
-		Scope:   talosconfigmanager.PatchScopeWorker,
-		Content: []byte("machine:\n  nodeLabels:\n    " + longhornDefaultDisk + ": \"true\"\n"),
+		Path:  "workers/longhorn.yaml",
+		Scope: talosconfigmanager.PatchScopeWorker,
+		Content: []byte("machine:\n  nodeLabels:\n    " + longhornDefaultDisk + ": \"true\"\n" +
+			"  kubelet:\n    extraArgs:\n      node-labels: \"" + longhornDefaultDisk + "=true,workload=compute\"\n"),
 	}})
 	require.NoError(t, err)
 
@@ -97,6 +98,11 @@ func TestAutoscalerNodeDesiredConfigKeepsAutoscalerShape(t *testing.T) {
 	assert.Equal(t, "batch", machine.MachineNodeLabels["workload"])
 	assert.Equal(t, "batch:NoSchedule", machine.MachineNodeTaints["dedicated"])
 	assert.NotContains(t, machine.MachineNodeLabels, longhornDefaultDisk)
+	assert.Equal(
+		t,
+		[]string{"workload=compute"},
+		machine.MachineKubelet.KubeletExtraArgs.ToMap()["node-labels"],
+	)
 
 	diff, err := talosprovisioner.MachineConfigDiffForTest(running, desired)
 	require.NoError(t, err)
@@ -123,6 +129,8 @@ func TestStaticWorkerDesiredConfigKeepsStaticShape(t *testing.T) {
 	labels := desired.RawV1Alpha1().MachineConfig.MachineNodeLabels
 	assert.Equal(t, "true", labels[longhornDefaultDisk])
 	assert.NotContains(t, labels, talosprovisioner.LabelAutoscaled)
+	assert.Equal(t, []string{longhornDefaultDisk + "=true,workload=compute"},
+		desired.RawV1Alpha1().MachineConfig.MachineKubelet.KubeletExtraArgs.ToMap()["node-labels"])
 }
 
 // TestAutoscalerNodeOfUnconfiguredPoolIsRefused pins that a server whose pool is not in
