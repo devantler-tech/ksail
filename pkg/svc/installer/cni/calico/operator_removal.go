@@ -19,6 +19,8 @@ var errOperatorHistoryChanged = errors.New(
 	"calico operator history changed during removal preflight",
 )
 
+const calicoReleaseName = "calico"
+
 type operatorHistoryIdentity struct {
 	UID     types.UID
 	Version string
@@ -49,7 +51,7 @@ func readOperatorHistory(
 		return nil, err
 	}
 
-	err = rejectOtherReleaseStorage(ctx, client, resource, "calico")
+	err = rejectOtherReleaseStorage(ctx, client, resource, calicoReleaseName)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +84,7 @@ func readOperatorHistory(
 func validOperatorHistory(object metav1.Object) bool {
 	return strings.HasPrefix(object.GetName(), "sh.helm.release.v1.calico.v") &&
 		object.GetUID() != "" && object.GetResourceVersion() != "" &&
-		object.GetLabels()["owner"] == "helm" && object.GetLabels()["name"] == "calico" &&
+		object.GetLabels()["owner"] == "helm" && object.GetLabels()["name"] == calicoReleaseName &&
 		!hasGitOpsOwner(object)
 }
 
@@ -101,7 +103,7 @@ func (r *prerequisiteRemoval) removeOperator(ctx context.Context, client helm.In
 		return nil
 	}
 
-	err = client.UninstallRelease(ctx, "calico", prerequisiteNamespace)
+	err = client.UninstallRelease(ctx, calicoReleaseName, prerequisiteNamespace)
 	if err != nil {
 		return fmt.Errorf("failed to uninstall calico release: %w", err)
 	}
@@ -138,7 +140,7 @@ func validatePrerequisiteReleaseStorage(
 	client metadata.Interface,
 	resource schema.GroupVersionResource,
 ) error {
-	for _, release := range []string{"calico", "calico-crds"} {
+	for _, release := range []string{calicoReleaseName, "calico-crds"} {
 		err := rejectOtherReleaseStorage(ctx, client, resource, release)
 		if err != nil {
 			return err
