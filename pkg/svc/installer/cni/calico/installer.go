@@ -154,7 +154,7 @@ func (c *Installer) Uninstall(ctx context.Context) error {
 	skipped, err = c.CheckGitOpsOwnership(
 		ctx,
 		"calico prerequisites",
-		"calico-crds",
+		prerequisiteReleaseName,
 		prerequisiteNamespace,
 	)
 	if err != nil {
@@ -221,7 +221,7 @@ func (c *Installer) chartSpec() *helm.ChartSpec {
 // custom resources fail Helm manifest validation on a fresh cluster.
 func (c *Installer) crdChartSpec() *helm.ChartSpec {
 	return &helm.ChartSpec{
-		ReleaseName:     "calico-crds",
+		ReleaseName:     prerequisiteReleaseName,
 		ChartName:       "projectcalico/projectcalico.org.v3",
 		Namespace:       "tigera-operator",
 		Version:         chartVersion(),
@@ -261,7 +261,7 @@ func (c *Installer) helmInstallOrUpgradeCalico(ctx context.Context) error {
 	skipped, ownershipErr = c.CheckGitOpsOwnership(
 		ctx,
 		"calico prerequisites",
-		"calico-crds",
+		prerequisiteReleaseName,
 		"tigera-operator",
 	)
 	if ownershipErr != nil {

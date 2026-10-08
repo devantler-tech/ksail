@@ -84,7 +84,7 @@ func readOperatorHistory(
 func validOperatorHistory(object metav1.Object) bool {
 	return strings.HasPrefix(object.GetName(), "sh.helm.release.v1.calico.v") &&
 		object.GetUID() != "" && object.GetResourceVersion() != "" &&
-		object.GetLabels()["owner"] == "helm" && object.GetLabels()["name"] == calicoReleaseName &&
+		object.GetLabels()["owner"] == helmStorageOwner && object.GetLabels()["name"] == calicoReleaseName &&
 		!hasGitOpsOwner(object)
 }
 
@@ -140,7 +140,7 @@ func validatePrerequisiteReleaseStorage(
 	client metadata.Interface,
 	resource schema.GroupVersionResource,
 ) error {
-	for _, release := range []string{calicoReleaseName, "calico-crds"} {
+	for _, release := range []string{calicoReleaseName, prerequisiteReleaseName} {
 		err := rejectOtherReleaseStorage(ctx, client, resource, release)
 		if err != nil {
 			return err

@@ -12,7 +12,8 @@ import (
 )
 
 func ownsLegacyStorage(object metav1.Object) bool {
-	return object.GetLabels()["owner"] == "helm" && object.GetLabels()["name"] == "calico-crds" &&
+	return object.GetLabels()["owner"] == helmStorageOwner &&
+		object.GetLabels()["name"] == prerequisiteReleaseName &&
 		!hasGitOpsOwner(object)
 }
 

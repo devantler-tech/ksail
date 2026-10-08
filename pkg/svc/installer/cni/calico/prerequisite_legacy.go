@@ -80,7 +80,7 @@ func (plan *prerequisitePlan) captureLegacyResource(
 
 	for _, object := range objects.Items {
 		annotations := object.GetAnnotations()
-		if annotations["meta.helm.sh/release-name"] != "calico-crds" ||
+		if annotations["meta.helm.sh/release-name"] != prerequisiteReleaseName ||
 			annotations["meta.helm.sh/release-namespace"] != prerequisiteNamespace {
 			continue
 		}

@@ -24,6 +24,9 @@ import (
 )
 
 const (
+	prerequisiteReleaseName  = "calico-crds"
+	helmStorageOwner         = "helm"
+	prerequisiteCRDKind      = "CustomResourceDefinition"
 	prerequisiteNamespace    = "tigera-operator"
 	prerequisiteInventory    = "ksail-calico-prerequisites"
 	prerequisiteOwnerKey     = "ksail.io/component"
@@ -107,7 +110,7 @@ func renderedPrerequisiteResource(
 
 func prerequisiteResourceForKind(gvk schema.GroupVersionKind) string {
 	if gvk.Group == "apiextensions.k8s.io" && gvk.Version == "v1" &&
-		gvk.Kind == "CustomResourceDefinition" {
+		gvk.Kind == prerequisiteCRDKind {
 		return "customresourcedefinitions"
 	}
 
@@ -204,14 +207,14 @@ func ownsPrerequisite(object metav1.Object) bool {
 
 	_, hasNamespace := annotations["meta.helm.sh/release-namespace"]
 	if (hasRelease || hasNamespace) &&
-		(annotations["meta.helm.sh/release-name"] != "calico-crds" ||
+		(annotations["meta.helm.sh/release-name"] != prerequisiteReleaseName ||
 			annotations["meta.helm.sh/release-namespace"] != prerequisiteNamespace) {
 		return false
 	}
 
 	return labels[prerequisiteOwnerKey] == prerequisiteOwner ||
 		(labels["app.kubernetes.io/managed-by"] == "Helm" &&
-			annotations["meta.helm.sh/release-name"] == "calico-crds" &&
+			annotations["meta.helm.sh/release-name"] == prerequisiteReleaseName &&
 			annotations["meta.helm.sh/release-namespace"] == prerequisiteNamespace)
 }
 
@@ -303,7 +306,7 @@ func validatePrerequisiteRef(ref prerequisiteRef) error {
 	}
 
 	for _, kind := range []string{
-		"CustomResourceDefinition", "MutatingAdmissionPolicy", "MutatingAdmissionPolicyBinding",
+		prerequisiteCRDKind, "MutatingAdmissionPolicy", "MutatingAdmissionPolicyBinding",
 		"ValidatingAdmissionPolicy", "ValidatingAdmissionPolicyBinding",
 	} {
 		object := &unstructured.Unstructured{}
@@ -525,7 +528,7 @@ func (plan *prerequisitePlan) apply(ctx context.Context) error {
 
 func (plan *prerequisitePlan) established(ctx context.Context, timeout time.Duration) error {
 	for _, object := range plan.objects {
-		if object.GetKind() != "CustomResourceDefinition" {
+		if object.GetKind() != prerequisiteCRDKind {
 			continue
 		}
 

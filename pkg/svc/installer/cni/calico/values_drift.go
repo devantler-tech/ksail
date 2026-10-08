@@ -62,7 +62,7 @@ func (c *Installer) recordedPrerequisites(ctx context.Context) (bool, error) {
 }
 
 func (c *Installer) prerequisitesGitOpsManaged(ctx context.Context) (bool, error) {
-	for _, release := range []string{"calico", "calico-crds"} {
+	for _, release := range []string{"calico", prerequisiteReleaseName} {
 		skipped, ownershipErr := c.CheckGitOpsOwnership(
 			ctx,
 			release,
