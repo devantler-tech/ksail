@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "repositories": ["devantler-tech/reusable-workflows"],
+  "paths": ["README.md", "AGENTS.md"],
+  "exceptions": []
+}
