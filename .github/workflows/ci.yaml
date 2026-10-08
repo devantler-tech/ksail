@@ -163,6 +163,7 @@ jobs:
       rate-limit-gate-script: ${{ steps.filter.outputs.rate-limit-gate-script }}
       hetzner-cleanup-script: ${{ steps.filter.outputs.hetzner-cleanup-script }}
       gitops-assert-scripts: ${{ steps.filter.outputs.gitops-assert-scripts }}
+      kubeconform-cancellation: ${{ steps.filter.outputs.kubeconform-cancellation }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -174,6 +175,9 @@ jobs:
         id: filter
         with:
           filters: |
+            kubeconform-cancellation:
+              - 'pkg/client/kubeconform/**'
+              - '.github/workflows/ci.yaml'
             code:
               - '**/*.go'
               - 'go.mod'
@@ -821,7 +825,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [changes]
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && (needs.changes.outputs.code == 'true' || needs.changes.outputs.cli == 'true' || needs.changes.outputs.system-test == 'true'))
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && (needs.changes.outputs.code == 'true' || needs.changes.outputs.cli == 'true' || needs.changes.outputs.system-test == 'true' || needs.changes.outputs.kubeconform-cancellation == 'true'))
     permissions:
       contents: read
     outputs:
@@ -852,6 +856,32 @@ jobs:
           go-version: ${{ steps.setup-go.outputs.go-version }}
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
+
+      - name: 🧪 Repeat schema cancellation acceptance
+        id: schema-cancellation
+        if: needs.changes.outputs.kubeconform-cancellation == 'true'
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          go test ./pkg/client/kubeconform \
+            -run '^TestValidateBytesStopsBetweenDocumentsWhenContextCancelled$' \
+            -count=20 -json > "$RUNNER_TEMP/kubeconform-cancellation.json"
+          jq -e -s '
+            . as $events
+            | ([ $events[] | select(.Action == "run" and .Test == "TestValidateBytesStopsBetweenDocumentsWhenContextCancelled") ] | length) == 20
+            and ([ $events[] | select(.Action == "pass" and .Test == "TestValidateBytesStopsBetweenDocumentsWhenContextCancelled") ] | length) == 20
+            and ([ $events[] | select(.Action == "fail" or .Action == "skip") ] | length) == 0
+          ' "$RUNNER_TEMP/kubeconform-cancellation.json"
+          go test ./pkg/client/kubeconform -count=1
+
+      - name: 📤 Preserve schema cancellation observations
+        if: ${{ always() && steps.schema-cancellation.outcome != 'skipped' && steps.schema-cancellation.outcome != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kubeconform-cancellation-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/kubeconform-cancellation.json
+          if-no-files-found: error
+          retention-days: 14
 
       - name: 🔍 Seal prepared KSail binary
         id: binary-checksum
