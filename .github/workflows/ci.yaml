@@ -226,6 +226,7 @@ jobs:
               - '.goreleaser.yaml'
               - '.goreleaser.desktop.yaml'
               - '.github/workflows/cd.yaml'
+              - '.github/scripts/publish-operator-chart.sh'
               - '.github/actions/setup-desktop-build/**'
               - '.github/actions/free-disk-space/**'
               - 'scripts/stage-webui.sh'
