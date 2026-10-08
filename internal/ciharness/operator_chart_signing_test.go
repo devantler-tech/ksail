@@ -160,6 +160,7 @@ case "$1" in
   *) exit 99 ;;
 esac
 `)
+	//nolint:gosec // Runs a fixed repository-owned publisher with test-owned inputs.
 	command := exec.CommandContext(t.Context(), "bash", script)
 	command.Dir = directory
 	command.Env = append(envWithoutReleaseRef(),
