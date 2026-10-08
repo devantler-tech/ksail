@@ -6,11 +6,19 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+)
+
+// The restore action is loaded from this repository at a full commit, never a branch or a tag.
+// Which commit is not pinned here: the dependency bot moves it with every release, and a
+// literal revision in this test failed each of those updates.
+var restoreBinaryActionPin = regexp.MustCompile(
+	`^devantler-tech/ksail/\.github/actions/restore-ksail-binary@[0-9a-f]{40}$`,
 )
 
 func TestKSailBinaryArtifactProducerPublication(t *testing.T) {
@@ -55,9 +63,7 @@ func TestKSailBinaryArtifactDockerConsumer(t *testing.T) {
 	consumer := workflow.Jobs["system-test-docker"]
 	assert.Contains(t, consumer.Needs, "build-artifact")
 	restore := findHarnessStep(t, consumer.Steps, "📥 Restore KSail binary")
-	assert.Equal(t,
-		"devantler-tech/ksail/.github/actions/restore-ksail-binary@"+
-			"f9172ab810fdcb94b47351d04d70708f6878e10a", restore.Uses)
+	assert.Regexp(t, restoreBinaryActionPin, restore.Uses)
 	assert.Equal(
 		t,
 		"${{ needs.build-artifact.outputs.artifact-id }}",
