@@ -215,7 +215,9 @@ func ownsPrerequisite(object metav1.Object) bool {
 			annotations["meta.helm.sh/release-namespace"] == prerequisiteNamespace)
 }
 
-func (c *Installer) prerequisiteClients() (dynamic.Interface, kubernetes.Interface, metadata.Interface, error) {
+func (c *Installer) prerequisiteClients() (
+	dynamic.Interface, kubernetes.Interface, metadata.Interface, error,
+) {
 	config, err := c.BuildRESTConfig()
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("calico prerequisites configuration: %w", err)

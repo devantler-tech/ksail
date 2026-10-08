@@ -123,7 +123,11 @@ set -euo pipefail
 [[ " $* " == *" --kubeconfig $FIXTURE/calico-migration.kubeconfig "* && " $* " == *' --context fixture '* ]]
 case "$1 $2" in
 'cluster diff')
-  if [[ -f "$FIXTURE/updated" ]]; then cat "$FIXTURE/after-diff.json"; exit 0; fi
+  if [[ -f "$FIXTURE/updated" ]]; then
+    cat "$FIXTURE/after-diff.json"
+    if [[ "$CASE" == diff-status ]]; then exit 2; fi
+    exit 0
+  fi
   cat "$FIXTURE/before-diff.json"; exit 2 ;;
 'cluster update')
   case "$CASE" in
@@ -139,7 +143,7 @@ esac
 SH
 chmod +x "$fixture/bin/kubectl" "$fixture/bin/helm" "$fixture/bin/ksail"
 
-for scenario in valid k3s vcluster baseline incomplete uid config history-missing history-replaced history-unrecorded; do
+for scenario in valid k3s vcluster baseline incomplete uid config history-missing history-replaced history-unrecorded diff-status; do
   rm -f "$fixture/updated"
   printf 'apiVersion: ksail.io/v1alpha1\nkind: Cluster\nspec:\n  cluster:\n    connection:\n      kubeconfig: %s/calico-migration.kubeconfig\n' "$fixture" >"$fixture/project/ksail.yaml"
   status=0

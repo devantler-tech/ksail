@@ -138,8 +138,10 @@ for ((attempt = 0; attempt < 36; attempt++)); do
 done
 [[ "$converged" == true ]] || fail 'Calico node image did not converge on the candidate version'
 kubectl rollout status daemonset/calico-node --namespace calico-system --timeout=5m "${cli_target[@]}"
+status=0
 ksail cluster diff --config "$config_file" --output json --exit-code "${cli_target[@]}" \
-  >"$log_dir/after-diff.json" 2>"$log_dir/after-diff.stderr"
+  >"$log_dir/after-diff.json" 2>"$log_dir/after-diff.stderr" || status=$?
+[[ "$status" == 0 ]] || fail "final diff exited $status; see after-diff.json and after-diff.stderr"
 jq -e -s 'length == 1 and (.[0] | .totalChanges == 0 and .inPlaceChanges == [] and
   .rebootRequired == [] and .recreateRequired == [] and .rollingRecreate == [] and
   .wipeRequired == [] and .unknownBaseline == [])' "$log_dir/after-diff.json" >/dev/null || fail 'migration did not converge without configuration changes'

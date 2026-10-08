@@ -191,6 +191,9 @@ func (c *Client) InstallOrUpgradeChart(ctx context.Context, spec *ChartSpec) (*R
 }
 
 // TemplateChart renders a Helm chart's templates without installing it.
+// Configured API-version migrations use server dry-run and may require cluster access.
+// That dry run skips Helm ownership validation with TakeOwnership; callers must
+// validate ownership before writing resources managed outside the release.
 // It returns the rendered YAML manifests as a string.
 // This is useful for extracting container images from charts.
 func (c *Client) TemplateChart(ctx context.Context, spec *ChartSpec) (string, error) {
