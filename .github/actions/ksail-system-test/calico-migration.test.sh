@@ -94,7 +94,13 @@ case "$1 $2" in
   if [[ -f "$FIXTURE/updated" && "$CASE" == history-replaced ]]; then uid=replacement; fi
   printf 'Secret\tsh.helm.release.v1.calico-crds.v1\t%s\n' "$uid" ;;
 'get customresourcedefinitions.'*)
-  if [[ "$CASE" == legacy-incomplete ]]; then
+  if [[ "$CASE" == update-failure ]]; then
+    jq '.items += [{apiVersion:"admissionregistration.k8s.io/v1",kind:"MutatingAdmissionPolicy",
+      metadata:{name:"policytypes.policy.projectcalico.org",uid:"operator-policy-uid",
+        annotations:{"unrelated.example.com/value":"sensitive-fixture-marker"},
+        managedFields:[{manager:"tigera-operator",operation:"Update"}]},
+      spec:{unrelated:"sensitive-fixture-marker"}}]' "$FIXTURE/identities.json"
+  elif [[ "$CASE" == legacy-incomplete ]]; then
     jq '.items |= .[0:-1]' "$FIXTURE/identities.json"
   elif [[ "$CASE" == legacy-extra ]]; then
     jq '.items += [.items[0] | .metadata.name = "extra" | .metadata.uid = "extra"]' "$FIXTURE/identities.json"
@@ -138,6 +144,10 @@ case "$1 $2" in
   fi
   cat "$FIXTURE/before-diff.json"; exit 2 ;;
 'cluster update')
+  if [[ "$CASE" == update-failure ]]; then
+    echo 'fixture foreign or unknown ownership refusal' >&2
+    exit 7
+  fi
   case "$CASE" in
   k3s) [[ " $* " == *' --kubernetes-version v1.37.1-k3s1 '* ]] ;;
   vcluster) [[ " $* " != *' --kubernetes-version '* ]] ;;
@@ -151,7 +161,7 @@ esac
 SH
 chmod +x "$fixture/bin/kubectl" "$fixture/bin/helm" "$fixture/bin/ksail"
 
-for scenario in valid k3s vcluster baseline legacy-incomplete legacy-extra incomplete inventory-short uid config history-missing history-replaced history-unrecorded diff-status; do
+for scenario in valid k3s vcluster baseline legacy-incomplete legacy-extra incomplete inventory-short uid config history-missing history-replaced history-unrecorded diff-status update-failure; do
 	rm -f "$fixture/updated"
 	printf 'apiVersion: ksail.io/v1alpha1\nkind: Cluster\nspec:\n  cluster:\n    connection:\n      kubeconfig: %s/calico-migration.kubeconfig\n' "$fixture" >"$fixture/project/ksail.yaml"
 	status=0
@@ -173,10 +183,27 @@ for scenario in valid k3s vcluster baseline legacy-incomplete legacy-extra incom
 			echo "FAIL: accepted invalid migration: $scenario" >&2
 			exit 1
 		}
+		if [[ "$scenario" == update-failure ]]; then
+			grep -q 'candidate update exited 7; see update.json, update.stderr and prerequisite-ownership.json' "$fixture/migrate-$scenario.log" || {
+				echo 'FAIL: update refusal lacks saved diagnostic context' >&2
+				exit 1
+			}
+		fi
 		grep -q 'Calico migration trial:' "$fixture/migrate-$scenario.log" || {
 			cat "$fixture/migrate-$scenario.log" >&2
 			exit 1
 		}
+	fi
+	if [[ "$scenario" == update-failure ]]; then
+		jq -e 'length == 1 and .[0] == {kind:"MutatingAdmissionPolicy",
+          legacyHelmOwner:false, ksailOwner:false, writers:["TigeraOperator"]}' \
+			"$fixture/logs-$scenario/calico-migration/prerequisite-ownership.json" >/dev/null
+		diagnostics=$(cat "$fixture/logs-$scenario/calico-migration/prerequisite-ownership.json")
+		[[ "$diagnostics" != *sensitive-fixture-marker* ]] || {
+			echo 'FAIL: ownership diagnostics retain unneeded object data' >&2
+			exit 1
+		}
+		grep -q 'fixture foreign or unknown ownership refusal' "$fixture/logs-$scenario/calico-migration/update.stderr"
 	fi
 	if [[ "$scenario" == baseline || "$scenario" == legacy-incomplete || "$scenario" == legacy-extra ]]; then
 		[[ ! -f "$fixture/updated" ]] || {

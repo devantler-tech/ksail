@@ -64,6 +64,21 @@ read_legacy_history() {
 }
 read_legacy_history >"$log_dir/before-history.json" || fail 'baseline Helm history metadata is missing or incomplete'
 resource_types='customresourcedefinitions.apiextensions.k8s.io,mutatingadmissionpolicies.admissionregistration.k8s.io,mutatingadmissionpolicybindings.admissionregistration.k8s.io,validatingadmissionpolicies.admissionregistration.k8s.io,validatingadmissionpolicybindings.admissionregistration.k8s.io'
+# Record only fixed classifications for the public chart target implicated by
+# migration refusals. Never publish identities, versions, arbitrary labels,
+# annotations, manager names, owner references or object contents.
+kubectl get "$resource_types" --request-timeout=30s --output json "${cli_target[@]}" |
+	jq '[.items[] | select(.metadata.name == "policytypes.policy.projectcalico.org") | {
+    kind,
+    legacyHelmOwner: (.metadata.labels["app.kubernetes.io/managed-by"] == "Helm" and
+      .metadata.annotations["meta.helm.sh/release-name"] == "calico-crds" and
+      .metadata.annotations["meta.helm.sh/release-namespace"] == "tigera-operator"),
+    ksailOwner: (.metadata.labels["ksail.io/component"] == "calico-prerequisites"),
+    writers: [(.metadata.managedFields // [])[] |
+      if .manager == "helm" then "Helm"
+      elif .manager == "tigera-operator" then "TigeraOperator"
+      else "Other" end] | unique
+  }] | sort_by(.kind)' >"$log_dir/prerequisite-ownership.json" || fail 'prerequisite ownership classification failed'
 read_prerequisites() {
 	kubectl get "$resource_types" --request-timeout=30s --output json "${cli_target[@]}" |
 		jq -e '[.items[] | select(.metadata.annotations["meta.helm.sh/release-name"] == "calico-crds" and
@@ -96,8 +111,10 @@ jq -e -s 'length == 1 and (.[0] | .totalChanges == 1 and
   .rebootRequired == [] and .recreateRequired == [] and .rollingRecreate == [] and
   .wipeRequired == [] and .unknownBaseline == [])' "$log_dir/before-diff.json" >/dev/null || fail 'migration diff is not exactly one in-place prerequisite change'
 
+status=0
 ksail cluster update --config "$config_file" --yes --output json "${version_args[@]}" "${cli_target[@]}" \
-	>"$log_dir/update.json" 2>"$log_dir/update.stderr"
+	>"$log_dir/update.json" 2>"$log_dir/update.stderr" || status=$?
+[[ "$status" == 0 ]] || fail "candidate update exited $status; see update.json, update.stderr and prerequisite-ownership.json"
 cmp "$config_file" "$log_dir/before-config.yaml" || fail 'update changed the desired configuration'
 helm list --all --namespace tigera-operator --output json "${helm_target[@]}" >"$log_dir/after-releases.json"
 expected=$(sed -nE 's/^FROM docker.io\/calico\/node:(v[0-9]+\.[0-9]+\.[0-9]+)@sha256:.*/\1/p' "$GITHUB_WORKSPACE/pkg/svc/installer/cni/calico/Dockerfile")

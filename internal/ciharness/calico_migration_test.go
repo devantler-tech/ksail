@@ -7,7 +7,47 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.yaml.in/yaml/v3"
 )
+
+func TestCalicoMigrationK3sKeepsEmbeddedLoadBalancerBaseline(t *testing.T) {
+	t.Parallel()
+
+	var workflow struct {
+		Jobs map[string]struct {
+			Strategy struct {
+				Matrix struct {
+					Include []map[string]any `yaml:"include"`
+				} `yaml:"matrix"`
+			} `yaml:"strategy"`
+		} `yaml:"jobs"`
+	}
+	require.NoError(t, yaml.Unmarshal(readRepoFile(t, ".github/workflows/ci.yaml"), &workflow))
+
+	var legs int
+
+	for _, entry := range workflow.Jobs["system-test-docker"].Strategy.Matrix.Include {
+		if entry["calico-migration"] != "true" {
+			continue
+		}
+
+		legs++
+
+		args := stringValue(entry["args"])
+		if entry["distribution"] == "K3s" {
+			require.Contains(
+				t,
+				args,
+				"--load-balancer Enabled",
+				"the immutable legacy K3s CLI leaves its embedded load balancer enabled",
+			)
+		} else {
+			require.Contains(t, args, "--load-balancer Disabled")
+		}
+	}
+
+	require.Equal(t, 3, legs)
+}
 
 func TestCalicoMigrationPublishesImmutableBaseline(t *testing.T) {
 	t.Parallel()

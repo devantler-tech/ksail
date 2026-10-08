@@ -1857,7 +1857,9 @@ jobs:
           - distribution: K3s
             provider: Docker
             init: true
-            args: "--name calico-migration --cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine None --gitops-engine None"
+            # Legacy K3s keeps its embedded load balancer enabled. Match that
+            # baseline so this unchanged-config trial isolates Calico drift.
+            args: "--name calico-migration --cni Calico --csi Disabled --load-balancer Enabled --metrics-server Disabled --policy-engine None --gitops-engine None"
             calico-migration: "true"
           - distribution: VCluster
             provider: Docker
