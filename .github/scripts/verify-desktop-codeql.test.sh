@@ -16,8 +16,23 @@ cat >"${scratch}/positive.json" <<'JSON'
 ["desktop/deeplink.go","handleDeepLink",1],
 ["desktop/notify.go","watchClusterStatus",1],
 ["desktop/window_state.go","trackWindowState",1],
+["third_party/cel-go/cel/env.go","NewEnv",1],
+["third_party/glamour/glamour.go","NewTermRenderer",1],
+["third_party/go-macholibre/universal_binary.go","ExtractReaders",1],
+["third_party/kyverno-jmespath/api.go","Search",1],
+["third_party/jmespath/api.go","Search",1],
+["third_party/ansi/width.go","Strip",1],
+["third_party/ansi-runtime/width.go","Strip",1],
+["third_party/redisotel/tracing.go","InstrumentTracing",1],
+["third_party/rediscmd/rediscmd.go","CmdString",1],
+["third_party/dynamiclistener/cert/cert.go","NewPrivateKey",1],
+["third_party/dynamiclistener/factory/cert_utils.go","ParseCertPEM",1],
 ["third_party/otelzap/otelzap.go","log",1],
-["third_party/otelzap/logvalue.go","logValue",1]
+["third_party/otelzap/logvalue.go","logValue",1],
+["internal/codeqlprofile/metrics.go","ParseTime",1],
+["internal/codeqlprofile/metrics.go","Summarize",1],
+["internal/codeqlprofile/files.go","ReadMeasurements",1],
+["internal/codeqlprofile/cmd/main.go","main",1]
 ]}}
 JSON
 
@@ -32,12 +47,21 @@ reject() {
 	fi
 }
 
-for index in {0..9}; do
+for index in {0..24}; do
 	jq --argjson i "${index}" '."#select".tuples[$i][2] = 0' "${scratch}/positive.json" >"${scratch}/zero.json"
 	reject zero
 	jq --argjson i "${index}" 'del(."#select".tuples[$i])' "${scratch}/positive.json" >"${scratch}/missing.json"
 	reject missing
 done
+
+# Neither the adapter-only baseline nor dependency-only evidence can satisfy
+# the combined coverage floor after integrating the independent security fix.
+jq '."#select".tuples |= map(select(.[0] | startswith("third_party/otelzap/") | not))' \
+	"${scratch}/positive.json" >"${scratch}/missing-adapter.json"
+reject missing-adapter
+jq '."#select".tuples |= map(select((.[0] | startswith("third_party/") | not) or (.[0] | startswith("third_party/otelzap/"))))' \
+	"${scratch}/positive.json" >"${scratch}/missing-dependencies.json"
+reject missing-dependencies
 
 jq '."#select".tuples[1] = ."#select".tuples[0]' "${scratch}/positive.json" >"${scratch}/duplicate.json"
 reject duplicate
@@ -104,8 +128,34 @@ printf '[{"source":{"id":"go/extractor/warning","name":"Recoverable warning"},"s
 run_database
 run_database false diagnostics
 
+# Native warnings can leave imported definitions unresolved or hide later
+# failures even when every sampled function body remains present.
+# Keep the IDs tied to CodeQL 2.27.1's extractor diagnostics.go.
+incomplete_accepted=0
+for diagnostic in package-not-found diagnostic-limit-reached; do
+	jq -n --arg id "go/autobuilder/${diagnostic}" '[{
+    source: {id: $id, name: "Incomplete extraction"},
+    severity: "warning", plaintextMessage: "Coverage remains incomplete"
+  }]' >"${scratch}/diagnostics.json"
+	for mode in full diagnostics; do
+		if run_database false "${mode}"; then
+			printf 'FAIL: accepted %s with valid body evidence (%s)\n' "${diagnostic}" "${mode}" >&2
+			incomplete_accepted=$((incomplete_accepted + 1))
+		fi
+	done
+done
+if [[ "${incomplete_accepted}" != 0 ]]; then exit 1; fi
+
+# Native extraction errors and future error IDs cannot certify full coverage.
+for diagnostic in newer-go-version-needed go-files-found-but-not-processed relative-import-paths newer-system-go-version-required unknown-extraction-error; do
+	jq -n --arg id "go/autobuilder/${diagnostic}" '[{
+    source: {id: $id, name: "Extraction error"}, severity: "error"
+  }]' >"${scratch}/diagnostics.json"
+	reject_database "${diagnostic} with valid body evidence"
+done
+
 # A killed module must fail despite all sampled CLI/desktop bodies surviving.
-for project in . third_party/go-archive third_party/otelzap; do
+for project in . third_party/go-archive third_party/otelzap third_party/cel-go third_party/glamour third_party/go-macholibre third_party/kyverno-jmespath third_party/jmespath third_party/ansi third_party/ansi-runtime third_party/redisotel third_party/rediscmd third_party/dynamiclistener; do
 	for severity in warning error note; do
 		jq -n --arg project "${project}" --arg severity "${severity}" '[{
     source: {id: "go/autobuilder/extraction-failed-for-project", name: "Extraction failed"},

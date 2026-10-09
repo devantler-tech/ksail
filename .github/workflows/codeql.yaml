@@ -13,24 +13,21 @@ name: 🔍 CodeQL
 #
 # Go uses `autobuild`, which the Go extractor resolves to standalone extraction: it reads
 # the module graph with `go list` and takes types from source, so it needs no compiler and
-# covers all three modules — root (CLI plus tagged desktop), `third_party/go-archive/`
-# and the `third_party/otelzap/` compatibility adapter — in one job.
-# `none` is rejected for Go, and `manual` runs a traced compile that exceeds the
-# runner's memory alongside the extractor.
+# covers the root (CLI plus tagged desktop), `third_party/go-archive/` and the
+# `third_party/otelzap/` compatibility module, plus all ten authenticated dependency
+# source modules in one job. `none` is rejected for Go. Standalone extraction avoids
+# running a traced compiler alongside the extractor.
 #
-# The autobuilder runs one `go-extractor` per `go.mod`, one after another, so the job's peak
-# is the largest single module. Untuned, the root module's extractor peaks above 13.4 GiB on
-# a 16 GB `ubuntu-latest` runner, leaving too little headroom for the runner agent and the
-# OS: the runner is then shut down part-way through extraction (`The runner has received a
-# shutdown signal`, #7131). CodeQL's own `ram` and `threads` budgets do not reach the
-# extractor, which is a separate Go process, and CodeQL sets no Go memory limit of its own.
-# The Autobuild step therefore sets `GOMEMLIMIT`: measured on the root module, 8 GiB brings
-# the extractor's peak to about 8.7 GiB while still extracting every first-party file, at the
-# cost of a longer extraction (about 9 minutes instead of 6). No `ram` or `threads` cap is set,
-# so CodeQL's own budget matches the default setup this replaces. Re-running a failed job
-# remains available because the workflow is owned here.
+# The Autobuild step sets `GOMEMLIMIT=8GiB` as a soft Go heap target for the separate
+# extractor process. The controlled resource profile checks source and function-body
+# coverage while measuring each extractor command's peak RSS and elapsed time. Those
+# measurements are not whole-job memory peaks and do not establish why managed runners
+# receive shutdown signals; the termination cause remains unresolved in #7131. No CodeQL
+# `ram` or `threads` override is set. The owned workflow supports normal failed-job retries;
+# managed Code Quality remains a separate required check.
 # The Go evidence guard rejects failed-project extraction diagnostics even when
-# Autobuild and analysis succeed, then requires real CLI/desktop/adapter function bodies.
+# Autobuild and analysis succeed, then requires real CLI, desktop, adapter and authenticated
+# dependency function bodies.
 #
 # Same languages and suite as the default setup it replaces: actions, Go and
 # JavaScript/TypeScript with the security-extended queries. This satisfies the "Require
