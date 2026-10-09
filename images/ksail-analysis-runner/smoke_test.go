@@ -94,7 +94,7 @@ esac`,
 		"pkg-config": "exit 0",
 		"cp":         "echo 'live smoke attempted to bootstrap the active runner' >&2; exit 99",
 		"go": `case "$1" in
-version) printf 'go version go1.26.8 linux/amd64\n' ;;
+version) printf 'go version go1.26.9 linux/amd64\n' ;;
 env) case "$2" in
   GOARCH) printf 'amd64\n' ;;
   CGO_ENABLED) printf '1\n' ;;

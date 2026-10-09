@@ -190,3 +190,50 @@ func TestExitCodeFromErrorReturnsFalseForPlainErrors(t *testing.T) {
 	assert.False(t, ok)
 	assert.Equal(t, 0, code)
 }
+
+// errTestUnreachable quotes a documentation-range address (RFC 5737), which the
+// address mask treats exactly like a public server address.
+var errTestUnreachable = errors.New("dial tcp 203.0.113.10:6443: connect: connection refused")
+
+func TestFailureTextHidesAddressesForEveryCommand(t *testing.T) {
+	t.Setenv("KSAIL_SHOW_ADDRESSES", "")
+
+	assert.Equal(
+		t,
+		"dial tcp <address hidden>:6443: connect: connection refused",
+		failureText(errTestUnreachable),
+	)
+}
+
+func TestFailureTextShowsAddressesWhenOptedIn(t *testing.T) {
+	t.Setenv("KSAIL_SHOW_ADDRESSES", "true")
+
+	assert.Equal(t, errTestUnreachable.Error(), failureText(errTestUnreachable))
+}
+
+func TestRunSafelyHidesAddressesInPanicOutput(t *testing.T) {
+	t.Setenv("KSAIL_SHOW_ADDRESSES", "")
+
+	var output bytes.Buffer
+
+	exitCode := runSafely(nil, func([]string) int {
+		panic(errTestUnreachable)
+	}, &output)
+
+	assert.Equal(t, 1, exitCode)
+	assert.Contains(t, output.String(), "dial tcp <address hidden>:6443")
+	assert.NotContains(t, output.String(), "203.0.113.10")
+	assert.Contains(t, output.String(), "runSafely")
+}
+
+func TestRunSafelyShowsAddressesInPanicOutputWhenOptedIn(t *testing.T) {
+	t.Setenv("KSAIL_SHOW_ADDRESSES", "true")
+
+	var output bytes.Buffer
+
+	runSafely(nil, func([]string) int {
+		panic(errTestUnreachable)
+	}, &output)
+
+	assert.Contains(t, output.String(), "203.0.113.10:6443")
+}

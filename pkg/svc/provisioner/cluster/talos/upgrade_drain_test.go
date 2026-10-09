@@ -2,6 +2,7 @@ package talosprovisioner_test
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -9,9 +10,53 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
+
+func TestImageUpgradeCordonMarksItsOwnNode(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset(&corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "prod-worker-1"},
+	})
+	prov := talosprovisioner.NewProvisioner(nil, talosprovisioner.NewOptions())
+
+	require.NoError(t, prov.MarkImageUpgradeCordonForTest(
+		t.Context(), clientset, "prod-worker-1",
+	))
+	got, err := clientset.CoreV1().Nodes().Get(
+		t.Context(), "prod-worker-1", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+	assert.True(t, got.Spec.Unschedulable)
+	assert.Equal(t, "true", got.Annotations[testImageUpgradeCordonAnnotation])
+	assert.Equal(t, "true", got.Annotations[testImageUpgradeStoragePendingAnnotation])
+}
+
+func TestImageUpgradeCordonRejectsExistingAdministrativeCordon(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset(&corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "prod-worker-1"},
+		Spec:       corev1.NodeSpec{Unschedulable: true},
+	})
+	prov := talosprovisioner.NewProvisioner(nil, talosprovisioner.NewOptions())
+
+	require.Error(t, prov.MarkImageUpgradeCordonForTest(
+		t.Context(), clientset, "prod-worker-1",
+	))
+	got, err := clientset.CoreV1().Nodes().Get(
+		t.Context(), "prod-worker-1", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+	assert.True(t, got.Spec.Unschedulable)
+	assert.NotContains(t, got.Annotations, testImageUpgradeCordonAnnotation)
+}
 
 // TestUncordonAfterUpgradeUncordonsReadyNode asserts the graceful OS-upgrade path
 // uncordons a node once it is back Ready — the counterpart to the cordon+drain it
@@ -99,4 +144,47 @@ func TestK8sClientOrWarnForUpgradeNilOnUnreachableAPI(t *testing.T) {
 		got,
 		"an unreachable Kubernetes API should yield a nil clientset (degrade, not abort)",
 	)
+}
+
+var errStaleNodeVersion = errors.New("stale resourceVersion")
+
+// Kubelet status reports move a Node's resourceVersion continually, so a marker
+// write that loses that race must be retried against the latest Node rather than
+// failing the roll.
+func TestImageUpgradeCordonRetriesAResourceVersionConflict(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset(&corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "prod-worker-1"},
+	})
+	conflicts := 0
+	conflictOnce := func(_ k8stesting.Action) (bool, runtime.Object, error) {
+		if conflicts > 0 {
+			return false, nil, nil
+		}
+
+		conflicts++
+
+		return true, nil, apierrors.NewConflict(
+			schema.GroupResource{Resource: "nodes"},
+			"prod-worker-1",
+			errStaleNodeVersion,
+		)
+	}
+	clientset.PrependReactor("update", "nodes", conflictOnce)
+
+	prov := talosprovisioner.NewProvisioner(nil, talosprovisioner.NewOptions())
+
+	require.NoError(t, prov.MarkImageUpgradeCordonForTest(
+		t.Context(), clientset, "prod-worker-1",
+	))
+	assert.Equal(t, 1, conflicts)
+
+	got, err := clientset.CoreV1().Nodes().Get(
+		t.Context(), "prod-worker-1", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+	assert.True(t, got.Spec.Unschedulable)
+	assert.Equal(t, "true", got.Annotations[testImageUpgradeCordonAnnotation])
+	assert.Equal(t, "true", got.Annotations[testImageUpgradeStoragePendingAnnotation])
 }

@@ -127,6 +127,20 @@ jobs:
 
 > **Note:** Only Talos distribution supports Hetzner and Omni providers.
 
+### Manual same-version Talos schematic trial
+
+Dispatch `system-test-hetzner.yaml` with `distribution=Talos`, `init=true` and
+`test_schematic_rollout=true`. The optional `schematic_server_type` choice selects
+`cx23`, `cx33` or `cpx22` for both node roles when the default class has no capacity.
+Its `Default` selection preserves the generated server classes. Selection is explicit:
+there is no automatic upsizing or retry across classes. The provider still checks
+availability before creating resources, and the trial still requires image drift,
+successful rollout, healthy nodes, converged readback and scoped cleanup.
+
+The corresponding action input is `talos-schematic-server-type`; it is rejected
+unless the initialized Hetzner/Talos schematic trial is enabled. The configuration
+editor requires Mike Farah's `yq`, provided by the workflow runner image.
+
 ## Inputs
 
 | Input                 | Description                                                   | Required | Default                |

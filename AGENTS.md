@@ -142,6 +142,7 @@ go run main.go --help
 │   ├── controller/         # controller-runtime reconcilers for the KSail operator (Cluster CRs)
 │   └── testutil/           # Shared test utilities (home-env isolation, root checks, snapshot helpers)
 ├── pkg/                    # Core packages
+│   ├── addressmask/        # Keeps server addresses out of progress output and error text
 │   ├── toolgen/            # Tool generation for AI assistants
 │   ├── apis/               # API types and schemas
 │   ├── cli/                # CLI wiring, UI, and Cobra commands
@@ -362,9 +363,13 @@ head, and has been tried as a user — then drive it to merge. Every open PR, wh
 is driven to a terminal state (merged, closed with the reason recorded, or parked on a named
 blocker), including dependency major bumps and external contributions; an external contributor's
 branch is reviewed statically and never run locally. Trusted authors are the GitHub logins
-`devantler`, `ksail-bot`, `dependabot[bot]`, `github-actions[bot]`, and `renovate[bot]`; never
+`devantler`, `ksail-bot[bot]`, `dependabot[bot]`, `github-actions[bot]`, and `renovate[bot]`; never
 push to `main`. The legacy `Daily AI Engineer` and `Daily AI Assistant` disclosure prefixes stay
 recognised as agent output. This section adds KSail-specifics.
+
+The verified `ksail-bot` App alias resolves to that exact bot account under the central trust
+binding; a bare `ksail-bot` user or lookalike is not trusted. Execution trust never waives review,
+CI, signatures, provider trials, or scope and does not grant credentials or App permissions.
 
 **Recommended local validation before any PR** (matches `CONTRIBUTING.md`; CI re-runs equivalents
 via the org-wide `validate-go-project` reusable workflow): `golangci-lint run --fix` to format and

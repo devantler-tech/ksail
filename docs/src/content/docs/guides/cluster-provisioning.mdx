@@ -110,6 +110,8 @@ spec:
 
 For a KSail-managed Cluster Autoscaler on Talos with Hetzner, `cluster diff` also compares the installed Helm values with the values rendered by the current KSail version. A mismatch appears as `cluster.autoscaler.node.chartValues`; `cluster update` applies it even when `ksail.yaml` has not changed. KSail runs the same check for cert-manager when `spec.cluster.certManager` is `Enabled`, and reports a mismatch as `cluster.certManager.chartValues`. Both operations use the resolved cluster context. Releases managed by Flux or Argo CD are excluded from this check and remain under GitOps control.
 
+KSail recognizes a Flux-owned release from its HelmRelease even when Helm's storage labels do not identify Flux. This discovery requires permission to list HelmReleases across namespaces; if that ownership read fails, KSail reports the failure rather than treating an unreadable release as unmanaged. Clusters without the Flux HelmRelease API continue to use Helm's storage labels.
+
 If a release cannot be inspected, KSail prints a warning and continues with the other diff checks. Resolve that warning before treating the absence of a chart-values change as confirmation that the component's settings match.
 
 ## Version Upgrades

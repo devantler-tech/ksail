@@ -435,6 +435,18 @@ ksail cluster update
 
 Applies in-place changes to components (CNI, GitOps engine, cert-manager, etc.). Node scaling changes for Talos are applied in-place. A Talos or Kubernetes version bump rolls the static nodes in place and **recycles autoscaler nodes** so they follow the new baseline (see [Autoscaler Node Upgrades](#autoscaler-node-upgrades)). Changes to `hetzner.location`, `hetzner.controlPlaneServerType`, or `hetzner.networkCidr` require cluster recreation. See the [Update Behavior table](/support-matrix/#update-behavior) for details.
 
+#### Server addresses in progress output
+
+Progress output does not print server addresses, because that output is routinely captured in public CI logs. For a Talos cluster a node is reported by its server name instead, and an address KSail has no name for — the cluster endpoint, for example — is shown as `<address hidden>`. K3s and kubeadm clusters on Hetzner report their endpoint the same way. Loopback and private-network addresses that belong to no named server are printed as they are.
+
+To see the addresses while debugging, opt back in for that run:
+
+```bash
+KSAIL_SHOW_ADDRESSES=true ksail cluster update
+```
+
+The error a failed command prints is treated the same way, for every command group: a publicly routable address in it is shown as `<address hidden>`, or as the server name where KSail knows it. So are warnings printed after a command finishes and the message of an unexpected crash. Because the assistant and MCP tools run the same commands, the errors they return are covered too. Output you asked for, such as a node listing from `ksail workload get nodes -o wide`, is not changed.
+
 ### Deploy with LoadBalancer
 
 ```bash

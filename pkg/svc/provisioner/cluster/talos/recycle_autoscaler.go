@@ -51,11 +51,45 @@ func (p *Provisioner) recycleAutoscalerNodes(
 	clusterName string,
 	result *clusterupdate.UpdateResult,
 ) error {
+	return p.recycleAutoscalerNodesWithImageCheck(ctx, clusterName, nil, result)
+}
+
+// recycleAutoscalerImageNodes recycles only the servers of configured pools whose
+// live boot image differs from the target, so a server a partial attempt already
+// replaced survives the retry.
+func (p *Provisioner) recycleAutoscalerImageNodes(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.recycleAutoscalerNodesWithImageCheck(ctx, clusterName,
+		func(ctx context.Context, ip string) (bool, error) {
+			if p.talosOpts == nil || p.talosOpts.Version == "" {
+				return false, ErrSchematicRequiresVersion
+			}
+
+			return p.nodeImageMatchesTarget(ctx, ip, p.talosOpts.Version)
+		}, result)
+}
+
+func (p *Provisioner) recycleAutoscalerNodesWithImageCheck(
+	ctx context.Context,
+	clusterName string,
+	imageMatches func(context.Context, string) (bool, error),
+	result *clusterupdate.UpdateResult,
+) error {
 	clientset, ordered, ok, err := p.prepareAutoscalerNodeConvergence(
 		ctx, clusterName, "  ⓘ No autoscaler nodes to recycle\n", result,
 	)
 	if err != nil || !ok {
 		return err
+	}
+
+	if imageMatches != nil {
+		ordered, err = selectAutoscalerImageServers(ctx, ordered, imageMatches)
+		if err != nil {
+			return err
+		}
 	}
 
 	hzProvider, err := p.hetznerProvider()
@@ -64,6 +98,34 @@ func (p *Provisioner) recycleAutoscalerNodes(
 	}
 
 	return p.recycleAutoscalerServers(ctx, clientset, hzProvider, ordered)
+}
+
+// Inspect every live image before authorizing a drain. A successful replacement
+// from a partial attempt is already at the target and must survive the retry.
+// Wipe/config recreation uses the ordinary path and still replaces every server.
+func selectAutoscalerImageServers(
+	ctx context.Context,
+	servers []*hcloud.Server,
+	imageMatches func(context.Context, string) (bool, error),
+) ([]*hcloud.Server, error) {
+	selected := make([]*hcloud.Server, 0, len(servers))
+	for _, server := range sortServersByName(servers) {
+		ip, err := hetznerNodeTalosAddress(server)
+		if err != nil {
+			return nil, fmt.Errorf("resolving address for %s: %w", server.Name, err)
+		}
+
+		matches, err := imageMatches(ctx, ip)
+		if err != nil {
+			return nil, fmt.Errorf("checking autoscaler image on %s: %w", server.Name, err)
+		}
+
+		if !matches {
+			selected = append(selected, server)
+		}
+	}
+
+	return selected, nil
 }
 
 // listAutoscalerServers returns the running autoscaler-managed servers of the
@@ -123,12 +185,14 @@ func (p *Provisioner) excludeUnconfiguredPoolServers(
 
 		_, poolErr := p.autoscalerNodePool(server.Labels[hetzner.LabelAutoscalerNodeGroup])
 		if poolErr != nil {
-			_, _ = fmt.Fprintf(p.logWriter,
-				"  ⚠ Autoscaler node %s is left untouched: %v\n", server.Name, poolErr)
-
-			recordFailedChange(result, RoleWorker, server.Name, fmt.Errorf(
+			// An image roll lists the servers twice in one update (the selective
+			// recycle, then the reboot or in-place step), so report each once.
+			if recordFailedChangeOnce(result, RoleWorker, server.Name, fmt.Errorf(
 				"%w; restore the pool, or drain the node and delete its server", poolErr,
-			))
+			)) {
+				_, _ = fmt.Fprintf(p.logWriter,
+					"  ⚠ Autoscaler node %s is left untouched: %v\n", server.Name, poolErr)
+			}
 
 			continue
 		}
@@ -218,7 +282,7 @@ func (p *Provisioner) applyInPlaceToAutoscalerNodes(
 	secretsSource := p.fetchSecretsSource(ctx, clusterName)
 
 	for _, server := range sortServersByName(servers) {
-		serverIP, addrErr := hetznerNodeTalosAddress(server)
+		serverIP, addrErr := p.hetznerNodeAddress(server)
 		if addrErr != nil {
 			p.recordNodeConfigFailure(
 				nodeWithRole{IP: server.Name, Role: RoleWorker}, result,
@@ -279,7 +343,7 @@ func (p *Provisioner) recycleSingleAutoscalerNode(
 	hzProvider *hetzner.Provider,
 	server *hcloud.Server,
 ) error {
-	serverIP, addrErr := hetznerNodeTalosAddress(server)
+	serverIP, addrErr := p.hetznerNodeAddress(server)
 	if addrErr != nil {
 		return fmt.Errorf("resolving address for %s: %w", server.Name, addrErr)
 	}

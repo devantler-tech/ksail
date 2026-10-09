@@ -69,11 +69,7 @@ var ErrBootstrapFailed = errors.New("hetzner: first-boot bootstrap failed")
 
 // logf writes one progress line to the Base's LogWriter, if it has one.
 func (b *Base) logf(format string, args ...any) {
-	if b.LogWriter == nil {
-		return
-	}
-
-	_, _ = fmt.Fprintf(b.LogWriter, format+"\n", args...)
+	_, _ = fmt.Fprintf(b.progress(), format+"\n", args...)
 }
 
 // sshWaitTimeout is the configured SSH wait bound, or its default.

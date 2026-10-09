@@ -1,6 +1,6 @@
 # Recover EKS ownership without creation state
 
-Status: Proposed. Implements [#6399](https://github.com/devantler-tech/ksail/issues/6399).
+Status: Accepted. Implements [#6399](https://github.com/devantler-tech/ksail/issues/6399).
 
 ## Problem
 
@@ -36,3 +36,4 @@ recover the pre-stop size of a node group that was already stopped when all loca
 Recovery works from a new machine without inventing a create-time snapshot. Legacy creation state
 remains supported, but grants no exemption from the immutable identity verifier. The recovery command
 stays experimental; live AWS validation and graduation are separate from hermetic lifecycle tests.
+Accepting this recovery design does not graduate the command or replace that live validation.
