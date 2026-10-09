@@ -49,6 +49,42 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: 🔧 Resolve GitOps engine
+      id: resolve-gitops-engine
+      shell: bash
+      env:
+        ARGS: ${{ inputs.args }}
+      run: |
+        set -euo pipefail
+        # Match the cluster action's whitespace splitting without expanding file globs.
+        # Do not echo ARGS: registry arguments can contain credentials.
+        set -f
+        IFS=$' \t\n'
+        engine=""
+        expect_engine=false
+        # shellcheck disable=SC2086 # Intentionally split the CLI argument string into words.
+        for argument in $ARGS; do
+          if [ "$expect_engine" = true ]; then
+            engine="$argument"
+            expect_engine=false
+            continue
+          fi
+          case "$argument" in
+            --) break ;;
+            --gitops-engine) expect_engine=true ;;
+            --gitops-engine=*) engine="${argument#--gitops-engine=}" ;;
+          esac
+        done
+        if [ "$expect_engine" = true ]; then
+          echo "❌ GitOps engine argument is missing its value" >&2
+          exit 1
+        fi
+        case "$engine" in
+          Flux|ArgoCD) ;;
+          *) engine="" ;;
+        esac
+        printf 'engine=%s\n' "$engine" >> "$GITHUB_OUTPUT"
+
     - name: 🧪 ksail workload create
       id: workload-create
       shell: bash
@@ -167,13 +203,11 @@ runs:
     - name: 🧪 ksail workload push and reconcile
       id: workload-push-reconcile
       if: >-
-        contains(format(' {0} ', inputs.args), ' --gitops-engine Flux ') ||
-        contains(format(' {0} ', inputs.args), ' --gitops-engine=Flux ') ||
-        contains(format(' {0} ', inputs.args), ' --gitops-engine ArgoCD ') ||
-        contains(format(' {0} ', inputs.args), ' --gitops-engine=ArgoCD ')
+        steps.resolve-gitops-engine.outputs.engine == 'Flux' ||
+        steps.resolve-gitops-engine.outputs.engine == 'ArgoCD'
       shell: bash
       env:
-        ARGS: ${{ inputs.args }}
+        GITOPS_ENGINE: ${{ steps.resolve-gitops-engine.outputs.engine }}
         DISTRIBUTION: ${{ inputs.distribution }}
         GITOPS_PATH: ${{ inputs.gitops-path }}
         GHCR_USER: ${{ inputs.ghcr-user }}
@@ -211,13 +245,11 @@ runs:
           exit 0
         fi
 
-        # Do not echo ARGS: on registry legs it carries GHCR credentials.
-        case " $ARGS " in
-          *" --gitops-engine ArgoCD "*|*" --gitops-engine=ArgoCD "*) engine=ArgoCD ;;
-          *" --gitops-engine Flux "*|*" --gitops-engine=Flux "*) engine=Flux ;;
+        case "$GITOPS_ENGINE" in
+          Flux|ArgoCD) ;;
           *) echo "❌ could not determine the GitOps engine from the action args" >&2; exit 1 ;;
         esac
-        "$GITHUB_WORKSPACE/.github/scripts/assert-gitops-deployed.sh" "$engine" "$fixture"
+        "$GITHUB_WORKSPACE/.github/scripts/assert-gitops-deployed.sh" "$GITOPS_ENGINE" "$fixture"
 
     - name: 🧪 ksail workload delete
       shell: bash

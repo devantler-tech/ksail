@@ -4,7 +4,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -15,39 +14,66 @@ func TestWorkloadGitOpsReconciliationAcceptsBothFlagForms(t *testing.T) {
 	t.Parallel()
 	action := readCompositeAction(t, ".github/actions/ksail-test-workload/action.yaml")
 	step := findHarnessStep(t, action.Runs.Steps, "🧪 ksail workload push and reconcile")
-	// Evaluate the literal contains operands from the real action condition.
-	condition := regexp.MustCompile(`contains\(format\(' \{0\} ', inputs.args\), '([^']+)'\)`)
-	operands := condition.FindAllStringSubmatch(step.If, -1)
-	require.NotEmpty(t, operands)
+	resolver := findHarnessStep(t, action.Runs.Steps, "🔧 Resolve GitOps engine")
+	require.Equal(t, "resolve-gitops-engine", resolver.ID)
+	require.Equal(t, "${{ inputs.args }}", resolver.Env["ARGS"])
+	require.Equal(t,
+		"steps.resolve-gitops-engine.outputs.engine == 'Flux' || "+
+			"steps.resolve-gitops-engine.outputs.engine == 'ArgoCD'", step.If)
+	require.Equal(t, "${{ steps.resolve-gitops-engine.outputs.engine }}", step.Env["GITOPS_ENGINE"])
 
 	for _, scenario := range []struct{ args, engine string }{
 		{"--gitops-engine Flux", "Flux"},
 		{"--gitops-engine=Flux", "Flux"},
+		{"--gitops-engine  Flux", "Flux"},
+		{"--gitops-engine\tFlux", "Flux"},
+		{"--gitops-engine\nFlux", "Flux"},
 		{"--name fixture --gitops-engine ArgoCD --workers 1", "ArgoCD"},
 		{"--name fixture --gitops-engine=ArgoCD --workers 1", "ArgoCD"},
+		{"--name fixture\t--gitops-engine\tArgoCD\t--workers 1", "ArgoCD"},
+		{"--name fixture\n--gitops-engine=ArgoCD\n--workers 1", "ArgoCD"},
 		{"--name fixture", ""},
 		{"--gitops-engine None", ""},
 		{"--gitops-engine=FluxOther", ""},
 		{"--gitops-engine ArgoCDOther", ""},
+		{"--gitops-engine Flux --gitops-engine=None", ""},
+		{"--gitops-engine=None --gitops-engine\tArgoCD", "ArgoCD"},
+		{"-- --gitops-engine Flux", ""},
 	} {
 		t.Run(scenario.args, func(t *testing.T) {
 			t.Parallel()
 
-			selected := false
-			for _, operand := range operands {
-				selected = selected || strings.Contains(" "+scenario.args+" ", operand[1])
-			}
-
-			require.Equal(t, scenario.engine != "", selected)
+			engine := runGitOpsEngineResolver(t, resolver.Run, scenario.args)
+			require.Equal(t, scenario.engine, engine)
+			selected := engine == "Flux" || engine == "ArgoCD"
 
 			if selected {
-				runGitOpsReconciliationFixture(t, step.Run, scenario.args, scenario.engine)
+				runGitOpsReconciliationFixture(t, step.Run, engine)
 			}
 		})
 	}
 }
 
-func runGitOpsReconciliationFixture(t *testing.T, script, args, engine string) {
+func runGitOpsEngineResolver(t *testing.T, script, args string) string {
+	t.Helper()
+	dir := t.TempDir()
+	outputPath := filepath.Join(dir, "outputs")
+	//nolint:gosec // Executes the fixed repository-owned action in this test's private directory.
+	command := exec.CommandContext(t.Context(), "bash", "-c", script)
+	command.Dir = dir
+
+	command.Env = append(os.Environ(), "ARGS="+args, "GITHUB_OUTPUT="+outputPath)
+	output, err := command.CombinedOutput()
+	require.NoErrorf(t, err, "%s", output)
+	//nolint:gosec // Reads this test's private action output.
+	resolved, err := os.ReadFile(outputPath)
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(string(resolved), "engine="))
+
+	return strings.TrimSuffix(strings.TrimPrefix(string(resolved), "engine="), "\n")
+}
+
+func runGitOpsReconciliationFixture(t *testing.T, script, engine string) {
 	t.Helper()
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "bin")
@@ -74,7 +100,7 @@ func runGitOpsReconciliationFixture(t *testing.T, script, args, engine string) {
 	command.Env = append(
 		os.Environ(),
 		"PATH="+bin+":"+os.Getenv("PATH"),
-		"ARGS="+args,
+		"GITOPS_ENGINE="+engine,
 		"DISTRIBUTION=Vanilla",
 		"GITHUB_WORKSPACE="+dir,
 		"GITOPS_PATH="+filepath.Join(
