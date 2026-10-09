@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mockApi } from "./mock-api.ts";
+import { mockApi, mockClusterCatalog } from "./mock-api.ts";
 
 const CLUSTER_NAME = "production-observability-control-plane-with-a-very-long-generated-cluster-name";
 const NAMESPACE = "n".repeat(63);
@@ -200,10 +200,7 @@ async function mockOperatorApi(page: Page) {
         return true;
       }
 
-      if (url.pathname === "/api/v1/clusters") {
-        await route.fulfill({ json: { items: [cluster] } });
-        return true;
-      }
+      if (await mockClusterCatalog(route, url, [cluster])) return true;
 
       if (url.pathname.endsWith("/resources")) {
         await route.fulfill({
