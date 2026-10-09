@@ -3,6 +3,7 @@ package calicoinstaller
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"strings"
 	"testing"
 	"time"
@@ -127,6 +128,8 @@ func TestCalicoRefusesUnprovenOrChangedOperatorPrerequisitesBeforeWrites(t *test
 			}
 		},
 	}
+	maps.Copy(cases, dependencyManagerRefusals())
+
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -140,6 +143,39 @@ func TestCalicoRefusesUnprovenOrChangedOperatorPrerequisitesBeforeWrites(t *test
 			require.Empty(t, fixture.writes)
 		})
 	}
+}
+
+func dependencyManagerRefusals() map[string]func(*prerequisiteFixture) {
+	cases := map[string]func(*prerequisiteFixture){
+		"KSail marker": func(f *prerequisiteFixture) {
+			fixtureMetadata(f.objects[fixtureDependencyPath])["labels"] = map[string]any{
+				"operator.tigera.io/validating-admission-policy": "managed",
+				prerequisiteOwnerKey:                             "foreign",
+			}
+		},
+		"GitOps marker": func(f *prerequisiteFixture) {
+			fixtureMetadata(f.objects[fixtureDependencyPath])["labels"] = map[string]any{
+				"operator.tigera.io/validating-admission-policy": "managed",
+				"argocd.argoproj.io/instance":                    "foreign",
+			}
+		},
+	}
+	for name, annotations := range map[string]map[string]any{
+		"partial legacy release":   {"meta.helm.sh/release-name": "calico-crds"},
+		"partial legacy namespace": {"meta.helm.sh/release-namespace": "tigera-operator"},
+		"foreign legacy namespace": {
+			"meta.helm.sh/release-name": "calico-crds", "meta.helm.sh/release-namespace": "foreign",
+		},
+		"empty legacy annotations": {
+			"meta.helm.sh/release-name": "", "meta.helm.sh/release-namespace": "",
+		},
+	} {
+		cases[name] = func(f *prerequisiteFixture) {
+			fixtureMetadata(f.objects[fixtureDependencyPath])["annotations"] = annotations
+		}
+	}
+
+	return cases
 }
 
 func TestCalicoRefusesOperatorDependencyReplacementBeforeWritesAndOnRetry(t *testing.T) {
@@ -304,38 +340,27 @@ func TestCalicoObservesAllOperatorAdmissionKindsAndRefusesChangesAtCompletion(t 
 	for kind, resource := range kinds {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
-			fixture := newPrerequisiteFixture(t)
-			seedOperatorDependency(t, fixture)
-			policy := fixture.objects[fixtureDependencyPath]
-			delete(fixture.objects, fixtureDependencyPath)
-
-			path := "/apis/" + admissionRegistrationGroup + "/v1/" + resource + "/calico-fixture"
-			fixture.objects[path] = policy
-			policy["kind"] = kind
-
-			label := "operator.tigera.io/validating-admission-policy"
-			if strings.HasPrefix(kind, "Mutating") {
-				label = "operator.tigera.io/mutating-admission-policy"
-			}
-
-			fixtureMetadata(policy)["labels"] = map[string]any{label: "managed"}
-			if strings.HasSuffix(kind, "Binding") {
-				policy["spec"] = map[string]any{"policyName": "calico-policy"}
-			}
-
-			spec, err := json.Marshal(policy["spec"])
-			require.NoError(t, err)
-
-			manifest := strings.ReplaceAll(
-				prerequisiteFixtureManifest,
-				"ValidatingAdmissionPolicy",
-				kind,
-			)
-			manifest = strings.Replace(manifest, "{failurePolicy: Fail}", string(spec), 1)
+			fixture, path, manifest := annotatedAdmissionFixture(t, kind, resource)
+			policy := fixture.objects[path]
 			ctx := context.Background()
 			plan, err := dependencyInstaller(fixture).planPrerequisites(ctx, manifest)
 			require.NoError(t, err)
 			require.NoError(t, plan.apply(ctx))
+			resumed, err := dependencyInstaller(fixture).planPrerequisites(ctx, manifest)
+			require.NoError(t, err)
+			require.NoError(t, resumed.apply(ctx))
+			removal, err := dependencyInstaller(fixture).planPrerequisiteRemoval(ctx)
+			require.NoError(t, err)
+			require.Len(t, removal.plan.state.Dependencies, 1)
+			require.Equal(t, "external-policy", string(removal.plan.state.Dependencies[0].UID))
+
+			for _, ref := range removal.plan.state.Resources {
+				require.NotEqual(t, "external-policy", string(ref.UID))
+			}
+
+			require.Equal(t, "external-policy", fixtureMetadata(policy)["uid"])
+			assertRecordedDependencyRemovalGuards(t, fixture, path)
+			policy = fixture.objects[path]
 
 			for _, write := range fixture.writes {
 				require.NotContains(t, write, path)
@@ -352,6 +377,89 @@ func TestCalicoObservesAllOperatorAdmissionKindsAndRefusesChangesAtCompletion(t 
 			require.Len(t, fixture.writes, writes)
 		})
 	}
+}
+
+func assertRecordedDependencyRemovalGuards(
+	t *testing.T,
+	fixture *prerequisiteFixture,
+	path string,
+) {
+	t.Helper()
+
+	changes := map[string]func(map[string]any){
+		"replacement UID": func(policy map[string]any) {
+			fixtureMetadata(policy)["uid"] = "replacement"
+		},
+		"changed spec": func(policy map[string]any) {
+			policy["spec"] = map[string]any{"policyName": "foreign", "failurePolicy": "Ignore"}
+		},
+		"changed controller": func(policy map[string]any) {
+			object := &unstructured.Unstructured{Object: policy}
+			owners := object.GetOwnerReferences()
+			owners[0].UID = "replacement"
+			object.SetOwnerReferences(owners)
+		},
+		"Helm reclaim": func(policy map[string]any) {
+			object := &unstructured.Unstructured{Object: policy}
+			labels := object.GetLabels()
+			labels["app.kubernetes.io/managed-by"] = "Helm"
+			object.SetLabels(labels)
+		},
+	}
+	for name, mutate := range changes {
+		t.Run(name, func(t *testing.T) {
+			// Cases mutate the same fixture and must finish before the next one starts.
+			policy := fixture.objects[path]
+			original := (&unstructured.Unstructured{Object: policy}).DeepCopy()
+
+			t.Cleanup(func() { fixture.objects[path] = original.Object })
+			mutate(policy)
+
+			writes := len(fixture.writes)
+			_, err := dependencyInstaller(fixture).planPrerequisiteRemoval(context.Background())
+			require.Error(t, err)
+			require.Len(t, fixture.writes, writes)
+		})
+	}
+}
+
+func annotatedAdmissionFixture(
+	t *testing.T,
+	kind, resource string,
+) (*prerequisiteFixture, string, string) {
+	t.Helper()
+	fixture := newPrerequisiteFixture(t)
+	seedOperatorDependency(t, fixture)
+	fixture.seedLegacyCRD("legacy-crd", "7")
+	policy := fixture.objects[fixtureDependencyPath]
+	delete(fixture.objects, fixtureDependencyPath)
+
+	path := "/apis/" + admissionRegistrationGroup + "/v1/" + resource + "/calico-fixture"
+	fixture.objects[path] = policy
+	policy["kind"] = kind
+
+	label := "operator.tigera.io/validating-admission-policy"
+	if strings.HasPrefix(kind, "Mutating") {
+		label = "operator.tigera.io/mutating-admission-policy"
+	}
+
+	fixtureMetadata(policy)["labels"] = map[string]any{label: "managed"}
+	// The operator preserves old Helm annotations when taking over the labels.
+	fixtureMetadata(policy)["annotations"] = map[string]any{
+		"meta.helm.sh/release-name":      "calico-crds",
+		"meta.helm.sh/release-namespace": "tigera-operator",
+	}
+	if strings.HasSuffix(kind, "Binding") {
+		policy["spec"] = map[string]any{"policyName": "calico-policy"}
+	}
+
+	spec, err := json.Marshal(policy["spec"])
+	require.NoError(t, err)
+
+	manifest := strings.ReplaceAll(prerequisiteFixtureManifest, "ValidatingAdmissionPolicy", kind)
+	manifest = strings.Replace(manifest, "{failurePolicy: Fail}", string(spec), 1)
+
+	return fixture, path, manifest
 }
 
 func TestCalicoRefusesOverlappingDependencyInventoryBeforeWrites(t *testing.T) {

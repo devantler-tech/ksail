@@ -107,7 +107,8 @@ read_dependency_identities() {
         ValidatingAdmissionPolicy:"validatingadmissionpolicies",
         ValidatingAdmissionPolicyBinding:"validatingadmissionpolicybindings"}[.kind]),
        name: .metadata.name, uid: .metadata.uid,
-       legacyHelmOwner: (.metadata.annotations["meta.helm.sh/release-name"] == "calico-crds" and
+       legacyHelmOwner: (.metadata.labels["app.kubernetes.io/managed-by"] == "Helm" and
+         .metadata.annotations["meta.helm.sh/release-name"] == "calico-crds" and
          .metadata.annotations["meta.helm.sh/release-namespace"] == "tigera-operator"),
        ksailOwner: ((.metadata.labels // {}) | has("ksail.io/component"))}]'
 }

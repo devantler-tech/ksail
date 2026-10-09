@@ -96,7 +96,15 @@ case "$1 $2" in
 'get installation')
   printf '%s\n' '{"metadata":{"uid":"installation-fixture","labels":{"app.kubernetes.io/managed-by":"Helm"},"annotations":{"meta.helm.sh/release-name":"calico","meta.helm.sh/release-namespace":"tigera-operator"}}}' ;;
 'get customresourcedefinitions.'*)
-  if [[ "$CASE" == dependencies || "$CASE" == dependency-* ]]; then
+  if [[ "$CASE" == annotated-* ]]; then
+    ksail_owner=false
+    if [[ -f "$FIXTURE/updated" && "$CASE" == annotated-reclassified ]]; then ksail_owner=true; fi
+    jq --argjson ksailOwner "$ksail_owner" '.items[0] |= (
+      .apiVersion = "admissionregistration.k8s.io/v1" | .kind = "MutatingAdmissionPolicy" |
+      .metadata.labels = ({"operator.tigera.io/mutating-admission-policy":"managed"} +
+        if $ksailOwner then {"ksail.io/component":"calico-prerequisites"} else {} end))' \
+      "$FIXTURE/identities.json"
+  elif [[ "$CASE" == dependencies || "$CASE" == dependency-* ]]; then
     uid=uid-39
     ksail_owner=false
     if [[ -f "$FIXTURE/updated" && "$CASE" == dependency-replaced ]]; then uid=replacement; fi
@@ -125,7 +133,17 @@ case "$1 $2" in
     jq '.items[0].metadata.uid = "replacement"' "$FIXTURE/identities.json"
   else cat "$FIXTURE/identities.json"; fi ;;
 'get configmap')
-  if [[ "$CASE" == history-unrecorded ]]; then
+  if [[ "$CASE" == annotated-* ]]; then
+    jq --arg scenario "$CASE" '.data["inventory.json"] |= (fromjson |
+      .resources |= map(if .uid == "uid-1" then
+        .group = "admissionregistration.k8s.io" | .resource = "mutatingadmissionpolicies"
+        else . end) |
+      if $scenario == "annotated-dependency" then
+        .dependencies = [.resources[] | select(.uid == "uid-1") |
+          .installationUid = "installation-fixture" | .specSha256 = ("a" * 64)] |
+        .resources |= map(select(.uid != "uid-1"))
+      else .dependencies = [] end | tojson)' "$FIXTURE/inventory.json"
+  elif [[ "$CASE" == history-unrecorded ]]; then
     jq '.data["inventory.json"] |= (fromjson | .resources |= map(select(.storage != true)) | tojson)' "$FIXTURE/inventory.json"
   elif [[ "$CASE" == incomplete ]]; then
     jq '.data["inventory.json"] |= (fromjson | .complete = false | tojson)' "$FIXTURE/inventory.json"
@@ -188,7 +206,7 @@ esac
 SH
 chmod +x "$fixture/bin/kubectl" "$fixture/bin/helm" "$fixture/bin/ksail"
 
-for scenario in valid k3s vcluster dependencies dependency-incomplete dependency-overlap dependency-replaced dependency-adopted dependency-reclassified baseline legacy-incomplete legacy-extra incomplete inventory-short uid config history-missing history-replaced history-unrecorded diff-status update-failure; do
+for scenario in valid k3s vcluster dependencies annotated-dependency annotated-reclassified dependency-incomplete dependency-overlap dependency-replaced dependency-adopted dependency-reclassified baseline legacy-incomplete legacy-extra incomplete inventory-short uid config history-missing history-replaced history-unrecorded diff-status update-failure; do
 	rm -f "$fixture/updated"
 	printf 'apiVersion: ksail.io/v1alpha1\nkind: Cluster\nspec:\n  cluster:\n    connection:\n      kubeconfig: %s/calico-migration.kubeconfig\n' "$fixture" >"$fixture/project/ksail.yaml"
 	status=0
@@ -200,7 +218,7 @@ for scenario in valid k3s vcluster dependencies dependency-incomplete dependency
 		DISTRIBUTION="$distribution" GITHUB_WORKSPACE="$action_dir/../../.." \
 		SYSTEM_TEST_LOG_DIR="$fixture/logs-$scenario" bash "$subject" migrate) \
 		>"$fixture/migrate-$scenario.log" 2>&1 || status=$?
-	if [[ "$scenario" == valid || "$scenario" == k3s || "$scenario" == vcluster || "$scenario" == dependencies ]]; then
+	if [[ "$scenario" == valid || "$scenario" == k3s || "$scenario" == vcluster || "$scenario" == dependencies || "$scenario" == annotated-dependency ]]; then
 		[[ "$status" == 0 ]] || {
 			cat "$fixture/migrate-$scenario.log" >&2
 			exit 1
@@ -233,7 +251,7 @@ for scenario in valid k3s vcluster dependencies dependency-incomplete dependency
 		}
 		grep -q 'fixture foreign or unknown ownership refusal' "$fixture/logs-$scenario/calico-migration/update.stderr"
 	fi
-	if [[ "$scenario" == dependencies ]]; then
+	if [[ "$scenario" == dependencies || "$scenario" == annotated-dependency ]]; then
 		jq -e '.operatorDependencyIdentitiesPreserved == true and .operatorDependenciesUnadopted == true' \
 			"$fixture/logs-$scenario/calico-migration/dependency-verdict.json" >/dev/null
 	fi

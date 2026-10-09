@@ -186,19 +186,26 @@ func validateDependencyManagers(object *unstructured.Unstructured) error {
 		return prerequisiteError("Calico operator prerequisite lacks its managed label")
 	}
 
-	for _, key := range []string{"meta.helm.sh/release-name", "meta.helm.sh/release-namespace"} {
-		if _, present := object.GetAnnotations()[key]; present {
-			return prerequisiteError(
-				"Calico operator prerequisite has conflicting Helm ownership",
-			)
-		}
-	}
-
 	if _, present := object.GetLabels()[prerequisiteOwnerKey]; present {
 		return prerequisiteError("Calico operator prerequisite has conflicting KSail ownership")
 	}
 
+	if hasConflictingDependencyHelmOwner(object) {
+		return prerequisiteError("Calico operator prerequisite has conflicting Helm ownership")
+	}
+
 	return nil
+}
+
+func hasConflictingDependencyHelmOwner(object *unstructured.Unstructured) bool {
+	annotations := object.GetAnnotations()
+	_, hasRelease := annotations["meta.helm.sh/release-name"]
+	_, hasNamespace := annotations["meta.helm.sh/release-namespace"]
+	// The operator retains legacy annotations when replacing Helm's manager label.
+	// Only that complete pair is compatible with an observation-only dependency.
+	return ownsPrerequisite(object) || ((hasRelease || hasNamespace) &&
+		(annotations["meta.helm.sh/release-name"] != prerequisiteReleaseName ||
+			annotations["meta.helm.sh/release-namespace"] != prerequisiteNamespace))
 }
 
 func validateInstallationController(object *unstructured.Unstructured) error {
