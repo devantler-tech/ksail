@@ -7,3 +7,9 @@ paths:
       # GitHub supports an ordered concurrency queue, but actionlint v1.7.12
       # does not recognize the queue key yet.
       - 'unexpected key "queue" for "concurrency" section'
+self-hosted-runner:
+  labels:
+    # Repository-scoped ARC scale set; used only by explicit analysis preflight.
+    - ksail-code-quality
+    # Platform-owned ARC pool; used only by the main-only delivery preflight.
+    - platform-linux

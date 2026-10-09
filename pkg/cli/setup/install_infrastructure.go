@@ -659,7 +659,7 @@ func installMetalLB(
 	return nil
 }
 
-// installHcloudCCM installs the Hetzner Cloud Controller Manager for Talos × Hetzner LoadBalancer support.
+// installHcloudCCM initializes Talos × Hetzner nodes and enables optional load balancing.
 func installHcloudCCM(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
@@ -679,6 +679,11 @@ func installHcloudCCM(
 		resolveClusterNameFromContext(clusterCfg),
 	)
 
+	var ccmOptions []hcloudccminstaller.Option
+	if clusterCfg.Spec.Cluster.LoadBalancer == v1alpha1.LoadBalancerDisabled {
+		ccmOptions = append(ccmOptions, hcloudccminstaller.WithLoadBalancersDisabled())
+	}
+
 	ccmInstaller := hcloudccminstaller.NewInstaller(
 		helmClient,
 		kubeconfigPath,
@@ -686,6 +691,7 @@ func installHcloudCCM(
 		timeout,
 		networkName,
 		installer.IsHAEnabled(clusterCfg.Spec.Cluster.TotalNodeCount()),
+		ccmOptions...,
 	)
 
 	installErr := ccmInstaller.Install(ctx)

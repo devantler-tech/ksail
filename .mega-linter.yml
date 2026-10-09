@@ -14,12 +14,11 @@ DISABLE_LINTERS:
   - GO_REVIVE
   - REPOSITORY_BETTERLEAKS
   # Disabled: a gitleaks fork newly default-activated by MegaLinter v9.6.0.
-  # Consistent with GITLEAKS/SECRETLINT below — this repo does not gate on an
+  # Consistent with SECRETLINT below — this repo does not gate on an
   # in-MegaLinter secret scanner; its only findings are deterministic test
   # fixtures/snapshots (e.g. cipher_test.go age key, cloudinit_test.go SSH/PGP
   # keys, gen testdata/snapshots), not real credentials.
   - REPOSITORY_CHECKOV
-  - REPOSITORY_GITLEAKS
   - REPOSITORY_GRYPE
   # Disabled: consistent with the other dependency vulnerability scanners above
   # (trivy/grype) — this repo relies on Dependabot for dependency CVE triage, not

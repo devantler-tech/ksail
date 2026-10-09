@@ -220,7 +220,7 @@ func (p *Provisioner) waitReadyAndUncordon(
 ) error {
 	_, _ = fmt.Fprintf(p.logWriter, "    Waiting for %s to become ready...\n", nodeName)
 
-	waitErr := p.waitForK8sNodeReady(ctx, clientset, nodeName, nodeReadinessTimeout)
+	waitErr := p.waitForK8sNodeReady(ctx, clientset, nodeName)
 	if waitErr != nil {
 		recordFailedChange(result, node.Role, node.IP, waitErr)
 

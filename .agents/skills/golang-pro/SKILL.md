@@ -3,11 +3,12 @@ description: Implements concurrent Go patterns using goroutines and channels, de
 license: MIT
 metadata:
     author: https://github.com/Jeffallan
+    company: https://synergetic.solutions
     domain: language
     github-path: skills/golang-pro
-    github-ref: refs/tags/v0.4.14
+    github-ref: refs/tags/v0.4.18
     github-repo: https://github.com/Jeffallan/claude-skills
-    github-tree-sha: e347d9842958ce46d5f0644ef6009304d648a964
+    github-tree-sha: 77236ba0ba332d7556e1abb3626f5b4f6acf46fb
     output-format: code
     related-skills: devops-engineer, microservices-architect, test-master
     role: specialist
@@ -124,5 +125,7 @@ When implementing Go features, provide:
 ## Knowledge Reference
 
 Go 1.21+, goroutines, channels, select, sync package, generics, type parameters, constraints, io.Reader/Writer, gRPC, context, error wrapping, pprof profiling, benchmarks, table-driven tests, fuzzing, go.mod, internal packages, functional options
+
+Maintained by [@jeffallan](https://github.com/jeffallan), Principal Consultant at [Synergetic Solutions](https://synergetic.solutions)
 
 [Documentation](https://jeffallan.github.io/claude-skills/skills/language/golang-pro/)

@@ -30,5 +30,8 @@ func TestKubernetesProvisioner_ProgressFollowsInnerLogWriter(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	assert.Same(t, &logs, provisioner.ProgressWriterForTest())
+	_, err = provisioner.ProgressWriterForTest().Write([]byte("progress line\n"))
+	require.NoError(t, err)
+
+	assert.Equal(t, "progress line\n", logs.String())
 }

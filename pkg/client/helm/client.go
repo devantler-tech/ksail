@@ -391,9 +391,11 @@ func (c *Client) ListReleases(ctx context.Context) ([]ReleaseInfo, error) {
 	return result, nil
 }
 
-// GetReleaseStorageLabels returns the Kubernetes object labels from the latest
-// Helm release storage object (Secret or ConfigMap) for the given release name
-// and namespace. The storage backend is determined by the HELM_DRIVER
+// GetReleaseStorageLabels returns a matching Flux HelmRelease's ownership
+// labels, or the latest Helm storage object's labels when Flux does not own
+// the release. Flux need not label Helm storage, so inspect its declared owner
+// before assuming that ordinary Helm labels mean KSail ownership.
+// The storage backend is determined by the HELM_DRIVER
 // environment variable: "configmap"/"configmaps" queries ConfigMaps, "memory"
 // always returns ErrNoReleaseStorage (no Kubernetes objects), and the default
 // queries Secrets. Returns (nil, ErrNoReleaseStorage) when no matching storage
@@ -402,6 +404,24 @@ func (c *Client) GetReleaseStorageLabels(
 	ctx context.Context,
 	releaseName, namespace string,
 ) (map[string]string, error) {
+	if releaseName == "" {
+		return nil, errReleaseNameRequired
+	}
+
+	if namespace == "" {
+		namespace = c.settings.Namespace()
+	}
+
+	err := ValidateKubernetesReleaseStorageDriver(configuredReleaseStorageDriver())
+	if err != nil {
+		return nil, err
+	}
+
+	labels, err := c.fluxReleaseOwnershipLabels(ctx, releaseName, namespace)
+	if !errors.Is(err, errFluxReleaseNotOwned) {
+		return labels, err
+	}
+
 	metadata, err := c.GetReleaseStorageMetadata(ctx, releaseName, namespace)
 	if err != nil {
 		return nil, err

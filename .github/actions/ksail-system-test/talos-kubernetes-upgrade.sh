@@ -29,6 +29,8 @@ echo "🧪 Explicit Talos Kubernetes upgrade: $UPGRADE_FROM → $UPGRADE_TO"
 # other update arguments while removing init-only and source-version options.
 update_args_text=$(printf '%s' "${ARGS:-}" | sed -E 's/--image-verification [^ ]*//g; s/--kubernetes-version(=| +)[^ ]*//g')
 read -r -a update_args <<<"$update_args_text"
+# Bash 3.2 treats an empty array as unset under nounset. Expand only populated
+# arrays without introducing an empty CLI argument when there are no options.
 if ! timeout --kill-after=10s 900s ksail cluster update --force --distribution Talos --provider Docker \
 	${update_args[@]+"${update_args[@]}"} --kubernetes-version "$UPGRADE_TO" 2>&1 | tee "$log_dir/talos-kubernetes-upgrade.log"; then
 	echo "❌ ERROR: explicit Talos Kubernetes upgrade failed"

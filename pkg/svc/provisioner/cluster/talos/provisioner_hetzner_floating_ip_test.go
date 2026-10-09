@@ -424,7 +424,8 @@ func runStrayFloatingIPEndpoint(t *testing.T, labelStatus int, labelBody string)
 }
 
 // TestUpdateConfigsWithEndpoint_FloatingIPEnabledWarnsAboutStrayAddress verifies
-// that a leaked cluster-labelled address is surfaced by name and IP, while the
+// that a leaked cluster-labelled address is surfaced by name (its IP stays out of
+// the default output, ksail#7593), while the
 // managed address is still attached and never reported (ksail#6277).
 func TestUpdateConfigsWithEndpoint_FloatingIPEnabledWarnsAboutStrayAddress(t *testing.T) {
 	t.Setenv(testFloatingIPTokenEnvVar, "vip-test-token")
@@ -434,7 +435,7 @@ func TestUpdateConfigsWithEndpoint_FloatingIPEnabledWarnsAboutStrayAddress(t *te
 
 	assert.Equal(t, int32(1), assigns, "the managed floating IP must still be attached")
 	assert.Contains(t, output, "fip-cluster-floating-ip-old")
-	assert.Contains(t, output, "192.0.2.11")
+	assert.NotContains(t, output, "192.0.2.11", "addresses stay out of default output")
 	assert.NotContains(t, output, "fip-cluster-floating-ip (192.0.2.10)",
 		"the managed address is not a stray")
 }

@@ -85,6 +85,19 @@ func ExportPlannedVersionDrift(cmd *cobra.Command, cfg *v1alpha1.Cluster,
 	return result
 }
 
+// ExportResolveDimensionTarget exercises discovery without constructing a provisioner.
+func ExportResolveDimensionTarget(
+	cmd *cobra.Command,
+	resolver versionresolver.Resolver,
+	label, currentVersion string,
+	imagePlanner clusterupdate.DistributionImagePlanner,
+) (string, string, bool) {
+	return resolveDimensionTarget(cmd, resolver, versionDimension{
+		label: label, currentVersion: currentVersion,
+		imageRef: "registry.invalid/ksail/node", imagePlanner: imagePlanner,
+	})
+}
+
 // ExportSetEKSIdentityClientFactory replaces SDK client construction for offline lifecycle tests.
 func ExportSetEKSIdentityClientFactory(
 	factory func(
