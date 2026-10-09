@@ -310,6 +310,7 @@ func TestExportWithSpecificImages(t *testing.T) {
 	exportCmd := []string{
 		ctrCommand, "--namespace=k8s.io", "images", "export",
 		"--platform", "linux/amd64",
+		"--local",
 		"/root/ksail-images-export.tar", "docker.io/library/nginx:latest",
 	}
 	setupExecMockWithCmdForExporter(
@@ -431,6 +432,7 @@ func TestExportK3sDistribution(t *testing.T) {
 	k3dExportCmd := []string{
 		ctrCommand, "--namespace=k8s.io", "images", "export",
 		"--platform", "linux/amd64",
+		"--local",
 		"/tmp/ksail-images-export.tar", "docker.io/library/nginx:latest",
 	}
 	setupExecMockWithCmdForExporter(
@@ -497,6 +499,7 @@ func TestExportEmptyProvider(t *testing.T) {
 			"export",
 			"--platform",
 			"linux/amd64",
+			"--local",
 			"/root/ksail-images-export.tar",
 			"docker.io/library/nginx:latest",
 		},
@@ -555,6 +558,7 @@ func TestExportCopyFromContainerFails(t *testing.T) {
 			"export",
 			"--platform",
 			"linux/amd64",
+			"--local",
 			"/root/ksail-images-export.tar",
 			"docker.io/library/nginx:latest",
 		},
@@ -903,6 +907,7 @@ func TestExportListImagesFiltersDigests(t *testing.T) {
 	exportCmd := []string{
 		ctrCommand, "--namespace=k8s.io", "images", "export",
 		"--platform", "linux/amd64",
+		"--local",
 		"/root/ksail-images-export.tar", "nginx:latest", "redis:alpine",
 	}
 	setupExecMockWithCmdForExporter(ctx, t, mockClient, "my-cluster-control-plane", exportCmd)
@@ -1006,6 +1011,7 @@ func buildKindCtrExportCommand(images ...string) []string {
 		"export",
 		"--platform",
 		"linux/amd64",
+		"--local",
 		kindExporterTarPath,
 	)
 
@@ -1135,6 +1141,9 @@ func setupPlatformDetectMockForExporter(
 
 	setupExecMockWithStdoutForExporter(ctx, t, mockClient, containerName,
 		[]string{"uname", "-m"}, "x86_64\n")
+	setupExecMockWithStdoutForExporter(ctx, t, mockClient, containerName,
+		[]string{ctrCommand, "--namespace=k8s.io", "images", "export", "--help"},
+		"OPTIONS:\n   --local  Use client-side export\n   --help, -h  Show help\n")
 }
 
 func setupEmptyImageListMockForExporter(
@@ -1370,7 +1379,7 @@ func setupFallbackRepairRetryMocks(
 }
 
 func matchesSingleImageExportCommand(opts container.ExecOptions, imageRef string) bool {
-	return len(opts.Cmd) == 8 && opts.Cmd[len(opts.Cmd)-1] == imageRef
+	return len(opts.Cmd) == 9 && opts.Cmd[len(opts.Cmd)-1] == imageRef
 }
 
 // setupBulkExportFailMock sets up the mock for the initial bulk export that fails.
