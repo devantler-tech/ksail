@@ -55,6 +55,7 @@ type prerequisiteFixture struct {
 	mu          sync.Mutex
 	objects     map[string]map[string]any
 	writes      []string
+	beforeGet   func(http.ResponseWriter, *http.Request) bool
 	beforeWrite func(*http.Request, map[string]any)
 	kubeconfig  string
 	version     int
@@ -234,6 +235,10 @@ func (fixture *prerequisiteFixture) serveDelete(
 }
 
 func (fixture *prerequisiteFixture) serveGet(writer http.ResponseWriter, request *http.Request) {
+	if fixture.beforeGet != nil && fixture.beforeGet(writer, request) {
+		return
+	}
+
 	if object := fixture.objects[request.URL.Path]; object != nil {
 		fixtureJSON(writer, object)
 

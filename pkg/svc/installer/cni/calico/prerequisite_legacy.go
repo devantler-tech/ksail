@@ -3,10 +3,10 @@ package calicoinstaller
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -91,11 +91,13 @@ func (plan *prerequisitePlan) captureLegacyResource(
 func (plan *prerequisitePlan) captureLegacyObject(
 	ctx context.Context,
 	resource schema.GroupVersionResource,
-	object *unstructured.Unstructured,
+	object metav1.Object,
 ) error {
-	if plan.isDependency(object) {
-		// Revalidate recorded provenance and content without adopting the object.
-		return plan.inspectDependency(ctx, object, object)
+	ref := refForObject(resource, object)
+	if slices.ContainsFunc(plan.state.Dependencies, func(dependency prerequisiteDependency) bool {
+		return dependency.key() == ref.key()
+	}) {
+		return plan.inspectListedDependency(ctx, resource, object)
 	}
 
 	annotations := object.GetAnnotations()
@@ -111,8 +113,6 @@ func (plan *prerequisitePlan) captureLegacyObject(
 		)
 	}
 
-	ref := refForObject(resource, object)
-
 	err := recordedPrerequisiteIdentity(plan.state, ref)
 	if err != nil {
 		return err
@@ -123,17 +123,39 @@ func (plan *prerequisitePlan) captureLegacyObject(
 	return nil
 }
 
+func (plan *prerequisitePlan) inspectListedDependency(
+	ctx context.Context,
+	resource schema.GroupVersionResource,
+	object metav1.Object,
+) error {
+	live, err := plan.client.Resource(resource).Get(ctx, object.GetName(), metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("inspect recorded Calico dependency %s: %w", object.GetName(), err)
+	}
+
+	if object.GetUID() == "" || object.GetResourceVersion() == "" ||
+		live.GetUID() != object.GetUID() || live.GetResourceVersion() != object.GetResourceVersion() {
+		return prerequisiteError("listed Calico dependency identity changed")
+	}
+	// Revalidate recorded provenance and content without adopting the object.
+	return plan.inspectDependency(ctx, live, live)
+}
+
 func (plan *prerequisitePlan) listLegacyResources(
 	ctx context.Context,
 	resource schema.GroupVersionResource,
 ) (
-	*unstructured.UnstructuredList, schema.GroupVersionResource, error,
+	*metav1.PartialObjectMetadataList, schema.GroupVersionResource, error,
 ) {
-	objects, err := plan.client.Resource(resource).List(ctx, metav1.ListOptions{})
+	if plan.meta == nil {
+		return nil, resource, prerequisiteError("legacy Calico metadata client is unavailable")
+	}
+
+	objects, err := plan.meta.Resource(resource).List(ctx, metav1.ListOptions{})
 	if apierrors.IsNotFound(err) && resource.Group == "admissionregistration.k8s.io" {
 		resource.Version = "v1beta1"
 
-		objects, err = plan.client.Resource(resource).List(ctx, metav1.ListOptions{})
+		objects, err = plan.meta.Resource(resource).List(ctx, metav1.ListOptions{})
 		if apierrors.IsNotFound(err) {
 			return nil, resource, nil
 		}

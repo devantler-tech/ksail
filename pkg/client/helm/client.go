@@ -249,6 +249,13 @@ func (c *Client) UninstallRelease(ctx context.Context, releaseName, namespace st
 
 	client := helmv4action.NewUninstall(c.actionConfig)
 	client.KeepHistory = false
+	client.WaitStrategy = helmv4kube.HookOnlyStrategy
+	client.Timeout = DefaultTimeout
+
+	waitContext, cancel := context.WithTimeout(ctx, DefaultTimeout)
+	defer cancel()
+
+	client.WaitOptions = []helmv4kube.WaitOption{helmv4kube.WithWaitContext(waitContext)}
 
 	_, uninstallErr := client.Run(releaseName)
 	if uninstallErr != nil {

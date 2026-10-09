@@ -168,7 +168,9 @@ runs:
       id: workload-push-reconcile
       if: >-
         contains(format(' {0} ', inputs.args), ' --gitops-engine Flux ') ||
-        contains(format(' {0} ', inputs.args), ' --gitops-engine ArgoCD ')
+        contains(format(' {0} ', inputs.args), ' --gitops-engine=Flux ') ||
+        contains(format(' {0} ', inputs.args), ' --gitops-engine ArgoCD ') ||
+        contains(format(' {0} ', inputs.args), ' --gitops-engine=ArgoCD ')
       shell: bash
       env:
         ARGS: ${{ inputs.args }}
@@ -210,9 +212,9 @@ runs:
         fi
 
         # Do not echo ARGS: on registry legs it carries GHCR credentials.
-        case "$ARGS" in
-          *"--gitops-engine ArgoCD"*) engine=ArgoCD ;;
-          *"--gitops-engine Flux"*) engine=Flux ;;
+        case " $ARGS " in
+          *" --gitops-engine ArgoCD "*|*" --gitops-engine=ArgoCD "*) engine=ArgoCD ;;
+          *" --gitops-engine Flux "*|*" --gitops-engine=Flux "*) engine=Flux ;;
           *) echo "❌ could not determine the GitOps engine from the action args" >&2; exit 1 ;;
         esac
         "$GITHUB_WORKSPACE/.github/scripts/assert-gitops-deployed.sh" "$engine" "$fixture"
