@@ -213,6 +213,23 @@ jobs:
               - '.github/fixtures/workflow-run-cleanup/**'
               - '.github/fixtures/talos-schematic-trial.yaml'
               - 'internal/ciharness/**'
+              # Authenticate every copied byte, including embedded data and
+              # metadata edits that the shared Go source filter does not select.
+              - 'third_party/cel-go/**'
+              - 'third_party/glamour/**'
+              - 'third_party/go-macholibre/**'
+              - 'third_party/kyverno-jmespath/**'
+              - 'third_party/jmespath/**'
+              - 'third_party/ansi/**'
+              - 'third_party/ansi-runtime/**'
+              - 'third_party/redisotel/**'
+              - 'third_party/rediscmd/**'
+              - 'third_party/dynamiclistener/**'
+              - '.gitattributes'
+              - '.mega-linter.yml'
+              - '.jscpd.json'
+              - 'go.mod'
+              - 'go.sum'
             # The release build configuration is the subject of Go tests too: the OTel
             # reachability guard in pkg/client/kubescape pins a digest of every file below, and
             # other tests read the GoReleaser files and the CD workflow. The org-required Go

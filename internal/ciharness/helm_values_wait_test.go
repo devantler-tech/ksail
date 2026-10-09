@@ -19,6 +19,9 @@ if [[ "$1" == wait ]]; then
   exit 0
 fi
 [[ "$1" == get ]] || exit 99
+if [[ "$FIXTURE_MODE" == converges-slow-reader ]]; then
+  sleep 0.4
+fi
 if [[ "$2" == helmrelease/values-probe ]]; then
   reads=0
   [[ ! -f "$FIXTURE_DIR/reads" ]] || read -r reads < "$FIXTURE_DIR/reads"
@@ -60,9 +63,15 @@ printf '%s\n' "$*" >> "$FIXTURE_DIR/timeouts"
 [[ "$1" == --kill-after=1s ]] || exit 99
 shift
 [[ "$1" =~ ^[0-9]+s$ ]] || exit 99
+limit="$1"
 shift
-# Keep the actual process termination behavior; shorten only the fixture clock.
-exec "$FIXTURE_TIMEOUT" --kill-after=0.1s 0.3s "$@"
+# Shorten only the deliberately hanging reader, never healthy subprocesses.
+# The outer real deadline still catches a missing production timeout.
+if [[ "$FIXTURE_MODE" == release-reader-hang && "$3" == helmrelease/values-probe ]] ||
+   [[ "$FIXTURE_MODE" == child-reader-hang && "$3" == configmap/values-probe ]]; then
+  limit=0.3s
+fi
+exec "$FIXTURE_TIMEOUT" --kill-after=0.1s "$limit" "$@"
 `
 
 func writeHelmValuesWaitFixture(t *testing.T, dir, mode string) {
@@ -139,12 +148,11 @@ func runHelmValuesWaitFixture(t *testing.T, mode string) (string, string, error)
 	require.NoError(t, err, "GNU timeout is required for the process-bound regression")
 
 	// The outer real-process deadline makes an unbounded reader fail safely in RED.
-	//nolint:gosec // Fixed repository-owned call site and private reader fixtures.
-	command := exec.CommandContext(
+	command := exec.CommandContext( //nolint:gosec // Fixed repository-owned call site and private reader fixtures.
 		t.Context(),
 		timeoutPath,
 		"--kill-after=0.1s",
-		"3s",
+		"10s",
 		"bash",
 		path,
 	)
@@ -174,6 +182,15 @@ func TestHelmValuesWaitBoundsHangingReaders(t *testing.T) {
 			require.ErrorAs(t, err, &exitErr, output)
 			assert.Equal(t, 1, exitErr.ExitCode(), output)
 			assert.Contains(t, output, "native Flux observation is incomplete or differs")
+
+			if mode == "child-reader-hang" {
+				assert.Contains(t,
+					calls,
+					"get configmap/values-probe",
+					"the intended hanging reader must be reached",
+				)
+			}
+
 			assert.NotContains(t, calls, "create ")
 			assert.NotContains(t, calls, "delete ")
 		})
@@ -183,7 +200,7 @@ func TestHelmValuesWaitBoundsHangingReaders(t *testing.T) {
 func TestHelmValuesWaitForCompleteReconciliation(t *testing.T) {
 	t.Parallel()
 
-	for _, mode := range []string{"converges", "transient-release-failure"} {
+	for _, mode := range []string{"converges", "transient-release-failure", "converges-slow-reader"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 

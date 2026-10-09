@@ -1,0 +1,55 @@
+name: "Release"
+
+permissions:
+  contents: read
+
+# there should never be two releases in progress at the same time
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: tag the latest commit on main with the given version (prefixed with v)
+        required: true
+
+jobs:
+
+  version-available:
+    uses: anchore/workflows/.github/workflows/check-version-available.yaml@4f25313f96311410cad4173f74617654a3e46d48 # v0.3.0
+    with:
+      version: ${{ github.event.inputs.version }}
+
+  check-gate:
+    permissions:
+      checks: read   # required for getting the status of specific check names
+    uses: anchore/workflows/.github/workflows/check-gate.yaml@4f25313f96311410cad4173f74617654a3e46d48 # v0.3.0
+    with:
+      # these are checks that should be run on pull-request and merges to main.
+      # we do NOT want to kick off a release if these have not been verified on main.
+      # Please see the validations.yaml workflow for the names that should be used here.
+      checks: '["Static analysis", "Unit tests"]'
+
+  release:
+    needs: [check-gate, version-available]
+    environment: release  # contains secrets needed for release
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write   # needed for creating github release objects
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+        with:
+          fetch-depth: 0  # we need the full history to reason about changelogs and tags
+          persist-credentials: true  # needed for pushing a tag
+
+      # setup checkout, go, go-make, binny, and cache go modules
+      - uses: anchore/go-make/.github/actions/setup@383ef7852b8ae43a30f424896b52479186d2ea4d # v0.1.0
+
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          RELEASE_VERSION: ${{ github.event.inputs.version }}
+        run: make ci-release
