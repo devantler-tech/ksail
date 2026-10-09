@@ -95,11 +95,16 @@ case "$1 $2" in
   printf 'Secret\tsh.helm.release.v1.calico-crds.v1\t%s\n' "$uid" ;;
 'get customresourcedefinitions.'*)
   if [[ "$CASE" == update-failure ]]; then
-    jq '.items += [{apiVersion:"admissionregistration.k8s.io/v1",kind:"MutatingAdmissionPolicy",
+    show_managed_fields=false
+    [[ " $* " != *' --show-managed-fields '* ]] || show_managed_fields=true
+    jq --argjson showManagedFields "$show_managed_fields" '.items += [{apiVersion:"admissionregistration.k8s.io/v1",kind:"MutatingAdmissionPolicy",
       metadata:{name:"policytypes.policy.projectcalico.org",uid:"operator-policy-uid",
+        labels:{"operator.tigera.io/mutating-admission-policy":"managed",
+          "unrelated.example.com/value":"sensitive-fixture-marker"},
         annotations:{"unrelated.example.com/value":"sensitive-fixture-marker"},
         managedFields:[{manager:"tigera-operator",operation:"Update"}]},
-      spec:{unrelated:"sensitive-fixture-marker"}}]' "$FIXTURE/identities.json"
+      spec:{unrelated:"sensitive-fixture-marker"}}] |
+      if $showManagedFields then . else .items |= map(del(.metadata.managedFields)) end' "$FIXTURE/identities.json"
   elif [[ "$CASE" == legacy-incomplete ]]; then
     jq '.items |= .[0:-1]' "$FIXTURE/identities.json"
   elif [[ "$CASE" == legacy-extra ]]; then
@@ -196,7 +201,7 @@ for scenario in valid k3s vcluster baseline legacy-incomplete legacy-extra incom
 	fi
 	if [[ "$scenario" == update-failure ]]; then
 		jq -e 'length == 1 and .[0] == {kind:"MutatingAdmissionPolicy",
-          legacyHelmOwner:false, ksailOwner:false, writers:["TigeraOperator"]}' \
+          legacyHelmOwner:false, ksailOwner:false, operatorManagedLabel:true, writers:["TigeraOperator"]}' \
 			"$fixture/logs-$scenario/calico-migration/prerequisite-ownership.json" >/dev/null
 		diagnostics=$(cat "$fixture/logs-$scenario/calico-migration/prerequisite-ownership.json")
 		[[ "$diagnostics" != *sensitive-fixture-marker* ]] || {

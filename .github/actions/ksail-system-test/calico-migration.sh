@@ -67,13 +67,14 @@ resource_types='customresourcedefinitions.apiextensions.k8s.io,mutatingadmission
 # Record only fixed classifications for the public chart target implicated by
 # migration refusals. Never publish identities, versions, arbitrary labels,
 # annotations, manager names, owner references or object contents.
-kubectl get "$resource_types" --request-timeout=30s --output json "${cli_target[@]}" |
+kubectl get "$resource_types" --request-timeout=30s --show-managed-fields --output json "${cli_target[@]}" |
 	jq '[.items[] | select(.metadata.name == "policytypes.policy.projectcalico.org") | {
     kind,
     legacyHelmOwner: (.metadata.labels["app.kubernetes.io/managed-by"] == "Helm" and
       .metadata.annotations["meta.helm.sh/release-name"] == "calico-crds" and
       .metadata.annotations["meta.helm.sh/release-namespace"] == "tigera-operator"),
     ksailOwner: (.metadata.labels["ksail.io/component"] == "calico-prerequisites"),
+    operatorManagedLabel: (.metadata.labels["operator.tigera.io/mutating-admission-policy"] == "managed"),
     writers: [(.metadata.managedFields // [])[] |
       if .manager == "helm" then "Helm"
       elif .manager == "tigera-operator" then "TigeraOperator"
