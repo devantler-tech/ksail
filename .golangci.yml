@@ -117,6 +117,8 @@ linters:
         - github.com/kubescape/kubescape/v3
         - github.com/moby/go-archive
         - k8s.io/pod-security-admission
+        # Flux meta's unchanged API retains the embedded Kubernetes minor (#7259).
+        - k8s.io/apimachinery
     wsl_v5:
       allow-first-in-block: true
       allow-whole-block: false
