@@ -36,6 +36,7 @@ const (
 	prerequisiteDecodeBuffer = 4096
 	configMapResource        = "configmaps"
 	secretResource           = "secrets"
+	admissionBetaVersion     = "v1beta1"
 )
 
 var errInvalidPrerequisites = errors.New("invalid Calico prerequisites")
@@ -63,9 +64,10 @@ func (r prerequisiteRef) key() string {
 }
 
 type prerequisiteState struct {
-	Version   string            `json:"version"`
-	Complete  bool              `json:"complete"`
-	Resources []prerequisiteRef `json:"resources"`
+	Version      string                   `json:"version"`
+	Complete     bool                     `json:"complete"`
+	Resources    []prerequisiteRef        `json:"resources"`
+	Dependencies []prerequisiteDependency `json:"dependencies,omitempty"`
 }
 
 type prerequisitePlan struct {
@@ -74,6 +76,7 @@ type prerequisitePlan struct {
 	objects   []*unstructured.Unstructured
 	state     prerequisiteState
 	inventory *corev1.ConfigMap
+	meta      metadata.Interface
 }
 
 func prerequisiteResource(object *unstructured.Unstructured) (schema.GroupVersionResource, error) {
@@ -115,7 +118,7 @@ func prerequisiteResourceForKind(gvk schema.GroupVersionKind) string {
 	}
 
 	if gvk.Group != "admissionregistration.k8s.io" ||
-		(gvk.Version != "v1" && gvk.Version != "v1beta1") {
+		(gvk.Version != "v1" && gvk.Version != admissionBetaVersion) {
 		return ""
 	}
 
@@ -274,22 +277,44 @@ func readPrerequisiteState(
 		return nil, state, fmt.Errorf("decode Calico inventory: %w", err)
 	}
 
+	err = validatePrerequisiteState(state)
+	if err != nil {
+		return nil, state, err
+	}
+
+	return object, state, nil
+}
+
+func validatePrerequisiteState(state prerequisiteState) error {
 	seen := make(map[string]bool)
 
 	for _, ref := range state.Resources {
-		err = validatePrerequisiteRef(ref)
+		err := validatePrerequisiteRef(ref)
 		if err != nil {
-			return nil, state, err
+			return err
 		}
 
 		if seen[ref.key()] {
-			return nil, state, prerequisiteError("Calico inventory contains duplicate identities")
+			return prerequisiteError("Calico inventory contains duplicate identities")
 		}
 
 		seen[ref.key()] = true
 	}
 
-	return object, state, nil
+	for _, dependency := range state.Dependencies {
+		err := validateDependencyRef(dependency)
+		if err != nil {
+			return err
+		}
+
+		if seen[dependency.key()] {
+			return prerequisiteError("Calico inventory contains overlapping identities")
+		}
+
+		seen[dependency.key()] = true
+	}
+
+	return nil
 }
 
 func validatePrerequisiteRef(ref prerequisiteRef) error {
@@ -422,6 +447,7 @@ func (c *Installer) loadPrerequisitePlan(
 		core:      core,
 		inventory: inventory,
 		state:     state,
+		meta:      meta,
 	}, meta, nil
 }
 
@@ -499,7 +525,12 @@ func (plan *prerequisitePlan) captureLegacy(ctx context.Context, meta metadata.I
 }
 
 func (plan *prerequisitePlan) apply(ctx context.Context) error {
-	err := plan.ensureNamespace(ctx)
+	err := plan.revalidateDependencies(ctx)
+	if err != nil {
+		return err
+	}
+
+	err = plan.ensureNamespace(ctx)
 	if err != nil {
 		return err
 	}
@@ -512,6 +543,10 @@ func (plan *prerequisitePlan) apply(ctx context.Context) error {
 	}
 
 	for _, object := range plan.objects {
+		if plan.isDependency(object) {
+			continue
+		}
+
 		err = plan.applyObject(ctx, object)
 		if err != nil {
 			return err

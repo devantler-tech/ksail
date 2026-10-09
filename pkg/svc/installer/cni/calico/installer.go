@@ -333,14 +333,7 @@ func (c *Installer) installCalico(ctx context.Context) error {
 		return fmt.Errorf("install or upgrade calico: %w", operatorErr)
 	}
 
-	plan.state.Complete = true
-
-	err = plan.save(ctx)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return plan.complete(ctx)
 }
 
 // runInstallWithRetry installs a chart, retrying transient bootstrap failures

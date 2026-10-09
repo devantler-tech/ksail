@@ -78,7 +78,7 @@ jq -n '[{name:"calico",status:"deployed",chart:"tigera-operator-v3.32.2"},{name:
 jq -n --arg version "$target_version" '[{name:"calico",status:"deployed",chart:("tigera-operator-" + $version)},{name:"calico-crds",status:"deployed",chart:"projectcalico.org.v3-v3.32.2"}]' >"$fixture/after-releases.json"
 jq -n '{totalChanges:1,inPlaceChanges:[{field:"cluster.cni.calico.prerequisites"}],rebootRequired:[],recreateRequired:[],rollingRecreate:[],wipeRequired:[],unknownBaseline:[]}' >"$fixture/before-diff.json"
 jq -n '{totalChanges:0,inPlaceChanges:[],rebootRequired:[],recreateRequired:[],rollingRecreate:[],wipeRequired:[],unknownBaseline:[]}' >"$fixture/after-diff.json"
-jq -n --arg version "$target_version" '{metadata:{labels:{"ksail.io/component":"calico-prerequisites"}},data:{"inventory.json":({complete:true,version:$version,resources:([range(1;40) | {uid:("uid-" + tostring)}] + [{storage:true,resource:"secrets",name:"sh.helm.release.v1.calico-crds.v1",namespace:"tigera-operator",uid:"history-uid"}])} | tojson)}}' >"$fixture/inventory.json"
+jq -n --arg version "$target_version" '{metadata:{labels:{"ksail.io/component":"calico-prerequisites"}},data:{"inventory.json":({complete:true,version:$version,resources:([range(1;40) | {group:"apiextensions.k8s.io",resource:"customresourcedefinitions",name:("fixture-" + tostring),uid:("uid-" + tostring)}] + [{storage:true,resource:"secrets",name:"sh.helm.release.v1.calico-crds.v1",namespace:"tigera-operator",uid:"history-uid"}])} | tojson)}}' >"$fixture/inventory.json"
 jq -n --arg version "$target_version" '{spec:{template:{spec:{containers:[{name:"calico-node",image:("docker.io/calico/node:" + $version)}]}}}}' >"$fixture/node.json"
 
 cat >"$fixture/bin/kubectl" <<'SH'
@@ -93,8 +93,20 @@ case "$1 $2" in
   uid=history-uid
   if [[ -f "$FIXTURE/updated" && "$CASE" == history-replaced ]]; then uid=replacement; fi
   printf 'Secret\tsh.helm.release.v1.calico-crds.v1\t%s\n' "$uid" ;;
+'get installation')
+  printf '%s\n' '{"metadata":{"uid":"installation-fixture","labels":{"app.kubernetes.io/managed-by":"Helm"},"annotations":{"meta.helm.sh/release-name":"calico","meta.helm.sh/release-namespace":"tigera-operator"}}}' ;;
 'get customresourcedefinitions.'*)
-  if [[ "$CASE" == update-failure ]]; then
+  if [[ "$CASE" == dependencies || "$CASE" == dependency-* ]]; then
+    uid=uid-39
+    ksail_owner=false
+    if [[ -f "$FIXTURE/updated" && "$CASE" == dependency-replaced ]]; then uid=replacement; fi
+    if [[ -f "$FIXTURE/updated" && ("$CASE" == dependency-adopted || "$CASE" == dependency-reclassified) ]]; then ksail_owner=true; fi
+    jq --arg uid "$uid" --argjson ksailOwner "$ksail_owner" '.items += [{
+      apiVersion:"admissionregistration.k8s.io/v1",kind:"MutatingAdmissionPolicy",
+      metadata:{name:"fixture-39",uid:$uid,
+        labels:(if $ksailOwner then {"ksail.io/component":"calico-prerequisites"} else {} end)}}]' \
+      "$FIXTURE/identities.json"
+  elif [[ "$CASE" == update-failure ]]; then
     show_managed_fields=false
     [[ " $* " != *' --show-managed-fields '* ]] || show_managed_fields=true
     jq --argjson showManagedFields "$show_managed_fields" '.items += [{apiVersion:"admissionregistration.k8s.io/v1",kind:"MutatingAdmissionPolicy",
@@ -119,6 +131,16 @@ case "$1 $2" in
     jq '.data["inventory.json"] |= (fromjson | .complete = false | tojson)' "$FIXTURE/inventory.json"
   elif [[ "$CASE" == inventory-short ]]; then
     jq '.data["inventory.json"] |= (fromjson | .resources |= map(select(.uid != "uid-39")) | tojson)' "$FIXTURE/inventory.json"
+  elif [[ "$CASE" == dependencies || "$CASE" == dependency-* ]]; then
+    jq --arg scenario "$CASE" '.data["inventory.json"] |= (fromjson |
+      .dependencies = [.resources[] | select(.uid == "uid-39") |
+        .group = "admissionregistration.k8s.io" | .resource = "mutatingadmissionpolicies" |
+        .installationUid = "installation-fixture" | .specSha256 = ("a" * 64)] |
+      .resources |= map(select(.uid != "uid-39")) |
+      if $scenario == "dependency-incomplete" then .dependencies[0] |= del(.specSha256)
+      elif $scenario == "dependency-overlap" then .resources += [.dependencies[0]]
+      elif $scenario == "dependency-reclassified" then .resources += .dependencies | .dependencies = []
+      else . end | tojson)' "$FIXTURE/inventory.json"
   else cat "$FIXTURE/inventory.json"; fi ;;
 'get daemonset') cat "$FIXTURE/node.json" ;;
 'version --request-timeout=30s')
@@ -166,7 +188,7 @@ esac
 SH
 chmod +x "$fixture/bin/kubectl" "$fixture/bin/helm" "$fixture/bin/ksail"
 
-for scenario in valid k3s vcluster baseline legacy-incomplete legacy-extra incomplete inventory-short uid config history-missing history-replaced history-unrecorded diff-status update-failure; do
+for scenario in valid k3s vcluster dependencies dependency-incomplete dependency-overlap dependency-replaced dependency-adopted dependency-reclassified baseline legacy-incomplete legacy-extra incomplete inventory-short uid config history-missing history-replaced history-unrecorded diff-status update-failure; do
 	rm -f "$fixture/updated"
 	printf 'apiVersion: ksail.io/v1alpha1\nkind: Cluster\nspec:\n  cluster:\n    connection:\n      kubeconfig: %s/calico-migration.kubeconfig\n' "$fixture" >"$fixture/project/ksail.yaml"
 	status=0
@@ -178,7 +200,7 @@ for scenario in valid k3s vcluster baseline legacy-incomplete legacy-extra incom
 		DISTRIBUTION="$distribution" GITHUB_WORKSPACE="$action_dir/../../.." \
 		SYSTEM_TEST_LOG_DIR="$fixture/logs-$scenario" bash "$subject" migrate) \
 		>"$fixture/migrate-$scenario.log" 2>&1 || status=$?
-	if [[ "$scenario" == valid || "$scenario" == k3s || "$scenario" == vcluster ]]; then
+	if [[ "$scenario" == valid || "$scenario" == k3s || "$scenario" == vcluster || "$scenario" == dependencies ]]; then
 		[[ "$status" == 0 ]] || {
 			cat "$fixture/migrate-$scenario.log" >&2
 			exit 1
@@ -201,7 +223,8 @@ for scenario in valid k3s vcluster baseline legacy-incomplete legacy-extra incom
 	fi
 	if [[ "$scenario" == update-failure ]]; then
 		jq -e 'length == 1 and .[0] == {kind:"MutatingAdmissionPolicy",
-          legacyHelmOwner:false, ksailOwner:false, operatorManagedLabel:true, writers:["TigeraOperator"]}' \
+          legacyHelmOwner:false, ksailOwner:false, operatorManagedLabel:true,
+          installationHelmOwner:true, controllerUIDMatches:false, writers:["TigeraOperator"]}' \
 			"$fixture/logs-$scenario/calico-migration/prerequisite-ownership.json" >/dev/null
 		diagnostics=$(cat "$fixture/logs-$scenario/calico-migration/prerequisite-ownership.json")
 		[[ "$diagnostics" != *sensitive-fixture-marker* ]] || {
@@ -209,6 +232,10 @@ for scenario in valid k3s vcluster baseline legacy-incomplete legacy-extra incom
 			exit 1
 		}
 		grep -q 'fixture foreign or unknown ownership refusal' "$fixture/logs-$scenario/calico-migration/update.stderr"
+	fi
+	if [[ "$scenario" == dependencies ]]; then
+		jq -e '.operatorDependencyIdentitiesPreserved == true and .operatorDependenciesUnadopted == true' \
+			"$fixture/logs-$scenario/calico-migration/dependency-verdict.json" >/dev/null
 	fi
 	if [[ "$scenario" == baseline || "$scenario" == legacy-incomplete || "$scenario" == legacy-extra ]]; then
 		[[ ! -f "$fixture/updated" ]] || {

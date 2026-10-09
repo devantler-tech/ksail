@@ -82,7 +82,7 @@ func (c *Installer) prerequisitesGitOpsManaged(ctx context.Context) (bool, error
 }
 
 func (c *Installer) prerequisitesDrifted(ctx context.Context) (bool, error) {
-	resources, core, _, err := c.prerequisiteClients()
+	resources, core, meta, err := c.prerequisiteClients()
 	if err != nil {
 		return false, fmt.Errorf("calico drift inventory client: %w", err)
 	}
@@ -94,6 +94,13 @@ func (c *Installer) prerequisitesDrifted(ctx context.Context) (bool, error) {
 
 	if inventory == nil || !state.Complete || state.Version != chartVersion() {
 		return true, nil
+	}
+
+	plan := &prerequisitePlan{client: resources, core: core, meta: meta, state: state}
+
+	err = plan.revalidateDependencies(ctx)
+	if err != nil {
+		return false, fmt.Errorf("calico operator prerequisite drift: %w", err)
 	}
 
 	missing, err := prerequisitesMissing(ctx, resources, state)

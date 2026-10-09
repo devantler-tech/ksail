@@ -34,6 +34,10 @@ func (plan *prerequisitePlan) inspectTarget(
 
 	live, err := plan.client.Resource(resource).Get(ctx, object.GetName(), metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
+		if plan.isDependency(object) {
+			return prerequisiteError("Calico operator prerequisite identity is missing")
+		}
+
 		return nil
 	}
 
@@ -41,7 +45,7 @@ func (plan *prerequisitePlan) inspectTarget(
 		return fmt.Errorf("inspect Calico prerequisite %s: %w", object.GetName(), err)
 	}
 
-	if live.GetUID() == "" || !ownsPrerequisite(live) {
+	if live.GetUID() == "" {
 		return prerequisiteError(
 			"Calico prerequisite %s has foreign or unknown ownership",
 			object.GetName(),
@@ -52,6 +56,14 @@ func (plan *prerequisitePlan) inspectTarget(
 		return prerequisiteError("Calico prerequisite lacks resource version")
 	}
 
+	if !ownsPrerequisite(live) {
+		return plan.inspectExternalTarget(ctx, object, live)
+	}
+
+	if plan.isDependency(object) {
+		return prerequisiteError("Calico operator prerequisite ownership changed")
+	}
+
 	err = recordedPrerequisiteIdentity(plan.state, refForObject(resource, live))
 	if err != nil {
 		return err
@@ -59,6 +71,18 @@ func (plan *prerequisitePlan) inspectTarget(
 
 	object.SetUID(live.GetUID())
 	object.SetResourceVersion(live.GetResourceVersion())
+
+	return nil
+}
+
+func (plan *prerequisitePlan) inspectExternalTarget(
+	ctx context.Context, object, live *unstructured.Unstructured,
+) error {
+	err := plan.inspectDependency(ctx, object, live)
+	if err != nil {
+		return fmt.Errorf("calico prerequisite %s has foreign or unknown ownership: %w",
+			object.GetName(), err)
+	}
 
 	return nil
 }

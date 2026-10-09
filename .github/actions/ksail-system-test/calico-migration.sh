@@ -67,14 +67,24 @@ resource_types='customresourcedefinitions.apiextensions.k8s.io,mutatingadmission
 # Record only fixed classifications for the public chart target implicated by
 # migration refusals. Never publish identities, versions, arbitrary labels,
 # annotations, manager names, owner references or object contents.
+installation=$(kubectl get installation default --request-timeout=30s --output json "${cli_target[@]}" |
+	jq '{uid: .metadata.uid, helmOwner: (
+      .metadata.labels["app.kubernetes.io/managed-by"] == "Helm" and
+      .metadata.annotations["meta.helm.sh/release-name"] == "calico" and
+      .metadata.annotations["meta.helm.sh/release-namespace"] == "tigera-operator")}')
 kubectl get "$resource_types" --request-timeout=30s --show-managed-fields --output json "${cli_target[@]}" |
-	jq '[.items[] | select(.metadata.name == "policytypes.policy.projectcalico.org") | {
+	jq --argjson installation "$installation" '[.items[] | select(.metadata.name == "policytypes.policy.projectcalico.org") | {
     kind,
     legacyHelmOwner: (.metadata.labels["app.kubernetes.io/managed-by"] == "Helm" and
       .metadata.annotations["meta.helm.sh/release-name"] == "calico-crds" and
       .metadata.annotations["meta.helm.sh/release-namespace"] == "tigera-operator"),
     ksailOwner: (.metadata.labels["ksail.io/component"] == "calico-prerequisites"),
     operatorManagedLabel: (.metadata.labels["operator.tigera.io/mutating-admission-policy"] == "managed"),
+    installationHelmOwner: $installation.helmOwner,
+    controllerUIDMatches: ((.metadata.ownerReferences // []) | length == 1 and
+      .[0].apiVersion == "operator.tigera.io/v1" and .[0].kind == "Installation" and
+      .[0].name == "default" and .[0].controller == true and
+      ($installation.uid | type == "string" and length > 0) and .[0].uid == $installation.uid),
     writers: [(.metadata.managedFields // [])[] |
       if .manager == "helm" then "Helm"
       elif .manager == "tigera-operator" then "TigeraOperator"
@@ -88,6 +98,20 @@ read_prerequisites() {
       select(length > 0 and all(.[]; (.uid | type == "string" and length > 0))) | sort_by(.kind, .name)'
 }
 read_prerequisites >"$log_dir/before-identities.json"
+read_dependency_identities() {
+	# Keep unowned admission identities in memory; publish only the verdict below.
+	kubectl get "$resource_types" --request-timeout=30s --output json "${cli_target[@]}" |
+		jq '[.items[] | select((.apiVersion // "") | startswith("admissionregistration.k8s.io/")) |
+      {resource: ({MutatingAdmissionPolicy:"mutatingadmissionpolicies",
+        MutatingAdmissionPolicyBinding:"mutatingadmissionpolicybindings",
+        ValidatingAdmissionPolicy:"validatingadmissionpolicies",
+        ValidatingAdmissionPolicyBinding:"validatingadmissionpolicybindings"}[.kind]),
+       name: .metadata.name, uid: .metadata.uid,
+       legacyHelmOwner: (.metadata.annotations["meta.helm.sh/release-name"] == "calico-crds" and
+         .metadata.annotations["meta.helm.sh/release-namespace"] == "tigera-operator"),
+       ksailOwner: ((.metadata.labels // {}) | has("ksail.io/component"))}]'
+}
+before_dependencies=$(read_dependency_identities) || fail 'operator prerequisite identity capture failed'
 # The pinned 3.32.2 chart has 31 CRDs and six admission prerequisites. The
 # candidate adds two admission prerequisites, verified in its 39-object inventory.
 jq -e 'length == 37' "$log_dir/before-identities.json" >/dev/null || fail 'legacy prerequisite capture is incomplete'
@@ -132,10 +156,37 @@ kubectl get configmap ksail-calico-prerequisites --namespace tigera-operator --o
 jq -e --arg expected "$expected" '
   select(.metadata.labels["ksail.io/component"] == "calico-prerequisites") |
   (.data["inventory.json"] | fromjson) |
+  ([.resources[] | select(.storage != true)] + (.dependencies // [])) as $objects |
   .complete == true and (.version == $expected or .version == ($expected | ltrimstr("v"))) and
-  (.resources | map(select(.storage != true)) | length == 39) and
-  all(.resources[]; (.uid | type == "string" and length > 0))
+  ($objects | length == 39) and
+  ($objects | map([.group, .resource, (.namespace // ""), .name]) | unique | length == 39) and
+  all(.resources[]; (.uid | type == "string" and length > 0)) and
+  all((.dependencies // [])[];
+    .group == "admissionregistration.k8s.io" and .storage != true and
+    (.uid | type == "string" and length > 0) and
+    (.installationUid | type == "string" and length > 0) and
+    (.specSha256 | type == "string" and test("^[0-9a-f]{64}$")))
 ' "$log_dir/inventory.json" >/dev/null || fail 'candidate prerequisite inventory is incomplete'
+after_dependencies=$(read_dependency_identities) || fail 'operator prerequisite identity readback failed'
+jq -e --argjson before "$before_dependencies" --argjson after "$after_dependencies" '
+  (.data["inventory.json"] | fromjson) as $state |
+  ($state.dependencies // []) as $dependencies |
+  ($state.resources + $dependencies) as $objects |
+  all($dependencies[]; . as $dependency |
+    any($before[]; .resource == $dependency.resource and .name == $dependency.name and
+      .uid == $dependency.uid and .ksailOwner == false) and
+    any($after[]; .resource == $dependency.resource and .name == $dependency.name and
+      .uid == $dependency.uid and .ksailOwner == false)) and
+  all($before[] | select(.ksailOwner == false and .legacyHelmOwner == false); . as $old |
+    if any($objects[]; .group == "admissionregistration.k8s.io" and
+      .resource == $old.resource and .name == $old.name) then
+      any($dependencies[]; .resource == $old.resource and .name == $old.name and .uid == $old.uid) and
+      all($state.resources[]; .group != "admissionregistration.k8s.io" or
+        .resource != $old.resource or .name != $old.name)
+    else true end)
+' "$log_dir/inventory.json" >/dev/null || fail 'migration replaced or adopted an operator prerequisite'
+printf '{"operatorDependencyIdentitiesPreserved":true,"operatorDependenciesUnadopted":true}\n' \
+	>"$log_dir/dependency-verdict.json"
 jq -e --slurpfile history "$log_dir/before-history.json" '
   (.data["inventory.json"] | fromjson | .resources | map(select(.storage == true))) as $storage |
   all($history[0][]; . as $old | any($storage[]; .resource == $old.resource and .name == $old.name and
