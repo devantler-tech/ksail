@@ -26,6 +26,7 @@ import (
 const (
 	prerequisiteReleaseName  = "calico-crds"
 	helmStorageOwner         = "helm"
+	helmResourceManager      = "Helm"
 	prerequisiteCRDKind      = "CustomResourceDefinition"
 	prerequisiteNamespace    = "tigera-operator"
 	prerequisiteInventory    = "ksail-calico-prerequisites"
@@ -216,7 +217,7 @@ func ownsPrerequisite(object metav1.Object) bool {
 	}
 
 	return labels[prerequisiteOwnerKey] == prerequisiteOwner ||
-		(labels["app.kubernetes.io/managed-by"] == "Helm" &&
+		(labels["app.kubernetes.io/managed-by"] == helmResourceManager &&
 			annotations["meta.helm.sh/release-name"] == prerequisiteReleaseName &&
 			annotations["meta.helm.sh/release-namespace"] == prerequisiteNamespace)
 }

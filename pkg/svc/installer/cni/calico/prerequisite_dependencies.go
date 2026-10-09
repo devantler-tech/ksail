@@ -240,7 +240,7 @@ func ownsDependencyInstallation(installation *unstructured.Unstructured) bool {
 	annotations := installation.GetAnnotations()
 
 	return !hasGitOpsOwner(installation) &&
-		installation.GetLabels()["app.kubernetes.io/managed-by"] == "Helm" &&
+		installation.GetLabels()["app.kubernetes.io/managed-by"] == helmResourceManager &&
 		annotations["meta.helm.sh/release-name"] == calicoReleaseName &&
 		annotations["meta.helm.sh/release-namespace"] == prerequisiteNamespace
 }

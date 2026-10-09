@@ -38,6 +38,9 @@ type chartValuesDriftProbe struct {
 	needed func(*v1alpha1.Cluster) bool
 	// factory selects the component's installer factory.
 	factory func(*setup.InstallerFactories) installerFactory
+	// requireBaseline prevents an unverified prerequisite inventory from being
+	// reported as clean when the probe cannot complete.
+	requireBaseline bool
 }
 
 // autoscalerValuesProbe compares the Cluster Autoscaler's values (ksail#7366).
@@ -79,8 +82,9 @@ func chartValuesDriftProbes() []chartValuesDriftProbe {
 
 func calicoPrerequisitesProbe() chartValuesDriftProbe {
 	return chartValuesDriftProbe{
-		component: "calico",
-		field:     specdiff.CalicoPrerequisitesField,
+		component:       "calico",
+		field:           specdiff.CalicoPrerequisitesField,
+		requireBaseline: true,
 		needed: func(cfg *v1alpha1.Cluster) bool {
 			return cfg.Spec.Cluster.CNI == v1alpha1.CNICalico &&
 				cfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK
@@ -115,8 +119,8 @@ func checkChartValuesDrift(
 
 // checkComponentValuesDrift compares one component's installed release values
 // with the values this KSail version renders, and appends an in-place change
-// when they differ. Errors are logged as warnings and skipped: they should not
-// block the rest of the update.
+// when they differ. Required prerequisite baselines remain unknown on an
+// incomplete probe, so diff and update cannot report a false clean result.
 func checkComponentValuesDrift(
 	cmd *cobra.Command,
 	ctx *localregistry.Context,
@@ -127,6 +131,20 @@ func checkComponentValuesDrift(
 	if !probe.needed(ctx.ClusterCfg) {
 		return
 	}
+
+	baselineKnown := false
+
+	defer func() {
+		if probe.requireBaseline && !baselineKnown {
+			diff.UnknownBaseline = append(diff.UnknownBaseline, clusterupdate.Change{
+				Field:    probe.field,
+				OldValue: clusterupdate.UnknownBaselineValue,
+				NewValue: "verified prerequisites",
+				Category: clusterupdate.ChangeCategoryUnknown,
+				Reason:   "prerequisite identity and ownership could not be verified; baseline is unknown",
+			})
+		}
+	}()
 
 	factory := probe.factory(getInstallerFactories())
 	if factory == nil {
@@ -160,6 +178,8 @@ func checkComponentValuesDrift(
 
 		return
 	}
+
+	baselineKnown = true
 
 	diffEngine.CheckChartValues(probe.field, probe.component, drifted, diff)
 }

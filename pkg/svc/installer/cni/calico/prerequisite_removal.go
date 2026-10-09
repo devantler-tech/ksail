@@ -7,6 +7,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/metadata"
 )
@@ -20,8 +21,13 @@ func ownsLegacyStorage(object metav1.Object) bool {
 type prerequisiteRemoval struct {
 	plan            *prerequisitePlan
 	meta            metadata.Interface
-	versions        map[string]string
+	targets         map[string]prerequisiteRemovalTarget
 	operatorHistory map[string]operatorHistoryIdentity
+}
+
+type prerequisiteRemovalTarget struct {
+	resource        schema.GroupVersionResource
+	resourceVersion string
 }
 
 func (r *prerequisiteRemoval) record(ctx context.Context) error {
@@ -51,7 +57,8 @@ func (c *Installer) planPrerequisiteRemoval(ctx context.Context) (*prerequisiteR
 	}
 
 	removal := &prerequisiteRemoval{
-		plan: plan, meta: meta, versions: make(map[string]string), operatorHistory: operatorHistory,
+		plan: plan, meta: meta, targets: make(map[string]prerequisiteRemovalTarget),
+		operatorHistory: operatorHistory,
 	}
 	for _, ref := range plan.state.Resources {
 		err = removal.inspectTarget(ctx, ref)
@@ -64,9 +71,7 @@ func (c *Installer) planPrerequisiteRemoval(ctx context.Context) (*prerequisiteR
 }
 
 func (r *prerequisiteRemoval) inspectTarget(ctx context.Context, ref prerequisiteRef) error {
-	object, err := r.meta.Resource(ref.gvr()).
-		Namespace(ref.Namespace).
-		Get(ctx, ref.Name, metav1.GetOptions{})
+	object, resource, err := r.observeTarget(ctx, ref)
 	if apierrors.IsNotFound(err) {
 		return nil
 	}
@@ -75,7 +80,7 @@ func (r *prerequisiteRemoval) inspectTarget(ctx context.Context, ref prerequisit
 		return fmt.Errorf("inspect calico removal target %s: %w", ref.Name, err)
 	}
 
-	if object.UID != ref.UID {
+	if object.Name != ref.Name || object.Namespace != ref.Namespace || object.UID != ref.UID {
 		return prerequisiteError("Calico prerequisite %s identity changed", ref.Name)
 	}
 
@@ -92,9 +97,38 @@ func (r *prerequisiteRemoval) inspectTarget(ctx context.Context, ref prerequisit
 		return prerequisiteError("Calico removal observation lacks resource version")
 	}
 
-	r.versions[ref.key()] = object.ResourceVersion
+	r.targets[ref.key()] = prerequisiteRemovalTarget{
+		resource: resource, resourceVersion: object.ResourceVersion,
+	}
 
 	return nil
+}
+
+func (r *prerequisiteRemoval) observeTarget(
+	ctx context.Context, ref prerequisiteRef,
+) (*metav1.PartialObjectMetadata, schema.GroupVersionResource, error) {
+	resource := ref.gvr()
+	object, err := r.meta.Resource(resource).Namespace(ref.Namespace).
+		Get(ctx, ref.Name, metav1.GetOptions{})
+
+	if apierrors.IsNotFound(err) && resource.Group == admissionRegistrationGroup {
+		// A removed serving version does not prove object absence. Only change
+		// the version of this validated resource; inspection still fences the
+		// recorded name, scope, UID, ownership and current resource version.
+		resource.Version = "v1"
+		if ref.Version == "v1" {
+			resource.Version = admissionBetaVersion
+		}
+
+		object, err = r.meta.Resource(resource).Namespace(ref.Namespace).
+			Get(ctx, ref.Name, metav1.GetOptions{})
+	}
+
+	if err != nil {
+		return nil, resource, fmt.Errorf("observe Calico removal target: %w", err)
+	}
+
+	return object, resource, nil
 }
 
 func (r *prerequisiteRemoval) remove(ctx context.Context, timeout time.Duration) error {
@@ -133,22 +167,26 @@ func (r *prerequisiteRemoval) removeTarget(
 	ref prerequisiteRef,
 	timeout time.Duration,
 ) error {
-	version, observed := r.versions[ref.key()]
+	target, observed := r.targets[ref.key()]
 	if !observed {
 		return nil
 	}
 
-	client := r.meta.Resource(ref.gvr()).Namespace(ref.Namespace)
+	client := r.meta.Resource(target.resource).Namespace(ref.Namespace)
 
 	err := client.Delete(ctx, ref.Name, metav1.DeleteOptions{
-		Preconditions: &metav1.Preconditions{UID: &ref.UID, ResourceVersion: &version},
+		Preconditions: &metav1.Preconditions{
+			UID: &ref.UID, ResourceVersion: &target.resourceVersion,
+		},
 	})
 	if err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("delete calico prerequisite %s: %w", ref.Name, err)
 	}
 
+	ref.Version = target.resource.Version
+
 	err = wait.PollUntilContextTimeout(ctx, prerequisitePollInterval, timeout, true,
-		func(ctx context.Context) (bool, error) { return prerequisiteAbsent(ctx, client, ref) })
+		func(ctx context.Context) (bool, error) { return r.prerequisiteAbsent(ctx, ref) })
 	if err != nil {
 		return fmt.Errorf("wait for calico prerequisite %s absence: %w", ref.Name, err)
 	}
@@ -156,12 +194,11 @@ func (r *prerequisiteRemoval) removeTarget(
 	return nil
 }
 
-func prerequisiteAbsent(
+func (r *prerequisiteRemoval) prerequisiteAbsent(
 	ctx context.Context,
-	client metadata.ResourceInterface,
 	ref prerequisiteRef,
 ) (bool, error) {
-	object, err := client.Get(ctx, ref.Name, metav1.GetOptions{})
+	object, _, err := r.observeTarget(ctx, ref)
 	if apierrors.IsNotFound(err) {
 		return true, nil
 	}
@@ -170,7 +207,7 @@ func prerequisiteAbsent(
 		return false, fmt.Errorf("read calico prerequisite absence: %w", err)
 	}
 
-	if object.UID != ref.UID {
+	if object.Name != ref.Name || object.Namespace != ref.Namespace || object.UID != ref.UID {
 		return false, prerequisiteError("Calico prerequisite replaced during removal")
 	}
 
