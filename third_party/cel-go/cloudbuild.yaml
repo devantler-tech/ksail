@@ -1,0 +1,40 @@
+# Used by Google Cloud Build to run cel-go conformance tests and generate necessary file structure for TestGrid dashboard in Google Cloud Storage
+steps:
+        # - name: 'ubuntu'
+        #   # writes start time and #PR to started.json
+        #   args: ['bash', 'conformance/start.sh', '$COMMIT_SHA']
+        # # Because testgrid uses monotonically increasing, numerical ids as folder names and GCB generates random ids, the timestamp
+        # # at start is recorded and written to a file, then read at the end to ensure monotonically increasing numbers.
+        # - name: 'ubuntu'
+        #   # stores timestamp in _DATE to use as build id
+        #   args: ['bash', '-c', 'date +%Y%m%d%H%M%S > _DATE' ] # Will create folder of format YYYYMMDDHHMMSS
+        # - name: 'gcr.io/cloud-builders/gcloud'
+        #   # writes _DATE to GCS bucket so it can be used as GCS folder name
+        #   args: ['storage', 'cp', '--recursive', '_DATE', 'gs://cel-conformance']
+        # - name: 'gcr.io/cloud-builders/bazel'
+        #   # run conformance tests with bazel
+        #   args: ['test', '--test_output=all', 'conformance/ct_dashboard']
+        # - name: 'ubuntu'
+        #   # creates necessary format and folder structure for TestGrid to parse
+        #   args: ['bash', 'conformance/zip.sh']
+        # - name: 'gcr.io/cloud-builders/gcloud'
+        #   entrypoint: sh
+        #   # deploys folder of test results (with build id as folder name) to GCS
+        #   args: ['-c', 'gcloud storage cp --recursive $(cat _DATE) gs://cel-conformance/test-logs/']
+        - name: 'golang:1.23.0'
+          # check the integrity of the vendor directory
+          args: ['scripts/verify-vendor.sh']
+        - name: 'gcr.io/cloud-builders/bazel:7.3.2'
+          entrypoint: bazel
+          args:
+          - 'test'
+          - '--enable_bzlmod'
+          - '--test_output=errors'
+          - '--google_default_credentials'
+          - '--remote_cache=https://storage.googleapis.com/cel-go-remote-cache'
+          -  '...'
+          id: bazel-test
+          waitFor: ['-']
+timeout: 10m
+options:
+        machineType: 'E2_HIGHCPU_32'

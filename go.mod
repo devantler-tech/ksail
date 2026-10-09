@@ -359,7 +359,7 @@ require (
 	github.com/chainguard-dev/git-urls v1.0.2 // indirect
 	github.com/charithe/durationcheck v0.0.11 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
-	github.com/charmbracelet/x/ansi v0.11.7 // indirect
+	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect
 	github.com/charmbracelet/x/exp/slice v0.0.0-20260122224438-b01af16209d9 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
@@ -537,7 +537,7 @@ require (
 	github.com/golangci/unconvert v0.0.0-20250410112200-a129a6e6413e // indirect
 	github.com/goodhosts/hostsfile v0.1.7 // indirect
 	github.com/google/btree v1.1.3 // indirect
-	github.com/google/cel-go v0.31.0 // indirect
+	github.com/google/cel-go v0.31.0
 	github.com/google/certificate-transparency-go v1.3.3 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
@@ -1040,6 +1040,11 @@ require (
 // Dependency version pins: modules replaced here have upstream incompatibilities
 // that require pinning until the respective projects ship compatible releases.
 replace (
+	// Authenticate the complete release source instead of unavailable Git/LFS
+	// downloads (ksail#7131, ADR 0010). This qualified pin leaves future releases
+	// unaffected; remove it after an authenticated successor passes managed analysis.
+	github.com/anchore/go-macholibre v0.1.0 => ./third_party/go-macholibre
+
 	// image-factory v1.3.0 transitively pulls in grype v0.112.0 (via go-vex),
 	// which added a *DistroAlertData parameter to models.NewDocument. kubescape
 	// v3.0.48 still calls the 10-argument form and will not compile against
@@ -1048,6 +1053,12 @@ replace (
 	// so pinning grype back to v0.104.2 is safe. This replace can be removed
 	// once kubescape ships a release compatible with grype v0.106+.
 	github.com/anchore/grype => github.com/anchore/grype v0.104.2
+	// Same source authentication and removal condition as ADR 0010, without
+	// replacing newer Glamour releases.
+	github.com/charmbracelet/glamour v1.0.0 => ./third_party/glamour
+
+	// Preserve the selected runtime version with validated protocol parsing.
+	github.com/charmbracelet/x/ansi v0.11.7 => ./third_party/ansi-runtime
 
 	// k3d v5.9.0-rc.0 uses docker/docker monolith types. docker/cli v29 migrated
 	// to the new moby/moby/api and moby/moby/client split modules whose types are
@@ -1055,6 +1066,12 @@ replace (
 	// everything on the monolith type system.
 	github.com/docker/cli => github.com/docker/cli v28.3.1+incompatible
 	github.com/docker/docker => github.com/docker/docker v28.5.2+incompatible
+	// Same source authentication and removal condition as ADR 0010, without
+	// replacing newer CEL releases.
+	github.com/google/cel-go v0.31.0 => ./third_party/cel-go
+
+	// Authenticate the selected JMESPath source independently of shallow Git fetches.
+	github.com/jmespath/go-jmespath v0.4.1-0.20220621161143-b0104c826a24 => ./third_party/jmespath
 	// The v5.9.0 tag moved after Go's checksum database recorded its original
 	// source. Select that authenticated commit without accepting changed tag
 	// bytes (ksail#6781). This qualified replacement leaves future releases
@@ -1075,6 +1092,7 @@ replace (
 	// fixes patch.go without forcing the moby/moby split (or once KSail migrates to
 	// the split universe).
 	github.com/kubescape/kubescape/v3 => github.com/devantler/kubescape/v3 v3.0.49-0.20260529230755-084b6f1ebcc8
+	github.com/kyverno/go-jmespath v0.4.1-0.20231124160150-95e59c162877 => ./third_party/kyverno-jmespath
 
 	// loft-sh/log uses tablewriter v0.0.5 API which is incompatible with v1.x
 	// required by k9s, grype, and syft. This replace can be removed once
@@ -1109,6 +1127,15 @@ replace (
 	// longer imports libcontainer/user) — bumping it cannot go past v1.3.6 without
 	// reintroducing the break described above.
 	github.com/opencontainers/runc => github.com/opencontainers/runc v1.3.6
+
+	// The selected tag and original commit are unavailable through direct Git.
+	// Preserve every authenticated published source byte (ksail#7456, ADR 0010).
+	// Remove when an authenticated successor resolves the dependency test graph.
+	github.com/rancher/dynamiclistener v1.27.5 => ./third_party/dynamiclistener
+
+	// Authenticate the selected Redis instrumentation source and its companion.
+	github.com/redis/go-redis/extra/rediscmd/v9 v9.5.3 => ./third_party/rediscmd
+	github.com/redis/go-redis/extra/redisotel/v9 v9.5.3 => ./third_party/redisotel
 
 	// Compatibility adapter for the fixed OTel logging API. See
 	// third_party/otelzap/KSail-PATCH.md for provenance and removal conditions.
