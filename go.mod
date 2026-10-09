@@ -16,7 +16,7 @@ require (
 	github.com/fatih/color v1.19.0
 	github.com/fluxcd/helm-controller/api v1.6.5
 	github.com/fluxcd/kustomize-controller/api v1.9.5
-	github.com/fluxcd/pkg/apis/meta v1.31.0
+	github.com/fluxcd/pkg/apis/meta v1.32.0
 	github.com/fluxcd/source-controller/api v1.9.5
 	github.com/getsops/sops/v3 v3.13.3
 	github.com/gkampitakis/go-snaps v0.5.23
@@ -40,7 +40,7 @@ require (
 	helm.sh/helm/v4 v4.2.4
 	k8s.io/api v0.36.5
 	k8s.io/apiextensions-apiserver v0.36.5
-	k8s.io/apimachinery v0.36.5
+	k8s.io/apimachinery v0.37.0
 	k8s.io/cli-runtime v0.36.5
 	k8s.io/client-go v0.36.5
 	k8s.io/kubectl v0.36.5
@@ -1127,3 +1127,8 @@ tool (
 	github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 	golang.org/x/tools/cmd/deadcode
 )
+
+// Flux meta v1.32.0 has unchanged Go APIs but requires Kubernetes v0.37.0.
+// Keep its runtime compatible with the embedded v0.36 tools until #7259 lands.
+// Qualify this mapping so a later requirement cannot reuse it without validation.
+replace k8s.io/apimachinery v0.37.0 => k8s.io/apimachinery v0.36.5
