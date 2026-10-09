@@ -166,7 +166,9 @@ runs:
 
     - name: 🧪 ksail workload push and reconcile
       id: workload-push-reconcile
-      if: contains(inputs.args, '--gitops-engine')
+      if: >-
+        contains(format(' {0} ', inputs.args), ' --gitops-engine Flux ') ||
+        contains(format(' {0} ', inputs.args), ' --gitops-engine ArgoCD ')
       shell: bash
       env:
         ARGS: ${{ inputs.args }}

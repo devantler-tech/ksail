@@ -19,6 +19,7 @@ type Installer struct {
 	*cni.InstallerBase
 
 	distribution v1alpha1.Distribution
+	provider     v1alpha1.Provider
 	haEnabled    bool
 	podCIDR      string
 	// apiServerChecker is called before Helm operations to ensure the API server
@@ -50,13 +51,16 @@ const (
 // Option configures a Calico installer.
 type Option func(*Installer)
 
-// WithKubernetesProviderNetwork keeps Talos Calico IPAM in the same nested pod
-// network as the node configuration. Other providers keep their existing pool.
+// WithKubernetesProviderNetwork records the infrastructure backend and keeps
+// Talos Calico IPAM in the same nested pod network as the node configuration.
+// Other providers keep their existing pool.
 func WithKubernetesProviderNetwork(
 	provider v1alpha1.Provider,
 	network v1alpha1.OptionsKubernetes,
 ) Option {
 	return func(inst *Installer) {
+		inst.provider = provider
+
 		if provider != v1alpha1.ProviderKubernetes {
 			return
 		}
@@ -434,14 +438,19 @@ func (c *Installer) getCalicoValues() map[string]string {
 		if c.podCIDR != "" {
 			values["installation.calicoNetwork.ipPools[0].cidr"] = fmt.Sprintf("%q", c.podCIDR)
 		}
-	case v1alpha1.DistributionVanilla,
-		v1alpha1.DistributionK3s,
+	case v1alpha1.DistributionVanilla:
+		if c.provider == v1alpha1.ProviderDocker || c.provider == v1alpha1.ProviderKubernetes {
+			// These backends run Kind. Match the operator's detected value rather
+			// than applying the chart's empty default over its owned field.
+			values["installation.kubernetesProvider"] = `"Kind"`
+		}
+	case v1alpha1.DistributionK3s,
 		v1alpha1.DistributionVCluster,
 		v1alpha1.DistributionKWOK,
 		v1alpha1.DistributionEKS,
 		v1alpha1.DistributionGKE,
 		v1alpha1.DistributionAKS:
-		// Vanilla, K3s, VCluster, KWOK, EKS, GKE, and AKS use default values.
+		// K3s, VCluster, KWOK, EKS, GKE, and AKS use default values.
 	}
 
 	return values
