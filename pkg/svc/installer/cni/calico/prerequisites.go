@@ -124,7 +124,7 @@ func prerequisiteResourceForKind(gvk schema.GroupVersionKind) string {
 	}
 
 	return map[string]string{
-		"MutatingAdmissionPolicy":          "mutatingadmissionpolicies",
+		mutatingAdmissionPolicyKind:        "mutatingadmissionpolicies",
 		"MutatingAdmissionPolicyBinding":   "mutatingadmissionpolicybindings",
 		"ValidatingAdmissionPolicy":        "validatingadmissionpolicies",
 		"ValidatingAdmissionPolicyBinding": "validatingadmissionpolicybindings",

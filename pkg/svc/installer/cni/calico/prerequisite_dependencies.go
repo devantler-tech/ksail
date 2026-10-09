@@ -16,7 +16,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-const admissionRegistrationGroup = "admissionregistration.k8s.io"
+const (
+	admissionRegistrationGroup  = "admissionregistration.k8s.io"
+	mutatingAdmissionPolicyKind = "MutatingAdmissionPolicy"
+)
 
 // Dependencies are observed operator objects, never KSail's mutation/removal inventory.
 type prerequisiteDependency struct {
@@ -79,18 +82,9 @@ func (plan *prerequisitePlan) inspectDependency(
 		return err
 	}
 
-	wanted, err := prerequisiteSpecDigest(desired)
+	actual, err := verifiedOperatorSpecDigest(desired, live)
 	if err != nil {
 		return err
-	}
-
-	actual, err := prerequisiteSpecDigest(live)
-	if err != nil {
-		return err
-	}
-
-	if wanted != actual {
-		return prerequisiteError("Calico operator prerequisite content differs from the chart")
 	}
 
 	dependency := prerequisiteDependency{
@@ -175,7 +169,7 @@ func validateDependencyManagers(object *unstructured.Unstructured) error {
 	label := "operator.tigera.io/validating-admission-policy"
 
 	switch object.GetKind() {
-	case "MutatingAdmissionPolicy", "MutatingAdmissionPolicyBinding":
+	case mutatingAdmissionPolicyKind, "MutatingAdmissionPolicyBinding":
 		label = "operator.tigera.io/mutating-admission-policy"
 	case "ValidatingAdmissionPolicy", "ValidatingAdmissionPolicyBinding":
 	default:
