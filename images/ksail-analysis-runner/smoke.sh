@@ -32,7 +32,7 @@ if touch /usr/local/ksail-analysis-write-probe 2>/dev/null; then
 	echo 'Root filesystem unexpectedly writable' >&2
 	exit 1
 fi
-test "$(go version)" = "go version go1.26.8 linux/$(go env GOARCH)"
+test "$(go version)" = "go version go1.26.9 linux/$(go env GOARCH)"
 test "$(node --version)" = v22.23.3
 test "$(go env CGO_ENABLED)" = 1
 test "$(go env GOFLAGS)" = -tags=desktop
