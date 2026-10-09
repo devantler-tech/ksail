@@ -21,6 +21,7 @@ A GitHub composite action that orchestrates a full end-to-end system test of KSa
 - **Manifest Validate** (when `init` is enabled) — Validate generated manifests before cluster creation
 - **Cluster Create** — Create and start a Kubernetes cluster
 - **Cluster Info / List** — Verify cluster status and listing
+- **Calico Migration** (optional) — Create with an immutable Calico 3.32.2 baseline binary, then use the candidate CLI to update without editing configuration. Verify prerequisite UIDs, the complete inventory, the deployed operator and node image, and an empty final diff. `calico-migration-binary` requires its producer's `calico-migration-sha256`; both artifacts are addressed by immutable IDs in CI.
 
 ### Phase 4 — Online Tests (cluster running)
 

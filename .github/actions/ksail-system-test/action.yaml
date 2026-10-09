@@ -28,6 +28,14 @@ inputs:
     description: Additional arguments for project init/create
     required: false
     default: ""
+  calico-migration-binary:
+    description: Verified producer binary that creates a legacy Calico cluster before candidate updates
+    required: false
+    default: ""
+  calico-migration-sha256:
+    description: SHA-256 from the immutable baseline binary producer
+    required: false
+    default: ""
   kubernetes-upgrade-from:
     description: Known starting Kubernetes version for the optional Docker/Talos upgrade trial
     required: false
@@ -253,17 +261,27 @@ runs:
         SCHEMATIC_TRIAL: ${{ inputs.test-talos-schematic-rollout }}
         SERVER_TYPE: ${{ inputs.talos-schematic-server-type }}
         INIT: ${{ inputs.init }}
+        CALICO_BASELINE: ${{ inputs.calico-migration-binary }}
       run: |
         set -euo pipefail
         # Inject GHCR credentials into --local-registry if it contains ghcr.io
         RESOLVED_ARGS="$ARGS"
+        if [[ -n "${CALICO_BASELINE:-}" ]]; then
+          [[ " $ARGS " == *" --cni Calico "* && " $ARGS " != *" --kubeconfig"* ]] || {
+            echo 'Calico migration requires an explicit Calico CNI without a kubeconfig override' >&2
+            exit 1
+          }
+          test ! -e "$RUNNER_TEMP/calico-migration.kubeconfig"
+          RESOLVED_ARGS="$RESOLVED_ARGS --kubeconfig $RUNNER_TEMP/calico-migration.kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/calico-migration.kubeconfig" >> "$GITHUB_ENV"
+        fi
         if [[ -n "${SERVER_TYPE:-}" && "${SCHEMATIC_TRIAL:-false}" != true ]]; then
           echo "❌ ERROR: a server class override requires the schematic trial" >&2
           exit 1
         fi
         if [[ "$ARGS" == *"--local-registry"* ]] && [[ "$ARGS" == *"ghcr.io"* ]] && [[ -n "$GHCR_USER" ]] && [[ -n "$GHCR_TOKEN" ]]; then
           # Replace 'ghcr.io/' with 'user:token@ghcr.io/'
-          RESOLVED_ARGS="${ARGS//ghcr.io\//${GHCR_USER}:${GHCR_TOKEN}@ghcr.io/}"
+          RESOLVED_ARGS="${RESOLVED_ARGS//ghcr.io\//${GHCR_USER}:${GHCR_TOKEN}@ghcr.io/}"
           # Append unique tag only to the --local-registry value (not the entire args string)
           # This is safe regardless of flag ordering
           RESOLVED_ARGS=$(echo "$RESOLVED_ARGS" | sed -E 's/(--local-registry[[:space:]]+)([^[:space:]]+)/\1\2:'"${ARTIFACT_TAG}"'/')
@@ -311,9 +329,22 @@ runs:
 
     # ── Phase 3 — Cluster provisioning ───────────────────────────────
 
+    - name: 🔍 Prepare Calico migration creation binary
+      id: calico-create-path
+      shell: bash
+      env:
+        BASELINE_BINARY: ${{ inputs.calico-migration-binary }}
+        BASELINE_SHA256: ${{ inputs.calico-migration-sha256 }}
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        INIT: ${{ inputs.init }}
+      run: bash "$GITHUB_WORKSPACE/.github/actions/ksail-system-test/calico-migration.sh" prepare
+
     - name: 🧪 ksail cluster create
       id: cluster-create
       uses: $/.github/actions/ksail-cluster
+      env:
+        PATH: ${{ steps.calico-create-path.outputs.path }}
       with:
         inventory-trial-server-type: ${{ inputs.test-autoscaler-inventory == 'true' && inputs.inventory-trial-server-type || '' }}
         inventory-trial-location: ${{ inputs.test-autoscaler-inventory == 'true' && inputs.inventory-trial-location || '' }}
@@ -337,6 +368,13 @@ runs:
         # volume over the shared one.
         cache: "false"
         validate: ${{ inputs.init }}
+
+    - name: 🧪 Migrate Calico with unchanged configuration
+      if: inputs.calico-migration-binary != ''
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+      run: bash "$GITHUB_WORKSPACE/.github/actions/ksail-system-test/calico-migration.sh" migrate
 
     - name: 🧪 ksail cluster info
       shell: bash

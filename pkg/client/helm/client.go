@@ -191,6 +191,9 @@ func (c *Client) InstallOrUpgradeChart(ctx context.Context, spec *ChartSpec) (*R
 }
 
 // TemplateChart renders a Helm chart's templates without installing it.
+// Configured API-version migrations use server dry-run and may require cluster access.
+// That dry run skips Helm ownership validation with TakeOwnership; callers must
+// validate ownership before writing resources managed outside the release.
 // It returns the rendered YAML manifests as a string.
 // This is useful for extracting container images from charts.
 func (c *Client) TemplateChart(ctx context.Context, spec *ChartSpec) (string, error) {
@@ -203,24 +206,9 @@ func (c *Client) TemplateChart(ctx context.Context, spec *ChartSpec) (string, er
 		return "", fmt.Errorf("template chart context cancelled: %w", ctxErr)
 	}
 
-	client := helmv4action.NewInstall(c.actionConfig)
-
-	client.ReleaseName = spec.ReleaseName
-	if client.ReleaseName == "" {
-		client.ReleaseName = "template-release"
-	}
-
-	client.Namespace = spec.Namespace
-	if client.Namespace == "" {
-		client.Namespace = "default"
-	}
-
-	client.DryRunStrategy = helmv4action.DryRunClient
-	client.Replace = true // Skip name uniqueness check
-
-	// Set version if provided
-	if spec.Version != "" {
-		client.Version = spec.Version
+	client, err := c.templateInstall(spec)
+	if err != nil {
+		return "", err
 	}
 
 	chart, vals, err := c.loadChartAndValues(ctx, spec, client)
@@ -233,7 +221,6 @@ func (c *Client) TemplateChart(ctx context.Context, spec *ChartSpec) (string, er
 		return "", fmt.Errorf("template chart %q: %w", spec.ChartName, err)
 	}
 
-	// Convert Releaser to Accessor to get the manifest
 	accessor, accErr := helmv4release.NewAccessor(rel)
 	if accErr != nil {
 		return "", fmt.Errorf("create release accessor: %w", accErr)
@@ -699,4 +686,56 @@ func (c *Client) upgradeRelease(
 	}
 
 	return executeAndExtractRelease(runFn)
+}
+
+func (c *Client) templateInstall(spec *ChartSpec) (*helmv4action.Install, error) {
+	// Client-only rendering replaces storage and discovery in its configuration.
+	// Keep those temporary changes away from subsequent real operations.
+	templateConfig := helmv4action.NewConfiguration(
+		helmv4action.ConfigurationSetLogger(c.actionConfig.Logger().Handler()),
+	)
+	templateConfig.RESTClientGetter = c.actionConfig.RESTClientGetter
+	templateConfig.Releases = c.actionConfig.Releases
+	templateConfig.KubeClient = c.actionConfig.KubeClient
+	templateConfig.RegistryClient = c.actionConfig.RegistryClient
+	templateConfig.CustomTemplateFuncs = c.actionConfig.CustomTemplateFuncs
+	templateConfig.HookOutputFunc = c.actionConfig.HookOutputFunc
+	client := helmv4action.NewInstall(templateConfig)
+
+	client.ReleaseName = spec.ReleaseName
+	if client.ReleaseName == "" {
+		client.ReleaseName = "template-release"
+	}
+
+	client.Namespace = spec.Namespace
+	if client.Namespace == "" {
+		client.Namespace = "default"
+	}
+
+	client.DryRunStrategy = helmv4action.DryRunClient
+
+	client.Replace = true // Skip name uniqueness check
+	if len(spec.APIVersionMigrations) > 0 {
+		// Prerequisite charts select admission resources using live capabilities.
+		// Server dry-run renders them without publishing a release or resources.
+		client.DryRunStrategy = helmv4action.DryRunServer
+		// Rendering does not adopt or write objects. Install's Helm ownership
+		// check cannot apply to resources the caller manages outside a release;
+		// the caller must validate ownership before its actual resource writes.
+		client.TakeOwnership = true
+
+		renderer, rendererErr := c.newAPIVersionPostRenderer(spec.APIVersionMigrations)
+		if rendererErr != nil {
+			return nil, fmt.Errorf("resolve template API migrations: %w", rendererErr)
+		}
+
+		client.PostRenderer = renderer
+	}
+
+	// Set version if provided
+	if spec.Version != "" {
+		client.Version = spec.Version
+	}
+
+	return client, nil
 }

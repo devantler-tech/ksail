@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"slices"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
@@ -72,6 +73,19 @@ func chartValuesDriftProbes() []chartValuesDriftProbe {
 	return []chartValuesDriftProbe{
 		autoscalerValuesProbe(),
 		certManagerValuesProbe(),
+		calicoPrerequisitesProbe(),
+	}
+}
+
+func calicoPrerequisitesProbe() chartValuesDriftProbe {
+	return chartValuesDriftProbe{
+		component: "calico",
+		field:     specdiff.CalicoPrerequisitesField,
+		needed: func(cfg *v1alpha1.Cluster) bool {
+			return cfg.Spec.Cluster.CNI == v1alpha1.CNICalico &&
+				cfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK
+		},
+		factory: func(factories *setup.InstallerFactories) installerFactory { return factories.Calico },
 	}
 }
 
@@ -88,6 +102,13 @@ func checkChartValuesDrift(
 	diff *clusterupdate.UpdateResult,
 ) {
 	for _, probe := range chartValuesDriftProbes() {
+		if probe.field == specdiff.CalicoPrerequisitesField &&
+			slices.ContainsFunc(diff.InPlaceChanges, func(change clusterupdate.Change) bool {
+				return change.Field == specdiff.CNIField
+			}) {
+			continue
+		}
+
 		checkComponentValuesDrift(cmd, ctx, diffEngine, diff, probe)
 	}
 }

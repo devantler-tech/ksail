@@ -1,6 +1,22 @@
 package calicoinstaller
 
-import "context"
+import (
+	"context"
+	"testing"
+)
+
+// PrerequisiteKubeconfigForTest serves prerequisite lifecycle requests locally.
+func PrerequisiteKubeconfigForTest(t *testing.T) string {
+	t.Helper()
+
+	fixture := newPrerequisiteFixture(t)
+	fixture.seedOperatorHistory()
+
+	return fixture.kubeconfig
+}
+
+// PrerequisiteManifestForTest is a complete CRD and admission policy fixture.
+const PrerequisiteManifestForTest = prerequisiteFixtureManifest
 
 // SetAPIServerCheckerForTest overrides the API server stability checker for unit testing.
 // This avoids needing a live Kubernetes cluster when testing the Install path.
