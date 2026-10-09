@@ -8,11 +8,11 @@ The operator trims each YAML document before decoding it. The chart renderer
 preserves its final newline. That changes only the final JSONPatch expression
 in these specimens:
 
-| File | Policy name | Mutation index | Original expression bytes |
-| --- | --- | --- | --- |
-| networkpolicy.yaml | policytypes.policy.projectcalico.org | 0 | 244 |
-| tierlabel.yaml | tierlabel.policy.projectcalico.org | 1 | 309 |
-| ippool.yaml | ippool.policy.projectcalico.org | 1 | 179 |
+| File               | Policy name                          | Mutation index | Original expression bytes |
+|--------------------|--------------------------------------|----------------|---------------------------|
+| networkpolicy.yaml | policytypes.policy.projectcalico.org | 0              | 244                       |
+| tierlabel.yaml     | tierlabel.policy.projectcalico.org   | 1              | 309                       |
+| ippool.yaml        | ippool.policy.projectcalico.org      | 1              | 179                       |
 
 The recognized form removes exactly one final LF. Tests preserve the exact
 observed fingerprint and reject other content changes.
