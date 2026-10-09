@@ -27,7 +27,7 @@ require (
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/siderolabs/talos v1.14.0-alpha.2
-	github.com/siderolabs/talos/pkg/machinery v1.14.0-alpha.2
+	github.com/siderolabs/talos/pkg/machinery v1.14.2
 	github.com/sirupsen/logrus v1.10.2
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -37,13 +37,13 @@ require (
 	golang.org/x/sync v0.24.0
 	golang.org/x/term v0.46.0
 	helm.sh/helm/v4 v4.2.4
-	k8s.io/api v0.36.5
-	k8s.io/apiextensions-apiserver v0.36.5
+	k8s.io/api v0.37.0
+	k8s.io/apiextensions-apiserver v0.37.0
 	k8s.io/apimachinery v0.37.0
-	k8s.io/cli-runtime v0.36.5
-	k8s.io/client-go v0.36.5
-	k8s.io/kubectl v0.36.5
-	sigs.k8s.io/controller-runtime v0.24.1
+	k8s.io/cli-runtime v0.37.0
+	k8s.io/client-go v0.37.0
+	k8s.io/kubectl v0.37.0
+	sigs.k8s.io/controller-runtime v0.25.0
 	sigs.k8s.io/gateway-api v1.6.2
 	sigs.k8s.io/kind v0.33.0
 	sigs.k8s.io/kustomize/api v0.21.2
@@ -97,7 +97,7 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/siderolabs/crypto v0.6.5
 	github.com/siderolabs/gen v0.8.8
-	github.com/siderolabs/go-kubernetes v0.2.41
+	github.com/siderolabs/go-kubernetes v0.2.43
 	github.com/siderolabs/go-retry v0.3.3
 	github.com/siderolabs/image-factory v1.3.3
 	github.com/siderolabs/omni/client v1.9.1
@@ -449,13 +449,13 @@ require (
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/firefart/nonamedreturns v1.0.6 // indirect
 	github.com/florianl/go-tc v0.4.8 // indirect
-	github.com/fluxcd/cli-utils v1.2.2 // indirect
+	github.com/fluxcd/cli-utils v1.3.0 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.10.0 // indirect
 	github.com/fluxcd/pkg/apis/kustomize v1.19.2 // indirect
-	github.com/fluxcd/pkg/ssa v0.77.0 // indirect
+	github.com/fluxcd/pkg/ssa v0.78.0 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
 	github.com/fvbommel/sortorder v1.1.0 // indirect
-	github.com/fxamacker/cbor/v2 v2.9.2 // indirect
+	github.com/fxamacker/cbor/v2 v2.9.3 // indirect
 	github.com/fzipp/gocyclo v0.6.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
 	github.com/gdamore/encoding v1.0.1 // indirect
@@ -613,7 +613,7 @@ require (
 	github.com/johnfercher/maroto/v2 v2.2.2 // indirect
 	github.com/jonboulle/clockwork v0.5.0 // indirect
 	github.com/josharian/native v1.1.0 // indirect
-	github.com/jsimonetti/rtnetlink/v2 v2.2.1-0.20260614152944-ab8601692836 // indirect
+	github.com/jsimonetti/rtnetlink/v2 v2.2.1-0.20260802200809-43bafec815b3 // indirect
 	github.com/json-iterator/go v1.1.13-0.20220915233716-71ac16282d12 // indirect
 	github.com/julz/importas v0.2.0 // indirect
 	github.com/jung-kurt/gofpdf v1.16.2 // indirect
@@ -772,7 +772,7 @@ require (
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.3.1 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
-	github.com/petermattis/goid v0.0.0-20260330135022-df67b199bc81 // indirect
+	github.com/petermattis/goid v0.0.0-20260713124913-97594f28f5ca // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
 	github.com/pin/tftp/v3 v3.2.0 // indirect
 	github.com/pjbgf/sha1cd v0.6.0 // indirect
@@ -780,13 +780,13 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pkg/profile v1.7.0 // indirect
 	github.com/pkg/xattr v0.4.12 // indirect
-	github.com/planetscale/vtprotobuf v0.6.1-0.20250313105119-ba97887b0a25 // indirect
+	github.com/planetscale/vtprotobuf v0.6.1-0.20260702190614-8ae5a48058df // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/project-copacetic/copacetic v0.10.0 // indirect
 	github.com/prometheus/client_golang v1.24.1 // indirect
-	github.com/prometheus/client_model v0.6.2 // indirect
-	github.com/prometheus/common v0.70.1 // indirect
-	github.com/prometheus/procfs v0.21.1 // indirect
+	github.com/prometheus/client_model v0.6.3 // indirect
+	github.com/prometheus/common v0.71.0 // indirect
+	github.com/prometheus/procfs v0.22.0 // indirect
 	github.com/quasilyte/go-ruleguard v0.4.5 // indirect
 	github.com/quasilyte/go-ruleguard/dsl v0.3.23 // indirect
 	github.com/quasilyte/gogrep v0.5.0 // indirect
@@ -944,9 +944,9 @@ require (
 	go.etcd.io/etcd/client/pkg/v3 v3.7.1 // indirect
 	go.etcd.io/etcd/client/v3 v3.7.1 // indirect
 	go.etcd.io/etcd/etcdutl/v3 v3.7.0-rc.0 // indirect
-	go.etcd.io/etcd/pkg/v3 v3.7.0-rc.0 // indirect
-	go.etcd.io/etcd/server/v3 v3.7.0-rc.0 // indirect
-	go.etcd.io/raft/v3 v3.7.0-rc.1 // indirect
+	go.etcd.io/etcd/pkg/v3 v3.7.0 // indirect
+	go.etcd.io/etcd/server/v3 v3.7.0 // indirect
+	go.etcd.io/raft/v3 v3.7.0 // indirect
 	go.mongodb.org/mongo-driver v1.17.9 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
@@ -1006,19 +1006,19 @@ require (
 	gorm.io/gorm v1.31.1 // indirect
 	helm.sh/helm/v3 v3.20.2 // indirect
 	honnef.co/go/tools v0.8.1 // indirect
-	k8s.io/apiserver v0.36.5
+	k8s.io/apiserver v0.37.0
 	k8s.io/cluster-bootstrap v0.36.0 // indirect
-	k8s.io/component-base v0.36.5 // indirect
-	k8s.io/component-helpers v0.36.5 // indirect
+	k8s.io/component-base v0.37.0 // indirect
+	k8s.io/component-helpers v0.37.0 // indirect
 	k8s.io/cri-api v0.36.3 // indirect
 	k8s.io/cri-client v0.36.3 // indirect
 	k8s.io/kube-aggregator v0.36.3 // indirect
-	k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad // indirect
+	k8s.io/kube-openapi v0.0.0-20260821135717-be32def86098 // indirect
 	k8s.io/kube-proxy v0.36.2 // indirect
 	k8s.io/kubelet v0.36.2 // indirect
 	k8s.io/kubernetes v1.36.0 // indirect
-	k8s.io/metrics v0.36.5 // indirect
-	k8s.io/streaming v0.36.5 // indirect
+	k8s.io/metrics v0.37.0 // indirect
+	k8s.io/streaming v0.37.0 // indirect
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 // indirect
 	modernc.org/libc v1.73.4 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
@@ -1028,7 +1028,7 @@ require (
 	mvdan.cc/sh/v3 v3.12.0 // indirect
 	mvdan.cc/unparam v0.0.0-20251027182757-5beb8c8f8f15 // indirect
 	oras.land/oras-go/v2 v2.6.2 // indirect
-	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.34.0 // indirect
+	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.36.0 // indirect
 	sigs.k8s.io/cli-utils v0.37.2 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/knftables v0.0.21 // indirect
