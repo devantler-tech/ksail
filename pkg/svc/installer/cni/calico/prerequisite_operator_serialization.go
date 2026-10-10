@@ -1,6 +1,7 @@
 package calicoinstaller
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -8,6 +9,10 @@ import (
 )
 
 const multiMutationPolicyCount = 2
+
+var errOperatorDependencyContentMismatch = errors.New(
+	"operator prerequisite content differs from the chart",
+)
 
 func verifiedOperatorSpecDigest(
 	desired, live *unstructured.Unstructured,
@@ -32,7 +37,11 @@ func verifiedOperatorSpecDigest(
 	}
 
 	if !matches {
-		return "", prerequisiteError("Calico operator prerequisite content differs from the chart")
+		return "", fmt.Errorf(
+			"%w: Calico %w",
+			errInvalidPrerequisites,
+			errOperatorDependencyContentMismatch,
+		)
 	}
 
 	return actual, nil

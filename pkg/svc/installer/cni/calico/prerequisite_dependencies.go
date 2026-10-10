@@ -5,21 +5,26 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 const (
 	admissionRegistrationGroup  = "admissionregistration.k8s.io"
 	mutatingAdmissionPolicyKind = "MutatingAdmissionPolicy"
 )
+
+var errOperatorDependencyPending = errors.New("calico operator dependency migration is pending")
 
 // Dependencies are observed operator objects, never KSail's mutation/removal inventory.
 type prerequisiteDependency struct {
@@ -291,6 +296,23 @@ func (plan *prerequisitePlan) complete(ctx context.Context) error {
 	return plan.save(ctx)
 }
 
+func (plan *prerequisitePlan) completeWithRetry(ctx context.Context, timeout time.Duration) error {
+	err := wait.PollUntilContextTimeout(ctx, prerequisitePollInterval, timeout, true,
+		func(ctx context.Context) (bool, error) {
+			err := plan.complete(ctx)
+			if errors.Is(err, errOperatorDependencyPending) {
+				return false, nil
+			}
+
+			return err == nil, err
+		})
+	if err != nil {
+		return fmt.Errorf("complete Calico prerequisites: %w", err)
+	}
+
+	return nil
+}
+
 func (plan *prerequisitePlan) revalidateDependencies(ctx context.Context) error {
 	return plan.validateDependencies(ctx, false)
 }
@@ -346,7 +368,15 @@ func (plan *prerequisitePlan) validateDependencyContent(
 			return digest, nil
 		}
 
-		return verifiedOperatorSpecDigest(desired, live)
+		verifiedDigest, err := verifiedOperatorSpecDigest(desired, live)
+		// Only the exact recorded old policy is an expected operator lag.
+		// Identity and provenance were checked above; unknown content stays fatal.
+		if completing && digest == dependency.SpecSHA256 &&
+			errors.Is(err, errOperatorDependencyContentMismatch) {
+			return "", fmt.Errorf("%w: %w", errOperatorDependencyPending, err)
+		}
+
+		return verifiedDigest, err
 	}
 
 	if digest != dependency.SpecSHA256 {
