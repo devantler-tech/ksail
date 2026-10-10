@@ -15,7 +15,7 @@
     "url": "https://github.com/devantler-tech/ksail/issues"
   },
   "engines": {
-    "vscode": "^1.138.0"
+    "vscode": "^1.140.0"
   },
   "categories": [
     "Machine Learning",
@@ -294,7 +294,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.6.4",
-    "@types/vscode": "^1.138.0",
+    "@types/vscode": "^1.140.0",
     "@typescript-eslint/eslint-plugin": "^8.70.1",
     "@typescript-eslint/parser": "^8.70.1",
     "@vscode/vsce": "^4.0.0",
