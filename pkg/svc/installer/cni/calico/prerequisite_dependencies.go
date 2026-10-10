@@ -82,7 +82,7 @@ func (plan *prerequisitePlan) inspectDependency(
 		return err
 	}
 
-	actual, err := verifiedOperatorSpecDigest(desired, live)
+	actual, err := plan.inspectDependencyDigest(desired, live, ref)
 	if err != nil {
 		return err
 	}
@@ -92,6 +92,47 @@ func (plan *prerequisitePlan) inspectDependency(
 	}
 
 	return plan.rememberDependency(dependency)
+}
+
+func (plan *prerequisitePlan) dependencyMigration() bool {
+	return plan.state.Version != "" && plan.state.Version != chartVersion() && len(plan.objects) > 0
+}
+
+func (plan *prerequisitePlan) inspectDependencyDigest(
+	desired, live *unstructured.Unstructured, ref prerequisiteRef,
+) (string, error) {
+	actual, err := verifiedOperatorSpecDigest(desired, live)
+	if !plan.dependencyMigration() {
+		return actual, err
+	}
+
+	index := slices.IndexFunc(plan.state.Dependencies, func(old prerequisiteDependency) bool {
+		return old.key() == ref.key()
+	})
+	if index < 0 {
+		return actual, err
+	}
+
+	previous := plan.state.Dependencies[index]
+
+	if err != nil {
+		_, desiredErr := prerequisiteSpecDigest(desired)
+		if desiredErr != nil {
+			return "", desiredErr
+		}
+		// Before the operator upgrade, only the previously recorded content is valid.
+		actual, err = prerequisiteSpecDigest(live)
+		if err != nil {
+			return "", err
+		}
+
+		if actual != previous.SpecSHA256 {
+			return "", prerequisiteError("Calico operator prerequisite identity or content changed")
+		}
+	}
+	// A resumed upgrade may already expose the new content. Keep the old binding
+	// until completion has validated every dependency against the new chart.
+	return previous.SpecSHA256, nil
 }
 
 func (plan *prerequisitePlan) rememberDependency(dependency prerequisiteDependency) error {
@@ -240,17 +281,22 @@ func ownsDependencyInstallation(installation *unstructured.Unstructured) bool {
 }
 
 func (plan *prerequisitePlan) complete(ctx context.Context) error {
-	err := plan.revalidateDependencies(ctx)
+	err := plan.validateDependencies(ctx, true)
 	if err != nil {
 		return err
 	}
 
-	plan.state.Complete = true
+	plan.state.Version, plan.state.Complete = chartVersion(), true
 
 	return plan.save(ctx)
 }
 
 func (plan *prerequisitePlan) revalidateDependencies(ctx context.Context) error {
+	return plan.validateDependencies(ctx, false)
+}
+
+func (plan *prerequisitePlan) validateDependencies(ctx context.Context, completing bool) error {
+	dependencies := slices.Clone(plan.state.Dependencies)
 	for index, dependency := range plan.state.Dependencies {
 		live, err := plan.observeDependency(ctx, dependency)
 		if err != nil {
@@ -262,20 +308,69 @@ func (plan *prerequisitePlan) revalidateDependencies(ctx context.Context) error 
 			return err
 		}
 
-		digest, err := prerequisiteSpecDigest(live)
+		if live.GetUID() != dependency.UID || installationUID != dependency.InstallationUID {
+			return prerequisiteError("Calico operator prerequisite identity or content changed")
+		}
+
+		digest, err := plan.validateDependencyContent(dependency, live, completing)
 		if err != nil {
 			return err
 		}
 
-		if live.GetUID() != dependency.UID || installationUID != dependency.InstallationUID ||
-			digest != dependency.SpecSHA256 {
-			return prerequisiteError("Calico operator prerequisite identity or content changed")
+		dependencies[index].Version = live.GroupVersionKind().Version
+		if completing {
+			dependencies[index].SpecSHA256 = digest
 		}
-
-		plan.state.Dependencies[index].Version = live.GroupVersionKind().Version
 	}
 
+	plan.state.Dependencies = dependencies
+
 	return nil
+}
+
+func (plan *prerequisitePlan) validateDependencyContent(
+	dependency prerequisiteDependency, live *unstructured.Unstructured, completing bool,
+) (string, error) {
+	digest, err := prerequisiteSpecDigest(live)
+	if err != nil {
+		return "", err
+	}
+
+	if plan.dependencyMigration() {
+		desired, desiredErr := plan.desiredDependency(dependency)
+		if desiredErr != nil {
+			return "", desiredErr
+		}
+
+		if !completing && digest == dependency.SpecSHA256 {
+			return digest, nil
+		}
+
+		return verifiedOperatorSpecDigest(desired, live)
+	}
+
+	if digest != dependency.SpecSHA256 {
+		return "", prerequisiteError("Calico operator prerequisite identity or content changed")
+	}
+
+	return digest, nil
+}
+
+func (plan *prerequisitePlan) desiredDependency(
+	dependency prerequisiteDependency,
+) (*unstructured.Unstructured, error) {
+	for _, object := range plan.objects {
+		resource, err := prerequisiteResource(object)
+		if err != nil {
+			return nil, err
+		}
+
+		if refForObject(resource, object).key() == dependency.key() {
+			return object, nil
+		}
+	}
+
+	return nil, prerequisiteError("Calico operator prerequisite is absent from the new chart")
 }
 
 func (plan *prerequisitePlan) observeDependency(

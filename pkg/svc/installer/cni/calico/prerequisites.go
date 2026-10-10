@@ -536,7 +536,13 @@ func (plan *prerequisitePlan) apply(ctx context.Context) error {
 		return err
 	}
 
-	plan.state.Version, plan.state.Complete = chartVersion(), false
+	// Preserve an upgrade's source version until the operator and every dependency
+	// have completed migration; retries must still recognize the old content.
+	if plan.state.Version == "" {
+		plan.state.Version = chartVersion()
+	}
+
+	plan.state.Complete = false
 
 	err = plan.save(ctx)
 	if err != nil {

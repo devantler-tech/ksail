@@ -2,10 +2,122 @@ package calicoinstaller
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
+
+// DependencyMigrationForTest exercises the prerequisite lifecycle against a local API fixture.
+type DependencyMigrationForTest struct {
+	fixture *prerequisiteFixture
+	plan    *prerequisitePlan
+}
+
+// CalicoChartVersionForTest exposes the embedded chart version for lifecycle assertions.
+func CalicoChartVersionForTest() string {
+	return chartVersion()
+}
+
+// NewDependencyMigrationForTest records the installed chart's dependency content.
+func NewDependencyMigrationForTest(t *testing.T, version string) *DependencyMigrationForTest {
+	t.Helper()
+	fixture := newPrerequisiteFixture(t)
+	seedOperatorDependency(t, fixture)
+	object := &unstructured.Unstructured{Object: fixture.objects[fixtureDependencyPath]}
+
+	resource, err := prerequisiteResource(object)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	digest, err := prerequisiteSpecDigest(object)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fixture.setInventory(t, prerequisiteState{
+		Version: version, Complete: true, Resources: nil,
+		Dependencies: []prerequisiteDependency{{
+			prerequisiteRef: refForObject(resource, object),
+			InstallationUID: "installation-uid", SpecSHA256: digest,
+		}},
+	})
+
+	return &DependencyMigrationForTest{fixture: fixture, plan: nil}
+}
+
+// Plan renders the next chart's policy and observes the currently installed dependency.
+func (f *DependencyMigrationForTest) Plan(spec map[string]any) error {
+	data, err := json.Marshal(spec)
+	if err != nil {
+		return fmt.Errorf("encode migration fixture policy: %w", err)
+	}
+
+	manifest := strings.Replace(
+		prerequisiteFixtureManifest,
+		"{failurePolicy: Fail}",
+		string(data),
+		1,
+	)
+
+	return f.PlanManifest(manifest)
+}
+
+// PlanManifest observes the inventory against a complete rendered chart fixture.
+func (f *DependencyMigrationForTest) PlanManifest(manifest string) error {
+	var err error
+
+	f.plan, err = dependencyInstaller(f.fixture).planPrerequisites(context.Background(), manifest)
+
+	return err
+}
+
+// Apply installs the owned prerequisites before the operator upgrade.
+func (f *DependencyMigrationForTest) Apply() error {
+	return f.plan.apply(context.Background())
+}
+
+// Complete validates the operator's resulting dependencies and saves the completed inventory.
+func (f *DependencyMigrationForTest) Complete() error {
+	return f.plan.complete(context.Background())
+}
+
+// Inventory returns the persisted chart version, completion flag and dependency digest.
+func (f *DependencyMigrationForTest) Inventory() (string, bool, string, error) {
+	_, state, err := readInstallerInventory(context.Background(), dependencyInstaller(f.fixture))
+	if err != nil {
+		return "", false, "", err
+	}
+
+	return state.Version, state.Complete, state.Dependencies[0].SpecSHA256, nil
+}
+
+// Dependency returns a copy of the operator-owned policy for simulating an operator update.
+func (f *DependencyMigrationForTest) Dependency() *unstructured.Unstructured {
+	f.fixture.mu.Lock()
+	defer f.fixture.mu.Unlock()
+
+	return (&unstructured.Unstructured{Object: f.fixture.objects[fixtureDependencyPath]}).DeepCopy()
+}
+
+// SetDependency simulates an API-observed change without using the installer's mutation path.
+func (f *DependencyMigrationForTest) SetDependency(object *unstructured.Unstructured) {
+	f.fixture.mu.Lock()
+	defer f.fixture.mu.Unlock()
+
+	f.fixture.objects[fixtureDependencyPath] = object.DeepCopy().Object
+}
+
+// Writes returns the API mutations made by the installer.
+func (f *DependencyMigrationForTest) Writes() []string {
+	f.fixture.mu.Lock()
+	defer f.fixture.mu.Unlock()
+
+	return append([]string(nil), f.fixture.writes...)
+}
 
 // PrerequisiteKubeconfigForTest serves prerequisite lifecycle requests locally.
 func PrerequisiteKubeconfigForTest(t *testing.T) string {
