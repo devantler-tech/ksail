@@ -114,7 +114,7 @@ func TestVerifyNoSigningMaterialIgnoresProviderSizeCeiling(t *testing.T) {
 	t.Parallel()
 
 	large := "#cloud-config\nruncmd:\n" + strings.Repeat("  - [echo, padding]\n", 4000)
-	if len(large) <= 32768 {
+	if len(large) <= providerCeilingBytes {
 		t.Fatalf("fixture must exceed the provider ceiling, got %d bytes", len(large))
 	}
 

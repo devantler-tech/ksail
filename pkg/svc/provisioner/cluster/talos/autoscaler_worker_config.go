@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	clusterautoscalerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/clusterautoscaler"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	x509 "github.com/siderolabs/crypto/x509"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
@@ -39,12 +40,8 @@ const (
 	// selector and the chart that stamps the label cannot drift apart.
 	autoscalerDeploymentSelector = "app.kubernetes.io/instance=" + clusterautoscalerinstaller.ReleaseName
 
-	// hetznerUserDataLimitBytes is Hetzner Cloud's hard ceiling on a server's
-	// user_data field (32 KiB). In HCLOUD_CLUSTER_CONFIG mode the cluster-autoscaler
-	// passes each pool's nodeConfigs[<pool>].cloudInit verbatim as the new server's
-	// user_data, so that value must stay within this limit or Hetzner rejects every
-	// scale-up with "invalid input in field 'user_data'".
-	hetznerUserDataLimitBytes = 32768
+	// The autoscaler submits each pool's cloudInit verbatim as server user_data.
+	hetznerUserDataLimitBytes = hetzner.UserDataLimitBytes
 	longhornDefaultDiskLabel  = "node.longhorn.io/create-default-disk"
 )
 
