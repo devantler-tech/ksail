@@ -122,18 +122,3 @@ GO-2026-5337  # Kyverno cross-namespace read via context (loaders disabled: no c
 # module is unmaintained, so no fix will ship; remove this entry if cosign or
 # Kyverno drops the helper.
 GO-2026-6225  # ACR credential helper unanchored host match (no registry client in ksail's path; no fix)
-
-# --- github.com/cilium/cilium @ v1.20.2 ------------------------------------
-# GO-2026-6596 concerns Cilium’s HTTPRoute controller. The symbol-free Go
-# record conservatively reports the linked module: its second SEMVER range
-# starts at 0 without a fixed event, despite the separate ecosystem range
-# ending at 1.18.11 and the ordinary fixed ranges ending at 1.19.5.
-# KSail links Hubble APIs and label utilities, not the HTTPRoute controller.
-# TestCiliumHTTPRouteControllerStaysUnlinked pins all 24 audited packages in
-# all ten shipped CLI/desktop platform graphs. It rejects changed versions,
-# replacements, vendored sources and incomplete or expanded package sets;
-# the release-configuration guards reject unaudited build settings (#7432).
-# Reassess by 2026-11-02, and before accepting any graph or source change.
-# Remove this entry when the Go record provides a usable fixed range or the
-# Cilium module leaves the shipped graph. Other Cilium advisories still block.
-GO-2026-6596  # Cilium HTTPRoute controller issue (controller unlinked; no usable GO-record fix)

@@ -10,11 +10,10 @@ import (
 
 const ciliumModulePath = "github.com/cilium/cilium"
 
-// GO-2026-6596 concerns Cilium's HTTP route controller. Its symbol-free Go
-// report conservatively flags the Cilium module linked by KSail. The audited
-// graph includes Hubble APIs and transitive label utilities, but excludes the
-// HTTP route controller. This guard pins that package set and v1.20.2; any new
-// package, changed version or replacement requires another assessment (#7432).
+// GO-2026-6596 concerns Cilium's HTTP route controller. The corrected Go record
+// excludes KSail's selected v1.20.2, so its exception has been removed (#7439).
+// Retain the audited Hubble API and label-utility graph, excluding the controller.
+// Any new package, changed version or replacement requires another assessment.
 func TestCiliumHTTPRouteControllerStaysUnlinked(t *testing.T) {
 	t.Parallel()
 
