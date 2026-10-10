@@ -29,6 +29,7 @@ func TestEKSReadOnlyAuthPreflightCannotProvision(t *testing.T) {
 	assert.Equal(t, true, auth.With["mask-aws-account-id"])
 	policy, ok := auth.With["inline-session-policy"].(string)
 	require.True(t, ok)
+
 	var permission struct {
 		Statement []struct {
 			Effect   string   `json:"effect"`
