@@ -213,6 +213,23 @@ jobs:
               - '.github/fixtures/workflow-run-cleanup/**'
               - '.github/fixtures/talos-schematic-trial.yaml'
               - 'internal/ciharness/**'
+              # Authenticate every copied byte, including embedded data and
+              # metadata edits that the shared Go source filter does not select.
+              - 'third_party/cel-go/**'
+              - 'third_party/glamour/**'
+              - 'third_party/go-macholibre/**'
+              - 'third_party/kyverno-jmespath/**'
+              - 'third_party/jmespath/**'
+              - 'third_party/ansi/**'
+              - 'third_party/ansi-runtime/**'
+              - 'third_party/redisotel/**'
+              - 'third_party/rediscmd/**'
+              - 'third_party/dynamiclistener/**'
+              - '.gitattributes'
+              - '.mega-linter.yml'
+              - '.jscpd.json'
+              - 'go.mod'
+              - 'go.sum'
             # The release build configuration is the subject of Go tests too: the OTel
             # reachability guard in pkg/client/kubescape pins a digest of every file below, and
             # other tests read the GoReleaser files and the CD workflow. The org-required Go
@@ -2205,7 +2222,7 @@ jobs:
         with:
           persist-credentials: false
       - name: 🧹 Free runner disk
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@3115397431e2bdf31d911930908a9002a93a4340
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@065b9e08b85a396b9e936c01f01b512bb23f8aa9
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -2300,7 +2317,7 @@ jobs:
           persist-credentials: false
       - name: Check active documentation
         id: links
-        uses: devantler-tech/.github/actions/validate-retired-repo-links@bd0035dd8f41fcf1459b878882b8897443f8dc59 # v4.9.4
+        uses: devantler-tech/.github/actions/validate-retired-repo-links@8d3327fe87f216d6e107941de4ce1ae019294cea # v7.9.1
         with:
           enabled: "true"
       - name: Require a completed scan
