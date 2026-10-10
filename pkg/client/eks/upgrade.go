@@ -91,7 +91,7 @@ func (c *Client) UpdateClusterVersion(
 
 	out, err := api.UpdateClusterVersion(ctx, &awseks.UpdateClusterVersionInput{
 		Name: aws.String(name), Version: aws.String(version), ClientRequestToken: aws.String(token),
-	})
+	}, c.eksOptions()...)
 	if err != nil {
 		return nil, fmt.Errorf("request EKS control-plane version update: %w", err)
 	}
@@ -116,6 +116,7 @@ func (c *Client) DescribeClusterUpdate(
 	out, err := api.DescribeUpdate(
 		ctx,
 		&awseks.DescribeUpdateInput{Name: aws.String(name), UpdateId: aws.String(updateID)},
+		c.eksOptions()...,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("describe EKS control-plane update %s: %w", updateID, err)
