@@ -12,6 +12,8 @@ import (
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
 	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -25,6 +27,8 @@ const (
 	lifecycleUpgradeMinMajor = 1
 	lifecycleUpgradeMinMinor = 13
 )
+
+var errImageUpgradeNodeAlreadyCordoned = errors.New("node already cordoned for another purpose")
 
 // supportsLifecycleUpgradeAPI reports whether a node running the given Talos
 // version tag implements the ImageService.Pull / LifecycleService.Upgrade APIs
@@ -87,7 +91,14 @@ func (p *Provisioner) upgradeNodeTalosVersion(
 	// Skip nodes already at the target. A rolling upgrade walks every node, so when
 	// resuming an interrupted or partial roll (a mixed-version cluster) it would
 	// otherwise reboot nodes that already run the desired version.
-	if runningVersionMatchesTarget(runningVersion, desiredTag) {
+	matches, matchErr := runningImageMatchesTarget(
+		ctx, talosClient.COSI, runningVersion, desiredTag, p.resolveSchematicID(),
+	)
+	if matchErr != nil {
+		return fmt.Errorf("checking running image on %s: %w", nodeIP, matchErr)
+	}
+
+	if matches {
 		_, _ = fmt.Fprintf(
 			p.logWriter,
 			"    %s already at %s, skipping upgrade\n",
@@ -108,7 +119,7 @@ func (p *Provisioner) upgradeNodeTalosVersion(
 		return err
 	}
 
-	// Wait for the node to come back with the desired version.
+	// Wait for the node to come back with the desired version and schematic.
 	_, _ = fmt.Fprintf(p.logWriter, "    Waiting for %s to become ready...\n", nodeIP)
 
 	waitErr := p.waitForNodeReadyAfterUpgrade(ctx, nodeIP, desiredTag)
@@ -311,7 +322,7 @@ func drainUpgradeStream(
 }
 
 // waitForNodeReadyAfterUpgrade polls a node's Talos API until it responds with
-// the desired version tag, indicating the node has rebooted into the new OS.
+// the desired version and schematic, proving it booted the requested OS image.
 func (p *Provisioner) waitForNodeReadyAfterUpgrade(
 	ctx context.Context,
 	nodeIP, desiredTag string,
@@ -328,11 +339,11 @@ func (p *Provisioner) waitForNodeReadyAfterUpgrade(
 	for time.Now().Before(deadline) {
 		pollCtx, pollCancel := context.WithTimeout(ctx, retryInterval)
 
-		tag, err := p.getRunningTalosVersion(pollCtx, nodeIP)
+		matches, err := p.nodeImageMatchesTarget(pollCtx, nodeIP, desiredTag)
 
 		pollCancel()
 
-		if err == nil && tag == desiredTag {
+		if err == nil && matches {
 			return nil
 		}
 
@@ -387,10 +398,24 @@ func (p *Provisioner) rollingUpgradeNodes(
 		storageProber = p.buildStorageHealthProberOrWarn(ctx, clientset, clusterName)
 	}
 
-	for i, node := range ordered {
+	for index, node := range ordered {
+		matches, matchErr := p.nodeImageMatchesTarget(ctx, node.IP, desiredTag)
+		if matchErr != nil {
+			return fmt.Errorf("checking image before drain on %s: %w", node.IP, matchErr)
+		}
+
+		if matches {
+			recoverErr := p.recoverUpgradedNode(ctx, clientset, node, storageProber)
+			if recoverErr != nil {
+				return fmt.Errorf("recovering node %s (%s): %w", node.IP, node.Role, recoverErr)
+			}
+
+			continue
+		}
+
 		_, _ = fmt.Fprintf(p.logWriter,
 			"  [%d/%d] Upgrading %s (%s)...\n",
-			i+1, len(ordered), node.IP, node.Role,
+			index+1, len(ordered), node.IP, node.Role,
 		)
 
 		upgradeErr := p.upgradeSingleNode(ctx, upgradeNodeRequest{
@@ -428,28 +453,15 @@ type upgradeNodeRequest struct {
 // upgradeSingleNode runs the full graceful per-node OS-upgrade sequence: cordon →
 // drain → reconcile desired config (#5294) → upgrade + reboot → wait Ready →
 // uncordon → between-node storage-health gate (#5467). When the clientset is nil
-// (Kubernetes API unreachable) or the node cannot be resolved to a Kubernetes node,
-// it degrades to the legacy reconcile + upgrade + reboot without draining, so a
-// needed OS upgrade still proceeds. A drain failure aborts the roll with the node
-// best-effort uncordoned (see cordonAndDrain), matching the config-change path.
+// (Kubernetes API unreachable) or a successful lookup finds no Kubernetes node,
+// it degrades to the legacy reconcile + upgrade + reboot without draining.
+// A failed lookup aborts the roll because the node's cordon state is unknown.
+// A drain failure aborts the roll with the node best-effort uncordoned
+// (see cordonAndDrain), matching the config-change path.
 func (p *Provisioner) upgradeSingleNode(ctx context.Context, req upgradeNodeRequest) error {
-	nodeName := ""
-
-	if req.clientset != nil {
-		resolved, resolveErr := p.resolveNodeName(ctx, req.clientset, req.node.IP)
-		if resolveErr != nil {
-			_, _ = fmt.Fprintf(p.logWriter,
-				"  ⚠ Could not resolve %s to a Kubernetes node; upgrading without drain: %v\n",
-				req.node.IP, resolveErr,
-			)
-		} else {
-			nodeName = resolved
-
-			drainErr := p.cordonAndDrain(ctx, req.clientset, nodeName)
-			if drainErr != nil {
-				return drainErr
-			}
-		}
+	nodeName, err := p.prepareNodeForImageUpgrade(ctx, req.clientset, req.node.IP)
+	if err != nil {
+		return err
 	}
 
 	// Reconcile the desired config onto the node before upgrading it. Best-effort:
@@ -474,21 +486,205 @@ func (p *Provisioner) upgradeSingleNode(ctx context.Context, req upgradeNodeRequ
 		return nil
 	}
 
-	uncordonErr := p.uncordonAfterUpgrade(ctx, req.clientset, nodeName)
+	return p.completeNodeUpgrade(ctx, req.clientset, nodeName, req.prober)
+}
+
+// prepareNodeForImageUpgrade reserves and drains a registered Kubernetes node.
+// Only a confirmed absent node or an unavailable client permits the recovery fallback.
+func (p *Provisioner) prepareNodeForImageUpgrade(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeIP string,
+) (string, error) {
+	if clientset == nil {
+		return "", nil
+	}
+
+	nodeName, err := p.resolveNodeName(ctx, clientset, nodeIP)
+	if err != nil {
+		if !errors.Is(err, ErrNodeNotFoundByIP) {
+			return "", fmt.Errorf("resolving Kubernetes node for %s: %w", nodeIP, err)
+		}
+
+		_, _ = fmt.Fprintf(p.logWriter,
+			"  ⚠ Could not resolve %s to a Kubernetes node; upgrading without drain: %v\n",
+			nodeIP, err,
+		)
+
+		return "", nil
+	}
+
+	err = p.markImageUpgradeCordon(ctx, clientset, nodeName)
+	if err != nil {
+		return "", fmt.Errorf("reserving image-upgrade cordon on %s: %w", nodeName, err)
+	}
+
+	err = p.cordonAndDrain(ctx, clientset, nodeName)
+	if err != nil {
+		return "", err
+	}
+
+	return nodeName, nil
+}
+
+// markImageUpgradeCordon atomically records KSail's ownership when it cordons a
+// node. An existing administrator cordon is left untouched and blocks the roll.
+func (p *Provisioner) markImageUpgradeCordon(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeName string,
+) error {
+	foreignCordon := false
+
+	err := updateLatestNode(ctx, clientset, nodeName, func(node *corev1.Node) bool {
+		foreignCordon = false
+
+		if node.Spec.Unschedulable {
+			if node.Annotations[imageUpgradeCordonAnnotation] == labelValueTrue &&
+				node.Annotations[imageUpgradeStoragePendingAnnotation] == labelValueTrue {
+				return false // resuming KSail's own interrupted roll
+			}
+
+			if node.Annotations[imageUpgradeCordonAnnotation] != labelValueTrue {
+				foreignCordon = true
+
+				return false
+			}
+		}
+
+		if node.Annotations == nil {
+			node.Annotations = make(map[string]string)
+		}
+
+		node.Annotations[imageUpgradeCordonAnnotation] = labelValueTrue
+		node.Annotations[imageUpgradeStoragePendingAnnotation] = labelValueTrue
+		node.Spec.Unschedulable = true
+
+		return true
+	})
+	if err != nil {
+		return fmt.Errorf("marking image-upgrade cordon on %s: %w", nodeName, err)
+	}
+
+	if foreignCordon {
+		return fmt.Errorf("%w: %s", errImageUpgradeNodeAlreadyCordoned, nodeName)
+	}
+
+	return nil
+}
+
+// completeNodeUpgrade finishes the upgrade of a node that runs the target image: it
+// waits for the node to report Ready, uncordons it, then gates progression to the next
+// node on replicated-storage volume health so a one-replica-per-node volume is not
+// faulted by rebooting consecutive replica holders before a rebuild completes (#5467).
+// The gate is a no-op when disabled or when no backend was detected (prober == nil).
+func (p *Provisioner) completeNodeUpgrade(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeName string,
+	prober storageHealthProber,
+) error {
+	uncordonErr := p.uncordonAfterUpgrade(ctx, clientset, nodeName)
 	if uncordonErr != nil {
 		return uncordonErr
 	}
 
-	// Gate progression to the next node on replicated-storage volume health so a
-	// one-replica-per-node volume is not faulted by rebooting consecutive replica
-	// holders before a rebuild completes (#5467). No-op when the gate is disabled or
-	// no backend was detected (prober == nil).
-	storageErr := p.waitForStorageHealthy(ctx, req.prober, p.storageHealthTimeout())
+	storageErr := p.finishImageUpgradeStorageGate(ctx, clientset, nodeName, prober)
 	if storageErr != nil {
 		return fmt.Errorf("storage health gate: %w", storageErr)
 	}
 
 	return nil
+}
+
+func (p *Provisioner) finishImageUpgradeStorageGate(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeName string,
+	prober storageHealthProber,
+) error {
+	err := p.waitForStorageHealthy(ctx, prober, p.storageHealthTimeout())
+	if err != nil {
+		return err
+	}
+
+	err = updateLatestNode(ctx, clientset, nodeName, func(node *corev1.Node) bool {
+		if node.Annotations[imageUpgradeStoragePendingAnnotation] != labelValueTrue {
+			return false
+		}
+
+		delete(node.Annotations, imageUpgradeStoragePendingAnnotation)
+
+		return true
+	})
+	if err != nil {
+		return fmt.Errorf("clearing storage recovery marker on %s: %w", nodeName, err)
+	}
+
+	return nil
+}
+
+// recoverUpgradedNode finishes the upgrade of a node that already runs the target
+// image but is still cordoned, which is how an earlier attempt leaves it when it times
+// out waiting for the node to become Ready. Skipping such a node would leave it
+// unschedulable. Every resolved node must be Ready before the roll advances, even
+// when schedulable or cordoned by another actor. An absent node was never cordoned;
+// a failure to read the node list fails the roll because its cordon state is unknown.
+func (p *Provisioner) recoverUpgradedNode(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	node nodeWithRole,
+	prober storageHealthProber,
+) error {
+	if clientset == nil {
+		return nil
+	}
+
+	nodeName, resolveErr := p.resolveNodeName(ctx, clientset, node.IP)
+	if resolveErr != nil {
+		// Only a node that is genuinely absent from the API can be skipped: when the
+		// node list itself cannot be read, its cordon state is unknown, and reporting
+		// success could leave a node cordoned by an earlier attempt unschedulable.
+		if !errors.Is(resolveErr, ErrNodeNotFoundByIP) {
+			return fmt.Errorf("resolving Kubernetes node for %s: %w", node.IP, resolveErr)
+		}
+
+		_, _ = fmt.Fprintf(p.logWriter,
+			"  ⚠ Could not resolve %s to a Kubernetes node; skipping the cordon check: %v\n",
+			node.IP, resolveErr,
+		)
+
+		return nil
+	}
+
+	k8sNode, getErr := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	if getErr != nil {
+		return fmt.Errorf("reading node %s: %w", nodeName, getErr)
+	}
+
+	if !k8sNode.Spec.Unschedulable ||
+		k8sNode.Annotations[imageUpgradeCordonAnnotation] != labelValueTrue {
+		// Check readiness without changing another actor's cordon. A previous
+		// attempt may also have uncordoned this node before its storage gate failed.
+		readyErr := p.waitForK8sNodeReady(ctx, clientset, nodeName)
+		if readyErr != nil {
+			return fmt.Errorf("node %s did not report Ready after upgrade: %w", nodeName, readyErr)
+		}
+
+		storageErr := p.finishImageUpgradeStorageGate(ctx, clientset, nodeName, prober)
+		if storageErr != nil {
+			return fmt.Errorf("storage health gate: %w", storageErr)
+		}
+
+		return nil
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter,
+		"  %s already runs the target image but is still cordoned; finishing its upgrade...\n",
+		nodeName,
+	)
+
+	return p.completeNodeUpgrade(ctx, clientset, nodeName, prober)
 }
 
 // uncordonAfterUpgrade waits for the upgraded node to report Ready, then uncordons
@@ -502,7 +698,7 @@ func (p *Provisioner) uncordonAfterUpgrade(
 	clientset kubernetes.Interface,
 	nodeName string,
 ) error {
-	readyErr := p.waitForK8sNodeReady(ctx, clientset, nodeName, nodeReadinessTimeout)
+	readyErr := p.waitForK8sNodeReady(ctx, clientset, nodeName)
 	if readyErr != nil {
 		return fmt.Errorf("node %s did not report Ready after upgrade: %w", nodeName, readyErr)
 	}

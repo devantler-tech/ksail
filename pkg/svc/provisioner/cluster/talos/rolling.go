@@ -17,6 +17,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/util/retry"
 	kubedrain "k8s.io/kubectl/pkg/drain"
 )
 
@@ -56,6 +57,26 @@ func (p *Provisioner) setNodeSchedulable(
 	node, err := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("get node %s: %w", nodeName, err)
+	}
+
+	if schedulable && node.Annotations[imageUpgradeCordonAnnotation] == labelValueTrue {
+		// Clear the recovery marker in the same API update that uncordons the
+		// node, so a later administrative cordon cannot inherit stale ownership.
+		err = updateLatestNode(ctx, clientset, nodeName, func(latest *corev1.Node) bool {
+			if latest.Annotations[imageUpgradeCordonAnnotation] != labelValueTrue {
+				return false // ownership was released between reads
+			}
+
+			latest.Spec.Unschedulable = false
+			delete(latest.Annotations, imageUpgradeCordonAnnotation)
+
+			return true
+		})
+		if err != nil {
+			return fmt.Errorf("unmarking image-upgrade cordon on %s: %w", nodeName, err)
+		}
+
+		return nil
 	}
 
 	helper := kubedrain.NewCordonHelper(node)
@@ -203,22 +224,23 @@ func (p *Provisioner) waitForK8sNodeReady(
 	ctx context.Context,
 	clientset kubernetes.Interface,
 	nodeName string,
-	timeout time.Duration,
 ) error {
-	pollErr := readiness.PollForReadiness(ctx, timeout, func(ctx context.Context) (bool, error) {
-		node, err := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
-		if err != nil {
-			return false, nil //nolint:nilerr // returning nil to continue polling
-		}
-
-		for _, cond := range node.Status.Conditions {
-			if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue {
-				return true, nil
+	pollErr := readiness.PollForReadiness(
+		ctx, nodeReadinessTimeout, func(ctx context.Context) (bool, error) {
+			node, err := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+			if err != nil {
+				return false, nil //nolint:nilerr // returning nil to continue polling
 			}
-		}
 
-		return false, nil
-	})
+			for _, cond := range node.Status.Conditions {
+				if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue {
+					return true, nil
+				}
+			}
+
+			return false, nil
+		},
+	)
 	if pollErr != nil {
 		return fmt.Errorf("wait for node %s readiness: %w", nodeName, pollErr)
 	}
@@ -415,7 +437,7 @@ func (p *Provisioner) rollingRebootSingleNode(
 
 	_, _ = fmt.Fprintf(p.logWriter, "    Waiting for %s to become ready...\n", nodeName)
 
-	waitErr := p.waitForK8sNodeReady(ctx, clientset, nodeName, nodeReadinessTimeout)
+	waitErr := p.waitForK8sNodeReady(ctx, clientset, nodeName)
 	if waitErr != nil {
 		return fmt.Errorf("wait for ready: %w", waitErr)
 	}
@@ -519,4 +541,40 @@ func (p *Provisioner) fetchAndBuildDesiredNodeConfig(
 	}
 
 	return desired, nil
+}
+
+// updateLatestNode applies mutate to a fresh copy of the named Node and writes it,
+// retrying on a resourceVersion conflict. Kubelet status reports move a Node's
+// resourceVersion continually, most of all right after a reboot, so a plain
+// read-modify-write of KSail's image-upgrade markers can otherwise fail with 409.
+// mutate reports whether a write is needed; returning false ends without writing.
+func updateLatestNode(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeName string,
+	mutate func(node *corev1.Node) bool,
+) error {
+	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		node, getErr := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+		if getErr != nil {
+			return fmt.Errorf("get node %s: %w", nodeName, getErr)
+		}
+
+		updated := node.DeepCopy()
+		if !mutate(updated) {
+			return nil
+		}
+
+		_, updateErr := clientset.CoreV1().Nodes().Update(ctx, updated, metav1.UpdateOptions{})
+		if updateErr != nil {
+			return fmt.Errorf("update node %s: %w", nodeName, updateErr)
+		}
+
+		return nil
+	})
+	if retryErr != nil {
+		return fmt.Errorf("conflict-retrying node write: %w", retryErr)
+	}
+
+	return nil
 }

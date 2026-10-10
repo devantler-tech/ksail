@@ -1,13 +1,13 @@
 package talosprovisioner
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/http2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -18,8 +18,15 @@ import (
 const upgradeDryRunObject = `{"apiVersion":"v1","kind":"ConfigMap",` +
 	`"metadata":{"name":"kubeconfig-in-cluster","namespace":"kube-system"}}`
 
+// errGracefulAPIServerShutdown carries the text the HTTP/2 transport reports when the API server
+// sends GOAWAY and closes the connection. client-go recognises that condition by this text, so
+// the fixture does not depend on the transport's deprecated error type.
+var errGracefulAPIServerShutdown = errors.New(
+	`http2: server sent GOAWAY and closed the connection; LastStreamID=89, ErrCode=NO_ERROR, debug=""`,
+)
+
 func gracefulAPIServerShutdown() error {
-	return http2.GoAwayError{LastStreamID: 89, ErrCode: http2.ErrCodeNo}
+	return errGracefulAPIServerShutdown
 }
 
 // The manifest diff issues this dry-run apply while the API server may still

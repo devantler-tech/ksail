@@ -344,3 +344,71 @@ func commandErrorString(err *errorhandler.CommandError) string {
 
 	return err.Error()
 }
+
+// warningWithAddress quotes a documentation-range address (RFC 5737), which the
+// address mask treats exactly like a public server address.
+const warningWithAddress = "heads up: 203.0.113.10:6443 answered slowly"
+
+func warningCommand(result error) *cobra.Command {
+	return &cobra.Command{
+		Use:           "test",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		RunE: func(c *cobra.Command, _ []string) error {
+			_, _ = fmt.Fprintln(c.ErrOrStderr(), warningWithAddress)
+
+			return result
+		},
+	}
+}
+
+// requireWarningReplayedWithoutAddress runs a command that writes a warning and
+// ends with result, and requires the replayed warning to hide its address. A
+// warning is captured during the run and written out afterwards, to the same
+// public logs a failed command's error reaches.
+func requireWarningReplayedWithoutAddress(t *testing.T, result error) {
+	t.Helper()
+
+	var stderr bytes.Buffer
+
+	cmd := warningCommand(result)
+	cmd.SetErr(&stderr)
+
+	_ = errorhandler.NewExecutor().Execute(cmd)
+
+	got := stderr.String()
+	if !strings.Contains(got, "heads up: <address hidden>:6443 answered slowly") {
+		t.Fatalf("expected the warning with its address hidden, got %q", got)
+	}
+
+	if strings.Contains(got, "203.0.113.10") {
+		t.Fatalf("the replayed warning still names the address: %q", got)
+	}
+}
+
+func TestExecutorExecuteHidesAddressesInWarningsReplayedOnSuccess(t *testing.T) {
+	t.Setenv("KSAIL_SHOW_ADDRESSES", "")
+
+	requireWarningReplayedWithoutAddress(t, nil)
+}
+
+func TestExecutorExecuteHidesAddressesInWarningsReplayedOnExitCode(t *testing.T) {
+	t.Setenv("KSAIL_SHOW_ADDRESSES", "")
+
+	requireWarningReplayedWithoutAddress(t, &exitCodeError{code: 2})
+}
+
+func TestExecutorExecuteShowsAddressesInReplayedWarningsWhenOptedIn(t *testing.T) {
+	t.Setenv("KSAIL_SHOW_ADDRESSES", "true")
+
+	var stderr bytes.Buffer
+
+	cmd := warningCommand(nil)
+	cmd.SetErr(&stderr)
+
+	_ = errorhandler.NewExecutor().Execute(cmd)
+
+	if got := stderr.String(); !strings.Contains(got, warningWithAddress) {
+		t.Fatalf("expected the warning unchanged, got %q", got)
+	}
+}

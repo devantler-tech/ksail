@@ -394,7 +394,7 @@ func auditedReleaseConfigDigests() map[string]string {
 		".github/actions/setup-desktop-build/action.yml":     "09d319886697e84b880a9744cacb0928daa9a6998f24600cf09183e152592c6a",
 		"scripts/stage-webui.sh":                             "5b3d7b0fa8b237f77ee9a88e6807e070c1b35c97df3d5f17357b3ecb8b2938a6",
 		".github/actions/free-disk-space/free-disk-space.sh": "2dd12fcf3779137ca1cb5f21194947f6a10d3f94f8fb438a1a29ec9021fbdc30",
-		".github/workflows/cd.yaml#without-uses":             "64d930477339dca6b336b440c15af4bfa10491e66c1400165cda91dd7d6b4fb2",
+		".github/workflows/cd.yaml#without-uses":             "db2b2c139401d21503994be9d4d3775b68068ea5edf2c01fcf6f02bc6853afc5",
 	}
 }
 

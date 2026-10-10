@@ -347,7 +347,7 @@ func TestSystemTestHarnessBoundsReservedSandboxRecovery(t *testing.T) {
 		systemAction.Runs.Steps,
 		"🧪 Cleanup KSail System Test",
 	)
-	assert.Equal(t, "./.github/actions/ksail-system-test-cleanup", cleanupStep.Uses)
+	assert.Equal(t, "$/.github/actions/ksail-system-test-cleanup", cleanupStep.Uses)
 	assert.Contains(t, cleanupStep.If, "inputs.cleanup == 'true'")
 	assert.Equal(t, "${{ inputs.args }}", stringValue(cleanupStep.With["args"]))
 
@@ -846,6 +846,7 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 		"🧪 ksail cluster create",
 		"🧪 ksail cluster info",
 		"🔐 Refresh AWS credentials before EKS update and cleanup",
+		"🔎 Report why the EKS create failed",
 		"🧪 ksail cluster update scales EKS nodes",
 		"🧪 ksail workload reconcile",
 		"🧪 EKS control-plane upgrade trial",

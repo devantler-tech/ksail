@@ -3,6 +3,7 @@ package talosprovisioner
 import (
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
@@ -71,4 +72,21 @@ func (p *Provisioner) buildDesiredConfigForNode(
 	}
 
 	return shapeAutoscalerWorker(desired, pool.Labels, poolTaintsToCoreV1(pool.Taints))
+}
+
+// externallyManagedNodeGroup reports whether name is a node group the user declared
+// in autoscalerNodePoolNames without defining it as a KSail autoscaler pool. Such a
+// group belongs to an autoscaler the user runs themselves: KSail has no pool
+// definition to converge its servers with, and nothing about them is left over, so
+// they are neither acted on nor reported. A name KSail derived from its own pools is
+// in both lists and is therefore never externally managed.
+func (p *Provisioner) externallyManagedNodeGroup(name string) bool {
+	if p.hetznerOpts == nil || !slices.Contains(p.hetznerOpts.AutoscalerNodePoolNames, name) {
+		return false
+	}
+
+	return !slices.ContainsFunc(
+		p.hetznerOpts.AutoscalerNodePools,
+		func(pool v1alpha1.NodePool) bool { return pool.Name == name },
+	)
 }

@@ -2,7 +2,10 @@ package talosprovisioner_test
 
 import (
 	"context"
+	"io"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
@@ -23,6 +26,95 @@ func TestKubernetesImageRefUsesTalosKubeletAvailability(t *testing.T) {
 	provisioner := talosprovisioner.NewProvisioner(nil, nil)
 
 	assert.Equal(t, "ghcr.io/siderolabs/kubelet", provisioner.KubernetesImageRef())
+}
+
+// The version reconciler calls UpgradeDistribution before it computes the
+// config diff. An explicit schematic change must therefore reach autoscaler
+// baseline reconciliation here, even when static node images are already set.
+func TestUpgradeDistributionReconcilesAutoscalerBaseline(t *testing.T) {
+	t.Setenv(v1alpha1.DefaultHetznerTokenEnvVar, "")
+
+	configs, err := talosconfigmanager.NewDefaultConfigs()
+	require.NoError(t, err)
+
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{NodeAutoscalerEnabled: true}).
+		WithTalosOptions(v1alpha1.OptionsTalos{
+			SchematicID: "test-schematic-id", Version: "v1.13.10",
+		}).
+		WithLogWriter(io.Discard)
+
+	err = provisioner.UpgradeDistribution(t.Context(), "test", "v1.13.10", "v1.13.10")
+	require.ErrorIs(t, err, talosprovisioner.ErrNoControlPlaneForSecretSync)
+}
+
+// A new CLI invocation generates a fresh PKI bundle. Same-version image rolls
+// must load the running cluster's identity before generating autoscaler configs.
+func TestUpgradeDistributionSyncsAutoscalerBaselineFromRunningControlPlane(t *testing.T) {
+	t.Setenv(v1alpha1.DefaultHetznerTokenEnvVar, "")
+
+	configs, err := talosconfigmanager.NewDefaultConfigs()
+	require.NoError(t, err)
+	running := runningWithHostname(t, talosprovisioner.RoleControlPlane, "fip-cluster-cp-0")
+	freshCA := configs.ControlPlane().RawV1Alpha1().ClusterConfig.ClusterCA.Crt
+	runningCA := running.RawV1Alpha1().ClusterConfig.ClusterCA.Crt
+	require.NotEqual(t, freshCA, runningCA, "precondition: new invocation has different PKI")
+
+	server := fipUpdateTestServer(t, false, &fipUpdateCalls{})
+	fetched := false
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{NodeAutoscalerEnabled: true}).
+		WithTalosOptions(v1alpha1.OptionsTalos{SchematicID: "test-schematic-id", Version: "v1.13.10"}).
+		WithInfraProvider(newFipUpdateProvider(server.URL)).
+		WithNodeConfigFetcherForTest(func(_ context.Context, _ string) (talosconfig.Provider, error) {
+			fetched = true
+
+			return running, nil
+		}).
+		WithLogWriter(io.Discard)
+	withUnreachableEndpointProbe(provisioner)
+
+	err = provisioner.UpgradeDistribution(t.Context(), "fip-cluster", "v1.13.10", "v1.13.10")
+	require.ErrorIs(t, err, talosprovisioner.ErrHcloudTokenNotSet)
+	assert.True(t, fetched, "running control-plane config must be fetched before autoscaler write")
+	assert.Equal(
+		t,
+		runningCA,
+		provisioner.TalosConfigsForTest().ControlPlane().RawV1Alpha1().ClusterConfig.ClusterCA.Crt,
+	)
+}
+
+// A same-version image change must still visit each node. A missing Talos API
+// response is an error, rather than evidence that the requested image is installed.
+func TestUpgradeDistributionSameVersionChecksNodeImage(t *testing.T) {
+	t.Setenv(v1alpha1.DefaultHetznerTokenEnvVar, "")
+
+	configs, err := talosconfigmanager.NewDefaultConfigs()
+	require.NoError(t, err)
+
+	serverJSON := strings.Replace(
+		fipUpdateControlPlaneServerJSON, "203.0.113.5", "127.0.0.1", 1,
+	)
+	server := fipUpdateTestServerWithServers(t, false, &fipUpdateCalls{}, serverJSON)
+	running := runningWithHostname(t, talosprovisioner.RoleControlPlane, "fip-cluster-cp-0")
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{}).
+		WithTalosOptions(v1alpha1.OptionsTalos{
+			SchematicID: "test-schematic-id", Version: "v1.13.10",
+		}).
+		WithInfraProvider(newFipUpdateProvider(server.URL)).
+		WithNodeConfigFetcherForTest(func(context.Context, string) (talosconfig.Provider, error) {
+			return running, nil
+		}).
+		WithTalosAPIRetryConfig(1, time.Millisecond, time.Millisecond).
+		WithLogWriter(io.Discard)
+	withUnreachableEndpointProbe(provisioner)
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+
+	err = provisioner.UpgradeDistribution(ctx, "fip-cluster", "v1.13.10", "v1.13.10")
+	require.ErrorContains(t, err, "checking image before drain on 127.0.0.1")
 }
 
 // TestSupportsLifecycleUpgradeAPI verifies that the upgrade path dispatch picks

@@ -130,6 +130,27 @@ inputs:
       Leave empty to skip.
     required: false
     default: ""
+  test-talos-schematic-rollout:
+    description: |
+      Hetzner Talos only. Change the Image Factory schematic without changing
+      the Talos version, then verify the running image converges on the new
+      schematic and the cluster is healthy. Intended for a manual dispatch.
+    required: false
+    default: "false"
+  talos-schematic-server-type:
+    description: Explicit Hetzner class for an initialized Talos schematic trial (cx23, cx33 or cpx22). Empty keeps defaults.
+    required: false
+    default: ""
+  test-autoscaler-inventory:
+    description: Run the optional Talos/Hetzner orphaned-server audit with one powered-off probe.
+    required: false
+    default: "false"
+  inventory-trial-server-type:
+    description: Initial server type shared by the cluster and powered-off inventory probe.
+    default: "cx23"
+  inventory-trial-location:
+    description: Location shared by the cluster and powered-off inventory probe.
+    default: "fsn1"
   floating-ip-toggle:
     description: |
       Hetzner + Talos only. When 'true', runs an additional step that enables
@@ -229,10 +250,17 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         UPGRADE_FROM: ${{ inputs.kubernetes-upgrade-from }}
         UPGRADE_TO: ${{ inputs.kubernetes-upgrade-to }}
+        SCHEMATIC_TRIAL: ${{ inputs.test-talos-schematic-rollout }}
+        SERVER_TYPE: ${{ inputs.talos-schematic-server-type }}
+        INIT: ${{ inputs.init }}
       run: |
         set -euo pipefail
         # Inject GHCR credentials into --local-registry if it contains ghcr.io
         RESOLVED_ARGS="$ARGS"
+        if [[ -n "${SERVER_TYPE:-}" && "${SCHEMATIC_TRIAL:-false}" != true ]]; then
+          echo "❌ ERROR: a server class override requires the schematic trial" >&2
+          exit 1
+        fi
         if [[ "$ARGS" == *"--local-registry"* ]] && [[ "$ARGS" == *"ghcr.io"* ]] && [[ -n "$GHCR_USER" ]] && [[ -n "$GHCR_TOKEN" ]]; then
           # Replace 'ghcr.io/' with 'user:token@ghcr.io/'
           RESOLVED_ARGS="${ARGS//ghcr.io\//${GHCR_USER}:${GHCR_TOKEN}@ghcr.io/}"
@@ -249,6 +277,21 @@ runs:
             exit 1
           fi
           RESOLVED_ARGS="$RESOLVED_ARGS --kubernetes-version $UPGRADE_FROM"
+        fi
+        if [[ "${SCHEMATIC_TRIAL:-false}" == true ]]; then
+          if [[ "$DISTRIBUTION" != Talos || "$PROVIDER" != Hetzner || "$INIT" != true ]] ||
+             [[ " $RESOLVED_ARGS " == *" --distribution-version "* || " $RESOLVED_ARGS " == *" --distribution-version="* ]]; then
+            echo "❌ ERROR: the schematic trial requires initialized Hetzner/Talos without a version override" >&2
+            exit 1
+          fi
+          # Match the tracked bootstrap ISO before init generates the configuration.
+          # Pinning a newer running version after create changes the render contract.
+          baseline_version=$(sed -nE 's/^[[:space:]]*DefaultHetznerTalosVersion = "([^"]+)"$/\1/p' pkg/apis/cluster/v1alpha1/defaults.go)
+          if [[ ! "$baseline_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ ERROR: cannot resolve one stable Talos bootstrap baseline" >&2
+            exit 1
+          fi
+          RESOLVED_ARGS="$RESOLVED_ARGS --distribution-version $baseline_version"
         fi
         echo "args=$RESOLVED_ARGS" >> "$GITHUB_OUTPUT"
 
@@ -270,10 +313,13 @@ runs:
 
     - name: 🧪 ksail cluster create
       id: cluster-create
-      uses: ./.github/actions/ksail-cluster
+      uses: $/.github/actions/ksail-cluster
       with:
+        inventory-trial-server-type: ${{ inputs.test-autoscaler-inventory == 'true' && inputs.inventory-trial-server-type || '' }}
+        inventory-trial-location: ${{ inputs.test-autoscaler-inventory == 'true' && inputs.inventory-trial-location || '' }}
         distribution: ${{ inputs.distribution }}
         provider: ${{ inputs.provider }}
+        hetzner-server-type: ${{ inputs.talos-schematic-server-type }}
         args: ${{ steps.resolve-args.outputs.args }}
         # KSail's four default mirrors plus ECR Public, where Argo CD's chart pulls
         # Redis. The warm-mirror-cache action caches the same five registries, so
@@ -362,7 +408,7 @@ runs:
 
     - name: 🧪 Workload Lifecycle Tests
       id: workload-tests
-      uses: ./.github/actions/ksail-test-workload
+      uses: $/.github/actions/ksail-test-workload
       with:
         test-workload-name: ${{ inputs.test-workload-name }}
         test-workload-image: ${{ inputs.test-workload-image }}
@@ -392,7 +438,7 @@ runs:
     - name: 🧪 Workload Mirror Tests
       id: workload-mirror-tests
       if: inputs.provider == 'Docker' && inputs.test-workload-mirror == 'true'
-      uses: ./.github/actions/ksail-test-workload-mirror
+      uses: $/.github/actions/ksail-test-workload-mirror
       with:
         distribution: ${{ inputs.distribution }}
         workload-timeout: ${{ inputs.workload-timeout }}
@@ -400,7 +446,7 @@ runs:
     - name: 🧪 Image Export/Import Tests
       id: image-export-import-tests
       if: inputs.distribution == 'Vanilla' || inputs.distribution == 'K3s'
-      uses: ./.github/actions/ksail-test-image-export-import
+      uses: $/.github/actions/ksail-test-image-export-import
       with:
         test-workload-name: ${{ inputs.test-workload-name }}
         test-workload-image: ${{ inputs.test-workload-image }}
@@ -408,7 +454,7 @@ runs:
 
     - name: 🧪 Workload Watch Tests
       id: workload-watch-tests
-      uses: ./.github/actions/ksail-test-workload-watch
+      uses: $/.github/actions/ksail-test-workload-watch
       with:
         workload-timeout: ${{ inputs.workload-timeout }}
 
@@ -458,7 +504,7 @@ runs:
 
     - name: 🧪 Backup & Restore Tests
       id: backup-restore-tests
-      uses: ./.github/actions/ksail-test-backup-restore
+      uses: $/.github/actions/ksail-test-backup-restore
       with:
         workload-timeout: ${{ inputs.workload-timeout }}
 
@@ -607,6 +653,111 @@ runs:
         fi
         echo "✅ stdout held one JSON document: $(jq -c . "$STDOUT_FILE")"
 
+    - name: 🧪 ksail cluster update — same-version Talos schematic
+      id: cluster-update-schematic
+      if: inputs.provider == 'Hetzner' && inputs.distribution == 'Talos' && inputs.test-talos-schematic-rollout == 'true'
+      shell: bash
+      env:
+        ARGS: ${{ steps.resolve-args.outputs.args }}
+        K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
+      run: |
+        set -euo pipefail
+        LOG_DIR=${KSAIL_SYSTEM_TEST_LOG_DIR:-/tmp/ksail-system-test-logs}
+        mkdir -p "$LOG_DIR"
+        LOG_FILE="$LOG_DIR/talos-schematic-rollout.log"
+        PRE_LOG="$LOG_DIR/talos-schematic-before.log"
+        APPLY_LOG="$LOG_DIR/talos-schematic-apply.log"
+        POST_LOG="$LOG_DIR/talos-schematic-after.log"
+        # All nodes must still run the version declared before project init.
+        if ! talos_version=$(ksail workload get nodes -o json | jq -er '
+          .items
+          | if type != "array" or length == 0 then error("no nodes") else . end
+          | map(.status.nodeInfo.osImage
+              | if type != "string" then error("missing Talos version")
+                elif test("^Talos \\(v[0-9]+\\.[0-9]+\\.[0-9]+\\)$") then
+                  capture("^Talos \\((?<version>v[0-9]+\\.[0-9]+\\.[0-9]+)\\)$").version
+                else error("invalid Talos version") end)
+          | unique
+          | if length == 1 then .[0] else error("mixed Talos versions") end
+        '); then
+          echo "❌ Cannot determine one running Talos version across all nodes" >&2
+          exit 1
+        fi
+
+        declared_version=$(yq -r '.spec.cluster.talos.version // ""' ksail.yaml)
+        if [[ ! "$declared_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ || "$declared_version" != "$talos_version" ]]; then
+          echo "❌ Running Talos version differs from the declared trial baseline" >&2
+          exit 1
+        fi
+        if [[ ! "${K8S_VERSION_FLAG:-}" =~ ^--kubernetes-version[[:space:]]v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "❌ Missing stable Kubernetes version pin for the schematic trial" >&2
+          exit 1
+        fi
+        # Use the explicit schematic path used by platform upgrades. Extensions
+        # would also rewrite machine.install.image, so they are not image-only.
+        expected_schematic=c9078f9419961640c712a8bf2bb9174933dfcf1da383fd8ea2b7dc21493f8bac
+        # The fixture identity is checked offline; read back the already-published
+        # schematic so this trial needs no Image Factory registration write.
+        published_schematic=$(curl --fail --silent --show-error --max-time 30 --retry 2 \
+          https://factory.talos.dev/schematics/c9078f9419961640c712a8bf2bb9174933dfcf1da383fd8ea2b7dc21493f8bac \
+          | yq -o=json -I=0 '.' | jq -cS '.')
+        fixture_schematic=$(yq -o=json -I=0 '.' \
+          "$GITHUB_WORKSPACE/.github/fixtures/talos-schematic-trial.yaml" | jq -cS '.')
+        if [[ "$published_schematic" != "$fixture_schematic" ]]; then
+          echo "❌ Published schematic differs from the reviewed fixture" >&2
+          exit 1
+        fi
+        schematic=$expected_schematic
+        yq -i ".spec.cluster.talos.schematicId = \"${schematic}\"" ksail.yaml
+        UPDATE_ARGS=$ARGS
+        if [[ "$UPDATE_ARGS" =~ --image-verification[[:space:]][^[:space:]]* ]]; then
+          UPDATE_ARGS=${UPDATE_ARGS/"${BASH_REMATCH[0]}"/}
+        fi
+
+        # The pre-update plan must detect the live node's different boot image.
+        # shellcheck disable=SC2086
+        ksail cluster update --dry-run --distribution Talos --provider Hetzner $UPDATE_ARGS $K8S_VERSION_FLAG 2>&1 | tee "$PRE_LOG" | tee "$LOG_FILE"
+        if ! grep -Fq "Would reconcile distribution image" "$PRE_LOG"; then
+          echo "❌ Live Talos image change was not detected" >&2
+          exit 1
+        fi
+        if ! grep -Fq "No changes detected" "$PRE_LOG"; then
+          echo "❌ Unexpected configuration changes were detected" >&2
+          exit 1
+        fi
+
+        # shellcheck disable=SC2086
+        ksail cluster update --force --distribution Talos --provider Hetzner $UPDATE_ARGS $K8S_VERSION_FLAG 2>&1 | tee "$APPLY_LOG" | tee -a "$LOG_FILE"
+        if ! grep -Fq "Distribution image reconciled at" "$APPLY_LOG"; then
+          echo "❌ The Talos image upgrade path did not run" >&2
+          exit 1
+        fi
+        ready=false
+        for attempt in {1..30}; do
+          if ksail workload get nodes -o json | jq -e '.items | length > 0 and all(.[]; any(.status.conditions[]?; .type == "Ready" and .status == "True"))' >/dev/null; then
+            ready=true
+            break
+          fi
+          echo "Waiting for Talos nodes to become Ready ($attempt/30)"
+          sleep 10
+        done
+        if [[ "$ready" != true ]]; then
+          echo "❌ Talos nodes did not become Ready after the image rollout" >&2
+          exit 1
+        fi
+        ksail cluster info 2>&1 | tee -a "$LOG_FILE"
+
+        # The second plan reads the running schematic through the Talos API.
+        # The configuration summary can be clean while the image still drifts.
+        # Require both a clean plan and no further image reconciliation.
+        # shellcheck disable=SC2086
+        ksail cluster update --dry-run --distribution Talos --provider Hetzner $UPDATE_ARGS $K8S_VERSION_FLAG 2>&1 | tee "$POST_LOG" | tee -a "$LOG_FILE"
+        if grep -Fq "Would reconcile distribution image" "$POST_LOG" ||
+          ! grep -Fq "No changes detected" "$POST_LOG"; then
+          echo "❌ Running Talos image did not converge" >&2
+          exit 1
+        fi
+
     - name: 🧪 cert-manager values drift — one upgrade then no-op
       # Reuse one existing real-node cluster; KWOK cannot prove workload readiness.
       if: >-
@@ -618,7 +769,21 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ steps.resolve-args.outputs.args }}
         K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
-      run: bash "$GITHUB_WORKSPACE/.github/actions/ksail-system-test/cert-manager-values-drift.sh"
+      run: bash "$GITHUB_WORKSPACE/.github/actions/ksail-system-test/chart-values-drift.sh"
+
+    - name: 🧪 Kyverno values drift — one upgrade then no-op
+      # Same real-node cluster: the policy engine KSail installed there is the release under test.
+      if: >-
+        inputs.provider == 'Docker' && inputs.distribution == 'Vanilla' && inputs.init == 'true' &&
+        contains(inputs.args, '--policy-engine Kyverno')
+      shell: bash
+      env:
+        VALUES_TRIAL_COMPONENT: kyverno
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ steps.resolve-args.outputs.args }}
+        K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
+      run: bash "$GITHUB_WORKSPACE/.github/actions/ksail-system-test/chart-values-drift.sh"
 
     - name: 🧪 Talos Kubernetes upgrade — known version path
       if: inputs.kubernetes-upgrade-from != '' && inputs.kubernetes-upgrade-to != ''
@@ -921,7 +1086,7 @@ runs:
     - name: 🧪 Kubernetes Provider Tests (nested clusters)
       id: kubernetes-provider-tests
       if: inputs.test-kubernetes-provider == 'true'
-      uses: ./.github/actions/ksail-test-kubernetes-provider
+      uses: $/.github/actions/ksail-test-kubernetes-provider
       with:
         distributions: ${{ inputs.kubernetes-provider-distributions }}
         cni: ${{ inputs.kubernetes-provider-cni }}
@@ -944,10 +1109,11 @@ runs:
         || steps.online-gen.outcome == 'failure'
         || steps.cluster-update-dry-run.outcome == 'failure'
         || steps.cluster-update.outcome == 'failure'
+        || steps.cluster-update-schematic.outcome == 'failure'
         || steps.cluster-update-rolling-resize.outcome == 'failure'
         || steps.cluster-update-floating-ip-toggle.outcome == 'failure'
         || steps.kubernetes-provider-tests.outcome == 'failure')
-      uses: ./.github/actions/debug-kubernetes-failure
+      uses: $/.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
 
@@ -1051,11 +1217,31 @@ runs:
         retention-days: 7
         if-no-files-found: ignore
 
+    - name: 📦 Setup hcloud for autoscaler inventory trial
+      if: inputs.test-autoscaler-inventory == 'true'
+      uses: hetznercloud/setup-hcloud@4ff9bbeda4053fb69dd7fa1fcbdfcce7e648bf33 # v1
+
+    - name: 🧪 Hetzner autoscaler inventory — unchanged update and retry
+      if: inputs.test-autoscaler-inventory == 'true'
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        CLUSTER_NAME: st-hetzner-dispatch-${{ github.run_id }}
+        TRIAL_SERVER_TYPE: ${{ inputs.inventory-trial-server-type }}
+        TRIAL_LOCATION: ${{ inputs.inventory-trial-location }}
+        K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
+      run: |
+        set -euo pipefail
+        [[ "$DISTRIBUTION" == Talos && "$PROVIDER" == Hetzner && "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
+        export K8S_VERSION="${K8S_VERSION_FLAG#--kubernetes-version }"
+        timeout --kill-after=6m 20m bash "$GITHUB_WORKSPACE/.github/actions/ksail-system-test/autoscaler-audit-trial.sh"
+
     # ── Phase 7 — Cleanup ────────────────────────────────────────────
 
     - name: 🧪 Cleanup KSail System Test
       if: always() && inputs.cleanup == 'true'
-      uses: ./.github/actions/ksail-system-test-cleanup
+      uses: $/.github/actions/ksail-system-test-cleanup
       with:
         distribution: ${{ inputs.distribution }}
         provider: ${{ inputs.provider }}

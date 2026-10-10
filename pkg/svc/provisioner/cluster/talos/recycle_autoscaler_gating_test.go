@@ -91,10 +91,12 @@ func TestSnapshotImageIDFromSecret_RoundTrip(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	assert.Equal(t, snapshotID, talosprovisioner.SnapshotImageIDFromSecretForTest(secret))
+	actualID, err := talosprovisioner.SnapshotImageIDFromSecretForTest(secret)
+	require.NoError(t, err)
+	assert.Equal(t, snapshotID, actualID)
 }
 
-func TestSnapshotImageIDFromSecret_UnreadableReturnsEmpty(t *testing.T) {
+func TestSnapshotImageIDFromSecret_RejectsUnreadable(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -107,9 +109,23 @@ func TestSnapshotImageIDFromSecret_UnreadableReturnsEmpty(t *testing.T) {
 			&corev1.Secret{Data: map[string][]byte{"other": []byte("x")}},
 		},
 		{
+			"incomplete legacy baseline",
+			&corev1.Secret{Data: map[string][]byte{"hcloud_image": []byte("1")}},
+		},
+		{
+			"empty modern key must not fall back to legacy",
+			&corev1.Secret{Data: map[string][]byte{
+				clusterConfigSecretKey: nil,
+				"hcloud_image":         []byte("1"),
+				"hcloud_cloud_init":    []byte("legacy-config"),
+			}},
+		},
+		{
 			"invalid base64",
 			&corev1.Secret{Data: map[string][]byte{
 				clusterConfigSecretKey: []byte("not base64!!"),
+				"hcloud_image":         []byte("1"),
+				"hcloud_cloud_init":    []byte("legacy-config"),
 			}},
 		},
 	}
@@ -118,19 +134,21 @@ func TestSnapshotImageIDFromSecret_UnreadableReturnsEmpty(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Empty(t, talosprovisioner.SnapshotImageIDFromSecretForTest(testCase.secret))
+			actualID, err := talosprovisioner.SnapshotImageIDFromSecretForTest(testCase.secret)
+			require.Error(t, err)
+			assert.Empty(t, actualID)
 		})
 	}
 }
 
-func TestCurrentAutoscalerSnapshotImageID_NoKubeconfigReturnsEmpty(t *testing.T) {
+func TestCurrentAutoscalerSnapshotImageID_NoKubeconfigReturnsError(t *testing.T) {
 	t.Parallel()
 
-	// With no kubeconfig configured, newSecretKubeclient errors and the probe
-	// degrades to "" — treated as "no detectable image change" by callers.
 	prov := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
 
-	assert.Empty(t, prov.CurrentAutoscalerSnapshotImageIDForTest(context.Background()))
+	actualID, err := prov.CurrentAutoscalerSnapshotImageIDForTest(context.Background())
+	require.Error(t, err)
+	assert.Empty(t, actualID)
 }
 
 func TestApplyInPlaceToAutoscalerNodes_NoopWhenNotHetzner(t *testing.T) {
@@ -152,22 +170,6 @@ func TestApplyInPlaceToAutoscalerNodes_NoopWhenAutoscalerDisabled(t *testing.T) 
 		WithHetznerOptions(v1alpha1.OptionsHetzner{
 			NodeAutoscalerEnabled:   false,
 			AutoscalerNodePoolNames: []string{"pool-a"},
-		})
-
-	err := prov.ApplyInPlaceToAutoscalerNodesForTest(
-		context.Background(), "test-cluster", clusterupdate.NewEmptyUpdateResult(),
-	)
-	require.NoError(t, err)
-}
-
-func TestApplyInPlaceToAutoscalerNodes_NoopWhenNoPools(t *testing.T) {
-	t.Parallel()
-
-	prov := talosprovisioner.NewProvisioner(nil, nil).
-		WithLogWriter(io.Discard).
-		WithHetznerOptions(v1alpha1.OptionsHetzner{
-			NodeAutoscalerEnabled:   true,
-			AutoscalerNodePoolNames: nil,
 		})
 
 	err := prov.ApplyInPlaceToAutoscalerNodesForTest(

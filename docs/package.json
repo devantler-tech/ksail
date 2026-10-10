@@ -4,22 +4,29 @@
   "version": "0.0.1",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "npm run test:dependencies && astro build",
+    "test:dependencies": "node --test tests/dependency-compatibility.test.mjs",
     "preview": "astro preview",
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/starlight": "^0.42.4",
+    "@astrojs/starlight": "^0.42.5",
     "astro": "^7.3.5",
     "astro-mermaid": "^2.1.0",
     "mermaid": "^11.17.2",
-    "sharp": "^0.35.4",
+    "sharp": "^0.35.5",
     "starlight-links-validator": "^0.26.0"
   },
   "devDependencies": {
     "starlight-github-alerts": "^0.5.0"
   },
   "overrides": {
-    "esbuild": "^0.28.1"
+    "esbuild": "^0.28.1",
+    "mermaid": {
+      "katex": "^0.18.2"
+    },
+    "postcss-nested": {
+      "postcss-selector-parser": "^7.1.6"
+    }
   }
 }

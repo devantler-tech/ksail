@@ -363,12 +363,24 @@ jobs:
           aws-region: ${{ inputs.region }}
           role-duration-seconds: 7200
 
+      - name: 🔎 Report why the EKS create failed
+        # Runs before the cleanup deletes the stacks, whose events are the only
+        # place the failure reason is recorded. Diagnostic: it only reads, and a
+        # read that fails cannot fail this step.
+        if: always() && steps.create.outcome == 'failure'
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          "$GITHUB_WORKSPACE/.github/scripts/report-eks-create-failure.sh" \
+            --cluster-name "$KSAIL_EKS_CLUSTER_NAME" \
+            --region "$AWS_REGION"
+
       - name: 🧪 ksail cluster update scales EKS nodes
         # Must exceed this step's own worst case, or the step timeout fires first
         # and masks the diagnostic wait_for_capacity would have printed. Budget:
         # wait_for_capacity polls 30 x 20s = 10m and runs twice (20m), leaving 20m
         # for the two `ksail cluster update` invocations and the identity asserts.
-        # The harness test caps this step at 45m via the post-refresh budget.
+        # The harness test caps this step at 47m via the post-refresh budget.
         timeout-minutes: 40
         shell: bash
         run: |

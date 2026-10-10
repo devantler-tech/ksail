@@ -12,15 +12,17 @@ import (
 	"io"
 	"maps"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	clusterautoscalerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/clusterautoscaler"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	x509 "github.com/siderolabs/crypto/x509"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/configloader"
+	talosmeta "github.com/siderolabs/talos/pkg/machinery/config/types/meta"
 	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -38,12 +40,9 @@ const (
 	// selector and the chart that stamps the label cannot drift apart.
 	autoscalerDeploymentSelector = "app.kubernetes.io/instance=" + clusterautoscalerinstaller.ReleaseName
 
-	// hetznerUserDataLimitBytes is Hetzner Cloud's hard ceiling on a server's
-	// user_data field (32 KiB). In HCLOUD_CLUSTER_CONFIG mode the cluster-autoscaler
-	// passes each pool's nodeConfigs[<pool>].cloudInit verbatim as the new server's
-	// user_data, so that value must stay within this limit or Hetzner rejects every
-	// scale-up with "invalid input in field 'user_data'".
-	hetznerUserDataLimitBytes = 32768
+	// The autoscaler submits each pool's cloudInit verbatim as server user_data.
+	hetznerUserDataLimitBytes = hetzner.UserDataLimitBytes
+	longhornDefaultDiskLabel  = "node.longhorn.io/create-default-disk"
 )
 
 // LabelAutoscaled is a Kubernetes node label stamped on every
@@ -51,8 +50,9 @@ const (
 // downstream workloads a discriminator to key node affinity off of (e.g. a soft
 // preference for baseline nodes so autoscaler nodes stay empty and scale down).
 //
-// It is applied via the worker config's machine.nodeLabels (kubelet
-// --node-labels) so it lands on the real Node object. The Hetzner cluster
+// Talos applies the worker config's machine.nodeLabels to the real Node object
+// through its node-labels controller, separately from kubelet registration labels.
+// The Hetzner cluster
 // autoscaler deliberately does NOT push its per-pool nodeConfigs[].labels to the
 // kubelet — those only seed the in-memory scheduling-simulation template — so
 // stamping the label in the worker cloud-init is the canonical mechanism (see
@@ -67,7 +67,8 @@ const labelValueTrue = "true"
 // GenerateAutoscalerWorkerConfig generates a stripped Talos worker config
 // suitable for autoscaler-provisioned compute-only nodes. It sets
 // machine.install.wipe to true, removes machine.disks (autoscaler nodes have
-// no attached Hetzner Volumes), removes the Longhorn storage node label while
+// no attached Hetzner Volumes), removes the Longhorn storage node label from both
+// machine.nodeLabels and kubelet registration arguments while
 // preserving machine.kubelet.extraMounts for CSI consumer access, and stamps the
 // LabelAutoscaled marker node label so workloads can tell autoscaler nodes apart
 // from static baseline workers.
@@ -128,7 +129,8 @@ func shapeAutoscalerWorker(
 
 		maps.Copy(cfg.MachineConfig.MachineNodeLabels, poolLabels)
 
-		delete(cfg.MachineConfig.MachineNodeLabels, "node.longhorn.io/create-default-disk")
+		delete(cfg.MachineConfig.MachineNodeLabels, longhornDefaultDiskLabel)
+		stripKubeletStorageLabel(cfg.MachineConfig.MachineKubelet)
 		cfg.MachineConfig.MachineNodeLabels[LabelAutoscaled] = labelValueTrue
 
 		applyPoolTaints(cfg, poolTaints)
@@ -140,6 +142,51 @@ func shapeAutoscalerWorker(
 	}
 
 	return patched, nil
+}
+
+// Kubelet registration labels are independent of machine.nodeLabels. Static workers
+// may set the Longhorn label here so storage can schedule immediately on first boot.
+// Remove it from every argument value when shaping compute-only autoscaler workers.
+func stripKubeletStorageLabel(kubelet *v1alpha1.KubeletConfig) {
+	if kubelet == nil {
+		return
+	}
+
+	values, ok := kubelet.KubeletExtraArgs.ToMap()["node-labels"]
+	if !ok {
+		return
+	}
+
+	filtered := make([]string, 0, len(values))
+	changed := false
+
+	for _, value := range values {
+		labels := strings.Split(value, ",")
+
+		kept := slices.DeleteFunc(labels, func(label string) bool {
+			key, _, _ := strings.Cut(label, "=")
+
+			return key == longhornDefaultDiskLabel
+		})
+		changed = changed || len(kept) != len(labels)
+
+		if len(kept) > 0 {
+			filtered = append(filtered, strings.Join(kept, ","))
+		}
+	}
+
+	if !changed {
+		return
+	}
+
+	switch len(filtered) {
+	case 0:
+		delete(kubelet.KubeletExtraArgs, "node-labels")
+	case 1:
+		kubelet.KubeletExtraArgs["node-labels"] = talosmeta.NewArgValue(filtered[0], nil)
+	default:
+		kubelet.KubeletExtraArgs["node-labels"] = talosmeta.NewArgValue("", filtered)
+	}
 }
 
 // applyPoolTaints writes the pool's taints into machine.nodeTaints. Talos encodes
@@ -244,46 +291,68 @@ func buildClusterConfigSecretValue(
 // in a cluster-autoscaler-config Secret's HCLOUD_CLUSTER_CONFIG value. It is used
 // to detect a Talos OS bump (a new boot image) across an update: a changed image
 // ID means existing autoscaler nodes booted from an older snapshot and can only
-// adopt the new one by being replaced. It returns "" when the key is absent or
-// the value cannot be decoded, so callers treat an unreadable baseline as "no
-// detectable image change" rather than forcing a disruptive recycle.
-func snapshotImageIDFromSecret(secret *corev1.Secret) string {
-	raw := secret.Data[clusterautoscalerinstaller.AutoscalerConfigHcloudClusterConfigKey]
+// adopt the new one by being replaced. A complete pre-migration legacy Secret is
+// also a baseline; an unreadable modern value must never fall back to legacy data.
+func snapshotImageIDFromSecret(secret *corev1.Secret) (string, error) {
+	raw, modern := secret.Data[clusterautoscalerinstaller.AutoscalerConfigHcloudClusterConfigKey]
+	if !modern &&
+		len(secret.Data["hcloud_image"]) > 0 && len(secret.Data["hcloud_cloud_init"]) > 0 {
+		return string(secret.Data["hcloud_image"]), nil
+	}
+
 	if len(raw) == 0 {
-		return ""
+		return "", ErrAutoscalerClusterConfigMissing
 	}
 
 	jsonBytes, err := base64.StdEncoding.DecodeString(string(raw))
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("decoding autoscaler cluster config: %w", err)
 	}
 
 	var clusterConfig hcloudClusterConfig
-	if json.Unmarshal(jsonBytes, &clusterConfig) != nil {
-		return ""
+
+	err = json.Unmarshal(jsonBytes, &clusterConfig)
+	if err != nil {
+		return "", fmt.Errorf("parsing autoscaler cluster config: %w", err)
 	}
 
-	return clusterConfig.ImagesForArch.Amd64
+	if clusterConfig.ImagesForArch.Amd64 == "" {
+		return "", ErrAutoscalerAMD64ImageMissing
+	}
+
+	return clusterConfig.ImagesForArch.Amd64, nil
 }
 
 // currentAutoscalerSnapshotImageID returns the amd64 snapshot image ID currently
-// recorded in the cluster-autoscaler-config Secret, or "" when the Secret is
-// absent or unreadable. It is best-effort: an empty result simply means no boot
-// image change can be detected, so the caller falls back to the diff-based gate.
-func (p *Provisioner) currentAutoscalerSnapshotImageID(ctx context.Context) string {
+// recorded in the cluster-autoscaler-config Secret. Only a missing Secret means
+// no prior baseline; read and decode failures must stop the update.
+func (p *Provisioner) currentAutoscalerSnapshotImageID(ctx context.Context) (string, error) {
+	imageID, _, err := p.currentAutoscalerSnapshotBaseline(ctx)
+
+	return imageID, err
+}
+
+func (p *Provisioner) currentAutoscalerSnapshotBaseline(ctx context.Context) (string, bool, error) {
 	kubeclient, err := p.newSecretKubeclient("autoscaler snapshot probe")
 	if err != nil {
-		return ""
+		return "", false, err
 	}
 
 	secret, err := kubeclient.CoreV1().
 		Secrets(autoscalerConfigSecretNamespace).
 		Get(ctx, autoscalerConfigSecretName, metav1.GetOptions{})
-	if err != nil {
-		return ""
+	if apierrors.IsNotFound(err) {
+		return "", false, nil
 	}
 
-	return snapshotImageIDFromSecret(secret)
+	if err != nil {
+		return "", false, fmt.Errorf("getting autoscaler snapshot Secret: %w", err)
+	}
+
+	imageID, err := snapshotImageIDFromSecret(secret)
+	_, pending := secret.Annotations[autoscalerImagePendingAnnotation]
+
+	return imageID, pending, err
 }
 
 // compressWorkerConfigToUserData encodes a Talos worker machine config into the
@@ -427,7 +496,7 @@ func updateAutoscalerSecretIfNeeded(
 	existing *corev1.Secret,
 	desiredData map[string][]byte,
 ) (bool, error) {
-	if !k8s.MergeSecretData(existing, desiredData) {
+	if !mergeAutoscalerSecretData(existing, desiredData) {
 		return false, nil
 	}
 
@@ -440,7 +509,7 @@ func updateAutoscalerSecretIfNeeded(
 			return fmt.Errorf("get autoscaler config secret for update: %w", getErr)
 		}
 
-		if !k8s.MergeSecretData(latest, desiredData) {
+		if !mergeAutoscalerSecretData(latest, desiredData) {
 			return nil
 		}
 

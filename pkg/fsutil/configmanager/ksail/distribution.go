@@ -470,6 +470,11 @@ func (m *ConfigManager) cacheTalosConfig() error {
 		}
 	}
 
+	talosConfig, err = talosConfig.WithProviderNetworks(m.Config)
+	if err != nil {
+		return fmt.Errorf("configure nested Talos networks: %w", err)
+	}
+
 	m.DistributionConfig.Talos = talosConfig
 
 	return nil

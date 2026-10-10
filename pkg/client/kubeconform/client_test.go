@@ -458,7 +458,10 @@ func TestValidateBytesStopsBetweenDocumentsWhenContextCancelled(t *testing.T) {
 	opts := &kubeconform.ValidationOptions{
 		IgnoreMissingSchemas: false,
 		SchemaLocations: []string{
-			schemaServer.URL + "/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json",
+			// A unique path prevents a reused server port from serving a persisted
+			// schema without reaching the handler that cancels the context.
+			schemaServer.URL + "/" + filepath.Base(filepath.Dir(t.TempDir())) +
+				"/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json",
 		},
 	}
 

@@ -33,13 +33,38 @@ func recordAppliedChange(result *clusterupdate.UpdateResult, role, nodeName, act
 
 // recordFailedChange adds a failed change to the update result.
 func recordFailedChange(result *clusterupdate.UpdateResult, role, nodeName string, err error) {
+	result.FailedChanges = append(result.FailedChanges, failedChange(role, nodeName, err))
+}
+
+// recordFailedChangeOnce adds a failed change unless result already carries the
+// identical one, and reports whether it was added. A step that lists the same
+// servers twice in one update uses it so each is reported once.
+func recordFailedChangeOnce(
+	result *clusterupdate.UpdateResult,
+	role, nodeName string,
+	err error,
+) bool {
+	change := failedChange(role, nodeName, err)
+
+	for _, existing := range result.FailedChanges {
+		if existing.Field == change.Field && existing.Reason == change.Reason {
+			return false
+		}
+	}
+
+	result.FailedChanges = append(result.FailedChanges, change)
+
+	return true
+}
+
+func failedChange(role, nodeName string, err error) clusterupdate.Change {
 	field := "cluster.workers"
 	if role == RoleControlPlane {
 		field = "cluster.controlPlanes"
 	}
 
-	result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
+	return clusterupdate.Change{
 		Field:  field,
 		Reason: fmt.Sprintf("failed to manage %s node %s: %v", role, nodeName, err),
-	})
+	}
 }

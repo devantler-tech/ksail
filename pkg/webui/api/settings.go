@@ -67,6 +67,8 @@ type CredentialUpdate struct {
 type AppSettings struct {
 	// Editor is the command used for interactive editor flows (e.g. "code --wait").
 	Editor string `json:"editor"`
+	// AWSSSORenewal enables explicit, experimental sign-in for imported AWS SSO contexts.
+	AWSSSORenewal bool `json:"awsSsoRenewal"`
 	// Chat holds the AI assistant preferences.
 	Chat ChatSettings `json:"chat"`
 }

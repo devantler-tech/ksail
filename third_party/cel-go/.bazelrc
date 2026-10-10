@@ -1,0 +1,6 @@
+# Enable Bzlmod for every Bazel command
+common --enable_bzlmod
+
+build --cxxopt=-std=c++17 --host_cxxopt=-std=c++17
+
+test --test_output=errors

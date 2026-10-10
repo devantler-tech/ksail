@@ -29,7 +29,8 @@ func workerConfigsWithLonghornLabel(t *testing.T) *talosconfigmanager.Configs {
 	require.NoError(t, os.MkdirAll(workersDir, 0o750))
 	require.NoError(t, os.WriteFile(
 		filepath.Join(workersDir, "longhorn.yaml"),
-		[]byte("machine:\n  nodeLabels:\n    "+longhornDefaultDiskLabel+": \"true\"\n"),
+		[]byte("machine:\n  nodeLabels:\n    "+longhornDefaultDiskLabel+": \"true\"\n"+
+			"  kubelet:\n    extraArgs:\n      node-labels: \""+longhornDefaultDiskLabel+"=true,workload=compute\"\n"),
 		0o600,
 	))
 
@@ -78,6 +79,16 @@ func bootedMachineLabels(t *testing.T, cloudInit string) map[string]string {
 	return booted.RawV1Alpha1().MachineConfig.MachineNodeLabels
 }
 
+func assertBootedKubeletLabels(t *testing.T, cloudInit string) {
+	t.Helper()
+
+	booted, err := configloader.NewFromBytes(decodePoolCloudInit(t, cloudInit))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"workload=compute"},
+		booted.RawV1Alpha1().MachineConfig.MachineKubelet.KubeletExtraArgs.ToMap()["node-labels"],
+		"an autoscaler node must register without the Longhorn default-disk label")
+}
+
 // The config a new autoscaler node boots from is the pool's cloudInit inside the Secret, not the
 // intermediate generated worker config. This builds that Secret the way cluster create and update
 // do, decodes each pool's cloudInit the way the autoscaler and Talos do, and checks the booted
@@ -123,6 +134,7 @@ func TestAutoscalerSecretPayloadBootsEveryPoolWithTheAutoscalerShape(t *testing.
 			"pool %s would boot without the autoscaler marker", name)
 		assert.NotContains(t, labels, longhornDefaultDiskLabel,
 			"pool %s would boot with the Longhorn default-disk label", name)
+		assertBootedKubeletLabels(t, nodeConfig.CloudInit)
 		assert.Equal(t, "true", nodeConfig.Labels[talosprovisioner.LabelAutoscaled],
 			"pool %s template would omit the autoscaler marker", name)
 		assert.NotContains(t, nodeConfig.Labels, longhornDefaultDiskLabel,

@@ -1,0 +1,56 @@
+name: Verify KSail ARC Delivery
+
+on:
+  workflow_dispatch:
+    inputs:
+      enable_arc:
+        description: Run only after the platform has verified admission, isolation and capacity
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: ksail-arc-preflight
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Verify actual restricted ARC job delivery
+    if: github.ref == 'refs/heads/main' && inputs.enable_arc
+    runs-on: platform-linux
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact main revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      # Cilium owns network enforcement; a job must not install privileged
+      # host firewall tooling or alter the runner's registration configuration.
+      - name: Verify actual runner isolation and external connectivity
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          test "${RUNNER_ENVIRONMENT}" = self-hosted
+          test ! -e /var/run/secrets/kubernetes.io/serviceaccount/token
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error \
+            --max-time 20 --output /dev/null https://api.github.com/zen
+
+      - name: Exercise desktop toolchain without altering the active runner
+        run: /usr/local/bin/ksail-analysis-smoke --live-runner
+
+      - name: Record bounded container memory proof
+        run: |
+          set -euo pipefail
+          limit=$(cat /sys/fs/cgroup/memory.max)
+          peak=$(cat /sys/fs/cgroup/memory.peak)
+          case "${peak}" in ''|*[!0-9]*) exit 1 ;; esac
+          test "${limit}" = 15032385536
+          test "${peak}" -gt 0
+          test "${peak}" -le "${limit}"
+          printf 'PASS: actual ARC job; memory limit bytes=%s; preflight peak bytes=%s\n' "${limit}" "${peak}"
