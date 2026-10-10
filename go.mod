@@ -16,8 +16,8 @@ require (
 	github.com/fatih/color v1.19.0
 	github.com/fluxcd/helm-controller/api v1.6.5
 	github.com/fluxcd/kustomize-controller/api v1.9.5
-	github.com/fluxcd/pkg/apis/meta v1.31.0
-	github.com/fluxcd/source-controller/api v1.9.5
+	github.com/fluxcd/pkg/apis/meta v1.32.0
+	github.com/fluxcd/source-controller/api v1.9.6
 	github.com/getsops/sops/v3 v3.13.3
 	github.com/gkampitakis/go-snaps v0.5.23
 	github.com/go-viper/mapstructure/v2 v2.5.0
@@ -34,12 +34,12 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.12.1
 	github.com/yannh/kubeconform v0.8.0
-	golang.org/x/sync v0.23.0
+	golang.org/x/sync v0.24.0
 	golang.org/x/term v0.46.0
 	helm.sh/helm/v4 v4.2.4
 	k8s.io/api v0.36.5
 	k8s.io/apiextensions-apiserver v0.36.5
-	k8s.io/apimachinery v0.36.5
+	k8s.io/apimachinery v0.37.0
 	k8s.io/cli-runtime v0.36.5
 	k8s.io/client-go v0.36.5
 	k8s.io/kubectl v0.36.5
@@ -62,7 +62,7 @@ require (
 	github.com/apricote/hcloud-upload-image/hcloudimages v1.4.0
 	github.com/atotto/clipboard v0.1.4
 	github.com/aws/aws-sdk-go-v2 v1.47.1
-	github.com/aws/aws-sdk-go-v2/config v1.33.4
+	github.com/aws/aws-sdk-go-v2/config v1.33.6
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.6
 	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.81.1
 	github.com/aws/aws-sdk-go-v2/service/eks v1.102.0
@@ -82,9 +82,9 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.5
 	github.com/google/go-github/v72 v72.0.0
 	github.com/googleapis/gax-go/v2 v2.26.2
-	github.com/gopacket/gopacket v1.7.3
+	github.com/gopacket/gopacket v1.7.4
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
-	github.com/hetznercloud/hcloud-go/v2 v2.49.0
+	github.com/hetznercloud/hcloud-go/v2 v2.50.0
 	github.com/invopop/jsonschema v0.14.0
 	github.com/kubescape/kubescape/v3 v3.0.48
 	github.com/kubescape/opa-utils v0.0.314
@@ -359,7 +359,7 @@ require (
 	github.com/chainguard-dev/git-urls v1.0.2 // indirect
 	github.com/charithe/durationcheck v0.0.11 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
-	github.com/charmbracelet/x/ansi v0.11.7 // indirect
+	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect
 	github.com/charmbracelet/x/exp/slice v0.0.0-20260122224438-b01af16209d9 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
@@ -537,7 +537,7 @@ require (
 	github.com/golangci/unconvert v0.0.0-20250410112200-a129a6e6413e // indirect
 	github.com/goodhosts/hostsfile v0.1.7 // indirect
 	github.com/google/btree v1.1.3 // indirect
-	github.com/google/cel-go v0.31.0 // indirect
+	github.com/google/cel-go v0.31.0
 	github.com/google/certificate-transparency-go v1.3.3 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
@@ -955,7 +955,7 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace v0.69.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.71.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.62.0 // indirect
-	go.opentelemetry.io/otel v1.46.0
+	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.22.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.44.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.44.0 // indirect
@@ -963,12 +963,12 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.45.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.45.0 // indirect
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.46.0 // indirect
-	go.opentelemetry.io/otel/log v0.22.0
-	go.opentelemetry.io/otel/metric v1.46.0 // indirect
-	go.opentelemetry.io/otel/sdk v1.46.0
+	go.opentelemetry.io/otel/log v1.47.0
+	go.opentelemetry.io/otel/metric v1.47.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.47.0
 	go.opentelemetry.io/otel/sdk/log v0.22.0
-	go.opentelemetry.io/otel/sdk/metric v1.46.0 // indirect
-	go.opentelemetry.io/otel/trace v1.46.0
+	go.opentelemetry.io/otel/sdk/metric v1.47.0 // indirect
+	go.opentelemetry.io/otel/trace v1.47.0
 	go.opentelemetry.io/proto/otlp v1.11.1
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
@@ -1040,6 +1040,11 @@ require (
 // Dependency version pins: modules replaced here have upstream incompatibilities
 // that require pinning until the respective projects ship compatible releases.
 replace (
+	// Authenticate the complete release source instead of unavailable Git/LFS
+	// downloads (ksail#7131, ADR 0010). This qualified pin leaves future releases
+	// unaffected; remove it after an authenticated successor passes managed analysis.
+	github.com/anchore/go-macholibre v0.1.0 => ./third_party/go-macholibre
+
 	// image-factory v1.3.0 transitively pulls in grype v0.112.0 (via go-vex),
 	// which added a *DistroAlertData parameter to models.NewDocument. kubescape
 	// v3.0.48 still calls the 10-argument form and will not compile against
@@ -1048,6 +1053,12 @@ replace (
 	// so pinning grype back to v0.104.2 is safe. This replace can be removed
 	// once kubescape ships a release compatible with grype v0.106+.
 	github.com/anchore/grype => github.com/anchore/grype v0.104.2
+	// Same source authentication and removal condition as ADR 0010, without
+	// replacing newer Glamour releases.
+	github.com/charmbracelet/glamour v1.0.0 => ./third_party/glamour
+
+	// Preserve the selected runtime version with validated protocol parsing.
+	github.com/charmbracelet/x/ansi v0.11.7 => ./third_party/ansi-runtime
 
 	// k3d v5.9.0-rc.0 uses docker/docker monolith types. docker/cli v29 migrated
 	// to the new moby/moby/api and moby/moby/client split modules whose types are
@@ -1055,6 +1066,12 @@ replace (
 	// everything on the monolith type system.
 	github.com/docker/cli => github.com/docker/cli v28.3.1+incompatible
 	github.com/docker/docker => github.com/docker/docker v28.5.2+incompatible
+	// Same source authentication and removal condition as ADR 0010, without
+	// replacing newer CEL releases.
+	github.com/google/cel-go v0.31.0 => ./third_party/cel-go
+
+	// Authenticate the selected JMESPath source independently of shallow Git fetches.
+	github.com/jmespath/go-jmespath v0.4.1-0.20220621161143-b0104c826a24 => ./third_party/jmespath
 	// The v5.9.0 tag moved after Go's checksum database recorded its original
 	// source. Select that authenticated commit without accepting changed tag
 	// bytes (ksail#6781). This qualified replacement leaves future releases
@@ -1075,6 +1092,7 @@ replace (
 	// fixes patch.go without forcing the moby/moby split (or once KSail migrates to
 	// the split universe).
 	github.com/kubescape/kubescape/v3 => github.com/devantler/kubescape/v3 v3.0.49-0.20260529230755-084b6f1ebcc8
+	github.com/kyverno/go-jmespath v0.4.1-0.20231124160150-95e59c162877 => ./third_party/kyverno-jmespath
 
 	// loft-sh/log uses tablewriter v0.0.5 API which is incompatible with v1.x
 	// required by k9s, grype, and syft. This replace can be removed once
@@ -1110,6 +1128,15 @@ replace (
 	// reintroducing the break described above.
 	github.com/opencontainers/runc => github.com/opencontainers/runc v1.3.6
 
+	// The selected tag and original commit are unavailable through direct Git.
+	// Preserve every authenticated published source byte (ksail#7456, ADR 0010).
+	// Remove when an authenticated successor resolves the dependency test graph.
+	github.com/rancher/dynamiclistener v1.27.5 => ./third_party/dynamiclistener
+
+	// Authenticate the selected Redis instrumentation source and its companion.
+	github.com/redis/go-redis/extra/rediscmd/v9 v9.5.3 => ./third_party/rediscmd
+	github.com/redis/go-redis/extra/redisotel/v9 v9.5.3 => ./third_party/redisotel
+
 	// Compatibility adapter for the fixed OTel logging API. See
 	// third_party/otelzap/KSail-PATCH.md for provenance and removal conditions.
 	github.com/uptrace/opentelemetry-go-extra/otelzap => ./third_party/otelzap
@@ -1127,3 +1154,8 @@ tool (
 	github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 	golang.org/x/tools/cmd/deadcode
 )
+
+// Flux meta v1.32.0 has unchanged Go APIs but requires Kubernetes v0.37.0.
+// Keep its runtime compatible with the embedded v0.36 tools until #7259 lands.
+// Qualify this mapping so a later requirement cannot reuse it without validation.
+replace k8s.io/apimachinery v0.37.0 => k8s.io/apimachinery v0.36.5
