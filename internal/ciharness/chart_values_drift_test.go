@@ -11,7 +11,59 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const certManagerTrialStep = "🧪 cert-manager values drift — one upgrade then no-op"
+const (
+	certManagerTrialStep = "🧪 cert-manager values drift — one upgrade then no-op"
+	kyvernoTrialStep     = "🧪 Kyverno values drift — one upgrade then no-op"
+)
+
+// valuesTrialProfile describes one component's fixture: the release the stubs
+// serve, the values before and after seeding, and the flags the seed must carry.
+type valuesTrialProfile struct {
+	step         string
+	component    string
+	release      string
+	chart        string
+	field        string
+	baseValues   string
+	seededValues string
+	seedFlags    string
+	extraArgs    string
+	rollouts     int
+}
+
+func certManagerTrialProfile() valuesTrialProfile {
+	return valuesTrialProfile{
+		step:         certManagerTrialStep,
+		component:    "",
+		release:      "cert-manager",
+		chart:        "cert-manager-v1.21.2",
+		field:        "cluster.certManager.chartValues",
+		baseValues:   `{"installCRDs":true,"startupapicheck":{"timeout":"10m0s"}}`,
+		seededValues: `{"installCRDs":true,"startupapicheck":{"timeout":"12m0s"}}`,
+		seedFlags:    "--version v1.21.2|--set installCRDs=true|--set startupapicheck.timeout=12m0s",
+		extraArgs:    " --cert-manager Enabled",
+		rollouts:     3,
+	}
+}
+
+func kyvernoTrialProfile() valuesTrialProfile {
+	base := `{"admissionController":{"webhookServer":{"failurePolicy":"Ignore"}}}`
+
+	return valuesTrialProfile{
+		step:       kyvernoTrialStep,
+		component:  "kyverno",
+		release:    "kyverno",
+		chart:      "kyverno-3.9.1",
+		field:      "cluster.policyEngine.chartValues",
+		baseValues: base,
+		seededValues: `{"admissionController":{"podAnnotations":{"ksail-values-trial":"seeded"},` +
+			`"webhookServer":{"failurePolicy":"Ignore"}}}`,
+		seedFlags: "--version 3.9.1|--repo https://kyverno.github.io/kyverno/|" +
+			"--set admissionController.podAnnotations.ksail-values-trial=seeded",
+		extraArgs: " --policy-engine Kyverno",
+		rollouts:  4,
+	}
+}
 
 const certManagerTargetGuard = `
 validate_target() {
@@ -50,19 +102,20 @@ case "$1 $2" in
     else
       printf '['
     fi
-    printf '{"name":"cert-manager","status":"%s",\n"chart":"cert-manager-v1.21.2","revision":"%s"}]\n' \
-      "$status" "$revision"
+    printf '{"name":"%s","status":"%s",\n"chart":"%s","revision":"%s"}]\n' \
+      "$FIXTURE_RELEASE" "$status" "$FIXTURE_CHART" "$revision"
     [[ "$FIXTURE_MODE" != helm_list_nonzero ]] || exit 55
     ;;
   'get values')
     if [[ "$revision" == 2 || ( "$revision" != 1 && "$FIXTURE_MODE" == wrong_values ) ]]; then
-      printf '{"installCRDs":true,"startupapicheck":{"timeout":"12m0s"}}\n'
+      printf '%s\n' "$FIXTURE_SEEDED_VALUES"
     else
-      printf '{"installCRDs":true,"startupapicheck":{"timeout":"10m0s"}}\n'
+      printf '%s\n' "$FIXTURE_BASE_VALUES"
     fi
     ;;
-  'upgrade cert-manager')
-    for flag in '--atomic' '--wait' '--wait-for-jobs' '--reuse-values' '--version v1.21.2' '--set installCRDs=true'; do
+  "upgrade $FIXTURE_RELEASE")
+    IFS='|' read -r -a seed_flags <<<"$FIXTURE_SEED_FLAGS"
+    for flag in '--atomic' '--wait' '--wait-for-jobs' '--reuse-values' "${seed_flags[@]}"; do
       [[ " $* " == *" $flag "* ]] || exit 99
     done
     printf 2 > "$FIXTURE_REVISION"
@@ -125,7 +178,7 @@ validate_config() {
 validate_config "$@"
 revision=$(cat "$FIXTURE_REVISION")
 empty='"rebootRequired":[],"recreateRequired":[],"rollingRecreate":[],"wipeRequired":[],"unknownBaseline":[]'
-drift='{"totalChanges":1,"inPlaceChanges":[{"field":"cluster.certManager.chartValues","category":"in-place"}],'
+drift='{"totalChanges":1,"inPlaceChanges":[{"field":"'"$FIXTURE_FIELD"'","category":"in-place"}],'
 drift+="$empty}"
 noop='{"totalChanges":0,"inPlaceChanges":[],'
 noop+="$empty}"
@@ -176,8 +229,18 @@ esac
 
 func runCertManagerTrial(t *testing.T, mode string) (string, string, error) {
 	t.Helper()
+
+	return runValuesTrial(t, certManagerTrialProfile(), mode)
+}
+
+func runValuesTrial(
+	t *testing.T,
+	profile valuesTrialProfile,
+	mode string,
+) (string, string, error) {
+	t.Helper()
 	action := readCompositeAction(t, ".github/actions/ksail-system-test/action.yaml")
-	step := findHarnessStep(t, action.Runs.Steps, certManagerTrialStep)
+	step := findHarnessStep(t, action.Runs.Steps, profile.step)
 	dir := t.TempDir()
 	revisionFile := filepath.Join(dir, "revision")
 	callsFile := filepath.Join(dir, "calls")
@@ -195,9 +258,9 @@ func runCertManagerTrial(t *testing.T, mode string) (string, string, error) {
 	writeExecutableStub(t, filepath.Join(dir, "ksail"), certManagerKSailStub)
 
 	args := "--name fixture-cluster --kubeconfig " + kubeconfigFile +
-		" --cert-manager Enabled --image-verification Disabled"
+		profile.extraArgs + " --image-verification Disabled"
 	if mode == "missing_name" {
-		args = "--kubeconfig " + kubeconfigFile + " --cert-manager Enabled"
+		args = "--kubeconfig " + kubeconfigFile + profile.extraArgs
 	}
 
 	command := exec.CommandContext(t.Context(), "bash")
@@ -215,6 +278,13 @@ func runCertManagerTrial(t *testing.T, mode string) (string, string, error) {
 		"FIXTURE_CALLS="+callsFile,
 		"FIXTURE_MODE="+mode,
 		"FIXTURE_KUBECONFIG="+kubeconfigFile,
+		"VALUES_TRIAL_COMPONENT="+profile.component,
+		"FIXTURE_RELEASE="+profile.release,
+		"FIXTURE_CHART="+profile.chart,
+		"FIXTURE_FIELD="+profile.field,
+		"FIXTURE_BASE_VALUES="+profile.baseValues,
+		"FIXTURE_SEEDED_VALUES="+profile.seededValues,
+		"FIXTURE_SEED_FLAGS="+profile.seedFlags,
 	)
 	output, err := command.CombinedOutput()
 	fixtureRoot, openErr := os.OpenRoot(dir)
@@ -304,6 +374,66 @@ func TestCertManagerValuesTrialUsesExistingRealNodeLeg(t *testing.T) {
 	assert.Contains(t, step.If, "inputs.provider == 'Docker'")
 	assert.Contains(t, step.If, "inputs.distribution == 'Vanilla'")
 	assert.Contains(t, step.If, "contains(inputs.args, '--cert-manager Enabled')")
+	assert.Equal(t, "${{ steps.resolve-args.outputs.args }}", step.Env["ARGS"])
+	assert.Equal(t, "${{ steps.k8s-version-pin.outputs.flag }}", step.Env["K8S_VERSION_FLAG"])
+}
+
+func TestKyvernoValuesTrialConverges(t *testing.T) {
+	t.Parallel()
+
+	profile := kyvernoTrialProfile()
+	output, calls, err := runValuesTrial(t, profile, "success")
+	require.NoError(t, err, output)
+	assert.Equal(t, 1, strings.Count(calls, "helm upgrade "), calls)
+	assert.Equal(t, 2, strings.Count(calls, "ksail cluster update "), calls)
+	assert.Equal(t, 3, strings.Count(calls, "ksail cluster diff "), calls)
+	assert.Equal(t, profile.rollouts, strings.Count(calls, "kubectl rollout status "), calls)
+	assert.Contains(t, calls, "--namespace kyverno")
+	assert.Contains(t, calls, "--repo https://kyverno.github.io/kyverno/")
+	assert.NotContains(t, calls, "cert-manager")
+	assert.Contains(t, output, "kyverno values trial: one Helm upgrade and a repeated no-op")
+}
+
+func TestKyvernoValuesTrialRejectsIncompleteProof(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct{ mode, want string }{
+		{mode: "missing_drift", want: "values drift did not exit exactly 2"},
+		{mode: "no_upgrade", want: "reconciliation did not create exactly one revision"},
+		{mode: "wrong_values", want: "reconciliation did not restore the desired values"},
+		{mode: "gitops_owned", want: "latest storage revision differs or is GitOps-owned"},
+		{mode: "not_ready", want: "kyverno-admission-controller is not ready"},
+		{mode: "repeat_upgrade", want: "repeated update changed the Helm revision"},
+		{mode: "unknown_baseline", want: "expected only one in-place kyverno values change"},
+	} {
+		t.Run(testCase.mode, func(t *testing.T) {
+			t.Parallel()
+			output, _, err := runValuesTrial(t, kyvernoTrialProfile(), testCase.mode)
+			require.Error(t, err, output)
+			assert.Contains(t, output, testCase.want)
+		})
+	}
+}
+
+func TestValuesTrialRejectsUnknownComponent(t *testing.T) {
+	t.Parallel()
+
+	profile := kyvernoTrialProfile()
+	profile.component = "gatekeeper"
+	output, calls, err := runValuesTrial(t, profile, "success")
+	require.Error(t, err, output)
+	assert.Contains(t, output, "unknown component")
+	assert.NotContains(t, calls, "helm upgrade ")
+}
+
+func TestKyvernoValuesTrialUsesExistingRealNodeLeg(t *testing.T) {
+	t.Parallel()
+	action := readCompositeAction(t, ".github/actions/ksail-system-test/action.yaml")
+	step := findHarnessStep(t, action.Runs.Steps, kyvernoTrialStep)
+	assert.Contains(t, step.If, "inputs.provider == 'Docker'")
+	assert.Contains(t, step.If, "inputs.distribution == 'Vanilla'")
+	assert.Contains(t, step.If, "contains(inputs.args, '--policy-engine Kyverno')")
+	assert.Equal(t, "kyverno", step.Env["VALUES_TRIAL_COMPONENT"])
 	assert.Equal(t, "${{ steps.resolve-args.outputs.args }}", step.Env["ARGS"])
 	assert.Equal(t, "${{ steps.k8s-version-pin.outputs.flag }}", step.Env["K8S_VERSION_FLAG"])
 }

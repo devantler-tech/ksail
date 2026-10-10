@@ -65,6 +65,28 @@ func certManagerValuesProbe() chartValuesDriftProbe {
 	}
 }
 
+// policyEngineValuesProbe compares the configured policy engine's values
+// (ksail#7651). The factory builds the Kyverno or Gatekeeper installer the
+// configuration selects, so a release of the other engine is never compared.
+func policyEngineValuesProbe() chartValuesDriftProbe {
+	return chartValuesDriftProbe{
+		component: "policy-engine",
+		field:     specdiff.PolicyEngineValuesField,
+		needed:    ksailInstallsPolicyEngine,
+		factory: func(factories *setup.InstallerFactories) installerFactory {
+			return factories.PolicyEngine
+		},
+	}
+}
+
+// ksailInstallsPolicyEngine reports whether the configuration has KSail
+// install a policy engine. An unset engine selects none: the installer factory
+// rejects it, so probing it would only warn about a component nobody asked for.
+func ksailInstallsPolicyEngine(clusterCfg *v1alpha1.Cluster) bool {
+	return clusterCfg.Spec.Cluster.PolicyEngine != "" &&
+		setup.GetComponentRequirements(clusterCfg).NeedsPolicyEngine
+}
+
 // chartValuesDriftProbes lists the components whose rendered chart values are
 // compared with their installed release. The remaining component families are
 // tracked on ksail#7366.
@@ -72,6 +94,7 @@ func chartValuesDriftProbes() []chartValuesDriftProbe {
 	return []chartValuesDriftProbe{
 		autoscalerValuesProbe(),
 		certManagerValuesProbe(),
+		policyEngineValuesProbe(),
 	}
 }
 

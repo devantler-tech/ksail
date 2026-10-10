@@ -1,12 +1,39 @@
 #!/usr/bin/env bash
-# Exercise the actual cert-manager values reconciliation on an existing CI cluster.
+# Exercise the actual chart values reconciliation of one KSail-managed component
+# (VALUES_TRIAL_COMPONENT: cert-manager or kyverno) on an existing CI cluster.
 set -euo pipefail
 
+component="${VALUES_TRIAL_COMPONENT:-cert-manager}"
+
 fail() {
-	echo "cert-manager values trial: $*" >&2
+	echo "$component values trial: $*" >&2
 	exit 1
 }
-log_dir="${SYSTEM_TEST_LOG_DIR:-/tmp/ksail-system-test-logs}/cert-manager-values-drift"
+
+# Each component names its Helm release, the diff field its drift is reported
+# on, the workloads that must be ready again and a value KSail always renders.
+case "$component" in
+cert-manager)
+	release=cert-manager
+	namespace=cert-manager
+	chart_repo=https://charts.jetstack.io
+	values_field=cluster.certManager.chartValues
+	deployments=(cert-manager cert-manager-webhook cert-manager-cainjector)
+	initial_values_filter='.installCRDs == true and (.startupapicheck.timeout | type == "string")'
+	;;
+kyverno)
+	release=kyverno
+	namespace=kyverno
+	chart_repo=https://kyverno.github.io/kyverno/
+	values_field=cluster.policyEngine.chartValues
+	deployments=(kyverno-admission-controller kyverno-background-controller
+		kyverno-cleanup-controller kyverno-reports-controller)
+	initial_values_filter='.admissionController.webhookServer.failurePolicy == "Ignore"'
+	;;
+*) fail 'unknown component' ;;
+esac
+
+log_dir="${SYSTEM_TEST_LOG_DIR:-/tmp/ksail-system-test-logs}/$component-values-drift"
 mkdir -p "$log_dir"
 command -v helm >/dev/null || fail 'Helm CLI is required to seed the live release'
 helm version --short >"$log_dir/helm-version.txt"
@@ -70,25 +97,25 @@ read -r -a version_args <<<"$K8S_VERSION_FLAG"
 
 release_state() {
 	local phase="$1"
-	helm list --all --namespace cert-manager --output json "${helm_target_args[@]}" >"$log_dir/$phase-release.json" || fail 'could not read latest Helm release'
+	helm list --all --namespace "$namespace" --output json "${helm_target_args[@]}" >"$log_dir/$phase-release.json" || fail 'could not read latest Helm release'
 	# --all includes the latest failed/pending revision. A deployed-only query could
 	# hide a second attempted upgrade and falsely report convergence.
-	jq -er 'map(select(.name == "cert-manager")) |
+	jq -er --arg release "$release" 'map(select(.name == $release)) |
     select(length == 1) | .[0] |
     select(.status == "deployed" and (.revision | tostring | test("^[1-9][0-9]*$")) and
-      (.chart | test("^cert-manager-v?[0-9]+\\.[0-9]+\\.[0-9]+([-+][0-9A-Za-z.-]+)?$"))) |
+      (.chart | test("^" + $release + "-v?[0-9]+\\.[0-9]+\\.[0-9]+([-+][0-9A-Za-z.-]+)?$"))) |
     [.revision | tostring] | .[0]' "$log_dir/$phase-release.json" || fail 'latest release is not a single deployed revision'
 }
 
 read_values() {
 	local phase="$1" revision="$2"
-	helm get values cert-manager --namespace cert-manager --revision "$revision" --output json "${helm_target_args[@]}" |
+	helm get values "$release" --namespace "$namespace" --revision "$revision" --output json "${helm_target_args[@]}" |
 		jq -eS 'select(type == "object")' >"$log_dir/$phase-values.json" || fail 'release values are not an object'
 }
 
 assert_ownership() {
 	local revision="$1"
-	kubectl get secrets --namespace cert-manager --selector owner=helm,name=cert-manager \
+	kubectl get secrets --namespace "$namespace" --selector "owner=helm,name=$release" \
 		--request-timeout=30s --output json "${cli_target_args[@]}" >"$log_dir/storage.json"
 	jq -e --arg revision "$revision" '
     .items | map(.metadata.labels) |
@@ -115,13 +142,13 @@ assert_diff() {
 }
 
 assert_values_change() {
-	jq -e -s 'length == 1 and (.[0] |
+	jq -e -s --arg field "$values_field" 'length == 1 and (.[0] |
     type == "object" and .totalChanges == 1 and
     (.inPlaceChanges | length == 1) and
-    .inPlaceChanges[0].field == "cluster.certManager.chartValues" and
+    .inPlaceChanges[0].field == $field and
     .inPlaceChanges[0].category == "in-place" and
     .rebootRequired == [] and .recreateRequired == [] and .rollingRecreate == [] and
-    .wipeRequired == [] and .unknownBaseline == [])' "$1" >/dev/null || fail 'expected only one in-place cert-manager values change'
+    .wipeRequired == [] and .unknownBaseline == [])' "$1" >/dev/null || fail "expected only one in-place $component values change"
 }
 
 assert_no_changes() {
@@ -140,23 +167,39 @@ update_cluster() {
 original_revision=$(release_state original)
 assert_ownership "$original_revision"
 read_values original "$original_revision"
-jq -e '.installCRDs == true and (.startupapicheck.timeout | type == "string")' \
-	"$log_dir/original-values.json" >/dev/null || fail 'initial KSail values are missing'
+jq -e "$initial_values_filter" "$log_dir/original-values.json" >/dev/null || fail 'initial KSail values are missing'
 assert_diff initial 0
-chart_version=$(jq -er 'map(select(.name == "cert-manager")) | .[0].chart |
-  sub("^cert-manager-"; "")' "$log_dir/original-release.json")
-seed_timeout=12m0s
-if [[ $(jq -r '.startupapicheck.timeout' "$log_dir/original-values.json") == "$seed_timeout" ]]; then
-	seed_timeout=13m0s
-fi
-jq -eS --arg timeout "$seed_timeout" '.startupapicheck.timeout = $timeout' \
+chart_version=$(jq -er --arg release "$release" 'map(select(.name == $release)) | .[0].chart |
+  sub("^" + $release + "-"; "")' "$log_dir/original-release.json")
+
+# The seed changes values KSail does not declare in ksail.yaml, so only the
+# rendered-values comparison can notice it; the spec stays byte-for-byte identical.
+case "$component" in
+cert-manager)
+	seed_value=12m0s
+	if [[ $(jq -r '.startupapicheck.timeout' "$log_dir/original-values.json") == "$seed_value" ]]; then
+		seed_value=13m0s
+	fi
+	# shellcheck disable=SC2016 # $seed is a jq variable
+	seed_filter='.startupapicheck.timeout = $seed'
+	# Helm --set stores booleans as actual booleans, matching real release storage.
+	seed_args=(--set installCRDs=true --set "startupapicheck.timeout=$seed_value")
+	;;
+kyverno)
+	# A pod annotation KSail never renders: every KSail value stays as installed.
+	seed_value=seeded
+	jq -e '.admissionController.podAnnotations["ksail-values-trial"] == null' \
+		"$log_dir/original-values.json" >/dev/null || fail 'seed value is already present'
+	# shellcheck disable=SC2016 # $seed is a jq variable
+	seed_filter='.admissionController.podAnnotations["ksail-values-trial"] = $seed'
+	seed_args=(--set "admissionController.podAnnotations.ksail-values-trial=$seed_value")
+	;;
+esac
+jq -eS --arg seed "$seed_value" "$seed_filter" \
 	"$log_dir/original-values.json" >"$log_dir/expected-seed-values.json"
 
-# Helm --set stores booleans as actual booleans, matching real release storage.
-# Only the timeout changes; KSail's declared spec remains byte-for-byte identical.
-helm upgrade cert-manager cert-manager --repo https://charts.jetstack.io \
-	--namespace cert-manager --version "$chart_version" --reuse-values \
-	--set installCRDs=true --set "startupapicheck.timeout=$seed_timeout" \
+helm upgrade "$release" "$release" --repo "$chart_repo" \
+	--namespace "$namespace" --version "$chart_version" --reuse-values "${seed_args[@]}" \
 	--atomic --wait --wait-for-jobs --timeout 10m "${helm_target_args[@]}" >"$log_dir/seed-upgrade.log" 2>&1
 seed_revision=$(release_state seeded)
 [[ "$seed_revision" == "$((original_revision + 1))" ]] || fail 'seeding did not create exactly one revision'
@@ -173,8 +216,8 @@ updated_revision=$(release_state updated)
 assert_ownership "$updated_revision"
 read_values updated "$updated_revision"
 cmp -s "$log_dir/original-values.json" "$log_dir/updated-values.json" || fail 'reconciliation did not restore the desired values'
-for deployment in cert-manager cert-manager-webhook cert-manager-cainjector; do
-	kubectl rollout status "deployment/$deployment" --namespace cert-manager \
+for deployment in "${deployments[@]}"; do
+	kubectl rollout status "deployment/$deployment" --namespace "$namespace" \
 		--timeout=600s --request-timeout=30s "${cli_target_args[@]}" >"$log_dir/$deployment-readiness.log" 2>&1 || fail "$deployment is not ready"
 done
 
@@ -188,4 +231,4 @@ assert_ownership "$repeated_revision"
 read_values repeated "$repeated_revision"
 cmp -s "$log_dir/original-values.json" "$log_dir/repeated-values.json" || fail 'repeated update changed desired values'
 cmp -s ksail.yaml "$log_dir/ksail-before.yaml" || fail 'trial changed the declared KSail spec'
-echo "cert-manager values trial: one Helm upgrade and a repeated no-op (revisions $seed_revision → $updated_revision → $repeated_revision)"
+echo "$component values trial: one Helm upgrade and a repeated no-op (revisions $seed_revision → $updated_revision → $repeated_revision)"
