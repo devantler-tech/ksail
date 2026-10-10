@@ -17,7 +17,7 @@ require (
 	github.com/fluxcd/helm-controller/api v1.6.5
 	github.com/fluxcd/kustomize-controller/api v1.9.5
 	github.com/fluxcd/pkg/apis/meta v1.32.0
-	github.com/fluxcd/source-controller/api v1.9.5
+	github.com/fluxcd/source-controller/api v1.9.6
 	github.com/getsops/sops/v3 v3.13.3
 	github.com/gkampitakis/go-snaps v0.5.23
 	github.com/go-viper/mapstructure/v2 v2.5.0
@@ -34,7 +34,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.12.1
 	github.com/yannh/kubeconform v0.8.0
-	golang.org/x/sync v0.23.0
+	golang.org/x/sync v0.24.0
 	golang.org/x/term v0.46.0
 	helm.sh/helm/v4 v4.2.4
 	k8s.io/api v0.36.5
@@ -62,7 +62,7 @@ require (
 	github.com/apricote/hcloud-upload-image/hcloudimages v1.4.0
 	github.com/atotto/clipboard v0.1.4
 	github.com/aws/aws-sdk-go-v2 v1.47.1
-	github.com/aws/aws-sdk-go-v2/config v1.33.4
+	github.com/aws/aws-sdk-go-v2/config v1.33.6
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.6
 	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.81.1
 	github.com/aws/aws-sdk-go-v2/service/eks v1.102.0
@@ -82,9 +82,9 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.5
 	github.com/google/go-github/v72 v72.0.0
 	github.com/googleapis/gax-go/v2 v2.26.2
-	github.com/gopacket/gopacket v1.7.3
+	github.com/gopacket/gopacket v1.7.4
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
-	github.com/hetznercloud/hcloud-go/v2 v2.49.0
+	github.com/hetznercloud/hcloud-go/v2 v2.50.0
 	github.com/invopop/jsonschema v0.14.0
 	github.com/kubescape/kubescape/v3 v3.0.48
 	github.com/kubescape/opa-utils v0.0.314
@@ -955,7 +955,7 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace v0.69.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.71.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.62.0 // indirect
-	go.opentelemetry.io/otel v1.46.0
+	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.22.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.44.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.44.0 // indirect
@@ -963,12 +963,12 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.45.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.45.0 // indirect
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.46.0 // indirect
-	go.opentelemetry.io/otel/log v0.22.0
-	go.opentelemetry.io/otel/metric v1.46.0 // indirect
-	go.opentelemetry.io/otel/sdk v1.46.0
+	go.opentelemetry.io/otel/log v1.47.0
+	go.opentelemetry.io/otel/metric v1.47.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.47.0
 	go.opentelemetry.io/otel/sdk/log v0.22.0
-	go.opentelemetry.io/otel/sdk/metric v1.46.0 // indirect
-	go.opentelemetry.io/otel/trace v1.46.0
+	go.opentelemetry.io/otel/sdk/metric v1.47.0 // indirect
+	go.opentelemetry.io/otel/trace v1.47.0
 	go.opentelemetry.io/proto/otlp v1.11.1
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
