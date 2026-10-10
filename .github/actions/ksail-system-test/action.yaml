@@ -769,7 +769,21 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ steps.resolve-args.outputs.args }}
         K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
-      run: bash "$GITHUB_WORKSPACE/.github/actions/ksail-system-test/cert-manager-values-drift.sh"
+      run: bash "$GITHUB_WORKSPACE/.github/actions/ksail-system-test/chart-values-drift.sh"
+
+    - name: 🧪 Kyverno values drift — one upgrade then no-op
+      # Same real-node cluster: the policy engine KSail installed there is the release under test.
+      if: >-
+        inputs.provider == 'Docker' && inputs.distribution == 'Vanilla' && inputs.init == 'true' &&
+        contains(inputs.args, '--policy-engine Kyverno')
+      shell: bash
+      env:
+        VALUES_TRIAL_COMPONENT: kyverno
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ steps.resolve-args.outputs.args }}
+        K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
+      run: bash "$GITHUB_WORKSPACE/.github/actions/ksail-system-test/chart-values-drift.sh"
 
     - name: 🧪 Talos Kubernetes upgrade — known version path
       if: inputs.kubernetes-upgrade-from != '' && inputs.kubernetes-upgrade-to != ''
