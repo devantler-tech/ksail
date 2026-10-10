@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package cel.testdata;
+
+import "cel/testdata/mutant.proto";
+
+// Team is a test message for CEL.
+message Team {
+  // The name of the team.
+  // Formated as 'team_<8_digit_hex_number>'.
+  string name = 1;
+
+  // The members of the team.
+  repeated Mutant members = 2;
+}

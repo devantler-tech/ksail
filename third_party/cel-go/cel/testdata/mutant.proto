@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package cel.testdata;
+
+// Mutant is a test message for CEL.
+message Mutant {
+  // The display name of the mutant.
+  string name = 1;
+
+  // The level of the mutant.
+  // Values from 1 to 10.
+  int32 level = 2;
+
+  // The super power of the mutant.
+  // Matches the IDs in Foo.db.
+  string super_power = 3;
+}
