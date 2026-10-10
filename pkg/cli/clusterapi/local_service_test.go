@@ -28,7 +28,10 @@ import (
 )
 
 const (
-	eventuallyTimeout = 2 * time.Second
+	// eventuallyTimeout only bounds waits for something that is expected to happen, so a passing
+	// test never spends it. It is generous because the coverage job runs every package at once on
+	// a shared runner, where a background create has taken longer than two seconds to finish.
+	eventuallyTimeout = 30 * time.Second
 	eventuallyTick    = 10 * time.Millisecond
 
 	// devClusterName is the discovered-cluster name shared by the List tests.
