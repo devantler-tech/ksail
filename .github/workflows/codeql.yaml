@@ -29,6 +29,12 @@ name: 🔍 CodeQL
 # Autobuild and analysis succeed, then requires real CLI, desktop, adapter and authenticated
 # dependency function bodies.
 #
+# Before it extracts, the Go autobuilder runs plain `make` at the repository root, here and in
+# the managed Code Quality job alike. The Makefile routes that call to
+# `.github/scripts/codeql-autobuild-prepare.sh`, which adds swap on a GitHub-hosted runner and
+# writes memory samples to the job log until the autobuilder exits. In the managed job that is
+# the only place the repository can act, so it is where the runner's memory can be observed.
+#
 # Same languages and suite as the default setup it replaces: actions, Go and
 # JavaScript/TypeScript with the security-extended queries. This satisfies the "Require
 # code scanning results" ruleset. Code-quality results cannot come from a custom workflow
@@ -72,6 +78,10 @@ jobs:
       - name: 🧪 Verify desktop coverage evidence guard
         if: matrix.language == 'go'
         run: bash .github/scripts/verify-desktop-codeql.test.sh
+
+      - name: 🧪 Verify autobuild runner preparation
+        if: matrix.language == 'go'
+        run: bash .github/scripts/codeql-autobuild-prepare.test.sh
 
       - name: 🐧 Install desktop extraction headers
         if: matrix.language == 'go'
