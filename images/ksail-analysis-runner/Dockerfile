@@ -4,7 +4,7 @@ ARG TARGETARCH
 USER 0:0
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN printf 'APT::Snapshot "20261005T000000Z";\n' > /etc/apt/apt.conf.d/99ksail-analysis-snapshot \
-    && apt-get update \
+    && apt-get update -o APT::Update::Error-Mode=any \
     && apt-get install --yes --no-install-recommends \
        build-essential=12.10ubuntu1 pkg-config=1.8.1-2build1 \
        libgtk-4-dev=4.14.5+ds-0ubuntu0.10 \

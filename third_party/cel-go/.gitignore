@@ -1,0 +1,16 @@
+.DS_Store
+.idea
+.vscode
+bazel-bin
+bazel-cel-go
+bazel-genfiles
+bazel-out
+bazel-testlogs
+proto/checked.pb.go
+proto/syntax.pb.go
+*~
+MODULE.bazel.lock
+.ijwb/
+*antlr*.jar
+.antlr/
+
