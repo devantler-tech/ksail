@@ -39,6 +39,12 @@ const AutoscalerValuesField = "cluster.autoscaler.node.chartValues"
 // the same cert-manager Helm upgrade as a cluster.certManager change.
 const CertManagerValuesField = "cluster.certManager.chartValues"
 
+// PolicyEngineValuesField is the diff key for policy-engine (Kyverno or
+// Gatekeeper) chart values that differ from the ones this KSail version
+// renders. Reconciliation routes it to the same policy-engine Helm upgrade as
+// a cluster.policyEngine change.
+const PolicyEngineValuesField = "cluster.policyEngine.chartValues"
+
 // fluxVerifyDriftedDisplay is the old value rendered for verify drift. The
 // detector receives a single boolean covering both an absent spec.verify block
 // and one that is present but differs, so this names the disjunction rather than
