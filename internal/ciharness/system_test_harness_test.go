@@ -833,7 +833,7 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
 	smokeJob, ok := workflow.Jobs["smoke-test"]
 	require.True(t, ok, "smoke-test job is missing")
-	assert.Equal(t, 235, smokeJob.TimeoutMinutes)
+	assert.Equal(t, 280, smokeJob.TimeoutMinutes)
 
 	boundedStepNames := []string{
 		"📄 Checkout",
@@ -849,6 +849,8 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 		"🔎 Report why the EKS create failed",
 		"🧪 ksail cluster update scales EKS nodes",
 		"🧪 ksail workload reconcile",
+		"🔐 Refresh AWS credentials before EKS recovery",
+		"🧪 Recover EKS ownership after local state loss",
 		"🧹 Delete EKS smoke cluster",
 	}
 
@@ -889,14 +891,127 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 	updateIndex := harnessStepIndex(t, smokeJob.Steps, "🧪 ksail cluster update scales EKS nodes")
 	deleteIndex := harnessStepIndex(t, smokeJob.Steps, "🧹 Delete EKS smoke cluster")
 	assert.Less(t, refreshIndex, updateIndex)
-	assert.Less(t, updateIndex, deleteIndex)
+
+	recoveryRefreshIndex := harnessStepIndex(
+		t,
+		smokeJob.Steps,
+		"🔐 Refresh AWS credentials before EKS recovery",
+	)
+	recoveryIndex := harnessStepIndex(
+		t,
+		smokeJob.Steps,
+		"🧪 Recover EKS ownership after local state loss",
+	)
+	reconcileIndex := harnessStepIndex(t, smokeJob.Steps, "🧪 ksail workload reconcile")
+	assert.Less(t, updateIndex, recoveryRefreshIndex)
+	assert.Less(t, reconcileIndex, recoveryRefreshIndex)
+	assert.Less(t, recoveryRefreshIndex, recoveryIndex)
+	assert.Less(t, recoveryIndex, deleteIndex)
+
+	recoveryCredentials := findHarnessStep(
+		t,
+		smokeJob.Steps,
+		"🔐 Refresh AWS credentials before EKS recovery",
+	)
+	assert.Equal(t, initialCredentials.Uses, recoveryCredentials.Uses)
+	assert.Equal(
+		t,
+		initialCredentials.With["role-to-assume"],
+		recoveryCredentials.With["role-to-assume"],
+	)
+	assert.Equal(t, 7200, recoveryCredentials.With["role-duration-seconds"])
+	assert.Contains(t, recoveryCredentials.If, "always()")
 
 	postRefreshMinutes := 0
-	for _, name := range boundedStepNames[10:] {
+	for _, name := range boundedStepNames[10:12] {
 		postRefreshMinutes += findHarnessStep(t, smokeJob.Steps, name).TimeoutMinutes
 	}
 
 	assert.LessOrEqual(t, postRefreshMinutes+10, 120)
+
+	postRecoveryRefreshMinutes := 0
+	for _, name := range boundedStepNames[13:] {
+		postRecoveryRefreshMinutes += findHarnessStep(t, smokeJob.Steps, name).TimeoutMinutes
+	}
+
+	assert.LessOrEqual(t, postRecoveryRefreshMinutes+10, 120)
+}
+
+//nolint:funlen // The workflow step and its external CLI boundary are verified together.
+func TestEKSSmokeRecoversOwnershipWithoutProjectOrLocalState(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
+	smokeJob, ok := workflow.Jobs["smoke-test"]
+	require.True(t, ok)
+	recovery := findHarnessStep(t, smokeJob.Steps, "🧪 Recover EKS ownership after local state loss")
+
+	tempDir := t.TempDir()
+	binDir := filepath.Join(tempDir, "bin")
+	require.NoError(t, os.Mkdir(binDir, 0o700))
+
+	callLog := filepath.Join(tempDir, "calls")
+	awsCallLog := filepath.Join(tempDir, "aws-calls")
+
+	const clusterARN = "arn:aws:eks:us-east-1:123456789012:cluster/fixture"
+
+	writeExecutableStub(t, filepath.Join(binDir, "ksail"), `#!/usr/bin/env bash
+set -euo pipefail
+printf '%s|%s|%s\n' "$PWD" "$HOME" "$*" >> "$KSAIL_RECOVERY_CALL_LOG"
+if [[ "$*" == *"cluster eks-bind"* && "$*" != *"--yes"* ]]; then
+  echo "cluster ARN: $STUB_CLUSTER_ARN"
+  echo 'EKS ownership rebind requires --yes after reviewing the displayed identity' >&2
+  exit 1
+fi
+`)
+	writeExecutableStub(t, filepath.Join(binDir, "aws"), `#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "$AWS_RECOVERY_CALL_LOG"
+printf '%s\t%s\n' "$STUB_CLUSTER_ARN" '2026-09-27T00:00:00Z'
+`)
+
+	command := exec.CommandContext(t.Context(), "bash", "-c", recovery.Run) //nolint:gosec
+	command.Dir = tempDir
+	command.Env = append(os.Environ(),
+		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"HOME="+tempDir,
+		"RUNNER_TEMP="+tempDir,
+		"KSAIL_EKS_CLUSTER_NAME=fixture",
+		"AWS_REGION=us-east-1",
+		"KSAIL_RECOVERY_CALL_LOG="+callLog,
+		"AWS_RECOVERY_CALL_LOG="+awsCallLog,
+		"STUB_CLUSTER_ARN="+clusterARN,
+	)
+	diagnostics, err := command.CombinedOutput()
+	require.NoErrorf(t, err, "recovery step failed: %s", diagnostics)
+
+	calls, err := os.ReadFile(callLog) //nolint:gosec // Test-owned path.
+	require.NoError(t, err)
+
+	lines := strings.Split(strings.TrimSpace(string(calls)), "\n")
+	require.Len(t, lines, 4)
+
+	wantCommands := []string{
+		"cluster eks-bind --experimental --name fixture --provider AWS",
+		"cluster eks-bind --experimental --name fixture --provider AWS --yes",
+		"cluster stop --name fixture --provider AWS",
+		"cluster start --name fixture --provider AWS",
+	}
+
+	for index, line := range lines {
+		parts := strings.SplitN(line, "|", 3)
+		require.Len(t, parts, 3)
+		assert.Equal(t, filepath.Join(tempDir, "eks-ownership-recovery", "work"), parts[0])
+		assert.Equal(t, filepath.Join(tempDir, "eks-ownership-recovery", "home"), parts[1])
+		assert.Equal(t, wantCommands[index], parts[2])
+	}
+
+	awsCalls, err := os.ReadFile(awsCallLog) //nolint:gosec // Test-owned path.
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"eks describe-cluster --name fixture --region us-east-1 --query cluster.[arn,createdAt] --output text",
+		"eks describe-cluster --name fixture --region us-east-1 --query cluster.[arn,createdAt] --output text",
+	}, strings.Split(strings.TrimSpace(string(awsCalls)), "\n"))
 }
 
 func harnessStepIndex(t *testing.T, steps []harnessStep, name string) int {

@@ -1,6 +1,7 @@
 package clusterapi
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,9 +10,35 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
+	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type discoveredEKSNames []string
+
+func (names discoveredEKSNames) ListAllClusters(context.Context) ([]string, error) {
+	return names, nil
+}
+
+// A Settings region change can reveal a same-named EKS cluster that has no local record.
+// A name-only web action must not redirect from that row to the recovered cluster in another region.
+func TestDiscoveredEKSRegionMustMatchRecoveredOwnershipBeforeJob(t *testing.T) {
+	isolateHome(t)
+	t.Setenv("AWS_REGION", "us-west-2")
+
+	const name = "same-name-other-region"
+	saveOwnership(t, name, "eu-north-1", recordedAliases())
+
+	service := NewTestService(nil)
+	service.discoverProviders = []v1alpha1.Provider{v1alpha1.ProviderAWS}
+	service.discoverer.AWS = discoveredEKSNames{name}
+
+	_, err := service.startJob(t.Context(), name, v1alpha1.ClusterPhaseDeleting)
+	require.ErrorIs(t, err, api.ErrInvalid)
+	require.ErrorContains(t, err, "region")
+	assert.Empty(t, service.jobs, "a refused action must not register a mutation job")
+}
 
 // isolateHome points state reads and writes at a throwaway home so this package never touches the
 // developer's real ~/.ksail/clusters. t.Setenv forbids t.Parallel, which is why these tests are

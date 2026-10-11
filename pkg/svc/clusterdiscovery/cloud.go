@@ -79,6 +79,8 @@ func (d *Discoverer) listOmni(ctx context.Context) ([]Cluster, error) {
 // listAWS lists EKS clusters. It skips silently unless AWS appears configured and the eksctl binary
 // is on PATH, so the common no-AWS case costs nothing and never emits a warning.
 func (d *Discoverer) listAWS(ctx context.Context) ([]Cluster, error) {
+	region := d.AWSRegion()
+
 	lister := d.AWS
 	if lister == nil {
 		if !d.awsConfigured() || !d.eksctlAvailable() {
@@ -98,7 +100,7 @@ func (d *Discoverer) listAWS(ctx context.Context) ([]Cluster, error) {
 
 		provider, err := awsprovider.NewProvider(
 			client,
-			d.AWSRegion(),
+			region,
 			providerOptions...,
 		)
 		if err != nil {
@@ -108,12 +110,40 @@ func (d *Discoverer) listAWS(ctx context.Context) ([]Cluster, error) {
 		lister = provider
 	}
 
+	if regional, ok := lister.(interface {
+		ListAllClustersWithRegion(ctx context.Context) ([]eksctlclient.ClusterSummary, error)
+	}); ok {
+		summaries, err := regional.ListAllClustersWithRegion(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("query EKS: %w", err)
+		}
+
+		return clustersFromEKSSummaries(summaries), nil
+	}
+
 	names, err := lister.ListAllClusters(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("query EKS: %w", err)
 	}
 
-	return clustersWithDistribution(names, v1alpha1.DistributionEKS, v1alpha1.ProviderAWS), nil
+	clusters := clustersWithDistribution(names, v1alpha1.DistributionEKS, v1alpha1.ProviderAWS)
+	for i := range clusters {
+		clusters[i].Region = region
+	}
+
+	return clusters, nil
+}
+
+func clustersFromEKSSummaries(summaries []eksctlclient.ClusterSummary) []Cluster {
+	clusters := make([]Cluster, 0, len(summaries))
+	for _, summary := range summaries {
+		clusters = append(clusters, Cluster{
+			Name: summary.Name, Distribution: v1alpha1.DistributionEKS,
+			Provider: v1alpha1.ProviderAWS, Region: summary.Region,
+		})
+	}
+
+	return clusters
 }
 
 // listGCP lists GKE clusters. It skips silently unless GCP appears configured (a project plus
