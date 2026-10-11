@@ -57,14 +57,7 @@ func NewDiffCmd() *cobra.Command {
 		SilenceUsage: true,
 	}
 
-	cfgManager := ksailconfigmanager.NewCommandConfigManager(
-		cmd,
-		ksailconfigmanager.DefaultClusterFieldSelectors(),
-	)
-
-	// Hide flags that diff doesn't expose in its help but that are needed for
-	// config defaults and validation to work correctly.
-	hideConfigOnlyFlags(cmd)
+	cfgManager := newDiffConfigManager(cmd)
 
 	cmd.Flags().String("output", "text",
 		"Output format: text or json. Use json for machine-readable structured output.")
@@ -104,6 +97,26 @@ func NewDiffCmd() *cobra.Command {
 	}
 
 	return cmd
+}
+
+func newDiffConfigManager(cmd *cobra.Command) *ksailconfigmanager.ConfigManager {
+	cfgManager := ksailconfigmanager.NewCommandConfigManager(
+		cmd,
+		append(ksailconfigmanager.DefaultClusterFieldSelectors(),
+			ksailconfigmanager.DefaultProviderFieldSelector(),
+			ksailconfigmanager.ControlPlanesFieldSelector(),
+			ksailconfigmanager.WorkersFieldSelector(),
+		),
+	)
+
+	// Diff needs update's defaults while retaining its read-only flag surface.
+	hideConfigOnlyFlags(cmd)
+
+	for _, name := range []string{"provider", "control-planes", "workers"} {
+		cmd.Flags().Lookup(name).Hidden = true
+	}
+
+	return cfgManager
 }
 
 // diffOptions bundles the per-invocation diff flags so handleDiffRunE keeps a

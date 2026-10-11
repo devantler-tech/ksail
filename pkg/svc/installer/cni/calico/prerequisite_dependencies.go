@@ -1,0 +1,490 @@
+package calicoinstaller
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
+	"time"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
+)
+
+const (
+	admissionRegistrationGroup  = "admissionregistration.k8s.io"
+	mutatingAdmissionPolicyKind = "MutatingAdmissionPolicy"
+)
+
+var errOperatorDependencyPending = errors.New("calico operator dependency migration is pending")
+
+// Dependencies are observed operator objects, never KSail's mutation/removal inventory.
+type prerequisiteDependency struct {
+	prerequisiteRef
+
+	InstallationUID types.UID `json:"installationUid"`
+	SpecSHA256      string    `json:"specSha256"`
+}
+
+func validateDependencyRef(ref prerequisiteDependency) error {
+	err := validatePrerequisiteRef(ref.prerequisiteRef)
+	if err != nil {
+		return err
+	}
+
+	digest, err := hex.DecodeString(ref.SpecSHA256)
+	if ref.Storage || ref.Group != admissionRegistrationGroup ||
+		ref.InstallationUID == "" || err != nil || len(digest) != sha256.Size {
+		return prerequisiteError("Calico operator dependency contains incomplete provenance")
+	}
+
+	return nil
+}
+
+func (plan *prerequisitePlan) isDependency(object *unstructured.Unstructured) bool {
+	resource, err := prerequisiteResource(object)
+	if err != nil {
+		return false
+	}
+
+	key := refForObject(resource, object).key()
+
+	return slices.ContainsFunc(plan.state.Dependencies, func(ref prerequisiteDependency) bool {
+		return ref.key() == key
+	})
+}
+
+func (plan *prerequisitePlan) inspectDependency(
+	ctx context.Context, desired, live *unstructured.Unstructured,
+) error {
+	resource, err := prerequisiteResource(desired)
+	if err != nil {
+		return err
+	}
+
+	if desired.GroupVersionKind() != live.GroupVersionKind() || live.GetNamespace() != "" {
+		return prerequisiteError("Calico operator prerequisite resource identity differs")
+	}
+
+	ref := refForObject(resource, live)
+
+	if slices.ContainsFunc(plan.state.Resources, func(old prerequisiteRef) bool {
+		return old.key() == ref.key()
+	}) {
+		return prerequisiteError("Calico owned prerequisite cannot become an external dependency")
+	}
+
+	installationUID, err := plan.operatorDependencyProvenance(ctx, live)
+	if err != nil {
+		return err
+	}
+
+	actual, err := plan.inspectDependencyDigest(desired, live, ref)
+	if err != nil {
+		return err
+	}
+
+	dependency := prerequisiteDependency{
+		prerequisiteRef: ref, InstallationUID: installationUID, SpecSHA256: actual,
+	}
+
+	return plan.rememberDependency(dependency)
+}
+
+func (plan *prerequisitePlan) dependencyMigration() bool {
+	return plan.state.Version != "" && plan.state.Version != chartVersion() && len(plan.objects) > 0
+}
+
+func (plan *prerequisitePlan) inspectDependencyDigest(
+	desired, live *unstructured.Unstructured, ref prerequisiteRef,
+) (string, error) {
+	actual, err := verifiedOperatorSpecDigest(desired, live)
+	if !plan.dependencyMigration() {
+		return actual, err
+	}
+
+	index := slices.IndexFunc(plan.state.Dependencies, func(old prerequisiteDependency) bool {
+		return old.key() == ref.key()
+	})
+	if index < 0 {
+		return actual, err
+	}
+
+	previous := plan.state.Dependencies[index]
+
+	if err != nil {
+		_, desiredErr := prerequisiteSpecDigest(desired)
+		if desiredErr != nil {
+			return "", desiredErr
+		}
+		// Before the operator upgrade, only the previously recorded content is valid.
+		actual, err = prerequisiteSpecDigest(live)
+		if err != nil {
+			return "", err
+		}
+
+		if actual != previous.SpecSHA256 {
+			return "", prerequisiteError("Calico operator prerequisite identity or content changed")
+		}
+	}
+	// A resumed upgrade may already expose the new content. Keep the old binding
+	// until completion has validated every dependency against the new chart.
+	return previous.SpecSHA256, nil
+}
+
+func (plan *prerequisitePlan) rememberDependency(dependency prerequisiteDependency) error {
+	index := slices.IndexFunc(plan.state.Dependencies, func(old prerequisiteDependency) bool {
+		return old.key() == dependency.key()
+	})
+	if index >= 0 {
+		previous := plan.state.Dependencies[index]
+
+		previous.Version = dependency.Version
+		if previous != dependency {
+			return prerequisiteError("Calico operator prerequisite identity or content changed")
+		}
+
+		plan.state.Dependencies[index] = dependency
+	} else {
+		plan.state.Dependencies = append(plan.state.Dependencies, dependency)
+	}
+
+	return nil
+}
+
+func (plan *prerequisitePlan) operatorDependencyProvenance(
+	ctx context.Context, object *unstructured.Unstructured,
+) (types.UID, error) {
+	err := validateOperatorDependency(object)
+	if err != nil {
+		return "", err
+	}
+
+	installation, err := plan.client.Resource(schema.GroupVersionResource{
+		Group: "operator.tigera.io", Version: "v1", Resource: "installations",
+	}).Get(ctx, "default", metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("inspect Calico dependency Installation: %w", err)
+	}
+
+	err = validateDependencyInstallation(installation, object.GetOwnerReferences()[0].UID)
+	if err != nil {
+		return "", err
+	}
+
+	if plan.meta == nil {
+		return "", prerequisiteError("Calico dependency history client is unavailable")
+	}
+
+	history, err := readOperatorHistory(ctx, plan.meta)
+	if err != nil {
+		return "", err
+	}
+
+	if len(history) == 0 {
+		return "", prerequisiteError("Calico operator prerequisite lacks validated release history")
+	}
+
+	return installation.GetUID(), nil
+}
+
+func validateOperatorDependency(object *unstructured.Unstructured) error {
+	if object.GetUID() == "" || object.GetResourceVersion() == "" ||
+		object.GetDeletionTimestamp() != nil || hasGitOpsOwner(object) ||
+		object.GroupVersionKind().Group != admissionRegistrationGroup {
+		return prerequisiteError("Calico operator prerequisite has unverified provenance")
+	}
+
+	err := validateDependencyManagers(object)
+	if err != nil {
+		return err
+	}
+
+	return validateInstallationController(object)
+}
+
+func validateDependencyManagers(object *unstructured.Unstructured) error {
+	label := "operator.tigera.io/validating-admission-policy"
+
+	switch object.GetKind() {
+	case mutatingAdmissionPolicyKind, "MutatingAdmissionPolicyBinding":
+		label = "operator.tigera.io/mutating-admission-policy"
+	case "ValidatingAdmissionPolicy", "ValidatingAdmissionPolicyBinding":
+	default:
+		return prerequisiteError("Calico operator dependency is not an admission prerequisite")
+	}
+
+	if object.GetLabels()[label] != "managed" {
+		return prerequisiteError("Calico operator prerequisite lacks its managed label")
+	}
+
+	if _, present := object.GetLabels()[prerequisiteOwnerKey]; present {
+		return prerequisiteError("Calico operator prerequisite has conflicting KSail ownership")
+	}
+
+	if hasConflictingDependencyHelmOwner(object) {
+		return prerequisiteError("Calico operator prerequisite has conflicting Helm ownership")
+	}
+
+	return nil
+}
+
+func hasConflictingDependencyHelmOwner(object *unstructured.Unstructured) bool {
+	annotations := object.GetAnnotations()
+	_, hasRelease := annotations["meta.helm.sh/release-name"]
+	_, hasNamespace := annotations["meta.helm.sh/release-namespace"]
+	// The operator retains legacy annotations when replacing Helm's manager label.
+	// Only that complete pair is compatible with an observation-only dependency.
+	return ownsPrerequisite(object) || ((hasRelease || hasNamespace) &&
+		(annotations["meta.helm.sh/release-name"] != prerequisiteReleaseName ||
+			annotations["meta.helm.sh/release-namespace"] != prerequisiteNamespace))
+}
+
+func validateInstallationController(object *unstructured.Unstructured) error {
+	owners := object.GetOwnerReferences()
+	if len(owners) != 1 || owners[0].APIVersion != "operator.tigera.io/v1" ||
+		owners[0].Kind != "Installation" || owners[0].Name != "default" ||
+		owners[0].Controller == nil || !*owners[0].Controller || owners[0].UID == "" {
+		return prerequisiteError(
+			"Calico operator prerequisite lacks its Installation controller",
+		)
+	}
+
+	return nil
+}
+
+func validateDependencyInstallation(
+	installation *unstructured.Unstructured,
+	ownerUID types.UID,
+) error {
+	if installation.GetName() != "default" || installation.GetNamespace() != "" ||
+		installation.GroupVersionKind() != (schema.GroupVersionKind{
+			Group: "operator.tigera.io", Version: "v1", Kind: "Installation",
+		}) || installation.GetUID() != ownerUID || installation.GetResourceVersion() == "" ||
+		installation.GetDeletionTimestamp() != nil || !ownsDependencyInstallation(installation) {
+		return prerequisiteError("Calico dependency Installation ownership is unverified")
+	}
+
+	return nil
+}
+
+func ownsDependencyInstallation(installation *unstructured.Unstructured) bool {
+	annotations := installation.GetAnnotations()
+
+	return !hasGitOpsOwner(installation) &&
+		installation.GetLabels()["app.kubernetes.io/managed-by"] == helmResourceManager &&
+		annotations["meta.helm.sh/release-name"] == calicoReleaseName &&
+		annotations["meta.helm.sh/release-namespace"] == prerequisiteNamespace
+}
+
+func (plan *prerequisitePlan) complete(ctx context.Context) error {
+	err := plan.validateDependencies(ctx, true)
+	if err != nil {
+		return err
+	}
+
+	plan.state.Version, plan.state.Complete = chartVersion(), true
+
+	return plan.save(ctx)
+}
+
+func (plan *prerequisitePlan) completeWithRetry(ctx context.Context, timeout time.Duration) error {
+	err := wait.PollUntilContextTimeout(ctx, prerequisitePollInterval, timeout, true,
+		func(ctx context.Context) (bool, error) {
+			err := plan.complete(ctx)
+			if errors.Is(err, errOperatorDependencyPending) {
+				return false, nil
+			}
+
+			return err == nil, err
+		})
+	if err != nil {
+		return fmt.Errorf("complete Calico prerequisites: %w", err)
+	}
+
+	return nil
+}
+
+func (plan *prerequisitePlan) revalidateDependencies(ctx context.Context) error {
+	return plan.validateDependencies(ctx, false)
+}
+
+func (plan *prerequisitePlan) validateDependencies(ctx context.Context, completing bool) error {
+	dependencies := slices.Clone(plan.state.Dependencies)
+	for index, dependency := range plan.state.Dependencies {
+		live, err := plan.observeDependency(ctx, dependency)
+		if err != nil {
+			return fmt.Errorf("observe Calico operator prerequisite: %w", err)
+		}
+
+		installationUID, err := plan.operatorDependencyProvenance(ctx, live)
+		if err != nil {
+			return err
+		}
+
+		if live.GetUID() != dependency.UID || installationUID != dependency.InstallationUID {
+			return prerequisiteError("Calico operator prerequisite identity or content changed")
+		}
+
+		digest, err := plan.validateDependencyContent(dependency, live, completing)
+		if err != nil {
+			return err
+		}
+
+		dependencies[index].Version = live.GroupVersionKind().Version
+		if completing {
+			dependencies[index].SpecSHA256 = digest
+		}
+	}
+
+	plan.state.Dependencies = dependencies
+
+	return nil
+}
+
+func (plan *prerequisitePlan) validateDependencyContent(
+	dependency prerequisiteDependency, live *unstructured.Unstructured, completing bool,
+) (string, error) {
+	digest, err := prerequisiteSpecDigest(live)
+	if err != nil {
+		return "", err
+	}
+
+	if plan.dependencyMigration() {
+		desired, desiredErr := plan.desiredDependency(dependency)
+		if desiredErr != nil {
+			return "", desiredErr
+		}
+
+		if !completing && digest == dependency.SpecSHA256 {
+			return digest, nil
+		}
+
+		verifiedDigest, err := verifiedOperatorSpecDigest(desired, live)
+		// Only the exact recorded old policy is an expected operator lag.
+		// Identity and provenance were checked above; unknown content stays fatal.
+		if completing && digest == dependency.SpecSHA256 &&
+			errors.Is(err, errOperatorDependencyContentMismatch) {
+			return "", fmt.Errorf("%w: %w", errOperatorDependencyPending, err)
+		}
+
+		return verifiedDigest, err
+	}
+
+	if digest != dependency.SpecSHA256 {
+		return "", prerequisiteError("Calico operator prerequisite identity or content changed")
+	}
+
+	return digest, nil
+}
+
+func (plan *prerequisitePlan) desiredDependency(
+	dependency prerequisiteDependency,
+) (*unstructured.Unstructured, error) {
+	for _, object := range plan.objects {
+		resource, err := prerequisiteResource(object)
+		if err != nil {
+			return nil, err
+		}
+
+		if refForObject(resource, object).key() == dependency.key() {
+			return object, nil
+		}
+	}
+
+	return nil, prerequisiteError("Calico operator prerequisite is absent from the new chart")
+}
+
+func (plan *prerequisitePlan) observeDependency(
+	ctx context.Context, dependency prerequisiteDependency,
+) (*unstructured.Unstructured, error) {
+	resource := dependency.gvr()
+
+	live, err := plan.client.Resource(resource).Get(ctx, dependency.Name, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		// Serving-version changes never authorize a new object incarnation.
+		resource.Version = "v1"
+		if dependency.Version == "v1" {
+			resource.Version = admissionBetaVersion
+		}
+
+		live, err = plan.client.Resource(resource).Get(ctx, dependency.Name, metav1.GetOptions{})
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("read Calico operator prerequisite: %w", err)
+	}
+
+	actual, err := prerequisiteResource(live)
+	if err != nil {
+		return nil, err
+	}
+
+	if actual != resource || live.GetName() != dependency.Name {
+		return nil, prerequisiteError("Calico operator prerequisite resource identity differs")
+	}
+
+	return live, nil
+}
+
+func prerequisiteSpecDigest(object *unstructured.Unstructured) (string, error) {
+	spec, found, err := unstructured.NestedMap(object.Object, "spec")
+	if err != nil || !found {
+		return "", prerequisiteError("Calico operator prerequisite lacks a valid spec")
+	}
+	// Normalize only Kubernetes admission-registration defaults; compare every other field.
+	if strings.HasSuffix(object.GetKind(), "Policy") {
+		if _, present := spec["failurePolicy"]; !present {
+			spec["failurePolicy"] = "Fail"
+		}
+	}
+
+	for _, key := range []string{"matchConstraints", "matchResources"} {
+		match, exists := spec[key].(map[string]any)
+		if !exists {
+			continue
+		}
+
+		defaultAdmissionMatch(match)
+	}
+
+	data, err := json.Marshal(spec)
+	if err != nil {
+		return "", fmt.Errorf("encode Calico operator prerequisite spec: %w", err)
+	}
+
+	digest := sha256.Sum256(data)
+
+	return hex.EncodeToString(digest[:]), nil
+}
+
+func defaultAdmissionMatch(match map[string]any) {
+	if _, present := match["matchPolicy"]; !present {
+		match["matchPolicy"] = "Equivalent"
+	}
+
+	for _, selector := range []string{"namespaceSelector", "objectSelector"} {
+		if _, present := match[selector]; !present {
+			match[selector] = map[string]any{}
+		}
+	}
+
+	for _, key := range []string{"resourceRules", "excludeResourceRules"} {
+		rules, _ := match[key].([]any)
+		for _, rule := range rules {
+			if fields, ok := rule.(map[string]any); ok {
+				if _, present := fields["scope"]; !present {
+					fields["scope"] = "*"
+				}
+			}
+		}
+	}
+}

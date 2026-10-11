@@ -1,6 +1,11 @@
 //nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
 package calicoinstaller
 
+import "github.com/devantler-tech/ksail/v7/pkg/client/helm"
+
+// ChartSpecForTest exposes the installer's actual chart and values for offline rendering.
+var ChartSpecForTest = func(inst *Installer) *helm.ChartSpec { return inst.chartSpec() }
+
 // TalosCalicoValuesForTest exposes talosCalicoValues for testing.
 var TalosCalicoValuesForTest = talosCalicoValues
 

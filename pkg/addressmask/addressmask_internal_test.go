@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/addressmask/addressmasktest"
@@ -359,6 +360,12 @@ func (s *slowSink) Write(payload []byte) (int, error) {
 // address that write went on to hold.
 func TestMaskingWriterOutdatedFlushLeavesNewTextHeld(t *testing.T) {
 	t.Parallel()
+
+	synctest.Test(t, testMaskingWriterOutdatedFlushLeavesNewTextHeld)
+}
+
+func testMaskingWriterOutdatedFlushLeavesNewTextHeld(t *testing.T) {
+	t.Helper()
 
 	sink := &slowSink{delay: 40 * time.Millisecond}
 

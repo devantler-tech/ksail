@@ -22,12 +22,21 @@ import (
 // to the appropriate one based on which cluster exists. It is used when only a
 // cluster name and provider are known (without distribution information).
 type MultiProvisioner struct {
-	clusterName string
+	clusterName    string
+	kubeconfigPath string
 }
 
 // NewMultiProvisioner creates a provisioner that tries multiple distributions.
 func NewMultiProvisioner(clusterName string) *MultiProvisioner {
 	return &MultiProvisioner{clusterName: clusterName}
+}
+
+// WithKubeconfig retains the resolved kubeconfig for each distribution's
+// lifecycle operations, including post-start readiness checks.
+func (m *MultiProvisioner) WithKubeconfig(path string) *MultiProvisioner {
+	m.kubeconfigPath = path
+
+	return m
 }
 
 // operation is a function that operates on a provisioner with a cluster name.
@@ -92,7 +101,7 @@ func (m *MultiProvisioner) List(ctx context.Context) ([]string, error) {
 	var allClusters []string
 
 	for _, dist := range supportedDistributions() {
-		provisioner, err := CreateMinimalProvisioner(dist, m.clusterName, "", "")
+		provisioner, err := CreateMinimalProvisioner(dist, m.clusterName, m.kubeconfigPath, "")
 		if err != nil {
 			continue
 		}
@@ -148,7 +157,7 @@ func (m *MultiProvisioner) forExistingCluster(
 	}
 
 	for _, dist := range supportedDistributions() {
-		provisioner, err := CreateMinimalProvisioner(dist, clusterName, "", "")
+		provisioner, err := CreateMinimalProvisioner(dist, clusterName, m.kubeconfigPath, "")
 		if err != nil {
 			continue
 		}
@@ -187,7 +196,7 @@ func CreateMinimalProvisioner(
 	case v1alpha1.DistributionVanilla:
 		return createMinimalKindProvisioner(clusterName, kubeconfigPath)
 	case v1alpha1.DistributionK3s:
-		return createMinimalK3dProvisioner(clusterName), nil
+		return createMinimalK3dProvisioner(clusterName, kubeconfigPath), nil
 	case v1alpha1.DistributionTalos:
 		return createMinimalTalosProvisioner(clusterName, kubeconfigPath, providerType)
 	case v1alpha1.DistributionVCluster:
@@ -234,12 +243,12 @@ func createMinimalKindProvisioner(clusterName, kubeconfigPath string) (Provision
 
 // createMinimalK3dProvisioner builds a K3d provisioner from just a cluster
 // name, for lifecycle actions that need no full ksail config.
-func createMinimalK3dProvisioner(clusterName string) Provisioner {
+func createMinimalK3dProvisioner(clusterName, kubeconfigPath string) Provisioner {
 	k3dConfig := &k3dv1alpha5.SimpleConfig{
 		ObjectMeta: k3dtypes.ObjectMeta{Name: clusterName},
 	}
 
-	return k3dprovisioner.CreateProvisioner(k3dConfig, "")
+	return k3dprovisioner.CreateProvisioner(k3dConfig, "").WithKubeconfig(kubeconfigPath)
 }
 
 // createMinimalTalosProvisioner builds a Talos provisioner from just a

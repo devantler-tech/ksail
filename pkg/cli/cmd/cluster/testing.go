@@ -41,6 +41,13 @@ func overrideInstallerFactory(apply func(*setup.InstallerFactories)) func() {
 	}
 }
 
+// SetCalicoInstallerFactoryForTests overrides the Calico installer factory.
+func SetCalicoInstallerFactoryForTests(
+	factory func(*v1alpha1.Cluster) (installer.Installer, error),
+) func() {
+	return overrideInstallerFactory(func(f *setup.InstallerFactories) { f.Calico = factory })
+}
+
 // SetCertManagerInstallerFactoryForTests overrides the cert-manager installer factory.
 func SetCertManagerInstallerFactoryForTests(
 	factory func(*v1alpha1.Cluster) (installer.Installer, error),
