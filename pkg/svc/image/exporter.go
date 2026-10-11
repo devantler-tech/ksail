@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -29,6 +30,8 @@ const (
 
 // Error definitions.
 var (
+	errIncompleteExportHelp = errors.New("incomplete help output")
+
 	// ErrNoNodes is returned when no cluster nodes are found.
 	ErrNoNodes = errors.New("no cluster nodes found")
 	// ErrUnsupportedProvider is returned when the provider is not supported for image operations.
@@ -51,6 +54,7 @@ type ExportOptions struct {
 type Exporter struct {
 	dockerClient dockerclient.Client
 	executor     *ContainerExecutor
+	localExport  bool
 }
 
 // NewExporter creates a new image exporter.
@@ -171,6 +175,11 @@ func (e *Exporter) exportImagesFromNode(
 		return fmt.Errorf("failed to detect node platform: %w", err)
 	}
 
+	e, err = e.withLocalExport(ctx, nodeName)
+	if err != nil {
+		return err
+	}
+
 	exportImages, exportErr := e.tryExportImagesWithRepair(
 		ctx,
 		nodeName,
@@ -211,6 +220,34 @@ func (e *Exporter) exportImagesFromNode(
 	_, _ = e.executor.ExecInContainer(ctx, nodeName, []string{"rm", "-f", tmpPath})
 
 	return nil
+}
+
+func (e *Exporter) withLocalExport(ctx context.Context, nodeName string) (*Exporter, error) {
+	// Probe once for this operation. Containerd 1.6 exports synchronously but
+	// lacks --local; newer versions expose it and 2.x otherwise defaults to an
+	// asynchronous transfer whose output copy may outlive the export command.
+	help, err := e.executor.ExecInContainer(ctx, nodeName,
+		[]string{ctrCommand, ctrNamespaceArg, ctrImages, "export", "--help"})
+	if err != nil {
+		return nil, fmt.Errorf("failed to discover image export options: %w", err)
+	}
+
+	options := strings.Fields(help)
+	// ctr's help flag follows the export-specific flags. Its absence must not
+	// turn empty or truncated output into permission to use the transfer mode.
+	if !slices.Contains(options, "--help,") && !slices.Contains(options, "--help") {
+		return nil, fmt.Errorf(
+			"failed to discover image export options: %w",
+			errIncompleteExportHelp,
+		)
+	}
+
+	// Keep the selection local to this operation, including repairs and fallbacks,
+	// so concurrent calls on the same Exporter cannot change each other's mode.
+	exporter := *e
+	exporter.localExport = slices.Contains(options, "--local")
+
+	return &exporter, nil
 }
 
 // collectExportedArchive copies the exported archive to the host and validates it,

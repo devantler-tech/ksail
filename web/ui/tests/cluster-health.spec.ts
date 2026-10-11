@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { Cluster, K8sObject } from "../src/api.ts";
-import { mockApi } from "./mock-api.ts";
+import { mockApi, mockClusterCatalog } from "./mock-api.ts";
 
 const cluster: Cluster = {
   metadata: { name: "external-demo", namespace: "default", annotations: { "ksail.io/unmanaged": "true" } },
@@ -30,14 +30,7 @@ type ResourceResponse = { items: K8sObject[] } | { status: number; error: string
 
 async function openHealth(page: Page, responseFor: (kind: string) => ResourceResponse) {
   await mockApi(page, { mode: "local", capabilities: { workloadRead: true } }, async (route, url) => {
-    if (url.pathname === "/api/v1/meta") {
-      await route.fulfill({ json: { distributions: [], providers: {}, components: [] } });
-      return true;
-    }
-    if (url.pathname === "/api/v1/clusters") {
-      await route.fulfill({ json: { items: [cluster] } });
-      return true;
-    }
+    if (await mockClusterCatalog(route, url, [cluster])) return true;
     if (url.pathname.endsWith("/resources")) {
       const response = responseFor(url.searchParams.get("kind") ?? "");
       await ("status" in response

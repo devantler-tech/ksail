@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
@@ -91,6 +92,13 @@ type Client struct {
 	requireCredentialValues   bool
 	optionErr                 error
 	awsConfig                 *aws.Config
+	// upgradeEKS and upgradeSTS hold the exact credentials that passed upgrade
+	// lifetime validation. Until the upgrade releases them, every EKS and STS call
+	// signs with them, so a refreshing provider cannot swap identity or lifetime
+	// mid-upgrade. upgradeMu guards them because the client is shared.
+	upgradeMu  sync.RWMutex
+	upgradeEKS aws.CredentialsProvider
+	upgradeSTS aws.CredentialsProvider
 }
 
 // Option customises a Client.
@@ -246,7 +254,9 @@ func (c *Client) CallerAccountID(ctx context.Context) (string, error) {
 		return "", errCallerIdentityUnavailable
 	}
 
-	out, err := c.identityGetter.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
+	out, err := c.identityGetter.GetCallerIdentity(
+		ctx, &sts.GetCallerIdentityInput{}, c.stsOptions()...,
+	)
 	if err != nil {
 		return "", fmt.Errorf("getting AWS caller identity: %w", err)
 	}
@@ -263,6 +273,7 @@ func (c *Client) DescribeCluster(ctx context.Context, name string) (*ekstypes.Cl
 	out, err := c.describer.DescribeCluster(
 		ctx,
 		&awseks.DescribeClusterInput{Name: aws.String(name)},
+		c.eksOptions()...,
 	)
 	if err != nil {
 		// A cluster EKS has never heard of is absence, not a query failure, and it is the shape
@@ -287,13 +298,17 @@ func (c *Client) DescribeCluster(ctx context.Context, name string) (*ekstypes.Cl
 // MintToken mints the standard EKS bearer token for the named cluster: a
 // presigned STS GetCallerIdentity URL carrying the cluster-binding header,
 // base64url-encoded under the k8s-aws-v1 prefix. The token inherits the
-// presigner's credentials and is valid for presignExpirySeconds.
+// presigner's credentials, or an upgrade's validated STS credentials while it
+// holds them, and is valid for presignExpirySeconds.
 func (c *Client) MintToken(ctx context.Context, clusterName string) (string, error) {
+	clientOptions := c.stsOptions()
+	clientOptions = append(clientOptions, withTokenHeaders(clusterName))
+
 	request, err := c.presigner.PresignGetCallerIdentity(
 		ctx,
 		&sts.GetCallerIdentityInput{},
 		func(options *sts.PresignOptions) {
-			options.ClientOptions = append(options.ClientOptions, withTokenHeaders(clusterName))
+			options.ClientOptions = append(options.ClientOptions, clientOptions...)
 		},
 	)
 	if err != nil {
@@ -367,6 +382,8 @@ func (c *Client) hasExplicitAWSConfiguration() bool {
 	return c.awsConfig != nil || c.staticCredentialProvider != nil || len(c.loadOptions) > 0
 }
 
+// configureMissingEKSClients builds EKS and inventory clients from the captured
+// configuration while preserving explicit service-option precedence.
 func (c *Client) configureMissingEKSClients(ctx context.Context, cfg aws.Config) error {
 	endpoint, frozen, err := awsconfigutil.FrozenServiceEndpoint(ctx, cfg, "EKS")
 	if err != nil {
@@ -390,8 +407,29 @@ func (c *Client) configureMissingEKSClients(ctx context.Context, cfg aws.Config)
 	}
 
 	if c.nodegroupStacks == nil {
-		c.nodegroupStacks = cloudformation.NewFromConfig(cfg)
+		return c.configureCloudFormationClient(ctx, cfg)
 	}
+
+	return nil
+}
+
+// configureCloudFormationClient binds node-group inventory to the captured endpoint
+// before applying explicit service options, just like EKS and STS.
+func (c *Client) configureCloudFormationClient(ctx context.Context, cfg aws.Config) error {
+	endpoint, frozen, err := awsconfigutil.FrozenServiceEndpoint(ctx, cfg, "CloudFormation")
+	if err != nil {
+		return fmt.Errorf("resolve frozen CloudFormation endpoint: %w", err)
+	}
+
+	if frozen {
+		cfg.ServiceOptions = append([]func(string, any){func(_ string, options any) {
+			if stackOptions, ok := options.(*cloudformation.Options); ok {
+				stackOptions.BaseEndpoint = endpoint
+			}
+		}}, cfg.ServiceOptions...)
+	}
+
+	c.nodegroupStacks = cloudformation.NewFromConfig(cfg)
 
 	return nil
 }

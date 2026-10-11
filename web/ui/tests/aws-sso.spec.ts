@@ -1,21 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mockApi } from "./mock-api.ts";
+import { mockApi, mockClusterCatalog } from "./mock-api.ts";
 
 async function openExpiredContext(page: Page, options: { enabled?: boolean; loginFails?: boolean } = {}) {
   let expired = true;
   const logins: { path: string; body: string | null }[] = [];
   await mockApi(page, { mode: "local", capabilities: { workloadRead: true } }, async (route, url) => {
     if (url.pathname === "/api/v1/config") return false;
-    if (url.pathname === "/api/v1/meta") {
-      await route.fulfill({ json: { distributions: [], providers: {}, components: [] } });
-      return true;
-    }
-    if (url.pathname === "/api/v1/clusters") {
-      await route.fulfill({ json: { items: [{
-        metadata: { name: "selected", namespace: "default", annotations: { "ksail.io/unmanaged": "true" } },
-      }] } });
-      return true;
-    }
+    if (await mockClusterCatalog(route, url, [{
+      metadata: { name: "selected", namespace: "default", annotations: { "ksail.io/unmanaged": "true" } },
+    }])) return true;
     if (url.pathname.endsWith("/authentication/renew")) {
       logins.push({ path: url.pathname, body: route.request().postData() });
       if (options.loginFails) {

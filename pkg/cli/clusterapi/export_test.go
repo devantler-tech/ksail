@@ -162,6 +162,17 @@ func NewTestService(factory FactoryFunc) *Service {
 	// Point the kubeconfig at nowhere by default so List's endpoint enrichment never reads the
 	// developer's real kubeconfig; tests that need one inject it via SetKubeconfigPathForTest.
 	service.kubeconfigPath = func() string { return "" }
+	// Answer the run-state question without asking the host. The real probe lists containers on
+	// whatever Docker daemon the machine runs, with no time limit, so on a busy CI runner a List
+	// call could outlast a test's wait. Unknown is what the probe reports when there is no daemon;
+	// tests about running and stopped clusters override it with SetDockerStatusForTest.
+	service.discoverer.DockerStatus = func(
+		context.Context,
+		v1alpha1.Distribution,
+		string,
+	) clusterdiscovery.RunState {
+		return clusterdiscovery.RunStateUnknown
+	}
 	service.resolveEKSCreateAccount = func(
 		context.Context,
 		credentials.AWSResolution,

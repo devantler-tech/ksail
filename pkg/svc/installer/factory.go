@@ -332,6 +332,7 @@ func (f *Factory) addLoadBalancerInstaller(
 			f.timeout,
 			networkName,
 			haEnabled,
+			hcloudccminstaller.LoadBalancerOptions(spec.LoadBalancer)...,
 		)
 	}
 

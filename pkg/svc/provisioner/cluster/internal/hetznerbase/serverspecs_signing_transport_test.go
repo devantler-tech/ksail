@@ -8,17 +8,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/hetznerbase"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+const providerCeilingBytes = hetzner.UserDataLimitBytes
+
 // userDataCarrying wraps a fixture body in a minimal cloud-config document so
 // each case exercises the real YAML walk rather than a bare scalar.
-// providerCeilingBytes mirrors the package's maxProviderUserDataBytes. Declared
-// once here so the boundary cases below cannot drift apart from each other.
-const providerCeilingBytes = 32768
-
 func userDataCarrying(body string) string {
 	return fmt.Sprintf(`#cloud-config
 write_files:

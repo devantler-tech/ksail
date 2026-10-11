@@ -1,0 +1,67 @@
+load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+
+package(
+    default_visibility = [
+        "//cel:__subpackages__",
+        "//checker:__subpackages__",
+        "//common:__subpackages__",
+        "//ext:__subpackages__",
+        "//interpreter:__subpackages__",
+        "//parser:__subpackages__",
+        "//repl:__subpackages__",
+        "//server:__subpackages__",
+        "//test:__subpackages__",
+    ],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "test_all_types.pb.go",
+        "test_extensions.pb.go",
+    ],
+    importpath = "github.com/google/cel-go/test/proto2pb",
+    deps = [
+        "@org_golang_google_protobuf//proto:go_default_library",
+        "@org_golang_google_protobuf//reflect/protoreflect:go_default_library",
+        "@org_golang_google_protobuf//runtime/protoimpl:go_default_library",
+        "@org_golang_google_protobuf//types/known/anypb:go_default_library",
+        "@org_golang_google_protobuf//types/known/durationpb:go_default_library",
+        "@org_golang_google_protobuf//types/known/structpb:go_default_library",
+        "@org_golang_google_protobuf//types/known/timestamppb:go_default_library",
+        "@org_golang_google_protobuf//types/known/wrapperspb:go_default_library",
+    ],
+)
+
+proto_library(
+    name = "test_all_types_proto",
+    srcs = ["test_all_types.proto"],
+    deps = [
+        "@com_google_protobuf//:any_proto",
+        "@com_google_protobuf//:duration_proto",
+        "@com_google_protobuf//:struct_proto",
+        "@com_google_protobuf//:timestamp_proto",
+        "@com_google_protobuf//:wrappers_proto",
+    ],
+)
+
+proto_library(
+    name = "test_extensions_proto",
+    srcs = ["test_extensions.proto"],
+    deps = [
+        ":test_all_types_proto",
+        "@com_google_protobuf//:wrappers_proto",
+    ],
+)
+
+go_proto_library(
+    name = "test_all_types_go_proto",
+    importpath = "github.com/google/cel-go/test/proto2pb",
+    protos = [
+        ":test_all_types_proto",
+        ":test_extensions_proto",
+    ],
+)

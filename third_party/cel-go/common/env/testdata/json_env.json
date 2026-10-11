@@ -1,0 +1,95 @@
+{
+  "name": "json-env",
+  "container": "google.expr",
+  "extensions": [
+    {
+      "name": "optional",
+      "version": "2"
+    },
+    {
+      "name": "math",
+      "version": "latest"
+    }
+  ],
+  "variables": [
+    {
+      "name": "msg",
+      "type": "google.expr.proto3.test.TestAllTypes",
+      "description": "msg represents all possible type permutation which CEL understands from a proto perspective"
+    },
+    {
+      "name": "opt_msg",
+      "type": "optional_type<google.expr.proto3.test.TestAllTypes>",
+      "description": "opt_msg represents all possible type permutation which CEL understands from a proto perspective"
+    }
+  ],
+  "functions": [
+    {
+      "name": "isEmpty",
+      "description": "determines whether a list is empty,\nor a string has no characters",
+      "overloads": [
+        {
+          "id": "wrapper_string_isEmpty",
+          "examples": [
+            "''.isEmpty() // true"
+          ],
+          "target": "wrapper_string",
+          "return": "bool"
+        },
+        {
+          "id": "list_isEmpty",
+          "examples": [
+            "[].isEmpty() // true",
+            "[1].isEmpty() // false"
+          ],
+          "target": "list<~T>",
+          "return": "bool"
+        }
+      ]
+    },
+    {
+      "name": "getOrDefault",
+      "description": "Returns the value of a key in a map or the provided\ndefault value.",
+      "overloads": [
+        {
+          "id": "map_getOrDefault",
+          "target": "map<~K, ~V>",
+          "return": "~V",
+          "args": [
+            "~K",
+            "~V"
+          ]
+        }
+      ]
+    }
+  ],
+  "validators": [
+    {
+      "name": "cel.validator.duration"
+    },
+    {
+      "name": "cel.validator.matches"
+    },
+    {
+      "name": "cel.validator.timestamp"
+    },
+    {
+      "name": "cel.validator.comprehension_nesting_limit",
+      "config": {
+        "limit": 2
+      }
+    }
+  ],
+  "features": [
+    {
+      "name": "cel.feature.macro_call_tracking",
+      "enabled": true
+    }
+  ],
+  "limits": [
+    {
+      "name": "cel.limit.parse_recursion_depth",
+      "value": 7
+    }
+  ]
+}

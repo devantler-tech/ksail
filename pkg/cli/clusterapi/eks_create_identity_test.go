@@ -3,6 +3,7 @@ package clusterapi_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/clusterapi"
@@ -20,6 +21,8 @@ const (
 	canonicalRegionEnv = "AWS_REGION"
 	canonicalRegionVal = "us-east-1"
 	rebindingRegionVal = "ap-south-7"
+	// Coverage runs can delay asynchronous EKS create completion beyond the general 2s test bound.
+	eksCreateReadyTimeout = 10 * time.Second
 )
 
 // midCreateProvisioner runs onCreate from inside Create, so a test can act at a point that is
@@ -111,7 +114,7 @@ func recordCaptureForCreate(
 		phase, found := phaseOf(list, clusterName)
 		require.True(collect, found, "the cluster is not listed yet")
 		require.Equal(collect, v1alpha1.ClusterPhaseReady, phase)
-	}, eventuallyTimeout, eventuallyTick)
+	}, eksCreateReadyTimeout, eventuallyTick)
 
 	select {
 	case got := <-records:
@@ -166,7 +169,7 @@ func TestCreateEKSResolvesAccountOnceBeforeProvisioning(t *testing.T) {
 		phase, found := phaseOf(list, "account-pinned-eks")
 		require.True(collect, found)
 		require.Equal(collect, v1alpha1.ClusterPhaseReady, phase)
-	}, eventuallyTimeout, eventuallyTick)
+	}, eksCreateReadyTimeout, eventuallyTick)
 
 	assert.Equal(t, "resolve-account", <-events)
 	assert.Equal(t, "create", <-events)
@@ -211,7 +214,7 @@ func TestCreateEKSStopsBeforeProvisioningWhenAccountResolutionFails(t *testing.T
 		phase, found := phaseOf(list, "unresolved-account-eks")
 		require.True(collect, found)
 		require.Equal(collect, v1alpha1.ClusterPhaseFailed, phase)
-	}, eventuallyTimeout, eventuallyTick)
+	}, eksCreateReadyTimeout, eventuallyTick)
 
 	select {
 	case <-created:

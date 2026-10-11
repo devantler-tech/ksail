@@ -134,9 +134,30 @@ func (o *updateOrchestrator) runVerifiedProvisioner(
 
 // runWithoutUpdater handles distributions whose provisioner does not implement
 // the Updater interface (e.g. VCluster): it computes a spec-level diff to avoid
-// blind recreation when nothing changed, honors dry-run, and otherwise recreates.
+// blind recreation when nothing changed and migrates Calico prerequisites through
+// their installer without replacing the cluster. Other changes require recreation.
 func (o *updateOrchestrator) runWithoutUpdater() error {
 	specDiff := computeSpecOnlyDiff(o.cmd, o.ctx)
+
+	return o.applySpecOnlyDiff(specDiff)
+}
+
+func (o *updateOrchestrator) applySpecOnlyDiff(specDiff *clusterupdate.UpdateResult) error {
+	if isCalicoPrerequisiteOnlyDiff(specDiff) {
+		displayChangesSummary(o.cmd, specDiff)
+
+		if o.dryRun {
+			return nil
+		}
+
+		reconciler := newComponentReconciler(o.cmd, o.ctx.ClusterCfg, o.clusterName)
+		result := clusterupdate.NewEmptyUpdateResult()
+		err := reconciler.reconcileComponents(o.cmd.Context(), specDiff, result)
+		reportFailedChanges(o.cmd, result)
+
+		return finalizeInPlaceApply(o.cmd, o.ctx, reconciler, o.clusterName, result, err)
+	}
+
 	if specDiff.TotalChanges() == 0 {
 		// Surface any unknown-baseline components so the user sees that the
 		// current state could not be read, then exit without recreating.
@@ -165,6 +186,14 @@ func (o *updateOrchestrator) runWithoutUpdater() error {
 	displayChangesSummary(o.cmd, specDiff)
 
 	return o.executeRecreateFlow()
+}
+
+// isCalicoPrerequisiteOnlyDiff requires a complete, single component change.
+// Unknown baselines and every other change retain the existing recreation path.
+func isCalicoPrerequisiteOnlyDiff(diff *clusterupdate.UpdateResult) bool {
+	return !diff.HasUnknownBaseline() && diff.TotalChanges() == 1 &&
+		len(diff.InPlaceChanges) == 1 &&
+		diff.InPlaceChanges[0].Field == specdiff.CalicoPrerequisitesField
 }
 
 // reconcileClusterVersions reconciles the cluster's distribution and Kubernetes

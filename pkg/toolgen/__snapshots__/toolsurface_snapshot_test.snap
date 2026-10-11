@@ -48,6 +48,11 @@ workload_write
         "description": "Kubernetes context of cluster (applies to: diff)",
         "type": "string"
       },
+      "control-planes": {
+        "default": 1,
+        "description": "Number of control-plane nodes (applies to: diff)",
+        "type": "integer"
+      },
       "distribution": {
         "description": "Kubernetes distribution to use (applies to: diff)",
         "type": "string"
@@ -94,6 +99,11 @@ workload_write
       "talosconfig": {
         "description": "path to talosconfig (default: ~/.talos/config) (applies to: repair)",
         "type": "string"
+      },
+      "workers": {
+        "default": 0,
+        "description": "Number of worker nodes (applies to: diff)",
+        "type": "integer"
       }
     },
     "required": [

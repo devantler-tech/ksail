@@ -563,13 +563,24 @@ func usableNodePortHost(host string) bool {
 	return ip == nil || !ip.IsUnspecified()
 }
 
-// firstNodeAddress returns the first node address of the given type, or "".
+// firstNodeAddress returns the first usable address of the given type, or "".
+// Node IP fields must contain an IP; loopback, wildcard and scoped addresses
+// cannot expose a stable NodePort to clients outside the node.
 func firstNodeAddress(nodes []corev1.Node, addrType corev1.NodeAddressType) string {
 	for i := range nodes {
 		for _, addr := range nodes[i].Status.Addresses {
-			if addr.Type == addrType && addr.Address != "" {
-				return addr.Address
+			if addr.Type != addrType || addr.Address == "" {
+				continue
 			}
+
+			if addrType == corev1.NodeExternalIP || addrType == corev1.NodeInternalIP {
+				ip := net.ParseIP(addr.Address)
+				if ip == nil || !ip.IsGlobalUnicast() || ip.IsLoopback() {
+					continue
+				}
+			}
+
+			return addr.Address
 		}
 	}
 

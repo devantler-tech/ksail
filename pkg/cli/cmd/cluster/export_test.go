@@ -368,6 +368,25 @@ func ExportApplyInPlaceChanges(
 	)
 }
 
+// ExportApplySpecOnlyDiff exercises the updater-free apply boundary.
+func ExportApplySpecOnlyDiff(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	clusterName string,
+	diff *clusterupdate.UpdateResult,
+	dryRun bool,
+) error {
+	orchestrator := &updateOrchestrator{
+		cmd:         cmd,
+		ctx:         ctx,
+		clusterName: clusterName,
+		consent:     true,
+		dryRun:      dryRun,
+	}
+
+	return orchestrator.applySpecOnlyDiff(diff)
+}
+
 // ExportExecuteRecreateFlow exposes the post-consent recreate boundary for fail-closed tests.
 func ExportExecuteRecreateFlow(
 	cmd *cobra.Command,

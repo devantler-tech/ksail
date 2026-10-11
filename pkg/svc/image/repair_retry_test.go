@@ -140,6 +140,10 @@ func allowAnyExec(ctx context.Context, mockClient *docker.MockAPIClient) func() 
 	mockClient.EXPECT().
 		ContainerExecCreate(ctx, mock.Anything, mock.Anything).
 		RunAndReturn(func(_ context.Context, _ string, opts container.ExecOptions) (container.ExecCreateResponse, error) {
+			if len(opts.Cmd) == 5 && opts.Cmd[3] == "export" && opts.Cmd[4] == "--help" {
+				return container.ExecCreateResponse{ID: "exec-help"}, nil
+			}
+
 			if isCtrContentFetch(opts.Cmd) {
 				contentFetches.Add(1)
 			}
@@ -149,7 +153,14 @@ func allowAnyExec(ctx context.Context, mockClient *docker.MockAPIClient) func() 
 
 	mockClient.EXPECT().
 		ContainerExecAttach(ctx, mock.Anything, container.ExecStartOptions{}).
-		RunAndReturn(func(_ context.Context, _ string, _ container.ExecStartOptions) (dockertypes.HijackedResponse, error) {
+		RunAndReturn(func(_ context.Context, id string, _ container.ExecStartOptions) (dockertypes.HijackedResponse, error) {
+			if id == "exec-help" {
+				return mockDockerStreamResponse(
+					"OPTIONS:\n   --local  Use client-side export\n   --help, -h  Show help\n",
+					"",
+				), nil
+			}
+
 			return mockDockerStreamResponse("", ""), nil
 		})
 

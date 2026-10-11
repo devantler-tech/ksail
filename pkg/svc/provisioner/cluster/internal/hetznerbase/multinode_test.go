@@ -426,25 +426,41 @@ func TestRunCreateMultiNodeSerialisesControlPlaneJoins(t *testing.T) {
 	assert.Equal(t, 0, infra.deleteNodesCalls)
 }
 
-func TestRunCreateMultiNodeControlPlaneJoinNeverCompletesCleansUp(t *testing.T) {
+func TestRunCreateMultiNodeControlPlaneJoinCancelledCleansUp(t *testing.T) {
 	t.Parallel()
+
+	setupCtx, setupCancel := context.WithTimeout(t.Context(), testBringUpBudget)
+	defer setupCancel()
+
+	ctx, cancel := context.WithCancel(setupCtx)
+	defer cancel()
 
 	log := &eventLog{}
 	base, infra, strategy, material := newHAMultiNodeBase(
 		t, log,
-		func() (string, uint32) { return "", errExitNotFound }, // sentinel never appears
+		func() (string, uint32) {
+			// End the wait only after SSH setup and the first join probe.
+			// A deadline measured from startup can expire during kubeconfig
+			// retrieval on a busy runner, missing the phase under test.
+			log.add("join-incomplete-probe")
+			cancel()
+
+			return "", errExitNotFound // sentinel never appears
+		},
 	)
 
-	ctx, cancel := context.WithTimeout(t.Context(), testFailFastBudget)
-	defer cancel()
-
 	err := base.RunCreateMultiNode(ctx, "", strategy, material)
-	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.ErrorIs(t, err, context.Canceled)
 	require.ErrorContains(t, err, "wait for control-plane joiner")
 	// Only the init control plane and the first (stuck) joiner were created —
 	// the wedged join blocked every later node — and cleanup-on-failure ran.
 	assert.Equal(t, 2, infra.createServerCalls)
 	assert.Equal(t, 1, infra.deleteNodesCalls)
+	assert.Equal(t, []string{
+		"create:" + nodeName(t, base.ClusterName, hetzner.NodeTypeControlPlane, 0),
+		"create:" + nodeName(t, base.ClusterName, hetzner.NodeTypeControlPlane, 1),
+		"join-incomplete-probe",
+	}, log.list())
 }
 
 func TestRunCreateMultiNodeEmptyJoinSentinelCleansUp(t *testing.T) {

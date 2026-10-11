@@ -1,0 +1,47 @@
+name: "Validations"
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+
+  Static-Analysis:
+    # Note: changing this job name requires making the same update in the .github/workflows/release.yaml pipeline
+    name: "Static analysis"
+    runs-on: ubuntu-24.04
+    steps:
+      # setup checkout, go, go-make, binny, and cache go modules
+      - uses: anchore/go-make/.github/actions/setup@383ef7852b8ae43a30f424896b52479186d2ea4d # v0.1.0
+
+      - name: Run static analysis
+        run: make static-analysis
+
+  Unit-Test:
+    # Note: changing this job name requires making the same update in the .github/workflows/release.yaml pipeline
+    name: "Unit tests"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          lfs: true
+          persist-credentials: false
+
+      - name: Checkout LFS objects
+        run: git lfs checkout
+
+      # setup go, go-make, binny, and cache go modules
+      - uses: anchore/go-make/.github/actions/setup@383ef7852b8ae43a30f424896b52479186d2ea4d # v0.1.0
+
+      - name: Run unit tests
+        run: make unit
+
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: unit-test-results
+          path: test/results/**/*

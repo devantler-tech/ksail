@@ -59,7 +59,7 @@ func TestInstaller_Install_APIDiscoveryErrorRetry(t *testing.T) {
 	client := helm.NewMockInterface(t)
 	installer := calicoinstaller.NewInstaller(
 		client,
-		"/path/to/kubeconfig",
+		calicoinstaller.PrerequisiteKubeconfigForTest(t),
 		"test-context",
 		2*time.Minute,
 		v1alpha1.DistributionVanilla,
@@ -103,7 +103,7 @@ func TestInstaller_Install_APIDiscoveryErrorRetryExhausted(t *testing.T) {
 	client := helm.NewMockInterface(t)
 	installer := calicoinstaller.NewInstaller(
 		client,
-		"/path/to/kubeconfig",
+		calicoinstaller.PrerequisiteKubeconfigForTest(t),
 		"test-context",
 		2*time.Minute,
 		v1alpha1.DistributionVanilla,
@@ -159,10 +159,13 @@ func TestInstaller_Install_ContextCanceled_Vanilla(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	// The CRD install (phase 1) is reached first and fails on the canceled context.
 	client.EXPECT().
-		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isCalicoCRDSpec)).
-		Return(nil, context.Canceled)
+		GetReleaseStorageLabels(mock.Anything, "calico-crds", "tigera-operator").
+		Return(nil, nil)
+	// Rendering is reached first and fails on the canceled context.
+	client.EXPECT().
+		TemplateChart(mock.Anything, mock.MatchedBy(isCalicoCRDSpec)).
+		Return("", context.Canceled)
 
 	err := installer.Install(ctx)
 	require.Error(t, err)
@@ -174,7 +177,7 @@ func TestInstaller_Install_K3s_APIServerUnavailableRetrySucceeds(t *testing.T) {
 	client := helm.NewMockInterface(t)
 	installer := calicoinstaller.NewInstaller(
 		client,
-		"/path/to/kubeconfig",
+		calicoinstaller.PrerequisiteKubeconfigForTest(t),
 		"test-context",
 		2*time.Minute,
 		v1alpha1.DistributionK3s,
@@ -212,7 +215,7 @@ func TestInstaller_Install_K3s_APIServerUnavailableRetryExhausted(t *testing.T) 
 	client := helm.NewMockInterface(t)
 	installer := calicoinstaller.NewInstaller(
 		client,
-		"/path/to/kubeconfig",
+		calicoinstaller.PrerequisiteKubeconfigForTest(t),
 		"test-context",
 		2*time.Minute,
 		v1alpha1.DistributionK3s,
@@ -250,7 +253,7 @@ func TestInstaller_Install_Vanilla_NoRetryOnAPIServerUnavailable(t *testing.T) {
 	client := helm.NewMockInterface(t)
 	installer := calicoinstaller.NewInstaller(
 		client,
-		"/path/to/kubeconfig",
+		calicoinstaller.PrerequisiteKubeconfigForTest(t),
 		"test-context",
 		2*time.Minute,
 		v1alpha1.DistributionVanilla,

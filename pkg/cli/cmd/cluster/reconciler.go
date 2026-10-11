@@ -22,6 +22,8 @@ import (
 // defaultReconcileTimeout is the default timeout for component reconciliation operations.
 const defaultReconcileTimeout = 5 * time.Minute
 
+var errCalicoInstallerFactoryUnavailable = errors.New("calico installer factory is unavailable")
+
 // errMetricsServerDisableUnsupported is returned when attempting to disable metrics-server in-place.
 var errMetricsServerDisableUnsupported = errors.New(
 	"disabling metrics-server in-place is not yet supported; use 'ksail cluster delete && ksail cluster create'",
@@ -58,6 +60,11 @@ type componentReconciler struct {
 	// certManagerErr replays the first attempt's failure for the other field.
 	certManagerInstalled bool
 	certManagerErr       error
+	// policyEngineInstalled coalesces a cluster.policyEngine change and
+	// policy-engine chart-values drift into one Helm install/upgrade per pass;
+	// policyEngineErr replays the first attempt's failure for the other field.
+	policyEngineInstalled bool
+	policyEngineErr       error
 	// loadBalancerReconciled coalesces the generic load-balancer field and the
 	// EKS-specific controller opt-in when both change in one update pass.
 	loadBalancerReconciled bool
@@ -168,6 +175,8 @@ func (r *componentReconciler) handlerForField(
 	handlers[specdiff.RegistryCredentialField] = r.reconcileRegistryCredentials
 	handlers[specdiff.FluxVerifyField] = r.reconcileFluxVerify
 	handlers[specdiff.CertManagerValuesField] = r.reconcileCertManagerValues
+	handlers[specdiff.CalicoPrerequisitesField] = r.reconcileCalicoPrerequisites
+	handlers[specdiff.PolicyEngineValuesField] = r.reconcilePolicyEngineValues
 
 	if handler, ok := handlers[field]; ok {
 		return handler, true
@@ -198,7 +207,9 @@ func isComponentReconcileField(field string) bool {
 		specdiff.EKSLoadBalancerControllerField,
 		specdiff.RegistryCredentialField,
 		specdiff.FluxVerifyField,
-		specdiff.CertManagerValuesField:
+		specdiff.CertManagerValuesField,
+		specdiff.CalicoPrerequisitesField,
+		specdiff.PolicyEngineValuesField:
 		return true
 	default:
 		return strings.HasPrefix(field, "cluster.autoscaler.node.")
@@ -211,6 +222,34 @@ func (r *componentReconciler) reconcileCNI(_ context.Context, _ clusterupdate.Ch
 	_, err := setup.InstallCNI(r.cmd, r.clusterCfg, nil)
 	if err != nil {
 		return fmt.Errorf("failed to install CNI: %w", err)
+	}
+
+	return nil
+}
+
+// reconcileCalicoPrerequisites runs the same scoped installer used to detect
+// prerequisite drift, preserving its ownership checks and migration inventory.
+func (r *componentReconciler) reconcileCalicoPrerequisites(
+	ctx context.Context,
+	_ clusterupdate.Change,
+) error {
+	if r.clusterCfg.Spec.Cluster.CNI != v1alpha1.CNICalico ||
+		r.clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK {
+		return nil
+	}
+
+	if r.factories.Calico == nil {
+		return errCalicoInstallerFactoryUnavailable
+	}
+
+	inst, err := r.factories.Calico(r.clusterCfg)
+	if err != nil {
+		return fmt.Errorf("create Calico prerequisite installer: %w", err)
+	}
+
+	err = inst.Install(ctx)
+	if err != nil {
+		return fmt.Errorf("migrate Calico prerequisites: %w", err)
 	}
 
 	return nil
@@ -555,16 +594,47 @@ func (r *componentReconciler) reconcilePolicyEngine(
 		return r.uninstallWithFactory(ctx, r.factories.PolicyEngine)
 	}
 
+	return r.installPolicyEngineOnce(ctx)
+}
+
+// reconcilePolicyEngineValues upgrades the configured policy engine to the
+// chart values this KSail version renders when the installed release carries
+// other values (ksail#7651). Drift is only reported while KSail installs a
+// policy engine, so this re-checks that rather than installing a component the
+// configuration does not want.
+func (r *componentReconciler) reconcilePolicyEngineValues(
+	ctx context.Context,
+	_ clusterupdate.Change,
+) error {
+	if !ksailInstallsPolicyEngine(r.clusterCfg) {
+		return nil
+	}
+
+	return r.installPolicyEngineOnce(ctx)
+}
+
+// installPolicyEngineOnce runs the policy-engine Helm install/upgrade at most
+// once per update pass, replaying the first outcome for every later field that
+// maps to it.
+func (r *componentReconciler) installPolicyEngineOnce(ctx context.Context) error {
+	if r.policyEngineInstalled {
+		return r.policyEngineErr
+	}
+
+	r.policyEngineInstalled = true
+
 	if r.factories.PolicyEngine == nil {
-		return setup.ErrPolicyEngineInstallerFactoryNil
+		r.policyEngineErr = setup.ErrPolicyEngineInstallerFactoryNil
+
+		return r.policyEngineErr
 	}
 
 	err := setup.InstallPolicyEngineSilent(ctx, r.clusterCfg, r.factories)
 	if err != nil {
-		return fmt.Errorf("failed to install policy engine: %w", err)
+		r.policyEngineErr = fmt.Errorf("failed to install policy engine: %w", err)
 	}
 
-	return nil
+	return r.policyEngineErr
 }
 
 // reconcileGitOpsEngine installs or uninstalls the GitOps engine.

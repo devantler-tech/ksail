@@ -15,6 +15,7 @@ import (
 
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	clusterautoscalerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/clusterautoscaler"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	x509 "github.com/siderolabs/crypto/x509"
@@ -697,7 +698,7 @@ func TestApplyAutoscalerConfigSecret_CompressesLargeConfigUnderLimit(t *testing.
 	clientset := fake.NewClientset()
 	largeConfig := largeWorkerConfigYAML(t)
 
-	require.Greater(t, len(largeConfig), 32768,
+	require.Greater(t, len(largeConfig), hetzner.UserDataLimitBytes,
 		"test fixture must exceed Hetzner's raw user_data limit to be representative")
 
 	_, err := talosprovisioner.ApplyAutoscalerConfigSecret(
@@ -713,7 +714,7 @@ func TestApplyAutoscalerConfigSecret_CompressesLargeConfigUnderLimit(t *testing.
 	cfg := decodeClusterConfig(t, secret.Data[clusterConfigSecretKey])
 	cloudInit := cfg.NodeConfigs["pool1"].CloudInit
 
-	assert.LessOrEqual(t, len(cloudInit), 32768,
+	assert.LessOrEqual(t, len(cloudInit), hetzner.UserDataLimitBytes,
 		"gzip must bring cloud-init under Hetzner's 32 KiB user_data limit")
 	assert.True(t, isASCII([]byte(cloudInit)),
 		"cloud-init must be ASCII so JSON marshaling does not corrupt it")

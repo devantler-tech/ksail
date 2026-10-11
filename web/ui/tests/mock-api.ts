@@ -1,4 +1,18 @@
 import type { Page, Route } from "@playwright/test";
+import type { Cluster } from "../src/api.ts";
+
+// Keep catalog routing shared while each test retains its cluster scenario.
+export async function mockClusterCatalog(route: Route, url: URL, clusters: Cluster[]) {
+  if (url.pathname === "/api/v1/meta") {
+    await route.fulfill({ json: { distributions: [], providers: {}, components: [] } });
+    return true;
+  }
+  if (url.pathname === "/api/v1/clusters") {
+    await route.fulfill({ json: { items: clusters } });
+    return true;
+  }
+  return false;
+}
 
 type MockApiConfig = {
   mode: "local" | "operator";

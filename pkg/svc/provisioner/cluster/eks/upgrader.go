@@ -122,12 +122,15 @@ func (p *UpgradableProvisioner) UpgradeKubernetes(
 
 	token := rand.Text()
 
-	err = p.verifyUpgradeSubmission(ctx, api, expected)
+	// Validate first so the final cluster check and the update share one signer.
+	err = validateUpgradeCredentialLifetime(ctx, api)
 	if err != nil {
 		return err
 	}
 
-	err = p.validateUpgradeCredentialLifetime(ctx)
+	defer releaseUpgradeCredentials(api)
+
+	err = p.verifyUpgradeSubmission(ctx, api, expected)
 	if err != nil {
 		return err
 	}
@@ -147,6 +150,33 @@ func (p *UpgradableProvisioner) UpgradeKubernetes(
 	}
 
 	return p.waitForControlPlaneUpgrade(ctx, api, expected, target, updateID)
+}
+
+// validateUpgradeCredentialLifetime asks the resolved API to check its effective
+// credentials, refusing clients that cannot establish this pre-mutation boundary.
+func validateUpgradeCredentialLifetime(ctx context.Context, api AWSClusterVersionAPI) error {
+	validator, ok := api.(interface {
+		ValidateUpgradeCredentialLifetime(ctx context.Context) error
+	})
+	if !ok {
+		return eksclient.ErrUpgradeCredentialLifetime
+	}
+
+	err := validator.ValidateUpgradeCredentialLifetime(ctx)
+	if err != nil {
+		return fmt.Errorf("validate EKS upgrade credential lifetime: %w", err)
+	}
+
+	return nil
+}
+
+// releaseUpgradeCredentials returns a reused client to its configured providers
+// once this upgrade ends.
+func releaseUpgradeCredentials(api AWSClusterVersionAPI) {
+	releaser, ok := api.(interface{ ReleaseUpgradeCredentials() })
+	if ok {
+		releaser.ReleaseUpgradeCredentials()
+	}
 }
 
 // UpgradeDistribution refuses a separate OS upgrade; AWS manages that dimension.
@@ -292,48 +322,6 @@ func (p *UpgradableProvisioner) validateControlPlaneIdentity(cluster *ekstypes.C
 		arn.Resource != "cluster/"+p.name ||
 		arn.AccountID == "" {
 		return eksidentity.ErrInvalidLiveIdentity
-	}
-
-	return nil
-}
-
-var errUpgradeCredentialLifetime = errors.New(
-	"EKS upgrade credentials must remain valid through the bounded wait plus one minute; " +
-		"use a credential provider with a sufficient known session expiry",
-)
-
-// validateUpgradeCredentialLifetime rejects credentials that could expire after AWS accepts
-// the upgrade. The selected credential generation stays fixed for ownership and mutation.
-func (p *UpgradableProvisioner) validateUpgradeCredentialLifetime(ctx context.Context) error {
-	if p.upgradeCredentials == nil {
-		return errUpgradeCredentialLifetime
-	}
-
-	values, err := p.upgradeCredentials.Retrieve(ctx)
-	if err != nil {
-		return fmt.Errorf("read frozen EKS upgrade credentials: %w", err)
-	}
-
-	if values.AccessKeyID == "" || values.SecretAccessKey == "" {
-		return errUpgradeCredentialLifetime
-	}
-
-	if !values.CanExpire {
-		if values.SessionToken != "" {
-			return errUpgradeCredentialLifetime
-		}
-
-		return nil
-	}
-
-	deadline, ok := ctx.Deadline()
-	if !ok || !values.Expires.After(deadline.Add(time.Minute)) {
-		return errUpgradeCredentialLifetime
-	}
-
-	err = ctx.Err()
-	if err != nil {
-		return fmt.Errorf("validate EKS upgrade credential lifetime: %w", err)
 	}
 
 	return nil

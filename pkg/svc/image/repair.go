@@ -318,7 +318,7 @@ func (e *Exporter) tryExportImages(
 	// but only the layers for the running platform are actually downloaded.
 	// Without --platform, ctr tries to export all platforms and fails with
 	// "content digest not found" for missing platform layers.
-	cmd := make([]string, 0, 7+len(images)) //nolint:mnd // fixed args + images
+	cmd := make([]string, 0, 8+len(images)) //nolint:mnd // fixed args + optional flag + images
 	cmd = append(
 		cmd,
 		ctrCommand,
@@ -327,8 +327,13 @@ func (e *Exporter) tryExportImages(
 		"export",
 		"--platform",
 		platform,
-		tmpPath,
 	)
+
+	if e.localExport {
+		cmd = append(cmd, "--local")
+	}
+
+	cmd = append(cmd, tmpPath)
 	cmd = append(cmd, images...)
 
 	_, err := e.executor.ExecInContainer(ctx, nodeName, cmd)

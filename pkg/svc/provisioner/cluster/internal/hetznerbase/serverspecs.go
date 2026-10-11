@@ -26,14 +26,9 @@ const DefaultImageName = "ubuntu-24.04"
 
 const maxDecodedUserDataBytes = 1 << 20
 
-// maxProviderUserDataBytes is Hetzner Cloud's hard ceiling on a server's
-// user_data field (32 KiB). It is a different bound from
-// maxDecodedUserDataBytes, which caps how much text the guards will READ so a
-// marker cannot hide past the inspected prefix; this one caps what the provider
-// will ACCEPT. The Talos autoscaler path pins the same ceiling as
-// hetznerUserDataLimitBytes, where exceeding it makes Hetzner reject the request
-// with "invalid input in field 'user_data'".
-const maxProviderUserDataBytes = 32768
+// maxProviderUserDataBytes bounds the submitted payload. The separate
+// maxDecodedUserDataBytes bound limits security inspection after decoding.
+const maxProviderUserDataBytes = hetzner.UserDataLimitBytes
 
 // ErrUserDataTooLargeForProvider is returned when the user-data a node would be
 // created with exceeds what Hetzner accepts. Expanding compressed user-data

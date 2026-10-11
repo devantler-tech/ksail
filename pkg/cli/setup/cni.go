@@ -152,7 +152,19 @@ func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 
 	setup.timeout = max(setup.timeout, installer.CalicoInstallTimeout)
 
-	calicoInst := calicoinstaller.NewInstaller(
+	calicoInst := newCalicoInstaller(clusterCfg, setup)
+
+	return runCNIInstallation(
+		cmd, calicoInst, "calico", tmr, setup, clusterCfg,
+		[]string{"tigera-operator", "calico-system"},
+	)
+}
+
+func newCalicoInstaller(
+	clusterCfg *v1alpha1.Cluster,
+	setup *cniSetupResult,
+) *calicoinstaller.Installer {
+	return calicoinstaller.NewInstaller(
 		setup.helmClient,
 		setup.kubeconfig,
 		clusterCfg.Spec.Cluster.Connection.Context,
@@ -164,11 +176,22 @@ func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 			clusterCfg.Spec.Provider.Kubernetes,
 		),
 	)
+}
 
-	return runCNIInstallation(
-		cmd, calicoInst, "calico", tmr, setup, clusterCfg,
-		[]string{"tigera-operator", "calico-system"},
-	)
+func calicoFactory(
+	factories *InstallerFactories,
+) func(*v1alpha1.Cluster) (installer.Installer, error) {
+	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+		client, kubeconfig, err := factories.HelmClientFactory(clusterCfg)
+		if err != nil {
+			return nil, fmt.Errorf("create Calico Helm client: %w", err)
+		}
+
+		return newCalicoInstaller(clusterCfg, &cniSetupResult{
+			helmClient: client, kubeconfig: kubeconfig,
+			timeout: max(installer.GetInstallTimeout(clusterCfg), installer.CalicoInstallTimeout),
+		}), nil
+	}
 }
 
 func runCNIInstallation(

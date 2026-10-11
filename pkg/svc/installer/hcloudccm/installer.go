@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/hetzner"
 )
@@ -42,6 +43,17 @@ type Option func(*options)
 // disabling the service controller that provisions Hetzner load balancers.
 func WithLoadBalancersDisabled() Option {
 	return func(cfg *options) { cfg.loadBalancersDisabled = true }
+}
+
+// LoadBalancerOptions returns the options that make the cloud controller honour
+// the cluster's load-balancer setting. Every install path must pass them, or a
+// later install would switch Hetzner load balancers back on.
+func LoadBalancerOptions(setting v1alpha1.LoadBalancer) []Option {
+	if setting == v1alpha1.LoadBalancerDisabled {
+		return []Option{WithLoadBalancersDisabled()}
+	}
+
+	return nil
 }
 
 // NewInstaller creates a new Hetzner Cloud Controller Manager installer instance.
