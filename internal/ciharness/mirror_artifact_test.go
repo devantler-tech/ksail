@@ -25,6 +25,7 @@ func mirrorArchiveNames() []string {
 	}
 }
 
+// TestMirrorCachePersistenceRequiresDefaultBranch checks reusable cache scope.
 // A PR-scoped multi-GB mirror entry duplicates the mandatory producer artifact
 // and cannot be reused by other PRs. Exercise the policy rather than assuming
 // a successful cache save means the repository stays within its storage budget.
