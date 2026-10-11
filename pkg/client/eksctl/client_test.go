@@ -462,7 +462,7 @@ func TestGetCluster_HappyPath(t *testing.T) {
 	t.Parallel()
 
 	runner := &fakeRunner{
-		stdout: []byte(`[{"Name":"demo","Region":"us-east-1","EksctlCreated":"True"}]`),
+		stdout: []byte(`[{"Name":"demo","Region":"us-east-1","Owned":"True"}]`),
 	}
 	client := newTestClient(runner)
 
@@ -497,8 +497,8 @@ func TestListClusters_HappyPath(t *testing.T) {
 
 	runner := &fakeRunner{
 		stdout: []byte(`[
-			{"Name":"a","Region":"us-east-1","EksctlCreated":"True"},
-			{"Name":"b","Region":"us-east-1","EksctlCreated":"False"}
+			{"Name":"a","Region":"us-east-1","Owned":"True"},
+			{"Name":"b","Region":"us-east-1","Owned":"False"}
 		]`),
 	}
 	client := newTestClient(runner)

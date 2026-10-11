@@ -81,7 +81,7 @@ if [ "$1 $2" = "get cluster" ]; then
   fi
   eksctl_created="${KSAIL_EKSCTL_CREATED-True}"
   printf '[{"Name":"%s","Region":"%s",' "$discovered_cluster" "$discovered_region"
-  printf '"EksctlCreated":"%s"}]\n' "$eksctl_created"
+  printf '"Owned":"%s"}]\n' "$eksctl_created"
 elif [ "$1 $2" = "get nodegroup" ]; then
 	current_desired="${KSAIL_EKS_NODEGROUP_DESIRED:-0}"
 	current_min="${KSAIL_EKS_NODEGROUP_MIN:-2}"
@@ -176,7 +176,7 @@ func TestStandaloneEKSLifecycleCommandsRouteToEksctl(t *testing.T) {
 			configureStandaloneEKSNodegroupAction(t, testCase.name)
 
 			if testCase.name == "start" {
-				// EksctlCreated is normalized explicitly: case and surrounding whitespace are benign.
+				// Owned is normalized explicitly: case and surrounding whitespace are benign.
 				t.Setenv("KSAIL_EKSCTL_CREATED", " true ")
 			}
 
@@ -491,7 +491,7 @@ set -eu
 printf '%s\n' "$*" >> "$KSAIL_EKSCTL_MARKER"
 case "$1 $2" in
   'get cluster')
-    printf '[{"Name":"%s","Region":"ap-southeast-2","EksctlCreated":"True"}]\n' "$KSAIL_EKS_CLUSTER"
+    printf '[{"Name":"%s","Region":"ap-southeast-2","Owned":"True"}]\n' "$KSAIL_EKS_CLUSTER"
     ;;
   'get nodegroup')
     capacity=$(cat "$KSAIL_EKS_BARRIER_DIR/capacity")
@@ -2036,12 +2036,21 @@ func TestStandaloneEKSStartRejectsMissingEksctlOwnership(t *testing.T) {
 			err := cmd.Execute()
 			require.ErrorIs(t, err, cluster.ErrUnmanagedCluster)
 			assert.Contains(t, err.Error(), "did not report an eksctl-created cluster")
+
+			expectedCalls := []string{fmt.Sprintf(
+				"get cluster --name %s --output json --region ap-southeast-2",
+				clusterName,
+			)}
+			if testCase.name == "empty" {
+				expectedCalls = append(
+					expectedCalls,
+					"get cluster --output json --region ap-southeast-2",
+				)
+			}
+
 			assert.Equal(
 				t,
-				[]string{fmt.Sprintf(
-					"get cluster --name %s --output json --region ap-southeast-2",
-					clusterName,
-				)},
+				expectedCalls,
 				readStandaloneEKSCalls(t, markerPath),
 			)
 			assertParentAWSEnvironmentUnchanged(t)

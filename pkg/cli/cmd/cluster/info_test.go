@@ -130,7 +130,7 @@ func TestAWSProviderStatus_AggregatesNodegroups(t *testing.T) {
 	t.Parallel()
 
 	client := newEksctlClient(t, map[string][]byte{
-		"get cluster": []byte(`[{"Name":"demo","Region":"us-east-1","EksctlCreated":"True"}]`),
+		"get cluster": []byte(`[{"Name":"demo","Region":"us-east-1","Owned":"True"}]`),
 		"get nodegroup": []byte(
 			`[{"Cluster":"demo","Name":"ng-1","Status":"ACTIVE"},{"Cluster":"demo","Name":"ng-2","Status":"ACTIVE"}]`,
 		),
@@ -185,7 +185,7 @@ func TestAWSProviderStatus_ForwardsRegion(t *testing.T) {
 		t: t,
 		responses: map[string][]byte{
 			"get cluster": []byte(
-				`[{"Name":"demo","Region":"eu-west-1","EksctlCreated":"True"}]`,
+				`[{"Name":"demo","Region":"eu-west-1","Owned":"True"}]`,
 			),
 			"get nodegroup": []byte(`[{"Cluster":"demo","Name":"ng-1","Status":"ACTIVE"}]`),
 		},

@@ -150,8 +150,8 @@ func TestListAllClusters_ReturnsNames(t *testing.T) {
 
 	prov, _ := newProvider(t, map[string][]response{
 		"get cluster": {{stdout: []byte(`[
-			{"Name":"a","Region":"us-east-1","EksctlCreated":"True"},
-			{"Name":"b","Region":"us-east-1","EksctlCreated":"True"}
+			{"Name":"a","Region":"us-east-1","Owned":"True"},
+			{"Name":"b","Region":"us-east-1","Owned":"True"}
 		]`)}},
 	})
 
@@ -245,7 +245,7 @@ func TestStopNodesPinsProfileResolvedRegion(t *testing.T) {
 
 	prov, runner := newProviderWithRegion(t, map[string][]response{
 		"get cluster": {{
-			stdout: []byte(`[{"Name":"demo","Region":"eu-north-1","EksctlCreated":"True"}]`),
+			stdout: []byte(`[{"Name":"demo","Region":"eu-north-1","Owned":"True"}]`),
 		}},
 		"get nodegroup":   {{stdout: nodegroupJSON(3, 2)}},
 		"scale nodegroup": {{}},
@@ -279,7 +279,7 @@ func TestStartNodesPinsProfileResolvedRegion(t *testing.T) {
 
 	prov, runner := newProviderWithRegion(t, map[string][]response{
 		"get cluster": {{
-			stdout: []byte(`[{"Name":"demo","Region":"eu-north-1","EksctlCreated":"True"}]`),
+			stdout: []byte(`[{"Name":"demo","Region":"eu-north-1","Owned":"True"}]`),
 		}},
 		"get nodegroup": {
 			{stdout: nodegroupJSON(0, 0)},
@@ -307,8 +307,8 @@ func TestStopNodesRejectsProfileResolvedClusterWithoutExactIdentity(t *testing.T
 
 	//nolint:paralleltest // The subtests share the process HOME set by their parent.
 	for name, summary := range map[string]string{
-		"different name": `[{"Name":"other","Region":"eu-north-1","EksctlCreated":"True"}]`,
-		"missing region": `[{"Name":"demo","Region":"","EksctlCreated":"True"}]`,
+		"different name": `[{"Name":"other","Region":"eu-north-1","Owned":"True"}]`,
+		"missing region": `[{"Name":"demo","Region":"","Owned":"True"}]`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			prov, runner := newProviderWithRegion(t, map[string][]response{
@@ -327,8 +327,8 @@ func TestProfileResolvedLifecycleRegionDoesNotMutateSharedProvider(t *testing.T)
 
 	prov, runner := newProviderWithRegion(t, map[string][]response{
 		"get cluster": {
-			{stdout: []byte(`[{"Name":"first","Region":"eu-north-1","EksctlCreated":"True"}]`)},
-			{stdout: []byte(`[{"Name":"second","Region":"us-west-2","EksctlCreated":"True"}]`)},
+			{stdout: []byte(`[{"Name":"first","Region":"eu-north-1","Owned":"True"}]`)},
+			{stdout: []byte(`[{"Name":"second","Region":"us-west-2","Owned":"True"}]`)},
 		},
 		"get nodegroup": {
 			{
@@ -813,7 +813,7 @@ func TestGetClusterStatus_ZeroNodegroups(t *testing.T) {
 
 	prov, _ := newProvider(t, map[string][]response{
 		"get cluster": {
-			{stdout: []byte(`[{"Name":"demo","Region":"us-east-1","EksctlCreated":"True"}]`)},
+			{stdout: []byte(`[{"Name":"demo","Region":"us-east-1","Owned":"True"}]`)},
 		},
 		"get nodegroup": {{stdout: []byte(`[]`)}},
 	})
@@ -832,7 +832,7 @@ func TestGetClusterStatus_AggregatesNodegroupStatus(t *testing.T) {
 
 	prov, _ := newProvider(t, map[string][]response{
 		"get cluster": {
-			{stdout: []byte(`[{"Name":"demo","Region":"us-east-1","EksctlCreated":"True"}]`)},
+			{stdout: []byte(`[{"Name":"demo","Region":"us-east-1","Owned":"True"}]`)},
 		},
 		"get nodegroup": {{stdout: []byte(`[
 			{"Cluster":"demo","Name":"ng-1","Status":"ACTIVE"},
@@ -860,7 +860,7 @@ func newProviderWithDescriber(
 
 	runner := &scriptedRunner{t: t, responses: map[string][]response{
 		"get cluster": {
-			{stdout: []byte(`[{"Name":"demo","Region":"us-east-1","EksctlCreated":"True"}]`)},
+			{stdout: []byte(`[{"Name":"demo","Region":"us-east-1","Owned":"True"}]`)},
 		},
 		"get nodegroup": {{stdout: []byte(`[]`)}},
 	}}
