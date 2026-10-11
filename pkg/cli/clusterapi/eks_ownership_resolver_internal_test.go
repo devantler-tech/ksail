@@ -17,6 +17,7 @@ import (
 
 type discoveredEKSNames []string
 
+// ListAllClusters supplies discovery names without contacting AWS.
 func (names discoveredEKSNames) ListAllClusters(context.Context) ([]string, error) {
 	return names, nil
 }

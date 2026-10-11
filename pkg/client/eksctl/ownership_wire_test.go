@@ -24,6 +24,7 @@ type ownershipWireRunner struct {
 
 var errRegionalOwnershipQuery = errors.New("regional query refused")
 
+// Run keeps native named details separate from the regional provenance response.
 func (r *ownershipWireRunner) Run(
 	_ context.Context,
 	_ string,
@@ -38,6 +39,7 @@ func (r *ownershipWireRunner) Run(
 	return []byte(r.regional), nil, r.regionalErr
 }
 
+// TestGetClusterUsesRegionalOwnershipForDetailedNamedResponse catches reliance on nonexistent named provenance.
 func TestGetClusterUsesRegionalOwnershipForDetailedNamedResponse(t *testing.T) {
 	t.Parallel()
 
@@ -62,6 +64,7 @@ func TestGetClusterUsesRegionalOwnershipForDetailedNamedResponse(t *testing.T) {
 	}, runner.calls)
 }
 
+// TestListClustersReadsEksctlOwnedField pins the published regional wire field rather than a synthetic tag.
 func TestListClustersReadsEksctlOwnedField(t *testing.T) {
 	t.Parallel()
 
@@ -75,6 +78,7 @@ func TestListClustersReadsEksctlOwnedField(t *testing.T) {
 	assert.Equal(t, "False", got[0].EKSCTLCreated)
 }
 
+// TestGetClusterRejectsUncorroboratedRegionalOwnership rejects missing, ambiguous, malformed, and refused evidence.
 func TestGetClusterRejectsUncorroboratedRegionalOwnership(t *testing.T) {
 	t.Parallel()
 
@@ -109,6 +113,7 @@ func TestGetClusterRejectsUncorroboratedRegionalOwnership(t *testing.T) {
 	}
 }
 
+// TestGetClusterPreservesNegativeRegionalOwnership prevents false or unknown provenance becoming ownership.
 func TestGetClusterPreservesNegativeRegionalOwnership(t *testing.T) {
 	t.Parallel()
 
@@ -131,6 +136,7 @@ func TestGetClusterPreservesNegativeRegionalOwnership(t *testing.T) {
 	}
 }
 
+// TestGetClusterRejectsMultipleNamedResults prevents one arbitrarily selected cluster from satisfying a named query.
 func TestGetClusterRejectsMultipleNamedResults(t *testing.T) {
 	t.Parallel()
 

@@ -1086,6 +1086,8 @@ func (s *Service) runCreate(ctx context.Context, name string, spec v1alpha1.Spec
 	current.phase = v1alpha1.ClusterPhaseReady
 }
 
+// runDelete executes guarded deletion asynchronously, removing completed jobs
+// while retaining genuine failures for the UI to report and retry.
 func (s *Service) runDelete(ctx context.Context, name string, spec v1alpha1.Spec) {
 	err := s.runGuardedProvisionerWithMissing(
 		ctx,

@@ -181,6 +181,7 @@ func TestEKSRecoveryRequiresExplicitTargetWithoutLocalEvidence(t *testing.T) {
 	assert.Empty(t, readStandaloneEKSCalls(t, marker))
 }
 
+// TestEKSRecoveryRejectsAnExplicitEmptyName prevents recovery from falling back to an unintended target.
 func TestEKSRecoveryRejectsAnExplicitEmptyName(t *testing.T) {
 	const name = "eks-empty-name-recovery"
 
@@ -199,6 +200,7 @@ func TestEKSRecoveryRejectsAnExplicitEmptyName(t *testing.T) {
 	assert.Empty(t, readStandaloneEKSCalls(t, marker))
 }
 
+// TestEKSRecoveryPrefersProfileRegionToStaleKubeconfigContext protects the caller's selected AWS region.
 func TestEKSRecoveryPrefersProfileRegionToStaleKubeconfigContext(t *testing.T) {
 	const name = "eks-profile-region-recovery"
 
@@ -235,6 +237,7 @@ aws_session_token = fixture-session
 		"get cluster --name "+name+" --output json --region ap-southeast-2")
 }
 
+// TestEKSRecoveryDoesNotBorrowAnotherClustersAWSOptions keeps unrelated project credentials out of recovery.
 func TestEKSRecoveryDoesNotBorrowAnotherClustersAWSOptions(t *testing.T) {
 	const name = "eks-recovery-explicit-target"
 

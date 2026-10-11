@@ -511,6 +511,8 @@ func selectPersistedAWSOwnership(
 	return ownerships[0], nil
 }
 
+// queryFrozenAWSOwnership resolves credentials once, pins the selected region,
+// and corroborates eksctl ownership before returning that frozen AWS selection.
 func queryFrozenAWSOwnership(
 	ctx context.Context,
 	resolved *lifecycle.ResolvedClusterInfo,

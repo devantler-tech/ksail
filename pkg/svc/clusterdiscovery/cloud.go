@@ -134,6 +134,8 @@ func (d *Discoverer) listAWS(ctx context.Context) ([]Cluster, error) {
 	return clusters, nil
 }
 
+// clustersFromEKSSummaries carries each discovered region into the UI inventory
+// without treating an enumeration result as immutable ownership evidence.
 func clustersFromEKSSummaries(summaries []eksctlclient.ClusterSummary) []Cluster {
 	clusters := make([]Cluster, 0, len(summaries))
 	for _, summary := range summaries {

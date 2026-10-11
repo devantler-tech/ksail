@@ -52,6 +52,7 @@ func TestEKSRecoveryUsesDetailedNamedAndRegionalOwnedResponses(t *testing.T) {
 	)
 }
 
+// TestEKSRecoveryRejectsNegativeRegionalOwnership refuses native false, unknown, and absent provenance.
 func TestEKSRecoveryRejectsNegativeRegionalOwnership(t *testing.T) {
 	for _, owned := range []string{"False", "Unknown", ""} {
 		t.Run(owned, func(t *testing.T) {

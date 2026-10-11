@@ -126,6 +126,7 @@ func newEksctlClient(t *testing.T, responses map[string][]byte) *eksctlclient.Cl
 	)
 }
 
+// TestAWSProviderStatus_AggregatesNodegroups verifies EKS capacity is visible through cluster info.
 func TestAWSProviderStatus_AggregatesNodegroups(t *testing.T) {
 	t.Parallel()
 

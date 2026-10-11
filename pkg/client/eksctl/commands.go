@@ -146,9 +146,29 @@ func (c *Client) DeleteCluster(
 	return c.execWithProgress(ctx, args...)
 }
 
-// GetCluster returns the summary for a named cluster. Returns
-// ErrClusterNotFound when no cluster with the given name exists.
+// GetCluster returns a named cluster's ownership summary, corroborating native
+// details with a regional listing. An unavailable listing remains an error;
+// callers needing only cluster existence should use GetClusterDetails instead.
 func (c *Client) GetCluster(
+	ctx context.Context,
+	name, region string,
+) (*ClusterSummary, error) {
+	named, err := c.GetClusterDetails(ctx, name, region)
+	if err != nil {
+		return nil, err
+	}
+
+	if named.Name != name || named.EKSCTLCreated != "" {
+		return named, nil
+	}
+
+	return c.regionalClusterSummary(ctx, name, region)
+}
+
+// GetClusterDetails describes one named cluster without enumerating the region.
+// Native details do not establish eksctl ownership. Empty and ambiguous named
+// responses are rejected rather than accepted as evidence that a cluster exists.
+func (c *Client) GetClusterDetails(
 	ctx context.Context,
 	name, region string,
 ) (*ClusterSummary, error) {
@@ -178,12 +198,7 @@ func (c *Client) GetCluster(
 		return nil, fmt.Errorf("%w: named query for %s", ErrAmbiguousCluster, name)
 	}
 
-	named := &clusters[0]
-	if named.Name != name || named.EKSCTLCreated != "" {
-		return named, nil
-	}
-
-	return c.regionalClusterSummary(ctx, name, region)
+	return &clusters[0], nil
 }
 
 // regionalClusterSummary binds provenance to exactly one named entry in the same

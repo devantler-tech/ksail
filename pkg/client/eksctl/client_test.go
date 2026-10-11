@@ -458,6 +458,7 @@ func TestGetCluster_NotFound(t *testing.T) {
 	require.ErrorIs(t, err, eksctl.ErrClusterNotFound)
 }
 
+// TestGetCluster_HappyPath checks native named details are corroborated by regional ownership.
 func TestGetCluster_HappyPath(t *testing.T) {
 	t.Parallel()
 
@@ -492,6 +493,7 @@ func TestListClusters_EmptyOutput(t *testing.T) {
 	assert.Empty(t, clusters)
 }
 
+// TestListClusters_HappyPath verifies regional names, regions, and Owned values survive decoding.
 func TestListClusters_HappyPath(t *testing.T) {
 	t.Parallel()
 

@@ -269,7 +269,7 @@ func (p *Provider) GetClusterStatus(
 		return nil, provider.ErrProviderUnavailable
 	}
 
-	_, err := p.client.GetCluster(ctx, clusterName, p.region)
+	_, err := p.client.GetClusterDetails(ctx, clusterName, p.region)
 	if err != nil {
 		return nil, translateClientErr(err)
 	}
@@ -282,7 +282,7 @@ func (p *Provider) GetClusterStatus(
 	status := provider.BuildClusterStatus(nodes, NodegroupStatusActive)
 	if status == nil {
 		// BuildClusterStatus returns nil for an empty node list, but the
-		// cluster exists (GetCluster succeeded above) — only its nodegroups
+		// cluster exists (GetClusterDetails succeeded above) — only its nodegroups
 		// are absent. Return a zero-node status so callers can rely on the
 		// (status, err) contract: status is non-nil whenever err is nil.
 		status = &provider.ClusterStatus{Phase: provider.PhaseStopped, Nodes: nodes}

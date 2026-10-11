@@ -166,6 +166,8 @@ func validateEKSRecoveryTarget(cmd *cobra.Command, resolved *lifecycle.ResolvedC
 	return nil
 }
 
+// validateExplicitEKSRecoveryName rejects an explicitly blank recovery target
+// before ambient defaults can accidentally select another cluster.
 func validateExplicitEKSRecoveryName(cmd *cobra.Command) error {
 	if !cmd.Flags().Changed("name") {
 		return nil
