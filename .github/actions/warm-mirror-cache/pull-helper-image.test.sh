@@ -80,8 +80,9 @@ first_line() { { grep -n -m1 -F -- "$1" "$2" || true; } | cut -d: -f1; }
 for action in "$restore_action" "$warm_action"; do
 	prepull=$(first_line 'pull-helper-image.sh' "$action")
 	first_use=$(first_line "$helper_image \\" "$action")
-	[ -n "$prepull" ] && [ -n "$first_use" ] && [ "$prepull" -lt "$first_use" ] ||
+	if [ -z "$prepull" ] || [ -z "$first_use" ] || [ "$prepull" -ge "$first_use" ]; then
 		fail "$action must pull the helper image before its first helper container"
+	fi
 	if grep -n 'busybox' "$action" | grep -v 'docker.io/library/busybox:1.36.1' |
 		grep 'busybox:' | grep -Fvq "$helper_image"; then
 		fail "$action starts a helper container from an image the shared script does not pull"
@@ -89,11 +90,15 @@ for action in "$restore_action" "$warm_action"; do
 done
 # The restore must obtain the helper before it creates or fills any volume.
 volume_create=$(first_line 'docker volume create' "$restore_action")
-[ -n "$volume_create" ] && [ "$(first_line 'pull-helper-image.sh' "$restore_action")" -lt "$volume_create" ] ||
+prepull=$(first_line 'pull-helper-image.sh' "$restore_action")
+if [ -z "$prepull" ] || [ -z "$volume_create" ] || [ "$prepull" -ge "$volume_create" ]; then
 	fail 'the restore must pull the helper image before creating a mirror volume'
+fi
 # The warm action must obtain it before it discards the rejected archives.
 discard=$(first_line 'rm -rf -- /tmp/mirror-cache' "$warm_action")
-[ -n "$discard" ] && [ "$(first_line 'pull-helper-image.sh' "$warm_action")" -lt "$discard" ] ||
+prepull=$(first_line 'pull-helper-image.sh' "$warm_action")
+if [ -z "$prepull" ] || [ -z "$discard" ] || [ "$prepull" -ge "$discard" ]; then
 	fail 'the warm action must pull the helper image before replacing mirror archives'
+fi
 
 echo 'PASS: pull-helper-image'
