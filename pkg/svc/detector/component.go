@@ -380,7 +380,7 @@ func (d *ComponentDetector) detectMetricsServer(
 func (d *ComponentDetector) detectLoadBalancer(
 	ctx context.Context,
 	distribution v1alpha1.Distribution,
-	_ v1alpha1.Provider,
+	provider v1alpha1.Provider,
 ) (v1alpha1.LoadBalancer, error) {
 	// K3s bundles ServiceLB. When the user disables it (--load-balancer Disabled),
 	// K3s is started with --disable=servicelb and no svclb DaemonSets are created.
@@ -417,10 +417,8 @@ func (d *ComponentDetector) detectLoadBalancer(
 		}
 	}
 
-	// Talos: check for MetalLB Helm release (used by Talos × Docker;
-	// Talos × Hetzner also resolves correctly via ProvidesLoadBalancerByDefault).
 	if distribution == v1alpha1.DistributionTalos {
-		return d.detectMetalLB(ctx)
+		return d.detectTalosLoadBalancer(ctx, provider)
 	}
 
 	// KWOK: simulated pods have no real network dataplane, so LoadBalancer is
@@ -486,6 +484,21 @@ func (d *ComponentDetector) containerExistsWithRetry(
 	return false, lastErr
 }
 
+// detectTalosLoadBalancer reads the load-balancer state of a Talos cluster.
+func (d *ComponentDetector) detectTalosLoadBalancer(
+	ctx context.Context,
+	provider v1alpha1.Provider,
+) (v1alpha1.LoadBalancer, error) {
+	// Hetzner: the cloud controller is installed whether or not load balancers
+	// are wanted, so read how it was installed.
+	if provider == v1alpha1.ProviderHetzner {
+		return d.detectHCloudLoadBalancer(ctx)
+	}
+
+	// Otherwise check for a MetalLB Helm release (used by Talos × Docker).
+	return d.detectMetalLB(ctx)
+}
+
 // detectMetalLB checks for a MetalLB Helm release.
 func (d *ComponentDetector) detectMetalLB(ctx context.Context) (v1alpha1.LoadBalancer, error) {
 	exists, err := d.helmClient.ReleaseExists(ctx, ReleaseMetalLB, NamespaceMetalLB)
@@ -498,6 +511,58 @@ func (d *ComponentDetector) detectMetalLB(ctx context.Context) (v1alpha1.LoadBal
 	}
 
 	return v1alpha1.LoadBalancerDefault, nil
+}
+
+// detectHCloudLoadBalancer reads the load-balancer state of a Hetzner cluster
+// from the hcloud cloud controller release. The controller initialises nodes, so
+// it is installed even with load balancers disabled; in that case its service
+// controller is switched off. Without the release nothing can provision a load
+// balancer at all. Default is returned otherwise, which resolves to Enabled
+// through ProvidesLoadBalancerByDefault.
+func (d *ComponentDetector) detectHCloudLoadBalancer(
+	ctx context.Context,
+) (v1alpha1.LoadBalancer, error) {
+	exists, err := d.helmClient.ReleaseExists(ctx, ReleaseHCloudCCM, NamespaceHCloudCCM)
+	if err != nil {
+		return v1alpha1.LoadBalancerDefault, fmt.Errorf("check hcloud-ccm release: %w", err)
+	}
+
+	if !exists {
+		return v1alpha1.LoadBalancerDisabled, nil
+	}
+
+	values, err := d.helmClient.GetReleaseValues(ctx, ReleaseHCloudCCM, NamespaceHCloudCCM)
+	if err != nil {
+		return v1alpha1.LoadBalancerDefault, fmt.Errorf("read hcloud-ccm release values: %w", err)
+	}
+
+	if hcloudServiceControllerDisabled(values) {
+		return v1alpha1.LoadBalancerDisabled, nil
+	}
+
+	return v1alpha1.LoadBalancerDefault, nil
+}
+
+// hcloudServiceControllerDisabled reports whether the hcloud cloud controller
+// values switch off the service controller, which provisions load balancers.
+func hcloudServiceControllerDisabled(values map[string]any) bool {
+	args, hasArgs := values["args"].(map[string]any)
+	if !hasArgs {
+		return false
+	}
+
+	controllers, hasControllers := args["controllers"].(string)
+	if !hasControllers {
+		return false
+	}
+
+	for controller := range strings.SplitSeq(controllers, ",") {
+		if strings.TrimSpace(controller) == hcloudServiceControllerOff {
+			return true
+		}
+	}
+
+	return false
 }
 
 // detectCertManager checks for a cert-manager Helm release.
