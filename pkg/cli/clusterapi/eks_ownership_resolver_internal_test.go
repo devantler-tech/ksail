@@ -41,6 +41,59 @@ func TestDiscoveredEKSRegionMustMatchRecoveredOwnershipBeforeJob(t *testing.T) {
 	assert.Empty(t, service.jobs, "a refused action must not register a mutation job")
 }
 
+// TestDiscoveredLegacyEKSRegionBinding preserves config-only clusters without allowing a
+// same-named discovery row to redirect a lifecycle action to another region.
+func TestDiscoveredLegacyEKSRegionBinding(t *testing.T) {
+	for _, test := range []struct {
+		name         string
+		configRegion string
+		savedSpec    bool
+		wantError    bool
+	}{
+		{name: "matching legacy region", configRegion: "eu-north-1", savedSpec: true},
+		{name: "different legacy region", configRegion: "us-west-2", savedSpec: true, wantError: true},
+		{name: "missing legacy binding", savedSpec: true, wantError: true},
+		{name: "missing creation evidence", configRegion: "eu-north-1", wantError: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			home := isolateHome(t)
+			t.Setenv("AWS_REGION", "eu-north-1")
+
+			const name = "legacy-config-only"
+			if test.savedSpec {
+				require.NoError(t, state.SaveClusterSpec(name, &v1alpha1.ClusterSpec{
+					Distribution: v1alpha1.DistributionEKS,
+					Provider:     v1alpha1.ProviderAWS,
+				}))
+			}
+
+			if test.configRegion != "" {
+				dir := filepath.Join(home, ".ksail", "clusters", name)
+				require.NoError(t, os.MkdirAll(dir, 0o750))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "eks.yaml"), []byte(
+					"apiVersion: eksctl.io/v1alpha5\nkind: ClusterConfig\nmetadata:\n"+
+						"  name: "+name+"\n  region: "+test.configRegion+"\n"), 0o600))
+			}
+
+			service := NewTestService(nil)
+			service.discoverProviders = []v1alpha1.Provider{v1alpha1.ProviderAWS}
+			service.discoverer.AWS = discoveredEKSNames{name}
+
+			_, err := service.startJob(t.Context(), name, v1alpha1.ClusterPhaseDeleting)
+			if test.wantError {
+				require.ErrorIs(t, err, api.ErrInvalid)
+				assert.Empty(t, service.jobs,
+					"an unconfirmed target must not register a mutation job")
+
+				return
+			}
+
+			require.NoError(t, err, "matching legacy creation evidence must remain usable")
+			assert.Len(t, service.jobs, 1)
+		})
+	}
+}
+
 // isolateHome points state reads and writes at a throwaway home so this package never touches the
 // developer's real ~/.ksail/clusters. t.Setenv forbids t.Parallel, which is why these tests are
 // serial.

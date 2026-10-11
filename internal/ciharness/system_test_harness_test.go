@@ -923,14 +923,22 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 	assert.Contains(t, recoveryCredentials.If, "always()")
 
 	postRefreshMinutes := 0
-	for _, name := range boundedStepNames[10:12] {
+	for _, name := range []string{
+		"🔎 Report why the EKS create failed",
+		"🧪 ksail cluster update scales EKS nodes",
+		"🧪 ksail workload reconcile",
+	} {
 		postRefreshMinutes += findHarnessStep(t, smokeJob.Steps, name).TimeoutMinutes
 	}
 
 	assert.LessOrEqual(t, postRefreshMinutes+10, 120)
 
 	postRecoveryRefreshMinutes := 0
-	for _, name := range boundedStepNames[13:] {
+	for _, name := range []string{
+		"🔐 Refresh AWS credentials before EKS recovery",
+		"🧪 Recover EKS ownership after local state loss",
+		"🧹 Delete EKS smoke cluster",
+	} {
 		postRecoveryRefreshMinutes += findHarnessStep(t, smokeJob.Steps, name).TimeoutMinutes
 	}
 

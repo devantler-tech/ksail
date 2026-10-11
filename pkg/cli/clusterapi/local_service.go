@@ -597,6 +597,10 @@ func confirmDiscoveredEKSRegion(name, region string) error {
 	}
 
 	ownerships, err := state.ListEKSOwnershipStates(name)
+	if errors.Is(err, state.ErrEKSOwnershipStateNotFound) {
+		return confirmDiscoveredLegacyEKSRegion(name, region)
+	}
+
 	if err != nil {
 		return fmt.Errorf("%w: read EKS ownership regions for %q: %w", api.ErrInvalid, name, err)
 	}
@@ -611,6 +615,24 @@ func confirmDiscoveredEKSRegion(name, region string) error {
 	}
 
 	return nil
+}
+
+// confirmDiscoveredLegacyEKSRegion keeps config-only targets bound to their saved region.
+// Ownership is checked separately by startJob before it registers any mutation.
+func confirmDiscoveredLegacyEKSRegion(name, region string) error {
+	bound, err := boundEKSConfig(name)
+	if err != nil {
+		return err
+	}
+
+	if bound == nil || bound.Region == region {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"%w: discovered EKS cluster %q is in region %q, but its local config binds it to %q",
+		api.ErrInvalid, name, region, bound.Region,
+	)
 }
 
 // dockerFactory adapts the Service's provisioner factory to the discovery DockerFactory shape,
