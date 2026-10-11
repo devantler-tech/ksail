@@ -495,6 +495,144 @@ func TestDetectLoadBalancer_Talos_MetalLB_Default(t *testing.T) {
 	assert.Equal(t, v1alpha1.LoadBalancerDefault, loadBalancer)
 }
 
+// detectHetznerLoadBalancer runs detectLoadBalancer for Talos × Hetzner with the
+// hcloud cloud controller release in the given state.
+func detectHetznerLoadBalancer(
+	t *testing.T,
+	releaseExists bool,
+	values map[string]any,
+) v1alpha1.LoadBalancer {
+	t.Helper()
+
+	ctx := context.Background()
+	helmClient := helm.NewMockInterface(t)
+	k8sClientset := fake.NewClientset()
+
+	helmClient.On("ReleaseExists", ctx, detector.ReleaseHCloudCCM, detector.NamespaceHCloudCCM).
+		Return(releaseExists, nil)
+
+	if releaseExists {
+		helmClient.On(
+			"GetReleaseValues", ctx,
+			detector.ReleaseHCloudCCM, detector.NamespaceHCloudCCM,
+		).Return(values, nil)
+	}
+
+	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
+	loadBalancer, err := d.ExportDetectLoadBalancer(
+		ctx,
+		v1alpha1.DistributionTalos,
+		v1alpha1.ProviderHetzner,
+	)
+
+	require.NoError(t, err)
+
+	return loadBalancer
+}
+
+func TestDetectLoadBalancer_Talos_Hetzner(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		releaseExists bool
+		values        map[string]any
+		want          v1alpha1.LoadBalancer
+	}{
+		{
+			name:          "no cloud controller means no load balancers",
+			releaseExists: false,
+			want:          v1alpha1.LoadBalancerDisabled,
+		},
+		{
+			name:          "service controller switched off",
+			releaseExists: true,
+			values:        map[string]any{"args": map[string]any{"controllers": "*,-service"}},
+			want:          v1alpha1.LoadBalancerDisabled,
+		},
+		{
+			name:          "service controller switched off among other entries",
+			releaseExists: true,
+			values: map[string]any{
+				"args": map[string]any{"controllers": "*, -service ,-route"},
+			},
+			want: v1alpha1.LoadBalancerDisabled,
+		},
+		{
+			name:          "no controller override keeps the default",
+			releaseExists: true,
+			values:        map[string]any{"networking": map[string]any{"enabled": true}},
+			want:          v1alpha1.LoadBalancerDefault,
+		},
+		{
+			name:          "another controller switched off keeps the default",
+			releaseExists: true,
+			values:        map[string]any{"args": map[string]any{"controllers": "*,-route"}},
+			want:          v1alpha1.LoadBalancerDefault,
+		},
+		{
+			name:          "no user values keeps the default",
+			releaseExists: true,
+			values:        nil,
+			want:          v1alpha1.LoadBalancerDefault,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := detectHetznerLoadBalancer(t, testCase.releaseExists, testCase.values)
+
+			assert.Equal(t, testCase.want, got)
+		})
+	}
+}
+
+func TestDetectLoadBalancer_Talos_Hetzner_ReleaseCheckError(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	helmClient := helm.NewMockInterface(t)
+	k8sClientset := fake.NewClientset()
+
+	helmClient.On("ReleaseExists", ctx, detector.ReleaseHCloudCCM, detector.NamespaceHCloudCCM).
+		Return(false, assert.AnError)
+
+	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
+	loadBalancer, err := d.ExportDetectLoadBalancer(
+		ctx,
+		v1alpha1.DistributionTalos,
+		v1alpha1.ProviderHetzner,
+	)
+
+	require.ErrorIs(t, err, assert.AnError)
+	assert.Equal(t, v1alpha1.LoadBalancerDefault, loadBalancer)
+}
+
+func TestDetectLoadBalancer_Talos_Hetzner_ValuesReadError(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	helmClient := helm.NewMockInterface(t)
+	k8sClientset := fake.NewClientset()
+
+	helmClient.On("ReleaseExists", ctx, detector.ReleaseHCloudCCM, detector.NamespaceHCloudCCM).
+		Return(true, nil)
+	helmClient.On("GetReleaseValues", ctx, detector.ReleaseHCloudCCM, detector.NamespaceHCloudCCM).
+		Return(nil, assert.AnError)
+
+	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
+	loadBalancer, err := d.ExportDetectLoadBalancer(
+		ctx,
+		v1alpha1.DistributionTalos,
+		v1alpha1.ProviderHetzner,
+	)
+
+	require.ErrorIs(t, err, assert.AnError)
+	assert.Equal(t, v1alpha1.LoadBalancerDefault, loadBalancer)
+}
+
 func TestDetectLoadBalancer_KWOK_Disabled(t *testing.T) {
 	t.Parallel()
 

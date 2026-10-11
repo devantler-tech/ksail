@@ -679,10 +679,7 @@ func installHcloudCCM(
 		resolveClusterNameFromContext(clusterCfg),
 	)
 
-	var ccmOptions []hcloudccminstaller.Option
-	if clusterCfg.Spec.Cluster.LoadBalancer == v1alpha1.LoadBalancerDisabled {
-		ccmOptions = append(ccmOptions, hcloudccminstaller.WithLoadBalancersDisabled())
-	}
+	ccmOptions := hcloudccminstaller.LoadBalancerOptions(clusterCfg.Spec.Cluster.LoadBalancer)
 
 	ccmInstaller := hcloudccminstaller.NewInstaller(
 		helmClient,
