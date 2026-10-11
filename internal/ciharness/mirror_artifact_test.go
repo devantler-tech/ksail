@@ -243,6 +243,63 @@ func TestMirrorHelperImagePullIsRetriedAndNamed(t *testing.T) {
 	)
 }
 
+func TestMirrorWarmStopsBeforeExportWithoutHelperImage(t *testing.T) {
+	t.Parallel()
+	action := readCompositeAction(t, ".github/actions/warm-mirror-cache/action.yaml")
+	steps := action.Runs.Steps
+	prepullIndex := harnessStepIndex(t, steps, "📥 Pre-pull mirror helper image")
+	prepull := steps[prepullIndex]
+	// A composite action stops at its first failed step, so an unconditional
+	// step that precedes both helper users keeps them from running at all.
+	assert.Empty(t, prepull.If, "the helper pull must not be skippable")
+	assert.False(t, prepull.ContinueOnError, "a failed helper pull must stop the action")
+	assert.Less(t, prepullIndex, harnessStepIndex(t, steps, "🔍 Check if cache is complete"))
+	assert.Less(t, prepullIndex, harnessStepIndex(t, steps, "💾 Export mirror volumes"))
+
+	directory := mirrorArchiveFixture(t)
+	before, err := directory.ReadFile("docker.io.tar")
+	require.NoError(t, err)
+
+	bin := t.TempDir()
+	calls := filepath.Join(bin, "docker-calls")
+	writeExecutableStub(t, filepath.Join(bin, "docker"), `#!/bin/sh
+printf '%s\n' "$*" >>"$DOCKER_CALLS"
+exit 1
+`)
+	writeExecutableStub(t, filepath.Join(bin, "sleep"), "#!/bin/sh\nexit 0\n")
+
+	actionPath, err := filepath.Abs("../../.github/actions/warm-mirror-cache")
+	require.NoError(t, err)
+
+	command := exec.CommandContext(t.Context(), "bash", "-e", "-o", "pipefail")
+	command.Stdin = strings.NewReader(prepull.Run)
+
+	command.Env = append(os.Environ(), "GITHUB_ACTION_PATH="+actionPath, "DOCKER_CALLS="+calls,
+		"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	output, err := command.CombinedOutput()
+	require.Error(t, err, "an unavailable helper image must fail the step: %s", output)
+	assert.Contains(t, string(output), "Failed to pull the mirror helper image")
+
+	recorded, err := os.ReadFile(calls) //nolint:gosec // G304: fixture path created by this test
+	require.NoError(t, err)
+	assert.Equal(
+		t,
+		3,
+		strings.Count(string(recorded), "pull --quiet "),
+		"the pull must stop after three attempts",
+	)
+	assert.NotContains(
+		t,
+		string(recorded),
+		"run ",
+		"no helper container may start without its image",
+	)
+
+	after, err := directory.ReadFile("docker.io.tar")
+	require.NoError(t, err)
+	assert.Equal(t, before, after, "the restored archives must be left untouched")
+}
+
 func TestMirrorRegenerationReplacesRejectedSymlinks(t *testing.T) {
 	t.Parallel()
 	action := readCompositeAction(t, ".github/actions/warm-mirror-cache/action.yaml")
