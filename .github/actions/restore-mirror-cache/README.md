@@ -21,3 +21,8 @@ branch also refreshes the reusable warming cache.
 
 Optional KWOK and distribution-node image caches are independent. The standalone k3k sentinel
 supplies no artifact ID and retains its cache restore and live-pull fallback.
+
+Importing and exporting a mirror volume runs a small helper container. Both
+actions pull that helper image first through `pull-helper-image.sh`, with three
+attempts. If it still cannot be pulled, the step fails and names the helper
+image; no mirror volume or archive has been changed at that point.

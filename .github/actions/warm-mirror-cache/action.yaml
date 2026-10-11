@@ -322,6 +322,13 @@ runs:
     - name: 📥 Pre-pull registry image
       uses: $/.github/actions/pull-registry-image
 
+    # The check and export steps below both start this helper container. Pull it
+    # once, with a bounded retry, before either can change a mirror volume or
+    # archive, so a registry error on it is reported as what it is (#7673).
+    - name: 📥 Pre-pull mirror helper image
+      shell: bash
+      run: bash "$GITHUB_ACTION_PATH/pull-helper-image.sh"
+
     - name: 🔍 Check if cache is complete
       id: check-cache
       if: steps.restore-cache.outputs.cache-matched-key != ''
