@@ -1706,6 +1706,9 @@ jobs:
         run: |
           shellcheck .github/actions/warm-mirror-cache/cache-validation.test.sh
           bash .github/actions/warm-mirror-cache/cache-validation.test.sh
+          shellcheck .github/actions/warm-mirror-cache/pull-helper-image.sh \
+            .github/actions/warm-mirror-cache/pull-helper-image.test.sh
+          bash .github/actions/warm-mirror-cache/pull-helper-image.test.sh
           shellcheck .github/actions/ksail-system-test/offline-ecr-upstream.sh \
             .github/actions/ksail-system-test/offline-ecr-upstream.test.sh \
             .github/actions/ksail-system-test/verify-offline-ecr-pull.sh \

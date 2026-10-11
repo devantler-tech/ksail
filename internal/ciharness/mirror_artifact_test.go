@@ -227,6 +227,79 @@ func TestMirrorRestoredCacheChecksConsumerPull(t *testing.T) {
 	)
 }
 
+func TestMirrorHelperImagePullIsRetriedAndNamed(t *testing.T) {
+	t.Parallel()
+	command := exec.CommandContext(
+		t.Context(),
+		"bash",
+		"../../.github/actions/warm-mirror-cache/pull-helper-image.test.sh",
+	)
+	output, err := command.CombinedOutput()
+	require.NoError(
+		t,
+		err,
+		"the helper image pull must retry and name its own failure: %s",
+		output,
+	)
+}
+
+func TestMirrorWarmStopsBeforeExportWithoutHelperImage(t *testing.T) {
+	t.Parallel()
+	action := readCompositeAction(t, ".github/actions/warm-mirror-cache/action.yaml")
+	steps := action.Runs.Steps
+	prepullIndex := harnessStepIndex(t, steps, "📥 Pre-pull mirror helper image")
+	prepull := steps[prepullIndex]
+	// A composite action stops at its first failed step, so an unconditional
+	// step that precedes both helper users keeps them from running at all.
+	assert.Empty(t, prepull.If, "the helper pull must not be skippable")
+	assert.False(t, prepull.ContinueOnError, "a failed helper pull must stop the action")
+	assert.Less(t, prepullIndex, harnessStepIndex(t, steps, "🔍 Check if cache is complete"))
+	assert.Less(t, prepullIndex, harnessStepIndex(t, steps, "💾 Export mirror volumes"))
+
+	directory := mirrorArchiveFixture(t)
+	before, err := directory.ReadFile("docker.io.tar")
+	require.NoError(t, err)
+
+	bin := t.TempDir()
+	calls := filepath.Join(bin, "docker-calls")
+	writeExecutableStub(t, filepath.Join(bin, "docker"), `#!/bin/sh
+printf '%s\n' "$*" >>"$DOCKER_CALLS"
+exit 1
+`)
+	writeExecutableStub(t, filepath.Join(bin, "sleep"), "#!/bin/sh\nexit 0\n")
+
+	actionPath, err := filepath.Abs("../../.github/actions/warm-mirror-cache")
+	require.NoError(t, err)
+
+	command := exec.CommandContext(t.Context(), "bash", "-e", "-o", "pipefail")
+	command.Stdin = strings.NewReader(prepull.Run)
+
+	command.Env = append(os.Environ(), "GITHUB_ACTION_PATH="+actionPath, "DOCKER_CALLS="+calls,
+		"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	output, err := command.CombinedOutput()
+	require.Error(t, err, "an unavailable helper image must fail the step: %s", output)
+	assert.Contains(t, string(output), "Failed to pull the mirror helper image")
+
+	recorded, err := os.ReadFile(calls) //nolint:gosec // G304: fixture path created by this test
+	require.NoError(t, err)
+	assert.Equal(
+		t,
+		3,
+		strings.Count(string(recorded), "pull --quiet "),
+		"the pull must stop after three attempts",
+	)
+	assert.NotContains(
+		t,
+		string(recorded),
+		"run ",
+		"no helper container may start without its image",
+	)
+
+	after, err := directory.ReadFile("docker.io.tar")
+	require.NoError(t, err)
+	assert.Equal(t, before, after, "the restored archives must be left untouched")
+}
+
 func TestMirrorRegenerationReplacesRejectedSymlinks(t *testing.T) {
 	t.Parallel()
 	action := readCompositeAction(t, ".github/actions/warm-mirror-cache/action.yaml")
@@ -565,6 +638,9 @@ func runMirrorVolumeImport(t *testing.T, registry, stage, artifact string) (stri
 	bin := t.TempDir()
 	writeExecutableStub(t, filepath.Join(bin, "docker"), `#!/bin/bash
 set -euo pipefail
+if [[ "$FAIL_STAGE" == helper && ( "$1" == image || "$1" == pull ) ]]; then
+  exit 99
+fi
 if [[ "$1" == volume && "$2" == create && "$3" == "$FAIL_REGISTRY" && "$FAIL_STAGE" == create ]]; then
   exit 99
 fi
@@ -575,6 +651,11 @@ if [[ "$1" == run && "$FAIL_STAGE" == import ]]; then
 fi
 exit 0
 `)
+	writeExecutableStub(t, filepath.Join(bin, "sleep"), "#!/bin/sh\nexit 0\n")
+
+	actionPath, err := filepath.Abs("../../.github/actions/restore-mirror-cache")
+	require.NoError(t, err)
+
 	command := exec.CommandContext(t.Context(), "bash", "-e", "-o", "pipefail")
 	command.Stdin = strings.NewReader(
 		strings.ReplaceAll(step.Run, "/tmp/mirror-cache", `"$FIXTURE_MIRROR_DIR"`),
@@ -583,6 +664,7 @@ exit 0
 	command.Env = append(os.Environ(), "FAIL_REGISTRY="+registry, "FAIL_STAGE="+stage,
 		"ARTIFACT_ID="+artifact,
 		"FIXTURE_MIRROR_DIR="+directory.Name(),
+		"GITHUB_ACTION_PATH="+actionPath,
 		"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	output, err := command.CombinedOutput()
 
@@ -602,6 +684,31 @@ func TestMirrorConsumerStopsOnFailedVolumeImport(t *testing.T) {
 				assert.NotContains(t, output, "✅ Restored "+registry+" mirror cache")
 			})
 		}
+	}
+}
+
+func TestMirrorConsumerNamesUnavailableHelperImage(t *testing.T) {
+	t.Parallel()
+
+	for _, artifact := range []string{"123456", ""} {
+		t.Run("artifact="+artifact, func(t *testing.T) {
+			t.Parallel()
+			output, err := runMirrorVolumeImport(t, "", "helper", artifact)
+			require.Error(t, err, "an unavailable helper image must stop the restore: %s", output)
+			assert.Contains(
+				t,
+				output,
+				"Failed to pull the mirror helper image mirror.gcr.io/library/busybox:1.37 after 3 attempts",
+			)
+			assert.NotContains(t, output, "Failed to import",
+				"a helper image failure is not a mirror import failure")
+			assert.NotContains(
+				t,
+				output,
+				"✅ Restored",
+				"no mirror may be imported without the helper image",
+			)
+		})
 	}
 }
 
