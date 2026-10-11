@@ -369,6 +369,19 @@ jobs:
             exit 1
           fi
 
+          # A ready API server does not mean the namespace's default service account exists
+          # yet: the controller manager creates it shortly after, and a pod created before
+          # then is refused outright rather than left pending.
+          sa_attempts=60
+          until kubectl get serviceaccount default --namespace default >/dev/null 2>&1; do
+            sa_attempts=$((sa_attempts - 1))
+            if [ "${sa_attempts}" -le 0 ]; then
+              echo "❌ The default service account did not appear within 120s, so the probe pod cannot be created" >&2
+              exit 1
+            fi
+            sleep 2
+          done
+
           kubectl run userdata-probe --image="${PROBE_IMAGE}" --restart=Never \
             --overrides="{\"apiVersion\":\"v1\",\"spec\":{\"nodeName\":\"${node}\",\"hostNetwork\":true,\"tolerations\":[{\"operator\":\"Exists\"}]}}" \
             --command -- sleep 600
