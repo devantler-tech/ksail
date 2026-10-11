@@ -48,6 +48,11 @@ func TestConfigsWithNameKeepsNativeKubeconfigsSeparate(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, "nested-talos", nested.Worker().Cluster().Name())
 
+			for _, config := range []talosconfig.Provider{nested.ControlPlane(), nested.Worker()} {
+				assert.Equal(t, "preserved",
+					config.Machine().NodeLabels()["inherited.example.test"])
+			}
+
 			nestedRaw := nativeAdminKubeconfig(t, nested)
 			nestedConfig, err := clientcmd.Load(nestedRaw)
 			require.NoError(t, err)
@@ -81,8 +86,24 @@ func requireSeparateKubeconfigEntries(t *testing.T, hostRaw, nestedRaw []byte) {
 	))
 	merged, err := clientcmd.LoadFromFile(path)
 	require.NoError(t, err)
+	require.Contains(t, hostConfig.Clusters, "host-fixture")
+	require.Contains(t, merged.Clusters, "host-fixture")
+	require.Contains(t, merged.Clusters, "nested-talos")
 	assert.Equal(t, hostConfig.Clusters["host-fixture"], merged.Clusters["host-fixture"])
 	assert.Equal(t, "https://nested.example.test:6443", merged.Clusters["nested-talos"].Server)
+
+	require.NotEmpty(t, hostConfig.CurrentContext)
+	require.Contains(t, hostConfig.Contexts, hostConfig.CurrentContext)
+	hostContext := hostConfig.Contexts[hostConfig.CurrentContext]
+	require.NotNil(t, hostContext)
+	require.NotEmpty(t, hostContext.AuthInfo)
+	require.Contains(t, hostConfig.AuthInfos, hostContext.AuthInfo)
+	require.NotNil(t, hostConfig.AuthInfos[hostContext.AuthInfo])
+	require.Contains(t, merged.Contexts, hostConfig.CurrentContext)
+	require.Contains(t, merged.AuthInfos, hostContext.AuthInfo)
+	assert.Equal(t, hostContext, merged.Contexts[hostConfig.CurrentContext])
+	assert.Equal(t, hostConfig.AuthInfos[hostContext.AuthInfo],
+		merged.AuthInfos[hostContext.AuthInfo])
 }
 
 // inheritedHostConfig models scaffolded host settings applied at either cluster
@@ -95,7 +116,8 @@ func inheritedHostConfig(t *testing.T, scopes []talos.PatchScope) *talos.Configs
 		patches = append(patches, talos.Patch{
 			Path: "inherited-host-config", Scope: scope,
 			Content: []byte("cluster:\n  clusterName: host-fixture\n" +
-				"machine:\n  certSANs: [keep.example.test]\n"),
+				"machine:\n  certSANs: [keep.example.test]\n" +
+				"  nodeLabels:\n    inherited.example.test: preserved\n"),
 		})
 	}
 
