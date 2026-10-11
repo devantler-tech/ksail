@@ -233,11 +233,18 @@ func (c *Configs) GetClusterName() string {
 // This regenerates the underlying Talos bundle with the new cluster name,
 // which is necessary because the cluster name is embedded in PKI certificates
 // and the kubeconfig context name (admin@<cluster-name>).
+// The selected name overrides inherited cluster and role patches so the native
+// admin kubeconfig cannot replace another cluster's entry under its old name.
 //
 // Returns a new Configs instance; the original is not modified.
 // Returns an error if bundle regeneration fails.
 func (c *Configs) WithName(name string) (*Configs, error) {
-	if name == "" || name == c.Name {
+	if name == "" {
+		return c, nil
+	}
+
+	if name == c.Name && c.ControlPlane() != nil && c.Worker() != nil &&
+		c.ControlPlane().Cluster().Name() == name && c.Worker().Cluster().Name() == name {
 		return c, nil
 	}
 
@@ -245,6 +252,18 @@ func (c *Configs) WithName(name string) (*Configs, error) {
 	// (secrets left nil) because the cluster name is embedded in the certificates.
 	return c.regenerate(func(params *regenParams) error {
 		params.name = name
+		content := fmt.Appendf(nil, "cluster:\n  clusterName: %q\n", name)
+		// Role patches run after cluster patches. Retain final overrides for
+		// both roles so later endpoint/SAN regeneration preserves this name.
+		params.patches = append(
+			slices.Clone(c.patches),
+			Patch{
+				Path:    "ksail-control-plane-name",
+				Scope:   PatchScopeControlPlane,
+				Content: content,
+			},
+			Patch{Path: "ksail-worker-name", Scope: PatchScopeWorker, Content: content},
+		)
 
 		return nil
 	})
