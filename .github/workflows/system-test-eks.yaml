@@ -19,14 +19,18 @@ name: "System Test - EKS"
 #      https://eksctl.io/usage/minimum-iam-policies/). Require every role created
 #      by that identity to carry the `eks-ci-smoke-boundary` permissions boundary.
 #      Never grant AdministratorAccess.
-#   4. Set the role's MaxSessionDuration to 7200 seconds — the smoke test job
-#      may run up to 120 minutes and must keep credentials through cleanup.
+#   4. Set the role's MaxSessionDuration to 7200 seconds. Each phase refreshes
+#      credentials, including an independent session for final cleanup.
 #   5. Keep the non-secret role ARN in this workflow so the trusted repository
 #      owns the complete OIDC configuration path declaratively.
 
 on:
   workflow_dispatch:
     inputs:
+      preflight_only:
+        description: "Verify existing OIDC identity and session lifetime without creating resources"
+        type: boolean
+        default: false
       gitops_engine:
         description: "GitOps engine to bootstrap and reconcile"
         required: false
@@ -38,6 +42,16 @@ on:
         required: false
         type: string
         default: us-east-1
+      upgrade_from_version:
+        description: "Optional upgrade trial: create at this 1.MINOR version (set both versions)"
+        required: false
+        type: string
+        default: ""
+      upgrade_to_version:
+        description: "Optional upgrade trial: upgrade to the next 1.MINOR version"
+        required: false
+        type: string
+        default: ""
   # No schedule yet: this smoke test creates billable AWS resources. Keep it
   # manual until the OIDC role and the expected spend envelope exist.
 
@@ -59,9 +73,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     environment: ci
+    permissions:
+      contents: read
     outputs:
       aws-credentials: ${{ steps.aws.outputs.available }}
     steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 🔎 Validate upgrade trial inputs before creating resources
+        shell: bash
+        env:
+          EKS_UPGRADE_FROM: ${{ inputs.upgrade_from_version }}
+          EKS_UPGRADE_TO: ${{ inputs.upgrade_to_version }}
+        run: bash .github/scripts/eks-upgrade-trial.sh --validate-versions
+
       - name: 🔎 Check required AWS OIDC role
         id: aws
         shell: bash
@@ -75,12 +103,65 @@ jobs:
 
           echo "available=true" >> "$GITHUB_OUTPUT"
 
+  auth-preflight:
+    name: 🔐 Read-only EKS OIDC Preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [preflight]
+    if: inputs.preflight_only && needs.preflight.outputs.aws-credentials == 'true'
+    environment: ci
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: 📄 Checkout
+        timeout-minutes: 2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        timeout-minutes: 5
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: 🔐 Check existing AWS OIDC role
+        id: oidc
+        timeout-minutes: 3
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.AWS_OIDC_ROLE_ARN }}
+          role-session-name: ksail-eks-preflight-${{ github.run_id }}
+          aws-region: ${{ inputs.region }}
+          role-duration-seconds: 7200
+          action-timeout-s: 120
+          retry-max-attempts: 3
+          mask-aws-account-id: true
+          output-credentials: true
+          # Intersect session permissions with the existing role so this job
+          # can only observe its identity, even if later code changes.
+          inline-session-policy: '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["sts:GetCallerIdentity"],"Resource":"*"}]}'
+
+      - name: 🔎 Verify OIDC identity and actual expiration
+        timeout-minutes: 2
+        shell: bash
+        env:
+          AWS_PREFLIGHT_SESSION: ksail-eks-preflight-${{ github.run_id }}
+          AWS_SESSION_EXPIRATION: ${{ steps.oidc.outputs.aws-expiration }}
+        run: |
+          set -euo pipefail
+          trap 'rm -f "$RUNNER_TEMP/eks-auth-error"' EXIT
+          aws sts get-caller-identity --output json 2>"$RUNNER_TEMP/eks-auth-error" |
+            go run ./internal/ciharness/cmd/eksauthpreflight
+
   build-artifact:
     name: 🏗️ Build KSail Binary
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [preflight]
-    if: needs.preflight.outputs.aws-credentials == 'true'
+    if: "!inputs.preflight_only && needs.preflight.outputs.aws-credentials == 'true'"
     permissions:
       contents: read
     steps:
@@ -105,15 +186,12 @@ jobs:
   smoke-test:
     name: 🧪 EKS Smoke Test
     runs-on: ubuntu-latest
-    # Must cover every step budget below, or a worst-case run is cancelled while
-    # the always-run cleanup is still deleting the cluster. Worst case (GitOps
-    # engine enabled): 175 minutes of steps before cleanup + 45 for cleanup = 220,
-    # plus at least 15 minutes of job-level headroom = 235.
-    # Re-check this sum whenever a step's timeout-minutes changes; the ciharness
-    # test TestEKSSmokeReservesCleanupBudgetAndFreshCredentials enforces it.
-    timeout-minutes: 235
+    # All bounded steps, including the optional 90m upgrade trial, 21m settling
+    # step, and 45m always-run deletion, plus at least 15m of job-level headroom.
+    # The ciharness tests sum the actual budgets and enforce the hosted-job cap.
+    timeout-minutes: 360
     needs: [preflight, build-artifact]
-    if: needs.preflight.outputs.aws-credentials == 'true'
+    if: "!inputs.preflight_only && needs.preflight.outputs.aws-credentials == 'true'"
     environment: ci
     permissions:
       contents: read
@@ -249,6 +327,14 @@ jobs:
             (.addons[] | select(.name == "vpc-cni" or .name == "aws-ebs-csi-driver") | .permissionsBoundary) = strenv(AWS_PERMISSIONS_BOUNDARY_ARN)
           ' eks.yaml
 
+      - name: 🔧 Prepare EKS upgrade trial project
+        if: inputs.upgrade_from_version != ''
+        timeout-minutes: 5
+        shell: bash
+        env:
+          EKS_UPGRADE_FROM: ${{ inputs.upgrade_from_version }}
+        run: go run ./internal/ciharness/cmd/eksupgradeconfig
+
       - name: 🧪 ksail cluster create
         id: create
         timeout-minutes: 60
@@ -319,6 +405,31 @@ jobs:
             fi
           }
 
+          nodegroup_identity() {
+            aws eks describe-nodegroup \
+              --cluster-name "$KSAIL_EKS_CLUSTER_NAME" \
+              --nodegroup-name "$nodegroup_name" \
+              --region "$AWS_REGION" \
+              --query 'nodegroup.[nodegroupArn,createdAt]' \
+              --output json |
+              jq -ce --arg cluster "$KSAIL_EKS_CLUSTER_NAME" --arg group "$nodegroup_name" '
+                select(type == "array" and length == 2 and
+                  (.[0] | type == "string" and
+                    test("^arn:aws(-[a-z0-9-]+)?:eks:[a-z0-9-]+:[0-9]{12}:nodegroup/") and
+                    (split(":")[5] | startswith("nodegroup/" + $cluster + "/" + $group + "/"))) and
+                  (.[1] | (type == "number" and . > 0) or
+                    (type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T"))))'
+          }
+
+          assert_same_nodegroup() {
+            local expected="$1" actual
+            actual="$(nodegroup_identity)" || return 1
+            if [[ "$actual" != "$expected" ]]; then
+              echo "::error::EKS managed node group identity changed during update."
+              return 1
+            fi
+          }
+
           set_nodegroup_capacity() {
             local desired="$1"
             local min_size="$2"
@@ -383,16 +494,24 @@ jobs:
           }
 
           cluster_identity="$(cluster_identity)"
+          nodegroup_name="$(yq -r '.managedNodeGroups | select(length == 1) | .[0].name' eks.yaml)"
+          if [[ ! "$nodegroup_name" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]]; then
+            echo "::error::EKS smoke requires one named managed node group."
+            exit 1
+          fi
+          nodegroup_identity="$(nodegroup_identity)"
 
           set_nodegroup_capacity 2 1 2
           ksail cluster update --yes
           wait_for_capacity 2 1 2 2
           assert_same_cluster "$cluster_identity"
+          assert_same_nodegroup "$nodegroup_identity"
 
           set_nodegroup_capacity 1 1 1
           ksail cluster update --yes
           wait_for_capacity 1 1 1 1
           assert_same_cluster "$cluster_identity"
+          assert_same_nodegroup "$nodegroup_identity"
 
       - name: 🧪 ksail workload reconcile
         if: inputs.gitops_engine != 'None'
@@ -402,6 +521,31 @@ jobs:
           set -euo pipefail
           cd "$KSAIL_EKS_WORKDIR"
           ksail workload reconcile --timeout 10m
+
+      - name: 🧪 EKS control-plane upgrade trial
+        if: inputs.upgrade_from_version != ''
+        timeout-minutes: 90
+        shell: bash
+        env:
+          EKS_UPGRADE_FROM: ${{ inputs.upgrade_from_version }}
+          EKS_UPGRADE_TO: ${{ inputs.upgrade_to_version }}
+        run: bash .github/scripts/eks-upgrade-trial.sh
+
+      - name: 🔐 Refresh AWS credentials for final cleanup
+        if: always() && steps.create.outputs.attempted == 'true'
+        timeout-minutes: 5
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.AWS_OIDC_ROLE_ARN }}
+          role-session-name: ksail-system-test-eks-cleanup-${{ github.run_id }}
+          aws-region: ${{ inputs.region }}
+          role-duration-seconds: 7200
+
+      - name: ⏳ Wait for EKS update before cleanup
+        if: always() && steps.create.outputs.attempted == 'true' && inputs.upgrade_from_version != ''
+        timeout-minutes: 21
+        shell: bash
+        run: timeout 20m bash .github/scripts/eks-upgrade-trial.sh --wait-before-cleanup
 
       - name: 🧹 Delete EKS smoke cluster
         if: always()
