@@ -34,8 +34,12 @@ func TestMirrorCachePersistenceRequiresDefaultBranch(t *testing.T) {
 	action := readCompositeAction(t, ".github/actions/warm-mirror-cache/action.yaml")
 	policy := findHarnessStep(t, action.Runs.Steps, "🧭 Select reusable mirror cache writes")
 	save := findHarnessStep(t, action.Runs.Steps, "💾 Save mirror cache")
-	require.Equal(t, "steps.cache-policy.outputs.save == 'true' && steps.check-cache.outputs.complete != 'true'", save.If,
-		"the persistence decision must gate the large cache write")
+	require.Equal(
+		t,
+		"steps.cache-policy.outputs.save == 'true' && steps.check-cache.outputs.complete != 'true'",
+		save.If,
+		"the persistence decision must gate the large cache write",
+	)
 	require.Equal(t, "${{ github.event.repository.default_branch }}", policy.Env["DEFAULT_BRANCH"])
 
 	for _, test := range []struct {
@@ -56,6 +60,7 @@ func TestMirrorCachePersistenceRequiresDefaultBranch(t *testing.T) {
 			directory, err := os.OpenRoot(t.TempDir())
 			require.NoError(t, err)
 			t.Cleanup(func() { require.NoError(t, directory.Close()) })
+
 			outputFile := filepath.Join(directory.Name(), "outputs")
 			command := exec.CommandContext(t.Context(), "bash", "-e", "-o", "pipefail")
 			command.Stdin = strings.NewReader(policy.Run)
