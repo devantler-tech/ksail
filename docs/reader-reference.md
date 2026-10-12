@@ -116,8 +116,9 @@ for component limits. Provider prerequisites differ:
 - Docker needs a running local daemon.
 - Kubernetes needs access to an existing host cluster and the network setup for its chosen exposure
   method (Gateway, LoadBalancer or NodePort), not local Docker.
-- Hetzner needs provider credentials and distribution-specific prerequisites; Talos additionally
-  needs an available compatible ISO.
+- Hetzner needs provider credentials and distribution-specific prerequisites. Talos uses an available
+  compatible ISO or a snapshot built from a Talos factory schematic. Snapshot mode needs a Talos
+  version pin and supported x86 server types; see the [Hetzner guide](https://ksail.devantler.tech/providers/hetzner/).
 - Omni needs an account, service credentials and its configured API endpoint.
 - EKS needs AWS credentials/permissions and an external `eksctl` binary, which KSail does not embed.
 - GKE needs Google Application Default Credentials and project/location configuration.
