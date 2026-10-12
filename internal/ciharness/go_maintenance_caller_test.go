@@ -84,7 +84,9 @@ func validateGoMaintenanceIdentity(workflow ciWorkflow, caller todosWorkflow) er
 	job, found := workflow.Jobs["ci-go"]
 	// Reviewed catalogue revisions preserve the read-only maintenance boundary.
 	// One adds opt-in disk measurements and capacity-based cleanup; the latest pins the
-	// linter to the Go toolchain setup-go installed and moves the signed-fix pins. This
+	// linter to the Go toolchain setup-go installed and moves the signed-fix pins. The
+	// v7.9.4 release only separates module and compilation caches; maintenance
+	// admission, every job permission and all signed-fix pins remain unchanged. This
 	// caller keeps their defaults and still explicitly disables signed-fix jobs.
 	// Keep explicit reviewed identities: a syntactically valid SHA alone is insufficient.
 	reviewed := slices.Contains([]string{
@@ -94,6 +96,7 @@ func validateGoMaintenanceIdentity(workflow ciWorkflow, caller todosWorkflow) er
 		prefix + "ef34177c48310d4e8d6605233cb7218b926dcc55",
 		prefix + "fca583ac795d56928c5b542944b6e0963ea1e270",
 		prefix + "8d3327fe87f216d6e107941de4ce1ae019294cea",
+		prefix + "cd706d2309d8c4f192f02c902214c6bd1b5a8e69",
 	}, job.Uses)
 	if !found || !reviewed || len(job.Steps) != 0 ||
 		caller.Jobs["ci-go"].RunsOn != "" || !reflect.DeepEqual(job.Needs, []string{"changes"}) {
@@ -138,6 +141,7 @@ func TestGoMaintenanceCallerAcceptsReviewedReleaseRevisions(t *testing.T) {
 		"ef34177c48310d4e8d6605233cb7218b926dcc55",
 		"fca583ac795d56928c5b542944b6e0963ea1e270",
 		"8d3327fe87f216d6e107941de4ce1ae019294cea",
+		"cd706d2309d8c4f192f02c902214c6bd1b5a8e69",
 	} {
 		t.Run(revision, func(t *testing.T) {
 			t.Parallel()
