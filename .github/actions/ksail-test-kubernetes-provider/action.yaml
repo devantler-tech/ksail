@@ -130,8 +130,26 @@ runs:
         echo "Nested mirror registries: ${#MIRRORS[@]} (docker.io/ghcr.io authenticated when secrets present)"
         echo ""
 
+        # Count each distribution once, after its whole lifecycle (create, checks,
+        # delete, drain) has finished. A failed operation marks the distribution
+        # failed however many operations fail in it; OPERATION_FAILURES keeps the
+        # per-operation total visible in the summary.
+        ATTEMPTED=0
         FAILED=0
         PASSED=0
+        OPERATION_FAILURES=0
+        record_failure() {
+          dist_failed=true
+          OPERATION_FAILURES=$((OPERATION_FAILURES + 1))
+        }
+        finish_distribution() {
+          ATTEMPTED=$((ATTEMPTED + 1))
+          if [ "$dist_failed" = true ]; then
+            FAILED=$((FAILED + 1))
+          else
+            PASSED=$((PASSED + 1))
+          fi
+        }
         IFS=',' read -ra DIST_ARRAY <<< "$DISTRIBUTIONS"
 
         for DIST in "${DIST_ARRAY[@]}"; do
@@ -145,6 +163,7 @@ runs:
             kwok) NESTED_CONTEXT="kwok-$NESTED_NAME" ;;
             *) echo "❌ Unsupported nested distribution: $DIST"; exit 64 ;;
           esac
+          dist_failed=false
           echo "──────────────────────────────────────────────────────"
           echo "🧪 Testing: $DIST on Kubernetes provider (name: $NESTED_NAME)"
           echo "──────────────────────────────────────────────────────"
@@ -169,7 +188,7 @@ runs:
             echo "  ✅ $DIST create succeeded"
           else
             echo "  ❌ $DIST create FAILED (exit code: $?)"
-            FAILED=$((FAILED + 1))
+            record_failure
           fi
 
           # Probe the saved endpoint first. Info can hang on an unreachable API,
@@ -196,14 +215,13 @@ runs:
               echo "  ⏳ Verifying $DIST cluster info..."
               if timeout --kill-after=1s 30s ksail cluster info --name "$NESTED_NAME" --provider Kubernetes 2>&1 | tee "$INFO_LOG"; then
                 echo "  ✅ $DIST info and nested API readiness succeeded"
-                PASSED=$((PASSED + 1))
               else
                 echo "  ❌ $DIST info FAILED"
-                FAILED=$((FAILED + 1))
+                record_failure
               fi
             else
               echo "  ❌ $DIST nested API readiness FAILED"
-              FAILED=$((FAILED + 1))
+              record_failure
               if [ "${DIST,,}" = talos ]; then
                 # Capture only this failed cluster's endpoint/port evidence before
                 # deletion. Never dump kubeconfig, Secret data, or container env.
@@ -227,7 +245,7 @@ runs:
 
           # Pin the premise the k3k privileged-pod guard depends on: the server pod is
           # created by the StatefulSet controller. Runs while the nested cluster is still
-          # up, and a failure adds to FAILED rather than masking an earlier one.
+          # up, and a failure is recorded beside an earlier one rather than masking it.
           if [ "$create_ok" = "true" ] && [ "$ASSERT_K3K_SERVER_CREATOR" = "true" ] && [ "${DIST,,}" = "k3s" ]; then
             # An explicit host context can leave the nested cluster selected after
             # creation. The server pod lives on the host, so bind the query first.
@@ -238,11 +256,11 @@ runs:
                 echo "  ✅ $DIST server pod creator matches the guard pinned principal"
               else
                 echo "  ❌ $DIST server pod creator assertion FAILED"
-                FAILED=$((FAILED + 1))
+                record_failure
               fi
             else
               echo "  ❌ $DIST host context restoration FAILED; skipping server pod creator assertion"
-              FAILED=$((FAILED + 1))
+              record_failure
             fi
           fi
 
@@ -256,13 +274,14 @@ runs:
             echo "  ✅ $DIST delete succeeded"
           else
             echo "  ❌ $DIST delete FAILED"
-            FAILED=$((FAILED + 1))
+            record_failure
           fi
 
           # Restore host context in case nested cluster creation changed it.
           if ! kubectl config use-context "$HOST_CONTEXT"; then
             echo "  ❌ $DIST host context restoration FAILED; stopping nested tests"
-            FAILED=$((FAILED + 1))
+            record_failure
+            finish_distribution
             break
           fi
 
@@ -292,19 +311,31 @@ runs:
           done
           if [ "$drained" != true ]; then
             echo "  ❌ $DIST cleanup was not verified; stopping nested tests"
-            FAILED=$((FAILED + 1))
+            record_failure
+            finish_distribution
             break
           fi
 
+          finish_distribution
           echo ""
         done
 
         echo "=== Kubernetes Provider Test Summary ==="
-        echo "  Passed: $PASSED / ${#DIST_ARRAY[@]}"
-        echo "  Failed: $FAILED / ${#DIST_ARRAY[@]}"
+        # A stop after host restoration or drain failure leaves later
+        # distributions untried; report them as unattempted, never as passed.
+        TOTAL=${#DIST_ARRAY[@]}
+        UNATTEMPTED=$((TOTAL - ATTEMPTED))
+        echo "  Attempted: $ATTEMPTED / $TOTAL"
+        echo "  Passed: $PASSED / $TOTAL"
+        echo "  Failed: $FAILED / $TOTAL"
+        echo "  Unattempted: $UNATTEMPTED / $TOTAL"
 
-        if [ "$FAILED" -gt 0 ]; then
-          echo "❌ $FAILED Kubernetes provider test(s) failed"
+        if [ "$FAILED" -gt 0 ] || [ "$UNATTEMPTED" -gt 0 ]; then
+          SUMMARY="❌ $FAILED distribution(s) failed ($OPERATION_FAILURES failed operation(s))"
+          if [ "$UNATTEMPTED" -gt 0 ]; then
+            SUMMARY="$SUMMARY; $UNATTEMPTED not attempted"
+          fi
+          echo "$SUMMARY"
           exit 1
         fi
         echo "✅ All Kubernetes provider tests passed"
