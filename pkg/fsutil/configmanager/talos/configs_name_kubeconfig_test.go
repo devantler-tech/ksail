@@ -150,6 +150,37 @@ func TestConfigsWithNameRepairsAnInheritedNameEvenWhenMetadataMatches(t *testing
 	assert.Equal(t, base.Name, repaired.Worker().Cluster().Name())
 }
 
+// TestConfigsWithNameKeepsGenerationOverridesPrivate protects external patch
+// consumers while repeated naming and later exposure changes retain precedence.
+func TestConfigsWithNameKeepsGenerationOverridesPrivate(t *testing.T) {
+	t.Parallel()
+
+	host := inheritedHostConfig(t, []talos.PatchScope{
+		talos.PatchScopeControlPlane, talos.PatchScopeWorker,
+	})
+	originalPatches := host.Patches()
+	nested, err := host.WithName("nested-talos")
+	require.NoError(t, err)
+	assert.Equal(t, originalPatches, nested.Patches())
+
+	nested, err = nested.WithName("renamed-talos")
+	require.NoError(t, err)
+	assert.Equal(t, originalPatches, nested.Patches())
+	nested, err = nested.WithEndpoint("127.0.0.1")
+	require.NoError(t, err)
+	assert.Equal(t, originalPatches, nested.Patches())
+	nested, err = nested.WithCertSANs([]string{"renamed.example.test"})
+	require.NoError(t, err)
+
+	patches := nested.Patches()
+	require.Len(t, patches, len(originalPatches)+1)
+	assert.Equal(t, originalPatches, patches[:len(originalPatches)])
+	assert.Equal(t, "ksail-exposure-cert-sans", patches[len(originalPatches)].Path)
+	assert.Equal(t, "renamed-talos", nested.ControlPlane().Cluster().Name())
+	assert.Equal(t, "renamed-talos", nested.Worker().Cluster().Name())
+	assert.Equal(t, originalPatches, host.Patches())
+}
+
 // nativeAdminKubeconfig uses Talos's actual admin generator rather than assuming
 // the cluster-entry name a control plane will publish.
 func nativeAdminKubeconfig(t *testing.T, configs *talos.Configs) []byte {

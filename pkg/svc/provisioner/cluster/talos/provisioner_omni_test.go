@@ -2,6 +2,7 @@ package talosprovisioner_test
 
 import (
 	"context"
+	"io"
 	"path/filepath"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/cosi-project/runtime/pkg/state/impl/inmem"
 	"github.com/cosi-project/runtime/pkg/state/impl/namespaced"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	talosconfig "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	omniprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
@@ -155,6 +157,34 @@ func TestBuildOmniPatchInfos_WithPatches(t *testing.T) {
 			patch.Scope == omniprovider.PatchScopeWorker
 		assert.True(t, isValid, "unexpected patch scope: %v", patch.Scope)
 	}
+}
+
+// TestNamedDefaultsKeepInternalNamesOutOfOmniTemplates exercises the patch list
+// shared by Omni creation and scaling, where Omni owns the cluster name.
+func TestNamedDefaultsKeepInternalNamesOutOfOmniTemplates(t *testing.T) {
+	t.Parallel()
+
+	configs, err := talosconfig.NewDefaultConfigsWithVersionContractAndName(
+		talosconfig.DefaultKubernetesVersion, "omni-fixture", nil,
+	)
+	require.NoError(t, err)
+
+	provisioner := talosprovisioner.NewProvisioner(configs, nil)
+	patches := provisioner.BuildOmniPatchInfosForTest()
+	require.Len(t, patches, 1)
+	assert.Equal(t, "allow-scheduling-on-control-planes", patches[0].Path)
+
+	reader, err := omniprovider.BuildClusterTemplate(omniprovider.TemplateParams{
+		ClusterName: "omni-fixture", TalosVersion: "1.13.1",
+		KubernetesVersion: configs.KubernetesVersion(),
+		ControlPlanes:     1, MachineClass: "fixture-machines", Patches: patches,
+	})
+	require.NoError(t, err)
+	content, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "name: omni-fixture")
+	assert.Contains(t, string(content), "allowSchedulingOnControlPlanes: true")
+	assert.NotContains(t, string(content), "clusterName:")
 }
 
 func TestSyncAndWaitOmniCluster_InvalidTemplate(t *testing.T) {
