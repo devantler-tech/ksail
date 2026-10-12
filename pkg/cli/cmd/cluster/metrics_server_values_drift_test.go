@@ -29,26 +29,32 @@ func newMetricsServerDriftContext() *localregistry.Context {
 //nolint:paralleltest // overrides the process-wide installer factories.
 func TestCheckChartValuesDrift_ReportsMetricsServerDrift(t *testing.T) {
 	regCtx := newMetricsServerDriftContext()
-	want := cluster.ExportResolveKubeContext(regCtx)
-	require.NotEmpty(t, want, "the test needs a derived context to compare against")
-
-	var probed string
+	probed := &v1alpha1.Cluster{}
 
 	t.Cleanup(cluster.SetMetricsServerInstallerFactoryForTests(
 		func(probeCfg *v1alpha1.Cluster) (installer.Installer, error) {
-			probed = probeCfg.Spec.Cluster.Connection.Context
+			probeCfg.DeepCopyInto(probed)
 
 			return &driftingInstaller{drifted: true}, nil
 		},
 	))
 
-	cmd, _ := newDriftCmd()
+	cmd, stderr := newDriftCmd()
 	diff := clusterupdate.NewEmptyUpdateResult()
 	cluster.ExportCheckChartValuesDrift(cmd, regCtx, diff)
 
-	require.Len(t, diff.InPlaceChanges, 1)
-	assert.Equal(t, specdiff.MetricsServerValuesField, diff.InPlaceChanges[0].Field)
-	assert.Equal(t, want, probed, "the probe must use the resolved kube context")
+	fields := make([]string, 0, len(diff.InPlaceChanges))
+	for _, change := range diff.InPlaceChanges {
+		fields = append(fields, change.Field)
+	}
+
+	assert.Equal(t, []string{specdiff.MetricsServerValuesField}, fields)
+	assert.Empty(t, stderr.String())
+	assert.Equal(t, v1alpha1.MetricsServerEnabled, probed.Spec.Cluster.MetricsServer)
+	want := cluster.ExportResolveKubeContext(regCtx)
+	assert.Equal(t, want, probed.Spec.Cluster.Connection.Context,
+		"the probe must use the resolved kube context")
+	assert.NotEmpty(t, probed.Spec.Cluster.Connection.Context)
 	assert.Empty(t, regCtx.ClusterCfg.Spec.Cluster.Connection.Context,
 		"pinning the probe context must not mutate the caller's config")
 }
