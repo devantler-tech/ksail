@@ -49,6 +49,9 @@ type Configs struct {
 	endpoint string
 	// patches is stored for regeneration with a new name.
 	patches []Patch
+	// nameOverride reapplies the selected name after configured patches during
+	// regeneration, without exporting those internal overrides to providers.
+	nameOverride bool
 	// versionContract is stored for regeneration to preserve version contract across WithName/WithEndpoint calls.
 	versionContract *talosconfig.VersionContract
 	// extensions is the list of Talos Image Factory official extension names.
@@ -233,11 +236,18 @@ func (c *Configs) GetClusterName() string {
 // This regenerates the underlying Talos bundle with the new cluster name,
 // which is necessary because the cluster name is embedded in PKI certificates
 // and the kubeconfig context name (admin@<cluster-name>).
+// The selected name overrides inherited cluster and role patches so the native
+// admin kubeconfig cannot replace another cluster's entry under its old name.
 //
 // Returns a new Configs instance; the original is not modified.
 // Returns an error if bundle regeneration fails.
 func (c *Configs) WithName(name string) (*Configs, error) {
-	if name == "" || name == c.Name {
+	if name == "" {
+		return c, nil
+	}
+
+	if name == c.Name && c.ControlPlane() != nil && c.Worker() != nil &&
+		c.ControlPlane().Cluster().Name() == name && c.Worker().Cluster().Name() == name {
 		return c, nil
 	}
 
@@ -245,6 +255,7 @@ func (c *Configs) WithName(name string) (*Configs, error) {
 	// (secrets left nil) because the cluster name is embedded in the certificates.
 	return c.regenerate(func(params *regenParams) error {
 		params.name = name
+		params.nameOverride = true
 
 		return nil
 	})
@@ -552,7 +563,8 @@ func (c *Configs) KubernetesVersion() string {
 	return DefaultKubernetesVersion
 }
 
-// Patches returns a copy of the patches used to build this config.
+// Patches returns a copy of the configured patches for external providers.
+// Internal cluster-name overrides used during bundle generation are excluded.
 // A copy is returned to prevent callers from mutating the internal state.
 func (c *Configs) Patches() []Patch {
 	if c.patches == nil {
@@ -978,6 +990,7 @@ func (c *Configs) ApplyMirrorRegistries(mirrors []MirrorRegistry) error {
 // named field instead of re-spelling the whole argument list.
 type regenParams struct {
 	name              string
+	nameOverride      bool
 	kubernetesVersion string
 	networkCIDR       string
 	endpoint          string
@@ -1004,6 +1017,7 @@ func (c *Configs) snapshot() regenParams {
 
 	return regenParams{
 		name:              c.Name,
+		nameOverride:      c.nameOverride,
 		kubernetesVersion: kubernetesVersion,
 		networkCIDR:       networkCIDR,
 		endpoint:          c.endpoint,
@@ -1027,16 +1041,40 @@ func (c *Configs) regenerate(mutate func(*regenParams) error) (*Configs, error) 
 		return nil, err
 	}
 
-	return newConfigsWithEndpointAndSecrets(
+	patches := params.patches
+	if params.nameOverride {
+		content := fmt.Appendf(nil, "cluster:\n  clusterName: %q\n", params.name)
+		// Role patches run after cluster patches. Reapply final name overrides
+		// for both roles on every regeneration, without changing the stored list.
+		patches = append(
+			slices.Clone(patches),
+			Patch{
+				Path:    "ksail-control-plane-name",
+				Scope:   PatchScopeControlPlane,
+				Content: content,
+			},
+			Patch{Path: "ksail-worker-name", Scope: PatchScopeWorker, Content: content},
+		)
+	}
+
+	updated, err := newConfigsWithEndpointAndSecrets(
 		params.name,
 		params.kubernetesVersion,
 		params.networkCIDR,
 		params.endpoint,
-		params.patches,
+		patches,
 		params.secrets,
 		params.versionContract,
 		params.extensions,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	updated.patches = params.patches
+	updated.nameOverride = params.nameOverride
+
+	return updated, nil
 }
 
 // preserveSecrets extracts the current PKI into params.secrets so regeneration

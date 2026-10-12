@@ -1809,6 +1809,13 @@ jobs:
           - "--cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine Gatekeeper --gitops-engine ArgoCD"
           - "--gitops-engine Flux --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
           - "--gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
+        # Replace the unnamed Talos default with the named trial below. Naming
+        # the host creates the inherited cluster-name patch nested creation must override.
+        exclude:
+          - distribution: Talos
+            provider: Docker
+            init: true
+            args: ""
         # init=false (CLI-flag-only path without ksail.yaml) is now covered by
         # unit tests (TestCreate_NoConfigFile_*) instead of full E2E clusters.
         include:
@@ -1816,8 +1823,8 @@ jobs:
             provider: Docker
             init: true
             args: "--name system-test-cluster-with-image-verification --image-verification Enabled"
-          # Enable Kubernetes provider tests on the default (init=true, args="")
-          # entry for each distribution. This tests all 4 nested distributions
+          # Enable Kubernetes provider tests on the default initialized host
+          # for each distribution (Talos explicitly named). This tests all 4 nested distributions
           # (Vanilla,K3s,VCluster,Talos) on each host type, once per matrix.
           # The three mirror-supported distributions also opt into their smoke
           # test here so it runs once per distribution rather than for all args.
@@ -1836,7 +1843,7 @@ jobs:
           - distribution: Talos
             provider: Docker
             init: true
-            args: ""
+            args: "--name system-test-cluster"
             kubernetes-upgrade-from: "v1.36.2"
             kubernetes-upgrade-to: "v1.37.1"
             test-kubernetes-provider: "true"
