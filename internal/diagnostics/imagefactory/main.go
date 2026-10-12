@@ -76,6 +76,7 @@ func register(ctx context.Context, baseURL string, httpClient *http.Client) obse
 	defer observationMutex.Unlock()
 
 	result.ElapsedMS = time.Since(started).Milliseconds()
+
 	result.Outcome = errorKind(err)
 	if err != nil {
 		return result
@@ -348,6 +349,7 @@ func run() int {
 			control := curlControl(ctx)
 
 			control.Trial = trial
+
 			err := encoder.Encode(control)
 			if err != nil {
 				return 1

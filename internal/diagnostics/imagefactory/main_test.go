@@ -73,10 +73,12 @@ func TestRegisterRequiresVerifiedTLSAndExactSchematic(t *testing.T) {
 
 func fixtureClient(t *testing.T, server *httptest.Server, trust bool) *http.Client {
 	t.Helper()
+
 	base, ok := http.DefaultTransport.(*http.Transport)
 	require.True(t, ok)
 
 	transport := base.Clone()
+
 	if trust {
 		pool := x509.NewCertPool()
 		pool.AddCert(server.Certificate())
