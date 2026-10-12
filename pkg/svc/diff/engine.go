@@ -52,6 +52,11 @@ const CNIField = "cluster.cni"
 // a cluster.policyEngine change.
 const PolicyEngineValuesField = "cluster.policyEngine.chartValues"
 
+// MetricsServerValuesField is the diff key for metrics-server chart values that
+// differ from the ones this KSail version renders. Reconciliation routes it to
+// the same metrics-server Helm upgrade as a cluster.metricsServer change.
+const MetricsServerValuesField = "cluster.metricsServer.chartValues"
+
 // fluxVerifyDriftedDisplay is the old value rendered for verify drift. The
 // detector receives a single boolean covering both an absent spec.verify block
 // and one that is present but differs, so this names the disjunction rather than

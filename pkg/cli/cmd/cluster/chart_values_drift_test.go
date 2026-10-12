@@ -198,6 +198,7 @@ func TestChartValuesDriftFieldsReconcileInPlace(t *testing.T) {
 	require.Contains(t, fields, specdiff.AutoscalerValuesField)
 	require.Contains(t, fields, specdiff.CertManagerValuesField)
 	require.Contains(t, fields, specdiff.PolicyEngineValuesField)
+	require.Contains(t, fields, specdiff.MetricsServerValuesField)
 
 	for _, field := range fields {
 		t.Run(field, func(t *testing.T) {

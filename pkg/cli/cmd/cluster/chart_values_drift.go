@@ -91,6 +91,20 @@ func ksailInstallsPolicyEngine(clusterCfg *v1alpha1.Cluster) bool {
 		setup.GetComponentRequirements(clusterCfg).NeedsPolicyEngine
 }
 
+// metricsServerValuesProbe compares metrics-server's values (ksail#7703). It is
+// needed only while KSail installs metrics-server: a distribution that ships
+// its own never has a KSail release to compare.
+func metricsServerValuesProbe() chartValuesDriftProbe {
+	return chartValuesDriftProbe{
+		component: "metrics-server",
+		field:     specdiff.MetricsServerValuesField,
+		needed:    setup.NeedsMetricsServerInstall,
+		factory: func(factories *setup.InstallerFactories) installerFactory {
+			return factories.MetricsServer
+		},
+	}
+}
+
 // chartValuesDriftProbes lists the components whose rendered chart values are
 // compared with their installed release. The remaining component families are
 // tracked on ksail#7366.
@@ -99,6 +113,7 @@ func chartValuesDriftProbes() []chartValuesDriftProbe {
 		autoscalerValuesProbe(),
 		certManagerValuesProbe(),
 		policyEngineValuesProbe(),
+		metricsServerValuesProbe(),
 		calicoPrerequisitesProbe(),
 	}
 }

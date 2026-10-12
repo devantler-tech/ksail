@@ -504,3 +504,58 @@ func TestInstallCNI_KWOKUnsupportedCNIReturnsError(t *testing.T) {
 	)
 	assert.False(t, installed)
 }
+
+// TestInstallMetricsServerSilent_UsesTheMetricsServerFactory installs through
+// the factory `cluster update` compares rendered values with (ksail#7703), so
+// detection and installation can never render different values.
+func TestInstallMetricsServerSilent_UsesTheMetricsServerFactory(t *testing.T) {
+	t.Parallel()
+
+	inst := &mockInstaller{}
+	factories := &setup.InstallerFactories{
+		HelmClientFactory: func(_ *v1alpha1.Cluster) (*helm.Client, string, error) {
+			return nil, "", fmt.Errorf("helm error: %w", errHelmClientFailed)
+		},
+		MetricsServer: func(_ *v1alpha1.Cluster) (installer.Installer, error) {
+			return inst, nil
+		},
+	}
+
+	err := setup.InstallMetricsServerSilent(
+		context.Background(), &v1alpha1.Cluster{}, factories,
+	)
+	require.NoError(t, err, "the configured factory must be used, not a direct Helm client")
+}
+
+// TestInstallMetricsServerSilent_ReportsAFailedInstall keeps the installer's
+// error visible to the caller.
+func TestInstallMetricsServerSilent_ReportsAFailedInstall(t *testing.T) {
+	t.Parallel()
+
+	factories := &setup.InstallerFactories{
+		MetricsServer: func(_ *v1alpha1.Cluster) (installer.Installer, error) {
+			return &mockInstaller{installErr: errInstallFailed}, nil
+		},
+	}
+
+	err := setup.InstallMetricsServerSilent(
+		context.Background(), &v1alpha1.Cluster{}, factories,
+	)
+	require.ErrorIs(t, err, errInstallFailed)
+	assert.Contains(t, err.Error(), "metrics-server installation failed")
+}
+
+// TestMetricsServerFactory_PropagatesAHelmClientError is the default factory's
+// failure path.
+func TestMetricsServerFactory_PropagatesAHelmClientError(t *testing.T) {
+	t.Parallel()
+
+	factories := setup.DefaultInstallerFactories()
+	factories.HelmClientFactory = func(_ *v1alpha1.Cluster) (*helm.Client, string, error) {
+		return nil, "", fmt.Errorf("helm error: %w", errHelmClientFailed)
+	}
+
+	inst, err := factories.MetricsServer(&v1alpha1.Cluster{})
+	require.ErrorIs(t, err, errHelmClientFailed)
+	assert.Nil(t, inst)
+}
