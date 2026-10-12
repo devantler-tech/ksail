@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - internal/diagnostics/imagefactory/**
+      - internal/imagefactorytransport/**
+      - pkg/svc/provisioner/cluster/talos/schematic_registration.go
       - .github/workflows/image-factory-transport.yaml
   workflow_dispatch:
 
@@ -29,6 +31,6 @@ jobs:
           go-version-file: go.mod
           cache: false
       - name: Verify diagnostic boundaries
-        run: go test -race ./internal/diagnostics/imagefactory
+        run: go test -race ./internal/diagnostics/imagefactory ./internal/imagefactorytransport
       - name: Compare fixed public registration transports
         run: go run ./internal/diagnostics/imagefactory
