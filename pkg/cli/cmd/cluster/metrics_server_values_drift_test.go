@@ -250,7 +250,7 @@ func TestReconcileMetricsServerValues_SkipsWhenKSailDoesNotInstallIt(t *testing.
 // must be applied in place. Sending it to the recreation flow would delete the
 // cluster to change a setting.
 //
-//nolint:paralleltest // overrides the process-wide installer factories and HOME.
+
 func TestMetricsServerValuesOnlyUpdateDoesNotRecreateTheCluster(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
