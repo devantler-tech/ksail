@@ -33,7 +33,7 @@ go test ./pkg/<package>/...   # the package you changed
 go test ./...           # the whole unit suite, before you open the PR
 ```
 
-In the pull request, say which of these you ran. If your change touches cluster creation, a cloud provider, the release pipeline or a deployment and you could not run that part yourself, say so plainly. CI runs the Docker system tests only for a pull request from a branch in this repository that changes a file they depend on; a documentation-only change and a pull request from a fork skip them (see [System Tests](#system-tests)). The maintainers run the cloud and release checks. A passing unit suite is not proof that a cluster, a release or a deployment works.
+In the pull request, say which of these you ran. If your change touches cluster creation, a cloud provider, the release pipeline or a deployment and you could not run that part yourself, say so plainly. On a pull request, CI starts the Docker system tests by itself only when the pull request comes from a branch in this repository and changes a file they depend on; a documentation-only change and a pull request from a fork skip them. They can also be started by hand for any branch in this repository (see [System Tests](#system-tests)). The maintainers run the cloud and release checks. A passing unit suite is not proof that a cluster, a release or a deployment works.
 
 ## Getting Started
 
