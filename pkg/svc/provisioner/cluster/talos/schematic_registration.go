@@ -53,6 +53,7 @@ func registerSchematic(
 
 	httpClient := imagefactorytransport.Client()
 	defer httpClient.CloseIdleConnections()
+
 	client, err := factoryclient.New(baseURL, factoryclient.WithClient(httpClient))
 	if err != nil {
 		return "", fmt.Errorf("create image factory client: %w", err)
