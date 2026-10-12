@@ -131,6 +131,15 @@ func calicoPrerequisitesProbe() chartValuesDriftProbe {
 	}
 }
 
+// isChartValuesDriftField reports whether a diff field is one a chart-values
+// drift probe produces, so the set of changes applied without recreation is the
+// probe list itself and cannot fall behind it.
+func isChartValuesDriftField(field string) bool {
+	return slices.ContainsFunc(chartValuesDriftProbes(), func(probe chartValuesDriftProbe) bool {
+		return probe.field == field
+	})
+}
+
 // checkChartValuesDrift runs every chart-values drift probe.
 //
 // This is the only signal a KSail upgrade that changes a component's rendered

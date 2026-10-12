@@ -1,6 +1,7 @@
 package cluster_test
 
 import (
+	"bytes"
 	"testing"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -242,4 +243,85 @@ func TestReconcileMetricsServerValues_SkipsWhenKSailDoesNotInstallIt(t *testing.
 	err := cluster.ExportReconcileComponents(newReconcileTestCmd(), cfg, diff, result)
 	require.NoError(t, err)
 	assert.Zero(t, inst.installs)
+}
+
+// TestMetricsServerValuesOnlyUpdateDoesNotRecreateTheCluster covers provisioners
+// without an Updater (VCluster): a values-only change is one Helm upgrade, so it
+// must be applied in place. Sending it to the recreation flow would delete the
+// cluster to change a setting.
+//
+//nolint:paralleltest // overrides the process-wide installer factories and HOME.
+func TestMetricsServerValuesOnlyUpdateDoesNotRecreateTheCluster(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	inst := &driftingInstaller{drifted: true}
+
+	t.Cleanup(cluster.SetMetricsServerInstallerFactoryForTests(
+		func(*v1alpha1.Cluster) (installer.Installer, error) { return inst, nil },
+	))
+
+	regCtx := newMetricsServerDriftContext()
+	regCtx.ClusterCfg.Spec.Cluster.Distribution = v1alpha1.DistributionVCluster
+
+	cmd, _ := newDriftCmd()
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	cluster.ExportCheckChartValuesDrift(cmd, regCtx, diff)
+	require.Len(t, diff.InPlaceChanges, 1, "the values-only change must be reported")
+
+	require.NoError(t, cluster.ExportApplySpecOnlyDiff(cmd, regCtx, "values-only", diff, true))
+	require.NotContains(t, output.String(), "recreation would be required")
+	require.Zero(t, inst.installs, "dry run must not upgrade the release")
+
+	output.Reset()
+	require.NoError(t, cluster.ExportApplySpecOnlyDiff(cmd, regCtx, "values-only", diff, false))
+	require.Equal(t, 1, inst.installs)
+	require.NotContains(t, output.String(), "recreat")
+}
+
+// TestValuesOnlyUpdateStillRecreatesForOtherChanges keeps the recreation path for
+// every diff that is not made only of chart-values changes.
+func TestValuesOnlyUpdateStillRecreatesForOtherChanges(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name string
+		edit func(diff *clusterupdate.UpdateResult)
+	}{
+		{name: "unknown baseline", edit: func(diff *clusterupdate.UpdateResult) {
+			diff.UnknownBaseline = []clusterupdate.Change{{Field: "cluster.csi"}}
+		}},
+		{name: "component switch", edit: func(diff *clusterupdate.UpdateResult) {
+			diff.InPlaceChanges = append(
+				diff.InPlaceChanges, clusterupdate.Change{Field: "cluster.metricsServer"},
+			)
+		}},
+		{name: "recreate-required change", edit: func(diff *clusterupdate.UpdateResult) {
+			diff.RecreateRequired = []clusterupdate.Change{{Field: "cluster.distribution"}}
+		}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			cmd, _ := newDriftCmd()
+
+			var output bytes.Buffer
+			cmd.SetOut(&output)
+
+			diff := clusterupdate.NewEmptyUpdateResult()
+			diff.InPlaceChanges = []clusterupdate.Change{
+				{Field: specdiff.MetricsServerValuesField},
+				{Field: specdiff.CertManagerValuesField},
+			}
+			testCase.edit(diff)
+
+			require.NoError(t, cluster.ExportApplySpecOnlyDiff(
+				cmd, newMetricsServerDriftContext(), "other-change", diff, true,
+			))
+			require.Contains(t, output.String(), "recreation would be required")
+		})
+	}
 }
