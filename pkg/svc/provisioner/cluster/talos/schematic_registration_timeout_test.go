@@ -106,39 +106,14 @@ func TestRegisterSchematicBoundsTransientRetries(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			computed := talosconfigmanager.Schematic{}
-			wantBody, err := computed.Marshal()
-			require.NoError(t, err)
+			var computed talosconfigmanager.Schematic
 
 			var calls atomic.Int32
-			server := httptest.NewServer(
-				http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-					assert.Equal(t, http.MethodPost, request.Method)
-					assert.Equal(t, "/schematics", request.URL.Path)
-					assert.Equal(t, "application/yaml", request.Header.Get("Content-Type"))
-					body, readErr := io.ReadAll(request.Body)
-					assert.NoError(t, readErr)
-					assert.Equal(
-						t,
-						wantBody,
-						body,
-						"every attempt must register the same content-addressed schematic",
-					)
 
-					if calls.Add(1) <= testCase.failures {
-						http.Error(writer, "fixture response mentions 503", testCase.status)
-
-						return
-					}
-
-					writer.Header().Set("Content-Type", "application/json")
-					_ = json.NewEncoder(writer).
-						Encode(map[string]string{"id": "stored-id", "schematic": string(body)})
-				}),
-			)
+			server := schematicRetryServer(t, computed, testCase.status, testCase.failures, &calls)
 			t.Cleanup(server.Close)
 
-			id, registerErr := talosprovisioner.RegisterSchematicForTest(
+			schematicID, registerErr := talosprovisioner.RegisterSchematicForTest(
 				t.Context(),
 				server.URL,
 				time.Second,
@@ -147,10 +122,10 @@ func TestRegisterSchematicBoundsTransientRetries(t *testing.T) {
 
 			if testCase.wantSuccess {
 				require.NoError(t, registerErr)
-				assert.Equal(t, "stored-id", id)
+				assert.Equal(t, "stored-id", schematicID)
 			} else {
 				require.Error(t, registerErr)
-				assert.Empty(t, id)
+				assert.Empty(t, schematicID)
 			}
 
 			assert.Equal(t, testCase.wantCalls, calls.Load())
@@ -158,10 +133,50 @@ func TestRegisterSchematicBoundsTransientRetries(t *testing.T) {
 	}
 }
 
+func schematicRetryServer(
+	t *testing.T,
+	computed talosconfigmanager.Schematic,
+	status int,
+	failures int32,
+	calls *atomic.Int32,
+) *httptest.Server {
+	t.Helper()
+
+	wantBody, err := computed.Marshal()
+	require.NoError(t, err)
+
+	return httptest.NewServer(
+		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			assert.Equal(t, http.MethodPost, request.Method)
+			assert.Equal(t, "/schematics", request.URL.Path)
+			assert.Equal(t, "application/yaml", request.Header.Get("Content-Type"))
+			body, readErr := io.ReadAll(request.Body)
+			assert.NoError(t, readErr)
+			assert.Equal(
+				t,
+				wantBody,
+				body,
+				"every attempt must register the same content-addressed schematic",
+			)
+
+			if calls.Add(1) <= failures {
+				http.Error(writer, "fixture response mentions 503", status)
+
+				return
+			}
+
+			writer.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(writer).
+				Encode(map[string]string{"id": "stored-id", "schematic": string(body)})
+		}),
+	)
+}
+
 func TestRegisterSchematicRetriesInterruptedTransport(t *testing.T) {
 	t.Parallel()
 
 	var calls atomic.Int32
+
 	server := httptest.NewServer(
 		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			body, err := io.ReadAll(request.Body)
@@ -189,15 +204,14 @@ func TestRegisterSchematicRetriesInterruptedTransport(t *testing.T) {
 	)
 	t.Cleanup(server.Close)
 
-	id, err := talosprovisioner.RegisterSchematicForTest(
-		t.Context(),
-		server.URL,
-		time.Second,
-		talosconfigmanager.Schematic{},
+	var computed talosconfigmanager.Schematic
+
+	schematicID, err := talosprovisioner.RegisterSchematicForTest(
+		t.Context(), server.URL, time.Second, computed,
 	)
 
 	require.NoError(t, err)
-	assert.Equal(t, "stored-id", id)
+	assert.Equal(t, "stored-id", schematicID)
 	assert.Equal(t, int32(3), calls.Load())
 }
 
@@ -205,6 +219,7 @@ func TestRegisterSchematicRetainsTheOverallDeadlineAcrossRetries(t *testing.T) {
 	t.Parallel()
 
 	var calls atomic.Int32
+
 	server := httptest.NewServer(
 		http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 			calls.Add(1)
@@ -213,11 +228,10 @@ func TestRegisterSchematicRetainsTheOverallDeadlineAcrossRetries(t *testing.T) {
 	)
 	t.Cleanup(server.Close)
 
+	var computed talosconfigmanager.Schematic
+
 	_, err := talosprovisioner.RegisterSchematicForTest(
-		t.Context(),
-		server.URL,
-		50*time.Millisecond,
-		talosconfigmanager.Schematic{},
+		t.Context(), server.URL, 50*time.Millisecond, computed,
 	)
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
@@ -231,6 +245,7 @@ func TestRegisterSchematicCancelsBeforeRetrying(t *testing.T) {
 	t.Cleanup(cancel)
 
 	var calls atomic.Int32
+
 	server := httptest.NewServer(
 		http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 			calls.Add(1)
@@ -240,11 +255,10 @@ func TestRegisterSchematicCancelsBeforeRetrying(t *testing.T) {
 	)
 	t.Cleanup(server.Close)
 
+	var computed talosconfigmanager.Schematic
+
 	_, err := talosprovisioner.RegisterSchematicForTest(
-		ctx,
-		server.URL,
-		time.Second,
-		talosconfigmanager.Schematic{},
+		ctx, server.URL, time.Second, computed,
 	)
 
 	require.ErrorIs(t, err, context.Canceled)
@@ -255,6 +269,7 @@ func TestRegisterSchematicRejectsAnUntrustedFactoryCertificate(t *testing.T) {
 	t.Parallel()
 
 	var calls atomic.Int32
+
 	server := httptest.NewUnstartedServer(
 		http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 			calls.Add(1)
@@ -264,11 +279,10 @@ func TestRegisterSchematicRejectsAnUntrustedFactoryCertificate(t *testing.T) {
 	server.StartTLS()
 	t.Cleanup(server.Close)
 
+	var computed talosconfigmanager.Schematic
+
 	_, err := talosprovisioner.RegisterSchematicForTest(
-		t.Context(),
-		server.URL,
-		time.Second,
-		talosconfigmanager.Schematic{},
+		t.Context(), server.URL, time.Second, computed,
 	)
 
 	var certificateError *tls.CertificateVerificationError
