@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"testing"
@@ -14,12 +15,30 @@ import (
 
 type recordedConn struct {
 	net.Conn
-	writes [][]byte
+	writes   [][]byte
+	short    bool
+	writeErr error
 }
 
 func (conn *recordedConn) Write(payload []byte) (int, error) {
 	conn.writes = append(conn.writes, bytes.Clone(payload))
+	if conn.writeErr != nil {
+		return len(payload) / 2, conn.writeErr
+	}
+	if conn.short {
+		return 0, nil
+	}
 	return len(payload), nil
+}
+
+func TestWriteSizingRejectsShortWritesAndPreservesErrors(t *testing.T) {
+	t.Parallel()
+	written, err := (writeSizedConn{Conn: &recordedConn{short: true}}).Write([]byte("synthetic"))
+	require.Zero(t, written)
+	require.ErrorIs(t, err, io.ErrShortWrite)
+	written, err = (writeSizedConn{Conn: &recordedConn{writeErr: net.ErrClosed}}).Write([]byte("synthetic"))
+	require.Equal(t, 4, written)
+	require.ErrorIs(t, err, net.ErrClosed)
 }
 
 func TestNewSizesWritesAndPreservesDialContextAndTLS(t *testing.T) {

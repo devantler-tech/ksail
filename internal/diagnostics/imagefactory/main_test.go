@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
@@ -9,7 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -92,33 +90,4 @@ func TestTransportComparisonsPreserveVerifiedTLS(t *testing.T) {
 			}
 		})
 	}
-}
-
-type recordingConn struct {
-	net.Conn
-	writes [][]byte
-	short  bool
-}
-
-func (conn *recordingConn) Write(payload []byte) (int, error) {
-	conn.writes = append(conn.writes, bytes.Clone(payload))
-	if conn.short {
-		return 0, nil
-	}
-	return len(payload), nil
-}
-
-func TestSmallWritesPreserveBytesAndRejectIncompleteWrites(t *testing.T) {
-	t.Parallel()
-	payload := bytes.Repeat([]byte("synthetic"), 400)
-	underlying := &recordingConn{}
-	written, err := (smallWriteConn{Conn: underlying}).Write(payload)
-	require.NoError(t, err)
-	require.Equal(t, len(payload), written)
-	require.Equal(t, payload, bytes.Join(underlying.writes, nil))
-	for _, chunk := range underlying.writes {
-		require.LessOrEqual(t, len(chunk), 1024)
-	}
-	_, err = (smallWriteConn{Conn: &recordingConn{short: true}}).Write(payload)
-	require.ErrorIs(t, err, io.ErrShortWrite)
 }

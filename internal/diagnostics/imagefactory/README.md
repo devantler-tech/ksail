@@ -1,7 +1,8 @@
 # Public Image Factory transport comparison
 
-This internal diagnostic investigates KSail #7707. It does not change KSail's
-production transport, image configuration or registration retries.
+This internal diagnostic investigates KSail #7707. The production registration
+client uses the shared smaller-write transport; TLS versions, hybrid groups,
+certificate verification, image configuration and registration retries are unchanged.
 
 The dedicated Actions workflow uses Ubuntu 24.04 and the repository's Go toolchain,
 without production environments, secrets, Kubernetes access or provider resources.
@@ -15,7 +16,7 @@ Each of two trials pairs curl with seven SDK requests on the same hosted runner:
 - Go's [pre-1.26 curve set](https://github.com/golang/go/blob/go1.25.0/src/crypto/tls/defaults.go),
   including X25519MLKEM768; certificate verification is still enabled.
 - IPv4 only.
-- Smaller TCP writes with unchanged TLS defaults.
+- The actual production transport's smaller TCP writes with unchanged TLS defaults.
 - Classical X25519 and TLS 1.2 controls, **only for this synthetic public request**.
   Neither is a proposed production downgrade or fallback.
 

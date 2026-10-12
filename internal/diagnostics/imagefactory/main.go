@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/internal/imagefactorytransport"
 	factoryclient "github.com/siderolabs/image-factory/pkg/client"
 	"github.com/siderolabs/image-factory/pkg/schematic"
 )
@@ -149,37 +150,9 @@ func transportFor(mode string) *http.Transport {
 			return dialer.DialContext(ctx, "tcp4", address)
 		}
 	case "small-writes":
-		dial := transport.DialContext
-		transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
-			conn, err := dial(ctx, network, address)
-			if err != nil {
-				return nil, err
-			}
-			return smallWriteConn{Conn: conn}, nil
-		}
+		return imagefactorytransport.New(transport)
 	}
 	return transport
-}
-
-// smallWriteConn changes write sizing, not TLS groups, versions or verification.
-type smallWriteConn struct{ net.Conn }
-
-func (conn smallWriteConn) Write(payload []byte) (int, error) {
-	const chunkSize = 1024
-	written := 0
-	for len(payload) > 0 {
-		size := min(len(payload), chunkSize)
-		n, err := conn.Conn.Write(payload[:size])
-		written += n
-		if err != nil {
-			return written, err
-		}
-		if n != size {
-			return written, io.ErrShortWrite
-		}
-		payload = payload[size:]
-	}
-	return written, nil
 }
 
 // curlControl sends the very same synthetic body immediately before each SDK request.
@@ -243,7 +216,10 @@ func main() {
 				os.Exit(1)
 			}
 			client := &http.Client{}
-			if mode != "sdk-default" {
+			if mode == "small-writes" {
+				factoryHTTP := imagefactorytransport.Client()
+				client = &factoryHTTP
+			} else if mode != "sdk-default" {
 				client.Transport = transportFor(mode)
 			}
 			result := register(ctx, factoryURL, client)
