@@ -78,7 +78,7 @@ Continue with the [Getting Started guide](https://ksail.devantler.tech/start/qui
 ## What KSail Bundles
 
 | Category                 | Built-in Capabilities                                                            |
-| ------------------------ | -------------------------------------------------------------------------------- |
+|--------------------------|----------------------------------------------------------------------------------|
 | Cluster Provisioning     | Kind, K3d, Talos, VCluster (Vind), KWOK (kwokctl), EKS, GKE, AKS                 |
 | Container Orchestration  | kubectl, Helm, Kustomize                                                         |
 | GitOps Engines           | Flux, ArgoCD                                                                     |
@@ -93,7 +93,7 @@ See the [feature overview](https://ksail.devantler.tech/features/) and [architec
 ## Supported Platforms
 
 | OS                                                | Architecture |
-| ------------------------------------------------- | ------------ |
+|---------------------------------------------------|--------------|
 | 🐧 Linux                                          | amd64, arm64 |
 | 🍎 macOS                                          | arm64        |
 | ⊞ Windows downloads (use WSL2 for local clusters) | amd64, arm64 |
@@ -101,7 +101,7 @@ See the [feature overview](https://ksail.devantler.tech/features/) and [architec
 The available provider/distribution combinations are:
 
 | Provider                   | Distributions                                           |
-| -------------------------- | ------------------------------------------------------- |
+|----------------------------|---------------------------------------------------------|
 | Docker                     | Vanilla (Kind), K3s (K3d), Talos, VCluster (Vind), KWOK |
 | Kubernetes (existing host) | Vanilla, K3s, Talos, VCluster, KWOK                     |
 | Hetzner                    | Vanilla, K3s, Talos                                     |
@@ -145,7 +145,7 @@ Contributions are welcome! See [CONTRIBUTING.md](../CONTRIBUTING.md) for the dev
 ## Related Projects
 
 | Project                                                               | Description                                   | Type     |
-| --------------------------------------------------------------------- | --------------------------------------------- | -------- |
+|-----------------------------------------------------------------------|-----------------------------------------------|----------|
 | [devantler-tech/platform](https://github.com/devantler-tech/platform) | The maintainer's personal kubernetes platform | Platform |
 
 Using KSail in your project? Open a PR to add it here.
