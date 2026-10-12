@@ -45,7 +45,8 @@ ksail cluster delete --name ksail-first --provider Docker
 ```
 
 Creation downloads images, uses local resources and updates your Kubernetes connection settings.
-Check the cluster information, then delete this trial and its workloads when finished; confirm its name at the prompt.
+Check the cluster information, then delete this trial and its workloads when finished.
+In your terminal, review the displayed cluster name and type `yes` to confirm deletion.
 Project files and cached registry data remain available for reuse.
 Cloud providers have separate credentials, setup and costs.
 
