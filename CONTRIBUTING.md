@@ -24,7 +24,7 @@ If you have questions, don't hesitate to ask in [GitHub Discussions](https://git
 
 ### The smallest safe first change
 
-A unit-tested change in one package, or a fix to a guide outside the documentation site (such as this file or a `README.md`), needs only Go. You do not need Docker, Node.js or a cloud account for it:
+A unit-tested change in one package, or a fix to a guide outside the documentation site (such as this file or a `README.md`), needs only Go — plus, on macOS, GNU coreutils, because the CI-harness tests in the whole unit suite need GNU `timeout` (see [Prerequisites](#prerequisites)). You do not need Docker, Node.js or a cloud account for it:
 
 ```sh
 # working-directory: ./
@@ -324,12 +324,12 @@ System tests exercise full cluster lifecycle scenarios on real clusters. They ar
 | Workflow                         | Covers                                                        | Runs                                                                                                |
 |----------------------------------|---------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
 | `ci.yaml` (`system-test-docker`) | Vanilla, K3s, Talos, VCluster and KWOK on the Docker provider | On pull requests (see below) and on manual dispatch                                                 |
-| `system-test-hetzner.yaml`       | Talos, K3s and Vanilla on Hetzner Cloud                       | Weekly (Sunday 03:00 UTC) and on manual dispatch                                                    |
+| `system-test-hetzner.yaml`       | Talos in full; K3s and Vanilla as a smoke check, on Hetzner   | Weekly (Sunday 03:00 UTC) and on manual dispatch                                                    |
 | `system-test-omni.yaml`          | Talos on Sidero Omni                                          | Manual dispatch only (the schedule is paused)                                                       |
 | `system-test-eks.yaml`           | EKS on AWS                                                    | Manual dispatch only                                                                                |
 | `system-test-k3k-calico.yaml`    | The nested Kubernetes provider with Calico                    | Weekly (Monday 02:30 UTC), on manual dispatch, and on pull requests that change the workflow itself |
 
-All of them except the EKS workflow use the composite action at `.github/actions/ksail-system-test/action.yaml`. The EKS workflow has its own init, create, update and cleanup steps, so a change to the composite action does not change what it covers.
+All of them except the EKS workflow use the composite action at `.github/actions/ksail-system-test/action.yaml`. In the Hetzner workflow only the Talos legs do: its K3s and Vanilla legs are smoke checks that create the cluster, wait for the API server and delete it, so they do not exercise workloads, update, stop or start. The EKS workflow has its own init, create, update and cleanup steps, so a change to the composite action does not change what it covers.
 
 **When the Docker system tests run:**
 
@@ -356,7 +356,7 @@ This is useful for validating infrastructure-sensitive changes that the path lis
 
 **Checks that need no cluster:**
 
-`workload gen` subcommands and the `open chat --help` / `open mcp --help` smoke checks are covered by unit tests, which run on every pull request with Go changes. They need neither Docker nor a cluster.
+`workload gen` subcommands and the `open chat --help` / `open mcp --help` smoke checks are covered by unit tests, which run on every pull request with Go changes. They need neither Docker nor a cluster. The exceptions are `workload gen clusterrole` and `workload gen role`: they ask the API server which resources exist, so their coverage is the online phase of the system tests, and a change to either needs a system-test run.
 
 Note: cipher encrypt/decrypt E2E testing is not currently possible because the encrypt command uses hardcoded empty key groups (no `.sops.yaml` config loading). Cipher commands are covered by unit tests in `pkg/cli/cmd/workload/cipher/`.
 

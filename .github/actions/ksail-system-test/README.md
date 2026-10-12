@@ -23,7 +23,7 @@ There is no offline phase any more: manifest generation, the `open chat --help` 
 ### Phase 4 — Online Tests (cluster running)
 
 - **Workload Lifecycle** (`ksail-test-workload`) — Full CRUD: create, get, describe, logs, scale, install (Helm), apply (kustomize), push/reconcile (GitOps), delete
-- **Workload Mirror** (`ksail-test-workload-mirror`, optional) — Smoke-test `workload mirror` against a live HTTP deployment
+- **Workload Mirror** (`ksail-test-workload-mirror`, optional, Docker provider only) — Smoke-test `workload mirror` against a live HTTP deployment. On any other provider the phase is skipped even when `test-workload-mirror` is `"true"`
 - **Image Export & Import** (`ksail-test-image-export-import`) — Vanilla and K3s only
 - **Workload Watch** (`ksail-test-workload-watch`)
 - **API-dependent Gen** — `workload gen clusterrole` and `role` (require API server for resource group discovery)
@@ -45,6 +45,7 @@ There is no offline phase any more: manifest generation, the `open chat --help` 
 - Automatic Kubernetes diagnostic output on failure
 - **Cluster Switch** (switch kubeconfig context) — a normal test step placed after the debug step; it runs only when everything before it passed
 - Diagnostics and logs are uploaded as artifacts on failure (unless `upload-artifacts` is `"false"`)
+- The autoscaler inventory trial (`test-autoscaler-inventory`) runs after this phase, so a failure in that trial is not covered by the diagnostics above; read its output in the job log
 
 ### Phase 7 — Cleanup
 
@@ -189,7 +190,7 @@ Each of these adds a phase and is off unless set. The action's `action.yaml` des
 
 | Input                               | Description                                                                                   | Default                      |
 |-------------------------------------|-----------------------------------------------------------------------------------------------|------------------------------|
-| `test-workload-mirror`              | Smoke-test `workload mirror` against a live HTTP deployment                                   | `false`                      |
+| `test-workload-mirror`              | Docker provider only: smoke-test `workload mirror` against a live HTTP deployment             | `false`                      |
 | `test-kubernetes-provider`          | Create nested clusters on the running host cluster                                            | `false`                      |
 | `kubernetes-provider-distributions` | Comma-separated distributions for the nested clusters                                         | `Vanilla,K3s,VCluster,Talos` |
 | `kubernetes-provider-cni`           | CNI to install in each nested cluster (e.g. `Calico`)                                         | `""`                         |
