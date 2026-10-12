@@ -24,9 +24,12 @@ import (
 )
 
 const (
-	factoryURL    = "https://factory.talos.dev"
-	requestBudget = 30 * time.Second
-	trials        = 2
+	factoryURL       = "https://factory.talos.dev"
+	requestBudget    = 30 * time.Second
+	trials           = 2
+	diagnosticBudget = 15 * time.Minute
+	controlFields    = 3
+	exitUsage        = 2
 )
 
 type observation struct {
@@ -46,18 +49,26 @@ type observation struct {
 // register traces phase completion, never remote addresses, headers, or raw errors.
 func register(ctx context.Context, baseURL string, httpClient *http.Client) observation {
 	result := observation{}
-	var mu sync.Mutex
+	var observationMutex sync.Mutex
 	trace := &httptrace.ClientTrace{
-		DNSDone: func(info httptrace.DNSDoneInfo) { mu.Lock(); defer mu.Unlock(); result.DNSDone = info.Err == nil },
+		DNSDone: func(info httptrace.DNSDoneInfo) {
+			observationMutex.Lock()
+			defer observationMutex.Unlock()
+			result.DNSDone = info.Err == nil
+		},
 		ConnectDone: func(_, _ string, err error) {
-			mu.Lock()
-			defer mu.Unlock()
+			observationMutex.Lock()
+			defer observationMutex.Unlock()
 			result.Connected = result.Connected || err == nil
 		},
-		TLSHandshakeStart: func() { mu.Lock(); defer mu.Unlock(); result.TLSStarted = true },
+		TLSHandshakeStart: func() {
+			observationMutex.Lock()
+			defer observationMutex.Unlock()
+			result.TLSStarted = true
+		},
 		TLSHandshakeDone: func(state tls.ConnectionState, err error) {
-			mu.Lock()
-			defer mu.Unlock()
+			observationMutex.Lock()
+			defer observationMutex.Unlock()
 			result.TLSVerified = err == nil && len(state.VerifiedChains) > 0
 			if err == nil {
 				result.Protocol = "http/1.1"
@@ -66,7 +77,11 @@ func register(ctx context.Context, baseURL string, httpClient *http.Client) obse
 				}
 			}
 		},
-		GotFirstResponseByte: func() { mu.Lock(); defer mu.Unlock(); result.FirstByte = true },
+		GotFirstResponseByte: func() {
+			observationMutex.Lock()
+			defer observationMutex.Unlock()
+			result.FirstByte = true
+		},
 	}
 	started := time.Now()
 	bounded, cancel := context.WithTimeout(httptrace.WithClientTrace(ctx, trace), requestBudget)
@@ -81,27 +96,29 @@ func register(ctx context.Context, baseURL string, httpClient *http.Client) obse
 	if err != nil {
 		return observation{Outcome: "input_configuration"}
 	}
-	id, normalized, err := client.SchematicCreate(bounded, input)
-	mu.Lock()
-	defer mu.Unlock()
+	schematicID, normalized, err := client.SchematicCreate(bounded, input)
+	observationMutex.Lock()
+	defer observationMutex.Unlock()
 	result.ElapsedMS = time.Since(started).Milliseconds()
 	result.Outcome = errorKind(err)
 	if err != nil {
 		return result
 	}
-	result.IDMatches = id == expected
-	if normalized == nil {
-		result.IDMatches = false
-	} else {
-		normalizedID, idErr := normalized.ID()
-		result.IDMatches = result.IDMatches && idErr == nil && normalizedID == expected
-	}
+	result.IDMatches = matchesSchematic(expected, schematicID, normalized)
 	if !result.IDMatches {
 		result.Outcome = "id_mismatch"
 	} else if !result.TLSVerified {
 		result.Outcome = "unverified_tls"
 	}
 	return result
+}
+
+func matchesSchematic(expected, schematicID string, normalized *schematic.Schematic) bool {
+	if normalized == nil || schematicID != expected {
+		return false
+	}
+	normalizedID, err := normalized.ID()
+	return err == nil && normalizedID == expected
 }
 
 // errorKind deliberately drops error messages, which may contain network details.
@@ -129,7 +146,11 @@ func errorKind(err error) string {
 
 // transportFor changes one independent setting, retaining normal TLS verification.
 func transportFor(mode string) *http.Transport {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	base, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil
+	}
+	transport := base.Clone()
 	switch mode {
 	case "http1":
 		transport.Protocols = new(http.Protocols)
@@ -142,8 +163,6 @@ func transportFor(mode string) *http.Transport {
 	case "classical-control":
 		// Public synthetic comparison only; never a proposed production fallback.
 		transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, CurvePreferences: []tls.CurveID{tls.X25519}}
-	case "tls12-control":
-		transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, MaxVersion: tls.VersionTLS12}
 	case "ipv4":
 		dialer := &net.Dialer{Timeout: requestBudget, KeepAlive: requestBudget}
 		transport.DialContext = func(ctx context.Context, _, address string) (net.Conn, error) {
@@ -180,7 +199,7 @@ func curlControl(ctx context.Context) observation {
 		return result
 	}
 	parts := strings.Split(string(output), "\n")
-	if len(parts) < 3 {
+	if len(parts) < controlFields {
 		result.Outcome = "invalid_control"
 		return result
 	}
@@ -202,39 +221,58 @@ func curlControl(ctx context.Context) observation {
 }
 
 func main() {
-	if len(os.Args) != 1 {
-		os.Exit(2)
+	os.Exit(run())
+}
+
+func clientFor(mode string) *http.Client {
+	if mode == "small-writes" {
+		client := imagefactorytransport.Client()
+		return &client
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	if mode == "sdk-default" {
+		return &http.Client{}
+	}
+	transport := transportFor(mode)
+	if transport == nil {
+		return nil
+	}
+	return &http.Client{Transport: transport}
+}
+
+func run() int {
+	if len(os.Args) != 1 {
+		return exitUsage
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), diagnosticBudget)
 	defer cancel()
 	encoder := json.NewEncoder(os.Stdout)
 	for trial := 1; trial <= trials; trial++ {
-		for _, mode := range []string{"sdk-default", "http1", "pre126-curves", "ipv4", "small-writes", "classical-control", "tls12-control"} {
+		for _, mode := range []string{
+			"sdk-default", "http1", "pre126-curves", "ipv4", "small-writes", "classical-control",
+		} {
 			control := curlControl(ctx)
 			control.Trial = trial
-			if encoder.Encode(control) != nil {
-				os.Exit(1)
+			if err := encoder.Encode(control); err != nil {
+				return 1
 			}
-			client := &http.Client{}
-			if mode == "small-writes" {
-				factoryHTTP := imagefactorytransport.Client()
-				client = &factoryHTTP
-			} else if mode != "sdk-default" {
-				client.Transport = transportFor(mode)
+			client := clientFor(mode)
+			if client == nil {
+				return 1
 			}
 			result := register(ctx, factoryURL, client)
 			result.Mode, result.Trial = mode, trial
 			client.CloseIdleConnections()
-			if encoder.Encode(result) != nil {
-				os.Exit(1)
+			if err := encoder.Encode(result); err != nil {
+				return 1
 			}
 			if ctx.Err() != nil {
-				os.Exit(1)
+				return 1
 			}
 		}
 	}
 	// Completion means every observation was collected, not that production is fixed.
-	if encoder.Encode(map[string]string{"diagnostic": "completed", "productionRepair": "unverified"}) != nil {
-		os.Exit(1)
+	if err := encoder.Encode(map[string]string{"diagnostic": "completed", "productionRepair": "unverified"}); err != nil {
+		return 1
 	}
+	return 0
 }

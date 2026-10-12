@@ -3,11 +3,14 @@ package imagefactorytransport
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"time"
 )
+
+const dialBudget = 30 * time.Second
 
 // Client preserves a custom default transport, or clones the standard transport.
 func Client() http.Client {
@@ -23,7 +26,7 @@ func New(base *http.Transport) *http.Transport {
 	transport := base.Clone()
 	dial := transport.DialContext
 	if dial == nil {
-		dialer := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
+		dialer := &net.Dialer{Timeout: dialBudget, KeepAlive: dialBudget}
 		dial = dialer.DialContext
 	}
 	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -49,7 +52,7 @@ func (conn writeSizedConn) Write(payload []byte) (int, error) {
 		n, err := conn.Conn.Write(payload[:size])
 		written += n
 		if err != nil {
-			return written, err
+			return written, fmt.Errorf("write Image Factory connection: %w", err)
 		}
 		if n != size {
 			return written, io.ErrShortWrite

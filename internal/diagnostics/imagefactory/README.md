@@ -9,7 +9,7 @@ without production environments, secrets, Kubernetes access or provider resource
 It registers only the fixed empty public schematic. There are no URL, credentials,
 schematic, or cluster inputs.
 
-Each of two trials pairs curl with seven SDK requests on the same hosted runner:
+Each of two trials pairs curl with six SDK requests on the same hosted runner:
 
 - The SDK's unmodified default HTTP client.
 - HTTP/1.1 only.
@@ -17,8 +17,8 @@ Each of two trials pairs curl with seven SDK requests on the same hosted runner:
   including X25519MLKEM768; certificate verification is still enabled.
 - IPv4 only.
 - The actual production transport's smaller TCP writes with unchanged TLS defaults.
-- Classical X25519 and TLS 1.2 controls, **only for this synthetic public request**.
-  Neither is a proposed production downgrade or fallback.
+- Classical X25519, **only for this synthetic public request**;
+  it is not a proposed production downgrade or fallback.
 
 Each registration has a 30-second budget, including any SDK follow-up request.
 The complete comparison is bounded to fifteen minutes. Output contains only controlled

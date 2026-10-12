@@ -1,15 +1,15 @@
-package imagefactorytransport
+package imagefactorytransport_test
 
 import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"errors"
 	"io"
 	"net"
 	"net/http"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/internal/imagefactorytransport"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,12 +33,28 @@ func (conn *recordedConn) Write(payload []byte) (int, error) {
 
 func TestWriteSizingRejectsShortWritesAndPreservesErrors(t *testing.T) {
 	t.Parallel()
-	written, err := (writeSizedConn{Conn: &recordedConn{short: true}}).Write([]byte("synthetic"))
-	require.Zero(t, written)
-	require.ErrorIs(t, err, io.ErrShortWrite)
-	written, err = (writeSizedConn{Conn: &recordedConn{writeErr: net.ErrClosed}}).Write([]byte("synthetic"))
-	require.Equal(t, 4, written)
-	require.ErrorIs(t, err, net.ErrClosed)
+	for _, testCase := range []struct {
+		name        string
+		conn        *recordedConn
+		wantWritten int
+		wantErr     error
+	}{
+		{"short", &recordedConn{short: true}, 0, io.ErrShortWrite},
+		{"failed", &recordedConn{writeErr: net.ErrClosed}, 4, net.ErrClosed},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			transport := imagefactorytransport.New(&http.Transport{
+				DialContext: func(context.Context, string, string) (net.Conn, error) { return testCase.conn, nil },
+			})
+			defer transport.CloseIdleConnections()
+			conn, err := transport.DialContext(t.Context(), "tcp", "synthetic.invalid:443")
+			require.NoError(t, err)
+			written, err := conn.Write([]byte("synthetic"))
+			require.Equal(t, testCase.wantWritten, written)
+			require.ErrorIs(t, err, testCase.wantErr)
+		})
+	}
 }
 
 func TestNewSizesWritesAndPreservesDialContextAndTLS(t *testing.T) {
@@ -56,7 +72,7 @@ func TestNewSizesWritesAndPreservesDialContextAndTLS(t *testing.T) {
 			return conn, nil
 		},
 	}
-	transport := New(base)
+	transport := imagefactorytransport.New(base)
 	defer transport.CloseIdleConnections()
 	require.NotSame(t, base, transport)
 	require.Equal(t, base.TLSClientConfig, transport.TLSClientConfig)
@@ -76,11 +92,35 @@ func TestNewSizesWritesAndPreservesDialContextAndTLS(t *testing.T) {
 
 func TestNewPreservesDialErrors(t *testing.T) {
 	t.Parallel()
-	transport := New(&http.Transport{DialContext: func(context.Context, string, string) (net.Conn, error) {
+	transport := imagefactorytransport.New(&http.Transport{DialContext: func(context.Context, string, string) (net.Conn, error) {
 		return nil, net.ErrClosed
 	}})
 	defer transport.CloseIdleConnections()
 	conn, err := transport.DialContext(t.Context(), "tcp", "synthetic.invalid:443")
 	require.Nil(t, conn)
-	require.True(t, errors.Is(err, net.ErrClosed))
+	require.ErrorIs(t, err, net.ErrClosed)
+}
+
+func TestClientOwnsItsStandardTransport(t *testing.T) {
+	t.Parallel()
+	client := imagefactorytransport.Client()
+	defer client.CloseIdleConnections()
+	require.NotNil(t, client.Transport)
+	require.NotSame(t, http.DefaultTransport, client.Transport)
+	base, ok := http.DefaultTransport.(*http.Transport)
+	require.True(t, ok)
+	transport, ok := client.Transport.(*http.Transport)
+	require.True(t, ok)
+	require.Equal(t, base.TLSClientConfig, transport.TLSClientConfig)
+}
+
+func TestMissingDialFunctionPreservesCancellation(t *testing.T) {
+	t.Parallel()
+	transport := imagefactorytransport.New(&http.Transport{})
+	defer transport.CloseIdleConnections()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	conn, err := transport.DialContext(ctx, "tcp", "127.0.0.1:1")
+	require.Nil(t, conn)
+	require.ErrorIs(t, err, context.Canceled)
 }
