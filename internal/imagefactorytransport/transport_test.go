@@ -50,7 +50,9 @@ func TestWriteSizingRejectsShortWritesAndPreservesErrors(t *testing.T) {
 			t.Parallel()
 
 			transport := imagefactorytransport.New(&http.Transport{
-				DialContext: func(context.Context, string, string) (net.Conn, error) { return testCase.conn, nil },
+				DialContext: func(context.Context, string, string) (net.Conn, error) {
+					return testCase.conn, nil
+				},
 			})
 			defer transport.CloseIdleConnections()
 
@@ -108,7 +110,9 @@ func TestNewPreservesDialErrors(t *testing.T) {
 	t.Parallel()
 
 	base := &http.Transport{
-		DialContext: func(context.Context, string, string) (net.Conn, error) { return nil, net.ErrClosed },
+		DialContext: func(context.Context, string, string) (net.Conn, error) {
+			return nil, net.ErrClosed
+		},
 	}
 
 	transport := imagefactorytransport.New(base)
