@@ -71,10 +71,7 @@ func register(ctx context.Context, baseURL string, httpClient *http.Client) obse
 			defer observationMutex.Unlock()
 			result.TLSVerified = err == nil && len(state.VerifiedChains) > 0
 			if err == nil {
-				result.Protocol = "http/1.1"
-				if state.NegotiatedProtocol == "h2" {
-					result.Protocol = "h2"
-				}
+				result.Protocol = negotiatedProtocol(state)
 			}
 		},
 		GotFirstResponseByte: func() {
@@ -111,6 +108,13 @@ func register(ctx context.Context, baseURL string, httpClient *http.Client) obse
 		result.Outcome = "unverified_tls"
 	}
 	return result
+}
+
+func negotiatedProtocol(state tls.ConnectionState) string {
+	if state.NegotiatedProtocol == "h2" {
+		return "h2"
+	}
+	return "http/1.1"
 }
 
 func matchesSchematic(expected, schematicID string, normalized *schematic.Schematic) bool {

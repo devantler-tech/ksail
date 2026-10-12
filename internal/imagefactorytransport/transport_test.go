@@ -92,9 +92,10 @@ func TestNewSizesWritesAndPreservesDialContextAndTLS(t *testing.T) {
 
 func TestNewPreservesDialErrors(t *testing.T) {
 	t.Parallel()
-	transport := imagefactorytransport.New(&http.Transport{DialContext: func(context.Context, string, string) (net.Conn, error) {
-		return nil, net.ErrClosed
-	}})
+	base := &http.Transport{
+		DialContext: func(context.Context, string, string) (net.Conn, error) { return nil, net.ErrClosed },
+	}
+	transport := imagefactorytransport.New(base)
 	defer transport.CloseIdleConnections()
 	conn, err := transport.DialContext(t.Context(), "tcp", "synthetic.invalid:443")
 	require.Nil(t, conn)
