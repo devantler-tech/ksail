@@ -18,24 +18,29 @@ func Client() http.Client {
 	if !ok {
 		return http.Client{Transport: http.DefaultTransport}
 	}
+
 	return http.Client{Transport: New(base)}
 }
 
 // New gives registration its own transport while preserving the caller's settings.
 func New(base *http.Transport) *http.Transport {
 	transport := base.Clone()
+
 	dial := transport.DialContext
 	if dial == nil {
 		dialer := &net.Dialer{Timeout: dialBudget, KeepAlive: dialBudget}
 		dial = dialer.DialContext
 	}
+
 	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
 		conn, err := dial(ctx, network, address)
 		if err != nil {
 			return nil, err
 		}
+
 		return writeSizedConn{Conn: conn}, nil
 	}
+
 	return transport
 }
 
@@ -46,18 +51,24 @@ type writeSizedConn struct{ net.Conn }
 
 func (conn writeSizedConn) Write(payload []byte) (int, error) {
 	const maximumWrite = 1024
+
 	written := 0
+
 	for len(payload) > 0 {
 		size := min(len(payload), maximumWrite)
 		n, err := conn.Conn.Write(payload[:size])
+
 		written += n
 		if err != nil {
 			return written, fmt.Errorf("write Image Factory connection: %w", err)
 		}
+
 		if n != size {
 			return written, io.ErrShortWrite
 		}
+
 		payload = payload[size:]
 	}
+
 	return written, nil
 }
