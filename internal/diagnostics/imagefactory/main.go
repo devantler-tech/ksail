@@ -52,7 +52,47 @@ func register(ctx context.Context, baseURL string, httpClient *http.Client) obse
 
 	var observationMutex sync.Mutex
 
-	trace := &httptrace.ClientTrace{
+	trace := traceFor(&result, &observationMutex)
+	started := time.Now()
+
+	bounded, cancel := context.WithTimeout(httptrace.WithClientTrace(ctx, trace), requestBudget)
+	defer cancel()
+
+	client, err := factoryclient.New(baseURL, factoryclient.WithClient(*httpClient))
+	if err != nil {
+		return observation{Outcome: "client_configuration"}
+	}
+
+	input := schematic.Schematic{}
+
+	expected, err := input.ID()
+	if err != nil {
+		return observation{Outcome: "input_configuration"}
+	}
+
+	schematicID, normalized, err := client.SchematicCreate(bounded, input)
+
+	observationMutex.Lock()
+	defer observationMutex.Unlock()
+
+	result.ElapsedMS = time.Since(started).Milliseconds()
+	result.Outcome = errorKind(err)
+	if err != nil {
+		return result
+	}
+
+	result.IDMatches = matchesSchematic(expected, schematicID, normalized)
+	if !result.IDMatches {
+		result.Outcome = "id_mismatch"
+	} else if !result.TLSVerified {
+		result.Outcome = "unverified_tls"
+	}
+
+	return result
+}
+
+func traceFor(result *observation, observationMutex *sync.Mutex) *httptrace.ClientTrace {
+	return &httptrace.ClientTrace{
 		DNSDone: func(info httptrace.DNSDoneInfo) {
 			observationMutex.Lock()
 			defer observationMutex.Unlock()
@@ -87,43 +127,6 @@ func register(ctx context.Context, baseURL string, httpClient *http.Client) obse
 			result.FirstByte = true
 		},
 	}
-	started := time.Now()
-
-	bounded, cancel := context.WithTimeout(httptrace.WithClientTrace(ctx, trace), requestBudget)
-	defer cancel()
-
-	client, err := factoryclient.New(baseURL, factoryclient.WithClient(*httpClient))
-	if err != nil {
-		return observation{Outcome: "client_configuration"}
-	}
-
-	input := schematic.Schematic{}
-
-	expected, err := input.ID()
-	if err != nil {
-		return observation{Outcome: "input_configuration"}
-	}
-
-	schematicID, normalized, err := client.SchematicCreate(bounded, input)
-
-	observationMutex.Lock()
-	defer observationMutex.Unlock()
-
-	result.ElapsedMS = time.Since(started).Milliseconds()
-
-	result.Outcome = errorKind(err)
-	if err != nil {
-		return result
-	}
-
-	result.IDMatches = matchesSchematic(expected, schematicID, normalized)
-	if !result.IDMatches {
-		result.Outcome = "id_mismatch"
-	} else if !result.TLSVerified {
-		result.Outcome = "unverified_tls"
-	}
-
-	return result
 }
 
 func negotiatedProtocol(state tls.ConnectionState) string {
@@ -235,8 +238,24 @@ func curlControl(ctx context.Context) observation {
 	defer cancel()
 
 	started := time.Now()
+	cmd := curlCommand(bounded, payload)
+	output, err := cmd.Output()
+
+	result := observation{
+		Mode:      "curl",
+		Outcome:   errorKind(err),
+		ElapsedMS: time.Since(started).Milliseconds(),
+	}
+	if err != nil {
+		return result
+	}
+
+	return parseCurlControl(output, expected, result)
+}
+
+func curlCommand(ctx context.Context, payload []byte) *exec.Cmd {
 	cmd := exec.CommandContext(
-		bounded,
+		ctx,
 		"curl",
 		"--disable",
 		"--silent",
@@ -256,17 +275,11 @@ func curlControl(ctx context.Context) observation {
 	)
 	cmd.Stdin = bytes.NewReader(payload)
 	cmd.Stderr = io.Discard
-	output, err := cmd.Output()
 
-	result := observation{
-		Mode:      "curl",
-		Outcome:   errorKind(err),
-		ElapsedMS: time.Since(started).Milliseconds(),
-	}
-	if err != nil {
-		return result
-	}
+	return cmd
+}
 
+func parseCurlControl(output []byte, expected string, result observation) observation {
 	parts := strings.Split(string(output), "\n")
 	if len(parts) < controlFields {
 		result.Outcome = "invalid_control"

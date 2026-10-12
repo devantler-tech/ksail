@@ -56,14 +56,14 @@ func (conn writeSizedConn) Write(payload []byte) (int, error) {
 
 	for len(payload) > 0 {
 		size := min(len(payload), maximumWrite)
-		n, err := conn.Conn.Write(payload[:size])
+		bytesWritten, err := conn.Conn.Write(payload[:size])
 
-		written += n
+		written += bytesWritten
 		if err != nil {
 			return written, fmt.Errorf("write Image Factory connection: %w", err)
 		}
 
-		if n != size {
+		if bytesWritten != size {
 			return written, io.ErrShortWrite
 		}
 

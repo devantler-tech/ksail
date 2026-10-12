@@ -50,22 +50,8 @@ func TestRegisterRequiresVerifiedTLSAndExactSchematic(t *testing.T) {
 			)
 			defer server.Close()
 
-			base, ok := http.DefaultTransport.(*http.Transport)
-			require.True(t, ok)
-
-			transport := base.Clone()
-
-			if testCase.trust {
-				pool := x509.NewCertPool()
-				pool.AddCert(server.Certificate())
-				serverTransport, ok := server.Client().Transport.(*http.Transport)
-				require.True(t, ok)
-
-				transport.TLSClientConfig = serverTransport.TLSClientConfig.Clone()
-				transport.TLSClientConfig.InsecureSkipVerify = false
-				transport.TLSClientConfig.RootCAs = pool
-			}
-			defer transport.CloseIdleConnections()
+			client := fixtureClient(t, server, testCase.trust)
+			defer client.CloseIdleConnections()
 
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
@@ -74,7 +60,7 @@ func TestRegisterRequiresVerifiedTLSAndExactSchematic(t *testing.T) {
 				cancel()
 			}
 
-			result := register(ctx, server.URL, &http.Client{Transport: transport})
+			result := register(ctx, server.URL, client)
 			require.Equal(t, testCase.want, result.Outcome)
 
 			if testCase.want == "ok" {
@@ -83,6 +69,26 @@ func TestRegisterRequiresVerifiedTLSAndExactSchematic(t *testing.T) {
 			}
 		})
 	}
+}
+
+func fixtureClient(t *testing.T, server *httptest.Server, trust bool) *http.Client {
+	t.Helper()
+	base, ok := http.DefaultTransport.(*http.Transport)
+	require.True(t, ok)
+
+	transport := base.Clone()
+	if trust {
+		pool := x509.NewCertPool()
+		pool.AddCert(server.Certificate())
+		serverTransport, ok := server.Client().Transport.(*http.Transport)
+		require.True(t, ok)
+
+		transport.TLSClientConfig = serverTransport.TLSClientConfig.Clone()
+		transport.TLSClientConfig.InsecureSkipVerify = false
+		transport.TLSClientConfig.RootCAs = pool
+	}
+
+	return &http.Client{Transport: transport}
 }
 
 func TestTransportComparisonsPreserveVerifiedTLS(t *testing.T) {
