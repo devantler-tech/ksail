@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	certManagerTrialStep = "🧪 cert-manager values drift — one upgrade then no-op"
-	kyvernoTrialStep     = "🧪 Kyverno values drift — one upgrade then no-op"
+	certManagerTrialStep   = "🧪 cert-manager values drift — one upgrade then no-op"
+	kyvernoTrialStep       = "🧪 Kyverno values drift — one upgrade then no-op"
+	metricsServerTrialStep = "🧪 metrics-server values drift — one upgrade then no-op"
 )
 
 // valuesTrialProfile describes one component's fixture: the release the stubs
@@ -62,6 +63,27 @@ func kyvernoTrialProfile() valuesTrialProfile {
 			"--set admissionController.podAnnotations.ksail-values-trial=seeded",
 		extraArgs: " --policy-engine Kyverno",
 		rollouts:  4,
+	}
+}
+
+func metricsServerTrialProfile() valuesTrialProfile {
+	base := `{"args":["--kubelet-preferred-address-types=InternalIP",` +
+		`"--authentication-tolerate-lookup-failure=true"]}`
+
+	return valuesTrialProfile{
+		step:       metricsServerTrialStep,
+		component:  "metrics-server",
+		release:    "metrics-server",
+		chart:      "metrics-server-3.13.1",
+		field:      "cluster.metricsServer.chartValues",
+		baseValues: base,
+		seededValues: `{"args":["--kubelet-preferred-address-types=InternalIP",` +
+			`"--authentication-tolerate-lookup-failure=true"],` +
+			`"podAnnotations":{"ksail-values-trial":"seeded"}}`,
+		seedFlags: "--version 3.13.1|--repo https://kubernetes-sigs.github.io/metrics-server/|" +
+			"--set podAnnotations.ksail-values-trial=seeded",
+		extraArgs: " --metrics-server Enabled",
+		rollouts:  1,
 	}
 }
 
@@ -434,6 +456,56 @@ func TestKyvernoValuesTrialUsesExistingRealNodeLeg(t *testing.T) {
 	assert.Contains(t, step.If, "inputs.distribution == 'Vanilla'")
 	assert.Contains(t, step.If, "contains(inputs.args, '--policy-engine Kyverno')")
 	assert.Equal(t, "kyverno", step.Env["VALUES_TRIAL_COMPONENT"])
+	assert.Equal(t, "${{ steps.resolve-args.outputs.args }}", step.Env["ARGS"])
+	assert.Equal(t, "${{ steps.k8s-version-pin.outputs.flag }}", step.Env["K8S_VERSION_FLAG"])
+}
+
+func TestMetricsServerValuesTrialConverges(t *testing.T) {
+	t.Parallel()
+
+	profile := metricsServerTrialProfile()
+	output, calls, err := runValuesTrial(t, profile, "success")
+	require.NoError(t, err, output)
+	assert.Equal(t, 1, strings.Count(calls, "helm upgrade "), calls)
+	assert.Equal(t, 2, strings.Count(calls, "ksail cluster update "), calls)
+	assert.Equal(t, 3, strings.Count(calls, "ksail cluster diff "), calls)
+	assert.Equal(t, profile.rollouts, strings.Count(calls, "kubectl rollout status "), calls)
+	assert.Contains(t, calls, "--namespace kube-system")
+	assert.Contains(t, calls, "--repo https://kubernetes-sigs.github.io/metrics-server/")
+	assert.NotContains(t, calls, "cert-manager")
+	assert.NotContains(t, calls, "kyverno")
+	assert.Contains(t, output, "metrics-server values trial: one Helm upgrade and a repeated no-op")
+}
+
+func TestMetricsServerValuesTrialRejectsIncompleteProof(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct{ mode, want string }{
+		{mode: "missing_drift", want: "values drift did not exit exactly 2"},
+		{mode: "no_upgrade", want: "reconciliation did not create exactly one revision"},
+		{mode: "wrong_values", want: "reconciliation did not restore the desired values"},
+		{mode: "gitops_owned", want: "latest storage revision differs or is GitOps-owned"},
+		{mode: "not_ready", want: "metrics-server is not ready"},
+		{mode: "repeat_upgrade", want: "repeated update changed the Helm revision"},
+		{mode: "unknown_baseline", want: "expected only one in-place metrics-server values change"},
+	} {
+		t.Run(testCase.mode, func(t *testing.T) {
+			t.Parallel()
+			output, _, err := runValuesTrial(t, metricsServerTrialProfile(), testCase.mode)
+			require.Error(t, err, output)
+			assert.Contains(t, output, testCase.want)
+		})
+	}
+}
+
+func TestMetricsServerValuesTrialUsesExistingRealNodeLeg(t *testing.T) {
+	t.Parallel()
+	action := readCompositeAction(t, ".github/actions/ksail-system-test/action.yaml")
+	step := findHarnessStep(t, action.Runs.Steps, metricsServerTrialStep)
+	assert.Contains(t, step.If, "inputs.provider == 'Docker'")
+	assert.Contains(t, step.If, "inputs.distribution == 'Vanilla'")
+	assert.Contains(t, step.If, "contains(inputs.args, '--metrics-server Enabled')")
+	assert.Equal(t, "metrics-server", step.Env["VALUES_TRIAL_COMPONENT"])
 	assert.Equal(t, "${{ steps.resolve-args.outputs.args }}", step.Env["ARGS"])
 	assert.Equal(t, "${{ steps.k8s-version-pin.outputs.flag }}", step.Env["K8S_VERSION_FLAG"])
 }

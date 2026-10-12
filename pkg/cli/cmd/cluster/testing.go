@@ -84,6 +84,15 @@ func SetPolicyEngineInstallerFactoryForTests(
 	})
 }
 
+// SetMetricsServerInstallerFactoryForTests overrides the metrics-server installer factory.
+func SetMetricsServerInstallerFactoryForTests(
+	factory func(*v1alpha1.Cluster) (installer.Installer, error),
+) func() {
+	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
+		f.MetricsServer = factory
+	})
+}
+
 // SetClusterAutoscalerInstallerFactoryForTests overrides the cluster-autoscaler installer factory.
 func SetClusterAutoscalerInstallerFactoryForTests(
 	factory func(*v1alpha1.Cluster) (installer.Installer, error),

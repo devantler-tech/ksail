@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -134,8 +135,9 @@ func (o *updateOrchestrator) runVerifiedProvisioner(
 
 // runWithoutUpdater handles distributions whose provisioner does not implement
 // the Updater interface (e.g. VCluster): it computes a spec-level diff to avoid
-// blind recreation when nothing changed and migrates Calico prerequisites through
-// their installer without replacing the cluster. Other changes require recreation.
+// blind recreation when nothing changed and applies component chart-values
+// changes through their installers without replacing the cluster. Other changes
+// require recreation.
 func (o *updateOrchestrator) runWithoutUpdater() error {
 	specDiff := computeSpecOnlyDiff(o.cmd, o.ctx)
 
@@ -143,7 +145,7 @@ func (o *updateOrchestrator) runWithoutUpdater() error {
 }
 
 func (o *updateOrchestrator) applySpecOnlyDiff(specDiff *clusterupdate.UpdateResult) error {
-	if isCalicoPrerequisiteOnlyDiff(specDiff) {
+	if isChartValuesOnlyDiff(specDiff) {
 		displayChangesSummary(o.cmd, specDiff)
 
 		if o.dryRun {
@@ -188,12 +190,20 @@ func (o *updateOrchestrator) applySpecOnlyDiff(specDiff *clusterupdate.UpdateRes
 	return o.executeRecreateFlow()
 }
 
-// isCalicoPrerequisiteOnlyDiff requires a complete, single component change.
-// Unknown baselines and every other change retain the existing recreation path.
-func isCalicoPrerequisiteOnlyDiff(diff *clusterupdate.UpdateResult) bool {
-	return !diff.HasUnknownBaseline() && diff.TotalChanges() == 1 &&
-		len(diff.InPlaceChanges) == 1 &&
-		diff.InPlaceChanges[0].Field == specdiff.CalicoPrerequisitesField
+// isChartValuesOnlyDiff requires a complete diff made only of the changes the
+// chart-values drift probes report. Each is one Helm upgrade of a component that
+// is already installed, so applying it never needs a new cluster: recreating one
+// for it would delete the workloads to change a setting (ksail#7703). Unknown
+// baselines and every other change retain the existing recreation path.
+func isChartValuesOnlyDiff(diff *clusterupdate.UpdateResult) bool {
+	if diff.HasUnknownBaseline() || len(diff.InPlaceChanges) == 0 ||
+		diff.TotalChanges() != len(diff.InPlaceChanges) {
+		return false
+	}
+
+	return !slices.ContainsFunc(diff.InPlaceChanges, func(change clusterupdate.Change) bool {
+		return !isChartValuesDriftField(change.Field)
+	})
 }
 
 // reconcileClusterVersions reconciles the cluster's distribution and Kubernetes

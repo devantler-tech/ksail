@@ -91,6 +91,20 @@ func ksailInstallsPolicyEngine(clusterCfg *v1alpha1.Cluster) bool {
 		setup.GetComponentRequirements(clusterCfg).NeedsPolicyEngine
 }
 
+// metricsServerValuesProbe compares metrics-server's values (ksail#7703). It is
+// needed only while KSail installs metrics-server: a distribution that ships
+// its own never has a KSail release to compare.
+func metricsServerValuesProbe() chartValuesDriftProbe {
+	return chartValuesDriftProbe{
+		component: "metrics-server",
+		field:     specdiff.MetricsServerValuesField,
+		needed:    setup.NeedsMetricsServerInstall,
+		factory: func(factories *setup.InstallerFactories) installerFactory {
+			return factories.MetricsServer
+		},
+	}
+}
+
 // chartValuesDriftProbes lists the components whose rendered chart values are
 // compared with their installed release. The remaining component families are
 // tracked on ksail#7366.
@@ -99,6 +113,7 @@ func chartValuesDriftProbes() []chartValuesDriftProbe {
 		autoscalerValuesProbe(),
 		certManagerValuesProbe(),
 		policyEngineValuesProbe(),
+		metricsServerValuesProbe(),
 		calicoPrerequisitesProbe(),
 	}
 }
@@ -114,6 +129,15 @@ func calicoPrerequisitesProbe() chartValuesDriftProbe {
 		},
 		factory: func(factories *setup.InstallerFactories) installerFactory { return factories.Calico },
 	}
+}
+
+// isChartValuesDriftField reports whether a diff field is one a chart-values
+// drift probe produces, so the set of changes applied without recreation is the
+// probe list itself and cannot fall behind it.
+func isChartValuesDriftField(field string) bool {
+	return slices.ContainsFunc(chartValuesDriftProbes(), func(probe chartValuesDriftProbe) bool {
+		return probe.field == field
+	})
 }
 
 // checkChartValuesDrift runs every chart-values drift probe.
