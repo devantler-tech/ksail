@@ -1,4 +1,5 @@
 <!-- mcp-name: io.github.devantler-tech/ksail -->
+
 # 🛥️🐳 KSail
 
 KSail helps developers create Kubernetes clusters and deploy applications from one command-line tool.

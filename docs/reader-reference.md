@@ -77,38 +77,38 @@ Continue with the [Getting Started guide](https://ksail.devantler.tech/start/qui
 
 ## What KSail Bundles
 
-| Category                 | Built-in Capabilities                                                |
-|--------------------------|----------------------------------------------------------------------|
-| Cluster Provisioning     | Kind, K3d, Talos, VCluster (Vind), KWOK (kwokctl), EKS, GKE, AKS               |
-| Container Orchestration  | kubectl, Helm, Kustomize                                             |
-| GitOps Engines           | Flux, ArgoCD                                                         |
-| Secrets Management       | SOPS with Age encryption                                             |
-| Manifest Validation      | Kubeconform                                                          |
-| Cluster Operations       | K9s, backup & restore, multi-tenancy (`ksail tenant`)                |
-| AI Integration           | Chat assistant (Copilot SDK), MCP server, VS Code extension          |
+| Category                 | Built-in Capabilities                                                            |
+| ------------------------ | -------------------------------------------------------------------------------- |
+| Cluster Provisioning     | Kind, K3d, Talos, VCluster (Vind), KWOK (kwokctl), EKS, GKE, AKS                 |
+| Container Orchestration  | kubectl, Helm, Kustomize                                                         |
+| GitOps Engines           | Flux, ArgoCD                                                                     |
+| Secrets Management       | SOPS with Age encryption                                                         |
+| Manifest Validation      | Kubeconform                                                                      |
+| Cluster Operations       | K9s, backup & restore, multi-tenancy (`ksail tenant`)                            |
+| AI Integration           | Chat assistant (Copilot SDK), MCP server, VS Code extension                      |
 | Infrastructure Providers | Docker (local), Kubernetes (nested), Hetzner Cloud, Sidero Omni, AWS, GCP, Azure |
 
 See the [feature overview](https://ksail.devantler.tech/features/) and [architecture guide](https://ksail.devantler.tech/architecture/) for details.
 
 ## Supported Platforms
 
-| OS                                            | Architecture |
-|-----------------------------------------------|--------------|
-| 🐧 Linux                                      | amd64, arm64 |
-| 🍎 macOS                                      | arm64        |
+| OS                                                | Architecture |
+| ------------------------------------------------- | ------------ |
+| 🐧 Linux                                          | amd64, arm64 |
+| 🍎 macOS                                          | arm64        |
 | ⊞ Windows downloads (use WSL2 for local clusters) | amd64, arm64 |
 
 The available provider/distribution combinations are:
 
-| Provider | Distributions |
-|----------|---------------|
-| Docker | Vanilla (Kind), K3s (K3d), Talos, VCluster (Vind), KWOK |
-| Kubernetes (existing host) | Vanilla, K3s, Talos, VCluster, KWOK |
-| Hetzner | Vanilla, K3s, Talos |
-| Omni | Talos |
-| AWS | EKS |
-| GCP | GKE |
-| Azure | AKS |
+| Provider                   | Distributions                                           |
+| -------------------------- | ------------------------------------------------------- |
+| Docker                     | Vanilla (Kind), K3s (K3d), Talos, VCluster (Vind), KWOK |
+| Kubernetes (existing host) | Vanilla, K3s, Talos, VCluster, KWOK                     |
+| Hetzner                    | Vanilla, K3s, Talos                                     |
+| Omni                       | Talos                                                   |
+| AWS                        | EKS                                                     |
+| GCP                        | GKE                                                     |
+| Azure                      | AKS                                                     |
 
 Consult the [support matrix](https://ksail.devantler.tech/support-matrix/) and distribution guides
 for component limits. Provider prerequisites differ:
@@ -123,7 +123,7 @@ for component limits. Provider prerequisites differ:
 - GKE needs Google Application Default Credentials and project/location configuration.
 - AKS needs Azure-resolvable credentials and subscription/resource-group configuration.
 
-Follow the individual [provider guides](https://ksail.devantler.tech/providers/) before creating
+Use [Choose your setup](https://ksail.devantler.tech/distributions/) to find each provider's guide before creating
 resources. Managed cluster support does not imply all KSail component installers or
 experimental add-ons are supported. GKE and AKS currently show an unknown provider status in
 `ksail cluster info`; use their provider consoles for that status.
@@ -145,7 +145,7 @@ Contributions are welcome! See [CONTRIBUTING.md](../CONTRIBUTING.md) for the dev
 ## Related Projects
 
 | Project                                                               | Description                                   | Type     |
-|-----------------------------------------------------------------------|-----------------------------------------------|----------|
+| --------------------------------------------------------------------- | --------------------------------------------- | -------- |
 | [devantler-tech/platform](https://github.com/devantler-tech/platform) | The maintainer's personal kubernetes platform | Platform |
 
 Using KSail in your project? Open a PR to add it here.
