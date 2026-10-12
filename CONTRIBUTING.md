@@ -33,7 +33,7 @@ go test ./pkg/<package>/...   # the package you changed
 go test ./...           # the whole unit suite, before you open the PR
 ```
 
-In the pull request, say which of these you ran. If your change touches cluster creation, a cloud provider, the release pipeline or a deployment and you could not run that part yourself, say so plainly — CI runs the Docker system tests for you (see [System Tests](#system-tests)), and the maintainers run the cloud and release checks. A passing unit suite is not proof that a cluster, a release or a deployment works.
+In the pull request, say which of these you ran. If your change touches cluster creation, a cloud provider, the release pipeline or a deployment and you could not run that part yourself, say so plainly. CI runs the Docker system tests only for a pull request from a branch in this repository that changes a file they depend on; a documentation-only change and a pull request from a fork skip them (see [System Tests](#system-tests)). The maintainers run the cloud and release checks. A passing unit suite is not proof that a cluster, a release or a deployment works.
 
 ## Getting Started
 
@@ -219,7 +219,6 @@ npx @vscode/vsce package --no-dependencies
 The extension source is organized as follows:
 
 ```text
-vsce/
 vsce/
 ├── src/
 │   ├── extension.ts          # Entry point, command registration
@@ -447,4 +446,4 @@ This workflow ensures that:
 
 - Releases are only published after **all artifacts** are uploaded
 - Users never encounter partial releases with missing binaries or extensions
-- If a job fails, the `cleanup-failed-release` job deletes the unpublished draft and its tag, so no incomplete release is left behind
+- If publication is blocked, the `cleanup-failed-release` job deletes the unpublished draft and then tries to delete its tag. If the tag cannot be deleted the job fails and names the manual cleanup. When a published release already exists for the tag, it leaves the draft and the tag for a maintainer to inspect
