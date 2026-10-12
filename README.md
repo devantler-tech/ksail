@@ -1,137 +1,60 @@
 <!-- mcp-name: io.github.devantler-tech/ksail -->
-[![GitHub Stars](https://img.shields.io/github/stars/devantler-tech/ksail?style=flat)](https://github.com/devantler-tech/ksail/stargazers)
-[![Latest Release](https://img.shields.io/github/v/release/devantler-tech/ksail)](https://github.com/devantler-tech/ksail/releases/latest)
-[![License](https://img.shields.io/badge/License-PolyForm--Shield--1.0.0-blue.svg)](https://polyformproject.org/licenses/shield/1.0.0)
-[![Go Reference](https://pkg.go.dev/badge/github.com/devantler-tech/ksail/v7.svg)](https://pkg.go.dev/github.com/devantler-tech/ksail/v7)
-[![CI - KSail](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml/badge.svg)](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml)
-[![MCP Registry](https://img.shields.io/badge/MCP_Registry-io.github.devantler--tech/ksail-blue?logo=github)](https://github.com/mcp)
-
 # 🛥️🐳 KSail
 
-![ksail](./docs/src/assets/ksail-cli-dark.png)
+KSail helps developers create Kubernetes clusters and deploy applications from one command-line tool.
+Kubernetes runs applications packaged in containers; KSail bundles the tools for trying it locally,
+then working with cloud providers or an existing cluster.
 
-KSail bundles common Kubernetes tooling into a single binary. Spin up local clusters, deploy workloads, and operate cloud-native stacks across distributions and providers through a CLI, VS Code extension, AI chat TUI, or MCP server — with **only Docker or access to a Cloud Provider required**.
+## Install and try it
 
-📖 **Full documentation:** <https://ksail.devantler.tech>
+On Linux or an Apple Silicon Mac, open a shell with `curl`, `tar` and
+`sha256sum` (Linux) or `shasum` (macOS) available:
 
-## Quick Install
-
-```bash
-# Linux / macOS (checksum-verified release)
+```sh
 curl -fsSL https://github.com/devantler-tech/ksail/releases/latest/download/install.sh | sh
-
-# macOS (Homebrew)
-brew install --cask devantler-tech/tap/ksail
 ```
 
-See the [Installation Guide](https://ksail.devantler.tech/installation/) for binary downloads and more options.
+The installer verifies the downloaded release's checksum and prints its installation directory.
+Follow its `PATH` instruction if needed, so your shell can find `ksail`.
+[Other installation options](docs/reader-reference.md#installation-options) include Homebrew and
+Windows downloads.
 
-## AI Assistant Plugins
+From a directory where you want a new project:
 
-Install the ksail plugin from the [devantler-tech agent plugin marketplace](https://github.com/devantler-tech/agent-plugins) for [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli) or [Claude Code](https://code.claude.com/docs/en/discover-plugins) to auto-register ksail's MCP server and a ksail expertise skill.
-
-**Copilot CLI:**
-
-```bash
-copilot plugin marketplace add devantler-tech/agent-plugins
-copilot plugin install ksail@devantler-plugins
+```sh
+ksail --help
+mkdir ksail-first
+cd ksail-first
+ksail project init --name ksail-first --distribution Vanilla --provider Docker
 ```
 
-**Claude Code:**
+Expect an initialization success message and `ksail.yaml`, `kind.yaml` and `k8s/kustomization.yaml`
+in this directory, plus registry mirror configuration and a `.devcontainer` folder for optional editor setup.
+This step only writes project files; it needs no Docker daemon or cloud account.
+`--name` names the cluster, not an output directory.
 
-```text
-/plugin marketplace add devantler-tech/agent-plugins
-/plugin install ksail@devantler-plugins
+## Run the local cluster
+
+Install and start Docker Engine or Docker Desktop. From the same `ksail-first` directory:
+
+```sh
+ksail cluster create
+ksail cluster info
+ksail cluster delete --name ksail-first --provider Docker
 ```
 
-Requires `ksail` on `PATH`.
+Creation downloads images, uses local resources and updates your Kubernetes connection settings.
+Check the cluster information, then delete this trial and its workloads when finished; confirm its name at the prompt.
+Project files and cached registry data remain available for reuse.
+Cloud providers have separate credentials, setup and costs.
 
-If you installed the plugin earlier from this repository's own marketplace, remove that marketplace first. Its copy no longer updates, and removing the marketplace also uninstalls the plugin it provided:
+## Next steps
 
-- Copilot CLI: `copilot plugin marketplace remove ksail --force`
-- Claude Code: `/plugin marketplace remove ksail`
+- [Quickstart](https://ksail.devantler.tech/start/quickstart/): deploy your first workload.
+- [Reader reference](docs/reader-reference.md): bundled tools, supported platforms, cloud setup and optional AI integrations.
+- [Documentation](https://ksail.devantler.tech/): configuration, commands and architecture.
+- [Contributing](CONTRIBUTING.md): choose and validate your first change.
+- [Discussions](https://github.com/devantler-tech/ksail/discussions) and [issues](https://github.com/devantler-tech/ksail/issues): questions, bugs and ideas.
 
-## Quick Start
-
-```bash
-ksail project init --name my-app   # scaffold project + native configs
-ksail cluster create               # spin up the cluster (Docker only)
-ksail cluster connect              # open K9s
-```
-
-Continue with the [Getting Started guide](https://ksail.devantler.tech/) for GitOps, workloads, and multi-tenancy.
-
-## What KSail Bundles
-
-| Category                 | Built-in Capabilities                                                |
-|--------------------------|----------------------------------------------------------------------|
-| Cluster Provisioning     | Kind, K3d, Talos, VCluster (Vind), KWOK (kwokctl), EKS               |
-| Container Orchestration  | kubectl, Helm, Kustomize                                             |
-| GitOps Engines           | Flux, ArgoCD                                                         |
-| Secrets Management       | SOPS with Age encryption                                             |
-| Manifest Validation      | Kubeconform                                                          |
-| Cluster Operations       | K9s, backup & restore, multi-tenancy (`ksail tenant`)                |
-| AI Integration           | Chat assistant (Copilot SDK), MCP server, VS Code extension          |
-| Infrastructure Providers | Docker (local), Kubernetes (nested), Hetzner Cloud, Sidero Omni, AWS |
-
-See the [feature overview](https://ksail.devantler.tech/features/) and [architecture guide](https://ksail.devantler.tech/architecture/) for details.
-
-## Supported Platforms
-
-| OS                                            | Architecture |
-|-----------------------------------------------|--------------|
-| 🐧 Linux                                      | amd64, arm64 |
-| 🍎 macOS                                      | arm64        |
-| ⊞ Windows (native untested; WSL2 recommended) | amd64, arm64 |
-
-| Provider   | Vanilla  | K3s     | Talos | VCluster | KWOK        | EKS |
-|------------|----------|---------|-------|----------|-------------|-----|
-| Docker     | ✅ (Kind) | ✅ (K3d) | ✅     | ✅ (Vind) | ✅ (kwokctl) | —   |
-| Kubernetes | ✅        | ✅       | ✅     | ✅        | ✅           | —   |
-| Hetzner    | —        | —       | ✅     | —        | —           | —   |
-| Omni       | —        | —       | ✅     | —        | —           | —   |
-| AWS        | —        | —       | —     | —        | —           | 🚧  |
-
-## Community & Support
-
-- 💬 **[GitHub Discussions](https://github.com/devantler-tech/ksail/discussions)** — questions, ideas, and community
-- 🐛 **[Issue Tracker](https://github.com/devantler-tech/ksail/issues)** — bugs and feature requests
-- 📖 **[Documentation](https://ksail.devantler.tech)** — guides, CLI reference, architecture
-- 🎓 **[Resources](https://ksail.devantler.tech/resources/)** — presentations, blog posts, tutorials
-- ⭐ **[Star the repo](https://github.com/devantler-tech/ksail)** — help others discover KSail
-
-## Contributing
-
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for the development process, coding standards, and PR guidelines. Start with issues labeled [`good first issue`](https://github.com/devantler-tech/ksail/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
-
-## Related Projects
-
-| Project                                                               | Description                                   | Type     |
-|-----------------------------------------------------------------------|-----------------------------------------------|----------|
-| [devantler-tech/platform](https://github.com/devantler-tech/platform) | The maintainer's personal kubernetes platform | Platform |
-
-Using KSail in your project? Open a PR to add it here.
-
-## License
-
-KSail is licensed under the **[PolyForm Shield License 1.0.0](LICENSE)**. You may use, modify, and distribute KSail for any purpose — except providing a product that competes with KSail. When redistributing, you must include the [license terms](LICENSE) and the required copyright notice.
-
-**What this means in practice:**
-
-- ✅ Use KSail as a CLI tool in any project (open-source or proprietary)
-- ✅ Embed or link KSail as a library in your own software
-- ✅ Fork and modify KSail for internal or non-competing use
-- ✅ Use any license for your own project — no copyleft requirement
-- ❌ Build and distribute a product that competes with KSail
-
-For the full license text including notice and non-compete details, see [LICENSE](LICENSE). For common questions, see the [Licensing FAQ](https://ksail.devantler.tech/faq/#licensing).
-
-## Star History
-
-<a href="https://www.star-history.com/#devantler-tech/ksail&type=timeline&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=devantler-tech/ksail&type=timeline&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=devantler-tech/ksail&type=timeline&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=devantler-tech/ksail&type=timeline&legend=top-left" />
- </picture>
-</a>
+KSail is source-available under [PolyForm Shield 1.0.0](LICENSE).
+Read the license's use, redistribution and noncompetition terms before reusing it.
