@@ -51,6 +51,7 @@ func TestCheckChartValuesDrift_ReportsMetricsServerDrift(t *testing.T) {
 	assert.Equal(t, []string{specdiff.MetricsServerValuesField}, fields)
 	assert.Empty(t, stderr.String())
 	assert.Equal(t, v1alpha1.MetricsServerEnabled, probed.Spec.Cluster.MetricsServer)
+
 	want := cluster.ExportResolveKubeContext(regCtx)
 	assert.Equal(t, want, probed.Spec.Cluster.Connection.Context,
 		"the probe must use the resolved kube context")
