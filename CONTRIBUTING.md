@@ -321,13 +321,13 @@ go test ./...
 
 System tests exercise full cluster lifecycle scenarios on real clusters. They are split by where the cluster runs:
 
-| Workflow                      | Covers                                                    | Runs                                                        |
-|-------------------------------|-----------------------------------------------------------|-------------------------------------------------------------|
-| `ci.yaml` (`system-test-docker`) | Vanilla, K3s, Talos, VCluster and KWOK on the Docker provider | On pull requests (see below) and on manual dispatch         |
-| `system-test-hetzner.yaml`    | Talos, K3s and Vanilla on Hetzner Cloud                   | Weekly (Sunday 03:00 UTC) and on manual dispatch            |
-| `system-test-omni.yaml`       | Talos on Sidero Omni                                      | Manual dispatch only (the schedule is paused)               |
-| `system-test-eks.yaml`        | EKS on AWS                                                | Manual dispatch only                                        |
-| `system-test-k3k-calico.yaml` | The nested Kubernetes provider with Calico                | Weekly (Monday 02:30 UTC), on manual dispatch, and on pull requests that change the workflow itself |
+| Workflow                         | Covers                                                        | Runs                                                                                                |
+|----------------------------------|---------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
+| `ci.yaml` (`system-test-docker`) | Vanilla, K3s, Talos, VCluster and KWOK on the Docker provider | On pull requests (see below) and on manual dispatch                                                 |
+| `system-test-hetzner.yaml`       | Talos, K3s and Vanilla on Hetzner Cloud                       | Weekly (Sunday 03:00 UTC) and on manual dispatch                                                    |
+| `system-test-omni.yaml`          | Talos on Sidero Omni                                          | Manual dispatch only (the schedule is paused)                                                       |
+| `system-test-eks.yaml`           | EKS on AWS                                                    | Manual dispatch only                                                                                |
+| `system-test-k3k-calico.yaml`    | The nested Kubernetes provider with Calico                    | Weekly (Monday 02:30 UTC), on manual dispatch, and on pull requests that change the workflow itself |
 
 All of them except the EKS workflow use the composite action at `.github/actions/ksail-system-test/action.yaml`. The EKS workflow has its own init, create, update and cleanup steps, so a change to the composite action does not change what it covers.
 
@@ -403,14 +403,14 @@ The workflow also sets **`KSAIL_SPEC_CLUSTER_OMNI_MACHINECLASS`** to `ksail` via
 
 #### Scheduled Workflows
 
-| Workflow                   | Schedule                                  | Purpose                                         |
-|----------------------------|-------------------------------------------|-------------------------------------------------|
-| `update-skills`            | Daily (06:00 UTC)                         | Copilot skills upgrades                         |
+| Workflow                   | Schedule                                       | Purpose                                           |
+|----------------------------|------------------------------------------------|---------------------------------------------------|
+| `update-skills`            | Daily (06:00 UTC)                              | Copilot skills upgrades                           |
 | `maintenance`              | Daily (00:00 UTC) and monthly (1st, 00:15 UTC) | Old workflow run cleanup; monthly package cleanup |
-| `update-hetzner-talos-iso` | Every 6 hours                             | Track Hetzner's latest compatible Talos ISO     |
-| `system-test-hetzner`      | Weekly (Sunday 03:00 UTC)                 | Hetzner system tests                            |
-| `system-test-k3k-calico`   | Weekly (Monday 02:30 UTC)                 | Nested Kubernetes provider system test          |
-| `codeql`                   | Weekly (Saturday 06:46 UTC)               | Code scanning                                   |
+| `update-hetzner-talos-iso` | Every 6 hours                                  | Track Hetzner's latest compatible Talos ISO       |
+| `system-test-hetzner`      | Weekly (Sunday 03:00 UTC)                      | Hetzner system tests                              |
+| `system-test-k3k-calico`   | Weekly (Monday 02:30 UTC)                      | Nested Kubernetes provider system test            |
+| `codeql`                   | Weekly (Saturday 06:46 UTC)                    | Code scanning                                     |
 
 ## CD
 

@@ -37,20 +37,20 @@ Go must be set up first: the action runs `go` itself on a cache miss.
 
 ## Inputs
 
-| Input                 | Required | Default  | Description                                                                                                                                                                                             |
-|-----------------------|----------|----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `go-version`          | Yes      | -        | Go version from the `setup-go` output, used in the cache key                                                                                                                                            |
-| `source-hash`         | Yes      | -        | Hash of the source files (use `hashFiles('go.mod', 'go.sum', '**/*.go')`)                                                                                                                               |
-| `output-path`         | No       | `ksail`  | Where to put the binary. Relative to the repository root (for example `ksail`) or absolute (for example `/usr/local/bin/ksail`). Must not contain a parent-directory step (`..`); the action fails if it does. |
-| `save`                | No       | `'true'` | Whether to save the cache after a build. Set to `'false'` in jobs that should only restore, so one job owns the cache entry.                                                                           |
+| Input                 | Required | Default           | Description                                                                                                                                                                                                                                  |
+|-----------------------|----------|-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `go-version`          | Yes      | -                 | Go version from the `setup-go` output, used in the cache key                                                                                                                                                                                 |
+| `source-hash`         | Yes      | -                 | Hash of the source files (use `hashFiles('go.mod', 'go.sum', '**/*.go')`)                                                                                                                                                                    |
+| `output-path`         | No       | `ksail`           | Where to put the binary. Relative to the repository root (for example `ksail`) or absolute (for example `/usr/local/bin/ksail`). Must not contain a parent-directory step (`..`); the action fails if it does.                               |
+| `save`                | No       | `'true'`          | Whether to save the cache after a build. Set to `'false'` in jobs that should only restore, so one job owns the cache entry.                                                                                                                 |
 | `copilot-cli-version` | No       | see `action.yaml` | Copilot CLI version bundled into the binary. It is part of the cache key, so a version change rebuilds instead of restoring a binary bundled with the previous version. Leave it at the default unless you are changing the bundled version. |
 
 ## Outputs
 
-| Output                   | Description                                                                                       |
-|--------------------------|---------------------------------------------------------------------------------------------------|
-| `cache-hit`              | Whether the cache was hit (`'true'` or `'false'`)                                                 |
-| `binary-path`            | Absolute path to the prepared binary                                                              |
+| Output                   | Description                                                                                            |
+|--------------------------|--------------------------------------------------------------------------------------------------------|
+| `cache-hit`              | Whether the cache was hit (`'true'` or `'false'`)                                                      |
+| `binary-path`            | Absolute path to the prepared binary                                                                   |
 | `output-path-normalized` | The `output-path` as used: a relative path with a leading `./` stripped, or the absolute path as given |
 
 ## Examples

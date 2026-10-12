@@ -175,49 +175,49 @@ Cloud credentials are read from environment variables, not inputs (see [Prerequi
 
 ### Registries
 
-| Input                 | Description                                                          | Default                      |
-|-----------------------|----------------------------------------------------------------------|------------------------------|
-| `ghcr-user`           | GitHub Container Registry username (external registry tests)         | `""`                         |
-| `ghcr-token`          | GitHub Container Registry token (external registry tests)            | `""`                         |
-| `dockerhub-user`      | Docker Hub username, so nested clusters pull through authenticated mirrors | `""`                   |
-| `dockerhub-token`     | Docker Hub token for the same purpose                                | `""`                         |
-| `ecr-public-upstream` | Upstream for the ECR Public mirror and containerd fallback           | `https://ecr-public.aws.com` |
+| Input                 | Description                                                                | Default                      |
+|-----------------------|----------------------------------------------------------------------------|------------------------------|
+| `ghcr-user`           | GitHub Container Registry username (external registry tests)               | `""`                         |
+| `ghcr-token`          | GitHub Container Registry token (external registry tests)                  | `""`                         |
+| `dockerhub-user`      | Docker Hub username, so nested clusters pull through authenticated mirrors | `""`                         |
+| `dockerhub-token`     | Docker Hub token for the same purpose                                      | `""`                         |
+| `ecr-public-upstream` | Upstream for the ECR Public mirror and containerd fallback                 | `https://ecr-public.aws.com` |
 
 ### Optional trials
 
 Each of these adds a phase and is off unless set. The action's `action.yaml` describes the exact preconditions of each.
 
-| Input                               | Description                                                                              | Default                      |
-|-------------------------------------|------------------------------------------------------------------------------------------|------------------------------|
-| `test-workload-mirror`              | Smoke-test `workload mirror` against a live HTTP deployment                              | `false`                      |
-| `test-kubernetes-provider`          | Create nested clusters on the running host cluster                                       | `false`                      |
-| `kubernetes-provider-distributions` | Comma-separated distributions for the nested clusters                                    | `Vanilla,K3s,VCluster,Talos` |
-| `kubernetes-provider-cni`           | CNI to install in each nested cluster (e.g. `Calico`)                                    | `""`                         |
-| `assert-k3k-server-creator`         | Assert and record which principal created the nested K3s server pod                      | `false`                      |
-| `calico-migration-binary`           | Verified baseline binary that creates a legacy Calico cluster before the candidate updates it | `""`                    |
-| `calico-migration-sha256`           | SHA-256 from the producer of that baseline binary                                        | `""`                         |
-| `kubernetes-upgrade-from`           | Starting Kubernetes version for the Docker/Talos upgrade trial                           | `""`                         |
-| `kubernetes-upgrade-to`             | Target Kubernetes version for the Docker/Talos upgrade trial                             | `""`                         |
-| `rolling-resize-server-type`        | Hetzner only: server type to resize to, exercising rolling node replacement              | `""`                         |
-| `test-talos-schematic-rollout`      | Hetzner Talos only: change the Image Factory schematic and verify the rollout            | `false`                      |
-| `talos-schematic-server-type`       | Hetzner class for that trial (`cx23`, `cx33` or `cpx22`); empty keeps the defaults       | `""`                         |
-| `test-autoscaler-inventory`         | Talos/Hetzner orphaned-server audit with one powered-off probe                           | `false`                      |
-| `inventory-trial-server-type`       | Server type shared by the cluster and the inventory probe                                | `cx23`                       |
-| `inventory-trial-location`          | Location shared by the cluster and the inventory probe                                   | `fsn1`                       |
-| `floating-ip-toggle`                | Hetzner Talos only: enable then disable the floating IP and verify the API endpoint each time | `false`                 |
+| Input                               | Description                                                                                   | Default                      |
+|-------------------------------------|-----------------------------------------------------------------------------------------------|------------------------------|
+| `test-workload-mirror`              | Smoke-test `workload mirror` against a live HTTP deployment                                   | `false`                      |
+| `test-kubernetes-provider`          | Create nested clusters on the running host cluster                                            | `false`                      |
+| `kubernetes-provider-distributions` | Comma-separated distributions for the nested clusters                                         | `Vanilla,K3s,VCluster,Talos` |
+| `kubernetes-provider-cni`           | CNI to install in each nested cluster (e.g. `Calico`)                                         | `""`                         |
+| `assert-k3k-server-creator`         | Assert and record which principal created the nested K3s server pod                           | `false`                      |
+| `calico-migration-binary`           | Verified baseline binary that creates a legacy Calico cluster before the candidate updates it | `""`                         |
+| `calico-migration-sha256`           | SHA-256 from the producer of that baseline binary                                             | `""`                         |
+| `kubernetes-upgrade-from`           | Starting Kubernetes version for the Docker/Talos upgrade trial                                | `""`                         |
+| `kubernetes-upgrade-to`             | Target Kubernetes version for the Docker/Talos upgrade trial                                  | `""`                         |
+| `rolling-resize-server-type`        | Hetzner only: server type to resize to, exercising rolling node replacement                   | `""`                         |
+| `test-talos-schematic-rollout`      | Hetzner Talos only: change the Image Factory schematic and verify the rollout                 | `false`                      |
+| `talos-schematic-server-type`       | Hetzner class for that trial (`cx23`, `cx33` or `cpx22`); empty keeps the defaults            | `""`                         |
+| `test-autoscaler-inventory`         | Talos/Hetzner orphaned-server audit with one powered-off probe                                | `false`                      |
+| `inventory-trial-server-type`       | Server type shared by the cluster and the inventory probe                                     | `cx23`                       |
+| `inventory-trial-location`          | Location shared by the cluster and the inventory probe                                        | `fsn1`                       |
+| `floating-ip-toggle`                | Hetzner Talos only: enable then disable the floating IP and verify the API endpoint each time | `false`                      |
 
 ### Diagnostics and cleanup
 
-| Input                 | Description                                                                                         | Default |
-|-----------------------|-----------------------------------------------------------------------------------------------------|---------|
-| `upload-artifacts`    | Upload diagnostics and logs from inside the action                                                  | `true`  |
-| `comprehensive-debug` | Run the full Kubernetes debug action after a failure; the bounded core diagnostics run either way   | `true`  |
-| `cleanup`             | Delete the cluster inside the action                                                                | `true`  |
+| Input                 | Description                                                                                       | Default |
+|-----------------------|---------------------------------------------------------------------------------------------------|---------|
+| `upload-artifacts`    | Upload diagnostics and logs from inside the action                                                | `true`  |
+| `comprehensive-debug` | Run the full Kubernetes debug action after a failure; the bounded core diagnostics run either way | `true`  |
+| `cleanup`             | Delete the cluster inside the action                                                              | `true`  |
 
 ## Outputs
 
-| Output         | Description                                                    |
-|----------------|----------------------------------------------------------------|
+| Output         | Description                                                                                                                                                                                                                          |
+|----------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `artifact-tag` | Readable suffix for this matrix entry's diagnostic artifacts, built from the distribution, provider, init mode and the first 30 characters of the arguments. Two entries that differ only later in their arguments get the same tag. |
 
 ## Prerequisites
