@@ -27,6 +27,8 @@ func TestOperatorChartLabelAcceptsVersionBuildMetadata(t *testing.T) {
 	for name, version := range map[string]string{
 		"flux digest suffix":  "7.202.28+b69a2c9f4e13",
 		"long build metadata": "7.202.28+" + strings.Repeat("a", 80),
+		// The 63-character cut lands inside a run of mixed punctuation.
+		"punctuation at the cut": "7.202.28+" + strings.Repeat("a", 36) + "-.-." + strings.Repeat("b", 20),
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

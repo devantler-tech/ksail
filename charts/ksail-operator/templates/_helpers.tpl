@@ -17,7 +17,7 @@
 app.kubernetes.io/name: {{ include "ksail-operator.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
-helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" | trimSuffix "_" | trimSuffix "." }}
+helm.sh/chart: {{ regexReplaceAll "[^A-Za-z0-9]+$" (printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63) "" }}
 {{- end -}}
 
 {{/* Selector labels for the operator. */}}
