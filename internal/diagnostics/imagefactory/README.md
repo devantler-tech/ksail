@@ -8,16 +8,19 @@ without production environments, secrets, Kubernetes access or provider resource
 It registers only the fixed empty public schematic. There are no URL, credentials,
 schematic, or cluster inputs.
 
-Each of two trials pairs curl with four SDK requests on the same hosted runner:
+Each of two trials pairs curl with seven SDK requests on the same hosted runner:
 
 - The SDK's unmodified default HTTP client.
 - HTTP/1.1 only.
 - Go's [pre-1.26 curve set](https://github.com/golang/go/blob/go1.25.0/src/crypto/tls/defaults.go),
   including X25519MLKEM768; certificate verification is still enabled.
 - IPv4 only.
+- Smaller TCP writes with unchanged TLS defaults.
+- Classical X25519 and TLS 1.2 controls, **only for this synthetic public request**.
+  Neither is a proposed production downgrade or fallback.
 
 Each registration has a 30-second budget, including any SDK follow-up request.
-The complete comparison is bounded to ten minutes. Output contains only controlled
+The complete comparison is bounded to fifteen minutes. Output contains only controlled
 outcomes, phase-completion flags, negotiated protocol and elapsed time. It does not
 print raw errors, addresses, headers, credentials or response bodies.
 

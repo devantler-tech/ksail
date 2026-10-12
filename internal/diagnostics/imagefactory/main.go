@@ -138,13 +138,48 @@ func transportFor(mode string) *http.Transport {
 			MinVersion:       tls.VersionTLS12,
 			CurvePreferences: []tls.CurveID{tls.X25519MLKEM768, tls.X25519, tls.CurveP256, tls.CurveP384, tls.CurveP521},
 		}
+	case "classical-control":
+		// Public synthetic comparison only; never a proposed production fallback.
+		transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, CurvePreferences: []tls.CurveID{tls.X25519}}
+	case "tls12-control":
+		transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, MaxVersion: tls.VersionTLS12}
 	case "ipv4":
 		dialer := &net.Dialer{Timeout: requestBudget, KeepAlive: requestBudget}
 		transport.DialContext = func(ctx context.Context, _, address string) (net.Conn, error) {
 			return dialer.DialContext(ctx, "tcp4", address)
 		}
+	case "small-writes":
+		dial := transport.DialContext
+		transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+			conn, err := dial(ctx, network, address)
+			if err != nil {
+				return nil, err
+			}
+			return smallWriteConn{Conn: conn}, nil
+		}
 	}
 	return transport
+}
+
+// smallWriteConn changes write sizing, not TLS groups, versions or verification.
+type smallWriteConn struct{ net.Conn }
+
+func (conn smallWriteConn) Write(payload []byte) (int, error) {
+	const chunkSize = 1024
+	written := 0
+	for len(payload) > 0 {
+		size := min(len(payload), chunkSize)
+		n, err := conn.Conn.Write(payload[:size])
+		written += n
+		if err != nil {
+			return written, err
+		}
+		if n != size {
+			return written, io.ErrShortWrite
+		}
+		payload = payload[size:]
+	}
+	return written, nil
 }
 
 // curlControl sends the very same synthetic body immediately before each SDK request.
@@ -161,7 +196,7 @@ func curlControl(ctx context.Context) observation {
 	bounded, cancel := context.WithTimeout(ctx, requestBudget+time.Second)
 	defer cancel()
 	started := time.Now()
-	cmd := exec.CommandContext(bounded, "curl", "--silent", "--show-error", "--fail",
+	cmd := exec.CommandContext(bounded, "curl", "--disable", "--silent", "--show-error", "--fail",
 		"--connect-timeout", "15", "--max-time", "30", "--header", "Content-Type: application/yaml",
 		"--data-binary", "@-", "--write-out", "\n%{ssl_verify_result}\n%{http_code}", factoryURL+"/schematics")
 	cmd.Stdin = bytes.NewReader(payload)
@@ -197,11 +232,11 @@ func main() {
 	if len(os.Args) != 1 {
 		os.Exit(2)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
 	encoder := json.NewEncoder(os.Stdout)
 	for trial := 1; trial <= trials; trial++ {
-		for _, mode := range []string{"sdk-default", "http1", "pre126-curves", "ipv4"} {
+		for _, mode := range []string{"sdk-default", "http1", "pre126-curves", "ipv4", "small-writes", "classical-control", "tls12-control"} {
 			control := curlControl(ctx)
 			control.Trial = trial
 			if encoder.Encode(control) != nil {
