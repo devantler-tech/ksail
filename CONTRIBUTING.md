@@ -24,7 +24,7 @@ If you have questions, don't hesitate to ask in [GitHub Discussions](https://git
 
 ### The smallest safe first change
 
-A documentation fix or a unit-tested change in one package needs only Go. You do not need Docker, Node.js or a cloud account for it:
+A unit-tested change in one package, or a fix to a guide outside the documentation site (such as this file or a `README.md`), needs only Go. You do not need Docker, Node.js or a cloud account for it:
 
 ```sh
 # working-directory: ./
@@ -33,7 +33,9 @@ go test ./pkg/<package>/...   # the package you changed
 go test ./...           # the whole unit suite, before you open the PR
 ```
 
-In the pull request, say which of these you ran. If your change touches cluster creation, a cloud provider, the release pipeline or a deployment and you could not run that part yourself, say so plainly. On a pull request, CI starts the Docker system tests by itself only when the pull request comes from a branch in this repository and changes a file they depend on; a documentation-only change and a pull request from a fork skip them. They can also be started by hand for any branch in this repository (see [System Tests](#system-tests)). The maintainers run the cloud and release checks. A passing unit suite is not proof that a cluster, a release or a deployment works.
+A change under `docs/` is different: it is part of the documentation site, so it also needs Node.js and a site build before you open the pull request (see [Building the documentation](#building-the-documentation)).
+
+In the pull request, say which of these you ran. If your change touches cluster creation, a cloud provider, the release pipeline or a deployment and you could not run that part yourself, say so plainly. On a pull request, CI starts the Docker system tests by itself only when the pull request comes from a branch in this repository and changes a file they depend on; a change that touches none of those files (most documentation changes) and a pull request from a fork skip them. They can also be started by hand for any branch in this repository (see [System Tests](#system-tests)). The maintainers run the cloud and release checks. A passing unit suite is not proof that a cluster, a release or a deployment works.
 
 ## Getting Started
 
@@ -327,13 +329,13 @@ System tests exercise full cluster lifecycle scenarios on real clusters. They ar
 | `system-test-eks.yaml`        | EKS on AWS                                                | Manual dispatch only                                        |
 | `system-test-k3k-calico.yaml` | The nested Kubernetes provider with Calico                | Weekly (Monday 02:30 UTC), on manual dispatch, and on pull requests that change the workflow itself |
 
-All of them use the composite action at `.github/actions/ksail-system-test/action.yaml`.
+All of them except the EKS workflow use the composite action at `.github/actions/ksail-system-test/action.yaml`. The EKS workflow has its own init, create, update and cleanup steps, so a change to the composite action does not change what it covers.
 
 **When the Docker system tests run:**
 
 The `system-test-docker` job in `.github/workflows/ci.yaml` runs on a pull request when both of these hold:
 
-- the pull request changes a file the system tests depend on (the `system-test` path list in the `changes` job of `ci.yaml`); a documentation-only change skips them;
+- the pull request changes a file the system tests depend on (the `system-test` path list in the `changes` job of `ci.yaml`). Most documentation changes are not on that list and skip the tests, but everything under `.github/actions/` is, including the guides next to the actions;
 - the pull request comes from a branch in this repository. Pull requests from forks do not run them; they can be started by manual dispatch once the change is on a branch in this repository.
 
 When it runs, it is part of `CI - Required Checks`, so a failure blocks the pull request. It does not run in the merge queue.
@@ -360,7 +362,7 @@ Note: cipher encrypt/decrypt E2E testing is not currently possible because the e
 
 **What the system test covers:**
 
-Each matrix job runs a full cluster lifecycle: `init` → `create` → workload deployment → `update` (regression detection) → `stop` → `start`, along with workload read operations (`get`, `describe`, `logs`) and scaling. Whether the job deletes its cluster at the end is an input of the action; the Docker job in CI leaves it to the runner being discarded. See `.github/actions/ksail-system-test/action.yaml` for the complete test sequence.
+Each matrix job runs a full cluster lifecycle: `init` → `create` → workload deployment → `update` (regression detection) → `stop` → `start`, along with workload read operations (`get`, `describe`, `logs`) and scaling. The cluster is always deleted at the end. By default the action does it; the Docker job in CI turns that off so it can upload diagnostics first, and then deletes the cluster in a dedicated cleanup step that runs even after a failure. See `.github/actions/ksail-system-test/action.yaml` for the complete test sequence.
 
 **If system tests fail:**
 
@@ -438,7 +440,7 @@ The CD workflow implements an atomic publication strategy to ensure users never 
 
    GoReleaser also opens a separate draft PR to update the Homebrew cask in [`devantler-tech/homebrew-tap`](https://github.com/devantler-tech/homebrew-tap) (branch: `goreleaser/ksail`).
 
-2. **Other artifacts**: Separate jobs build the VSCode extension, the desktop apps, the operator chart and the documentation site, and upload their artifacts to the same draft release.
+2. **Other artifacts**: Separate jobs build the VSCode extension and the desktop apps, which are attached to the same draft release. Two more jobs publish the operator chart to the container registry and build the documentation site for GitHub Pages; they are not attached to the release, but publication waits for them too.
 
 3. **Atomic Publication**: A final `publish-release` job waits for all of those jobs to complete successfully, then publishes the draft release.
 

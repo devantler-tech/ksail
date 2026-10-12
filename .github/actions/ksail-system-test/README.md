@@ -24,7 +24,7 @@ There is no offline phase any more: manifest generation, the `open chat --help` 
 
 - **Workload Lifecycle** (`ksail-test-workload`) — Full CRUD: create, get, describe, logs, scale, install (Helm), apply (kustomize), push/reconcile (GitOps), delete
 - **Workload Mirror** (`ksail-test-workload-mirror`, optional) — Smoke-test `workload mirror` against a live HTTP deployment
-- **Image Export & Import** (`ksail-test-image-export-import`)
+- **Image Export & Import** (`ksail-test-image-export-import`) — Vanilla and K3s only
 - **Workload Watch** (`ksail-test-workload-watch`)
 - **API-dependent Gen** — `workload gen clusterrole` and `role` (require API server for resource group discovery)
 - **Backup & Restore** (`ksail-test-backup-restore`) — Deploy workload, backup cluster, delete workload, restore from backup, verify restoration
@@ -42,7 +42,8 @@ There is no offline phase any more: manifest generation, the `open chat --help` 
 
 ### Phase 5 — Debug
 
-- Automatic Kubernetes diagnostic output on failure, then **Cluster Switch** (switch kubeconfig context)
+- Automatic Kubernetes diagnostic output on failure
+- **Cluster Switch** (switch kubeconfig context) — a normal test step placed after the debug step; it runs only when everything before it passed
 - Diagnostics and logs are uploaded as artifacts on failure (unless `upload-artifacts` is `"false"`)
 
 ### Phase 7 — Cleanup
@@ -68,7 +69,7 @@ Adding a new test phase: create a new sub-action and add one `uses:` line to the
 
 ## Usage
 
-The action expects the `ksail` binary on `PATH`. In this repository the workflows get it from the `cache-ksail-binary` or `restore-ksail-binary` action; the examples below build it directly to stay self-contained.
+The action expects the `ksail` binary on `PATH`. In this repository the workflows get it from the `cache-ksail-binary` or `restore-ksail-binary` action; the first example and the full workflow at the end build it directly. The snippets in between show only the step that differs and assume the binary is already installed.
 
 ### Basic Usage
 
@@ -95,6 +96,7 @@ steps:
 ```yaml
 jobs:
   system-test:
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -107,6 +109,7 @@ jobs:
             args: "--gitops-engine Flux"
     steps:
       - uses: actions/checkout@v7
+      # ... set up Go and install ksail as in Basic Usage ...
       - uses: ./.github/actions/ksail-system-test
         with:
           distribution: ${{ matrix.distribution }}
@@ -215,7 +218,7 @@ Each of these adds a phase and is off unless set. The action's `action.yaml` des
 
 | Output         | Description                                                    |
 |----------------|----------------------------------------------------------------|
-| `artifact-tag` | Unique suffix for this matrix entry's diagnostic artifacts     |
+| `artifact-tag` | Readable suffix for this matrix entry's diagnostic artifacts, built from the distribution, provider, init mode and the first 30 characters of the arguments. Two entries that differ only later in their arguments get the same tag. |
 
 ## Prerequisites
 
