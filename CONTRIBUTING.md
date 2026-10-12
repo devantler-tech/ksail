@@ -356,7 +356,7 @@ This is useful for validating infrastructure-sensitive changes that the path lis
 
 **Checks that need no cluster:**
 
-`workload gen` subcommands and the `open chat --help` / `open mcp --help` smoke checks are covered by unit tests, which run on every pull request with Go changes. They need neither Docker nor a cluster. The exceptions are `workload gen clusterrole` and `workload gen role`: they ask the API server which resources exist, so their coverage is the online phase of the system tests, and a change to either needs a system-test run.
+`workload gen` subcommands and the `open mcp --help` smoke check are covered by unit tests, which run on every pull request with Go changes (`open chat --help` has no check of its own; unit tests cover the chat command's flags and helpers). They need neither Docker nor a cluster. The exceptions are `workload gen clusterrole` and `workload gen role`: they ask the API server which resources exist, so their coverage is the online phase of the system tests, and a change to either needs a system-test run.
 
 Note: cipher encrypt/decrypt E2E testing is not currently possible because the encrypt command uses hardcoded empty key groups (no `.sops.yaml` config loading). Cipher commands are covered by unit tests in `pkg/cli/cmd/workload/cipher/`.
 

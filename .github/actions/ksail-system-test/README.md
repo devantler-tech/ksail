@@ -10,7 +10,7 @@ A GitHub composite action that orchestrates a full end-to-end system test of KSa
 - Artifact tag generation for unique CI run identification
 - GHCR credential resolution for external registry tests
 
-There is no offline phase any more: manifest generation, the `open chat --help` / `open mcp --help` smoke checks and the tenant commands are covered by unit tests.
+There is no offline phase any more: manifest generation, the `open mcp --help` smoke check and the tenant commands are covered by unit tests. `open chat --help` has no check of its own; unit tests cover the chat command's flags and helpers.
 
 ### Phase 3 — Cluster Provisioning
 

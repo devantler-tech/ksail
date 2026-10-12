@@ -1,6 +1,6 @@
 # Cache KSail Binary
 
-A composite action that restores the KSail binary from the Actions cache, or builds it when the cache has no match. The CI and system-test workflows use it so every job runs the same binary without rebuilding it.
+A composite action that restores the KSail binary from the Actions cache, or builds it when the cache has no match. The CI and system-test workflows use it so every job that hits the cache reuses the same binary, and a job that misses builds it.
 
 ## Purpose
 
