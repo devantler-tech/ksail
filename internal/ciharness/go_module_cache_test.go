@@ -115,7 +115,6 @@ func TestGoModuleRestoreOnly(t *testing.T) {
 	t.Parallel()
 
 	action := readCompositeAction(t, ".github/actions/restore-go-modules/action.yaml")
-	identify := findHarnessStep(t, action.Runs.Steps, "Identify Go module cache")
 	restore := findHarnessStep(t, action.Runs.Steps, "Restore Go module cache")
 	assert.True(t, strings.HasPrefix(restore.Uses, "actions/cache/restore@"))
 	assert.Equal(t, "${{ steps.module-path.outputs.path }}", stringValue(restore.With["path"]))
@@ -142,6 +141,13 @@ func TestGoModuleRestoreOnly(t *testing.T) {
 			"the combined action adds a post-job save",
 		)
 	}
+}
+
+func TestGoModuleRestorePathMetadata(t *testing.T) {
+	t.Parallel()
+
+	action := readCompositeAction(t, ".github/actions/restore-go-modules/action.yaml")
+	identify := findHarnessStep(t, action.Runs.Steps, "Identify Go module cache")
 
 	for _, test := range []struct {
 		name, path string
