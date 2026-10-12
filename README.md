@@ -2,9 +2,10 @@
 
 # 🛥️🐳 KSail
 
-KSail helps developers create Kubernetes clusters and deploy applications from one command-line tool.
-Kubernetes runs applications packaged in containers; KSail bundles the tools for trying it locally,
+KSail helps developers create Kubernetes clusters (groups of machines that run applications)
+and deploy applications from one command-line tool. It bundles tools for trying Kubernetes locally,
 then working with cloud providers or an existing cluster.
+Kubernetes runs applications in containers: packages of application code and the software it needs.
 
 ## Install and try it
 
@@ -30,8 +31,8 @@ ksail project init --name ksail-first --distribution Vanilla --provider Docker
 ```
 
 Expect an initialization success message and `ksail.yaml`, `kind.yaml` and `k8s/kustomization.yaml`
-in this directory, plus registry mirror configuration and a `.devcontainer` folder for optional editor setup.
-This step only writes project files; it needs no Docker daemon or cloud account.
+in this directory, plus settings for caching container downloads and a `.devcontainer` folder for optional editor setup.
+This step only writes project files; it needs no Docker (the program that runs local containers) or cloud account.
 `--name` names the cluster, not an output directory.
 
 ## Run the local cluster
@@ -44,15 +45,16 @@ ksail cluster info
 ksail cluster delete --name ksail-first --provider Docker
 ```
 
-Creation downloads images, uses local resources and updates your Kubernetes connection settings.
-Check the cluster information, then delete this trial and its workloads when finished.
+Creation downloads container images (packaged applications), uses your computer's memory and storage,
+and writes connection settings so Kubernetes tools can reach your cluster.
+Check the cluster information, then delete this trial and its applications when finished.
 In your terminal, review the displayed cluster name and type `yes` to confirm deletion.
 Project files and cached registry data remain available for reuse.
 Cloud providers have separate credentials, setup and costs.
 
 ## Next steps
 
-- [Quickstart](https://ksail.devantler.tech/start/quickstart/): deploy your first workload.
+- [Quickstart](https://ksail.devantler.tech/start/quickstart/): deploy your first application.
 - [Reader reference](docs/reader-reference.md): bundled tools, supported platforms, cloud setup and optional AI integrations.
 - [Documentation](https://ksail.devantler.tech/): configuration, commands and architecture.
 - [Contributing](CONTRIBUTING.md): choose and validate your first change.
