@@ -16,7 +16,7 @@ On Linux or an Apple Silicon Mac, open a shell with `curl`, `tar` and
 curl -fsSL https://github.com/devantler-tech/ksail/releases/latest/download/install.sh | sh
 ```
 
-The installer verifies the downloaded release's checksum and prints its installation directory.
+The installer checks that the download matches the published release and prints its installation directory.
 Follow its `PATH` instruction if needed, so your shell can find `ksail`.
 [Other installation options](docs/reader-reference.md#installation-options) include Homebrew and
 Windows downloads.
@@ -49,7 +49,7 @@ Creation downloads container images (packaged applications), uses your computer'
 and writes connection settings so Kubernetes tools can reach your cluster.
 Check the cluster information, then delete this trial and its applications when finished.
 In your terminal, review the displayed cluster name and type `yes` to confirm deletion.
-Project files and cached registry data remain available for reuse.
+Project files and cached downloads remain available for reuse.
 Cloud providers have separate credentials, setup and costs.
 
 ## Next steps
