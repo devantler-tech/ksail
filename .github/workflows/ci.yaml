@@ -1592,6 +1592,22 @@ jobs:
             --set auth.oidc.clientID=ksail \
             --set auth.oidc.clientSecret=dummy \
             --set auth.oidc.redirectURL=https://ksail.local/api/v1/auth/callback >/dev/null
+          echo "=== version with build metadata (Flux OCIRepository source) ==="
+          # Flux installs a chart from an OCIRepository as "<version>+<digest>".
+          # "+" is not valid in a label value, so every object would be rejected.
+          packaged="$(mktemp -d)"
+          helm package charts/ksail-operator --version 0.0.0+0123456789ab \
+            --destination "$packaged" >/dev/null
+          rendered="$(helm template ksail-operator "$packaged"/ksail-operator-*.tgz)"
+          if ! grep -q 'helm.sh/chart: ksail-operator-0.0.0_0123456789ab$' <<<"$rendered"; then
+            echo "::error::helm.sh/chart label does not sanitise build metadata"
+            grep 'helm.sh/chart:' <<<"$rendered" | sort -u
+            exit 1
+          fi
+          if grep 'helm.sh/chart:' <<<"$rendered" | grep -q '+'; then
+            echo "::error::helm.sh/chart label still carries '+'"
+            exit 1
+          fi
           echo "✅ All chart template permutations rendered"
 
   operator-chart-e2e:
