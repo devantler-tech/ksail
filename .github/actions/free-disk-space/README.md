@@ -18,7 +18,7 @@ need to add a single `uses:` line).
 
 1. Records free space on `/`.
 2. `sudo rm -rf` of the largest unused directories (Android SDK, .NET, GHC, Boost, Swift, CodeQL,
-   PyPy, Ruby, Python, Chromium, PowerShell, Julia, AWS CLI, Gradle, Azure CLI, miniconda). Each
+   PyPy, Ruby, Python, Chromium, PowerShell, Julia, AWS CLI, AWS SAM CLI, Gradle, Azure CLI, miniconda). Each
    removal is best-effort — missing paths are not an error.
 3. Optionally runs `docker system prune -af --volumes` (see `docker-prune`).
 4. Logs the before → after free space and the amount gained.
@@ -36,7 +36,7 @@ Targeted `rm -rf` is deliberately used instead of the slower `apt-get remove` pa
 
 ```yaml
 - name: 📄 Checkout
-  uses: actions/checkout@v6
+  uses: actions/checkout@v7
   with:
     persist-credentials: false
 
@@ -54,4 +54,6 @@ Targeted `rm -rf` is deliberately used instead of the slower `apt-get remove` pa
 ## Where It Is Used
 
 Disk-heavy jobs in [`ci.yaml`](../../workflows/ci.yaml): `build-artifact`, `generate`,
-`operator-chart-e2e`, `warm-helm-cache`, `warm-mirror-cache`, and `system-test-docker`.
+`operator-chart-e2e`, `warm-helm-cache`, `warm-mirror-cache`, and `system-test-docker`. The
+`release-graph-audit` job there and the desktop workflow run the script directly, and the
+k3k + Calico sentinel workflow uses the action too.
