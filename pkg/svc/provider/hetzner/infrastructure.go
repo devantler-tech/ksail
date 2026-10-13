@@ -763,7 +763,7 @@ func (p *Provider) deleteLoadBalancerWithRetry(
 		DefaultDeleteRetryDelay,
 		"context cancelled while retrying load balancer deletion",
 		func() (bool, error) {
-			_, err := p.client.LoadBalancer.Delete(ctx, loadBalancer)
+			_, _, err := p.client.LoadBalancer.DeleteWithResult(ctx, loadBalancer)
 			if err == nil {
 				return true, nil
 			}
