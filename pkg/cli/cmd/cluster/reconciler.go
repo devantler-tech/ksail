@@ -65,6 +65,11 @@ type componentReconciler struct {
 	// policyEngineErr replays the first attempt's failure for the other field.
 	policyEngineInstalled bool
 	policyEngineErr       error
+	// metricsServerInstalled coalesces a cluster.metricsServer change and
+	// metrics-server chart-values drift into one Helm install/upgrade per pass;
+	// metricsServerErr replays the first attempt's failure for the other field.
+	metricsServerInstalled bool
+	metricsServerErr       error
 	// loadBalancerReconciled coalesces the generic load-balancer field and the
 	// EKS-specific controller opt-in when both change in one update pass.
 	loadBalancerReconciled bool
@@ -177,6 +182,7 @@ func (r *componentReconciler) handlerForField(
 	handlers[specdiff.CertManagerValuesField] = r.reconcileCertManagerValues
 	handlers[specdiff.CalicoPrerequisitesField] = r.reconcileCalicoPrerequisites
 	handlers[specdiff.PolicyEngineValuesField] = r.reconcilePolicyEngineValues
+	handlers[specdiff.MetricsServerValuesField] = r.reconcileMetricsServerValues
 
 	if handler, ok := handlers[field]; ok {
 		return handler, true
@@ -209,7 +215,8 @@ func isComponentReconcileField(field string) bool {
 		specdiff.FluxVerifyField,
 		specdiff.CertManagerValuesField,
 		specdiff.CalicoPrerequisitesField,
-		specdiff.PolicyEngineValuesField:
+		specdiff.PolicyEngineValuesField,
+		specdiff.MetricsServerValuesField:
 		return true
 	default:
 		return strings.HasPrefix(field, "cluster.autoscaler.node.")
@@ -293,14 +300,40 @@ func (r *componentReconciler) reconcileMetricsServer(
 		return errMetricsServerDisableUnsupported
 	}
 
-	if setup.NeedsMetricsServerInstall(r.clusterCfg) {
-		err := setup.InstallMetricsServerSilent(ctx, r.clusterCfg, r.factories)
-		if err != nil {
-			return fmt.Errorf("failed to install metrics-server: %w", err)
-		}
+	return r.installMetricsServerOnce(ctx)
+}
+
+// reconcileMetricsServerValues upgrades metrics-server to the chart values this
+// KSail version renders when the installed release carries other values
+// (ksail#7703).
+func (r *componentReconciler) reconcileMetricsServerValues(
+	ctx context.Context,
+	_ clusterupdate.Change,
+) error {
+	return r.installMetricsServerOnce(ctx)
+}
+
+// installMetricsServerOnce runs the metrics-server Helm install/upgrade at most
+// once per update pass, replaying the first outcome for every later field that
+// maps to it. It re-checks that KSail installs metrics-server, so neither field
+// installs a component the configuration does not want.
+func (r *componentReconciler) installMetricsServerOnce(ctx context.Context) error {
+	if !setup.NeedsMetricsServerInstall(r.clusterCfg) {
+		return nil
 	}
 
-	return nil
+	if r.metricsServerInstalled {
+		return r.metricsServerErr
+	}
+
+	r.metricsServerInstalled = true
+
+	err := setup.InstallMetricsServerSilent(ctx, r.clusterCfg, r.factories)
+	if err != nil {
+		r.metricsServerErr = fmt.Errorf("failed to install metrics-server: %w", err)
+	}
+
+	return r.metricsServerErr
 }
 
 // reconcileLoadBalancer installs or uninstalls the load balancer.

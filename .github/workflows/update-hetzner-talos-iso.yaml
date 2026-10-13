@@ -45,6 +45,10 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
 
       - name: 🔎 Read official Hetzner catalog
         id: catalog

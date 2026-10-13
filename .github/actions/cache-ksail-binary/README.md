@@ -1,6 +1,6 @@
 # Cache KSail Binary
 
-A composite action that consolidates the binary preparation logic used across multiple CI jobs in the KSail-Go workflow.
+A composite action that restores the KSail binary from the Actions cache, or builds it when the cache has no match. The CI and system-test workflows use it so every job that hits the cache reuses the same binary, and a job that misses builds it.
 
 ## Purpose
 
@@ -8,54 +8,54 @@ This action extracts the duplicated cache-based binary preparation pattern into 
 
 ## What It Does
 
-1. **Computes cache key** based on Go version and source files
-2. **Restores cached binary** from `.cache/ksail` if available
-3. **Builds binary** if cache miss occurs
-4. **Saves binary to cache** for future runs
-5. **Ensures binary is executable** with `chmod +x`
+1. **Computes the cache key** from the runner OS, the Go version, the source hash and the bundled Copilot CLI version
+2. **Restores the cached binary** from `.cache/ksail` if that key exists
+3. **Builds the binary on a cache miss**: generates the embedded chat documentation (`go generate ./pkg/svc/chat/...`), bundles the Copilot CLI (`go tool bundler`), then runs a stripped `go build`
+4. **Copies the binary** to `output-path` and makes it executable (with `sudo` for an absolute path)
+5. **Saves the binary to the cache** after a build, unless `save` is `'false'`
 
-## Path Differences
-
-The action supports different output paths to accommodate job-specific requirements:
-
-- **`build-artifact` job**: Uses `ksail` (root directory) for direct execution
-- **`system-test` job**: Uses `bin/ksail` (bin directory) to avoid conflicts with test artifacts
-
-This path flexibility is intentional and necessary because:
-
-- The build-artifact job produces a standalone binary for verification
-- The system-test job needs the binary in `bin/` to align with the test execution context and avoid conflicts with KSail-generated cluster configuration files (e.g., `k8s/`, `kind.yaml`, `k3d.yaml`)
+The action does not build the web UI.
 
 ## Usage
 
 ```yaml
+- name: ⚙️ Setup Go
+  id: setup-go
+  uses: actions/setup-go@v7
+  with:
+    go-version-file: go.mod
+
 - name: 📦 Cache KSail Binary
   uses: ./.github/actions/cache-ksail-binary
   with:
     go-version: ${{ steps.setup-go.outputs.go-version }}
     source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
-    output-path: ksail # or bin/ksail
+    output-path: /usr/local/bin/ksail
 ```
+
+Go must be set up first: the action runs `go` itself on a cache miss.
 
 ## Inputs
 
-| Input         | Required | Default | Description                                                                                                                                                                                                     |
-|---------------|----------|---------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `go-version`  | Yes      | -       | Go version from `setup-go` output, used for cache key computation                                                                                                                                               |
-| `source-hash` | Yes      | -       | Hash of source files (use `hashFiles('go.mod', 'go.sum', '**/*.go')`)                                                                                                                                           |
-| `output-path` | No       | `ksail` | Target path for the binary relative to repository root (e.g., `ksail` or `bin/ksail`). Must be relative to repository root and must not contain path traversal sequences (e.g., `..`, `../`, `*/../*`, `*/..`). |
+| Input                 | Required | Default           | Description                                                                                                                                                                                                                                  |
+|-----------------------|----------|-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `go-version`          | Yes      | -                 | Go version from the `setup-go` output, used in the cache key                                                                                                                                                                                 |
+| `source-hash`         | Yes      | -                 | Hash of the source files (use `hashFiles('go.mod', 'go.sum', '**/*.go')`)                                                                                                                                                                    |
+| `output-path`         | No       | `ksail`           | Where to put the binary. Relative to the repository root (for example `ksail`) or absolute (for example `/usr/local/bin/ksail`). Must not contain a parent-directory step (`..`); the action fails if it does.                               |
+| `save`                | No       | `'true'`          | Whether to save the cache after a build. Set to `'false'` in jobs that should only restore, so one job owns the cache entry.                                                                                                                 |
+| `copilot-cli-version` | No       | see `action.yaml` | Copilot CLI version bundled into the binary. It is part of the cache key, so a version change rebuilds instead of restoring a binary bundled with the previous version. Leave it at the default unless you are changing the bundled version. |
 
 ## Outputs
 
-| Output                   | Description                                                         |
-|--------------------------|---------------------------------------------------------------------|
-| `cache-hit`              | Whether the cache was hit (`'true'` or `'false'`)                   |
-| `binary-path`            | Absolute path to the prepared binary                                |
-| `output-path-normalized` | Normalized relative path to the binary (with leading `./` stripped) |
+| Output                   | Description                                                                                            |
+|--------------------------|--------------------------------------------------------------------------------------------------------|
+| `cache-hit`              | Whether the cache was hit (`'true'` or `'false'`)                                                      |
+| `binary-path`            | Absolute path to the prepared binary                                                                   |
+| `output-path-normalized` | The `output-path` as used: a relative path with a leading `./` stripped, or the absolute path as given |
 
 ## Examples
 
-### Build-Artifact Job
+### Build and save (one job per workflow)
 
 ```yaml
 - name: 📦 Cache KSail Binary
@@ -63,10 +63,10 @@ This path flexibility is intentional and necessary because:
   with:
     go-version: ${{ steps.setup-go.outputs.go-version }}
     source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
-    output-path: ksail
+    output-path: /usr/local/bin/ksail
 ```
 
-### System-Test Job
+### Restore only
 
 ```yaml
 - name: 📦 Cache KSail Binary
@@ -74,9 +74,12 @@ This path flexibility is intentional and necessary because:
   with:
     go-version: ${{ steps.setup-go.outputs.go-version }}
     source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
-    output-path: bin/ksail
+    output-path: /usr/local/bin/ksail
+    save: "false"
 ```
+
+A restore-only job still builds the binary when the cache has no match; it just does not write the result back.
 
 ## Related
 
-- Original issue: [#527 - Optimize CI system-test build time](https://github.com/devantler-tech/ksail/pull/527)
+- Original change: [#527 - Optimize CI system-test build time](https://github.com/devantler-tech/ksail/pull/527)

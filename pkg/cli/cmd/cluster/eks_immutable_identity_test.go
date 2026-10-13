@@ -524,7 +524,14 @@ func immutableEKSClusterInRegion(
 			"arn:aws:eks:" + region + ":123456789012:cluster/" + clusterName,
 		),
 		CreatedAt: aws.Time(createdAt),
+		Endpoint:  aws.String(immutableEKSEndpoint(region)),
 	}
+}
+
+// immutableEKSEndpoint is the API endpoint the fake cluster reports in a region. A kubeconfig
+// fixture has to carry the same value in its cluster entry to be selected for that cluster.
+func immutableEKSEndpoint(region string) string {
+	return "https://0123456789ABCDEF0123456789ABCDEF.gr7." + region + ".eks.amazonaws.com"
 }
 
 func immutableIdentityTime() time.Time {

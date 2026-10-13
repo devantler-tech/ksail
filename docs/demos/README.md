@@ -8,7 +8,7 @@ committed so the published site serves them without a build-time render step.
 
 | Tape                     | Demo                                                                              | Docker? |
 |--------------------------|-----------------------------------------------------------------------------------|---------|
-| `cluster-init.tape`      | Quick start: `cluster init`, the declarative `ksail.yaml`, switching distribution | no      |
+| `cluster-init.tape`      | Quick start: `project init`, the declarative `ksail.yaml`, switching distribution | no      |
 | `cluster-lifecycle.tape` | Full lifecycle on a real Kind cluster: create → info → deploy → delete            | **yes** |
 
 ## Regenerate

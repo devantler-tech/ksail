@@ -647,7 +647,7 @@ jobs:
       || (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
       && needs.changes.outputs.govuln-allowlist == 'true')
-    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@8d3327fe87f216d6e107941de4ce1ae019294cea # v7.9.1
+    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@cd706d2309d8c4f192f02c902214c6bd1b5a8e69 # v7.9.4
     # The canonical defaults make a default-branch run answer "did the check run" rather than
     # "did the diff touch a Go file". On main the branch's green IS the protection
     # signal, so a path filter that skips the suite or the scan leaves main green
@@ -870,6 +870,10 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
 
       - name: 📦 Cache KSail Binary
         id: binary
@@ -1002,6 +1006,10 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
 
       - name: 📝 Generate JSON schema
         if: needs.changes.outputs.schema == 'true'
@@ -1338,6 +1346,10 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
 
       - name: 🏠 Verify tests never touch the real home directory
         shell: bash
@@ -1626,6 +1638,10 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
 
       - name: 🧪 Run Operator Chart E2E
         uses: ./.github/actions/operator-chart-e2e
@@ -1664,6 +1680,10 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
 
       - name: 📦 Cache KSail Binary
         uses: ./.github/actions/cache-ksail-binary
@@ -1727,6 +1747,10 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
 
       - name: 📦 Cache KSail Binary
         uses: ./.github/actions/cache-ksail-binary
@@ -1809,6 +1833,13 @@ jobs:
           - "--cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine Gatekeeper --gitops-engine ArgoCD"
           - "--gitops-engine Flux --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
           - "--gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
+        # Replace the unnamed Talos default with the named trial below. Naming
+        # the host creates the inherited cluster-name patch nested creation must override.
+        exclude:
+          - distribution: Talos
+            provider: Docker
+            init: true
+            args: ""
         # init=false (CLI-flag-only path without ksail.yaml) is now covered by
         # unit tests (TestCreate_NoConfigFile_*) instead of full E2E clusters.
         include:
@@ -1816,8 +1847,8 @@ jobs:
             provider: Docker
             init: true
             args: "--name system-test-cluster-with-image-verification --image-verification Enabled"
-          # Enable Kubernetes provider tests on the default (init=true, args="")
-          # entry for each distribution. This tests all 4 nested distributions
+          # Enable Kubernetes provider tests on the default initialized host
+          # for each distribution (Talos explicitly named). This tests all 4 nested distributions
           # (Vanilla,K3s,VCluster,Talos) on each host type, once per matrix.
           # The three mirror-supported distributions also opt into their smoke
           # test here so it runs once per distribution rather than for all args.
@@ -1836,7 +1867,7 @@ jobs:
           - distribution: Talos
             provider: Docker
             init: true
-            args: ""
+            args: "--name system-test-cluster"
             kubernetes-upgrade-from: "v1.36.2"
             kubernetes-upgrade-to: "v1.37.1"
             test-kubernetes-provider: "true"
@@ -2251,6 +2282,10 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
 
       # -count=1 is load-bearing: the files under test are invisible to the Go build graph,
       # so a cached PASS from an earlier run would be replayed over the changed configuration.
@@ -2281,6 +2316,10 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
 
       - name: 🔐 Audit Shipped Dependency Graphs
         # Release files are outside Go's test-cache inputs; always execute the audit.
@@ -2308,6 +2347,11 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
+
       - name: 🧪 Reproduce local safety and partial-deletion cases
         id: local-safety
         shell: bash
