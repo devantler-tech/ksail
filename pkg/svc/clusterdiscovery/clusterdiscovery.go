@@ -53,6 +53,8 @@ type Cluster struct {
 	Name         string
 	Distribution v1alpha1.Distribution
 	Provider     v1alpha1.Provider
+	// Region is the region used to discover an EKS cluster. A name alone is not an AWS target.
+	Region string
 	// RunState is the cluster's coarse running/stopped state when the provider can report it
 	// (Docker today). RunStateUnknown for providers that do not — callers must not treat unknown as
 	// stopped.

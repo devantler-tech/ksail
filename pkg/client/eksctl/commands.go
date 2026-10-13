@@ -41,17 +41,17 @@ const flagTimeout = "--timeout"
 // is an upper bound that is never reached.
 const createClusterWaitTimeout = "45m"
 
-// ClusterSummary represents a single cluster entry returned by
-// `eksctl get cluster -o json`. Field tags preserve eksctl's PascalCase
-// JSON keys (eksctl emits these names verbatim).
+// ClusterSummary represents a regional `eksctl get cluster -o json` entry.
+// Named queries instead return an AWS cluster detail without ownership; GetCluster
+// corroborates that detail with the regional listing before returning provenance.
 //
 //nolint:tagliatelle // eksctl's JSON output uses PascalCase keys.
 type ClusterSummary struct {
 	Name   string `json:"Name"`
 	Region string `json:"Region"`
 	// EKSCTLCreated reports whether the cluster was created by eksctl.
-	// eksctl prints the string "True"/"False"; we keep it as-is.
-	EKSCTLCreated string `json:"EksctlCreated"`
+	// Its regional JSON field is Owned, with values True, False, or Unknown.
+	EKSCTLCreated string `json:"Owned"`
 }
 
 // NodegroupSummary represents a single managed nodegroup returned by
@@ -146,9 +146,29 @@ func (c *Client) DeleteCluster(
 	return c.execWithProgress(ctx, args...)
 }
 
-// GetCluster returns the summary for a named cluster. Returns
-// ErrClusterNotFound when no cluster with the given name exists.
+// GetCluster returns a named cluster's ownership summary, corroborating native
+// details with a regional listing. An unavailable listing remains an error;
+// callers needing only cluster existence should use GetClusterDetails instead.
 func (c *Client) GetCluster(
+	ctx context.Context,
+	name, region string,
+) (*ClusterSummary, error) {
+	named, err := c.GetClusterDetails(ctx, name, region)
+	if err != nil {
+		return nil, err
+	}
+
+	if named.Name != name || named.EKSCTLCreated != "" {
+		return named, nil
+	}
+
+	return c.regionalClusterSummary(ctx, name, region)
+}
+
+// GetClusterDetails describes one named cluster without enumerating the region.
+// Native details do not establish eksctl ownership. Empty and ambiguous named
+// responses are rejected rather than accepted as evidence that a cluster exists.
+func (c *Client) GetClusterDetails(
 	ctx context.Context,
 	name, region string,
 ) (*ClusterSummary, error) {
@@ -174,7 +194,43 @@ func (c *Client) GetCluster(
 		return nil, fmt.Errorf("%w: %s", ErrClusterNotFound, name)
 	}
 
+	if len(clusters) != 1 {
+		return nil, fmt.Errorf("%w: named query for %s", ErrAmbiguousCluster, name)
+	}
+
 	return &clusters[0], nil
+}
+
+// regionalClusterSummary binds provenance to exactly one named entry in the same
+// credential-isolated region. Missing or duplicate entries never become ownership.
+func (c *Client) regionalClusterSummary(
+	ctx context.Context,
+	name, region string,
+) (*ClusterSummary, error) {
+	clusters, err := c.ListClusters(ctx, region)
+	if err != nil {
+		return nil, err
+	}
+
+	var matched *ClusterSummary
+
+	for index := range clusters {
+		if clusters[index].Name != name {
+			continue
+		}
+
+		if matched != nil {
+			return nil, fmt.Errorf("%w: regional query for %s", ErrAmbiguousCluster, name)
+		}
+
+		matched = &clusters[index]
+	}
+
+	if matched == nil {
+		return nil, fmt.Errorf("%w: %s", ErrClusterNotFound, name)
+	}
+
+	return matched, nil
 }
 
 // ListClusters returns the summary of all EKS clusters in the given region.

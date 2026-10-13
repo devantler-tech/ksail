@@ -44,7 +44,7 @@ func TestDiscoverAWS_UsesCanonicalIsolatedChildEnvironment(t *testing.T) {
 [ -z "${KSAIL_ACCESS+x}" ] || exit 46
 [ -z "${KSAIL_SECRET+x}" ] || exit 47
 [ -z "${KSAIL_SESSION+x}" ] || exit 48
-printf '[{"Name":"mapped-eks","Region":"eu-west-1","EksctlCreated":"True"}]\n'
+printf '[{"Name":"mapped-eks","Region":"eu-west-1","Owned":"True"}]\n'
 `)
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("KSAIL_PROFILE", "parent-custom-profile")
@@ -82,6 +82,8 @@ printf '[{"Name":"mapped-eks","Region":"eu-west-1","EksctlCreated":"True"}]\n'
 	require.Empty(t, failures)
 	require.Len(t, clusters, 1)
 	assert.Equal(t, "mapped-eks", clusters[0].Name)
+	assert.Equal(t, "eu-west-1", clusters[0].Region,
+		"discovery must retain the region reported by eksctl when no AWS_REGION is set")
 	assert.Equal(t, "parent-stale-profile", os.Getenv("AWS_PROFILE"))
 	assert.Equal(t, "parent-custom-profile", os.Getenv("KSAIL_PROFILE"))
 }

@@ -37,7 +37,7 @@ func TestEKSUpgradeTrialReservesFreshCleanupSession(t *testing.T) {
 	trial := findHarnessStep(t, job.Steps, "🧪 EKS control-plane upgrade trial")
 	assert.Equal(t, "${{ inputs.upgrade_from_version }}", trial.Env["EKS_UPGRADE_FROM"])
 	assert.Equal(t, "${{ inputs.upgrade_to_version }}", trial.Env["EKS_UPGRADE_TO"])
-	assert.Equal(t, "inputs.upgrade_from_version != ''", trial.If)
+	assert.Equal(t, eksUpgradeTrialCondition, trial.If)
 	assert.False(t, trial.ContinueOnError)
 	assert.GreaterOrEqual(t, trial.TimeoutMinutes, 75)
 
@@ -62,13 +62,13 @@ func TestEKSUpgradeTrialReservesFreshCleanupSession(t *testing.T) {
 		harnessStepIndex(t, job.Steps, wait.Name),
 		harnessStepIndex(t, job.Steps, "🧹 Delete EKS smoke cluster"))
 
-	minutes := 15 // Final job-level headroom in addition to every bounded step.
+	// Final job-level headroom in addition to every bounded step of the path.
+	const headroomMinutes = 15
 
-	for _, step := range job.Steps {
-		require.Positive(t, step.TimeoutMinutes, "unbounded step: %s", step.Name)
-		minutes += step.TimeoutMinutes
-	}
-
-	assert.GreaterOrEqual(t, job.TimeoutMinutes, minutes)
+	assert.GreaterOrEqual(
+		t,
+		job.TimeoutMinutes,
+		eksSmokePathMinutes(t, job.Steps, true)+headroomMinutes,
+	)
 	assert.LessOrEqual(t, job.TimeoutMinutes, 360, "GitHub-hosted jobs have a six-hour limit")
 }

@@ -63,6 +63,9 @@ type SimpleLifecycleConfig struct {
 		provisioner clusterprovisioner.Provisioner,
 		clusterName string,
 	) error
+	// Prepare, when non-nil, adjusts a resolved target before standalone AWS validation.
+	// Recovery uses it to discard settings borrowed from a different named project.
+	Prepare func(resolved *ResolvedClusterInfo)
 	// Guard, when non-nil, runs after cluster resolution and before the provisioner is created. It
 	// lets a caller refuse the action for a resolved cluster — e.g. an unmanaged, ksail-unprovisioned
 	// cluster — with a clear error. A nil Guard is a no-op.
@@ -516,6 +519,10 @@ func runSimpleLifecycleAction(
 	resolved, err := ResolveClusterInfoStrict(cmd, nameFlag, providerFlag, "")
 	if err != nil {
 		return err
+	}
+
+	if config.Prepare != nil {
+		config.Prepare(resolved)
 	}
 
 	err = ValidateStandaloneAWSTarget(resolved)

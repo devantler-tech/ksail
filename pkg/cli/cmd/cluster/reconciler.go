@@ -30,6 +30,8 @@ const (
 
 var errCalicoInstallerFactoryUnavailable = errors.New("calico installer factory is unavailable")
 
+var errCiliumInstallerFactoryUnavailable = errors.New("cilium installer factory is unavailable")
+
 // errMetricsServerDisableUnsupported is returned when attempting to disable metrics-server in-place.
 var errMetricsServerDisableUnsupported = errors.New(
 	"disabling metrics-server in-place is not yet supported; use 'ksail cluster delete && ksail cluster create'",
@@ -189,6 +191,7 @@ func (r *componentReconciler) handlerForField(
 	handlers[specdiff.CalicoPrerequisitesField] = r.reconcileCalicoPrerequisites
 	handlers[specdiff.PolicyEngineValuesField] = r.reconcilePolicyEngineValues
 	handlers[specdiff.MetricsServerValuesField] = r.reconcileMetricsServerValues
+	handlers[specdiff.CiliumValuesField] = r.reconcileCiliumValues
 
 	if handler, ok := handlers[field]; ok {
 		return handler, true
@@ -222,7 +225,8 @@ func isComponentReconcileField(field string) bool {
 		specdiff.CertManagerValuesField,
 		specdiff.CalicoPrerequisitesField,
 		specdiff.PolicyEngineValuesField,
-		specdiff.MetricsServerValuesField:
+		specdiff.MetricsServerValuesField,
+		specdiff.CiliumValuesField:
 		return true
 	default:
 		return strings.HasPrefix(field, "cluster.autoscaler.node.")
@@ -263,6 +267,35 @@ func (r *componentReconciler) reconcileCalicoPrerequisites(
 	err = inst.Install(ctx)
 	if err != nil {
 		return fmt.Errorf("migrate Calico prerequisites: %w", err)
+	}
+
+	return nil
+}
+
+// reconcileCiliumValues upgrades Cilium to the chart values this KSail version
+// renders when the installed release carries other values (ksail#7722). It runs
+// the installer the drift probe compared with, so it applies exactly the values
+// that were reported and keeps that installer's ownership check.
+func (r *componentReconciler) reconcileCiliumValues(
+	ctx context.Context,
+	_ clusterupdate.Change,
+) error {
+	if !ksailInstallsCilium(r.clusterCfg) {
+		return nil
+	}
+
+	if r.factories.Cilium == nil {
+		return errCiliumInstallerFactoryUnavailable
+	}
+
+	inst, err := r.factories.Cilium(r.clusterCfg)
+	if err != nil {
+		return fmt.Errorf("create Cilium installer: %w", err)
+	}
+
+	err = inst.Install(ctx)
+	if err != nil {
+		return fmt.Errorf("upgrade Cilium: %w", err)
 	}
 
 	return nil

@@ -15,6 +15,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -613,6 +614,9 @@ func TestDeleteEKSStaysIdempotentWhenTheClusterIsAlreadyGone(t *testing.T) {
 	)
 
 	createEKSClusterForTest(t, service, clusterName)
+	require.NoError(t, state.SaveEKSOwnershipState(
+		clusterName, "ap-southeast-2", ownershipRecordFor(clusterName, "ap-southeast-2"),
+	))
 
 	require.NoError(t, service.Delete(context.Background(), "default", clusterName))
 	require.Eventually(t, func() bool {
@@ -627,6 +631,10 @@ func TestDeleteEKSStaysIdempotentWhenTheClusterIsAlreadyGone(t *testing.T) {
 
 	assert.Empty(t, provisioner.deletedNames(),
 		"a delete was issued against a cluster the guard had established was gone")
+
+	_, err := state.LoadEKSOwnershipState(clusterName, "ap-southeast-2")
+	require.ErrorIs(t, err, state.ErrEKSOwnershipStateNotFound,
+		"a completed delete must remove the recovered ownership record")
 }
 
 // TestDeleteEKSStillRefusesAnIdentityMismatch is the other direction, and the reason the test above
