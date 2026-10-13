@@ -58,3 +58,15 @@ fi
 [[ ! -e "$CURL_CALLS" ]]
 [[ ! -e "$tmp_dir/invalid/targets.md" ]]
 printf 'PASS: ambiguous configuration fails before creating evidence or issuing requests\n'
+
+for config in $'user_agent = "first"\nuser_agent = ""' $'user_agent = ""\nuser_agent = "first"'; do
+	printf '%s\n' "$config" >"$tmp_dir/repo/lychee.toml"
+	if PATH="$tmp_dir/bin:$PATH" bash "$tmp_dir/repo/.github/scripts/strict-link-transport.sh" \
+		"$tmp_dir/empty-duplicate" >"$tmp_dir/empty-duplicate-output" 2>&1; then
+		printf 'FAIL: an empty duplicate user agent was accepted\n' >&2
+		exit 1
+	fi
+	[[ ! -e "$CURL_CALLS" ]]
+	[[ ! -e "$tmp_dir/empty-duplicate/targets.md" ]]
+done
+printf 'PASS: empty duplicate configuration fails in either order before requests\n'

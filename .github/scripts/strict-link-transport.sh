@@ -8,7 +8,9 @@ if [[ $# != 1 || -z "$1" ]]; then
 fi
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/../.." && pwd)"
-user_agent="$(sed -n 's/^user_agent = "\(.*\)"$/\1/p' "$repo_root/lychee.toml")"
+# Prefix every match so an empty final value survives command substitution.
+user_agent="$(sed -n 's/^user_agent = "\(.*\)"$/value:\1/p' "$repo_root/lychee.toml")"
+user_agent="${user_agent#value:}"
 if [[ -z "$user_agent" || "$user_agent" == *$'\n'* ]]; then
 	printf 'ERROR: expected exactly one configured link-check user agent\n' >&2
 	exit 2
