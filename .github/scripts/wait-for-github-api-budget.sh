@@ -17,7 +17,7 @@ Reading the budget is free: GitHub does not count the rate_limit endpoint.
 
 Exit codes:
   0  budget is available, or the budget could not be read (see below)
-  1  budget is exhausted and does not return within --max-wait
+  1  budget is too low and does not return within --max-wait
   2  usage error
 
 An unreadable budget is reported as a warning and exits 0. This script only
@@ -85,8 +85,9 @@ unreadable=0
 while true; do
 	if ! budget="$(read_budget)"; then
 		unreadable=$((unreadable + 1))
-		if [[ "${unreadable}" -ge 3 ]]; then
-			printf '::warning::Could not read the GitHub request budget after %s attempts; continuing without waiting.\n' \
+		# Give up after three attempts, or sooner when another retry would outlast --max-wait.
+		if [[ "${unreadable}" -ge 3 || $(($(date +%s) + 10)) -gt "${deadline}" ]]; then
+			printf '::warning::Could not read the GitHub request budget (%s attempt(s)); continuing without waiting.\n' \
 				"${unreadable}"
 			exit 0
 		fi
@@ -116,7 +117,7 @@ while true; do
 		pause=5
 	fi
 	if [[ $((now + pause)) -gt "${deadline}" ]]; then
-		printf '::error::GitHub request budget is exhausted (REST %s, GraphQL %s) and does not return within %s s.\n' \
+		printf '::error::GitHub request budget is too low (REST %s, GraphQL %s) and does not return within %s s.\n' \
 			"${core_remaining}" "${graphql_remaining}" "${max_wait}" >&2
 		exit 1
 	fi

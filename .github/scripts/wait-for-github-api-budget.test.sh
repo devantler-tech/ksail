@@ -119,10 +119,19 @@ run_case beyond-max-wait 1 "" "does not return within 60 s" \
 	"0 1600 4900 1600" -- --max-wait 60
 
 # An unreadable budget never stops a release: three attempts, then a warning and exit 0.
-run_case unreadable 0 "10 10" "Could not read the GitHub request budget after 3 attempts" \
+run_case unreadable 0 "10 10" "Could not read the GitHub request budget (3 attempt(s))" \
 	"fail"
-run_case malformed 0 "10 10" "Could not read the GitHub request budget after 3 attempts" \
+run_case malformed 0 "10 10" "Could not read the GitHub request budget (3 attempt(s))" \
 	"garbage"
+# A retry never outlasts --max-wait: with the deadline already reached, a failed read gives up at
+# once, both on the first read and after a wait for the reset has used the time up.
+run_case unreadable-at-deadline 0 "" "Could not read the GitHub request budget (1 attempt(s))" \
+	"fail" -- --max-wait 5
+run_case unreadable-after-reset-wait 0 "605" "Could not read the GitHub request budget (1 attempt(s))" \
+	"0 1600 4900 1600" "fail" -- --max-wait 610
+# With time left, the retry still happens.
+run_case unreadable-with-time-left 0 "10" "Could not read the GitHub request budget (2 attempt(s))" \
+	"fail" -- --max-wait 15
 # One failed read does not skip the wait when the next read shows exhaustion.
 run_case recovers-after-failed-read 0 "10 595" "budget is available" \
 	"fail" "0 1600 4900 1600" "5000 5200 4900 5200"

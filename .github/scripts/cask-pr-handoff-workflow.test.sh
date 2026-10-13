@@ -345,11 +345,12 @@ if [ "$(grep -Fc -- 'run: .github/scripts/wait-for-github-api-budget.sh' "${cd_w
 	fail 'the checkpoint and the cask delivery job must each wait for the tap token request budget'
 fi
 awk '
-  /wait-for-github-api-budget\.sh/ { waits++ }
-  /redraft-evergreen-cask-prs\.sh --tap/ { if (waits < 1) bad = 1; checkpoint = 1 }
-  /name: 🍺 Style-clean and deliver cask PRs/ { if (waits < 2) bad = 1; delivery = 1 }
+  /^  [a-z-]+:$/ { job = $1; waited = 0 }
+  /run: \.github\/scripts\/wait-for-github-api-budget\.sh/ { waited = 1 }
+  /redraft-evergreen-cask-prs\.sh --tap/ { if (job != "cask-checkpoint:" || !waited) bad = 1; checkpoint = 1 }
+  /name: 🍺 Style-clean and deliver cask PRs/ { if (job != "homebrew:" || !waited) bad = 1; delivery = 1 }
   END { exit (bad || !checkpoint || !delivery) ? 1 : 0 }
-' "${cd_workflow}" || fail 'each budget wait must run before the step that spends the budget'
+' "${cd_workflow}" || fail 'each budget wait must run in the same job as, and before, the step that spends the budget'
 awk '
   /^  [a-z-]+:$/ { job = $1 }
   /timeout-minutes:/ { timeout[job] = $2 }
