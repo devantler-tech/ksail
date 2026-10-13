@@ -48,7 +48,9 @@ jobs:
     name: 🍺 Re-arm cask PR draft checkpoint
     needs: [validate-release-ref]
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # The checkpoint itself takes seconds. The rest is room to wait out an exhausted request budget:
+    # the tap token shares its hourly budget with other automation, and GitHub's window is one hour.
+    timeout-minutes: 70
     permissions:
       contents: read
     steps:
@@ -56,6 +58,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Two releases stopped here on 2026-10-09 with "API rate limit exceeded" while that shared
+      # budget was at zero (devantler-tech/monorepo#4055). Waiting for the reset costs at most an hour
+      # and nothing is published yet; it also starts the cask-writing jobs on a fresh budget.
+      - name: ⏳ Wait for the tap token's request budget
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
+        run: .github/scripts/wait-for-github-api-budget.sh
       - name: 🍺 Re-draft reused evergreen cask PRs
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
@@ -710,7 +719,8 @@ jobs:
     # passes plus both casks' three independent five-minute wait bounds (checks, online audit,
     # and async merge). Reserve ten more minutes for preparation. An incomplete cask delivery
     # fails this job without deleting the already-published release.
-    timeout-minutes: 40
+    # A further 65 minutes cover the wait for the tap token's request budget below.
+    timeout-minutes: 105
     needs: [publish-release]
     permissions:
       contents: read
@@ -719,6 +729,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      # This job polls the tap for several minutes; starting it on an exhausted budget fails the
+      # delivery after the release is already published (devantler-tech/monorepo#4055).
+      - name: ⏳ Wait for the tap token's request budget
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
+        run: .github/scripts/wait-for-github-api-budget.sh
 
       - name: 🍺 Style-clean and deliver cask PRs
         env:
