@@ -43,7 +43,7 @@ func TestResolveAgeKey_EvalCanonicalPathParentNotExist(t *testing.T) {
 	)
 	t.Setenv("TEST_SOPSUTIL_CANONICAL_NOT_EXIST", "")
 
-	sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_SOPSUTIL_CANONICAL_NOT_EXIST"}
+	sops := v1alpha1.SOPS{Env: v1alpha1.SOPSEnv{Var: "TEST_SOPSUTIL_CANONICAL_NOT_EXIST"}}
 
 	_, err := sopsutil.ResolveAgeKey(sops)
 
@@ -85,7 +85,7 @@ func TestResolveAgeKey_EvalCanonicalPathPermissionDenied(t *testing.T) {
 	t.Setenv("SOPS_AGE_KEY_FILE", keyFilePath)
 	t.Setenv("TEST_SOPSUTIL_PERM_DENIED", "")
 
-	sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_SOPSUTIL_PERM_DENIED"}
+	sops := v1alpha1.SOPS{Env: v1alpha1.SOPSEnv{Var: "TEST_SOPSUTIL_PERM_DENIED"}}
 
 	_, resolveErr := sopsutil.ResolveAgeKey(sops)
 
@@ -116,8 +116,8 @@ func TestResolveEnabledAgeKey_AutoDetectWithCanonicalError(t *testing.T) {
 	t.Setenv("TEST_SOPSUTIL_AUTODETECT_ERR", "")
 
 	sops := v1alpha1.SOPS{
-		AgeKeyEnvVar: "TEST_SOPSUTIL_AUTODETECT_ERR",
-		Enabled:      v1alpha1.SOPSEnabledDefault, // auto-detect
+		Env:     v1alpha1.SOPSEnv{Var: "TEST_SOPSUTIL_AUTODETECT_ERR"},
+		Enabled: v1alpha1.SOPSEnabledDefault, // auto-detect
 	}
 
 	key, resolveErr := sopsutil.ResolveEnabledAgeKey(sops)

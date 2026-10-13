@@ -87,7 +87,9 @@ func TestResolveEnabledAgeKey(t *testing.T) {
 		t.Setenv("TEST_SOPSUTIL_NONEXISTENT_VAR_AUTO_11111", "")
 		noKeyFileEnv(t)
 
-		sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_SOPSUTIL_NONEXISTENT_VAR_AUTO_11111"}
+		sops := v1alpha1.SOPS{
+			Env: v1alpha1.SOPSEnv{Var: "TEST_SOPSUTIL_NONEXISTENT_VAR_AUTO_11111"},
+		}
 		got, err := sopsutil.ResolveEnabledAgeKey(sops)
 		require.NoError(t, err)
 		assert.Empty(t, got)
@@ -96,7 +98,7 @@ func TestResolveEnabledAgeKey(t *testing.T) {
 		t.Setenv("TEST_SOPSUTIL_AGE_KEY_AUTO_22222", testAgeKey)
 		noKeyFileEnv(t)
 
-		sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_SOPSUTIL_AGE_KEY_AUTO_22222"}
+		sops := v1alpha1.SOPS{Env: v1alpha1.SOPSEnv{Var: "TEST_SOPSUTIL_AGE_KEY_AUTO_22222"}}
 		got, err := sopsutil.ResolveEnabledAgeKey(sops)
 		require.NoError(t, err)
 		assert.Equal(t, testAgeKey, got)
@@ -105,7 +107,7 @@ func TestResolveEnabledAgeKey(t *testing.T) {
 		t.Setenv("TEST_SOPSUTIL_AGE_KEY_META_33333", "# comment\n"+metaAgeKey+"\n")
 		noKeyFileEnv(t)
 
-		sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_SOPSUTIL_AGE_KEY_META_33333"}
+		sops := v1alpha1.SOPS{Env: v1alpha1.SOPSEnv{Var: "TEST_SOPSUTIL_AGE_KEY_META_33333"}}
 		got, err := sopsutil.ResolveEnabledAgeKey(sops)
 		require.NoError(t, err)
 		assert.Equal(t, metaAgeKey, got)
@@ -115,8 +117,8 @@ func TestResolveEnabledAgeKey(t *testing.T) {
 		noKeyFileEnv(t)
 
 		sops := v1alpha1.SOPS{
-			Enabled:      v1alpha1.SOPSEnabledEnabled,
-			AgeKeyEnvVar: "TEST_SOPSUTIL_NONEXISTENT_VAR_ENABLED_44444",
+			Enabled: v1alpha1.SOPSEnabledEnabled,
+			Env:     v1alpha1.SOPSEnv{Var: "TEST_SOPSUTIL_NONEXISTENT_VAR_ENABLED_44444"},
 		}
 		got, err := sopsutil.ResolveEnabledAgeKey(sops)
 		require.ErrorIs(t, err, sopsutil.ErrSOPSKeyNotFound)
@@ -127,8 +129,8 @@ func TestResolveEnabledAgeKey(t *testing.T) {
 		noKeyFileEnv(t)
 
 		sops := v1alpha1.SOPS{
-			Enabled:      v1alpha1.SOPSEnabledEnabled,
-			AgeKeyEnvVar: "TEST_SOPSUTIL_AGE_KEY_ENABLED_55555",
+			Enabled: v1alpha1.SOPSEnabledEnabled,
+			Env:     v1alpha1.SOPSEnv{Var: "TEST_SOPSUTIL_AGE_KEY_ENABLED_55555"},
 		}
 		got, err := sopsutil.ResolveEnabledAgeKey(sops)
 		require.NoError(t, err)

@@ -13,6 +13,12 @@ const (
 	jsonSchemaTypeArray   = "array"
 )
 
+// JSON Schema keyword constants.
+const (
+	jsonSchemaKeyType        = "type"
+	jsonSchemaKeyDescription = "description"
+)
+
 // Cobra flag type constants.
 const (
 	helpFlagName        = "help"

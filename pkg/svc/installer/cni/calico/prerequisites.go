@@ -124,10 +124,10 @@ func prerequisiteResourceForKind(gvk schema.GroupVersionKind) string {
 	}
 
 	return map[string]string{
-		mutatingAdmissionPolicyKind:        "mutatingadmissionpolicies",
-		mutatingAdmissionPolicyBindingKind: "mutatingadmissionpolicybindings",
-		"ValidatingAdmissionPolicy":        "validatingadmissionpolicies",
-		"ValidatingAdmissionPolicyBinding": "validatingadmissionpolicybindings",
+		mutatingAdmissionPolicyKind:          "mutatingadmissionpolicies",
+		mutatingAdmissionPolicyBindingKind:   "mutatingadmissionpolicybindings",
+		validatingAdmissionPolicyKind:        "validatingadmissionpolicies",
+		validatingAdmissionPolicyBindingKind: "validatingadmissionpolicybindings",
 	}[gvk.Kind]
 }
 
@@ -333,7 +333,7 @@ func validatePrerequisiteRef(ref prerequisiteRef) error {
 
 	for _, kind := range []string{
 		prerequisiteCRDKind, mutatingAdmissionPolicyKind, mutatingAdmissionPolicyBindingKind,
-		"ValidatingAdmissionPolicy", "ValidatingAdmissionPolicyBinding",
+		validatingAdmissionPolicyKind, validatingAdmissionPolicyBindingKind,
 	} {
 		object := &unstructured.Unstructured{}
 		object.SetGroupVersionKind(

@@ -70,42 +70,42 @@ func marshalNativeNetworkPolicies(opts Options) (string, error) {
 
 func nativeNetworkPolicy(name, namespace string, spec map[string]any) map[string]any {
 	return map[string]any{
-		"apiVersion": "networking.k8s.io/v1",
-		"kind":       "NetworkPolicy",
-		"metadata": map[string]any{
-			"name":      name,
-			"namespace": namespace,
-			"labels":    ManagedByLabels(),
+		keyAPIVersion: "networking.k8s.io/v1",
+		keyKind:       "NetworkPolicy",
+		keyMetadata: map[string]any{
+			keyName:      name,
+			keyNamespace: namespace,
+			keyLabels:    ManagedByLabels(),
 		},
-		"spec": spec,
+		keySpec: spec,
 	}
 }
 
 func nativeDefaultDeny(namespace string) map[string]any {
 	return nativeNetworkPolicy("default-deny", namespace, map[string]any{
-		"podSelector": map[string]any{},
-		"policyTypes": []string{"Ingress", policyTypeEgress},
+		keyPodSelector: map[string]any{},
+		keyPolicyTypes: []string{"Ingress", policyTypeEgress},
 	})
 }
 
 func nativeAllowDNS(namespace string) map[string]any {
 	return nativeNetworkPolicy("allow-dns", namespace, map[string]any{
-		"podSelector": map[string]any{},
-		"policyTypes": []string{policyTypeEgress},
-		"egress": []map[string]any{
+		keyPodSelector: map[string]any{},
+		keyPolicyTypes: []string{policyTypeEgress},
+		keyEgress: []map[string]any{
 			{
 				"to": []map[string]any{
 					{
 						"namespaceSelector": map[string]any{
-							"matchLabels": map[string]any{
+							keyMatchLabels: map[string]any{
 								"kubernetes.io/metadata.name": "kube-system",
 							},
 						},
 					},
 				},
 				"ports": []map[string]any{
-					{"protocol": "UDP", "port": dnsPort},
-					{"protocol": "TCP", "port": dnsPort},
+					{keyProtocol: "UDP", keyPort: dnsPort},
+					{keyProtocol: "TCP", keyPort: dnsPort},
 				},
 			},
 		},
@@ -114,13 +114,13 @@ func nativeAllowDNS(namespace string) map[string]any {
 
 func nativeAllowIntraNamespace(namespace string) map[string]any {
 	return nativeNetworkPolicy("allow-intra-namespace", namespace, map[string]any{
-		"podSelector": map[string]any{},
-		"policyTypes": []string{"Ingress", policyTypeEgress},
+		keyPodSelector: map[string]any{},
+		keyPolicyTypes: []string{"Ingress", policyTypeEgress},
 		"ingress": []map[string]any{
-			{"from": []map[string]any{{"podSelector": map[string]any{}}}},
+			{"from": []map[string]any{{keyPodSelector: map[string]any{}}}},
 		},
-		"egress": []map[string]any{
-			{"to": []map[string]any{{"podSelector": map[string]any{}}}},
+		keyEgress: []map[string]any{
+			{"to": []map[string]any{{keyPodSelector: map[string]any{}}}},
 		},
 	})
 }
@@ -146,28 +146,28 @@ func marshalCiliumNetworkPolicies(opts Options) (string, error) {
 // starting point that platform teams can extend.
 func ciliumNetworkPolicy(namespace string) map[string]any {
 	intraNamespace := map[string]any{
-		"matchLabels": map[string]any{"k8s:io.kubernetes.pod.namespace": namespace},
+		keyMatchLabels: map[string]any{"k8s:io.kubernetes.pod.namespace": namespace},
 	}
 
 	return map[string]any{
-		"apiVersion": "cilium.io/v2",
-		"kind":       "CiliumNetworkPolicy",
-		"metadata": map[string]any{
-			"name":      "tenant-isolation",
-			"namespace": namespace,
-			"labels":    ManagedByLabels(),
+		keyAPIVersion: "cilium.io/v2",
+		keyKind:       "CiliumNetworkPolicy",
+		keyMetadata: map[string]any{
+			keyName:      "tenant-isolation",
+			keyNamespace: namespace,
+			keyLabels:    ManagedByLabels(),
 		},
-		"spec": map[string]any{
+		keySpec: map[string]any{
 			"endpointSelector": map[string]any{},
 			"ingress": []map[string]any{
 				{"fromEndpoints": []map[string]any{intraNamespace}},
 			},
-			"egress": []map[string]any{
+			keyEgress: []map[string]any{
 				{"toEndpoints": []map[string]any{intraNamespace}},
 				{
 					"toEndpoints": []map[string]any{
 						{
-							"matchLabels": map[string]any{
+							keyMatchLabels: map[string]any{
 								"k8s:io.kubernetes.pod.namespace": "kube-system",
 								"k8s:k8s-app":                     "kube-dns",
 							},
@@ -176,8 +176,8 @@ func ciliumNetworkPolicy(namespace string) map[string]any {
 					"toPorts": []map[string]any{
 						{
 							"ports": []map[string]any{
-								{"port": "53", "protocol": "UDP"},
-								{"port": "53", "protocol": "TCP"},
+								{keyPort: "53", keyProtocol: "UDP"},
+								{keyPort: "53", keyProtocol: "TCP"},
 							},
 						},
 					},

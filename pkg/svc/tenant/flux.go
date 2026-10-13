@@ -152,7 +152,7 @@ func applyFluxHardening(spec *fluxKustomizationSpec, opts Options) {
 	if opts.FluxDecryption {
 		spec.Decryption = &fluxDecryption{
 			Provider:  "sops",
-			SecretRef: map[string]string{"name": "sops-age"},
+			SecretRef: map[string]string{keyName: "sops-age"},
 		}
 	}
 }
