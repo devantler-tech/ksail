@@ -24,8 +24,7 @@ func skipWindowsSymlinkPrivilegeError(t *testing.T, err error) {
 }
 
 func isWindowsSymlinkPrivilegeError(err error) bool {
-	var linkErr *os.LinkError
-	if errors.As(err, &linkErr) {
+	if linkErr, ok := errors.AsType[*os.LinkError](err); ok {
 		err = linkErr.Err
 	}
 

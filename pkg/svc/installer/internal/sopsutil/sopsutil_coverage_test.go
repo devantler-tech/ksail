@@ -82,7 +82,7 @@ func noKeyFile(t *testing.T) {
 func TestResolveAgeKey_EmptyEnvVarName(t *testing.T) {
 	noKeyFile(t)
 
-	sops := v1alpha1.SOPS{AgeKeyEnvVar: ""}
+	sops := v1alpha1.SOPS{}
 	key, err := sopsutil.ResolveAgeKey(sops)
 
 	require.NoError(t, err)
@@ -97,7 +97,7 @@ func TestResolveAgeKey_EnvVarSetWithoutAgePrefix(t *testing.T) {
 	t.Setenv("TEST_SOPSUTIL_NO_PREFIX_88888", "not-a-valid-age-key")
 	noKeyFile(t)
 
-	sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_SOPSUTIL_NO_PREFIX_88888"}
+	sops := v1alpha1.SOPS{Env: v1alpha1.SOPSEnv{Var: "TEST_SOPSUTIL_NO_PREFIX_88888"}}
 	key, err := sopsutil.ResolveAgeKey(sops)
 
 	require.NoError(t, err)
@@ -113,8 +113,8 @@ func TestResolveEnabledAgeKey_NilEnabled(t *testing.T) {
 	noKeyFile(t)
 
 	sops := v1alpha1.SOPS{
-		AgeKeyEnvVar: "TEST_SOPSUTIL_NILCHECK_99999",
-		Enabled:      v1alpha1.SOPSEnabledDefault,
+		Env:     v1alpha1.SOPSEnv{Var: "TEST_SOPSUTIL_NILCHECK_99999"},
+		Enabled: v1alpha1.SOPSEnabledDefault,
 	}
 	key, err := sopsutil.ResolveEnabledAgeKey(sops)
 

@@ -678,7 +678,8 @@ func CreateMinimalProvisionerForProvider(
 	case v1alpha1.ProviderDocker, "":
 		// Docker provider supports all Docker-based distributions -
 		// create a multi-provisioner that tries each distribution in order
-		return clusterprovisioner.NewMultiProvisioner(info.ClusterName), nil
+		return clusterprovisioner.NewMultiProvisioner(info.ClusterName).
+			WithKubeconfig(info.KubeconfigPath), nil
 
 	case v1alpha1.ProviderKubernetes:
 		// Kubernetes provider runs clusters as pods in a host cluster.

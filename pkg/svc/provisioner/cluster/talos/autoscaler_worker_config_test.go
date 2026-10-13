@@ -49,7 +49,7 @@ func newTestWorkerProvider() *taloscontainer.Container {
 			MachineInstall: &v1alpha1.InstallConfig{
 				InstallWipe: &falseVal,
 			},
-			MachineDisks: []*v1alpha1.MachineDisk{
+			MachineDisks: []*v1alpha1.MachineDisk{ //nolint:staticcheck // legacy Talos input under test
 				{DeviceName: "/dev/sdb"},
 			},
 			MachineNodeLabels: map[string]string{

@@ -22,6 +22,15 @@ retry_wait_time = 2
 # Per-request timeout (seconds). Generous to accommodate slow servers.
 timeout = 30
 
+# A request that still times out after every retry is reported but does not
+# fail the job. A time-out says the host did not answer this runner in time,
+# not that the link is wrong: on 2026-10-12 factory.talos.dev timed out for
+# GitHub-hosted runners through four runs over 90 minutes while answering 200
+# in under a second elsewhere, and failed the required lint job on a pull
+# request that touched neither linked file (#7697). The links stay checked:
+# a 404, a DNS failure and a malformed URL still fail.
+accept_timeouts = true
+
 # Total concurrent requests. Lower than the default (128) to reduce the
 # chance of triggering rate-limits or connection-pool exhaustion on CI.
 max_concurrency = 32

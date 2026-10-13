@@ -1,6 +1,7 @@
 package ciharness_test
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -65,8 +66,12 @@ esac
 const nestedCleanupKSailStub = `#!/usr/bin/env bash
 set -euo pipefail
 printf 'ksail %s\n' "$*" >> "$FIXTURE_CALLS"
-if [[ "$FIXTURE_MODE" == delete-error && "$2" == delete ]]; then
+if [[ "$FIXTURE_MODE" == delete-error || "$FIXTURE_MODE" == info-delete-error ]] && [[ "$2" == delete ]]; then
   echo 'fixture delete failed' >&2
+  exit 1
+fi
+if [[ "$FIXTURE_MODE" == info-delete-error && "$2" == info ]]; then
+  echo 'fixture info failed' >&2
   exit 1
 fi
 if [[ "$FIXTURE_MODE" == create-error && "$2" == create && "$*" == *nested-vanilla* ]]; then
@@ -347,4 +352,118 @@ func TestNestedCleanupPreservesCreateFailureAndStillDeletes(t *testing.T) {
 	)
 	assert.NotContains(t, calls, "ksail cluster info --name nested-vanilla")
 	assert.NotContains(t, output, "All Kubernetes provider tests passed")
+}
+
+// nestedSummary returns the lifecycle counts the action prints for a trial of
+// total distributions, so each case states its whole expected summary once.
+func nestedSummary(attempted, passed, failed, unattempted, total int) []string {
+	return []string{
+		fmt.Sprintf("  Attempted: %d / %d\n", attempted, total),
+		fmt.Sprintf("  Passed: %d / %d\n", passed, total),
+		fmt.Sprintf("  Failed: %d / %d\n", failed, total),
+		fmt.Sprintf("  Unattempted: %d / %d\n", unattempted, total),
+	}
+}
+
+type nestedSummaryCase struct {
+	name          string
+	mode          string
+	distributions string
+	summary       []string
+	operations    []string
+	failedLine    string
+}
+
+func nestedSummaryFailureCases() []nestedSummaryCase {
+	return []nestedSummaryCase{
+		{
+			name:          "delete failure after a healthy create is failed only",
+			mode:          "delete-error",
+			distributions: "Vanilla",
+			summary:       nestedSummary(1, 0, 1, 0, 1),
+			operations: []string{
+				"Vanilla info and nested API readiness succeeded",
+				"Vanilla delete FAILED",
+			},
+			failedLine: "1 distribution(s) failed (1 failed operation(s))",
+		},
+		{
+			name: "drain failure after a healthy create is failed only", mode: "pending",
+			distributions: "Vanilla", summary: nestedSummary(1, 0, 1, 0, 1),
+			operations: []string{"Vanilla delete succeeded", "Vanilla cleanup was not verified"},
+			failedLine: "1 distribution(s) failed (1 failed operation(s))",
+		},
+		{
+			name: "several failures in one distribution fail it once", mode: "info-delete-error",
+			distributions: "Vanilla", summary: nestedSummary(1, 0, 1, 0, 1),
+			operations: []string{"Vanilla info FAILED", "Vanilla delete FAILED"},
+			failedLine: "1 distribution(s) failed (2 failed operation(s))",
+		},
+		{
+			name:          "a create failure does not hide a later pass",
+			mode:          "create-error",
+			distributions: "Vanilla,K3s",
+			summary:       nestedSummary(2, 1, 1, 0, 2),
+			operations: []string{
+				"Vanilla create FAILED",
+				"Vanilla resources drained",
+				"K3s resources drained",
+			},
+			failedLine: "1 distribution(s) failed (1 failed operation(s))",
+		},
+		{
+			name:          "a drain stop leaves the rest unattempted",
+			mode:          "query-error",
+			distributions: "Vanilla,K3s,VCluster,Talos",
+			summary:       nestedSummary(1, 0, 1, 3, 4),
+			operations: []string{
+				"Vanilla namespace verification FAILED",
+				"Vanilla cleanup was not verified",
+			},
+			failedLine: "1 distribution(s) failed (1 failed operation(s)); 3 not attempted",
+		},
+		{
+			name: "a host restoration stop leaves the rest unattempted", mode: "host-error",
+			distributions: "Vanilla,K3s", summary: nestedSummary(1, 0, 1, 1, 2),
+			operations: []string{"Vanilla host context restoration FAILED; stopping nested tests"},
+			failedLine: "1 distribution(s) failed (1 failed operation(s)); 1 not attempted",
+		},
+	}
+}
+
+func TestNestedSummaryCountsEachDistributionOnce(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range nestedSummaryFailureCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			output, _, err := runNestedCleanup(t, testCase.mode, testCase.distributions)
+			require.Error(t, err, output)
+
+			for _, line := range testCase.summary {
+				assert.Contains(t, output, line)
+			}
+
+			for _, operation := range testCase.operations {
+				assert.Contains(t, output, operation, "every operation outcome must stay visible")
+			}
+
+			assert.Contains(t, output, testCase.failedLine)
+			assert.NotContains(t, output, "All Kubernetes provider tests passed")
+		})
+	}
+}
+
+func TestNestedSummaryReportsACompleteHealthyTrial(t *testing.T) {
+	t.Parallel()
+	output, calls, err := runNestedCleanup(t, "empty", "Vanilla,K3s,VCluster,Talos")
+	require.NoError(t, err, output)
+
+	for _, line := range nestedSummary(4, 4, 0, 0, 4) {
+		assert.Contains(t, output, line)
+	}
+
+	assert.Contains(t, output, "All Kubernetes provider tests passed")
+	assert.Equal(t, 4, strings.Count(calls, "ksail cluster delete --provider Kubernetes"))
+	assert.Equal(t, 4, strings.Count(output, "resources drained"))
 }

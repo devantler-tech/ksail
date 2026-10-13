@@ -62,6 +62,37 @@ jobs:
             --retry 6 --retry-delay 30 --retry-all-errors \
             https://ksail.devantler.tech/
 
+  # The pull-request link check reports a link that times out without failing (see
+  # lychee.toml), because a time-out there usually means the host did not answer the
+  # runner in time. This job is where a time-out still fails: it checks the same files
+  # once a day with time-outs counted as errors, so a host that has stopped answering
+  # for good turns this scheduled run red within a day instead of passing forever.
+  check-external-links-strict:
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || github.event.schedule == '0 0 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: List the files the link checker reads
+        run: .github/scripts/list-link-check-files.sh > "$RUNNER_TEMP/link-check-files.txt"
+
+      - name: Check links with time-outs counted as errors
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          lycheeVersion: v0.24.2
+          args: >-
+            --no-progress --config lychee.toml --accept-timeouts=false
+            --files-from ${{ runner.temp }}/link-check-files.txt
+          fail: true
+
   delete-old-images:
     if: >-
       github.event_name == 'workflow_dispatch'

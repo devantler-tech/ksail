@@ -49,15 +49,15 @@ func buildParameterSchema(cmd *cobra.Command, excludeFlags []string) map[string]
 	if acceptsPositionalArgs(cmd) {
 		// Add positional args parameter for commands that expect them
 		properties[argsKey] = map[string]any{
-			"type":        "array",
-			"items":       map[string]any{"type": "string"},
-			"description": "Positional arguments for the command",
+			jsonSchemaKeyType:        "array",
+			"items":                  map[string]any{jsonSchemaKeyType: "string"},
+			jsonSchemaKeyDescription: "Positional arguments for the command",
 		}
 	}
 
 	schema := map[string]any{
-		"type":       "object",
-		"properties": properties,
+		jsonSchemaKeyType: "object",
+		"properties":      properties,
 	}
 
 	if len(required) > 0 {
@@ -88,33 +88,33 @@ func flagToSchemaProperty(flag *pflag.Flag) map[string]any {
 // buildStandardProperty creates a property map with type information based on flag type.
 func buildStandardProperty(flag *pflag.Flag) map[string]any {
 	prop := map[string]any{
-		"description": truncateDescription(flag.Usage, maxDescriptionLength),
+		jsonSchemaKeyDescription: truncateDescription(flag.Usage, maxDescriptionLength),
 	}
 
 	switch flag.Value.Type() {
 	case flagTypeBool:
-		prop["type"] = jsonSchemaTypeBoolean
+		prop[jsonSchemaKeyType] = jsonSchemaTypeBoolean
 	case "int", "int8", "int16", "int32", "int64",
 		"uint", "uint8", "uint16", "uint32", "uint64":
-		prop["type"] = jsonSchemaTypeInteger
+		prop[jsonSchemaKeyType] = jsonSchemaTypeInteger
 	case "float32", "float64":
-		prop["type"] = jsonSchemaTypeNumber
+		prop[jsonSchemaKeyType] = jsonSchemaTypeNumber
 	case flagTypeStringSlice, flagTypeStringArray:
-		prop["type"] = jsonSchemaTypeArray
-		prop["items"] = map[string]any{"type": jsonSchemaTypeString}
+		prop[jsonSchemaKeyType] = jsonSchemaTypeArray
+		prop["items"] = map[string]any{jsonSchemaKeyType: jsonSchemaTypeString}
 	case flagTypeIntSlice:
-		prop["type"] = jsonSchemaTypeArray
-		prop["items"] = map[string]any{"type": jsonSchemaTypeInteger}
+		prop[jsonSchemaKeyType] = jsonSchemaTypeArray
+		prop["items"] = map[string]any{jsonSchemaKeyType: jsonSchemaTypeInteger}
 	case "duration":
-		prop["type"] = jsonSchemaTypeString
+		prop[jsonSchemaKeyType] = jsonSchemaTypeString
 
 		desc := truncateDescription(
 			flag.Usage,
 			maxDescriptionLength-len(" (format: 1h30m, 5m, 30s)"),
 		)
-		prop["description"] = desc + " (format: 1h30m, 5m, 30s)"
+		prop[jsonSchemaKeyDescription] = desc + " (format: 1h30m, 5m, 30s)"
 	default:
-		prop["type"] = jsonSchemaTypeString
+		prop[jsonSchemaKeyType] = jsonSchemaTypeString
 	}
 
 	return prop
@@ -125,7 +125,7 @@ func addDefaultValue(prop map[string]any, flag *pflag.Flag) {
 	if flag.DefValue != "" && flag.DefValue != defaultValueFalse &&
 		flag.DefValue != defaultValueEmptyArray {
 		// Get the JSON schema type from the prop map
-		flagType, _ := prop["type"].(string)
+		flagType, _ := prop[jsonSchemaKeyType].(string)
 		prop["default"] = convertDefaultValue(flagType, flag.DefValue)
 	}
 }
@@ -249,9 +249,9 @@ func buildEnumProperty(ev enumValuer, flag *pflag.Flag) map[string]any {
 	}
 
 	prop := map[string]any{
-		"type": jsonSchemaTypeString,
-		"enum": validValues,
-		"description": truncateDescription(fmt.Sprintf(
+		jsonSchemaKeyType: jsonSchemaTypeString,
+		"enum":            validValues,
+		jsonSchemaKeyDescription: truncateDescription(fmt.Sprintf(
 			"%s (valid options: %s)",
 			flag.Usage,
 			strings.Join(validValues, ", "),
@@ -349,9 +349,9 @@ func buildConsolidatedParameterSchema(
 	addPositionalArgsProperty(properties, subcommands)
 
 	return map[string]any{
-		"type":       "object",
-		"properties": properties,
-		"required":   required,
+		jsonSchemaKeyType: "object",
+		"properties":      properties,
+		"required":        required,
 	}
 }
 
@@ -373,9 +373,12 @@ func buildSubcommandEnumProperty(subcommands map[string]*SubcommandDef) map[stri
 	}
 
 	return map[string]any{
-		"type":        jsonSchemaTypeString,
-		"enum":        names,
-		"description": "The subcommand to execute. Options:\n" + strings.Join(descriptions, "\n"),
+		jsonSchemaKeyType: jsonSchemaTypeString,
+		"enum":            names,
+		jsonSchemaKeyDescription: "The subcommand to execute. Options:\n" + strings.Join(
+			descriptions,
+			"\n",
+		),
 	}
 }
 
@@ -465,12 +468,12 @@ func addFlagProperties(
 ) {
 	for flagName, flagDef := range allFlags {
 		prop := map[string]any{
-			"type": flagDef.Type,
+			jsonSchemaKeyType: flagDef.Type,
 		}
 
 		// Add items property for array types (required by JSON Schema)
 		if flagDef.ItemsType != "" {
-			prop["items"] = map[string]any{"type": flagDef.ItemsType}
+			prop["items"] = map[string]any{jsonSchemaKeyType: flagDef.ItemsType}
 		}
 
 		// Build description with conditional applicability.
@@ -488,7 +491,7 @@ func addFlagProperties(
 			description = truncateDescription(description, maxTotalFlagDescriptionLength)
 		}
 
-		prop["description"] = description
+		prop[jsonSchemaKeyDescription] = description
 
 		// Add default if present
 		if flagDef.Default != "" && flagDef.Default != defaultValueFalse &&
@@ -533,9 +536,9 @@ func addPositionalArgsProperty(properties map[string]any, subcommands map[string
 	}
 
 	properties[argsKey] = map[string]any{
-		"type":        jsonSchemaTypeArray,
-		"items":       map[string]any{"type": jsonSchemaTypeString},
-		"description": description,
+		jsonSchemaKeyType:        jsonSchemaTypeArray,
+		"items":                  map[string]any{jsonSchemaKeyType: jsonSchemaTypeString},
+		jsonSchemaKeyDescription: description,
 	}
 }
 

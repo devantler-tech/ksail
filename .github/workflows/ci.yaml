@@ -647,7 +647,7 @@ jobs:
       || (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
       && needs.changes.outputs.govuln-allowlist == 'true')
-    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@8d3327fe87f216d6e107941de4ce1ae019294cea # v7.9.1
+    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@8ed2071ebe18864b8b86efe0f6b1df8d73d2a6ab # v7.10.4
     # The canonical defaults make a default-branch run answer "did the check run" rather than
     # "did the diff touch a Go file". On main the branch's green IS the protection
     # signal, so a path filter that skips the suite or the scan leaves main green
@@ -841,7 +841,9 @@ jobs:
   build-artifact:
     name: 🏗️ Build KSail Binary
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Also build the immutable migration baseline; dependency churn can make
+    # that second build miss the candidate's warmed cache.
+    timeout-minutes: 40
     needs: [changes]
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && (needs.changes.outputs.code == 'true' || needs.changes.outputs.cli == 'true' || needs.changes.outputs.system-test == 'true' || needs.changes.outputs.kubeconform-cancellation == 'true'))
     permissions:
@@ -849,6 +851,8 @@ jobs:
     outputs:
       artifact-id: ${{ steps.binary-artifact.outputs.artifact-id }}
       binary-sha256: ${{ steps.binary-checksum.outputs.binary-sha256 }}
+      calico-baseline-artifact-id: ${{ steps.calico-baseline-artifact.outputs.artifact-id }}
+      calico-baseline-sha256: ${{ steps.calico-baseline-build.outputs.binary-sha256 }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -866,6 +870,10 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
 
       - name: 📦 Cache KSail Binary
         id: binary
@@ -923,6 +931,41 @@ jobs:
           compression-level: 0
           retention-days: 1
 
+      - name: 📄 Checkout Calico 3.32.2 baseline
+        if: needs.changes.outputs.system-test == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Reviewed protected-main source immediately before this migration fix.
+          ref: 66ba54d8de006cac38575c3697c863f453fc0f1b
+          path: calico-legacy-source
+          persist-credentials: false
+
+      - name: 🏗️ Build Calico migration baseline
+        id: calico-baseline-build
+        if: needs.changes.outputs.system-test == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
+        env:
+          GOMEMLIMIT: 6GiB
+          GOPROXY: https://proxy.golang.org,direct
+        run: |
+          set -euo pipefail
+          test "$(git -C calico-legacy-source rev-parse HEAD)" = 66ba54d8de006cac38575c3697c863f453fc0f1b
+          grep -Fxq 'FROM docker.io/calico/node:v3.32.2@sha256:99b03fe91e8bfbcb153ae65ef4b701b24ce541ffdd74ff314eb041096008f7fd' calico-legacy-source/pkg/svc/installer/cni/calico/Dockerfile
+          mkdir -p "$RUNNER_TEMP/calico-legacy-bin"
+          (cd calico-legacy-source && go build -trimpath -ldflags='-s -w' -o "$RUNNER_TEMP/calico-legacy-bin/ksail" .)
+          checksum=$(sha256sum "$RUNNER_TEMP/calico-legacy-bin/ksail" | cut -d ' ' -f 1)
+          echo "binary-sha256=$checksum" >> "$GITHUB_OUTPUT"
+
+      - name: 📤 Publish Calico migration baseline
+        id: calico-baseline-artifact
+        if: needs.changes.outputs.system-test == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: calico-legacy-binary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/calico-legacy-bin/ksail
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
   generate:
     name: 📝 Generate Schema, CRD & Docs
     runs-on: ubuntu-latest
@@ -963,6 +1006,10 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
 
       - name: 📝 Generate JSON schema
         if: needs.changes.outputs.schema == 'true'
@@ -1299,6 +1346,10 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
 
       - name: 🏠 Verify tests never touch the real home directory
         shell: bash
@@ -1587,6 +1638,10 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
 
       - name: 🧪 Run Operator Chart E2E
         uses: ./.github/actions/operator-chart-e2e
@@ -1625,6 +1680,10 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
 
       - name: 📦 Cache KSail Binary
         uses: ./.github/actions/cache-ksail-binary
@@ -1667,6 +1726,9 @@ jobs:
         run: |
           shellcheck .github/actions/warm-mirror-cache/cache-validation.test.sh
           bash .github/actions/warm-mirror-cache/cache-validation.test.sh
+          shellcheck .github/actions/warm-mirror-cache/pull-helper-image.sh \
+            .github/actions/warm-mirror-cache/pull-helper-image.test.sh
+          bash .github/actions/warm-mirror-cache/pull-helper-image.test.sh
           shellcheck .github/actions/ksail-system-test/offline-ecr-upstream.sh \
             .github/actions/ksail-system-test/offline-ecr-upstream.test.sh \
             .github/actions/ksail-system-test/verify-offline-ecr-pull.sh \
@@ -1685,6 +1747,10 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
 
       - name: 📦 Cache KSail Binary
         uses: ./.github/actions/cache-ksail-binary
@@ -1767,6 +1833,13 @@ jobs:
           - "--cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine Gatekeeper --gitops-engine ArgoCD"
           - "--gitops-engine Flux --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
           - "--gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
+        # Replace the unnamed Talos default with the named trial below. Naming
+        # the host creates the inherited cluster-name patch nested creation must override.
+        exclude:
+          - distribution: Talos
+            provider: Docker
+            init: true
+            args: ""
         # init=false (CLI-flag-only path without ksail.yaml) is now covered by
         # unit tests (TestCreate_NoConfigFile_*) instead of full E2E clusters.
         include:
@@ -1774,8 +1847,8 @@ jobs:
             provider: Docker
             init: true
             args: "--name system-test-cluster-with-image-verification --image-verification Enabled"
-          # Enable Kubernetes provider tests on the default (init=true, args="")
-          # entry for each distribution. This tests all 4 nested distributions
+          # Enable Kubernetes provider tests on the default initialized host
+          # for each distribution (Talos explicitly named). This tests all 4 nested distributions
           # (Vanilla,K3s,VCluster,Talos) on each host type, once per matrix.
           # The three mirror-supported distributions also opt into their smoke
           # test here so it runs once per distribution rather than for all args.
@@ -1794,7 +1867,7 @@ jobs:
           - distribution: Talos
             provider: Docker
             init: true
-            args: ""
+            args: "--name system-test-cluster"
             kubernetes-upgrade-from: "v1.36.2"
             kubernetes-upgrade-to: "v1.37.1"
             test-kubernetes-provider: "true"
@@ -1825,6 +1898,25 @@ jobs:
             test-kubernetes-provider: "true"
             kubernetes-provider-distributions: "K3s"
             kubernetes-provider-cni: "Calico"
+          # Keep the fresh 3.33 installations above, and also create these with
+          # the immutable 3.32.2 CLI before the candidate's unchanged-config update.
+          - distribution: Vanilla
+            provider: Docker
+            init: true
+            args: "--name calico-migration --cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine None --gitops-engine None"
+            calico-migration: "true"
+          - distribution: K3s
+            provider: Docker
+            init: true
+            # Legacy K3s keeps its embedded load balancer enabled. Match that
+            # baseline so this unchanged-config trial isolates Calico drift.
+            args: "--name calico-migration --cni Calico --csi Disabled --load-balancer Enabled --metrics-server Disabled --policy-engine None --gitops-engine None"
+            calico-migration: "true"
+          - distribution: VCluster
+            provider: Docker
+            init: true
+            args: "--name calico-migration --cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine None --gitops-engine None"
+            calico-migration: "true"
           # NOTE: KWOK excluded — simulated nodes cannot run real workloads (DinD pods)
     steps:
       - name: 📄 Checkout
@@ -1860,6 +1952,24 @@ jobs:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
 
+      - name: 🔍 Require Calico migration baseline artifact
+        if: ${{ matrix.calico-migration == 'true' }}
+        env:
+          ARTIFACT_ID: ${{ needs.build-artifact.outputs.calico-baseline-artifact-id }}
+          BINARY_SHA256: ${{ needs.build-artifact.outputs.calico-baseline-sha256 }}
+        run: |
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ && "$BINARY_SHA256" =~ ^[a-f0-9]{64}$ ]] || {
+            echo 'Missing exact Calico baseline artifact identity' >&2
+            exit 1
+          }
+
+      - name: 📥 Download Calico migration baseline
+        if: ${{ matrix.calico-migration == 'true' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.build-artifact.outputs.calico-baseline-artifact-id }}
+          path: ${{ runner.temp }}/calico-legacy-download
+
       - name: 📥 Restore Helm Cache
         uses: ./.github/actions/restore-helm-cache
 
@@ -1887,6 +1997,8 @@ jobs:
           provider: ${{ matrix.provider }}
           init: ${{ matrix.init }}
           args: ${{ matrix.args }}
+          calico-migration-binary: ${{ matrix.calico-migration == 'true' && format('{0}/calico-legacy-download/ksail', runner.temp) || '' }}
+          calico-migration-sha256: ${{ matrix.calico-migration == 'true' && needs.build-artifact.outputs.calico-baseline-sha256 || '' }}
           kubernetes-upgrade-from: ${{ matrix.kubernetes-upgrade-from || '' }}
           kubernetes-upgrade-to: ${{ matrix.kubernetes-upgrade-to || '' }}
           ecr-public-upstream: ${{ steps.offline-ecr.outputs.remote-url || 'https://ecr-public.aws.com' }}
@@ -2170,6 +2282,10 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
 
       # -count=1 is load-bearing: the files under test are invisible to the Go build graph,
       # so a cached PASS from an earlier run would be replayed over the changed configuration.
@@ -2200,6 +2316,10 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
 
       - name: 🔐 Audit Shipped Dependency Graphs
         # Release files are outside Go's test-cache inputs; always execute the audit.
@@ -2227,6 +2347,11 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
+
       - name: 🧪 Reproduce local safety and partial-deletion cases
         id: local-safety
         shell: bash
@@ -2254,7 +2379,7 @@ jobs:
         if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          version: v2.11.4
+          version: v2.14.0
           install-only: true
           verify: false
       - name: 🔍 Validate with the canonical CI linter

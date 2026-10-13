@@ -277,7 +277,7 @@ func ExportResolveCreatedContextName(
 
 // ExportResolvePostCreateContext exports resolvePostCreateContext for testing.
 func ExportResolvePostCreateContext(ctx *localregistry.Context) error {
-	return resolvePostCreateContext(ctx)
+	return resolvePostCreateContext(context.Background(), ctx)
 }
 
 // ExportPrepareEKSCreateConfig exports prepareEKSCreateConfig for testing.
@@ -366,6 +366,25 @@ func ExportApplyInPlaceChanges(
 		cmd, updater, reconciler, clusterName,
 		currentSpec, ctx, diff, outputTimer, force, allowRolling,
 	)
+}
+
+// ExportApplySpecOnlyDiff exercises the updater-free apply boundary.
+func ExportApplySpecOnlyDiff(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	clusterName string,
+	diff *clusterupdate.UpdateResult,
+	dryRun bool,
+) error {
+	orchestrator := &updateOrchestrator{
+		cmd:         cmd,
+		ctx:         ctx,
+		clusterName: clusterName,
+		consent:     true,
+		dryRun:      dryRun,
+	}
+
+	return orchestrator.applySpecOnlyDiff(diff)
 }
 
 // ExportExecuteRecreateFlow exposes the post-consent recreate boundary for fail-closed tests.

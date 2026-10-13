@@ -113,7 +113,7 @@ func (o *updateOrchestrator) planEKSVersionUpgrade(
 		upgrader: upgrader,
 		change: clusterupdate.Change{
 			Field: "kubernetes.version", OldValue: current.KubernetesVersion, NewValue: target,
-			Category: planner.KubernetesUpgradeCategory(), Reason: "pinned via configuration",
+			Category: planner.KubernetesUpgradeCategory(), Reason: pinnedViaConfigurationReason,
 		},
 	}, nil
 }

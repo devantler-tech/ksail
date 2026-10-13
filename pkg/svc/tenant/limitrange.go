@@ -21,10 +21,10 @@ func GenerateLimitRangeManifests(opts Options) (map[string]string, error) {
 	return generateNamespacedManifest("limitrange.yaml", opts.Namespaces,
 		func(namespace string) map[string]any {
 			return map[string]any{
-				"apiVersion": "v1",
-				"kind":       "LimitRange",
-				"metadata":   namespacedMeta(opts.Name+"-limits", namespace),
-				"spec": map[string]any{
+				keyAPIVersion: "v1",
+				keyKind:       "LimitRange",
+				keyMetadata:   namespacedMeta(opts.Name+"-limits", namespace),
+				keySpec: map[string]any{
 					"limits": []map[string]any{
 						{
 							"type": "Container",

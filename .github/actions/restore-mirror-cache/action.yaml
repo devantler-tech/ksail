@@ -218,6 +218,9 @@ runs:
         # mirror.gcr.io is anonymous and not rate-limited. It re-serializes
         # manifests, so the upstream digest can't be pinned through it — we pin
         # by tag, exactly like registry:3 in pull-registry-image.sh.
+        # Pull it once, with a bounded retry, before any volume is created: a
+        # registry error on this image is not a failed mirror import (#7673).
+        bash "$GITHUB_ACTION_PATH/../warm-mirror-cache/pull-helper-image.sh"
 
         import_mirror() {
           local registry="$1"

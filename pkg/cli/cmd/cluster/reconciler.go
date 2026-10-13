@@ -22,6 +22,14 @@ import (
 // defaultReconcileTimeout is the default timeout for component reconciliation operations.
 const defaultReconcileTimeout = 5 * time.Minute
 
+// Diff field names both the component reconciler and the update orchestrator dispatch on.
+const (
+	fieldClusterCNI           = "cluster.cni"
+	fieldClusterMetricsServer = "cluster.metricsServer"
+)
+
+var errCalicoInstallerFactoryUnavailable = errors.New("calico installer factory is unavailable")
+
 // errMetricsServerDisableUnsupported is returned when attempting to disable metrics-server in-place.
 var errMetricsServerDisableUnsupported = errors.New(
 	"disabling metrics-server in-place is not yet supported; use 'ksail cluster delete && ksail cluster create'",
@@ -63,6 +71,11 @@ type componentReconciler struct {
 	// policyEngineErr replays the first attempt's failure for the other field.
 	policyEngineInstalled bool
 	policyEngineErr       error
+	// metricsServerInstalled coalesces a cluster.metricsServer change and
+	// metrics-server chart-values drift into one Helm install/upgrade per pass;
+	// metricsServerErr replays the first attempt's failure for the other field.
+	metricsServerInstalled bool
+	metricsServerErr       error
 	// loadBalancerReconciled coalesces the generic load-balancer field and the
 	// EKS-specific controller opt-in when both change in one update pass.
 	loadBalancerReconciled bool
@@ -159,9 +172,9 @@ func (r *componentReconciler) handlerForField(
 	field string,
 ) (func(context.Context, clusterupdate.Change) error, bool) {
 	handlers := map[string]func(context.Context, clusterupdate.Change) error{
-		"cluster.cni":                               r.reconcileCNI,
+		fieldClusterCNI:                             r.reconcileCNI,
 		"cluster.csi":                               r.reconcileCSI,
-		"cluster.metricsServer":                     r.reconcileMetricsServer,
+		fieldClusterMetricsServer:                   r.reconcileMetricsServer,
 		"cluster.loadBalancer":                      r.reconcileLoadBalancer,
 		"cluster.certManager":                       r.reconcileCertManager,
 		"cluster.policyEngine":                      r.reconcilePolicyEngine,
@@ -173,7 +186,9 @@ func (r *componentReconciler) handlerForField(
 	handlers[specdiff.RegistryCredentialField] = r.reconcileRegistryCredentials
 	handlers[specdiff.FluxVerifyField] = r.reconcileFluxVerify
 	handlers[specdiff.CertManagerValuesField] = r.reconcileCertManagerValues
+	handlers[specdiff.CalicoPrerequisitesField] = r.reconcileCalicoPrerequisites
 	handlers[specdiff.PolicyEngineValuesField] = r.reconcilePolicyEngineValues
+	handlers[specdiff.MetricsServerValuesField] = r.reconcileMetricsServerValues
 
 	if handler, ok := handlers[field]; ok {
 		return handler, true
@@ -192,9 +207,9 @@ func (r *componentReconciler) handlerForField(
 
 func isComponentReconcileField(field string) bool {
 	switch field {
-	case "cluster.cni",
+	case fieldClusterCNI,
 		"cluster.csi",
-		"cluster.metricsServer",
+		fieldClusterMetricsServer,
 		"cluster.loadBalancer",
 		"cluster.certManager",
 		"cluster.policyEngine",
@@ -205,7 +220,9 @@ func isComponentReconcileField(field string) bool {
 		specdiff.RegistryCredentialField,
 		specdiff.FluxVerifyField,
 		specdiff.CertManagerValuesField,
-		specdiff.PolicyEngineValuesField:
+		specdiff.CalicoPrerequisitesField,
+		specdiff.PolicyEngineValuesField,
+		specdiff.MetricsServerValuesField:
 		return true
 	default:
 		return strings.HasPrefix(field, "cluster.autoscaler.node.")
@@ -218,6 +235,34 @@ func (r *componentReconciler) reconcileCNI(_ context.Context, _ clusterupdate.Ch
 	_, err := setup.InstallCNI(r.cmd, r.clusterCfg, nil)
 	if err != nil {
 		return fmt.Errorf("failed to install CNI: %w", err)
+	}
+
+	return nil
+}
+
+// reconcileCalicoPrerequisites runs the same scoped installer used to detect
+// prerequisite drift, preserving its ownership checks and migration inventory.
+func (r *componentReconciler) reconcileCalicoPrerequisites(
+	ctx context.Context,
+	_ clusterupdate.Change,
+) error {
+	if r.clusterCfg.Spec.Cluster.CNI != v1alpha1.CNICalico ||
+		r.clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK {
+		return nil
+	}
+
+	if r.factories.Calico == nil {
+		return errCalicoInstallerFactoryUnavailable
+	}
+
+	inst, err := r.factories.Calico(r.clusterCfg)
+	if err != nil {
+		return fmt.Errorf("create Calico prerequisite installer: %w", err)
+	}
+
+	err = inst.Install(ctx)
+	if err != nil {
+		return fmt.Errorf("migrate Calico prerequisites: %w", err)
 	}
 
 	return nil
@@ -261,14 +306,40 @@ func (r *componentReconciler) reconcileMetricsServer(
 		return errMetricsServerDisableUnsupported
 	}
 
-	if setup.NeedsMetricsServerInstall(r.clusterCfg) {
-		err := setup.InstallMetricsServerSilent(ctx, r.clusterCfg, r.factories)
-		if err != nil {
-			return fmt.Errorf("failed to install metrics-server: %w", err)
-		}
+	return r.installMetricsServerOnce(ctx)
+}
+
+// reconcileMetricsServerValues upgrades metrics-server to the chart values this
+// KSail version renders when the installed release carries other values
+// (ksail#7703).
+func (r *componentReconciler) reconcileMetricsServerValues(
+	ctx context.Context,
+	_ clusterupdate.Change,
+) error {
+	return r.installMetricsServerOnce(ctx)
+}
+
+// installMetricsServerOnce runs the metrics-server Helm install/upgrade at most
+// once per update pass, replaying the first outcome for every later field that
+// maps to it. It re-checks that KSail installs metrics-server, so neither field
+// installs a component the configuration does not want.
+func (r *componentReconciler) installMetricsServerOnce(ctx context.Context) error {
+	if !setup.NeedsMetricsServerInstall(r.clusterCfg) {
+		return nil
 	}
 
-	return nil
+	if r.metricsServerInstalled {
+		return r.metricsServerErr
+	}
+
+	r.metricsServerInstalled = true
+
+	err := setup.InstallMetricsServerSilent(ctx, r.clusterCfg, r.factories)
+	if err != nil {
+		r.metricsServerErr = fmt.Errorf("failed to install metrics-server: %w", err)
+	}
+
+	return r.metricsServerErr
 }
 
 // reconcileLoadBalancer installs or uninstalls the load balancer.

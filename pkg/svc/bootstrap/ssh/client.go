@@ -240,8 +240,7 @@ func (c *Client) exec(
 
 	result := RunResult{Stdout: stdout.Bytes(), Stderr: stderr.Bytes(), ExitCode: 0}
 
-	var exitErr *ssh.ExitError
-	if errors.As(err, &exitErr) {
+	if exitErr, ok := errors.AsType[*ssh.ExitError](err); ok {
 		result.ExitCode = exitErr.ExitStatus()
 
 		return result, fmt.Errorf(

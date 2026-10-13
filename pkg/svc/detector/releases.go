@@ -17,6 +17,14 @@ const (
 	// NamespaceHCloudCSI is the namespace where the Hetzner Cloud CSI driver is installed.
 	NamespaceHCloudCSI = "kube-system"
 
+	// ReleaseHCloudCCM is the Helm release name for the Hetzner Cloud controller manager.
+	ReleaseHCloudCCM = "hcloud-cloud-controller-manager"
+	// NamespaceHCloudCCM is the namespace where the Hetzner Cloud controller manager is installed.
+	NamespaceHCloudCCM = "kube-system"
+	// hcloudServiceControllerOff is the entry in the controller manager's controller list
+	// that switches off the service controller, and with it Hetzner load balancers.
+	hcloudServiceControllerOff = "-service"
+
 	// ReleaseMetricsServer is the Helm release name for the metrics-server.
 	ReleaseMetricsServer = "metrics-server"
 	// NamespaceMetricsServer is the namespace where the metrics-server is installed.

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -134,9 +135,31 @@ func (o *updateOrchestrator) runVerifiedProvisioner(
 
 // runWithoutUpdater handles distributions whose provisioner does not implement
 // the Updater interface (e.g. VCluster): it computes a spec-level diff to avoid
-// blind recreation when nothing changed, honors dry-run, and otherwise recreates.
+// blind recreation when nothing changed and applies component chart-values
+// changes through their installers without replacing the cluster. Other changes
+// require recreation.
 func (o *updateOrchestrator) runWithoutUpdater() error {
 	specDiff := computeSpecOnlyDiff(o.cmd, o.ctx)
+
+	return o.applySpecOnlyDiff(specDiff)
+}
+
+func (o *updateOrchestrator) applySpecOnlyDiff(specDiff *clusterupdate.UpdateResult) error {
+	if isChartValuesOnlyDiff(specDiff) {
+		displayChangesSummary(o.cmd, specDiff)
+
+		if o.dryRun {
+			return nil
+		}
+
+		reconciler := newComponentReconciler(o.cmd, o.ctx.ClusterCfg, o.clusterName)
+		result := clusterupdate.NewEmptyUpdateResult()
+		err := reconciler.reconcileComponents(o.cmd.Context(), specDiff, result)
+		reportFailedChanges(o.cmd, result)
+
+		return finalizeInPlaceApply(o.cmd, o.ctx, reconciler, o.clusterName, result, err)
+	}
+
 	if specDiff.TotalChanges() == 0 {
 		// Surface any unknown-baseline components so the user sees that the
 		// current state could not be read, then exit without recreating.
@@ -165,6 +188,22 @@ func (o *updateOrchestrator) runWithoutUpdater() error {
 	displayChangesSummary(o.cmd, specDiff)
 
 	return o.executeRecreateFlow()
+}
+
+// isChartValuesOnlyDiff requires a complete diff made only of the changes the
+// chart-values drift probes report. Each is one Helm upgrade of a component that
+// is already installed, so applying it never needs a new cluster: recreating one
+// for it would delete the workloads to change a setting (ksail#7703). Unknown
+// baselines and every other change retain the existing recreation path.
+func isChartValuesOnlyDiff(diff *clusterupdate.UpdateResult) bool {
+	if diff.HasUnknownBaseline() || len(diff.InPlaceChanges) == 0 ||
+		diff.TotalChanges() != len(diff.InPlaceChanges) {
+		return false
+	}
+
+	return !slices.ContainsFunc(diff.InPlaceChanges, func(change clusterupdate.Change) bool {
+		return !isChartValuesDriftField(change.Field)
+	})
 }
 
 // reconcileClusterVersions reconciles the cluster's distribution and Kubernetes
@@ -743,7 +782,7 @@ func createAndVerifyProvisioner(
 	// kubeconfig's unrelated ambient current-context.
 	if ctx.ClusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS &&
 		strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context) == "" {
-		err = resolveEKSPostCreateContext(ctx)
+		err = resolveEKSPostCreateContext(cmd.Context(), ctx)
 		if err != nil {
 			return nil, fmt.Errorf("resolve exact EKS kubeconfig context: %w", err)
 		}
@@ -1020,14 +1059,14 @@ func promoteUnsupportedInPlaceChanges(
 }
 
 func isComponentReconcileChange(change clusterupdate.Change) bool {
-	if change.Field == "cluster.cni" {
+	if change.Field == fieldClusterCNI {
 		// Distinct CNI choices use distinct Helm releases, and the component
 		// reconciler cannot yet remove the old release safely. Recreate until a
 		// transition can prove both installation and cleanup.
 		return false
 	}
 
-	if change.Field == "cluster.metricsServer" &&
+	if change.Field == fieldClusterMetricsServer &&
 		v1alpha1.MetricsServer(change.NewValue) == v1alpha1.MetricsServerDisabled {
 		return false
 	}

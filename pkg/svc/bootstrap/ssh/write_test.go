@@ -237,8 +237,7 @@ func shellExecHandler(ctx context.Context, captured *writeRecorder) execHandler 
 		err := cmd.Run()
 		code := 0
 
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			code = exitCodeOf(exitErr)
 		}
 

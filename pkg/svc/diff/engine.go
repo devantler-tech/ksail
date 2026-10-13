@@ -39,11 +39,23 @@ const AutoscalerValuesField = "cluster.autoscaler.node.chartValues"
 // the same cert-manager Helm upgrade as a cluster.certManager change.
 const CertManagerValuesField = "cluster.certManager.chartValues"
 
+// CalicoPrerequisitesField schedules an in-place CNI upgrade when its installed
+// prerequisite chart version, migration inventory or operator values drift.
+const CalicoPrerequisitesField = "cluster.cni.calico.prerequisites"
+
+// CNIField names the component change that also reconciles CNI prerequisites.
+const CNIField = "cluster.cni"
+
 // PolicyEngineValuesField is the diff key for policy-engine (Kyverno or
 // Gatekeeper) chart values that differ from the ones this KSail version
 // renders. Reconciliation routes it to the same policy-engine Helm upgrade as
 // a cluster.policyEngine change.
 const PolicyEngineValuesField = "cluster.policyEngine.chartValues"
+
+// MetricsServerValuesField is the diff key for metrics-server chart values that
+// differ from the ones this KSail version renders. Reconciliation routes it to
+// the same metrics-server Helm upgrade as a cluster.metricsServer change.
+const MetricsServerValuesField = "cluster.metricsServer.chartValues"
 
 // fluxVerifyDriftedDisplay is the old value rendered for verify drift. The
 // detector receives a single boolean covering both an absent spec.verify block

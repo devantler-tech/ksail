@@ -3,6 +3,10 @@ name: "System Test - Hetzner"
 on:
   workflow_dispatch:
     inputs:
+      nested_provider_trial:
+        description: Repeat nested-provider checks on one initialized Talos host with default components
+        type: boolean
+        default: false
       autoscaler_inventory_trial:
         description: Audit an orphaned autoscaler server and retry (Talos only; one extra powered-off server)
         type: boolean
@@ -142,6 +146,10 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
 
       - name: 📦 Cache KSail Binary
         uses: $/.github/actions/cache-ksail-binary
@@ -168,6 +176,10 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
 
       - name: 📦 Cache KSail Binary
         uses: $/.github/actions/cache-ksail-binary
@@ -202,6 +214,59 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: ✅ Select bounded nested-provider trial
+        id: nested-provider
+        shell: bash
+        timeout-minutes: 1
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MATRIX_SUFFIX: ${{ matrix.suffix }}
+          NESTED_TRIAL: ${{ inputs.nested_provider_trial }}
+          DISTRIBUTION: ${{ matrix.distribution }}
+          INIT: ${{ matrix.init }}
+          CONTROL_PLANES: ${{ inputs.control_planes }}
+          WORKERS: ${{ inputs.workers }}
+          ROLLING_RESIZE: ${{ inputs.rolling_resize_server_type }}
+          SCHEMATIC_TRIAL: ${{ inputs.test_schematic_rollout }}
+          SCHEMATIC_SERVER_TYPE: ${{ inputs.schematic_server_type }}
+          INVENTORY_TRIAL: ${{ inputs.autoscaler_inventory_trial }}
+          FLOATING_IP_TOGGLE: ${{ inputs.floating_ip_toggle }}
+          CNI: ${{ inputs.cni }}
+          CSI: ${{ inputs.csi }}
+          LOAD_BALANCER: ${{ inputs.load_balancer }}
+          METRICS_SERVER: ${{ inputs.metrics_server }}
+          POLICY_ENGINE: ${{ inputs.policy_engine }}
+          CERT_MANAGER: ${{ inputs.cert_manager }}
+          GITOPS_ENGINE: ${{ inputs.gitops_engine }}
+        run: |
+          set -euo pipefail
+          selected=false
+          case "$EVENT_NAME" in
+            schedule)
+              [[ "$MATRIX_SUFFIX" != default-init ]] || selected=true
+              ;;
+            workflow_dispatch)
+              case "$NESTED_TRIAL" in
+                ""|false) ;;
+                true)
+                  if [[ "$DISTRIBUTION" != Talos || "$INIT" != true || "$CONTROL_PLANES" != 1 || "$WORKERS" != 0 || -n "$ROLLING_RESIZE" || "$SCHEMATIC_TRIAL" != false || "$SCHEMATIC_SERVER_TYPE" != Default || "$INVENTORY_TRIAL" != false || "$FLOATING_IP_TOGGLE" != false ]]; then
+                    echo 'ERROR: nested trial requires initialized Talos, one control plane, no workers, and no other trial or resize' >&2
+                    exit 1
+                  fi
+                  if [[ "$CNI" != Default || "$CSI" != Default || "$LOAD_BALANCER" != Default || "$METRICS_SERVER" != Default || "$POLICY_ENGINE" != None || "$CERT_MANAGER" != Disabled || "$GITOPS_ENGINE" != None ]]; then
+                    echo 'ERROR: nested trial requires default component selections' >&2
+                    exit 1
+                  fi
+                  selected=true
+                  ;;
+                *) echo 'ERROR: invalid nested-provider trial selection' >&2; exit 1 ;;
+              esac
+              ;;
+            *) echo 'ERROR: unsupported Hetzner workflow event' >&2; exit 1 ;;
+          esac
+          printf 'value=%s\n' "$selected" >> "$GITHUB_OUTPUT"
+          printf 'Nested-provider checks selected: %s\n' "$selected"
 
       - name: ✅ Validate bounded autoscaler inventory trial
         if: inputs.autoscaler_inventory_trial
@@ -369,6 +434,19 @@ jobs:
             exit 1
           fi
 
+          # A ready API server does not mean the namespace's default service account exists
+          # yet: the controller manager creates it shortly after, and a pod created before
+          # then is refused outright rather than left pending.
+          sa_attempts=60
+          until kubectl get serviceaccount default --namespace default >/dev/null 2>&1; do
+            sa_attempts=$((sa_attempts - 1))
+            if [ "${sa_attempts}" -le 0 ]; then
+              echo "❌ The default service account did not appear within 120s, so the probe pod cannot be created" >&2
+              exit 1
+            fi
+            sleep 2
+          done
+
           kubectl run userdata-probe --image="${PROBE_IMAGE}" --restart=Never \
             --overrides="{\"apiVersion\":\"v1\",\"spec\":{\"nodeName\":\"${node}\",\"hostNetwork\":true,\"tolerations\":[{\"operator\":\"Exists\"}]}}" \
             --command -- sleep 600
@@ -401,7 +479,7 @@ jobs:
           init: ${{ matrix.init }}
           args: ${{ steps.args.outputs.value }}
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
-          test-kubernetes-provider: ${{ matrix.suffix == 'default-init' && 'true' || 'false' }}
+          test-kubernetes-provider: ${{ steps.nested-provider.outputs.value }}
           rolling-resize-server-type: ${{ github.event_name == 'workflow_dispatch' && inputs.rolling_resize_server_type || '' }}
           test-talos-schematic-rollout: ${{ github.event_name == 'workflow_dispatch' && inputs.test_schematic_rollout || false }}
           talos-schematic-server-type: ${{ github.event_name == 'workflow_dispatch' && inputs.schematic_server_type != 'Default' && inputs.schematic_server_type || '' }}

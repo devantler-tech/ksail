@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Exercise the actual chart values reconciliation of one KSail-managed component
-# (VALUES_TRIAL_COMPONENT: cert-manager or kyverno) on an existing CI cluster.
+# (VALUES_TRIAL_COMPONENT: cert-manager, kyverno or metrics-server) on an existing CI cluster.
 set -euo pipefail
 
 component="${VALUES_TRIAL_COMPONENT:-cert-manager}"
@@ -29,6 +29,14 @@ kyverno)
 	deployments=(kyverno-admission-controller kyverno-background-controller
 		kyverno-cleanup-controller kyverno-reports-controller)
 	initial_values_filter='.admissionController.webhookServer.failurePolicy == "Ignore"'
+	;;
+metrics-server)
+	release=metrics-server
+	namespace=kube-system
+	chart_repo=https://kubernetes-sigs.github.io/metrics-server/
+	values_field=cluster.metricsServer.chartValues
+	deployments=(metrics-server)
+	initial_values_filter='.args | type == "array" and index("--authentication-tolerate-lookup-failure=true") != null'
 	;;
 *) fail 'unknown component' ;;
 esac
@@ -193,6 +201,15 @@ kyverno)
 	# shellcheck disable=SC2016 # $seed is a jq variable
 	seed_filter='.admissionController.podAnnotations["ksail-values-trial"] = $seed'
 	seed_args=(--set "admissionController.podAnnotations.ksail-values-trial=$seed_value")
+	;;
+metrics-server)
+	# A pod annotation KSail never renders: every KSail value stays as installed.
+	seed_value=seeded
+	jq -e '.podAnnotations["ksail-values-trial"] == null' \
+		"$log_dir/original-values.json" >/dev/null || fail 'seed value is already present'
+	# shellcheck disable=SC2016 # $seed is a jq variable
+	seed_filter='.podAnnotations["ksail-values-trial"] = $seed'
+	seed_args=(--set "podAnnotations.ksail-values-trial=$seed_value")
 	;;
 esac
 jq -eS --arg seed "$seed_value" "$seed_filter" \

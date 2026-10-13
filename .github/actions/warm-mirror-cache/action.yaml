@@ -10,7 +10,8 @@ description: |
   3. Creates mirror registries for docker.io, ghcr.io, quay.io, registry.k8s.io,
      and ecr-public.aws.com
   4. Pulls all images through the mirrors (populating their volumes)
-  5. Saves the mirror volumes to GitHub Actions cache
+  5. Prepares validated mirror volumes for the run artifact; default-branch
+     runs also save reusable warming caches
 
   The cache key is based on the hash of the extracted image list, ensuring
   cache invalidation when any image reference changes (including code changes
@@ -28,7 +29,7 @@ outputs:
     description: Whether a restored cache passed the consumer pull check
     value: ${{ steps.check-cache.outputs.complete == 'true' }}
   cache-key:
-    description: The validated restored key or the key saved by this warm job
+    description: The validated producer key for the prepared mirror archives
     value: ${{ steps.check-cache.outputs.complete == 'true' && steps.restore-cache.outputs.cache-matched-key || steps.check-cache.outputs.repair-key || steps.generate-key.outputs.cache-key }}
   image-count:
     description: Number of unique images extracted
@@ -268,6 +269,23 @@ runs:
         echo "dist-node-cache-key=$DIST_NODE_CACHE_KEY" >> "$GITHUB_OUTPUT"
         echo "📦 Distribution node cache key: $DIST_NODE_CACHE_KEY"
 
+    - name: 🧭 Select reusable mirror cache writes
+      id: cache-policy
+      shell: bash
+      env:
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      run: |
+        # PR merge-ref caches cannot be reused by other PRs, and each run
+        # already publishes these large archives in its validated artifact.
+        SAVE=false
+        if [ -n "$DEFAULT_BRANCH" ] && [ "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH" ]; then
+          case "$GITHUB_EVENT_NAME" in
+            push|workflow_dispatch) SAVE=true ;;
+          esac
+        fi
+        echo "save=$SAVE" >> "$GITHUB_OUTPUT"
+        echo "Reusable mirror cache write: $SAVE"
+
     - name: 📥 Restore mirror cache
       id: restore-cache
       uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
@@ -303,6 +321,13 @@ runs:
 
     - name: 📥 Pre-pull registry image
       uses: $/.github/actions/pull-registry-image
+
+    # The check and export steps below both start this helper container. Pull it
+    # once, with a bounded retry, before either can change a mirror volume or
+    # archive, so a registry error on it is reported as what it is (#7673).
+    - name: 📥 Pre-pull mirror helper image
+      shell: bash
+      run: bash "$GITHUB_ACTION_PATH/pull-helper-image.sh"
 
     - name: 🔍 Check if cache is complete
       id: check-cache
@@ -1016,7 +1041,7 @@ runs:
         docker network rm ksail-mirrors 2>/dev/null || true
 
     - name: 💾 Save mirror cache
-      if: steps.check-cache.outputs.complete != 'true'
+      if: steps.cache-policy.outputs.save == 'true' && steps.check-cache.outputs.complete != 'true'
       uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
       with:
         path: /tmp/mirror-cache

@@ -70,10 +70,10 @@ func containsArgoCDRBACCM(data []byte) bool {
 // hand-edited file whose ConfigMap omits apiVersion would be found-then-missed
 // on the delete path, leaving a removed tenant's RBAC policy lines behind.
 func isArgoCDRBACConfigMap(raw map[string]any) bool {
-	kind, _ := raw["kind"].(string)
+	kind, _ := raw[keyKind].(string)
 
-	meta, _ := raw["metadata"].(map[string]any)
-	name, _ := meta["name"].(string)
+	meta, _ := raw[keyMetadata].(map[string]any)
+	name, _ := meta[keyName].(string)
 
 	return kind == configMapKind && name == rbacConfigMapName
 }

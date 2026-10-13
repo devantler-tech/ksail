@@ -20,6 +20,7 @@ import (
 	kubeletcsrapproverinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/kubeletcsrapprover"
 	kyvernoinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/kyverno"
 	localpathstorageinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/localpathstorage"
+	metricsserverinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/metricsserver"
 	"github.com/spf13/cobra"
 )
 
@@ -66,8 +67,10 @@ type InstallerFactories struct {
 		operatorVersion string,
 	) installer.Installer
 	CertManager               func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
+	Calico                    func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	CSI                       func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	PolicyEngine              func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
+	MetricsServer             func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	ArgoCD                    func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	KubeletCSRApprover        func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	ClusterAutoscaler         func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
@@ -167,6 +170,27 @@ func policyEngineFactory(
 		default:
 			return nil, fmt.Errorf("%w: unknown engine %q", ErrPolicyEngineDisabled, engine)
 		}
+	}
+}
+
+// metricsServerFactory creates the metrics-server factory function. Installing
+// and comparing rendered chart values both build the installer here, so they
+// always render the same values for a cluster.
+func metricsServerFactory(
+	factories *InstallerFactories,
+) func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+		helmClient, timeout, err := resolveHelmClientAndTimeout(factories, clusterCfg, 0)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create helm client: %w", err)
+		}
+
+		return metricsserverinstaller.NewInstaller(
+			helmClient,
+			timeout,
+			clusterCfg.Spec.Cluster.Distribution,
+			installer.IsHAEnabled(clusterCfg.Spec.Cluster.TotalNodeCount()),
+		), nil
 	}
 }
 
@@ -330,7 +354,9 @@ func DefaultInstallerFactories() *InstallerFactories {
 		0,
 	)
 	factories.CSI = csiFactory(factories)
+	factories.Calico = calicoFactory(factories)
 	factories.PolicyEngine = policyEngineFactory(factories)
+	factories.MetricsServer = metricsServerFactory(factories)
 	factories.ClusterAutoscaler = clusterAutoscalerFactory(factories)
 	factories.AWSLoadBalancerController = func(
 		clusterCfg *v1alpha1.Cluster,

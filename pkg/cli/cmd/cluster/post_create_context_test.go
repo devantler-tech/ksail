@@ -18,104 +18,6 @@ import (
 	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
-//nolint:funlen // table keeps all fail-closed EKS selection cases together
-func TestResolvePostCreateContext_EKS(t *testing.T) {
-	t.Parallel()
-
-	const (
-		clusterName = "st-eks"
-		region      = "eu-west-1"
-		firstMatch  = "arn:aws:iam::123456789012:role/ci@st-eks.eu-west-1.eksctl.io"
-		secondMatch = "arn:aws:iam::123456789012:role/operator@st-eks.eu-west-1.eksctl.io"
-	)
-
-	testCases := []struct {
-		name            string
-		explicitContext string
-		currentContext  string
-		contexts        []string
-		wantContext     string
-		wantErr         string
-	}{
-		{
-			name:            "explicit context is preserved",
-			explicitContext: "operator-selected-context",
-			wantContext:     "operator-selected-context",
-		},
-		{
-			name:           "unique matching context is selected",
-			currentContext: "unrelated-context",
-			contexts:       []string{"unrelated-context", firstMatch},
-			wantContext:    firstMatch,
-		},
-		{
-			name:           "current context wins among multiple matches",
-			currentContext: secondMatch,
-			contexts:       []string{firstMatch, secondMatch},
-			wantContext:    secondMatch,
-		},
-		{
-			name:           "missing match fails closed",
-			currentContext: "unrelated-context",
-			contexts:       []string{"unrelated-context"},
-			wantErr:        `no kubeconfig context matches EKS cluster "st-eks" in region "eu-west-1"`,
-		},
-		{
-			name:           "ambiguous matches fail closed",
-			currentContext: "unrelated-context",
-			contexts:       []string{secondMatch, "unrelated-context", firstMatch},
-			wantErr:        `multiple kubeconfig contexts match EKS cluster "st-eks" in region "eu-west-1"`,
-		},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
-
-			if testCase.explicitContext == "" {
-				config := clientcmdapi.NewConfig()
-				config.CurrentContext = testCase.currentContext
-
-				for _, contextName := range testCase.contexts {
-					config.Contexts[contextName] = &clientcmdapi.Context{}
-				}
-
-				require.NoError(t, clientcmd.WriteToFile(*config, kubeconfigPath))
-			}
-
-			ctx := &localregistry.Context{
-				ClusterCfg: &v1alpha1.Cluster{
-					Spec: v1alpha1.Spec{
-						Cluster: v1alpha1.ClusterSpec{
-							Distribution: v1alpha1.DistributionEKS,
-							Provider:     v1alpha1.ProviderAWS,
-							Connection: v1alpha1.Connection{
-								Context:    testCase.explicitContext,
-								Kubeconfig: kubeconfigPath,
-							},
-						},
-					},
-				},
-				EKSConfig:    &clusterprovisioner.EKSConfig{Name: clusterName, Region: region},
-				EKSAccountID: "123456789012",
-			}
-
-			err := cluster.ExportResolvePostCreateContext(ctx)
-			if testCase.wantErr != "" {
-				require.ErrorContains(t, err, testCase.wantErr)
-				assert.ErrorContains(t, err, "set spec.cluster.connection.context explicitly")
-
-				return
-			}
-
-			require.NoError(t, err)
-			assert.Equal(t, testCase.wantContext, ctx.ClusterCfg.Spec.Cluster.Connection.Context)
-		})
-	}
-}
-
 func TestResolvePostCreateContext_NonEKSUsesDistributionConvention(t *testing.T) {
 	t.Parallel()
 
@@ -155,16 +57,16 @@ func TestResolvePostCreateContext_EKSRegionDelegatedToProfile(t *testing.T) {
 	t.Parallel()
 
 	const (
-		eksctlContext      = "arn:aws:iam::123456789012:role/ci@st-eks.eu-west-1.eksctl.io"
-		otherRegionContext = "arn:aws:iam::123456789012:role/ci@st-eks.us-east-1.eksctl.io"
+		eksctlContext      = "ci@st-eks.eu-west-1.eksctl.io"
+		otherRegionContext = "ci@st-eks.us-east-1.eksctl.io"
 	)
 
-	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
-	config := clientcmdapi.NewConfig()
-	config.CurrentContext = eksctlContext
-	config.Contexts[eksctlContext] = &clientcmdapi.Context{}
-	config.Contexts[otherRegionContext] = &clientcmdapi.Context{}
-	require.NoError(t, clientcmd.WriteToFile(*config, kubeconfigPath))
+	kubeconfigPath := writeEKSContextKubeconfig(
+		t,
+		eksctlContext,
+		eksContextFixture{name: eksctlContext, server: eksContextTestEndpoint},
+		eksContextFixture{name: otherRegionContext, server: eksContextTestOtherEndpoint},
+	)
 
 	ctx := &localregistry.Context{
 		ClusterCfg: &v1alpha1.Cluster{
@@ -177,8 +79,8 @@ func TestResolvePostCreateContext_EKSRegionDelegatedToProfile(t *testing.T) {
 				},
 			},
 		},
-		EKSConfig:    &clusterprovisioner.EKSConfig{Name: "st-eks"},
-		EKSAccountID: "123456789012",
+		EKSConfig:   &clusterprovisioner.EKSConfig{Name: "st-eks"},
+		EKSEndpoint: eksContextTestEndpoint,
 	}
 
 	require.NoError(t, cluster.ExportResolvePostCreateContext(ctx))
@@ -189,7 +91,7 @@ func TestResolvePostCreateContext_EKSRegionDelegatedToProfile(t *testing.T) {
 func TestResolvePostCreateContext_EKSExplicitContextPinsObservedRegion(t *testing.T) {
 	t.Parallel()
 
-	const explicitContext = "arn:aws:iam::123456789012:role/ci@st-eks.eu-west-1.eksctl.io"
+	const explicitContext = "ci@st-eks.eu-west-1.eksctl.io"
 
 	ctx := newExplicitEKSPostCreateContext(
 		t,
@@ -208,9 +110,9 @@ func TestResolvePostCreateContext_EKSRejectsUnobservedExplicitContext(t *testing
 	t.Parallel()
 
 	const (
-		targetContext = "arn:aws:iam::123456789012:role/ci@st-eks.eu-west-1.eksctl.io"
-		otherContext  = "arn:aws:iam::123456789012:role/ci@st-eks.us-east-1.eksctl.io"
-		wrongTarget   = "arn:aws:iam::123456789012:role/ci@other.eu-west-1.eksctl.io"
+		targetContext = "ci@st-eks.eu-west-1.eksctl.io"
+		otherContext  = "ci@st-eks.us-east-1.eksctl.io"
+		wrongTarget   = "ci@other.eu-west-1.eksctl.io"
 	)
 
 	testCases := []struct {
@@ -267,7 +169,7 @@ func TestResolvePostCreateContext_EKSRejectsUnobservedExplicitContext(t *testing
 func TestResolvePostCreateContext_EKSExplicitContextPreservesConfiguredRegion(t *testing.T) {
 	t.Parallel()
 
-	const explicitContext = "arn:aws:iam::123456789012:role/ci@st-eks.eu-west-1.eksctl.io"
+	const explicitContext = "ci@st-eks.eu-west-1.eksctl.io"
 
 	ctx := &localregistry.Context{
 		ClusterCfg: &v1alpha1.Cluster{Spec: v1alpha1.Spec{Cluster: v1alpha1.ClusterSpec{

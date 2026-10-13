@@ -2,10 +2,14 @@ package talosprovisioner
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/internal/imagefactorytransport"
+	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	factoryclient "github.com/siderolabs/image-factory/pkg/client"
 )
@@ -13,10 +17,16 @@ import (
 // imageFactoryURL is the Image Factory that serves KSail's installer and snapshot images.
 const imageFactoryURL = "https://factory.talos.dev"
 
-// imageFactoryRegistrationTimeout bounds one schematic registration request, so a stalled
+// imageFactoryRegistrationTimeout bounds all schematic registration attempts, so a stalled
 // Image Factory response cannot block an upgrade or snapshot build indefinitely. The factory
 // client uses an http.Client with no timeout of its own.
 const imageFactoryRegistrationTimeout = 30 * time.Second
+
+const (
+	imageFactoryRegistrationAttempts = 3
+	imageFactoryRegistrationBackoff  = 100 * time.Millisecond
+	imageFactoryRegistrationMaxWait  = 200 * time.Millisecond
+)
 
 // ErrSchematicIDMismatch reports that Image Factory stored KSail's schematic under an ID other
 // than the one KSail computed, so images addressed by the computed ID would not be served.
@@ -41,17 +51,48 @@ func registerSchematic(
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	client, err := factoryclient.New(baseURL)
+	httpClient := imagefactorytransport.Client()
+	defer httpClient.CloseIdleConnections()
+
+	client, err := factoryclient.New(baseURL, factoryclient.WithClient(httpClient))
 	if err != nil {
 		return "", fmt.Errorf("create image factory client: %w", err)
 	}
 
-	schematicID, _, err := client.SchematicCreate(ctx, computed)
+	var schematicID string
+
+	err = netretry.Do(ctx, imageFactoryRegistrationAttempts,
+		imageFactoryRegistrationBackoff, imageFactoryRegistrationMaxWait,
+		func() error {
+			var createErr error
+
+			schematicID, _, createErr = client.SchematicCreate(ctx, computed)
+			if createErr != nil {
+				return fmt.Errorf("create schematic: %w", createErr)
+			}
+
+			return nil
+		}, netretry.WithRetryable(isSchematicRegistrationRetryable))
 	if err != nil {
 		return "", fmt.Errorf("register schematic with image factory: %w", err)
 	}
 
 	return schematicID, nil
+}
+
+// Status codes, not response prose, decide whether a factory refusal is transient.
+func isSchematicRegistrationRetryable(err error) bool {
+	if responseError, ok := errors.AsType[*factoryclient.HTTPError](err); ok {
+		return responseError.Code == http.StatusTooManyRequests ||
+			(responseError.Code >= http.StatusInternalServerError && responseError.Code < 600)
+	}
+
+	_, certificateFailure := errors.AsType[*tls.CertificateVerificationError](err)
+	if factoryclient.IsInvalidSchematicError(err) || certificateFailure {
+		return false
+	}
+
+	return netretry.IsRetryable(err)
 }
 
 // ensureSchematicRegistered registers KSail's computed schematic with Image Factory before

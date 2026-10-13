@@ -22,6 +22,21 @@ New to KSail? Welcome! Here's how to get started:
 
 If you have questions, don't hesitate to ask in [GitHub Discussions](https://github.com/devantler-tech/ksail/discussions).
 
+### The smallest safe first change
+
+A unit-tested change in one package, or a fix to a guide outside the documentation site (such as this file or a `README.md`), needs only Go — plus, on macOS, GNU coreutils, because the CI-harness tests in the whole unit suite need GNU `timeout` (see [Prerequisites](#prerequisites)). You do not need Docker, Node.js or a cloud account for it:
+
+```sh
+# working-directory: ./
+go build ./...          # everything compiles
+go test ./pkg/<package>/...   # the package you changed
+go test ./...           # the whole unit suite, before you open the PR
+```
+
+A change under `docs/` is different: it is part of the documentation site, so it also needs Node.js and a site build before you open the pull request (see [Building the documentation](#building-the-documentation)).
+
+In the pull request, say which of these you ran. If your change touches cluster creation, a cloud provider, the release pipeline or a deployment and you could not run that part yourself, say so plainly. On a pull request, CI starts the Docker system tests by itself only when the pull request comes from a branch in this repository and changes a file they depend on; a change that touches none of those files (most documentation changes) and a pull request from a fork skip them. They can also be started by hand for any branch in this repository (see [System Tests](#system-tests)). The maintainers run the cloud and release checks. A passing unit suite is not proof that a cluster, a release or a deployment works.
+
 ## Getting Started
 
 To get started with contributing to KSail, you'll need to set up your development environment, and understand the codebase, the CI setup and its requirements.
@@ -41,17 +56,18 @@ For detailed package and API documentation, refer to the Go documentation at [pk
 
 **Runtime Requirements:**
 
-- [Docker](https://www.docker.com/get-started/) — The only required external dependency for running KSail
+- [Docker](https://www.docker.com/get-started/) — The only external dependency for local clusters (the Docker provider, which every distribution except the managed cloud ones can use)
+- Cloud providers need their own account and credentials, and only when you use them: Hetzner (`HCLOUD_TOKEN`), Sidero Omni (`OMNI_SERVICE_ACCOUNT_KEY`), and AWS, Google Cloud or Azure for the managed distributions. EKS also needs the [`eksctl`](https://eksctl.io/installation/) binary on your `PATH`; it is the one tool KSail does not embed.
 
 **Development Requirements:**
 
 Before you begin developing, ensure you have the following installed:
 
-- [Go (v1.26.1+)](https://go.dev/doc/install)
+- [Go](https://go.dev/doc/install) — the version in the `go` line of [`go.mod`](go.mod) or newer (CI installs exactly that version)
 - [mockery (v3.5+)](https://vektra.github.io/mockery/v3.5/installation/)
 - [golangci-lint](https://golangci-lint.run/docs/welcome/install/)
 - [mega-linter](https://github.com/oxsecurity/megalinter/tree/main/mega-linter-runner#installation)
-- [Node.js (v24+)](https://nodejs.org/en/download/) — Required for building documentation (matches CI)
+- [Node.js (v24+)](https://nodejs.org/en/download/) — Required for the documentation site, the web UI (and therefore `make build`) and the VSCode extension; CI uses Node.js 24. A plain `go build` does not need it.
 - GNU coreutils — The CI harness uses GNU `timeout` to test hanging processes. On macOS, install
   `coreutils`; the harness also recognizes its `gtimeout` command.
 
@@ -83,7 +99,10 @@ MegaLinter also checks Markdown files. Markdown lint rules are configured in `.m
 
 ```sh
 # working-directory: ./
-# Build the ksail binary (development build)
+# Build the ksail binary with the web UI embedded (needs Node.js)
+make build
+
+# Or: build the CLI only (Go only; `ksail open web` then serves a placeholder page)
 go build -o ksail
 
 # Or: compile all packages (no binary output)
@@ -92,6 +111,8 @@ go build ./...
 # For optimized builds (strips debug symbols):
 go build -ldflags="-s -w" -o ksail-optimized
 ```
+
+The web UI is not checked in. `make build` builds it from `web/ui/` and stages it into `pkg/webui/dist/` before compiling, so the binary serves the real UI. A plain `go build` skips that step: every CLI command works, but the embedded web UI is a placeholder. Use the plain build for CLI work and `make build` when you touch or need the web UI.
 
 > **Note:** Release builds use `-ldflags="-s -w -X .../buildmeta.Version=... -X .../buildmeta.Commit=... -X .../buildmeta.Date=..."`. The `-s -w` flags strip debug symbols (reducing binary size significantly) and the `-X` flags inject version metadata via GoReleaser. Development builds retain debug symbols for a better debugging experience.
 
@@ -208,6 +229,9 @@ vsce/
 │   │   └── prompts.ts        # Interactive wizard implementations
 │   ├── ksail/
 │   │   ├── clusters.ts       # KSail CLI wrapper functions
+│   │   ├── clusterList.ts    # Cluster list parsing
+│   │   ├── contexts.ts       # Shared helpers for kubeconfig context names
+│   │   ├── enums.ts          # Distribution, provider and option values
 │   │   ├── binary.ts         # KSail binary discovery and execution
 │   │   ├── kubectl.ts        # kubectl wrapper for cluster status queries
 │   │   └── index.ts          # Module exports
@@ -215,12 +239,11 @@ vsce/
 │   │   ├── cloudProvider.ts              # Cloud Explorer tree provider (KSail clusters in Clouds view)
 │   │   ├── clusterExplorerContributor.ts # Annotates KSail contexts in Cluster Explorer
 │   │   ├── clusterProvider.ts            # Create Cluster wizard (HTML-based)
-│   │   ├── contextNames.ts               # Shared helpers for parsing kubeconfig context names
 │   │   └── index.ts                      # Module exports
-│   └── mcp/
-│       ├── serverProvider.ts  # MCP server definition provider
-│       ├── schemaClient.ts    # MCP schema client for KSail
-│       └── index.ts           # Module exports
+│   ├── mcp/
+│   │   ├── serverProvider.ts  # MCP server definition provider
+│   │   └── index.ts           # Module exports
+│   └── test/                  # Extension tests
 ├── dist/                      # Compiled output
 └── package.json               # Extension manifest
 ```
@@ -234,7 +257,7 @@ The repository is organized around the top-level CLI entry point (`main.go`) and
 - **main.go** - CLI entry point
 - **pkg/cli/cmd/** - CLI command implementations
 - **pkg/** - Public packages (importable by external projects)
-- **internal/** - Private packages (build metadata, operator reconcilers, test utilities)
+- **internal/** - Private packages (build metadata, operator reconcilers, test utilities, and the CI, release and dependency contract checks)
 - **charts/** - Helm charts (`charts/ksail-operator/` — operator + embedded web UI)
 - **web/** - Web UI source (`web/ui/` — Vite/React SPA, embedded via `pkg/webui`)
 - **desktop/** - Native desktop app (shared Go module; opt in with -tags desktop)
@@ -245,7 +268,7 @@ The repository is organized around the top-level CLI entry point (`main.go`) and
 ### Key Packages in pkg/
 
 - **apis/** - API types, schemas, and enums (distribution/provider values)
-- **client/** - Tool clients (kubectl, helm, flux, argocd, docker, k9s, kubeconform, kubescape, kustomize, oci, netretry, sops, klogutil; eksctl shells out to an external binary); distribution tools like kind, k3d, and vcluster are used directly via their SDKs in provisioners, not wrapped in `pkg/client/`
+- **client/** - Tool clients (kubectl, helm, flux, argocd, docker, k9s, kubeconform, kubescape, kustomize, oci, netretry, sops, klogutil, hubble, celrules, and the managed-cloud clients eks, gke and aks; eksctl shells out to an external binary); distribution tools like kind, k3d, and vcluster are used directly via their SDKs in provisioners, not wrapped in `pkg/client/`
 - **client/reconciler/** - Common base for GitOps reconciliation clients (Flux and ArgoCD)
 - **operator/** - Kubernetes operator manager and REST API server (reconcilers live in `internal/controller/`)
 - **webui/** - Embedded web UI assets (built from `web/ui/`, served by `ksail open web` and the operator)
@@ -254,7 +277,7 @@ The repository is organized around the top-level CLI entry point (`main.go`) and
 - **svc/image/** - Container image export/import services for Vanilla and K3s distributions
 - **svc/installer/** - Component installers (CNI, CSI, metrics-server, etc.)
 - **svc/provider/** - Infrastructure providers (e.g., `docker.Provider` for running nodes as containers)
-- **svc/provisioner/** - Distribution provisioners (Vanilla, K3s, Talos, VCluster, KWOK, EKS)
+- **svc/provisioner/** - Distribution provisioners (Vanilla, K3s, Talos, VCluster, KWOK, EKS, GKE, AKS)
 - **svc/registryresolver/** - OCI registry detection, resolution, and artifact push utilities
 - **svc/state/** - Cluster state persistence for distributions that cannot introspect their running configuration (Kind, K3d)
 - **di/** - Dependency injection for wiring components
@@ -266,16 +289,20 @@ KSail separates infrastructure management from distribution configuration:
 - **Providers** manage the infrastructure lifecycle (start/stop containers)
 - **Provisioners** configure and manage Kubernetes distributions
 
-| Distribution | Provisioner            | Tool    | Provider              | Description                                      |
-|--------------|------------------------|---------|-----------------------|--------------------------------------------------|
-| `Vanilla`    | KindClusterProvisioner | Kind    | Docker                | Standard upstream Kubernetes                     |
-| `K3s`        | K3dClusterProvisioner  | K3d     | Docker                | Lightweight K3s in Docker                        |
-| `Talos`      | TalosProvisioner       | Talos   | Docker, Hetzner, Omni | Immutable Talos Linux                            |
-| `VCluster`   | VClusterProvisioner    | Vind    | Docker                | Virtual clusters via vCluster (Vind) in Docker   |
-| `KWOK`       | KWOKProvisioner        | kwokctl | Docker                | Simulated Kubernetes cluster (no real workloads) |
-| `EKS`        | EKSProvisioner         | eksctl  | AWS                   | Managed Kubernetes on Amazon Web Services        |
+| Distribution | Provisioner            | Tool             | Provider                          | Description                                      |
+|--------------|------------------------|------------------|-----------------------------------|--------------------------------------------------|
+| `Vanilla`    | KindClusterProvisioner | Kind             | Docker, Hetzner, Kubernetes       | Standard upstream Kubernetes                     |
+| `K3s`        | K3dClusterProvisioner  | K3d              | Docker, Hetzner, Kubernetes       | Lightweight K3s                                  |
+| `Talos`      | TalosProvisioner       | Talos            | Docker, Hetzner, Omni, Kubernetes | Immutable Talos Linux                            |
+| `VCluster`   | VClusterProvisioner    | Vind             | Docker, Kubernetes                | Virtual clusters via vCluster (Vind)             |
+| `KWOK`       | KWOKProvisioner        | kwokctl          | Docker, Kubernetes                | Simulated Kubernetes cluster (no real workloads) |
+| `EKS`        | EKSProvisioner         | eksctl           | AWS                               | Managed Kubernetes on Amazon Web Services        |
+| `GKE`        | `gke.Provisioner`      | Google Cloud SDK | GCP                               | Managed Kubernetes on Google Cloud               |
+| `AKS`        | `aks.Provisioner`      | Azure SDK        | Azure                             | Managed Kubernetes on Microsoft Azure            |
 
-KSail's code is publicly available and reusable. All core functionality is implemented in the `pkg/` directory so external projects can import and use any package under `pkg/`. The `internal/` directory holds packages not useful to external consumers: `internal/buildmeta` (build-time version metadata injected via ldflags), `internal/controller` (the controller-runtime reconcilers behind the KSail operator), and `internal/testutil` (shared test utilities).
+The `Kubernetes` provider runs cluster nodes as pods inside an existing cluster. The supported combinations are defined in `pkg/apis/cluster/v1alpha1/distributionmeta.go`, which is the source of truth for this table.
+
+KSail's code is publicly available and reusable. All core functionality is implemented in the `pkg/` directory so external projects can import and use any package under `pkg/`. The `internal/` directory holds packages not useful to external consumers, such as `internal/buildmeta` (build-time version metadata injected via ldflags), `internal/controller` (the controller-runtime reconcilers behind the KSail operator), `internal/testutil` (shared test utilities) and the checks CI runs on the repository itself (for example `internal/ciharness` and `internal/releasecontract`).
 
 For detailed package and API documentation, refer to [pkg.go.dev/github.com/devantler-tech/ksail/v7](https://pkg.go.dev/github.com/devantler-tech/ksail/v7).
 
@@ -292,44 +319,54 @@ go test ./...
 
 #### System Tests
 
-System tests exercise full cluster lifecycle scenarios across the system-testable distributions (Vanilla, K3s, Talos, VCluster, KWOK) and providers (Docker, Hetzner, Omni); EKS is excluded because `ksail cluster create` is not yet functional for it. They are configured in `.github/workflows/ci.yaml` and the composite action at `.github/actions/ksail-system-test/action.yaml`.
+System tests exercise full cluster lifecycle scenarios on real clusters. They are split by where the cluster runs:
 
-**When they run:**
+| Workflow                         | Covers                                                        | Runs                                                                                                |
+|----------------------------------|---------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
+| `ci.yaml` (`system-test-docker`) | Vanilla, K3s, Talos, VCluster and KWOK on the Docker provider | On pull requests (see below) and on manual dispatch                                                 |
+| `system-test-hetzner.yaml`       | Talos in full; K3s and Vanilla as a smoke check, on Hetzner   | Weekly (Sunday 03:00 UTC) and on manual dispatch                                                    |
+| `system-test-omni.yaml`          | Talos on Sidero Omni                                          | Manual dispatch only (the schedule is paused)                                                       |
+| `system-test-eks.yaml`           | EKS on AWS                                                    | Manual dispatch only                                                                                |
+| `system-test-k3k-calico.yaml`    | The nested Kubernetes provider with Calico                    | Weekly (Monday 02:30 UTC), on manual dispatch, and on pull requests that change the workflow itself |
 
-System tests run in GitHub’s **merge queue** (`merge_group` event) and do **not** run on regular `pull_request` checks. This is intentional:
+All of them except the EKS workflow use the composite action at `.github/actions/ksail-system-test/action.yaml`. In the Hetzner workflow only the Talos legs do: its K3s and Vanilla legs are smoke checks that create the cluster, wait for the API server and delete it, so they do not exercise workloads, update, stop or start. The EKS workflow has its own init, create, update and cleanup steps, so a change to the composite action does not change what it covers.
 
-- **Cost**: The test matrix spans 44+ jobs (5 distributions × 2 init modes × 5 config variants + cloud providers), consuming 6–11 CPU-hours per run. Running this on every PR push would be prohibitively expensive.
-- **Feedback time**: A full system test run takes 20–30 minutes. Deferring to the merge queue keeps PR feedback loops fast (unit tests, linting, and build run on every PR push instead).
-- **Flakiness**: Cloud provider tests (Hetzner, Omni) are inherently flaky due to network and infrastructure variability. Running them on PRs would produce noisy failures unrelated to code changes.
+**When the Docker system tests run:**
+
+The `system-test-docker` job in `.github/workflows/ci.yaml` runs on a pull request when both of these hold:
+
+- the pull request changes a file the system tests depend on (the `system-test` path list in the `changes` job of `ci.yaml`). Most documentation changes are not on that list and skip the tests, but everything under `.github/actions/` is, including the guides next to the actions;
+- the pull request comes from a branch in this repository. Pull requests from forks do not run them; they can be started by manual dispatch once the change is on a branch in this repository.
+
+When it runs, it is part of `CI - Required Checks`, so a failure blocks the pull request. It does not run in the merge queue.
+
+The matrix runs each of the five distributions against several configuration variants (default, a full component stack, an alternative stack, and Flux and ArgoCD with a registry). Projects are always created with `ksail project init` first; the path without a `ksail.yaml` is covered by unit tests instead. The exact matrix is in the job definition.
+
+The cloud workflows (Hetzner, Omni, EKS) are separate because they cost money, need credentials and depend on infrastructure outside the repository. They never run on a pull request and are not required checks.
 
 **Manual trigger:**
 
-You can manually trigger system tests from any branch using `workflow_dispatch`:
+You can manually trigger the Docker system tests from any branch in this repository using `workflow_dispatch`:
 
 ```sh
 gh workflow run ci.yaml --ref your-branch --field run_system_tests=true
 ```
 
-This is useful for validating infrastructure-sensitive changes before entering the merge queue.
+This is useful for validating infrastructure-sensitive changes that the path list does not pick up.
 
-**Lightweight tests on every PR with code changes:**
+**Checks that need no cluster:**
 
-The `gen-smoke-test` job runs on every PR that has Go source changes (`needs.changes.outputs.code == 'true'`) and validates:
-
-- Most `workload gen` subcommands (manifest generation + schema validation); `clusterrole` and `role` require live API-server discovery and are covered by system tests instead
-- Smoke tests for `chat --help` and `mcp --help`
-
-These tests do not require Docker or a cluster and complete in under a minute.
+`workload gen` subcommands and the `open mcp --help` smoke check are covered by unit tests, which run on every pull request with Go changes (`open chat --help` has no check of its own; unit tests cover the chat command's flags and helpers). They need neither Docker nor a cluster. The exceptions are `workload gen clusterrole` and `workload gen role`: they ask the API server which resources exist, so their coverage is the online phase of the system tests, and a change to either needs a system-test run.
 
 Note: cipher encrypt/decrypt E2E testing is not currently possible because the encrypt command uses hardcoded empty key groups (no `.sops.yaml` config loading). Cipher commands are covered by unit tests in `pkg/cli/cmd/workload/cipher/`.
 
 **What the system test covers:**
 
-Each matrix job runs a full cluster lifecycle: `init` → `create` → workload deployment → `update` (regression detection) → `stop` → `start` → `delete`, along with workload read operations (`get`, `describe`, `logs`), scaling, and cleanup. See `.github/actions/ksail-system-test/action.yaml` for the complete test sequence.
+Each matrix job runs a full cluster lifecycle: `init` → `create` → workload deployment → `update` (regression detection) → `stop` → `start`, along with workload read operations (`get`, `describe`, `logs`) and scaling. The cluster is always deleted at the end. By default the action does it; the Docker job in CI turns that off so it can upload diagnostics first, and then deletes the cluster in a dedicated cleanup step that runs even after a failure. See `.github/actions/ksail-system-test/action.yaml` for the complete test sequence.
 
-**If system tests fail in the merge queue:**
+**If system tests fail:**
 
-The merge is blocked until the failure is resolved. The CI includes a comprehensive debug action (`.github/actions/debug-kubernetes-failure/`) that collects Kubernetes diagnostics (node status, pod status, events, component logs) to aid investigation.
+The pull request is blocked until the failure is resolved. The CI includes a comprehensive debug action (`.github/actions/debug-kubernetes-failure/`) that collects Kubernetes diagnostics (node status, pod status, events, component logs) to aid investigation.
 
 #### Hetzner Provider Testing
 
@@ -342,35 +379,38 @@ To test the Hetzner provider locally, you need:
 
 **Note:** Hetzner tests incur cloud costs. Use `ksail cluster delete` to clean up resources.
 
-**Note:** CI includes a safety-net cleanup job (`cleanup-hetzner`) that runs after system tests and deletes any Hetzner resources labeled `ksail.owned=true`. This is implemented as a GitHub Action at `.github/actions/cleanup-hetzner/action.yaml` and is not intended for local execution.
+**Note:** The Hetzner workflow (`.github/workflows/system-test-hetzner.yaml`) ends with a safety-net `cleanup` job that always runs, also after a failure. It uses the action at `.github/actions/cleanup-hetzner/action.yaml` and is not intended for local execution.
 
-**Warning:** The cleanup action is destructive and will delete all KSail-managed Hetzner resources (servers, placement groups, firewalls, and networks) in your project that are labeled `ksail.owned=true`. Manual cleanup of any remaining resources should be done via the Hetzner Cloud Console or `hcloud` CLI if needed.
+**Cleanup boundary:** the job deletes only the resources of the clusters that run created. Each call selects one cluster by its `ksail.cluster.name` label, which includes the workflow run id. It removes that cluster's servers, placement groups, firewalls, networks and floating IPs (a floating IP only when it also carries `ksail.owned=true`). It does not touch other clusters in the project, including ones you created by hand. Remove anything else through the Hetzner Cloud Console or the `hcloud` CLI.
 
 #### Omni Provider Testing
 
 To test the Omni provider locally, you need:
 
 - **`OMNI_SERVICE_ACCOUNT_KEY`** – A Sidero Omni service account key with cluster management permissions. The environment variable name is configurable via `spec.provider.omni.serviceAccountKeyEnvVar` in `ksail.yaml`.
-- **Omni endpoint** – The URL of your Sidero Omni instance, configured via `spec.provider.omni.endpoint` in `ksail.yaml` (there is no CLI flag for this value).
+- **Omni endpoint** – The URL of your Sidero Omni instance. Set it in the `OMNI_ENDPOINT` environment variable (the name is configurable via `spec.provider.omni.endpointEnvVar`) or as `spec.provider.omni.endpoint` in `ksail.yaml`. When both are set, the environment variable wins.
 
 **Note:** Omni requires a [Sidero Omni](https://www.siderolabs.com/omni/) account and does not run locally. Omni manages the Talos machine lifecycle; `StartNodes` and `StopNodes` are no-ops in the Omni provider.
 
-**CI integration:** Omni system tests run as part of the `system-test` matrix in `.github/workflows/ci.yaml` alongside Docker and Hetzner tests. They execute the same broader system-test workflow against a live Omni endpoint, including cluster lifecycle, workload, backup/restore, and start/stop validation steps. Omni test failures **block merge** (they are not optional). The following repository secret and variable must be configured for CI:
+**CI integration:** Omni system tests have their own workflow, `.github/workflows/system-test-omni.yaml`. It runs on manual dispatch only: its weekly schedule is paused until a machine is registered in the Omni instance. It runs the same system-test action against a live Omni endpoint and is not a required check, so it does not block a pull request. It needs:
 
 - **`secrets.OMNI_SERVICE_ACCOUNT_KEY`** – Repository secret containing the Omni service account key.
 - **`vars.OMNI_ENDPOINT`** – Repository variable containing the Omni instance URL.
 
 The workflow also sets **`KSAIL_SPEC_CLUSTER_OMNI_MACHINECLASS`** to `ksail` via `env`; this specifies the Omni machine class used for test nodes.
 
-**Note:** CI includes a safety-net cleanup job (`cleanup-omni`) that runs after system tests and deletes the known system-test clusters remaining in Omni. This is implemented as a GitHub Action at `.github/actions/cleanup-omni/action.yaml` and is not intended for local execution.
+**Note:** The Omni workflow ends with a safety-net `cleanup` job that always runs and deletes the known system-test clusters remaining in Omni. It uses the action at `.github/actions/cleanup-omni/action.yaml` and is not intended for local execution.
 
 #### Scheduled Workflows
 
-| Workflow        | Schedule                   | Purpose                            |
-|-----------------|----------------------------|------------------------------------|
-| `update-skills` | Daily (06:00 UTC)          | Copilot skills upgrades            |
-| `maintenance`   | Monthly (1st, 00:00 UTC)   | Old workflow run and image cleanup |
-| `sync-labels`   | Weekly (Monday, 07:00 UTC) | Label synchronization              |
+| Workflow                   | Schedule                                       | Purpose                                           |
+|----------------------------|------------------------------------------------|---------------------------------------------------|
+| `update-skills`            | Daily (06:00 UTC)                              | Copilot skills upgrades                           |
+| `maintenance`              | Daily (00:00 UTC) and monthly (1st, 00:15 UTC) | Old workflow run cleanup; monthly package cleanup |
+| `update-hetzner-talos-iso` | Every 6 hours                                  | Track Hetzner's latest compatible Talos ISO       |
+| `system-test-hetzner`      | Weekly (Sunday 03:00 UTC)                      | Hetzner system tests                              |
+| `system-test-k3k-calico`   | Weekly (Monday 02:30 UTC)                      | Nested Kubernetes provider system test            |
+| `codeql`                   | Weekly (Saturday 06:46 UTC)                    | Code scanning                                     |
 
 ## CD
 
@@ -398,14 +438,14 @@ The CD workflow implements an atomic publication strategy to ensure users never 
    - Docker images published to GHCR
    - Generated changelog from commit history
 
-   GoReleaser also opens a separate PR to update the Homebrew cask in [`devantler-tech/homebrew-tap`](https://github.com/devantler-tech/homebrew-tap) (branch pattern: `goreleaser/ksail-vX.Y.Z`).
+   GoReleaser also opens a separate draft PR to update the Homebrew cask in [`devantler-tech/homebrew-tap`](https://github.com/devantler-tech/homebrew-tap) (branch: `goreleaser/ksail`).
 
-2. **VSCode Extension Upload**: A separate job builds the VSCode extension and uploads it as a release asset to the same draft release.
+2. **Other artifacts**: Separate jobs build the VSCode extension and the desktop apps, which are attached to the same draft release. Two more jobs publish the operator chart to the container registry and build the documentation site for GitHub Pages; they are not attached to the release, but publication waits for them too.
 
-3. **Atomic Publication**: A final `publish-release` job waits for both the `goreleaser` and `vscode-extension` jobs to complete successfully, then publishes the draft release.
+3. **Atomic Publication**: A final `publish-release` job waits for all of those jobs to complete successfully, then publishes the draft release.
 
 This workflow ensures that:
 
 - Releases are only published after **all artifacts** are uploaded
 - Users never encounter partial releases with missing binaries or extensions
-- If any job fails, the draft remains unpublished and can be deleted or fixed manually
+- If publication is blocked, the `cleanup-failed-release` job deletes the unpublished draft and then tries to delete its tag. If the tag cannot be deleted the job fails and names the manual cleanup. When a published release already exists for the tag, it leaves the draft and the tag for a maintainer to inspect
