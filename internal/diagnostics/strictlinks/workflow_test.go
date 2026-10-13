@@ -73,6 +73,35 @@ func TestProbeRequiresManualOptIn(t *testing.T) {
 	assert.LessOrEqual(t, probe.TimeoutMinutes, 20)
 }
 
+func TestProbeKeepsFocusedLinksStrict(t *testing.T) {
+	t.Parallel()
+	probe := readWorkflow(t, "image-factory-transport.yaml").Jobs["strict-links"]
+	daily := readWorkflow(t, "maintenance.yaml").Jobs["check-external-links-strict"]
+
+	for _, focused := range probe.Steps {
+		if focused.Name != "Check the same two links with the strict daily client" {
+			continue
+		}
+
+		assert.Equal(t, "--no-progress --config lychee.toml --accept-timeouts=false "+
+			"${{ runner.temp }}/strict-links/targets.md", focused.With["args"])
+		assert.Equal(t, true, focused.With["fail"])
+
+		for _, caller := range daily.Steps {
+			if caller.Name != "Check links with time-outs counted as errors" {
+				continue
+			}
+
+			assert.Equal(t, caller.Uses, focused.Uses)
+			assert.Equal(t, caller.With["lycheeVersion"], focused.With["lycheeVersion"])
+
+			return
+		}
+	}
+
+	t.Fatal("the focused strict client or its daily counterpart is missing")
+}
+
 func TestProbeRunsTheDailyStrictCallerAfterFocusedFailure(t *testing.T) {
 	t.Parallel()
 	probe := readWorkflow(t, "image-factory-transport.yaml").Jobs["strict-links"]
