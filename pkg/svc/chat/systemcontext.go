@@ -165,7 +165,7 @@ func IsReadOperation(kind copilot.PermissionRequestKind) bool {
 		copilot.PermissionRequestKindExtensionManagement,
 		copilot.PermissionRequestKindExtensionPermissionAccess,
 		copilot.PermissionRequestKindExtensionEnvAccess,
-		copilot.PermissionRequestKindFactory:
+		copilot.PermissionRequestKindWorkflow:
 		return false
 	default:
 		return false
