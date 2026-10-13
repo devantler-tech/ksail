@@ -15,6 +15,7 @@ import (
 const bash32GoProfile = `#!/usr/bin/env bash
 set -euo pipefail
 [[ "$1" == test ]]
+printf 'go_test_args=%s\n' "$*" >&2
 shift
 targets=()
 while [[ $# -gt 0 && "$1" != -* ]]; do
@@ -101,6 +102,21 @@ func TestBash32WorkflowKeepsItsBuildSmall(t *testing.T) {
 
 	require.NotEmpty(t, unique)
 	assert.LessOrEqual(t, len(unique), 300, "a shell fixture must not compile the cluster SDKs")
+
+	var invocations []string
+
+	for line := range strings.SplitSeq(output, "\n") {
+		if args, ok := strings.CutPrefix(line, "go_test_args="); ok {
+			invocations = append(invocations, args)
+		}
+	}
+
+	require.Equal(t, []string{
+		"test kubernetes_update_test.go system_test_harness_test.go " +
+			"-list ^TestSystemTestTalosUpgradeEmptyArgumentsUnderBash32$",
+		"test kubernetes_update_test.go system_test_harness_test.go " +
+			"-run ^TestSystemTestTalosUpgradeEmptyArgumentsUnderBash32$ -count=1",
+	}, invocations, "listing the fixture must be followed by its uncached execution")
 }
 
 func TestBash32WorkflowRejectsAnUnselectedFixture(t *testing.T) {

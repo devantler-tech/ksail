@@ -16,6 +16,9 @@ exceeded" and the release stops half-way (devantler-tech/monorepo#4055).
 
 The REST budget read is free. The minimal GraphQL query costs one point and
 reads that endpoint's own allowance, which can differ from REST's metadata.
+Each request is limited to 10 seconds, with a 2-second forced-stop grace period.
+GNU timeout (timeout on Linux or gtimeout on macOS) bounds the reads; without
+it, the budget is treated as unreadable rather than issuing an unbounded request.
 
 Exit codes:
   0  budget is available, or the budget could not be read (see below)
@@ -61,11 +64,22 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
+api_timeout=timeout
+if ! command -v "${api_timeout}" >/dev/null 2>&1; then
+	api_timeout=gtimeout
+fi
+
+# Bound each metadata request even when the HTTP client has no request timeout.
+read_api() {
+	command -v "${api_timeout}" >/dev/null 2>&1 || return 1
+	"${api_timeout}" -k 2s 10s gh api "$@"
+}
+
 # Read GraphQL's own response headers, including a complete primary-limit refusal.
 # Other failures and incomplete responses remain unreadable, without printing headers.
 read_graphql_budget() {
 	local response status=0
-	response="$(gh api --include graphql -f 'query=query { rateLimit { remaining resetAt } }' 2>/dev/null)" || status=$?
+	response="$(read_api --include graphql -f 'query=query { rateLimit { remaining resetAt } }' 2>/dev/null)" || status=$?
 	jq -eRcs --argjson status "${status}" '
       capture("^(?<headers>.*?)\\r?\\n\\r?\\n(?<body>.*)$"; "p")
       | .body |= fromjson
@@ -99,7 +113,7 @@ read_graphql_budget() {
 # response does not contain bounded whole numbers and positive reset timestamps.
 read_budget() {
 	local response graphql fields
-	if ! response="$(gh api rate_limit 2>/dev/null)"; then
+	if ! response="$(read_api rate_limit 2>/dev/null)"; then
 		return 1
 	fi
 	if ! graphql="$(read_graphql_budget)"; then

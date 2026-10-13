@@ -9,6 +9,12 @@ trap 'rm -rf "${tmp_dir}"' EXIT
 fake_bin="${tmp_dir}/bin"
 mkdir -p "${fake_bin}"
 
+test_timeout=timeout
+if ! command -v "${test_timeout}" >/dev/null 2>&1; then
+	test_timeout=gtimeout
+fi
+command -v "${test_timeout}" >/dev/null
+
 # The fake clock starts at 1000 and moves only when the script sleeps, so every wait is exact and
 # the test never really waits.
 cat >"${fake_bin}/date" <<'EOF'
@@ -46,11 +52,15 @@ esac
 response="$(sed -n "${line}p" "${state_dir}/responses")"
 behavior="${response}"
 case "${behavior}" in
-core-failed-full-output | graphql-failed-full-output | graphql-partial | graphql-wrong-resource | graphql-duplicate-header | graphql-missing-header | graphql-other-error | graphql-rate-limited-positive-header)
+core-failed-full-output | graphql-failed-full-output | graphql-partial | graphql-wrong-resource | graphql-duplicate-header | graphql-missing-header | graphql-other-error | graphql-rate-limited-positive-header | core-hangs | graphql-hangs)
 	response="4000 5000 4900 5000"
 	;;
 graphql-rate-limit-alias) response="4000 1100 0 1300" ;;
 esac
+if [[ "${behavior}" == core-hangs && "$*" == "api rate_limit" ]] ||
+	[[ "${behavior}" == graphql-hangs && "$*" == "api --include graphql "* ]]; then
+	exec /bin/sleep 60
+fi
 if [[ "$*" == "api --include graphql "* ]]; then
 	read -r _ _ reported_remaining reported_reset actual_remaining actual_reset <<<"${response}"
 	actual_remaining="${actual_remaining:-${reported_remaining}}"
@@ -113,7 +123,7 @@ run_case() {
 	done
 	[[ $# -gt 0 ]] && shift
 	output="$(PATH="${fake_bin}:${PATH}" BUDGET_STATE_DIR="${state_dir}" \
-		bash "${wait_script}" "$@" 2>&1)" || status=$?
+		"${test_timeout}" -k 2s 15s bash "${wait_script}" "$@" 2>&1)" || status=$?
 	sleeps="$(tr '\n' ' ' <"${state_dir}/sleeps" | sed 's/ $//')"
 	if [[ "${status}" -ne "${want_status}" ]]; then
 		fail "${name}: exit ${status}, expected ${want_status}. Output: ${output}"
@@ -213,6 +223,10 @@ run_case null-number 0 "10 10" "Could not read the GitHub request budget (3 atte
 # once, both on the first read and after a wait for the reset has used the time up.
 run_case unreadable-at-deadline 0 "" "Could not read the GitHub request budget (1 attempt(s))" \
 	"fail" -- --max-wait 5
+run_case stalled-core-read 0 "" "Could not read the GitHub request budget (1 attempt(s))" \
+	"core-hangs" -- --max-wait 0
+run_case stalled-graphql-read 0 "" "Could not read the GitHub request budget (1 attempt(s))" \
+	"graphql-hangs" -- --max-wait 0
 run_case unreadable-after-reset-wait 0 "605" "Could not read the GitHub request budget (1 attempt(s))" \
 	"0 1600 4900 1600" "fail" -- --max-wait 610
 # With time left, the retry still happens.
