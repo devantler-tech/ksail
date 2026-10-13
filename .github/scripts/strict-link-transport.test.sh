@@ -6,8 +6,8 @@ tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 mkdir -p "$tmp_dir/repo/.github/scripts" "$tmp_dir/bin"
 if [[ ! -f "$script_dir/strict-link-transport.sh" ]]; then
-  printf 'FAIL: strict link transport observation is unavailable\n' >&2
-  exit 1
+	printf 'FAIL: strict link transport observation is unavailable\n' >&2
+	exit 1
 fi
 cp "$script_dir/strict-link-transport.sh" "$tmp_dir/repo/.github/scripts/"
 printf 'user_agent = "controlled-agent"\n' >"$tmp_dir/repo/lychee.toml"
@@ -25,12 +25,12 @@ CURL
 chmod +x "$tmp_dir/bin/curl"
 export CURL_CALLS="$tmp_dir/calls"
 PATH="$tmp_dir/bin:$PATH" bash "$tmp_dir/repo/.github/scripts/strict-link-transport.sh" \
-  "$tmp_dir/probe with spaces" >"$tmp_dir/output" 2>&1
+	"$tmp_dir/probe with spaces" >"$tmp_dir/output" 2>&1
 grep -Fq 'curl_exit=28' "$tmp_dir/output"
 grep -Fq 'curl_exit=0' "$tmp_dir/output"
 if grep -Fq 'raw private error' "$tmp_dir/output"; then
-  printf 'FAIL: raw curl errors escaped into diagnostic output\n' >&2
-  exit 1
+	printf 'FAIL: raw curl errors escaped into diagnostic output\n' >&2
+	exit 1
 fi
 [[ "$(grep -c '^https://factory.talos.dev/' "$CURL_CALLS")" == 2 ]]
 [[ "$(grep -c '^--max-time$' "$CURL_CALLS")" == 2 ]]
@@ -42,8 +42,8 @@ fi
 [[ "$(grep -A1 '^--proto-redir$' "$CURL_CALLS" | grep -c '^=https$')" == 2 ]]
 [[ "$(grep -c '^https://factory.talos.dev/schematics/c9078f9419961640c712a8bf2bb9174933dfcf1da383fd8ea2b7dc21493f8bac$' "$CURL_CALLS")" == 1 ]]
 if grep -Eq '^(-k|--insecure|--verbose|--trace|--trace-ascii|--dump-header|--retry)$' "$CURL_CALLS"; then
-  printf 'FAIL: transport probe widened or printed the request\n' >&2
-  exit 1
+	printf 'FAIL: transport probe widened or printed the request\n' >&2
+	exit 1
 fi
 [[ "$(wc -l <"$tmp_dir/probe with spaces/targets.md" | tr -d ' ')" == 2 ]]
 printf 'PASS: both fixed targets observed after a timeout with bounded private output\n'
@@ -51,9 +51,9 @@ printf 'PASS: both fixed targets observed after a timeout with bounded private o
 printf 'user_agent = "first"\nuser_agent = "second"\n' >"$tmp_dir/repo/lychee.toml"
 rm "$CURL_CALLS"
 if PATH="$tmp_dir/bin:$PATH" bash "$tmp_dir/repo/.github/scripts/strict-link-transport.sh" \
-  "$tmp_dir/invalid" >"$tmp_dir/invalid-output" 2>&1; then
-  printf 'FAIL: ambiguous checker configuration accepted\n' >&2
-  exit 1
+	"$tmp_dir/invalid" >"$tmp_dir/invalid-output" 2>&1; then
+	printf 'FAIL: ambiguous checker configuration accepted\n' >&2
+	exit 1
 fi
 [[ ! -e "$CURL_CALLS" ]]
 [[ ! -e "$tmp_dir/invalid/targets.md" ]]
