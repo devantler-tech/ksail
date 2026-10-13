@@ -210,6 +210,22 @@ func (p *Provider) ListNodes(ctx context.Context, clusterName string) ([]provide
 // ListAllClusters returns the names of all EKS clusters visible in the
 // configured region (or the default region eksctl resolves when region is "").
 func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
+	clusters, err := p.ListAllClustersWithRegion(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return provider.NamesFrom(
+		clusters,
+		func(c eksctlclient.ClusterSummary) string { return c.Name },
+	), nil
+}
+
+// ListAllClustersWithRegion retains the region reported by eksctl for each cluster.
+// This matters when eksctl selected a profile default rather than an explicit region.
+func (p *Provider) ListAllClustersWithRegion(
+	ctx context.Context,
+) ([]eksctlclient.ClusterSummary, error) {
 	clusters, err := provider.FetchOrTranslate(
 		p.client != nil,
 		func() ([]eksctlclient.ClusterSummary, error) {
@@ -221,10 +237,7 @@ func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
 		return nil, err //nolint:wrapcheck // FetchOrTranslate already ran the error through translateClientErr
 	}
 
-	return provider.NamesFrom(
-		clusters,
-		func(c eksctlclient.ClusterSummary) string { return c.Name },
-	), nil
+	return clusters, nil
 }
 
 // NodesExist returns true if the cluster has at least one managed nodegroup.
@@ -256,7 +269,7 @@ func (p *Provider) GetClusterStatus(
 		return nil, provider.ErrProviderUnavailable
 	}
 
-	_, err := p.client.GetCluster(ctx, clusterName, p.region)
+	_, err := p.client.GetClusterDetails(ctx, clusterName, p.region)
 	if err != nil {
 		return nil, translateClientErr(err)
 	}
@@ -269,7 +282,7 @@ func (p *Provider) GetClusterStatus(
 	status := provider.BuildClusterStatus(nodes, NodegroupStatusActive)
 	if status == nil {
 		// BuildClusterStatus returns nil for an empty node list, but the
-		// cluster exists (GetCluster succeeded above) — only its nodegroups
+		// cluster exists (GetClusterDetails succeeded above) — only its nodegroups
 		// are absent. Return a zero-node status so callers can rely on the
 		// (status, err) contract: status is non-nil whenever err is nil.
 		status = &provider.ClusterStatus{Phase: provider.PhaseStopped, Nodes: nodes}

@@ -129,6 +129,42 @@ KSail invokes eksctl to provision the cluster from `eks.yaml` and waits for comp
 | `ksail cluster list`   | Lists clusters in the configured region (all regions when unset)    |
 | `ksail cluster info`   | Shows cluster details                                               |
 
+### Recover missing local ownership state
+
+On a new machine, or after losing local KSail state, use the experimental
+`eks-bind` command to recover the identity of an existing eksctl-created cluster.
+Neither `ksail.yaml`, `eks.yaml`, nor the original creation snapshot is required.
+Name the cluster and provider explicitly, and select the intended region:
+
+```bash
+AWS_REGION=eu-north-1 ksail cluster eks-bind --experimental --name my-cluster --provider AWS
+```
+
+The command makes read-only queries and displays the AWS account, cluster ARN,
+region, and creation time. It exits without writing state until you repeat the
+command with `--yes` after reviewing that identity. Your selected credentials must
+be able to inspect the cluster and its eksctl provenance.
+
+The confirmed command writes only a local immutable identity record and credential
+environment-variable names. It never stores credential values, creates a synthetic
+creation snapshot, or changes AWS resources. CLI lifecycle operations can then
+use that record. For local web and desktop, select the recorded region in Settings
+and refresh the cluster list before choosing the recovered cluster. The list follows
+the selected region; the ownership record alone does not add a row. Every mutation
+still checks the live account and exact cluster incarnation. The recovery command
+remains off by default behind `--experimental`.
+
+When the local web or desktop backend has no rendered EKS config, it rebuilds one
+from the single recorded region for a selected cluster. Multiple recorded regions,
+corrupt state, conflicting configuration, and changed live identities are refused.
+Use an explicitly selected CLI target when the local API cannot distinguish
+same-named clusters across regions.
+
+Rebinding clears old node-group capacity snapshots. If a cluster was already
+stopped when its local state was lost, recovery cannot reconstruct its previous
+capacity; set the desired capacity through your reviewed EKS configuration or AWS
+tooling before relying on a later stop/start cycle.
+
 ### Experimental control-plane upgrades
 
 To upgrade an ACTIVE EKS control plane from 1.34 to 1.35, set an explicit target

@@ -121,7 +121,7 @@ type eksConfigMetadata struct {
 	} `json:"metadata"`
 }
 
-// eksCreateCompleted reports whether persisted state shows an EKS create completed for name.
+// eksCreateCompleted reports a completed create or an explicitly recovered EKS identity.
 //
 // State is written for EVERY distribution, so its existence alone does not prove that: it may
 // belong to a Kind or Talos cluster of the same name. Entering the bound path on that would look
@@ -131,12 +131,21 @@ type eksConfigMetadata struct {
 // first record.
 func eksCreateCompleted(name string) (bool, error) {
 	spec, err := state.LoadClusterSpec(name)
-	if err != nil {
-		if errors.Is(err, state.ErrStateNotFound) {
-			// Not created yet: the caller renders from the ambient region.
+	if errors.Is(err, state.ErrStateNotFound) {
+		_, ownershipErr := state.ListEKSOwnershipStates(name)
+		if errors.Is(ownershipErr, state.ErrEKSOwnershipStateNotFound) {
 			return false, nil
 		}
 
+		if ownershipErr != nil {
+			return false, unreadableOwnershipError(name, ownershipErr)
+		}
+
+		// Recovery writes no creation spec, but still binds an existing target.
+		return true, nil
+	}
+
+	if err != nil {
 		return false, fmt.Errorf(
 			"%w: read local KSail state for EKS cluster %q: %w", api.ErrInvalid, name, err,
 		)
@@ -202,10 +211,8 @@ func refuseEKSCreateOverCompletedState(distribution v1alpha1.Distribution, name 
 // boundEKSConfig returns the EKS target recorded when the named cluster was created, or nil when
 // there is no such record and the caller should render a fresh config.
 //
-// Persisted cluster state is the discriminator: it is written only after a provisioner reports a
-// successful create, so its absence means either a first create or a retry after a failed one —
-// both of which must honour the region selected now. Once it exists, every subsequent action is a
-// mutation of an existing remote cluster and is bound to the region that created it.
+// A creation snapshot or a recovered immutable identity distinguishes an existing target from a
+// first create or an unbound retry. Existing targets remain bound to their recorded region.
 //
 // Missing or unreadable evidence for a cluster that did complete creation is an error rather than a
 // silent fall back to the ambient region: the fallback is precisely the redirect being prevented.
