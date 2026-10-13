@@ -167,11 +167,11 @@ func marshalNamespace(name, podSecurity string) (string, error) {
 	maps.Copy(labels, k8s.PSSLabels(podSecurity))
 
 	namespace := map[string]any{
-		"apiVersion": "v1",
-		"kind":       "Namespace",
-		"metadata": map[string]any{
-			"name":   name,
-			"labels": labels,
+		keyAPIVersion: "v1",
+		keyKind:       "Namespace",
+		keyMetadata: map[string]any{
+			keyName:   name,
+			keyLabels: labels,
 		},
 	}
 
@@ -189,12 +189,12 @@ func marshalServiceAccount(
 	imagePullSecrets []string,
 ) (string, error) {
 	serviceAccount := map[string]any{
-		"apiVersion": "v1",
-		"kind":       "ServiceAccount",
-		"metadata": map[string]any{
-			"name":      name,
-			"namespace": namespaceName,
-			"labels":    ManagedByLabels(),
+		keyAPIVersion: "v1",
+		keyKind:       "ServiceAccount",
+		keyMetadata: map[string]any{
+			keyName:      name,
+			keyNamespace: namespaceName,
+			keyLabels:    ManagedByLabels(),
 		},
 	}
 
@@ -206,7 +206,7 @@ func marshalServiceAccount(
 	if len(secrets) > 0 {
 		refs := make([]map[string]string, len(secrets))
 		for i, secret := range secrets {
-			refs[i] = map[string]string{"name": secret}
+			refs[i] = map[string]string{keyName: secret}
 		}
 
 		serviceAccount["imagePullSecrets"] = refs

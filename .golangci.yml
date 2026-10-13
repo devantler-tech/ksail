@@ -33,18 +33,6 @@ linters:
       - linters:
           - goconst
         path: _test\.go$
-      # Tests build their inputs from deprecated fields on purpose. The SOPS age-key alias
-      # must keep working until it is removed, so the tests of every installer that reads it
-      # name it; and a legacy Talos machine configuration can only be written with the
-      # v1alpha1 fields Talos has since deprecated. Production code stays checked.
-      - linters:
-          - staticcheck
-        path: _test\.go$
-        text: 'SA1019: \(github\.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1\.SOPS\)\.AgeKeyEnvVar is deprecated'
-      - linters:
-          - staticcheck
-        path: pkg/svc/provisioner/cluster/talos/.*_test\.go$
-        text: 'SA1019: \(github\.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1\.(ClusterConfig|MachineConfig)\)\.[A-Za-z]+ is deprecated'
       # Tests that mutate shared global state (SetClusterStabilityCheckForTests) cannot run in parallel
       - linters:
           - paralleltest
@@ -107,9 +95,6 @@ linters:
       # a package, so the path exclusion above cannot keep a test's copies out of the count
       # for a production file; this option does.
       ignore-tests: true
-      # A map key in a manifest, Helm value set or JSON schema is a field name of that
-      # document. Naming each one hides the document's shape; values stay checked.
-      ignore-map-keys: true
     misspell:
       # mirrord (metalbear) is a product name referenced in docs/comments, not a
       # misspelling of "mirrored".
