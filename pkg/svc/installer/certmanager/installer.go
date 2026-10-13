@@ -7,6 +7,9 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/helmutil"
 )
 
+// helmValueTrue switches a chart option on through a Helm set value.
+const helmValueTrue = "true"
+
 // Installer installs or upgrades cert-manager.
 //
 // It embeds helmutil.Base to provide standard Helm chart lifecycle management.
@@ -19,7 +22,7 @@ type Installer struct {
 // (replicas, PDB, topology spread) for the controller and webhook deployments.
 func NewInstaller(client helm.Interface, timeout time.Duration, haEnabled bool) *Installer {
 	setValues := map[string]string{
-		"installCRDs":             "true",
+		"installCRDs":             helmValueTrue,
 		"startupapicheck.timeout": startupAPICheckTimeout(timeout),
 	}
 
@@ -28,9 +31,9 @@ func NewInstaller(client helm.Interface, timeout time.Duration, haEnabled bool) 
 	if haEnabled {
 		setValues["replicaCount"] = "2"
 		setValues["webhook.replicaCount"] = "2"
-		setValues["podDisruptionBudget.enabled"] = "true"
+		setValues["podDisruptionBudget.enabled"] = helmValueTrue
 		setValues["podDisruptionBudget.minAvailable"] = "1"
-		setValues["webhook.podDisruptionBudget.enabled"] = "true"
+		setValues["webhook.podDisruptionBudget.enabled"] = helmValueTrue
 		setValues["webhook.podDisruptionBudget.minAvailable"] = "1"
 
 		valuesYaml = `topologySpreadConstraints:

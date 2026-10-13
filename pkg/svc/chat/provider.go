@@ -14,6 +14,9 @@ import (
 
 const genericAPIKeyEnvVar = "KSAIL_AI_API_KEY" //nolint:gosec // Environment variable name, not a credential.
 
+// sdkTypeOpenAI is the SDK provider type for every endpoint that speaks the OpenAI wire format.
+const sdkTypeOpenAI = "openai"
+
 var (
 	// ErrUnsupportedAIProvider indicates an unknown chat provider name.
 	ErrUnsupportedAIProvider = errors.New("unsupported AI provider")
@@ -143,7 +146,7 @@ func providerPresetFor(provider v1alpha1.AIProvider) (providerPreset, bool) {
 	switch provider {
 	case v1alpha1.AIProviderOpenAI:
 		return providerPreset{
-			sdkType: "openai", baseURL: "https://api.openai.com/v1",
+			sdkType: sdkTypeOpenAI, baseURL: "https://api.openai.com/v1",
 			keyEnvVars: []string{"OPENAI_API_KEY"}, requiresKey: true,
 		}, true
 	case v1alpha1.AIProviderAnthropic:
@@ -153,8 +156,10 @@ func providerPresetFor(provider v1alpha1.AIProvider) (providerPreset, bool) {
 		}, true
 	case v1alpha1.AIProviderGemini:
 		return providerPreset{
-			sdkType: "openai", baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
-			keyEnvVars: []string{"GEMINI_API_KEY", "GOOGLE_API_KEY"}, requiresKey: true,
+			sdkType:     sdkTypeOpenAI,
+			baseURL:     "https://generativelanguage.googleapis.com/v1beta/openai",
+			keyEnvVars:  []string{"GEMINI_API_KEY", "GOOGLE_API_KEY"},
+			requiresKey: true,
 		}, true
 	case v1alpha1.AIProviderAzureOpenAI:
 		return providerPreset{
@@ -162,13 +167,13 @@ func providerPresetFor(provider v1alpha1.AIProvider) (providerPreset, bool) {
 		}, true
 	case v1alpha1.AIProviderOpenRouter:
 		return providerPreset{
-			sdkType: "openai", baseURL: "https://openrouter.ai/api/v1",
+			sdkType: sdkTypeOpenAI, baseURL: "https://openrouter.ai/api/v1",
 			keyEnvVars: []string{"OPENROUTER_API_KEY"}, requiresKey: true,
 		}, true
 	case v1alpha1.AIProviderOllama:
-		return providerPreset{sdkType: "openai", baseURL: "http://localhost:11434/v1"}, true
+		return providerPreset{sdkType: sdkTypeOpenAI, baseURL: "http://localhost:11434/v1"}, true
 	case v1alpha1.AIProviderOpenAICompatible:
-		return providerPreset{sdkType: "openai"}, true
+		return providerPreset{sdkType: sdkTypeOpenAI}, true
 	case v1alpha1.AIProviderCopilot:
 		return providerPreset{}, false
 	default:

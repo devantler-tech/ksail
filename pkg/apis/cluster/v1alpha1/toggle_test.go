@@ -174,7 +174,7 @@ func TestToggleEnumTypesAcceptCoercedValues(t *testing.T) {
 			// pointer-receiver ValidValues method via the interface.
 			ptr := reflect.New(toggleType)
 
-			valuer, ok := ptr.Interface().(toggleEnumValuer)
+			valuer, ok := reflect.TypeAssert[toggleEnumValuer](ptr)
 			require.Truef(t, ok, "%s does not implement ValidValues", toggleType.Name())
 
 			values := valuer.ValidValues()

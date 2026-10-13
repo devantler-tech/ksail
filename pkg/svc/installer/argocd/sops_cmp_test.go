@@ -24,14 +24,14 @@ func TestShouldEnableSOPS(t *testing.T) {
 		{
 			name: "explicitly enabled returns true",
 			sops: v1alpha1.SOPS{
-				Enabled:      v1alpha1.SOPSEnabledEnabled,
-				AgeKeyEnvVar: "NONEXISTENT_KEY_99999",
+				Enabled: v1alpha1.SOPSEnabledEnabled,
+				Env:     v1alpha1.SOPSEnv{Var: "NONEXISTENT_KEY_99999"},
 			},
 			want: true,
 		},
 		{
 			name: "auto-detect with key available returns true",
-			sops: v1alpha1.SOPS{AgeKeyEnvVar: "TEST_ARGOCD_CMP_SOPS_KEY"},
+			sops: v1alpha1.SOPS{Env: v1alpha1.SOPSEnv{Var: "TEST_ARGOCD_CMP_SOPS_KEY"}},
 			env: map[string]string{
 				"TEST_ARGOCD_CMP_SOPS_KEY": "AGE-SECRET-KEY-1TESTKEY" +
 					"000000000000000000000000000000000000000000000000",
@@ -40,7 +40,9 @@ func TestShouldEnableSOPS(t *testing.T) {
 		},
 		{
 			name: "auto-detect with no key returns false",
-			sops: v1alpha1.SOPS{AgeKeyEnvVar: "TEST_ARGOCD_CMP_SOPS_NONEXISTENT_99999"},
+			sops: v1alpha1.SOPS{
+				Env: v1alpha1.SOPSEnv{Var: "TEST_ARGOCD_CMP_SOPS_NONEXISTENT_99999"},
+			},
 			env: map[string]string{
 				"SOPS_AGE_KEY_FILE": "/tmp/nonexistent-ksail-argocd-cmp-test.txt",
 			},

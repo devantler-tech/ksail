@@ -24,7 +24,7 @@ func TestResolveAgeKey_KeyFilePermissionDenied(t *testing.T) {
 
 	t.Setenv("SOPS_AGE_KEY_FILE", keyPath)
 
-	sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_SOPSUTIL_NONEXISTENT_PERM"}
+	sops := v1alpha1.SOPS{Env: v1alpha1.SOPSEnv{Var: "TEST_SOPSUTIL_NONEXISTENT_PERM"}}
 
 	_, resolveErr := sopsutil.ResolveAgeKey(sops)
 	require.Error(t, resolveErr)

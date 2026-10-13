@@ -212,7 +212,7 @@ func renderedNamespaces(docs []map[string]any) map[string]*corev1.Namespace {
 
 		labels, _, _ := unstructured.NestedStringMap(doc, "metadata", "labels")
 		known[name] = &corev1.Namespace{
-			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
+			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: kindNamespace},
 			ObjectMeta: metav1.ObjectMeta{Name: name, Labels: labels},
 		}
 	}
@@ -372,7 +372,7 @@ func isBuiltinClusterScoped(groupKind schema.GroupKind) bool {
 // have no namespace.
 func builtinClusterScopedKinds() map[string][]string {
 	return map[string][]string{
-		"":                          {"Namespace", "Node", "PersistentVolume"},
+		"":                          {kindNamespace, "Node", "PersistentVolume"},
 		"rbac.authorization.k8s.io": {"ClusterRole", "ClusterRoleBinding"},
 		"apiextensions.k8s.io":      {"CustomResourceDefinition"},
 		"apiregistration.k8s.io":    {"APIService"},

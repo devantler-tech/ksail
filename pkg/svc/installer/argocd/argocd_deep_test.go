@@ -73,8 +73,8 @@ func TestEnsureSopsAgeSecret_EnabledWithKey_ValidKubeconfig(t *testing.T) {
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				SOPS: v1alpha1.SOPS{
-					Enabled:      v1alpha1.SOPSEnabledEnabled,
-					AgeKeyEnvVar: "TEST_ARGOCD_DEEP_SOPS_KEY",
+					Enabled: v1alpha1.SOPSEnabledEnabled,
+					Env:     v1alpha1.SOPSEnv{Var: "TEST_ARGOCD_DEEP_SOPS_KEY"},
 				},
 			},
 		},
@@ -101,7 +101,7 @@ func TestEnsureSopsAgeSecret_AutoDetectWithKey(t *testing.T) {
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				SOPS: v1alpha1.SOPS{
-					AgeKeyEnvVar: "TEST_ARGOCD_AUTO_SOPS_KEY",
+					Env: v1alpha1.SOPSEnv{Var: "TEST_ARGOCD_AUTO_SOPS_KEY"},
 				},
 			},
 		},

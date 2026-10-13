@@ -115,19 +115,19 @@ func renderedPrerequisiteResource(
 func prerequisiteResourceForKind(gvk schema.GroupVersionKind) string {
 	if gvk.Group == "apiextensions.k8s.io" && gvk.Version == "v1" &&
 		gvk.Kind == prerequisiteCRDKind {
-		return "customresourcedefinitions"
+		return crdResource
 	}
 
-	if gvk.Group != "admissionregistration.k8s.io" ||
+	if gvk.Group != admissionRegistrationGroup ||
 		(gvk.Version != "v1" && gvk.Version != admissionBetaVersion) {
 		return ""
 	}
 
 	return map[string]string{
-		mutatingAdmissionPolicyKind:        "mutatingadmissionpolicies",
-		"MutatingAdmissionPolicyBinding":   "mutatingadmissionpolicybindings",
-		"ValidatingAdmissionPolicy":        "validatingadmissionpolicies",
-		"ValidatingAdmissionPolicyBinding": "validatingadmissionpolicybindings",
+		mutatingAdmissionPolicyKind:          "mutatingadmissionpolicies",
+		mutatingAdmissionPolicyBindingKind:   "mutatingadmissionpolicybindings",
+		validatingAdmissionPolicyKind:        "validatingadmissionpolicies",
+		validatingAdmissionPolicyBindingKind: "validatingadmissionpolicybindings",
 	}[gvk.Kind]
 }
 
@@ -165,7 +165,7 @@ func parsePrerequisites(manifest string) ([]*unstructured.Unstructured, error) {
 
 		seen[key] = true
 
-		if gvr.Resource == "customresourcedefinitions" {
+		if gvr.Resource == crdResource {
 			crds++
 		}
 
@@ -332,8 +332,8 @@ func validatePrerequisiteRef(ref prerequisiteRef) error {
 	}
 
 	for _, kind := range []string{
-		prerequisiteCRDKind, "MutatingAdmissionPolicy", "MutatingAdmissionPolicyBinding",
-		"ValidatingAdmissionPolicy", "ValidatingAdmissionPolicyBinding",
+		prerequisiteCRDKind, mutatingAdmissionPolicyKind, mutatingAdmissionPolicyBindingKind,
+		validatingAdmissionPolicyKind, validatingAdmissionPolicyBindingKind,
 	} {
 		object := &unstructured.Unstructured{}
 		object.SetGroupVersionKind(

@@ -28,10 +28,13 @@ type ProgressLabels struct {
 	Completed string
 }
 
+// pendingLabel is the not-yet-started status text every label set shares.
+const pendingLabel = "pending"
+
 // DefaultLabels returns the default progress labels.
 func DefaultLabels() ProgressLabels {
 	return ProgressLabels{
-		Pending:   "pending",
+		Pending:   pendingLabel,
 		Running:   "running",
 		Completed: "completed",
 	}
@@ -40,7 +43,7 @@ func DefaultLabels() ProgressLabels {
 // InstallingLabels returns labels suitable for installation tasks.
 func InstallingLabels() ProgressLabels {
 	return ProgressLabels{
-		Pending:   "pending",
+		Pending:   pendingLabel,
 		Running:   "installing",
 		Completed: "installed",
 	}
@@ -49,7 +52,7 @@ func InstallingLabels() ProgressLabels {
 // ValidatingLabels returns labels suitable for validation tasks.
 func ValidatingLabels() ProgressLabels {
 	return ProgressLabels{
-		Pending:   "pending",
+		Pending:   pendingLabel,
 		Running:   "validating",
 		Completed: "validated",
 	}
@@ -58,7 +61,7 @@ func ValidatingLabels() ProgressLabels {
 // ReconcilingLabels returns labels suitable for reconciliation tasks.
 func ReconcilingLabels() ProgressLabels {
 	return ProgressLabels{
-		Pending:   "pending",
+		Pending:   pendingLabel,
 		Running:   "reconciling",
 		Completed: "reconciled",
 	}
@@ -279,7 +282,6 @@ func NewProgressGroup(
 	termWidth := 0
 
 	if file, ok := writer.(*os.File); ok {
-		//nolint:gosec // uintptr to int conversion is safe for term.IsTerminal usage
 		fd := int(file.Fd())
 		isTTY = term.IsTerminal(fd)
 

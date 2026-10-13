@@ -105,8 +105,7 @@ func classifyCheckError(
 	lastStatus string,
 	timeoutErr func(lastStatus string) error,
 ) error {
-	var halt *haltError
-	if errors.As(err, &halt) {
+	if halt, ok := errors.AsType[*haltError](err); ok {
 		return halt.err
 	}
 

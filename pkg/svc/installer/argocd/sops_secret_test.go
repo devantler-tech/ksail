@@ -75,7 +75,7 @@ func TestResolveAgeKey(t *testing.T) {
 	t.Run("env var set with valid key", func(t *testing.T) {
 		t.Setenv("TEST_ARGOCD_SOPS_AGE_KEY_RESOLVE", testKey)
 
-		sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_ARGOCD_SOPS_AGE_KEY_RESOLVE"}
+		sops := v1alpha1.SOPS{Env: v1alpha1.SOPSEnv{Var: "TEST_ARGOCD_SOPS_AGE_KEY_RESOLVE"}}
 
 		got, err := argocdinstaller.ResolveAgeKey(sops)
 		require.NoError(t, err)
@@ -85,7 +85,7 @@ func TestResolveAgeKey(t *testing.T) {
 	t.Run("env var not set and no key file returns empty", func(t *testing.T) {
 		t.Setenv("SOPS_AGE_KEY_FILE", "/tmp/nonexistent-ksail-argocd-test-keys.txt")
 
-		sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_ARGOCD_SOPS_NONEXISTENT_VAR_12345"}
+		sops := v1alpha1.SOPS{Env: v1alpha1.SOPSEnv{Var: "TEST_ARGOCD_SOPS_NONEXISTENT_VAR_12345"}}
 
 		got, err := argocdinstaller.ResolveAgeKey(sops)
 		require.NoError(t, err)
@@ -95,7 +95,7 @@ func TestResolveAgeKey(t *testing.T) {
 	t.Run("env var name empty skips env lookup", func(t *testing.T) {
 		t.Setenv("SOPS_AGE_KEY_FILE", "/tmp/nonexistent-ksail-argocd-test-empty.txt")
 
-		sops := v1alpha1.SOPS{AgeKeyEnvVar: ""}
+		sops := v1alpha1.SOPS{}
 
 		got, err := argocdinstaller.ResolveAgeKey(sops)
 		require.NoError(t, err)
@@ -106,7 +106,7 @@ func TestResolveAgeKey(t *testing.T) {
 		const metaKey = "AGE-SECRET-KEY-1METAKEY000000000000000000000000000000000000000000000000"
 		t.Setenv("TEST_ARGOCD_SOPS_AGE_KEY_META", "# comment\n"+metaKey+"\n")
 
-		sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_ARGOCD_SOPS_AGE_KEY_META"}
+		sops := v1alpha1.SOPS{Env: v1alpha1.SOPSEnv{Var: "TEST_ARGOCD_SOPS_AGE_KEY_META"}}
 
 		got, err := argocdinstaller.ResolveAgeKey(sops)
 		require.NoError(t, err)
@@ -159,7 +159,7 @@ func TestEnsureSopsAgeSecret_NoKeyAutoDetect(t *testing.T) {
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				SOPS: v1alpha1.SOPS{
-					AgeKeyEnvVar: "TEST_ARGOCD_SOPS_NONEXISTENT_VAR_99999",
+					Env: v1alpha1.SOPSEnv{Var: "TEST_ARGOCD_SOPS_NONEXISTENT_VAR_99999"},
 				},
 			},
 		},
@@ -179,8 +179,8 @@ func TestEnsureSopsAgeSecret_EnabledNoKey(t *testing.T) {
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				SOPS: v1alpha1.SOPS{
-					Enabled:      v1alpha1.SOPSEnabledEnabled,
-					AgeKeyEnvVar: "TEST_ARGOCD_SOPS_NONEXISTENT_VAR_88888",
+					Enabled: v1alpha1.SOPSEnabledEnabled,
+					Env:     v1alpha1.SOPSEnv{Var: "TEST_ARGOCD_SOPS_NONEXISTENT_VAR_88888"},
 				},
 			},
 		},

@@ -12,6 +12,9 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/cni"
 )
 
+// helmValueTrue switches a chart option on through a Helm set value.
+const helmValueTrue = "true"
+
 // errGatewayAPICRDInstallerNil is returned when the Gateway API CRD installer is not configured.
 var errGatewayAPICRDInstallerNil = errors.New("gateway API CRD installer is not configured")
 
@@ -236,7 +239,7 @@ func (c *Installer) defaultCiliumValues() map[string]string {
 
 	return map[string]string{
 		"operator.replicas":  operatorReplicas,
-		"gatewayAPI.enabled": "true",
+		"gatewayAPI.enabled": helmValueTrue,
 	}
 }
 
@@ -246,8 +249,8 @@ func (c *Installer) defaultCiliumValues() map[string]string {
 // NET_BIND_SERVICE is needed for binding to privileged ports (80, 443).
 func dockerCiliumValues() map[string]string {
 	return map[string]string{
-		"gatewayAPI.hostNetwork.enabled":                           "true",
-		"envoy.securityContext.capabilities.keepCapNetBindService": "true",
+		"gatewayAPI.hostNetwork.enabled":                           helmValueTrue,
+		"envoy.securityContext.capabilities.keepCapNetBindService": helmValueTrue,
 		"envoy.securityContext.capabilities.envoy":                 `["NET_ADMIN","NET_BIND_SERVICE","SYS_ADMIN"]`,
 	}
 }
@@ -270,7 +273,7 @@ func talosCiliumValues() map[string]string {
 		// Enable kube-proxy replacement mode for Talos.
 		// When kube-proxy is disabled in Talos (proxy.disabled: true), Cilium must
 		// replace kube-proxy functionality and connect directly to the API server.
-		"kubeProxyReplacement": "true",
+		"kubeProxyReplacement": helmValueTrue,
 		// Connect to API server via KubePrism (Talos's local API proxy).
 		// This is required when kube-proxy is disabled because the Kubernetes service
 		// IP (10.96.0.1) is not routable until Cilium is running.

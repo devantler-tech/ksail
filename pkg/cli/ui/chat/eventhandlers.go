@@ -90,12 +90,14 @@ func (d *sessionEventDispatcher) dispatch(
 }
 
 func (d *sessionEventDispatcher) handleSessionLifecycle(eventType copilot.SessionEventType) {
-	switch eventType {
-	case copilot.SessionEventTypeSessionIdle:
+	if eventType == copilot.SessionEventTypeSessionIdle {
 		d.eventChan <- streamEndMsg{}
-	case copilot.SessionEventTypeAssistantTurnEnd:
+
+		return
+	}
+
+	if eventType == copilot.SessionEventTypeAssistantTurnEnd {
 		d.eventChan <- turnEndMsg{}
-	default:
 	}
 }
 
