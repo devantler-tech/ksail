@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/internal/imagefactorytransport"
 	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	factoryclient "github.com/siderolabs/image-factory/pkg/client"
@@ -50,7 +51,10 @@ func registerSchematic(
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	client, err := factoryclient.New(baseURL)
+	httpClient := imagefactorytransport.Client()
+	defer httpClient.CloseIdleConnections()
+
+	client, err := factoryclient.New(baseURL, factoryclient.WithClient(httpClient))
 	if err != nil {
 		return "", fmt.Errorf("create image factory client: %w", err)
 	}
