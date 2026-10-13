@@ -128,7 +128,20 @@ func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		return err
 	}
 
-	ciliumInst := ciliuminstaller.NewInstaller(
+	return runCNIInstallation(
+		cmd, newCiliumInstaller(clusterCfg, setup), "cilium", tmr, setup, clusterCfg,
+		[]string{"kube-system"},
+	)
+}
+
+// newCiliumInstaller builds the Cilium installer for a cluster. Installing and
+// comparing rendered chart values both build it here, so they always render the
+// same values for a cluster.
+func newCiliumInstaller(
+	clusterCfg *v1alpha1.Cluster,
+	setup *cniSetupResult,
+) *ciliuminstaller.Installer {
+	return ciliuminstaller.NewInstaller(
 		setup.helmClient,
 		setup.kubeconfig,
 		clusterCfg.Spec.Cluster.Connection.Context,
@@ -138,10 +151,22 @@ func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		clusterCfg.Spec.Cluster.LoadBalancer,
 		installer.IsHAEnabled(clusterCfg.Spec.Cluster.TotalNodeCount()),
 	)
+}
 
-	return runCNIInstallation(
-		cmd, ciliumInst, "cilium", tmr, setup, clusterCfg, []string{"kube-system"},
-	)
+func ciliumFactory(
+	factories *InstallerFactories,
+) func(*v1alpha1.Cluster) (installer.Installer, error) {
+	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+		client, kubeconfig, err := factories.HelmClientFactory(clusterCfg)
+		if err != nil {
+			return nil, fmt.Errorf("create Cilium Helm client: %w", err)
+		}
+
+		return newCiliumInstaller(clusterCfg, &cniSetupResult{
+			helmClient: client, kubeconfig: kubeconfig,
+			timeout: installer.GetInstallTimeout(clusterCfg),
+		}), nil
+	}
 }
 
 func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr timer.Timer) error {

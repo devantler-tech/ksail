@@ -68,6 +68,7 @@ type InstallerFactories struct {
 	) installer.Installer
 	CertManager               func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	Calico                    func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
+	Cilium                    func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	CSI                       func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	PolicyEngine              func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	MetricsServer             func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
@@ -355,6 +356,7 @@ func DefaultInstallerFactories() *InstallerFactories {
 	)
 	factories.CSI = csiFactory(factories)
 	factories.Calico = calicoFactory(factories)
+	factories.Cilium = ciliumFactory(factories)
 	factories.PolicyEngine = policyEngineFactory(factories)
 	factories.MetricsServer = metricsServerFactory(factories)
 	factories.ClusterAutoscaler = clusterAutoscalerFactory(factories)
