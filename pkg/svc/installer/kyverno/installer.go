@@ -10,6 +10,9 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/helmutil"
 )
 
+// kyvernoName names the Kyverno component, its Helm repository, its release and its namespace.
+const kyvernoName = "kyverno"
+
 // Installer installs or upgrades Kyverno.
 //
 // It embeds helmutil.Base to provide standard Helm chart lifecycle management
@@ -62,17 +65,17 @@ func NewInstaller(
 
 	return &Installer{
 		Base: helmutil.NewBase(
-			"kyverno",
+			kyvernoName,
 			client,
 			timeout,
 			&helm.RepositoryEntry{
-				Name: "kyverno",
+				Name: kyvernoName,
 				URL:  "https://kyverno.github.io/kyverno/",
 			},
 			&helm.ChartSpec{
-				ReleaseName:     "kyverno",
+				ReleaseName:     kyvernoName,
 				ChartName:       "kyverno/kyverno",
-				Namespace:       "kyverno",
+				Namespace:       kyvernoName,
 				Version:         chartVersion(),
 				RepoURL:         "https://kyverno.github.io/kyverno/",
 				CreateNamespace: true,

@@ -189,7 +189,7 @@ func jsonFieldName(field reflect.StructField) string {
 		return ""
 	}
 
-	name := strings.Split(jsonTag, ",")[0]
+	name, _, _ := strings.Cut(jsonTag, ",")
 	if name == "-" {
 		return ""
 	}

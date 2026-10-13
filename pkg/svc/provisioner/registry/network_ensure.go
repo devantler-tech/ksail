@@ -23,6 +23,9 @@ const DefaultNetworkMTU = "1500"
 // daemon's lowered bridge MTU. Keep in sync with kubernetesprovider's dindMTU.
 const NestedNetworkMTU = "1400"
 
+// networkOptionTrue is the value Docker and Talos read as an enabled network label or option.
+const networkOptionTrue = "true"
+
 // EnsureNetwork creates a Docker network if it doesn't already exist.
 // This is used to pre-create the cluster network before registry setup, allowing
 // registry containers to be connected and accessible via Docker DNS when nodes start
@@ -117,15 +120,15 @@ func buildNetworkCreateOptions(networkName, networkCIDR, mtu string) network.Cre
 		Driver: "bridge",
 		// Use Talos labels so the SDK recognizes this as a Talos network.
 		Labels: map[string]string{
-			"talos.owned":        "true",
+			"talos.owned":        networkOptionTrue,
 			"talos.cluster.name": networkName,
 		},
 		// Enable container name DNS resolution and set MTU. The MTU option is required
 		// by the Talos SDK's Reflect() function which reads com.docker.network.driver.mtu
 		// to parse network state; without it strconv.Atoi("") fails during deletion.
 		Options: map[string]string{
-			"com.docker.network.bridge.enable_icc":           "true",
-			"com.docker.network.bridge.enable_ip_masquerade": "true",
+			"com.docker.network.bridge.enable_icc":           networkOptionTrue,
+			"com.docker.network.bridge.enable_ip_masquerade": networkOptionTrue,
 			"com.docker.network.driver.mtu":                  mtu,
 		},
 	}

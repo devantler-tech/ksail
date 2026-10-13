@@ -18,13 +18,13 @@ func prerequisiteResources() []schema.GroupVersionResource {
 	resources := make([]schema.GroupVersionResource, 0, len(names)+1)
 
 	resources = append(resources, schema.GroupVersionResource{
-		Group: "apiextensions.k8s.io", Version: "v1", Resource: "customresourcedefinitions",
+		Group: "apiextensions.k8s.io", Version: "v1", Resource: crdResource,
 	})
 	for _, name := range names {
 		resources = append(
 			resources,
 			schema.GroupVersionResource{
-				Group:    "admissionregistration.k8s.io",
+				Group:    admissionRegistrationGroup,
 				Version:  "v1",
 				Resource: name,
 			},
@@ -152,7 +152,7 @@ func (plan *prerequisitePlan) listLegacyResources(
 	}
 
 	objects, err := plan.meta.Resource(resource).List(ctx, metav1.ListOptions{})
-	if apierrors.IsNotFound(err) && resource.Group == "admissionregistration.k8s.io" {
+	if apierrors.IsNotFound(err) && resource.Group == admissionRegistrationGroup {
 		resource.Version = "v1beta1"
 
 		objects, err = plan.meta.Resource(resource).List(ctx, metav1.ListOptions{})

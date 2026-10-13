@@ -228,11 +228,11 @@ func getProviderStatus(
 	case v1alpha1.ProviderGCP, v1alpha1.ProviderAzure:
 		// GCP/GKE and Azure/AKS status inspection is not yet implemented. Return
 		// a minimal stub so callers that rely on this helper do not fail for them.
-		return &provider.ClusterStatus{Phase: "unknown"}, nil
+		return &provider.ClusterStatus{Phase: provider.PhaseUnknown}, nil
 	case v1alpha1.ProviderKubernetes:
 		// Kubernetes provider status is a stub: full pod/namespace status inspection
 		// is not yet implemented. Return unknown so callers do not fail.
-		return &provider.ClusterStatus{Phase: "unknown"}, nil
+		return &provider.ClusterStatus{Phase: provider.PhaseUnknown}, nil
 	default:
 		return nil, fmt.Errorf("%w: %s", errUnsupportedProvider, prov)
 	}

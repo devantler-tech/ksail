@@ -11,6 +11,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// pinnedViaConfigurationReason explains a version change whose target the
+// configuration names explicitly, rather than the latest stable release.
+const pinnedViaConfigurationReason = "pinned via configuration"
+
 // versionDimension describes one read-only version-reconciliation dimension
 // (distribution or Kubernetes) for drift computation.
 type versionDimension struct {
@@ -227,10 +231,10 @@ func resolveDimensionTarget(
 				return "", "", false
 			}
 
-			return target, "pinned via configuration", true
+			return target, pinnedViaConfigurationReason, true
 		}
 
-		return normalizeVersionTag(dimension.pinnedVersion), "pinned via configuration", true
+		return normalizeVersionTag(dimension.pinnedVersion), pinnedViaConfigurationReason, true
 	}
 
 	if dimension.imageRef == "" {

@@ -362,7 +362,7 @@ func (m *Model) renderToolOutput(
 
 // truncateLine returns the first line of text, truncated to maxLen runes (Unicode-safe).
 func (m *Model) truncateLine(text string, maxLen int) string {
-	firstLine := strings.Split(text, "\n")[0]
+	firstLine, _, _ := strings.Cut(text, "\n")
 	if utf8.RuneCountInString(firstLine) > maxLen {
 		runes := []rune(firstLine)
 

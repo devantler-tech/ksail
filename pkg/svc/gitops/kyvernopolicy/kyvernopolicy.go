@@ -42,6 +42,7 @@ const (
 	policyAPIVersion  = "kyverno.io/v1"
 	kindClusterPolicy = "ClusterPolicy"
 	kindPolicy        = "Policy"
+	kindNamespace     = "Namespace"
 )
 
 var errDecodePolicy = errors.New("decode Kyverno policy")
@@ -119,7 +120,7 @@ func decodeInto(doc map[string]any, target any) error {
 // NamespaceDocumentName returns the name of a core v1 Namespace document, the
 // same shape the policy engine reads namespace labels from.
 func NamespaceDocumentName(doc map[string]any) (string, bool) {
-	if doc["apiVersion"] != "v1" || doc["kind"] != "Namespace" {
+	if doc["apiVersion"] != "v1" || doc["kind"] != kindNamespace {
 		return "", false
 	}
 
@@ -180,7 +181,7 @@ func namespaceLister(docs []map[string]any) corev1listers.NamespaceLister {
 	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 
 	for _, doc := range docs {
-		if doc["apiVersion"] != "v1" || doc["kind"] != "Namespace" {
+		if doc["apiVersion"] != "v1" || doc["kind"] != kindNamespace {
 			continue
 		}
 

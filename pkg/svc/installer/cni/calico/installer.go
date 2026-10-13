@@ -209,7 +209,7 @@ func (c *Installer) chartSpec() *helm.ChartSpec {
 	return &helm.ChartSpec{
 		ReleaseName:     "calico",
 		ChartName:       "projectcalico/tigera-operator",
-		Namespace:       "tigera-operator",
+		Namespace:       prerequisiteNamespace,
 		Version:         chartVersion(),
 		RepoURL:         calicoChartsRepoURL,
 		CreateNamespace: true,
@@ -227,7 +227,7 @@ func (c *Installer) crdChartSpec() *helm.ChartSpec {
 	return &helm.ChartSpec{
 		ReleaseName:     prerequisiteReleaseName,
 		ChartName:       "projectcalico/projectcalico.org.v3",
-		Namespace:       "tigera-operator",
+		Namespace:       prerequisiteNamespace,
 		Version:         chartVersion(),
 		RepoURL:         calicoChartsRepoURL,
 		CreateNamespace: true,
@@ -242,7 +242,7 @@ func (c *Installer) crdChartSpec() *helm.ChartSpec {
 				To:   "admissionregistration.k8s.io/v1",
 			},
 			{
-				Kind: "MutatingAdmissionPolicyBinding",
+				Kind: mutatingAdmissionPolicyBindingKind,
 				From: "admissionregistration.k8s.io/v1beta1",
 				To:   "admissionregistration.k8s.io/v1",
 			},
@@ -253,7 +253,7 @@ func (c *Installer) crdChartSpec() *helm.ChartSpec {
 // --- internals ---
 
 func (c *Installer) helmInstallOrUpgradeCalico(ctx context.Context) error {
-	skipped, ownershipErr := c.CheckGitOpsOwnership(ctx, "calico", "calico", "tigera-operator")
+	skipped, ownershipErr := c.CheckGitOpsOwnership(ctx, "calico", "calico", prerequisiteNamespace)
 	if ownershipErr != nil {
 		return fmt.Errorf("check calico ownership: %w", ownershipErr)
 	}
@@ -266,7 +266,7 @@ func (c *Installer) helmInstallOrUpgradeCalico(ctx context.Context) error {
 		ctx,
 		"calico prerequisites",
 		prerequisiteReleaseName,
-		"tigera-operator",
+		prerequisiteNamespace,
 	)
 	if ownershipErr != nil {
 		return fmt.Errorf("check calico prerequisites ownership: %w", ownershipErr)
@@ -522,7 +522,7 @@ func isAPIServerUnavailableError(err error) bool {
 }
 
 func calicoNamespaces() []string {
-	return []string{"tigera-operator", "calico-system"}
+	return []string{prerequisiteNamespace, "calico-system"}
 }
 
 // ensurePrivilegedNamespaces creates the required namespaces with PSS labels for Talos.
