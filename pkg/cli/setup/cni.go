@@ -156,15 +156,30 @@ func newCiliumInstaller(
 func ciliumFactory(
 	factories *InstallerFactories,
 ) func(*v1alpha1.Cluster) (installer.Installer, error) {
+	return cniInstallerFactory(factories, "Cilium", 0,
+		func(clusterCfg *v1alpha1.Cluster, setup *cniSetupResult) installer.Installer {
+			return newCiliumInstaller(clusterCfg, setup)
+		})
+}
+
+// cniInstallerFactory builds a CNI installer factory around the constructor
+// installation uses. minTimeout raises the install timeout for a CNI that needs
+// longer than the configured one.
+func cniInstallerFactory(
+	factories *InstallerFactories,
+	name string,
+	minTimeout time.Duration,
+	build func(*v1alpha1.Cluster, *cniSetupResult) installer.Installer,
+) func(*v1alpha1.Cluster) (installer.Installer, error) {
 	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
 		client, kubeconfig, err := factories.HelmClientFactory(clusterCfg)
 		if err != nil {
-			return nil, fmt.Errorf("create Cilium Helm client: %w", err)
+			return nil, fmt.Errorf("create %s Helm client: %w", name, err)
 		}
 
-		return newCiliumInstaller(clusterCfg, &cniSetupResult{
+		return build(clusterCfg, &cniSetupResult{
 			helmClient: client, kubeconfig: kubeconfig,
-			timeout: installer.GetInstallTimeout(clusterCfg),
+			timeout: max(installer.GetInstallTimeout(clusterCfg), minTimeout),
 		}), nil
 	}
 }
@@ -206,17 +221,10 @@ func newCalicoInstaller(
 func calicoFactory(
 	factories *InstallerFactories,
 ) func(*v1alpha1.Cluster) (installer.Installer, error) {
-	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
-		client, kubeconfig, err := factories.HelmClientFactory(clusterCfg)
-		if err != nil {
-			return nil, fmt.Errorf("create Calico Helm client: %w", err)
-		}
-
-		return newCalicoInstaller(clusterCfg, &cniSetupResult{
-			helmClient: client, kubeconfig: kubeconfig,
-			timeout: max(installer.GetInstallTimeout(clusterCfg), installer.CalicoInstallTimeout),
-		}), nil
-	}
+	return cniInstallerFactory(factories, "Calico", installer.CalicoInstallTimeout,
+		func(clusterCfg *v1alpha1.Cluster, setup *cniSetupResult) installer.Installer {
+			return newCalicoInstaller(clusterCfg, setup)
+		})
 }
 
 func runCNIInstallation(
