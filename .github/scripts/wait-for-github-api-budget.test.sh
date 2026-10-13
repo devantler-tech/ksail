@@ -41,7 +41,7 @@ state_dir="${BUDGET_STATE_DIR:?}"
 reads="$(cat "${state_dir}/reads")"
 total="$(wc -l <"${state_dir}/responses" | tr -d ' ')"
 case "$*" in
-"api rate_limit")
+"api rate_limit" | "api --include rate_limit")
 	line=$((reads + 1))
 	printf '%s\n' "${line}" >"${state_dir}/reads"
 	;;
@@ -52,14 +52,41 @@ esac
 response="$(sed -n "${line}p" "${state_dir}/responses")"
 behavior="${response}"
 case "${behavior}" in
-core-failed-full-output | graphql-failed-full-output | graphql-partial | graphql-wrong-resource | graphql-duplicate-header | graphql-missing-header | graphql-other-error | graphql-rate-limited-positive-header | core-hangs | graphql-hangs)
+core-failed-full-output | graphql-failed-full-output | graphql-partial | graphql-partial-core-exhausted | graphql-wrong-resource | graphql-duplicate-header | graphql-missing-header | graphql-other-error | graphql-rate-limited-positive-header | core-hangs | graphql-hangs | core-headers-exhausted | core-headers-recovered | core-wrong-resource | core-duplicate-header | core-missing-header | core-forbidden | core-secondary-* | graphql-secondary-*)
 	response="4000 5000 4900 5000"
 	;;
 graphql-rate-limit-alias) response="4000 1100 0 1300" ;;
 esac
-if [[ "${behavior}" == core-hangs && "$*" == "api rate_limit" ]] ||
+[[ "${behavior}" == core-headers-recovered ]] && response="0 5000 4900 5000"
+[[ "${behavior}" == graphql-secondary-after-core-exhaustion ]] && response="0 1600 4900 5000"
+[[ "${behavior}" == graphql-partial-core-exhausted ]] && response="0 1600 4900 5000"
+if [[ "${behavior}" == core-hangs && ( "$*" == "api rate_limit" || "$*" == "api --include rate_limit" ) ]] ||
 	[[ "${behavior}" == graphql-hangs && "$*" == "api --include graphql "* ]]; then
 	exec /bin/sleep 60
+fi
+# Secondary refusals must be distinguished from ordinary permission failures.
+if [[ "${behavior}" == core-secondary-* && "$*" != "api --include graphql "* ]] ||
+	[[ "${behavior}" == graphql-secondary-* && "$*" == "api --include graphql "* ]] ||
+	[[ "${behavior}" == core-forbidden && "$*" != "api --include graphql "* ]]; then
+	if [[ "$*" == "api --include "* ]]; then
+		resource=core
+		[[ "${behavior}" == graphql-secondary-* ]] && resource=graphql
+		remaining=4000
+		[[ "${behavior}" == core-secondary-zero-header ]] && remaining=0
+		printf 'HTTP/2.0 403 Forbidden\r\nX-Ratelimit-Resource: %s\r\nX-Ratelimit-Remaining: %s\r\nX-Ratelimit-Reset: 1300\r\n' "${resource}" "${remaining}"
+		case "${behavior}" in
+		*-secondary-retry | core-secondary-zero-header | graphql-secondary-after-core-exhaustion) printf 'Retry-After: 120\r\n' ;;
+		core-secondary-short-retry) printf 'Retry-After: 5\r\n' ;;
+		core-secondary-bad-retry) printf 'Retry-After: soon\r\n' ;;
+		esac
+		printf 'X-Private-Value: private-sentinel\r\n\r\n'
+	fi
+	if [[ "${behavior}" == core-forbidden ]]; then
+		printf '%s\n' '{"message":"Forbidden"}'
+	else
+		printf '%s\n' '{"message":"You have exceeded a secondary rate limit."}'
+	fi
+	exit 1
 fi
 if [[ "$*" == "api --include graphql "* ]]; then
 	read -r _ _ reported_remaining reported_reset actual_remaining actual_reset <<<"${response}"
@@ -73,7 +100,7 @@ if [[ "$*" == "api --include graphql "* ]]; then
 	[[ "${behavior}" != graphql-missing-header ]] && printf 'X-Ratelimit-Reset: %s\r\n' "${actual_reset}"
 	printf 'X-Private-Value: private-sentinel\r\n\r\n'
 	case "${behavior}" in
-	graphql-partial) printf '%s' '{"data":{"rateLimit":'; exit 1 ;;
+	graphql-partial | graphql-partial-core-exhausted) printf '%s' '{"data":{"rateLimit":'; exit 1 ;;
 	graphql-other-error) printf '%s\n' '{"errors":[{"type":"FORBIDDEN"}]}'; exit 1 ;;
 	graphql-rate-limited-positive-header) printf '%s\n' '{"errors":[{"type":"RATE_LIMITED"}]}'; exit 1 ;;
 	esac
@@ -86,6 +113,17 @@ if [[ "$*" == "api --include graphql "* ]]; then
 	printf '{"data":{"rateLimit":{"remaining":%s,"resetAt":"2026-10-13T15:00:00Z"}}}\n' "${actual_remaining}"
 	[[ "${behavior}" == graphql-failed-full-output ]] && exit 1
 	exit 0
+fi
+if [[ "$*" == "api --include rate_limit" ]]; then
+	read -r core_remaining core_reset _ <<<"${response}"
+	resource=core
+	[[ "${behavior}" == core-wrong-resource ]] && resource=graphql
+	[[ "${behavior}" == core-headers-exhausted ]] && core_remaining=0 && core_reset=1300
+	[[ "${behavior}" == core-headers-recovered ]] && core_remaining=4000
+	printf 'HTTP/2.0 200 OK\r\nX-Ratelimit-Resource: %s\r\nX-Ratelimit-Remaining: %s\r\n' "${resource}" "${core_remaining}"
+	[[ "${behavior}" == core-duplicate-header ]] && printf 'X-Ratelimit-Remaining: 4000\r\n'
+	[[ "${behavior}" != core-missing-header ]] && printf 'X-Ratelimit-Reset: %s\r\n' "${core_reset}"
+	printf 'X-Private-Value: private-sentinel\r\n\r\n'
 fi
 case "${response}" in
 fail) exit 1 ;;
@@ -171,6 +209,44 @@ run_case graphql-endpoint-exhausted 0 "905" "budget is available" \
 	"4000 1600 4900 1100 0 1900" "4000 5200 4900 1100 5000 5200"
 run_case graphql-rest-metadata-stale 0 "" "budget is available" \
 	"4000 1600 0 1900 4900 1600" "4000 5200 4900 5200 4900 5200"
+
+# REST's own headers, rather than its cross-region JSON snapshot, control the wait.
+run_case core-headers-exhausted 0 "305" "budget is available" \
+	"core-headers-exhausted" "4000 5000 4900 5000"
+run_case core-headers-recovered 0 "" "REST 4000, GraphQL 4900" "core-headers-recovered"
+run_case core-exhausted-with-unreadable-graphql 0 "605" "budget is available" \
+	"graphql-partial-core-exhausted" "4000 5000 4900 5000"
+run_case core-exhausted-with-unreadable-graphql-at-deadline 1 "" "does not return within 0 s" \
+	"graphql-partial-core-exhausted" -- --max-wait 0
+for invalid in core-wrong-resource core-duplicate-header core-missing-header core-forbidden; do
+	run_case "${invalid}" 0 "10 10" "Could not read" "${invalid}"
+done
+
+# Known secondary restrictions never fall through to API-heavy delivery.
+run_case core-secondary-retry 0 "120" "budget is available" \
+	"core-secondary-retry" "4000 5000 4900 5000"
+run_case graphql-secondary-retry 0 "120" "budget is available" \
+	"graphql-secondary-retry" "4000 5000 4900 5000"
+run_case secondary-without-retry-after 0 "60" "budget is available" \
+	"core-secondary-default" "4000 5000 4900 5000"
+run_case secondary-exponential-backoff 0 "60 120" "budget is available" \
+	"core-secondary-default" "core-secondary-default" "4000 5000 4900 5000"
+run_case secondary-retry-after-exponential 0 "120 240" "budget is available" \
+	"core-secondary-retry" "core-secondary-retry" "4000 5000 4900 5000"
+run_case secondary-short-retry-after 0 "5" "budget is available" \
+	"core-secondary-short-retry" "4000 5000 4900 5000" -- --max-wait 15
+run_case secondary-after-other-primary-exhaustion 0 "605" "budget is available" \
+	"graphql-secondary-after-core-exhaustion" "4000 5000 4900 5000"
+run_case secondary-persistent 1 "60 120" "secondary rate limit persisted" "core-secondary-default"
+run_case secondary-at-deadline 1 "" "secondary rate limit does not recover within 0 s" \
+	"core-secondary-default" -- --max-wait 0
+run_case secondary-retry-after-beyond-deadline 1 "" "secondary rate limit does not recover within 100 s" \
+	"core-secondary-retry" -- --max-wait 100
+run_case secondary-primary-also-exhausted 0 "305" "budget is available" \
+	"core-secondary-zero-header" "4000 5000 4900 5000"
+run_case secondary-invalid-retry-after 1 "" "Could not validate GitHub rate-limit backoff" "core-secondary-bad-retry"
+run_case secondary-recovery-unreadable 1 "60" "Could not confirm recovery from the GitHub secondary rate limit" \
+	"core-secondary-default" "fail"
 
 # A reset already in the past still pauses briefly instead of spinning.
 run_case stale-reset 0 "5" "budget is available" \

@@ -352,6 +352,14 @@ awk '
   END { exit (bad || !checkpoint || !delivery) ? 1 : 0 }
 ' "${cd_workflow}" || fail 'each budget wait must run in the same job as, and before, the step that spends the budget'
 awk '
+  /^  [a-z-]+:$/ { job = $1; timeout_ready = 0 }
+  /run: brew install coreutils/ { timeout_ready = 1 }
+  /run: \.github\/scripts\/wait-for-github-api-budget\.sh/ {
+    if (job == "homebrew:") { seen = 1; if (!timeout_ready) bad = 1 }
+  }
+  END { exit (bad || !seen) ? 1 : 0 }
+' "${cd_workflow}" || fail 'macOS must provide GNU timeout before the budget wait'
+awk '
   /^  [a-z-]+:$/ { job = $1 }
   /timeout-minutes:/ { timeout[job] = $2 }
   END { exit (timeout["cask-checkpoint:"] >= 65 && timeout["homebrew:"] >= 100) ? 0 : 1 }

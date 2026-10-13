@@ -730,6 +730,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Provide the request timeout utility
+        run: brew install coreutils
+
       # This job polls the tap for several minutes; starting it on an exhausted budget fails the
       # delivery after the release is already published (devantler-tech/monorepo#4055).
       - name: ⏳ Wait for the tap token's request budget
