@@ -88,7 +88,7 @@ read_graphql_budget() {
             and (.body.data.rateLimit.resetAt | type) == "string")
           or ($status == 1 and .body.data == null
             and (.body.errors | type) == "array" and (.body.errors | length) > 0
-            and all(.body.errors[]; .type == "RATE_LIMIT")
+            and all(.body.errors[]; .type == "RATE_LIMIT" or .type == "RATE_LIMITED")
             and $quota["x-ratelimit-remaining"] == "0")
         then [$quota["x-ratelimit-remaining"], $quota["x-ratelimit-reset"]] | map(tonumber)
         else error("failed or incomplete quota observation") end

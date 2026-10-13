@@ -46,9 +46,10 @@ esac
 response="$(sed -n "${line}p" "${state_dir}/responses")"
 behavior="${response}"
 case "${behavior}" in
-core-failed-full-output | graphql-failed-full-output | graphql-partial | graphql-wrong-resource | graphql-duplicate-header | graphql-missing-header | graphql-other-error)
+core-failed-full-output | graphql-failed-full-output | graphql-partial | graphql-wrong-resource | graphql-duplicate-header | graphql-missing-header | graphql-other-error | graphql-rate-limited-positive-header)
 	response="4000 5000 4900 5000"
 	;;
+graphql-rate-limit-alias) response="4000 1100 0 1300" ;;
 esac
 if [[ "$*" == "api --include graphql "* ]]; then
 	read -r _ _ reported_remaining reported_reset actual_remaining actual_reset <<<"${response}"
@@ -64,9 +65,12 @@ if [[ "$*" == "api --include graphql "* ]]; then
 	case "${behavior}" in
 	graphql-partial) printf '%s' '{"data":{"rateLimit":'; exit 1 ;;
 	graphql-other-error) printf '%s\n' '{"errors":[{"type":"FORBIDDEN"}]}'; exit 1 ;;
+	graphql-rate-limited-positive-header) printf '%s\n' '{"errors":[{"type":"RATE_LIMITED"}]}'; exit 1 ;;
 	esac
 	if [[ "${actual_remaining}" == 0 ]]; then
-		printf '%s\n' '{"errors":[{"type":"RATE_LIMIT"}]}'
+		rate_error=RATE_LIMITED
+		[[ "${behavior}" == graphql-rate-limit-alias ]] && rate_error=RATE_LIMIT
+		printf '{"errors":[{"type":"%s"}]}\n' "${rate_error}"
 		exit 1
 	fi
 	printf '{"data":{"rateLimit":{"remaining":%s,"resetAt":"2026-10-13T15:00:00Z"}}}\n' "${actual_remaining}"
@@ -142,6 +146,12 @@ run_case at-floor 0 "" "budget is available: REST 300, GraphQL 50" \
 # GraphQL alone exhausted, and both exhausted with GraphQL resetting later: wait for the later one.
 run_case graphql-exhausted 0 "305" "budget is available" \
 	"4000 1100 0 1300" "4000 1100 5000 4900"
+run_case graphql-rate-limit-alias 0 "305" "budget is available" \
+	"graphql-rate-limit-alias" "4000 1100 5000 4900"
+run_case graphql-rate-limited-deadline 1 "" "does not return within 100 s" \
+	"4000 1100 0 1300" -- --max-wait 100
+run_case graphql-rate-limited-positive-header 0 "10 10" "Could not read" \
+	"graphql-rate-limited-positive-header"
 run_case both-exhausted 0 "905" "budget is available" \
 	"0 1100 0 1900" "5000 4700 5000 5500"
 
