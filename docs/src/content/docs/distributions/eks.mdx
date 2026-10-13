@@ -275,7 +275,9 @@ machines, direct AWS operations, `create`, and `update` are outside this lock.
 
 ## kubeconfig Context
 
-EKS contexts written by eksctl follow the format `<iam-identity>@<name>.<region>.eksctl.io`. Set `spec.cluster.connection.context` in `ksail.yaml` after cluster creation if you need to override the auto-detected context.
+EKS contexts written by eksctl follow the format `<iam-identity>@<name>.<region>.eksctl.io`, where `<iam-identity>` is the last path segment of the caller's ARN: an IAM user name, or the session name of an assumed role.
+
+When `spec.cluster.connection.context` is not set, KSail selects the context for the configured cluster and region whose cluster entry points at the API endpoint AWS reports for the cluster KSail created. A context for another cluster with the same name and region, for example in a different AWS account, is never selected. Set `spec.cluster.connection.context` in `ksail.yaml` to choose a context yourself.
 
 ## Limitations
 
