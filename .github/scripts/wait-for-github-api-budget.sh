@@ -2,6 +2,7 @@
 
 set -euo pipefail
 
+# Print the release wait options and the behavior of each exit status.
 usage() {
 	cat <<'EOF'
 Usage:
@@ -13,7 +14,8 @@ budget is shared with other automation, so a release can start while that
 budget is at zero. Without this wait the next step fails with "API rate limit
 exceeded" and the release stops half-way (devantler-tech/monorepo#4055).
 
-Reading the budget is free: GitHub does not count the rate_limit endpoint.
+The REST budget read is free. The minimal GraphQL query costs one point and
+reads that endpoint's own allowance, which can differ from REST's metadata.
 
 Exit codes:
   0  budget is available, or the budget could not be read (see below)
@@ -59,19 +61,62 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
+# Read GraphQL's own response headers, including a complete primary-limit refusal.
+# Other failures and incomplete responses remain unreadable, without printing headers.
+read_graphql_budget() {
+	local response status=0
+	response="$(gh api --include graphql -f 'query=query { rateLimit { remaining resetAt } }' 2>/dev/null)" || status=$?
+	jq -eRcs --argjson status "${status}" '
+      capture("^(?<headers>.*?)\\r?\\n\\r?\\n(?<body>.*)$"; "p")
+      | .body |= fromjson
+      | (.headers | split("\n") | map(sub("\r$"; ""))) as $lines
+      | if ($lines[0] | test("^HTTP/[0-9.]+ 200 ")) then .
+        else error("not a complete GraphQL response") end
+      | ($lines[1:] | map(select(test("^x-ratelimit-(resource|remaining|reset):"; "i"))
+          | capture("^(?<key>[^:]+):[ \\t]*(?<value>.*)$")
+          | .key |= ascii_downcase)) as $headers
+      | (if all(["x-ratelimit-resource", "x-ratelimit-remaining", "x-ratelimit-reset"][];
+          . as $key | [$headers[] | select(.key == $key)] | length == 1)
+        then ($headers | map({key, value}) | from_entries)
+        else error("missing or duplicate quota headers") end) as $quota
+      | if $quota["x-ratelimit-resource"] == "graphql"
+          and all([$quota["x-ratelimit-remaining"], $quota["x-ratelimit-reset"]][];
+            test("^(0|[1-9][0-9]*)$")) then .
+        else error("invalid quota headers") end
+      | if ($status == 0 and (.body.errors // [] | length) == 0
+            and (.body.data.rateLimit.remaining | type) == "number"
+            and (.body.data.rateLimit.resetAt | type) == "string")
+          or ($status == 1 and .body.data == null
+            and (.body.errors | type) == "array" and (.body.errors | length) > 0
+            and all(.body.errors[]; .type == "RATE_LIMIT")
+            and $quota["x-ratelimit-remaining"] == "0")
+        then [$quota["x-ratelimit-remaining"], $quota["x-ratelimit-reset"]] | map(tonumber)
+        else error("failed or incomplete quota observation") end
+    ' <<<"${response}" 2>/dev/null
+}
+
 # Prints "<core remaining> <core reset> <graphql remaining> <graphql reset>", or fails when the
-# response is missing or is not four whole numbers.
+# response does not contain bounded whole numbers and positive reset timestamps.
 read_budget() {
-	local response fields
+	local response graphql fields
 	if ! response="$(gh api rate_limit 2>/dev/null)"; then
 		return 1
 	fi
-	if ! fields="$(jq -er '
-      [.resources.core.remaining, .resources.core.reset,
-       .resources.graphql.remaining, .resources.graphql.reset]
-      | if all(.[]; type == "number" and . >= 0 and . == floor)
-        then map(tostring) | join(" ")
-        else error("not whole numbers") end
+	if ! graphql="$(read_graphql_budget)"; then
+		return 1
+	fi
+	# Keep integers within the exact JSON range and the Bash arithmetic range.
+	# A zero reset cannot identify the exhausted resource's next window.
+	if ! fields="$(jq -er --argjson graphql "${graphql}" '
+      [.resources.core.remaining, .resources.core.reset] + $graphql
+      | if all(.[]; type == "number" and . >= 0 and . <= 9007199254740991 and . == floor)
+          and .[1] > 0 and .[3] > 0
+        then map(tostring)
+        else error("invalid budget numbers") end
+      # Only canonical decimal strings may reach Bash numeric comparisons.
+      | if all(.[]; test("^(0|[1-9][0-9]*)$"))
+        then join(" ")
+        else error("nondecimal budget numbers") end
     ' <<<"${response}" 2>/dev/null)"; then
 		return 1
 	fi

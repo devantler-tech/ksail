@@ -32,22 +32,58 @@ cat >"${fake_bin}/gh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 state_dir="${BUDGET_STATE_DIR:?}"
-[[ "$*" == "api rate_limit" ]] || { printf 'unexpected fake gh invocation: %s\n' "$*" >&2; exit 2; }
 reads="$(cat "${state_dir}/reads")"
-printf '%s\n' "$((reads + 1))" >"${state_dir}/reads"
 total="$(wc -l <"${state_dir}/responses" | tr -d ' ')"
-line=$((reads + 1))
+case "$*" in
+"api rate_limit")
+	line=$((reads + 1))
+	printf '%s\n' "${line}" >"${state_dir}/reads"
+	;;
+"api --include graphql -f query=query { rateLimit { remaining resetAt } }") line="${reads}" ;;
+*) printf 'unexpected fake gh invocation: %s\n' "$*" >&2; exit 2 ;;
+esac
 [[ "${line}" -gt "${total}" ]] && line="${total}"
 response="$(sed -n "${line}p" "${state_dir}/responses")"
+behavior="${response}"
+case "${behavior}" in
+core-failed-full-output | graphql-failed-full-output | graphql-partial | graphql-wrong-resource | graphql-duplicate-header | graphql-missing-header | graphql-other-error)
+	response="4000 5000 4900 5000"
+	;;
+esac
+if [[ "$*" == "api --include graphql "* ]]; then
+	read -r _ _ reported_remaining reported_reset actual_remaining actual_reset <<<"${response}"
+	actual_remaining="${actual_remaining:-${reported_remaining}}"
+	actual_reset="${actual_reset:-${reported_reset}}"
+	resource=graphql
+	[[ "${behavior}" == graphql-wrong-resource ]] && resource=core
+	printf 'HTTP/2.0 200 OK\r\nX-Ratelimit-Resource: %s\r\nX-Ratelimit-Remaining: %s\r\n' \
+		"${resource}" "${actual_remaining}"
+	[[ "${behavior}" == graphql-duplicate-header ]] && printf 'X-Ratelimit-Remaining: 4900\r\n'
+	[[ "${behavior}" != graphql-missing-header ]] && printf 'X-Ratelimit-Reset: %s\r\n' "${actual_reset}"
+	printf 'X-Private-Value: private-sentinel\r\n\r\n'
+	case "${behavior}" in
+	graphql-partial) printf '%s' '{"data":{"rateLimit":'; exit 1 ;;
+	graphql-other-error) printf '%s\n' '{"errors":[{"type":"FORBIDDEN"}]}'; exit 1 ;;
+	esac
+	if [[ "${actual_remaining}" == 0 ]]; then
+		printf '%s\n' '{"errors":[{"type":"RATE_LIMIT"}]}'
+		exit 1
+	fi
+	printf '{"data":{"rateLimit":{"remaining":%s,"resetAt":"2026-10-13T15:00:00Z"}}}\n' "${actual_remaining}"
+	[[ "${behavior}" == graphql-failed-full-output ]] && exit 1
+	exit 0
+fi
 case "${response}" in
 fail) exit 1 ;;
 garbage) printf '%s\n' '{"resources":{"core":{"remaining":"many","reset":null}}}' ;;
 *)
-	read -r core_remaining core_reset graphql_remaining graphql_reset <<<"${response}"
+	read -r core_remaining core_reset graphql_remaining graphql_reset _ <<<"${response}"
 	printf '{"resources":{"core":{"remaining":%s,"reset":%s},"graphql":{"remaining":%s,"reset":%s}}}\n' \
 		"${core_remaining}" "${core_reset}" "${graphql_remaining}" "${graphql_reset}"
+	[[ "${behavior}" == core-failed-full-output ]] && exit 1
 	;;
 esac
+exit 0
 EOF
 chmod +x "${fake_bin}/date" "${fake_bin}/sleep" "${fake_bin}/gh"
 
@@ -84,6 +120,9 @@ run_case() {
 	if [[ "${output}" != *"${want_text}"* ]]; then
 		fail "${name}: output lacks '${want_text}'. Output: ${output}"
 	fi
+	if [[ "${output}" == *private-sentinel* ]]; then
+		fail "${name}: raw response headers escaped into output"
+	fi
 }
 
 # Budget present: no wait at all.
@@ -106,6 +145,13 @@ run_case graphql-exhausted 0 "305" "budget is available" \
 run_case both-exhausted 0 "905" "budget is available" \
 	"0 1100 0 1900" "5000 4700 5000 5500"
 
+# The GraphQL endpoint's own response determines its allowance. The REST
+# endpoint can report a different GraphQL window on the same authenticated CLI.
+run_case graphql-endpoint-exhausted 0 "905" "budget is available" \
+	"4000 1600 4900 1100 0 1900" "4000 5200 4900 1100 5000 5200"
+run_case graphql-rest-metadata-stale 0 "" "budget is available" \
+	"4000 1600 0 1900 4900 1600" "4000 5200 4900 5200 4900 5200"
+
 # A reset already in the past still pauses briefly instead of spinning.
 run_case stale-reset 0 "5" "budget is available" \
 	"0 900 4900 900" "5000 4500 4900 4500"
@@ -123,6 +169,36 @@ run_case unreadable 0 "10 10" "Could not read the GitHub request budget (3 attem
 	"fail"
 run_case malformed 0 "10 10" "Could not read the GitHub request budget (3 attempt(s))" \
 	"garbage"
+for invalid in core-failed-full-output graphql-failed-full-output graphql-partial \
+	graphql-wrong-resource graphql-duplicate-header graphql-missing-header graphql-other-error; do
+	run_case "${invalid}" 0 "10 10" "Could not read the GitHub request budget (3 attempt(s))" "${invalid}"
+done
+run_case graphql-partial-then-exhausted 0 "10 895" "budget is available" \
+	"graphql-partial" "4000 1600 4900 1100 0 1900" "4000 5200 4900 1100 5000 5200"
+
+# Invalid API numbers must use the unreadable-response path, never claim available
+# capacity or enter Bash arithmetic with scientific notation or oversized values.
+run_case zero-core-reset 0 "10 10" "Could not read the GitHub request budget (3 attempt(s))" \
+	"0 0 50 1700000000"
+run_case zero-graphql-reset 0 "10 10" "Could not read the GitHub request budget (3 attempt(s))" \
+	"300 1700000000 0 0"
+run_case oversized-core-reset 0 "10 10" "Could not read the GitHub request budget (3 attempt(s))" \
+	"0 1e20 50 1700000000"
+run_case oversized-graphql-reset 0 "10 10" "Could not read the GitHub request budget (3 attempt(s))" \
+	"300 1700000000 0 1e20"
+run_case oversized-core-remaining 0 "10 10" "Could not read the GitHub request budget (3 attempt(s))" \
+	"1e20 1700000000 50 1700000000"
+run_case oversized-graphql-remaining 0 "10 10" "Could not read the GitHub request budget (3 attempt(s))" \
+	"300 1700000000 1e20 1700000000"
+run_case fractional-number 0 "10 10" "Could not read the GitHub request budget (3 attempt(s))" \
+	"300.5 1700000000 50 1700000000"
+run_case negative-number 0 "10 10" "Could not read the GitHub request budget (3 attempt(s))" \
+	"-1 1700000000 50 1700000000"
+run_case numeric-string 0 "10 10" "Could not read the GitHub request budget (3 attempt(s))" \
+	'"300" 1700000000 50 1700000000'
+run_case null-number 0 "10 10" "Could not read the GitHub request budget (3 attempt(s))" \
+	"300 1700000000 null 1700000000"
+
 # A retry never outlasts --max-wait: with the deadline already reached, a failed read gives up at
 # once, both on the first read and after a wait for the reset has used the time up.
 run_case unreadable-at-deadline 0 "" "Could not read the GitHub request budget (1 attempt(s))" \
