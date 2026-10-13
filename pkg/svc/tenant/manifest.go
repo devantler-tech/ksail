@@ -6,13 +6,30 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// Field names of the Kubernetes manifests this package builds as plain maps.
+const (
+	keyAPIVersion  = "apiVersion"
+	keyKind        = "kind"
+	keyMetadata    = "metadata"
+	keyName        = "name"
+	keyNamespace   = "namespace"
+	keyLabels      = "labels"
+	keySpec        = "spec"
+	keyPodSelector = "podSelector"
+	keyPolicyTypes = "policyTypes"
+	keyEgress      = "egress"
+	keyMatchLabels = "matchLabels"
+	keyPort        = "port"
+	keyProtocol    = "protocol"
+)
+
 // namespacedMeta returns the standard metadata block (name, namespace, and
 // managed-by labels) shared by generated namespaced manifests.
 func namespacedMeta(name, namespace string) map[string]any {
 	return map[string]any{
-		"name":      name,
-		"namespace": namespace,
-		"labels":    ManagedByLabels(),
+		keyName:      name,
+		keyNamespace: namespace,
+		keyLabels:    ManagedByLabels(),
 	}
 }
 

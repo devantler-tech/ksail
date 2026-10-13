@@ -213,7 +213,7 @@ func TestDetectCNIChanges(t *testing.T) { //nolint:funlen // table-driven tests
 			name: "no changes when CNI matches",
 			running: &v1alpha1.Config{
 				ClusterConfig: &v1alpha1.ClusterConfig{
-					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{
+					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{ //nolint:staticcheck // legacy Talos input under test
 						CNI: &v1alpha1.CNIConfig{CNIName: "flannel"},
 					},
 				},
@@ -221,7 +221,7 @@ func TestDetectCNIChanges(t *testing.T) { //nolint:funlen // table-driven tests
 			},
 			desired: &v1alpha1.Config{
 				ClusterConfig: &v1alpha1.ClusterConfig{
-					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{
+					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{ //nolint:staticcheck // legacy Talos input under test
 						CNI: &v1alpha1.CNIConfig{CNIName: "flannel"},
 					},
 				},
@@ -233,7 +233,7 @@ func TestDetectCNIChanges(t *testing.T) { //nolint:funlen // table-driven tests
 			name: "detect CNI changed from flannel to none",
 			running: &v1alpha1.Config{
 				ClusterConfig: &v1alpha1.ClusterConfig{
-					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{
+					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{ //nolint:staticcheck // legacy Talos input under test
 						CNI: &v1alpha1.CNIConfig{CNIName: "flannel"},
 					},
 				},
@@ -241,7 +241,7 @@ func TestDetectCNIChanges(t *testing.T) { //nolint:funlen // table-driven tests
 			},
 			desired: &v1alpha1.Config{
 				ClusterConfig: &v1alpha1.ClusterConfig{
-					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{
+					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{ //nolint:staticcheck // legacy Talos input under test
 						CNI: &v1alpha1.CNIConfig{CNIName: "none"},
 					},
 				},
@@ -254,7 +254,7 @@ func TestDetectCNIChanges(t *testing.T) { //nolint:funlen // table-driven tests
 			name: "detect CNI changed from none to flannel",
 			running: &v1alpha1.Config{
 				ClusterConfig: &v1alpha1.ClusterConfig{
-					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{
+					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{ //nolint:staticcheck // legacy Talos input under test
 						CNI: &v1alpha1.CNIConfig{CNIName: "none"},
 					},
 				},
@@ -262,7 +262,7 @@ func TestDetectCNIChanges(t *testing.T) { //nolint:funlen // table-driven tests
 			},
 			desired: &v1alpha1.Config{
 				ClusterConfig: &v1alpha1.ClusterConfig{
-					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{
+					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{ //nolint:staticcheck // legacy Talos input under test
 						CNI: &v1alpha1.CNIConfig{CNIName: "flannel"},
 					},
 				},
@@ -280,7 +280,7 @@ func TestDetectCNIChanges(t *testing.T) { //nolint:funlen // table-driven tests
 			name: "no change between two non-flannel CNI names (alpha.2 collapses to none)",
 			running: &v1alpha1.Config{
 				ClusterConfig: &v1alpha1.ClusterConfig{
-					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{
+					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{ //nolint:staticcheck // legacy Talos input under test
 						CNI: &v1alpha1.CNIConfig{CNIName: "none"},
 					},
 				},
@@ -288,7 +288,7 @@ func TestDetectCNIChanges(t *testing.T) { //nolint:funlen // table-driven tests
 			},
 			desired: &v1alpha1.Config{
 				ClusterConfig: &v1alpha1.ClusterConfig{
-					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{
+					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{ //nolint:staticcheck // legacy Talos input under test
 						CNI: &v1alpha1.CNIConfig{CNIName: "custom"},
 					},
 				},
@@ -300,13 +300,13 @@ func TestDetectCNIChanges(t *testing.T) { //nolint:funlen // table-driven tests
 			name: "no changes when both have nil CNI",
 			running: &v1alpha1.Config{
 				ClusterConfig: &v1alpha1.ClusterConfig{
-					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{},
+					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{}, //nolint:staticcheck // legacy Talos input under test
 				},
 				MachineConfig: &v1alpha1.MachineConfig{},
 			},
 			desired: &v1alpha1.Config{
 				ClusterConfig: &v1alpha1.ClusterConfig{
-					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{},
+					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{}, //nolint:staticcheck // legacy Talos input under test
 				},
 				MachineConfig: &v1alpha1.MachineConfig{},
 			},
@@ -467,7 +467,7 @@ func TestClassifyMachineConfigChanges(t *testing.T) { //nolint:funlen // table-d
 			name: "no changes when configs match",
 			running: &v1alpha1.Config{
 				ClusterConfig: &v1alpha1.ClusterConfig{
-					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{
+					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{ //nolint:staticcheck // legacy Talos input under test
 						CNI: &v1alpha1.CNIConfig{CNIName: "flannel"},
 					},
 				},
@@ -477,7 +477,7 @@ func TestClassifyMachineConfigChanges(t *testing.T) { //nolint:funlen // table-d
 			},
 			desired: &v1alpha1.Config{
 				ClusterConfig: &v1alpha1.ClusterConfig{
-					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{
+					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{ //nolint:staticcheck // legacy Talos input under test
 						CNI: &v1alpha1.CNIConfig{CNIName: "flannel"},
 					},
 				},
@@ -493,22 +493,22 @@ func TestClassifyMachineConfigChanges(t *testing.T) { //nolint:funlen // table-d
 			name: "combined encryption and CNI changes",
 			running: &v1alpha1.Config{
 				ClusterConfig: &v1alpha1.ClusterConfig{
-					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{
+					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{ //nolint:staticcheck // legacy Talos input under test
 						CNI: &v1alpha1.CNIConfig{CNIName: "flannel"},
 					},
 				},
 				MachineConfig: &v1alpha1.MachineConfig{
-					MachineSystemDiskEncryption: &v1alpha1.SystemDiskEncryptionConfig{},
+					MachineSystemDiskEncryption: &v1alpha1.SystemDiskEncryptionConfig{}, //nolint:staticcheck // legacy Talos input
 				},
 			},
 			desired: &v1alpha1.Config{
 				ClusterConfig: &v1alpha1.ClusterConfig{
-					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{
+					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{ //nolint:staticcheck // legacy Talos input under test
 						CNI: &v1alpha1.CNIConfig{CNIName: "none"},
 					},
 				},
 				MachineConfig: &v1alpha1.MachineConfig{
-					MachineSystemDiskEncryption: &v1alpha1.SystemDiskEncryptionConfig{
+					MachineSystemDiskEncryption: &v1alpha1.SystemDiskEncryptionConfig{ //nolint:staticcheck // legacy Talos input
 						EphemeralPartition: &v1alpha1.EncryptionConfig{
 							EncryptionProvider: "luks2",
 						},
@@ -524,7 +524,7 @@ func TestClassifyMachineConfigChanges(t *testing.T) { //nolint:funlen // table-d
 			running: &v1alpha1.Config{
 				ClusterConfig: &v1alpha1.ClusterConfig{},
 				MachineConfig: &v1alpha1.MachineConfig{
-					MachineSystemDiskEncryption: &v1alpha1.SystemDiskEncryptionConfig{
+					MachineSystemDiskEncryption: &v1alpha1.SystemDiskEncryptionConfig{ //nolint:staticcheck // legacy Talos input
 						EphemeralPartition: &v1alpha1.EncryptionConfig{
 							EncryptionProvider: "luks2",
 						},
@@ -535,7 +535,7 @@ func TestClassifyMachineConfigChanges(t *testing.T) { //nolint:funlen // table-d
 			desired: &v1alpha1.Config{
 				ClusterConfig: &v1alpha1.ClusterConfig{},
 				MachineConfig: &v1alpha1.MachineConfig{
-					MachineSystemDiskEncryption: &v1alpha1.SystemDiskEncryptionConfig{},
+					MachineSystemDiskEncryption: &v1alpha1.SystemDiskEncryptionConfig{}, //nolint:staticcheck // legacy Talos input
 					MachineFeatures: &v1alpha1.FeaturesConfig{
 						DiskQuotaSupport: new(true),
 					},
@@ -549,7 +549,7 @@ func TestClassifyMachineConfigChanges(t *testing.T) { //nolint:funlen // table-d
 			name: "only reboot-required changes",
 			running: &v1alpha1.Config{
 				ClusterConfig: &v1alpha1.ClusterConfig{
-					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{
+					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{ //nolint:staticcheck // legacy Talos input under test
 						CNI: &v1alpha1.CNIConfig{CNIName: "flannel"},
 					},
 				},
@@ -559,7 +559,7 @@ func TestClassifyMachineConfigChanges(t *testing.T) { //nolint:funlen // table-d
 			},
 			desired: &v1alpha1.Config{
 				ClusterConfig: &v1alpha1.ClusterConfig{
-					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{
+					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{ //nolint:staticcheck // legacy Talos input under test
 						CNI: &v1alpha1.CNIConfig{CNIName: "none"},
 					},
 				},
@@ -633,7 +633,7 @@ func TestCNIName(t *testing.T) { //nolint:funlen // table-driven tests
 			name: "nil CNI returns flannel default",
 			config: &v1alpha1.Config{
 				ClusterConfig: &v1alpha1.ClusterConfig{
-					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{},
+					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{}, //nolint:staticcheck // legacy Talos input under test
 				},
 				MachineConfig: &v1alpha1.MachineConfig{},
 			},
@@ -643,7 +643,7 @@ func TestCNIName(t *testing.T) { //nolint:funlen // table-driven tests
 			name: "flannel CNI",
 			config: &v1alpha1.Config{
 				ClusterConfig: &v1alpha1.ClusterConfig{
-					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{
+					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{ //nolint:staticcheck // legacy Talos input under test
 						CNI: &v1alpha1.CNIConfig{CNIName: "flannel"},
 					},
 				},
@@ -655,7 +655,7 @@ func TestCNIName(t *testing.T) { //nolint:funlen // table-driven tests
 			name: "none CNI",
 			config: &v1alpha1.Config{
 				ClusterConfig: &v1alpha1.ClusterConfig{
-					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{
+					ClusterNetwork: &v1alpha1.ClusterNetworkConfig{ //nolint:staticcheck // legacy Talos input under test
 						CNI: &v1alpha1.CNIConfig{CNIName: "none"},
 					},
 				},

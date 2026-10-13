@@ -22,6 +22,12 @@ import (
 // defaultReconcileTimeout is the default timeout for component reconciliation operations.
 const defaultReconcileTimeout = 5 * time.Minute
 
+// Diff field names both the component reconciler and the update orchestrator dispatch on.
+const (
+	fieldClusterCNI           = "cluster.cni"
+	fieldClusterMetricsServer = "cluster.metricsServer"
+)
+
 var errCalicoInstallerFactoryUnavailable = errors.New("calico installer factory is unavailable")
 
 // errMetricsServerDisableUnsupported is returned when attempting to disable metrics-server in-place.
@@ -166,9 +172,9 @@ func (r *componentReconciler) handlerForField(
 	field string,
 ) (func(context.Context, clusterupdate.Change) error, bool) {
 	handlers := map[string]func(context.Context, clusterupdate.Change) error{
-		"cluster.cni":                               r.reconcileCNI,
+		fieldClusterCNI:                             r.reconcileCNI,
 		"cluster.csi":                               r.reconcileCSI,
-		"cluster.metricsServer":                     r.reconcileMetricsServer,
+		fieldClusterMetricsServer:                   r.reconcileMetricsServer,
 		"cluster.loadBalancer":                      r.reconcileLoadBalancer,
 		"cluster.certManager":                       r.reconcileCertManager,
 		"cluster.policyEngine":                      r.reconcilePolicyEngine,
@@ -201,9 +207,9 @@ func (r *componentReconciler) handlerForField(
 
 func isComponentReconcileField(field string) bool {
 	switch field {
-	case "cluster.cni",
+	case fieldClusterCNI,
 		"cluster.csi",
-		"cluster.metricsServer",
+		fieldClusterMetricsServer,
 		"cluster.loadBalancer",
 		"cluster.certManager",
 		"cluster.policyEngine",

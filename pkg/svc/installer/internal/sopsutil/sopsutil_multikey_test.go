@@ -152,7 +152,7 @@ func TestResolveAgeKey_EnvVarOverride(t *testing.T) {
 		noKeyFileEnv(t)
 
 		sops := v1alpha1.SOPS{
-			AgeKeyEnvVar: "TEST_SOPSUTIL_ENV_VAR_OLD",
+			AgeKeyEnvVar: "TEST_SOPSUTIL_ENV_VAR_OLD", //nolint:staticcheck // the deprecated alias is the subject
 			Env:          v1alpha1.SOPSEnv{Var: "TEST_SOPSUTIL_ENV_VAR_NEW"},
 		}
 		got, err := sopsutil.ResolveAgeKey(sops)
@@ -165,7 +165,7 @@ func TestResolveAgeKey_EnvVarOverride(t *testing.T) {
 		noKeyFileEnv(t)
 
 		sops := v1alpha1.SOPS{
-			AgeKeyEnvVar: "TEST_SOPSUTIL_ENV_VAR_FALLBACK",
+			AgeKeyEnvVar: "TEST_SOPSUTIL_ENV_VAR_FALLBACK", //nolint:staticcheck // the deprecated alias is the subject
 		}
 		got, err := sopsutil.ResolveAgeKey(sops)
 		require.NoError(t, err)
@@ -190,8 +190,8 @@ func TestResolveAgeKey_ExtractFileOverride(t *testing.T) {
 		t.Setenv("TEST_SOPSUTIL_EXTRACT_EMPTY", "")
 
 		sops := v1alpha1.SOPS{
-			AgeKeyEnvVar: "TEST_SOPSUTIL_EXTRACT_EMPTY",
-			Extract:      v1alpha1.SOPSExtract{File: keyPath},
+			Env:     v1alpha1.SOPSEnv{Var: "TEST_SOPSUTIL_EXTRACT_EMPTY"},
+			Extract: v1alpha1.SOPSExtract{File: keyPath},
 		}
 		got, err := sopsutil.ResolveAgeKey(sops)
 		require.NoError(t, err)
@@ -219,8 +219,8 @@ func TestResolveAgeKey_MultiKeyFileReturnsAll(t *testing.T) {
 	t.Setenv("TEST_SOPSUTIL_MULTI_EMPTY", "")
 
 	sops := v1alpha1.SOPS{
-		AgeKeyEnvVar: "TEST_SOPSUTIL_MULTI_EMPTY",
-		Extract:      v1alpha1.SOPSExtract{File: keyPath},
+		Env:     v1alpha1.SOPSEnv{Var: "TEST_SOPSUTIL_MULTI_EMPTY"},
+		Extract: v1alpha1.SOPSExtract{File: keyPath},
 	}
 	got, err := sopsutil.ResolveAgeKey(sops)
 	require.NoError(t, err)

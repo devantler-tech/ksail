@@ -58,6 +58,9 @@ const (
 	k3kHelmTimeout = 5 * time.Minute
 	// k3kAPIServerPort is the API server port used by k3k clusters.
 	k3kAPIServerPort = 6443
+	// labelManagedBy and labelCluster mark the guard resources KSail creates for a cluster.
+	labelManagedBy = "ksail.io/managed-by"
+	labelCluster   = "ksail.io/cluster"
 	// managedByKSail is the ksail.io/managed-by label value on resources KSail creates.
 	managedByKSail = "ksail"
 	// k3kAPIServerPFTimeout bounds how long Create waits for a server pod to become
@@ -665,8 +668,8 @@ func (p *K3kProvisioner) ensureNamespace(ctx context.Context, clusterName, names
 		ObjectMeta: metav1.ObjectMeta{
 			Name: namespace,
 			Labels: map[string]string{
-				"ksail.io/managed-by": managedByKSail,
-				"ksail.io/cluster":    clusterName,
+				labelManagedBy: managedByKSail,
+				labelCluster:   clusterName,
 				// The k3k server runs embedded k3s and requires a privileged container.
 				// Hosts that enforce Pod Security Admission at the "baseline" level (e.g.
 				// Talos, which defaults namespaces to baseline) would otherwise reject the
@@ -790,8 +793,8 @@ func (p *K3kProvisioner) buildPrivilegedPodGuardPolicy(
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 			Labels: map[string]string{
-				"ksail.io/managed-by": managedByKSail,
-				"ksail.io/cluster":    clusterName,
+				labelManagedBy: managedByKSail,
+				labelCluster:   clusterName,
 			},
 		},
 		Spec: admissionv1.ValidatingAdmissionPolicySpec{
@@ -915,8 +918,8 @@ func (p *K3kProvisioner) buildPrivilegedPodGuardBinding(
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 			Labels: map[string]string{
-				"ksail.io/managed-by": managedByKSail,
-				"ksail.io/cluster":    clusterName,
+				labelManagedBy: managedByKSail,
+				labelCluster:   clusterName,
 			},
 		},
 		Spec: admissionv1.ValidatingAdmissionPolicyBindingSpec{
@@ -927,8 +930,8 @@ func (p *K3kProvisioner) buildPrivilegedPodGuardBinding(
 				// blanket privileged exemption with no guard attached.
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
-						"ksail.io/managed-by": managedByKSail,
-						"ksail.io/cluster":    clusterName,
+						labelManagedBy: managedByKSail,
+						labelCluster:   clusterName,
 					},
 				},
 			},
@@ -1004,8 +1007,8 @@ func (p *K3kProvisioner) buildClusterCR(
 			Name:      clusterName,
 			Namespace: namespace,
 			Labels: map[string]string{
-				"ksail.io/managed-by": managedByKSail,
-				"ksail.io/cluster":    clusterName,
+				labelManagedBy: managedByKSail,
+				labelCluster:   clusterName,
 			},
 		},
 		Spec: k3kv1beta1.ClusterSpec{
