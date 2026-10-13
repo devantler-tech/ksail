@@ -58,6 +58,8 @@ const (
 	k3kHelmTimeout = 5 * time.Minute
 	// k3kAPIServerPort is the API server port used by k3k clusters.
 	k3kAPIServerPort = 6443
+	// managedByKSail is the ksail.io/managed-by label value on resources KSail creates.
+	managedByKSail = "ksail"
 	// k3kAPIServerPFTimeout bounds how long Create waits for a server pod to become
 	// port-forwardable when wiring the in-session nested API endpoint.
 	k3kAPIServerPFTimeout = 2 * time.Minute
@@ -663,7 +665,7 @@ func (p *K3kProvisioner) ensureNamespace(ctx context.Context, clusterName, names
 		ObjectMeta: metav1.ObjectMeta{
 			Name: namespace,
 			Labels: map[string]string{
-				"ksail.io/managed-by": "ksail",
+				"ksail.io/managed-by": managedByKSail,
 				"ksail.io/cluster":    clusterName,
 				// The k3k server runs embedded k3s and requires a privileged container.
 				// Hosts that enforce Pod Security Admission at the "baseline" level (e.g.
@@ -788,7 +790,7 @@ func (p *K3kProvisioner) buildPrivilegedPodGuardPolicy(
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 			Labels: map[string]string{
-				"ksail.io/managed-by": "ksail",
+				"ksail.io/managed-by": managedByKSail,
 				"ksail.io/cluster":    clusterName,
 			},
 		},
@@ -913,7 +915,7 @@ func (p *K3kProvisioner) buildPrivilegedPodGuardBinding(
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 			Labels: map[string]string{
-				"ksail.io/managed-by": "ksail",
+				"ksail.io/managed-by": managedByKSail,
 				"ksail.io/cluster":    clusterName,
 			},
 		},
@@ -925,7 +927,7 @@ func (p *K3kProvisioner) buildPrivilegedPodGuardBinding(
 				// blanket privileged exemption with no guard attached.
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
-						"ksail.io/managed-by": "ksail",
+						"ksail.io/managed-by": managedByKSail,
 						"ksail.io/cluster":    clusterName,
 					},
 				},
@@ -1002,7 +1004,7 @@ func (p *K3kProvisioner) buildClusterCR(
 			Name:      clusterName,
 			Namespace: namespace,
 			Labels: map[string]string{
-				"ksail.io/managed-by": "ksail",
+				"ksail.io/managed-by": managedByKSail,
 				"ksail.io/cluster":    clusterName,
 			},
 		},

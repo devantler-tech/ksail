@@ -30,6 +30,11 @@ const (
 	diagnosticBudget = 15 * time.Minute
 	controlFields    = 3
 	exitUsage        = 2
+
+	// modeSmallWrites selects the transport that splits request writes.
+	modeSmallWrites = "small-writes"
+	// outcomeInputConfiguration reports a request that could not be built.
+	outcomeInputConfiguration = "input_configuration"
 )
 
 type observation struct {
@@ -67,7 +72,7 @@ func register(ctx context.Context, baseURL string, httpClient *http.Client) obse
 
 	expected, err := input.ID()
 	if err != nil {
-		return observation{Outcome: "input_configuration"}
+		return observation{Outcome: outcomeInputConfiguration}
 	}
 
 	schematicID, normalized, err := client.SchematicCreate(bounded, input)
@@ -214,7 +219,7 @@ func transportFor(mode string) *http.Transport {
 		transport.DialContext = func(ctx context.Context, _, address string) (net.Conn, error) {
 			return dialer.DialContext(ctx, "tcp4", address)
 		}
-	case "small-writes":
+	case modeSmallWrites:
 		return imagefactorytransport.New(transport)
 	}
 
@@ -227,12 +232,12 @@ func curlControl(ctx context.Context) observation {
 
 	payload, err := input.Marshal()
 	if err != nil {
-		return observation{Outcome: "input_configuration"}
+		return observation{Outcome: outcomeInputConfiguration}
 	}
 
 	expected, err := input.ID()
 	if err != nil {
-		return observation{Outcome: "input_configuration"}
+		return observation{Outcome: outcomeInputConfiguration}
 	}
 
 	bounded, cancel := context.WithTimeout(ctx, requestBudget+time.Second)
@@ -314,7 +319,7 @@ func main() {
 }
 
 func clientFor(mode string) *http.Client {
-	if mode == "small-writes" {
+	if mode == modeSmallWrites {
 		client := imagefactorytransport.Client()
 
 		return &client
@@ -344,7 +349,7 @@ func run() int {
 
 	for trial := 1; trial <= trials; trial++ {
 		for _, mode := range []string{
-			"sdk-default", "http1", "pre126-curves", "ipv4", "small-writes", "classical-control",
+			"sdk-default", "http1", "pre126-curves", "ipv4", modeSmallWrites, "classical-control",
 		} {
 			control := curlControl(ctx)
 

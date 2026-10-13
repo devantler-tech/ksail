@@ -54,6 +54,9 @@ const networkRemovalInterval = 2 * time.Second
 // vCluster SDK for control plane containers.
 const controlPlaneContainerPrefix = "vcluster.cp."
 
+// dockerDriver is the vCluster SDK driver that runs the virtual cluster in Docker.
+const dockerDriver = "docker"
+
 // transientCreateErrors returns error substrings that indicate potentially
 // transient infrastructure failures during vCluster cluster creation.
 // Exit status 22 (EINVAL) has been observed on CI runners where the Docker
@@ -181,7 +184,7 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 	}
 
 	opts := &cli.CreateOptions{
-		Driver:       "docker",
+		Driver:       dockerDriver,
 		ChartVersion: vclusterconfigmanager.ChartVersion(),
 		Connect:      false,
 		Upgrade:      false,
@@ -270,7 +273,7 @@ func cleanupFailedCreate(
 	logger loftlog.Logger,
 ) {
 	deleteOpts := &cli.DeleteOptions{
-		Driver:         "docker",
+		Driver:         dockerDriver,
 		DeleteContext:  true,
 		IgnoreNotFound: true,
 	}
@@ -438,7 +441,7 @@ func (p *Provisioner) Delete(ctx context.Context, name string) error {
 	}
 
 	opts := &cli.DeleteOptions{
-		Driver:         "docker",
+		Driver:         dockerDriver,
 		DeleteContext:  true,
 		IgnoreNotFound: true,
 	}

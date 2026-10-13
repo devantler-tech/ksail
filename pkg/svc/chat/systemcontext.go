@@ -163,7 +163,9 @@ func IsReadOperation(kind copilot.PermissionRequestKind) bool {
 		copilot.PermissionRequestKindWrite,
 		copilot.PermissionRequestKindHook,
 		copilot.PermissionRequestKindExtensionManagement,
-		copilot.PermissionRequestKindExtensionPermissionAccess:
+		copilot.PermissionRequestKindExtensionPermissionAccess,
+		copilot.PermissionRequestKindExtensionEnvAccess,
+		copilot.PermissionRequestKindFactory:
 		return false
 	default:
 		return false
