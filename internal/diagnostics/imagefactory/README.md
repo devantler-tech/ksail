@@ -34,3 +34,17 @@ Contradictory or interrupted observations remain inconclusive.
 The local TLS fixtures require verified certificates, exact input and returned
 schematic identities, rejection of an untrusted certificate, and cancellation.
 They verify the probe's reporting boundaries, not public network reachability.
+
+## Strict link transport observation
+
+Dispatch the same workflow with `strict_links: true` to investigate the daily
+link check on its configured `ubuntu-latest` runner. This default-off route skips
+registration requests. It records bounded curl GET timings for the two fixed
+public links, then checks those links with the daily Lychee version and configuration.
+It also runs the complete daily strict caller, even when the focused link check fails.
+
+`observation=completed` means both curl requests were observed; their exit codes
+and the two strict checks determine reachability. Timeouts remain failures, TLS
+verification stays enabled, and no addresses, headers or raw curl errors are printed.
+The workflow has a twenty-minute deadline. A successful engineering-host check
+does not establish hosted recovery; compare observations made in the same run.
