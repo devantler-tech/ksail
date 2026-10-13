@@ -128,7 +128,20 @@ func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		return err
 	}
 
-	ciliumInst := ciliuminstaller.NewInstaller(
+	return runCNIInstallation(
+		cmd, newCiliumInstaller(clusterCfg, setup), "cilium", tmr, setup, clusterCfg,
+		[]string{"kube-system"},
+	)
+}
+
+// newCiliumInstaller builds the Cilium installer for a cluster. Installing and
+// comparing rendered chart values both build it here, so they always render the
+// same values for a cluster.
+func newCiliumInstaller(
+	clusterCfg *v1alpha1.Cluster,
+	setup *cniSetupResult,
+) *ciliuminstaller.Installer {
+	return ciliuminstaller.NewInstaller(
 		setup.helmClient,
 		setup.kubeconfig,
 		clusterCfg.Spec.Cluster.Connection.Context,
@@ -138,10 +151,37 @@ func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		clusterCfg.Spec.Cluster.LoadBalancer,
 		installer.IsHAEnabled(clusterCfg.Spec.Cluster.TotalNodeCount()),
 	)
+}
 
-	return runCNIInstallation(
-		cmd, ciliumInst, "cilium", tmr, setup, clusterCfg, []string{"kube-system"},
-	)
+func ciliumFactory(
+	factories *InstallerFactories,
+) func(*v1alpha1.Cluster) (installer.Installer, error) {
+	return cniInstallerFactory(factories, "Cilium", 0,
+		func(clusterCfg *v1alpha1.Cluster, setup *cniSetupResult) installer.Installer {
+			return newCiliumInstaller(clusterCfg, setup)
+		})
+}
+
+// cniInstallerFactory builds a CNI installer factory around the constructor
+// installation uses. minTimeout raises the install timeout for a CNI that needs
+// longer than the configured one.
+func cniInstallerFactory(
+	factories *InstallerFactories,
+	name string,
+	minTimeout time.Duration,
+	build func(*v1alpha1.Cluster, *cniSetupResult) installer.Installer,
+) func(*v1alpha1.Cluster) (installer.Installer, error) {
+	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+		client, kubeconfig, err := factories.HelmClientFactory(clusterCfg)
+		if err != nil {
+			return nil, fmt.Errorf("create %s Helm client: %w", name, err)
+		}
+
+		return build(clusterCfg, &cniSetupResult{
+			helmClient: client, kubeconfig: kubeconfig,
+			timeout: max(installer.GetInstallTimeout(clusterCfg), minTimeout),
+		}), nil
+	}
 }
 
 func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr timer.Timer) error {
@@ -181,17 +221,10 @@ func newCalicoInstaller(
 func calicoFactory(
 	factories *InstallerFactories,
 ) func(*v1alpha1.Cluster) (installer.Installer, error) {
-	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
-		client, kubeconfig, err := factories.HelmClientFactory(clusterCfg)
-		if err != nil {
-			return nil, fmt.Errorf("create Calico Helm client: %w", err)
-		}
-
-		return newCalicoInstaller(clusterCfg, &cniSetupResult{
-			helmClient: client, kubeconfig: kubeconfig,
-			timeout: max(installer.GetInstallTimeout(clusterCfg), installer.CalicoInstallTimeout),
-		}), nil
-	}
+	return cniInstallerFactory(factories, "Calico", installer.CalicoInstallTimeout,
+		func(clusterCfg *v1alpha1.Cluster, setup *cniSetupResult) installer.Installer {
+			return newCalicoInstaller(clusterCfg, setup)
+		})
 }
 
 func runCNIInstallation(

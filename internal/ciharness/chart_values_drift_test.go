@@ -15,6 +15,7 @@ const (
 	certManagerTrialStep   = "🧪 cert-manager values drift — one upgrade then no-op"
 	kyvernoTrialStep       = "🧪 Kyverno values drift — one upgrade then no-op"
 	metricsServerTrialStep = "🧪 metrics-server values drift — one upgrade then no-op"
+	ciliumTrialStep        = "🧪 Cilium values drift — one upgrade then no-op"
 )
 
 // valuesTrialProfile describes one component's fixture: the release the stubs
@@ -506,6 +507,75 @@ func TestMetricsServerValuesTrialUsesExistingRealNodeLeg(t *testing.T) {
 	assert.Contains(t, step.If, "inputs.distribution == 'Vanilla'")
 	assert.Contains(t, step.If, "contains(inputs.args, '--metrics-server Enabled')")
 	assert.Equal(t, "metrics-server", step.Env["VALUES_TRIAL_COMPONENT"])
+	assert.Equal(t, "${{ steps.resolve-args.outputs.args }}", step.Env["ARGS"])
+	assert.Equal(t, "${{ steps.k8s-version-pin.outputs.flag }}", step.Env["K8S_VERSION_FLAG"])
+}
+
+func ciliumTrialProfile() valuesTrialProfile {
+	return valuesTrialProfile{
+		step:       ciliumTrialStep,
+		component:  "cilium",
+		release:    "cilium",
+		chart:      "cilium-1.20.2",
+		field:      "cluster.cni.cilium.chartValues",
+		baseValues: `{"gatewayAPI":{"enabled":true},"operator":{"replicas":1}}`,
+		seededValues: `{"gatewayAPI":{"enabled":true},"operator":{` +
+			`"podAnnotations":{"ksail-values-trial":"seeded"},"replicas":1}}`,
+		seedFlags: "--version 1.20.2|--repo https://helm.cilium.io|" +
+			"--set operator.podAnnotations.ksail-values-trial=seeded",
+		extraArgs: " --cni Cilium",
+		rollouts:  1,
+	}
+}
+
+func TestCiliumValuesTrialConverges(t *testing.T) {
+	t.Parallel()
+
+	profile := ciliumTrialProfile()
+	output, calls, err := runValuesTrial(t, profile, "success")
+	require.NoError(t, err, output)
+	assert.Equal(t, 1, strings.Count(calls, "helm upgrade "), calls)
+	assert.Equal(t, 2, strings.Count(calls, "ksail cluster update "), calls)
+	assert.Equal(t, 3, strings.Count(calls, "ksail cluster diff "), calls)
+	assert.Equal(t, profile.rollouts, strings.Count(calls, "kubectl rollout status "), calls)
+	assert.Contains(t, calls, "kubectl rollout status deployment/cilium-operator")
+	assert.Contains(t, calls, "--namespace kube-system")
+	assert.Contains(t, calls, "--repo https://helm.cilium.io")
+	assert.NotContains(t, calls, "cert-manager")
+	assert.NotContains(t, calls, "kyverno")
+	assert.NotContains(t, calls, "metrics-server")
+	assert.Contains(t, output, "cilium values trial: one Helm upgrade and a repeated no-op")
+}
+
+func TestCiliumValuesTrialRejectsIncompleteProof(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct{ mode, want string }{
+		{mode: "missing_drift", want: "values drift did not exit exactly 2"},
+		{mode: "no_upgrade", want: "reconciliation did not create exactly one revision"},
+		{mode: "wrong_values", want: "reconciliation did not restore the desired values"},
+		{mode: "gitops_owned", want: "latest storage revision differs or is GitOps-owned"},
+		{mode: "not_ready", want: "cilium-operator is not ready"},
+		{mode: "repeat_upgrade", want: "repeated update changed the Helm revision"},
+		{mode: "unknown_baseline", want: "expected only one in-place cilium values change"},
+	} {
+		t.Run(testCase.mode, func(t *testing.T) {
+			t.Parallel()
+			output, _, err := runValuesTrial(t, ciliumTrialProfile(), testCase.mode)
+			require.Error(t, err, output)
+			assert.Contains(t, output, testCase.want)
+		})
+	}
+}
+
+func TestCiliumValuesTrialUsesExistingRealNodeLeg(t *testing.T) {
+	t.Parallel()
+	action := readCompositeAction(t, ".github/actions/ksail-system-test/action.yaml")
+	step := findHarnessStep(t, action.Runs.Steps, ciliumTrialStep)
+	assert.Contains(t, step.If, "inputs.provider == 'Docker'")
+	assert.Contains(t, step.If, "inputs.distribution == 'Vanilla'")
+	assert.Contains(t, step.If, "contains(inputs.args, '--cni Cilium')")
+	assert.Equal(t, "cilium", step.Env["VALUES_TRIAL_COMPONENT"])
 	assert.Equal(t, "${{ steps.resolve-args.outputs.args }}", step.Env["ARGS"])
 	assert.Equal(t, "${{ steps.k8s-version-pin.outputs.flag }}", step.Env["K8S_VERSION_FLAG"])
 }

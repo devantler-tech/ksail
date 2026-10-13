@@ -52,6 +52,12 @@ const CNIField = "cluster.cni"
 // a cluster.policyEngine change.
 const PolicyEngineValuesField = "cluster.policyEngine.chartValues"
 
+// CiliumValuesField is the diff key for Cilium chart values that differ from
+// the ones this KSail version renders. Reconciliation routes it to a Helm
+// upgrade of the installed Cilium release; a cluster.cni change, which installs
+// the CNI itself, takes precedence over it.
+const CiliumValuesField = "cluster.cni.cilium.chartValues"
+
 // MetricsServerValuesField is the diff key for metrics-server chart values that
 // differ from the ones this KSail version renders. Reconciliation routes it to
 // the same metrics-server Helm upgrade as a cluster.metricsServer change.
