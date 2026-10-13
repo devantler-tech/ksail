@@ -277,7 +277,7 @@ func ExportResolveCreatedContextName(
 
 // ExportResolvePostCreateContext exports resolvePostCreateContext for testing.
 func ExportResolvePostCreateContext(ctx *localregistry.Context) error {
-	return resolvePostCreateContext(ctx)
+	return resolvePostCreateContext(context.Background(), ctx)
 }
 
 // ExportPrepareEKSCreateConfig exports prepareEKSCreateConfig for testing.

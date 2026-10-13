@@ -1,0 +1,43 @@
+name: Image Factory transport diagnostic
+
+on:
+  pull_request:
+    paths:
+      - internal/diagnostics/imagefactory/**
+      - internal/imagefactorytransport/**
+      - pkg/svc/provisioner/cluster/talos/schematic_registration.go
+      - .github/workflows/image-factory-transport.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-factory-transport-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  public-transport:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Verify diagnostic boundaries
+        run: go test -race ./internal/diagnostics/imagefactory ./internal/imagefactorytransport
+      - name: Check the changed helpers with the repository's pinned Go linter
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a
+        with:
+          version: v2.14.0
+          args: --fix --timeout=4m ./internal/diagnostics/imagefactory ./internal/imagefactorytransport
+      - name: Require formatting to already be committed
+        run: git diff --exit-code -- internal/diagnostics/imagefactory internal/imagefactorytransport
+      - name: Compare fixed public registration transports
+        run: go run ./internal/diagnostics/imagefactory

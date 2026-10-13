@@ -25,7 +25,7 @@ func TestResolveAgeKey_KeyFileReadError(t *testing.T) {
 	t.Setenv("SOPS_AGE_KEY_FILE", keyDir)
 	t.Setenv("TEST_SOPSUTIL_NONEXISTENT_READ_ERR", "")
 
-	sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_SOPSUTIL_NONEXISTENT_READ_ERR"}
+	sops := v1alpha1.SOPS{Env: v1alpha1.SOPSEnv{Var: "TEST_SOPSUTIL_NONEXISTENT_READ_ERR"}}
 
 	got, resolveErr := sopsutil.ResolveAgeKey(sops)
 	require.Error(t, resolveErr)
@@ -48,8 +48,8 @@ func TestResolveEnabledAgeKey_ExplicitlyEnabledWithResolveError(t *testing.T) {
 	t.Setenv("TEST_SOPSUTIL_NONEXISTENT_ENABLED_ERR", "")
 
 	sops := v1alpha1.SOPS{
-		Enabled:      v1alpha1.SOPSEnabledEnabled,
-		AgeKeyEnvVar: "TEST_SOPSUTIL_NONEXISTENT_ENABLED_ERR",
+		Enabled: v1alpha1.SOPSEnabledEnabled,
+		Env:     v1alpha1.SOPSEnv{Var: "TEST_SOPSUTIL_NONEXISTENT_ENABLED_ERR"},
 	}
 
 	got, resolveErr := sopsutil.ResolveEnabledAgeKey(sops)
@@ -65,7 +65,7 @@ func TestResolveAgeKey_EnvVarWithInvalidKey(t *testing.T) {
 	t.Setenv("TEST_SOPSUTIL_INVALID_KEY", "not-a-valid-age-key")
 	t.Setenv("SOPS_AGE_KEY_FILE", filepath.Join(t.TempDir(), "nonexistent-keys.txt"))
 
-	sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_SOPSUTIL_INVALID_KEY"}
+	sops := v1alpha1.SOPS{Env: v1alpha1.SOPSEnv{Var: "TEST_SOPSUTIL_INVALID_KEY"}}
 
 	got, err := sopsutil.ResolveAgeKey(sops)
 	require.NoError(t, err)

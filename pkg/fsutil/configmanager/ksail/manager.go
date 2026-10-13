@@ -300,8 +300,7 @@ func (m *ConfigManager) readConfig(silent bool) error {
 
 	err = m.Viper.ReadInConfig()
 	if err != nil {
-		var configFileNotFoundError viper.ConfigFileNotFoundError
-		if !errors.As(err, &configFileNotFoundError) {
+		if _, ok := errors.AsType[viper.ConfigFileNotFoundError](err); !ok {
 			return fmt.Errorf("failed to read config file: %w", err)
 		}
 

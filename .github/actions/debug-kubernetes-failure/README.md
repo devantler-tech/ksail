@@ -1,6 +1,6 @@
 # Debug Kubernetes Failure Action
 
-A GitHub composite action that outputs diagnostic information for debugging Kubernetes cluster failures. Shows disk usage, node status, pod status, recent events, and GitOps resource statuses (FluxInstance, OCIRepository, ArgoCD Application).
+A GitHub composite action that outputs diagnostic information for debugging Kubernetes cluster failures. Shows disk usage, node status, pod status, deployments, Helm releases, recent events, and the status of the components KSail can install: CNI (Cilium, Calico), CSI (Local Path, Hetzner), GitOps (Flux, ArgoCD), policy engines (Kyverno, Gatekeeper), cert-manager and Metrics Server.
 
 ## Why?
 
@@ -55,15 +55,26 @@ steps:
 
 ## Inputs
 
-| Input             | Description                           | Default   |
-|-------------------|---------------------------------------|-----------|
-| `kubectl-command` | The kubectl command or wrapper to use | `kubectl` |
-| `show-disk-usage` | Show host and Docker disk usage       | `true`    |
-| `show-nodes`      | Show node status and conditions       | `true`    |
-| `show-pods`       | Show pod status                       | `true`    |
-| `show-events`     | Show recent cluster events            | `true`    |
-| `events-limit`    | Number of recent events to show       | `50`      |
-| `namespace`       | Namespace to query (empty for all)    | `""`      |
+Every section is on by default; set its input to `"false"` to skip it.
+
+| Input                 | Description                                                      | Default   |
+|-----------------------|------------------------------------------------------------------|-----------|
+| `kubectl-command`     | The kubectl command or wrapper to use (e.g. `ksail workload`)    | `kubectl` |
+| `namespace`           | Namespace to query (empty for all)                               | `""`      |
+| `show-disk-usage`     | Show host and Docker disk usage                                  | `true`    |
+| `show-nodes`          | Show node status and conditions                                  | `true`    |
+| `show-pods`           | Show pod status                                                  | `true`    |
+| `show-deployments`    | Show deployment status and details for failing deployments       | `true`    |
+| `show-helm-releases`  | Show Helm release status summary                                 | `true`    |
+| `show-events`         | Show recent cluster events                                       | `true`    |
+| `events-limit`        | Number of recent events to show                                  | `50`      |
+| `show-cni`            | Show CNI (Cilium/Calico) status and logs                         | `true`    |
+| `show-csi`            | Show CSI (Local Path/Hetzner) status                             | `true`    |
+| `show-gitops`         | Show GitOps (Flux/ArgoCD) status, resources, and controller logs | `true`    |
+| `show-policy-engine`  | Show policy engine (Kyverno/Gatekeeper) status and logs          | `true`    |
+| `show-cert-manager`   | Show cert-manager status and certificate resources               | `true`    |
+| `show-metrics-server` | Show Metrics Server status                                       | `true`    |
+| `log-tail-lines`      | Number of log lines to show per controller                       | `100`     |
 
 ## Example Output
 

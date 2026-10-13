@@ -22,7 +22,7 @@ func TestResolveAgeKey_FromKeyFile(t *testing.T) {
 	t.Setenv("SOPS_AGE_KEY_FILE", keyPath)
 	t.Setenv("TEST_SOPSUTIL_NONEXISTENT_12345", "")
 
-	sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_SOPSUTIL_NONEXISTENT_12345"}
+	sops := v1alpha1.SOPS{Env: v1alpha1.SOPSEnv{Var: "TEST_SOPSUTIL_NONEXISTENT_12345"}}
 
 	got, resolveErr := sopsutil.ResolveAgeKey(sops)
 	require.NoError(t, resolveErr)
@@ -38,7 +38,7 @@ func TestResolveAgeKey_KeyFileNoKey(t *testing.T) {
 	t.Setenv("SOPS_AGE_KEY_FILE", keyPath)
 	t.Setenv("TEST_SOPSUTIL_NONEXISTENT_67890", "")
 
-	sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_SOPSUTIL_NONEXISTENT_67890"}
+	sops := v1alpha1.SOPS{Env: v1alpha1.SOPSEnv{Var: "TEST_SOPSUTIL_NONEXISTENT_67890"}}
 
 	got, resolveErr := sopsutil.ResolveAgeKey(sops)
 	require.NoError(t, resolveErr)
@@ -52,7 +52,7 @@ func TestResolveEnabledAgeKey_AutoDetectWithError(t *testing.T) {
 	t.Setenv("TEST_SOPSUTIL_NONEXISTENT_99999", "")
 
 	// Auto-detect mode (Enabled == nil), env var unset.
-	sops := v1alpha1.SOPS{AgeKeyEnvVar: "TEST_SOPSUTIL_NONEXISTENT_99999"}
+	sops := v1alpha1.SOPS{Env: v1alpha1.SOPSEnv{Var: "TEST_SOPSUTIL_NONEXISTENT_99999"}}
 
 	// Auto-detect suppresses errors and returns empty.
 	got, err := sopsutil.ResolveEnabledAgeKey(sops)

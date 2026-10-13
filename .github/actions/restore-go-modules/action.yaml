@@ -1,0 +1,23 @@
+name: Restore Go modules
+description: Restore the shared main-backed module archive without saving duplicate Go caches.
+
+runs:
+  using: composite
+  steps:
+    - name: Identify Go module cache
+      id: module-path
+      shell: bash
+      run: |
+        set -euo pipefail
+        cache_path="$(go env GOMODCACHE)"
+        [[ "$cache_path" == /* && "$cache_path" != *$'\n'* ]]
+        printf 'path=%s\n' "$cache_path" >> "$GITHUB_OUTPUT"
+
+    - name: Restore Go module cache
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.module-path.outputs.path }}
+        key: go-mod-v1-${{ runner.os }}-${{ runner.arch }}-.-${{ hashFiles('go.sum') }}
+        # Match the released validator: main starts from exact inputs, while a
+        # PR may reuse modules from an earlier default-branch dependency graph.
+        restore-keys: ${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) && format('go-mod-v1-{0}-{1}-.-', runner.os, runner.arch) || '' }}

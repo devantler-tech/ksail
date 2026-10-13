@@ -20,8 +20,12 @@ import (
 )
 
 const (
-	admissionRegistrationGroup  = "admissionregistration.k8s.io"
-	mutatingAdmissionPolicyKind = "MutatingAdmissionPolicy"
+	admissionRegistrationGroup           = "admissionregistration.k8s.io"
+	mutatingAdmissionPolicyKind          = "MutatingAdmissionPolicy"
+	mutatingAdmissionPolicyBindingKind   = "MutatingAdmissionPolicyBinding"
+	validatingAdmissionPolicyKind        = "ValidatingAdmissionPolicy"
+	validatingAdmissionPolicyBindingKind = "ValidatingAdmissionPolicyBinding"
+	crdResource                          = "customresourcedefinitions"
 )
 
 var errOperatorDependencyPending = errors.New("calico operator dependency migration is pending")
@@ -215,9 +219,9 @@ func validateDependencyManagers(object *unstructured.Unstructured) error {
 	label := "operator.tigera.io/validating-admission-policy"
 
 	switch object.GetKind() {
-	case mutatingAdmissionPolicyKind, "MutatingAdmissionPolicyBinding":
+	case mutatingAdmissionPolicyKind, mutatingAdmissionPolicyBindingKind:
 		label = "operator.tigera.io/mutating-admission-policy"
-	case "ValidatingAdmissionPolicy", "ValidatingAdmissionPolicyBinding":
+	case validatingAdmissionPolicyKind, validatingAdmissionPolicyBindingKind:
 	default:
 		return prerequisiteError("Calico operator dependency is not an admission prerequisite")
 	}

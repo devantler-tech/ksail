@@ -30,7 +30,9 @@ func wrapConfig(cfg *v1alpha1.Config) talosconfig.Provider {
 // sysctlsConfig builds a provider carrying the given sysctls.
 func sysctlsConfig(sysctls map[string]string) talosconfig.Provider {
 	return wrapConfig(&v1alpha1.Config{
-		MachineConfig: &v1alpha1.MachineConfig{MachineSysctls: sysctls},
+		MachineConfig: &v1alpha1.MachineConfig{
+			MachineSysctls: sysctls, //nolint:staticcheck // legacy Talos input under test
+		},
 	})
 }
 

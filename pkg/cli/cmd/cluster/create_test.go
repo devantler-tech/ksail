@@ -450,18 +450,18 @@ metadata:
 `)
 	writeFile(t, workingDir, "kubeconfig", `apiVersion: v1
 kind: Config
-current-context: arn:aws:iam::123456789012:role/ci@st-eks.eu-north-1.eksctl.io
+current-context: ci@st-eks.eu-north-1.eksctl.io
 clusters:
   - cluster:
-      server: https://example.invalid
-    name: arn:aws:iam::123456789012:role/ci@st-eks.eu-north-1.eksctl.io
+      server: `+immutableEKSEndpoint("eu-north-1")+`
+    name: ci@st-eks.eu-north-1.eksctl.io
 contexts:
   - context:
-      cluster: arn:aws:iam::123456789012:role/ci@st-eks.eu-north-1.eksctl.io
-      user: arn:aws:iam::123456789012:role/ci@st-eks.eu-north-1.eksctl.io
-    name: arn:aws:iam::123456789012:role/ci@st-eks.eu-north-1.eksctl.io
+      cluster: ci@st-eks.eu-north-1.eksctl.io
+      user: ci@st-eks.eu-north-1.eksctl.io
+    name: ci@st-eks.eu-north-1.eksctl.io
 users:
-  - name: arn:aws:iam::123456789012:role/ci@st-eks.eu-north-1.eksctl.io
+  - name: ci@st-eks.eu-north-1.eksctl.io
     user:
       token: fake
 `)
@@ -491,7 +491,7 @@ region = eu-north-1
 func writeEKSCreateTestFiles(t *testing.T, workingDir string) string {
 	t.Helper()
 
-	const eksctlContext = "arn:aws:iam::123456789012:role/ci@st-eks.eu-west-1.eksctl.io"
+	const eksctlContext = "ci@st-eks.eu-west-1.eksctl.io"
 
 	t.Setenv("AWS_ACCESS_KEY_ID", "fixture-access")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "fixture-secret")
@@ -523,7 +523,7 @@ kind: Config
 current-context: `+eksctlContext+`
 clusters:
   - cluster:
-      server: https://example.invalid
+      server: `+immutableEKSEndpoint("eu-west-1")+`
     name: `+eksctlContext+`
 contexts:
   - context:

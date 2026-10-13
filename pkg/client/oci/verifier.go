@@ -183,8 +183,7 @@ func isNotFoundError(err error) bool {
 		return false
 	}
 
-	var transportErr *transport.Error
-	if errors.As(err, &transportErr) {
+	if transportErr, ok := errors.AsType[*transport.Error](err); ok {
 		if transportErr.StatusCode == http.StatusNotFound {
 			return true
 		}
@@ -293,8 +292,7 @@ func classifyRegistryError(err error) error {
 	}
 
 	// Check for transport errors (includes HTTP status codes)
-	var transportErr *transport.Error
-	if errors.As(err, &transportErr) {
+	if transportErr, ok := errors.AsType[*transport.Error](err); ok {
 		classifiedErr := classifyTransportError(transportErr)
 		if classifiedErr != nil {
 			return classifiedErr

@@ -329,6 +329,7 @@ func TestInstallerFactories_AllFieldsPopulated(t *testing.T) {
 	assert.NotNil(t, factories.CertManager, "CertManager")
 	assert.NotNil(t, factories.CSI, "CSI")
 	assert.NotNil(t, factories.PolicyEngine, "PolicyEngine")
+	assert.NotNil(t, factories.MetricsServer, "MetricsServer")
 	assert.NotNil(t, factories.ArgoCD, "ArgoCD")
 	assert.NotNil(t, factories.KubeletCSRApprover, "KubeletCSRApprover")
 	assert.NotNil(t, factories.EnsureArgoCDResources, "EnsureArgoCDResources")

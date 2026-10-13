@@ -35,6 +35,9 @@ import (
 // stable value is reported and the namespace path segment is otherwise ignored.
 const localNamespace = "default"
 
+// conditionTypeReady is the status condition type the web UI renders for a cluster.
+const conditionTypeReady = "Ready"
+
 // FactoryFunc builds a provisioner factory for a requested cluster. The name is used by distributions
 // whose provisioner reads the cluster name from its config (VCluster, KWOK). It is injectable so
 // tests can substitute mock provisioners.
@@ -1367,7 +1370,7 @@ func listEntryCondition(entry listEntry) (metav1.Condition, bool) {
 // render it, and the reason lets the SPA present a "Stopped" state without a new ClusterPhase value.
 func stoppedCondition() metav1.Condition {
 	return metav1.Condition{
-		Type:    "Ready",
+		Type:    conditionTypeReady,
 		Status:  metav1.ConditionFalse,
 		Reason:  "Stopped",
 		Message: "Cluster is stopped",
@@ -1406,7 +1409,7 @@ func jobConditionFor(
 	}
 
 	return metav1.Condition{
-		Type:               "Ready",
+		Type:               conditionTypeReady,
 		Status:             metav1.ConditionFalse,
 		Reason:             reason,
 		Message:            detail,

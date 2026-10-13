@@ -102,7 +102,7 @@ OIDC closes the otherwise-unauthenticated REST API: the API owns the login/callb
 helm upgrade --install ksail-operator charts/ksail-operator \
   --namespace ksail-system --create-namespace \
   --set ui.ingress.enabled=true \
-  --set ui.ingress.hosts[0].host=ksail.local \
+  --set 'ui.ingress.hosts[0].host=ksail.local' \
   --set auth.oidc.enabled=true \
   --set auth.oidc.issuerURL=https://dex.example.com \
   --set auth.oidc.clientID=ksail \

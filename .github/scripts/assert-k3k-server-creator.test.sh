@@ -179,6 +179,14 @@ awk -v bash_version="${BASH_VERSINFO[0]}" '
   }
 ' "${action}" >"${tmp_dir}/creator-block.sh"
 [ -s "${tmp_dir}/creator-block.sh" ]
+# The block reports through the action's own failure recorder; extract that too,
+# so a renamed or removed recorder fails here instead of in a provider trial.
+awk '
+  /^        record_failure\(\) \{$/ { block = 1 }
+  block { sub(/^        /, ""); print }
+  block && /^}$/ { block = 0 }
+' "${action}" >"${tmp_dir}/record-failure.sh"
+[ -s "${tmp_dir}/record-failure.sh" ]
 
 cat >"${fake_bin}/kubectl" <<'FAKE'
 #!/usr/bin/env bash
@@ -215,22 +223,24 @@ for restore_fail in false true; do
           NESTED_NAME=nested-k3s
           HOST_CONTEXT=custom-host
           LOG_DIR="$CASE_DIR"
-          FAILED=0
+          dist_failed=false
+          OPERATION_FAILURES=0
+          source "$2"
           source "$1"
-          printf "%s\n" "$FAILED" >"$CASE_DIR/failed"
-        ' bash "${tmp_dir}/creator-block.sh" >"${case_dir}/output" 2>&1; then
+          printf "%s %s\n" "$OPERATION_FAILURES" "$dist_failed" >"$CASE_DIR/failed"
+        ' bash "${tmp_dir}/creator-block.sh" "${tmp_dir}/record-failure.sh" >"${case_dir}/output" 2>&1; then
 		cat "${case_dir}/output" >&2
 		exit 1
 	fi
 	if [ "${restore_fail}" = false ]; then
-		if [ "$(cat "${case_dir}/failed")" != 0 ] ||
+		if [ "$(cat "${case_dir}/failed")" != "0 false" ] ||
 			[ "$(cat "${case_dir}/queried-context")" != custom-host ]; then
 			printf 'FAIL: creator assertion did not query the restored host context\n' >&2
 			cat "${case_dir}/output" >&2
 			exit 1
 		fi
 	else
-		if [ "$(cat "${case_dir}/failed")" != 1 ] || [ -e "${case_dir}/queried-context" ]; then
+		if [ "$(cat "${case_dir}/failed")" != "1 true" ] || [ -e "${case_dir}/queried-context" ]; then
 			printf 'FAIL: failed host-context restoration must fail and skip the creator assertion\n' >&2
 			exit 1
 		fi

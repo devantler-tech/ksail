@@ -20,7 +20,6 @@ import (
 	cloudproviderkindinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/cloudproviderkind"
 	hcloudccminstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/hcloudccm"
 	metallbinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/metallb"
-	metricsserverinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/metricsserver"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 )
 
@@ -168,17 +167,16 @@ func InstallMetricsServerSilent(
 	clusterCfg *v1alpha1.Cluster,
 	factories *InstallerFactories,
 ) error {
-	helmClient, _, timeout, err := helmClientSetup(clusterCfg, factories)
-	if err != nil {
-		return err
+	// Factories assembled by hand (tests, embedders) may leave the field unset.
+	factory := factories.MetricsServer
+	if factory == nil {
+		factory = metricsServerFactory(factories)
 	}
 
-	msInstaller := metricsserverinstaller.NewInstaller(
-		helmClient,
-		timeout,
-		clusterCfg.Spec.Cluster.Distribution,
-		installer.IsHAEnabled(clusterCfg.Spec.Cluster.TotalNodeCount()),
-	)
+	msInstaller, err := factory(clusterCfg)
+	if err != nil {
+		return fmt.Errorf("failed to create metrics-server installer: %w", err)
+	}
 
 	installErr := msInstaller.Install(ctx)
 	if installErr != nil {

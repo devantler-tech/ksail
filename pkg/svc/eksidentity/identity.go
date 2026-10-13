@@ -127,20 +127,64 @@ func Verify(ctx context.Context, client Client, clusterName, region string) erro
 	return verifier(ctx)
 }
 
+// VerifiedEndpoint returns the Kubernetes API endpoint AWS reports for the exact cluster incarnation
+// in the persisted ownership record. The endpoint is taken from the same response the account, ARN
+// and creation-time checks run on, so it never describes a replacement or another account's
+// same-named cluster. Callers use it to bind a kubeconfig entry to the owned cluster: nothing in a
+// kubeconfig names an AWS account. It performs no AWS mutation.
+func VerifiedEndpoint(
+	ctx context.Context,
+	client Client,
+	clusterName, region string,
+) (string, error) {
+	expected, err := state.LoadEKSOwnershipState(clusterName, region)
+	if err != nil {
+		return "", migrationRequiredError(clusterName, err)
+	}
+
+	cluster, err := verifiedCluster(ctx, client, clusterName, region, expected)
+	if err != nil {
+		return "", err
+	}
+
+	endpoint := strings.TrimSpace(aws.ToString(cluster.Endpoint))
+	if endpoint == "" {
+		return "", fmt.Errorf("%w: cluster API endpoint is missing", ErrInvalidLiveIdentity)
+	}
+
+	return endpoint, nil
+}
+
 func verifyExpected(
 	ctx context.Context,
 	client Client,
 	clusterName, region string,
 	expected *state.EKSOwnershipState,
 ) error {
+	_, err := verifiedCluster(ctx, client, clusterName, region, expected)
+
+	return err
+}
+
+// verifiedCluster returns the live cluster only after the current account and the cluster's ARN and
+// creation time have been matched against the persisted ownership record.
+func verifiedCluster(
+	ctx context.Context,
+	client Client,
+	clusterName, region string,
+	expected *state.EKSOwnershipState,
+) (*ekstypes.Cluster, error) {
 	accountID, err := client.CallerAccountID(ctx)
 	if err != nil {
-		return fmt.Errorf("resolve current AWS account for EKS ownership verification: %w", err)
+		return nil, fmt.Errorf(
+			"resolve current AWS account for EKS ownership verification: %w",
+			err,
+		)
 	}
 
 	accountID = strings.TrimSpace(accountID)
 	if accountID != expected.AccountID {
-		return fmt.Errorf(
+		return nil, fmt.Errorf(
 			"%w: current AWS account %q does not match persisted account %q",
 			ErrIdentityMismatch,
 			accountID,
@@ -150,16 +194,16 @@ func verifyExpected(
 
 	cluster, err := client.DescribeCluster(ctx, clusterName)
 	if err != nil {
-		return fmt.Errorf("describe EKS cluster for ownership verification: %w", err)
+		return nil, fmt.Errorf("describe EKS cluster for ownership verification: %w", err)
 	}
 
 	live, err := identityFromCluster(clusterName, region, accountID, cluster)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if live.ClusterARN != expected.ClusterARN {
-		return fmt.Errorf(
+		return nil, fmt.Errorf(
 			"%w: live cluster ARN %q does not match persisted ARN %q",
 			ErrIdentityMismatch,
 			live.ClusterARN,
@@ -168,7 +212,7 @@ func verifyExpected(
 	}
 
 	if !live.CreatedAt.Equal(expected.CreatedAt) {
-		return fmt.Errorf(
+		return nil, fmt.Errorf(
 			"%w: live cluster creation time %s does not match persisted creation time %s",
 			ErrIdentityMismatch,
 			live.CreatedAt.Format("2006-01-02T15:04:05.999999999Z07:00"),
@@ -176,7 +220,7 @@ func verifyExpected(
 		)
 	}
 
-	return nil
+	return cluster, nil
 }
 
 // Observe returns the validated live identity without persisting or mutating anything. It is used by

@@ -16,7 +16,12 @@ linters:
   enable:
     - wsl_v5
   disable:
+    # exhaustruct is off under both of its names: golangci-lint v2.12 moved it to
+    # exhaustruct_v5 and keeps the old name as a deprecated alias.
     - exhaustruct
+    - exhaustruct_v5
+    # Superseded by gomodguard_v2, which `default: all` already enables.
+    - gomodguard
     - wsl
     - ireturn
   exclusions:
@@ -95,11 +100,16 @@ linters:
       # controller-gen emits DeepCopy* methods and json.Unmarshaler requires a pointer receiver for
       # UnmarshalJSON. Exclude them so types with value-receiver domain methods (e.g. ClusterSpec,
       # LocalRegistry, AutoscalerExpanderList) are not flagged as mixing receiver styles.
+      # The marshalling side is the mirror image: MarshalJSON and MarshalYAML need a value
+      # receiver so a non-addressable value is still encoded through them, on types whose
+      # mutating methods need a pointer (e.g. Cluster). recvcheck stopped excluding them itself.
       exclusions:
         - "*.DeepCopyInto"
         - "*.DeepCopy"
         - "*.DeepCopyObject"
         - "*.UnmarshalJSON"
+        - "*.MarshalJSON"
+        - "*.MarshalYAML"
     tagalign:
       align: false
       sort: true

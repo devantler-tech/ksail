@@ -97,9 +97,9 @@ func (s NodeSpec) validateResources() error {
 // labelArgs returns the label flags that mark a container or volume as part of the node's cluster.
 func (s NodeSpec) labelArgs() []string {
 	return []string{
-		"--label", LabelManagedBy + "=" + ManagedByValue,
-		"--label", LabelCluster + "=" + s.ClusterName,
-		"--label", LabelRole + "=" + s.Role,
+		flagLabel, LabelManagedBy + "=" + ManagedByValue,
+		flagLabel, LabelCluster + "=" + s.ClusterName,
+		flagLabel, LabelRole + "=" + s.Role,
 	}
 }
 
@@ -178,7 +178,7 @@ func (p *Provider) CreateNode(ctx context.Context, spec NodeSpec) error {
 	for _, mount := range spec.Volumes {
 		name := spec.volumeName(mount)
 
-		args := append([]string{"volume", "create"}, spec.labelArgs()...)
+		args := append([]string{commandVolume, "create"}, spec.labelArgs()...)
 		if mount.Size != "" {
 			args = append(args, "-s", mount.Size)
 		}
@@ -212,12 +212,12 @@ func (p *Provider) cleanUpFailedNode(ctx context.Context, container string, volu
 	defer cancel()
 
 	if container != "" {
-		_, _ = p.runner.Run(cleanupCtx, "delete", "--force", "--", container)
+		_, _ = p.runner.Run(cleanupCtx, commandDelete, "--force", "--", container)
 	}
 
 	if len(volumes) > 0 {
 		_, _ = p.runner.Run(
-			cleanupCtx, append([]string{"volume", "delete", "--"}, volumes...)...,
+			cleanupCtx, append([]string{commandVolume, commandDelete, "--"}, volumes...)...,
 		)
 	}
 }

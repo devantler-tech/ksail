@@ -260,7 +260,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	p.portForwards = append(p.portForwards, k8sPF)
 
-	hostTalosEndpoint := net.JoinHostPort("127.0.0.1", strconv.Itoa(talosPF.LocalPort))
+	hostTalosEndpoint := net.JoinHostPort(loopbackIPv4, strconv.Itoa(talosPF.LocalPort))
 	hostK8sEndpoint := fmt.Sprintf("https://127.0.0.1:%d", k8sPF.LocalPort)
 
 	_, _ = fmt.Fprintf(p.progressWriter(), "► Talos API → localhost:%d\n", talosPF.LocalPort)
@@ -444,7 +444,7 @@ func (p *KubernetesProvisioner) prepareExposure(
 	// published for the Connector contract verifies against the served certificate.
 	newConfigs, err := p.inner.talosConfigs.WithCertSANs(
 		append(
-			[]string{"127.0.0.1", "localhost", exposure.Address},
+			[]string{loopbackIPv4, "localhost", exposure.Address},
 			ConnectionFor(clusterName).CertSANs()...,
 		),
 	)
@@ -500,7 +500,12 @@ func (p *KubernetesProvisioner) discoverMappedPorts(
 	ctx context.Context,
 	clusterName string,
 ) (int, int, error) {
-	talosEndpoint, err := p.inner.getMappedPortEndpoint(ctx, clusterName, talosAPIPort, "127.0.0.1")
+	talosEndpoint, err := p.inner.getMappedPortEndpoint(
+		ctx,
+		clusterName,
+		talosAPIPort,
+		loopbackIPv4,
+	)
 	if err != nil {
 		return 0, 0, fmt.Errorf("get Talos API endpoint: %w", err)
 	}
@@ -510,7 +515,7 @@ func (p *KubernetesProvisioner) discoverMappedPorts(
 		return 0, 0, fmt.Errorf("parse Talos API port: %w", err)
 	}
 
-	k8sEndpoint, err := p.inner.getMappedPortEndpoint(ctx, clusterName, k8sAPIPort, "127.0.0.1")
+	k8sEndpoint, err := p.inner.getMappedPortEndpoint(ctx, clusterName, k8sAPIPort, loopbackIPv4)
 	if err != nil {
 		return 0, 0, fmt.Errorf("get K8s API endpoint: %w", err)
 	}

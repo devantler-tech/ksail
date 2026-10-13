@@ -433,11 +433,7 @@ func environmentValues(environment []string) map[string]string {
 // redacted; the tail is capped in both lines and bytes, so neither a long output nor a single
 // very long line can carry the whole of it into an error.
 func wrapExecErr(args []string, stdout, stderr []byte, err error) error {
-	const (
-		firstLineParts = 2
-	)
-
-	firstStderrLine := strings.SplitN(strings.TrimSpace(string(stderr)), "\n", firstLineParts)[0]
+	firstStderrLine, _, _ := strings.Cut(strings.TrimSpace(string(stderr)), "\n")
 
 	wrapped := fmt.Errorf("eksctl %s: %w", strings.Join(args, " "), err)
 	if firstStderrLine != "" {
