@@ -90,11 +90,6 @@ linters:
         text: "var-naming: avoid meaningless package names"
         path: pkg/utils/doc.go
   settings:
-    goconst:
-      # Repeated fixture literals stay inline. goconst counts a literal across every file in
-      # a package, so the path exclusion above cannot keep a test's copies out of the count
-      # for a production file; this option does.
-      ignore-tests: true
     misspell:
       # mirrord (metalbear) is a product name referenced in docs/comments, not a
       # misspelling of "mirrored".
