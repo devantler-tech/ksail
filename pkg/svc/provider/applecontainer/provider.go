@@ -39,6 +39,13 @@ const StateRunning = "running"
 // availabilityTimeout bounds the service probe behind IsAvailable, which has no context.
 const availabilityTimeout = 10 * time.Second
 
+// Words of the container CLI this provider passes more than once.
+const (
+	commandVolume = "volume"
+	commandDelete = "delete"
+	flagLabel     = "--label"
+)
+
 // containerEntry is the subset of `container list --format json` this provider reads.
 type containerEntry struct {
 	ID            string `json:"id"`
@@ -224,7 +231,7 @@ func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 	}
 
 	if len(nodes) > 0 {
-		args := []string{"delete", "--force", "--"}
+		args := []string{commandDelete, "--force", "--"}
 		for _, node := range nodes {
 			args = append(args, node.Name)
 		}
@@ -338,7 +345,7 @@ func (p *Provider) deleteVolumes(ctx context.Context, clusterName string) error 
 		return provider.ErrProviderUnavailable
 	}
 
-	output, err := p.runner.Run(ctx, "volume", "list", "--format", "json")
+	output, err := p.runner.Run(ctx, commandVolume, "list", "--format", "json")
 	if err != nil {
 		return fmt.Errorf("failed to list volumes: %w", err)
 	}
@@ -350,7 +357,7 @@ func (p *Provider) deleteVolumes(ctx context.Context, clusterName string) error 
 		return fmt.Errorf("%w: volume list: %w", ErrInvalidOutput, err)
 	}
 
-	args := []string{"volume", "delete", "--"}
+	args := []string{commandVolume, commandDelete, "--"}
 
 	for _, entry := range entries {
 		labels := entry.Configuration.Labels

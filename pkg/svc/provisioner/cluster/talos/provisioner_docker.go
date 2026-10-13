@@ -698,6 +698,9 @@ const talosAPIPort = 50000
 // k8sAPIPort is the Kubernetes API server port.
 const k8sAPIPort = 6443
 
+// loopbackIPv4 is the host address Docker publishes a node's ports on.
+const loopbackIPv4 = "127.0.0.1"
+
 // getMappedPortEndpoint inspects the first control-plane container for the given
 // cluster and returns a 127.0.0.1:<hostPort> endpoint for the specified container port.
 // On macOS and other non-Linux systems Docker runs in a VM, so we need to use the
@@ -746,7 +749,7 @@ func (p *Provisioner) getMappedPortEndpoint(
 // exact pod IP. Both nested paths require an unambiguous, valid mapped port.
 func mappedPortEndpoint(bindings []nat.PortBinding, bindingAddress string) (string, error) {
 	if bindingAddress == "" {
-		return net.JoinHostPort("127.0.0.1", bindings[0].HostPort), nil
+		return net.JoinHostPort(loopbackIPv4, bindings[0].HostPort), nil
 	}
 
 	bindingAddress = preferredMappedAddress(bindings, bindingAddress)
@@ -778,9 +781,9 @@ func mappedPortEndpoint(bindings []nat.PortBinding, bindingAddress string) (stri
 }
 
 func preferredMappedAddress(bindings []nat.PortBinding, bindingAddress string) string {
-	if bindingAddress == "127.0.0.1" &&
+	if bindingAddress == loopbackIPv4 &&
 		!slices.ContainsFunc(bindings, func(binding nat.PortBinding) bool {
-			return binding.HostIP == "127.0.0.1"
+			return binding.HostIP == loopbackIPv4
 		}) {
 		return "0.0.0.0"
 	}

@@ -25,7 +25,8 @@ func (execStub) Exec(
 	_ context.Context, _, _ string, _ api.ExecRequest, streams api.ExecStreams,
 ) error {
 	go func() {
-		for range streams.Resize { //nolint:revive // drain so the resize queue never blocks
+		// Drain so the resize queue never blocks.
+		for range streams.Resize {
 		}
 	}()
 

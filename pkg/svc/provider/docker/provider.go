@@ -50,6 +50,7 @@ const (
 // Node role constants used across label schemes.
 const (
 	roleControlPlane = "control-plane"
+	roleAddon        = "addon"
 )
 
 // Provider implements provider.Provider for Docker-based clusters.
@@ -464,10 +465,10 @@ var kwokSuffixRoles = map[string]string{
 	"-kube-controller-manager": roleControlPlane,
 	"-kube-scheduler":          roleControlPlane,
 	"-kwok-controller":         "controller",
-	"-prometheus":              "addon",
-	"-jaeger":                  "addon",
-	"-dashboard":               "addon",
-	"-metrics-server":          "addon",
+	"-prometheus":              roleAddon,
+	"-jaeger":                  roleAddon,
+	"-dashboard":               roleAddon,
+	"-metrics-server":          roleAddon,
 }
 
 // kwokDistinctiveSuffixes are container-name suffixes unique to KWOK.  Only these

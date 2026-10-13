@@ -180,7 +180,7 @@ func TestGenerateAutoscalerWorkerConfig_StrippingLogic(t *testing.T) {
 	t.Run("removes machine.disks", func(t *testing.T) {
 		t.Parallel()
 
-		assert.Empty(t, rawCfg.MachineConfig.MachineDisks) //nolint:staticcheck // deprecated field
+		assert.Empty(t, rawCfg.MachineConfig.MachineDisks)
 	})
 
 	t.Run("removes longhorn node label", func(t *testing.T) {

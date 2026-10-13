@@ -8,6 +8,9 @@ import (
 
 const dnsPort = 53
 
+// policyTypeEgress is the NetworkPolicy type that governs outbound traffic.
+const policyTypeEgress = "Egress"
+
 // GenerateNetworkPolicyManifests generates default-deny NetworkPolicies plus
 // DNS and intra-namespace allow rules for each namespace. Returns a map with a
 // single "networkpolicy.yaml" (multi-doc) entry, or an empty map when
@@ -81,14 +84,14 @@ func nativeNetworkPolicy(name, namespace string, spec map[string]any) map[string
 func nativeDefaultDeny(namespace string) map[string]any {
 	return nativeNetworkPolicy("default-deny", namespace, map[string]any{
 		"podSelector": map[string]any{},
-		"policyTypes": []string{"Ingress", "Egress"},
+		"policyTypes": []string{"Ingress", policyTypeEgress},
 	})
 }
 
 func nativeAllowDNS(namespace string) map[string]any {
 	return nativeNetworkPolicy("allow-dns", namespace, map[string]any{
 		"podSelector": map[string]any{},
-		"policyTypes": []string{"Egress"},
+		"policyTypes": []string{policyTypeEgress},
 		"egress": []map[string]any{
 			{
 				"to": []map[string]any{
@@ -112,7 +115,7 @@ func nativeAllowDNS(namespace string) map[string]any {
 func nativeAllowIntraNamespace(namespace string) map[string]any {
 	return nativeNetworkPolicy("allow-intra-namespace", namespace, map[string]any{
 		"podSelector": map[string]any{},
-		"policyTypes": []string{"Ingress", "Egress"},
+		"policyTypes": []string{"Ingress", policyTypeEgress},
 		"ingress": []map[string]any{
 			{"from": []map[string]any{{"podSelector": map[string]any{}}}},
 		},

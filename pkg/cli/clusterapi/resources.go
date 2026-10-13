@@ -278,7 +278,7 @@ func newUnmanagedCluster(contextName, endpoint string) v1alpha1.Cluster {
 // unmanagedCondition is the Ready=False condition attached to an unmanaged (kubeconfig-only) cluster.
 func unmanagedCondition() metav1.Condition {
 	return metav1.Condition{
-		Type:    "Ready",
+		Type:    conditionTypeReady,
 		Status:  metav1.ConditionFalse,
 		Reason:  "Unmanaged",
 		Message: "Cluster is present in the kubeconfig but not managed by ksail",

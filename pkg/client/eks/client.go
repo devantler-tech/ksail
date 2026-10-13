@@ -280,8 +280,7 @@ func (c *Client) DescribeCluster(ctx context.Context, name string) (*ekstypes.Cl
 		// absence actually takes in production — the empty-payload case below is the rarer one.
 		// Reporting both through ErrClusterNotFound gives callers a single sentinel to test, so
 		// "the cluster is gone" cannot be mistaken for "the lookup broke".
-		var notFound *ekstypes.ResourceNotFoundException
-		if errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*ekstypes.ResourceNotFoundException](err); ok {
 			return nil, fmt.Errorf("%w: %s: %w", ErrClusterNotFound, name, err)
 		}
 

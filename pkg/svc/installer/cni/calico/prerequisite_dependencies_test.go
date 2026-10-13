@@ -12,7 +12,7 @@ import (
 func TestCalicoDependencyMigrationRefusesMissingTargetBeforeWrites(t *testing.T) {
 	t.Parallel()
 	fixture := calicoinstaller.NewDependencyMigrationForTest(t, "previous")
-	manifest := strings.Split(calicoinstaller.PrerequisiteManifestForTest, "\n---\n")[0]
+	manifest, _, _ := strings.Cut(calicoinstaller.PrerequisiteManifestForTest, "\n---\n")
 	require.NoError(t, fixture.PlanManifest(manifest))
 	require.ErrorContains(t, fixture.Apply(), "absent from the new chart")
 	require.Empty(t, fixture.Writes())

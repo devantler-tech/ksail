@@ -165,6 +165,8 @@ const (
 	PhaseStopped = "stopped"
 	// PhaseDegraded means some, but not all, nodes are ready.
 	PhaseDegraded = "degraded"
+	// PhaseUnknown means the provider has no status inspection to report from.
+	PhaseUnknown = "unknown"
 )
 
 // BuildClusterStatus derives a ClusterStatus from a list of nodes by counting

@@ -67,7 +67,7 @@ func TestProvisioner_WithTalosOptions(t *testing.T) {
 
 	p := talosprovisioner.NewProvisioner(nil, nil)
 	result := p.WithTalosOptions(v1alpha1.OptionsTalos{
-		ControlPlanes: 5,
+		ControlPlanes: 5, //nolint:staticcheck // the builder still accepts the deprecated field
 	})
 
 	assert.Same(t, p, result)
