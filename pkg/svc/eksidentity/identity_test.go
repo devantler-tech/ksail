@@ -275,6 +275,91 @@ func TestVerifyPropagatesIdentityQueriesWithoutMutation(t *testing.T) {
 	})
 }
 
+func TestVerifiedEndpointReturnsOwnedClusterEndpoint(t *testing.T) {
+	t.Parallel()
+
+	const (
+		clusterName = "endpoint-owned"
+		endpoint    = "https://ABCDEF0123456789.gr7.eu-north-1.eks.amazonaws.com"
+	)
+
+	persistOwnership(t, clusterName, identityTime())
+
+	cluster := eksCluster(
+		clusterName,
+		"arn:aws:eks:eu-north-1:123456789012:cluster/"+clusterName,
+		identityTime(),
+	)
+	cluster.Endpoint = aws.String(" " + endpoint + " ")
+	client := &fakeClient{accountID: "123456789012", cluster: cluster}
+
+	got, err := eksidentity.VerifiedEndpoint(t.Context(), client, clusterName, "eu-north-1")
+	require.NoError(t, err)
+	assert.Equal(t, endpoint, got)
+	assert.Equal(t, 1, client.describeCalls)
+}
+
+func TestVerifiedEndpointRequiresOwnershipRecord(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeClient{accountID: "123456789012"}
+
+	_, err := eksidentity.VerifiedEndpoint(t.Context(), client, "endpoint-unowned", "eu-north-1")
+	require.ErrorIs(t, err, state.ErrEKSOwnershipStateNotFound)
+	assert.Zero(t, client.describeCalls)
+}
+
+func TestVerifiedEndpointRejectsAnotherAccount(t *testing.T) {
+	t.Parallel()
+
+	clusterName := "endpoint-other-account"
+	persistOwnership(t, clusterName, identityTime())
+
+	client := &fakeClient{accountID: "210987654321"}
+
+	_, err := eksidentity.VerifiedEndpoint(t.Context(), client, clusterName, "eu-north-1")
+	require.ErrorIs(t, err, eksidentity.ErrIdentityMismatch)
+	assert.Zero(t, client.describeCalls)
+}
+
+func TestVerifiedEndpointRejectsSameNameReplacement(t *testing.T) {
+	t.Parallel()
+
+	clusterName := "endpoint-replaced"
+	persistOwnership(t, clusterName, identityTime())
+
+	cluster := eksCluster(
+		clusterName,
+		"arn:aws:eks:eu-north-1:123456789012:cluster/"+clusterName,
+		identityTime().Add(time.Minute),
+	)
+	cluster.Endpoint = aws.String("https://ABCDEF0123456789.gr7.eu-north-1.eks.amazonaws.com")
+	client := &fakeClient{accountID: "123456789012", cluster: cluster}
+
+	_, err := eksidentity.VerifiedEndpoint(t.Context(), client, clusterName, "eu-north-1")
+	require.ErrorIs(t, err, eksidentity.ErrIdentityMismatch)
+}
+
+func TestVerifiedEndpointRejectsMissingEndpoint(t *testing.T) {
+	t.Parallel()
+
+	clusterName := "endpoint-missing"
+	persistOwnership(t, clusterName, identityTime())
+
+	client := &fakeClient{
+		accountID: "123456789012",
+		cluster: eksCluster(
+			clusterName,
+			"arn:aws:eks:eu-north-1:123456789012:cluster/"+clusterName,
+			identityTime(),
+		),
+	}
+
+	_, err := eksidentity.VerifiedEndpoint(t.Context(), client, clusterName, "eu-north-1")
+	require.ErrorIs(t, err, eksidentity.ErrInvalidLiveIdentity)
+	require.ErrorContains(t, err, "endpoint")
+}
+
 func persistOwnership(t *testing.T, clusterName string, createdAt time.Time) {
 	t.Helper()
 

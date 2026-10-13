@@ -782,7 +782,7 @@ func createAndVerifyProvisioner(
 	// kubeconfig's unrelated ambient current-context.
 	if ctx.ClusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS &&
 		strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context) == "" {
-		err = resolveEKSPostCreateContext(ctx)
+		err = resolveEKSPostCreateContext(cmd.Context(), ctx)
 		if err != nil {
 			return nil, fmt.Errorf("resolve exact EKS kubeconfig context: %w", err)
 		}
