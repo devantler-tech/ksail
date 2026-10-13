@@ -763,8 +763,17 @@ func (p *Provider) deleteLoadBalancerWithRetry(
 		DefaultDeleteRetryDelay,
 		"context cancelled while retrying load balancer deletion",
 		func() (bool, error) {
-			_, _, err := p.client.LoadBalancer.DeleteWithResult(ctx, loadBalancer)
+			result, _, err := p.client.LoadBalancer.DeleteWithResult(ctx, loadBalancer)
 			if err == nil {
+				// Deletion is asynchronous: the API accepts the request and reports
+				// the outcome through the returned action. Wait for it so the network
+				// is not deleted while the LB is still attached, and so a failed
+				// deletion is retried instead of read as done.
+				waitErr := p.waitForAction(ctx, result.Action)
+				if waitErr != nil {
+					return false, waitErr
+				}
+
 				return true, nil
 			}
 
