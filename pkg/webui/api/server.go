@@ -1326,8 +1326,7 @@ func writeError(writer http.ResponseWriter, status int, err error) {
 // the media type is unsupported, 413 when the body exceeded maxRequestBodyBytes, otherwise 400 for
 // malformed JSON.
 func writeDecodeError(writer http.ResponseWriter, err error) {
-	var maxBytesErr *http.MaxBytesError
-	if errors.As(err, &maxBytesErr) {
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 		writeError(writer, http.StatusRequestEntityTooLarge, err)
 
 		return

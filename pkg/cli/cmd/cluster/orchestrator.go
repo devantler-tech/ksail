@@ -1059,14 +1059,14 @@ func promoteUnsupportedInPlaceChanges(
 }
 
 func isComponentReconcileChange(change clusterupdate.Change) bool {
-	if change.Field == "cluster.cni" {
+	if change.Field == fieldClusterCNI {
 		// Distinct CNI choices use distinct Helm releases, and the component
 		// reconciler cannot yet remove the old release safely. Recreate until a
 		// transition can prove both installation and cleanup.
 		return false
 	}
 
-	if change.Field == "cluster.metricsServer" &&
+	if change.Field == fieldClusterMetricsServer &&
 		v1alpha1.MetricsServer(change.NewValue) == v1alpha1.MetricsServerDisabled {
 		return false
 	}

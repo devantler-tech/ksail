@@ -83,8 +83,7 @@ func IsPlacementError(err error) bool {
 	// Also check for resource_unavailable during placement (the observed CI error).
 	// The error message pattern: "error during placement (resource_unavailable, ...)"
 	// indicates this is a placement-related resource constraint.
-	var apiErr hcloud.Error
-	if errors.As(err, &apiErr) {
+	if apiErr, ok := errors.AsType[hcloud.Error](err); ok {
 		if apiErr.Code == hcloud.ErrorCodeResourceUnavailable {
 			// Resource unavailable can be placement-related when creating servers
 			// with placement group constraints.

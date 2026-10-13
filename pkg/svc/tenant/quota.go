@@ -19,10 +19,10 @@ func GenerateResourceQuotaManifests(opts Options) (map[string]string, error) {
 	return generateNamespacedManifest("resourcequota.yaml", opts.Namespaces,
 		func(namespace string) map[string]any {
 			return map[string]any{
-				"apiVersion": "v1",
-				"kind":       "ResourceQuota",
-				"metadata":   namespacedMeta(opts.Name+"-quota", namespace),
-				"spec": map[string]any{
+				keyAPIVersion: "v1",
+				keyKind:       "ResourceQuota",
+				keyMetadata:   namespacedMeta(opts.Name+"-quota", namespace),
+				keySpec: map[string]any{
 					"hard": map[string]any{
 						"requests.cpu":    cpu,
 						"requests.memory": memory,
