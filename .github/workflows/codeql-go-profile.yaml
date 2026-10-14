@@ -117,6 +117,7 @@ jobs:
           status=0
           bash .github/scripts/profile-codeql-go.sh "$RUNNER_TEMP/codeql-profile-report" || status=$?
           if [[ "$SWAP_COMPARISON" != true ]]; then exit "$status"; fi
+          jq -e --argjson actual "$status" '.profileExitCode == $actual' "$RUNNER_TEMP/codeql-profile-report/report.json" > /dev/null
           bash .github/scripts/profile-codeql-compare.sh validate "$SOURCE_SHA" "$ADDED_SWAP_GIB" "$RUNNER_TEMP/codeql-profile-report/report.json"
           if [[ "$status" != 0 ]]; then
             printf '::notice::Baseline extraction failed with exit %s; only the collection was validated.\n' "$status"
