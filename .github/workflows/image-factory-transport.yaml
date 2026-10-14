@@ -5,9 +5,17 @@ on:
     paths:
       - internal/diagnostics/imagefactory/**
       - internal/imagefactorytransport/**
+      - internal/diagnostics/strictlinks/**
       - pkg/svc/provisioner/cluster/talos/schematic_registration.go
       - .github/workflows/image-factory-transport.yaml
+      - .github/scripts/strict-link-transport*
+      - lychee.toml
   workflow_dispatch:
+    inputs:
+      strict_links:
+        description: Compare strict link checks instead of registration requests
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -18,6 +26,7 @@ concurrency:
 
 jobs:
   public-transport:
+    if: github.event_name != 'workflow_dispatch' || !inputs.strict_links
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -31,13 +40,46 @@ jobs:
           go-version-file: go.mod
           cache: false
       - name: Verify diagnostic boundaries
-        run: go test -race ./internal/diagnostics/imagefactory ./internal/imagefactorytransport
+        run: go test -race ./internal/diagnostics/imagefactory ./internal/imagefactorytransport ./internal/diagnostics/strictlinks
       - name: Check the changed helpers with the repository's pinned Go linter
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a
         with:
           version: v2.14.0
-          args: --fix --timeout=4m ./internal/diagnostics/imagefactory ./internal/imagefactorytransport
+          args: --fix --timeout=4m ./internal/diagnostics/imagefactory ./internal/imagefactorytransport ./internal/diagnostics/strictlinks
       - name: Require formatting to already be committed
-        run: git diff --exit-code -- internal/diagnostics/imagefactory internal/imagefactorytransport
+        run: git diff --exit-code -- internal/diagnostics/imagefactory internal/imagefactorytransport internal/diagnostics/strictlinks
       - name: Compare fixed public registration transports
         run: go run ./internal/diagnostics/imagefactory
+
+  strict-links:
+    if: github.event_name == 'workflow_dispatch' && inputs.strict_links
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Observe the fixed public GET request phases
+        id: prepare
+        run: bash .github/scripts/strict-link-transport.sh "$RUNNER_TEMP/strict-links"
+      - name: Check the same two links with the strict daily client
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          lycheeVersion: v0.24.2
+          args: >-
+            --no-progress --config lychee.toml --accept-timeouts=false
+            ${{ runner.temp }}/strict-links/targets.md
+          fail: true
+      - name: List the complete daily input files
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: .github/scripts/list-link-check-files.sh > "$RUNNER_TEMP/link-check-files.txt"
+      - name: Run the complete daily strict caller
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          lycheeVersion: v0.24.2
+          args: >-
+            --no-progress --config lychee.toml --accept-timeouts=false
+            --files-from ${{ runner.temp }}/link-check-files.txt
+          fail: true

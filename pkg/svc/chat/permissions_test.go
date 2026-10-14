@@ -38,7 +38,7 @@ func TestIsReadOperation(t *testing.T) {
 			copilot.PermissionRequestKindExtensionEnvAccess,
 			false,
 		},
-		{"factory kind", copilot.PermissionRequestKindFactory, false},
+		{"workflow kind", copilot.PermissionRequestKindWorkflow, false},
 		{"empty kind", "", false},
 		{"unknown kind", "unknown", false},
 	}

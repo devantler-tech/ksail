@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
 
-	awsarn "github.com/aws/aws-sdk-go-v2/aws/arn"
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/clusterflags"
 	kubeconfigutil "github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
@@ -503,7 +503,7 @@ func runClusterCreationWorkflow(
 	// For Omni clusters, the kubeconfig context is now renamed during saveOmniKubeconfig
 	// to match the configured context or the Talos convention (admin@<name>).
 	// If an explicit context is already configured, preserve it.
-	err = resolvePostCreateContext(ctx)
+	err = resolvePostCreateContext(cmd.Context(), ctx)
 	if err != nil {
 		return false, err
 	}
@@ -671,13 +671,13 @@ func prepareEKSOutputKubeconfigPath(kubeconfigPath string) (string, error) {
 // resolvePostCreateContext selects the kubeconfig context created by the
 // provisioner. Most distributions use a deterministic name, while eksctl
 // prefixes EKS contexts with the AWS identity that created the cluster.
-func resolvePostCreateContext(ctx *localregistry.Context) error {
-	connection := &ctx.ClusterCfg.Spec.Cluster.Connection
-	distribution := ctx.ClusterCfg.Spec.Cluster.Distribution
+func resolvePostCreateContext(ctx context.Context, clusterCtx *localregistry.Context) error {
+	connection := &clusterCtx.ClusterCfg.Spec.Cluster.Connection
+	distribution := clusterCtx.ClusterCfg.Spec.Cluster.Distribution
 
 	if connection.Context != "" {
 		if distribution == v1alpha1.DistributionEKS {
-			return pinObservedExplicitEKSRegion(ctx, connection.Context)
+			return pinObservedExplicitEKSRegion(clusterCtx, connection.Context)
 		}
 
 		return nil
@@ -686,14 +686,14 @@ func resolvePostCreateContext(ctx *localregistry.Context) error {
 	if distribution != v1alpha1.DistributionEKS {
 		connection.Context = resolveCreatedContextName(
 			distribution,
-			ctx.ClusterCfg.Spec.Cluster.Provider,
-			resolveClusterNameFromContext(ctx),
+			clusterCtx.ClusterCfg.Spec.Cluster.Provider,
+			resolveClusterNameFromContext(clusterCtx),
 		)
 
 		return nil
 	}
 
-	return resolveEKSPostCreateContext(ctx)
+	return resolveEKSPostCreateContext(ctx, clusterCtx)
 }
 
 // pinObservedExplicitEKSRegion derives a profile-selected region only from the kubeconfig output
@@ -736,23 +736,24 @@ func pinObservedExplicitEKSRegion(ctx *localregistry.Context, contextName string
 }
 
 // resolveEKSPostCreateContext selects the identity-qualified context that
-// eksctl wrote for the configured cluster and region.
-func resolveEKSPostCreateContext(ctx *localregistry.Context) error {
-	clusterName, region, config, err := loadEKSContextConfig(ctx)
+// eksctl wrote for the configured cluster and region, and only one whose
+// cluster entry talks to the owned cluster's own API endpoint.
+func resolveEKSPostCreateContext(ctx context.Context, clusterCtx *localregistry.Context) error {
+	clusterName, region, config, err := loadEKSContextConfig(clusterCtx)
 	if err != nil {
 		return err
 	}
 
-	accountID, err := resolveEKSContextAccountID(ctx, clusterName, region)
+	endpoint, err := resolveEKSContextEndpoint(ctx, clusterCtx, clusterName, region)
 	if err != nil {
 		return err
 	}
 
 	matches := make([]string, 0, len(config.Contexts))
 
-	for contextName := range config.Contexts {
+	for contextName, kubeContext := range config.Contexts {
 		if matchesEKSContext(contextName, clusterName, region) &&
-			matchesEKSContextAccount(contextName, accountID) {
+			eksContextTargetsEndpoint(config, kubeContext, endpoint) {
 			matches = append(matches, contextName)
 		}
 	}
@@ -764,12 +765,14 @@ func resolveEKSPostCreateContext(ctx *localregistry.Context) error {
 		return err
 	}
 
-	ctx.ClusterCfg.Spec.Cluster.Connection.Context = selected
-	pinEKSRegionFromContext(ctx, selected)
+	clusterCtx.ClusterCfg.Spec.Cluster.Connection.Context = selected
+	pinEKSRegionFromContext(clusterCtx, selected)
 
 	return nil
 }
 
+// resolveEKSContextAccountID returns the AWS account of the cluster whose immutable ownership KSail
+// holds, from this command's capture or from the persisted record.
 func resolveEKSContextAccountID(
 	ctx *localregistry.Context,
 	clusterName, region string,
@@ -788,18 +791,85 @@ func resolveEKSContextAccountID(
 	return ownership.AccountID, nil
 }
 
-func matchesEKSContextAccount(contextName, accountID string) bool {
-	identityEnd := strings.LastIndex(contextName, "@")
-	if identityEnd <= 0 {
-		return false
+// resolveEKSContextEndpoint returns the API endpoint of the cluster whose immutable ownership KSail
+// holds, read from AWS under the credential snapshot pinned for this command. The name of an eksctl
+// context carries only the last path segment of the caller's ARN, so the AWS account cannot be read
+// from it; the endpoint in its cluster entry is what identifies the cluster it reaches.
+func resolveEKSContextEndpoint(
+	ctx context.Context,
+	clusterCtx *localregistry.Context,
+	clusterName, region string,
+) (string, error) {
+	if endpoint := strings.TrimSpace(clusterCtx.EKSEndpoint); endpoint != "" {
+		return endpoint, nil
 	}
 
-	identity, err := awsarn.Parse(contextName[:identityEnd])
+	if clusterCtx.AWSResolution == nil {
+		return "", fmt.Errorf(
+			"resolve EKS endpoint for kubeconfig context selection: %w; %s",
+			errEKSConfigurationUnavailable,
+			explicitEKSContextHint,
+		)
+	}
+
+	eksIdentityClientFactoryState.RLock()
+	factory := eksIdentityClientFactoryState.factory
+	eksIdentityClientFactoryState.RUnlock()
+
+	identityClient, err := factory(ctx, region, *clusterCtx.AWSResolution)
 	if err != nil {
+		return "", fmt.Errorf(
+			"resolve EKS endpoint for kubeconfig context selection: create AWS client: %w",
+			err,
+		)
+	}
+
+	endpoint, err := eksidentity.VerifiedEndpoint(ctx, identityClient, clusterName, region)
+	if err != nil {
+		return "", fmt.Errorf("resolve EKS endpoint for kubeconfig context selection: %w", err)
+	}
+
+	clusterCtx.EKSEndpoint = endpoint
+
+	return endpoint, nil
+}
+
+// eksContextTargetsEndpoint reports whether a kubeconfig context reaches the given API endpoint.
+// A context with no cluster entry, or one pointing anywhere else, is never a candidate.
+func eksContextTargetsEndpoint(
+	config *clientcmdapi.Config,
+	kubeContext *clientcmdapi.Context,
+	endpoint string,
+) bool {
+	if kubeContext == nil {
 		return false
 	}
 
-	return identity.AccountID == accountID
+	kubeCluster, found := config.Clusters[kubeContext.Cluster]
+	if !found || kubeCluster == nil {
+		return false
+	}
+
+	return sameAPIEndpoint(kubeCluster.Server, endpoint)
+}
+
+// sameAPIEndpoint compares two API server URLs by scheme and host. Host names are case-insensitive
+// and a trailing slash carries no meaning; anything that is not a plain HTTPS origin never matches.
+func sameAPIEndpoint(first, second string) bool {
+	firstOrigin, firstOK := httpsOrigin(first)
+	secondOrigin, secondOK := httpsOrigin(second)
+
+	return firstOK && secondOK && firstOrigin == secondOrigin
+}
+
+func httpsOrigin(raw string) (string, bool) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil ||
+		strings.Trim(parsed.Path, "/") != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", false
+	}
+
+	return strings.ToLower(parsed.Host), true
 }
 
 // pinEKSRegionFromContext preserves the exact region eksctl selected after a create whose region was

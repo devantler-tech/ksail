@@ -458,11 +458,12 @@ func TestGetCluster_NotFound(t *testing.T) {
 	require.ErrorIs(t, err, eksctl.ErrClusterNotFound)
 }
 
+// TestGetCluster_HappyPath checks native named details are corroborated by regional ownership.
 func TestGetCluster_HappyPath(t *testing.T) {
 	t.Parallel()
 
 	runner := &fakeRunner{
-		stdout: []byte(`[{"Name":"demo","Region":"us-east-1","EksctlCreated":"True"}]`),
+		stdout: []byte(`[{"Name":"demo","Region":"us-east-1","Owned":"True"}]`),
 	}
 	client := newTestClient(runner)
 
@@ -492,13 +493,14 @@ func TestListClusters_EmptyOutput(t *testing.T) {
 	assert.Empty(t, clusters)
 }
 
+// TestListClusters_HappyPath verifies regional names, regions, and Owned values survive decoding.
 func TestListClusters_HappyPath(t *testing.T) {
 	t.Parallel()
 
 	runner := &fakeRunner{
 		stdout: []byte(`[
-			{"Name":"a","Region":"us-east-1","EksctlCreated":"True"},
-			{"Name":"b","Region":"us-east-1","EksctlCreated":"False"}
+			{"Name":"a","Region":"us-east-1","Owned":"True"},
+			{"Name":"b","Region":"us-east-1","Owned":"False"}
 		]`),
 	}
 	client := newTestClient(runner)

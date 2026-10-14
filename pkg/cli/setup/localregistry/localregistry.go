@@ -113,9 +113,13 @@ type Context struct {
 	AWSResolution *credentials.AWSResolution
 	// AWSOwnershipVerifier rechecks the exact EKS incarnation at each mutation boundary.
 	AWSOwnershipVerifier lifecycle.AWSOwnershipVerifier
-	// EKSAccountID binds implicit kubeconfig context selection to the AWS account
-	// whose immutable ownership was captured or verified.
+	// EKSAccountID is the AWS account whose immutable ownership was captured or
+	// verified. It scopes the EKS state KSail keeps for the cluster.
 	EKSAccountID string
+	// EKSEndpoint is the Kubernetes API endpoint AWS reported for that cluster. It binds
+	// implicit kubeconfig context selection to the cluster: a kubeconfig names no AWS
+	// account, but its cluster entry names the endpoint it talks to.
+	EKSEndpoint string
 	// MirrorSpecs holds resolved registry mirror specifications for the Kubernetes
 	// provider. The nested provisioner sets these up inside the DinD environment so
 	// nested clusters pull through authenticated, caching mirrors. Nil for other

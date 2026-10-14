@@ -128,11 +128,15 @@ func TestCreateAndVerifyProvisioner_HonorsFactoryOverride(t *testing.T) {
 //
 //nolint:paralleltest // mutates the global provisioner-factory override
 func TestCreateAndVerifyProvisioner_EKSBindsExactContext(t *testing.T) {
+	// The ambient context names a cluster of the same name and region in another AWS
+	// account. Its name cannot show that: eksctl writes only the last segment of the caller's
+	// ARN before the "@". Its cluster entry does, by pointing at a different API endpoint.
 	const (
-		clusterName   = "factory-coverage"
-		region        = "us-east-1"
-		ambient       = "arn:aws:iam::999999999999:role/ci@factory-coverage.us-east-1.eksctl.io"
-		targetContext = "arn:aws:iam::123456789012:role/ci@factory-coverage.us-east-1.eksctl.io"
+		clusterName    = "factory-coverage"
+		region         = "us-east-1"
+		ambient        = "other-account-session@factory-coverage.us-east-1.eksctl.io"
+		targetContext  = "ci@factory-coverage.us-east-1.eksctl.io"
+		targetEndpoint = "https://127.0.0.1:6444"
 	)
 
 	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
@@ -141,7 +145,7 @@ func TestCreateAndVerifyProvisioner_EKSBindsExactContext(t *testing.T) {
 	config.Clusters[ambient] = &clientcmdapi.Cluster{Server: "https://127.0.0.1:6443"}
 	config.AuthInfos[ambient] = &clientcmdapi.AuthInfo{Token: "ambient-token"}
 	config.Contexts[ambient] = &clientcmdapi.Context{Cluster: ambient, AuthInfo: ambient}
-	config.Clusters[targetContext] = &clientcmdapi.Cluster{Server: "https://127.0.0.1:6444"}
+	config.Clusters[targetContext] = &clientcmdapi.Cluster{Server: targetEndpoint}
 	config.AuthInfos[targetContext] = &clientcmdapi.AuthInfo{Token: "target-token"}
 	config.Contexts[targetContext] = &clientcmdapi.Context{
 		Cluster:  targetContext,
@@ -161,6 +165,7 @@ func TestCreateAndVerifyProvisioner_EKSBindsExactContext(t *testing.T) {
 	ctx.ClusterCfg.Spec.Cluster.Connection.Kubeconfig = kubeconfigPath
 	ctx.EKSConfig.Region = region
 	ctx.EKSAccountID = "123456789012"
+	ctx.EKSEndpoint = targetEndpoint
 
 	_, err := cluster.ExportCreateAndVerifyProvisioner(cmd, ctx, clusterName)
 	require.NoError(t, err)

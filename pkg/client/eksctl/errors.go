@@ -36,6 +36,9 @@ var ErrExplicitCredentialsUnavailable = errors.New(
 // named cluster returns an empty result set.
 var ErrClusterNotFound = errors.New("eks cluster not found")
 
+// ErrAmbiguousCluster rejects multiple results for an exact cluster lookup.
+var ErrAmbiguousCluster = errors.New("eks cluster lookup returned multiple matches")
+
 // ErrEmptyClusterName is returned when an operation requires a cluster name
 // but an empty string was supplied.
 var ErrEmptyClusterName = errors.New("cluster name must not be empty")

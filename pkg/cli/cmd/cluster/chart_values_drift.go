@@ -115,7 +115,34 @@ func chartValuesDriftProbes() []chartValuesDriftProbe {
 		policyEngineValuesProbe(),
 		metricsServerValuesProbe(),
 		calicoPrerequisitesProbe(),
+		ciliumValuesProbe(),
 	}
+}
+
+// ciliumValuesProbe compares Cilium's values (ksail#7722). KWOK installs no
+// CNI, so it never has a KSail release to compare.
+func ciliumValuesProbe() chartValuesDriftProbe {
+	return chartValuesDriftProbe{
+		component: "cilium",
+		field:     specdiff.CiliumValuesField,
+		needed:    ksailInstallsCilium,
+		factory: func(factories *setup.InstallerFactories) installerFactory {
+			return factories.Cilium
+		},
+	}
+}
+
+// ksailInstallsCilium reports whether the configuration has KSail install
+// Cilium as the cluster's CNI.
+func ksailInstallsCilium(clusterCfg *v1alpha1.Cluster) bool {
+	return clusterCfg.Spec.Cluster.CNI == v1alpha1.CNICilium &&
+		clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK
+}
+
+// isCNIProbeField reports whether a probe compares the installed CNI. A
+// cluster.cni change installs the CNI itself, so its probes are not run beside it.
+func isCNIProbeField(field string) bool {
+	return field == specdiff.CalicoPrerequisitesField || field == specdiff.CiliumValuesField
 }
 
 func calicoPrerequisitesProbe() chartValuesDriftProbe {
@@ -152,11 +179,12 @@ func checkChartValuesDrift(
 	diffEngine *specdiff.Engine,
 	diff *clusterupdate.UpdateResult,
 ) {
+	cniChanges := slices.ContainsFunc(diff.InPlaceChanges, func(change clusterupdate.Change) bool {
+		return change.Field == specdiff.CNIField
+	})
+
 	for _, probe := range chartValuesDriftProbes() {
-		if probe.field == specdiff.CalicoPrerequisitesField &&
-			slices.ContainsFunc(diff.InPlaceChanges, func(change clusterupdate.Change) bool {
-				return change.Field == specdiff.CNIField
-			}) {
+		if cniChanges && isCNIProbeField(probe.field) {
 			continue
 		}
 

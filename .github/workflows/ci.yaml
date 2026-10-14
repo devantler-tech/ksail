@@ -2353,7 +2353,7 @@ jobs:
         with:
           persist-credentials: false
       - name: 🧹 Free runner disk
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@065b9e08b85a396b9e936c01f01b512bb23f8aa9
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@0f64bcdf29760400fbd6307f835c7d98ad7f9ae5
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -2453,7 +2453,7 @@ jobs:
           persist-credentials: false
       - name: Check active documentation
         id: links
-        uses: devantler-tech/.github/actions/validate-retired-repo-links@8d3327fe87f216d6e107941de4ce1ae019294cea # v7.9.1
+        uses: devantler-tech/.github/actions/validate-retired-repo-links@8ed2071ebe18864b8b86efe0f6b1df8d73d2a6ab # v7.10.4
         with:
           enabled: "true"
       - name: Require a completed scan

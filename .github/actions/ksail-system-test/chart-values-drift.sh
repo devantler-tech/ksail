@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Exercise the actual chart values reconciliation of one KSail-managed component
-# (VALUES_TRIAL_COMPONENT: cert-manager, kyverno or metrics-server) on an existing CI cluster.
+# (VALUES_TRIAL_COMPONENT: cert-manager, kyverno, metrics-server or cilium) on an existing CI cluster.
 set -euo pipefail
 
 component="${VALUES_TRIAL_COMPONENT:-cert-manager}"
@@ -37,6 +37,15 @@ metrics-server)
 	values_field=cluster.metricsServer.chartValues
 	deployments=(metrics-server)
 	initial_values_filter='.args | type == "array" and index("--authentication-tolerate-lookup-failure=true") != null'
+	;;
+cilium)
+	release=cilium
+	namespace=kube-system
+	chart_repo=https://helm.cilium.io
+	values_field=cluster.cni.cilium.chartValues
+	# The agent is a DaemonSet Helm already waits for; the seed only rolls the operator.
+	deployments=(cilium-operator)
+	initial_values_filter='.gatewayAPI.enabled == true and (.operator.replicas | type == "number")'
 	;;
 *) fail 'unknown component' ;;
 esac
@@ -210,6 +219,16 @@ metrics-server)
 	# shellcheck disable=SC2016 # $seed is a jq variable
 	seed_filter='.podAnnotations["ksail-values-trial"] = $seed'
 	seed_args=(--set "podAnnotations.ksail-values-trial=$seed_value")
+	;;
+cilium)
+	# An operator pod annotation KSail never renders: every KSail value stays as
+	# installed, and the agents that carry the cluster network are not restarted.
+	seed_value=seeded
+	jq -e '.operator.podAnnotations["ksail-values-trial"] == null' \
+		"$log_dir/original-values.json" >/dev/null || fail 'seed value is already present'
+	# shellcheck disable=SC2016 # $seed is a jq variable
+	seed_filter='.operator.podAnnotations["ksail-values-trial"] = $seed'
+	seed_args=(--set "operator.podAnnotations.ksail-values-trial=$seed_value")
 	;;
 esac
 jq -eS --arg seed "$seed_value" "$seed_filter" \
