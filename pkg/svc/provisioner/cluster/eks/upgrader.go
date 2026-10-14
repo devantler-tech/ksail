@@ -3,6 +3,7 @@ package eksprovisioner
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"strings"
@@ -120,7 +121,9 @@ func (p *UpgradableProvisioner) UpgradeKubernetes(
 		return nil
 	}
 
-	token := rand.Text()
+	// EKS requires 33–126 characters; rand.Text's length may change between Go releases.
+	// Hash the random identifier to retain its entropy in a fixed, API-compatible encoding.
+	token := fmt.Sprintf("%x", sha256.Sum256([]byte(rand.Text())))
 
 	// Validate first so the final cluster check and the update share one signer.
 	err = validateUpgradeCredentialLifetime(ctx, api)

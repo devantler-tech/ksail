@@ -28,6 +28,7 @@ const eksUpgradeStartingVersion = "1.34"
 type eksUpgradeCase struct {
 	name, target                                     string
 	enabled, dryRun, wantMutation, wantErr, fromFlag bool
+	retrySubmission                                  bool
 }
 
 //nolint:paralleltest // Test helpers change process credentials and endpoints with t.Setenv.
@@ -40,6 +41,7 @@ func TestEKSExplicitUpgradeOrchestration(t *testing.T) {
 	for _, testCase := range []eksUpgradeCase{
 		{name: "disabled", target: "1.35"},
 		{name: "yaml_minor", target: "1.35", enabled: true, wantMutation: true},
+		{name: "retry_submission", target: "1.35", enabled: true, wantMutation: true, retrySubmission: true},
 		{name: "flag_overrides_yaml", target: "1.35", enabled: true, wantMutation: true, fromFlag: true},
 		{name: "zero_patch", target: "v1.35.0", enabled: true, wantMutation: true},
 		{name: "dry_run", target: "1.35", enabled: true, dryRun: true},
@@ -57,7 +59,7 @@ func exerciseEKSUpgrade(t *testing.T, testCase eksUpgradeCase) {
 	t.Helper()
 
 	mutations := 0
-	factory := eksUpgradeFactory(t, &mutations)
+	factory := eksUpgradeFactoryWithRetry(t, &mutations, testCase.retrySubmission)
 	cmd, cfg := loadEKSUpgradeConfig(t, testCase)
 	provisioner, _, err := factory.Create(t.Context(), cfg)
 	require.NoError(t, err)
@@ -137,7 +139,15 @@ func loadEKSUpgradeConfig(
 
 func eksUpgradeFactory(t *testing.T, mutations *int) clusterprovisioner.DefaultFactory {
 	t.Helper()
-	t.Setenv("AWS_ENDPOINT_URL_EKS", eksUpgradeHTTPFixture(t, mutations))
+
+	return eksUpgradeFactoryWithRetry(t, mutations, false)
+}
+
+func eksUpgradeFactoryWithRetry(
+	t *testing.T, mutations *int, retrySubmission bool,
+) clusterprovisioner.DefaultFactory {
+	t.Helper()
+	t.Setenv("AWS_ENDPOINT_URL_EKS", eksUpgradeHTTPFixture(t, mutations, retrySubmission))
 	t.Setenv("AWS_IGNORE_CONFIGURED_ENDPOINT_URLS", "false")
 	frozen, err := credentials.FreezeAWS(t.Context(), credentials.AWSResolution{
 		AccessKeyID: "FROZENUPGRADE", SecretAccessKey: "secret",
@@ -155,26 +165,27 @@ func eksUpgradeFactory(t *testing.T, mutations *int) clusterprovisioner.DefaultF
 	}
 }
 
-func eksUpgradeHTTPFixture(t *testing.T, mutations *int) string {
+func eksUpgradeHTTPFixture(t *testing.T, mutations *int, retrySubmission bool) string {
 	t.Helper()
 
 	version := eksUpgradeStartingVersion
+	contract := eksUpgradeRequestContract{retrySubmission: retrySubmission}
 	server := httptest.NewServer(
 		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			writer.Header().Set("Content-Type", "application/json")
 			assert.Contains(t, request.Header.Get("Authorization"), "Credential=FROZENUPGRADE/")
 
 			if request.Method == http.MethodPost {
-				*mutations++
-
 				var body map[string]any
 
 				request.Body = http.MaxBytesReader(writer, request.Body, 1024)
 				assert.NoError(t, json.NewDecoder(request.Body).Decode(&body))
-				assert.Equal(t, "1.35", body["version"])
-				assert.NotEmpty(t, body["clientRequestToken"])
-				assert.NotContains(t, body, "force")
 
+				if !contract.accept(t, writer, body) {
+					return
+				}
+
+				*mutations++
 				version = "1.35"
 			}
 
@@ -196,6 +207,50 @@ func eksUpgradeHTTPFixture(t *testing.T, mutations *int) string {
 	t.Cleanup(server.Close)
 
 	return server.URL
+}
+
+type eksUpgradeRequestContract struct {
+	retrySubmission bool
+	submittedToken  string
+}
+
+func (contract *eksUpgradeRequestContract) accept(
+	t *testing.T, writer http.ResponseWriter, body map[string]any,
+) bool {
+	t.Helper()
+
+	assert.Equal(t, "1.35", body["version"])
+
+	token, validToken := body["clientRequestToken"].(string)
+	if !validToken || len(token) < 33 || len(token) > 126 {
+		writer.Header().Set("X-Amzn-Errortype", "InvalidParameterException")
+		writer.WriteHeader(http.StatusBadRequest)
+		_, _ = writer.Write([]byte(
+			`{"message":"The client request token parameter must be between 33 and 126 characters."}`,
+		))
+
+		return false
+	}
+
+	assert.NotContains(t, body, "force")
+
+	if contract.retrySubmission && contract.submittedToken == "" {
+		contract.submittedToken = token
+
+		writer.Header().Set("X-Amzn-Errortype", "ServerException")
+		writer.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = writer.Write([]byte(`{"message":"retry this request"}`))
+
+		return false
+	}
+
+	if contract.retrySubmission {
+		assert.Equal(
+			t, contract.submittedToken, token, "SDK retries must retain the request token",
+		)
+	}
+
+	return true
 }
 
 //nolint:paralleltest // The HTTP fixture changes AWS endpoint environment.
