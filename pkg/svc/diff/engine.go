@@ -58,6 +58,11 @@ const PolicyEngineValuesField = "cluster.policyEngine.chartValues"
 // the CNI itself, takes precedence over it.
 const CiliumValuesField = "cluster.cni.cilium.chartValues"
 
+// CSIValuesField is the diff key for Hetzner CSI driver chart values that
+// differ from the ones this KSail version renders. Reconciliation routes it to
+// the same Helm upgrade of the driver as a cluster.csi change.
+const CSIValuesField = "cluster.csi.chartValues"
+
 // MetricsServerValuesField is the diff key for metrics-server chart values that
 // differ from the ones this KSail version renders. Reconciliation routes it to
 // the same metrics-server Helm upgrade as a cluster.metricsServer change.

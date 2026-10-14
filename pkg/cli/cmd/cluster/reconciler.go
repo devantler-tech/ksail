@@ -78,6 +78,11 @@ type componentReconciler struct {
 	// metricsServerErr replays the first attempt's failure for the other field.
 	metricsServerInstalled bool
 	metricsServerErr       error
+	// csiInstalled coalesces a cluster.csi change and Hetzner CSI chart-values
+	// drift into one Helm install/upgrade per pass; csiErr replays the first
+	// attempt's failure for the other field.
+	csiInstalled bool
+	csiErr       error
 	// loadBalancerReconciled coalesces the generic load-balancer field and the
 	// EKS-specific controller opt-in when both change in one update pass.
 	loadBalancerReconciled bool
@@ -192,6 +197,7 @@ func (r *componentReconciler) handlerForField(
 	handlers[specdiff.PolicyEngineValuesField] = r.reconcilePolicyEngineValues
 	handlers[specdiff.MetricsServerValuesField] = r.reconcileMetricsServerValues
 	handlers[specdiff.CiliumValuesField] = r.reconcileCiliumValues
+	handlers[specdiff.CSIValuesField] = r.reconcileCSIValues
 
 	if handler, ok := handlers[field]; ok {
 		return handler, true
@@ -226,7 +232,8 @@ func isComponentReconcileField(field string) bool {
 		specdiff.CalicoPrerequisitesField,
 		specdiff.PolicyEngineValuesField,
 		specdiff.MetricsServerValuesField,
-		specdiff.CiliumValuesField:
+		specdiff.CiliumValuesField,
+		specdiff.CSIValuesField:
 		return true
 	default:
 		return strings.HasPrefix(field, "cluster.autoscaler.node.")
@@ -319,13 +326,43 @@ func (r *componentReconciler) reconcileCSI(ctx context.Context, change clusterup
 		return r.uninstallWithFactory(ctx, r.factories.CSI)
 	}
 
-	// Install the new CSI
-	err := setup.InstallCSISilent(ctx, r.clusterCfg, r.factories)
-	if err != nil {
-		return fmt.Errorf("failed to install CSI: %w", err)
+	return r.installCSIOnce(ctx)
+}
+
+// reconcileCSIValues upgrades the Hetzner CSI driver to the chart values this
+// KSail version renders when the installed release carries other values
+// (ksail#7747). It re-checks that KSail installs the driver, so a stale drift
+// change never installs a storage driver the configuration does not want.
+func (r *componentReconciler) reconcileCSIValues(
+	ctx context.Context,
+	_ clusterupdate.Change,
+) error {
+	if !ksailInstallsHetznerCSI(r.clusterCfg) {
+		return nil
 	}
 
-	return nil
+	if r.factories.CSI == nil {
+		return setup.ErrCSIInstallerFactoryNil
+	}
+
+	return r.installCSIOnce(ctx)
+}
+
+// installCSIOnce runs the CSI Helm install/upgrade at most once per update
+// pass, replaying the first outcome for every later field that maps to it.
+func (r *componentReconciler) installCSIOnce(ctx context.Context) error {
+	if r.csiInstalled {
+		return r.csiErr
+	}
+
+	r.csiInstalled = true
+
+	err := setup.InstallCSISilent(ctx, r.clusterCfg, r.factories)
+	if err != nil {
+		r.csiErr = fmt.Errorf("failed to install CSI: %w", err)
+	}
+
+	return r.csiErr
 }
 
 // reconcileMetricsServer installs or uninstalls the metrics server.
