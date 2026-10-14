@@ -19,9 +19,9 @@ if [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/pulls/43" ]]; 
 	printf 'unexpected candidate 43 lookup\n' >&2
 	exit 2
 elif [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/pulls/42" ]]; then
-	[[ "${scenario}" == pr-failure ]] && exit 1
+	[[ "${scenario}" == pr-failure || "${scenario}" == merged-known-pr-failure ]] && exit 1
 	if [[ "${merged_scenario}" == true ]]; then
-		printf '%s\n' '{
+		pr='{
     "state":"closed",
     "draft":false,
     "merged":true,
@@ -33,6 +33,13 @@ elif [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/pulls/42" ]]
     "title":"chore(cask): update ksail to v7.166.0",
     "labels":[{"name":"automation"},{"name":"dependencies"}]
   }'
+		if [[ "${scenario}" == merged-known-untrusted ]]; then
+			pr="$(jq '.user.login = "someone-else"' <<<"${pr}")"
+		elif [[ "${scenario}" == merged-known-open ||
+			("${scenario}" == merged-known-late && ! -f "${state_dir}/list-read") ]]; then
+			pr="$(jq '.state = "open" | .merged = false | .merged_at = null' <<<"${pr}")"
+		fi
+		printf '%s\n' "${pr}"
 	else
 		printf '%s\n' '{
     "state":"open",
@@ -46,7 +53,9 @@ elif [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/pulls/42" ]]
 	fi
 elif [[ "${command_line}" == "api --paginate --slurp repos/devantler-tech/homebrew-tap/pulls/42/files?per_page=100" ]]; then
 	[[ "${scenario}" == files-failure ]] && exit 1
-	if [[ "${scenario}" == malformed-files ]]; then
+	if [[ "${scenario}" == merged-known-extra-file ]]; then
+		printf '%s\n' '[[{"filename":"Casks/ksail.rb","sha":"2222222222222222222222222222222222222222"},{"filename":"README.md"}]]'
+	elif [[ "${scenario}" == malformed-files ]]; then
 		printf '%s\n' '{}'
 	elif [[ "${scenario}" == paginated-files ]]; then
 		printf '%s\n' '[[{"filename":"Casks/ksail.rb"}],[{"filename":"README.md"}]]'
@@ -64,7 +73,9 @@ elif [[ "${command_line}" == "api --paginate --slurp repos/devantler-tech/homebr
 	fi
 elif [[ "${command_line}" == "api repos/devantler-tech/ksail/releases/tags/v7.166.1" ]]; then
 	[[ "${scenario}" == release-failure ]] && exit 1
-	if [[ "${scenario}" == malformed-release ]]; then
+	if [[ "${scenario}" == merged-known-wrong-digest ]]; then
+		printf '%s\n' '{"assets":[{"name":"ksail_7.166.1_darwin_arm64.tar.gz","digest":"sha256:1111111111111111111111111111111111111111111111111111111111111111","url":"ignored"}]}'
+	elif [[ "${scenario}" == malformed-release ]]; then
 		printf '%s\n' '{"assets":[{}]}'
 	else
 		printf '%s\n' '{"assets":[{"name":"ksail_7.166.1_darwin_arm64.tar.gz","digest":"sha256:0000000000000000000000000000000000000000000000000000000000000000","url":"ignored"}]}'
@@ -103,6 +114,12 @@ elif [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/compare/4444
 	printf '%s\n' '{"status":"ahead","behind_by":0,"merge_base_commit":{"sha":"4444444444444444444444444444444444444444"}}'
 elif [[ "${command_line}" == "api --paginate --slurp repos/devantler-tech/homebrew-tap/pulls?state=closed&head=devantler-tech:goreleaser/ksail&per_page=100" ]]; then
 	[[ "${scenario}" == merged-list-failure ]] && exit 1
+	if [[ "${scenario}" == merged-known-not-listed || "${scenario}" == merged-known-late ||
+		"${scenario}" == merged-known-untrusted || "${scenario}" == merged-known-open ]]; then
+		touch "${state_dir}/list-read"
+		printf '%s\n' '[[]]'
+		exit 0
+	fi
 	author="devantler"
 	merged_at='"2026-07-18T19:58:28Z"'
 	[[ "${scenario}" == merged-wrong-list-author ]] && author="someone-else"

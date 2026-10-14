@@ -12,7 +12,8 @@ pass_count=0
 
 run_case() {
 	local scenario="$1" expected_status="$2" expected_output="$3"
-	local case_dir="${tmp_dir}/${scenario}" output status
+	shift 3
+	local case_dir="${tmp_dir}/${scenario}-${pass_count}" output status
 	mkdir -p "${case_dir}/evidence" "${case_dir}/state"
 	set +e
 	output="$(PATH="${fake_bin}:${PATH}" \
@@ -23,7 +24,7 @@ run_case() {
 		--cask-name ksail \
 		--source-repo devantler-tech/ksail \
 		--tag v7.166.1 \
-		--output-dir "${case_dir}/evidence" 2>&1)"
+		--output-dir "${case_dir}/evidence" "$@" 2>&1)"
 	status=$?
 	set -e
 
@@ -64,5 +65,24 @@ run_case merged-closed-unmerged 1 'no trusted merged cask PR'
 run_case merged-list-failure 1 'could not enumerate merged cask PRs'
 run_case merged-main-file-failure 1 'no valid merged cask PR'
 run_case merged-moving-main 1 'no valid merged cask PR'
+
+# Discovery can omit the selected PR, or finish after that PR merges. The named
+# read must exercise the same collector/validator and retain its immutable proof.
+run_case merged-known-not-listed 0 '42' --pr 42
+run_case merged-known-late 0 '42' --pr 42
+run_case merged-list-failure 0 '42' --pr 42
+for scenario in merged-main-file-failure merged-moving-main merged-merge-file-failure \
+	merged-main-ref-failure merged-malformed-main-file merged-comparison-failure; do
+	run_case "${scenario}" 1 'no valid merged cask PR' --pr 42
+done
+run_case merged-known-untrusted 1 'no valid merged cask PR' --pr 42
+run_case merged-known-open 1 'no valid merged cask PR' --pr 42
+run_case merged-known-extra-file 1 'no valid merged cask PR' --pr 42
+run_case merged-known-wrong-digest 1 'no valid merged cask PR' --pr 42
+run_case merged-known-pr-failure 1 'no valid merged cask PR' --pr 42
+
+# An invalid named candidate must not contaminate the number when an independently
+# validated historical candidate still proves this release on current main.
+run_case merged-newest-invalid 0 '42' --pr 43
 
 printf 'All %d merged cask handoff finder cases passed.\n' "${pass_count}"
