@@ -33,12 +33,19 @@ case "${0##*/}" in
       [[ "$FIXTURE_MODE" != wrong-group ]] || group=unrelated
       id=original
       [[ "$FIXTURE_MODE" != empty-id ]] || id=''
+      case "$FIXTURE_MODE" in
+        trailing-colon) id='original:extra' ;;
+        nested-id) id='original/extra' ;;
+        whitespace-id) id='original extra' ;;
+        newline-id) id=$'original\n' ;;
+      esac
       if [[ "$FIXTURE_MODE" == replaced-up && "$updates" -ge 1 ]] ||
          [[ "$FIXTURE_MODE" == replaced-down && "$updates" -ge 2 ]]; then
         id=replacement
         created='"2026-10-05T12:00:00Z"'
       fi
-      printf '["arn:aws:eks:us-east-1:123456789012:nodegroup/fixture/%s/%s",%s]\n' "$group" "$id" "$created"
+      jq -cn --arg arn "arn:aws:eks:us-east-1:123456789012:nodegroup/fixture/$group/$id" \
+        --argjson created "$created" '[$arn, $created]'
     else exit 99; fi ;;
   ksail)
     [[ "$*" == 'cluster update --yes' ]] || exit 99
@@ -95,6 +102,7 @@ func TestEKSSmokeRejectsReplacedManagedNodeGroups(t *testing.T) {
 	modes := []string{
 		"unchanged", "epoch", "replaced-up", "replaced-down",
 		"empty", "empty-id", "malformed", "reader-failure", "wrong-group",
+		"trailing-colon", "nested-id", "whitespace-id", "newline-id",
 	}
 	for _, mode := range modes {
 		t.Run(mode, func(t *testing.T) {
