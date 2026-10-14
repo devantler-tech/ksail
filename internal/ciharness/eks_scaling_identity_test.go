@@ -32,6 +32,7 @@ case "${0##*/}" in
       group=primary
       [[ "$FIXTURE_MODE" != wrong-group ]] || group=unrelated
       id=original
+      [[ "$FIXTURE_MODE" != empty-id ]] || id=''
       if [[ "$FIXTURE_MODE" == replaced-up && "$updates" -ge 1 ]] ||
          [[ "$FIXTURE_MODE" == replaced-down && "$updates" -ge 2 ]]; then
         id=replacement
@@ -93,7 +94,7 @@ func TestEKSSmokeRejectsReplacedManagedNodeGroups(t *testing.T) {
 
 	modes := []string{
 		"unchanged", "epoch", "replaced-up", "replaced-down",
-		"empty", "malformed", "reader-failure", "wrong-group",
+		"empty", "empty-id", "malformed", "reader-failure", "wrong-group",
 	}
 	for _, mode := range modes {
 		t.Run(mode, func(t *testing.T) {
