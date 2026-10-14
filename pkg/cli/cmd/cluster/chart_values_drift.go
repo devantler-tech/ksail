@@ -105,6 +105,28 @@ func metricsServerValuesProbe() chartValuesDriftProbe {
 	}
 }
 
+// hetznerCSIValuesProbe compares the Hetzner CSI driver's values (ksail#7747).
+// Only Talos on Hetzner installs the driver through Helm; every other cluster
+// gets the local-path provisioner, which has no release to compare.
+func hetznerCSIValuesProbe() chartValuesDriftProbe {
+	return chartValuesDriftProbe{
+		component: "hetzner-csi",
+		field:     specdiff.CSIValuesField,
+		needed:    ksailInstallsHetznerCSI,
+		factory: func(factories *setup.InstallerFactories) installerFactory {
+			return factories.CSI
+		},
+	}
+}
+
+// ksailInstallsHetznerCSI reports whether the configuration has KSail install
+// the Hetzner CSI driver.
+func ksailInstallsHetznerCSI(clusterCfg *v1alpha1.Cluster) bool {
+	return clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos &&
+		clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderHetzner &&
+		setup.GetComponentRequirements(clusterCfg).NeedsCSI
+}
+
 // chartValuesDriftProbes lists the components whose rendered chart values are
 // compared with their installed release. The remaining component families are
 // tracked on ksail#7366.
@@ -116,6 +138,7 @@ func chartValuesDriftProbes() []chartValuesDriftProbe {
 		metricsServerValuesProbe(),
 		calicoPrerequisitesProbe(),
 		ciliumValuesProbe(),
+		hetznerCSIValuesProbe(),
 	}
 }
 

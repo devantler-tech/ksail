@@ -65,6 +65,52 @@ func newDriftCmd() (*cobra.Command, *bytes.Buffer) {
 	return cmd, &stderr
 }
 
+// installerFactoryOverride replaces one component's installer factory for a
+// test and returns the restore function.
+type installerFactoryOverride func(func(*v1alpha1.Cluster) (installer.Installer, error)) func()
+
+// assertReportsValuesDrift runs the drift check with the component's installer
+// reporting drift, asserts that exactly field is reported as an in-place change
+// through the resolved kube context, and returns the configuration the probe
+// built its installer from.
+func assertReportsValuesDrift(
+	t *testing.T,
+	regCtx *localregistry.Context,
+	override installerFactoryOverride,
+	field string,
+) *v1alpha1.Cluster {
+	t.Helper()
+
+	probed := &v1alpha1.Cluster{}
+
+	t.Cleanup(override(func(probeCfg *v1alpha1.Cluster) (installer.Installer, error) {
+		probeCfg.DeepCopyInto(probed)
+
+		return &driftingInstaller{drifted: true}, nil
+	}))
+
+	cmd, stderr := newDriftCmd()
+	diff := clusterupdate.NewEmptyUpdateResult()
+	cluster.ExportCheckChartValuesDrift(cmd, regCtx, diff)
+
+	fields := make([]string, 0, len(diff.InPlaceChanges))
+	for _, change := range diff.InPlaceChanges {
+		fields = append(fields, change.Field)
+	}
+
+	assert.Equal(t, []string{field}, fields)
+	assert.Empty(t, stderr.String())
+
+	want := cluster.ExportResolveKubeContext(regCtx)
+	assert.Equal(t, want, probed.Spec.Cluster.Connection.Context,
+		"the probe must use the resolved kube context")
+	assert.NotEmpty(t, probed.Spec.Cluster.Connection.Context)
+	assert.Empty(t, regCtx.ClusterCfg.Spec.Cluster.Connection.Context,
+		"pinning the probe context must not mutate the caller's config")
+
+	return probed
+}
+
 // TestCheckChartValuesDrift_ReportsCertManagerDrift is ksail#7444: an
 // installed cert-manager release whose values differ from the rendered ones
 // must surface as an in-place change, probed through the resolved context.
@@ -200,6 +246,7 @@ func TestChartValuesDriftFieldsReconcileInPlace(t *testing.T) {
 	require.Contains(t, fields, specdiff.PolicyEngineValuesField)
 	require.Contains(t, fields, specdiff.MetricsServerValuesField)
 	require.Contains(t, fields, specdiff.CiliumValuesField)
+	require.Contains(t, fields, specdiff.CSIValuesField)
 
 	for _, field := range fields {
 		t.Run(field, func(t *testing.T) {
