@@ -337,6 +337,41 @@ assert_contains 'redraft-evergreen-cask-prs.sh --tap devantler-tech/homebrew-tap
 if [ "$(grep -Fc -- 'needs: [cask-checkpoint]' "${cd_workflow}")" -lt 2 ]; then
 	fail 'both cask-writing release jobs (goreleaser, desktop-macos) must gate on cask-checkpoint'
 fi
+# Both jobs that spend the tap token's request budget wait for it first. The token's account
+# shares its hourly budget with other automation, and two releases stopped at the checkpoint on an
+# exhausted budget (devantler-tech/monorepo#4055). The wait must come before the step it protects,
+# and its job must outlast GitHub's one-hour window.
+if [ "$(grep -Fc -- 'run: .github/scripts/wait-for-github-api-budget.sh' "${cd_workflow}")" -lt 2 ]; then
+	fail 'the checkpoint and the cask delivery job must each wait for the tap token request budget'
+fi
+awk '
+  /^  [a-z-]+:$/ { job = $1; waited = 0 }
+  /run: \.github\/scripts\/wait-for-github-api-budget\.sh/ { waited = 1 }
+  /redraft-evergreen-cask-prs\.sh --tap/ { if (job != "cask-checkpoint:" || !waited) bad = 1; checkpoint = 1 }
+  /name: 🍺 Style-clean and deliver cask PRs/ { if (job != "homebrew:" || !waited) bad = 1; delivery = 1 }
+  END { exit (bad || !checkpoint || !delivery) ? 1 : 0 }
+' "${cd_workflow}" || fail 'each budget wait must run in the same job as, and before, the step that spends the budget'
+awk '
+  /^  [a-z-]+:$/ { job = $1; timeout_ready = 0 }
+  /run: brew install coreutils/ { timeout_ready = 1 }
+  /run: \.github\/scripts\/wait-for-github-api-budget\.sh/ {
+    if (job == "homebrew:") { seen = 1; if (!timeout_ready) bad = 1 }
+  }
+  END { exit (bad || !seen) ? 1 : 0 }
+' "${cd_workflow}" || fail 'macOS must provide GNU timeout before the budget wait'
+awk '
+  /^  [a-z-]+:$/ { job = $1 }
+  /timeout-minutes:/ { timeout[job] = $2 }
+  END { exit (timeout["cask-checkpoint:"] >= 65 && timeout["homebrew:"] >= 100) ? 0 : 1 }
+' "${cd_workflow}" || fail 'jobs that wait for the request budget must outlast the one-hour window'
+for wait_file in wait-for-github-api-budget.sh wait-for-github-api-budget.test.sh; do
+	if [ "$(grep -Fc -- ".github/scripts/${wait_file}" "${ci_workflow}")" -lt 2 ]; then
+		fail "CI must path-filter and shellcheck ${wait_file}"
+	fi
+done
+if [ "$(grep -Fc -- '.github/scripts/wait-for-github-api-budget.test.sh' "${ci_workflow}")" -lt 3 ]; then
+	fail 'CI must execute the request-budget wait test'
+fi
 assert_contains 'convertPullRequestToDraft' \
 	"${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
 	'the checkpoint script must demote via the draft conversion mutation'

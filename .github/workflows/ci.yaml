@@ -414,6 +414,8 @@ jobs:
               - '.github/scripts/upload-release-assets.sh'
               - '.github/scripts/upload-release-assets.test.sh'
               - '.github/scripts/validate-cask-pr-handoff.sh'
+              - '.github/scripts/wait-for-github-api-budget.sh'
+              - '.github/scripts/wait-for-github-api-budget.test.sh'
               - '.github/scripts/validate-cask-pr-handoff.test.sh'
               - '.github/workflows/cd.yaml'
               - '.github/workflows/ci.yaml'
@@ -608,6 +610,8 @@ jobs:
             .github/scripts/upload-release-assets.test.sh \
             .github/scripts/validate-cask-pr-handoff.sh \
             .github/scripts/validate-cask-pr-handoff.test.sh \
+            .github/scripts/wait-for-github-api-budget.sh \
+            .github/scripts/wait-for-github-api-budget.test.sh \
             .github/scripts/cask-pr-handoff-workflow.test.sh
           .github/scripts/collect-cask-pr-handoff.test.sh
           .github/scripts/finish-cask-pr-handoff.test.sh
@@ -617,6 +621,7 @@ jobs:
           .github/scripts/style-clean-cask-branch.test.sh
           .github/scripts/upload-release-assets.test.sh
           .github/scripts/validate-cask-pr-handoff.test.sh
+          .github/scripts/wait-for-github-api-budget.test.sh
           .github/scripts/cask-pr-handoff-workflow.test.sh
 
   ci-go:
@@ -2255,7 +2260,13 @@ jobs:
       - name: 🧪 Verify empty arguments under Bash 3.2
         env:
           KSAIL_REQUIRE_BASH32: "true"
-        run: go test ./internal/ciharness -run '^TestSystemTestTalosUpgradeEmptyArgumentsUnderBash32$' -count=1
+        working-directory: internal/ciharness
+        run: |
+          # -run selects execution, not compilation; the full harness imports the cluster SDKs.
+          test_files=(kubernetes_update_test.go system_test_harness_test.go)
+          test_name=TestSystemTestTalosUpgradeEmptyArgumentsUnderBash32
+          go test "${test_files[@]}" -list "^${test_name}$" | grep -Fx "${test_name}"
+          go test "${test_files[@]}" -run "^${test_name}$" -count=1
 
   # Runs the Go suite when only the release build configuration changed. The org-required Go
   # validation skips its test job on such a pull request, because no Go file changed, while
@@ -2342,7 +2353,7 @@ jobs:
         with:
           persist-credentials: false
       - name: 🧹 Free runner disk
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@065b9e08b85a396b9e936c01f01b512bb23f8aa9
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@0f64bcdf29760400fbd6307f835c7d98ad7f9ae5
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -2442,7 +2453,7 @@ jobs:
           persist-credentials: false
       - name: Check active documentation
         id: links
-        uses: devantler-tech/.github/actions/validate-retired-repo-links@8d3327fe87f216d6e107941de4ce1ae019294cea # v7.9.1
+        uses: devantler-tech/.github/actions/validate-retired-repo-links@8ed2071ebe18864b8b86efe0f6b1df8d73d2a6ab # v7.10.4
         with:
           enabled: "true"
       - name: Require a completed scan

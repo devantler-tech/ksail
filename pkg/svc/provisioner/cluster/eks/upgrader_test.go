@@ -21,6 +21,23 @@ var (
 	errUpgradeFixturePoll    = errors.New("wrong poll identity")
 )
 
+func TestControlPlaneUpgradeUsesDistinctValidRequestTokens(t *testing.T) {
+	t.Parallel()
+
+	api := &upgradeAPI{cluster: upgradeCluster(), result: upgradeResult()}
+	api.afterPoll = func() { api.cluster.Version = aws.String("1.35") }
+	provisioner := newUpgradeProvisioner(t, api, func(context.Context) error { return nil })
+
+	for range 2 {
+		api.cluster.Version = aws.String("1.34")
+
+		require.NoError(t, provisioner.UpgradeKubernetes(t.Context(), "demo", "1.34", "1.35"))
+	}
+
+	require.Len(t, api.tokens, 2)
+	assert.NotEqual(t, api.tokens[0], api.tokens[1], "independent requests must not share a token")
+}
+
 func TestControlPlaneUpgradeWaitsThroughUpdateAndClusterConvergence(t *testing.T) {
 	t.Parallel()
 
@@ -144,6 +161,7 @@ type upgradeAPI struct {
 	// leaving the pre-upgrade snapshot read (polls == 0) alone.
 	describeErr func(describes, polls int) error
 	submission  func() *ekstypes.Update
+	tokens      []string
 }
 
 func upgradeCluster() *ekstypes.Cluster {
@@ -193,12 +211,13 @@ func (api *upgradeAPI) UpdateClusterVersion(
 	_ context.Context,
 	name, version, token string,
 ) (*ekstypes.Update, error) {
-	// AWS rejects a client request token outside 33 to 126 characters.
 	if name != "demo" || version != "1.35" || len(token) < 33 || len(token) > 126 {
 		return nil, errUpgradeFixtureRequest
 	}
 
 	api.submitted++
+
+	api.tokens = append(api.tokens, token)
 	if api.afterSubmit != nil {
 		api.afterSubmit()
 	}
