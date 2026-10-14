@@ -11,6 +11,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awscredentials "github.com/aws/aws-sdk-go-v2/credentials"
+	awseks "github.com/aws/aws-sdk-go-v2/service/eks"
+	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
@@ -24,6 +28,38 @@ import (
 )
 
 const eksUpgradeStartingVersion = "1.34"
+
+func TestEKSUpgradeSDKRejectsShortTokenBeforeValidRequest(t *testing.T) {
+	t.Parallel()
+
+	mutations := 0
+	endpoint := eksUpgradeHTTPFixture(t, &mutations, false)
+	client := awseks.NewFromConfig(aws.Config{
+		Region: "us-east-1",
+		Credentials: aws.NewCredentialsCache(
+			awscredentials.NewStaticCredentialsProvider("FROZENUPGRADE", "secret", ""),
+		),
+	}, func(options *awseks.Options) { options.BaseEndpoint = aws.String(endpoint) })
+
+	input := &awseks.UpdateClusterVersionInput{
+		Name: aws.String("demo"), Version: aws.String("1.35"),
+		ClientRequestToken: aws.String(strings.Repeat("a", 32)),
+	}
+	_, err := client.UpdateClusterVersion(t.Context(), input)
+
+	var invalidToken *ekstypes.InvalidParameterException
+
+	require.ErrorAs(t, err, &invalidToken)
+	assert.Contains(t, invalidToken.Error(), "between 33 and 126 characters")
+	assert.Zero(t, mutations, "a rejected request must not accept an update")
+
+	input.ClientRequestToken = aws.String(strings.Repeat("a", 33))
+	result, err := client.UpdateClusterVersion(t.Context(), input)
+	require.NoError(t, err)
+	require.NotNil(t, result.Update)
+	assert.Equal(t, "upgrade-id", aws.ToString(result.Update.Id))
+	assert.Equal(t, 1, mutations)
+}
 
 type eksUpgradeCase struct {
 	name, target                                     string
