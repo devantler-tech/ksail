@@ -82,6 +82,14 @@ func (p *Provider) CheckServerAvailabilityWithRetryForTest(
 	)
 }
 
+// DeleteLoadBalancerWithRetryForTest exports deleteLoadBalancerWithRetry for testing.
+func (p *Provider) DeleteLoadBalancerWithRetryForTest(
+	ctx context.Context,
+	loadBalancer *hcloud.LoadBalancer,
+) error {
+	return p.deleteLoadBalancerWithRetry(ctx, loadBalancer)
+}
+
 // DeleteFloatingIPForTest exports deleteFloatingIP for testing.
 func (p *Provider) DeleteFloatingIPForTest(ctx context.Context, clusterName string) error {
 	return p.deleteFloatingIP(ctx, clusterName)
