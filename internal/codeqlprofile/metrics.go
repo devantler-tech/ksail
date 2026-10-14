@@ -31,16 +31,18 @@ type Stats struct {
 
 // Record binds the process status and its measurements to a requested extraction.
 type Record struct {
-	Project  string `json:"project"`
-	ExitCode int    `json:"exitCode"`
-	Stats    Stats  `json:"stats"`
+	Project           string  `json:"project"`
+	ExitCode          int     `json:"exitCode"`
+	Stats             Stats   `json:"stats"`
+	ObservedFileCount *uint64 `json:"observedExtractedFileCount"`
 }
 
 // Report retains failed and partial observations for investigation.
 type Report struct {
-	Complete bool     `json:"complete"`
-	Expected []string `json:"expectedProjects"`
-	Records  []Record `json:"records"`
+	Complete          bool     `json:"complete"`
+	MeasurementsValid bool     `json:"measurementsValid"`
+	Expected          []string `json:"expectedProjects"`
+	Records           []Record `json:"records"`
 }
 
 // ParseTime reads GNU time on Linux or BSD time on macOS. Missing or repeated
@@ -180,6 +182,8 @@ func Summarize(expected []string, records []Record) (Report, error) {
 		return report, err
 	}
 
+	report.MeasurementsValid = validMeasurements(wanted, records)
+
 	observed := make(map[string]Record, len(records))
 	for _, record := range records {
 		_, duplicate := observed[record.Project]
@@ -202,6 +206,37 @@ func Summarize(expected []string, records []Record) (Report, error) {
 	report.Complete = true
 
 	return report, nil
+}
+
+// validMeasurements accepts well-formed failed commands as observations, while
+// complete still requires successful extraction. Native log counts are not
+// finalized database coverage, including when a command was interrupted.
+func validMeasurements(wanted map[string]bool, records []Record) bool {
+	if len(wanted) != len(records) {
+		return false
+	}
+
+	seen := make(map[string]bool, len(records))
+	for _, record := range records {
+		if !wanted[record.Project] || seen[record.Project] || !validObservation(record) {
+			return false
+		}
+
+		seen[record.Project] = true
+	}
+
+	return true
+}
+
+func validObservation(record Record) bool {
+	const maxExitCode = 255
+
+	stats := record.Stats
+
+	return record.ObservedFileCount != nil &&
+		record.ExitCode >= 0 && record.ExitCode <= maxExitCode &&
+		stats.ExitCode >= 0 && stats.ExitCode <= maxExitCode &&
+		stats.CommandPeakRSSBytes > 0 && validElapsed(stats.WallSeconds)
 }
 
 func inventory(expected []string) (map[string]bool, error) {

@@ -49,6 +49,10 @@ free_gib() {
 # add_swap creates and enables one swap file, on the first disk with room to spare.
 add_swap() {
 	local directory margin available file
+	if [[ "$swap_gib" == 0 ]]; then
+		printf '%s no additional swap requested; existing swap is unchanged\n' "$prefix"
+		return 0
+	fi
 	for directory in /mnt /; do
 		# Nothing else writes to /mnt; the root disk also holds the module cache and database.
 		if [[ "$directory" == /mnt ]]; then margin=10; else margin=20; fi

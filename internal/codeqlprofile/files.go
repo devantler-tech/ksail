@@ -63,6 +63,21 @@ func readMeasurement(platform string, root *os.Root, base, project string) (Reco
 	}
 
 	record.Stats, err = ParseTime(platform, string(measurement))
+	if err != nil {
+		return record, err
+	}
 
-	return record, err
+	count, err := root.ReadFile(base + ".files")
+	if err != nil {
+		return record, errMeasurement
+	}
+
+	value, err := strconv.ParseUint(strings.TrimSpace(string(count)), 10, 64)
+	if err != nil {
+		return record, errMeasurement
+	}
+
+	record.ObservedFileCount = &value
+
+	return record, nil
 }

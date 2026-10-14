@@ -134,6 +134,12 @@ expect_contains "$output" 'no disk has room for 8 GiB of swap; none added' 'no d
 expect_contains "$output" 'sampling every 1s' 'no disk still samples'
 expect_equal "$(cat "$work/no-disk/sudo.log")" '' 'no disk commands'
 
+# A comparison baseline preserves the runner's existing swap without allocating.
+output=$(prepare baseline KSAIL_CODEQL_SWAP_GIB=0)
+expect_contains "$output" 'no additional swap requested' 'baseline'
+expect_contains "$output" 'after mem_total=' 'baseline memory'
+expect_equal "$(cat "$work/baseline/sudo.log")" '' 'baseline commands'
+
 # A refused swap is reported and cleaned up, and the build still goes on.
 output=$(prepare refused STUB_SUDO_FAIL=swapon)
 expect_contains "$output" 'could not enable swap at /mnt/ksail-codeql.swap' 'refused swap'
