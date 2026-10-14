@@ -18,27 +18,7 @@ import (
 func TestCodeQLProfileBindsActualProcessStatus(t *testing.T) {
 	t.Parallel()
 
-	var workflow struct {
-		Jobs map[string]struct {
-			Steps []struct {
-				Name string `yaml:"name"`
-				Run  string `yaml:"run"`
-			} `yaml:"steps"`
-		} `yaml:"jobs"`
-	}
-
-	err := yaml.Unmarshal(readRepoFile(t, ".github/workflows/codeql-go-profile.yaml"), &workflow)
-	require.NoError(t, err)
-
-	var entrypoint string
-
-	for _, step := range workflow.Jobs["profile"].Steps {
-		if step.Name == "Measure every Go project and verify function bodies" {
-			entrypoint = step.Run
-		}
-	}
-
-	require.NotEmpty(t, entrypoint)
+	entrypoint := codeQLProfileEntrypoint(t)
 
 	for _, test := range []struct {
 		name, comparison string
@@ -53,33 +33,7 @@ func TestCodeQLProfileBindsActualProcessStatus(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			directory := t.TempDir()
-			scripts := filepath.Join(directory, ".github/scripts")
-			require.NoError(t, os.MkdirAll(scripts, 0o700))
-
-			collector := fmt.Sprintf(
-				"mkdir -p \"$1\"\nprintf '{\"profileExitCode\":%d}\\n' > \"$1/report.json\"\nexit %d\n",
-				test.reported,
-				test.actual,
-			)
-			require.NoError(
-				t,
-				os.WriteFile(
-					filepath.Join(scripts, "profile-codeql-go.sh"),
-					[]byte(collector),
-					0o600,
-				),
-			)
-
-			validator := "printf called > \"$RUNNER_TEMP/validated\"\n"
-			require.NoError(
-				t,
-				os.WriteFile(
-					filepath.Join(scripts, "profile-codeql-compare.sh"),
-					[]byte(validator),
-					0o600,
-				),
-			)
+			directory := codeQLProfileFixture(t, test.actual, test.reported)
 			command := exec.CommandContext(t.Context(), "bash", "-e", "-o", "pipefail")
 			command.Dir = directory
 			command.Stdin = strings.NewReader(entrypoint)
@@ -103,4 +57,66 @@ func TestCodeQLProfileBindsActualProcessStatus(t *testing.T) {
 			)
 		})
 	}
+}
+
+func codeQLProfileEntrypoint(t *testing.T) string {
+	t.Helper()
+
+	var workflow struct {
+		Jobs map[string]struct {
+			Steps []struct {
+				Name string `yaml:"name"`
+				Run  string `yaml:"run"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+
+	err := yaml.Unmarshal(readRepoFile(t, ".github/workflows/codeql-go-profile.yaml"), &workflow)
+	require.NoError(t, err)
+
+	var entrypoint string
+
+	for _, step := range workflow.Jobs["profile"].Steps {
+		if step.Name == "Measure every Go project and verify function bodies" {
+			entrypoint = step.Run
+		}
+	}
+
+	require.NotEmpty(t, entrypoint)
+
+	return entrypoint
+}
+
+func codeQLProfileFixture(t *testing.T, actual, reported int) string {
+	t.Helper()
+
+	directory := t.TempDir()
+	scripts := filepath.Join(directory, ".github/scripts")
+	require.NoError(t, os.MkdirAll(scripts, 0o700))
+
+	collector := fmt.Sprintf(
+		"mkdir -p \"$1\"\nprintf '{\"profileExitCode\":%d}\\n' > \"$1/report.json\"\nexit %d\n",
+		reported,
+		actual,
+	)
+	require.NoError(
+		t,
+		os.WriteFile(
+			filepath.Join(scripts, "profile-codeql-go.sh"),
+			[]byte(collector),
+			0o600,
+		),
+	)
+
+	validator := "printf called > \"$RUNNER_TEMP/validated\"\n"
+	require.NoError(
+		t,
+		os.WriteFile(
+			filepath.Join(scripts, "profile-codeql-compare.sh"),
+			[]byte(validator),
+			0o600,
+		),
+	)
+
+	return directory
 }
