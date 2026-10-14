@@ -77,6 +77,8 @@ cat >"$scratch/extractor" <<'EXTRACTOR'
 set -eu
 [[ "$#" == 2 && "$1" == -mod=mod && "$2" == ./... ]]
 [[ "$GOWORK" == off ]]
+printf '2026/10/14 10:30:12 Done extracting %s/native.go (5ms)\n' "$PWD"
+printf '2026/10/14 10:30:13 Done extracting %s/native.go (7ms)\n' "$PWD"
 printf '%s\t%s\n' "${PWD##*/}" "${GOFLAGS:-}" >>"$PROFILE_TEST_OBSERVED"
 case "$PWD" in
   */fails) exit 23 ;;
@@ -112,7 +114,8 @@ if "$scratch/report" "$scratch/metrics" <"$scratch/inventory" >"$scratch/report.
 	exit 1
 fi
 jq -e '.complete == false and (.records | length == 4) and
-  .records[1].exitCode == 23 and all(.records[]; .stats.commandPeakRssBytes > 0)' \
+  .measurementsValid == true and .records[1].exitCode == 23 and
+  all(.records[]; .stats.commandPeakRssBytes > 0 and .observedExtractedFileCount == 1)' \
 	"$scratch/report.json" >/dev/null
 jq -e '.sourceVerified == false and .coverageVerified == false and (.records | length == 4)' \
 	"$scratch/progress.json" >/dev/null
@@ -125,6 +128,67 @@ if (cd "$scratch/source" && bash "$script_dir/profile-codeql-go.sh" --extract \
 	exit 1
 fi
 printf 'PASS: measured all four commands, retained failure, and rejected escaping paths\n'
+
+# Exercise the complete profiler's failure cleanup, including a sampler that
+# emitted plausible data before failing. The final EXIT pass must retain that
+# failure, and preparation metadata must remain an object rather than a boolean.
+mkdir -p "$scratch/lifecycle-source" "$scratch/lifecycle-bin" "$scratch/lifecycle-pack/tools/linux64" "$scratch/lifecycle-proc"
+(
+	cd "$scratch/lifecycle-source"
+	printf 'module example.invalid/lifecycle\n\ngo 1.26.1\n' >go.mod
+	printf 'package lifecycle\n' >source.go
+	git init -q
+	git add go.mod source.go
+	git -c user.name=Fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false commit -qm fixture
+)
+printf 'MemTotal: 16384000 kB\n' >"$scratch/lifecycle-proc/meminfo"
+printf '#!/usr/bin/env bash\nexit 23\n' >"$scratch/lifecycle-pack/tools/linux64/go-extractor"
+cat >"$scratch/lifecycle-bin/uname" <<'EOF'
+#!/usr/bin/env bash
+case "$1" in -s) echo Linux ;; -m) echo x86_64 ;; -r) echo fixture-kernel ;; *) exit 97 ;; esac
+EOF
+printf '#!/usr/bin/env bash\necho 4\n' >"$scratch/lifecycle-bin/getconf"
+cat >"$scratch/lifecycle-bin/go" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$1 $2" == 'env GOVERSION' ]]; then echo go1.26.8; exit; fi
+[[ "$1 $2" == 'build -o' ]]
+if [[ "$4" == ./internal/codeqlprofile/cmd ]]; then cp "$PROFILE_TEST_REPORTER" "$3"; else
+  [[ "$4" == ./internal/codeqlprofile/cmd/memory ]]
+  cat >"$3" <<'SAMPLER'
+#!/usr/bin/env bash
+printf '{"sampleCount":1,"totalBytes":16777216000,"swapTotalBytes":3221225472,"lastElapsedSeconds":1,"minimumAvailableBytes":1024,"maximumSwapUsedBytes":0,"largestSampledRssBytes":1024}\n' >"$1"
+exit 23
+SAMPLER
+fi
+chmod +x "$3"
+EOF
+cat >"$scratch/lifecycle-codeql" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "$1 $2" in
+  'resolve extractor') printf '"%s"\n' "$PROFILE_TEST_PACK" ;;
+  'version --format=json') printf '{"version":"2.27.1"}\n' ;;
+  'database init') exit 0 ;;
+  'database trace-command') sleep 0.2; exit 23 ;;
+  *) exit 97 ;;
+esac
+EOF
+chmod +x "$scratch/lifecycle-bin/"* "$scratch/lifecycle-codeql" "$scratch/lifecycle-pack/tools/linux64/go-extractor"
+printf '{"requestedAddedSwapGiB":0,"allocationVerified":true}\n' >"$scratch/lifecycle-swap.json"
+status=0
+(
+	cd "$scratch/lifecycle-source"
+	PATH="$scratch/lifecycle-bin:$PATH" PROFILE_TEST_REPORTER="$scratch/report" PROFILE_TEST_PACK="$scratch/lifecycle-pack" \
+		KSAIL_CODEQL_PROC_ROOT="$scratch/lifecycle-proc" KSAIL_CODEQL_SWAP_REPORT="$scratch/lifecycle-swap.json" \
+		CODEQL_CLI="$scratch/lifecycle-codeql" GOMEMLIMIT=8GiB \
+		bash "$script_dir/profile-codeql-go.sh" "$scratch/lifecycle-output"
+) >"$scratch/lifecycle.log" 2>&1 || status=$?
+[[ "$status" != 0 ]]
+jq -e '.complete == false and .profileExitCode != 0 and .memorySamplerExitCode == 23 and
+  .swapPreparation.requestedAddedSwapGiB == 0 and .swapPreparation.allocationVerified == true' \
+	"$scratch/lifecycle-output/report.json" >/dev/null
+printf 'PASS: production failure cleanup preserves failed sampler and actual preparation metadata\n'
 
 # A clean successor commit must not certify measurements from its predecessor.
 (
