@@ -120,7 +120,8 @@ func (p *UpgradableProvisioner) UpgradeKubernetes(
 		return nil
 	}
 
-	token := rand.Text()
+	// EKS accepts a client request token of 33 to 126 characters; one rand.Text() is 26.
+	token := rand.Text() + rand.Text()
 
 	// Validate first so the final cluster check and the update share one signer.
 	err = validateUpgradeCredentialLifetime(ctx, api)

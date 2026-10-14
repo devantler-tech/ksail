@@ -193,7 +193,8 @@ func (api *upgradeAPI) UpdateClusterVersion(
 	_ context.Context,
 	name, version, token string,
 ) (*ekstypes.Update, error) {
-	if name != "demo" || version != "1.35" || token == "" {
+	// AWS rejects a client request token outside 33 to 126 characters.
+	if name != "demo" || version != "1.35" || len(token) < 33 || len(token) > 126 {
 		return nil, errUpgradeFixtureRequest
 	}
 
