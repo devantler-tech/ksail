@@ -121,8 +121,8 @@ func (p *UpgradableProvisioner) UpgradeKubernetes(
 		return nil
 	}
 
-	// EKS requires 33–126 characters; rand.Text's length may change between Go releases.
-	// Hash the random identifier to retain its entropy in a fixed, API-compatible encoding.
+	// Generate one fixed 64-character lowercase hexadecimal token per upgrade operation.
+	// SDK retries retain this token.
 	token := fmt.Sprintf("%x", sha256.Sum256([]byte(rand.Text())))
 
 	// Validate first so the final cluster check and the update share one signer.
