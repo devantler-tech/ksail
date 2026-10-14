@@ -68,7 +68,7 @@ cluster_absent() {
 	local output
 	local status=0
 
-	output="$(aws eks describe-cluster \
+	output="$(timeout --kill-after=10s 30s aws eks describe-cluster \
 		--name "${cluster_name}" \
 		--region "${region}" \
 		--query 'cluster.status' \
@@ -77,6 +77,13 @@ cluster_absent() {
 	if ((status == 0)); then
 		# DELETING still describes an existing cluster. Leave the waiting
 		# fallback and final absence check responsible for completion.
+		return 1
+	fi
+	# timeout's failure statuses never certify a complete AWS response, even
+	# when the process emitted plausible not-found text before it stalled.
+	if ((status >= 124 && status <= 127 || status == 137)); then
+		printf '::warning::Could not determine whether cluster %s still exists in %s: probe did not complete.\n' \
+			"${cluster_name}" "${region}" >&2
 		return 1
 	fi
 
@@ -126,7 +133,10 @@ if [[ ! -d "${workdir}" ]]; then
 elif ! cd "${workdir}"; then
 	echo "::warning::EKS smoke workdir ${workdir} could not be entered; skipping ksail and using eksctl."
 else
-	ksail cluster delete --provider AWS --name "${cluster_name}" --force ||
+	# Two 20-minute attempts, two 30-second probes and their kill grace periods
+	# fit within the workflow's 45-minute cleanup step. A stuck primary command
+	# must leave time for the independent fallback and explicit final probe.
+	timeout --kill-after=10s 20m ksail cluster delete --provider AWS --name "${cluster_name}" --force ||
 		echo "::warning::ksail cluster delete failed."
 fi
 
@@ -135,7 +145,7 @@ fi
 # otherwise a delete that silently no-ops spends only one of the two attempts.
 if ! cluster_absent; then
 	echo "::warning::Cluster still present; falling back to eksctl delete cluster."
-	eksctl delete cluster \
+	timeout --kill-after=10s 20m eksctl delete cluster \
 		--name "${cluster_name}" \
 		--region "${region}" \
 		--wait || true
