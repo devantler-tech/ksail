@@ -3,6 +3,7 @@
 set -euo pipefail
 [[ $# == 4 && ("$1" == validate || "$1" == compare) ]]
 mode="$1" sha="$2"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [[ "$sha" =~ ^[a-f0-9]{40}$ ]]
 head="$(git rev-parse HEAD)"
 [[ "$head" == "$sha" ]]
@@ -81,13 +82,10 @@ if [[ "$mode" == validate ]]; then
 fi
 validate_observation 0 "$3"
 validate_observation 8 "$4"
-jq -n --slurpfile baseline "$3" --slurpfile treatment "$4" '
-  def envelope: {sourceSha,workflowRunId,workflowRunAttempt,architecture,platform,runnerImageOS,runnerImageVersion,
-    kernelRelease,codeqlVersion,goVersion,goHeapLimit,extractorSha256,runnerPackagesSha256,processorModelSha256,
-    physicalMemoryBytes,logicalProcessors,
-    cgroupLimits,expectedProjects,originalSwapBytes:.swapPreparation.originalSwapBytes};
+jq -L "$script_dir" -n --slurpfile baseline "$3" --slurpfile treatment "$4" '
+  include "profile-codeql-environment";
   $baseline[0] as $b | $treatment[0] as $t |
-  if ($b|envelope) != ($t|envelope) then error("runner, tools, source or original swap differs between arms") else
+  if ($b|profile_environment) != ($t|profile_environment) then error("runner, tools, source or original swap differs between arms") else
     ($b.profileExitCode==0) as $complete |
     if $complete and $b.nativeFiles != $t.nativeFiles then error("native database file sets differ") else
       {collectionValid:true,comparableCoverage:$complete,

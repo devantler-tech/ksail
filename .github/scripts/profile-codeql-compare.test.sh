@@ -77,3 +77,90 @@ for mutation in '.runnerImageVersion="other"' '.goVersion="go1.26.9"' \
 	fi
 done
 printf 'PASS: comparable complete pair, retained failed baseline and rejected invalid/unequal observations\n'
+
+# A fixed cohort selects by environment before examining extraction outcomes.
+cohort="$scratch/cohort"
+mkdir -p "$cohort"
+reports=()
+for replica in 0 1 2; do
+	for arm in 0 8; do
+		directory="$cohort/codeql-go-profile-$sha-attempt1-swap$arm-replica$replica"
+		mkdir -p "$directory"
+		fixture="$scratch/before.json"
+		if [[ "$arm" == 8 ]]; then fixture="$scratch/after.json"; fi
+		jq --argjson replica "$replica" '.replica=$replica' "$fixture" >"$directory/report.json"
+		reports+=("$directory/report.json")
+	done
+done
+bash "$script_dir/profile-codeql-cohort.sh" "$sha" "$cohort" >"$scratch/cohort.json"
+jq -e '.collectionValid and .comparableCoverage and (.observations|length)==6 and
+  .selection.baseline.replica==0 and .selection.treatment.replica==0' "$scratch/cohort.json" >/dev/null
+
+jq -L "$script_dir" -s -f "$script_dir/profile-codeql-cohort-select.jq" "${reports[@]}" >"$scratch/selected.json"
+jq -s '.[] | .profileExitCode=137 | .complete=false | .coverageVerified=false | .nativeFiles=null |
+  .records |= map(.exitCode=137 | .stats.commandPeakRssBytes=999999 | .stats.wallSeconds=99)' \
+	"${reports[@]}" >"$scratch/changed-outcomes.json"
+jq -L "$script_dir" -s -f "$script_dir/profile-codeql-cohort-select.jq" "$scratch/changed-outcomes.json" >"$scratch/selected-after.json"
+cmp "$scratch/selected.json" "$scratch/selected-after.json"
+jq -s '.[] | .processorModelSha256=(if .replica==1 then "a"*64 elif .replica==2 then "e"*64 else "f"*64 end)' \
+	"${reports[@]}" >"$scratch/ordered-environments.json"
+jq -L "$script_dir" -s -f "$script_dir/profile-codeql-cohort-select.jq" "$scratch/ordered-environments.json" >"$scratch/ordered-selection.json"
+jq -e '(.cohorts|length)==3 and .baseline.replica==1 and .treatment.replica==1' "$scratch/ordered-selection.json" >/dev/null
+
+baseline="${reports[0]}"
+cp "$baseline" "$scratch/saved-baseline.json"
+jq '.replica=0' "$scratch/failed.json" >"$baseline"
+bash "$script_dir/profile-codeql-cohort.sh" "$sha" "$cohort" >"$scratch/cohort-failed-baseline.json"
+jq -e '.outcome=="baseline-incomplete" and .selection.baseline.replica==0 and
+  .baseline.profileExitCode==1 and (.observations|length)==6 and .projects==null' "$scratch/cohort-failed-baseline.json" >/dev/null
+cp "$scratch/saved-baseline.json" "$baseline"
+
+unselected="${reports[5]}"
+cp "$unselected" "$scratch/saved-unselected.json"
+for mutation in '.replica=0' '.workflowRunId="other"' '.workflowRunAttempt="2"' '.sourceSha=("b"*40)' \
+	'.swapPreparation.requestedAddedSwapGiB=0' '.nativeFiles.sourceFilesSha256=("f"*64)' \
+	'.complete=false | .profileExitCode=1 | .traceExitCode=137 | .finalizeExitCode=-1 | .coverageVerified=false | .nativeFilesExitCode=-1 | .nativeFiles=null | .records[0].exitCode=137'; do
+	jq "$mutation" "$scratch/saved-unselected.json" >"$unselected"
+	if bash "$script_dir/profile-codeql-cohort.sh" "$sha" "$cohort" >"$scratch/output" 2>&1; then
+		printf 'FAIL: invalid unselected cohort member accepted: %s\n' "$mutation" >&2
+		exit 1
+	fi
+done
+cp "$scratch/saved-unselected.json" "$unselected"
+mv "$unselected" "$scratch/missing-report.json"
+if bash "$script_dir/profile-codeql-cohort.sh" "$sha" "$cohort" >"$scratch/output" 2>&1; then
+	printf 'FAIL: missing cohort member accepted\n' >&2
+	exit 1
+fi
+mv "$scratch/missing-report.json" "$unselected"
+mkdir "$cohort/unexpected"
+cp "$unselected" "$cohort/unexpected/report.json"
+if bash "$script_dir/profile-codeql-cohort.sh" "$sha" "$cohort" >"$scratch/output" 2>&1; then
+	printf 'FAIL: extra cohort report accepted\n' >&2
+	exit 1
+fi
+rm "$cohort/unexpected/report.json"
+rmdir "$cohort/unexpected"
+
+for report in "${reports[@]}"; do
+	jq '.processorModelSha256=((if .swapPreparation.requestedAddedSwapGiB==0 then .replica|tostring else ["a","b","c"][.replica] end)*64)' \
+		"$report" >"$scratch/changed.json"
+	mv "$scratch/changed.json" "$report"
+done
+if bash "$script_dir/profile-codeql-cohort.sh" "$sha" "$cohort" >"$scratch/output" 2>"$scratch/error"; then
+	printf 'FAIL: cohort without a matching environment accepted\n' >&2
+	exit 1
+fi
+jq -e '.collectionValid and (.comparableCoverage|not) and .outcome=="inconclusive-no-matching-environment" and
+  (.observations|length)==6 and (.selection.cohorts|length)==6 and .selection.baseline==null and .projects==null' "$scratch/output" >/dev/null
+jq '.memorySamplerExitCode=23' "$unselected" >"$scratch/changed.json"
+mv "$scratch/changed.json" "$unselected"
+if bash "$script_dir/profile-codeql-cohort.sh" "$sha" "$cohort" >"$scratch/output" 2>"$scratch/error"; then
+	printf 'FAIL: invalid unmatched cohort member accepted\n' >&2
+	exit 1
+fi
+if jq -e '.collectionValid==true' "$scratch/output" >/dev/null 2>&1; then
+	printf 'FAIL: unmatched invalid observations certified as valid\n' >&2
+	exit 1
+fi
+printf 'PASS: fixed cohort, outcome-independent selection, retained failed baseline and all-member refusal controls\n'

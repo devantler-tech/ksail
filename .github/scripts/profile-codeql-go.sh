@@ -119,6 +119,8 @@ kernel_release="$(uname -r)"
 extractor_hash="$(shasum -a 256 "$extractor" | cut -d ' ' -f 1)"
 [[ "$extractor_hash" =~ ^[a-f0-9]{64}$ ]]
 swap_metadata='null'
+replica="${KSAIL_CODEQL_PROFILE_REPLICA:-0}"
+[[ "$replica" =~ ^[0-2]$ ]]
 if [[ -n "${KSAIL_CODEQL_SWAP_REPORT:-}" ]]; then
 	swap_metadata="$(jq -ce 'select(type == "object")' "$KSAIL_CODEQL_SWAP_REPORT")"
 fi
@@ -130,6 +132,7 @@ jq -n --arg sha "$source_sha" --arg architecture "$architecture" --arg platform 
 	--arg extractorHash "$extractor_hash" --arg runId "${GITHUB_RUN_ID:-}" --arg runAttempt "${GITHUB_RUN_ATTEMPT:-}" \
 	--arg packagesHash "${KSAIL_CODEQL_PACKAGES_SHA256:-}" --arg processorHash "${KSAIL_CODEQL_PROCESSOR_SHA256:-}" \
 	--argjson swap "$swap_metadata" \
+	--argjson replica "$replica" \
 	--argjson cgroups "$cgroup_limits" \
 	--argjson physicalMemoryBytes "$memory" --argjson logicalProcessors "$processors" --argjson cgroupMemoryLimitBytes "$cgroup_limit" \
 	'{sourceSha: $sha, architecture: $architecture, platform: $platform, codeqlVersion: $version,
@@ -138,7 +141,7 @@ jq -n --arg sha "$source_sha" --arg architecture "$architecture" --arg platform 
 	  cgroupLimits:$cgroups, resourceEnvelopeVerified:false,
 	  runnerImageOS:$imageOS, runnerImageVersion:$imageVersion, kernelRelease:$kernel,
 	  extractorSha256:$extractorHash, workflowRunId:$runId, workflowRunAttempt:$runAttempt, swapPreparation:$swap,
-	  runnerPackagesSha256:$packagesHash, processorModelSha256:$processorHash,
+	  runnerPackagesSha256:$packagesHash, processorModelSha256:$processorHash, replica:$replica,
 	  profileExitCode:-1, memorySamplerExitCode:-1, nativeFiles:null, nativeFilesExitCode:-1,
 	  traceExitCode: -1, finalizeExitCode: -1, sourceVerified: false, coverageVerified: false}' >"$KSAIL_CODEQL_CONTEXT"
 

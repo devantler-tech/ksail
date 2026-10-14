@@ -28,7 +28,7 @@ on:
         options: [8GiB, "off"]
         default: 8GiB
       swap_comparison:
-        description: Compare unchanged hosted swap with 8 GiB added swap (heap off in both arms)
+        description: Compare unchanged swap with 8 GiB added swap in a fixed six-job cohort (heap off)
         type: boolean
         default: false
 
@@ -40,13 +40,14 @@ concurrency:
 
 jobs:
   profile:
-    name: ${{ inputs.swap_comparison && format('Collect Go profile with {0} GiB added swap', matrix.swap_gib) || 'Measure Go extraction on Linux' }}
+    name: ${{ inputs.swap_comparison && format('Collect Go profile with {0} GiB added swap, replica {1}', matrix.swap_gib, matrix.replica) || 'Measure Go extraction on Linux' }}
     runs-on: ubuntu-24.04
     timeout-minutes: ${{ inputs.swap_comparison && 120 || 50 }}
     strategy:
       fail-fast: false
       matrix:
         swap_gib: ${{ fromJSON(inputs.swap_comparison && '[0,8]' || '[0]') }}
+        replica: ${{ fromJSON(inputs.swap_comparison && '[0,1,2]' || '[0]') }}
     permissions:
       contents: read
       actions: read
@@ -110,6 +111,7 @@ jobs:
           SWAP_COMPARISON: ${{ inputs.swap_comparison && 'true' || 'false' }}
           ADDED_SWAP_GIB: ${{ matrix.swap_gib }}
           SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          KSAIL_CODEQL_PROFILE_REPLICA: ${{ matrix.replica }}
         run: |
           if [[ "$SWAP_COMPARISON" == true ]]; then
             export KSAIL_CODEQL_SWAP_REPORT="$RUNNER_TEMP/codeql-swap.json"
@@ -117,7 +119,7 @@ jobs:
           status=0
           bash .github/scripts/profile-codeql-go.sh "$RUNNER_TEMP/codeql-profile-report" || status=$?
           if [[ "$SWAP_COMPARISON" != true ]]; then exit "$status"; fi
-          jq -e --argjson actual "$status" '.profileExitCode == $actual' "$RUNNER_TEMP/codeql-profile-report/report.json" > /dev/null
+          jq -e --argjson actual "$status" --argjson replica "$KSAIL_CODEQL_PROFILE_REPLICA" '.profileExitCode == $actual and .replica == $replica' "$RUNNER_TEMP/codeql-profile-report/report.json" > /dev/null
           bash .github/scripts/profile-codeql-compare.sh validate "$SOURCE_SHA" "$ADDED_SWAP_GIB" "$RUNNER_TEMP/codeql-profile-report/report.json"
           if [[ "$status" != 0 ]]; then
             printf '::notice::Baseline extraction failed with exit %s; only the collection was validated.\n' "$status"
@@ -127,13 +129,13 @@ jobs:
         if: ${{ always() && !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: codeql-go-profile-${{ github.event.pull_request.head.sha || github.sha }}-attempt${{ github.run_attempt }}-swap${{ matrix.swap_gib }}
+          name: codeql-go-profile-${{ github.event.pull_request.head.sha || github.sha }}-attempt${{ github.run_attempt }}-swap${{ matrix.swap_gib }}${{ inputs.swap_comparison && format('-replica{0}', matrix.replica) || '' }}
           path: ${{ runner.temp }}/codeql-profile-report/report.json
           if-no-files-found: error
           retention-days: 14
 
   compare:
-    name: Validate the paired swap observations
+    name: Validate the fixed swap comparison cohort
     if: ${{ always() && !cancelled() && inputs.swap_comparison }}
     needs: profile
     runs-on: ubuntu-24.04
@@ -147,25 +149,24 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Download this attempt's two normalized reports
+      - name: Download this attempt's six normalized reports
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: codeql-go-profile-${{ github.sha }}-attempt${{ github.run_attempt }}-swap*
+          pattern: codeql-go-profile-${{ github.sha }}-attempt${{ github.run_attempt }}-swap*-replica*
           path: ${{ runner.temp }}/codeql-comparison
       - name: Compare matching environments and native database coverage
         env:
           SOURCE_SHA: ${{ github.sha }}
-          RUN_ATTEMPT: ${{ github.run_attempt }}
+          PROFILE_JOBS_RESULT: ${{ needs.profile.result }}
         run: |
-          baseline="$RUNNER_TEMP/codeql-comparison/codeql-go-profile-$SOURCE_SHA-attempt$RUN_ATTEMPT-swap0/report.json"
-          treatment="$RUNNER_TEMP/codeql-comparison/codeql-go-profile-$SOURCE_SHA-attempt$RUN_ATTEMPT-swap8/report.json"
-          bash .github/scripts/profile-codeql-compare.sh compare "$SOURCE_SHA" "$baseline" "$treatment" > "$RUNNER_TEMP/codeql-comparison/comparison.json"
-          jq '{collectionValid,comparableCoverage,outcome}' "$RUNNER_TEMP/codeql-comparison/comparison.json"
+          test "$PROFILE_JOBS_RESULT" = success
+          bash .github/scripts/profile-codeql-cohort.sh "$SOURCE_SHA" "$RUNNER_TEMP/codeql-comparison" > "$RUNNER_TEMP/codeql-comparison.json"
+          jq '{collectionValid,comparableCoverage,outcome,selection}' "$RUNNER_TEMP/codeql-comparison.json"
       - name: Preserve the comparison
         if: ${{ always() && !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: codeql-go-comparison-${{ github.sha }}-attempt${{ github.run_attempt }}
-          path: ${{ runner.temp }}/codeql-comparison/comparison.json
+          path: ${{ runner.temp }}/codeql-comparison.json
           if-no-files-found: error
           retention-days: 14
