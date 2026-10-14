@@ -28,6 +28,8 @@ case "$1 $2" in
   case "$TRIAL_SCENARIO" in
   cleanup-updating | cleanup-wait-error) echo UPDATING; exit 0 ;;
   cleanup-active) echo ACTIVE; exit 0 ;;
+  cleanup-updating-warning) echo 'warning: fixture CLI notice' >&2; echo UPDATING; exit 0 ;;
+  cleanup-unexpected-status) echo BOGUS; exit 0 ;;
   cleanup-missing) echo 'An error occurred (ResourceNotFoundException) when calling the DescribeCluster operation: No cluster found'; exit 1 ;;
   cleanup-missing-leading-newline) printf '\nAn error occurred (ResourceNotFoundException) when calling the DescribeCluster operation: No cluster found\n' >&2; exit 1 ;;
   cleanup-missing-cli-prefix) printf '\naws: [ERROR]: An error occurred (ResourceNotFoundException) when calling the DescribeCluster operation: No cluster found\n' >&2; exit 1 ;;
@@ -172,7 +174,7 @@ echo 'PASS: version inputs fail closed and default off'
 for scenario in cleanup-updating cleanup-wait-error cleanup-active cleanup-missing \
 	cleanup-missing-leading-newline cleanup-missing-cli-prefix cleanup-partial-not-found \
 	cleanup-profile-not-found cleanup-missing-error-prefix cleanup-wrong-operation \
-	cleanup-query-error cleanup-empty; do
+	cleanup-query-error cleanup-empty cleanup-updating-warning cleanup-unexpected-status; do
 	state="$scratch/$scenario"
 	mkdir -p "$state"
 	status=0
@@ -183,7 +185,8 @@ for scenario in cleanup-updating cleanup-wait-error cleanup-active cleanup-missi
 	expected=0
 	case "$scenario" in
 	cleanup-wait-error | cleanup-query-error | cleanup-empty | cleanup-partial-not-found | \
-		cleanup-profile-not-found | cleanup-missing-error-prefix | cleanup-wrong-operation) expected=1 ;;
+		cleanup-profile-not-found | cleanup-missing-error-prefix | cleanup-wrong-operation | \
+		cleanup-unexpected-status) expected=1 ;;
 	esac
 	if [[ "$status" != "$expected" ]]; then
 		cat "$state/output" >&2
@@ -191,7 +194,7 @@ for scenario in cleanup-updating cleanup-wait-error cleanup-active cleanup-missi
 		exit 1
 	fi
 	case "$scenario" in
-	cleanup-updating | cleanup-wait-error) [[ -f "$state/waited" ]] ;;
+	cleanup-updating | cleanup-wait-error | cleanup-updating-warning) [[ -f "$state/waited" ]] ;;
 	*) [[ ! -f "$state/waited" ]] ;;
 	esac
 	echo "PASS: $scenario"

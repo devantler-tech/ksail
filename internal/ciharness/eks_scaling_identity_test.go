@@ -127,6 +127,7 @@ func TestEKSSmokeRejectsReplacedManagedNodeGroups(t *testing.T) {
 				assert.Contains(t, string(output), "managed node group identity changed")
 			default:
 				assert.NotContains(t, string(calls), "ksail cluster update")
+				assert.Equal(t, 1, strings.Count(string(calls), "aws eks describe-nodegroup"))
 			}
 
 			assert.NotContains(t, string(calls), "delete")

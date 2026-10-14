@@ -15,8 +15,13 @@ fail() {
 if [[ "${1:-}" == --wait-before-cleanup ]]; then
 	: "${KSAIL_EKS_CLUSTER_NAME:?}" "${AWS_REGION:?}"
 	export AWS_PAGER='' AWS_MAX_ATTEMPTS=3
+	# Keep stderr apart from the status: a CLI warning beside a successful
+	# UPDATING answer must not turn the value into something that skips the wait.
+	diagnostics="$(mktemp)"
+	trap 'rm -f "$diagnostics"' EXIT
 	if ! status="$(aws eks describe-cluster --name "$KSAIL_EKS_CLUSTER_NAME" --region "$AWS_REGION" \
-		--query 'cluster.status' --output text --cli-connect-timeout 10 --cli-read-timeout 30 2>&1)"; then
+		--query 'cluster.status' --output text --cli-connect-timeout 10 --cli-read-timeout 30 2>"$diagnostics")"; then
+		status="$status$(<"$diagnostics")"
 		# Accept the CLI's fixed error formatting, but preserve partial output
 		# and unrelated diagnostics as an unknown observation.
 		while [[ "$status" == $'\n'* ]]; do
@@ -29,13 +34,17 @@ if [[ "${1:-}" == --wait-before-cleanup ]]; then
 		fi
 		fail 'Cannot determine EKS status before cleanup; deletion checks must still run.'
 	fi
-	[[ -n "$status" && "$status" != None ]] || fail 'AWS returned no EKS status before cleanup.'
-	if [[ "$status" == UPDATING ]]; then
+	case "$status" in
+	ACTIVE | CREATING | DELETING | FAILED | PENDING) ;;
+	UPDATING)
 		echo 'Waiting for the accepted EKS update before deletion.'
 		aws eks wait cluster-active --name "$KSAIL_EKS_CLUSTER_NAME" --region "$AWS_REGION" \
 			--cli-connect-timeout 10 --cli-read-timeout 30 ||
 			fail 'EKS update did not settle; deletion must still run and any remaining resources need attention.'
-	fi
+		;;
+	'' | None) fail 'AWS returned no EKS status before cleanup.' ;;
+	*) fail 'AWS returned an unexpected EKS status before cleanup.' ;;
+	esac
 	exit 0
 fi
 
