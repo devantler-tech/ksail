@@ -9,6 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/internal/ciharness/eksauth"
 )
 
+// main validates piped STS identity and session expiration without logging provider details.
 func main() {
 	err := eksauth.Verify(os.Stdin, os.Getenv("AWS_OIDC_ROLE_ARN"),
 		os.Getenv("AWS_PREFLIGHT_SESSION"), os.Getenv("AWS_SESSION_EXPIRATION"), time.Now())

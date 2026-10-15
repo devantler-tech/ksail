@@ -112,6 +112,7 @@ jobs:
     environment: ci
     permissions:
       contents: read
+      # Request GitHub OIDC credentials for the identity-only AWS session below.
       id-token: write
     steps:
       - name: 📄 Checkout

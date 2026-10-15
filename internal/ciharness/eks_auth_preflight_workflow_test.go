@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestEKSReadOnlyAuthPreflightCannotProvision preserves the identity-only session boundary.
 func TestEKSReadOnlyAuthPreflightCannotProvision(t *testing.T) {
 	t.Parallel()
 

@@ -29,6 +29,8 @@ import (
 
 const eksUpgradeStartingVersion = "1.34"
 
+// TestEKSUpgradeSDKPreservesServiceTokenRejection preserves the provider's error
+// without asserting an unsupported client-side token-length rule.
 func TestEKSUpgradeSDKPreservesServiceTokenRejection(t *testing.T) {
 	t.Parallel()
 
@@ -252,6 +254,7 @@ type eksUpgradeRequestContract struct {
 	submittedToken  string
 }
 
+// accept checks KSail's request format and models a retryable submission.
 func (contract *eksUpgradeRequestContract) accept(
 	t *testing.T, writer http.ResponseWriter, body map[string]any,
 ) bool {

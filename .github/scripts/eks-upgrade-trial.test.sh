@@ -105,6 +105,8 @@ echo ok
 STUB
 chmod +x "$scratch/bin/"*
 
+# run_case exercises the trial with local command stubs and inert credentials,
+# checking its outcome, cleanup, and absence of credential values in output.
 run_case() {
 	local scenario="$1" expected="$2" state="$scratch/$1" status=0
 	local expected_message="${3:-}"

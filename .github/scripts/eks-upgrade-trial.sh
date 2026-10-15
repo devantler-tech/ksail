@@ -3,6 +3,7 @@
 set +x
 set -euo pipefail
 
+# fail reports a workflow error and stops the trial or cleanup probe.
 fail() {
 	echo "::error::$*" >&2
 	exit 1
@@ -70,15 +71,18 @@ trap 'exit 143' TERM
 cd "$KSAIL_EKS_WORKDIR"
 export AWS_PAGER='' AWS_MAX_ATTEMPTS=3
 
+# describe_cluster reads the selected cluster with bounded AWS request waits.
 describe_cluster() {
 	aws eks describe-cluster --name "$KSAIL_EKS_CLUSTER_NAME" --region "$AWS_REGION" \
 		--cli-connect-timeout 10 --cli-read-timeout 30 --output json
 }
+# updates returns a stable inventory for detecting unintended AWS submissions.
 updates() {
 	aws eks list-updates --name "$KSAIL_EKS_CLUSTER_NAME" --region "$AWS_REGION" \
 		--cli-connect-timeout 10 --cli-read-timeout 30 --output json |
 		jq -ce '.updateIds | if type == "array" then sort else error("missing update inventory") end'
 }
+# assert_cluster requires the expected version, ACTIVE status, and original identity.
 assert_cluster() {
 	local version="$1" actual
 	actual="$(describe_cluster)" || fail 'Cannot inspect the EKS cluster.'

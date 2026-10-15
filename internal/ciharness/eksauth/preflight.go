@@ -66,6 +66,7 @@ func Verify(reader io.Reader, role, session, expiry string, now time.Time) error
 	return nil
 }
 
+// readIdentity decodes bounded STS output and replaces read failures with sanitized errors.
 func readIdentity(reader io.Reader) (callerIdentity, error) {
 	var identity callerIdentity
 
@@ -81,6 +82,7 @@ func readIdentity(reader io.Reader) (callerIdentity, error) {
 	return identity, nil
 }
 
+// readExpiration accepts RFC3339 values and the credentials action's JSON string encoding.
 func readExpiration(expiry string) (time.Time, error) {
 	// The pinned credentials action serializes its SDK Date output as a JSON
 	// string. Accept that native wire form as well as a plain RFC3339 value.

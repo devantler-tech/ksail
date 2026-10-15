@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestVerifyReadOnlyOIDCPreflight checks identity binding and the two-hour session boundary.
 func TestVerifyReadOnlyOIDCPreflight(t *testing.T) {
 	t.Parallel()
 
@@ -74,10 +75,12 @@ type failedIdentityReader struct{}
 
 var errFailedIdentity = errors.New("private-provider-response")
 
+// Read simulates an unavailable identity response carrying private provider error details.
 func (failedIdentityReader) Read([]byte) (int, error) {
 	return 0, errFailedIdentity
 }
 
+// TestVerifyRejectsUnreadableIdentity prevents provider read errors from leaking to callers.
 func TestVerifyRejectsUnreadableIdentity(t *testing.T) {
 	t.Parallel()
 

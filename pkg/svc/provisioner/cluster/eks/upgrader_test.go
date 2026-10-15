@@ -21,6 +21,8 @@ var (
 	errUpgradeFixturePoll    = errors.New("wrong poll identity")
 )
 
+// TestControlPlaneUpgradeUsesDistinctHexRequestTokens requires independent
+// operations to use distinct 64-character lowercase hexadecimal tokens.
 func TestControlPlaneUpgradeUsesDistinctHexRequestTokens(t *testing.T) {
 	t.Parallel()
 
@@ -212,6 +214,7 @@ func (api *upgradeAPI) MintToken(context.Context, string) (string, error) { retu
 // the real SDK boundary is exercised in upgrader_credentials_test.go.
 func (api *upgradeAPI) ValidateUpgradeCredentialLifetime(context.Context) error { return nil }
 
+// UpdateClusterVersion records valid fixture submissions and invokes configured result hooks.
 func (api *upgradeAPI) UpdateClusterVersion(
 	_ context.Context,
 	name, version, token string,

@@ -1279,8 +1279,6 @@ func readRepoFile(t *testing.T, path string) []byte {
 	return contents
 }
 
-// findHarnessStep returns the named step, delegating the lookup to
-// harnessStepIndex so a single linear search backs every step accessor.
 // The EKS smoke job runs either the control-plane upgrade trial or the
 // ownership recovery, selected by whether an upgrade source version is given.
 const (
@@ -1313,6 +1311,8 @@ func eksSmokePathMinutes(t *testing.T, steps []harnessStep, upgradeTrial bool) i
 	return minutes
 }
 
+// findHarnessStep returns the named step, delegating the lookup to
+// harnessStepIndex so a single linear search backs every step accessor.
 func findHarnessStep(t *testing.T, steps []harnessStep, name string) harnessStep {
 	t.Helper()
 
