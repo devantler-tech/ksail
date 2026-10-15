@@ -809,8 +809,16 @@ func TestEKSSmokeExercisesStableInPlaceScalingWithoutRecreation(t *testing.T) {
 	assert.Contains(t, updateStep.Run, `cluster.[arn,createdAt]`)
 	assert.Contains(t, updateStep.Run, `assert_same_cluster`)
 	assert.Equal(t, 2, strings.Count(updateStep.Run, `assert_same_cluster "$cluster_identity"`))
-	assert.Contains(t, updateStep.Run, `set_nodegroup_capacity 2 1 2`)
-	assert.Contains(t, updateStep.Run, `wait_for_capacity 2 1 2 2`)
+	assert.Contains(
+		t,
+		updateStep.Run,
+		`set_nodegroup_capacity "$KSAIL_EKS_SMOKE_PEAK_NODES" 1 "$KSAIL_EKS_SMOKE_PEAK_NODES"`,
+	)
+	assert.Contains(
+		t,
+		updateStep.Run,
+		`wait_for_capacity "$KSAIL_EKS_SMOKE_PEAK_NODES" 1 "$KSAIL_EKS_SMOKE_PEAK_NODES" "$KSAIL_EKS_SMOKE_PEAK_NODES"`,
+	)
 	assert.Contains(t, updateStep.Run, `set_nodegroup_capacity 1 1 1`)
 	assert.Contains(t, updateStep.Run, `wait_for_capacity 1 1 1 1`)
 	assert.Contains(t, updateStep.Run, `eksctl get nodegroup`)
@@ -833,7 +841,7 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
 	smokeJob, ok := workflow.Jobs["smoke-test"]
 	require.True(t, ok, "smoke-test job is missing")
-	assert.Equal(t, 280, smokeJob.TimeoutMinutes)
+	assert.Equal(t, 285, smokeJob.TimeoutMinutes)
 
 	boundedStepNames := []string{
 		"📄 Checkout",
@@ -843,6 +851,7 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 		"📦 Cache KSail Binary",
 		"📥 Install eksctl",
 		"🔧 Initialize EKS project",
+		"🔎 Check EKS capacity before create",
 		"🧪 ksail cluster create",
 		"🧪 ksail cluster info",
 		"🔐 Refresh AWS credentials before EKS update and cleanup",

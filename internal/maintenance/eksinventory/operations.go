@@ -89,7 +89,7 @@ func computeOperations() []operation {
 	return []operation{
 		{
 			service:     ec2Service,
-			command:     "describe-instances",
+			command:     describeInstances,
 			title:       "Instances not terminated, by state and type",
 			collection:  "Reservations.Instances",
 			identity:    "InstanceId",
