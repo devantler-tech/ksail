@@ -92,7 +92,7 @@ require (
 	github.com/kyverno/api v0.0.1-alpha.3.0.20260723090831-fb2785727f98
 	github.com/kyverno/kyverno v1.19.1
 	github.com/loft-sh/log v0.0.0-20260812120051-874a69680b18
-	github.com/loft-sh/vcluster v0.37.2
+	github.com/loft-sh/vcluster v0.37.3
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/rancher/k3k v1.1.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
@@ -666,9 +666,9 @@ require (
 	github.com/lithammer/dedent v1.1.0 // indirect
 	github.com/lmittmann/tint v1.1.3 // indirect
 	github.com/loft-sh/admin-apis v0.0.0-20260721223200-58c89e54604e // indirect
-	github.com/loft-sh/agentapi/v4 v4.12.0-rc.3 // indirect
+	github.com/loft-sh/agentapi/v4 v4.12.2-rc.3 // indirect
 	github.com/loft-sh/analytics-client v0.0.0-20240219162240-2f4c64b2494e // indirect
-	github.com/loft-sh/api/v4 v4.12.0-rc.3 // indirect
+	github.com/loft-sh/api/v4 v4.12.2-rc.3 // indirect
 	github.com/loft-sh/apiserver v0.0.0-20260707184419-aef558a5ae8d // indirect
 	github.com/loft-sh/external-types v0.1.0-alpha.2.0.20260409132559-a38365a8cbf2 // indirect
 	github.com/loft-sh/image v0.0.0-20250818103249-5e7d53b59343 // indirect
