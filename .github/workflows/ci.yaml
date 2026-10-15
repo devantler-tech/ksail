@@ -1952,7 +1952,7 @@ jobs:
 
       - name: 📥 Restore KSail binary
         # Pin the identical published action until actionlint supports $/ references.
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@065b9e08b85a396b9e936c01f01b512bb23f8aa9
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@232789ff45f8b574a95fcb89162d92faeae79c3c
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
