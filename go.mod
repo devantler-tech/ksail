@@ -63,12 +63,12 @@ require (
 	github.com/apricote/hcloud-upload-image/hcloudimages v1.4.0
 	github.com/atotto/clipboard v0.1.4
 	github.com/aws/aws-sdk-go-v2 v1.47.1
-	github.com/aws/aws-sdk-go-v2/config v1.33.6
-	github.com/aws/aws-sdk-go-v2/credentials v1.20.6
+	github.com/aws/aws-sdk-go-v2/config v1.33.7
+	github.com/aws/aws-sdk-go-v2/credentials v1.20.7
 	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.81.1
 	github.com/aws/aws-sdk-go-v2/service/eks v1.102.0
-	github.com/aws/aws-sdk-go-v2/service/sts v1.51.1
-	github.com/aws/smithy-go v1.28.3
+	github.com/aws/aws-sdk-go-v2/service/sts v1.51.2
+	github.com/aws/smithy-go v1.28.4
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/glamour v1.0.0
@@ -79,7 +79,7 @@ require (
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/cosi-project/runtime v1.16.3
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/github/copilot-sdk/go v1.0.16
+	github.com/github/copilot-sdk/go v1.0.17
 	github.com/go-jose/go-jose/v4 v4.1.5
 	github.com/google/go-github/v72 v72.0.0
 	github.com/googleapis/gax-go/v2 v2.26.2
@@ -104,7 +104,7 @@ require (
 	github.com/siderolabs/omni/client v1.9.1
 	github.com/sigstore/sigstore v1.10.11
 	github.com/sigstore/sigstore-go v1.3.0
-	github.com/wailsapp/wails/v3 v3.0.0-beta.27
+	github.com/wailsapp/wails/v3 v3.0.0-beta.28
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.57.0
 	golang.org/x/mod v0.41.0
@@ -317,9 +317,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.31 // indirect
 	github.com/aws/aws-sdk-go-v2/service/kms v1.54.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.105.2 // indirect
-	github.com/aws/aws-sdk-go-v2/service/signin v1.10.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sso v1.38.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.1 // indirect
+	github.com/aws/aws-sdk-go-v2/service/signin v1.10.2 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.38.2 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.2 // indirect
 	github.com/awslabs/amazon-ecr-credential-helper/ecr-login v0.12.0 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect

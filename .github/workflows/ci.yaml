@@ -907,7 +907,7 @@ jobs:
 
       - name: 📤 Preserve schema cancellation observations
         if: ${{ always() && steps.schema-cancellation.outcome != 'skipped' && steps.schema-cancellation.outcome != '' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: kubeconform-cancellation-${{ github.sha }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/kubeconform-cancellation.json
@@ -928,7 +928,7 @@ jobs:
 
       - name: 📤 Publish KSail binary
         id: binary-artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ksail-binary-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ steps.binary.outputs.binary-path }}
@@ -963,7 +963,7 @@ jobs:
       - name: 📤 Publish Calico migration baseline
         id: calico-baseline-artifact
         if: needs.changes.outputs.system-test == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: calico-legacy-binary-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/calico-legacy-bin/ksail
@@ -1066,7 +1066,7 @@ jobs:
           else
             echo "No changes"
           fi
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: generate-patch
           path: /tmp/generate.patch
@@ -1539,7 +1539,7 @@ jobs:
 
       - name: 📤 Upload VSIX artifact
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ksail-vsix
           path: ksail.vsix
@@ -1780,7 +1780,7 @@ jobs:
 
       - name: 📤 Publish validated mirror artifact
         id: mirror-artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: mirror-cache-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -2036,7 +2036,7 @@ jobs:
         if: ${{ failure() && steps.system-test.outcome == 'failure' }}
         continue-on-error: true
         timeout-minutes: 5
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: system-test-diagnostics-${{ steps.system-test.outputs.artifact-tag }}
           path: /tmp/system-test-diagnostics/
@@ -2061,7 +2061,7 @@ jobs:
         if: ${{ always() && steps.system-test.outcome != 'skipped' && steps.system-test.outcome != '' }}
         continue-on-error: true
         timeout-minutes: 5
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: system-test-logs-${{ steps.system-test.outputs.artifact-tag }}
           path: /tmp/ksail-system-test-logs/
@@ -2434,7 +2434,7 @@ jobs:
           fi
       - name: 📤 Preserve exact-head acceptance evidence
         if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: local-recovery-${{ github.sha }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/local-recovery-evidence
@@ -2535,7 +2535,7 @@ jobs:
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/actions/aggregate-job-checks@1d726483facb9340655489913f609082677be8f5 # v13.10.6
+      - uses: devantler-tech/actions/aggregate-job-checks@ea4df9004d4ab43b6c9af5b0c5f55712f7211328 # v13.10.12
         with:
           job-results: >-
             ${{ needs.retired-repo-links.result }}
