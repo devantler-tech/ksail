@@ -43,9 +43,10 @@ tenancy, contradictory associations and missing type metadata stop as unknown.
 The Standard classifier requires a Standard family letter followed by a numeric
 generation; HPC, Inf, Trn, DL and unfamiliar shapes cannot silently use this quota.
 
-Admission requires applied quota minus usage and pending buffer to cover the
-planned target plus the documented rebalancing surge allowance, and that total
-to fit the five-vCPU ceiling. This is a point-in-time
+Available headroom is the applied quota minus current usage and the pending
+buffer. Admission requires enough headroom for the planned target plus the
+documented rebalancing surge allowance. This combined demand must also fit within
+five vCPUs. This is a point-in-time
 observation, subject to concurrent activity and regional stock availability.
 It neither reserves resources nor certifies prior cleanup or authorizes a trial.
 

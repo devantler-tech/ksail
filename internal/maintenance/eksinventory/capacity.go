@@ -31,6 +31,8 @@ type capacityTotals struct{ quota, usage, pending, target, surge, required int }
 
 // CheckCapacity reads complete regional observations before admitting an EKS smoke plan.
 // Config is one JSON eksctl document, converted from the generated YAML by the caller.
+// peakNodes must equal the largest node-group maxSize used by the smoke scenario.
+// The caller must keep every later scaling step within that bound.
 // A nil query uses the bounded, read-only AWS CLI boundary. Every incomplete observation
 // returns an error and prints unknown. Admission is neither a reservation nor trial authorization.
 func CheckCapacity(
