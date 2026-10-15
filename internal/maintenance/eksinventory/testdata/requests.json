@@ -1,0 +1,56 @@
+{
+  "eks list-clusters": {
+    "maxResults": 100
+  },
+  "cloudformation list-stacks": {},
+  "ec2 describe-fleets": {
+    "MaxResults": 100
+  },
+  "ec2 describe-spot-fleet-requests": {
+    "MaxResults": 100
+  },
+  "ec2 describe-spot-instance-requests": {
+    "MaxResults": 100
+  },
+  "ec2 describe-instances": {
+    "MaxResults": 100,
+    "Filters": [
+      {
+        "Name": "instance-state-name",
+        "Values": [
+          "pending",
+          "running",
+          "stopping",
+          "stopped",
+          "shutting-down"
+        ]
+      }
+    ],
+    "IncludeManagedResources": true
+  },
+  "autoscaling describe-auto-scaling-groups": {
+    "MaxRecords": 100
+  },
+  "ec2 describe-nat-gateways": {
+    "MaxResults": 100
+  },
+  "ec2 describe-addresses": {},
+  "ec2 describe-network-interfaces": {
+    "MaxResults": 100,
+    "IncludeManagedResources": true
+  },
+  "ec2 describe-volumes": {
+    "MaxResults": 100,
+    "IncludeManagedResources": true
+  },
+  "elb describe-load-balancers": {
+    "PageSize": 100
+  },
+  "elbv2 describe-load-balancers": {
+    "PageSize": 100
+  },
+  "service-quotas list-service-quotas": {
+    "MaxResults": 100,
+    "ServiceCode": "ec2"
+  }
+}

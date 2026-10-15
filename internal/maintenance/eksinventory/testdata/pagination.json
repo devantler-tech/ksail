@@ -1,0 +1,68 @@
+[
+  {
+    "operation": "ec2 describe-volumes",
+    "first": {
+      "Volumes": [],
+      "NextToken": "private-token"
+    },
+    "last": {
+      "Volumes": [
+        {
+          "VolumeId": "private-volume",
+          "State": "available"
+        }
+      ]
+    },
+    "inputToken": "NextToken",
+    "want": "EBS volumes, by state: 1"
+  },
+  {
+    "operation": "eks list-clusters",
+    "first": {
+      "clusters": [],
+      "nextToken": "private-token"
+    },
+    "last": {
+      "clusters": [
+        "private-cluster"
+      ]
+    },
+    "inputToken": "nextToken",
+    "want": "EKS clusters: 1"
+  },
+  {
+    "operation": "elb describe-load-balancers",
+    "first": {
+      "LoadBalancerDescriptions": [],
+      "NextMarker": "private-token"
+    },
+    "last": {
+      "LoadBalancerDescriptions": [
+        {
+          "LoadBalancerName": "private-lb"
+        }
+      ]
+    },
+    "inputToken": "Marker",
+    "want": "Classic load balancers: 1"
+  },
+  {
+    "operation": "elbv2 describe-load-balancers",
+    "first": {
+      "LoadBalancers": [],
+      "NextMarker": "private-token"
+    },
+    "last": {
+      "LoadBalancers": [
+        {
+          "LoadBalancerArn": "private-lb",
+          "State": {
+            "Code": "active"
+          }
+        }
+      ]
+    },
+    "inputToken": "Marker",
+    "want": "ELBv2 load balancers, by state: 1"
+  }
+]

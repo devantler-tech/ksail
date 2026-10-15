@@ -420,6 +420,7 @@ jobs:
               - '.github/workflows/cd.yaml'
               - '.github/workflows/ci.yaml'
             eks-smoke-scripts:
+              - 'internal/maintenance/eksinventory/**'
               - '.github/scripts/delete-eks-smoke-cluster.sh'
               - '.github/scripts/delete-eks-smoke-cluster.test.sh'
               - '.github/scripts/report-eks-create-failure.sh'
@@ -452,7 +453,7 @@ jobs:
   eks-smoke-scripts:
     name: 🧹 Validate EKS Smoke Teardown
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     needs: [changes]
     if: needs.changes.outputs.eks-smoke-scripts == 'true'
     permissions:
@@ -462,6 +463,15 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: 🔎 Verify complete and private regional inventories
+        run: go test ./internal/maintenance/eksinventory/...
 
       - name: 🧹 Verify EKS smoke teardown reports only real leaks
         run: |
@@ -2527,6 +2537,7 @@ jobs:
         test-release-config,
         release-graph-audit,
         cask-pr-handoff,
+        eks-smoke-scripts,
         k3k-sentinel-scripts,
         rate-limit-gate-script,
         hetzner-cleanup-script,
@@ -2567,6 +2578,7 @@ jobs:
             ${{ needs.test-release-config.result }}
             ${{ needs.release-graph-audit.result }}
             ${{ needs.cask-pr-handoff.result }}
+            ${{ needs.eks-smoke-scripts.result }}
             ${{ needs.k3k-sentinel-scripts.result }}
             ${{ needs.rate-limit-gate-script.result }}
             ${{ needs.hetzner-cleanup-script.result }}

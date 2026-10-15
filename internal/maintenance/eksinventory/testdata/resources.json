@@ -1,0 +1,163 @@
+[
+  {
+    "operation": "eks list-clusters",
+    "body": {
+      "clusters": [
+        "private-cluster"
+      ]
+    },
+    "want": "EKS clusters: 1"
+  },
+  {
+    "operation": "cloudformation list-stacks",
+    "body": {
+      "StackSummaries": [
+        {
+          "StackId": "private-stack",
+          "StackStatus": "DELETE_FAILED"
+        }
+      ]
+    },
+    "want": "CloudFormation stacks, by state: 1\n  1 DELETE_FAILED"
+  },
+  {
+    "operation": "ec2 describe-fleets",
+    "body": {
+      "Fleets": [
+        {
+          "FleetId": "private-fleet",
+          "FleetState": "active",
+          "Type": "maintain"
+        }
+      ]
+    },
+    "want": "Enumerated EC2 fleets, by state and type: 1\n  1 active maintain"
+  },
+  {
+    "operation": "ec2 describe-spot-fleet-requests",
+    "body": {
+      "SpotFleetRequestConfigs": [
+        {
+          "SpotFleetRequestId": "private-fleet",
+          "SpotFleetRequestState": "cancelled_running"
+        }
+      ]
+    },
+    "want": "Spot fleet requests, by state: 1\n  1 cancelled_running"
+  },
+  {
+    "operation": "ec2 describe-spot-instance-requests",
+    "body": {
+      "SpotInstanceRequests": [
+        {
+          "SpotInstanceRequestId": "private-request",
+          "State": "open"
+        }
+      ]
+    },
+    "want": "Spot instance requests, by state: 1\n  1 open"
+  },
+  {
+    "operation": "ec2 describe-instances",
+    "body": {
+      "Reservations": [
+        {
+          "Instances": [
+            {
+              "InstanceId": "private-instance",
+              "State": {
+                "Name": "stopped"
+              },
+              "InstanceType": "t3.medium"
+            }
+          ]
+        }
+      ]
+    },
+    "want": "Instances not terminated, by state and type: 1\n  1 stopped t3.medium"
+  },
+  {
+    "operation": "autoscaling describe-auto-scaling-groups",
+    "body": {
+      "AutoScalingGroups": [
+        {
+          "AutoScalingGroupARN": "private-asg",
+          "DesiredCapacity": 0
+        }
+      ]
+    },
+    "want": "Auto Scaling groups, by desired capacity: 1\n  1 0"
+  },
+  {
+    "operation": "ec2 describe-nat-gateways",
+    "body": {
+      "NatGateways": [
+        {
+          "NatGatewayId": "private-nat",
+          "State": "deleted"
+        }
+      ]
+    },
+    "want": "NAT gateways, by state: 1\n  1 deleted"
+  },
+  {
+    "operation": "ec2 describe-addresses",
+    "body": {
+      "Addresses": [
+        {
+          "AllocationId": "private-address"
+        }
+      ]
+    },
+    "want": "Elastic IP addresses: 1"
+  },
+  {
+    "operation": "ec2 describe-network-interfaces",
+    "body": {
+      "NetworkInterfaces": [
+        {
+          "NetworkInterfaceId": "private-interface",
+          "Status": "available"
+        }
+      ]
+    },
+    "want": "Network interfaces, by state: 1\n  1 available"
+  },
+  {
+    "operation": "ec2 describe-volumes",
+    "body": {
+      "Volumes": [
+        {
+          "VolumeId": "private-volume",
+          "State": "available"
+        }
+      ]
+    },
+    "want": "EBS volumes, by state: 1\n  1 available"
+  },
+  {
+    "operation": "elb describe-load-balancers",
+    "body": {
+      "LoadBalancerDescriptions": [
+        {
+          "LoadBalancerName": "private-classic"
+        }
+      ]
+    },
+    "want": "Classic load balancers: 1"
+  },
+  {
+    "operation": "elbv2 describe-load-balancers",
+    "body": {
+      "LoadBalancers": [
+        {
+          "LoadBalancerArn": "private-lb",
+          "State": {
+            "Code": "active"
+          }
+        }
+      ]
+    },
+    "want": "ELBv2 load balancers, by state: 1\n  1 active"
+  }
+]
