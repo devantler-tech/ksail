@@ -45,6 +45,21 @@ func newCapacityFixture() *capacityFixture {
 	}
 }
 
+func newCapacityHeadroomFixture(quota int, reserved, pending bool) *capacityFixture {
+	fixture := newCapacityFixture()
+
+	fixture.quota = fmt.Sprintf(`{"Quotas":[{"QuotaCode":"L-1216C47A","Value":%d}]}`, quota)
+	if reserved {
+		fixture.reservations = reservation("active", 6, 6)
+	}
+
+	if pending {
+		fixture.instances = instanceRows(instance("i-pending", "t3.medium", "pending", ""))
+	}
+
+	return fixture
+}
+
 func (fixture *capacityFixture) query(_ context.Context, args ...string) ([]byte, error) {
 	if len(args) != 10 {
 		return nil, inventory.ErrInventory
@@ -442,19 +457,7 @@ func TestCapacityFrankfurtBudgetPreservesRegionalAndLiveLimits(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			fixture := newCapacityFixture()
-
-			fixture.quota = fmt.Sprintf(
-				`{"Quotas":[{"QuotaCode":"L-1216C47A","Value":%d}]}`,
-				test.quota,
-			)
-			if test.reserved {
-				fixture.reservations = reservation("active", 6, 6)
-			}
-
-			if test.pending {
-				fixture.instances = instanceRows(instance("i-pending", "t3.medium", "pending", ""))
-			}
+			fixture := newCapacityHeadroomFixture(test.quota, test.reserved, test.pending)
 
 			var output bytes.Buffer
 
