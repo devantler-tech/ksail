@@ -167,7 +167,7 @@ func collect(
 func requestInput(operationSpec operation, token string) map[string]any {
 	input := make(map[string]any)
 	if slices.Contains(
-		[]string{"describe-instances", "describe-network-interfaces", "describe-volumes"},
+		[]string{describeInstances, "describe-network-interfaces", "describe-volumes"},
 		operationSpec.command,
 	) {
 		input["IncludeManagedResources"] = true
@@ -188,8 +188,14 @@ func requestInput(operationSpec operation, token string) map[string]any {
 	if operationSpec.kind == instanceKind {
 		input["Filters"] = []map[string]any{
 			{
-				"Name":   "instance-state-name",
-				"Values": []string{"pending", "running", "stopping", "stopped", "shutting-down"},
+				"Name": "instance-state-name",
+				"Values": []string{
+					capacityPending,
+					capacityRunning,
+					"stopping",
+					"stopped",
+					"shutting-down",
+				},
 			},
 		}
 	}
@@ -248,6 +254,31 @@ func queryPage(
 }
 
 func records(data json.RawMessage, path []string) ([]json.RawMessage, error) {
+	if len(path) == 0 {
+		return nil, fmt.Errorf("empty resource path: %w", ErrInventory)
+	}
+
+	rows := []json.RawMessage{data}
+
+	for _, key := range path {
+		var next []json.RawMessage
+
+		for _, row := range rows {
+			children, err := collectionRecords(row, key)
+			if err != nil {
+				return nil, err
+			}
+
+			next = append(next, children...)
+		}
+
+		rows = next
+	}
+
+	return rows, nil
+}
+
+func collectionRecords(data json.RawMessage, key string) ([]json.RawMessage, error) {
 	var object map[string]json.RawMessage
 
 	err := json.Unmarshal(data, &object)
@@ -255,34 +286,19 @@ func records(data json.RawMessage, path []string) ([]json.RawMessage, error) {
 		return nil, fmt.Errorf("invalid resource object: %w", ErrInventory)
 	}
 
-	field, found := object[path[0]]
-	if !found || bytes.Equal(bytes.TrimSpace(field), []byte("null")) {
+	raw, found := object[key]
+	if !found || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 		return nil, fmt.Errorf("missing resource collection: %w", ErrInventory)
 	}
 
 	var rows []json.RawMessage
 
-	err = json.Unmarshal(field, &rows)
+	err = json.Unmarshal(raw, &rows)
 	if err != nil {
 		return nil, fmt.Errorf("invalid resource collection: %w", ErrInventory)
 	}
 
-	if len(path) == 1 {
-		return rows, nil
-	}
-
-	var flattened []json.RawMessage
-
-	for _, row := range rows {
-		children, err := records(row, path[1:])
-		if err != nil {
-			return nil, err
-		}
-
-		flattened = append(flattened, children...)
-	}
-
-	return flattened, nil
+	return rows, nil
 }
 
 func field(data json.RawMessage, path string) (json.RawMessage, error) {
@@ -662,7 +678,7 @@ func validAWSRequest(args []string) bool {
 
 	return valid &&
 		slices.ContainsFunc(
-			operations(),
+			append(operations(), capacityReadOperations()...),
 			func(spec operation) bool { return spec.service == args[0] && spec.command == args[1] },
 		)
 }

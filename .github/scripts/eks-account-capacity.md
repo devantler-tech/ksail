@@ -41,3 +41,6 @@ and [NAT gateway deletion](https://docs.aws.amazon.com/vpc/latest/userguide/nat-
 Run-owned capture and post-delete verification remain separate requirements.
 This diagnostic cannot retroactively certify an earlier teardown and does not
 authorize another billable trial, a permission expansion or a quota increase.
+
+For a separate, fail-closed smoke-candidate quota decision, enable the workflow's
+optional check. See [EKS smoke quota admission](eks-capacity-preflight.md).

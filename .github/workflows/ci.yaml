@@ -421,6 +421,8 @@ jobs:
               - '.github/workflows/ci.yaml'
             eks-smoke-scripts:
               - 'internal/maintenance/eksinventory/**'
+              - '.github/scripts/check-eks-capacity.sh'
+              - '.github/scripts/check-eks-capacity.test.sh'
               - '.github/scripts/delete-eks-smoke-cluster.sh'
               - '.github/scripts/delete-eks-smoke-cluster.test.sh'
               - '.github/scripts/report-eks-create-failure.sh'
@@ -472,6 +474,11 @@ jobs:
 
       - name: 🔎 Verify complete and private regional inventories
         run: go test ./internal/maintenance/eksinventory/...
+
+      - name: 🔎 Verify capacity admission refuses incomplete reads
+        run: |
+          shellcheck .github/scripts/check-eks-capacity.sh .github/scripts/check-eks-capacity.test.sh
+          .github/scripts/check-eks-capacity.test.sh
 
       - name: 🧹 Verify EKS smoke teardown reports only real leaks
         run: |

@@ -12,7 +12,12 @@ on:
         description: "AWS region to read"
         required: false
         type: string
-        default: us-east-1
+        default: eu-central-1
+      check_smoke_capacity:
+        description: "Also check quota admission for the two-node t3.medium smoke candidate (read-only)"
+        required: false
+        type: boolean
+        default: false
 
 env:
   AWS_OIDC_ROLE_ARN: "arn:aws:iam::939001610192:role/eks-ci"
@@ -27,7 +32,7 @@ jobs:
   report:
     name: 🔎 Report EC2 Launch Capacity
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     environment: ci
     permissions:
       contents: read
@@ -62,3 +67,19 @@ jobs:
           AWS_REGION: ${{ inputs.region }}
         run: |
           "$GITHUB_WORKSPACE/.github/scripts/report-eks-account-capacity.sh" --region "$AWS_REGION"
+
+      - name: 🔎 Check smoke candidate quota without creating resources
+        if: inputs.check_smoke_capacity
+        timeout-minutes: 5
+        shell: bash
+        env:
+          AWS_REGION: ${{ inputs.region }}
+        run: |
+          set -euo pipefail
+          jq -cn --arg region "$AWS_REGION" '{
+            apiVersion: "eksctl.io/v1alpha5", kind: "ClusterConfig",
+            metadata: {name: "capacity-probe", region: $region},
+            managedNodeGroups: [{name: "default", instanceType: "t3.medium",
+              desiredCapacity: 1, minSize: 1, maxSize: 1}]
+          }' | "$GITHUB_WORKSPACE/.github/scripts/check-eks-capacity.sh" \
+            --region "$AWS_REGION" --cluster-name capacity-probe --peak-nodes 2
