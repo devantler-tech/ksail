@@ -63,6 +63,12 @@ const CiliumValuesField = "cluster.cni.cilium.chartValues"
 // the same Helm upgrade of the driver as a cluster.csi change.
 const CSIValuesField = "cluster.csi.chartValues"
 
+// HcloudCCMValuesField is the diff key for Hetzner cloud controller manager
+// chart values that differ from the ones this KSail version renders.
+// Reconciliation routes it to the same Helm upgrade of the controller as a
+// cluster.loadBalancer change on Talos × Hetzner.
+const HcloudCCMValuesField = "cluster.loadBalancer.hcloudCCM.chartValues"
+
 // MetricsServerValuesField is the diff key for metrics-server chart values that
 // differ from the ones this KSail version renders. Reconciliation routes it to
 // the same metrics-server Helm upgrade as a cluster.metricsServer change.
