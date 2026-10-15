@@ -1,0 +1,153 @@
+name: 🔎 Verify Published Cask Handoff
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type "verify published casks" to run the read-only verification'
+        required: true
+        type: string
+      release_tag:
+        description: Published KSail version currently delivered by both casks
+        required: true
+        type: string
+      cli_pr:
+        description: Merged Homebrew tap PR for the CLI cask
+        required: true
+        type: string
+      desktop_pr:
+        description: Merged Homebrew tap PR for the desktop cask
+        required: true
+        type: string
+
+# Only read public release and tap evidence; this workflow cannot deliver a cask.
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: 🔎 Verify Both Published Casks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: ✅ Validate read-only cask verification
+        shell: bash
+        env:
+          CONFIRM_READ_ONLY: ${{ inputs.confirmation }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          CLI_PR: ${{ inputs.cli_pr }}
+          DESKTOP_PR: ${{ inputs.desktop_pr }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" != workflow_dispatch || "$GITHUB_REF" != refs/heads/main ||
+                "$CONFIRM_READ_ONLY" != 'verify published casks' ]]; then
+            echo '::error::Verification requires an explicitly confirmed dispatch from main.'
+            exit 1
+          fi
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ||
+                ! "$CLI_PR" =~ ^[1-9][0-9]*$ || ! "$DESKTOP_PR" =~ ^[1-9][0-9]*$ ]]; then
+            echo '::error::Supply a complete release tag and two positive PR numbers.'
+            exit 1
+          fi
+
+      - name: 📄 Checkout reviewed observer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 🔎 Verify named merged deliveries
+        timeout-minutes: 10
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          CLI_PR: ${{ inputs.cli_pr }}
+          DESKTOP_PR: ${{ inputs.desktop_pr }}
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || {
+            echo '::error::Observer checkout does not match this workflow run.'
+            exit 1
+          }
+          evidence_dir="$RUNNER_TEMP/cask-handoff-verification"
+          mkdir -p "$evidence_dir/ksail" "$evidence_dir/ksail-desktop"
+          gh api "repos/devantler-tech/ksail/releases/tags/$RELEASE_TAG" > "$evidence_dir/release.json"
+          jq -e --arg tag "$RELEASE_TAG" '
+            .tag_name == $tag and .draft == false and .prerelease == false and
+            (.id | type == "number" and . > 0 and floor == .) and
+            (.assets | type == "array" and length > 0) and
+            (.published_at | type == "string" and length > 0)
+          ' "$evidence_dir/release.json" >/dev/null || {
+            echo '::error::Select a published, non-prerelease KSail release.'
+            exit 1
+          }
+
+          for name in ksail ksail-desktop; do
+            pr="$CLI_PR"
+            [[ "$name" != ksail-desktop ]] || pr="$DESKTOP_PR"
+            observed="$(timeout 120s bash .github/scripts/find-merged-cask-pr-handoff.sh \
+              --tap devantler-tech/homebrew-tap --cask-name "$name" \
+              --source-repo devantler-tech/ksail --tag "$RELEASE_TAG" \
+              --output-dir "$evidence_dir/$name" --pr "$pr")"
+            [[ "$observed" == "$pr" ]] || {
+              echo '::error::Verification did not recognize the requested named delivery.'
+              exit 1
+            }
+            jq -e --argjson pr "$pr" '.pr.number == $pr' \
+              "$evidence_dir/$name/merged-$pr.json" >/dev/null || {
+              echo '::error::Named PR identity is incomplete or mismatched.'
+              exit 1
+            }
+          done
+          tap_main="$(gh api repos/devantler-tech/homebrew-tap/git/ref/heads/main --jq .object.sha)"
+          for evidence in "$evidence_dir/ksail/merged-$CLI_PR.json" \
+                          "$evidence_dir/ksail-desktop/merged-$DESKTOP_PR.json"; do
+            jq -e --arg main "$tap_main" '.mainRef.sha == $main' "$evidence" >/dev/null || {
+              echo '::error::Cask main snapshot changed during verification.'
+              exit 1
+            }
+            jq -e --slurpfile release "$evidence_dir/release.json" '
+              (.releaseAssets | sort_by(.name)) ==
+              ($release[0].assets | map({name,digest}) | sort_by(.name))
+            ' "$evidence" >/dev/null || {
+              echo '::error::Release assets differ between observations.'
+              exit 1
+            }
+          done
+          gh api "repos/devantler-tech/ksail/releases/tags/$RELEASE_TAG" > "$evidence_dir/rebound-release.json"
+          jq -e --slurpfile prior "$evidence_dir/release.json" '
+            def identity: {id,tag_name,draft,prerelease,published_at,
+              assets:(.assets | map({name,digest}) | sort_by(.name))};
+            identity == ($prior[0] | identity)
+          ' "$evidence_dir/rebound-release.json" >/dev/null || {
+            echo '::error::Release identity or publication changed during verification.'
+            exit 1
+          }
+          [[ "$(gh api repos/devantler-tech/homebrew-tap/git/ref/heads/main --jq .object.sha)" == "$tap_main" ]] || {
+            echo '::error::Cask main snapshot changed during the final release read.'
+            exit 1
+          }
+          # This receipt proves merged content; checks and the actual online audit
+          # require independent exact-head readback and are not inferred from a merge.
+          jq -n --arg observer "$GITHUB_SHA" --arg tag "$RELEASE_TAG" --arg main "$tap_main" \
+            --slurpfile release "$evidence_dir/release.json" \
+            --slurpfile cli "$evidence_dir/ksail/merged-$CLI_PR.json" \
+            --slurpfile desktop "$evidence_dir/ksail-desktop/merged-$DESKTOP_PR.json" '
+            {proof_scope:"merged identities, current-main blobs and published asset digests",
+             observer_commit:$observer, release_tag:$tag, release_id:$release[0].id,
+             tap_main:$main, casks:([$cli[0], $desktop[0]] | map({
+               pr:.pr.number, head:.pr.head.sha, merge:.pr.merge_commit_sha,
+               path:.mainFile.path, blob:.mainFile.sha, release_assets:.releaseAssets
+             }))}
+          ' > "$evidence_dir/receipt.json"
+          cat "$evidence_dir/receipt.json"
+          printf 'Verified both named merged cask contents for %s at tap main %s.\n' \
+            "$RELEASE_TAG" "$tap_main" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 📤 Preserve immutable verification evidence
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cask-handoff-verification
+          path: ${{ runner.temp }}/cask-handoff-verification
+          if-no-files-found: error
+          retention-days: 7

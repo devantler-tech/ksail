@@ -1,24 +1,8 @@
 # KSail reader reference
 
-[![GitHub Stars](https://img.shields.io/github/stars/devantler-tech/ksail?style=flat)](https://github.com/devantler-tech/ksail/stargazers)
-[![Latest Release](https://img.shields.io/github/v/release/devantler-tech/ksail)](https://github.com/devantler-tech/ksail/releases/latest)
-[![License](https://img.shields.io/badge/License-PolyForm--Shield--1.0.0-blue.svg)](https://polyformproject.org/licenses/shield/1.0.0)
-[![Go Reference](https://pkg.go.dev/badge/github.com/devantler-tech/ksail/v7.svg)](https://pkg.go.dev/github.com/devantler-tech/ksail/v7)
-[![CI - KSail](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml/badge.svg)](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml)
-[![MCP Registry](https://img.shields.io/badge/MCP_Registry-io.github.devantler--tech/ksail-blue?logo=github)](https://github.com/mcp)
-
-Start with the [project README](../README.md) for a credential-free first checkpoint.
-Find optional integrations, platform details and related projects here.
+Start with the [project README](../README.md) for an overview and local quick start.
+Find detailed setup, optional integrations and platform information here.
 Contributors start with [CONTRIBUTING.md](../CONTRIBUTING.md).
-
-![KSail command-line interface](src/assets/ksail-cli-dark.png)
-
-KSail bundles common Kubernetes tooling into a single binary, with a CLI, VS Code extension,
-AI chat interface and MCP server. A provider supplies machines or containers; a distribution
-chooses the Kubernetes implementation. Local Docker clusters need a running Docker daemon;
-cloud and existing-Kubernetes paths have their own prerequisites, permissions and costs.
-
-📖 **Full documentation:** <https://ksail.devantler.tech>
 
 ## Installation options
 
@@ -66,29 +50,22 @@ If you installed the plugin earlier from this repository's own marketplace, remo
 - Copilot CLI: `copilot plugin marketplace remove ksail --force`
 - Claude Code: `/plugin marketplace remove ksail`
 
-## Explore your cluster
+## Run the local cluster
 
-After creating the [README's local cluster](../README.md#run-the-local-cluster),
-run `ksail cluster connect` from the project directory to open K9s, an interactive
-terminal view of the cluster. Enter `:quit` to exit K9s. Delete the trial when finished
-as described in the README.
+Follow the [README quick start](../README.md#quick-start) from a new project directory.
+Initialization creates `ksail.yaml`, `kind.yaml` and `k8s/kustomization.yaml`, plus cache settings
+and an optional development-container configuration. The name flag names the cluster; it does
+not create an output directory. Initialization needs no Docker or cloud account.
 
-Continue with the [Getting Started guide](https://ksail.devantler.tech/start/quickstart/) for GitOps, workloads, and multi-tenancy.
+Cluster creation needs Docker running. It downloads container images, uses local memory and
+storage, and writes connection settings for Kubernetes tools. The README's connect command opens
+K9s; enter `:quit` to leave. Delete only your trial cluster using the README's named deletion
+command, review the name and type `yes` when prompted. Project files and cached downloads remain.
 
 ## What KSail Bundles
 
-| Category                 | Built-in Capabilities                                                            |
-|--------------------------|----------------------------------------------------------------------------------|
-| Cluster Provisioning     | Kind, K3d, Talos, VCluster (Vind), KWOK (kwokctl), EKS, GKE, AKS                 |
-| Container Orchestration  | kubectl, Helm, Kustomize                                                         |
-| GitOps Engines           | Flux, ArgoCD                                                                     |
-| Secrets Management       | SOPS with Age encryption                                                         |
-| Manifest Validation      | Kubeconform                                                                      |
-| Cluster Operations       | K9s, backup & restore, multi-tenancy (`ksail tenant`)                            |
-| AI Integration           | Chat assistant (Copilot SDK), MCP server, VS Code extension                      |
-| Infrastructure Providers | Docker (local), Kubernetes (nested), Hetzner Cloud, Sidero Omni, AWS, GCP, Azure |
-
-See the [feature overview](https://ksail.devantler.tech/features/) and [architecture guide](https://ksail.devantler.tech/architecture/) for details.
+See the [README overview](../README.md#what-you-get) for the included tools and capabilities,
+and the [feature guide](https://ksail.devantler.tech/features/) for details.
 
 ## Supported Platforms
 

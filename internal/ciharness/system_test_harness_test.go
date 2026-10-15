@@ -809,8 +809,16 @@ func TestEKSSmokeExercisesStableInPlaceScalingWithoutRecreation(t *testing.T) {
 	assert.Contains(t, updateStep.Run, `cluster.[arn,createdAt]`)
 	assert.Contains(t, updateStep.Run, `assert_same_cluster`)
 	assert.Equal(t, 2, strings.Count(updateStep.Run, `assert_same_cluster "$cluster_identity"`))
-	assert.Contains(t, updateStep.Run, `set_nodegroup_capacity 2 1 2`)
-	assert.Contains(t, updateStep.Run, `wait_for_capacity 2 1 2 2`)
+	assert.Contains(
+		t,
+		updateStep.Run,
+		`set_nodegroup_capacity "$KSAIL_EKS_SMOKE_PEAK_NODES" 1 "$KSAIL_EKS_SMOKE_PEAK_NODES"`,
+	)
+	assert.Contains(
+		t,
+		updateStep.Run,
+		`wait_for_capacity "$KSAIL_EKS_SMOKE_PEAK_NODES" 1 "$KSAIL_EKS_SMOKE_PEAK_NODES" "$KSAIL_EKS_SMOKE_PEAK_NODES"`,
+	)
 	assert.Contains(t, updateStep.Run, `set_nodegroup_capacity 1 1 1`)
 	assert.Contains(t, updateStep.Run, `wait_for_capacity 1 1 1 1`)
 	assert.Contains(t, updateStep.Run, `eksctl get nodegroup`)
@@ -833,6 +841,12 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
 	smokeJob, ok := workflow.Jobs["smoke-test"]
 	require.True(t, ok, "smoke-test job is missing")
+	assert.Equal(t, 360, smokeJob.TimeoutMinutes)
+	assert.Less(t,
+		harnessStepIndex(t, smokeJob.Steps, "🔧 Prepare EKS upgrade trial project"),
+		harnessStepIndex(t, smokeJob.Steps, "🔎 Check EKS capacity before create"),
+		"capacity must observe the final prepared upgrade configuration",
+	)
 
 	boundedStepNames := []string{
 		"📄 Checkout",
@@ -843,6 +857,7 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 		"📥 Install eksctl",
 		"🔧 Initialize EKS project",
 		"🔧 Prepare EKS upgrade trial project",
+		"🔎 Check EKS capacity before create",
 		"🧪 ksail cluster create",
 		"🧪 ksail cluster info",
 		"🔐 Refresh AWS credentials before EKS update and cleanup",
@@ -1286,8 +1301,8 @@ const (
 	eksNoUpgradeTrialCondition = "inputs.upgrade_from_version == ''"
 )
 
-// eksSmokePathMinutes sums the step budgets of one of the EKS smoke job's two
-// mutually exclusive paths, and requires every step to be bounded.
+// eksSmokePathMinutes bounds one of the EKS smoke job's mutually exclusive paths.
+// A failed-create diagnostic and the success-gated upgrade cannot run together.
 func eksSmokePathMinutes(t *testing.T, steps []harnessStep, upgradeTrial bool) int {
 	t.Helper()
 
@@ -1308,7 +1323,34 @@ func eksSmokePathMinutes(t *testing.T, steps []harnessStep, upgradeTrial bool) i
 		minutes += step.TimeoutMinutes
 	}
 
+	if upgradeTrial {
+		minutes -= eksDisjointUpgradeMinutes(t, steps)
+	}
+
 	return minutes
+}
+
+// eksDisjointUpgradeMinutes requires the failure/success predicates and ordering
+// that prove at least one step is skipped, then returns the smaller saved budget.
+func eksDisjointUpgradeMinutes(t *testing.T, steps []harnessStep) int {
+	t.Helper()
+
+	create := findHarnessStep(t, steps, "🧪 ksail cluster create")
+	diagnostic := findHarnessStep(t, steps, "🔎 Report why the EKS create failed")
+	trial := findHarnessStep(t, steps, "🧪 EKS control-plane upgrade trial")
+	require.False(t, create.ContinueOnError, "failure must retain GitHub's default success gate")
+	require.Equal(t, "always() && steps.create.outcome == 'failure'", diagnostic.If)
+	require.Equal(t, eksUpgradeTrialCondition, trial.If)
+	require.Less(t,
+		harnessStepIndex(t, steps, create.Name),
+		harnessStepIndex(t, steps, diagnostic.Name),
+	)
+	require.Less(t,
+		harnessStepIndex(t, steps, diagnostic.Name),
+		harnessStepIndex(t, steps, trial.Name),
+	)
+
+	return min(diagnostic.TimeoutMinutes, trial.TimeoutMinutes)
 }
 
 // findHarnessStep returns the named step, delegating the lookup to

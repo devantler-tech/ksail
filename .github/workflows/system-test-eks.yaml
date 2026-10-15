@@ -41,7 +41,7 @@ on:
         description: "AWS region for the smoke-test cluster"
         required: false
         type: string
-        default: us-east-1
+        default: eu-central-1
       upgrade_from_version:
         description: "Optional upgrade trial: create at this 1.MINOR version (set both versions)"
         required: false
@@ -58,6 +58,7 @@ on:
 env:
   GOPROXY: "https://proxy.golang.org,direct"
   GOMEMLIMIT: "6GiB"
+  KSAIL_EKS_SMOKE_PEAK_NODES: "2"
   EKSCTL_VERSION: "v0.229.0"
   AWS_OIDC_ROLE_ARN: "arn:aws:iam::939001610192:role/eks-ci"
 
@@ -197,7 +198,9 @@ jobs:
     # ownership recovery path (5m credential refresh, 40m recovery) never run in
     # the same job: together with the shared steps and the 45m deletion they
     # would exceed the six-hour hosted-job limit. The ciharness tests sum each
-    # path's actual budgets plus 15m of job-level headroom and enforce the cap.
+    # path's actual budgets, including the pre-create capacity read, plus 15m of
+    # job-level headroom and enforce the cap. The failed-create diagnostic and
+    # the success-gated upgrade trial are mutually exclusive as well.
     timeout-minutes: 360
     needs: [preflight, build-artifact]
     if: "!inputs.preflight_only && needs.preflight.outputs.aws-credentials == 'true'"
@@ -344,6 +347,17 @@ jobs:
         env:
           EKS_UPGRADE_FROM: ${{ inputs.upgrade_from_version }}
         run: go run ./internal/ciharness/cmd/eksupgradeconfig
+
+      - name: 🔎 Check EKS capacity before create
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          yq -o=json '.' "$KSAIL_EKS_WORKDIR/eks.yaml" | \
+            "$GITHUB_WORKSPACE/.github/scripts/check-eks-capacity.sh" \
+              --region "$AWS_REGION" \
+              --cluster-name "$KSAIL_EKS_CLUSTER_NAME" \
+              --peak-nodes "$KSAIL_EKS_SMOKE_PEAK_NODES"
 
       - name: 🧪 ksail cluster create
         id: create
@@ -512,9 +526,9 @@ jobs:
           fi
           nodegroup_identity="$(nodegroup_identity)"
 
-          set_nodegroup_capacity 2 1 2
+          set_nodegroup_capacity "$KSAIL_EKS_SMOKE_PEAK_NODES" 1 "$KSAIL_EKS_SMOKE_PEAK_NODES"
           ksail cluster update --yes
-          wait_for_capacity 2 1 2 2
+          wait_for_capacity "$KSAIL_EKS_SMOKE_PEAK_NODES" 1 "$KSAIL_EKS_SMOKE_PEAK_NODES" "$KSAIL_EKS_SMOKE_PEAK_NODES"
           assert_same_cluster "$cluster_identity"
           assert_same_nodegroup "$nodegroup_identity"
 

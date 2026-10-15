@@ -1,6 +1,6 @@
 name: "EKS Account Capacity"
 
-# Reads what is using EC2 launch capacity in the EKS smoke-test account, with
+# Reads regional EKS resource inventories with
 # the same OIDC role the smoke test assumes (see system-test-eks.yaml for the
 # AWS-side setup). It creates nothing and costs nothing: run it before spending
 # a smoke-test run when node groups fail to launch for an account limit.
@@ -12,7 +12,12 @@ on:
         description: "AWS region to read"
         required: false
         type: string
-        default: us-east-1
+        default: eu-central-1
+      check_smoke_capacity:
+        description: "Also check quota admission for the two-node t3.medium smoke candidate (read-only)"
+        required: false
+        type: boolean
+        default: false
 
 env:
   AWS_OIDC_ROLE_ARN: "arn:aws:iam::939001610192:role/eks-ci"
@@ -27,7 +32,7 @@ jobs:
   report:
     name: 🔎 Report EC2 Launch Capacity
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 35
     environment: ci
     permissions:
       contents: read
@@ -39,6 +44,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: ⚙️ Setup Go
+        timeout-minutes: 10
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
       - name: 🔐 Configure AWS credentials (OIDC)
         timeout-minutes: 5
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
@@ -48,10 +60,26 @@ jobs:
           aws-region: ${{ inputs.region }}
           role-duration-seconds: 900
 
-      - name: 🔎 Report what is using EC2 launch capacity
-        timeout-minutes: 3
+      - name: 🔎 Report regional EKS resources
+        timeout-minutes: 5
         shell: bash
         env:
           AWS_REGION: ${{ inputs.region }}
         run: |
           "$GITHUB_WORKSPACE/.github/scripts/report-eks-account-capacity.sh" --region "$AWS_REGION"
+
+      - name: 🔎 Check smoke candidate quota without creating resources
+        if: inputs.check_smoke_capacity
+        timeout-minutes: 5
+        shell: bash
+        env:
+          AWS_REGION: ${{ inputs.region }}
+        run: |
+          set -euo pipefail
+          jq -cn --arg region "$AWS_REGION" '{
+            apiVersion: "eksctl.io/v1alpha5", kind: "ClusterConfig",
+            metadata: {name: "capacity-probe", region: $region},
+            managedNodeGroups: [{name: "default", instanceType: "t3.medium",
+              desiredCapacity: 1, minSize: 1, maxSize: 1}]
+          }' | "$GITHUB_WORKSPACE/.github/scripts/check-eks-capacity.sh" \
+            --region "$AWS_REGION" --cluster-name capacity-probe --peak-nodes 2

@@ -72,7 +72,12 @@ func TestGoSetupNeverImplicitlySavesCaches(t *testing.T) {
 
 		var workflow struct {
 			Jobs map[string]struct {
-				Steps []harnessStep `yaml:"steps"`
+				// Cache policy depends only on these fields. Other workflow
+				// fields may legally contain expressions, including timeouts.
+				Steps []struct {
+					Uses string         `yaml:"uses"`
+					With map[string]any `yaml:"with"`
+				} `yaml:"steps"`
 			} `yaml:"jobs"`
 		}
 		require.NoError(t, yaml.Unmarshal(

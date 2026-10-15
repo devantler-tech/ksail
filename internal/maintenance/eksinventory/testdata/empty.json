@@ -1,0 +1,53 @@
+{
+  "eks list-clusters": {
+    "clusters": []
+  },
+  "cloudformation list-stacks": {
+    "StackSummaries": []
+  },
+  "ec2 describe-fleets": {
+    "Fleets": []
+  },
+  "ec2 describe-spot-fleet-requests": {
+    "SpotFleetRequestConfigs": []
+  },
+  "ec2 describe-spot-instance-requests": {
+    "SpotInstanceRequests": []
+  },
+  "ec2 describe-instances": {
+    "Reservations": []
+  },
+  "autoscaling describe-auto-scaling-groups": {
+    "AutoScalingGroups": []
+  },
+  "ec2 describe-nat-gateways": {
+    "NatGateways": []
+  },
+  "ec2 describe-addresses": {
+    "Addresses": []
+  },
+  "ec2 describe-network-interfaces": {
+    "NetworkInterfaces": []
+  },
+  "ec2 describe-volumes": {
+    "Volumes": []
+  },
+  "elb describe-load-balancers": {
+    "LoadBalancerDescriptions": []
+  },
+  "elbv2 describe-load-balancers": {
+    "LoadBalancers": []
+  },
+  "service-quotas list-service-quotas": {
+    "Quotas": [
+      {
+        "QuotaCode": "L-1216C47A",
+        "Value": 5
+      },
+      {
+        "QuotaCode": "L-34B43A08",
+        "Value": 0
+      }
+    ]
+  }
+}

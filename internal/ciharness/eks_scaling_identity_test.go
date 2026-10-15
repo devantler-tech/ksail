@@ -83,7 +83,7 @@ func makeEKSSmokeScalingFixture(t *testing.T, script, mode string) (*exec.Cmd, s
 	command.Env = append(os.Environ(),
 		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"FIXTURE_DIR="+dir, "FIXTURE_MODE="+mode, "KSAIL_EKS_WORKDIR="+dir,
-		"KSAIL_EKS_CLUSTER_NAME=fixture", "AWS_REGION=us-east-1",
+		"KSAIL_EKS_CLUSTER_NAME=fixture", "AWS_REGION=us-east-1", "KSAIL_EKS_SMOKE_PEAK_NODES=2",
 	)
 
 	return command, dir

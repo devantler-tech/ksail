@@ -1,64 +1,87 @@
 <!-- mcp-name: io.github.devantler-tech/ksail -->
 
+[![GitHub Stars](https://img.shields.io/github/stars/devantler-tech/ksail?style=flat)](https://github.com/devantler-tech/ksail/stargazers)
+[![Latest Release](https://img.shields.io/github/v/release/devantler-tech/ksail)](https://github.com/devantler-tech/ksail/releases/latest)
+[![License](https://img.shields.io/badge/License-PolyForm--Shield--1.0.0-blue.svg)](LICENSE)
+[![Go Reference](https://pkg.go.dev/badge/github.com/devantler-tech/ksail/v7.svg)](https://pkg.go.dev/github.com/devantler-tech/ksail/v7)
+[![CI - KSail](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml/badge.svg)](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml)
+
 # 🛥️🐳 KSail
 
-KSail helps developers create Kubernetes clusters (groups of machines that run applications)
-and deploy applications from one command-line tool. It bundles tools for trying Kubernetes locally,
-then working with cloud providers or an existing cluster.
-Kubernetes runs applications in containers: packages of application code and the software it needs.
+![KSail command-line interface](docs/src/assets/ksail-cli-dark.png)
 
-## Install and try it
+KSail brings Kubernetes cluster setup, application deployment and everyday operations into one tool.
+Create local clusters with Docker, or work with supported cloud providers and existing Kubernetes
+clusters. Use it from your terminal, VS Code or an AI assistant.
 
-On Linux or an Apple Silicon Mac, open a shell with `curl`, `tar` and
-`sha256sum` (Linux) or `shasum` (macOS) available:
+📖 **[Documentation](https://ksail.devantler.tech)** · **[Quickstart](https://ksail.devantler.tech/start/quickstart/)** · **[Support](#community--support)**
+
+## What you get
+
+| Task                  | Included tools and capabilities                                        |
+|-----------------------|------------------------------------------------------------------------|
+| Create clusters       | Kind, K3d, Talos, vCluster, KWOK, EKS, GKE and AKS                     |
+| Deploy applications   | kubectl, Helm, Kustomize, Flux and ArgoCD                              |
+| Protect configuration | Encrypt secrets with SOPS and Age; validate manifests with Kubeconform |
+| Operate clusters      | K9s, backup and restore, multi-tenancy                                 |
+| Work with AI          | Chat assistant, MCP server and VS Code extension                       |
+
+See [features](https://ksail.devantler.tech/features/) and the
+[support matrix](https://ksail.devantler.tech/support-matrix/) for supported platforms and combinations.
+KWOK simulates clusters; it does not run applications. Cloud providers need their own setup and incur charges.
+
+## Quick install
+
+On Linux or an Apple Silicon Mac, with `curl`, `tar` and `sha256sum` or `shasum` available:
 
 ```sh
 curl -fsSL https://github.com/devantler-tech/ksail/releases/latest/download/install.sh | sh
 ```
 
-The installer checks that the download matches the published release and prints its installation directory.
-Follow its `PATH` instruction if needed, so your shell can find `ksail`.
-[Other installation options](docs/reader-reference.md#installation-options) include Homebrew and
-Windows downloads.
+The installer verifies the download and prints where it installed KSail. Follow its `PATH`
+instruction if needed. Prefer Homebrew or a Windows download? See
+[installation options](docs/reader-reference.md#installation-options).
 
-From a directory where you want a new project:
+## Quick start
+
+Create a project in a new directory:
 
 ```sh
-ksail --help
-mkdir ksail-first
-cd ksail-first
-ksail project init --name ksail-first --distribution Vanilla --provider Docker
+mkdir my-app
+cd my-app
+ksail project init --name my-app --distribution Vanilla --provider Docker
 ```
 
-Expect an initialization success message and `ksail.yaml`, `kind.yaml` and `k8s/kustomization.yaml`
-in this directory, plus settings for caching container downloads and a `.devcontainer` folder for optional editor setup.
-This step only writes project files; it needs no Docker (the program that runs local containers) or cloud account.
-`--name` names the cluster, not an output directory.
-
-## Run the local cluster
-
-Install and start Docker Engine or Docker Desktop. From the same `ksail-first` directory:
+This creates your project files without needing Docker or a cloud account.
+With Docker Engine or Docker Desktop running, start and explore a local cluster:
 
 ```sh
 ksail cluster create
-ksail cluster info
-ksail cluster delete --name ksail-first --provider Docker
+ksail cluster connect
 ```
 
-Creation downloads container images (packaged applications), uses your computer's memory and storage,
-and writes connection settings so Kubernetes tools can reach your cluster.
-Check the cluster information, then delete this trial and its applications when finished.
-In your terminal, review the displayed cluster name and type `yes` to confirm deletion.
-Project files and cached downloads remain available for reuse.
-Cloud providers have separate credentials, setup and costs.
+This creates a local Kubernetes cluster and opens K9s to explore it. Enter `:quit` to leave K9s.
+When finished, delete the trial cluster and its applications:
 
-## Next steps
+```sh
+ksail cluster delete --name my-app --provider Docker
+```
 
-- [Quickstart](https://ksail.devantler.tech/start/quickstart/): deploy your first application.
-- [Reader reference](docs/reader-reference.md): bundled tools, supported platforms, cloud setup and optional AI integrations.
-- [Documentation](https://ksail.devantler.tech/): configuration, commands and architecture.
-- [Contributing](CONTRIBUTING.md): choose and validate your first change.
-- [Discussions](https://github.com/devantler-tech/ksail/discussions) and [issues](https://github.com/devantler-tech/ksail/issues): questions, bugs and ideas.
+Review the cluster name and confirm deletion when prompted. Project files remain for reuse.
 
-KSail is source-available under [PolyForm Shield 1.0.0](LICENSE).
-Read the license's use, redistribution and noncompetition terms before reusing it.
+Continue with the [quickstart guide](https://ksail.devantler.tech/start/quickstart/) to deploy an application.
+The [reader reference](docs/reader-reference.md) covers local setup details, cloud providers and optional
+[AI assistant plugins](docs/reader-reference.md#ai-assistant-plugins).
+
+## Community & support
+
+- 💬 [Discussions](https://github.com/devantler-tech/ksail/discussions) — questions and ideas.
+- 🐛 [Issues](https://github.com/devantler-tech/ksail/issues) — bugs and feature requests.
+- 🎓 [Resources](https://ksail.devantler.tech/resources/) — presentations and tutorials.
+- 🛠️ [Contributing](CONTRIBUTING.md) — make your first contribution.
+
+## License
+
+KSail is source-available under [PolyForm Shield 1.0.0](LICENSE), with use, redistribution and
+noncompetition terms. See the [licensing guide](docs/reader-reference.md#license) and full license
+before reusing it.

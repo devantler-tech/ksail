@@ -75,6 +75,7 @@ type InstallerFactories struct {
 	ArgoCD                    func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	KubeletCSRApprover        func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	ClusterAutoscaler         func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
+	HcloudCCM                 func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	AWSLoadBalancerController func(
 		clusterCfg *v1alpha1.Cluster,
 		ksailManaged bool,
@@ -360,6 +361,7 @@ func DefaultInstallerFactories() *InstallerFactories {
 	factories.PolicyEngine = policyEngineFactory(factories)
 	factories.MetricsServer = metricsServerFactory(factories)
 	factories.ClusterAutoscaler = clusterAutoscalerFactory(factories)
+	factories.HcloudCCM = hcloudCCMFactory(factories)
 	factories.AWSLoadBalancerController = func(
 		clusterCfg *v1alpha1.Cluster,
 		ksailManaged bool,

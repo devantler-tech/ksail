@@ -420,6 +420,9 @@ jobs:
               - '.github/workflows/cd.yaml'
               - '.github/workflows/ci.yaml'
             eks-smoke-scripts:
+              - 'internal/maintenance/eksinventory/**'
+              - '.github/scripts/check-eks-capacity.sh'
+              - '.github/scripts/check-eks-capacity.test.sh'
               - '.github/scripts/delete-eks-smoke-cluster.sh'
               - '.github/scripts/delete-eks-smoke-cluster.test.sh'
               - '.github/scripts/report-eks-create-failure.sh'
@@ -452,7 +455,7 @@ jobs:
   eks-smoke-scripts:
     name: 🧹 Validate EKS Smoke Teardown
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     needs: [changes]
     if: needs.changes.outputs.eks-smoke-scripts == 'true'
     permissions:
@@ -462,6 +465,20 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: 🔎 Verify complete and private regional inventories
+        run: go test ./internal/maintenance/eksinventory/...
+
+      - name: 🔎 Verify capacity admission refuses incomplete reads
+        run: |
+          shellcheck .github/scripts/check-eks-capacity.sh .github/scripts/check-eks-capacity.test.sh
+          .github/scripts/check-eks-capacity.test.sh
 
       - name: 🧹 Verify EKS smoke teardown reports only real leaks
         run: |
@@ -907,7 +924,7 @@ jobs:
 
       - name: 📤 Preserve schema cancellation observations
         if: ${{ always() && steps.schema-cancellation.outcome != 'skipped' && steps.schema-cancellation.outcome != '' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: kubeconform-cancellation-${{ github.sha }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/kubeconform-cancellation.json
@@ -928,7 +945,7 @@ jobs:
 
       - name: 📤 Publish KSail binary
         id: binary-artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ksail-binary-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ steps.binary.outputs.binary-path }}
@@ -963,7 +980,7 @@ jobs:
       - name: 📤 Publish Calico migration baseline
         id: calico-baseline-artifact
         if: needs.changes.outputs.system-test == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: calico-legacy-binary-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/calico-legacy-bin/ksail
@@ -1040,7 +1057,7 @@ jobs:
 
       - name: ⚙️ Setup Node.js
         if: needs.changes.outputs.schema == 'true'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           cache: "npm"
@@ -1066,7 +1083,7 @@ jobs:
           else
             echo "No changes"
           fi
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: generate-patch
           path: /tmp/generate.patch
@@ -1486,7 +1503,7 @@ jobs:
           persist-credentials: false
 
       - name: ⚙️ Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           cache: "npm"
@@ -1518,7 +1535,7 @@ jobs:
           persist-credentials: false
 
       - name: ⚙️ Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           cache: "npm"
@@ -1539,7 +1556,7 @@ jobs:
 
       - name: 📤 Upload VSIX artifact
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ksail-vsix
           path: ksail.vsix
@@ -1780,7 +1797,7 @@ jobs:
 
       - name: 📤 Publish validated mirror artifact
         id: mirror-artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: mirror-cache-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -1952,7 +1969,7 @@ jobs:
 
       - name: 📥 Restore KSail binary
         # Pin the identical published action until actionlint supports $/ references.
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@065b9e08b85a396b9e936c01f01b512bb23f8aa9
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@232789ff45f8b574a95fcb89162d92faeae79c3c
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2036,7 +2053,7 @@ jobs:
         if: ${{ failure() && steps.system-test.outcome == 'failure' }}
         continue-on-error: true
         timeout-minutes: 5
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: system-test-diagnostics-${{ steps.system-test.outputs.artifact-tag }}
           path: /tmp/system-test-diagnostics/
@@ -2061,7 +2078,7 @@ jobs:
         if: ${{ always() && steps.system-test.outcome != 'skipped' && steps.system-test.outcome != '' }}
         continue-on-error: true
         timeout-minutes: 5
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: system-test-logs-${{ steps.system-test.outputs.artifact-tag }}
           path: /tmp/ksail-system-test-logs/
@@ -2403,7 +2420,7 @@ jobs:
             --max-issues-per-linter 0 --max-same-issues 0 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/lint.log"
       - name: ⚙️ Setup Node.js for canonical generation
         if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
       - name: 📝 Regenerate all maintained artifacts
@@ -2434,7 +2451,7 @@ jobs:
           fi
       - name: 📤 Preserve exact-head acceptance evidence
         if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: local-recovery-${{ github.sha }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/local-recovery-evidence
@@ -2453,7 +2470,7 @@ jobs:
           persist-credentials: false
       - name: Check active documentation
         id: links
-        uses: devantler-tech/.github/actions/validate-retired-repo-links@8ed2071ebe18864b8b86efe0f6b1df8d73d2a6ab # v7.10.4
+        uses: devantler-tech/.github/actions/validate-retired-repo-links@226e6e7e5f3609868eb96a6a26f6dc293c88ba30 # v7.11.0
         with:
           enabled: "true"
       - name: Require a completed scan
@@ -2527,6 +2544,7 @@ jobs:
         test-release-config,
         release-graph-audit,
         cask-pr-handoff,
+        eks-smoke-scripts,
         k3k-sentinel-scripts,
         rate-limit-gate-script,
         hetzner-cleanup-script,
@@ -2535,7 +2553,7 @@ jobs:
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/actions/aggregate-job-checks@1d726483facb9340655489913f609082677be8f5 # v13.10.6
+      - uses: devantler-tech/actions/aggregate-job-checks@ea4df9004d4ab43b6c9af5b0c5f55712f7211328 # v13.10.12
         with:
           job-results: >-
             ${{ needs.retired-repo-links.result }}
@@ -2567,6 +2585,7 @@ jobs:
             ${{ needs.test-release-config.result }}
             ${{ needs.release-graph-audit.result }}
             ${{ needs.cask-pr-handoff.result }}
+            ${{ needs.eks-smoke-scripts.result }}
             ${{ needs.k3k-sentinel-scripts.result }}
             ${{ needs.rate-limit-gate-script.result }}
             ${{ needs.hetzner-cleanup-script.result }}
