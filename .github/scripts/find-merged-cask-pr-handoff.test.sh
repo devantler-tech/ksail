@@ -10,6 +10,7 @@ tmp_dir="$(mktemp -d)"
 trap 'rm -rf "${tmp_dir}"' EXIT
 pass_count=0
 
+# Exercise the real finder against one isolated API fixture and assert its output and evidence.
 run_case() {
 	local scenario="$1" expected_status="$2" expected_output="$3"
 	shift 3

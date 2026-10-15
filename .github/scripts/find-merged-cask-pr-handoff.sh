@@ -2,6 +2,7 @@
 
 set -euo pipefail
 
+# Describe the required release identity and optional known-PR reconciliation lead.
 usage() {
 	cat <<'EOF'
 Usage:
@@ -82,6 +83,8 @@ branch="goreleaser/${cask_name}"
 work="$(mktemp -d)"
 trap 'rm -rf "${work}"' EXIT
 
+# Recollect a candidate and require immutable merge, current-main and release-digest proof.
+# Preserve successful evidence while keeping candidate diagnostics off the PR-number output.
 validate_candidate() {
 	local pr="$1" evidence="${output_dir}/merged-$1.json"
 	local candidate_log="${work}/candidate-$1.log"
