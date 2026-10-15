@@ -265,9 +265,9 @@ func TestCapacityFiveVCPUCeiling(t *testing.T) {
 
 	err := inventory.CheckCapacity(
 		t.Context(),
-		"eu-central-1",
+		"us-east-1",
 		"fixture", 1,
-		[]byte(capacityPlan),
+		[]byte(strings.ReplaceAll(capacityPlan, "eu-central-1", "us-east-1")),
 		&out,
 		fixture.query,
 	)
@@ -395,9 +395,79 @@ func TestCapacityCurrentSmokeIncludesAutoScalingSurge(t *testing.T) {
 		&output,
 		fixture.query,
 	)
-	if err == nil || !strings.Contains(output.String(), "refused (trial-ceiling)") ||
-		!strings.Contains(output.String(), "target=4 surge=2 required=6") {
+	if err != nil || !strings.Contains(output.String(), "admitted quota=16") ||
+		!strings.Contains(output.String(), "target=4 surge=2 required=6 trial-ceiling=16") {
 		t.Fatalf("two-node candidate ignored AWS surge: %s", output.String())
+	}
+}
+
+func TestCapacityFrankfurtBudgetPreservesRegionalAndLiveLimits(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name, region, verdict, totals string
+		peak, quota                   int
+		reserved, pending             bool
+		admitted                      bool
+	}{
+		{
+			"exact Frankfurt envelope", "eu-central-1", "admitted",
+			"target=14 surge=2 required=16 trial-ceiling=16", 7, 16, false, false, true,
+		},
+		{
+			"above Frankfurt budget", "eu-central-1", "refused (trial-ceiling)",
+			"target=16 surge=2 required=18 trial-ceiling=16", 8, 100, false, false, false,
+		},
+		{
+			"lower applied quota", "eu-central-1", "refused (insufficient-headroom)",
+			"target=4 surge=2 required=6 trial-ceiling=16", 2, 5, false, false, false,
+		},
+		{
+			"reservation consumes headroom", "eu-central-1", "refused (insufficient-headroom)",
+			"target=4 surge=2 required=6 trial-ceiling=16", 2, 16, true, false, false,
+		},
+		{
+			"pending launch consumes buffer", "eu-central-1", "refused (insufficient-headroom)",
+			"target=14 surge=2 required=16 trial-ceiling=16", 7, 16, false, true, false,
+		},
+		{
+			"US budget unchanged", "us-east-1", "refused (trial-ceiling)",
+			"target=4 surge=2 required=6 trial-ceiling=5", 2, 100, false, false, false,
+		},
+		{
+			"other EU region unchanged", "eu-west-1", "refused (trial-ceiling)",
+			"target=4 surge=2 required=6 trial-ceiling=5", 2, 100, false, false, false,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			fixture := newCapacityFixture()
+
+			fixture.quota = fmt.Sprintf(
+				`{"Quotas":[{"QuotaCode":"L-1216C47A","Value":%d}]}`,
+				test.quota,
+			)
+			if test.reserved {
+				fixture.reservations = reservation("active", 6, 6)
+			}
+
+			if test.pending {
+				fixture.instances = instanceRows(instance("i-pending", "t3.medium", "pending", ""))
+			}
+
+			var output bytes.Buffer
+
+			err := inventory.CheckCapacity(
+				t.Context(), test.region, "fixture", test.peak,
+				[]byte(strings.ReplaceAll(capacityPlan, "eu-central-1", test.region)),
+				&output, fixture.query,
+			)
+			if (err == nil) != test.admitted || !strings.Contains(output.String(), test.verdict) ||
+				!strings.Contains(output.String(), test.totals) {
+				t.Fatalf("regional admission mismatch: error=%v output=%s", err, output.String())
+			}
+		})
 	}
 }
 

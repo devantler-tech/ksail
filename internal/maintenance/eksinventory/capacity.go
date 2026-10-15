@@ -17,14 +17,15 @@ import (
 var ErrCapacityRejected = errors.New("EKS capacity refused")
 
 const (
-	trialVCPUCeiling  = 5
-	maxCapacityTypes  = 100
-	rebalanceDivisor  = 10
-	maxJSONDepth      = 64
-	capacityDefault   = "default"
-	capacityPending   = "pending"
-	capacityRunning   = "running"
-	describeInstances = "describe-instances"
+	defaultTrialVCPUCeiling   = 5
+	frankfurtTrialVCPUCeiling = 16
+	maxCapacityTypes          = 100
+	rebalanceDivisor          = 10
+	maxJSONDepth              = 64
+	capacityDefault           = "default"
+	capacityPending           = "pending"
+	capacityRunning           = "running"
+	describeInstances         = "describe-instances"
 )
 
 type capacityTotals struct{ quota, usage, pending, target, surge, required int }
@@ -57,8 +58,13 @@ func CheckCapacity(
 		return capacityUnknown(output, err)
 	}
 
+	trialCeiling := defaultTrialVCPUCeiling
+	if region == "eu-central-1" {
+		trialCeiling = frankfurtTrialVCPUCeiling
+	}
+
 	verdict := "admitted"
-	if totals.required > trialVCPUCeiling {
+	if totals.required > trialCeiling {
 		verdict = "refused (trial-ceiling)"
 	} else if totals.quota-totals.usage-totals.pending < totals.required {
 		verdict = "refused (insufficient-headroom)"
@@ -77,7 +83,7 @@ func CheckCapacity(
 		totals.target,
 		totals.surge,
 		totals.required,
-		trialVCPUCeiling,
+		trialCeiling,
 	)
 	if err != nil {
 		return fmt.Errorf("write capacity verdict: %w", err)

@@ -7,7 +7,8 @@ Usage: check-eks-capacity.sh --region REGION --cluster-name NAME --peak-nodes N 
 
 Read the complete generated eksctl configuration as JSON on standard input.
 Only a supported smoke plan with completely observed regional quota headroom
-and a peak within five default vCPUs is admitted. Refusal or unknown exits
+and a peak including surge within sixteen default vCPUs in eu-central-1 or five
+elsewhere is admitted. Refusal or unknown exits
 nonzero. This command only reads AWS and creates nothing. Admission does not
 certify cleanup, reserve capacity or authorize a billable trial.
 Requires Go matching go.mod and an authenticated, current AWS CLI.

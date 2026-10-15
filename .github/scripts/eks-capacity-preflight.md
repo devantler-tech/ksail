@@ -12,8 +12,10 @@ two default `t3.medium` target nodes need four default vCPUs. Auto Scaling zone
 rebalancing can launch before terminating, exceeding the group maximum by ten
 percent or one instance, whichever is greater. The check rounds this allowance
 upward and reports target, surge and required vCPUs separately. The current
-candidate therefore requires six vCPUs and is refused under the independent
-five-vCPU ceiling even when the account quota is higher.
+candidate therefore requires six vCPUs. The independent test ceiling is sixteen
+vCPUs in Frankfurt (`eu-central-1`) and five elsewhere. The current candidate can
+be admitted in Frankfurt only when complete live observations show at least six
+vCPUs of available headroom.
 
 Launch templates, alternative instance selectors, Spot, unmanaged/Fargate/automatic
 compute and unfamiliar sizing fields are unsupported and stop as unknown. This
@@ -46,7 +48,9 @@ generation; HPC, Inf, Trn, DL and unfamiliar shapes cannot silently use this quo
 Available headroom is the applied quota minus current usage and the pending
 buffer. Admission requires enough headroom for the planned target plus the
 documented rebalancing surge allowance. This combined demand must also fit within
-five vCPUs. This is a point-in-time
+the fixed regional test ceiling: sixteen vCPUs in `eu-central-1`, five elsewhere.
+Neither workflow inputs nor environment variables can raise these ceilings.
+This is a point-in-time
 observation, subject to concurrent activity and regional stock availability.
 It neither reserves resources nor certifies prior cleanup or authorizes a trial.
 
@@ -82,6 +86,7 @@ and [reservation API fields](https://docs.aws.amazon.com/AWSEC2/latest/APIRefere
 
 [Auto Scaling rebalancing allowance](https://docs.aws.amazon.com/autoscaling/ec2/userguide/as-instance-termination.html#as-instance-termination-availability-zone-rebalancing)
 applies to the [Auto Scaling groups managed by EKS](https://docs.aws.amazon.com/eks/latest/userguide/managed-node-groups.html).
-The default two-node candidate is deliberately refused until a separately
-validated trial design fits the retained ceiling; this change supplies no
-instance-size, purchase-option or quota fallback.
+The default two-node candidate fits Frankfurt's test ceiling; complete live quota
+headroom and the separate cleanup and trial-authorization requirements still
+determine whether a trial may proceed. There is no instance-size, purchase-option
+or quota fallback.
