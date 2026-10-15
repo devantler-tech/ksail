@@ -18,13 +18,13 @@ clusters. Use it from your terminal, VS Code or an AI assistant.
 
 ## What you get
 
-| Task | Included tools and capabilities |
-|------|---------------------------------|
-| Create clusters | Kind, K3d, Talos, vCluster, KWOK, EKS, GKE and AKS |
-| Deploy applications | kubectl, Helm, Kustomize, Flux and ArgoCD |
+| Task                  | Included tools and capabilities                                        |
+|-----------------------|------------------------------------------------------------------------|
+| Create clusters       | Kind, K3d, Talos, vCluster, KWOK, EKS, GKE and AKS                     |
+| Deploy applications   | kubectl, Helm, Kustomize, Flux and ArgoCD                              |
 | Protect configuration | Encrypt secrets with SOPS and Age; validate manifests with Kubeconform |
-| Operate clusters | K9s, backup and restore, multi-tenancy |
-| Work with AI | Chat assistant, MCP server and VS Code extension |
+| Operate clusters      | K9s, backup and restore, multi-tenancy                                 |
+| Work with AI          | Chat assistant, MCP server and VS Code extension                       |
 
 See [features](https://ksail.devantler.tech/features/) and the
 [support matrix](https://ksail.devantler.tech/support-matrix/) for supported platforms and combinations.
