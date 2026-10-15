@@ -798,6 +798,11 @@ jobs:
           reconcile_merged_handoff() {
             local name="$1" context="$2" branch="goreleaser/$1"
             local attempt merged_pr merged_reason
+            local known_pr="${3:-}"
+            local known_args=()
+            if [[ -n "$known_pr" ]]; then
+              known_args=(--pr "$known_pr")
+            fi
 
             # An initially-open evergreen PR can auto-merge at any point in this step. Every failure
             # after selecting that PR comes through here: only immutable merge evidence plus an
@@ -809,7 +814,7 @@ jobs:
                 --cask-name "$name" \
                 --source-repo "$GITHUB_REPOSITORY" \
                 --tag "$TAG" \
-                --output-dir "$evidence_dir" 2>&1)"; then
+                --output-dir "$evidence_dir" ${known_args[@]+"${known_args[@]}"} 2>&1)"; then
                 echo "::notice::${TAP}#${merged_pr} cask ${name} is merged and current for ${TAG}; ${context}"
                 printf -- '- %s#%s cask %s already merged for %s (immutable current-main proof)\n' \
                   "$TAP" "$merged_pr" "$name" "$TAG" >>"$GITHUB_STEP_SUMMARY"
@@ -888,7 +893,7 @@ jobs:
                 printf -- '- %s#%s ready but revalidation failed: %s\n' \
                   "$TAP" "$pr" "$validation" >>"$GITHUB_STEP_SUMMARY"
                 reconcile_merged_handoff "$name" \
-                  "${TAP}#${pr} failed ready-PR revalidation"
+                  "${TAP}#${pr} failed ready-PR revalidation" "$pr"
                 continue
               fi
               if ! delivery="$(.github/scripts/finish-cask-pr-handoff.sh \
@@ -899,7 +904,7 @@ jobs:
                 printf -- '- %s#%s ready retry: guarded direct delivery failed: %s\n' \
                   "$TAP" "$pr" "$delivery" >>"$GITHUB_STEP_SUMMARY"
                 reconcile_merged_handoff "$name" \
-                  "${TAP}#${pr} could not be delivered after ready-PR revalidation"
+                  "${TAP}#${pr} could not be delivered after ready-PR revalidation" "$pr"
                 continue
               fi
               echo "$delivery"
@@ -917,7 +922,7 @@ jobs:
               echo "::warning::Refusing to mutate ${TAP}#${pr}: ${validation}"
               printf -- '- %s#%s left untouched: %s\n' "$TAP" "$pr" "$validation" >>"$GITHUB_STEP_SUMMARY"
               reconcile_merged_handoff "$name" \
-                "${TAP}#${pr} failed draft validation after open enumeration"
+                "${TAP}#${pr} failed draft validation after open enumeration" "$pr"
               continue
             fi
             echo "Preparing ${TAP}#${pr} (${branch})"
@@ -934,7 +939,7 @@ jobs:
             if ! command -v brew >/dev/null 2>&1; then
               echo "::error::brew is not available on this runner; cannot style-check ${name}"
               reconcile_merged_handoff "$name" \
-                "brew became unavailable while preparing ${TAP}#${pr}"
+                "brew became unavailable while preparing ${TAP}#${pr}" "$pr"
               continue
             fi
             if .github/scripts/style-clean-cask-branch.sh \
@@ -950,7 +955,7 @@ jobs:
               printf -- '- %s cask %s left draft/open: could not ensure it is brew-style-clean\n' \
                 "$TAP" "$name" >>"$GITHUB_STEP_SUMMARY"
               reconcile_merged_handoff "$name" \
-                "${TAP}#${pr} could not be confirmed brew-style-clean"
+                "${TAP}#${pr} could not be confirmed brew-style-clean" "$pr"
               continue
             fi
 
@@ -962,7 +967,7 @@ jobs:
               printf -- '- %s#%s remains open after style validation failed: %s\n' \
                 "$TAP" "$pr" "$validation" >>"$GITHUB_STEP_SUMMARY"
               reconcile_merged_handoff "$name" \
-                "${TAP}#${pr} failed post-style validation"
+                "${TAP}#${pr} failed post-style validation" "$pr"
               continue
             fi
 
@@ -977,7 +982,7 @@ jobs:
             if ! gh api -X PATCH "repos/${TAP}/pulls/${pr}" -f title="$title" >/dev/null; then
               echo "::warning::Could not normalize the title on ${TAP}#${pr}; leaving it draft/open"
               reconcile_merged_handoff "$name" \
-                "${TAP}#${pr} could not receive normalized metadata"
+                "${TAP}#${pr} could not receive normalized metadata" "$pr"
               continue
             fi
             metadata_ok=true
@@ -1005,7 +1010,7 @@ jobs:
             if [ "$metadata_ok" != true ]; then
               echo "::warning::${TAP}#${pr} metadata is incomplete; leaving it draft/open"
               reconcile_merged_handoff "$name" \
-                "${TAP}#${pr} metadata could not be completed"
+                "${TAP}#${pr} metadata could not be completed" "$pr"
               continue
             fi
 
@@ -1015,7 +1020,7 @@ jobs:
               printf -- '- %s#%s remains open with incomplete handoff metadata: %s\n' \
                 "$TAP" "$pr" "$validation" >>"$GITHUB_STEP_SUMMARY"
               reconcile_merged_handoff "$name" \
-                "${TAP}#${pr} failed prepared validation"
+                "${TAP}#${pr} failed prepared validation" "$pr"
               continue
             fi
 
@@ -1036,7 +1041,7 @@ jobs:
               printf -- '- %s#%s remains pending: guarded direct delivery did not complete\n' \
                 "$TAP" "$pr" >>"$GITHUB_STEP_SUMMARY"
               reconcile_merged_handoff "$name" \
-                "${TAP}#${pr} could not be delivered"
+                "${TAP}#${pr} could not be delivered" "$pr"
             fi
           done
 
