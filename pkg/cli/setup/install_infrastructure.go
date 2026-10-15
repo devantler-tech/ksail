@@ -667,27 +667,16 @@ func installHcloudCCM(
 		return nil
 	}
 
-	helmClient, kubeconfigPath, timeout, err := helmClientSetup(clusterCfg, factories)
-	if err != nil {
-		return fmt.Errorf("failed to setup helm client for hcloud-ccm: %w", err)
+	// Factories assembled by hand (tests, embedders) may leave the field unset.
+	factory := factories.HcloudCCM
+	if factory == nil {
+		factory = hcloudCCMFactory(factories)
 	}
 
-	networkName := hcloudccminstaller.ResolveHetznerNetworkName(
-		clusterCfg,
-		resolveClusterNameFromContext(clusterCfg),
-	)
-
-	ccmOptions := hcloudccminstaller.LoadBalancerOptions(clusterCfg.Spec.Cluster.LoadBalancer)
-
-	ccmInstaller := hcloudccminstaller.NewInstaller(
-		helmClient,
-		kubeconfigPath,
-		clusterCfg.Spec.Cluster.Connection.Context,
-		timeout,
-		networkName,
-		installer.IsHAEnabled(clusterCfg.Spec.Cluster.TotalNodeCount()),
-		ccmOptions...,
-	)
+	ccmInstaller, err := factory(clusterCfg)
+	if err != nil {
+		return fmt.Errorf("failed to create hcloud-ccm installer: %w", err)
+	}
 
 	installErr := ccmInstaller.Install(ctx)
 	if installErr != nil {
@@ -695,6 +684,35 @@ func installHcloudCCM(
 	}
 
 	return nil
+}
+
+// hcloudCCMFactory creates the Hetzner cloud controller manager factory
+// function. Installing and comparing rendered chart values both build the
+// installer here, so they always render the same values for a cluster.
+func hcloudCCMFactory(
+	factories *InstallerFactories,
+) func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+		helmClient, kubeconfigPath, timeout, err := helmClientSetup(clusterCfg, factories)
+		if err != nil {
+			return nil, fmt.Errorf("failed to setup helm client for hcloud-ccm: %w", err)
+		}
+
+		networkName := hcloudccminstaller.ResolveHetznerNetworkName(
+			clusterCfg,
+			resolveClusterNameFromContext(clusterCfg),
+		)
+
+		return hcloudccminstaller.NewInstaller(
+			helmClient,
+			kubeconfigPath,
+			clusterCfg.Spec.Cluster.Connection.Context,
+			timeout,
+			networkName,
+			installer.IsHAEnabled(clusterCfg.Spec.Cluster.TotalNodeCount()),
+			hcloudccminstaller.LoadBalancerOptions(clusterCfg.Spec.Cluster.LoadBalancer)...,
+		), nil
+	}
 }
 
 // installKubeletCSRApproverSilent installs kubelet-csr-approver silently for parallel execution.

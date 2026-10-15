@@ -83,6 +83,12 @@ type componentReconciler struct {
 	// attempt's failure for the other field.
 	csiInstalled bool
 	csiErr       error
+	// hcloudCCMInstalled coalesces a cluster.loadBalancer change on Talos ×
+	// Hetzner and Hetzner cloud controller chart-values drift into one Helm
+	// install/upgrade per pass; hcloudCCMErr replays the first attempt's
+	// failure for the other field.
+	hcloudCCMInstalled bool
+	hcloudCCMErr       error
 	// loadBalancerReconciled coalesces the generic load-balancer field and the
 	// EKS-specific controller opt-in when both change in one update pass.
 	loadBalancerReconciled bool
@@ -198,6 +204,7 @@ func (r *componentReconciler) handlerForField(
 	handlers[specdiff.MetricsServerValuesField] = r.reconcileMetricsServerValues
 	handlers[specdiff.CiliumValuesField] = r.reconcileCiliumValues
 	handlers[specdiff.CSIValuesField] = r.reconcileCSIValues
+	handlers[specdiff.HcloudCCMValuesField] = r.reconcileHcloudCCMValues
 
 	if handler, ok := handlers[field]; ok {
 		return handler, true
@@ -233,7 +240,8 @@ func isComponentReconcileField(field string) bool {
 		specdiff.PolicyEngineValuesField,
 		specdiff.MetricsServerValuesField,
 		specdiff.CiliumValuesField,
-		specdiff.CSIValuesField:
+		specdiff.CSIValuesField,
+		specdiff.HcloudCCMValuesField:
 		return true
 	default:
 		return strings.HasPrefix(field, "cluster.autoscaler.node.")
@@ -529,12 +537,49 @@ func (r *componentReconciler) installLoadBalancer(ctx context.Context) (bool, st
 		return managed, releaseIdentity, nil
 	}
 
+	if ksailInstallsHcloudCCM(r.clusterCfg) {
+		return false, "", r.installHcloudCCMOnce(ctx)
+	}
+
 	err := setup.InstallLoadBalancerSilent(ctx, r.clusterCfg, r.factories)
 	if err != nil {
 		return false, "", fmt.Errorf("install load balancer: %w", err)
 	}
 
 	return false, "", nil
+}
+
+// reconcileHcloudCCMValues upgrades the Hetzner cloud controller manager to
+// the chart values this KSail version renders when the installed release
+// carries other values (ksail#7366). It re-checks that KSail installs the
+// controller, so a stale drift change never installs one on another cluster.
+func (r *componentReconciler) reconcileHcloudCCMValues(
+	ctx context.Context,
+	_ clusterupdate.Change,
+) error {
+	if !ksailInstallsHcloudCCM(r.clusterCfg) {
+		return nil
+	}
+
+	return r.installHcloudCCMOnce(ctx)
+}
+
+// installHcloudCCMOnce runs the Hetzner cloud controller Helm install/upgrade
+// at most once per update pass, replaying the first outcome for every later
+// field that maps to it.
+func (r *componentReconciler) installHcloudCCMOnce(ctx context.Context) error {
+	if r.hcloudCCMInstalled {
+		return r.hcloudCCMErr
+	}
+
+	r.hcloudCCMInstalled = true
+
+	err := setup.InstallLoadBalancerSilent(ctx, r.clusterCfg, r.factories)
+	if err != nil {
+		r.hcloudCCMErr = fmt.Errorf("install load balancer: %w", err)
+	}
+
+	return r.hcloudCCMErr
 }
 
 func (r *componentReconciler) eksLoadBalancerControllerOwnershipAfterReconcile() (

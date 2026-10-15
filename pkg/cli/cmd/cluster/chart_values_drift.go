@@ -127,6 +127,28 @@ func ksailInstallsHetznerCSI(clusterCfg *v1alpha1.Cluster) bool {
 		setup.GetComponentRequirements(clusterCfg).NeedsCSI
 }
 
+// hcloudCCMValuesProbe compares the Hetzner cloud controller manager's values
+// (ksail#7366). Talos on Hetzner always installs it to initialize nodes, so
+// its values also carry the load-balancer setting, the private network and the
+// replica count.
+func hcloudCCMValuesProbe() chartValuesDriftProbe {
+	return chartValuesDriftProbe{
+		component: "hcloud-ccm",
+		field:     specdiff.HcloudCCMValuesField,
+		needed:    ksailInstallsHcloudCCM,
+		factory: func(factories *setup.InstallerFactories) installerFactory {
+			return factories.HcloudCCM
+		},
+	}
+}
+
+// ksailInstallsHcloudCCM reports whether the configuration has KSail install
+// the Hetzner cloud controller manager.
+func ksailInstallsHcloudCCM(clusterCfg *v1alpha1.Cluster) bool {
+	return clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos &&
+		clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderHetzner
+}
+
 // chartValuesDriftProbes lists the components whose rendered chart values are
 // compared with their installed release. The remaining component families are
 // tracked on ksail#7366.
@@ -139,6 +161,7 @@ func chartValuesDriftProbes() []chartValuesDriftProbe {
 		calicoPrerequisitesProbe(),
 		ciliumValuesProbe(),
 		hetznerCSIValuesProbe(),
+		hcloudCCMValuesProbe(),
 	}
 }
 

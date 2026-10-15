@@ -247,6 +247,7 @@ func TestChartValuesDriftFieldsReconcileInPlace(t *testing.T) {
 	require.Contains(t, fields, specdiff.MetricsServerValuesField)
 	require.Contains(t, fields, specdiff.CiliumValuesField)
 	require.Contains(t, fields, specdiff.CSIValuesField)
+	require.Contains(t, fields, specdiff.HcloudCCMValuesField)
 
 	for _, field := range fields {
 		t.Run(field, func(t *testing.T) {

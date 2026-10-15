@@ -15,8 +15,12 @@ import (
 
 // newHetznerCSIDriftContext is a Talos cluster on Hetzner with the CSI setting
 // left at Default, which on that combination has KSail install the Hetzner CSI
-// driver.
-func newHetznerCSIDriftContext() *localregistry.Context {
+// driver. The cloud controller manager, which every such cluster also gets, is
+// left out of the probe so only the driver is compared.
+func newHetznerCSIDriftContext(t *testing.T) *localregistry.Context {
+	t.Helper()
+	t.Cleanup(cluster.SetHcloudCCMInstallerFactoryForTests(nil))
+
 	cfg := &v1alpha1.Cluster{}
 	cfg.Spec.Cluster.Distribution = v1alpha1.DistributionTalos
 	cfg.Spec.Cluster.Provider = v1alpha1.ProviderHetzner
@@ -31,7 +35,7 @@ func newHetznerCSIDriftContext() *localregistry.Context {
 //
 //nolint:paralleltest // overrides the process-wide installer factories.
 func TestCheckChartValuesDrift_ReportsHetznerCSIDrift(t *testing.T) {
-	probed := assertReportsValuesDrift(t, newHetznerCSIDriftContext(),
+	probed := assertReportsValuesDrift(t, newHetznerCSIDriftContext(t),
 		cluster.SetCSIInstallerFactoryForTests, specdiff.CSIValuesField)
 
 	assert.Equal(t, v1alpha1.ProviderHetzner, probed.Spec.Cluster.Provider)
@@ -53,7 +57,7 @@ func TestCheckChartValuesDrift_StaysSilentForMatchingHetznerCSI(t *testing.T) {
 
 	cmd, _ := newDriftCmd()
 	diff := clusterupdate.NewEmptyUpdateResult()
-	cluster.ExportCheckChartValuesDrift(cmd, newHetznerCSIDriftContext(), diff)
+	cluster.ExportCheckChartValuesDrift(cmd, newHetznerCSIDriftContext(t), diff)
 
 	assert.Equal(t, 1, probes, "the control must have compared the release")
 	assert.Zero(t, diff.TotalChanges())
@@ -91,7 +95,7 @@ func TestCheckChartValuesDrift_SkipsCSIKSailDoesNotInstallThroughHelm(t *testing
 				},
 			))
 
-			regCtx := newHetznerCSIDriftContext()
+			regCtx := newHetznerCSIDriftContext(t)
 			configure(regCtx.ClusterCfg)
 
 			cmd, stderr := newDriftCmd()
@@ -119,7 +123,7 @@ func TestCheckChartValuesDrift_WarnsWhenHetznerCSICannotBeCompared(t *testing.T)
 
 	cmd, stderr := newDriftCmd()
 	diff := clusterupdate.NewEmptyUpdateResult()
-	cluster.ExportCheckChartValuesDrift(cmd, newHetznerCSIDriftContext(), diff)
+	cluster.ExportCheckChartValuesDrift(cmd, newHetznerCSIDriftContext(t), diff)
 
 	assert.Zero(t, diff.TotalChanges())
 	assert.Contains(t, stderr.String(), "Cannot compare hetzner-csi values")
@@ -139,7 +143,7 @@ func TestReconcileCSIValuesSharesOneUpgrade(t *testing.T) {
 		},
 		{Field: specdiff.CSIValuesField},
 	}}
-	cfg := newHetznerCSIDriftContext().ClusterCfg
+	cfg := newHetznerCSIDriftContext(t).ClusterCfg
 	cfg.Spec.Cluster.CSI = v1alpha1.CSIEnabled
 
 	t.Run("success", func(t *testing.T) {
@@ -186,7 +190,7 @@ func TestReconcileCSIValues_UpgradesOnValuesOnlyDrift(t *testing.T) {
 		func(*v1alpha1.Cluster) (installer.Installer, error) { return inst, nil },
 	))
 
-	regCtx := newHetznerCSIDriftContext()
+	regCtx := newHetznerCSIDriftContext(t)
 	cmd, _ := newDriftCmd()
 	diff := clusterupdate.NewEmptyUpdateResult()
 	cluster.ExportCheckChartValuesDrift(cmd, regCtx, diff)
@@ -213,7 +217,7 @@ func TestReconcileCSIValues_SkipsWhenKSailDoesNotInstallIt(t *testing.T) {
 		func(*v1alpha1.Cluster) (installer.Installer, error) { return inst, nil },
 	))
 
-	cfg := newHetznerCSIDriftContext().ClusterCfg
+	cfg := newHetznerCSIDriftContext(t).ClusterCfg
 	cfg.Spec.Cluster.CSI = v1alpha1.CSIDisabled
 
 	diff := &clusterupdate.UpdateResult{InPlaceChanges: []clusterupdate.Change{
