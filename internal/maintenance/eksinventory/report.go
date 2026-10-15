@@ -25,21 +25,24 @@ var ErrInventory = errors.New("incomplete AWS inventory")
 
 var errAWSRead = errors.New("AWS read failed")
 
+var errEvidenceLimit = errors.New("baseline evidence limit")
+
 const (
-	awsArgumentCount = 10
-	maxGroups        = 40
-	nextTokenKey     = "NextToken"
-	eksTokenKey      = "nextToken"
-	nextMarkerKey    = "NextMarker"
-	maxResultsKey    = "MaxResults"
-	stateField       = "State"
-	instanceKind     = "instance"
-	quotaKind        = "quota"
-	ec2Service       = "ec2"
-	maxResponseBytes = 4 << 20
-	maxPages         = 200
-	maxRecords       = 100000
-	callTimeout      = 30 * time.Second
+	awsArgumentCount       = 10
+	maxGroups              = 40
+	nextTokenKey           = "NextToken"
+	eksTokenKey            = "nextToken"
+	nextMarkerKey          = "NextMarker"
+	maxResultsKey          = "MaxResults"
+	stateField             = "State"
+	instanceKind           = "instance"
+	quotaKind              = "quota"
+	ec2Service             = "ec2"
+	maxResponseBytes       = 4 << 20
+	maxPages               = 200
+	maxRecords             = 100000
+	callTimeout            = 30 * time.Second
+	unlimitedIdentityBytes = -1
 )
 
 // Query is the AWS CLI boundary; nil selects the installed aws executable.
@@ -49,6 +52,14 @@ type operation struct {
 	service, command, title, collection, identity string
 	state, allowed, extra, kind                   string
 	inputToken, outputToken, pageSize             string
+}
+
+type observation struct {
+	groups         map[string]int
+	identities     map[string]bool
+	count          int
+	identityBudget int
+	identityBytes  int
 }
 
 // Report prints only complete per-family counts and validated aggregate groups.
@@ -74,7 +85,7 @@ func Report(ctx context.Context, region string, output io.Writer, query Query) e
 	}
 
 	for _, operationSpec := range operations() {
-		groups, count, err := collect(ctx, region, operationSpec, query)
+		observed, err := collect(ctx, region, operationSpec, query, unlimitedIdentityBytes)
 		if err != nil {
 			_, writeErr := fmt.Fprintf(
 				output,
@@ -89,7 +100,7 @@ func Report(ctx context.Context, region string, output io.Writer, query Query) e
 			continue
 		}
 
-		groupErr := printGroups(output, operationSpec.title, groups, count)
+		groupErr := printGroups(output, operationSpec.title, observed.groups, observed.count)
 		if groupErr != nil {
 			return groupErr
 		}
@@ -112,56 +123,61 @@ func collect(
 	region string,
 	operationSpec operation,
 	query Query,
-) (map[string]int, int, error) {
-	groups := make(map[string]int)
-	identities := make(map[string]bool)
+	identityBudget int,
+) (observation, error) {
+	observed := &observation{
+		groups: make(
+			map[string]int,
+		),
+		identities:     make(map[string]bool),
+		identityBudget: identityBudget,
+	}
 	tokens := make(map[string]bool)
 	token := ""
-	count := 0
 
 	for range maxPages {
 		contextErr := ctx.Err()
 		if contextErr != nil {
-			return nil, 0, fmt.Errorf("inventory deadline: %w", contextErr)
+			return observation{}, fmt.Errorf("inventory deadline: %w", contextErr)
 		}
 
 		input := requestInput(operationSpec, token)
 
 		payload, err := queryPage(ctx, region, operationSpec, input, query)
 		if err != nil {
-			return nil, 0, err
+			return observation{}, err
 		}
 
 		rows, err := records(payload, strings.Split(operationSpec.collection, "."))
 		if err != nil {
-			return nil, 0, err
+			return observation{}, err
 		}
 
-		added, err := addRows(operationSpec, rows, groups, identities)
+		added, err := addRows(operationSpec, rows, observed)
 		if err != nil {
-			return nil, 0, err
+			return observation{}, err
 		}
 
-		count += added
+		observed.count += added
 
 		next, err := nextToken(payload, operationSpec.outputToken)
 		if err != nil {
-			return nil, 0, err
+			return observation{}, err
 		}
 
 		if next == "" {
-			return groups, count, nil
+			return *observed, nil
 		}
 
 		if tokens[next] {
-			return nil, 0, fmt.Errorf("repeated pagination token: %w", ErrInventory)
+			return observation{}, fmt.Errorf("repeated pagination token: %w", ErrInventory)
 		}
 
 		tokens[next] = true
 		token = next
 	}
 
-	return nil, 0, fmt.Errorf("pagination limit exceeded: %w", ErrInventory)
+	return observation{}, fmt.Errorf("pagination limit exceeded: %w", ErrInventory)
 }
 
 func requestInput(operationSpec operation, token string) map[string]any {
@@ -555,6 +571,8 @@ func awsQuery(ctx context.Context, args ...string) ([]byte, error) {
 
 func failureReason(err error) string {
 	switch {
+	case errors.Is(err, errEvidenceLimit):
+		return "evidence-limit"
 	case errors.Is(err, fs.ErrPermission):
 		return "access-denied"
 	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
@@ -569,8 +587,7 @@ func failureReason(err error) string {
 func addRows(
 	spec operation,
 	rows []json.RawMessage,
-	groups map[string]int,
-	identities map[string]bool,
+	observed *observation,
 ) (int, error) {
 	count := 0
 
@@ -580,22 +597,45 @@ func addRows(
 			return 0, err
 		}
 
-		if identities[identity] || len(identities) >= maxRecords {
-			return 0, fmt.Errorf("repeated or excessive identities: %w", ErrInventory)
+		err = addIdentity(observed, identity)
+		if err != nil {
+			return 0, err
 		}
-
-		identities[identity] = true
 
 		if include {
 			count++
 
 			if group != "" {
-				groups[group]++
+				observed.groups[group]++
 			}
 		}
 	}
 
 	return count, nil
+}
+
+func addIdentity(observed *observation, identity string) error {
+	if observed.identities[identity] || len(observed.identities) >= maxRecords {
+		return fmt.Errorf("repeated or excessive identities: %w", ErrInventory)
+	}
+
+	if observed.identityBudget >= 0 {
+		encoded, err := json.Marshal(identity)
+		if err != nil {
+			return fmt.Errorf("invalid baseline identity: %w", ErrInventory)
+		}
+
+		nextBytes := observed.identityBytes + len(encoded) + 1
+		if nextBytes > observed.identityBudget {
+			return fmt.Errorf("%w: %w", ErrInventory, errEvidenceLimit)
+		}
+
+		observed.identityBytes = nextBytes
+	}
+
+	observed.identities[identity] = true
+
+	return nil
 }
 
 func capacityGroup(row json.RawMessage, key string) (string, bool, error) {

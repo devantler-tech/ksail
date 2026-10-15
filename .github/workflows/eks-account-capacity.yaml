@@ -18,6 +18,11 @@ on:
         required: false
         type: boolean
         default: false
+      capture_resource_baseline:
+        description: "Capture a private regional baseline in this job (read-only; does not certify cleanup)"
+        required: false
+        type: boolean
+        default: false
 
 env:
   AWS_OIDC_ROLE_ARN: "arn:aws:iam::939001610192:role/eks-ci"
@@ -65,8 +70,22 @@ jobs:
         shell: bash
         env:
           AWS_REGION: ${{ inputs.region }}
+          CAPTURE_BASELINE: ${{ inputs.capture_resource_baseline }}
         run: |
-          "$GITHUB_WORKSPACE/.github/scripts/report-eks-account-capacity.sh" --region "$AWS_REGION"
+          set -euo pipefail
+          if [[ "$CAPTURE_BASELINE" == "true" ]]; then
+            evidence_dir="$(mktemp -d "$RUNNER_TEMP/eks-baseline.XXXXXXXX")"
+            trap 'rm -f "$evidence_dir/baseline.json"; rmdir "$evidence_dir"' EXIT
+            "$GITHUB_WORKSPACE/.github/scripts/report-eks-account-capacity.sh" \
+              --region "$AWS_REGION" --baseline-file "$evidence_dir/baseline.json" \
+              --cluster-name regional-diagnostic --run-id "$GITHUB_RUN_ID" \
+              --run-attempt "$GITHUB_RUN_ATTEMPT" --source-sha "$GITHUB_SHA"
+            test -s "$evidence_dir/baseline.json"
+            test "$(stat -c '%a' "$evidence_dir/baseline.json")" = 600
+            echo "Private baseline file verified; no manifest is uploaded."
+          else
+            "$GITHUB_WORKSPACE/.github/scripts/report-eks-account-capacity.sh" --region "$AWS_REGION"
+          fi
 
       - name: 🔎 Check smoke candidate quota without creating resources
         if: inputs.check_smoke_capacity
