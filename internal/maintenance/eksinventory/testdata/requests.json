@@ -17,13 +17,7 @@
     "Filters": [
       {
         "Name": "instance-state-name",
-        "Values": [
-          "pending",
-          "running",
-          "stopping",
-          "stopped",
-          "shutting-down"
-        ]
+        "Values": ["pending", "running", "stopping", "stopped", "shutting-down"]
       }
     ],
     "IncludeManagedResources": true

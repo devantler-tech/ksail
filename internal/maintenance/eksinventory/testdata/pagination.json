@@ -23,9 +23,7 @@
       "nextToken": "private-token"
     },
     "last": {
-      "clusters": [
-        "private-cluster"
-      ]
+      "clusters": ["private-cluster"]
     },
     "inputToken": "nextToken",
     "want": "EKS clusters: 1"

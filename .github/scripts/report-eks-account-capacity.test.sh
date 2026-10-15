@@ -67,7 +67,7 @@ refute_text 'private-' 'resource identifiers must never be printed'
 [[ ! -e "${fake_dir}/UNEXPECTED_CALL" ]] || fail 'only allow-listed AWS reads may run'
 [[ "$(wc -l <"${fake_dir}/calls.log" | tr -d ' ')" -eq 14 ]] || fail 'all fourteen read operations must run'
 if grep -Fv -- '--region eu-central-1 --output json --no-paginate --cli-input-json ' "${fake_dir}/calls.log" >/dev/null; then
-  fail 'every call must bind the requested region and explicit JSON pagination'
+	fail 'every call must bind the requested region and explicit JSON pagination'
 fi
 expect_fenced_group 'EKS regional resources (eu-central-1)' capacity
 pass 'the installed entry point reads every family and prints safe summaries'
@@ -83,20 +83,20 @@ pass 'a failed process cannot convert plausible stdout into a completed count'
 rm "${fake_dir}/ec2-describe-volumes.fail"
 
 for body in 'null' 'None' '' '{"Volumes":null}' '{"Volumes":[{"VolumeId":"private-volume","State":"::error::private-injection"}]}'; do
-  printf '%s' "${body}" >"${fake_dir}/ec2-describe-volumes.json"
-  run --region eu-central-1
-  expect_status 0 'malformed provider responses remain diagnostic'
-  expect_text 'EBS volumes, by state: unknown' 'null, missing or hostile data is unknown'
-  refute_text 'private-' 'hostile provider text must not reach public output'
+	printf '%s' "${body}" >"${fake_dir}/ec2-describe-volumes.json"
+	run --region eu-central-1
+	expect_status 0 'malformed provider responses remain diagnostic'
+	expect_text 'EBS volumes, by state: unknown' 'null, missing or hostile data is unknown'
+	refute_text 'private-' 'hostile provider text must not reach public output'
 done
 pass 'null, empty and hostile provider responses are never zero'
 
 for args in '' '--region' '--region eu-central-1;id' '--region EU-CENTRAL-1' '--cluster x' '--region eu-central-1 extra'; do
-  rm -f "${fake_dir}/calls.log"
-  # shellcheck disable=SC2086 # Deliberately split these literal argument fixtures.
-  run ${args}
-  expect_status 2 "usage error expected for: ${args}"
-  [[ ! -e "${fake_dir}/calls.log" ]] || fail 'invalid arguments must not reach AWS'
+	rm -f "${fake_dir}/calls.log"
+	# shellcheck disable=SC2086 # Deliberately split these literal argument fixtures.
+	run ${args}
+	expect_status 2 "usage error expected for: ${args}"
+	[[ ! -e "${fake_dir}/calls.log" ]] || fail 'invalid arguments must not reach AWS'
 done
 pass 'invalid arguments fail before AWS access'
 run --help

@@ -2,9 +2,7 @@
   {
     "operation": "eks list-clusters",
     "body": {
-      "clusters": [
-        "private-cluster"
-      ]
+      "clusters": ["private-cluster"]
     },
     "want": "EKS clusters: 1"
   },

@@ -3,7 +3,7 @@
 set -euo pipefail
 
 usage() {
-  cat <<'EOF_USAGE'
+	cat <<'EOF_USAGE'
 Usage:
   report-eks-account-capacity.sh --region REGION
 
@@ -24,29 +24,29 @@ EOF_USAGE
 region=""
 
 while (($# > 0)); do
-  case "$1" in
-  --help | -h)
-    usage
-    exit 0
-    ;;
-  --region)
-    if (($# < 2)); then
-      usage >&2
-      exit 2
-    fi
-    region="$2"
-    shift 2
-    ;;
-  *)
-    usage >&2
-    exit 2
-    ;;
-  esac
+	case "$1" in
+	--help | -h)
+		usage
+		exit 0
+		;;
+	--region)
+		if (($# < 2)); then
+			usage >&2
+			exit 2
+		fi
+		region="$2"
+		shift 2
+		;;
+	*)
+		usage >&2
+		exit 2
+		;;
+	esac
 done
 
 if [[ ! "${region}" =~ ^[a-z]{2}(-[a-z]+)+-[0-9]$ ]]; then
-  usage >&2
-  exit 2
+	usage >&2
+	exit 2
 fi
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
