@@ -21,7 +21,9 @@ var (
 	errUpgradeFixturePoll    = errors.New("wrong poll identity")
 )
 
-func TestControlPlaneUpgradeUsesDistinctValidRequestTokens(t *testing.T) {
+// TestControlPlaneUpgradeUsesDistinctHexRequestTokens requires independent
+// operations to use distinct 64-character lowercase hexadecimal tokens.
+func TestControlPlaneUpgradeUsesDistinctHexRequestTokens(t *testing.T) {
 	t.Parallel()
 
 	api := &upgradeAPI{cluster: upgradeCluster(), result: upgradeResult()}
@@ -35,6 +37,11 @@ func TestControlPlaneUpgradeUsesDistinctValidRequestTokens(t *testing.T) {
 	}
 
 	require.Len(t, api.tokens, 2)
+
+	for _, token := range api.tokens {
+		assert.Regexp(t, "^[0-9a-f]{64}$", token)
+	}
+
 	assert.NotEqual(t, api.tokens[0], api.tokens[1], "independent requests must not share a token")
 }
 
@@ -207,11 +214,12 @@ func (api *upgradeAPI) MintToken(context.Context, string) (string, error) { retu
 // the real SDK boundary is exercised in upgrader_credentials_test.go.
 func (api *upgradeAPI) ValidateUpgradeCredentialLifetime(context.Context) error { return nil }
 
+// UpdateClusterVersion records valid fixture submissions and invokes configured result hooks.
 func (api *upgradeAPI) UpdateClusterVersion(
 	_ context.Context,
 	name, version, token string,
 ) (*ekstypes.Update, error) {
-	if name != "demo" || version != "1.35" || len(token) < 33 || len(token) > 126 {
+	if name != "demo" || version != "1.35" || token == "" {
 		return nil, errUpgradeFixtureRequest
 	}
 

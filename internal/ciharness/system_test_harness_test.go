@@ -841,7 +841,12 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
 	smokeJob, ok := workflow.Jobs["smoke-test"]
 	require.True(t, ok, "smoke-test job is missing")
-	assert.Equal(t, 285, smokeJob.TimeoutMinutes)
+	assert.Equal(t, 360, smokeJob.TimeoutMinutes)
+	assert.Less(t,
+		harnessStepIndex(t, smokeJob.Steps, "🔧 Prepare EKS upgrade trial project"),
+		harnessStepIndex(t, smokeJob.Steps, "🔎 Check EKS capacity before create"),
+		"capacity must observe the final prepared upgrade configuration",
+	)
 
 	boundedStepNames := []string{
 		"📄 Checkout",
@@ -851,6 +856,7 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 		"📦 Cache KSail Binary",
 		"📥 Install eksctl",
 		"🔧 Initialize EKS project",
+		"🔧 Prepare EKS upgrade trial project",
 		"🔎 Check EKS capacity before create",
 		"🧪 ksail cluster create",
 		"🧪 ksail cluster info",
@@ -858,20 +864,29 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 		"🔎 Report why the EKS create failed",
 		"🧪 ksail cluster update scales EKS nodes",
 		"🧪 ksail workload reconcile",
+		"🧪 EKS control-plane upgrade trial",
+		"🔐 Refresh AWS credentials for final cleanup",
+		"⏳ Wait for EKS update before cleanup",
 		"🔐 Refresh AWS credentials before EKS recovery",
 		"🧪 Recover EKS ownership after local state loss",
 		"🧹 Delete EKS smoke cluster",
 	}
 
-	boundedMinutes := 0
-
 	for _, name := range boundedStepNames {
 		step := findHarnessStep(t, smokeJob.Steps, name)
 		require.Positive(t, step.TimeoutMinutes, "%s must have a timeout", name)
-		boundedMinutes += step.TimeoutMinutes
 	}
 
-	assert.LessOrEqual(t, boundedMinutes+15, smokeJob.TimeoutMinutes)
+	// The upgrade trial and the ownership recovery never share a job, so the
+	// job timeout must cover the longer path rather than the sum of both.
+	for _, upgradeTrial := range []bool{false, true} {
+		assert.LessOrEqual(
+			t,
+			eksSmokePathMinutes(t, smokeJob.Steps, upgradeTrial)+15,
+			smokeJob.TimeoutMinutes,
+			"upgrade trial path: %t", upgradeTrial,
+		)
+	}
 
 	initialCredentials := findHarnessStep(
 		t,
@@ -930,6 +945,12 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 	)
 	assert.Equal(t, 7200, recoveryCredentials.With["role-duration-seconds"])
 	assert.Contains(t, recoveryCredentials.If, "always()")
+	assert.Contains(t, recoveryCredentials.If, eksNoUpgradeTrialCondition)
+	assert.Equal(
+		t,
+		eksNoUpgradeTrialCondition,
+		findHarnessStep(t, smokeJob.Steps, "🧪 Recover EKS ownership after local state loss").If,
+	)
 
 	postRefreshMinutes := 0
 	for _, name := range []string{
@@ -1271,6 +1292,65 @@ func readRepoFile(t *testing.T, path string) []byte {
 	require.NoError(t, err)
 
 	return contents
+}
+
+// The EKS smoke job runs either the control-plane upgrade trial or the
+// ownership recovery, selected by whether an upgrade source version is given.
+const (
+	eksUpgradeTrialCondition   = "inputs.upgrade_from_version != ''"
+	eksNoUpgradeTrialCondition = "inputs.upgrade_from_version == ''"
+)
+
+// eksSmokePathMinutes bounds one of the EKS smoke job's mutually exclusive paths.
+// A failed-create diagnostic and the success-gated upgrade cannot run together.
+func eksSmokePathMinutes(t *testing.T, steps []harnessStep, upgradeTrial bool) int {
+	t.Helper()
+
+	skipped := eksUpgradeTrialCondition
+	if upgradeTrial {
+		skipped = eksNoUpgradeTrialCondition
+	}
+
+	minutes := 0
+
+	for _, step := range steps {
+		require.Positive(t, step.TimeoutMinutes, "unbounded step: %s", step.Name)
+
+		if strings.Contains(step.If, skipped) {
+			continue
+		}
+
+		minutes += step.TimeoutMinutes
+	}
+
+	if upgradeTrial {
+		minutes -= eksDisjointUpgradeMinutes(t, steps)
+	}
+
+	return minutes
+}
+
+// eksDisjointUpgradeMinutes requires the failure/success predicates and ordering
+// that prove at least one step is skipped, then returns the smaller saved budget.
+func eksDisjointUpgradeMinutes(t *testing.T, steps []harnessStep) int {
+	t.Helper()
+
+	create := findHarnessStep(t, steps, "🧪 ksail cluster create")
+	diagnostic := findHarnessStep(t, steps, "🔎 Report why the EKS create failed")
+	trial := findHarnessStep(t, steps, "🧪 EKS control-plane upgrade trial")
+	require.False(t, create.ContinueOnError, "failure must retain GitHub's default success gate")
+	require.Equal(t, "always() && steps.create.outcome == 'failure'", diagnostic.If)
+	require.Equal(t, eksUpgradeTrialCondition, trial.If)
+	require.Less(t,
+		harnessStepIndex(t, steps, create.Name),
+		harnessStepIndex(t, steps, diagnostic.Name),
+	)
+	require.Less(t,
+		harnessStepIndex(t, steps, diagnostic.Name),
+		harnessStepIndex(t, steps, trial.Name),
+	)
+
+	return min(diagnostic.TimeoutMinutes, trial.TimeoutMinutes)
 }
 
 // findHarnessStep returns the named step, delegating the lookup to
