@@ -70,6 +70,12 @@ run_case merged-moving-main 1 'no valid merged cask PR'
 # read must exercise the same collector/validator and retain its immutable proof.
 run_case merged-known-not-listed 0 '42' --pr 42
 run_case merged-known-late 0 '42' --pr 42
+# The selected PR can merge while discovery fails. Re-read the immutable delivery
+# even on a transport or malformed-response failure, retaining all validation gates.
+run_case merged-known-late-list-failure 0 '42' --pr 42
+run_case merged-known-late-list-malformed 0 '42' --pr 42
+run_case merged-known-open-list-failure 1 'could not enumerate merged cask PRs' --pr 42
+run_case merged-known-late-list-failure-wrong-digest 1 'could not enumerate merged cask PRs' --pr 42
 run_case merged-list-failure 0 '42' --pr 42
 for scenario in merged-main-file-failure merged-moving-main merged-merge-file-failure \
 	merged-main-ref-failure merged-malformed-main-file merged-comparison-failure; do

@@ -113,12 +113,20 @@ fi
 
 if ! gh api --paginate --slurp \
 	"repos/${tap}/pulls?state=closed&head=${tap%%/*}:${branch}&per_page=100" \
-	>"${work}/pages.json"; then
+	>"${work}/pages.json" 2>"${work}/discovery.log"; then
+	if [[ -n "${known_pr}" ]] && validate_candidate "${known_pr}"; then
+		printf '%s\n' "${known_pr}"
+		exit 0
+	fi
 	printf 'BLOCKED: could not enumerate merged cask PRs for %s\n' "${branch}" >&2
 	exit 1
 fi
 if ! jq -e 'type == "array" and all(.[]; type == "array")' \
 	"${work}/pages.json" >/dev/null 2>&1; then
+	if [[ -n "${known_pr}" ]] && validate_candidate "${known_pr}"; then
+		printf '%s\n' "${known_pr}"
+		exit 0
+	fi
 	printf 'BLOCKED: could not enumerate merged cask PRs for %s: malformed response\n' \
 		"${branch}" >&2
 	exit 1
