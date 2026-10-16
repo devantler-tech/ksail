@@ -146,6 +146,26 @@ func TestOwnershipVerificationRejectsEveryRecordedLeftoverKind(t *testing.T) {
 	}
 }
 
+func TestOwnershipVerificationTreatsFailedNATGatewayAsRemaining(t *testing.T) {
+	t.Parallel()
+	manifest := ownershipVerificationFixture(t)
+
+	var output bytes.Buffer
+
+	err := eksinventory.VerifyOwnership(
+		context.Background(), baselineBinding(), manifest, &output,
+		verificationQuery(t, "nat-gateway-failed", nil),
+	)
+	if !errors.Is(err, eksinventory.ErrInventory) ||
+		!strings.Contains(output.String(), "nat-gateway: state=remaining count=1") {
+		t.Fatalf(
+			"failed NAT gateway became clean teardown evidence: err=%v output=%s",
+			err,
+			output.String(),
+		)
+	}
+}
+
 func TestOwnershipVerificationRejectsIdentityReplacement(t *testing.T) {
 	t.Parallel()
 	manifest := ownershipVerificationFixture(t)
@@ -335,6 +355,61 @@ func TestOwnershipVerificationTreatsOnlyAbsentClassicELBVPCsAsUnrelated(t *testi
 	}
 }
 
+func TestOwnershipVerificationRejectsMissingVPCOnFilteredEC2Rows(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name string
+		vpc  string
+	}{
+		{name: "missing"},
+		{name: "null", vpc: `,"VpcId":null`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			manifest := ownershipVerificationFixture(t)
+			query := verificationQuery(t, "vpc", nil)
+
+			withIncompleteFilteredRow := func(ctx context.Context, args ...string) ([]byte, error) {
+				var input map[string]any
+
+				err := json.Unmarshal([]byte(args[8]), &input)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if args[0] == "ec2" && args[1] == "describe-instances" &&
+					input["InstanceIds"] == nil && input["Filters"] != nil {
+					return []byte(
+						`{"Reservations":[{"Instances":[{"InstanceId":"i-incomplete"` +
+							test.vpc + `}]}]}`,
+					), nil
+				}
+
+				return query(ctx, args...)
+			}
+
+			var output bytes.Buffer
+
+			err := eksinventory.VerifyOwnership(
+				context.Background(), baselineBinding(), manifest, &output,
+				withIncompleteFilteredRow,
+			)
+			if !errors.Is(err, eksinventory.ErrInventory) ||
+				!strings.Contains(
+					output.String(),
+					"vpc-census: state=unknown count=1 reason=invalid-or-incomplete-data",
+				) {
+				t.Fatalf(
+					"incomplete filtered VPC row became clean evidence: err=%v output=%s",
+					err,
+					output.String(),
+				)
+			}
+		})
+	}
+}
+
 func TestOwnershipVerificationRejectsAnUnattributedRegionalSurvivor(t *testing.T) {
 	t.Parallel()
 	manifest := ownershipVerificationFixture(t)
@@ -499,9 +574,15 @@ func verificationQuery(
 				return regional(ctx, args...)
 			}
 
-			if remainingKind == "nat-gateway" {
+			if remainingKind == "nat-gateway" || remainingKind == "nat-gateway-failed" {
+				state := "available"
+				if remainingKind == "nat-gateway-failed" {
+					state = "failed"
+				}
+
 				return []byte(
-					`{"NatGateways":[{"NatGatewayId":"nat-0123456789abcdef0","State":"available"}]}`,
+					`{"NatGateways":[{"NatGatewayId":"nat-0123456789abcdef0","State":"` +
+						state + `"}]}`,
 				), nil
 			}
 

@@ -247,7 +247,7 @@ func verifyOwnedResource(
 		service, command, collection = ec2Service, describeNatGateways, natGatewaysCollection
 		input["NatGatewayIds"] = []string{resource.Identity}
 		identityField, stateFieldName = natGatewayIDField, stateField
-		absentStates = []string{deletedState, failedState}
+		absentStates = []string{deletedState}
 	case addressKind:
 		service, command, collection = ec2Service, describeAddresses, "Addresses"
 		input["AllocationIds"] = []string{resource.Identity}
@@ -349,6 +349,7 @@ func verifyOwnedVPCCensus(
 	type censusRead struct {
 		service, command, collection, inputToken, outputToken, identity, vpc string
 		input                                                                map[string]any
+		optionalVPC                                                          bool
 	}
 
 	filters := []map[string]any{{"Name": "vpc-id", "Values": []string{vpcID}}}
@@ -366,11 +367,13 @@ func verifyOwnedVPCCensus(
 				maxResultsKey:           ownershipPageSize,
 				includeManagedResources: true,
 			},
+			false,
 		},
 		{
 			ec2Service, describeNatGateways, natGatewaysCollection, nextTokenKey,
 			nextTokenKey, natGatewayIDField, vpcIDField,
 			map[string]any{"Filter": filters, maxResultsKey: ownershipPageSize},
+			false,
 		},
 		{
 			ec2Service,
@@ -385,16 +388,19 @@ func verifyOwnedVPCCensus(
 				maxResultsKey:           ownershipPageSize,
 				includeManagedResources: true,
 			},
+			false,
 		},
 		{
 			elbService, describeLoadBalancers, classicLoadBalancersCollection, markerKey,
 			nextMarkerKey, classicLoadBalancerNameField, "VPCId",
 			map[string]any{pageSizeKey: ownershipPageSize},
+			true,
 		},
 		{
 			elbv2Service, describeLoadBalancers, loadBalancersCollection, markerKey,
 			nextMarkerKey, loadBalancerARNField, vpcIDField,
 			map[string]any{pageSizeKey: ownershipPageSize},
+			true,
 		},
 	}
 
@@ -415,7 +421,7 @@ func verifyOwnedVPCCensus(
 		}
 
 		for _, row := range rows {
-			rowVPC, fieldErr := optionalCensusVPCField(row, read.vpc)
+			rowVPC, fieldErr := censusVPCField(row, read.vpc, read.optionalVPC)
 			if fieldErr != nil {
 				return resourceVerification{
 					state: verificationUnknown, reason: invalidDataReason,
@@ -448,7 +454,7 @@ func verifyOwnedVPCCensus(
 	return resourceVerification{state: verificationAbsent}
 }
 
-func optionalCensusVPCField(data json.RawMessage, key string) (string, error) {
+func censusVPCField(data json.RawMessage, key string, optional bool) (string, error) {
 	var object map[string]json.RawMessage
 
 	err := json.Unmarshal(data, &object)
@@ -458,7 +464,11 @@ func optionalCensusVPCField(data json.RawMessage, key string) (string, error) {
 
 	value, found := object[key]
 	if !found || strings.TrimSpace(string(value)) == "null" {
-		return "", nil
+		if optional {
+			return "", nil
+		}
+
+		return "", fmt.Errorf("missing resource field: %w", ErrInventory)
 	}
 
 	return stringValue(value)
