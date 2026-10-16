@@ -117,6 +117,11 @@ func CaptureOwnership(
 	}
 
 	complete := collector.capture(hints)
+
+	if !replacing && manifest.AccountID == "" {
+		return fmt.Errorf("ownership capture has no verified account binding: %w", ErrInventory)
+	}
+
 	manifest.Resources = collector.sortedResources()
 
 	manifest.CaptureCount++
@@ -927,8 +932,9 @@ func (collector *ownershipCollector) captureHints(parent string, hints Ownership
 
 	for _, hint := range hints.LoadBalancerHosts {
 		valid, _ := regexp.MatchString(
-			`^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?\.`+
-				regexp.QuoteMeta(collector.binding.Region)+`\.elb\.amazonaws\.com$`,
+			`^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?\.(?:`+
+				regexp.QuoteMeta(collector.binding.Region)+`\.elb|elb\.`+
+				regexp.QuoteMeta(collector.binding.Region)+`)\.amazonaws\.com$`,
 			hint,
 		)
 		if !valid {

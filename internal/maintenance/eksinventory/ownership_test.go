@@ -665,6 +665,19 @@ func TestOwnershipCaptureRejectsPaginationOnASingleResponse(t *testing.T) {
 		t.Fatalf("unexpected pagination accepted: %v", err)
 	}
 
+	_, err = os.Stat(manifest)
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("unbound ownership manifest was published: %v", err)
+	}
+
+	err = eksinventory.CaptureOwnership(
+		context.Background(), baselineBinding(), baseline, manifest, eksinventory.OwnershipHints{},
+		io.Discard, base,
+	)
+	if err != nil {
+		t.Fatalf("follow-up capture could not recover: %v", err)
+	}
+
 	var got ownershipSnapshot
 
 	err = json.Unmarshal(readPrivateTestFile(t, manifest), &got)
@@ -672,8 +685,49 @@ func TestOwnershipCaptureRejectsPaginationOnASingleResponse(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got.Coverage["account"].ReadComplete {
-		t.Fatal("unread pagination page became a complete account binding")
+	if got.AccountID != "123456789012" || !got.Coverage["account"].ReadComplete {
+		t.Fatalf("follow-up capture did not publish a verified account binding: %#v", got)
+	}
+}
+
+func TestOwnershipCaptureAcceptsNetworkLoadBalancerHostname(t *testing.T) {
+	t.Parallel()
+	dir := privateBaselineDir(t)
+	baseline := captureBaselineFixture(t, dir)
+	manifest := filepath.Join(dir, "ownership.json")
+	base := ownershipQuery(t)
+	nlbARN := "arn:aws:elasticloadbalancing:eu-central-1:123456789012:loadbalancer/net/owned/abc"
+	nlbHost := "owned-123.elb.eu-central-1.amazonaws.com"
+	query := func(ctx context.Context, args ...string) ([]byte, error) {
+		if args[0] == "elbv2" && args[1] == "describe-load-balancers" {
+			return []byte(`{"LoadBalancers":[{"LoadBalancerArn":"` + nlbARN +
+				`","DNSName":"` + nlbHost + `","State":{"Code":"active"}}]}`), nil
+		}
+
+		return base(ctx, args...)
+	}
+
+	err := eksinventory.CaptureOwnership(
+		context.Background(), baselineBinding(), baseline, manifest, eksinventory.OwnershipHints{
+			LoadBalancerHosts:    []string{nlbHost},
+			WorkloadReadComplete: true,
+		}, io.Discard, query,
+	)
+	if err != nil {
+		t.Fatalf("network load balancer hostname rejected: %v", err)
+	}
+
+	var got ownershipSnapshot
+
+	err = json.Unmarshal(readPrivateTestFile(t, manifest), &got)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.ContainsFunc(got.Resources, func(resource ownedResource) bool {
+		return resource.Kind == "load-balancer" && resource.Identity == nlbARN
+	}) {
+		t.Fatalf("network load balancer identity was not recorded: %#v", got.Resources)
 	}
 }
 
