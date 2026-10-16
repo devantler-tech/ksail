@@ -97,6 +97,7 @@ func TestEKSOwnershipPermissionProbeIsReadOnlyAndOptIn(t *testing.T) {
 	require.Contains(t, step.Run, ".coverage.account.readComplete == true")
 	require.Contains(t, step.Run, ".coverage.cluster.reason == \"not-found\"")
 	require.Contains(t, step.Run, ".coverage.cloudformation.reason == \"not-found\"")
+	require.Contains(t, step.Run, "ownership-read-probe cluster-read=")
 	require.Contains(t, step.Run, "rm -f --")
 	require.NotContains(
 		t,

@@ -137,6 +137,12 @@ jobs:
           test "$capture_status" = 1
           test "$(stat -c '%a' "$baseline_file")" = 600
           test "$(stat -c '%a' "$ownership_file")" = 600
+          jq -r '
+            "ownership-read-probe cluster-read=" + (.coverage.cluster.readComplete | tostring) +
+            " cluster-reason=" + (.coverage.cluster.reason // "-") +
+            " cloudformation-read=" + (.coverage.cloudformation.readComplete | tostring) +
+            " cloudformation-reason=" + (.coverage.cloudformation.reason // "-")
+          ' "$ownership_file"
           jq -e '
             .coverage.account.readComplete == true and
             .coverage.cluster.reason == "not-found" and
