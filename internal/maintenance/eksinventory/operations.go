@@ -14,7 +14,7 @@ func operations() []operation {
 func clusterOperations() []operation {
 	return []operation{
 		{
-			service:     "eks",
+			service:     eksService,
 			command:     "list-clusters",
 			title:       "EKS clusters",
 			collection:  "clusters",
@@ -24,7 +24,7 @@ func clusterOperations() []operation {
 			pageSize:    "maxResults",
 		},
 		{
-			service:    "cloudformation",
+			service:    cloudFormationService,
 			command:    "list-stacks",
 			title:      "CloudFormation stacks, by state",
 			collection: "StackSummaries",
@@ -53,7 +53,7 @@ func fleetOperations() []operation {
 			state:       "FleetState",
 			allowed:     "submitted active deleted failed deleted_running deleted_terminating modifying",
 			extra:       "Type",
-			kind:        "fleet",
+			kind:        fleetKind,
 			inputToken:  nextTokenKey,
 			outputToken: nextTokenKey,
 			pageSize:    maxResultsKey,
@@ -174,7 +174,7 @@ func storageOperations() []operation {
 			identity:    "LoadBalancerName",
 			inputToken:  "Marker",
 			outputToken: nextMarkerKey,
-			pageSize:    "PageSize",
+			pageSize:    pageSizeKey,
 		},
 		{
 			service:     "elbv2",
@@ -186,7 +186,7 @@ func storageOperations() []operation {
 			allowed:     "active provisioning active_impaired failed",
 			inputToken:  "Marker",
 			outputToken: nextMarkerKey,
-			pageSize:    "PageSize",
+			pageSize:    pageSizeKey,
 		},
 	}
 }

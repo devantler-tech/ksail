@@ -38,6 +38,11 @@ on:
         required: false
         type: string
         default: eu-central-1
+      capture_resource_ownership:
+        description: "Opt in to private cumulative run-owned resource capture (verification is not delivered yet)"
+        required: false
+        type: boolean
+        default: false
   # No schedule yet: this smoke test creates billable AWS resources. Keep it
   # manual until the OIDC role and the expected spend envelope exist.
 
@@ -112,12 +117,13 @@ jobs:
     runs-on: ubuntu-latest
     # Must cover every step budget below, or a worst-case run is cancelled while
     # the always-run cleanup is still deleting the cluster. Worst case (GitOps
-    # engine enabled): 225 minutes of steps before cleanup (including the 5-minute
-    # credential refresh and 40-minute ownership recovery) + 45 for cleanup = 270,
-    # plus at least 15 minutes of job-level headroom = 285.
+    # engine enabled): 240 minutes of steps before cleanup (including the private
+    # 5-minute baseline, bounded 5-minute pre-scale capture, 5-minute final capture,
+    # credential refreshes and 40-minute ownership recovery) + 45 for cleanup +
+    # 2 for private evidence removal = 287, plus at least 18 minutes of headroom.
     # Re-check this sum whenever a step's timeout-minutes changes; the ciharness
     # test TestEKSSmokeReservesCleanupBudgetAndFreshCredentials enforces it.
-    timeout-minutes: 285
+    timeout-minutes: 305
     needs: [preflight, build-artifact]
     if: needs.preflight.outputs.aws-credentials == 'true'
     environment: ci
@@ -130,6 +136,9 @@ jobs:
       AWS_DEFAULT_REGION: ${{ inputs.region }}
       KSAIL_EKS_WORKDIR: /tmp/ksail-eks-smoke-${{ github.run_id }}-${{ github.run_attempt }}
       KSAIL_EKS_CLUSTER_NAME: st-eks-${{ github.run_id }}-${{ github.run_attempt }}
+      KSAIL_EKS_EVIDENCE_DIR: /tmp/ksail-eks-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+      KSAIL_EKS_BASELINE_FILE: /tmp/ksail-eks-evidence-${{ github.run_id }}-${{ github.run_attempt }}/baseline.json
+      KSAIL_EKS_OWNERSHIP_FILE: /tmp/ksail-eks-evidence-${{ github.run_id }}-${{ github.run_attempt }}/ownership.json
     steps:
       - name: 📄 Checkout
         timeout-minutes: 5
@@ -190,6 +199,20 @@ jobs:
           source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
           save: "false"
+
+      - name: 🔎 Capture EKS regional baseline
+        if: inputs.capture_resource_ownership
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -m 700 "$KSAIL_EKS_EVIDENCE_DIR"
+          "$GITHUB_WORKSPACE/.github/scripts/report-eks-account-capacity.sh" \
+            --region "$AWS_REGION" --baseline-file "$KSAIL_EKS_BASELINE_FILE" \
+            --cluster-name "$KSAIL_EKS_CLUSTER_NAME" --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" --source-sha "$GITHUB_SHA"
+          test -s "$KSAIL_EKS_BASELINE_FILE"
+          test "$(stat -c '%a' "$KSAIL_EKS_BASELINE_FILE")" = 600
 
       - name: 📥 Install eksctl
         timeout-minutes: 10
@@ -311,10 +334,13 @@ jobs:
         # Must exceed this step's own worst case, or the step timeout fires first
         # and masks the diagnostic wait_for_capacity would have printed. Budget:
         # wait_for_capacity polls 30 x 20s = 10m and runs twice (20m), leaving 20m
-        # for the two `ksail cluster update` invocations and the identity asserts.
-        # The harness test caps this step at 47m via the post-refresh budget.
-        timeout-minutes: 40
+        # for the two `ksail cluster update` invocations and the identity asserts,
+        # plus a separately bounded 5m ownership capture before scale-down.
+        # The harness test caps this step at 52m via the post-refresh budget.
+        timeout-minutes: 45
         shell: bash
+        env:
+          CAPTURE_RESOURCE_OWNERSHIP: ${{ inputs.capture_resource_ownership }}
         run: |
           set -euo pipefail
           cd "$KSAIL_EKS_WORKDIR"
@@ -440,6 +466,15 @@ jobs:
           assert_same_cluster "$cluster_identity"
           assert_same_nodegroup "$nodegroup_identity"
 
+          if [[ "${CAPTURE_RESOURCE_OWNERSHIP:-false}" == "true" ]]; then
+            timeout --kill-after=10s 5m \
+              "$GITHUB_WORKSPACE/.github/scripts/report-eks-account-capacity.sh" \
+                --region "$AWS_REGION" --baseline-file "$KSAIL_EKS_BASELINE_FILE" \
+                --ownership-file "$KSAIL_EKS_OWNERSHIP_FILE" \
+                --cluster-name "$KSAIL_EKS_CLUSTER_NAME" --run-id "$GITHUB_RUN_ID" \
+                --run-attempt "$GITHUB_RUN_ATTEMPT" --source-sha "$GITHUB_SHA"
+          fi
+
           set_nodegroup_capacity 1 1 1
           ksail cluster update --yes
           wait_for_capacity 1 1 1 1
@@ -518,6 +553,49 @@ jobs:
             exit 1
           fi
 
+      - name: 🔎 Preserve EKS ownership before cleanup
+        if: always() && inputs.capture_resource_ownership && steps.create.outputs.attempted == 'true'
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(
+            --region "$AWS_REGION" --baseline-file "$KSAIL_EKS_BASELINE_FILE"
+            --ownership-file "$KSAIL_EKS_OWNERSHIP_FILE"
+            --cluster-name "$KSAIL_EKS_CLUSTER_NAME" --run-id "$GITHUB_RUN_ID"
+            --run-attempt "$GITHUB_RUN_ATTEMPT" --source-sha "$GITHUB_SHA"
+          )
+
+          workload_complete=false
+          services=""
+          volumes=""
+          if services="$(kubectl get services --all-namespaces -o json 2>/dev/null)" &&
+             volumes="$(kubectl get persistentvolumes -o json 2>/dev/null)"; then
+            load_balancers="$(jq -ce '[
+              .items[].status.loadBalancer.ingress[]?.hostname | strings
+            ] | unique' <<< "$services")"
+            volume_ids="$(jq -ce '[
+              .items[].spec.csi.volumeHandle? |
+              select(type == "string" and test("^vol-[0-9a-f]{17}$"))
+            ] | unique' <<< "$volumes")"
+            while IFS= read -r identity; do
+              args+=(--load-balancer-host "$identity")
+            done < <(jq -r '.[]' <<< "$load_balancers")
+            while IFS= read -r identity; do
+              args+=(--volume-id "$identity")
+            done < <(jq -r '.[]' <<< "$volume_ids")
+            args+=(--workload-inventory-complete)
+            workload_complete=true
+          else
+            echo "::warning::Kubernetes workload ownership inventory is unavailable."
+          fi
+
+          status=0
+          "$GITHUB_WORKSPACE/.github/scripts/report-eks-account-capacity.sh" "${args[@]}" || status=$?
+          if [[ "$workload_complete" != "true" || "$status" -ne 0 ]]; then
+            exit 1
+          fi
+
       - name: 🧹 Delete EKS smoke cluster
         if: always()
         timeout-minutes: 45
@@ -530,3 +608,11 @@ jobs:
             --region "$AWS_REGION" \
             --workdir "$KSAIL_EKS_WORKDIR" \
             --create-attempted "${EKS_CREATE_ATTEMPTED:-false}"
+
+      - name: 🧽 Remove private EKS evidence
+        if: always()
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          rm -f -- "$KSAIL_EKS_BASELINE_FILE" "$KSAIL_EKS_OWNERSHIP_FILE"
+          rmdir "$KSAIL_EKS_EVIDENCE_DIR" 2>/dev/null || true

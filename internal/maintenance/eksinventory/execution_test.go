@@ -66,6 +66,55 @@ func TestAWSBoundaryRejectsMutationsBeforeStartingAProcess(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // The subprocess fixture mutates PATH and process-control environment variables.
+func TestAWSBoundaryAllowsOnlyOwnershipReadOperations(t *testing.T) {
+	if os.Getenv("KSAIL_EKS_TEST_PROCESS") != "" {
+		helperProcess()
+
+		return
+	}
+
+	prepareAWSProcess(t)
+
+	for _, operation := range [][2]string{
+		{"sts", "get-caller-identity"},
+		{"eks", "describe-cluster"},
+		{"eks", "list-nodegroups"},
+		{"eks", "describe-nodegroup"},
+		{"cloudformation", "describe-stacks"},
+		{"cloudformation", "list-stack-resources"},
+		{"cloudformation", "describe-stack-resources"},
+	} {
+		_, err := eksinventory.QueryAWSForTest(
+			context.Background(), operation[0], operation[1],
+			"--region", "eu-central-1", "--output", "json", "--no-paginate",
+			"--cli-input-json", "{}", "--no-cli-pager",
+		)
+		if err != nil {
+			t.Fatalf("ownership read %s %s rejected: %v", operation[0], operation[1], err)
+		}
+	}
+}
+
+func TestAWSBoundaryClassifiesOnlyExactReadNotFoundResponses(t *testing.T) {
+	if os.Getenv("KSAIL_EKS_TEST_PROCESS") != "" {
+		helperProcess()
+
+		return
+	}
+
+	prepareAWSProcess(t)
+	t.Setenv("KSAIL_EKS_TEST_PROCESS", "not-found-eks")
+
+	_, err := eksinventory.QueryAWSForTest(
+		context.Background(), "eks", "describe-cluster", "--region", "eu-central-1",
+		"--output", "json", "--no-paginate", "--cli-input-json", "{}", "--no-cli-pager",
+	)
+	if eksinventory.FailureReasonForTest(err) != "not-found" {
+		t.Fatalf("exact resource absence was not distinguished from an incomplete read: %v", err)
+	}
+}
+
 func prepareAWSProcess(t *testing.T) string {
 	t.Helper()
 
@@ -90,6 +139,15 @@ func prepareAWSProcess(t *testing.T) string {
 }
 
 func helperProcess() {
+	if os.Getenv("KSAIL_EKS_TEST_PROCESS") == "not-found-eks" {
+		_, _ = fmt.Fprintln(
+			os.Stderr,
+			"An error occurred (ResourceNotFoundException) when calling the DescribeCluster operation: No cluster found",
+		)
+
+		os.Exit(254)
+	}
+
 	if os.Getenv("KSAIL_EKS_TEST_PROCESS") == "timeout" {
 		_, _ = fmt.Fprintln(os.Stdout, `{"Volumes":[]}`)
 

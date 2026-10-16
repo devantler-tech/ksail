@@ -68,6 +68,45 @@ func TestEKSRegionalBaselineWorkflowIsOptInAndPrivate(t *testing.T) {
 	}
 }
 
+func TestEKSOwnershipPermissionProbeIsReadOnlyAndOptIn(t *testing.T) {
+	t.Parallel()
+
+	var trigger struct {
+		On map[string]struct {
+			Inputs map[string]struct {
+				Type    string `yaml:"type"`
+				Default any    `yaml:"default"`
+			} `yaml:"inputs"`
+		} `yaml:"on"`
+	}
+	require.NoError(
+		t,
+		yaml.Unmarshal(readRepoFile(t, ".github/workflows/eks-account-capacity.yaml"), &trigger),
+	)
+	input := trigger.On["workflow_dispatch"].Inputs["evaluate_ownership_reads"]
+	require.Equal(t, "boolean", input.Type)
+	require.Equal(t, false, input.Default)
+
+	workflow := readCIWorkflow(t, ".github/workflows/eks-account-capacity.yaml")
+	step := findHarnessStep(t, workflow.Jobs["report"].Steps, "🔎 Evaluate exact ownership reads")
+	require.Equal(t, 5, step.TimeoutMinutes)
+	require.Contains(t, step.If, "inputs.evaluate_ownership_reads")
+	require.Contains(t, step.Run, "--baseline-file")
+	require.Contains(t, step.Run, "--ownership-file")
+	require.Contains(t, step.Run, "capture_status")
+	require.Contains(t, step.Run, ".coverage.account.readComplete == true")
+	require.Contains(t, step.Run, ".coverage.cluster.reason == \"not-found\"")
+	require.Contains(t, step.Run, ".coverage.cloudformation.reason == \"not-found\"")
+	require.Contains(t, step.Run, "rm -f --")
+	require.NotContains(
+		t,
+		step.Run,
+		"aws ",
+		"provider evaluation must exercise the shipped collector",
+	)
+	require.Equal(t, 40, workflow.Jobs["report"].TimeoutMinutes)
+}
+
 func evaluateRegionalBaselineStep(t *testing.T, step harnessStep, mode string) {
 	t.Helper()
 	dir := t.TempDir()

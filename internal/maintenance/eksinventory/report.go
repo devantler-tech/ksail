@@ -25,24 +25,39 @@ var ErrInventory = errors.New("incomplete AWS inventory")
 
 var errAWSRead = errors.New("AWS read failed")
 
+var errResourceNotFound = errors.New("AWS resource not found")
+
 var errEvidenceLimit = errors.New("baseline evidence limit")
 
 const (
-	awsArgumentCount       = 10
-	maxGroups              = 40
-	nextTokenKey           = "NextToken"
-	eksTokenKey            = "nextToken"
-	nextMarkerKey          = "NextMarker"
-	maxResultsKey          = "MaxResults"
-	stateField             = "State"
-	instanceKind           = "instance"
-	quotaKind              = "quota"
-	ec2Service             = "ec2"
-	maxResponseBytes       = 4 << 20
-	maxPages               = 200
-	maxRecords             = 100000
-	callTimeout            = 30 * time.Second
-	unlimitedIdentityBytes = -1
+	awsArgumentCount        = 10
+	maxGroups               = 40
+	nextTokenKey            = "NextToken"
+	eksTokenKey             = "nextToken"
+	nextMarkerKey           = "NextMarker"
+	maxResultsKey           = "MaxResults"
+	stateField              = "State"
+	instanceKind            = "instance"
+	fleetKind               = "fleet"
+	addressKind             = "address"
+	autoScalingGroupKind    = "autoscaling-group"
+	classicLoadBalancerKind = "classic-load-balancer"
+	loadBalancerKind        = "load-balancer"
+	natGatewayKind          = "nat-gateway"
+	networkInterfaceKind    = "network-interface"
+	stackKind               = "stack"
+	volumeKind              = "volume"
+	quotaKind               = "quota"
+	ec2Service              = "ec2"
+	eksService              = "eks"
+	cloudFormationService   = "cloudformation"
+	pageSizeKey             = "PageSize"
+	repositoryName          = "devantler-tech/ksail"
+	maxResponseBytes        = 4 << 20
+	maxPages                = 200
+	maxRecords              = 100000
+	callTimeout             = 30 * time.Second
+	unlimitedIdentityBytes  = -1
 )
 
 // Query is the AWS CLI boundary; nil selects the installed aws executable.
@@ -419,7 +434,7 @@ func extraGroup(operationSpec operation, row json.RawMessage, state string) (str
 		return "", false, err
 	}
 
-	if operationSpec.kind == "fleet" &&
+	if operationSpec.kind == fleetKind &&
 		!slices.Contains([]string{"instant", "request", "maintain"}, extra) {
 		return "", false, fmt.Errorf("unrecognized fleet type: %w", ErrInventory)
 	}
@@ -563,6 +578,10 @@ func awsQuery(ctx context.Context, args ...string) ([]byte, error) {
 			return nil, fmt.Errorf("AWS read denied: %w", fs.ErrPermission)
 		}
 
+		if exactResourceNotFound(args[0], args[1], diagnostic.Bytes()) {
+			return nil, fmt.Errorf("AWS resource not found: %w", errResourceNotFound)
+		}
+
 		return nil, fmt.Errorf("AWS CLI read failed: %w", errAWSRead)
 	}
 
@@ -575,12 +594,28 @@ func failureReason(err error) string {
 		return "evidence-limit"
 	case errors.Is(err, fs.ErrPermission):
 		return "access-denied"
+	case errors.Is(err, errResourceNotFound):
+		return "not-found"
 	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
 		return "deadline"
 	case errors.Is(err, errAWSRead):
 		return "read-failed"
 	default:
 		return "invalid-or-incomplete-data"
+	}
+}
+
+func exactResourceNotFound(service, command string, diagnostic []byte) bool {
+	switch [2]string{service, command} {
+	case [2]string{eksService, "describe-cluster"}:
+		return bytes.Contains(diagnostic, []byte("(ResourceNotFoundException)")) &&
+			bytes.Contains(diagnostic, []byte("DescribeCluster operation"))
+	case [2]string{cloudFormationService, "describe-stacks"}:
+		return bytes.Contains(diagnostic, []byte("(ValidationError)")) &&
+			bytes.Contains(diagnostic, []byte("DescribeStacks operation")) &&
+			bytes.Contains(diagnostic, []byte("does not exist"))
+	default:
+		return false
 	}
 }
 
@@ -717,8 +752,19 @@ func validAWSRequest(args []string) bool {
 	valid, _ := regexp.MatchString(`^[a-z]{2}(-[a-z]+)+-[0-9]+$`, args[3])
 
 	return valid &&
-		slices.ContainsFunc(
+		(slices.ContainsFunc(
 			append(operations(), capacityReadOperations()...),
 			func(spec operation) bool { return spec.service == args[0] && spec.command == args[1] },
-		)
+		) || ownershipReadAllowed(args[0], args[1]))
+}
+
+func ownershipReadAllowed(service, command string) bool {
+	return slices.Contains([][2]string{
+		{eksService, "describe-cluster"},
+		{eksService, "list-nodegroups"},
+		{eksService, "describe-nodegroup"},
+		{cloudFormationService, "describe-stacks"},
+		{cloudFormationService, "list-stack-resources"},
+		{cloudFormationService, "describe-stack-resources"},
+	}, [2]string{service, command})
 }
