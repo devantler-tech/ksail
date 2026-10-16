@@ -102,8 +102,8 @@ func computeOperations() []operation {
 			pageSize:    maxResultsKey,
 		},
 		{
-			service:     "autoscaling",
-			command:     "describe-auto-scaling-groups",
+			service:     autoScalingService,
+			command:     describeAutoScalingGroups,
 			title:       "Auto Scaling groups, by desired capacity",
 			collection:  autoScalingGroupsCollection,
 			identity:    "AutoScalingGroupARN",

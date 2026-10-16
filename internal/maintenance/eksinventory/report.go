@@ -49,6 +49,8 @@ const (
 	reservationsInstances          = "Reservations.Instances"
 	instanceIDField                = "InstanceId"
 	autoScalingGroupsCollection    = "AutoScalingGroups"
+	autoScalingService             = "autoscaling"
+	describeAutoScalingGroups      = "describe-auto-scaling-groups"
 	describeFleets                 = "describe-fleets"
 	describeNatGateways            = "describe-nat-gateways"
 	natGatewaysCollection          = "NatGateways"

@@ -230,7 +230,7 @@ func verifyOwnedResource(
 			}
 		}
 
-		service, command, collection = "autoscaling", "describe-auto-scaling-groups", autoScalingGroupsCollection
+		service, command, collection = autoScalingService, describeAutoScalingGroups, autoScalingGroupsCollection
 		input["AutoScalingGroupNames"] = []string{name}
 		identityField = "AutoScalingGroupARN"
 	case instanceKind:
@@ -510,15 +510,7 @@ func verifyRegionalCensus(
 		baseline[observation.Service+"\x00"+observation.Operation] = observation
 	}
 
-	owned := make(map[string]bool, len(manifest.Resources)+1)
-
-	owned[observationIdentityKey(eksService, "list-clusters", manifest.Context.ClusterName)] = true
-	for _, resource := range manifest.Resources {
-		key, found := resourceObservationIdentityKey(resource)
-		if found {
-			owned[key] = true
-		}
-	}
+	owned := ownedRegionalIdentities(manifest)
 
 	unknown := 0
 
@@ -557,35 +549,40 @@ func verifyRegionalCensus(
 	return resourceVerification{state: verificationAbsent}
 }
 
-func resourceObservationIdentityKey(resource ownedResource) (string, bool) {
-	var service, command string
+func ownedRegionalIdentities(manifest *ownershipManifest) map[string]bool {
+	owned := make(map[string]bool, len(manifest.Resources)+1)
+	owned[observationIdentityKey(eksService, "list-clusters", manifest.Context.ClusterName)] = true
 
-	switch resource.Kind {
-	case stackKind:
-		service, command = cloudFormationService, "list-stacks"
-	case fleetKind:
-		service, command = ec2Service, describeFleets
-	case instanceKind:
-		service, command = ec2Service, describeInstances
-	case autoScalingGroupKind:
-		service, command = "autoscaling", "describe-auto-scaling-groups"
-	case natGatewayKind:
-		service, command = ec2Service, describeNatGateways
-	case addressKind:
-		service, command = ec2Service, describeAddresses
-	case networkInterfaceKind:
-		service, command = ec2Service, describeNetworkInterfaces
-	case volumeKind:
-		service, command = ec2Service, describeVolumes
-	case classicLoadBalancerKind:
-		service, command = elbService, describeLoadBalancers
-	case loadBalancerKind:
-		service, command = elbv2Service, describeLoadBalancers
-	default:
+	for _, resource := range manifest.Resources {
+		key, found := resourceObservationIdentityKey(resource)
+		if found {
+			owned[key] = true
+		}
+	}
+
+	return owned
+}
+
+func resourceObservationIdentityKey(resource ownedResource) (string, bool) {
+	operationByKind := map[string][2]string{
+		stackKind:               {cloudFormationService, "list-stacks"},
+		fleetKind:               {ec2Service, describeFleets},
+		instanceKind:            {ec2Service, describeInstances},
+		autoScalingGroupKind:    {autoScalingService, describeAutoScalingGroups},
+		natGatewayKind:          {ec2Service, describeNatGateways},
+		addressKind:             {ec2Service, describeAddresses},
+		networkInterfaceKind:    {ec2Service, describeNetworkInterfaces},
+		volumeKind:              {ec2Service, describeVolumes},
+		classicLoadBalancerKind: {elbService, describeLoadBalancers},
+		loadBalancerKind:        {elbv2Service, describeLoadBalancers},
+	}
+
+	operation, found := operationByKind[resource.Kind]
+	if !found {
 		return "", false
 	}
 
-	return observationIdentityKey(service, command, resource.Identity), true
+	return observationIdentityKey(operation[0], operation[1], resource.Identity), true
 }
 
 func observationIdentityKey(service, command, identity string) string {

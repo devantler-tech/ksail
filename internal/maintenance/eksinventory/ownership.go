@@ -725,8 +725,8 @@ func (collector *ownershipCollector) capturePhysicalStack(physicalID, parent str
 //nolint:cyclop // Lookup, identity binding, and child extraction are separate fail-closed checks.
 func (collector *ownershipCollector) captureAutoScalingGroup(name, parent string) error {
 	payload, err := collector.readSingle(
-		"autoscaling",
-		"describe-auto-scaling-groups",
+		autoScalingService,
+		describeAutoScalingGroups,
 		map[string]any{
 			"AutoScalingGroupNames": []string{name},
 		},
