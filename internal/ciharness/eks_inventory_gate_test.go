@@ -94,6 +94,7 @@ func TestEKSOwnershipPermissionProbeIsReadOnlyAndOptIn(t *testing.T) {
 	require.Contains(t, step.Run, "--baseline-file")
 	require.Contains(t, step.Run, "--ownership-file")
 	require.Contains(t, step.Run, "capture_status")
+	require.Contains(t, step.Run, `cluster_name="st-eks-ownership-probe-`)
 	require.Contains(t, step.Run, ".coverage.account.readComplete == true")
 	require.Contains(t, step.Run, ".coverage.cluster.reason == \"not-found\"")
 	require.Contains(t, step.Run, ".coverage.cloudformation.reason == \"not-found\"")

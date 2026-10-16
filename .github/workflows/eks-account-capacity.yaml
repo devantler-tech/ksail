@@ -119,7 +119,7 @@ jobs:
           evidence_dir="$RUNNER_TEMP/eks-ownership-read-probe-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           baseline_file="$evidence_dir/baseline.json"
           ownership_file="$evidence_dir/ownership.json"
-          cluster_name="ownership-probe-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cluster_name="st-eks-ownership-probe-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           mkdir -m 700 "$evidence_dir"
           trap 'rm -f -- "$baseline_file" "$ownership_file"; rmdir "$evidence_dir"' EXIT
 
