@@ -40,6 +40,7 @@ type ownershipCoverage struct {
 	ReadComplete      bool   `json:"readComplete"`
 	OwnershipCoverage string `json:"ownershipCoverage"`
 	Reason            string `json:"reason,omitempty"`
+	LastRead          string `json:"lastRead,omitempty"`
 }
 
 var errTestClusterNotFound = errors.New("cluster not found")
@@ -783,5 +784,83 @@ func TestOwnershipCaptureCanExtendFailedCreateStackEvidence(t *testing.T) {
 			return resource.Kind == "stack" && strings.Contains(resource.Identity, ":stack/root/")
 		}) {
 		t.Fatalf("failed-create evidence was not cumulative: reads=%d snapshot=%#v", reads, got)
+	}
+}
+
+func TestOwnershipCaptureNamesTheFailedReadWithoutIdentifiers(t *testing.T) {
+	t.Parallel()
+	dir := privateBaselineDir(t)
+	baseline := captureBaselineFixture(t, dir)
+	manifest := filepath.Join(dir, "ownership.json")
+	base := ownershipQuery(t)
+	query := func(ctx context.Context, args ...string) ([]byte, error) {
+		if args[0] == "cloudformation" && args[1] == "describe-stack-resources" {
+			return nil, fs.ErrPermission
+		}
+
+		return base(ctx, args...)
+	}
+
+	var output bytes.Buffer
+
+	err := eksinventory.CaptureOwnership(
+		context.Background(), baselineBinding(), baseline, manifest, eksinventory.OwnershipHints{},
+		&output, query,
+	)
+	if !errors.Is(err, eksinventory.ErrInventory) {
+		t.Fatalf("a denied compute read was accepted: %v", err)
+	}
+
+	summary := output.String()
+
+	const failedCompute = "compute: read=unknown ownership=partial recorded=1" +
+		" reason=access-denied last-read=cloudformation:describe-stack-resources\n"
+	if !strings.Contains(summary, failedCompute) {
+		t.Fatalf("summary does not name the failed read:\n%s", summary)
+	}
+
+	requirePublicOwnershipSummary(t, summary)
+	requirePrivateFailedRead(t, manifest)
+}
+
+// requirePrivateFailedRead proves the owner-only manifest keeps the failed compute read and that
+// the read is not attributed to the family captured after it.
+func requirePrivateFailedRead(t *testing.T, manifest string) {
+	t.Helper()
+
+	var got ownershipSnapshot
+
+	err := json.Unmarshal(readPrivateTestFile(t, manifest), &got)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	compute := got.Coverage["compute"]
+	if compute.ReadComplete || compute.Reason != "access-denied" ||
+		compute.LastRead != "cloudformation:describe-stack-resources" {
+		t.Fatalf("private manifest did not keep the failed read: %#v", compute)
+	}
+
+	if network := got.Coverage["network"]; !network.ReadComplete || network.LastRead != "" {
+		t.Fatalf("the failed read leaked into the next family: %#v", network)
+	}
+}
+
+// requirePublicOwnershipSummary proves a capture summary keeps failure detail on incomplete
+// families only and prints none of the fixture's account, ARN, cluster or node group identifiers.
+func requirePublicOwnershipSummary(t *testing.T, summary string) {
+	t.Helper()
+
+	for line := range strings.SplitSeq(summary, "\n") {
+		if strings.Contains(line, "read=complete") &&
+			(strings.Contains(line, "reason=") || strings.Contains(line, "last-read=")) {
+			t.Fatalf("a complete family carries failure detail: %q", line)
+		}
+	}
+
+	for _, identifier := range []string{"123456789012", "arn:", "regional-diagnostic", "workers"} {
+		if strings.Contains(summary, identifier) {
+			t.Fatalf("public summary printed identifier %q:\n%s", identifier, summary)
+		}
 	}
 }
