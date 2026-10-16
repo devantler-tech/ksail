@@ -21,6 +21,7 @@ const (
 	ownershipSchemaVersion = 3
 	ownershipPageSize      = 100
 	nanosecondDigits       = 9
+	maxPublicTokenLength   = 64
 )
 
 var volumeIDPattern = regexp.MustCompile(`^vol-[0-9a-f]{17}$`)
@@ -61,6 +62,9 @@ type ownershipCoverage struct {
 	ReadComplete      bool   `json:"readComplete"`
 	OwnershipCoverage string `json:"ownershipCoverage"`
 	Reason            string `json:"reason,omitempty"`
+	// LastRead names the last allow-listed AWS read the family attempted before it failed, as
+	// "<service>:<command>". It never carries an identifier, so the public summary may print it.
+	LastRead string `json:"lastRead,omitempty"`
 }
 
 type ownershipCollector struct {
@@ -69,6 +73,7 @@ type ownershipCollector struct {
 	query     Query
 	manifest  *ownershipManifest
 	resources map[string]ownedResource
+	lastRead  string
 }
 
 // CaptureOwnership imports a complete private baseline and atomically publishes
@@ -1164,6 +1169,8 @@ func (collector *ownershipCollector) readPage(
 	service, command string,
 	input map[string]any,
 ) (json.RawMessage, error) {
+	collector.lastRead = service + ":" + command
+
 	err := collector.ctx.Err()
 	if err != nil {
 		return nil, fmt.Errorf("ownership deadline: %w", err)
@@ -1257,9 +1264,13 @@ func (collector *ownershipCollector) cover(
 	coverage := ownershipCoverage{ReadComplete: readComplete, OwnershipCoverage: ownership}
 	if err != nil {
 		coverage.Reason = failureReason(err)
+		coverage.LastRead = collector.lastRead
 	}
 
 	collector.manifest.Coverage[family] = coverage
+	// Families are captured in sequence. Resetting here keeps a family that fails before its first
+	// read from being attributed the previous family's read.
+	collector.lastRead = ""
 }
 
 func printOwnership(output io.Writer, manifest *ownershipManifest) error {
@@ -1288,8 +1299,9 @@ func printOwnership(output io.Writer, manifest *ownershipManifest) error {
 		}
 
 		_, err = fmt.Fprintf(
-			output, "%s: read=%s ownership=%s recorded=%d\n",
+			output, "%s: read=%s ownership=%s recorded=%d%s\n",
 			family, state, coverage.OwnershipCoverage, countFamily(manifest.Resources, family),
+			coverageFailure(coverage),
 		)
 		if err != nil {
 			return fmt.Errorf("write ownership family: %w", err)
@@ -1305,6 +1317,37 @@ func printOwnership(output io.Writer, manifest *ownershipManifest) error {
 	}
 
 	return nil
+}
+
+// coverageFailure renders why a family is incomplete, so a failed capture can be diagnosed from a
+// public log. Both values are fixed vocabulary: the reason is a failureReason class and the read is
+// an allow-listed "<service>:<command>" pair. Anything else is withheld rather than printed.
+func coverageFailure(coverage ownershipCoverage) string {
+	var result strings.Builder
+
+	if publicToken(coverage.Reason) {
+		result.WriteString(" reason=" + coverage.Reason)
+	}
+
+	if publicToken(coverage.LastRead) {
+		result.WriteString(" last-read=" + coverage.LastRead)
+	}
+
+	return result.String()
+}
+
+func publicToken(value string) bool {
+	if value == "" || len(value) > maxPublicTokenLength {
+		return false
+	}
+
+	for _, char := range value {
+		if (char < 'a' || char > 'z') && (char < '0' || char > '9') && char != '-' && char != ':' {
+			return false
+		}
+	}
+
+	return true
 }
 
 //nolint:cyclop,lll // An explicit family-to-kind table keeps public counts deterministic.

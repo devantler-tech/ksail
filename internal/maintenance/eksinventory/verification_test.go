@@ -185,9 +185,27 @@ func TestOwnershipVerificationRejectsIdentityReplacement(t *testing.T) {
 	}
 }
 
-//nolint:forcetypeassert // The fixture is decoded from the manifest written immediately above.
 func TestOwnershipVerificationRejectsIncompleteEvidenceBeforeAWSReads(t *testing.T) {
 	t.Parallel()
+
+	requireCoverageRejectedBeforeAWSReads(t, "instantFleets", "ownershipCoverage", "unknown")
+}
+
+func TestOwnershipVerificationRejectsACompleteFamilyCarryingAFailedRead(t *testing.T) {
+	t.Parallel()
+
+	requireCoverageRejectedBeforeAWSReads(
+		t, "compute", "lastRead", "cloudformation:describe-stack-resources",
+	)
+}
+
+// requireCoverageRejectedBeforeAWSReads rewrites one coverage field of a complete manifest and
+// proves the verifier refuses it before any AWS read.
+//
+//nolint:forcetypeassert // The fixture is decoded from the manifest written immediately above.
+func requireCoverageRejectedBeforeAWSReads(t *testing.T, family, key, value string) {
+	t.Helper()
+
 	manifest := ownershipVerificationFixture(t)
 
 	var snapshot map[string]any
@@ -198,8 +216,8 @@ func TestOwnershipVerificationRejectsIncompleteEvidenceBeforeAWSReads(t *testing
 	}
 
 	coverage := snapshot["coverage"].(map[string]any)
-	instant := coverage["instantFleets"].(map[string]any)
-	instant["ownershipCoverage"] = "unknown"
+	entry := coverage[family].(map[string]any)
+	entry[key] = value
 
 	data, err := json.Marshal(snapshot)
 	if err != nil {
@@ -226,7 +244,10 @@ func TestOwnershipVerificationRejectsIncompleteEvidenceBeforeAWSReads(t *testing
 	if !errors.Is(err, eksinventory.ErrInventory) || reads != 0 ||
 		!strings.Contains(output.String(), "cleanup-verdict=unknown") {
 		t.Fatalf(
-			"incomplete ownership reached AWS or passed: reads=%d err=%v output=%s",
+			"%s %s=%q reached AWS or passed: reads=%d err=%v output=%s",
+			family,
+			key,
+			value,
 			reads,
 			err,
 			output.String(),

@@ -145,7 +145,7 @@ func validateOwnershipEvidence(manifest *ownershipManifest) error {
 	for family, ownership := range expected {
 		coverage, found := manifest.Coverage[family]
 		if !found || !coverage.ReadComplete || coverage.OwnershipCoverage != ownership ||
-			coverage.Reason != "" {
+			coverage.Reason != "" || coverage.LastRead != "" {
 			return ErrInventory
 		}
 	}
