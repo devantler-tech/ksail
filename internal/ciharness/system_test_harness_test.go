@@ -863,6 +863,7 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 		"🧪 Recover EKS ownership after local state loss",
 		"🔎 Preserve EKS ownership before cleanup",
 		"🧹 Delete EKS smoke cluster",
+		"🔎 Verify EKS cleanup from private ownership",
 		"🧽 Remove private EKS evidence",
 	}
 

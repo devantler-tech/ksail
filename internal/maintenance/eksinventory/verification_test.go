@@ -71,6 +71,50 @@ func TestOwnershipVerificationAcceptsOnlyACompleteCleanTeardown(t *testing.T) {
 	}
 }
 
+func TestOwnershipVerificationAcceptsACompleteZeroFleetCapture(t *testing.T) {
+	t.Parallel()
+	dir := privateBaselineDir(t)
+	baseline := captureBaselineFixture(t, dir)
+	manifest := filepath.Join(dir, "ownership.json")
+	query := ownershipQuery(t)
+
+	withoutFleet := func(ctx context.Context, args ...string) ([]byte, error) {
+		var input map[string]any
+
+		err := json.Unmarshal([]byte(args[8]), &input)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if args[0] == "cloudformation" && args[1] == "list-stack-resources" &&
+			input["StackName"] == "arn:aws:cloudformation:eu-central-1:123456789012:stack/nested/two" {
+			return []byte(`{"StackResourceSummaries":[]}`), nil
+		}
+
+		if args[0] == "ec2" && args[1] == "describe-fleets" {
+			t.Fatal("zero-fleet capture attempted an exact fleet read")
+		}
+
+		return query(ctx, args...)
+	}
+
+	err := eksinventory.CaptureOwnership(
+		context.Background(), baselineBinding(), baseline, manifest,
+		eksinventory.OwnershipHints{WorkloadReadComplete: true}, io.Discard, withoutFleet,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = eksinventory.VerifyOwnership(
+		context.Background(), baselineBinding(), manifest, io.Discard,
+		verificationQuery(t, "", nil),
+	)
+	if err != nil {
+		t.Fatalf("complete zero-fleet capture was rejected: %v", err)
+	}
+}
+
 func TestOwnershipVerificationRejectsEveryRecordedLeftoverKind(t *testing.T) {
 	t.Parallel()
 
@@ -312,6 +356,47 @@ func TestOwnershipVerificationRejectsAnUnattributedRegionalSurvivor(t *testing.T
 		strings.Contains(output.String(), "private-new-volume") {
 		t.Fatalf(
 			"unattributed regional survivor became clean evidence: err=%v output=%s",
+			err,
+			output.String(),
+		)
+	}
+}
+
+func TestOwnershipVerificationNamespacesRegionalIdentitiesByOperation(t *testing.T) {
+	t.Parallel()
+	manifest := ownershipVerificationFixture(t)
+	query := verificationQuery(t, "", nil)
+
+	withCollidingClassicELB := func(ctx context.Context, args ...string) ([]byte, error) {
+		var input map[string]any
+
+		err := json.Unmarshal([]byte(args[8]), &input)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if args[0] == "elb" && args[1] == "describe-load-balancers" &&
+			input["LoadBalancerNames"] == nil {
+			return []byte(
+				`{"LoadBalancerDescriptions":[{"LoadBalancerName":"regional-diagnostic"}]}`,
+			), nil
+		}
+
+		return query(ctx, args...)
+	}
+
+	var output bytes.Buffer
+
+	err := eksinventory.VerifyOwnership(
+		context.Background(), baselineBinding(), manifest, &output, withCollidingClassicELB,
+	)
+	if !errors.Is(err, eksinventory.ErrInventory) ||
+		!strings.Contains(
+			output.String(),
+			"regional-census: state=unknown count=1 reason=unattributed-new-resource",
+		) {
+		t.Fatalf(
+			"cross-family identity collision hid a survivor: err=%v output=%s",
 			err,
 			output.String(),
 		)

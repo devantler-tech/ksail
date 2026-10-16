@@ -512,9 +512,12 @@ func verifyRegionalCensus(
 
 	owned := make(map[string]bool, len(manifest.Resources)+1)
 
-	owned[manifest.Context.ClusterName] = true
+	owned[observationIdentityKey(eksService, "list-clusters", manifest.Context.ClusterName)] = true
 	for _, resource := range manifest.Resources {
-		owned[resource.Identity] = true
+		key, found := resourceObservationIdentityKey(resource)
+		if found {
+			owned[key] = true
+		}
 	}
 
 	unknown := 0
@@ -538,7 +541,8 @@ func verifyRegionalCensus(
 		}
 
 		for _, identity := range *observation.Identities {
-			if !previous[identity] && !owned[identity] {
+			if !previous[identity] &&
+				!owned[observationIdentityKey(observation.Service, observation.Operation, identity)] {
 				unknown++
 			}
 		}
@@ -551,6 +555,41 @@ func verifyRegionalCensus(
 	}
 
 	return resourceVerification{state: verificationAbsent}
+}
+
+func resourceObservationIdentityKey(resource ownedResource) (string, bool) {
+	var service, command string
+
+	switch resource.Kind {
+	case stackKind:
+		service, command = cloudFormationService, "list-stacks"
+	case fleetKind:
+		service, command = ec2Service, describeFleets
+	case instanceKind:
+		service, command = ec2Service, describeInstances
+	case autoScalingGroupKind:
+		service, command = "autoscaling", "describe-auto-scaling-groups"
+	case natGatewayKind:
+		service, command = ec2Service, describeNatGateways
+	case addressKind:
+		service, command = ec2Service, describeAddresses
+	case networkInterfaceKind:
+		service, command = ec2Service, describeNetworkInterfaces
+	case volumeKind:
+		service, command = ec2Service, describeVolumes
+	case classicLoadBalancerKind:
+		service, command = elbService, describeLoadBalancers
+	case loadBalancerKind:
+		service, command = elbv2Service, describeLoadBalancers
+	default:
+		return "", false
+	}
+
+	return observationIdentityKey(service, command, resource.Identity), true
+}
+
+func observationIdentityKey(service, command, identity string) string {
+	return service + "\x00" + command + "\x00" + identity
 }
 
 func incompleteObservationCount(observations []baselineObservation) (int, string) {

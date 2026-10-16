@@ -398,8 +398,6 @@ func (collector *ownershipCollector) capture(hints OwnershipHints) bool {
 		collector.cover(instantFleetsFamily, false, "partial", err)
 
 		complete = false
-	} else if collector.countKind(fleetKind) == 0 {
-		collector.cover(instantFleetsFamily, true, "unknown", nil)
 	} else {
 		collector.cover(instantFleetsFamily, true, "exact-identities", nil)
 	}
@@ -1227,10 +1225,6 @@ func (collector *ownershipCollector) identities(kind string) []string {
 	sort.Strings(result)
 
 	return result
-}
-
-func (collector *ownershipCollector) countKind(kind string) int {
-	return len(collector.identities(kind))
 }
 
 func (collector *ownershipCollector) sortedResources() []ownedResource {
