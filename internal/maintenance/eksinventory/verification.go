@@ -415,7 +415,7 @@ func verifyOwnedVPCCensus(
 		}
 
 		for _, row := range rows {
-			rowVPC, fieldErr := stringField(row, read.vpc)
+			rowVPC, fieldErr := optionalCensusVPCField(row, read.vpc)
 			if fieldErr != nil {
 				return resourceVerification{
 					state: verificationUnknown, reason: invalidDataReason,
@@ -446,6 +446,22 @@ func verifyOwnedVPCCensus(
 	}
 
 	return resourceVerification{state: verificationAbsent}
+}
+
+func optionalCensusVPCField(data json.RawMessage, key string) (string, error) {
+	var object map[string]json.RawMessage
+
+	err := json.Unmarshal(data, &object)
+	if err != nil || object == nil {
+		return "", fmt.Errorf("invalid resource field: %w", ErrInventory)
+	}
+
+	value, found := object[key]
+	if !found || strings.TrimSpace(string(value)) == "null" {
+		return "", nil
+	}
+
+	return stringValue(value)
 }
 
 func autoScalingGroupNamePrefix(identity string) string {

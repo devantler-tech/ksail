@@ -234,6 +234,63 @@ func TestOwnershipVerificationRejectsAnUnattributedResourceInItsOwnedVPC(t *test
 	}
 }
 
+func TestOwnershipVerificationTreatsOnlyAbsentClassicELBVPCsAsUnrelated(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name          string
+		row           string
+		expectedState string
+	}{
+		{name: "missing", row: `{"LoadBalancerName":"legacy-classic"}`, expectedState: "absent"},
+		{name: "null", row: `{"LoadBalancerName":"legacy-classic","VPCId":null}`, expectedState: "absent"},
+		{name: "malformed", row: `{"LoadBalancerName":"legacy-classic","VPCId":42}`, expectedState: "unknown"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			manifest := ownershipVerificationFixture(t)
+			query := verificationQuery(t, "vpc", nil)
+			vpcCensusReads := 0
+
+			withClassicELB := func(ctx context.Context, args ...string) ([]byte, error) {
+				var input map[string]any
+
+				err := json.Unmarshal([]byte(args[8]), &input)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if args[0] == "elb" && args[1] == "describe-load-balancers" &&
+					input["LoadBalancerNames"] == nil && vpcCensusReads == 0 {
+					vpcCensusReads++
+
+					return []byte(`{"LoadBalancerDescriptions":[` + test.row + `]}`), nil
+				}
+
+				return query(ctx, args...)
+			}
+
+			var output bytes.Buffer
+
+			err := eksinventory.VerifyOwnership(
+				context.Background(), baselineBinding(), manifest, &output, withClassicELB,
+			)
+			if !errors.Is(err, eksinventory.ErrInventory) || vpcCensusReads != 1 ||
+				!strings.Contains(
+					output.String(),
+					"vpc-census: state="+test.expectedState+" count=1",
+				) {
+				t.Fatalf(
+					"classic ELB VPC classification failed: reads=%d err=%v output=%s",
+					vpcCensusReads,
+					err,
+					output.String(),
+				)
+			}
+		})
+	}
+}
+
 func TestOwnershipVerificationRejectsAnUnattributedRegionalSurvivor(t *testing.T) {
 	t.Parallel()
 	manifest := ownershipVerificationFixture(t)
