@@ -125,7 +125,7 @@ func collectBaseline(
 	query Query,
 ) (baselineManifest, bool) {
 	manifest := baselineManifest{
-		SchemaVersion: 1, Repository: "devantler-tech/ksail", Context: binding,
+		SchemaVersion: 1, Repository: repositoryName, Context: binding,
 		StartedAt: time.Now().UTC(), Coverage: map[string]string{
 			"ownership":      baselineUnknown,
 			"teardown":       "unverified",

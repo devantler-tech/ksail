@@ -8,6 +8,11 @@ Usage:
   report-eks-account-capacity.sh --region REGION
   report-eks-account-capacity.sh --region REGION --baseline-file NEW_FILE \
     --cluster-name LABEL --run-id ID --run-attempt ATTEMPT --source-sha SHA
+  report-eks-account-capacity.sh --region REGION --baseline-file FILE \
+    --ownership-file FILE --cluster-name NAME --run-id ID \
+    --run-attempt ATTEMPT --source-sha SHA \
+    [--classic-load-balancer NAME] [--load-balancer-arn ARN] \
+    [--load-balancer-host DNS] [--volume-id ID] [--workload-inventory-complete]
 
 Print a read-only regional EKS resource diagnostic.
 
@@ -29,6 +34,13 @@ owned by the current user with no group or other access (for example, mktemp -d)
 The snapshot belongs only to its observation run; new identities do not prove
 ownership. Account binding, instant-fleet coverage and teardown remain unknown.
 Keep the file private; it is local evidence, not durable cross-job retention.
+
+Ownership mode imports that complete baseline and atomically creates or updates
+an owner-only cumulative manifest. Exact workload identities supplied by the
+caller are verified through read-only AWS operations before recording. Later
+captures union relationships, so scale-down or detachment cannot erase them.
+The public summary contains only family counts and coverage states. The manifest
+stays in the runner job and must be handed to the post-cleanup verifier privately.
 EOF_USAGE
 }
 
@@ -49,13 +61,18 @@ while (($# > 0)); do
 		region="$2"
 		shift 2
 		;;
-	--baseline-file | --cluster-name | --run-id | --run-attempt | --source-sha)
+	--baseline-file | --ownership-file | --cluster-name | --run-id | --run-attempt | --source-sha | \
+		--classic-load-balancer | --load-balancer-arn | --load-balancer-host | --volume-id)
 		if (($# < 2)); then
 			usage >&2
 			exit 2
 		fi
 		report_args+=("$1" "$2")
 		shift 2
+		;;
+	--workload-inventory-complete)
+		report_args+=("$1")
+		shift
 		;;
 	*)
 		usage >&2

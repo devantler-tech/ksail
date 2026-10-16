@@ -15,6 +15,8 @@ cat >"${fake_bin}/aws" <<'FAKE'
 set -euo pipefail
 printf '%s\n' "$*" >>"${FAKE_DIR}/calls.log"
 case "$1 $2" in
+'sts get-caller-identity'|'eks describe-cluster'|'eks list-nodegroups'|\
+'cloudformation describe-stacks'|'cloudformation list-stack-resources'|\
 'eks list-clusters'|'cloudformation list-stacks'|'ec2 describe-fleets'|\
 'ec2 describe-spot-fleet-requests'|'ec2 describe-spot-instance-requests'|\
 'ec2 describe-instances'|'autoscaling describe-auto-scaling-groups'|\
@@ -34,7 +36,12 @@ FAKE
 chmod +x "${fake_bin}/aws"
 
 printf '{"clusters":[]}\n' >"${fake_dir}/eks-list-clusters.json"
+printf '{"Account":"123456789012","Arn":"arn:aws:sts::123456789012:assumed-role/eks-ci/run"}\n' >"${fake_dir}/sts-get-caller-identity.json"
+printf '{"cluster":{"arn":"arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic","createdAt":1700000000}}\n' >"${fake_dir}/eks-describe-cluster.json"
+printf '{"nodegroups":[]}\n' >"${fake_dir}/eks-list-nodegroups.json"
 printf '{"StackSummaries":[]}\n' >"${fake_dir}/cloudformation-list-stacks.json"
+printf '{"Stacks":[{"StackId":"arn:aws:cloudformation:eu-central-1:123456789012:stack/root/one"}]}\n' >"${fake_dir}/cloudformation-describe-stacks.json"
+printf '{"StackResourceSummaries":[]}\n' >"${fake_dir}/cloudformation-list-stack-resources.json"
 printf '{"Fleets":[]}\n' >"${fake_dir}/ec2-describe-fleets.json"
 printf '{"SpotFleetRequestConfigs":[]}\n' >"${fake_dir}/ec2-describe-spot-fleet-requests.json"
 printf '{"SpotInstanceRequests":[]}\n' >"${fake_dir}/ec2-describe-spot-instance-requests.json"
@@ -96,6 +103,16 @@ jq -e '.context.runId == "123" and .context.runAttempt == "2" and
 run "${baseline_args[@]}" --baseline-file "${tmp_dir}/baseline.json"
 expect_status 1 'an existing baseline must never be overwritten'
 pass 'opt-in capture writes a private run-bound snapshot and refuses overwrites'
+
+run "${baseline_args[@]}" --baseline-file "${tmp_dir}/baseline.json" \
+	--ownership-file "${tmp_dir}/ownership.json"
+expect_status 0 'opt-in ownership capture must consume the private baseline'
+expect_text 'cumulative ownership capture' 'ownership capture must publish a sanitized summary'
+refute_text '123456789012' 'account identity must stay in the private manifest'
+jq -e '.schemaVersion == 2 and .accountId == "123456789012" and
+  .context.runId == "123" and (.clusterIdentity | contains(":cluster/regional-diagnostic|"))' \
+	"${tmp_dir}/ownership.json" >/dev/null || fail 'ownership evidence lost its verified binding'
+pass 'ownership mode preserves a private account-bound cumulative record'
 
 touch "${fake_dir}/ec2-describe-volumes.fail"
 run "${baseline_args[@]}" --baseline-file "${tmp_dir}/incomplete.json"
