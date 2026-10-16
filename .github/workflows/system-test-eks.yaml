@@ -39,7 +39,7 @@ on:
         type: string
         default: eu-central-1
       capture_resource_ownership:
-        description: "Opt in to private cumulative run-owned resource capture (verification is not delivered yet)"
+        description: "Opt in to private run-owned capture and fail-closed post-cleanup verification"
         required: false
         type: boolean
         default: false
@@ -120,10 +120,11 @@ jobs:
     # engine enabled): 240 minutes of steps before cleanup (including the private
     # 5-minute baseline, bounded 5-minute pre-scale capture, 5-minute final capture,
     # credential refreshes and 40-minute ownership recovery) + 45 for cleanup +
-    # 2 for private evidence removal = 287, plus at least 18 minutes of headroom.
+    # 5 for fail-closed ownership verification + 2 for private evidence removal
+    # = 292, plus at least 18 minutes of headroom.
     # Re-check this sum whenever a step's timeout-minutes changes; the ciharness
     # test TestEKSSmokeReservesCleanupBudgetAndFreshCredentials enforces it.
-    timeout-minutes: 305
+    timeout-minutes: 310
     needs: [preflight, build-artifact]
     if: needs.preflight.outputs.aws-credentials == 'true'
     environment: ci
@@ -608,6 +609,17 @@ jobs:
             --region "$AWS_REGION" \
             --workdir "$KSAIL_EKS_WORKDIR" \
             --create-attempted "${EKS_CREATE_ATTEMPTED:-false}"
+
+      - name: 🔎 Verify EKS cleanup from private ownership
+        if: always() && inputs.capture_resource_ownership
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$GITHUB_WORKSPACE/.github/scripts/report-eks-account-capacity.sh" \
+            --region "$AWS_REGION" --verify-ownership-file "$KSAIL_EKS_OWNERSHIP_FILE" \
+            --cluster-name "$KSAIL_EKS_CLUSTER_NAME" --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" --source-sha "$GITHUB_SHA"
 
       - name: 🧽 Remove private EKS evidence
         if: always()

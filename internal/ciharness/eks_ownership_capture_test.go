@@ -62,8 +62,11 @@ func TestEKSOwningResourceCaptureIsOptInCumulativeAndCannotSkipCleanup(t *testin
 
 	finalIndex := harnessStepIndex(t, steps, "🔎 Preserve EKS ownership before cleanup")
 	deleteIndex := harnessStepIndex(t, steps, "🧹 Delete EKS smoke cluster")
+	verifyIndex := harnessStepIndex(t, steps, "🔎 Verify EKS cleanup from private ownership")
 	eraseIndex := harnessStepIndex(t, steps, "🧽 Remove private EKS evidence")
 	assert.Less(t, finalIndex, deleteIndex)
+	assert.Less(t, deleteIndex, verifyIndex)
+	assert.Less(t, verifyIndex, eraseIndex)
 	assert.Less(t, deleteIndex, eraseIndex)
 	deleteStep := steps[deleteIndex]
 	require.Contains(
@@ -72,6 +75,14 @@ func TestEKSOwningResourceCaptureIsOptInCumulativeAndCannotSkipCleanup(t *testin
 		"always()",
 		"capture failure must still reach both deletion paths",
 	)
+
+	verify := steps[verifyIndex]
+	require.Equal(t, 5, verify.TimeoutMinutes)
+	require.Contains(t, verify.If, "always()")
+	require.Contains(t, verify.If, "inputs.capture_resource_ownership")
+	require.Contains(t, verify.Run, "--verify-ownership-file \"$KSAIL_EKS_OWNERSHIP_FILE\"")
+	require.Contains(t, verify.Run, "--run-attempt \"$GITHUB_RUN_ATTEMPT\"")
+	require.NotContains(t, verify.Run, "aws ")
 
 	erase := steps[eraseIndex]
 	require.Contains(t, erase.If, "always()")

@@ -9,3 +9,6 @@ func QueryAWSForTest(ctx context.Context, args ...string) ([]byte, error) {
 
 // FailureReasonForTest exposes the public-safe classification for boundary tests.
 func FailureReasonForTest(err error) string { return failureReason(err) }
+
+// ResourceNotFoundForTest exposes the exact-resource absence sentinel to injected-query tests.
+func ResourceNotFoundForTest() error { return errResourceNotFound }

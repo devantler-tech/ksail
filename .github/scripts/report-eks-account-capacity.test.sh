@@ -109,10 +109,17 @@ run "${baseline_args[@]}" --baseline-file "${tmp_dir}/baseline.json" \
 expect_status 0 'opt-in ownership capture must consume the private baseline'
 expect_text 'cumulative ownership capture' 'ownership capture must publish a sanitized summary'
 refute_text '123456789012' 'account identity must stay in the private manifest'
-jq -e '.schemaVersion == 2 and .accountId == "123456789012" and
+jq -e '.schemaVersion == 3 and .accountId == "123456789012" and
   .context.runId == "123" and (.clusterIdentity | contains(":cluster/regional-diagnostic|"))' \
 	"${tmp_dir}/ownership.json" >/dev/null || fail 'ownership evidence lost its verified binding'
 pass 'ownership mode preserves a private account-bound cumulative record'
+
+run "${baseline_args[@]}" --verify-ownership-file "${tmp_dir}/ownership.json"
+expect_status 1 'verification must reject incomplete run ownership before provider reads'
+expect_text 'cleanup-verdict=unknown' 'incomplete ownership must produce an explicit unknown verdict'
+expect_text 'Ownership verification failed' 'the entry point must preserve the verification failure'
+refute_text '123456789012' 'verification failures must not disclose the bound account'
+pass 'verification mode fails closed on incomplete private evidence'
 
 touch "${fake_dir}/ec2-describe-volumes.fail"
 run "${baseline_args[@]}" --baseline-file "${tmp_dir}/incomplete.json"

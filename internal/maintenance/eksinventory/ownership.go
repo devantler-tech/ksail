@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	ownershipSchemaVersion = 2
+	ownershipSchemaVersion = 3
 	ownershipPageSize      = 100
 	nanosecondDigits       = 9
 )
@@ -268,7 +268,8 @@ func validateOwnershipManifest(manifest *ownershipManifest) error {
 	knownKinds := map[string]bool{
 		addressKind: true, autoScalingGroupKind: true, classicLoadBalancerKind: true,
 		fleetKind: true, instanceKind: true, loadBalancerKind: true, natGatewayKind: true,
-		networkInterfaceKind: true, "nodegroup": true, stackKind: true, volumeKind: true,
+		networkInterfaceKind: true, nodegroupKind: true, stackKind: true, volumeKind: true,
+		vpcKind: true,
 	}
 	identities := make(map[string]bool)
 
@@ -369,7 +370,7 @@ func (collector *ownershipCollector) capture(hints OwnershipHints) bool {
 
 		complete = false
 	} else {
-		collector.cover("cloudformation", true, "exact-relationships", nil)
+		collector.cover("cloudformation", true, exactRelationships, nil)
 	}
 
 	if clusterIdentity != "" {
@@ -379,7 +380,7 @@ func (collector *ownershipCollector) capture(hints OwnershipHints) bool {
 
 			complete = false
 		} else {
-			collector.cover("compute", true, "exact-relationships", nil)
+			collector.cover("compute", true, exactRelationships, nil)
 		}
 	}
 
@@ -389,18 +390,18 @@ func (collector *ownershipCollector) capture(hints OwnershipHints) bool {
 
 		complete = false
 	} else {
-		collector.cover("network", true, "exact-relationships", nil)
+		collector.cover("network", true, exactRelationships, nil)
 	}
 
 	err = collector.captureFleets()
 	if err != nil {
-		collector.cover("instantFleets", false, "partial", err)
+		collector.cover(instantFleetsFamily, false, "partial", err)
 
 		complete = false
 	} else if collector.countKind(fleetKind) == 0 {
-		collector.cover("instantFleets", true, "unknown", nil)
+		collector.cover(instantFleetsFamily, true, "unknown", nil)
 	} else {
-		collector.cover("instantFleets", true, "exact-identities", nil)
+		collector.cover(instantFleetsFamily, true, "exact-identities", nil)
 	}
 
 	err = collector.captureHints(parent, hints)
@@ -513,7 +514,7 @@ func clusterCreationIdentity(value json.RawMessage) (string, error) {
 func (collector *ownershipCollector) captureStacks(accountID, parent string) error {
 	name := "eksctl-" + collector.binding.ClusterName + "-cluster"
 
-	payload, err := collector.readSingle("cloudformation", "describe-stacks", map[string]any{
+	payload, err := collector.readSingle("cloudformation", describeStacks, map[string]any{
 		"StackName": name,
 	})
 	if err != nil {
@@ -620,14 +621,14 @@ func (collector *ownershipCollector) captureCompute(clusterIdentity string) erro
 			return valueErr
 		}
 
-		payload, readErr := collector.readSingle(eksService, "describe-nodegroup", map[string]any{
+		payload, readErr := collector.readSingle(eksService, describeNodegroup, map[string]any{
 			"clusterName": collector.binding.ClusterName, "nodegroupName": name,
 		})
 		if readErr != nil {
 			return readErr
 		}
 
-		nodegroup, fieldErr := field(payload, "nodegroup")
+		nodegroup, fieldErr := field(payload, nodegroupKind)
 		if fieldErr != nil {
 			return fieldErr
 		}
@@ -638,7 +639,7 @@ func (collector *ownershipCollector) captureCompute(clusterIdentity string) erro
 			return fmt.Errorf("invalid nodegroup identity: %w", ErrInventory)
 		}
 
-		collector.add("nodegroup", arn, "cluster:"+clusterIdentity)
+		collector.add(nodegroupKind, arn, "cluster:"+clusterIdentity)
 
 		err = collector.capturePhysicalStack(
 			collector.binding.ClusterName+"/"+name,
@@ -736,7 +737,7 @@ func (collector *ownershipCollector) captureAutoScalingGroup(name, parent string
 		return err
 	}
 
-	groups, err := records(payload, []string{"AutoScalingGroups"})
+	groups, err := records(payload, []string{autoScalingGroupsCollection})
 	if err != nil || len(groups) != 1 {
 		return fmt.Errorf("autoscaling group lookup incomplete: %w", ErrInventory)
 	}
@@ -760,7 +761,7 @@ func (collector *ownershipCollector) captureAutoScalingGroup(name, parent string
 
 	ids := make([]string, 0, len(instances))
 	for _, instance := range instances {
-		identity, fieldErr := stringField(instance, "InstanceId")
+		identity, fieldErr := stringField(instance, instanceIDField)
 		if fieldErr != nil {
 			return fieldErr
 		}
@@ -780,8 +781,8 @@ func (collector *ownershipCollector) captureInstances(ids []string, parent strin
 	rows, err := collector.readExactRows(
 		"ec2",
 		"describe-instances",
-		map[string]any{"InstanceIds": ids, "IncludeManagedResources": true},
-		"Reservations.Instances",
+		map[string]any{"InstanceIds": ids, includeManagedResources: true},
+		reservationsInstances,
 	)
 	if err != nil {
 		return err
@@ -792,20 +793,20 @@ func (collector *ownershipCollector) captureInstances(ids []string, parent strin
 	}
 
 	for _, row := range rows {
-		identity, fieldErr := stringField(row, "InstanceId")
+		identity, fieldErr := stringField(row, instanceIDField)
 		if fieldErr != nil || !slices.Contains(ids, identity) {
 			return fmt.Errorf("instance identity mismatch: %w", ErrInventory)
 		}
 
 		collector.add(instanceKind, identity, autoScalingGroupKind+":"+parent)
 
-		interfaces, fieldErr := records(row, []string{"NetworkInterfaces"})
+		interfaces, fieldErr := records(row, []string{networkInterfacesCollection})
 		if fieldErr != nil {
 			return fieldErr
 		}
 
 		for _, network := range interfaces {
-			value, valueErr := stringField(network, "NetworkInterfaceId")
+			value, valueErr := stringField(network, networkInterfaceIDField)
 			if valueErr != nil {
 				return valueErr
 			}
@@ -839,15 +840,15 @@ func (collector *ownershipCollector) captureNAT() error {
 	}
 
 	rows, err := collector.readExactRows(
-		"ec2", "describe-nat-gateways", map[string]any{"NatGatewayIds": ids},
-		"NatGateways",
+		"ec2", describeNatGateways, map[string]any{"NatGatewayIds": ids},
+		natGatewaysCollection,
 	)
 	if err != nil {
 		return err
 	}
 
 	for _, row := range rows {
-		identity, fieldErr := stringField(row, "NatGatewayId")
+		identity, fieldErr := stringField(row, natGatewayIDField)
 		if fieldErr != nil || !slices.Contains(ids, identity) {
 			return fmt.Errorf("NAT identity mismatch: %w", ErrInventory)
 		}
@@ -867,7 +868,7 @@ func (collector *ownershipCollector) captureNAT() error {
 				collector.add(addressKind, allocation, natGatewayKind+":"+identity)
 			}
 
-			network, valueErr := optionalStringField(address, "NetworkInterfaceId")
+			network, valueErr := optionalStringField(address, networkInterfaceIDField)
 			if valueErr != nil {
 				return valueErr
 			}
@@ -888,7 +889,7 @@ func (collector *ownershipCollector) captureFleets() error {
 	}
 
 	rows, err := collector.readExactRows(
-		"ec2", "describe-fleets", map[string]any{"FleetIds": ids},
+		"ec2", describeFleets, map[string]any{"FleetIds": ids},
 		"Fleets",
 	)
 	if err != nil {
@@ -948,19 +949,19 @@ func (collector *ownershipCollector) captureHints(parent string, hints Ownership
 		}
 	}
 
-	err := collector.verifyHints("elb", "describe-load-balancers", "LoadBalancerNames",
-		"LoadBalancerDescriptions", "LoadBalancerName", hints.ClassicLoadBalancers)
+	err := collector.verifyHints(elbService, describeLoadBalancers, "LoadBalancerNames",
+		classicLoadBalancersCollection, classicLoadBalancerNameField, hints.ClassicLoadBalancers)
 	if err != nil {
 		return err
 	}
 
-	err = collector.verifyHints("elbv2", "describe-load-balancers", "LoadBalancerArns",
-		"LoadBalancers", "LoadBalancerArn", hints.LoadBalancerARNs)
+	err = collector.verifyHints(elbv2Service, describeLoadBalancers, "LoadBalancerArns",
+		loadBalancersCollection, loadBalancerARNField, hints.LoadBalancerARNs)
 	if err != nil {
 		return err
 	}
 
-	err = collector.verifyHints("ec2", "describe-volumes", "VolumeIds",
+	err = collector.verifyHints("ec2", describeVolumes, "VolumeIds",
 		"Volumes", "VolumeId", hints.VolumeIDs)
 	if err != nil {
 		return err
@@ -996,12 +997,12 @@ func (collector *ownershipCollector) captureLoadBalancerHosts(parent string, hin
 	for _, spec := range []struct {
 		service, collection, identity, kind string
 	}{
-		{"elb", "LoadBalancerDescriptions", "LoadBalancerName", classicLoadBalancerKind},
-		{"elbv2", "LoadBalancers", "LoadBalancerArn", loadBalancerKind},
+		{elbService, classicLoadBalancersCollection, classicLoadBalancerNameField, classicLoadBalancerKind},
+		{elbv2Service, loadBalancersCollection, loadBalancerARNField, loadBalancerKind},
 	} {
 		rows, err := collector.readAll(
-			spec.service, "describe-load-balancers", map[string]any{pageSizeKey: ownershipPageSize},
-			spec.collection, "Marker", "NextMarker",
+			spec.service, describeLoadBalancers, map[string]any{pageSizeKey: ownershipPageSize},
+			spec.collection, markerKey, "NextMarker",
 		)
 		if err != nil {
 			return err
@@ -1049,7 +1050,7 @@ func (collector *ownershipCollector) verifyHints(
 
 	input := map[string]any{inputKey: hints}
 	if service == "ec2" {
-		input["IncludeManagedResources"] = true
+		input[includeManagedResources] = true
 	}
 
 	rows, err := collector.readExactRows(service, command, input, collection)
@@ -1319,10 +1320,10 @@ func countFamily(resources []ownedResource, family string) int {
 	for _, resource := range resources {
 		if resource.Kind == family ||
 			(family == "cloudformation" && resource.Kind == stackKind) ||
-			(family == "compute" && slices.Contains([]string{"nodegroup", autoScalingGroupKind, instanceKind, volumeKind}, resource.Kind)) ||
-			(family == "network" && slices.Contains([]string{natGatewayKind, addressKind, networkInterfaceKind}, resource.Kind)) ||
+			(family == "compute" && slices.Contains([]string{nodegroupKind, autoScalingGroupKind, instanceKind, volumeKind}, resource.Kind)) ||
+			(family == "network" && slices.Contains([]string{natGatewayKind, addressKind, networkInterfaceKind, vpcKind}, resource.Kind)) ||
 			(family == "workloads" && slices.Contains([]string{classicLoadBalancerKind, loadBalancerKind, volumeKind}, resource.Kind)) ||
-			(family == "instantFleets" && resource.Kind == fleetKind) {
+			(family == instantFleetsFamily && resource.Kind == fleetKind) {
 			count++
 		}
 	}
@@ -1339,6 +1340,7 @@ func cloudFormationKind(resourceType string) string {
 		"AWS::EC2::EIP":                             "address",
 		"AWS::EC2::NetworkInterface":                "network-interface",
 		"AWS::EC2::Volume":                          volumeKind,
+		"AWS::EC2::VPC":                             vpcKind,
 		"AWS::EC2::EC2Fleet":                        fleetKind,
 		"AWS::EC2::SpotFleet":                       fleetKind,
 		"AWS::ElasticLoadBalancing::LoadBalancer":   classicLoadBalancerKind,

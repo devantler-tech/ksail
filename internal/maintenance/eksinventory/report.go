@@ -30,34 +30,68 @@ var errResourceNotFound = errors.New("AWS resource not found")
 var errEvidenceLimit = errors.New("baseline evidence limit")
 
 const (
-	awsArgumentCount        = 10
-	maxGroups               = 40
-	nextTokenKey            = "NextToken"
-	eksTokenKey             = "nextToken"
-	nextMarkerKey           = "NextMarker"
-	maxResultsKey           = "MaxResults"
-	stateField              = "State"
-	instanceKind            = "instance"
-	fleetKind               = "fleet"
-	addressKind             = "address"
-	autoScalingGroupKind    = "autoscaling-group"
-	classicLoadBalancerKind = "classic-load-balancer"
-	loadBalancerKind        = "load-balancer"
-	natGatewayKind          = "nat-gateway"
-	networkInterfaceKind    = "network-interface"
-	stackKind               = "stack"
-	volumeKind              = "volume"
-	quotaKind               = "quota"
-	ec2Service              = "ec2"
-	eksService              = "eks"
-	cloudFormationService   = "cloudformation"
-	pageSizeKey             = "PageSize"
-	repositoryName          = "devantler-tech/ksail"
-	maxResponseBytes        = 4 << 20
-	maxPages                = 200
-	maxRecords              = 100000
-	callTimeout             = 30 * time.Second
-	unlimitedIdentityBytes  = -1
+	awsArgumentCount               = 10
+	maxGroups                      = 40
+	nextTokenKey                   = "NextToken"
+	eksTokenKey                    = "nextToken"
+	nextMarkerKey                  = "NextMarker"
+	maxResultsKey                  = "MaxResults"
+	markerKey                      = "Marker"
+	stateField                     = "State"
+	terminatedState                = "terminated"
+	failedState                    = "failed"
+	deletedState                   = "deleted"
+	notFoundReason                 = "not-found"
+	invalidDataReason              = "invalid-or-incomplete-data"
+	exactRelationships             = "exact-relationships"
+	instantFleetsFamily            = "instantFleets"
+	includeManagedResources        = "IncludeManagedResources"
+	reservationsInstances          = "Reservations.Instances"
+	instanceIDField                = "InstanceId"
+	autoScalingGroupsCollection    = "AutoScalingGroups"
+	describeFleets                 = "describe-fleets"
+	describeNatGateways            = "describe-nat-gateways"
+	natGatewaysCollection          = "NatGateways"
+	natGatewayIDField              = "NatGatewayId"
+	describeAddresses              = "describe-addresses"
+	describeNetworkInterfaces      = "describe-network-interfaces"
+	networkInterfacesCollection    = "NetworkInterfaces"
+	networkInterfaceIDField        = "NetworkInterfaceId"
+	describeVolumes                = "describe-volumes"
+	describeLoadBalancers          = "describe-load-balancers"
+	classicLoadBalancersCollection = "LoadBalancerDescriptions"
+	classicLoadBalancerNameField   = "LoadBalancerName"
+	loadBalancersCollection        = "LoadBalancers"
+	loadBalancerARNField           = "LoadBalancerArn"
+	vpcIDField                     = "VpcId"
+	describeNodegroup              = "describe-nodegroup"
+	describeStacks                 = "describe-stacks"
+	describeVPCs                   = "describe-vpcs"
+	instanceKind                   = "instance"
+	fleetKind                      = "fleet"
+	addressKind                    = "address"
+	autoScalingGroupKind           = "autoscaling-group"
+	classicLoadBalancerKind        = "classic-load-balancer"
+	loadBalancerKind               = "load-balancer"
+	natGatewayKind                 = "nat-gateway"
+	networkInterfaceKind           = "network-interface"
+	stackKind                      = "stack"
+	volumeKind                     = "volume"
+	vpcKind                        = "vpc"
+	nodegroupKind                  = "nodegroup"
+	quotaKind                      = "quota"
+	ec2Service                     = "ec2"
+	eksService                     = "eks"
+	elbService                     = "elb"
+	elbv2Service                   = "elbv2"
+	cloudFormationService          = "cloudformation"
+	pageSizeKey                    = "PageSize"
+	repositoryName                 = "devantler-tech/ksail"
+	maxResponseBytes               = 4 << 20
+	maxPages                       = 200
+	maxRecords                     = 100000
+	callTimeout                    = 30 * time.Second
+	unlimitedIdentityBytes         = -1
 )
 
 // Query is the AWS CLI boundary; nil selects the installed aws executable.
@@ -198,10 +232,10 @@ func collect(
 func requestInput(operationSpec operation, token string) map[string]any {
 	input := make(map[string]any)
 	if slices.Contains(
-		[]string{describeInstances, "describe-network-interfaces", "describe-volumes"},
+		[]string{describeInstances, describeNetworkInterfaces, describeVolumes},
 		operationSpec.command,
 	) {
-		input["IncludeManagedResources"] = true
+		input[includeManagedResources] = true
 	}
 
 	if operationSpec.pageSize != "" {
@@ -417,7 +451,7 @@ func grouping(operationSpec operation, row json.RawMessage) (string, bool, error
 		return "", false, fmt.Errorf("unrecognized resource state: %w", ErrInventory)
 	}
 
-	if operationSpec.kind == instanceKind && state == "terminated" {
+	if operationSpec.kind == instanceKind && state == terminatedState {
 		return "", false, nil
 	}
 
@@ -595,25 +629,55 @@ func failureReason(err error) string {
 	case errors.Is(err, fs.ErrPermission):
 		return "access-denied"
 	case errors.Is(err, errResourceNotFound):
-		return "not-found"
+		return notFoundReason
 	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
 		return "deadline"
 	case errors.Is(err, errAWSRead):
 		return "read-failed"
 	default:
-		return "invalid-or-incomplete-data"
+		return invalidDataReason
 	}
 }
 
+//nolint:cyclop // Every allow-listed exact read has a distinct provider error contract.
 func exactResourceNotFound(service, command string, diagnostic []byte) bool {
 	switch [2]string{service, command} {
 	case [2]string{eksService, "describe-cluster"}:
 		return bytes.Contains(diagnostic, []byte("(ResourceNotFoundException)")) &&
 			bytes.Contains(diagnostic, []byte("DescribeCluster operation"))
-	case [2]string{cloudFormationService, "describe-stacks"}:
+	case [2]string{eksService, describeNodegroup}:
+		return bytes.Contains(diagnostic, []byte("(ResourceNotFoundException)")) &&
+			bytes.Contains(diagnostic, []byte("DescribeNodegroup operation"))
+	case [2]string{cloudFormationService, describeStacks}:
 		return bytes.Contains(diagnostic, []byte("(ValidationError)")) &&
 			bytes.Contains(diagnostic, []byte("DescribeStacks operation")) &&
 			bytes.Contains(diagnostic, []byte("does not exist"))
+	case [2]string{ec2Service, describeInstances}:
+		return bytes.Contains(diagnostic, []byte("(InvalidInstanceID.NotFound)")) &&
+			bytes.Contains(diagnostic, []byte("DescribeInstances operation"))
+	case [2]string{ec2Service, describeFleets}:
+		return bytes.Contains(diagnostic, []byte("(InvalidFleetId.NotFound)")) &&
+			bytes.Contains(diagnostic, []byte("DescribeFleets operation"))
+	case [2]string{ec2Service, describeNatGateways}:
+		return (bytes.Contains(diagnostic, []byte("(NatGatewayNotFound)")) ||
+			bytes.Contains(diagnostic, []byte("(InvalidNatGatewayID.NotFound)"))) &&
+			bytes.Contains(diagnostic, []byte("DescribeNatGateways operation"))
+	case [2]string{ec2Service, describeAddresses}:
+		return bytes.Contains(diagnostic, []byte("(InvalidAllocationID.NotFound)")) &&
+			bytes.Contains(diagnostic, []byte("DescribeAddresses operation"))
+	case [2]string{ec2Service, describeNetworkInterfaces}:
+		return bytes.Contains(diagnostic, []byte("(InvalidNetworkInterfaceID.NotFound)")) &&
+			bytes.Contains(diagnostic, []byte("DescribeNetworkInterfaces operation"))
+	case [2]string{ec2Service, describeVolumes}:
+		return bytes.Contains(diagnostic, []byte("(InvalidVolume.NotFound)")) &&
+			bytes.Contains(diagnostic, []byte("DescribeVolumes operation"))
+	case [2]string{ec2Service, describeVPCs}:
+		return bytes.Contains(diagnostic, []byte("(InvalidVpcID.NotFound)")) &&
+			bytes.Contains(diagnostic, []byte("DescribeVpcs operation"))
+	case [2]string{elbService, describeLoadBalancers},
+		[2]string{elbv2Service, describeLoadBalancers}:
+		return bytes.Contains(diagnostic, []byte("(LoadBalancerNotFound)")) &&
+			bytes.Contains(diagnostic, []byte("DescribeLoadBalancers operation"))
 	default:
 		return false
 	}
@@ -762,9 +826,10 @@ func ownershipReadAllowed(service, command string) bool {
 	return slices.Contains([][2]string{
 		{eksService, "describe-cluster"},
 		{eksService, "list-nodegroups"},
-		{eksService, "describe-nodegroup"},
-		{cloudFormationService, "describe-stacks"},
+		{eksService, describeNodegroup},
+		{cloudFormationService, describeStacks},
 		{cloudFormationService, "list-stack-resources"},
 		{cloudFormationService, "describe-stack-resources"},
+		{ec2Service, describeVPCs},
 	}, [2]string{service, command})
 }

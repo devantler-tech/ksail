@@ -84,6 +84,7 @@ func TestAWSBoundaryAllowsOnlyOwnershipReadOperations(t *testing.T) {
 		{"cloudformation", "describe-stacks"},
 		{"cloudformation", "list-stack-resources"},
 		{"cloudformation", "describe-stack-resources"},
+		{"ec2", "describe-vpcs"},
 	} {
 		_, err := eksinventory.QueryAWSForTest(
 			context.Background(), operation[0], operation[1],
@@ -104,14 +105,32 @@ func TestAWSBoundaryClassifiesOnlyExactReadNotFoundResponses(t *testing.T) {
 	}
 
 	prepareAWSProcess(t)
-	t.Setenv("KSAIL_EKS_TEST_PROCESS", "not-found-eks")
+	t.Setenv("KSAIL_EKS_TEST_PROCESS", "not-found-exact")
 
-	_, err := eksinventory.QueryAWSForTest(
-		context.Background(), "eks", "describe-cluster", "--region", "eu-central-1",
-		"--output", "json", "--no-paginate", "--cli-input-json", "{}", "--no-cli-pager",
-	)
-	if eksinventory.FailureReasonForTest(err) != "not-found" {
-		t.Fatalf("exact resource absence was not distinguished from an incomplete read: %v", err)
+	for _, operation := range [][2]string{
+		{"eks", "describe-cluster"},
+		{"eks", "describe-nodegroup"},
+		{"cloudformation", "describe-stacks"},
+		{"ec2", "describe-instances"},
+		{"ec2", "describe-fleets"},
+		{"ec2", "describe-nat-gateways"},
+		{"ec2", "describe-addresses"},
+		{"ec2", "describe-network-interfaces"},
+		{"ec2", "describe-volumes"},
+		{"ec2", "describe-vpcs"},
+		{"elb", "describe-load-balancers"},
+		{"elbv2", "describe-load-balancers"},
+	} {
+		_, err := eksinventory.QueryAWSForTest(
+			context.Background(), operation[0], operation[1], "--region", "eu-central-1",
+			"--output", "json", "--no-paginate", "--cli-input-json", "{}", "--no-cli-pager",
+		)
+		if eksinventory.FailureReasonForTest(err) != "not-found" {
+			t.Fatalf(
+				"%s %s absence was not distinguished from an incomplete read: %v",
+				operation[0], operation[1], err,
+			)
+		}
 	}
 }
 
@@ -138,12 +157,24 @@ func prepareAWSProcess(t *testing.T) string {
 	return dir
 }
 
+//nolint:lll // Exact AWS CLI error fixtures retain the operation and error-code spellings.
 func helperProcess() {
-	if os.Getenv("KSAIL_EKS_TEST_PROCESS") == "not-found-eks" {
-		_, _ = fmt.Fprintln(
-			os.Stderr,
-			"An error occurred (ResourceNotFoundException) when calling the DescribeCluster operation: No cluster found",
-		)
+	if os.Getenv("KSAIL_EKS_TEST_PROCESS") == "not-found-exact" {
+		diagnostics := map[string]string{
+			"eks describe-cluster":            "An error occurred (ResourceNotFoundException) when calling the DescribeCluster operation: No cluster found",
+			"eks describe-nodegroup":          "An error occurred (ResourceNotFoundException) when calling the DescribeNodegroup operation: No node group found",
+			"cloudformation describe-stacks":  "An error occurred (ValidationError) when calling the DescribeStacks operation: Stack does not exist",
+			"ec2 describe-instances":          "An error occurred (InvalidInstanceID.NotFound) when calling the DescribeInstances operation: not found",
+			"ec2 describe-fleets":             "An error occurred (InvalidFleetId.NotFound) when calling the DescribeFleets operation: not found",
+			"ec2 describe-nat-gateways":       "An error occurred (NatGatewayNotFound) when calling the DescribeNatGateways operation: not found",
+			"ec2 describe-addresses":          "An error occurred (InvalidAllocationID.NotFound) when calling the DescribeAddresses operation: not found",
+			"ec2 describe-network-interfaces": "An error occurred (InvalidNetworkInterfaceID.NotFound) when calling the DescribeNetworkInterfaces operation: not found",
+			"ec2 describe-volumes":            "An error occurred (InvalidVolume.NotFound) when calling the DescribeVolumes operation: not found",
+			"ec2 describe-vpcs":               "An error occurred (InvalidVpcID.NotFound) when calling the DescribeVpcs operation: not found",
+			"elb describe-load-balancers":     "An error occurred (LoadBalancerNotFound) when calling the DescribeLoadBalancers operation: not found",
+			"elbv2 describe-load-balancers":   "An error occurred (LoadBalancerNotFound) when calling the DescribeLoadBalancers operation: not found",
+		}
+		_, _ = fmt.Fprintln(os.Stderr, diagnostics[os.Args[1]+" "+os.Args[2]])
 
 		os.Exit(254)
 	}
