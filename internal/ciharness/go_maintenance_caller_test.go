@@ -94,6 +94,8 @@ func validateGoMaintenanceIdentity(workflow ciWorkflow, caller todosWorkflow) er
 	// the signed-fix pins move to v7.10.3, and this caller still disables those jobs.
 	// The v7.11.0 release updates runner hardening and the disabled signed-fix
 	// callees. Maintenance admission, permissions and caller inputs are unchanged.
+	// The v7.12.3 release contains the identical Go validation workflow blob as
+	// v7.11.0; its release, cleanup and repository-configuration changes are separate.
 	// Keep explicit reviewed identities: a syntactically valid SHA alone is insufficient.
 	reviewed := slices.Contains([]string{
 		prefix + "0600006235510307a04efebcac1ac1f363f5f862",
@@ -105,6 +107,7 @@ func validateGoMaintenanceIdentity(workflow ciWorkflow, caller todosWorkflow) er
 		prefix + "cd706d2309d8c4f192f02c902214c6bd1b5a8e69",
 		prefix + "8ed2071ebe18864b8b86efe0f6b1df8d73d2a6ab",
 		prefix + "226e6e7e5f3609868eb96a6a26f6dc293c88ba30",
+		prefix + "61693f6ef2740f113ecd2a4ae01840557abe44e8",
 	}, job.Uses)
 	if !found || !reviewed || len(job.Steps) != 0 ||
 		caller.Jobs["ci-go"].RunsOn != "" || !reflect.DeepEqual(job.Needs, []string{"changes"}) {
@@ -152,6 +155,7 @@ func TestGoMaintenanceCallerAcceptsReviewedReleaseRevisions(t *testing.T) {
 		"cd706d2309d8c4f192f02c902214c6bd1b5a8e69",
 		"8ed2071ebe18864b8b86efe0f6b1df8d73d2a6ab",
 		"226e6e7e5f3609868eb96a6a26f6dc293c88ba30",
+		"61693f6ef2740f113ecd2a4ae01840557abe44e8",
 	} {
 		t.Run(revision, func(t *testing.T) {
 			t.Parallel()
