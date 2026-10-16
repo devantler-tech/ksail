@@ -1,7 +1,6 @@
 package eksinventory
 
 import (
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -66,7 +65,7 @@ func readPrivateEvidence(path string, target any) error {
 	return nil
 }
 
-//nolint:cyclop,funlen // Atomic create and replacement deliberately take distinct guarded paths.
+//nolint:cyclop // Atomic create and replacement deliberately take distinct guarded paths.
 func publishOwnership(path string, data []byte, replace bool) error {
 	absolute, err := filepath.Abs(path)
 	if err != nil {
@@ -102,21 +101,11 @@ func publishOwnership(path string, data []byte, replace bool) error {
 		}
 	}
 
-	temporary := ".eks-ownership-" + rand.Text()
-
-	file, err := root.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, baselineFileMode)
+	temporary, err := writeTemporaryPrivateEvidence(root, ".eks-ownership-", data)
 	if err != nil {
-		return fmt.Errorf("create private ownership evidence: %w", ErrInventory)
+		return err
 	}
 	defer func() { _ = root.Remove(temporary) }()
-
-	_, writeErr := file.Write(data)
-	syncErr := file.Sync()
-
-	closeErr := file.Close()
-	if writeErr != nil || syncErr != nil || closeErr != nil {
-		return fmt.Errorf("write private ownership evidence: %w", ErrInventory)
-	}
 
 	if replace {
 		err = root.Rename(temporary, name)

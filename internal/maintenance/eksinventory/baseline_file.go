@@ -54,21 +54,12 @@ func baselineDestination(destination string) (*os.Root, string, error) {
 }
 
 func publishBaseline(root *os.Root, name string, data []byte) error {
-	temporary := ".eks-baseline-" + rand.Text()
-
-	file, err := root.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, baselineFileMode)
+	temporary, err := writeTemporaryPrivateEvidence(root, ".eks-baseline-", data)
 	if err != nil {
-		return fmt.Errorf("create private baseline: %w", ErrInventory)
+		return err
 	}
 	defer func() { _ = root.Remove(temporary) }()
 
-	_, writeErr := file.Write(data)
-	syncErr := file.Sync()
-
-	closeErr := file.Close()
-	if writeErr != nil || syncErr != nil || closeErr != nil {
-		return fmt.Errorf("write private baseline: %w", ErrInventory)
-	}
 	// Link publishes the complete file atomically and refuses an existing target,
 	// including a symlink created while the AWS reads were in progress.
 	err = root.Link(temporary, name)
@@ -77,4 +68,25 @@ func publishBaseline(root *os.Root, name string, data []byte) error {
 	}
 
 	return nil
+}
+
+func writeTemporaryPrivateEvidence(root *os.Root, prefix string, data []byte) (string, error) {
+	temporary := prefix + rand.Text()
+
+	file, err := root.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, baselineFileMode)
+	if err != nil {
+		return "", fmt.Errorf("create private evidence: %w", ErrInventory)
+	}
+
+	_, writeErr := file.Write(data)
+	syncErr := file.Sync()
+
+	closeErr := file.Close()
+	if writeErr != nil || syncErr != nil || closeErr != nil {
+		_ = root.Remove(temporary)
+
+		return "", fmt.Errorf("write private evidence: %w", ErrInventory)
+	}
+
+	return temporary, nil
 }
