@@ -468,6 +468,54 @@ func TestOwnershipCaptureRejectsAnAlteredRelationshipBeforeAWSReads(t *testing.T
 	}
 }
 
+func TestOwnershipCaptureRejectsUnknownEvidenceFieldsBeforeAWSReads(t *testing.T) {
+	t.Parallel()
+	dir := privateBaselineDir(t)
+	baseline := captureBaselineFixture(t, dir)
+	manifest := filepath.Join(dir, "ownership.json")
+
+	err := eksinventory.CaptureOwnership(
+		context.Background(), baselineBinding(), baseline, manifest, eksinventory.OwnershipHints{},
+		io.Discard, ownershipQuery(t),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var snapshot map[string]any
+
+	err = json.Unmarshal(readPrivateTestFile(t, manifest), &snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	snapshot["unreviewedField"] = true
+
+	data, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = os.WriteFile(manifest, data, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	query := func(context.Context, ...string) ([]byte, error) {
+		t.Fatal("unknown evidence field caused AWS reads")
+
+		return nil, nil
+	}
+
+	err = eksinventory.CaptureOwnership(
+		context.Background(), baselineBinding(), baseline, manifest, eksinventory.OwnershipHints{},
+		io.Discard, query,
+	)
+	if err == nil {
+		t.Fatal("unknown evidence field accepted")
+	}
+}
+
 //nolint:cyclop,funlen,lll // The two captures deliberately exercise distinct provider relationship graphs.
 func TestOwnershipCaptureUnionsRelationshipsAcrossScaleDown(t *testing.T) {
 	t.Parallel()

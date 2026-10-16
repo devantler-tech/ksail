@@ -49,6 +49,7 @@ func readPrivateEvidence(path string, target any) error {
 	defer func() { _ = file.Close() }()
 
 	decoder := json.NewDecoder(io.LimitReader(file, maxBaselineBytes+1))
+	decoder.DisallowUnknownFields()
 
 	err = decoder.Decode(target)
 	if err != nil {
