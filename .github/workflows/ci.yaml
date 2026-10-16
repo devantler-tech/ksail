@@ -421,6 +421,7 @@ jobs:
               - '.github/workflows/ci.yaml'
             eks-smoke-scripts:
               - 'internal/maintenance/eksinventory/**'
+              - 'pkg/fsutil/pathutil/**'
               - '.github/scripts/check-eks-capacity.sh'
               - '.github/scripts/check-eks-capacity.test.sh'
               - '.github/scripts/delete-eks-smoke-cluster.sh'

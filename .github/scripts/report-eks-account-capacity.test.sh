@@ -82,6 +82,31 @@ refute_text 'private-' 'stdout and stderr from failed reads must stay private'
 pass 'a failed process cannot convert plausible stdout into a completed count'
 rm "${fake_dir}/ec2-describe-volumes.fail"
 
+baseline_args=(--region eu-central-1 --cluster-name regional-diagnostic
+	--run-id 123 --run-attempt 2 --source-sha aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
+run "${baseline_args[@]}" --baseline-file "${tmp_dir}/baseline.json"
+expect_status 0 'opt-in baseline capture must run outside the repository'
+expect_text 'ec2 describe-volumes: observed=1 report-count=1' 'the baseline must retain a complete family'
+expect_text 'ownership=unknown account-binding=unknown instant-fleets=unknown teardown=unverified' 'baseline limits must remain explicit'
+refute_text 'private-' 'baseline identities must never appear in output'
+jq -e '.context.runId == "123" and .context.runAttempt == "2" and
+  .coverage.ownership == "unknown" and
+  (.observations[] | select(.operation == "describe-volumes") |
+    .complete == true and .identities == ["private-volume"])' "${tmp_dir}/baseline.json" >/dev/null || fail 'baseline lost its private identity or run binding'
+run "${baseline_args[@]}" --baseline-file "${tmp_dir}/baseline.json"
+expect_status 1 'an existing baseline must never be overwritten'
+pass 'opt-in capture writes a private run-bound snapshot and refuses overwrites'
+
+touch "${fake_dir}/ec2-describe-volumes.fail"
+run "${baseline_args[@]}" --baseline-file "${tmp_dir}/incomplete.json"
+expect_status 1 'baseline capture must fail on an incomplete read'
+expect_text 'ec2 describe-volumes: unknown (access-denied)' 'failed capture must name only a safe reason'
+refute_text 'private-' 'capture errors must not disclose AWS data'
+jq -e '.observations[] | select(.operation == "describe-volumes") |
+  .complete == false and (has("identities") | not)' "${tmp_dir}/incomplete.json" >/dev/null || fail 'partial identities survived a failed capture'
+rm "${fake_dir}/ec2-describe-volumes.fail"
+pass 'failed capture retains explicit unknown evidence and returns nonzero'
+
 for body in 'null' 'None' '' '{"Volumes":null}' '{"Volumes":[{"VolumeId":"private-volume","State":"::error::private-injection"}]}'; do
 	printf '%s' "${body}" >"${fake_dir}/ec2-describe-volumes.json"
 	run --region eu-central-1

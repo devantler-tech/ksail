@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/pathutil"
 )
 
 // File reading operations.
@@ -104,31 +106,12 @@ func ForEachYAMLFile(dir string, callback func(path string, content []byte) erro
 // It returns an error if the path cannot be made absolute or if symlinks in the
 // parent directory cannot be resolved (e.g., due to a missing parent or permissions).
 func EvalCanonicalPath(p string) (string, error) {
-	abs, err := filepath.Abs(p)
+	canonical, err := pathutil.EvalCanonicalPath(p)
 	if err != nil {
-		return "", fmt.Errorf("resolving absolute path: %w", err)
+		return "", fmt.Errorf("canonical path: %w", err)
 	}
 
-	resolved, err := filepath.EvalSymlinks(abs)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return "", fmt.Errorf("resolving symlinks: %w", err)
-		}
-
-		// Path doesn't exist yet: resolve the parent directory's symlinks and
-		// append the final component so the check remains accurate.
-		dir := filepath.Dir(abs)
-		base := filepath.Base(abs)
-
-		resolvedDir, dirErr := filepath.EvalSymlinks(dir)
-		if dirErr != nil {
-			return "", fmt.Errorf("resolving symlinks for parent: %w", dirErr)
-		}
-
-		return filepath.Join(resolvedDir, base), nil
-	}
-
-	return resolved, nil
+	return canonical, nil
 }
 
 // Path resolution operations.
