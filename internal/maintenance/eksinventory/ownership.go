@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -19,6 +20,7 @@ import (
 const (
 	ownershipSchemaVersion = 2
 	ownershipPageSize      = 100
+	nanosecondDigits       = 9
 )
 
 var volumeIDPattern = regexp.MustCompile(`^vol-[0-9a-f]{17}$`)
@@ -462,14 +464,45 @@ func (collector *ownershipCollector) clusterIdentity(accountID string) (string, 
 		return "", err
 	}
 
-	createdText := strings.Trim(string(created), `"`)
+	createdIdentity, err := clusterCreationIdentity(created)
+	if err != nil {
+		return "", err
+	}
 
-	valid, _ := regexp.MatchString(`^[0-9]+(?:\.[0-9]+)?$`, createdText)
-	if !valid {
+	return arn + "|" + createdIdentity, nil
+}
+
+func clusterCreationIdentity(value json.RawMessage) (string, error) {
+	var timestamp string
+	if json.Unmarshal(value, &timestamp) == nil {
+		createdAt, err := time.Parse(time.RFC3339Nano, timestamp)
+		if err != nil {
+			return "", fmt.Errorf("invalid cluster creation identity: %w", ErrInventory)
+		}
+
+		return createdAt.UTC().Format(time.RFC3339Nano), nil
+	}
+
+	secondsText, fractionText, _ := strings.Cut(string(value), ".")
+	if len(fractionText) > nanosecondDigits {
 		return "", fmt.Errorf("invalid cluster creation identity: %w", ErrInventory)
 	}
 
-	return arn + "|" + createdText, nil
+	seconds, err := strconv.ParseInt(secondsText, 10, 64)
+	if err != nil || seconds <= 0 || seconds > 253402300799 {
+		return "", fmt.Errorf("invalid cluster creation identity: %w", ErrInventory)
+	}
+
+	fractionText += strings.Repeat("0", nanosecondDigits-len(fractionText))
+
+	nanoseconds, err := strconv.ParseInt(fractionText, 10, 64)
+	if err != nil {
+		return "", fmt.Errorf("invalid cluster creation identity: %w", ErrInventory)
+	}
+
+	createdAt := time.Unix(seconds, nanoseconds).UTC()
+
+	return createdAt.Format(time.RFC3339Nano), nil
 }
 
 func (collector *ownershipCollector) captureStacks(accountID, parent string) error {

@@ -80,7 +80,7 @@ func ownershipQuery(t *testing.T) eksinventory.Query {
 			), nil
 		case "eks describe-cluster":
 			return []byte(
-				`{"cluster":{"arn":"arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic","createdAt":1700000000}}`,
+				`{"cluster":{"arn":"arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic","createdAt":"2024-03-14T15:31:44.348Z"}}`,
 			), nil
 		case "cloudformation describe-stacks":
 			return []byte(
@@ -240,7 +240,7 @@ func TestOwnershipCapturePreservesNestedAndDetachedRelationships(t *testing.T) {
 		{
 			Kind:     "classic-load-balancer",
 			Identity: "classic-owned",
-			Parent:   "cluster:arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic|1700000000",
+			Parent:   "cluster:arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic|2024-03-14T15:31:44.348Z",
 		},
 		{
 			Kind:     "fleet",
@@ -255,7 +255,7 @@ func TestOwnershipCapturePreservesNestedAndDetachedRelationships(t *testing.T) {
 		{
 			Kind:     "load-balancer",
 			Identity: "arn:aws:elasticloadbalancing:eu-central-1:123456789012:loadbalancer/app/owned/abc",
-			Parent:   "cluster:arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic|1700000000",
+			Parent:   "cluster:arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic|2024-03-14T15:31:44.348Z",
 		},
 		{
 			Kind:     "nat-gateway",
@@ -275,7 +275,7 @@ func TestOwnershipCapturePreservesNestedAndDetachedRelationships(t *testing.T) {
 		{
 			Kind:     "nodegroup",
 			Identity: "arn:aws:eks:eu-central-1:123456789012:nodegroup/regional-diagnostic/workers/abc",
-			Parent:   "cluster:arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic|1700000000",
+			Parent:   "cluster:arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic|2024-03-14T15:31:44.348Z",
 		},
 		{
 			Kind:     "stack",
@@ -290,13 +290,13 @@ func TestOwnershipCapturePreservesNestedAndDetachedRelationships(t *testing.T) {
 		{
 			Kind:     "stack",
 			Identity: "arn:aws:cloudformation:eu-central-1:123456789012:stack/root/one",
-			Parent:   "cluster:arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic|1700000000",
+			Parent:   "cluster:arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic|2024-03-14T15:31:44.348Z",
 		},
 		{Kind: "volume", Identity: "vol-0123456789abcdef0", Parent: "instance:i-0123456789abcdef0"},
 		{
 			Kind:     "volume",
 			Identity: "vol-11111111111111111",
-			Parent:   "cluster:arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic|1700000000",
+			Parent:   "cluster:arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic|2024-03-14T15:31:44.348Z",
 		},
 	}
 	if !reflect.DeepEqual(got.Resources, want) {
@@ -535,6 +535,10 @@ func TestOwnershipCaptureUnionsRelationshipsAcrossScaleDown(t *testing.T) {
 
 	second := func(ctx context.Context, args ...string) ([]byte, error) {
 		switch args[0] + " " + args[1] {
+		case "eks describe-cluster":
+			return []byte(
+				`{"cluster":{"arn":"arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic","createdAt":1710430304.348}}`,
+			), nil
 		case "autoscaling describe-auto-scaling-groups":
 			return []byte(
 				`{"AutoScalingGroups":[{"AutoScalingGroupARN":"arn:aws:autoscaling:eu-central-1:123456789012:autoScalingGroup:abc:autoScalingGroupName/eks-workers","AutoScalingGroupName":"eks-workers","Instances":[{"InstanceId":"i-11111111111111111"}]}]}`,
