@@ -13,6 +13,8 @@ Usage:
     --run-attempt ATTEMPT --source-sha SHA \
     [--classic-load-balancer NAME] [--load-balancer-arn ARN] \
     [--load-balancer-host DNS] [--volume-id ID] [--workload-inventory-complete]
+  report-eks-account-capacity.sh --region REGION --verify-ownership-file FILE \
+    --cluster-name NAME --run-id ID --run-attempt ATTEMPT --source-sha SHA
 
 Print a read-only regional EKS resource diagnostic.
 
@@ -41,6 +43,11 @@ caller are verified through read-only AWS operations before recording. Later
 captures union relationships, so scale-down or detachment cannot erase them.
 The public summary contains only family counts and coverage states. The manifest
 stays in the runner job and must be handed to the post-cleanup verifier privately.
+
+Verification mode reads every recorded identity and compares a complete regional
+census with the embedded pre-create baseline. Remaining resources, incomplete
+ownership, a failed read, identity replacement, or an unattributed new regional
+resource returns nonzero. Output contains only kind, count, state and safe reason.
 EOF_USAGE
 }
 
@@ -61,7 +68,7 @@ while (($# > 0)); do
 		region="$2"
 		shift 2
 		;;
-	--baseline-file | --ownership-file | --cluster-name | --run-id | --run-attempt | --source-sha | \
+	--baseline-file | --ownership-file | --verify-ownership-file | --cluster-name | --run-id | --run-attempt | --source-sha | \
 		--classic-load-balancer | --load-balancer-arn | --load-balancer-host | --volume-id)
 		if (($# < 2)); then
 			usage >&2

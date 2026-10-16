@@ -91,7 +91,7 @@ func ownershipQuery(t *testing.T) eksinventory.Query {
 			if stack == "arn:aws:cloudformation:eu-central-1:123456789012:stack/root/one" {
 				if input["NextToken"] == "root-page-2" {
 					return []byte(
-						`{"StackResourceSummaries":[{"LogicalResourceId":"Nat","PhysicalResourceId":"nat-0123456789abcdef0","ResourceType":"AWS::EC2::NatGateway","ResourceStatus":"CREATE_COMPLETE"}]}`,
+						`{"StackResourceSummaries":[{"LogicalResourceId":"Nat","PhysicalResourceId":"nat-0123456789abcdef0","ResourceType":"AWS::EC2::NatGateway","ResourceStatus":"CREATE_COMPLETE"},{"LogicalResourceId":"VPC","PhysicalResourceId":"vpc-0123456789abcdef0","ResourceType":"AWS::EC2::VPC","ResourceStatus":"CREATE_COMPLETE"}]}`,
 					), nil
 				}
 
@@ -221,7 +221,7 @@ func TestOwnershipCapturePreservesNestedAndDetachedRelationships(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got.SchemaVersion != 2 || got.AccountID != "123456789012" ||
+	if got.SchemaVersion != 3 || got.AccountID != "123456789012" ||
 		got.Context != baselineBinding() || !strings.Contains(got.Cluster, ":cluster/regional-diagnostic|") {
 		t.Fatalf("ownership binding incomplete: %#v", got)
 	}
@@ -297,6 +297,11 @@ func TestOwnershipCapturePreservesNestedAndDetachedRelationships(t *testing.T) {
 			Kind:     "volume",
 			Identity: "vol-11111111111111111",
 			Parent:   "cluster:arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic|2024-03-14T15:31:44.348Z",
+		},
+		{
+			Kind:     "vpc",
+			Identity: "vpc-0123456789abcdef0",
+			Parent:   "stack:arn:aws:cloudformation:eu-central-1:123456789012:stack/root/one",
 		},
 	}
 	if !reflect.DeepEqual(got.Resources, want) {

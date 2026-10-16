@@ -59,7 +59,7 @@ func capacityInstanceRecord(row json.RawMessage) (capacityInstance, bool, error)
 	}
 
 	switch state {
-	case "terminated", "stopped", "stopping":
+	case terminatedState, "stopped", "stopping":
 		return capacityInstance{}, false, nil
 	case capacityRunning, capacityPending:
 	default:
@@ -139,7 +139,7 @@ func capacityReservationRecord(
 	}
 
 	switch state {
-	case "expired", "cancelled", "failed", "unsupported", "cancelling":
+	case "expired", "cancelled", failedState, "unsupported", "cancelling":
 		return capacityReservation{}, false, nil
 	case "assessing", "scheduled", capacityPending, "active", "delayed":
 	default:

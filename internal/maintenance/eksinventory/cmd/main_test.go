@@ -150,6 +150,44 @@ func TestOwnershipCaptureWritesPrivateCumulativeEvidence(t *testing.T) {
 	}
 }
 
+func TestOwnershipVerificationRejectsIncompleteCaptureWithSanitizedOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("ownership verification requires Unix directory ownership and permissions")
+	}
+
+	dir := prepareBaselineAWS(t)
+	t.Setenv("PATH", dir)
+	baseline := filepath.Join(dir, "baseline.json")
+	manifest := filepath.Join(dir, "ownership.json")
+
+	args := []string{
+		"--region", "eu-central-1", "--cluster-name", "trial", "--run-id", "123",
+		"--run-attempt", "2", "--source-sha", strings.Repeat("a", 40),
+	}
+	if got := command.RunForTest(append(args, "--baseline-file", baseline), io.Discard); got != 0 {
+		t.Fatalf("baseline capture exit %d", got)
+	}
+
+	if got := command.RunForTest(
+		append(args, "--baseline-file", baseline, "--ownership-file", manifest),
+		io.Discard,
+	); got != 0 {
+		t.Fatalf("ownership capture exit %d", got)
+	}
+
+	var output bytes.Buffer
+
+	got := command.RunForTest(append(args, "--verify-ownership-file", manifest), &output)
+	if got != 1 || !strings.Contains(output.String(), "cleanup-verdict=unknown") ||
+		!strings.Contains(output.String(), "Ownership verification failed") ||
+		strings.Contains(
+			output.String(),
+			"123456789012",
+		) || strings.Contains(output.String(), dir) {
+		t.Fatalf("unsafe verification refusal: exit=%d output=%s", got, output.String())
+	}
+}
+
 func TestUsageDoesNotRequireAWS(t *testing.T) {
 	t.Parallel()
 
@@ -165,6 +203,7 @@ func TestUsageDoesNotRequireAWS(t *testing.T) {
 		{[]string{"--region", "eu-central-1", "extra"}, 2},
 		{[]string{"--region", "eu-central-1", "--baseline-file", ""}, 2},
 		{[]string{"--region", "eu-central-1", "--run-id", "123"}, 2},
+		{[]string{"--region", "eu-central-1", "--verify-ownership-file", ""}, 2},
 	} {
 		t.Run(strings.Join(test.args, " "), func(t *testing.T) {
 			t.Parallel()

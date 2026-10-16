@@ -127,11 +127,11 @@ func collectBaseline(
 	manifest := baselineManifest{
 		SchemaVersion: 1, Repository: repositoryName, Context: binding,
 		StartedAt: time.Now().UTC(), Coverage: map[string]string{
-			"ownership":      baselineUnknown,
-			"teardown":       "unverified",
-			"instantFleets":  baselineUnknown,
-			"accountBinding": baselineUnknown,
-			"retention":      "local-file",
+			"ownership":         baselineUnknown,
+			"teardown":          "unverified",
+			instantFleetsFamily: baselineUnknown,
+			"accountBinding":    baselineUnknown,
+			"retention":         "local-file",
 		},
 	}
 	complete := true

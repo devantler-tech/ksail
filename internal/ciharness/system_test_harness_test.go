@@ -841,7 +841,7 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
 	smokeJob, ok := workflow.Jobs["smoke-test"]
 	require.True(t, ok, "smoke-test job is missing")
-	assert.Equal(t, 305, smokeJob.TimeoutMinutes)
+	assert.Equal(t, 310, smokeJob.TimeoutMinutes)
 
 	boundedStepNames := []string{
 		"📄 Checkout",
@@ -863,6 +863,7 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 		"🧪 Recover EKS ownership after local state loss",
 		"🔎 Preserve EKS ownership before cleanup",
 		"🧹 Delete EKS smoke cluster",
+		"🔎 Verify EKS cleanup from private ownership",
 		"🧽 Remove private EKS evidence",
 	}
 

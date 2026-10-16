@@ -15,9 +15,10 @@ import (
 )
 
 const (
-	usageExitCode    = 2
-	reportTimeout    = 2 * time.Minute
-	ownershipTimeout = 5 * time.Minute
+	usageExitCode       = 2
+	reportTimeout       = 2 * time.Minute
+	ownershipTimeout    = 5 * time.Minute
+	verificationTimeout = 5 * time.Minute
 )
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout)) }
@@ -51,6 +52,35 @@ func run(args []string, output io.Writer) int {
 
 	if flags.NArg() != 0 {
 		return usageExitCode
+	}
+
+	if ownership.verification != "" {
+		baseline.binding.Region = *region
+		if ownership.destination != "" || baseline.destination != "" ||
+			baseline.binding.Validate() != nil {
+			return usageExitCode
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), verificationTimeout)
+		defer cancel()
+
+		err := eksinventory.VerifyOwnership(
+			ctx,
+			baseline.binding,
+			ownership.verification,
+			output,
+			nil,
+		)
+		if err != nil {
+			_, _ = fmt.Fprintln(
+				output,
+				"Ownership verification failed: cleanup is remaining or unknown.",
+			)
+
+			return 1
+		}
+
+		return 0
 	}
 
 	if ownership.destination != "" {
@@ -130,6 +160,7 @@ func run(args []string, output io.Writer) int {
 
 type ownershipOptions struct {
 	destination          string
+	verification         string
 	classicLoadBalancers stringList
 	loadBalancerARNs     stringList
 	loadBalancerHosts    stringList
@@ -139,6 +170,12 @@ type ownershipOptions struct {
 
 func (options *ownershipOptions) register(flags *flag.FlagSet) {
 	flags.StringVar(&options.destination, "ownership-file", "", "Private cumulative ownership file")
+	flags.StringVar(
+		&options.verification,
+		"verify-ownership-file",
+		"",
+		"Private cumulative ownership file to verify after cleanup",
+	)
 	flags.Var(
 		&options.classicLoadBalancers,
 		"classic-load-balancer",
