@@ -682,18 +682,35 @@ func (collector *ownershipCollector) capturePhysicalStack(physicalID, parent str
 	}
 
 	rows, err := records(payload, []string{"StackResources"})
-	if err != nil || len(rows) != 1 {
+	if err != nil || len(rows) == 0 {
 		return fmt.Errorf("physical stack lookup incomplete: %w", ErrInventory)
 	}
 
-	actual, err := stringField(rows[0], "PhysicalResourceId")
-	if err != nil || actual != physicalID {
-		return fmt.Errorf("physical stack identity mismatch: %w", ErrInventory)
+	stackID := ""
+	matches := 0
+
+	for _, row := range rows {
+		actual, fieldErr := optionalStringField(row, "PhysicalResourceId")
+		if fieldErr != nil {
+			return fieldErr
+		}
+
+		if actual != physicalID {
+			continue
+		}
+
+		matches++
+
+		stackID, fieldErr = stringField(row, "StackId")
+		if fieldErr != nil {
+			return fieldErr
+		}
 	}
 
-	stackID, err := stringField(rows[0], "StackId")
-	if err != nil {
-		return err
+	prefix := "arn:aws:cloudformation:" + collector.binding.Region + ":" +
+		collector.manifest.AccountID + ":stack/"
+	if matches != 1 || !strings.HasPrefix(stackID, prefix) {
+		return fmt.Errorf("physical stack identity mismatch: %w", ErrInventory)
 	}
 
 	collector.add(stackKind, stackID, parent)

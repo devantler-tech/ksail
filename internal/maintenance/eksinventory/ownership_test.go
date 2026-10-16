@@ -113,7 +113,7 @@ func ownershipQuery(t *testing.T) eksinventory.Query {
 			}
 
 			return []byte(
-				`{"StackResources":[{"StackId":"arn:aws:cloudformation:eu-central-1:123456789012:stack/nodegroup/three","LogicalResourceId":"ManagedNodeGroup","PhysicalResourceId":"regional-diagnostic/workers","ResourceType":"AWS::EKS::Nodegroup","ResourceStatus":"CREATE_COMPLETE"}]}`,
+				`{"StackResources":[{"StackId":"arn:aws:cloudformation:eu-central-1:123456789012:stack/nodegroup/three","LogicalResourceId":"ManagedNodeGroup","PhysicalResourceId":"regional-diagnostic/workers","ResourceType":"AWS::EKS::Nodegroup","ResourceStatus":"CREATE_COMPLETE"},{"StackId":"arn:aws:cloudformation:eu-central-1:123456789012:stack/nodegroup/three","LogicalResourceId":"LaunchTemplate","PhysicalResourceId":"lt-0123456789abcdef0","ResourceType":"AWS::EC2::LaunchTemplate","ResourceStatus":"CREATE_COMPLETE"}]}`,
 			), nil
 		case "eks list-nodegroups":
 			return []byte(`{"nodegroups":["workers"]}`), nil
