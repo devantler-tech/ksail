@@ -40,7 +40,7 @@ printf '{"Account":"123456789012","Arn":"arn:aws:sts::123456789012:assumed-role/
 printf '{"cluster":{"arn":"arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic","createdAt":1700000000}}\n' >"${fake_dir}/eks-describe-cluster.json"
 printf '{"nodegroups":[]}\n' >"${fake_dir}/eks-list-nodegroups.json"
 printf '{"StackSummaries":[]}\n' >"${fake_dir}/cloudformation-list-stacks.json"
-printf '{"Stacks":[{"StackId":"arn:aws:cloudformation:eu-central-1:123456789012:stack/root/one"}]}\n' >"${fake_dir}/cloudformation-describe-stacks.json"
+printf '{"Stacks":[{"StackId":"arn:aws:cloudformation:eu-central-1:123456789012:stack/eksctl-regional-diagnostic-cluster/one"}]}\n' >"${fake_dir}/cloudformation-describe-stacks.json"
 printf '{"StackResourceSummaries":[]}\n' >"${fake_dir}/cloudformation-list-stack-resources.json"
 printf '{"Fleets":[]}\n' >"${fake_dir}/ec2-describe-fleets.json"
 printf '{"SpotFleetRequestConfigs":[]}\n' >"${fake_dir}/ec2-describe-spot-fleet-requests.json"
