@@ -526,7 +526,105 @@ func (collector *ownershipCollector) captureStacks(accountID, parent string) err
 
 	collector.add(stackKind, stackID, parent)
 
-	return collector.captureStackResources(stackID, make(map[string]bool))
+	err = collector.captureStackResources(stackID, make(map[string]bool))
+	if err != nil {
+		return err
+	}
+
+	return collector.captureClusterStacks(stackID, parent)
+}
+
+// captureClusterStacks records the other stacks eksctl creates for the cluster, such as its add-on
+// and node group stacks, whatever their state. eksctl names each one "eksctl-<cluster>-<part>",
+// and the cluster name is unique to the run. A stack the run's pre-create baseline already listed
+// is never claimed.
+func (collector *ownershipCollector) captureClusterStacks(rootID, parent string) error {
+	stackIDs, err := collector.clusterStackIDs(rootID)
+	if err != nil {
+		return err
+	}
+
+	for _, stackID := range stackIDs {
+		collector.add(stackKind, stackID, parent)
+
+		err = collector.captureStackResources(stackID, make(map[string]bool))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// clusterStackIDs lists the region's stacks and returns the IDs of this cluster's eksctl stacks that
+// are new since the baseline, other than the root stack.
+func (collector *ownershipCollector) clusterStackIDs(rootID string) ([]string, error) {
+	existing, err := collector.baselineIdentities(cloudFormationService, listStacks)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := collector.readAll(
+		cloudFormationService, listStacks, map[string]any{},
+		"StackSummaries", nextTokenKey, nextTokenKey,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	namePrefix := "eksctl-" + collector.binding.ClusterName + "-"
+	identityPrefix := "arn:aws:cloudformation:" + collector.binding.Region + ":" +
+		collector.manifest.AccountID + ":stack/"
+
+	stackIDs := make([]string, 0, len(rows))
+
+	for _, row := range rows {
+		name, fieldErr := stringField(row, "StackName")
+		if fieldErr != nil {
+			return nil, fieldErr
+		}
+
+		stackID, fieldErr := stringField(row, "StackId")
+		if fieldErr != nil {
+			return nil, fieldErr
+		}
+
+		if !strings.HasPrefix(name, namePrefix) || stackID == rootID || existing[stackID] {
+			continue
+		}
+
+		if !strings.HasPrefix(stackID, identityPrefix+name+"/") {
+			return nil, fmt.Errorf("cluster stack identity mismatch: %w", ErrInventory)
+		}
+
+		stackIDs = append(stackIDs, stackID)
+	}
+
+	return stackIDs, nil
+}
+
+// baselineIdentities returns the identities one operation listed in the run's pre-create baseline.
+func (collector *ownershipCollector) baselineIdentities(
+	service, command string,
+) (map[string]bool, error) {
+	for _, observation := range collector.manifest.Baseline.Observations {
+		if observation.Service != service || observation.Operation != command {
+			continue
+		}
+
+		if !observation.Complete || observation.Identities == nil {
+			break
+		}
+
+		identities := make(map[string]bool, len(*observation.Identities))
+		for _, identity := range *observation.Identities {
+			identities[identity] = true
+		}
+
+		return identities, nil
+	}
+
+	return nil, fmt.Errorf("baseline lacks %s %s identities: %w", service, command, ErrInventory)
 }
 
 // stackIDByName reads one stack by its exact name and returns its unique stack ID. The caller

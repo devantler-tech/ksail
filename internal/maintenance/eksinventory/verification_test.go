@@ -458,6 +458,66 @@ func TestOwnershipVerificationRejectsAnUnattributedRegionalSurvivor(t *testing.T
 	}
 }
 
+// After a real teardown the region still lists every deleted stack, with its unique ID, for 90
+// days. The run's own deleted stacks, add-on stacks included, are attributed; an eksctl stack of
+// this cluster that no capture recorded is not.
+func TestOwnershipVerificationAttributesTheRunsDeletedStacks(t *testing.T) {
+	t.Parallel()
+	manifest := ownershipVerificationFixture(t)
+
+	deleted := func(ids ...string) string {
+		rows := make([]string, 0, len(ids))
+		for _, id := range ids {
+			rows = append(rows, `{"StackId":"`+id+`","StackName":"`+strings.Split(id, "/")[1]+
+				`","StackStatus":"DELETE_COMPLETE"}`)
+		}
+
+		return `{"StackSummaries":[` + strings.Join(rows, ",") + `]}`
+	}
+
+	runStacks := []string{
+		"arn:aws:cloudformation:eu-central-1:123456789012:stack/root/one",
+		nodegroupStackID, addonStackID, deletedAddonStackID,
+	}
+
+	for _, test := range []struct {
+		name    string
+		stacks  string
+		verdict string
+	}{
+		{name: "captured stacks", stacks: deleted(runStacks...), verdict: "cleanup-verdict=absent"},
+		{
+			name: "an uncaptured add-on stack",
+			stacks: deleted(append(runStacks, "arn:aws:cloudformation:eu-central-1:123456789012:stack/"+
+				"eksctl-regional-diagnostic-addon-coredns/9c8d7e6f")...),
+			verdict: "regional-census: state=unknown count=1 reason=unattributed-new-resource",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			base := verificationQuery(t, "", nil)
+			query := func(ctx context.Context, args ...string) ([]byte, error) {
+				if args[0] == "cloudformation" && args[1] == "list-stacks" {
+					return []byte(test.stacks), nil
+				}
+
+				return base(ctx, args...)
+			}
+
+			var output bytes.Buffer
+
+			err := eksinventory.VerifyOwnership(
+				context.Background(), baselineBinding(), manifest, &output, query,
+			)
+			if !strings.Contains(output.String(), test.verdict) ||
+				(err == nil) != (test.verdict == "cleanup-verdict=absent") {
+				t.Fatalf("stack census verdict: err=%v output=%s", err, output.String())
+			}
+		})
+	}
+}
+
 func TestOwnershipVerificationNamespacesRegionalIdentitiesByOperation(t *testing.T) {
 	t.Parallel()
 	manifest := ownershipVerificationFixture(t)

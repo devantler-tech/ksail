@@ -68,6 +68,7 @@ const (
 	vpcIDField                     = "VpcId"
 	describeNodegroup              = "describe-nodegroup"
 	describeStacks                 = "describe-stacks"
+	listStacks                     = "list-stacks"
 	describeVPCs                   = "describe-vpcs"
 	instanceKind                   = "instance"
 	fleetKind                      = "fleet"

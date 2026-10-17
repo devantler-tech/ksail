@@ -57,6 +57,27 @@ const (
 		`{"LogicalResourceId":"ManagedNodeGroup","PhysicalResourceId":"regional-diagnostic/workers","ResourceType":"AWS::EKS::Nodegroup","LastUpdatedTimestamp":"2026-10-16T20:27:29.044Z","ResourceStatus":"UPDATE_COMPLETE","DriftInformation":{"StackResourceDriftStatus":"NOT_CHECKED"}},` +
 		`{"LogicalResourceId":"NodeInstanceRole","PhysicalResourceId":"eksctl-regional-diagnostic-nodegrou-NodeInstanceRole-AbCdEfGh1234","ResourceType":"AWS::IAM::Role","LastUpdatedTimestamp":"2026-10-16T20:11:58.913Z","ResourceStatus":"CREATE_COMPLETE","DriftInformation":{"StackResourceDriftStatus":"NOT_CHECKED"}}` +
 		`]}`
+	// The add-on stack eksctl creates for a managed add-on's IAM role, and a second one already
+	// deleted: neither is reachable from the cluster or node group stacks.
+	addonStackID = "arn:aws:cloudformation:eu-central-1:123456789012:stack/" +
+		"eksctl-regional-diagnostic-addon-vpc-cni/1a2b3c4d-8b5d-11f1-9a3e-06d1c2b3a4f5"
+	deletedAddonStackID = "arn:aws:cloudformation:eu-central-1:123456789012:stack/" +
+		"eksctl-regional-diagnostic-addon-aws-ebs-csi-driver/5e6f7a8b-8b5d-11f1-9a3e-06d1c2b3a4f5"
+	// The region's stack list: this cluster's stacks, plus a lookalike, another cluster's and an
+	// unrelated stack, which the capture must not claim.
+	//nolint:lll // Literal provider responses keep the real field set visible.
+	clusterStackSummaries = `{"StackSummaries":[` +
+		`{"StackId":"arn:aws:cloudformation:eu-central-1:123456789012:stack/root/one","StackName":"eksctl-regional-diagnostic-cluster","CreationTime":"2026-10-16T20:01:12.004Z","StackStatus":"CREATE_COMPLETE","DriftInformation":{"StackDriftStatus":"NOT_CHECKED"}},` +
+		`{"StackId":"` + nodegroupStackID + `","StackName":"` + nodegroupStackName + `","CreationTime":"2026-10-16T20:11:40.118Z","LastUpdatedTime":"2026-10-16T20:27:27.301Z","StackStatus":"UPDATE_COMPLETE","DriftInformation":{"StackDriftStatus":"NOT_CHECKED"}},` +
+		`{"StackId":"` + addonStackID + `","StackName":"eksctl-regional-diagnostic-addon-vpc-cni","CreationTime":"2026-10-16T20:09:03.771Z","StackStatus":"CREATE_COMPLETE","DriftInformation":{"StackDriftStatus":"NOT_CHECKED"}},` +
+		`{"StackId":"arn:aws:cloudformation:eu-central-1:123456789012:stack/eksctl-regional-diagnosticx-cluster/9","StackName":"eksctl-regional-diagnosticx-cluster","CreationTime":"2026-10-15T10:00:00.000Z","StackStatus":"CREATE_COMPLETE"}` +
+		`],"NextToken":"stacks-page-2"}`
+	//nolint:lll // Literal provider responses keep the real field set visible.
+	clusterStackSummariesPage2 = `{"StackSummaries":[` +
+		`{"StackId":"` + deletedAddonStackID + `","StackName":"eksctl-regional-diagnostic-addon-aws-ebs-csi-driver","CreationTime":"2026-10-16T20:09:05.112Z","DeletionTime":"2026-10-16T20:10:44.902Z","StackStatus":"DELETE_COMPLETE","DriftInformation":{"StackDriftStatus":"NOT_CHECKED"}},` +
+		`{"StackId":"arn:aws:cloudformation:eu-central-1:123456789012:stack/eksctl-st-eks-1-1-cluster/7","StackName":"eksctl-st-eks-1-1-cluster","CreationTime":"2026-10-13T08:00:00.000Z","DeletionTime":"2026-10-13T09:00:00.000Z","StackStatus":"DELETE_COMPLETE"},` +
+		`{"StackId":"arn:aws:cloudformation:eu-central-1:123456789012:stack/unrelated/8","StackName":"unrelated","CreationTime":"2026-01-01T00:00:00.000Z","StackStatus":"CREATE_COMPLETE"}` +
+		`]}`
 )
 
 func captureBaselineFixture(t *testing.T, dir string) string {
@@ -106,6 +127,12 @@ func ownershipQuery(t *testing.T) eksinventory.Query {
 			return []byte(
 				`{"Stacks":[{"StackId":"arn:aws:cloudformation:eu-central-1:123456789012:stack/root/one"}]}`,
 			), nil
+		case "cloudformation list-stacks":
+			if input["NextToken"] == "stacks-page-2" {
+				return []byte(clusterStackSummariesPage2), nil
+			}
+
+			return []byte(clusterStackSummaries), nil
 		case "cloudformation list-stack-resources":
 			if input["StackName"] == nodegroupStackID {
 				return []byte(nodegroupStackResources), nil
@@ -291,6 +318,21 @@ func TestOwnershipCapturePreservesNestedAndDetachedRelationships(t *testing.T) {
 		{
 			Kind:     "nodegroup",
 			Identity: "arn:aws:eks:eu-central-1:123456789012:nodegroup/regional-diagnostic/workers/abc",
+			Parent:   "cluster:arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic|2024-03-14T15:31:44.348Z",
+		},
+		{
+			Kind:     "stack",
+			Identity: deletedAddonStackID,
+			Parent:   "cluster:arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic|2024-03-14T15:31:44.348Z",
+		},
+		{
+			Kind:     "stack",
+			Identity: addonStackID,
+			Parent:   "cluster:arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic|2024-03-14T15:31:44.348Z",
+		},
+		{
+			Kind:     "stack",
+			Identity: nodegroupStackID,
 			Parent:   "cluster:arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic|2024-03-14T15:31:44.348Z",
 		},
 		{
@@ -1014,6 +1056,99 @@ func requireUnboundNodegroupStackRefused(t *testing.T, read stackRead, reason st
 		if (resource.Kind == "stack" && strings.HasPrefix(resource.Parent, "nodegroup:")) ||
 			resource.Kind == "autoscaling-group" {
 			t.Fatalf("an unbound node group stack entered the graph: %#v", resource)
+		}
+	}
+}
+
+// TestOwnershipCaptureNeverClaimsABaselineStack proves a stack of this cluster's name that the
+// pre-create baseline already listed stays out of the ownership graph.
+func TestOwnershipCaptureNeverClaimsABaselineStack(t *testing.T) {
+	t.Parallel()
+	dir := privateBaselineDir(t)
+	baseline := filepath.Join(dir, "baseline.json")
+	pages := emptyPages(t)
+	pages["cloudformation list-stacks"] = json.RawMessage(`{"StackSummaries":[{"StackId":"` +
+		addonStackID + `","StackName":"eksctl-regional-diagnostic-addon-vpc-cni",` +
+		`"StackStatus":"CREATE_COMPLETE"}]}`)
+
+	err := eksinventory.CaptureBaseline(
+		context.Background(), baselineBinding(), baseline, io.Discard,
+		func(_ context.Context, args ...string) ([]byte, error) {
+			return pages[args[0]+" "+args[1]], nil
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	manifest := filepath.Join(dir, "ownership.json")
+
+	err = eksinventory.CaptureOwnership(
+		context.Background(), baselineBinding(), baseline, manifest,
+		eksinventory.OwnershipHints{WorkloadReadComplete: true}, io.Discard, ownershipQuery(t),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got ownershipSnapshot
+
+	err = json.Unmarshal(readPrivateTestFile(t, manifest), &got)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	claimed := make(map[string]bool)
+	for _, resource := range got.Resources {
+		claimed[resource.Identity] = true
+	}
+
+	if claimed[addonStackID] || !claimed[deletedAddonStackID] {
+		t.Fatalf("baseline stack claimed or new stack missed: %#v", got.Resources)
+	}
+}
+
+// TestOwnershipCaptureRefusesAClusterStackUnderAnotherName proves a listed stack whose unique ID
+// names a different stack fails the CloudFormation family instead of entering the graph.
+func TestOwnershipCaptureRefusesAClusterStackUnderAnotherName(t *testing.T) {
+	t.Parallel()
+	dir := privateBaselineDir(t)
+	baseline := captureBaselineFixture(t, dir)
+	manifest := filepath.Join(dir, "ownership.json")
+	query := withStackRead(t, func(command string, _ map[string]any) ([]byte, error, bool) {
+		if command != "list-stacks" {
+			return nil, nil, false
+		}
+
+		return []byte(`{"StackSummaries":[{"StackId":"arn:aws:cloudformation:eu-central-1:` +
+			`123456789012:stack/eksctl-st-eks-1-1-cluster/7",` +
+			`"StackName":"eksctl-regional-diagnostic-addon-vpc-cni","StackStatus":"CREATE_COMPLETE"}]}`,
+		), nil, true
+	})
+
+	err := eksinventory.CaptureOwnership(
+		context.Background(), baselineBinding(), baseline, manifest,
+		eksinventory.OwnershipHints{}, io.Discard, query,
+	)
+	if !errors.Is(err, eksinventory.ErrInventory) {
+		t.Fatalf("a mismatched stack identity was accepted: %v", err)
+	}
+
+	var got ownershipSnapshot
+
+	err = json.Unmarshal(readPrivateTestFile(t, manifest), &got)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	coverage := got.Coverage["cloudformation"]
+	if coverage.ReadComplete || coverage.Reason != "invalid-or-incomplete-data" {
+		t.Fatalf("cloudformation coverage = %#v", coverage)
+	}
+
+	for _, resource := range got.Resources {
+		if strings.Contains(resource.Identity, "eksctl-st-eks-1-1-cluster") {
+			t.Fatalf("a mismatched stack entered the graph: %#v", resource)
 		}
 	}
 }
