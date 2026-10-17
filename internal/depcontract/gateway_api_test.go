@@ -68,6 +68,8 @@ type dependabotUpdate struct {
 	Directories []string           `yaml:"directories"`
 	Allow       []yaml.Node        `yaml:"allow"`
 	Ignore      []dependabotIgnore `yaml:"ignore"`
+	// RebaseStrategy is read by the rebase contract in rebase_strategy_test.go.
+	RebaseStrategy string `yaml:"rebase-strategy"`
 }
 
 //nolint:tagliatelle // Dependabot defines these keys in kebab-case.

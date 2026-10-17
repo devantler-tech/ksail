@@ -23,6 +23,14 @@ updates:
   - package-ecosystem: gomod
     directory: /
     open-pull-requests-limit: 10
+    # Nearly every Go bump edits go.mod and go.sum, so merging one leaves every
+    # other open Go pull request conflicting. The default strategy rebases each
+    # of them, and every rebase re-runs the whole CI. Pull requests parked behind
+    # an upstream release cannot merge however often that happens: six of them
+    # were rebased 53 times between them (ksail#7579). Rebase on request instead:
+    # comment `@dependabot rebase` on the pull request you are about to merge.
+    # internal/depcontract holds this setting.
+    rebase-strategy: disabled
     schedule:
       interval: daily
     cooldown:
