@@ -279,6 +279,8 @@ jobs:
             (.managedNodeGroups[].iam.instanceRolePermissionsBoundary) = strenv(AWS_PERMISSIONS_BOUNDARY_ARN) |
             (.addons[] | select(.name == "vpc-cni" or .name == "aws-ebs-csi-driver") | .permissionsBoundary) = strenv(AWS_PERMISSIONS_BOUNDARY_ARN)
           ' eks.yaml
+          yq -i '.spec.cluster.loadBalancer = "Enabled" | .spec.cluster.eks.experimentalAWSLoadBalancerController = true' ksail.yaml
+          cat ksail.yaml
 
       - name: 🔎 Check EKS capacity before create
         timeout-minutes: 5
@@ -308,6 +310,50 @@ jobs:
           set -euo pipefail
           cd "$KSAIL_EKS_WORKDIR"
           ksail cluster info
+
+      - name: 🧪 AWS Load Balancer Controller values drift — one upgrade then no-op (trial for ksail#7819)
+        timeout-minutes: 25
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$KSAIL_EKS_WORKDIR"
+          release=aws-load-balancer-controller
+          namespace=kube-system
+          field=cluster.loadBalancer.awsLoadBalancerController.chartValues
+          fail() { echo "::error::lbc values trial: $*"; exit 1; }
+          rev() {
+            helm list --all -n "$namespace" -o json | jq -er --arg r "$release" \
+              'map(select(.name == $r)) | select(length == 1) | .[0] | select(.status == "deployed") | .revision | tostring'
+          }
+          diff_json() { local s=0; ksail cluster diff --output json --exit-code >"/tmp/lbc-$1.json" 2>"/tmp/lbc-$1.err" || s=$?; echo "$s"; }
+          only_values_change() {
+            jq -e -s --arg f "$field" 'length == 1 and (.[0] | .totalChanges == 1 and (.inPlaceChanges | length == 1) and .inPlaceChanges[0].field == $f)' "$1" >/dev/null
+          }
+          no_changes() { jq -e -s 'length == 1 and .[0].totalChanges == 0' "$1" >/dev/null; }
+          cp ksail.yaml /tmp/lbc-ksail-before.yaml
+          r0=$(rev) || fail 'controller release is not a single deployed revision'
+          helm get values "$release" -n "$namespace" -o json | jq -S . >/tmp/lbc-original.json
+          echo "original revision $r0; values:"; jq -c 'del(.clusterName)' /tmp/lbc-original.json
+          s=$(diff_json initial); [[ "$s" == 0 ]] && no_changes /tmp/lbc-initial.json || { cat /tmp/lbc-initial.json /tmp/lbc-initial.err; fail "initial diff exit $s, expected 0"; }
+          chart_version=$(helm list -n "$namespace" -o json | jq -er --arg r "$release" 'map(select(.name == $r))[0].chart | sub("^aws-load-balancer-controller-"; "")')
+          helm upgrade "$release" aws-load-balancer-controller --repo https://aws.github.io/eks-charts \
+            -n "$namespace" --version "$chart_version" --reuse-values \
+            --set podAnnotations.ksail-values-trial=seeded --atomic --wait --timeout 10m
+          r1=$(rev); [[ "$r1" == "$((r0 + 1))" ]] || fail "seed revision $r1"
+          cmp -s ksail.yaml /tmp/lbc-ksail-before.yaml || fail 'seed changed ksail.yaml'
+          s=$(diff_json drift); [[ "$s" == 2 ]] && only_values_change /tmp/lbc-drift.json || { cat /tmp/lbc-drift.json /tmp/lbc-drift.err; fail "drift diff exit $s, expected 2 with only $field"; }
+          echo "drift diff reports:"; jq -c '.inPlaceChanges' /tmp/lbc-drift.json
+          ksail cluster update --yes --output json >/tmp/lbc-update.json 2>/tmp/lbc-update.err || { cat /tmp/lbc-update.err; fail 'update failed'; }
+          only_values_change /tmp/lbc-update.json || { cat /tmp/lbc-update.json; fail 'update did not report exactly the values change'; }
+          r2=$(rev); [[ "$r2" == "$((r1 + 1))" ]] || fail "reconcile revision $r2"
+          helm get values "$release" -n "$namespace" -o json | jq -S . >/tmp/lbc-updated.json
+          cmp -s /tmp/lbc-original.json /tmp/lbc-updated.json || { diff /tmp/lbc-original.json /tmp/lbc-updated.json || true; fail 'update did not restore the values'; }
+          kubectl rollout status deployment/aws-load-balancer-controller -n "$namespace" --timeout=600s
+          s=$(diff_json repeated); [[ "$s" == 0 ]] && no_changes /tmp/lbc-repeated.json || { cat /tmp/lbc-repeated.json; fail "repeated diff exit $s"; }
+          ksail cluster update --yes --output json >/tmp/lbc-repeat.json 2>/tmp/lbc-repeat.err || fail 'repeat update failed'
+          no_changes /tmp/lbc-repeat.json || { cat /tmp/lbc-repeat.json; fail 'repeat update was not a no-op'; }
+          r3=$(rev); [[ "$r3" == "$r2" ]] || fail "repeat update changed revision to $r3"
+          echo "lbc values trial: PASSED — revisions $r0 → seeded $r1 → restored $r2 → repeat $r3"
 
       - name: 🔐 Refresh AWS credentials before EKS update and cleanup
         if: always() && steps.init.outcome == 'success'
