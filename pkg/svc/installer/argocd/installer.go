@@ -65,6 +65,19 @@ func (a *Installer) Uninstall(ctx context.Context) error {
 	return nil
 }
 
+// ValuesDrifted reports whether the installed Argo CD release carries other
+// user-supplied values than this installer renders (ksail#7772), using the
+// shared comparison: a missing or Flux- or Argo CD-owned release is not drift.
+func (a *Installer) ValuesDrifted(ctx context.Context) (bool, error) {
+	drifted, err := helmutil.NewBase("argocd", a.client, a.timeout, nil, a.chartSpec()).
+		ValuesDrifted(ctx)
+	if err != nil {
+		return false, fmt.Errorf("compare Argo CD values: %w", err)
+	}
+
+	return drifted, nil
+}
+
 // Images returns the container images used by Argo CD.
 func (a *Installer) Images(ctx context.Context) ([]string, error) {
 	images, err := helmutil.ImagesFromChart(ctx, a.client, a.chartSpec())
