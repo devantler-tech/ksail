@@ -173,10 +173,9 @@ func (e *Exporter) findExportNode(
 }
 
 // selectNodeHoldingImages returns the candidate holding the most of the
-// requested images, and that node's image listing. A node whose images cannot
-// be listed is never preferred over one that can; when no node can be listed,
-// the first (preferred) candidate is returned with a nil listing, which keeps
-// the single-node behaviour of listing it again and falling back from there.
+// requested images, and that node's image listing (nil when it could not be
+// read). When no node holds any of them, or no node can be listed, the first
+// (preferred) candidate is returned, which is the single-node behaviour.
 func (e *Exporter) selectNodeHoldingImages(
 	ctx context.Context,
 	candidates []string,
@@ -184,16 +183,19 @@ func (e *Exporter) selectNodeHoldingImages(
 ) (string, []string) {
 	normalizedRequested := normalizeImageRefs(requestedImages)
 
-	bestNode := candidates[0]
+	var preferredImages, bestImages []string
 
-	var bestImages []string
+	bestNode := ""
+	bestScore := 0
 
-	bestScore := -1
-
-	for _, nodeName := range candidates {
+	for index, nodeName := range candidates {
 		localImages, err := e.listImagesInNode(ctx, nodeName)
 		if err != nil {
 			continue
+		}
+
+		if index == 0 {
+			preferredImages = localImages
 		}
 
 		score := len(localImages)
@@ -208,6 +210,10 @@ func (e *Exporter) selectNodeHoldingImages(
 		if len(normalizedRequested) > 0 && score == len(normalizedRequested) {
 			break
 		}
+	}
+
+	if bestNode == "" {
+		return candidates[0], preferredImages
 	}
 
 	return bestNode, bestImages

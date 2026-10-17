@@ -19,11 +19,13 @@ type multiNodeExportCase struct {
 	distribution v1alpha1.Distribution
 	nodes        []container.Summary
 	// imageLists maps each node that is probed to its `ctr images list -q` output.
-	imageLists     map[string]string
-	exportNode     string
-	tmpPath        string
-	requested      []string
-	expectedExport []string
+	imageLists map[string]string
+	// controlPlaneListFails makes the Kind control-plane's image listing fail.
+	controlPlaneListFails bool
+	exportNode            string
+	tmpPath               string
+	requested             []string
+	expectedExport        []string
 }
 
 func kindMultiNodeSummaries() []container.Summary {
@@ -54,6 +56,14 @@ func runMultiNodeExportTest(t *testing.T, testCase multiNodeExportCase) {
 
 	// Each probed node is listed exactly once: the chosen node's listing is
 	// reused to resolve the requested refs, never read a second time.
+	if testCase.controlPlaneListFails {
+		setupKindExecFailWithCmdForExporter(
+			ctx, t, mockClient,
+			[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
+			"ctr: list failed",
+		)
+	}
+
 	for nodeName, imageList := range testCase.imageLists {
 		setupExecMockWithStdoutForExporter(
 			ctx, t, mockClient, nodeName,
@@ -195,5 +205,42 @@ func TestExportAllUsesNodeHoldingMostImages(t *testing.T) {
 			"registry.k8s.io/pause:3.10",
 			"docker.io/traefik/whoami:v1.10",
 		},
+	})
+}
+
+// A node that cannot be listed is skipped rather than chosen blindly.
+func TestExportSkipsNodeWhoseImagesCannotBeListed(t *testing.T) {
+	t.Parallel()
+
+	runMultiNodeExportTest(t, multiNodeExportCase{
+		distribution:          v1alpha1.DistributionVanilla,
+		nodes:                 kindMultiNodeSummaries()[:2],
+		controlPlaneListFails: true,
+		imageLists: map[string]string{
+			"my-cluster-worker": "docker.io/traefik/whoami:v1.10\n",
+		},
+		exportNode:     "my-cluster-worker",
+		tmpPath:        kindExporterTarPath,
+		requested:      []string{"traefik/whoami:v1.10"},
+		expectedExport: []string{"docker.io/traefik/whoami:v1.10"},
+	})
+}
+
+// An image held by no node keeps the preferred node, so the export fails there
+// with the existing message naming the image.
+func TestExportKeepsPreferredNodeWhenNoNodeHoldsImage(t *testing.T) {
+	t.Parallel()
+
+	runMultiNodeExportTest(t, multiNodeExportCase{
+		distribution: v1alpha1.DistributionVanilla,
+		nodes:        kindMultiNodeSummaries()[:2],
+		imageLists: map[string]string{
+			"my-cluster-control-plane": "registry.k8s.io/pause:3.10\n",
+			"my-cluster-worker":        "registry.k8s.io/pause:3.10\n",
+		},
+		exportNode:     "my-cluster-control-plane",
+		tmpPath:        kindExporterTarPath,
+		requested:      []string{"busybox:latest"},
+		expectedExport: []string{"docker.io/library/busybox:latest"},
 	})
 }
