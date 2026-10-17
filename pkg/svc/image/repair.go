@@ -47,7 +47,7 @@ func (e *Exporter) tryExportImagesWithRepair(
 
 	refreshedImages := images
 	if len(resolveImages) > 0 {
-		refreshedImages = e.resolveSpecifiedImages(ctx, nodeName, resolveImages)
+		refreshedImages = e.resolveSpecifiedImages(ctx, nodeName, resolveImages, nil)
 	}
 
 	refreshedImages = preferSuccessfulRepairRefs(refreshedImages, successfulRepairRefs)
