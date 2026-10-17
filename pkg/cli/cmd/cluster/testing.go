@@ -83,6 +83,15 @@ func SetHcloudCCMInstallerFactoryForTests(
 	})
 }
 
+// SetMetalLBInstallerFactoryForTests overrides the MetalLB installer factory.
+func SetMetalLBInstallerFactoryForTests(
+	factory func(*v1alpha1.Cluster) (installer.Installer, error),
+) func() {
+	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
+		f.MetalLB = factory
+	})
+}
+
 // SetArgoCDInstallerFactoryForTests overrides the Argo CD installer factory.
 func SetArgoCDInstallerFactoryForTests(
 	factory func(*v1alpha1.Cluster) (installer.Installer, error),

@@ -69,6 +69,17 @@ const CSIValuesField = "cluster.csi.chartValues"
 // cluster.loadBalancer change on Talos × Hetzner.
 const HcloudCCMValuesField = "cluster.loadBalancer.hcloudCCM.chartValues"
 
+// MetalLBValuesField is the diff key for MetalLB chart values that differ from
+// the ones this KSail version renders. Reconciliation routes it to the same
+// Helm upgrade of MetalLB as a cluster.loadBalancer change on Talos × Docker.
+const MetalLBValuesField = "cluster.loadBalancer.metallb.chartValues"
+
+// AWSLoadBalancerControllerValuesField is the diff key for AWS Load Balancer
+// Controller chart values that differ from the ones this KSail version renders.
+// Reconciliation routes it to the same Helm upgrade of the controller as a
+// cluster.loadBalancer change on EKS.
+const AWSLoadBalancerControllerValuesField = "cluster.loadBalancer.awsLoadBalancerController.chartValues"
+
 // MetricsServerValuesField is the diff key for metrics-server chart values that
 // differ from the ones this KSail version renders. Reconciliation routes it to
 // the same metrics-server Helm upgrade as a cluster.metricsServer change.
