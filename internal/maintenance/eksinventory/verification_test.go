@@ -195,7 +195,7 @@ func TestOwnershipVerificationRejectsACompleteFamilyCarryingAFailedRead(t *testi
 	t.Parallel()
 
 	requireCoverageRejectedBeforeAWSReads(
-		t, "compute", "lastRead", "cloudformation:describe-stack-resources",
+		t, "compute", "lastRead", "cloudformation:describe-stacks",
 	)
 }
 

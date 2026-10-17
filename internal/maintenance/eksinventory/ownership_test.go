@@ -45,6 +45,20 @@ type ownershipCoverage struct {
 
 var errTestClusterNotFound = errors.New("cluster not found")
 
+// The node group stack as eksctl names it and as CloudFormation lists it. The role that runs the
+// capture holds CloudFormation access on eksctl stack ARNs only, so the stack is read by its name.
+const (
+	nodegroupStackName = "eksctl-regional-diagnostic-nodegroup-workers"
+	nodegroupStackID   = "arn:aws:cloudformation:eu-central-1:123456789012:stack/" +
+		nodegroupStackName + "/0f6c5e40-8b5d-11f1-9a3e-06d1c2b3a4f5"
+	//nolint:lll // One literal provider response keeps the real field set visible.
+	nodegroupStackResources = `{"StackResourceSummaries":[` +
+		`{"LogicalResourceId":"LaunchTemplate","PhysicalResourceId":"lt-0123456789abcdef0","ResourceType":"AWS::EC2::LaunchTemplate","LastUpdatedTimestamp":"2026-10-16T20:12:40.512Z","ResourceStatus":"CREATE_COMPLETE","DriftInformation":{"StackResourceDriftStatus":"NOT_CHECKED"}},` +
+		`{"LogicalResourceId":"ManagedNodeGroup","PhysicalResourceId":"regional-diagnostic/workers","ResourceType":"AWS::EKS::Nodegroup","LastUpdatedTimestamp":"2026-10-16T20:27:29.044Z","ResourceStatus":"UPDATE_COMPLETE","DriftInformation":{"StackResourceDriftStatus":"NOT_CHECKED"}},` +
+		`{"LogicalResourceId":"NodeInstanceRole","PhysicalResourceId":"eksctl-regional-diagnostic-nodegrou-NodeInstanceRole-AbCdEfGh1234","ResourceType":"AWS::IAM::Role","LastUpdatedTimestamp":"2026-10-16T20:11:58.913Z","ResourceStatus":"CREATE_COMPLETE","DriftInformation":{"StackResourceDriftStatus":"NOT_CHECKED"}}` +
+		`]}`
+)
+
 func captureBaselineFixture(t *testing.T, dir string) string {
 	t.Helper()
 
@@ -84,10 +98,19 @@ func ownershipQuery(t *testing.T) eksinventory.Query {
 				`{"cluster":{"arn":"arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic","createdAt":"2024-03-14T15:31:44.348Z"}}`,
 			), nil
 		case "cloudformation describe-stacks":
+			if input["StackName"] == nodegroupStackName {
+				return []byte(`{"Stacks":[{"StackId":"` + nodegroupStackID + `","StackName":"` +
+					nodegroupStackName + `","StackStatus":"UPDATE_COMPLETE"}]}`), nil
+			}
+
 			return []byte(
 				`{"Stacks":[{"StackId":"arn:aws:cloudformation:eu-central-1:123456789012:stack/root/one"}]}`,
 			), nil
 		case "cloudformation list-stack-resources":
+			if input["StackName"] == nodegroupStackID {
+				return []byte(nodegroupStackResources), nil
+			}
+
 			stack := input["StackName"]
 			if stack == "arn:aws:cloudformation:eu-central-1:123456789012:stack/root/one" {
 				if input["NextToken"] == "root-page-2" {
@@ -108,14 +131,6 @@ func ownershipQuery(t *testing.T) eksinventory.Query {
 			}
 
 			return []byte(`{"StackResourceSummaries":[]}`), nil
-		case "cloudformation describe-stack-resources":
-			if input["PhysicalResourceId"] != "regional-diagnostic/workers" {
-				t.Fatalf("nodegroup stack lookup is not bound to its cluster: %#v", input)
-			}
-
-			return []byte(
-				`{"StackResources":[{"StackId":"arn:aws:cloudformation:eu-central-1:123456789012:stack/nodegroup/three","LogicalResourceId":"ManagedNodeGroup","PhysicalResourceId":"regional-diagnostic/workers","ResourceType":"AWS::EKS::Nodegroup","ResourceStatus":"CREATE_COMPLETE"},{"StackId":"arn:aws:cloudformation:eu-central-1:123456789012:stack/nodegroup/three","LogicalResourceId":"LaunchTemplate","PhysicalResourceId":"lt-0123456789abcdef0","ResourceType":"AWS::EC2::LaunchTemplate","ResourceStatus":"CREATE_COMPLETE"}]}`,
-			), nil
 		case "eks list-nodegroups":
 			return []byte(`{"nodegroups":["workers"]}`), nil
 		case "eks describe-nodegroup":
@@ -280,13 +295,13 @@ func TestOwnershipCapturePreservesNestedAndDetachedRelationships(t *testing.T) {
 		},
 		{
 			Kind:     "stack",
-			Identity: "arn:aws:cloudformation:eu-central-1:123456789012:stack/nested/two",
-			Parent:   "stack:arn:aws:cloudformation:eu-central-1:123456789012:stack/root/one",
+			Identity: nodegroupStackID,
+			Parent:   "nodegroup:arn:aws:eks:eu-central-1:123456789012:nodegroup/regional-diagnostic/workers/abc",
 		},
 		{
 			Kind:     "stack",
-			Identity: "arn:aws:cloudformation:eu-central-1:123456789012:stack/nodegroup/three",
-			Parent:   "nodegroup:arn:aws:eks:eu-central-1:123456789012:nodegroup/regional-diagnostic/workers/abc",
+			Identity: "arn:aws:cloudformation:eu-central-1:123456789012:stack/nested/two",
+			Parent:   "stack:arn:aws:cloudformation:eu-central-1:123456789012:stack/root/one",
 		},
 		{
 			Kind:     "stack",
@@ -794,7 +809,8 @@ func TestOwnershipCaptureNamesTheFailedReadWithoutIdentifiers(t *testing.T) {
 	manifest := filepath.Join(dir, "ownership.json")
 	base := ownershipQuery(t)
 	query := func(ctx context.Context, args ...string) ([]byte, error) {
-		if args[0] == "cloudformation" && args[1] == "describe-stack-resources" {
+		if args[0] == "cloudformation" && args[1] == "describe-stacks" &&
+			strings.Contains(args[8], nodegroupStackName) {
 			return nil, fs.ErrPermission
 		}
 
@@ -814,7 +830,7 @@ func TestOwnershipCaptureNamesTheFailedReadWithoutIdentifiers(t *testing.T) {
 	summary := output.String()
 
 	const failedCompute = "compute: read=unknown ownership=partial recorded=1" +
-		" reason=access-denied last-read=cloudformation:describe-stack-resources\n"
+		" reason=access-denied last-read=cloudformation:describe-stacks\n"
 	if !strings.Contains(summary, failedCompute) {
 		t.Fatalf("summary does not name the failed read:\n%s", summary)
 	}
@@ -837,7 +853,7 @@ func requirePrivateFailedRead(t *testing.T, manifest string) {
 
 	compute := got.Coverage["compute"]
 	if compute.ReadComplete || compute.Reason != "access-denied" ||
-		compute.LastRead != "cloudformation:describe-stack-resources" {
+		compute.LastRead != "cloudformation:describe-stacks" {
 		t.Fatalf("private manifest did not keep the failed read: %#v", compute)
 	}
 
@@ -861,6 +877,143 @@ func requirePublicOwnershipSummary(t *testing.T, summary string) {
 	for _, identifier := range []string{"123456789012", "arn:", "regional-diagnostic", "workers"} {
 		if strings.Contains(summary, identifier) {
 			t.Fatalf("public summary printed identifier %q:\n%s", identifier, summary)
+		}
+	}
+}
+
+// stackRead answers one CloudFormation read for a binding case; handled reports whether it did.
+type stackRead func(command string, input map[string]any) (data []byte, err error, handled bool)
+
+// TestOwnershipCaptureRefusesANodegroupStackItCannotBind proves the node group stack enters the
+// ownership graph only when the stack eksctl named for the node group lists exactly that node group.
+//
+//nolint:funlen // Each case names one way a real stack can fail the binding.
+func TestOwnershipCaptureRefusesANodegroupStackItCannotBind(t *testing.T) {
+	t.Parallel()
+
+	nodeGroupRow := func(physicalID string) string {
+		return `{"LogicalResourceId":"ManagedNodeGroup","PhysicalResourceId":"` + physicalID +
+			`","ResourceType":"AWS::EKS::Nodegroup","ResourceStatus":"CREATE_COMPLETE"}`
+	}
+
+	stackList := func(rows ...string) stackRead {
+		return func(command string, input map[string]any) ([]byte, error, bool) {
+			if command != "list-stack-resources" || input["StackName"] != nodegroupStackID {
+				return nil, nil, false
+			}
+
+			return []byte(`{"StackResourceSummaries":[` + strings.Join(rows, ",") + `]}`), nil, true
+		}
+	}
+
+	stackLookup := func(data []byte, err error) stackRead {
+		return func(command string, input map[string]any) ([]byte, error, bool) {
+			if command != "describe-stacks" || input["StackName"] != nodegroupStackName {
+				return nil, nil, false
+			}
+
+			return data, err, true
+		}
+	}
+
+	for _, test := range []struct {
+		name   string
+		reason string
+		read   stackRead
+	}{
+		{
+			name:   "stack is missing",
+			reason: "not-found",
+			read:   stackLookup(nil, eksinventory.ResourceNotFoundForTest()),
+		},
+		{
+			name:   "stack identity names another stack",
+			reason: "invalid-or-incomplete-data",
+			read: stackLookup([]byte(`{"Stacks":[{"StackId":"arn:aws:cloudformation:eu-central-1:`+
+				`123456789012:stack/`+nodegroupStackName+`-other/0f6c5e40"}]}`), nil),
+		},
+		{
+			name:   "stack lists no node group",
+			reason: "invalid-or-incomplete-data",
+			read:   stackList(),
+		},
+		{
+			name:   "stack lists another node group",
+			reason: "invalid-or-incomplete-data",
+			read:   stackList(nodeGroupRow("other-cluster/workers")),
+		},
+		{
+			name:   "stack lists a second node group",
+			reason: "invalid-or-incomplete-data",
+			read: stackList(
+				nodeGroupRow("regional-diagnostic/workers"), nodeGroupRow("regional-diagnostic/workers"),
+			),
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			requireUnboundNodegroupStackRefused(t, test.read, test.reason)
+		})
+	}
+}
+
+// withStackRead answers the CloudFormation reads read handles and leaves the rest to the fixture.
+func withStackRead(t *testing.T, read stackRead) eksinventory.Query {
+	t.Helper()
+
+	base := ownershipQuery(t)
+
+	return func(ctx context.Context, args ...string) ([]byte, error) {
+		var input map[string]any
+
+		err := json.Unmarshal([]byte(args[8]), &input)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if args[0] == "cloudformation" {
+			data, readErr, handled := read(args[1], input)
+			if handled {
+				return data, readErr
+			}
+		}
+
+		return base(ctx, args...)
+	}
+}
+
+func requireUnboundNodegroupStackRefused(t *testing.T, read stackRead, reason string) {
+	t.Helper()
+
+	dir := privateBaselineDir(t)
+	baseline := captureBaselineFixture(t, dir)
+	manifest := filepath.Join(dir, "ownership.json")
+
+	err := eksinventory.CaptureOwnership(
+		context.Background(), baselineBinding(), baseline, manifest,
+		eksinventory.OwnershipHints{}, io.Discard, withStackRead(t, read),
+	)
+	if !errors.Is(err, eksinventory.ErrInventory) {
+		t.Fatalf("an unbound node group stack was accepted: %v", err)
+	}
+
+	var got ownershipSnapshot
+
+	err = json.Unmarshal(readPrivateTestFile(t, manifest), &got)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	compute := got.Coverage["compute"]
+	if compute.ReadComplete || compute.Reason != reason {
+		t.Fatalf("compute coverage = %#v, want reason %q", compute, reason)
+	}
+
+	for _, resource := range got.Resources {
+		if (resource.Kind == "stack" && strings.HasPrefix(resource.Parent, "nodegroup:")) ||
+			resource.Kind == "autoscaling-group" {
+			t.Fatalf("an unbound node group stack entered the graph: %#v", resource)
 		}
 	}
 }

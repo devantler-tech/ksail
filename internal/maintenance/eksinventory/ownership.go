@@ -515,22 +515,12 @@ func clusterCreationIdentity(value json.RawMessage) (string, error) {
 }
 
 func (collector *ownershipCollector) captureStacks(accountID, parent string) error {
-	name := "eksctl-" + collector.binding.ClusterName + "-cluster"
-
-	payload, err := collector.readSingle("cloudformation", describeStacks, map[string]any{
-		"StackName": name,
-	})
+	stackID, err := collector.stackIDByName("eksctl-" + collector.binding.ClusterName + "-cluster")
 	if err != nil {
 		return err
 	}
 
-	rows, err := records(payload, []string{"Stacks"})
-	if err != nil || len(rows) != 1 {
-		return fmt.Errorf("root stack lookup incomplete: %w", ErrInventory)
-	}
-
-	stackID, err := stringField(rows[0], "StackId")
-	if err != nil || !strings.Contains(stackID, ":"+accountID+":stack/") {
+	if !strings.Contains(stackID, ":"+accountID+":stack/") {
 		return fmt.Errorf("invalid root stack identity: %w", ErrInventory)
 	}
 
@@ -539,13 +529,50 @@ func (collector *ownershipCollector) captureStacks(accountID, parent string) err
 	return collector.captureStackResources(stackID, make(map[string]bool))
 }
 
-//nolint:cyclop // Provider rows are validated field by field before entering the graph.
+// stackIDByName reads one stack by its exact name and returns its unique stack ID. The caller
+// binds the ID to the stack it expected.
+func (collector *ownershipCollector) stackIDByName(name string) (string, error) {
+	payload, err := collector.readSingle(cloudFormationService, describeStacks, map[string]any{
+		"StackName": name,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	rows, err := records(payload, []string{"Stacks"})
+	if err != nil || len(rows) != 1 {
+		return "", fmt.Errorf("stack lookup incomplete: %w", ErrInventory)
+	}
+
+	return stringField(rows[0], "StackId")
+}
+
+// stackResource is one validated row of a stack's resource list.
+type stackResource struct {
+	resourceType string
+	physicalID   string
+}
+
 func (collector *ownershipCollector) captureStackResources(
 	stackID string,
 	seen map[string]bool,
 ) error {
+	resources, err := collector.readStackResources(stackID, seen)
+	if err != nil {
+		return err
+	}
+
+	return collector.recordStackResources(stackID, resources, seen)
+}
+
+// readStackResources reads every page of a stack's resource list and validates each row before any
+// of it can enter the ownership graph.
+func (collector *ownershipCollector) readStackResources(
+	stackID string,
+	seen map[string]bool,
+) ([]stackResource, error) {
 	if seen[stackID] {
-		return fmt.Errorf("nested stack cycle: %w", ErrInventory)
+		return nil, fmt.Errorf("nested stack cycle: %w", ErrInventory)
 	}
 
 	seen[stackID] = true
@@ -555,43 +582,60 @@ func (collector *ownershipCollector) captureStackResources(
 		"StackResourceSummaries", "NextToken", "NextToken",
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
+
+	resources := make([]stackResource, 0, len(rows))
 
 	for _, row := range rows {
 		_, fieldErr := stringField(row, "LogicalResourceId")
 		if fieldErr != nil {
-			return fieldErr
+			return nil, fieldErr
 		}
 
 		resourceType, fieldErr := stringField(row, "ResourceType")
 		if fieldErr != nil {
-			return fieldErr
+			return nil, fieldErr
 		}
 
 		_, fieldErr = stringField(row, "ResourceStatus")
 		if fieldErr != nil {
-			return fieldErr
+			return nil, fieldErr
 		}
 
 		physical, fieldErr := optionalStringField(row, "PhysicalResourceId")
 		if fieldErr != nil {
-			return fieldErr
+			return nil, fieldErr
 		}
 
-		if physical == "" {
+		resources = append(
+			resources,
+			stackResource{resourceType: resourceType, physicalID: physical},
+		)
+	}
+
+	return resources, nil
+}
+
+func (collector *ownershipCollector) recordStackResources(
+	stackID string,
+	resources []stackResource,
+	seen map[string]bool,
+) error {
+	for _, resource := range resources {
+		if resource.physicalID == "" {
 			continue
 		}
 
-		kind := cloudFormationKind(resourceType)
+		kind := cloudFormationKind(resource.resourceType)
 		if kind == "" {
 			continue
 		}
 
-		collector.add(kind, physical, "stack:"+stackID)
+		collector.add(kind, resource.physicalID, "stack:"+stackID)
 
 		if kind == stackKind {
-			err = collector.captureStackResources(physical, seen)
+			err := collector.captureStackResources(resource.physicalID, seen)
 			if err != nil {
 				return err
 			}
@@ -644,10 +688,7 @@ func (collector *ownershipCollector) captureCompute(clusterIdentity string) erro
 
 		collector.add(nodegroupKind, arn, "cluster:"+clusterIdentity)
 
-		err = collector.capturePhysicalStack(
-			collector.binding.ClusterName+"/"+name,
-			"nodegroup:"+arn,
-		)
+		err = collector.captureNodegroupStack(name, "nodegroup:"+arn)
 		if err != nil {
 			return err
 		}
@@ -678,53 +719,53 @@ func (collector *ownershipCollector) captureCompute(clusterIdentity string) erro
 	return nil
 }
 
-func (collector *ownershipCollector) capturePhysicalStack(physicalID, parent string) error {
-	payload, err := collector.readSingle(
-		"cloudformation",
-		"describe-stack-resources",
-		map[string]any{
-			"PhysicalResourceId": physicalID,
-		},
-	)
+// captureNodegroupStack records the CloudFormation stack eksctl created for a managed node group.
+// The smoke role's CloudFormation grant is scoped to eksctl stack ARNs, so the stack is read by the
+// exact name eksctl gives it, with the same two reads the cluster stack uses, rather than looked up
+// by physical resource ID, a request that names no stack. The binding is then checked against the
+// stack's own resource list: it must hold exactly one node group, and that node group's physical
+// ID must be "<cluster>/<node group>".
+func (collector *ownershipCollector) captureNodegroupStack(nodegroupName, parent string) error {
+	stackName := "eksctl-" + collector.binding.ClusterName + "-nodegroup-" + nodegroupName
+
+	stackID, err := collector.stackIDByName(stackName)
 	if err != nil {
 		return err
 	}
 
-	rows, err := records(payload, []string{"StackResources"})
-	if err != nil || len(rows) == 0 {
-		return fmt.Errorf("physical stack lookup incomplete: %w", ErrInventory)
+	if !strings.HasPrefix(stackID, "arn:aws:cloudformation:"+collector.binding.Region+":"+
+		collector.manifest.AccountID+":stack/"+stackName+"/") {
+		return fmt.Errorf("nodegroup stack identity mismatch: %w", ErrInventory)
 	}
 
-	stackID := ""
-	matches := 0
+	seen := make(map[string]bool)
 
-	for _, row := range rows {
-		actual, fieldErr := optionalStringField(row, "PhysicalResourceId")
-		if fieldErr != nil {
-			return fieldErr
-		}
+	resources, err := collector.readStackResources(stackID, seen)
+	if err != nil {
+		return err
+	}
 
-		if actual != physicalID {
+	nodegroups := 0
+
+	for _, resource := range resources {
+		if resource.resourceType != "AWS::EKS::Nodegroup" {
 			continue
 		}
 
-		matches++
-
-		stackID, fieldErr = stringField(row, "StackId")
-		if fieldErr != nil {
-			return fieldErr
+		if resource.physicalID != collector.binding.ClusterName+"/"+nodegroupName {
+			return fmt.Errorf("nodegroup stack holds another node group: %w", ErrInventory)
 		}
+
+		nodegroups++
 	}
 
-	prefix := "arn:aws:cloudformation:" + collector.binding.Region + ":" +
-		collector.manifest.AccountID + ":stack/"
-	if matches != 1 || !strings.HasPrefix(stackID, prefix) {
-		return fmt.Errorf("physical stack identity mismatch: %w", ErrInventory)
+	if nodegroups != 1 {
+		return fmt.Errorf("nodegroup stack does not hold its node group: %w", ErrInventory)
 	}
 
 	collector.add(stackKind, stackID, parent)
 
-	return collector.captureStackResources(stackID, make(map[string]bool))
+	return collector.recordStackResources(stackID, resources, seen)
 }
 
 //nolint:cyclop // Lookup, identity binding, and child extraction are separate fail-closed checks.
