@@ -80,6 +80,11 @@ const MetalLBValuesField = "cluster.loadBalancer.metallb.chartValues"
 // cluster.loadBalancer change on EKS.
 const AWSLoadBalancerControllerValuesField = "cluster.loadBalancer.awsLoadBalancerController.chartValues"
 
+// ArgoCDValuesField is the diff key for Argo CD chart values that differ from
+// the ones this KSail version renders. Reconciliation routes it to the same
+// Helm upgrade of Argo CD as a cluster.gitOpsEngine change to ArgoCD.
+const ArgoCDValuesField = "cluster.gitOpsEngine.argocd.chartValues"
+
 // MetricsServerValuesField is the diff key for metrics-server chart values that
 // differ from the ones this KSail version renders. Reconciliation routes it to
 // the same metrics-server Helm upgrade as a cluster.metricsServer change.

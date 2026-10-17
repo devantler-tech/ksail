@@ -89,6 +89,11 @@ type componentReconciler struct {
 	// failure for the other field.
 	hcloudCCMInstalled bool
 	hcloudCCMErr       error
+	// argoCDInstalled coalesces a cluster.gitOpsEngine change to ArgoCD and
+	// Argo CD chart-values drift into one Helm install/upgrade per pass;
+	// argoCDErr replays the first attempt's failure for the other field.
+	argoCDInstalled bool
+	argoCDErr       error
 	// loadBalancerReconciled coalesces the generic load-balancer field and the
 	// EKS-specific controller opt-in when both change in one update pass.
 	loadBalancerReconciled bool
@@ -205,6 +210,7 @@ func (r *componentReconciler) handlerForField(
 	handlers[specdiff.CiliumValuesField] = r.reconcileCiliumValues
 	handlers[specdiff.CSIValuesField] = r.reconcileCSIValues
 	handlers[specdiff.HcloudCCMValuesField] = r.reconcileHcloudCCMValues
+	handlers[specdiff.ArgoCDValuesField] = r.reconcileArgoCDValues
 	handlers[specdiff.MetalLBValuesField] = r.reconcileLoadBalancerValues
 	handlers[specdiff.AWSLoadBalancerControllerValuesField] = r.reconcileLoadBalancerValues
 
@@ -244,6 +250,7 @@ func isComponentReconcileField(field string) bool {
 		specdiff.CiliumValuesField,
 		specdiff.CSIValuesField,
 		specdiff.HcloudCCMValuesField,
+		specdiff.ArgoCDValuesField,
 		specdiff.MetalLBValuesField,
 		specdiff.AWSLoadBalancerControllerValuesField:
 		return true
@@ -842,15 +849,43 @@ func (r *componentReconciler) reconcileGitOpsEngine(
 
 		return nil
 	case v1alpha1.GitOpsEngineArgoCD:
-		err := setup.InstallArgoCDSilent(ctx, r.clusterCfg, r.factories)
-		if err != nil {
-			return fmt.Errorf("failed to install ArgoCD: %w", err)
-		}
-
-		return nil
+		return r.installArgoCDOnce(ctx)
 	default:
 		return nil
 	}
+}
+
+// reconcileArgoCDValues upgrades Argo CD to the chart values this KSail
+// version renders when the installed release carries other values
+// (ksail#7772). It re-checks that KSail installs Argo CD, so a stale drift
+// change never installs it on another cluster.
+func (r *componentReconciler) reconcileArgoCDValues(
+	ctx context.Context,
+	_ clusterupdate.Change,
+) error {
+	if !ksailInstallsArgoCD(r.clusterCfg) {
+		return nil
+	}
+
+	return r.installArgoCDOnce(ctx)
+}
+
+// installArgoCDOnce runs the Argo CD Helm install/upgrade at most once per
+// update pass, replaying the first outcome for every later field that maps to
+// it.
+func (r *componentReconciler) installArgoCDOnce(ctx context.Context) error {
+	if r.argoCDInstalled {
+		return r.argoCDErr
+	}
+
+	r.argoCDInstalled = true
+
+	err := setup.InstallArgoCDSilent(ctx, r.clusterCfg, r.factories)
+	if err != nil {
+		r.argoCDErr = fmt.Errorf("failed to install ArgoCD: %w", err)
+	}
+
+	return r.argoCDErr
 }
 
 // uninstallGitOpsEngine uninstalls the old GitOps engine.

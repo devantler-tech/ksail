@@ -149,6 +149,27 @@ func ksailInstallsHcloudCCM(clusterCfg *v1alpha1.Cluster) bool {
 		clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderHetzner
 }
 
+// argoCDValuesProbe compares Argo CD's values (ksail#7772): its SOPS
+// decryption sidecar and high-availability settings. The Flux operator chart
+// is not probed because KSail renders no values for it; Flux's configuration
+// lives on the FluxInstance, which has its own drift checks.
+func argoCDValuesProbe() chartValuesDriftProbe {
+	return chartValuesDriftProbe{
+		component: "argocd",
+		field:     specdiff.ArgoCDValuesField,
+		needed:    ksailInstallsArgoCD,
+		factory: func(factories *setup.InstallerFactories) installerFactory {
+			return factories.ArgoCD
+		},
+	}
+}
+
+// ksailInstallsArgoCD reports whether the configuration has KSail install
+// Argo CD.
+func ksailInstallsArgoCD(clusterCfg *v1alpha1.Cluster) bool {
+	return setup.GetComponentRequirements(clusterCfg).NeedsArgoCD
+}
+
 // metalLBValuesProbe compares MetalLB's values (ksail#7771). Only Talos on
 // Docker installs MetalLB, and only while load balancers are Enabled. KSail
 // renders no chart values for it today (its address pool is applied as a
@@ -213,6 +234,7 @@ func chartValuesDriftProbes() []chartValuesDriftProbe {
 		ciliumValuesProbe(),
 		hetznerCSIValuesProbe(),
 		hcloudCCMValuesProbe(),
+		argoCDValuesProbe(),
 		metalLBValuesProbe(),
 		awsLoadBalancerControllerValuesProbe(),
 	}
