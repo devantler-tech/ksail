@@ -45,6 +45,10 @@ type ownershipCoverage struct {
 
 var errTestClusterNotFound = errors.New("cluster not found")
 
+// rootStackID is the cluster's root stack as eksctl names it, "eksctl-<cluster>-cluster".
+const rootStackID = "arn:aws:cloudformation:eu-central-1:123456789012:stack/" +
+	"eksctl-regional-diagnostic-cluster/2c4e6a80-8b5d-11f1-9a3e-06d1c2b3a4f5"
+
 // The node group stack as eksctl names it and as CloudFormation lists it. The role that runs the
 // capture holds CloudFormation access on eksctl stack ARNs only, so the stack is read by its name.
 const (
@@ -67,7 +71,7 @@ const (
 	// unrelated stack, which the capture must not claim.
 	//nolint:lll // Literal provider responses keep the real field set visible.
 	clusterStackSummaries = `{"StackSummaries":[` +
-		`{"StackId":"arn:aws:cloudformation:eu-central-1:123456789012:stack/root/one","StackName":"eksctl-regional-diagnostic-cluster","CreationTime":"2026-10-16T20:01:12.004Z","StackStatus":"CREATE_COMPLETE","DriftInformation":{"StackDriftStatus":"NOT_CHECKED"}},` +
+		`{"StackId":"` + rootStackID + `","StackName":"eksctl-regional-diagnostic-cluster","CreationTime":"2026-10-16T20:01:12.004Z","StackStatus":"CREATE_COMPLETE","DriftInformation":{"StackDriftStatus":"NOT_CHECKED"}},` +
 		`{"StackId":"` + nodegroupStackID + `","StackName":"` + nodegroupStackName + `","CreationTime":"2026-10-16T20:11:40.118Z","LastUpdatedTime":"2026-10-16T20:27:27.301Z","StackStatus":"UPDATE_COMPLETE","DriftInformation":{"StackDriftStatus":"NOT_CHECKED"}},` +
 		`{"StackId":"` + addonStackID + `","StackName":"eksctl-regional-diagnostic-addon-vpc-cni","CreationTime":"2026-10-16T20:09:03.771Z","StackStatus":"CREATE_COMPLETE","DriftInformation":{"StackDriftStatus":"NOT_CHECKED"}},` +
 		`{"StackId":"arn:aws:cloudformation:eu-central-1:123456789012:stack/eksctl-regional-diagnosticx-cluster/9","StackName":"eksctl-regional-diagnosticx-cluster","CreationTime":"2026-10-15T10:00:00.000Z","StackStatus":"CREATE_COMPLETE"}` +
@@ -79,6 +83,16 @@ const (
 		`{"StackId":"arn:aws:cloudformation:eu-central-1:123456789012:stack/unrelated/8","StackName":"unrelated","CreationTime":"2026-01-01T00:00:00.000Z","StackStatus":"CREATE_COMPLETE"}` +
 		`]}`
 )
+
+// describedStack answers describe-stacks for one stack ID with the tags eksctl puts on its stacks,
+// naming cluster as the stack's cluster.
+func describedStack(stackID, cluster string) []byte {
+	return []byte(`{"Stacks":[{"StackId":"` + stackID + `","StackName":"` +
+		strings.Split(stackID, "/")[1] + `","StackStatus":"CREATE_COMPLETE","Tags":[` +
+		`{"Key":"alpha.eksctl.io/eksctl-version","Value":"0.215.0"},` +
+		`{"Key":"alpha.eksctl.io/cluster-name","Value":"` + cluster + `"},` +
+		`{"Key":"eksctl.cluster.k8s.io/v1alpha1/cluster-name","Value":"` + cluster + `"}]}]}`)
+}
 
 func captureBaselineFixture(t *testing.T, dir string) string {
 	t.Helper()
@@ -124,8 +138,12 @@ func ownershipQuery(t *testing.T) eksinventory.Query {
 					nodegroupStackName + `","StackStatus":"UPDATE_COMPLETE"}]}`), nil
 			}
 
+			if stackID, _ := input["StackName"].(string); strings.HasPrefix(stackID, "arn:") {
+				return describedStack(stackID, "regional-diagnostic"), nil
+			}
+
 			return []byte(
-				`{"Stacks":[{"StackId":"arn:aws:cloudformation:eu-central-1:123456789012:stack/root/one"}]}`,
+				`{"Stacks":[{"StackId":"` + rootStackID + `"}]}`,
 			), nil
 		case "cloudformation list-stacks":
 			if input["NextToken"] == "stacks-page-2" {
@@ -139,7 +157,7 @@ func ownershipQuery(t *testing.T) eksinventory.Query {
 			}
 
 			stack := input["StackName"]
-			if stack == "arn:aws:cloudformation:eu-central-1:123456789012:stack/root/one" {
+			if stack == rootStackID {
 				if input["NextToken"] == "root-page-2" {
 					return []byte(
 						`{"StackResourceSummaries":[{"LogicalResourceId":"Nat","PhysicalResourceId":"nat-0123456789abcdef0","ResourceType":"AWS::EC2::NatGateway","ResourceStatus":"CREATE_COMPLETE"},{"LogicalResourceId":"VPC","PhysicalResourceId":"vpc-0123456789abcdef0","ResourceType":"AWS::EC2::VPC","ResourceStatus":"CREATE_COMPLETE"}]}`,
@@ -303,7 +321,7 @@ func TestOwnershipCapturePreservesNestedAndDetachedRelationships(t *testing.T) {
 		{
 			Kind:     "nat-gateway",
 			Identity: "nat-0123456789abcdef0",
-			Parent:   "stack:arn:aws:cloudformation:eu-central-1:123456789012:stack/root/one",
+			Parent:   "stack:" + rootStackID,
 		},
 		{
 			Kind:     "network-interface",
@@ -332,6 +350,11 @@ func TestOwnershipCapturePreservesNestedAndDetachedRelationships(t *testing.T) {
 		},
 		{
 			Kind:     "stack",
+			Identity: rootStackID,
+			Parent:   "cluster:arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic|2024-03-14T15:31:44.348Z",
+		},
+		{
+			Kind:     "stack",
 			Identity: nodegroupStackID,
 			Parent:   "cluster:arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic|2024-03-14T15:31:44.348Z",
 		},
@@ -343,12 +366,7 @@ func TestOwnershipCapturePreservesNestedAndDetachedRelationships(t *testing.T) {
 		{
 			Kind:     "stack",
 			Identity: "arn:aws:cloudformation:eu-central-1:123456789012:stack/nested/two",
-			Parent:   "stack:arn:aws:cloudformation:eu-central-1:123456789012:stack/root/one",
-		},
-		{
-			Kind:     "stack",
-			Identity: "arn:aws:cloudformation:eu-central-1:123456789012:stack/root/one",
-			Parent:   "cluster:arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic|2024-03-14T15:31:44.348Z",
+			Parent:   "stack:" + rootStackID,
 		},
 		{Kind: "volume", Identity: "vol-0123456789abcdef0", Parent: "instance:i-0123456789abcdef0"},
 		{
@@ -359,7 +377,7 @@ func TestOwnershipCapturePreservesNestedAndDetachedRelationships(t *testing.T) {
 		{
 			Kind:     "vpc",
 			Identity: "vpc-0123456789abcdef0",
-			Parent:   "stack:arn:aws:cloudformation:eu-central-1:123456789012:stack/root/one",
+			Parent:   "stack:" + rootStackID,
 		},
 	}
 	if !reflect.DeepEqual(got.Resources, want) {
@@ -838,7 +856,7 @@ func TestOwnershipCaptureCanExtendFailedCreateStackEvidence(t *testing.T) {
 
 	if reads != 2 || got.CaptureCount != 2 || got.Cluster != "" ||
 		!slices.ContainsFunc(got.Resources, func(resource ownedResource) bool {
-			return resource.Kind == "stack" && strings.Contains(resource.Identity, ":stack/root/")
+			return resource.Kind == "stack" && resource.Identity == rootStackID
 		}) {
 		t.Fatalf("failed-create evidence was not cumulative: reads=%d snapshot=%#v", reads, got)
 	}
@@ -1112,26 +1130,191 @@ func TestOwnershipCaptureNeverClaimsABaselineStack(t *testing.T) {
 // names a different stack fails the CloudFormation family instead of entering the graph.
 func TestOwnershipCaptureRefusesAClusterStackUnderAnotherName(t *testing.T) {
 	t.Parallel()
-	dir := privateBaselineDir(t)
-	baseline := captureBaselineFixture(t, dir)
-	manifest := filepath.Join(dir, "ownership.json")
+
+	const stackID = "arn:aws:cloudformation:eu-central-1:123456789012:stack/eksctl-st-eks-1-1-cluster/7"
+
 	query := withStackRead(t, func(command string, _ map[string]any) ([]byte, error, bool) {
 		if command != "list-stacks" {
 			return nil, nil, false
 		}
 
-		return []byte(`{"StackSummaries":[{"StackId":"arn:aws:cloudformation:eu-central-1:` +
-			`123456789012:stack/eksctl-st-eks-1-1-cluster/7",` +
+		return []byte(`{"StackSummaries":[{"StackId":"` + stackID + `",` +
 			`"StackName":"eksctl-regional-diagnostic-addon-vpc-cni","StackStatus":"CREATE_COMPLETE"}]}`,
 		), nil, true
 	})
 
+	requireUnboundStackRefused(t, query, stackID)
+}
+
+// stackSummary is one list-stacks row for a stack ID that names its stack.
+func stackSummary(stackID string) string {
+	return `{"StackId":"` + stackID + `","StackName":"` + strings.Split(stackID, "/")[1] +
+		`","StackStatus":"CREATE_COMPLETE"}`
+}
+
+// TestOwnershipCaptureClaimsOnlyStacksTaggedForTheCluster proves a new stack whose name starts with
+// "eksctl-<cluster>-" is claimed only when its own eksctl cluster tag does not name another
+// cluster. "regional-diagnostic-prod" is a separate cluster whose name starts with this cluster's
+// name, so its stacks share the prefix. A stack with no cluster tag stays claimed.
+func TestOwnershipCaptureClaimsOnlyStacksTaggedForTheCluster(t *testing.T) {
+	t.Parallel()
+
+	const stackPrefix = "arn:aws:cloudformation:eu-central-1:123456789012:stack/"
+
+	otherClusterStackID := stackPrefix + "eksctl-regional-diagnostic-prod-cluster/3d5f7b91"
+	untaggedStackID := stackPrefix + "eksctl-regional-diagnostic-addon-coredns/4e6a8c02"
+
+	listing := []byte(`{"StackSummaries":[` + stackSummary(addonStackID) + `,` +
+		stackSummary(otherClusterStackID) + `,` + stackSummary(untaggedStackID) + `]}`)
+	descriptions := map[string][]byte{
+		otherClusterStackID: describedStack(otherClusterStackID, "regional-diagnostic-prod"),
+		untaggedStackID:     []byte(`{"Stacks":[{"StackId":"` + untaggedStackID + `"}]}`),
+	}
+
+	query := withStackRead(t, func(command string, input map[string]any) ([]byte, error, bool) {
+		if command == "list-stacks" {
+			return listing, nil, true
+		}
+
+		stackID, _ := input["StackName"].(string)
+		description, found := descriptions[stackID]
+
+		return description, nil, command == "describe-stacks" && found
+	})
+
+	claimed := capturedIdentities(t, query)
+	if !claimed[addonStackID] || !claimed[untaggedStackID] || claimed[otherClusterStackID] {
+		t.Fatalf("stack claims do not follow the cluster tag: %#v", claimed)
+	}
+}
+
+// capturedIdentities runs one capture that must complete and returns every identity it claimed.
+func capturedIdentities(t *testing.T, query eksinventory.Query) map[string]bool {
+	t.Helper()
+
+	dir := privateBaselineDir(t)
+	manifest := filepath.Join(dir, "ownership.json")
+
 	err := eksinventory.CaptureOwnership(
-		context.Background(), baselineBinding(), baseline, manifest,
+		context.Background(), baselineBinding(), captureBaselineFixture(t, dir), manifest,
+		eksinventory.OwnershipHints{WorkloadReadComplete: true}, io.Discard, query,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got ownershipSnapshot
+
+	err = json.Unmarshal(readPrivateTestFile(t, manifest), &got)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	claimed := make(map[string]bool, len(got.Resources))
+	for _, resource := range got.Resources {
+		claimed[resource.Identity] = true
+	}
+
+	return claimed
+}
+
+// TestOwnershipCaptureRefusesAClusterStackItCannotBind proves a candidate stack whose description
+// names another stack, or names two clusters, fails the CloudFormation family.
+func TestOwnershipCaptureRefusesAClusterStackItCannotBind(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name        string
+		description string
+	}{
+		{
+			name: "description names another stack",
+			description: `{"Stacks":[{"StackId":"arn:aws:cloudformation:eu-central-1:123456789012:` +
+				`stack/eksctl-regional-diagnostic-addon-vpc-cni/0000"}]}`,
+		},
+		{
+			name: "description names two clusters",
+			description: `{"Stacks":[{"StackId":"` + addonStackID + `","Tags":[` +
+				`{"Key":"alpha.eksctl.io/cluster-name","Value":"regional-diagnostic"},` +
+				`{"Key":"alpha.eksctl.io/cluster-name","Value":"regional-diagnostic-prod"}]}]}`,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			query := withStackRead(
+				t,
+				func(command string, input map[string]any) ([]byte, error, bool) {
+					if command != "describe-stacks" || input["StackName"] != addonStackID {
+						return nil, nil, false
+					}
+
+					return []byte(test.description), nil, true
+				},
+			)
+
+			requireUnboundStackRefused(t, query, addonStackID)
+		})
+	}
+}
+
+// TestOwnershipCaptureRefusesARootStackItCannotBind proves the root stack's unique ID must name the
+// run's region, account and the exact stack "eksctl-<cluster>-cluster", as the node group and
+// add-on stack IDs must.
+func TestOwnershipCaptureRefusesARootStackItCannotBind(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name    string
+		stackID string
+	}{
+		{
+			name:    "another region",
+			stackID: "arn:aws:cloudformation:eu-west-1:123456789012:stack/eksctl-regional-diagnostic-cluster/1",
+		},
+		{
+			name:    "another account",
+			stackID: "arn:aws:cloudformation:eu-central-1:210987654321:stack/eksctl-regional-diagnostic-cluster/1",
+		},
+		{
+			name:    "another stack name",
+			stackID: "arn:aws:cloudformation:eu-central-1:123456789012:stack/eksctl-regional-diagnostic-cluster-old/1",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			query := withStackRead(
+				t,
+				func(command string, input map[string]any) ([]byte, error, bool) {
+					if command != "describe-stacks" ||
+						input["StackName"] != "eksctl-regional-diagnostic-cluster" {
+						return nil, nil, false
+					}
+
+					return []byte(`{"Stacks":[{"StackId":"` + test.stackID + `"}]}`), nil, true
+				},
+			)
+
+			requireUnboundStackRefused(t, query, test.stackID)
+		})
+	}
+}
+
+// requireUnboundStackRefused proves the capture fails the CloudFormation family and keeps the stack
+// it could not bind out of the graph.
+func requireUnboundStackRefused(t *testing.T, query eksinventory.Query, stackID string) {
+	t.Helper()
+
+	dir := privateBaselineDir(t)
+	manifest := filepath.Join(dir, "ownership.json")
+
+	err := eksinventory.CaptureOwnership(
+		context.Background(), baselineBinding(), captureBaselineFixture(t, dir), manifest,
 		eksinventory.OwnershipHints{}, io.Discard, query,
 	)
 	if !errors.Is(err, eksinventory.ErrInventory) {
-		t.Fatalf("a mismatched stack identity was accepted: %v", err)
+		t.Fatalf("an unbound stack was accepted: %v", err)
 	}
 
 	var got ownershipSnapshot
@@ -1147,8 +1330,8 @@ func TestOwnershipCaptureRefusesAClusterStackUnderAnotherName(t *testing.T) {
 	}
 
 	for _, resource := range got.Resources {
-		if strings.Contains(resource.Identity, "eksctl-st-eks-1-1-cluster") {
-			t.Fatalf("a mismatched stack entered the graph: %#v", resource)
+		if resource.Identity == stackID {
+			t.Fatalf("an unbound stack entered the graph: %#v", resource)
 		}
 	}
 }

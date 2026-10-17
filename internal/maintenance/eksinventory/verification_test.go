@@ -476,8 +476,7 @@ func TestOwnershipVerificationAttributesTheRunsDeletedStacks(t *testing.T) {
 	}
 
 	runStacks := []string{
-		"arn:aws:cloudformation:eu-central-1:123456789012:stack/root/one",
-		nodegroupStackID, addonStackID, deletedAddonStackID,
+		rootStackID, nodegroupStackID, addonStackID, deletedAddonStackID,
 	}
 
 	for _, test := range []struct {
@@ -599,7 +598,7 @@ func verificationQuery(
 			return nil, errors.Join(errFixtureResourceAbsent, notFound)
 		case "cloudformation describe-stacks":
 			identity, _ := input["StackName"].(string)
-			if remainingKind == "stack" && strings.Contains(identity, ":stack/root/") {
+			if remainingKind == "stack" && identity == rootStackID {
 				return []byte(
 					`{"Stacks":[{"StackId":"` + identity + `","StackStatus":"DELETE_FAILED"}]}`,
 				), nil

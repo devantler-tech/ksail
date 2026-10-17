@@ -369,7 +369,7 @@ func (collector *ownershipCollector) capture(hints OwnershipHints) bool {
 		parent = "cluster:" + collector.manifest.ClusterIdentity
 	}
 
-	err = collector.captureStacks(accountID, parent)
+	err = collector.captureStacks(parent)
 	if err != nil {
 		collector.cover("cloudformation", false, "partial", err)
 
@@ -514,13 +514,15 @@ func clusterCreationIdentity(value json.RawMessage) (string, error) {
 	return createdAt.Format(time.RFC3339Nano), nil
 }
 
-func (collector *ownershipCollector) captureStacks(accountID, parent string) error {
-	stackID, err := collector.stackIDByName("eksctl-" + collector.binding.ClusterName + "-cluster")
+func (collector *ownershipCollector) captureStacks(parent string) error {
+	stackName := "eksctl-" + collector.binding.ClusterName + "-cluster"
+
+	stackID, err := collector.stackIDByName(stackName)
 	if err != nil {
 		return err
 	}
 
-	if !strings.Contains(stackID, ":"+accountID+":stack/") {
+	if !strings.HasPrefix(stackID, collector.stackIdentityPrefix(stackName)) {
 		return fmt.Errorf("invalid root stack identity: %w", ErrInventory)
 	}
 
@@ -535,9 +537,9 @@ func (collector *ownershipCollector) captureStacks(accountID, parent string) err
 }
 
 // captureClusterStacks records the other stacks eksctl creates for the cluster, such as its add-on
-// and node group stacks, whatever their state. eksctl names each one "eksctl-<cluster>-<part>",
-// and the cluster name is unique to the run. A stack the run's pre-create baseline already listed
-// is never claimed.
+// and node group stacks, whatever their state. eksctl names each one "eksctl-<cluster>-<part>" and
+// tags it with the cluster's name. A stack the run's pre-create baseline already listed is never
+// claimed, and neither is a stack whose tag names another cluster.
 func (collector *ownershipCollector) captureClusterStacks(rootID, parent string) error {
 	stackIDs, err := collector.clusterStackIDs(rootID)
 	if err != nil {
@@ -572,35 +574,143 @@ func (collector *ownershipCollector) clusterStackIDs(rootID string) ([]string, e
 		return nil, err
 	}
 
-	namePrefix := "eksctl-" + collector.binding.ClusterName + "-"
-	identityPrefix := "arn:aws:cloudformation:" + collector.binding.Region + ":" +
-		collector.manifest.AccountID + ":stack/"
-
 	stackIDs := make([]string, 0, len(rows))
 
 	for _, row := range rows {
-		name, fieldErr := stringField(row, "StackName")
-		if fieldErr != nil {
-			return nil, fieldErr
+		stackID, claimed, rowErr := collector.clusterStackClaim(row, rootID, existing)
+		if rowErr != nil {
+			return nil, rowErr
 		}
 
-		stackID, fieldErr := stringField(row, "StackId")
-		if fieldErr != nil {
-			return nil, fieldErr
+		if claimed {
+			stackIDs = append(stackIDs, stackID)
 		}
-
-		if !strings.HasPrefix(name, namePrefix) || stackID == rootID || existing[stackID] {
-			continue
-		}
-
-		if !strings.HasPrefix(stackID, identityPrefix+name+"/") {
-			return nil, fmt.Errorf("cluster stack identity mismatch: %w", ErrInventory)
-		}
-
-		stackIDs = append(stackIDs, stackID)
 	}
 
 	return stackIDs, nil
+}
+
+// clusterStackClaim returns one listed stack's ID and whether the run claims it: a stack named
+// "eksctl-<cluster>-...", other than the root, that the baseline did not list and whose cluster tag
+// does not name another cluster.
+func (collector *ownershipCollector) clusterStackClaim(
+	row json.RawMessage,
+	rootID string,
+	existing map[string]bool,
+) (string, bool, error) {
+	name, err := stringField(row, "StackName")
+	if err != nil {
+		return "", false, err
+	}
+
+	stackID, err := stringField(row, "StackId")
+	if err != nil {
+		return "", false, err
+	}
+
+	if !strings.HasPrefix(name, "eksctl-"+collector.binding.ClusterName+"-") ||
+		stackID == rootID || existing[stackID] {
+		return stackID, false, nil
+	}
+
+	if !strings.HasPrefix(stackID, collector.stackIdentityPrefix(name)) {
+		return "", false, fmt.Errorf("cluster stack identity mismatch: %w", ErrInventory)
+	}
+
+	owned, err := collector.stackTaggedForCluster(stackID)
+	if err != nil {
+		return "", false, err
+	}
+
+	return stackID, owned, nil
+}
+
+// stackIdentityPrefix is the start of the unique ID of the stack with this exact name in the run's
+// region and account.
+func (collector *ownershipCollector) stackIdentityPrefix(stackName string) string {
+	return "arn:aws:cloudformation:" + collector.binding.Region + ":" +
+		collector.manifest.AccountID + ":stack/" + stackName + "/"
+}
+
+// eksctlClusterTag is the tag eksctl puts on every stack it creates, naming the stack's cluster.
+const eksctlClusterTag = "alpha.eksctl.io/cluster-name"
+
+// stackTaggedForCluster reads one stack by its unique ID and reports whether it may belong to the
+// run's cluster. One cluster's name can be the start of another's, so a stack named
+// "eksctl-<cluster>-..." can belong to a longer-named cluster; eksctl's cluster-name tag says which.
+// A stack without that tag stays claimed: claiming a stack that is not the run's fails toward a
+// false leftover at verification, never toward a false clean.
+func (collector *ownershipCollector) stackTaggedForCluster(stackID string) (bool, error) {
+	stack, err := collector.describeStack(stackID)
+	if err != nil {
+		return false, err
+	}
+
+	readID, err := stringField(stack, "StackId")
+	if err != nil {
+		return false, err
+	}
+
+	if readID != stackID {
+		return false, fmt.Errorf("cluster stack identity mismatch: %w", ErrInventory)
+	}
+
+	clusters, err := stackTagValues(stack, eksctlClusterTag)
+	if err != nil {
+		return false, err
+	}
+
+	switch len(clusters) {
+	case 0:
+		return true, nil
+	case 1:
+		return clusters[0] == collector.binding.ClusterName, nil
+	default:
+		return false, fmt.Errorf("ambiguous stack cluster tag: %w", ErrInventory)
+	}
+}
+
+// stackTagValues returns the values of every tag with this key on one described stack. A stack
+// that lists no tags has none.
+func stackTagValues(stack json.RawMessage, key string) ([]string, error) {
+	var object map[string]json.RawMessage
+
+	err := json.Unmarshal(stack, &object)
+	if err != nil || object == nil {
+		return nil, fmt.Errorf("invalid stack description: %w", ErrInventory)
+	}
+
+	var tags []json.RawMessage
+
+	raw, found := object["Tags"]
+	if found {
+		err = json.Unmarshal(raw, &tags)
+		if err != nil {
+			return nil, fmt.Errorf("invalid stack tags: %w", ErrInventory)
+		}
+	}
+
+	var values []string
+
+	for _, tag := range tags {
+		tagKey, keyErr := stringField(tag, "Key")
+		if keyErr != nil {
+			return nil, keyErr
+		}
+
+		if tagKey != key {
+			continue
+		}
+
+		value, valueErr := stringField(tag, "Value")
+		if valueErr != nil {
+			return nil, valueErr
+		}
+
+		values = append(values, value)
+	}
+
+	return values, nil
 }
 
 // baselineIdentities returns the identities one operation listed in the run's pre-create baseline.
@@ -630,19 +740,29 @@ func (collector *ownershipCollector) baselineIdentities(
 // stackIDByName reads one stack by its exact name and returns its unique stack ID. The caller
 // binds the ID to the stack it expected.
 func (collector *ownershipCollector) stackIDByName(name string) (string, error) {
-	payload, err := collector.readSingle(cloudFormationService, describeStacks, map[string]any{
-		"StackName": name,
-	})
+	stack, err := collector.describeStack(name)
 	if err != nil {
 		return "", err
 	}
 
-	rows, err := records(payload, []string{"Stacks"})
-	if err != nil || len(rows) != 1 {
-		return "", fmt.Errorf("stack lookup incomplete: %w", ErrInventory)
+	return stringField(stack, "StackId")
+}
+
+// describeStack reads the one stack with this exact name or unique stack ID.
+func (collector *ownershipCollector) describeStack(stack string) (json.RawMessage, error) {
+	payload, err := collector.readSingle(cloudFormationService, describeStacks, map[string]any{
+		"StackName": stack,
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	return stringField(rows[0], "StackId")
+	rows, err := records(payload, []string{"Stacks"})
+	if err != nil || len(rows) != 1 {
+		return nil, fmt.Errorf("stack lookup incomplete: %w", ErrInventory)
+	}
+
+	return rows[0], nil
 }
 
 // stackResource is one validated row of a stack's resource list.
@@ -831,8 +951,7 @@ func (collector *ownershipCollector) captureNodegroupStack(nodegroupName, parent
 		return err
 	}
 
-	if !strings.HasPrefix(stackID, "arn:aws:cloudformation:"+collector.binding.Region+":"+
-		collector.manifest.AccountID+":stack/"+stackName+"/") {
+	if !strings.HasPrefix(stackID, collector.stackIdentityPrefix(stackName)) {
 		return fmt.Errorf("nodegroup stack identity mismatch: %w", ErrInventory)
 	}
 
