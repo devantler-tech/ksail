@@ -664,7 +664,10 @@ func optionalPersistenceValues(disablePersistence bool) string {
 }
 
 type controllerManagerCompatibilityConfig struct {
-	kubernetesVersion      string
+	kubernetesVersion string
+	// versionFromImageTag marks a version read from the Kubernetes image tag. An image tag may
+	// carry a digest or a custom name, so it is read on a best-effort basis.
+	versionFromImageTag    bool
 	privateNodes           bool
 	virtualScheduler       bool
 	resourceClaimTemplates bool
@@ -723,6 +726,11 @@ func controllerManagerCompatibilityValues(
 	}
 
 	parsedVersion, err := semver.NewVersion(strings.TrimPrefix(config.kubernetesVersion, "v"))
+	if err != nil && config.versionFromImageTag {
+		// An image tag that is not a version tells us nothing about the controller set.
+		return "", nil
+	}
+
 	if err != nil {
 		return "", fmt.Errorf(
 			"parse vCluster Kubernetes version %q: %w",
@@ -787,11 +795,14 @@ func loadControllerManagerCompatibilityConfig(
 
 	k8s := input.ControlPlane.Distro.K8S
 	if k8s.Image.Tag != "" {
-		config.kubernetesVersion = k8s.Image.Tag
+		tag, _, _ := strings.Cut(k8s.Image.Tag, "@")
+		config.kubernetesVersion = tag
+		config.versionFromImageTag = true
 	}
 
 	if k8s.Version != "" {
 		config.kubernetesVersion = k8s.Version
+		config.versionFromImageTag = false
 	}
 
 	if input.PrivateNodes.Enabled != nil {

@@ -582,3 +582,75 @@ func TestBuildValuesFiles_Persistence(t *testing.T) {
 		}
 	})
 }
+
+func TestBuildValuesFiles_ControllerManagerCompatibilityRejectsInvalidVersions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		version    string
+		userValues string
+	}{
+		{name: "rejects an invalid default version", version: "not-a-version"},
+		{
+			name:       "rejects an invalid explicit version",
+			version:    "v1.37.1",
+			userValues: "controlPlane:\n  distro:\n    k8s:\n      version: not-a-version\n",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			userValuesPath := ""
+			if test.userValues != "" {
+				userValuesPath = t.TempDir() + "/vcluster.yaml"
+				require.NoError(t, os.WriteFile(userValuesPath, []byte(test.userValues), 0o600))
+			}
+
+			_, cleanup, err := vclusterprovisioner.BuildValuesFilesForVersionForTest(
+				userValuesPath, false, "", false, test.version, false,
+			)
+			defer cleanup()
+
+			require.ErrorContains(t, err, "parse vCluster Kubernetes version")
+		})
+	}
+}
+
+func TestBuildValuesFiles_ControllerManagerCompatibilityImageTags(t *testing.T) {
+	t.Parallel()
+
+	tests := []controllerCompatibilityTestCase{
+		{
+			name:    "reads the version from a digest-pinned Kubernetes image tag",
+			version: "v1.36.5",
+			userValues: "controlPlane:\n  distro:\n    k8s:\n      image:\n        tag: v1.37.1@sha256:" +
+				"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n",
+			wantControllers: standardControllers137,
+			wantOverride:    true,
+		},
+		{
+			name:         "leaves controllers unchanged for a Kubernetes image tag that is not a version",
+			version:      "v1.37.1",
+			userValues:   "controlPlane:\n  distro:\n    k8s:\n      image:\n        tag: custom-build\n",
+			wantOverride: false,
+		},
+		{
+			name:    "an explicit version overrides an image tag that is not a version",
+			version: "v1.36.5",
+			userValues: "controlPlane:\n  distro:\n    k8s:\n      version: v1.37.1\n" +
+				"      image:\n        tag: custom-build\n",
+			wantControllers: standardControllers137,
+			wantOverride:    true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			runControllerCompatibilityTest(t, test)
+		})
+	}
+}
