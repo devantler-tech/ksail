@@ -15,6 +15,8 @@ cat >"${fake_bin}/aws" <<'FAKE'
 set -euo pipefail
 printf '%s\n' "$*" >>"${FAKE_DIR}/calls.log"
 case "$1 $2" in
+'sts get-caller-identity'|'eks describe-cluster'|'eks list-nodegroups'|\
+'cloudformation describe-stacks'|'cloudformation list-stack-resources'|\
 'eks list-clusters'|'cloudformation list-stacks'|'ec2 describe-fleets'|\
 'ec2 describe-spot-fleet-requests'|'ec2 describe-spot-instance-requests'|\
 'ec2 describe-instances'|'autoscaling describe-auto-scaling-groups'|\
@@ -34,7 +36,12 @@ FAKE
 chmod +x "${fake_bin}/aws"
 
 printf '{"clusters":[]}\n' >"${fake_dir}/eks-list-clusters.json"
+printf '{"Account":"123456789012","Arn":"arn:aws:sts::123456789012:assumed-role/eks-ci/run"}\n' >"${fake_dir}/sts-get-caller-identity.json"
+printf '{"cluster":{"arn":"arn:aws:eks:eu-central-1:123456789012:cluster/regional-diagnostic","createdAt":1700000000}}\n' >"${fake_dir}/eks-describe-cluster.json"
+printf '{"nodegroups":[]}\n' >"${fake_dir}/eks-list-nodegroups.json"
 printf '{"StackSummaries":[]}\n' >"${fake_dir}/cloudformation-list-stacks.json"
+printf '{"Stacks":[{"StackId":"arn:aws:cloudformation:eu-central-1:123456789012:stack/root/one"}]}\n' >"${fake_dir}/cloudformation-describe-stacks.json"
+printf '{"StackResourceSummaries":[]}\n' >"${fake_dir}/cloudformation-list-stack-resources.json"
 printf '{"Fleets":[]}\n' >"${fake_dir}/ec2-describe-fleets.json"
 printf '{"SpotFleetRequestConfigs":[]}\n' >"${fake_dir}/ec2-describe-spot-fleet-requests.json"
 printf '{"SpotInstanceRequests":[]}\n' >"${fake_dir}/ec2-describe-spot-instance-requests.json"
@@ -81,6 +88,48 @@ refute_text 'EBS volumes, by state: 1' 'a partial failed read must not retain it
 refute_text 'private-' 'stdout and stderr from failed reads must stay private'
 pass 'a failed process cannot convert plausible stdout into a completed count'
 rm "${fake_dir}/ec2-describe-volumes.fail"
+
+baseline_args=(--region eu-central-1 --cluster-name regional-diagnostic
+	--run-id 123 --run-attempt 2 --source-sha aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
+run "${baseline_args[@]}" --baseline-file "${tmp_dir}/baseline.json"
+expect_status 0 'opt-in baseline capture must run outside the repository'
+expect_text 'ec2 describe-volumes: observed=1 report-count=1' 'the baseline must retain a complete family'
+expect_text 'ownership=unknown account-binding=unknown instant-fleets=unknown teardown=unverified' 'baseline limits must remain explicit'
+refute_text 'private-' 'baseline identities must never appear in output'
+jq -e '.context.runId == "123" and .context.runAttempt == "2" and
+  .coverage.ownership == "unknown" and
+  (.observations[] | select(.operation == "describe-volumes") |
+    .complete == true and .identities == ["private-volume"])' "${tmp_dir}/baseline.json" >/dev/null || fail 'baseline lost its private identity or run binding'
+run "${baseline_args[@]}" --baseline-file "${tmp_dir}/baseline.json"
+expect_status 1 'an existing baseline must never be overwritten'
+pass 'opt-in capture writes a private run-bound snapshot and refuses overwrites'
+
+run "${baseline_args[@]}" --baseline-file "${tmp_dir}/baseline.json" \
+	--ownership-file "${tmp_dir}/ownership.json"
+expect_status 0 'opt-in ownership capture must consume the private baseline'
+expect_text 'cumulative ownership capture' 'ownership capture must publish a sanitized summary'
+refute_text '123456789012' 'account identity must stay in the private manifest'
+jq -e '.schemaVersion == 3 and .accountId == "123456789012" and
+  .context.runId == "123" and (.clusterIdentity | contains(":cluster/regional-diagnostic|"))' \
+	"${tmp_dir}/ownership.json" >/dev/null || fail 'ownership evidence lost its verified binding'
+pass 'ownership mode preserves a private account-bound cumulative record'
+
+run "${baseline_args[@]}" --verify-ownership-file "${tmp_dir}/ownership.json"
+expect_status 1 'verification must reject incomplete run ownership before provider reads'
+expect_text 'cleanup-verdict=unknown' 'incomplete ownership must produce an explicit unknown verdict'
+expect_text 'Ownership verification failed' 'the entry point must preserve the verification failure'
+refute_text '123456789012' 'verification failures must not disclose the bound account'
+pass 'verification mode fails closed on incomplete private evidence'
+
+touch "${fake_dir}/ec2-describe-volumes.fail"
+run "${baseline_args[@]}" --baseline-file "${tmp_dir}/incomplete.json"
+expect_status 1 'baseline capture must fail on an incomplete read'
+expect_text 'ec2 describe-volumes: unknown (access-denied)' 'failed capture must name only a safe reason'
+refute_text 'private-' 'capture errors must not disclose AWS data'
+jq -e '.observations[] | select(.operation == "describe-volumes") |
+  .complete == false and (has("identities") | not)' "${tmp_dir}/incomplete.json" >/dev/null || fail 'partial identities survived a failed capture'
+rm "${fake_dir}/ec2-describe-volumes.fail"
+pass 'failed capture retains explicit unknown evidence and returns nonzero'
 
 for body in 'null' 'None' '' '{"Volumes":null}' '{"Volumes":[{"VolumeId":"private-volume","State":"::error::private-injection"}]}'; do
 	printf '%s' "${body}" >"${fake_dir}/ec2-describe-volumes.json"

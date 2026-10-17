@@ -421,6 +421,7 @@ jobs:
               - '.github/workflows/ci.yaml'
             eks-smoke-scripts:
               - 'internal/maintenance/eksinventory/**'
+              - 'pkg/fsutil/pathutil/**'
               - '.github/scripts/check-eks-capacity.sh'
               - '.github/scripts/check-eks-capacity.test.sh'
               - '.github/scripts/delete-eks-smoke-cluster.sh'
@@ -669,7 +670,7 @@ jobs:
       || (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
       && needs.changes.outputs.govuln-allowlist == 'true')
-    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@8ed2071ebe18864b8b86efe0f6b1df8d73d2a6ab # v7.10.4
+    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@61693f6ef2740f113ecd2a4ae01840557abe44e8 # v7.12.3
     # The canonical defaults make a default-branch run answer "did the check run" rather than
     # "did the diff touch a Go file". On main the branch's green IS the protection
     # signal, so a path filter that skips the suite or the scan leaves main green
@@ -1057,7 +1058,7 @@ jobs:
 
       - name: ⚙️ Setup Node.js
         if: needs.changes.outputs.schema == 'true'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           cache: "npm"
@@ -1135,7 +1136,7 @@ jobs:
           token: ${{ steps.generate-token.outputs.token }}
 
       - name: 📥 Download patches
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: "*-patch"
           merge-multiple: true
@@ -1503,7 +1504,7 @@ jobs:
           persist-credentials: false
 
       - name: ⚙️ Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           cache: "npm"
@@ -1535,7 +1536,7 @@ jobs:
           persist-credentials: false
 
       - name: ⚙️ Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           cache: "npm"
@@ -1969,7 +1970,7 @@ jobs:
 
       - name: 📥 Restore KSail binary
         # Pin the identical published action until actionlint supports $/ references.
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@232789ff45f8b574a95fcb89162d92faeae79c3c
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@d21c5bd92bcf694a82b36f84be573ef7fa13f8f1
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -1987,7 +1988,7 @@ jobs:
 
       - name: 📥 Download Calico migration baseline
         if: ${{ matrix.calico-migration == 'true' }}
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.build-artifact.outputs.calico-baseline-artifact-id }}
           path: ${{ runner.temp }}/calico-legacy-download
@@ -2370,7 +2371,7 @@ jobs:
         with:
           persist-credentials: false
       - name: 🧹 Free runner disk
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@0f64bcdf29760400fbd6307f835c7d98ad7f9ae5
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@d21c5bd92bcf694a82b36f84be573ef7fa13f8f1
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -2420,7 +2421,7 @@ jobs:
             --max-issues-per-linter 0 --max-same-issues 0 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/lint.log"
       - name: ⚙️ Setup Node.js for canonical generation
         if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
       - name: 📝 Regenerate all maintained artifacts
@@ -2470,7 +2471,7 @@ jobs:
           persist-credentials: false
       - name: Check active documentation
         id: links
-        uses: devantler-tech/.github/actions/validate-retired-repo-links@8ed2071ebe18864b8b86efe0f6b1df8d73d2a6ab # v7.10.4
+        uses: devantler-tech/.github/actions/validate-retired-repo-links@61693f6ef2740f113ecd2a4ae01840557abe44e8 # v7.12.3
         with:
           enabled: "true"
       - name: Require a completed scan

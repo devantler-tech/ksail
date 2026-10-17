@@ -18,6 +18,16 @@ on:
         required: false
         type: boolean
         default: false
+      capture_resource_baseline:
+        description: "Capture a private regional baseline in this job (read-only; does not certify cleanup)"
+        required: false
+        type: boolean
+        default: false
+      evaluate_ownership_reads:
+        description: "Evaluate exact cluster and stack ownership reads without creating resources"
+        required: false
+        type: boolean
+        default: false
 
 env:
   AWS_OIDC_ROLE_ARN: "arn:aws:iam::939001610192:role/eks-ci"
@@ -32,7 +42,7 @@ jobs:
   report:
     name: 🔎 Report EC2 Launch Capacity
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     environment: ci
     permissions:
       contents: read
@@ -65,8 +75,22 @@ jobs:
         shell: bash
         env:
           AWS_REGION: ${{ inputs.region }}
+          CAPTURE_BASELINE: ${{ inputs.capture_resource_baseline }}
         run: |
-          "$GITHUB_WORKSPACE/.github/scripts/report-eks-account-capacity.sh" --region "$AWS_REGION"
+          set -euo pipefail
+          if [[ "$CAPTURE_BASELINE" == "true" ]]; then
+            evidence_dir="$(mktemp -d "$RUNNER_TEMP/eks-baseline.XXXXXXXX")"
+            trap 'rm -f "$evidence_dir/baseline.json"; rmdir "$evidence_dir"' EXIT
+            "$GITHUB_WORKSPACE/.github/scripts/report-eks-account-capacity.sh" \
+              --region "$AWS_REGION" --baseline-file "$evidence_dir/baseline.json" \
+              --cluster-name regional-diagnostic --run-id "$GITHUB_RUN_ID" \
+              --run-attempt "$GITHUB_RUN_ATTEMPT" --source-sha "$GITHUB_SHA"
+            test -s "$evidence_dir/baseline.json"
+            test "$(stat -c '%a' "$evidence_dir/baseline.json")" = 600
+            echo "Private baseline file verified; no manifest is uploaded."
+          else
+            "$GITHUB_WORKSPACE/.github/scripts/report-eks-account-capacity.sh" --region "$AWS_REGION"
+          fi
 
       - name: 🔎 Check smoke candidate quota without creating resources
         if: inputs.check_smoke_capacity
@@ -83,3 +107,46 @@ jobs:
               desiredCapacity: 1, minSize: 1, maxSize: 1}]
           }' | "$GITHUB_WORKSPACE/.github/scripts/check-eks-capacity.sh" \
             --region "$AWS_REGION" --cluster-name capacity-probe --peak-nodes 2
+
+      - name: 🔎 Evaluate exact ownership reads
+        if: inputs.evaluate_ownership_reads
+        timeout-minutes: 5
+        shell: bash
+        env:
+          AWS_REGION: ${{ inputs.region }}
+        run: |
+          set -euo pipefail
+          evidence_dir="$RUNNER_TEMP/eks-ownership-read-probe-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          baseline_file="$evidence_dir/baseline.json"
+          ownership_file="$evidence_dir/ownership.json"
+          cluster_name="st-eks-ownership-probe-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -m 700 "$evidence_dir"
+          trap 'rm -f -- "$baseline_file" "$ownership_file"; rmdir "$evidence_dir"' EXIT
+
+          "$GITHUB_WORKSPACE/.github/scripts/report-eks-account-capacity.sh" \
+            --region "$AWS_REGION" --baseline-file "$baseline_file" \
+            --cluster-name "$cluster_name" --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" --source-sha "$GITHUB_SHA"
+
+          capture_status=0
+          "$GITHUB_WORKSPACE/.github/scripts/report-eks-account-capacity.sh" \
+            --region "$AWS_REGION" --baseline-file "$baseline_file" \
+            --ownership-file "$ownership_file" --cluster-name "$cluster_name" \
+            --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --source-sha "$GITHUB_SHA" || capture_status=$?
+          test "$capture_status" = 1
+          test "$(stat -c '%a' "$baseline_file")" = 600
+          test "$(stat -c '%a' "$ownership_file")" = 600
+          jq -r '
+            "ownership-read-probe cluster-read=" + (.coverage.cluster.readComplete | tostring) +
+            " cluster-reason=" + (.coverage.cluster.reason // "-") +
+            " cloudformation-read=" + (.coverage.cloudformation.readComplete | tostring) +
+            " cloudformation-reason=" + (.coverage.cloudformation.reason // "-")
+          ' "$ownership_file"
+          jq -e '
+            .coverage.account.readComplete == true and
+            .coverage.cluster.reason == "not-found" and
+            .coverage.cloudformation.reason == "not-found" and
+            .clusterIdentity == "" and .resources == []
+          ' "$ownership_file" >/dev/null
+          echo "Exact synthetic cluster and stack reads reached expected not-found responses; deeper resource reads remain untested without owned resources."

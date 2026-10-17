@@ -25,21 +25,75 @@ var ErrInventory = errors.New("incomplete AWS inventory")
 
 var errAWSRead = errors.New("AWS read failed")
 
+var errResourceNotFound = errors.New("AWS resource not found")
+
+var errEvidenceLimit = errors.New("baseline evidence limit")
+
 const (
-	awsArgumentCount = 10
-	maxGroups        = 40
-	nextTokenKey     = "NextToken"
-	eksTokenKey      = "nextToken"
-	nextMarkerKey    = "NextMarker"
-	maxResultsKey    = "MaxResults"
-	stateField       = "State"
-	instanceKind     = "instance"
-	quotaKind        = "quota"
-	ec2Service       = "ec2"
-	maxResponseBytes = 4 << 20
-	maxPages         = 200
-	maxRecords       = 100000
-	callTimeout      = 30 * time.Second
+	awsArgumentCount               = 10
+	maxGroups                      = 40
+	nextTokenKey                   = "NextToken"
+	eksTokenKey                    = "nextToken"
+	nextMarkerKey                  = "NextMarker"
+	maxResultsKey                  = "MaxResults"
+	markerKey                      = "Marker"
+	stateField                     = "State"
+	terminatedState                = "terminated"
+	failedState                    = "failed"
+	deletedState                   = "deleted"
+	notFoundReason                 = "not-found"
+	invalidDataReason              = "invalid-or-incomplete-data"
+	exactRelationships             = "exact-relationships"
+	instantFleetsFamily            = "instantFleets"
+	includeManagedResources        = "IncludeManagedResources"
+	reservationsInstances          = "Reservations.Instances"
+	instanceIDField                = "InstanceId"
+	autoScalingGroupsCollection    = "AutoScalingGroups"
+	autoScalingService             = "autoscaling"
+	describeAutoScalingGroups      = "describe-auto-scaling-groups"
+	describeFleets                 = "describe-fleets"
+	describeNatGateways            = "describe-nat-gateways"
+	natGatewaysCollection          = "NatGateways"
+	natGatewayIDField              = "NatGatewayId"
+	describeAddresses              = "describe-addresses"
+	describeNetworkInterfaces      = "describe-network-interfaces"
+	networkInterfacesCollection    = "NetworkInterfaces"
+	networkInterfaceIDField        = "NetworkInterfaceId"
+	describeVolumes                = "describe-volumes"
+	describeLoadBalancers          = "describe-load-balancers"
+	classicLoadBalancersCollection = "LoadBalancerDescriptions"
+	classicLoadBalancerNameField   = "LoadBalancerName"
+	loadBalancersCollection        = "LoadBalancers"
+	loadBalancerARNField           = "LoadBalancerArn"
+	vpcIDField                     = "VpcId"
+	describeNodegroup              = "describe-nodegroup"
+	describeStacks                 = "describe-stacks"
+	describeVPCs                   = "describe-vpcs"
+	instanceKind                   = "instance"
+	fleetKind                      = "fleet"
+	addressKind                    = "address"
+	autoScalingGroupKind           = "autoscaling-group"
+	classicLoadBalancerKind        = "classic-load-balancer"
+	loadBalancerKind               = "load-balancer"
+	natGatewayKind                 = "nat-gateway"
+	networkInterfaceKind           = "network-interface"
+	stackKind                      = "stack"
+	volumeKind                     = "volume"
+	vpcKind                        = "vpc"
+	nodegroupKind                  = "nodegroup"
+	quotaKind                      = "quota"
+	ec2Service                     = "ec2"
+	eksService                     = "eks"
+	elbService                     = "elb"
+	elbv2Service                   = "elbv2"
+	cloudFormationService          = "cloudformation"
+	pageSizeKey                    = "PageSize"
+	repositoryName                 = "devantler-tech/ksail"
+	maxResponseBytes               = 4 << 20
+	maxPages                       = 200
+	maxRecords                     = 100000
+	callTimeout                    = 30 * time.Second
+	unlimitedIdentityBytes         = -1
 )
 
 // Query is the AWS CLI boundary; nil selects the installed aws executable.
@@ -49,6 +103,14 @@ type operation struct {
 	service, command, title, collection, identity string
 	state, allowed, extra, kind                   string
 	inputToken, outputToken, pageSize             string
+}
+
+type observation struct {
+	groups         map[string]int
+	identities     map[string]bool
+	count          int
+	identityBudget int
+	identityBytes  int
 }
 
 // Report prints only complete per-family counts and validated aggregate groups.
@@ -74,7 +136,7 @@ func Report(ctx context.Context, region string, output io.Writer, query Query) e
 	}
 
 	for _, operationSpec := range operations() {
-		groups, count, err := collect(ctx, region, operationSpec, query)
+		observed, err := collect(ctx, region, operationSpec, query, unlimitedIdentityBytes)
 		if err != nil {
 			_, writeErr := fmt.Fprintf(
 				output,
@@ -89,7 +151,7 @@ func Report(ctx context.Context, region string, output io.Writer, query Query) e
 			continue
 		}
 
-		groupErr := printGroups(output, operationSpec.title, groups, count)
+		groupErr := printGroups(output, operationSpec.title, observed.groups, observed.count)
 		if groupErr != nil {
 			return groupErr
 		}
@@ -112,65 +174,70 @@ func collect(
 	region string,
 	operationSpec operation,
 	query Query,
-) (map[string]int, int, error) {
-	groups := make(map[string]int)
-	identities := make(map[string]bool)
+	identityBudget int,
+) (observation, error) {
+	observed := &observation{
+		groups: make(
+			map[string]int,
+		),
+		identities:     make(map[string]bool),
+		identityBudget: identityBudget,
+	}
 	tokens := make(map[string]bool)
 	token := ""
-	count := 0
 
 	for range maxPages {
 		contextErr := ctx.Err()
 		if contextErr != nil {
-			return nil, 0, fmt.Errorf("inventory deadline: %w", contextErr)
+			return observation{}, fmt.Errorf("inventory deadline: %w", contextErr)
 		}
 
 		input := requestInput(operationSpec, token)
 
 		payload, err := queryPage(ctx, region, operationSpec, input, query)
 		if err != nil {
-			return nil, 0, err
+			return observation{}, err
 		}
 
 		rows, err := records(payload, strings.Split(operationSpec.collection, "."))
 		if err != nil {
-			return nil, 0, err
+			return observation{}, err
 		}
 
-		added, err := addRows(operationSpec, rows, groups, identities)
+		added, err := addRows(operationSpec, rows, observed)
 		if err != nil {
-			return nil, 0, err
+			return observation{}, err
 		}
 
-		count += added
+		observed.count += added
 
 		next, err := nextToken(payload, operationSpec.outputToken)
 		if err != nil {
-			return nil, 0, err
+			return observation{}, err
 		}
 
 		if next == "" {
-			return groups, count, nil
+			return *observed, nil
 		}
 
 		if tokens[next] {
-			return nil, 0, fmt.Errorf("repeated pagination token: %w", ErrInventory)
+			return observation{}, fmt.Errorf("repeated pagination token: %w", ErrInventory)
 		}
 
 		tokens[next] = true
 		token = next
 	}
 
-	return nil, 0, fmt.Errorf("pagination limit exceeded: %w", ErrInventory)
+	return observation{}, fmt.Errorf("pagination limit exceeded: %w", ErrInventory)
 }
 
 func requestInput(operationSpec operation, token string) map[string]any {
 	input := make(map[string]any)
 	if slices.Contains(
-		[]string{describeInstances, "describe-network-interfaces", "describe-volumes"},
+		[]string{describeInstances, describeNetworkInterfaces, describeVolumes},
 		operationSpec.command,
 	) {
-		input["IncludeManagedResources"] = true
+		input[includeManagedResources] = true
 	}
 
 	if operationSpec.pageSize != "" {
@@ -386,7 +453,7 @@ func grouping(operationSpec operation, row json.RawMessage) (string, bool, error
 		return "", false, fmt.Errorf("unrecognized resource state: %w", ErrInventory)
 	}
 
-	if operationSpec.kind == instanceKind && state == "terminated" {
+	if operationSpec.kind == instanceKind && state == terminatedState {
 		return "", false, nil
 	}
 
@@ -403,7 +470,7 @@ func extraGroup(operationSpec operation, row json.RawMessage, state string) (str
 		return "", false, err
 	}
 
-	if operationSpec.kind == "fleet" &&
+	if operationSpec.kind == fleetKind &&
 		!slices.Contains([]string{"instant", "request", "maintain"}, extra) {
 		return "", false, fmt.Errorf("unrecognized fleet type: %w", ErrInventory)
 	}
@@ -547,6 +614,10 @@ func awsQuery(ctx context.Context, args ...string) ([]byte, error) {
 			return nil, fmt.Errorf("AWS read denied: %w", fs.ErrPermission)
 		}
 
+		if exactResourceNotFound(args[0], args[1], diagnostic.Bytes()) {
+			return nil, fmt.Errorf("AWS resource not found: %w", errResourceNotFound)
+		}
+
 		return nil, fmt.Errorf("AWS CLI read failed: %w", errAWSRead)
 	}
 
@@ -555,22 +626,69 @@ func awsQuery(ctx context.Context, args ...string) ([]byte, error) {
 
 func failureReason(err error) string {
 	switch {
+	case errors.Is(err, errEvidenceLimit):
+		return "evidence-limit"
 	case errors.Is(err, fs.ErrPermission):
 		return "access-denied"
+	case errors.Is(err, errResourceNotFound):
+		return notFoundReason
 	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
 		return "deadline"
 	case errors.Is(err, errAWSRead):
 		return "read-failed"
 	default:
-		return "invalid-or-incomplete-data"
+		return invalidDataReason
+	}
+}
+
+//nolint:cyclop // Every allow-listed exact read has a distinct provider error contract.
+func exactResourceNotFound(service, command string, diagnostic []byte) bool {
+	switch [2]string{service, command} {
+	case [2]string{eksService, "describe-cluster"}:
+		return bytes.Contains(diagnostic, []byte("(ResourceNotFoundException)")) &&
+			bytes.Contains(diagnostic, []byte("DescribeCluster operation"))
+	case [2]string{eksService, describeNodegroup}:
+		return bytes.Contains(diagnostic, []byte("(ResourceNotFoundException)")) &&
+			bytes.Contains(diagnostic, []byte("DescribeNodegroup operation"))
+	case [2]string{cloudFormationService, describeStacks}:
+		return bytes.Contains(diagnostic, []byte("(ValidationError)")) &&
+			bytes.Contains(diagnostic, []byte("DescribeStacks operation")) &&
+			bytes.Contains(diagnostic, []byte("does not exist"))
+	case [2]string{ec2Service, describeInstances}:
+		return bytes.Contains(diagnostic, []byte("(InvalidInstanceID.NotFound)")) &&
+			bytes.Contains(diagnostic, []byte("DescribeInstances operation"))
+	case [2]string{ec2Service, describeFleets}:
+		return bytes.Contains(diagnostic, []byte("(InvalidFleetId.NotFound)")) &&
+			bytes.Contains(diagnostic, []byte("DescribeFleets operation"))
+	case [2]string{ec2Service, describeNatGateways}:
+		return (bytes.Contains(diagnostic, []byte("(NatGatewayNotFound)")) ||
+			bytes.Contains(diagnostic, []byte("(InvalidNatGatewayID.NotFound)"))) &&
+			bytes.Contains(diagnostic, []byte("DescribeNatGateways operation"))
+	case [2]string{ec2Service, describeAddresses}:
+		return bytes.Contains(diagnostic, []byte("(InvalidAllocationID.NotFound)")) &&
+			bytes.Contains(diagnostic, []byte("DescribeAddresses operation"))
+	case [2]string{ec2Service, describeNetworkInterfaces}:
+		return bytes.Contains(diagnostic, []byte("(InvalidNetworkInterfaceID.NotFound)")) &&
+			bytes.Contains(diagnostic, []byte("DescribeNetworkInterfaces operation"))
+	case [2]string{ec2Service, describeVolumes}:
+		return bytes.Contains(diagnostic, []byte("(InvalidVolume.NotFound)")) &&
+			bytes.Contains(diagnostic, []byte("DescribeVolumes operation"))
+	case [2]string{ec2Service, describeVPCs}:
+		return bytes.Contains(diagnostic, []byte("(InvalidVpcID.NotFound)")) &&
+			bytes.Contains(diagnostic, []byte("DescribeVpcs operation"))
+	case [2]string{elbService, describeLoadBalancers},
+		[2]string{elbv2Service, describeLoadBalancers}:
+		return bytes.Contains(diagnostic, []byte("(LoadBalancerNotFound)")) &&
+			bytes.Contains(diagnostic, []byte("DescribeLoadBalancers operation"))
+	default:
+		return false
 	}
 }
 
 func addRows(
 	spec operation,
 	rows []json.RawMessage,
-	groups map[string]int,
-	identities map[string]bool,
+	observed *observation,
 ) (int, error) {
 	count := 0
 
@@ -580,22 +698,45 @@ func addRows(
 			return 0, err
 		}
 
-		if identities[identity] || len(identities) >= maxRecords {
-			return 0, fmt.Errorf("repeated or excessive identities: %w", ErrInventory)
+		err = addIdentity(observed, identity)
+		if err != nil {
+			return 0, err
 		}
-
-		identities[identity] = true
 
 		if include {
 			count++
 
 			if group != "" {
-				groups[group]++
+				observed.groups[group]++
 			}
 		}
 	}
 
 	return count, nil
+}
+
+func addIdentity(observed *observation, identity string) error {
+	if observed.identities[identity] || len(observed.identities) >= maxRecords {
+		return fmt.Errorf("repeated or excessive identities: %w", ErrInventory)
+	}
+
+	if observed.identityBudget >= 0 {
+		encoded, err := json.Marshal(identity)
+		if err != nil {
+			return fmt.Errorf("invalid baseline identity: %w", ErrInventory)
+		}
+
+		nextBytes := observed.identityBytes + len(encoded) + 1
+		if nextBytes > observed.identityBudget {
+			return fmt.Errorf("%w: %w", ErrInventory, errEvidenceLimit)
+		}
+
+		observed.identityBytes = nextBytes
+	}
+
+	observed.identities[identity] = true
+
+	return nil
 }
 
 func capacityGroup(row json.RawMessage, key string) (string, bool, error) {
@@ -677,8 +818,20 @@ func validAWSRequest(args []string) bool {
 	valid, _ := regexp.MatchString(`^[a-z]{2}(-[a-z]+)+-[0-9]+$`, args[3])
 
 	return valid &&
-		slices.ContainsFunc(
+		(slices.ContainsFunc(
 			append(operations(), capacityReadOperations()...),
 			func(spec operation) bool { return spec.service == args[0] && spec.command == args[1] },
-		)
+		) || ownershipReadAllowed(args[0], args[1]))
+}
+
+func ownershipReadAllowed(service, command string) bool {
+	return slices.Contains([][2]string{
+		{eksService, "describe-cluster"},
+		{eksService, "list-nodegroups"},
+		{eksService, describeNodegroup},
+		{cloudFormationService, describeStacks},
+		{cloudFormationService, "list-stack-resources"},
+		{cloudFormationService, "describe-stack-resources"},
+		{ec2Service, describeVPCs},
+	}, [2]string{service, command})
 }
