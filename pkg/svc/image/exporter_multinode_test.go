@@ -11,6 +11,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/image"
 	"github.com/docker/docker/api/types/container"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -226,21 +227,38 @@ func TestExportSkipsNodeWhoseImagesCannotBeListed(t *testing.T) {
 	})
 }
 
-// An image held by no node keeps the preferred node, so the export fails there
-// with the existing message naming the image.
-func TestExportKeepsPreferredNodeWhenNoNodeHoldsImage(t *testing.T) {
+// An image held by no node keeps the preferred node, and the export fails
+// there with an error naming the image.
+func TestExportFailsNamingImageHeldByNoNode(t *testing.T) {
 	t.Parallel()
 
-	runMultiNodeExportTest(t, multiNodeExportCase{
-		distribution: v1alpha1.DistributionVanilla,
-		nodes:        kindMultiNodeSummaries()[:2],
-		imageLists: map[string]string{
-			"my-cluster-control-plane": "registry.k8s.io/pause:3.10\n",
-			"my-cluster-worker":        "registry.k8s.io/pause:3.10\n",
-		},
-		exportNode:     "my-cluster-control-plane",
-		tmpPath:        kindExporterTarPath,
-		requested:      []string{"busybox:latest"},
-		expectedExport: []string{"docker.io/library/busybox:latest"},
-	})
+	ctx, mockClient, outputPath := newExporterTestContext(t)
+	mockClient.EXPECT().ContainerList(ctx, mock.Anything).Return(kindMultiNodeSummaries()[:2], nil)
+
+	for _, nodeName := range []string{kindExporterNodeName, "my-cluster-worker"} {
+		setupExecMockWithStdoutForExporter(
+			ctx, t, mockClient, nodeName,
+			[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
+			"registry.k8s.io/pause:3.10\n",
+		)
+	}
+
+	setupPlatformDetectMockForExporter(ctx, t, mockClient, kindExporterNodeName)
+
+	const missingImage = "docker.io/library/busybox:latest"
+
+	exportCmd := buildKindCtrExportCommand(missingImage)
+	notFound := `ctr: image "` + missingImage + `": not found`
+	// The bulk export and the per-image fallback both fail on the preferred node.
+	setupKindExecFailWithCmdForExporter(ctx, t, mockClient, exportCmd, notFound)
+	setupKindExecFailWithCmdForExporter(ctx, t, mockClient, exportCmd, notFound)
+	setupExecMockForExporter(ctx, t, mockClient, kindExporterNodeName)
+
+	err := image.NewExporter(mockClient).Export(
+		ctx, "my-cluster", v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker,
+		image.ExportOptions{OutputPath: outputPath, Images: []string{"busybox:latest"}},
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), missingImage)
 }
