@@ -9,8 +9,8 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 
 | Distribution     | Docker | Kubernetes | Hetzner | Omni | AWS   | GCP   | Azure |
 | ---------------- | ------ | ---------- | ------- | ---- | ----- | ----- | ----- |
-| Vanilla (Kind)   | ✅     | ✅         | ✅      | ❌   | ❌    | ❌    | ❌    |
-| K3s (K3d)        | ✅     | ✅         | ✅      | ❌   | ❌    | ❌    | ❌    |
+| Vanilla (Kind)   | ✅     | ✅         | ✅¹⁵    | ❌   | ❌    | ❌    | ❌    |
+| K3s (K3d)        | ✅     | ✅         | ✅¹⁵    | ❌   | ❌    | ❌    | ❌    |
 | Talos            | ✅     | ✅         | ✅      | ✅   | ❌    | ❌    | ❌    |
 | VCluster (Vind)  | ✅     | ✅         | ❌      | ❌   | ❌    | ❌    | ❌    |
 | KWOK (kwokctl)   | ✅     | ✅         | ❌      | ❌   | ❌    | ❌    | ❌    |
@@ -22,7 +22,7 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 
 - Docker provider requires Docker Desktop or Docker Engine installed locally — see [Docker Provider](/providers/docker/) for setup details
 - Kubernetes provider runs nested cluster nodes as pods inside an existing host Kubernetes cluster — no Docker daemon required on the host; see [Kubernetes Provider](/providers/kubernetes/) for setup details
-- Hetzner provider requires `HCLOUD_TOKEN` and runs Talos, K3s and Vanilla clusters on Hetzner Cloud servers. Talos clusters also need a Talos ISO available in your Hetzner account (KSail tracks the compatible x86 default automatically; for ARM, look up the matching ISO ID in the Hetzner Cloud Console). K3s clusters run native K3s and Vanilla clusters run kubeadm instead of Kind, on a standard Linux image set up through cloud-init, so they need no Talos ISO — see [Hetzner Provider](/providers/hetzner/) for setup details
+- ¹⁵ Hetzner provider requires `HCLOUD_TOKEN` and runs Talos, K3s and Vanilla clusters on Hetzner Cloud servers. Talos clusters also need a Talos ISO available in your Hetzner account (KSail tracks the compatible x86 default automatically; for ARM, look up the matching ISO ID in the Hetzner Cloud Console). K3s clusters run native K3s instead of K3d and Vanilla clusters run kubeadm instead of Kind, on a standard Linux image set up through cloud-init, so they need no Talos ISO — see [Hetzner Provider](/providers/hetzner/) for setup details
 - Omni provider requires a [Sidero Omni](https://www.siderolabs.com/omni/) account, an `OMNI_SERVICE_ACCOUNT_KEY` environment variable, and an Omni API endpoint configured via `spec.provider.omni.endpoint` in your KSail configuration — see [Omni Provider](/providers/omni/) for setup details
 - ¹⁰ AWS provider requires AWS credentials and an AWS account with EKS permissions — see [AWS Provider](/providers/aws/) for setup details; cluster lifecycle (create/delete/start/stop/list/info) and in-place managed node-group capacity updates are supported via eksctl. EKS ships the Amazon VPC CNI and in-tree `Service` type `LoadBalancer` support with the cluster. The **Amazon EBS CSI Driver is an EKS add-on requested by KSail's default `eks.yaml` scaffold** (the `aws-ebs-csi-driver` addon) rather than being built into the distribution itself. The **AWS Load Balancer Controller is separate and experimental** — KSail's default path installs nothing, and it is opt-in via `spec.cluster.eks.experimentalAWSLoadBalancerController`. KSail-managed component installation is still in progress (the 🚧 cells below)
 - ¹³ GCP provider requires Application Default Credentials plus `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION` — see [GCP Provider](/providers/gcp/) for setup details; cluster lifecycle (create/delete/start/stop/list/info) is supported, and GKE's managed CNI/CSI/LoadBalancer/metrics ship with the cluster
