@@ -339,6 +339,7 @@ jobs:
               - '.github/actions/**'
               - '.github/fixtures/**'
               - '.github/scripts/assert-gitops-deployed.sh'
+              - '.github/scripts/build-calico-migration-baseline.sh'
               - '.github/workflows/ci.yaml'
             schema:
               - 'pkg/apis/**/*.go'
@@ -950,8 +951,8 @@ jobs:
           compression-level: 0
           retention-days: 1
 
-  # Compile the immutable migration CLI independently so generation and cache
-  # warming wait only for the candidate binary they actually consume.
+  # Reuse the immutable migration CLI from a main-populated, exact-key cache.
+  # Every selected run still validates and publishes its own immutable artifact.
   build-calico-baseline:
     name: 🏗️ Build Calico Migration Baseline
     runs-on: ubuntu-latest
@@ -960,6 +961,7 @@ jobs:
     if: >-
       (github.event_name == 'pull_request' && needs.changes.outputs.system-test == 'true')
       || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
+      || (github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch))
     permissions:
       contents: read
     outputs:
@@ -971,18 +973,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: 🧹 Free disk space
-        # Identical reviewed bytes; actionlint does not yet parse $/ references.
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@dfe8865ef53b6ec9eb6d0dcce5a4e5313b12b584
-
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: false
-
-      - name: ♻️ Restore Go modules
-        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
 
       - name: 📄 Checkout Calico 3.32.2 baseline
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -992,19 +987,95 @@ jobs:
           path: calico-legacy-source
           persist-credentials: false
 
-      - name: 🏗️ Build Calico migration baseline
-        id: calico-baseline-build
-        env:
-          GOMEMLIMIT: 6GiB
-          GOPROXY: https://proxy.golang.org,direct
+      - name: 🔍 Verify immutable Calico source
         run: |
           set -euo pipefail
           test "$(git -C calico-legacy-source rev-parse HEAD)" = 66ba54d8de006cac38575c3697c863f453fc0f1b
           grep -Fxq 'FROM docker.io/calico/node:v3.32.2@sha256:99b03fe91e8bfbcb153ae65ef4b701b24ce541ffdd74ff314eb041096008f7fd' calico-legacy-source/pkg/svc/installer/cni/calico/Dockerfile
-          mkdir -p "$RUNNER_TEMP/calico-legacy-bin"
-          (cd calico-legacy-source && go build -trimpath -ldflags='-s -w' -o "$RUNNER_TEMP/calico-legacy-bin/ksail" .)
-          checksum=$(sha256sum "$RUNNER_TEMP/calico-legacy-bin/ksail" | cut -d ' ' -f 1)
+
+      - name: 🔑 Identify Calico baseline cache
+        id: calico-cache-key
+        env:
+          BASELINE_REF: 66ba54d8de006cac38575c3697c863f453fc0f1b
+          # Only actual build-recipe changes invalidate the immutable source.
+          RECIPE_HASH: ${{ hashFiles('.github/scripts/build-calico-migration-baseline.sh') }}
+        run: |
+          set -euo pipefail
+          go_version=$(go env GOVERSION)
+          goos=$(go env GOOS)
+          goarch=$(go env GOARCH)
+          cgo_enabled=$(go env CGO_ENABLED)
+          test -z "$(go env GOFLAGS)"
+          build_env=$(go env -json GOOS GOARCH GOAMD64 GOARM GOARM64 CGO_ENABLED CC CXX \
+            CGO_CFLAGS CGO_CPPFLAGS CGO_CXXFLAGS CGO_FFLAGS CGO_LDFLAGS GOEXPERIMENT GOFLAGS | sha256sum | cut -d ' ' -f 1)
+          printf 'key=calico-baseline-bin-v1-%s-%s-%s-cgo%s-%s-%s-%s-%s-%s\n' \
+            "$go_version" "$goos" "$goarch" "$cgo_enabled" "${ImageOS:?}" "${ImageVersion:?}" \
+            "$build_env" "$BASELINE_REF" "$RECIPE_HASH" >> "$GITHUB_OUTPUT"
+          printf 'go-version=%s\ngoos=%s\ngoarch=%s\ncgo-enabled=%s\n' \
+            "$go_version" "$goos" "$goarch" "$cgo_enabled" >> "$GITHUB_OUTPUT"
+
+      - name: ♻️ Restore Calico baseline binary
+        id: calico-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/calico-legacy-bin/ksail
+          key: ${{ steps.calico-cache-key.outputs.key }}
+
+      - name: 🧹 Free disk space
+        if: steps.calico-cache.outputs.cache-hit != 'true'
+        # Only cold compilation needs the large working-space reclamation.
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@dfe8865ef53b6ec9eb6d0dcce5a4e5313b12b584
+
+      - name: ♻️ Restore Go modules
+        if: steps.calico-cache.outputs.cache-hit != 'true'
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
+
+      - name: 🏗️ Build Calico migration baseline
+        if: steps.calico-cache.outputs.cache-hit != 'true'
+        env:
+          GOMEMLIMIT: 6GiB
+          GOPROXY: https://proxy.golang.org,direct
+        run: bash .github/scripts/build-calico-migration-baseline.sh
+
+      - name: 🔍 Validate Calico baseline binary
+        id: calico-baseline-build
+        env:
+          BASELINE_BINARY: ${{ runner.temp }}/calico-legacy-bin/ksail
+          BASELINE_REF: 66ba54d8de006cac38575c3697c863f453fc0f1b
+          GO_VERSION: ${{ steps.calico-cache-key.outputs.go-version }}
+          TARGET_GOOS: ${{ steps.calico-cache-key.outputs.goos }}
+          TARGET_GOARCH: ${{ steps.calico-cache-key.outputs.goarch }}
+          CGO_ENABLED: ${{ steps.calico-cache-key.outputs.cgo-enabled }}
+        run: |
+          set -euo pipefail
+          if [[ ! -f "$BASELINE_BINARY" || -L "$BASELINE_BINARY" || ! -s "$BASELINE_BINARY" ]]; then
+            echo "Missing or invalid Calico baseline binary" >&2
+            exit 1
+          fi
+          go version -m -json "$BASELINE_BINARY" | jq -e \
+            --arg source "$BASELINE_REF" --arg version "$GO_VERSION" \
+            --arg goos "$TARGET_GOOS" --arg goarch "$TARGET_GOARCH" --arg cgo "$CGO_ENABLED" '
+            def setting($key): [.Settings[]? | select(.Key == $key) | .Value];
+            .GoVersion == $version
+            and .Main.Path == "github.com/devantler-tech/ksail/v7"
+            and setting("vcs.revision") == [$source]
+            and setting("vcs.modified") == ["false"]
+            and setting("GOOS") == [$goos]
+            and setting("GOARCH") == [$goarch]
+            and setting("CGO_ENABLED") == [$cgo]
+            and setting("-trimpath") == ["true"]
+            and setting("-buildmode") == ["exe"]
+            and setting("-compiler") == ["gc"]
+          '
+          checksum=$(sha256sum "$BASELINE_BINARY" | cut -d ' ' -f 1)
           echo "binary-sha256=$checksum" >> "$GITHUB_OUTPUT"
+
+      - name: ♻️ Save main Calico baseline binary
+        if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && steps.calico-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/calico-legacy-bin/ksail
+          key: ${{ steps.calico-cache-key.outputs.key }}
 
       - name: 📤 Publish Calico migration baseline
         id: calico-baseline-artifact
@@ -2618,6 +2689,7 @@ jobs:
         if: >-
           (github.event_name == 'pull_request' && needs.changes.outputs.system-test == 'true')
           || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
+          || (github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch))
         env:
           BASELINE_RESULT: ${{ needs.build-calico-baseline.result }}
         run: |
