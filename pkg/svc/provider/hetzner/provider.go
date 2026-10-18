@@ -118,7 +118,10 @@ func (p *Provider) waitForServersStatus(
 	clusterName string,
 	desiredStatus hcloud.ServerStatus,
 ) error {
-	var condErr error
+	var (
+		condErr error
+		pollErr error
+	)
 
 	err := wait.PollUntilContextTimeout(
 		ctx,
@@ -127,7 +130,10 @@ func (p *Provider) waitForServersStatus(
 		false, // match the legacy ticker: wait one interval before the first check.
 		func(ctx context.Context) (bool, error) {
 			ready, checkErr := p.allServersAtStatus(ctx, clusterName, desiredStatus)
+			// Keep both observations: matching context sentinels do not prove
+			// the poll caused the request failure, so never replace its error.
 			condErr = checkErr
+			pollErr = ctx.Err()
 
 			return ready, checkErr
 		},
@@ -136,10 +142,11 @@ func (p *Provider) waitForServersStatus(
 		return nil
 	}
 
-	// allServersAtStatus errors propagate unwrapped (even when they wrap a
-	// context error); only the poller's own deadline/cancellation maps to the
-	// legacy timeout message.
-	if condErr != nil && errors.Is(err, condErr) {
+	// API failures without a matching poll interruption remain unchanged.
+	// When the poll also stopped with a matching context error, add the
+	// timeout diagnostic around the complete request error so neither
+	// observation loses its cause.
+	if condErr != nil && (pollErr == nil || !errors.Is(condErr, pollErr)) {
 		return condErr
 	}
 
