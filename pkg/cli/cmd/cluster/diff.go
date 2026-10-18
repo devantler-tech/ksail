@@ -139,6 +139,17 @@ func handleDiffRunE(
 		return err
 	}
 
+	// Diff is read-only, so a context it cannot select stays a warning: the probes
+	// that need the cluster then report an unknown baseline rather than a false clean.
+	err = resolveImplicitEKSKubeContext(cmd.Context(), ctx)
+	if err != nil {
+		notify.Warningf(
+			cmd.ErrOrStderr(),
+			"Cannot select the eksctl kubeconfig context (drift detection may be incomplete): %v",
+			err,
+		)
+	}
+
 	diff := computeSpecOnlyDiff(cmd, ctx)
 
 	// Also try provisioner-level diff for Updater-capable provisioners.

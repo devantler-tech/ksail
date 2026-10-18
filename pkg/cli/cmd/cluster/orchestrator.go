@@ -82,6 +82,13 @@ func (o *updateOrchestrator) run(outputTimer timer.Timer) error {
 		return err
 	}
 
+	// An implicit EKS context must be the one eksctl wrote, or every drift probe
+	// reads nothing and update cannot inspect the cluster it would change.
+	err = resolveImplicitEKSKubeContext(o.cmd.Context(), o.ctx)
+	if err != nil {
+		return err
+	}
+
 	// Fail fast when the user pinned a context the kubeconfig cannot resolve, so
 	// update never reports "No changes detected" for a cluster it could not inspect.
 	err = ensureConfiguredContextResolvable(o.ctx.ClusterCfg)
@@ -950,6 +957,33 @@ func resolveKubeContext(ctx *localregistry.Context) string {
 	}
 
 	return kubeContextFor(ctx.ClusterCfg, resolveClusterNameFromContext(ctx))
+}
+
+// resolveImplicitEKSKubeContext pins spec.cluster.connection.context for an
+// existing EKS cluster whose configuration leaves it empty (the `project init`
+// default). The distribution-derived fallback, "<name>.eksctl.io", never exists:
+// eksctl writes "<identity>@<name>.<region>.eksctl.io". So diff and update select
+// the context exactly as create does — the identity-qualified context whose
+// cluster entry reaches the owned cluster's verified API endpoint — instead of
+// probing a context that cannot resolve (ksail#7837). A pinned context and every
+// other distribution are left untouched.
+func resolveImplicitEKSKubeContext(ctx context.Context, clusterCtx *localregistry.Context) error {
+	clusterCfg := clusterCtx.ClusterCfg
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS ||
+		strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context) != "" {
+		return nil
+	}
+
+	// The endpoint read needs a frozen credential snapshot. A caller that already
+	// holds the verified endpoint needs no AWS call at all.
+	if strings.TrimSpace(clusterCtx.EKSEndpoint) == "" {
+		err := freezeEKSCreateCredentials(ctx, clusterCtx)
+		if err != nil {
+			return fmt.Errorf("resolve EKS kubeconfig context: %w", err)
+		}
+	}
+
+	return resolveEKSPostCreateContext(ctx, clusterCtx)
 }
 
 // kubeContextFor resolves the kubeconfig context for a cluster from its pinned
