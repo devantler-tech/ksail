@@ -1,6 +1,8 @@
 package ciharness_test
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -53,7 +55,7 @@ func TestCalicoMigrationPublishesImmutableBaseline(t *testing.T) {
 	t.Parallel()
 
 	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
-	producer := workflow.Jobs["build-artifact"]
+	producer := workflow.Jobs["build-calico-baseline"]
 	checkout := findHarnessStep(t, producer.Steps, "📄 Checkout Calico 3.32.2 baseline")
 	assert.Equal(t, "66ba54d8de006cac38575c3697c863f453fc0f1b", stringValue(checkout.With["ref"]))
 	assert.Equal(t, false, checkout.With["persist-credentials"])
@@ -79,7 +81,7 @@ func TestCalicoMigrationUsesImmutableBaselineOnlyForCreate(t *testing.T) {
 	assert.Equal(t, "${{ matrix.calico-migration == 'true' }}", download.If)
 	assert.Equal(
 		t,
-		"${{ needs.build-artifact.outputs.calico-baseline-artifact-id }}",
+		"${{ needs.build-calico-baseline.outputs.calico-baseline-artifact-id }}",
 		stringValue(download.With["artifact-ids"]),
 	)
 	assert.Equal(t, "${{ runner.temp }}/calico-legacy-download", stringValue(download.With["path"]))
@@ -118,6 +120,86 @@ func TestCalicoMigrationUsesImmutableBaselineOnlyForCreate(t *testing.T) {
 		harnessStepIndex(t, action.Runs.Steps, "🧪 ksail cluster info"),
 	)
 	assert.Contains(t, migrate.Run, "calico-migration.sh")
+}
+
+// Candidate generation and cache warming must not wait for a second, independent
+// compiler invocation. Migration legs still require its verified artifact.
+func TestCalicoBaselineBuildDoesNotDelayCandidateConsumers(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
+	baseline, found := workflow.Jobs["build-calico-baseline"]
+	require.True(t, found, "the migration baseline needs an independent producer")
+	assert.Equal(t, []string{"changes"}, baseline.Needs)
+	assert.False(t, baseline.ContinueOnError)
+	assert.Equal(t, "read", baseline.Permissions["contents"])
+	assert.Len(t, baseline.Permissions, 1)
+
+	for _, name := range []string{"build-artifact", "generate", "warm-helm-cache", "warm-mirror-cache"} {
+		job := workflow.Jobs[name]
+		assert.NotContains(t, job.Needs, "build-calico-baseline", name)
+
+		for _, step := range job.Steps {
+			assert.NotContains(t, step.Run, "calico-legacy-source", name)
+		}
+	}
+
+	consumer := workflow.Jobs["system-test-docker"]
+	assert.Contains(t, consumer.Needs, "build-calico-baseline")
+	assert.Contains(t, consumer.If, "needs.build-calico-baseline.result == 'success'")
+
+	gate := workflow.Jobs["require-checks-in-pr"]
+	assert.Contains(t, gate.Needs, "build-calico-baseline")
+	assert.Contains(t, gate.Steps[0].With["job-results"], "needs.build-calico-baseline.result")
+}
+
+func TestCalicoBaselineSetupPinsReviewedAction(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
+	step := findHarnessStep(t, workflow.Jobs["build-calico-baseline"].Steps, "🧹 Free disk space")
+	assert.Equal(
+		t,
+		"devantler-tech/ksail/.github/actions/free-disk-space@dfe8865ef53b6ec9eb6d0dcce5a4e5313b12b584",
+		step.Uses,
+	)
+
+	// The immutable protected-main action has exactly these candidate bytes.
+	// Future action changes need a reviewed pin refresh rather than stale setup.
+	for path, digest := range map[string]string{
+		"action.yaml":        "bb40116a5901c77432b0d330b05e56228d9546dab26f98a31f05a0e87ffab96c",
+		"free-disk-space.sh": "2dd12fcf3779137ca1cb5f21194947f6a10d3f94f8fb438a1a29ec9021fbdc30",
+	} {
+		contents := readRepoFile(t, ".github/actions/free-disk-space/"+path)
+		assert.Equal(t, digest, fmt.Sprintf("%x", sha256.Sum256(contents)), path)
+	}
+}
+
+func TestSelectedCalicoBaselineCannotSilentlySkip(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
+	gate := workflow.Jobs["require-checks-in-pr"]
+	step := findHarnessStep(t, gate.Steps, "🔍 Require the selected Calico baseline")
+	assert.Contains(t, step.If, "github.event_name == 'pull_request'")
+	assert.Contains(t, step.If, "needs.changes.outputs.system-test == 'true'")
+	assert.Contains(t, step.If, "inputs.run_system_tests == true")
+	assert.Contains(t, step.If, "!inputs.run_local_recovery_trial")
+	assert.Equal(t, "${{ needs.build-calico-baseline.result }}", step.Env["BASELINE_RESULT"])
+	assert.False(t, step.ContinueOnError)
+
+	for _, result := range []string{"success", "failure", "cancelled", "skipped", ""} {
+		t.Run(result, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := runBinaryArtifactStep(t, step, "BASELINE_RESULT="+result)
+			if result == "success" {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err, "a selected migration needs a successful producer")
+			}
+		})
+	}
 }
 
 func TestCalicoMigrationRejectsInvalidProof(t *testing.T) {
