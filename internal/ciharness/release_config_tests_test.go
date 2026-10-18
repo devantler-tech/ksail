@@ -102,11 +102,13 @@ func TestReleaseConfigChangesRunTheGoTests(t *testing.T) {
 	)
 
 	var aggregateStep harnessStep
+
 	for _, step := range aggregator.Steps {
 		if strings.HasPrefix(step.Uses, "devantler-tech/actions/aggregate-job-checks@") {
 			aggregateStep = step
 		}
 	}
+
 	assert.Contains(
 		t,
 		stringValue(aggregateStep.With["job-results"]),

@@ -132,9 +132,11 @@ func TestCalicoBaselineBuildDoesNotDelayCandidateConsumers(t *testing.T) {
 	assert.False(t, baseline.ContinueOnError)
 	assert.Equal(t, "read", baseline.Permissions["contents"])
 	assert.Len(t, baseline.Permissions, 1)
+
 	for _, name := range []string{"build-artifact", "generate", "warm-helm-cache", "warm-mirror-cache"} {
 		job := workflow.Jobs[name]
 		assert.NotContains(t, job.Needs, "build-calico-baseline", name)
+
 		for _, step := range job.Steps {
 			assert.NotContains(t, step.Run, "calico-legacy-source", name)
 		}
@@ -143,6 +145,7 @@ func TestCalicoBaselineBuildDoesNotDelayCandidateConsumers(t *testing.T) {
 	consumer := workflow.Jobs["system-test-docker"]
 	assert.Contains(t, consumer.Needs, "build-calico-baseline")
 	assert.Contains(t, consumer.If, "needs.build-calico-baseline.result == 'success'")
+
 	gate := workflow.Jobs["require-checks-in-pr"]
 	assert.Contains(t, gate.Needs, "build-calico-baseline")
 	assert.Contains(t, gate.Steps[0].With["job-results"], "needs.build-calico-baseline.result")
@@ -160,8 +163,11 @@ func TestSelectedCalicoBaselineCannotSilentlySkip(t *testing.T) {
 	assert.Contains(t, step.If, "!inputs.run_local_recovery_trial")
 	assert.Equal(t, "${{ needs.build-calico-baseline.result }}", step.Env["BASELINE_RESULT"])
 	assert.False(t, step.ContinueOnError)
+
 	for _, result := range []string{"success", "failure", "cancelled", "skipped", ""} {
 		t.Run(result, func(t *testing.T) {
+			t.Parallel()
+
 			_, err := runBinaryArtifactStep(t, step, "BASELINE_RESULT="+result)
 			if result == "success" {
 				require.NoError(t, err)
