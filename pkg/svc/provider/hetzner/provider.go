@@ -127,6 +127,13 @@ func (p *Provider) waitForServersStatus(
 		false, // match the legacy ticker: wait one interval before the first check.
 		func(ctx context.Context) (bool, error) {
 			ready, checkErr := p.allServersAtStatus(ctx, clusterName, desiredStatus)
+			// The poll can cancel an in-flight request when its deadline expires.
+			// Attribute that failure to the poll, while preserving API errors
+			// returned while the poll's context is still live.
+			if checkErr != nil && ctx.Err() != nil {
+				return false, ctx.Err()
+			}
+
 			condErr = checkErr
 
 			return ready, checkErr
