@@ -864,8 +864,6 @@ jobs:
   build-artifact:
     name: 🏗️ Build KSail Binary
     runs-on: ubuntu-latest
-    # Also build the immutable migration baseline; dependency churn can make
-    # that second build miss the candidate's warmed cache.
     timeout-minutes: 40
     needs: [changes]
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && (needs.changes.outputs.code == 'true' || needs.changes.outputs.cli == 'true' || needs.changes.outputs.system-test == 'true' || needs.changes.outputs.kubeconform-cancellation == 'true'))
@@ -874,8 +872,6 @@ jobs:
     outputs:
       artifact-id: ${{ steps.binary-artifact.outputs.artifact-id }}
       binary-sha256: ${{ steps.binary-checksum.outputs.binary-sha256 }}
-      calico-baseline-artifact-id: ${{ steps.calico-baseline-artifact.outputs.artifact-id }}
-      calico-baseline-sha256: ${{ steps.calico-baseline-build.outputs.binary-sha256 }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -954,8 +950,41 @@ jobs:
           compression-level: 0
           retention-days: 1
 
+  # Compile the immutable migration CLI independently so generation and cache
+  # warming wait only for the candidate binary they actually consume.
+  build-calico-baseline:
+    name: 🏗️ Build Calico Migration Baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: [changes]
+    if: >-
+      (github.event_name == 'pull_request' && needs.changes.outputs.system-test == 'true')
+      || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
+    permissions:
+      contents: read
+    outputs:
+      calico-baseline-artifact-id: ${{ steps.calico-baseline-artifact.outputs.artifact-id }}
+      calico-baseline-sha256: ${{ steps.calico-baseline-build.outputs.binary-sha256 }}
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 🧹 Free disk space
+        # Identical reviewed bytes; actionlint does not yet parse $/ references.
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@dfe8865ef53b6ec9eb6d0dcce5a4e5313b12b584
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
+
       - name: 📄 Checkout Calico 3.32.2 baseline
-        if: needs.changes.outputs.system-test == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Reviewed protected-main source immediately before this migration fix.
@@ -965,7 +994,6 @@ jobs:
 
       - name: 🏗️ Build Calico migration baseline
         id: calico-baseline-build
-        if: needs.changes.outputs.system-test == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
         env:
           GOMEMLIMIT: 6GiB
           GOPROXY: https://proxy.golang.org,direct
@@ -980,7 +1008,6 @@ jobs:
 
       - name: 📤 Publish Calico migration baseline
         id: calico-baseline-artifact
-        if: needs.changes.outputs.system-test == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: calico-legacy-binary-${{ github.run_id }}-${{ github.run_attempt }}
@@ -1822,12 +1849,14 @@ jobs:
       [
         changes,
         build-artifact,
+        build-calico-baseline,
         warm-helm-cache,
         warm-mirror-cache,
         wait-for-validate-go,
       ]
     if: >-
       !cancelled()
+      && needs.build-calico-baseline.result == 'success'
       && needs.warm-mirror-cache.result == 'success'
       && (needs.wait-for-validate-go.result == 'success' || needs.wait-for-validate-go.result == 'skipped')
       && (
@@ -1978,8 +2007,8 @@ jobs:
       - name: 🔍 Require Calico migration baseline artifact
         if: ${{ matrix.calico-migration == 'true' }}
         env:
-          ARTIFACT_ID: ${{ needs.build-artifact.outputs.calico-baseline-artifact-id }}
-          BINARY_SHA256: ${{ needs.build-artifact.outputs.calico-baseline-sha256 }}
+          ARTIFACT_ID: ${{ needs.build-calico-baseline.outputs.calico-baseline-artifact-id }}
+          BINARY_SHA256: ${{ needs.build-calico-baseline.outputs.calico-baseline-sha256 }}
         run: |
           [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ && "$BINARY_SHA256" =~ ^[a-f0-9]{64}$ ]] || {
             echo 'Missing exact Calico baseline artifact identity' >&2
@@ -1990,7 +2019,7 @@ jobs:
         if: ${{ matrix.calico-migration == 'true' }}
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          artifact-ids: ${{ needs.build-artifact.outputs.calico-baseline-artifact-id }}
+          artifact-ids: ${{ needs.build-calico-baseline.outputs.calico-baseline-artifact-id }}
           path: ${{ runner.temp }}/calico-legacy-download
 
       - name: 📥 Restore Helm Cache
@@ -2021,7 +2050,7 @@ jobs:
           init: ${{ matrix.init }}
           args: ${{ matrix.args }}
           calico-migration-binary: ${{ matrix.calico-migration == 'true' && format('{0}/calico-legacy-download/ksail', runner.temp) || '' }}
-          calico-migration-sha256: ${{ matrix.calico-migration == 'true' && needs.build-artifact.outputs.calico-baseline-sha256 || '' }}
+          calico-migration-sha256: ${{ matrix.calico-migration == 'true' && needs.build-calico-baseline.outputs.calico-baseline-sha256 || '' }}
           kubernetes-upgrade-from: ${{ matrix.kubernetes-upgrade-from || '' }}
           kubernetes-upgrade-to: ${{ matrix.kubernetes-upgrade-to || '' }}
           ecr-public-upstream: ${{ steps.offline-ecr.outputs.remote-url || 'https://ecr-public.aws.com' }}
@@ -2524,6 +2553,7 @@ jobs:
         verify-go-archive,
         verify-vulnerability-identities,
         build-artifact,
+        build-calico-baseline,
         generate,
         auto-commit,
         warm-helm-cache,
@@ -2565,6 +2595,7 @@ jobs:
             ${{ needs.verify-go-archive.result }}
             ${{ needs.verify-vulnerability-identities.result }}
             ${{ needs.build-artifact.result }}
+            ${{ needs.build-calico-baseline.result }}
             ${{ needs.generate.result }}
             ${{ needs.auto-commit.result }}
             ${{ needs.warm-helm-cache.result }}
@@ -2592,3 +2623,15 @@ jobs:
             ${{ needs.hetzner-cleanup-script.result }}
             ${{ needs.gitops-assert-scripts.result }}
             ${{ needs.local-recovery-trial.result }}
+
+      - name: 🔍 Require the selected Calico baseline
+        if: >-
+          (github.event_name == 'pull_request' && needs.changes.outputs.system-test == 'true')
+          || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true && !inputs.run_local_recovery_trial)
+        env:
+          BASELINE_RESULT: ${{ needs.build-calico-baseline.result }}
+        run: |
+          if [[ "$BASELINE_RESULT" != success ]]; then
+            echo "The selected Calico baseline must succeed, got: $BASELINE_RESULT" >&2
+            exit 1
+          fi
