@@ -1863,23 +1863,13 @@ jobs:
         # (e.g. run 27774791970). Reclaim disk before warming the cache.
         uses: ./.github/actions/free-disk-space
 
-      - name: ⚙️ Setup Go
-        id: setup-go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      # This job already waits for the producer. Reuse its exact sealed bytes
+      # instead of restoring Go modules or compiling again after cache eviction.
+      - name: 📥 Restore KSail binary
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@ee5fe3922267eb83f074c2fcccdfdc5c8586d3c7
         with:
-          go-version-file: go.mod
-          cache: false
-
-      - name: ♻️ Restore Go modules
-        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
-
-      - name: 📦 Cache KSail Binary
-        uses: ./.github/actions/cache-ksail-binary
-        with:
-          go-version: ${{ steps.setup-go.outputs.go-version }}
-          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
-          output-path: /usr/local/bin/ksail
-          save: "false"
+          artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
+          binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
 
       # The ECR Public copy falls back to Docker Hub for Docker Official
       # Images when ECR Public rate-limits the runner; skopeo reads this login.

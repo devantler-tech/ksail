@@ -84,6 +84,58 @@ func TestKSailBinaryArtifactDockerConsumer(t *testing.T) {
 	}
 }
 
+func TestKSailBinaryArtifactMirrorWarmerConsumer(t *testing.T) {
+	t.Parallel()
+	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
+	consumer := workflow.Jobs["warm-mirror-cache"]
+	assert.Contains(t, consumer.Needs, "build-artifact")
+	assert.Contains(t, consumer.Needs, "wait-for-validate-go")
+	assert.Equal(t, map[string]string{"contents": "read"}, consumer.Permissions)
+	assert.False(t, consumer.ContinueOnError)
+	restore := findHarnessStep(t, consumer.Steps, "📥 Restore KSail binary")
+	assert.Equal(t,
+		"devantler-tech/ksail/.github/actions/restore-ksail-binary@"+
+			"ee5fe3922267eb83f074c2fcccdfdc5c8586d3c7", restore.Uses)
+	assert.Equal(
+		t,
+		"${{ needs.build-artifact.outputs.artifact-id }}",
+		stringValue(restore.With["artifact-id"]),
+	)
+	assert.Equal(
+		t,
+		"${{ needs.build-artifact.outputs.binary-sha256 }}",
+		stringValue(restore.With["binary-sha256"]),
+	)
+	assert.Empty(t, restore.If, "warming always requires the current producer artifact")
+	assert.False(t, restore.ContinueOnError, "artifact verification failures must stop warming")
+	assert.Len(t, restore.With, 2, "retain the verified action's default executable destination")
+	assert.Less(t, harnessStepIndex(t, consumer.Steps, "🧹 Free disk space"),
+		harnessStepIndex(t, consumer.Steps, restore.Name))
+	assert.Less(t, harnessStepIndex(t, consumer.Steps, restore.Name),
+		harnessStepIndex(t, consumer.Steps, "🔥 Warm mirror cache"))
+
+	for _, step := range consumer.Steps {
+		assert.NotContains(
+			t,
+			step.Uses,
+			"actions/setup-go@",
+			"a binary consumer must not provision a compiler",
+		)
+		assert.NotContains(
+			t,
+			step.Uses,
+			"/restore-go-modules@",
+			"a binary consumer must not download Go modules",
+		)
+		assert.NotContains(
+			t,
+			step.Uses,
+			"cache-ksail-binary",
+			"cache eviction must not trigger a second compilation",
+		)
+	}
+}
+
 func TestKSailBinaryRestorePinnedSourceMatchesCandidate(t *testing.T) {
 	t.Parallel()
 
