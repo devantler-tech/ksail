@@ -83,3 +83,21 @@ func TestRecordUnselectableKubeContext_MarksTheBaselineUnknown(t *testing.T) {
 	assert.Equal(t, "cluster.connection.context", failed.UnknownBaseline[0].Field)
 	assert.Equal(t, clusterupdate.UnknownBaselineValue, failed.UnknownBaseline[0].OldValue)
 }
+
+// The region environment variable overrides eks.yaml for diff/update exactly as it does for
+// create, so the context selection targets the region the cluster actually runs in (ksail#7854).
+func TestResolveImplicitEKSKubeContext_HonoursTheRegionEnvironmentVariable(t *testing.T) {
+	t.Setenv("AWS_REGION", "eu-west-1")
+
+	const sessionMatch = "operator@st-eks.eu-west-1.eksctl.io"
+
+	ctx := newImplicitEKSPostCreateContext(writeEKSContextKubeconfig(
+		t, sessionMatch,
+		eksContextFixture{name: sessionMatch, server: eksContextTestEndpoint},
+	))
+	ctx.EKSConfig.Region = "us-east-1"
+
+	require.NoError(t, cluster.ExportResolveImplicitEKSKubeContext(ctx))
+	assert.Equal(t, "eu-west-1", ctx.EKSConfig.Region)
+	assert.Equal(t, sessionMatch, cluster.ExportResolveKubeContext(ctx))
+}

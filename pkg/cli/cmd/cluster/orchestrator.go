@@ -974,6 +974,15 @@ func resolveImplicitEKSKubeContext(ctx context.Context, clusterCtx *localregistr
 		return nil
 	}
 
+	// Honour the region environment variable over eks.yaml, as create does, so both the
+	// endpoint read and the context match target the region the cluster runs in.
+	if clusterCtx.EKSConfig != nil {
+		clusterCtx.EKSConfig.Region = lifecycle.ResolveAWSRegion(
+			clusterCfg.Spec.Provider.AWS,
+			&clusterprovisioner.DistributionConfig{EKS: clusterCtx.EKSConfig},
+		)
+	}
+
 	// The endpoint read needs a frozen credential snapshot. A caller that already
 	// holds the verified endpoint needs no AWS call at all.
 	if strings.TrimSpace(clusterCtx.EKSEndpoint) == "" {
