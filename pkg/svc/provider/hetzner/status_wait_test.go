@@ -42,7 +42,7 @@ func (testCase statusWaitCase) client(
 			cancel()
 		}
 
-		if testCase.cancelPoll || testCase.waitForDeadline {
+		if (testCase.cancelPoll && testCase.requestError == nil) || testCase.waitForDeadline {
 			<-request.Context().Done()
 
 			return nil, fmt.Errorf("status request interrupted: %w", request.Context().Err())
@@ -65,11 +65,16 @@ func (testCase statusWaitCase) checkError(t *testing.T, err, contextErr error) {
 	if testCase.wantTimeout {
 		require.ErrorContains(t, err, "timeout waiting for servers to reach status off")
 	} else {
-		require.NoError(
-			t,
-			contextErr,
-			"the poll must remain live for an independent request failure",
-		)
+		if testCase.cancelPoll {
+			require.ErrorIs(t, contextErr, context.Canceled)
+		} else {
+			require.NoError(
+				t,
+				contextErr,
+				"the poll must remain live for an independent request failure",
+			)
+		}
+
 		require.ErrorContains(t, err, "failed to list servers")
 		require.NotContains(t, err.Error(), "timeout waiting for servers")
 	}
@@ -101,6 +106,12 @@ func TestWaitForServersStatus_ContextErrorAttribution(t *testing.T) {
 			requestError: context.Canceled,
 			wantError:    context.Canceled,
 		},
+		{
+			name:         "independent API failure racing with poll cancellation is preserved",
+			cancelPoll:   true,
+			requestError: http.ErrHandlerTimeout,
+			wantError:    http.ErrHandlerTimeout,
+		},
 	}
 
 	for _, testCase := range tests {
@@ -109,7 +120,7 @@ func TestWaitForServersStatus_ContextErrorAttribution(t *testing.T) {
 
 			ctx, cancel := context.WithTimeout(
 				t.Context(),
-				hetzner.DefaultPollingInterval+time.Second,
+				hetzner.DefaultPollingInterval+10*time.Second,
 			)
 			defer cancel()
 

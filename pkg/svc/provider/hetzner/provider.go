@@ -128,9 +128,9 @@ func (p *Provider) waitForServersStatus(
 		func(ctx context.Context) (bool, error) {
 			ready, checkErr := p.allServersAtStatus(ctx, clusterName, desiredStatus)
 			// The poll can cancel an in-flight request when its deadline expires.
-			// Attribute that failure to the poll, while preserving API errors
-			// returned while the poll's context is still live.
-			if checkErr != nil && ctx.Err() != nil {
+			// Attribute only that context failure to the poll. An independent
+			// API error can race with cancellation and must retain its cause.
+			if ctx.Err() != nil && errors.Is(checkErr, ctx.Err()) {
 				return false, ctx.Err()
 			}
 
