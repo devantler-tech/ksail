@@ -255,10 +255,7 @@ func TestSystemTestTalosUpgradeMatrixWiresKnownVersions(t *testing.T) {
 	var workflow struct {
 		Jobs map[string]struct {
 			Strategy struct {
-				Matrix struct {
-					Include []map[string]any `yaml:"include"`
-					Exclude []map[string]any `yaml:"exclude"`
-				} `yaml:"matrix"`
+				Matrix dockerMatrix `yaml:"matrix"`
 			} `yaml:"strategy"`
 			Steps []harnessStep `yaml:"steps"`
 		} `yaml:"jobs"`
@@ -268,30 +265,31 @@ func TestSystemTestTalosUpgradeMatrixWiresKnownVersions(t *testing.T) {
 
 	var trialEntries int
 
-	for _, job := range workflow.Jobs {
-		for _, entry := range job.Strategy.Matrix.Include {
-			if entry["kubernetes-upgrade-from"] == nil && entry["kubernetes-upgrade-to"] == nil {
+	job, found := workflow.Jobs["system-test-docker"]
+	require.True(t, found)
+
+	for _, entry := range expandDockerMatrix(t, job.Strategy.Matrix) {
+		if entry["kubernetes-upgrade-from"] == "" && entry["kubernetes-upgrade-to"] == "" {
+			continue
+		}
+
+		trialEntries++
+
+		assertNamedTalosUpgradeEntry(t, entry)
+
+		var wired bool
+
+		for _, step := range job.Steps {
+			if step.Uses != "./.github/actions/ksail-system-test" {
 				continue
 			}
 
-			trialEntries++
+			wired = true
 
-			assertNamedTalosUpgradeEntry(t, entry, job.Strategy.Matrix.Exclude)
-
-			var wired bool
-
-			for _, step := range job.Steps {
-				if step.Uses != "./.github/actions/ksail-system-test" {
-					continue
-				}
-
-				wired = true
-
-				assertNestedTalosTrialInputs(t, step)
-			}
-
-			assert.True(t, wired, "the matrix must pass its known versions to the system test")
+			assertNestedTalosTrialInputs(t, step)
 		}
+
+		assert.True(t, wired, "the matrix must pass its known versions to the system test")
 	}
 
 	assert.Equal(
@@ -307,7 +305,7 @@ func TestSystemTestTalosUpgradeMatrixWiresKnownVersions(t *testing.T) {
 func assertNestedTalosTrialInputs(t *testing.T, step harnessStep) {
 	t.Helper()
 
-	assert.Equal(t, "${{ matrix.args }}", step.With["args"])
+	assert.Equal(t, "${{ matrix.effective-args || matrix.args }}", step.With["args"])
 	assert.Equal(t, "${{ matrix.test-kubernetes-provider || 'false' }}",
 		step.With["test-kubernetes-provider"])
 	assert.Equal(
@@ -323,17 +321,14 @@ func assertNestedTalosTrialInputs(t *testing.T, step harnessStep) {
 
 // assertNamedTalosUpgradeEntry keeps the real nested trial on a named host,
 // whose inherited name patch reproduces a kubeconfig overwrite missed by unnamed hosts.
-func assertNamedTalosUpgradeEntry(t *testing.T, entry map[string]any, excluded []map[string]any) {
+func assertNamedTalosUpgradeEntry(t *testing.T, entry map[string]string) {
 	t.Helper()
 
 	assert.Equal(t, "Talos", entry["distribution"])
 	assert.Equal(t, "Docker", entry["provider"])
-	assert.Equal(t, true, entry["init"])
-	assert.Regexp(t, `(?:^|\s)--name(?:=|\s+)\S+`, entry["args"])
+	assert.Equal(t, "true", entry["init"])
+	assert.Regexp(t, `(?:^|\s)--name(?:=|\s+)\S+`, entry["effective-args"])
 	assert.Equal(t, "true", entry["test-kubernetes-provider"])
 	assert.Equal(t, "v1.36.2", entry["kubernetes-upgrade-from"])
 	assert.Equal(t, "v1.37.1", entry["kubernetes-upgrade-to"])
-	assert.Contains(t, excluded, map[string]any{
-		"distribution": "Talos", "provider": "Docker", "init": true, "args": "",
-	}, "the named trial replaces the unnamed default without adding another job")
 }
