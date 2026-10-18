@@ -255,7 +255,9 @@ func TestSystemTestTalosUpgradeMatrixWiresKnownVersions(t *testing.T) {
 	var workflow struct {
 		Jobs map[string]struct {
 			Strategy struct {
-				Matrix dockerMatrix `yaml:"matrix"`
+				Matrix struct {
+					Include []map[string]any `yaml:"include"`
+				} `yaml:"matrix"`
 			} `yaml:"strategy"`
 			Steps []harnessStep `yaml:"steps"`
 		} `yaml:"jobs"`
@@ -265,31 +267,30 @@ func TestSystemTestTalosUpgradeMatrixWiresKnownVersions(t *testing.T) {
 
 	var trialEntries int
 
-	job, found := workflow.Jobs["system-test-docker"]
-	require.True(t, found)
-
-	for _, entry := range expandDockerMatrix(t, job.Strategy.Matrix) {
-		if entry["kubernetes-upgrade-from"] == "" && entry["kubernetes-upgrade-to"] == "" {
-			continue
-		}
-
-		trialEntries++
-
-		assertNamedTalosUpgradeEntry(t, entry)
-
-		var wired bool
-
-		for _, step := range job.Steps {
-			if step.Uses != "./.github/actions/ksail-system-test" {
+	for _, job := range workflow.Jobs {
+		for _, entry := range job.Strategy.Matrix.Include {
+			if entry["kubernetes-upgrade-from"] == nil && entry["kubernetes-upgrade-to"] == nil {
 				continue
 			}
 
-			wired = true
+			trialEntries++
 
-			assertNestedTalosTrialInputs(t, step)
+			assertNamedTalosUpgradeEntry(t, entry)
+
+			var wired bool
+
+			for _, step := range job.Steps {
+				if step.Uses != "./.github/actions/ksail-system-test" {
+					continue
+				}
+
+				wired = true
+
+				assertNestedTalosTrialInputs(t, step)
+			}
+
+			assert.True(t, wired, "the matrix must pass its known versions to the system test")
 		}
-
-		assert.True(t, wired, "the matrix must pass its known versions to the system test")
 	}
 
 	assert.Equal(
@@ -321,12 +322,12 @@ func assertNestedTalosTrialInputs(t *testing.T, step harnessStep) {
 
 // assertNamedTalosUpgradeEntry keeps the real nested trial on a named host,
 // whose inherited name patch reproduces a kubeconfig overwrite missed by unnamed hosts.
-func assertNamedTalosUpgradeEntry(t *testing.T, entry map[string]string) {
+func assertNamedTalosUpgradeEntry(t *testing.T, entry map[string]any) {
 	t.Helper()
 
 	assert.Equal(t, "Talos", entry["distribution"])
 	assert.Equal(t, "Docker", entry["provider"])
-	assert.Equal(t, "true", entry["init"])
+	assert.Equal(t, true, entry["init"])
 	assert.Regexp(t, `(?:^|\s)--name(?:=|\s+)\S+`, entry["effective-args"])
 	assert.Equal(t, "true", entry["test-kubernetes-provider"])
 	assert.Equal(t, "v1.36.2", entry["kubernetes-upgrade-from"])
