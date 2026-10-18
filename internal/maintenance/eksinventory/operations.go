@@ -25,7 +25,7 @@ func clusterOperations() []operation {
 		},
 		{
 			service:    cloudFormationService,
-			command:    "list-stacks",
+			command:    listStacks,
 			title:      "CloudFormation stacks, by state",
 			collection: "StackSummaries",
 			identity:   "StackId",

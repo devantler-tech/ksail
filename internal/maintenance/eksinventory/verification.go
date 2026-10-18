@@ -575,7 +575,7 @@ func ownedRegionalIdentities(manifest *ownershipManifest) map[string]bool {
 
 func resourceObservationIdentityKey(resource ownedResource) (string, bool) {
 	operationByKind := map[string][2]string{
-		stackKind:               {cloudFormationService, "list-stacks"},
+		stackKind:               {cloudFormationService, listStacks},
 		fleetKind:               {ec2Service, describeFleets},
 		instanceKind:            {ec2Service, describeInstances},
 		autoScalingGroupKind:    {autoScalingService, describeAutoScalingGroups},
