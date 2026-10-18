@@ -1,6 +1,8 @@
 package ciharness_test
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -149,6 +151,28 @@ func TestCalicoBaselineBuildDoesNotDelayCandidateConsumers(t *testing.T) {
 	gate := workflow.Jobs["require-checks-in-pr"]
 	assert.Contains(t, gate.Needs, "build-calico-baseline")
 	assert.Contains(t, gate.Steps[0].With["job-results"], "needs.build-calico-baseline.result")
+}
+
+func TestCalicoBaselineSetupPinsReviewedAction(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
+	step := findHarnessStep(t, workflow.Jobs["build-calico-baseline"].Steps, "🧹 Free disk space")
+	assert.Equal(
+		t,
+		"devantler-tech/ksail/.github/actions/free-disk-space@dfe8865ef53b6ec9eb6d0dcce5a4e5313b12b584",
+		step.Uses,
+	)
+
+	// The immutable protected-main action has exactly these candidate bytes.
+	// Future action changes need a reviewed pin refresh rather than stale setup.
+	for path, digest := range map[string]string{
+		"action.yaml":        "bb40116a5901c77432b0d330b05e56228d9546dab26f98a31f05a0e87ffab96c",
+		"free-disk-space.sh": "2dd12fcf3779137ca1cb5f21194947f6a10d3f94f8fb438a1a29ec9021fbdc30",
+	} {
+		contents := readRepoFile(t, ".github/actions/free-disk-space/"+path)
+		assert.Equal(t, digest, fmt.Sprintf("%x", sha256.Sum256(contents)), path)
+	}
 }
 
 func TestSelectedCalicoBaselineCannotSilentlySkip(t *testing.T) {

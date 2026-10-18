@@ -972,7 +972,8 @@ jobs:
           persist-credentials: false
 
       - name: 🧹 Free disk space
-        uses: ./.github/actions/free-disk-space
+        # Identical reviewed bytes; actionlint does not yet parse $/ references.
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@dfe8865ef53b6ec9eb6d0dcce5a4e5313b12b584
 
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
