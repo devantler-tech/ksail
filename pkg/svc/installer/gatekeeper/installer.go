@@ -37,7 +37,9 @@ type Installer struct {
 // without cluster access).
 //
 // When haEnabled is true the chart is configured with HA defaults
-// (replicas, PDB, topology spread) for the controller-manager.
+// (replicas, PDB, topology spread) for the controller-manager. Otherwise the
+// controller-manager's disruption budget allows every pod to be evicted, so a
+// cluster too small for HA can still drain its nodes.
 func NewInstaller(
 	client helm.Interface,
 	kubeconfig, kubeContext string,
@@ -59,6 +61,12 @@ func NewInstaller(
 		// components installed in parallel (e.g. ArgoCD).
 		"webhook.failurePolicy":         "Ignore",
 		"mutatingWebhook.failurePolicy": "Ignore",
+		// The chart always renders a budget that keeps one controller-manager
+		// pod available. Below the HA threshold there may be no other node to
+		// move that pod to, so draining its node (a Talos upgrade, a node
+		// replacement) can never finish. Let a small cluster's drain evict
+		// every pod; the HA branch below keeps one available.
+		"pdb.controllerManager.minAvailable": "0",
 	}
 
 	var valuesYaml string
