@@ -60,7 +60,7 @@ func TestDockerMatrixPreservesEveryEffectiveScenario(t *testing.T) {
 			Strategy struct {
 				Matrix      dockerMatrix `yaml:"matrix"`
 				MaxParallel int          `yaml:"max-parallel"`
-				FailFast    bool         `yaml:"fail-fast"`
+				FailFast    *bool        `yaml:"fail-fast"`
 			} `yaml:"strategy"`
 			Steps []harnessStep `yaml:"steps"`
 		} `yaml:"jobs"`
@@ -70,7 +70,12 @@ func TestDockerMatrixPreservesEveryEffectiveScenario(t *testing.T) {
 	job, ok := workflow.Jobs["system-test-docker"]
 	require.True(t, ok)
 	assert.Equal(t, 15, job.Strategy.MaxParallel, "ordering must not buy speed with more runners")
-	assert.False(t, job.Strategy.FailFast, "every selected scenario must run after a sibling fails")
+	require.NotNil(t, job.Strategy.FailFast, "GitHub defaults an omitted fail-fast to true")
+	assert.False(
+		t,
+		*job.Strategy.FailFast,
+		"every selected scenario must run after a sibling fails",
+	)
 
 	var baseline dockerMatrix
 
