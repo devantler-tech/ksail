@@ -3,6 +3,7 @@ package ciharness_test
 import (
 	"fmt"
 	"maps"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -57,6 +58,7 @@ func TestDockerMatrixPreservesEveryEffectiveScenario(t *testing.T) {
 	//nolint:tagliatelle // GitHub Actions defines these external keys in kebab-case.
 	var workflow struct {
 		Jobs map[string]struct {
+			Name     string `yaml:"name"`
 			Strategy struct {
 				Matrix      dockerMatrix `yaml:"matrix"`
 				MaxParallel int          `yaml:"max-parallel"`
@@ -109,6 +111,32 @@ func TestDockerMatrixPreservesEveryEffectiveScenario(t *testing.T) {
 	assert.Equal(t, "v1.36.2", got[0]["kubernetes-upgrade-from"])
 	assert.Equal(t, "v1.37.1", got[0]["kubernetes-upgrade-to"])
 	assertDockerLongCasesInFirstWave(t, got[:15])
+	assertDockerJobNamesRemainDistinct(t, job.Name, got)
+}
+
+func assertDockerJobNamesRemainDistinct(
+	t *testing.T,
+	template string,
+	scenarios []map[string]string,
+) {
+	t.Helper()
+
+	seen := make(map[string]bool, len(scenarios))
+
+	for _, scenario := range scenarios {
+		name := strings.NewReplacer(
+			"${{ matrix.distribution }}", scenario["distribution"],
+			"${{ matrix.provider }}", scenario["provider"],
+			"${{ matrix.init }}", scenario["init"],
+			"${{ matrix.effective-args || matrix.args }}", scenario["args"],
+		).Replace(template)
+		require.NotContains(t, name, "${{", "the displayed scenario name must be fully understood")
+		// Native job names are truncated. Keep each case distinct even in an
+		// eighty-character preview, rather than losing distribution after long args.
+		preview := fmt.Sprintf("%.80s", name)
+		assert.False(t, seen[preview], "indistinguishable scenario name: %s", preview)
+		seen[preview] = true
+	}
 }
 
 func assertDockerLongCasesInFirstWave(t *testing.T, firstWave []map[string]string) {

@@ -1910,7 +1910,7 @@ jobs:
   # Docker-based system tests run in full parallelism with no concurrency
   # constraints — each job gets its own runner with local Docker containers.
   system-test-docker:
-    name: 🧪 System Test (Docker)
+    name: 🧪 System Test (Docker) (${{ matrix.distribution }}, ${{ matrix.provider }}, ${{ matrix.init }}, ${{ matrix.effective-args || matrix.args }})
     runs-on: ubuntu-latest
     # The Talos host + full nested Kubernetes-provider coverage (Vanilla,K3s,VCluster,Talos)
     # has a ~77-min worst case. 120 gives comfortable headroom to absorb runtime variance
