@@ -7,6 +7,6 @@ set -euo pipefail
 export GOWORK=off
 mkdir -p "${RUNNER_TEMP:?}/calico-legacy-bin"
 (
-  cd calico-legacy-source
-  go build -trimpath -ldflags='-s -w' -o "$RUNNER_TEMP/calico-legacy-bin/ksail" .
+	cd calico-legacy-source
+	go build -trimpath -ldflags='-s -w' -o "$RUNNER_TEMP/calico-legacy-bin/ksail" .
 )
