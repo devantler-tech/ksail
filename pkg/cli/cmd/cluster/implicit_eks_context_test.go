@@ -1,10 +1,12 @@
 package cluster_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -61,4 +63,23 @@ func TestResolveImplicitEKSKubeContext_LeavesPinnedAndOtherDistributionsAlone(t 
 
 	require.NoError(t, cluster.ExportResolveImplicitEKSKubeContext(vanilla))
 	assert.Empty(t, vanilla.ClusterCfg.Spec.Cluster.Connection.Context)
+}
+
+var errContextUnselectable = errors.New("no kubeconfig context matches")
+
+// A context diff cannot select must never let it report "no drift" (ksail#7854 review).
+func TestRecordUnselectableKubeContext_MarksTheBaselineUnknown(t *testing.T) {
+	t.Parallel()
+
+	clean := &clusterupdate.UpdateResult{}
+	cluster.ExportRecordUnselectableKubeContext(clean, nil)
+	assert.False(t, clean.HasUnknownBaseline(),
+		"a selected context must not add an unknown baseline")
+
+	failed := &clusterupdate.UpdateResult{}
+	cluster.ExportRecordUnselectableKubeContext(failed, errContextUnselectable)
+	require.True(t, failed.HasUnknownBaseline())
+	require.Len(t, failed.UnknownBaseline, 1)
+	assert.Equal(t, "cluster.connection.context", failed.UnknownBaseline[0].Field)
+	assert.Equal(t, clusterupdate.UnknownBaselineValue, failed.UnknownBaseline[0].OldValue)
 }
