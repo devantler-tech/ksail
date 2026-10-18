@@ -91,6 +91,7 @@ func TestKSailBinaryArtifactMirrorWarmerConsumer(t *testing.T) {
 	assert.Contains(t, consumer.Needs, "build-artifact")
 	assert.Contains(t, consumer.Needs, "wait-for-validate-go")
 	assert.Equal(t, map[string]string{"contents": "read"}, consumer.Permissions)
+	assert.False(t, consumer.ContinueOnError)
 	restore := findHarnessStep(t, consumer.Steps, "📥 Restore KSail binary")
 	assert.Equal(t,
 		"devantler-tech/ksail/.github/actions/restore-ksail-binary@"+
@@ -106,6 +107,8 @@ func TestKSailBinaryArtifactMirrorWarmerConsumer(t *testing.T) {
 		stringValue(restore.With["binary-sha256"]),
 	)
 	assert.Empty(t, restore.If, "warming always requires the current producer artifact")
+	assert.False(t, restore.ContinueOnError, "artifact verification failures must stop warming")
+	assert.Len(t, restore.With, 2, "retain the verified action's default executable destination")
 	assert.Less(t, harnessStepIndex(t, consumer.Steps, "🧹 Free disk space"),
 		harnessStepIndex(t, consumer.Steps, restore.Name))
 	assert.Less(t, harnessStepIndex(t, consumer.Steps, restore.Name),
