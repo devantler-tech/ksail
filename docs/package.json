@@ -4,8 +4,9 @@
   "version": "0.0.1",
   "scripts": {
     "dev": "astro dev",
-    "build": "npm run test:dependencies && astro build",
+    "build": "npm run test:dependencies && npm run test:redirects && astro build",
     "test:dependencies": "node --test tests/dependency-compatibility.test.mjs",
+    "test:redirects": "node --test tests/legacy-cli-flags-redirects.test.mjs",
     "preview": "astro preview",
     "astro": "astro"
   },

@@ -948,7 +948,9 @@ func TestExportPrefersControlPlaneOverWorker(t *testing.T) {
 			Labels: map[string]string{"io.x-k8s.kind.role": "control-plane"},
 		},
 	}
-	runNodeSelectionTest(t, v1alpha1.DistributionVanilla, nodes, "my-cluster-control-plane")
+	runNodeSelectionTest(
+		t, v1alpha1.DistributionVanilla, nodes, "my-cluster-control-plane", "my-cluster-worker",
+	)
 }
 
 func TestExportK3dPrefersServerOverAgent(t *testing.T) {
@@ -964,7 +966,9 @@ func TestExportK3dPrefersServerOverAgent(t *testing.T) {
 			Labels: map[string]string{"k3d.role": "server"},
 		},
 	}
-	runNodeSelectionTest(t, v1alpha1.DistributionK3s, nodes, "k3d-my-cluster-server-0")
+	runNodeSelectionTest(
+		t, v1alpha1.DistributionK3s, nodes, "k3d-my-cluster-server-0", "k3d-my-cluster-agent-0",
+	)
 }
 
 func TestExportExcludesLoadbalancer(t *testing.T) {
@@ -1099,6 +1103,7 @@ func runNodeSelectionTest(
 	distribution v1alpha1.Distribution,
 	nodes []container.Summary,
 	expectedNodeName string,
+	otherProbedNodes ...string,
 ) {
 	t.Helper()
 
@@ -1109,6 +1114,11 @@ func runNodeSelectionTest(
 	mockClient.EXPECT().ContainerList(ctx, mock.Anything).Return(nodes, nil)
 
 	setupEmptyImageListMockForExporter(ctx, t, mockClient, expectedNodeName)
+
+	// On a multi-node cluster every other node is asked which images it holds.
+	for _, nodeName := range otherProbedNodes {
+		setupEmptyImageListMockForExporter(ctx, t, mockClient, nodeName)
+	}
 
 	// Mock platform detection (uname -m)
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, expectedNodeName)

@@ -6,19 +6,26 @@ import (
 	"strings"
 )
 
-// resolveImages gets the list of images to export.
+// resolveImages gets the list of images to export. nodeImages is the node's
+// image listing when the caller already read it, or nil to read it here.
 func (e *Exporter) resolveImages(
 	ctx context.Context,
 	nodeName string,
 	opts ExportOptions,
+	nodeImages []string,
 ) ([]string, error) {
 	if len(opts.Images) > 0 {
-		return e.resolveSpecifiedImages(ctx, nodeName, opts.Images), nil
+		return e.resolveSpecifiedImages(ctx, nodeName, opts.Images, nodeImages), nil
 	}
 
-	images, err := e.listImagesInNode(ctx, nodeName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list images: %w", err)
+	images := nodeImages
+	if images == nil {
+		var err error
+
+		images, err = e.listImagesInNode(ctx, nodeName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list images: %w", err)
+		}
 	}
 
 	if len(images) == 0 {
@@ -31,17 +38,24 @@ func (e *Exporter) resolveImages(
 // resolveSpecifiedImages normalizes user-provided image refs and, when possible,
 // resolves them to the exact refs already present in the node's image store.
 // This keeps shorthand refs working while preferring the precise local tag@digest
-// references returned by `ctr images list -q`.
+// references returned by `ctr images list -q`. nodeImages is the node's image
+// listing when the caller already read it, or nil to read it here.
 func (e *Exporter) resolveSpecifiedImages(
 	ctx context.Context,
 	nodeName string,
 	requestedImages []string,
+	nodeImages []string,
 ) []string {
 	normalizedRequested := normalizeImageRefs(requestedImages)
 
-	localImages, err := e.listImagesInNode(ctx, nodeName)
-	if err != nil {
-		return normalizedRequested
+	localImages := nodeImages
+	if localImages == nil {
+		var err error
+
+		localImages, err = e.listImagesInNode(ctx, nodeName)
+		if err != nil {
+			return normalizedRequested
+		}
 	}
 
 	lookup := newLocalImageLookup(localImages)

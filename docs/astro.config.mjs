@@ -3,6 +3,7 @@ import mermaid from "astro-mermaid";
 import { defineConfig } from "astro/config";
 import starlightGithubAlerts from "starlight-github-alerts";
 import starlightLinksValidator from "starlight-links-validator";
+import { legacyRedirects } from "./src/redirects/legacy-cli-flags.mjs";
 
 export default defineConfig({
   site: "https://ksail.devantler.tech",
@@ -45,6 +46,8 @@ export default defineConfig({
     "/guides/workload-validate/": "/configuration/workload-validate/",
     "/guides/companion-tools/": "/integrations/companion-tools/",
     "/guides/mirrord/": "/integrations/mirrord/",
+    // The command reference's addresses on the earlier documentation site
+    ...legacyRedirects(),
   },
   integrations: [
     mermaid(),

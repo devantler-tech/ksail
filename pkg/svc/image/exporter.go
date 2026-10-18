@@ -97,8 +97,8 @@ func (e *Exporter) Export(
 		return fmt.Errorf("failed to resolve export output path: %w", err)
 	}
 
-	// Find a suitable node for export
-	nodeName, err := e.findExportNode(ctx, clusterName, distribution)
+	// Find the node that holds the images to export
+	nodeName, nodeImages, err := e.findExportNode(ctx, clusterName, distribution, opts.Images)
 	if err != nil {
 		return err
 	}
@@ -107,7 +107,7 @@ func (e *Exporter) Export(
 	tmpPath := getTempPath(distribution)
 
 	// Get list of images to export
-	images, err := e.resolveImages(ctx, nodeName, opts)
+	images, err := e.resolveImages(ctx, nodeName, opts, nodeImages)
 	if err != nil {
 		return err
 	}
@@ -134,26 +134,102 @@ func (e *Exporter) Export(
 	)
 }
 
-// findExportNode finds a suitable node for export operations. The
-// unsupported-distribution and Docker-only provider guards are validated by
-// Export via validateImageOpParams before this is reached.
+// findExportNode finds the node to export from. The unsupported-distribution
+// and Docker-only provider guards are validated by Export via
+// validateImageOpParams before this is reached.
+//
+// Workloads usually run on worker nodes, so on a multi-node cluster the images
+// to export are often absent from the control-plane node. When more than one
+// node can serve the export, each one is asked which images it holds and the
+// node holding the most of the requested images (or, with no request, the most
+// images) is chosen; ties go to the preferred role. A single-node cluster is
+// not probed. The returned image list is the chosen node's listing when it was
+// read during selection, so it is not read twice; nil means it was not read.
 func (e *Exporter) findExportNode(
 	ctx context.Context,
 	clusterName string,
 	distribution v1alpha1.Distribution,
-) (string, error) {
+	requestedImages []string,
+) (string, []string, error) {
 	nodes, err := listClusterNodes(ctx, e.dockerClient, clusterName, distribution)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
-	// Find a suitable node for export (control-plane or server node)
-	nodeName := selectNodeForExport(nodes)
-	if nodeName == "" {
-		return "", fmt.Errorf("%w: no suitable node found in cluster %s", ErrNoNodes, clusterName)
+	candidates := orderExportCandidates(nodes)
+	if len(candidates) == 0 {
+		return "", nil, fmt.Errorf(
+			"%w: no suitable node found in cluster %s", ErrNoNodes, clusterName,
+		)
 	}
 
-	return nodeName, nil
+	if len(candidates) == 1 {
+		return candidates[0], nil, nil
+	}
+
+	nodeName, nodeImages := e.selectNodeHoldingImages(ctx, candidates, requestedImages)
+
+	return nodeName, nodeImages, nil
+}
+
+// selectNodeHoldingImages returns the candidate holding the most of the
+// requested images, and that node's image listing (nil when it could not be
+// read). When no node holds any of them, or no node can be listed, the first
+// (preferred) candidate is returned, which is the single-node behaviour.
+func (e *Exporter) selectNodeHoldingImages(
+	ctx context.Context,
+	candidates []string,
+	requestedImages []string,
+) (string, []string) {
+	normalizedRequested := normalizeImageRefs(requestedImages)
+
+	var preferredImages, bestImages []string
+
+	bestNode := ""
+	bestScore := 0
+
+	for index, nodeName := range candidates {
+		localImages, err := e.listImagesInNode(ctx, nodeName)
+		if err != nil {
+			continue
+		}
+
+		if index == 0 {
+			preferredImages = localImages
+		}
+
+		score := len(localImages)
+		if len(normalizedRequested) > 0 {
+			score = countHeldImages(newLocalImageLookup(localImages), normalizedRequested)
+		}
+
+		if score > bestScore {
+			bestNode, bestImages, bestScore = nodeName, localImages, score
+		}
+
+		if len(normalizedRequested) > 0 && score == len(normalizedRequested) {
+			break
+		}
+	}
+
+	if bestNode == "" {
+		return candidates[0], preferredImages
+	}
+
+	return bestNode, bestImages
+}
+
+// countHeldImages counts the requested refs the lookup resolves to a local image.
+func countHeldImages(lookup localImageLookup, normalizedRequested []string) int {
+	held := 0
+
+	for _, imageRef := range normalizedRequested {
+		if _, exists := lookup.byExactRef[lookup.resolve(imageRef)]; exists {
+			held++
+		}
+	}
+
+	return held
 }
 
 // exportImagesFromNode exports images from a node's containerd to the host filesystem.
