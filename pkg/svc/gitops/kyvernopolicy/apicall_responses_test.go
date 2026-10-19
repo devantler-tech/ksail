@@ -2,6 +2,7 @@ package kyvernopolicy_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/kyvernopolicy"
@@ -100,4 +101,24 @@ func TestEvaluate_APICallFixtureFailsClosedWhenResponseIsMissing(t *testing.T) {
 		violations[0].Message,
 		"no offline response for GET /api/v1/namespaces/arc-runners",
 	)
+}
+
+func TestEvaluate_APICallFixtureMissingResponseCannotUseDefault(t *testing.T) {
+	t.Parallel()
+
+	policyWithDefault := strings.Replace(apiCallResponsePolicy,
+		"jmesPath: metadata.annotations.state",
+		"jmesPath: metadata.annotations.state\n        default: baseline", 1)
+	engine := kyvernopolicy.NewEngine(
+		[]kyvernov1.PolicyInterface{policy(t, policyWithDefault)},
+		nil,
+		kyvernopolicy.WithAPICallResponses(kyvernopolicy.APICallResponses{}),
+	)
+
+	violations, err := engine.Evaluate(t.Context(), configMap("default", nil))
+	require.NoError(t, err)
+	require.Len(t, violations, 1, "a satisfying policy default cannot replace a missing fixture")
+	assert.True(t, violations[0].Error)
+	assert.True(t, violations[0].Blocking)
+	assert.Contains(t, violations[0].Message, "no offline response for GET /api/v1/namespaces/arc-runners")
 }

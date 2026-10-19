@@ -3,6 +3,9 @@ package kyvernopolicy_test
 import (
 	"errors"
 	"net"
+	"net/http"
+	"net/url"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -204,11 +207,27 @@ func TestEvaluate_NetworkContextIsNeverLoaded(t *testing.T) {
 // Kubernetes API responses cannot accidentally enable Kyverno's HTTP service-call
 // context. The fixture client is intentionally narrower than Kyverno's APICall type.
 func TestEvaluate_APICallFixturesDoNotEnableServiceCalls(t *testing.T) {
-	t.Parallel()
+	// This test changes the process-wide transport. A public test address avoids
+	// Kyverno's loopback blocklist; the proxy callback stops every attempted request
+	// before a socket is opened, including in the regression's broken state.
+	base, ok := http.DefaultTransport.(*http.Transport)
+	require.True(t, ok)
+	transport := base.Clone()
+	var requests atomic.Int32
+	transport.Proxy = func(*http.Request) (*url.URL, error) {
+		requests.Add(1)
 
-	address, connectionsMade := countConnections(t)
+		return nil, errors.New("test intercepted an offline HTTP request")
+	}
+	original := http.DefaultTransport
+	http.DefaultTransport = transport
+	t.Cleanup(func() {
+		http.DefaultTransport = original
+		transport.CloseIdleConnections()
+	})
+
 	engine := kyvernopolicy.NewEngine(
-		[]kyvernov1.PolicyInterface{policy(t, sprintf(networkContextPolicy, address))},
+		[]kyvernov1.PolicyInterface{policy(t, sprintf(networkContextPolicy, "203.0.113.1"))},
 		nil,
 		kyvernopolicy.WithAPICallResponses(kyvernopolicy.APICallResponses{}),
 	)
@@ -216,5 +235,10 @@ func TestEvaluate_APICallFixturesDoNotEnableServiceCalls(t *testing.T) {
 	violations, err := engine.Evaluate(t.Context(), configMap("default", nil))
 	require.NoError(t, err)
 	require.Len(t, violations, networkContextRules)
-	assert.Zero(t, connectionsMade(), "a response fixture must never enable HTTP service calls")
+	assert.Zero(t, requests.Load(), "a response fixture must never enable HTTP service calls")
+	for _, violation := range violations {
+		if violation.Rule == "service-call" {
+			assert.Contains(t, violation.Message, "service API calls are disabled offline")
+		}
+	}
 }
