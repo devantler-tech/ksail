@@ -26,6 +26,25 @@ type stopTestAPI struct {
 	ignoreShutdown map[string]bool
 	shutdowns      []string
 	poweroffs      []string
+	// stallStatusRead, when set, holds the first server list that follows the
+	// graceful shutdowns open until the client gives up on it, like a slow API
+	// whose status read is still in flight when the graceful window ends.
+	stallStatusRead bool
+	stalled         bool
+}
+
+// stallsThisRead reports whether a server list request must be held open.
+func (api *stopTestAPI) stallsThisRead(nameFilter string) bool {
+	api.mu.Lock()
+	defer api.mu.Unlock()
+
+	if !api.stallStatusRead || api.stalled || nameFilter != "" || len(api.shutdowns) == 0 {
+		return false
+	}
+
+	api.stalled = true
+
+	return true
 }
 
 func newStopTestAPI(status map[string]string, ignoreShutdown ...string) *stopTestAPI {
@@ -114,6 +133,12 @@ func (api *stopTestAPI) start(t *testing.T) *httptest.Server {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /servers", func(writer http.ResponseWriter, request *http.Request) {
+		if api.stallsThisRead(request.URL.Query().Get("name")) {
+			<-request.Context().Done()
+
+			return
+		}
+
 		writeJSONResponse(
 			t,
 			writer,
@@ -178,6 +203,27 @@ func TestStopNodes_PowersOffServersThatIgnoreShutdown(t *testing.T) {
 
 	assert.ElementsMatch(t, []string{"cp-1", "worker-1"}, api.shutdowns,
 		"a server that is already off is not shut down again")
+	assert.Equal(t, []string{"cp-1"}, api.poweroffs,
+		"only the server still running after the graceful window is forced off")
+}
+
+// TestStopNodes_PowersOffWhenTheLastStatusReadFailsAtTheWindowDeadline proves
+// that a status read still in flight when the graceful window ends does not
+// stop the power off. The provider cannot tell a read its own deadline
+// interrupted from one that failed with a matching error at that moment, and
+// in both cases the window has run out. The power off step lists the servers
+// again, so it acts on their current state and fails if the API is down.
+func TestStopNodes_PowersOffWhenTheLastStatusReadFailsAtTheWindowDeadline(t *testing.T) {
+	t.Parallel()
+
+	api := newStopTestAPI(map[string]string{"cp-1": "running", "worker-1": "running"}, "cp-1")
+	api.stallStatusRead = true
+	prov := hetzner.NewProvider(newTestHcloudClient(t, api.start(t).URL))
+	prov.SetGracefulShutdownTimeoutForTest(hetzner.DefaultPollingInterval + time.Second)
+
+	require.NoError(t, prov.StopNodes(t.Context(), stopTestCluster))
+
+	assert.True(t, api.stalled, "the status read at the window deadline must have been interrupted")
 	assert.Equal(t, []string{"cp-1"}, api.poweroffs,
 		"only the server still running after the graceful window is forced off")
 }
