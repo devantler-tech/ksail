@@ -180,6 +180,9 @@ const (
 	sentinelTimeout = 10 * time.Second
 )
 
+// errOfflineRequestIntercepted is returned by the test transport for every request it stops.
+var errOfflineRequestIntercepted = errors.New("test intercepted an offline HTTP request")
+
 // TestEvaluate_NetworkContextIsNeverLoaded pins that the offline evaluator opens no connection for a
 // policy's context entries. The engine has no Kubernetes client, registry client, ConfigMap resolver
 // or global context store, so Kyverno disables every network-backed loader; this is why the Kyverno
@@ -206,6 +209,8 @@ func TestEvaluate_NetworkContextIsNeverLoaded(t *testing.T) {
 // TestEvaluate_APICallFixturesDoNotEnableServiceCalls proves that enabling reviewed
 // Kubernetes API responses cannot accidentally enable Kyverno's HTTP service-call
 // context. The fixture client is intentionally narrower than Kyverno's APICall type.
+//
+//nolint:paralleltest // Replaces the process-wide http.DefaultTransport.
 func TestEvaluate_APICallFixturesDoNotEnableServiceCalls(t *testing.T) {
 	// This test changes the process-wide transport. A public test address avoids
 	// Kyverno's loopback blocklist; the proxy callback stops every attempted request
@@ -217,7 +222,7 @@ func TestEvaluate_APICallFixturesDoNotEnableServiceCalls(t *testing.T) {
 	transport.Proxy = func(*http.Request) (*url.URL, error) {
 		requests.Add(1)
 
-		return nil, errors.New("test intercepted an offline HTTP request")
+		return nil, errOfflineRequestIntercepted
 	}
 	original := http.DefaultTransport
 	http.DefaultTransport = transport

@@ -15,7 +15,10 @@ import (
 	"github.com/kyverno/kyverno/pkg/engine/jmespath"
 )
 
-var errAPICallResponseMissing = errors.New("no offline response")
+var (
+	errAPICallResponseMissing = errors.New("no offline response")
+	errServiceAPICallOffline  = errors.New("service API calls are disabled offline")
+)
 
 // APICallRequest identifies one Kubernetes API request made by a Kyverno
 // context entry during offline policy evaluation.
@@ -97,7 +100,12 @@ func (l *apiCallFixtureLoader) Load(
 	entries []kyvernov1.ContextEntry,
 	jsonContext enginecontext.Interface,
 ) error {
-	err := l.delegate.Load(ctx, query, l.client, rclientFactory, entries, jsonContext)
+	guarded, err := offlineAPICallEntries(entries)
+	if err != nil {
+		return err
+	}
+
+	err = l.delegate.Load(ctx, query, l.client, rclientFactory, guarded, jsonContext)
 	if err != nil {
 		return fmt.Errorf("load Kyverno API-call fixture context: %w", err)
 	}
@@ -112,4 +120,28 @@ func apiCallFixtureLoaderFactory(responses APICallResponses) engineapi.ContextLo
 	return func(policy kyvernov1.PolicyInterface, rule kyvernov1.Rule) engineapi.ContextLoader {
 		return &apiCallFixtureLoader{delegate: base(policy, rule), client: client}
 	}
+}
+
+// offlineAPICallEntries narrows apiCall context entries to what the fixture
+// client may answer. A service call is refused before Kyverno can reach its
+// HTTP client, and a policy default is dropped so it can never stand in for a
+// missing fixture: Kyverno substitutes the default for any fetch error.
+func offlineAPICallEntries(entries []kyvernov1.ContextEntry) ([]kyvernov1.ContextEntry, error) {
+	guarded := make([]kyvernov1.ContextEntry, len(entries))
+
+	for index, entry := range entries {
+		if entry.APICall != nil {
+			if entry.APICall.Service != nil {
+				return nil, fmt.Errorf("%w: context entry %s", errServiceAPICallOffline, entry.Name)
+			}
+
+			call := *entry.APICall
+			call.Default = nil
+			entry.APICall = &call
+		}
+
+		guarded[index] = entry
+	}
+
+	return guarded, nil
 }
