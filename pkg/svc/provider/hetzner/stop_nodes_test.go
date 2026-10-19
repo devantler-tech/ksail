@@ -3,6 +3,7 @@ package hetzner_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"sync"
 	"testing"
@@ -45,6 +46,17 @@ func (api *stopTestAPI) stallsThisRead(nameFilter string) bool {
 	api.stalled = true
 
 	return true
+}
+
+// recorded returns the servers shut down, the servers powered off, and whether
+// the API held a status read open, all read under the lock its handlers write
+// them under. A stalled handler can still be running after the client gave up
+// on it, so a test must never read these fields directly.
+func (api *stopTestAPI) recorded() ([]string, []string, bool) {
+	api.mu.Lock()
+	defer api.mu.Unlock()
+
+	return slices.Clone(api.shutdowns), slices.Clone(api.poweroffs), api.stalled
 }
 
 func newStopTestAPI(status map[string]string, ignoreShutdown ...string) *stopTestAPI {
@@ -182,8 +194,10 @@ func TestStopNodes_GracefulShutdownNeedsNoPowerOff(t *testing.T) {
 
 	require.NoError(t, prov.StopNodes(t.Context(), stopTestCluster))
 
-	assert.ElementsMatch(t, []string{"cp-1", "worker-1"}, api.shutdowns)
-	assert.Empty(t, api.poweroffs, "a graceful shutdown that finished must not be forced")
+	shutdowns, poweroffs, _ := api.recorded()
+
+	assert.ElementsMatch(t, []string{"cp-1", "worker-1"}, shutdowns)
+	assert.Empty(t, poweroffs, "a graceful shutdown that finished must not be forced")
 }
 
 // TestStopNodes_PowersOffServersThatIgnoreShutdown proves that a server still
@@ -201,9 +215,11 @@ func TestStopNodes_PowersOffServersThatIgnoreShutdown(t *testing.T) {
 
 	require.NoError(t, prov.StopNodes(t.Context(), stopTestCluster))
 
-	assert.ElementsMatch(t, []string{"cp-1", "worker-1"}, api.shutdowns,
+	shutdowns, poweroffs, _ := api.recorded()
+
+	assert.ElementsMatch(t, []string{"cp-1", "worker-1"}, shutdowns,
 		"a server that is already off is not shut down again")
-	assert.Equal(t, []string{"cp-1"}, api.poweroffs,
+	assert.Equal(t, []string{"cp-1"}, poweroffs,
 		"only the server still running after the graceful window is forced off")
 }
 
@@ -223,7 +239,9 @@ func TestStopNodes_PowersOffWhenTheLastStatusReadFailsAtTheWindowDeadline(t *tes
 
 	require.NoError(t, prov.StopNodes(t.Context(), stopTestCluster))
 
-	assert.True(t, api.stalled, "the status read at the window deadline must have been interrupted")
-	assert.Equal(t, []string{"cp-1"}, api.poweroffs,
+	_, poweroffs, stalled := api.recorded()
+
+	assert.True(t, stalled, "the status read at the window deadline must have been interrupted")
+	assert.Equal(t, []string{"cp-1"}, poweroffs,
 		"only the server still running after the graceful window is forced off")
 }
