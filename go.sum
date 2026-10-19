@@ -476,8 +476,8 @@ github.com/aws/aws-sdk-go-v2/service/ecr v1.55.3 h1:RtGctYMmkTerGClvdY6bHXdtly4F
 github.com/aws/aws-sdk-go-v2/service/ecr v1.55.3/go.mod h1:vBfBu24Ka3/5UZtepbTV0gnc9VPLT8ok+0oDDaYAzn4=
 github.com/aws/aws-sdk-go-v2/service/ecrpublic v1.38.10 h1:1A/sI3LNMi3fhRI5TFLMwwo7ALAALSFVCSGvFlr1Iys=
 github.com/aws/aws-sdk-go-v2/service/ecrpublic v1.38.10/go.mod h1:Diyyyz0b43X13pdi1mVMqlTwDjOmRbJMvDsqnduUYWM=
-github.com/aws/aws-sdk-go-v2/service/eks v1.103.0 h1:nH04024ODqpaMG7Cw/ozqYESFTokqk7c0CuiqSxBmn0=
-github.com/aws/aws-sdk-go-v2/service/eks v1.103.0/go.mod h1:7fl6nJPtJXGRN2f4HJhtFz3y52cWNfS+v/UhV7Ea/x0=
+github.com/aws/aws-sdk-go-v2/service/eks v1.104.1 h1:kwU0i0Sg1eNRl0gSPNIXqRCcwTJDdtrlsshSK536SiA=
+github.com/aws/aws-sdk-go-v2/service/eks v1.104.1/go.mod h1:7Z9oc7QnBWbdizy5Zj5Ba0XKLlfO8eyGRSNeqyH1eZY=
 github.com/aws/aws-sdk-go-v2/service/iam v1.53.6 h1:GPQvvxy8+FDnD9xKYzGKJMjIm5xkVM5pd3bFgRldNSo=
 github.com/aws/aws-sdk-go-v2/service/iam v1.53.6/go.mod h1:RJNVc52A0K41fCDJOnsCLeWJf8mwa0q30fM3CfE9U18=
 github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.21 h1:e6YW5uME30TkrElR+4/xcY7NB6CCj2dcv7vtmGXhfhQ=
@@ -1671,8 +1671,8 @@ github.com/kubescape/go-logger v0.0.25 h1:Bi6F0856LOlvjrbSKD+ZtKKzbfRXDifhVCjK8s
 github.com/kubescape/go-logger v0.0.25/go.mod h1:lk+R5/lAVJo4AgD4eYUJJfVTHf7ZChS73X1MFFbeInY=
 github.com/kubescape/k8s-interface v0.0.195 h1:pJ1PT3x3fd1WatLjyZbKAfE64PWtEbvxiFjOBKSBwuU=
 github.com/kubescape/k8s-interface v0.0.195/go.mod h1:j9snZbH+RxOaa1yG/bWgTClj90q7To0rGgQepxy4b+k=
-github.com/kubescape/opa-utils v0.0.314 h1:P/vUXvzhYWv3Tx8GCB96BPCJ6+EKxbJBFzmWWcQUi24=
-github.com/kubescape/opa-utils v0.0.314/go.mod h1:dWNcjmiTwGYlNmclXvDvgH7UlLdpDvmEc9T7ACTqLo0=
+github.com/kubescape/opa-utils v0.0.315 h1:43b6beRDo74nMztOFUBLWV0Vr2T0Ugap7/goU3JPe0Q=
+github.com/kubescape/opa-utils v0.0.315/go.mod h1:dWNcjmiTwGYlNmclXvDvgH7UlLdpDvmEc9T7ACTqLo0=
 github.com/kubescape/rbac-utils v0.0.21-0.20230806101615-07e36f555520 h1:SqlwF8G+oFazeYmZQKoPczLEflBQpwpHCU8DoLLyfj8=
 github.com/kubescape/rbac-utils v0.0.21-0.20230806101615-07e36f555520/go.mod h1:wuxMUSDzGUyWd25IJfBzEJ/Udmw2Vy7npj+MV3u3GrU=
 github.com/kubescape/regolibrary/v2 v2.0.1 h1:7lKj171gslgTbbcmmGVHk34AZNqxForOXZIINoQfdzQ=

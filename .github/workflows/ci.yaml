@@ -1218,7 +1218,7 @@ jobs:
       pull-requests: write
     steps:
       - name: 🔑 Generate GitHub App Token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: generate-token
         with:
           client-id: ${{ vars.APP_CLIENT_ID }}
@@ -2559,7 +2559,7 @@ jobs:
           persist-credentials: false
       - name: Check active documentation
         id: links
-        uses: devantler-tech/.github/actions/validate-retired-repo-links@61693f6ef2740f113ecd2a4ae01840557abe44e8 # v7.12.3
+        uses: devantler-tech/.github/actions/validate-retired-repo-links@21c75c6e9ad85628a0e4b4361a3ca9328f882c0f # v7.17.0
         with:
           enabled: "true"
       - name: Require a completed scan
