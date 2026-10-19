@@ -90,6 +90,9 @@ func (c *Cluster) expandWorkloadSpec() {
 	c.Spec.Workload.Tag = envvar.Expand(c.Spec.Workload.Tag)
 	c.Spec.Workload.KustomizationFile = envvar.Expand(c.Spec.Workload.KustomizationFile)
 	c.Spec.Workload.Scan.Exceptions = envvar.Expand(c.Spec.Workload.Scan.Exceptions)
+	c.Spec.Workload.Validation.KyvernoAPICallResponses = envvar.Expand(
+		c.Spec.Workload.Validation.KyvernoAPICallResponses,
+	)
 }
 
 func (c *Cluster) expandChatSpec() {

@@ -199,3 +199,22 @@ func TestEvaluate_NetworkContextIsNeverLoaded(t *testing.T) {
 	)
 	assert.Zero(t, connectionsMade(), "evaluating a policy must not open a network connection")
 }
+
+// TestEvaluate_APICallFixturesDoNotEnableServiceCalls proves that enabling reviewed
+// Kubernetes API responses cannot accidentally enable Kyverno's HTTP service-call
+// context. The fixture client is intentionally narrower than Kyverno's APICall type.
+func TestEvaluate_APICallFixturesDoNotEnableServiceCalls(t *testing.T) {
+	t.Parallel()
+
+	address, connectionsMade := countConnections(t)
+	engine := kyvernopolicy.NewEngine(
+		[]kyvernov1.PolicyInterface{policy(t, sprintf(networkContextPolicy, address))},
+		nil,
+		kyvernopolicy.WithAPICallResponses(kyvernopolicy.APICallResponses{}),
+	)
+
+	violations, err := engine.Evaluate(t.Context(), configMap("default", nil))
+	require.NoError(t, err)
+	require.Len(t, violations, networkContextRules)
+	assert.Zero(t, connectionsMade(), "a response fixture must never enable HTTP service calls")
+}

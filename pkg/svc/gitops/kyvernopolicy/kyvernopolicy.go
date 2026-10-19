@@ -143,8 +143,17 @@ type Engine struct {
 // namespaces are the source's rendered documents; the Namespace documents
 // among them supply the labels that namespaceSelector matches and
 // failure-action overrides are resolved against.
-func NewEngine(policies []kyvernov1.PolicyInterface, namespaces []map[string]any) *Engine {
+func NewEngine(
+	policies []kyvernov1.PolicyInterface,
+	namespaces []map[string]any,
+	opts ...EngineOption,
+) *Engine {
 	silenceControllerRuntimeLogger()
+
+	options := engineOptions{}
+	for _, option := range opts {
+		option(&options)
+	}
 
 	cfg := config.NewDefaultConfiguration(false)
 	jmesPath := jmespath.New(cfg)
@@ -158,6 +167,11 @@ func NewEngine(policies []kyvernov1.PolicyInterface, namespaces []map[string]any
 		}
 	}
 
+	contextLoader := factories.DefaultContextLoaderFactory(nil)
+	if options.apiCallResponses != nil {
+		contextLoader = apiCallFixtureLoaderFactory(options.apiCallResponses)
+	}
+
 	return &Engine{
 		policies:   validating,
 		namespaces: namespaceLister(namespaces),
@@ -169,7 +183,7 @@ func NewEngine(policies []kyvernov1.PolicyInterface, namespaces []map[string]any
 			nil,
 			nil,
 			imageverifycache.DisabledImageVerifyCache(),
-			factories.DefaultContextLoaderFactory(nil),
+			contextLoader,
 			nil,
 			&isCluster,
 		),

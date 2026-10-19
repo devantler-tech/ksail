@@ -72,6 +72,88 @@ data:
 	return dir
 }
 
+const apiCallFixturePolicy = `apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-retirement-baseline
+spec:
+  failurePolicy: Fail
+  validationFailureAction: Enforce
+  rules:
+    - name: check-retirement
+      match:
+        any:
+          - resources:
+              kinds: [ConfigMap]
+      context:
+        - name: retirement
+          apiCall:
+            urlPath: /api/v1/namespaces/arc-runners
+            jmesPath: metadata.annotations.state
+      validate:
+        message: retirement state must be baseline
+        deny:
+          conditions:
+            any:
+              - key: "{{ retirement }}"
+                operator: NotEquals
+                value: baseline
+`
+
+const apiCallFixture = `apiVersion: ksail.dev/v1alpha1
+kind: KyvernoAPICallResponses
+responses:
+  - method: GET
+    urlPath: /api/v1/namespaces/arc-runners
+    body:
+      metadata:
+        annotations:
+          state: baseline
+`
+
+func TestValidateKyvernoAPICallResponsesFlag(t *testing.T) {
+	t.Parallel()
+
+	dir := writeKyvernoKustomization(t, apiCallFixturePolicy, false)
+	fixture := filepath.Join(dir, "api-responses.yaml")
+	require.NoError(t, os.WriteFile(fixture, []byte(apiCallFixture), 0o600))
+
+	_, err := runValidate(
+		t,
+		dir,
+		"--kyverno-policies",
+		"--kyverno-api-call-responses",
+		fixture,
+	)
+	require.NoError(t, err)
+}
+
+//nolint:paralleltest // The configuration loader discovers ksail.yaml from the working directory.
+func TestValidateKyvernoAPICallResponsesFromConfig(t *testing.T) {
+	dir := writeKyvernoKustomization(t, apiCallFixturePolicy, false)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "api-responses.yaml"),
+		[]byte(apiCallFixture),
+		0o600,
+	))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "ksail.yaml"), []byte(`
+apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: fixture-test
+spec:
+  cluster:
+    policyEngine: Kyverno
+  workload:
+    validation:
+      kyvernoApiCallResponses: api-responses.yaml
+`), 0o600))
+	t.Chdir(dir)
+
+	_, err := runValidate(t, dir)
+	require.NoError(t, err)
+}
+
 func TestValidateKyvernoPoliciesOffByDefault(t *testing.T) {
 	t.Parallel()
 

@@ -1792,6 +1792,10 @@ workload_write
         "description": "Process the kustomization directory. This flag can't be used together with -f or -R. (applies to: describe, get)",
         "type": "string"
       },
+      "kyverno-api-call-responses": {
+        "description": "Path, relative to the validation root, to a reviewed offline response fixture for Kyverno Kubernetes apiCall context entries... (applies to: validate)",
+        "type": "string"
+      },
       "kyverno-policies": {
         "description": "Evaluate the source's own Kyverno ClusterPolicy and Policy validate rules, and its CEL-based ValidatingPolicy and NamespacedValidatingPolicy validations, against the rendered manifests... (applies to: validate)",
         "type": "boolean"

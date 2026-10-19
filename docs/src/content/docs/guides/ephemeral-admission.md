@@ -13,6 +13,35 @@ ksail workload scan ./k8s/overlays/test --ephemeral
 
 The offline validation or security scan runs first. If it fails, KSail does not create a cluster. For valid input, KSail applies namespaces and CRDs, waits for CRD establishment, prepares ConfigMaps and Secrets, installs declared Helm charts and waits for their workloads and jobs, then submits the remaining resources through server-side apply with strict field validation. After chart installation, KSail also reapplies the bootstrap resources to check their updates against newly installed policies. An API rejection fails the command and identifies the affected resource.
 
+## Supply reviewed API context offline
+
+An enforcing Kyverno policy may read Kubernetes state through an `apiCall` context entry. Offline validation has no cluster credentials and fails closed when that response is unavailable. For state that can be represented safely in source control, declare exact responses in a fixture:
+
+```yaml
+apiVersion: ksail.dev/v1alpha1
+kind: KyvernoAPICallResponses
+responses:
+  - method: GET
+    urlPath: /api/v1/namespaces/arc-runners
+    body:
+      metadata:
+        annotations:
+          lifecycle.example.com/state: baseline
+```
+
+Reference the fixture from `ksail.yaml` relative to the validation root:
+
+```yaml
+spec:
+  workload:
+    validation:
+      kyvernoApiCallResponses: validation/kyverno-api-responses.yaml
+```
+
+Use `--kyverno-api-call-responses <path>` for a one-run override. KSail matches the normalized HTTP method and URL path exactly, then hands the JSON body to Kyverno's normal context loader, including the policy's `jmesPath`. Duplicate or unmatched requests and malformed fixtures are errors. The fixture cannot enable HTTP service calls or a live Kubernetes connection.
+
+Treat this file like any other test fixture: use synthetic values when the policy only needs a shape or state, and do not commit credentials or production-only data. Ephemeral admission remains the appropriate check when a reviewed static response cannot represent the behavior.
+
 The admission phase has one ten-minute deadline shared by its API operations and chart installations. Cluster deletion runs with a separate two-minute deadline, including after cancellation or admission failure. Cleanup errors are reported together with the original failure. The user's existing clusters and kubeconfig are not used.
 
 ## Select one workload
