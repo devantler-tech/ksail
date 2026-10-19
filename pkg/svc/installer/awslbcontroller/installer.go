@@ -221,6 +221,30 @@ func (i *Installer) OwnsReleaseIdentity(ctx context.Context, expected string) (b
 		slices.Contains(metadata.HistoryIdentities, expected), nil
 }
 
+// ValuesDrifted reports whether a KSail-installed release carries other
+// user-supplied values than this installer renders (ksail#7771). On top of the
+// shared comparison it requires KSail's ownership label on the latest
+// revision: a values-only drift upgrades the release with no ksail.yaml change,
+// so a controller installed by hand under the same name is left alone, as
+// Uninstall leaves it.
+func (i *Installer) ValuesDrifted(ctx context.Context) (bool, error) {
+	drifted, err := i.Base.ValuesDrifted(ctx)
+	if err != nil || !drifted {
+		return drifted, err //nolint:wrapcheck // the shared comparison names the release.
+	}
+
+	metadata, err := i.client.GetReleaseStorageMetadata(ctx, ReleaseName, awslbcNamespace)
+	if err != nil {
+		return false, fmt.Errorf(
+			"check AWS load balancer controller release ownership: %w",
+			err,
+		)
+	}
+
+	return metadata != nil &&
+		metadata.Labels[ReleaseOwnershipLabel] == releaseOwnershipValue, nil
+}
+
 // Uninstall removes the AWS Load Balancer Controller only when the caller has
 // supplied positive KSail ownership evidence. A Flux- or ArgoCD-managed release
 // is still left untouched, and an ownership lookup failure aborts before Helm
