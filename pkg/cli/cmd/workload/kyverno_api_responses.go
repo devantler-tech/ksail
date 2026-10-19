@@ -50,6 +50,7 @@ func loadKyvernoAPICallResponses(
 	if err != nil {
 		return nil, fmt.Errorf("inspect validation root %q: %w", root, err)
 	}
+
 	if !info.IsDir() {
 		root = filepath.Dir(root)
 	}

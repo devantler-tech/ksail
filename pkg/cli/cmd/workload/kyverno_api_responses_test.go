@@ -44,6 +44,7 @@ func TestLoadKyvernoAPICallResponsesUsesContainingDirectoryForFileRoot(t *testin
 	root := t.TempDir()
 	target := filepath.Join(root, "workload.yaml")
 	fixture := filepath.Join(root, "api-responses.yaml")
+
 	require.NoError(t, os.WriteFile(target, []byte("apiVersion: v1\nkind: ConfigMap\n"), 0o600))
 	require.NoError(t, os.WriteFile(fixture, []byte(`
 apiVersion: ksail.dev/v1alpha1
