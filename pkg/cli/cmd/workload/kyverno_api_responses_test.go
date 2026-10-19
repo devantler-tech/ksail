@@ -38,6 +38,29 @@ responses:
 	assert.JSONEq(t, `{"metadata":{"annotations":{"state":"baseline"}}}`, string(body))
 }
 
+func TestLoadKyvernoAPICallResponsesUsesContainingDirectoryForFileRoot(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	target := filepath.Join(root, "workload.yaml")
+	fixture := filepath.Join(root, "api-responses.yaml")
+	require.NoError(t, os.WriteFile(target, []byte("apiVersion: v1\nkind: ConfigMap\n"), 0o600))
+	require.NoError(t, os.WriteFile(fixture, []byte(`
+apiVersion: ksail.dev/v1alpha1
+kind: KyvernoAPICallResponses
+responses:
+  - method: GET
+    urlPath: /api/v1/namespaces/default
+    body: {metadata: {name: default}}
+`), 0o600))
+
+	responses, err := loadKyvernoAPICallResponses(target, "api-responses.yaml")
+	require.NoError(t, err)
+	require.Contains(t, responses, kyvernopolicy.APICallRequest{
+		Method: "GET", URLPath: "/api/v1/namespaces/default",
+	})
+}
+
 func TestLoadKyvernoAPICallResponsesRejectsDuplicateRequest(t *testing.T) {
 	t.Parallel()
 

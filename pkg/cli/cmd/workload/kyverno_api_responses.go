@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -43,6 +44,14 @@ func loadKyvernoAPICallResponses(
 ) (kyvernopolicy.APICallResponses, error) {
 	if fixturePath == "" {
 		return nil, nil //nolint:nilnil // A missing optional fixture is distinct from an empty fixture.
+	}
+
+	info, err := os.Stat(root)
+	if err != nil {
+		return nil, fmt.Errorf("inspect validation root %q: %w", root, err)
+	}
+	if !info.IsDir() {
+		root = filepath.Dir(root)
 	}
 
 	resolved := fixturePath
