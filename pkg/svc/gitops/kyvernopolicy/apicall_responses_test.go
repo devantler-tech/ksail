@@ -120,5 +120,9 @@ func TestEvaluate_APICallFixtureMissingResponseCannotUseDefault(t *testing.T) {
 	require.Len(t, violations, 1, "a satisfying policy default cannot replace a missing fixture")
 	assert.True(t, violations[0].Error)
 	assert.True(t, violations[0].Blocking)
-	assert.Contains(t, violations[0].Message, "no offline response for GET /api/v1/namespaces/arc-runners")
+	assert.Contains(
+		t,
+		violations[0].Message,
+		"no offline response for GET /api/v1/namespaces/arc-runners",
+	)
 }

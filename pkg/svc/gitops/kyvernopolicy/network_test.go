@@ -217,8 +217,11 @@ func TestEvaluate_APICallFixturesDoNotEnableServiceCalls(t *testing.T) {
 	// before a socket is opened, including in the regression's broken state.
 	base, ok := http.DefaultTransport.(*http.Transport)
 	require.True(t, ok)
+
 	transport := base.Clone()
+
 	var requests atomic.Int32
+
 	transport.Proxy = func(*http.Request) (*url.URL, error) {
 		requests.Add(1)
 
@@ -226,8 +229,10 @@ func TestEvaluate_APICallFixturesDoNotEnableServiceCalls(t *testing.T) {
 	}
 	original := http.DefaultTransport
 	http.DefaultTransport = transport
+
 	t.Cleanup(func() {
 		http.DefaultTransport = original
+
 		transport.CloseIdleConnections()
 	})
 
@@ -241,6 +246,7 @@ func TestEvaluate_APICallFixturesDoNotEnableServiceCalls(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, violations, networkContextRules)
 	assert.Zero(t, requests.Load(), "a response fixture must never enable HTTP service calls")
+
 	for _, violation := range violations {
 		if violation.Rule == "service-call" {
 			assert.Contains(t, violation.Message, "service API calls are disabled offline")
