@@ -46,18 +46,9 @@ func loadKyvernoAPICallResponses(
 		return nil, nil //nolint:nilnil // A missing optional fixture is distinct from an empty fixture.
 	}
 
-	info, err := os.Stat(root)
+	root, resolved, err := resolveKyvernoAPICallResponsesFile(root, fixturePath)
 	if err != nil {
-		return nil, fmt.Errorf("inspect validation root %q: %w", root, err)
-	}
-
-	if !info.IsDir() {
-		root = filepath.Dir(root)
-	}
-
-	resolved := fixturePath
-	if !filepath.IsAbs(resolved) {
-		resolved = filepath.Join(root, resolved)
+		return nil, err
 	}
 
 	data, err := fsutil.ReadFileSafe(root, resolved)
@@ -71,6 +62,27 @@ func loadKyvernoAPICallResponses(
 	}
 
 	return buildKyvernoAPICallResponses(fixture.Responses, fixturePath)
+}
+
+// resolveKyvernoAPICallResponsesFile returns the directory a fixture path is relative
+// to (the validation root, or the directory holding a single-file root) and the
+// fixture file that path names.
+func resolveKyvernoAPICallResponsesFile(root, fixturePath string) (string, string, error) {
+	info, err := os.Stat(root)
+	if err != nil {
+		return "", "", fmt.Errorf("inspect validation root %q: %w", root, err)
+	}
+
+	if !info.IsDir() {
+		root = filepath.Dir(root)
+	}
+
+	resolved := fixturePath
+	if !filepath.IsAbs(resolved) {
+		resolved = filepath.Join(root, resolved)
+	}
+
+	return root, resolved, nil
 }
 
 func decodeKyvernoAPICallResponses(
@@ -153,4 +165,59 @@ func parseKyvernoAPICallResponse(
 	request := kyvernopolicy.APICallRequest{Method: method, URLPath: document.URLPath}
 
 	return request, body, nil
+}
+
+// kyvernoAPICallFixture is a loaded offline response fixture together with the
+// file it was read from, so directory validation can leave that file out.
+type kyvernoAPICallFixture struct {
+	responses kyvernopolicy.APICallResponses
+	// path is the resolved fixture file; empty when no fixture is configured.
+	path string
+}
+
+// loadKyvernoAPICallFixture loads the configured fixture and records its file.
+func loadKyvernoAPICallFixture(root, fixturePath string) (kyvernoAPICallFixture, error) {
+	responses, err := loadKyvernoAPICallResponses(root, fixturePath)
+	if err != nil {
+		return kyvernoAPICallFixture{}, err
+	}
+
+	if fixturePath == "" {
+		return kyvernoAPICallFixture{}, nil
+	}
+
+	_, resolved, err := resolveKyvernoAPICallResponsesFile(root, fixturePath)
+	if err != nil {
+		return kyvernoAPICallFixture{}, err
+	}
+
+	return kyvernoAPICallFixture{responses: responses, path: resolved}, nil
+}
+
+// excludeFixtureFile removes the fixture file from the loose YAML files. The
+// fixture is a KSail input, not a Kubernetes workload, so kubeconform and CEL
+// rules must not evaluate it. Paths are compared in absolute form; a path that
+// cannot be made absolute is kept, so validation never silently skips a file.
+func excludeFixtureFile(yamlFiles []string, fixturePath string) []string {
+	if fixturePath == "" {
+		return yamlFiles
+	}
+
+	fixture, err := filepath.Abs(fixturePath)
+	if err != nil {
+		return yamlFiles
+	}
+
+	filtered := make([]string, 0, len(yamlFiles))
+
+	for _, file := range yamlFiles {
+		absolute, err := filepath.Abs(file)
+		if err == nil && absolute == fixture {
+			continue
+		}
+
+		filtered = append(filtered, file)
+	}
+
+	return filtered
 }

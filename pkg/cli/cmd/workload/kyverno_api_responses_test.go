@@ -117,3 +117,47 @@ responses:
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "response 1")
 }
+
+func TestLoadKyvernoAPICallFixtureExcludesItsFileFromLooseValidation(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	fixtureDir := filepath.Join(root, "validation")
+	require.NoError(t, os.MkdirAll(fixtureDir, 0o750))
+
+	fixture := filepath.Join(fixtureDir, "kyverno-api-responses.yaml")
+	require.NoError(t, os.WriteFile(fixture, []byte(`
+apiVersion: ksail.dev/v1alpha1
+kind: KyvernoAPICallResponses
+responses: []
+`), 0o600))
+
+	workload := filepath.Join(root, "configmap.yaml")
+	require.NoError(t, os.WriteFile(workload, []byte("apiVersion: v1\nkind: ConfigMap\n"), 0o600))
+
+	loaded, err := loadKyvernoAPICallFixture(root, "validation/kyverno-api-responses.yaml")
+	require.NoError(t, err)
+	assert.NotNil(t, loaded.responses, "an empty fixture is still a configured fixture")
+
+	targets, err := discoverValidationTargets(root)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{fixture, workload}, targets.yamlFiles,
+		"the directory walk discovers the fixture as a YAML file")
+
+	assert.Equal(t, []string{workload}, excludeFixtureFile(targets.yamlFiles, loaded.path),
+		"the fixture is a KSail input, not a workload to validate")
+}
+
+func TestLoadKyvernoAPICallFixtureWithoutPathExcludesNothing(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+
+	loaded, err := loadKyvernoAPICallFixture(root, "")
+	require.NoError(t, err)
+	assert.Nil(t, loaded.responses)
+	assert.Empty(t, loaded.path)
+
+	files := []string{filepath.Join(root, "a.yaml")}
+	assert.Equal(t, files, excludeFixtureFile(files, loaded.path))
+}

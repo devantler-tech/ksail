@@ -307,14 +307,14 @@ func runValidateCmdInner(
 		cmd, cfg, configFound, loadErr, flags.kyvernoAPICallResponses,
 	)
 
-	apiCallResponses, err := loadKyvernoAPICallResponses(path, apiCallResponsesPath)
+	apiCallFixture, err := loadKyvernoAPICallFixture(path, apiCallResponsesPath)
 	if err != nil {
 		return err
 	}
 
 	return validatePath(
 		ctx, cmd, path, kubeconformClient, validationOpts, renderer, engine, kyvernoPolicies,
-		apiCallResponses,
+		apiCallFixture,
 	)
 }
 
@@ -798,7 +798,7 @@ func validatePath(
 	renderer *gitopsRenderer,
 	engine *celrules.Engine,
 	kyvernoPolicies bool,
-	apiCallResponses kyvernopolicy.APICallResponses,
+	apiCallFixture kyvernoAPICallFixture,
 ) error {
 	// Check if path exists
 	info, err := os.Stat(path)
@@ -816,7 +816,7 @@ func validatePath(
 	// If it's a directory, walk it to find YAML files and kustomizations
 	return validateDirectory(
 		ctx, cmd, path, kubeconformClient, opts, renderer, engine, kyvernoPolicies,
-		apiCallResponses,
+		apiCallFixture,
 	)
 }
 
@@ -868,14 +868,15 @@ func validateDirectory(
 	renderer *gitopsRenderer,
 	engine *celrules.Engine,
 	kyvernoPolicies bool,
-	apiCallResponses kyvernopolicy.APICallResponses,
+	apiCallFixture kyvernoAPICallFixture,
 ) error {
 	targets, err := discoverValidationTargets(dirPath)
 	if err != nil {
 		return err
 	}
 
-	kustomizations, yamlFiles := targets.kustomizations, targets.yamlFiles
+	kustomizations := targets.kustomizations
+	yamlFiles := excludeFixtureFile(targets.yamlFiles, apiCallFixture.path)
 
 	progressOpts := []notify.ProgressOption{
 		notify.WithAppendOnly(),
@@ -905,7 +906,7 @@ func validateDirectory(
 			celSink:          celSink,
 			kyverno:          kyvernoPolicies,
 			kyvernoSink:      kyvernoSink,
-			apiCallResponses: apiCallResponses,
+			apiCallResponses: apiCallFixture.responses,
 		}
 
 		err := validator.run(ctx, cmd, kustomizations, progressOpts)
