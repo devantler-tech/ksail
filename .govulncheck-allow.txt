@@ -115,9 +115,15 @@ GO-2026-5939  # Claircore manifest-URI SSRF (CVE-2026-10517; sink not linked; no
 # TestEvaluate_NetworkContextIsNeverLoaded pins it: a policy using each
 # network-backed context source opens zero connections (an ablation that
 # supplies a registry client factory makes it fail). No upstream fix.
-GO-2025-3615  # Kyverno SSRF via apiCall service calls (loader disabled: no client; no fix)
-GO-2026-5594  # Kyverno unrestricted outbound apiCall requests (loader disabled: no client; no fix)
-GO-2026-5337  # Kyverno cross-namespace read via context (loaders disabled: no client or resolver; no fix)
+# The one exception is opt-in API-call fixtures (#7872): they give Kyverno a
+# client that answers Kubernetes apiCall paths only from a reviewed in-memory
+# map, never a cluster or the network. Service calls are refused before
+# Kyverno sees them, and policy defaults cannot stand in for a missing
+# fixture. TestEvaluate_APICallFixturesDoNotEnableServiceCalls pins that no
+# HTTP request is attempted with fixtures enabled.
+GO-2025-3615  # Kyverno SSRF via apiCall service calls (loader disabled, or service calls refused with fixtures; no fix)
+GO-2026-5594  # Kyverno unrestricted outbound apiCall requests (no client, or an in-memory fixture client; no fix)
+GO-2026-5337  # Kyverno cross-namespace read via context (no client or resolver, or reviewed fixture responses only; no fix)
 
 # --- github.com/chrismellard/docker-credential-acr-env (transitive via cosign)
 # Measured 2026-09-17. The Azure credential helper matches registry hostnames

@@ -72,6 +72,145 @@ data:
 	return dir
 }
 
+const apiCallFixturePolicy = `apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-retirement-baseline
+spec:
+  failurePolicy: Fail
+  validationFailureAction: Enforce
+  rules:
+    - name: check-retirement
+      match:
+        any:
+          - resources:
+              kinds: [ConfigMap]
+      context:
+        - name: retirement
+          apiCall:
+            urlPath: /api/v1/namespaces/arc-runners
+            jmesPath: metadata.annotations.state
+      validate:
+        message: retirement state must be baseline
+        deny:
+          conditions:
+            any:
+              - key: "{{ retirement }}"
+                operator: NotEquals
+                value: baseline
+`
+
+const apiCallFixture = `apiVersion: ksail.dev/v1alpha1
+kind: KyvernoAPICallResponses
+responses:
+  - method: GET
+    urlPath: /api/v1/namespaces/arc-runners
+    body:
+      metadata:
+        annotations:
+          state: baseline
+`
+
+// TestValidateKyvernoAPICallResponsesFlag exercises the CLI's working-directory fixture override.
+//
+//nolint:paralleltest // A fixture path resolves against the working directory.
+func TestValidateKyvernoAPICallResponsesFlag(t *testing.T) {
+	dir := writeKyvernoKustomization(t, apiCallFixturePolicy, false)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "api-responses.yaml"),
+		[]byte(apiCallFixture),
+		0o600,
+	))
+	t.Chdir(dir)
+
+	_, err := runValidate(
+		t,
+		dir,
+		"--kyverno-policies",
+		"--kyverno-api-call-responses",
+		"api-responses.yaml",
+	)
+	require.NoError(t, err)
+}
+
+// TestValidateKyvernoAPICallResponsesFromConfig exercises repository-declared offline responses.
+//
+//nolint:paralleltest // The configuration loader discovers ksail.yaml from the working directory.
+func TestValidateKyvernoAPICallResponsesFromConfig(t *testing.T) {
+	dir := writeKyvernoKustomization(t, apiCallFixturePolicy, false)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "api-responses.yaml"),
+		[]byte(apiCallFixture),
+		0o600,
+	))
+	writeAPICallFixtureConfig(t, dir, "api-responses.yaml")
+	t.Chdir(dir)
+
+	_, err := runValidate(t, dir)
+	require.NoError(t, err)
+}
+
+// A configured fixture path names the same file whichever directory is
+// validated: it resolves against the working directory, not the validated path.
+//
+//nolint:paralleltest // The configuration loader discovers ksail.yaml from the working directory.
+func TestValidateKyvernoAPICallResponsesFromConfigForAnotherPath(t *testing.T) {
+	project := t.TempDir()
+	fixtureDir := filepath.Join(project, "validation")
+	require.NoError(t, os.MkdirAll(fixtureDir, 0o750))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(fixtureDir, "kyverno-api-responses.yaml"),
+		[]byte(apiCallFixture),
+		0o600,
+	))
+	writeAPICallFixtureConfig(t, project, "validation/kyverno-api-responses.yaml")
+
+	workload := writeKyvernoKustomization(t, apiCallFixturePolicy, false)
+	t.Chdir(project)
+
+	_, err := runValidate(t, workload)
+	require.NoError(t, err)
+}
+
+// The fixture is only read by the Kyverno pass over a directory, so a run that
+// has no such pass does not load it, and a missing fixture cannot fail it.
+func TestValidateKyvernoAPICallResponsesUnusedIsNotLoaded(t *testing.T) {
+	t.Parallel()
+
+	dir := writeKyvernoKustomization(t, requireTeamLabelPolicy("Enforce"), true)
+	missing := filepath.Join(t.TempDir(), "missing.yaml")
+
+	_, err := runValidate(t, dir, "--kyverno-api-call-responses", missing)
+	require.NoError(t, err, "Kyverno policies are off, so the fixture is unused")
+
+	_, err = runValidate(
+		t,
+		filepath.Join(dir, "configmap.yaml"),
+		"--kyverno-policies",
+		"--kyverno-api-call-responses",
+		missing,
+	)
+	require.NoError(t, err, "a single-file target has no Kyverno pass, so the fixture is unused")
+}
+
+// writeAPICallFixtureConfig declares Kyverno evaluation and a fixture path for CLI scenarios.
+func writeAPICallFixtureConfig(t *testing.T, dir, fixturePath string) {
+	t.Helper()
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "ksail.yaml"), []byte(`
+apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: fixture-test
+spec:
+  cluster:
+    policyEngine: Kyverno
+  workload:
+    validation:
+      kyvernoApiCallResponses: `+fixturePath+`
+`), 0o600))
+}
+
 func TestValidateKyvernoPoliciesOffByDefault(t *testing.T) {
 	t.Parallel()
 

@@ -23,6 +23,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/crdschema"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/fluxsubst"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/celrules"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/kyvernopolicy"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/render"
 	"github.com/spf13/cobra"
 	kustomizeTypes "sigs.k8s.io/kustomize/api/types"
@@ -113,11 +114,25 @@ type validateFlags struct {
 	skipKinds                 []string
 	schemaLocations           []string
 	rules                     string
+	kyvernoAPICallResponses   string
 }
 
 // addValidateFlags registers the flags for the validate command, binding each to a
 // field of flags.
 func addValidateFlags(cmd *cobra.Command, flags *validateFlags) {
+	addKubeconformValidateFlags(cmd, flags)
+	addPolicyValidateFlags(cmd, flags)
+	addKyvernoAPICallResponsesFlag(cmd, flags)
+	cmd.Flags().BoolVar(
+		&flags.ephemeral,
+		"ephemeral",
+		false,
+		ephemeralClusterDescription+"Add --ephemeral-children to also validate observed descendants.",
+	)
+}
+
+// addKubeconformValidateFlags registers schema locations, rendering and resource-selection options.
+func addKubeconformValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 	cmd.Flags().
 		BoolVar(&flags.skipSecrets, "skip-secrets", true, "Skip validation of Kubernetes Secrets")
 	cmd.Flags().BoolVar(&flags.strict, "strict", false, "Enable strict validation mode")
@@ -157,6 +172,10 @@ func addValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 			"custom resources whose CRD ships in the repo are validated instead of skipped "+
 			"(off by default; a CRD that cannot be converted is warned and skipped)",
 	)
+}
+
+// addPolicyValidateFlags registers offline CEL rules and policy-evaluation controls.
+func addPolicyValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 	cmd.Flags().BoolVar(
 		&flags.kyvernoPolicies,
 		kyvernoPoliciesFlagName,
@@ -172,11 +191,18 @@ func addValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 			"validation, a warning-severity violation is reported without failing. "+
 			"Overrides spec.workload.validation.rules from ksail.yaml.",
 	)
-	cmd.Flags().BoolVar(
-		&flags.ephemeral,
-		"ephemeral",
-		false,
-		ephemeralClusterDescription+"Add --ephemeral-children to also validate observed descendants.",
+}
+
+// addKyvernoAPICallResponsesFlag exposes the one-run override for reviewed offline responses.
+func addKyvernoAPICallResponsesFlag(cmd *cobra.Command, flags *validateFlags) {
+	cmd.Flags().StringVar(
+		&flags.kyvernoAPICallResponses,
+		"kyverno-api-call-responses",
+		"",
+		"Path, relative to the working directory, to a reviewed offline response fixture for "+
+			"Kyverno Kubernetes apiCall context entries. Exact method and URL-path matches only; "+
+			"missing responses fail closed and no live cluster or service access is enabled. "+
+			"Overrides spec.workload.validation.kyvernoApiCallResponses from ksail.yaml.",
 	)
 }
 
@@ -281,8 +307,16 @@ func runValidateCmdInner(
 
 	kyvernoPolicies := resolveKyvernoPolicies(cfg, configFound, loadErr, flags)
 
+	apiCallFixture, err := loadAPICallFixture(
+		cmd, cfg, configFound, loadErr, flags.kyvernoAPICallResponses, kyvernoPolicies, path,
+	)
+	if err != nil {
+		return err
+	}
+
 	return validatePath(
 		ctx, cmd, path, kubeconformClient, validationOpts, renderer, engine, kyvernoPolicies,
+		apiCallFixture,
 	)
 }
 
@@ -307,6 +341,79 @@ func resolveKyvernoPolicies(
 	}
 
 	return cfg.Spec.Cluster.PolicyEngine == v1alpha1.PolicyEngineKyverno
+}
+
+// configuredKyvernoAPICallResponses reads the repository setting and warns on configuration errors.
+func configuredKyvernoAPICallResponses(
+	cmd *cobra.Command,
+	cfg *v1alpha1.Cluster,
+	configFound bool,
+	loadErr error,
+) string {
+	if loadErr != nil {
+		notify.WriteMessage(notify.Message{
+			Type: notify.WarningType,
+			Content: "could not read spec.workload.validation.kyvernoApiCallResponses " +
+				"from ksail.yaml: %v",
+			Args:   []any{loadErr},
+			Writer: cmd.ErrOrStderr(),
+		})
+
+		return ""
+	}
+
+	if !configFound {
+		return ""
+	}
+
+	return cfg.Spec.Workload.Validation.KyvernoAPICallResponses
+}
+
+// resolveKyvernoAPICallResponsesPath prefers the explicit override to the repository fixture path.
+func resolveKyvernoAPICallResponsesPath(
+	cmd *cobra.Command,
+	cfg *v1alpha1.Cluster,
+	configFound bool,
+	loadErr error,
+	flag string,
+) string {
+	if flag != "" {
+		return flag
+	}
+
+	return configuredKyvernoAPICallResponses(cmd, cfg, configFound, loadErr)
+}
+
+// loadAPICallFixture loads the offline Kyverno API-call fixture
+// when this run consumes one. The fixture path resolves against the working
+// directory, like --rules and spec.workload.sourceDirectory, so a configured path
+// names the same file whichever directory is validated, and the fixture must stay
+// inside that directory.
+func loadAPICallFixture(
+	cmd *cobra.Command,
+	cfg *v1alpha1.Cluster,
+	configFound bool,
+	loadErr error,
+	flagPath string,
+	kyvernoPolicies bool,
+	target string,
+) (kyvernoAPICallFixture, error) {
+	fixturePath := resolveKyvernoAPICallResponsesPath(cmd, cfg, configFound, loadErr, flagPath)
+	if fixturePath == "" {
+		return kyvernoAPICallFixture{}, nil
+	}
+
+	applies, err := kyvernoAPICallFixtureApplies(kyvernoPolicies, target)
+	if err != nil || !applies {
+		return kyvernoAPICallFixture{}, err
+	}
+
+	workingDir, err := os.Getwd()
+	if err != nil {
+		return kyvernoAPICallFixture{}, fmt.Errorf("resolve working directory: %w", err)
+	}
+
+	return loadKyvernoAPICallFixture(workingDir, fixturePath)
 }
 
 // buildValidationOptions assembles the kubeconform validation options from the
@@ -727,6 +834,7 @@ func validatePath(
 	renderer *gitopsRenderer,
 	engine *celrules.Engine,
 	kyvernoPolicies bool,
+	apiCallFixture kyvernoAPICallFixture,
 ) error {
 	// Check if path exists
 	info, err := os.Stat(path)
@@ -744,6 +852,7 @@ func validatePath(
 	// If it's a directory, walk it to find YAML files and kustomizations
 	return validateDirectory(
 		ctx, cmd, path, kubeconformClient, opts, renderer, engine, kyvernoPolicies,
+		apiCallFixture,
 	)
 }
 
@@ -795,13 +904,15 @@ func validateDirectory(
 	renderer *gitopsRenderer,
 	engine *celrules.Engine,
 	kyvernoPolicies bool,
+	apiCallFixture kyvernoAPICallFixture,
 ) error {
 	targets, err := discoverValidationTargets(dirPath)
 	if err != nil {
 		return err
 	}
 
-	kustomizations, yamlFiles := targets.kustomizations, targets.yamlFiles
+	kustomizations := targets.kustomizations
+	yamlFiles := excludeFixtureFile(targets.yamlFiles, apiCallFixture.path)
 
 	progressOpts := []notify.ProgressOption{
 		notify.WithAppendOnly(),
@@ -821,16 +932,17 @@ func validateDirectory(
 
 	if len(kustomizations) > 0 {
 		validator := &kustomizationValidator{
-			dirPath:     dirPath,
-			kubeconform: kubeconformClient,
-			kustomize:   kustomize.NewClient(),
-			renderer:    renderer,
-			sink:        &degradationSink{},
-			opts:        opts,
-			engine:      engine,
-			celSink:     celSink,
-			kyverno:     kyvernoPolicies,
-			kyvernoSink: kyvernoSink,
+			dirPath:          dirPath,
+			kubeconform:      kubeconformClient,
+			kustomize:        kustomize.NewClient(),
+			renderer:         renderer,
+			sink:             &degradationSink{},
+			opts:             opts,
+			engine:           engine,
+			celSink:          celSink,
+			kyverno:          kyvernoPolicies,
+			kyvernoSink:      kyvernoSink,
+			apiCallResponses: apiCallFixture.responses,
 		}
 
 		err := validator.run(ctx, cmd, kustomizations, progressOpts)
@@ -931,16 +1043,17 @@ func runParallelValidation(
 // Helm-rendering it first. Its validate method is the task function passed to
 // the parallel progress group.
 type kustomizationValidator struct {
-	dirPath     string
-	kubeconform *kubeconform.Client
-	kustomize   *kustomize.Client
-	renderer    *gitopsRenderer // nil → Helm rendering disabled
-	sink        *degradationSink
-	opts        *kubeconform.ValidationOptions
-	engine      *celrules.Engine  // nil → CEL rule validation disabled
-	celSink     *celViolationSink // collects warning-severity CEL violations
-	kyverno     bool              // evaluate each output's own Kyverno policies
-	kyvernoSink *celViolationSink // collects non-blocking Kyverno results
+	dirPath          string
+	kubeconform      *kubeconform.Client
+	kustomize        *kustomize.Client
+	renderer         *gitopsRenderer // nil → Helm rendering disabled
+	sink             *degradationSink
+	opts             *kubeconform.ValidationOptions
+	engine           *celrules.Engine               // nil → CEL rule validation disabled
+	celSink          *celViolationSink              // collects warning-severity CEL violations
+	kyverno          bool                           // evaluate each output's own Kyverno policies
+	kyvernoSink      *celViolationSink              // collects non-blocking Kyverno results
+	apiCallResponses kyvernopolicy.APICallResponses // reviewed offline Kubernetes API context
 
 	// kyvernoInputs holds each validated kustomization's output for the Kyverno
 	// pass, which runs after every output is rendered so Namespaces rendered by one
@@ -1018,7 +1131,7 @@ func (v *kustomizationValidator) runKyverno(
 
 			return evaluateKyvernoDocuments(
 				taskCtx, true, input.data, dir, input.skipKinds, v.kyvernoSink,
-				input.attribution, shared,
+				input.attribution, shared, v.apiCallResponses,
 			)
 		},
 		append(progressOpts, notify.WithCountLabel("kustomizations"))...,

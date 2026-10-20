@@ -225,6 +225,7 @@ func TestCluster_ExpandEnvVars_AllFieldsAtOnce(t *testing.T) {
 	t.Setenv("TEST_REGISTRY", "localhost:5000")
 	t.Setenv("TEST_SOURCE_DIR", "/test/k8s")
 	t.Setenv("TEST_TAG", "latest")
+	t.Setenv("TEST_KYVERNO_API_RESPONSES", "/test/kyverno-api-responses.yaml")
 	t.Setenv("TEST_CHAT_MODEL", "claude")
 	t.Setenv("TEST_MIRRORS_DIR", "/test/mirrors")
 	t.Setenv("TEST_TALOS_CONFIG", "/test/talosconfig")
@@ -240,6 +241,7 @@ func TestCluster_ExpandEnvVars_AllFieldsAtOnce(t *testing.T) {
 	cluster.Spec.Cluster.LocalRegistry.Registry = "${TEST_REGISTRY}"
 	cluster.Spec.Workload.SourceDirectory = "${TEST_SOURCE_DIR}"
 	cluster.Spec.Workload.Tag = "${TEST_TAG}"
+	cluster.Spec.Workload.Validation.KyvernoAPICallResponses = "${TEST_KYVERNO_API_RESPONSES}"
 	cluster.Spec.Chat.Model = "${TEST_CHAT_MODEL}"
 	cluster.Spec.Cluster.Vanilla.MirrorsDir = "${TEST_MIRRORS_DIR}"
 	cluster.Spec.Cluster.Talos.Config = "${TEST_TALOS_CONFIG}"
@@ -257,6 +259,11 @@ func TestCluster_ExpandEnvVars_AllFieldsAtOnce(t *testing.T) {
 	assert.Equal(t, "localhost:5000", cluster.Spec.Cluster.LocalRegistry.Registry)
 	assert.Equal(t, "/test/k8s", cluster.Spec.Workload.SourceDirectory)
 	assert.Equal(t, "latest", cluster.Spec.Workload.Tag)
+	assert.Equal(
+		t,
+		"/test/kyverno-api-responses.yaml",
+		cluster.Spec.Workload.Validation.KyvernoAPICallResponses,
+	)
 	assert.Equal(t, "claude", cluster.Spec.Chat.Model)
 	assert.Equal(t, "/test/mirrors", cluster.Spec.Cluster.Vanilla.MirrorsDir)
 	assert.Equal(t, "/test/talosconfig", cluster.Spec.Cluster.Talos.Config)
