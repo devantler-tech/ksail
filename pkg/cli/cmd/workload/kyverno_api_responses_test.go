@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestLoadKyvernoAPICallResponses verifies safe fixture loading and method normalization.
 func TestLoadKyvernoAPICallResponses(t *testing.T) {
 	t.Parallel()
 
@@ -38,6 +39,7 @@ responses:
 	assert.JSONEq(t, `{"metadata":{"annotations":{"state":"baseline"}}}`, string(body))
 }
 
+// TestKyvernoAPICallFixtureAppliesOnlyToKyvernoDirectoryRuns pins when a fixture is consumed.
 func TestKyvernoAPICallFixtureAppliesOnlyToKyvernoDirectoryRuns(t *testing.T) {
 	t.Parallel()
 
@@ -61,6 +63,7 @@ func TestKyvernoAPICallFixtureAppliesOnlyToKyvernoDirectoryRuns(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestExcludeFixtureFileMatchesASymlinkedSpelling excludes every canonical spelling of the fixture.
 func TestExcludeFixtureFileMatchesASymlinkedSpelling(t *testing.T) {
 	t.Parallel()
 
@@ -83,6 +86,7 @@ responses: []
 		"both spellings name the fixture, so neither is validated as a workload")
 }
 
+// TestLoadKyvernoAPICallResponsesRejectsDuplicateRequest rejects ambiguous normalized requests.
 func TestLoadKyvernoAPICallResponsesRejectsDuplicateRequest(t *testing.T) {
 	t.Parallel()
 
@@ -105,6 +109,7 @@ responses:
 	assert.Contains(t, err.Error(), "duplicate response for GET /api/v1/namespaces/arc-runners")
 }
 
+// TestLoadKyvernoAPICallResponsesRejectsPathEscape keeps fixture reads inside the project root.
 func TestLoadKyvernoAPICallResponsesRejectsPathEscape(t *testing.T) {
 	t.Parallel()
 
@@ -120,6 +125,7 @@ responses: []
 	require.ErrorIs(t, err, fsutil.ErrPathOutsideBase)
 }
 
+// TestLoadKyvernoAPICallResponsesRejectsUnsupportedShape rejects invalid methods, paths and bodies.
 func TestLoadKyvernoAPICallResponsesRejectsUnsupportedShape(t *testing.T) {
 	t.Parallel()
 
@@ -139,6 +145,7 @@ responses:
 	assert.Contains(t, err.Error(), "response 1")
 }
 
+// TestLoadKyvernoAPICallFixtureExcludesItsFileFromLooseValidation separates fixtures from workloads.
 func TestLoadKyvernoAPICallFixtureExcludesItsFileFromLooseValidation(t *testing.T) {
 	t.Parallel()
 
@@ -169,6 +176,7 @@ responses: []
 		"the fixture is a KSail input, not a workload to validate")
 }
 
+// TestLoadKyvernoAPICallFixtureWithoutPathExcludesNothing preserves validation without a fixture.
 func TestLoadKyvernoAPICallFixtureWithoutPathExcludesNothing(t *testing.T) {
 	t.Parallel()
 
@@ -209,6 +217,7 @@ responses:
 	assert.Contains(t, string(body), "9007199254740993")
 }
 
+// TestLoadKyvernoAPICallResponsesRejectsNullBody requires a usable response rather than JSON null.
 func TestLoadKyvernoAPICallResponsesRejectsNullBody(t *testing.T) {
 	t.Parallel()
 

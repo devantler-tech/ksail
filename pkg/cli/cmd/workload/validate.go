@@ -131,6 +131,7 @@ func addValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 	)
 }
 
+// addKubeconformValidateFlags registers schema locations, rendering and resource-selection options.
 func addKubeconformValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 	cmd.Flags().
 		BoolVar(&flags.skipSecrets, "skip-secrets", true, "Skip validation of Kubernetes Secrets")
@@ -173,6 +174,7 @@ func addKubeconformValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 	)
 }
 
+// addPolicyValidateFlags registers offline CEL rules and policy-evaluation controls.
 func addPolicyValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 	cmd.Flags().BoolVar(
 		&flags.kyvernoPolicies,
@@ -191,6 +193,7 @@ func addPolicyValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 	)
 }
 
+// addKyvernoAPICallResponsesFlag exposes the one-run override for reviewed offline responses.
 func addKyvernoAPICallResponsesFlag(cmd *cobra.Command, flags *validateFlags) {
 	cmd.Flags().StringVar(
 		&flags.kyvernoAPICallResponses,
@@ -340,6 +343,7 @@ func resolveKyvernoPolicies(
 	return cfg.Spec.Cluster.PolicyEngine == v1alpha1.PolicyEngineKyverno
 }
 
+// configuredKyvernoAPICallResponses reads the repository setting and warns on configuration errors.
 func configuredKyvernoAPICallResponses(
 	cmd *cobra.Command,
 	cfg *v1alpha1.Cluster,
@@ -365,6 +369,7 @@ func configuredKyvernoAPICallResponses(
 	return cfg.Spec.Workload.Validation.KyvernoAPICallResponses
 }
 
+// resolveKyvernoAPICallResponsesPath prefers the explicit override to the repository fixture path.
 func resolveKyvernoAPICallResponsesPath(
 	cmd *cobra.Command,
 	cfg *v1alpha1.Cluster,

@@ -39,6 +39,7 @@ type kyvernoAPICallResponseDocument struct {
 	Body    json.RawMessage `json:"body"`
 }
 
+// loadKyvernoAPICallResponses reads a root-confined fixture and indexes its validated responses.
 func loadKyvernoAPICallResponses(
 	base string,
 	fixturePath string,
@@ -83,6 +84,7 @@ func resolveKyvernoAPICallResponsesFile(base, fixturePath string) (string, error
 	return canonical, nil
 }
 
+// decodeKyvernoAPICallResponses rejects unknown fields and requires the supported fixture type.
 func decodeKyvernoAPICallResponses(
 	data []byte,
 	fixturePath string,
@@ -112,6 +114,7 @@ func decodeKyvernoAPICallResponses(
 	return fixture, nil
 }
 
+// buildKyvernoAPICallResponses indexes normalized requests, rejecting duplicates and invalid entries.
 func buildKyvernoAPICallResponses(
 	documents []kyvernoAPICallResponseDocument,
 	fixturePath string,
@@ -139,6 +142,7 @@ func buildKyvernoAPICallResponses(
 	return responses, nil
 }
 
+// parseKyvernoAPICallResponse validates a request while preserving the JSON response's number text.
 func parseKyvernoAPICallResponse(
 	document kyvernoAPICallResponseDocument,
 ) (kyvernopolicy.APICallRequest, json.RawMessage, error) {

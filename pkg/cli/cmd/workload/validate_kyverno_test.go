@@ -111,6 +111,8 @@ responses:
           state: baseline
 `
 
+// TestValidateKyvernoAPICallResponsesFlag exercises the CLI's working-directory fixture override.
+//
 //nolint:paralleltest // A fixture path resolves against the working directory.
 func TestValidateKyvernoAPICallResponsesFlag(t *testing.T) {
 	dir := writeKyvernoKustomization(t, apiCallFixturePolicy, false)
@@ -131,6 +133,8 @@ func TestValidateKyvernoAPICallResponsesFlag(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestValidateKyvernoAPICallResponsesFromConfig exercises repository-declared offline responses.
+//
 //nolint:paralleltest // The configuration loader discovers ksail.yaml from the working directory.
 func TestValidateKyvernoAPICallResponsesFromConfig(t *testing.T) {
 	dir := writeKyvernoKustomization(t, apiCallFixturePolicy, false)
@@ -189,6 +193,7 @@ func TestValidateKyvernoAPICallResponsesUnusedIsNotLoaded(t *testing.T) {
 	require.NoError(t, err, "a single-file target has no Kyverno pass, so the fixture is unused")
 }
 
+// writeAPICallFixtureConfig declares Kyverno evaluation and a fixture path for CLI scenarios.
 func writeAPICallFixtureConfig(t *testing.T, dir, fixturePath string) {
 	t.Helper()
 

@@ -56,6 +56,7 @@ type apiCallResponseClient struct {
 	err       error
 }
 
+// newAPICallResponseClient snapshots responses and rejects keys that normalize to one request.
 func newAPICallResponseClient(responses APICallResponses) *apiCallResponseClient {
 	cloned := make(APICallResponses, len(responses))
 	for request, response := range responses {
@@ -73,6 +74,7 @@ func newAPICallResponseClient(responses APICallResponses) *apiCallResponseClient
 	return &apiCallResponseClient{responses: cloned}
 }
 
+// RawAbsPath returns a copy of an exact fixture response without contacting a Kubernetes API.
 func (c *apiCallResponseClient) RawAbsPath(
 	_ context.Context,
 	urlPath string,
@@ -93,6 +95,7 @@ func (c *apiCallResponseClient) RawAbsPath(
 	return append([]byte(nil), response...), nil
 }
 
+// normalizedMethod folds method spelling to uppercase and defaults an omitted method to GET.
 func normalizedMethod(method string) string {
 	method = strings.ToUpper(strings.TrimSpace(method))
 	if method == "" {
@@ -107,6 +110,7 @@ type apiCallFixtureLoader struct {
 	client   engineapi.RawClient
 }
 
+// Load confines API-call context to fixture responses before invoking Kyverno's context loader.
 func (l *apiCallFixtureLoader) Load(
 	ctx context.Context,
 	query jmespath.Interface,
@@ -128,6 +132,7 @@ func (l *apiCallFixtureLoader) Load(
 	return nil
 }
 
+// apiCallFixtureLoaderFactory shares the immutable response client across policy context loaders.
 func apiCallFixtureLoaderFactory(responses APICallResponses) engineapi.ContextLoaderFactory {
 	base := factories.DefaultContextLoaderFactory(nil)
 	client := newAPICallResponseClient(responses)

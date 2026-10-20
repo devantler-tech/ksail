@@ -85,6 +85,7 @@ func (c *Cluster) expandHetznerOptions() {
 	// So we don't expand it here
 }
 
+// expandWorkloadSpec expands environment references in workload paths and validation inputs.
 func (c *Cluster) expandWorkloadSpec() {
 	c.Spec.Workload.SourceDirectory = envvar.Expand(c.Spec.Workload.SourceDirectory)
 	c.Spec.Workload.Tag = envvar.Expand(c.Spec.Workload.Tag)

@@ -41,6 +41,7 @@ spec:
             value: baseline
 `
 
+// TestEvaluate_APICallFixtureUsesKyvernoJMESPath exercises Kyverno's real response projection.
 func TestEvaluate_APICallFixtureUsesKyvernoJMESPath(t *testing.T) {
 	t.Parallel()
 
@@ -60,6 +61,7 @@ func TestEvaluate_APICallFixtureUsesKyvernoJMESPath(t *testing.T) {
 	assert.Empty(t, violations, "the real Kyverno loader must apply the apiCall jmesPath")
 }
 
+// TestEvaluate_APICallFixtureCanProducePolicyDenial keeps enforcing policy denials blocking.
 func TestEvaluate_APICallFixtureCanProducePolicyDenial(t *testing.T) {
 	t.Parallel()
 
@@ -82,6 +84,7 @@ func TestEvaluate_APICallFixtureCanProducePolicyDenial(t *testing.T) {
 	assert.Contains(t, violations[0].Message, "retirement state must be baseline")
 }
 
+// TestEvaluate_APICallFixtureFailsClosedWhenResponseIsMissing rejects unmatched enforcing calls.
 func TestEvaluate_APICallFixtureFailsClosedWhenResponseIsMissing(t *testing.T) {
 	t.Parallel()
 
@@ -103,6 +106,7 @@ func TestEvaluate_APICallFixtureFailsClosedWhenResponseIsMissing(t *testing.T) {
 	)
 }
 
+// TestEvaluate_APICallFixtureMissingResponseCannotUseDefault prevents defaults from hiding misses.
 func TestEvaluate_APICallFixtureMissingResponseCannotUseDefault(t *testing.T) {
 	t.Parallel()
 
