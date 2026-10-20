@@ -53,6 +53,14 @@ GO-2025-3521  # GitRepo volume inadvertent local repository access (node-side; n
 GO-2026-5064  # containerd v1 CRI checkpoint/restore CDI-annotation smuggling (transitive; no v1 fix; path unused)
 GO-2026-5338  # containerd v1 CRI checkpoint import local image-tag poisoning (CVE-2026-50195; transitive; no v1 fix; path unused)
 GO-2026-5622  # containerd v1 CRI checkpoint/restore arbitrary host log read via symlink (CVE-2026-53489; transitive; no v1 fix; path unused)
+# GO-2026-6791 measured 2026-10-20 with `govulncheck -json ./...` at ksail main
+# (containerd v1.7.36, containerd/v2 v2.3.6). The advisory lists no symbols, so
+# any linked package of the v1 module counts as reachable. Every trace stops at
+# a package init in content, remotes, images, labels, errdefs, filters,
+# archive/compression or pkg/randutil, linked through helm's registry client
+# under kubescape (pkg/client/kubescape). No CRI plugin package is linked.
+# containerd/v2 v2.3.6 is past the v2 fix (2.3.4), so only v1 is flagged.
+GO-2026-6791  # containerd v1 CRI checkpoint restore bypasses destination security context (CVE-2026-95837; transitive; no v1 fix; path unused)
 
 # --- golang.org/x/crypto/openpgp @ v0.53.0 (transitive via kubescape) -------
 # Published 2026-07-08. This is a package-level "unmaintained, don't use" design
