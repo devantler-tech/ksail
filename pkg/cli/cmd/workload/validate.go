@@ -196,7 +196,7 @@ func addKyvernoAPICallResponsesFlag(cmd *cobra.Command, flags *validateFlags) {
 		&flags.kyvernoAPICallResponses,
 		"kyverno-api-call-responses",
 		"",
-		"Path, relative to the validation root, to a reviewed offline response fixture for "+
+		"Path, relative to the working directory, to a reviewed offline response fixture for "+
 			"Kyverno Kubernetes apiCall context entries. Exact method and URL-path matches only; "+
 			"missing responses fail closed and no live cluster or service access is enabled. "+
 			"Overrides spec.workload.validation.kyvernoApiCallResponses from ksail.yaml.",
@@ -303,11 +303,10 @@ func runValidateCmdInner(
 	}
 
 	kyvernoPolicies := resolveKyvernoPolicies(cfg, configFound, loadErr, flags)
-	apiCallResponsesPath := resolveKyvernoAPICallResponsesPath(
-		cmd, cfg, configFound, loadErr, flags.kyvernoAPICallResponses,
-	)
 
-	apiCallFixture, err := loadKyvernoAPICallFixture(path, apiCallResponsesPath)
+	apiCallFixture, err := loadAPICallFixture(
+		cmd, cfg, configFound, loadErr, flags.kyvernoAPICallResponses, kyvernoPolicies, path,
+	)
 	if err != nil {
 		return err
 	}
@@ -378,6 +377,38 @@ func resolveKyvernoAPICallResponsesPath(
 	}
 
 	return configuredKyvernoAPICallResponses(cmd, cfg, configFound, loadErr)
+}
+
+// loadAPICallFixture loads the offline Kyverno API-call fixture
+// when this run consumes one. The fixture path resolves against the working
+// directory, like --rules and spec.workload.sourceDirectory, so a configured path
+// names the same file whichever directory is validated, and the fixture must stay
+// inside that directory.
+func loadAPICallFixture(
+	cmd *cobra.Command,
+	cfg *v1alpha1.Cluster,
+	configFound bool,
+	loadErr error,
+	flagPath string,
+	kyvernoPolicies bool,
+	target string,
+) (kyvernoAPICallFixture, error) {
+	fixturePath := resolveKyvernoAPICallResponsesPath(cmd, cfg, configFound, loadErr, flagPath)
+	if fixturePath == "" {
+		return kyvernoAPICallFixture{}, nil
+	}
+
+	applies, err := kyvernoAPICallFixtureApplies(kyvernoPolicies, target)
+	if err != nil || !applies {
+		return kyvernoAPICallFixture{}, err
+	}
+
+	workingDir, err := os.Getwd()
+	if err != nil {
+		return kyvernoAPICallFixture{}, fmt.Errorf("resolve working directory: %w", err)
+	}
+
+	return loadKyvernoAPICallFixture(workingDir, fixturePath)
 }
 
 // buildValidationOptions assembles the kubeconform validation options from the

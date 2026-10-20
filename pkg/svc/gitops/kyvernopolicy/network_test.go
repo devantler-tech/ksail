@@ -247,9 +247,15 @@ func TestEvaluate_APICallFixturesDoNotEnableServiceCalls(t *testing.T) {
 	require.Len(t, violations, networkContextRules)
 	assert.Zero(t, requests.Load(), "a response fixture must never enable HTTP service calls")
 
+	serviceCallFound := false
+
 	for _, violation := range violations {
 		if violation.Rule == "service-call" {
+			serviceCallFound = true
+
 			assert.Contains(t, violation.Message, "service API calls are disabled offline")
 		}
 	}
+
+	assert.True(t, serviceCallFound, "the service-call rule must report its refusal")
 }

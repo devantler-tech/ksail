@@ -1793,7 +1793,7 @@ workload_write
         "type": "string"
       },
       "kyverno-api-call-responses": {
-        "description": "Path, relative to the validation root, to a reviewed offline response fixture for Kyverno Kubernetes apiCall context entries... (applies to: validate)",
+        "description": "Path, relative to the working directory, to a reviewed offline response fixture for Kyverno Kubernetes apiCall context entries... (applies to: validate)",
         "type": "string"
       },
       "kyverno-policies": {

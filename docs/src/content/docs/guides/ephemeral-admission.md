@@ -29,7 +29,7 @@ responses:
           lifecycle.example.com/state: baseline
 ```
 
-Reference the fixture from `ksail.yaml` relative to the validation root:
+Reference the fixture from `ksail.yaml`. Like `rules` and `sourceDirectory`, the path is relative to the directory you run KSail in, and the fixture must stay inside it, so the same setting works whichever directory you validate:
 
 ```yaml
 spec:
@@ -38,7 +38,7 @@ spec:
       kyvernoApiCallResponses: validation/kyverno-api-responses.yaml
 ```
 
-Use `--kyverno-api-call-responses <path>` for a one-run override. KSail matches the normalized HTTP method and URL path exactly, then hands the JSON body to Kyverno's normal context loader, including the policy's `jmesPath`. Duplicate or unmatched requests and malformed fixtures are errors. The fixture cannot enable HTTP service calls or a live Kubernetes connection. A fixture kept under the validation root is not itself validated as a workload.
+Use `--kyverno-api-call-responses <path>` for a one-run override. KSail matches the normalized HTTP method and URL path exactly, then hands the JSON body to Kyverno's normal context loader, including the policy's `jmesPath`. Duplicate or unmatched requests and malformed fixtures are errors. The fixture cannot enable HTTP service calls or a live Kubernetes connection. KSail reads the fixture only when Kyverno policies are on and a directory is validated, and a fixture inside the validated directory is not itself validated as a workload.
 
 Treat this file like any other test fixture: use synthetic values when the policy only needs a shape or state, and do not commit credentials or production-only data. Ephemeral admission remains the appropriate check when a reviewed static response cannot represent the behavior.
 

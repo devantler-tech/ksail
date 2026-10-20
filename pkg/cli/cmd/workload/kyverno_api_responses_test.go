@@ -38,28 +38,49 @@ responses:
 	assert.JSONEq(t, `{"metadata":{"annotations":{"state":"baseline"}}}`, string(body))
 }
 
-func TestLoadKyvernoAPICallResponsesUsesContainingDirectoryForFileRoot(t *testing.T) {
+func TestKyvernoAPICallFixtureAppliesOnlyToKyvernoDirectoryRuns(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	target := filepath.Join(root, "workload.yaml")
-	fixture := filepath.Join(root, "api-responses.yaml")
+	file := filepath.Join(root, "workload.yaml")
+	require.NoError(t, os.WriteFile(file, []byte("apiVersion: v1\nkind: ConfigMap\n"), 0o600))
 
-	require.NoError(t, os.WriteFile(target, []byte("apiVersion: v1\nkind: ConfigMap\n"), 0o600))
+	applies, err := kyvernoAPICallFixtureApplies(true, root)
+	require.NoError(t, err)
+	assert.True(t, applies, "a directory run with Kyverno policies reads the fixture")
+
+	applies, err = kyvernoAPICallFixtureApplies(false, root)
+	require.NoError(t, err)
+	assert.False(t, applies, "with Kyverno policies off nothing reads the fixture")
+
+	applies, err = kyvernoAPICallFixtureApplies(true, file)
+	require.NoError(t, err)
+	assert.False(t, applies, "a single-file run has no Kyverno pass")
+
+	_, err = kyvernoAPICallFixtureApplies(true, filepath.Join(root, "missing"))
+	require.Error(t, err)
+}
+
+func TestExcludeFixtureFileMatchesASymlinkedSpelling(t *testing.T) {
+	t.Parallel()
+
+	realDir := t.TempDir()
+	fixture := filepath.Join(realDir, "kyverno-api-responses.yaml")
 	require.NoError(t, os.WriteFile(fixture, []byte(`
 apiVersion: ksail.dev/v1alpha1
 kind: KyvernoAPICallResponses
-responses:
-  - method: GET
-    urlPath: /api/v1/namespaces/default
-    body: {metadata: {name: default}}
+responses: []
 `), 0o600))
 
-	responses, err := loadKyvernoAPICallResponses(target, "api-responses.yaml")
+	link := filepath.Join(t.TempDir(), "linked")
+	require.NoError(t, os.Symlink(realDir, link))
+
+	loaded, err := loadKyvernoAPICallFixture(link, "kyverno-api-responses.yaml")
 	require.NoError(t, err)
-	require.Contains(t, responses, kyvernopolicy.APICallRequest{
-		Method: "GET", URLPath: "/api/v1/namespaces/default",
-	})
+
+	files := []string{filepath.Join(link, "kyverno-api-responses.yaml"), fixture}
+	assert.Empty(t, excludeFixtureFile(files, loaded.path),
+		"both spellings name the fixture, so neither is validated as a workload")
 }
 
 func TestLoadKyvernoAPICallResponsesRejectsDuplicateRequest(t *testing.T) {

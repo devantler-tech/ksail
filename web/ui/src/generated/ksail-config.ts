@@ -909,7 +909,7 @@ export interface KSailClusterConfiguration {
          */
         rules?: string;
         /**
-         * Path, relative to the validation root, to a ksail.dev/v1alpha1 KyvernoAPICallResponses fixture for offline Kyverno apiCall context. Exact method and URL-path matches only; missing responses fail closed and no live cluster or service access is enabled. Overridden by --kyverno-api-call-responses.
+         * Path, relative to the working directory, to a ksail.dev/v1alpha1 KyvernoAPICallResponses fixture for offline Kyverno apiCall context. Exact method and URL-path matches only; missing responses fail closed and no live cluster or service access is enabled. Overridden by --kyverno-api-call-responses.
          */
         kyvernoApiCallResponses?: string;
       };
