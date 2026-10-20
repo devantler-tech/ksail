@@ -1,6 +1,7 @@
 package workload
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,9 +34,9 @@ type kyvernoAPICallResponsesFile struct {
 }
 
 type kyvernoAPICallResponseDocument struct {
-	Method  string `json:"method"`
-	URLPath string `json:"urlPath"`
-	Body    any    `json:"body"`
+	Method  string          `json:"method"`
+	URLPath string          `json:"urlPath"`
+	Body    json.RawMessage `json:"body"`
 }
 
 func loadKyvernoAPICallResponses(
@@ -146,22 +147,22 @@ func parseKyvernoAPICallResponse(
 		method = "GET"
 	}
 
+	body := bytes.TrimSpace(document.Body)
+
 	if (method != "GET" && method != "POST") ||
-		!strings.HasPrefix(document.URLPath, "/") || document.Body == nil {
+		!strings.HasPrefix(document.URLPath, "/") ||
+		len(body) == 0 || bytes.Equal(body, []byte("null")) {
 		return kyvernopolicy.APICallRequest{}, nil, fmt.Errorf(
 			"%w: requires GET or POST, an absolute urlPath, and a non-null body",
 			errInvalidKyvernoAPICallResponse,
 		)
 	}
 
-	body, err := json.Marshal(document.Body)
-	if err != nil {
-		return kyvernopolicy.APICallRequest{}, nil, fmt.Errorf("encode response body: %w", err)
-	}
-
 	request := kyvernopolicy.APICallRequest{Method: method, URLPath: document.URLPath}
 
-	return request, body, nil
+	// The raw body keeps the reviewed number text exactly; decoding it into any
+	// would turn every number into a float64 and lose large integers.
+	return request, append(json.RawMessage(nil), body...), nil
 }
 
 // kyvernoAPICallFixture is a loaded offline response fixture together with the

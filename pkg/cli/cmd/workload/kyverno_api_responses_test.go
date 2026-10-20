@@ -182,3 +182,47 @@ func TestLoadKyvernoAPICallFixtureWithoutPathExcludesNothing(t *testing.T) {
 	files := []string{filepath.Join(root, "a.yaml")}
 	assert.Equal(t, files, excludeFixtureFile(files, loaded.path))
 }
+
+// A response body reaches Kyverno as written: an integer beyond float64's exact
+// range keeps every digit.
+func TestLoadKyvernoAPICallResponsesKeepsLargeIntegersExact(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	fixture := filepath.Join(root, "api-responses.yaml")
+	require.NoError(t, os.WriteFile(fixture, []byte(`
+apiVersion: ksail.dev/v1alpha1
+kind: KyvernoAPICallResponses
+responses:
+  - urlPath: /api/v1/namespaces/default
+    body:
+      metadata:
+        generation: 9007199254740993
+`), 0o600))
+
+	responses, err := loadKyvernoAPICallResponses(root, "api-responses.yaml")
+	require.NoError(t, err)
+
+	body := responses[kyvernopolicy.APICallRequest{
+		Method: "GET", URLPath: "/api/v1/namespaces/default",
+	}]
+	assert.Contains(t, string(body), "9007199254740993")
+}
+
+func TestLoadKyvernoAPICallResponsesRejectsNullBody(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	fixture := filepath.Join(root, "api-responses.yaml")
+	require.NoError(t, os.WriteFile(fixture, []byte(`
+apiVersion: ksail.dev/v1alpha1
+kind: KyvernoAPICallResponses
+responses:
+  - urlPath: /api/v1/namespaces/default
+    body: null
+  - urlPath: /api/v1/namespaces/other
+`), 0o600))
+
+	_, err := loadKyvernoAPICallResponses(root, "api-responses.yaml")
+	require.ErrorIs(t, err, errInvalidKyvernoAPICallResponse)
+}
