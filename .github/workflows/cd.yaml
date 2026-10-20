@@ -697,6 +697,9 @@ jobs:
               repo: context.repo.repo,
               release_id: release.id,
               draft: false,
+              // A retried older tag must not replace a newer stable release as latest (#7898).
+              // GitHub's legacy policy selects by creation date and semantic version.
+              make_latest: 'legacy',
             });
 
             console.log(`Successfully published release ${tag}`);
