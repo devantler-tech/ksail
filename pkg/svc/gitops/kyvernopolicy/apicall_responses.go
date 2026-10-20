@@ -16,8 +16,9 @@ import (
 )
 
 var (
-	errAPICallResponseMissing = errors.New("no offline response")
-	errServiceAPICallOffline  = errors.New("service API calls are disabled offline")
+	errAPICallResponseMissing   = errors.New("no offline response")
+	errAPICallResponseDuplicate = errors.New("duplicate offline response")
+	errServiceAPICallOffline    = errors.New("service API calls are disabled offline")
 )
 
 // APICallRequest identifies one Kubernetes API request made by a Kyverno
@@ -47,14 +48,24 @@ func WithAPICallResponses(responses APICallResponses) EngineOption {
 	}
 }
 
+// apiCallResponseClient answers Kubernetes API requests from reviewed
+// responses. err is set when the responses are ambiguous; every request then
+// fails, so evaluation fails closed instead of picking one response at random.
 type apiCallResponseClient struct {
 	responses APICallResponses
+	err       error
 }
 
 func newAPICallResponseClient(responses APICallResponses) *apiCallResponseClient {
 	cloned := make(APICallResponses, len(responses))
 	for request, response := range responses {
 		request.Method = normalizedMethod(request.Method)
+
+		if _, duplicate := cloned[request]; duplicate {
+			return &apiCallResponseClient{err: fmt.Errorf(
+				"%w for %s %s", errAPICallResponseDuplicate, request.Method, request.URLPath,
+			)}
+		}
 
 		cloned[request] = append(json.RawMessage(nil), response...)
 	}
@@ -68,6 +79,10 @@ func (c *apiCallResponseClient) RawAbsPath(
 	method string,
 	_ io.Reader,
 ) ([]byte, error) {
+	if c.err != nil {
+		return nil, c.err
+	}
+
 	method = normalizedMethod(method)
 
 	response, found := c.responses[APICallRequest{Method: method, URLPath: urlPath}]

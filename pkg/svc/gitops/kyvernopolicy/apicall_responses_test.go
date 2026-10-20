@@ -126,3 +126,34 @@ func TestEvaluate_APICallFixtureMissingResponseCannotUseDefault(t *testing.T) {
 		"no offline response for GET /api/v1/namespaces/arc-runners",
 	)
 }
+
+// Method spellings normalize to one request, so two responses for GET and get
+// are ambiguous. Evaluation fails closed rather than using either one.
+func TestEvaluate_APICallFixtureRejectsResponsesThatNormalizeToOneRequest(t *testing.T) {
+	t.Parallel()
+
+	responses := kyvernopolicy.APICallResponses{
+		{Method: "GET", URLPath: "/api/v1/namespaces/arc-runners"}: json.RawMessage(`{
+			"metadata":{"annotations":{"state":"baseline"}}
+		}`),
+		{Method: "get", URLPath: "/api/v1/namespaces/arc-runners"}: json.RawMessage(`{
+			"metadata":{"annotations":{"state":"retired"}}
+		}`),
+	}
+	engine := kyvernopolicy.NewEngine(
+		[]kyvernov1.PolicyInterface{policy(t, apiCallResponsePolicy)},
+		nil,
+		kyvernopolicy.WithAPICallResponses(responses),
+	)
+
+	violations, err := engine.Evaluate(t.Context(), configMap("default", nil))
+	require.NoError(t, err)
+	require.Len(t, violations, 1)
+	assert.True(t, violations[0].Error)
+	assert.True(t, violations[0].Blocking)
+	assert.Contains(
+		t,
+		violations[0].Message,
+		"duplicate offline response for GET /api/v1/namespaces/arc-runners",
+	)
+}
