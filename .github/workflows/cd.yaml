@@ -154,6 +154,9 @@ jobs:
           # cache-poisoning risk for runtime artifacts (see https://docs.zizmor.sh/audits/#cache-poisoning)
           cache: false
 
+      - name: 📦 Download Go modules
+        run: bash .github/scripts/download-go-modules.sh
+
       - name: ⚙️ Setup Docker Buildx
         uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4.4.0
 
@@ -282,6 +285,9 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6.4.0 # zizmor: ignore[cache-poisoning]
         with:
           node-version: "24"
+
+      - name: 📦 Download Go modules
+        run: bash .github/scripts/download-go-modules.sh
 
       - name: 🏗️ Run GoReleaser (desktop cask)
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
