@@ -4,4 +4,4 @@
 # Image mappings:
 # - ghcr.io/kyverno/charts/kyverno → chart version (OCI chart artifact tag)
 
-FROM ghcr.io/kyverno/charts/kyverno:3.9.1@sha256:720542b97bdbc2633535c2297332690d21cfbb944053eb1ec1f0dbe8e3895444
+FROM ghcr.io/kyverno/charts/kyverno:3.9.2@sha256:83054f30148c3cfc001087c1f5772eda7c7224e9b74b7f0e70c39c9cafe009d1
