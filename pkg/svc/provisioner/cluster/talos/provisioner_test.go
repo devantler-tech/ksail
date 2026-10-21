@@ -974,7 +974,6 @@ func dockerCPFixtures(
 
 	inspectResp := container.InspectResponse{
 		NetworkSettings: &container.NetworkSettings{
-			//nolint:staticcheck
 			Ports: nat.PortMap{
 				"50000/tcp": []nat.PortBinding{
 					{HostIP: "0.0.0.0", HostPort: "33333"},

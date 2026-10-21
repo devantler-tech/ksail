@@ -1451,29 +1451,13 @@ func TestKSailValidatorKindConfigEdgeCases(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			// Create a valid config to test cross-configuration validation
-			config := &v1alpha1.Cluster{
-				APIVersion: "ksail.io/v1alpha1",
-				Kind:       "Cluster",
-				Spec: v1alpha1.Spec{
-					Cluster: v1alpha1.ClusterSpec{
-						Distribution:       v1alpha1.DistributionVanilla,
-						DistributionConfig: "kind.yaml",
-						Connection: v1alpha1.Connection{
-							Context: "kind-" + test.expectedName,
-						},
-					},
-				},
-			}
-
-			validator := ksailvalidator.NewValidatorForKind(test.kindConfig)
-			result := validator.Validate(config)
-
-			assert.True(t, result.Valid, test.description+" should pass validation")
-			assert.Empty(
+			assertCrossConfigurationValid(
 				t,
-				result.Errors,
-				test.description+" should have no validation errors",
+				ksailvalidator.NewValidatorForKind(test.kindConfig),
+				v1alpha1.DistributionVanilla,
+				"kind.yaml",
+				"kind-"+test.expectedName,
+				test.description,
 			)
 		})
 	}
@@ -1511,32 +1495,46 @@ func TestKSailValidatorK3dConfigEdgeCases(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			// Create a valid config to test cross-configuration validation
-			config := &v1alpha1.Cluster{
-				APIVersion: "ksail.io/v1alpha1",
-				Kind:       "Cluster",
-				Spec: v1alpha1.Spec{
-					Cluster: v1alpha1.ClusterSpec{
-						Distribution:       v1alpha1.DistributionK3s,
-						DistributionConfig: "k3d.yaml",
-						Connection: v1alpha1.Connection{
-							Context: "k3d-" + test.expectedName,
-						},
-					},
-				},
-			}
-
-			validator := ksailvalidator.NewValidatorForK3d(test.k3dConfig)
-			result := validator.Validate(config)
-
-			assert.True(t, result.Valid, test.description+" should pass validation")
-			assert.Empty(
+			assertCrossConfigurationValid(
 				t,
-				result.Errors,
-				test.description+" should have no validation errors",
+				ksailvalidator.NewValidatorForK3d(test.k3dConfig),
+				v1alpha1.DistributionK3s,
+				"k3d.yaml",
+				"k3d-"+test.expectedName,
+				test.description,
 			)
 		})
 	}
+}
+
+// assertCrossConfigurationValid validates a minimal cluster config whose context
+// matches the distribution config, and expects it to pass with no errors.
+func assertCrossConfigurationValid(
+	t *testing.T,
+	validator *ksailvalidator.Validator,
+	distribution v1alpha1.Distribution,
+	distributionConfig string,
+	context string,
+	description string,
+) {
+	t.Helper()
+
+	config := &v1alpha1.Cluster{
+		APIVersion: "ksail.io/v1alpha1",
+		Kind:       "Cluster",
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution:       distribution,
+				DistributionConfig: distributionConfig,
+				Connection:         v1alpha1.Connection{Context: context},
+			},
+		},
+	}
+
+	result := validator.Validate(config)
+
+	assert.True(t, result.Valid, description+" should pass validation")
+	assert.Empty(t, result.Errors, description+" should have no validation errors")
 }
 
 // TestKSailValidatorContextValidationComprehensive tests comprehensive context validation scenarios.
