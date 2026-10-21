@@ -79,6 +79,31 @@ func TestPublisherRequiresVerifiedMainPush(t *testing.T) {
 	}
 }
 
+func TestVerificationUsesNativeRunnersForBothArchitectures(t *testing.T) {
+	t.Parallel()
+
+	verify := value(t, readWorkflow(t), "jobs", "verify")
+	require.Equal(t, "${{ matrix.runner }}", value(t, verify, "runs-on"))
+	require.Equal(t, false, value(t, verify, "strategy", "fail-fast"))
+	require.Equal(t, []any{
+		map[string]any{"runner": "ubuntu-24.04", "platform": "linux/amd64"},
+		map[string]any{"runner": "ubuntu-24.04-arm", "platform": "linux/arm64"},
+	}, value(t, verify, "strategy", "matrix", "include"))
+	require.Equal(t, "${{ matrix.platform }}", value(t, verify, "env", "BUILD_PLATFORM"))
+
+	checked := 0
+
+	for _, step := range steps(t, verify) {
+		if run, ok := step["run"].(string); ok && strings.Contains(run, "docker ") {
+			require.Contains(t, run, `--platform "${BUILD_PLATFORM}"`)
+
+			checked++
+		}
+	}
+
+	require.Equal(t, 2, checked, "both the build and smoke run must use the selected architecture")
+}
+
 func TestVerificationExercisesRestrictedExecutableMounts(t *testing.T) {
 	t.Parallel()
 
