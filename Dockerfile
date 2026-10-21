@@ -1,5 +1,5 @@
 # Use distroless static image for minimal attack surface
-FROM gcr.io/distroless/static:nonroot@sha256:516757106de35205efb70b91ba03f6f1298424a0678c603255cf2852a7000087
+FROM gcr.io/distroless/static:nonroot@sha256:d62067879de890a1def9da0e7766b7d20810a5e5555cef8506b752437d7a3e88
 
 # MCP Registry ownership verification
 LABEL io.modelcontextprotocol.server.name="io.github.devantler-tech/ksail"
