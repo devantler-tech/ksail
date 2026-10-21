@@ -495,8 +495,7 @@ assert_contains 'cask-publish: ${{ steps.cask-order.outputs.publish }}' "${check
 	'cask-checkpoint must export the cask order decision'
 assert_contains '.github/scripts/resolve-cask-publication.sh' "${checkpoint_block}" \
 	'cask-checkpoint must run the cask order resolver'
-[[ "$(grep -n 'resolve-cask-publication.sh' "${checkpoint_block}" | cut -d: -f1)" -lt \
-	"$(grep -n 'redraft-evergreen-cask-prs.sh' "${checkpoint_block}" | cut -d: -f1)" ]] ||
+[[ "$(grep -n 'resolve-cask-publication.sh' "${checkpoint_block}" | cut -d: -f1)" -lt "$(grep -n 'redraft-evergreen-cask-prs.sh' "${checkpoint_block}" | cut -d: -f1)" ]] ||
 	fail 'the cask order decision must be taken before any evergreen PR is re-drafted'
 assert_contains "if: steps.cask-order.outputs.publish == 'true'" "${checkpoint_block}" \
 	'an older tag must not re-draft the evergreen cask PRs it will never deliver'
