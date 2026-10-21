@@ -44,6 +44,10 @@ jobs:
   # otherwise the tap could auto-merge freshly rewritten, not-yet-validated cask content while this
   # release's assets are still a draft. Fail-closed: nothing is published yet, so aborting here is
   # safe and the release run is simply re-run after the wedge is cleared.
+  #
+  # The same job decides whether this release may move the shared cask pointers at all. A retried
+  # older tag, or a prerelease, still publishes its own versioned assets, but leaves both casks on
+  # the newer version (#7898). Unreadable current versions fail the job before anything is written.
   cask-checkpoint:
     name: 🍺 Re-arm cask PR draft checkpoint
     needs: [validate-release-ref]
@@ -53,6 +57,8 @@ jobs:
     timeout-minutes: 70
     permissions:
       contents: read
+    outputs:
+      cask-publish: ${{ steps.cask-order.outputs.publish }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -65,7 +71,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
         run: .github/scripts/wait-for-github-api-budget.sh
+      - name: 🔢 Decide whether this release may update the casks
+        id: cask-order
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          .github/scripts/resolve-cask-publication.sh \
+            --tap devantler-tech/homebrew-tap \
+            --source-repo "$GITHUB_REPOSITORY" \
+            --tag "$TAG" \
+            ksail ksail-desktop
       - name: 🍺 Re-draft reused evergreen cask PRs
+        if: steps.cask-order.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
         run: .github/scripts/redraft-evergreen-cask-prs.sh --tap devantler-tech/homebrew-tap ksail ksail-desktop
@@ -187,6 +205,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          # .goreleaser.yaml uploads the cask only when this is exactly "true".
+          KSAIL_CASK_PUBLISH: ${{ needs.cask-checkpoint.outputs.cask-publish }}
 
   # The web UI is embedded into the binary (go:embed via pkg/webui, staged by the GoReleaser
   # before-hook) and served by the operator and `ksail open web`/`ksail open desktop` themselves — no separate UI image.
@@ -298,6 +318,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
+          # .goreleaser.desktop.yaml uploads the cask only when this is exactly "true".
+          KSAIL_CASK_PUBLISH: ${{ needs.cask-checkpoint.outputs.cask-publish }}
 
       # GoReleaser's release pipe is disabled (.goreleaser.desktop.yaml). Emit the macOS archive as a
       # workflow artifact; `publish-release` attaches it to the draft before publishing, so every asset
@@ -730,7 +752,9 @@ jobs:
     # fails this job without deleting the already-published release.
     # A further 65 minutes cover the wait for the tap token's request budget below.
     timeout-minutes: 105
-    needs: [publish-release]
+    needs: [cask-checkpoint, publish-release]
+    # An older or prerelease tag left both casks untouched, so there is nothing to deliver.
+    if: needs.cask-checkpoint.outputs.cask-publish == 'true'
     permissions:
       contents: read
     steps:
