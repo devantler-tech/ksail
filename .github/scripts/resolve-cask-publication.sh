@@ -71,17 +71,30 @@ emit() {
 }
 
 # Prints -1, 0 or 1 for two stable versions already matched against stable_pattern.
+# stable_pattern forbids leading zeros, so a longer component is the larger one and equal-length
+# components order as strings. This never converts to a machine integer, which would overflow
+# and reverse the order of components beyond 64 bits.
 compare_stable() {
 	local -a left right
-	local i
+	local i a b
 	IFS=. read -r -a left <<<"$1"
 	IFS=. read -r -a right <<<"$2"
 	for i in 0 1 2; do
-		if ((10#${left[i]} < 10#${right[i]})); then
+		a="${left[i]}"
+		b="${right[i]}"
+		if ((${#a} != ${#b})); then
+			if ((${#a} < ${#b})); then
+				printf -- '-1\n'
+			else
+				printf '1\n'
+			fi
+			return
+		fi
+		if [[ "${a}" < "${b}" ]]; then
 			printf -- '-1\n'
 			return
 		fi
-		if ((10#${left[i]} > 10#${right[i]})); then
+		if [[ "${a}" > "${b}" ]]; then
 			printf '1\n'
 			return
 		fi
