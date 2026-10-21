@@ -12,6 +12,18 @@ import (
 
 const imageRepository = "ghcr.io/devantler-tech/ksail-analysis-runner"
 
+func TestPinnedPackagesHaveASnapshotFallbackForUbuntuPorts(t *testing.T) {
+	t.Parallel()
+
+	dockerfile, err := os.ReadFile("Dockerfile")
+	require.NoError(t, err)
+	require.Contains(t, string(dockerfile),
+		`Acquire::Snapshots::URI::Host::ports.ubuntu.com "https://snapshot.ubuntu.com/ubuntu/@SNAPSHOTID@/";`)
+	require.Contains(t, string(dockerfile), `APT::Snapshot "20261005T000000Z";`)
+	require.NotContains(t, string(dockerfile), "AllowInsecureRepositories")
+	require.NotContains(t, string(dockerfile), "--allow-unauthenticated")
+}
+
 func TestPublicationConcurrencyKeepsEachCommitAndManualVerificationSeparate(t *testing.T) {
 	t.Parallel()
 

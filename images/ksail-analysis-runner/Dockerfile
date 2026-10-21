@@ -3,7 +3,9 @@ FROM ghcr.io/actions/actions-runner@sha256:e5496277be5d09bc968b3d64911b74e219ac4
 ARG TARGETARCH
 USER 0:0
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-RUN printf 'APT::Snapshot "20261005T000000Z";\n' > /etc/apt/apt.conf.d/99ksail-analysis-snapshot \
+RUN printf '%s\n' 'APT::Snapshot "20261005T000000Z";' \
+       'Acquire::Snapshots::URI::Host::ports.ubuntu.com "https://snapshot.ubuntu.com/ubuntu/@SNAPSHOTID@/";' \
+       > /etc/apt/apt.conf.d/99ksail-analysis-snapshot \
     && apt-get update -o APT::Update::Error-Mode=any \
     && apt-get install --yes --no-install-recommends \
        build-essential=12.10ubuntu1 pkg-config=1.8.1-2build1 \
