@@ -39,10 +39,8 @@ func TestGenerate(t *testing.T) {
 
 	createCluster := func(_ string) *kindv1alpha4.Cluster {
 		return &kindv1alpha4.Cluster{
-			TypeMeta: kindv1alpha4.TypeMeta{
-				APIVersion: "kind.x-k8s.io/v1alpha4",
-				Kind:       "Cluster",
-			},
+			APIVersion: "kind.x-k8s.io/v1alpha4",
+			Kind:       "Cluster",
 		}
 	}
 

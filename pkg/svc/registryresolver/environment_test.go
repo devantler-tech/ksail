@@ -10,7 +10,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/registryresolver"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -45,7 +44,7 @@ func TestDetectGitOpsEngine_NamespaceSecondaryWhenNoRelease(t *testing.T) {
 		Return(false, nil).Maybe()
 
 	clientset := fake.NewClientset(&corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{Name: "flux-system"},
+		Name: "flux-system",
 	})
 
 	engine, err := registryresolver.DetectGitOpsEngine(
@@ -83,7 +82,7 @@ func TestDetectGitOpsEngine_NamespaceSecondaryWhenHelmUnreadable(t *testing.T) {
 	// Helm history is unreadable (restricted RBAC); the namespace probe must
 	// still classify a cluster with the argocd namespace as ArgoCD.
 	clientset := fake.NewClientset(&corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{Name: "argocd"},
+		Name: "argocd",
 	})
 
 	// No HelmClient injected and no kubeconfig set, so the bundle would try to

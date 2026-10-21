@@ -9,7 +9,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -24,10 +23,8 @@ const (
 
 func createTestScaffolderForK3d() *scaffolder.Scaffolder {
 	cluster := &v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "ksail.io/v1alpha1",
-			Kind:       "Cluster",
-		},
+		APIVersion: "ksail.io/v1alpha1",
+		Kind:       "Cluster",
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution: v1alpha1.DistributionK3s,

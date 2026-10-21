@@ -66,10 +66,8 @@ func (c *Client) createHelmRepository(
 	flags *sourceHelmFlags,
 ) error {
 	helmRepo := &sourcev1.HelmRepository{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		Name:      name,
+		Namespace: namespace,
 		Spec: sourcev1.HelmRepositorySpec{
 			URL:      flags.url,
 			Interval: metav1.Duration{Duration: flags.interval},

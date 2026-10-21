@@ -73,8 +73,8 @@ func TestHostnameOnly(t *testing.T) {
 
 func nodeWithAddresses(addrs ...corev1.NodeAddress) *corev1.Node {
 	return &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: "n1"},
-		Status:     corev1.NodeStatus{Addresses: addrs},
+		Name:   "n1",
+		Status: corev1.NodeStatus{Addresses: addrs},
 	}
 }
 
@@ -281,10 +281,8 @@ func TestExposeViaLoadBalancer(t *testing.T) {
 		"services",
 		func(_ k8stesting.Action) (bool, runtime.Object, error) {
 			return true, &corev1.Service{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      kubeprovider.APIServiceName,
-					Namespace: testExposureNS,
-				},
+				Name:      kubeprovider.APIServiceName,
+				Namespace: testExposureNS,
 				Status: corev1.ServiceStatus{
 					LoadBalancer: corev1.LoadBalancerStatus{
 						Ingress: []corev1.LoadBalancerIngress{{IP: "9.9.9.9"}},
@@ -317,10 +315,8 @@ func TestResolveExposureFallsBackToLoadBalancer(t *testing.T) {
 		"services",
 		func(_ k8stesting.Action) (bool, runtime.Object, error) {
 			return true, &corev1.Service{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      kubeprovider.APIServiceName,
-					Namespace: testExposureNS,
-				},
+				Name:      kubeprovider.APIServiceName,
+				Namespace: testExposureNS,
 				Status: corev1.ServiceStatus{
 					LoadBalancer: corev1.LoadBalancerStatus{
 						Ingress: []corev1.LoadBalancerIngress{{Hostname: "lb.example.com"}},
@@ -347,7 +343,7 @@ func TestUpdateAPIServiceTargetPort(t *testing.T) {
 	t.Parallel()
 
 	existing := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{Name: kubeprovider.APIServiceName, Namespace: testExposureNS},
+		Name: kubeprovider.APIServiceName, Namespace: testExposureNS,
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{{Name: "https", Port: kubeprovider.DinDAPIServerPort}},
 		},

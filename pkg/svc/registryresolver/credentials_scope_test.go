@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
@@ -95,12 +94,10 @@ func TestTryArgoCDSecretDoesNotReusePullOnlyCredentialsForPush(t *testing.T) {
 	t.Parallel()
 
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      argoCDSecretName,
-			Namespace: argoCDSecretNamespace,
-			Annotations: map[string]string{
-				registryauth.CredentialPurposeAnnotation: registryauth.PullCredentialPurpose,
-			},
+		Name:      argoCDSecretName,
+		Namespace: argoCDSecretNamespace,
+		Annotations: map[string]string{
+			registryauth.CredentialPurposeAnnotation: registryauth.PullCredentialPurpose,
 		},
 		Data: map[string][]byte{
 			"username": []byte(testUsername),
@@ -131,10 +128,8 @@ func buildFluxCredentialSecret(t *testing.T, host, password string) *corev1.Secr
 	require.NoError(t, err)
 
 	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fluxSecretName,
-			Namespace: fluxSecretNamespace,
-		},
-		Data: map[string][]byte{corev1.DockerConfigJsonKey: dockerConfig},
+		Name:      fluxSecretName,
+		Namespace: fluxSecretNamespace,
+		Data:      map[string][]byte{corev1.DockerConfigJsonKey: dockerConfig},
 	}
 }

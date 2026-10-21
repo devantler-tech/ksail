@@ -80,15 +80,13 @@ func TestReconcileDistributionImage(t *testing.T) {
 			t.Parallel()
 
 			prov := &imageUpgraderFake{
-				versionUpgraderFake: versionUpgraderFake{
-					current: clusterupdate.VersionInfo{
-						DistributionVersion: "v1.13.10",
-						KubernetesVersion:   "v1.35.0",
-					},
-					distributionPin: testCase.pin,
-					upgradeErr:      testCase.upgradeErr,
+				current: clusterupdate.VersionInfo{
+					DistributionVersion: "v1.13.10",
+					KubernetesVersion:   "v1.35.0",
 				},
-				changed: testCase.changed, readErr: testCase.readErr,
+				distributionPin: testCase.pin,
+				upgradeErr:      testCase.upgradeErr,
+				changed:         testCase.changed, readErr: testCase.readErr,
 			}
 			cmd := &cobra.Command{}
 			cmd.SetContext(t.Context())
@@ -134,8 +132,8 @@ func TestDistributionImageDrift(t *testing.T) {
 	t.Parallel()
 
 	prov := &imageUpgraderFake{
-		versionUpgraderFake: versionUpgraderFake{distributionPin: "v1.13.10"},
-		changed:             true,
+		distributionPin: "v1.13.10",
+		changed:         true,
 	}
 	cmd := &cobra.Command{}
 	cmd.SetContext(t.Context())
@@ -150,8 +148,8 @@ func TestDistributionImageDriftUnavailable(t *testing.T) {
 	t.Parallel()
 
 	prov := &imageUpgraderFake{
-		versionUpgraderFake: versionUpgraderFake{distributionPin: "v1.13.10"},
-		readErr:             io.ErrUnexpectedEOF,
+		distributionPin: "v1.13.10",
+		readErr:         io.ErrUnexpectedEOF,
 	}
 	cmd := &cobra.Command{}
 	cmd.SetContext(t.Context())

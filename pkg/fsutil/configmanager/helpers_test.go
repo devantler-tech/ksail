@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
-	configtypes "github.com/k3d-io/k3d/v5/pkg/config/types"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/require"
 	v1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
@@ -35,7 +34,7 @@ func TestGetClusterName(t *testing.T) {
 		},
 		"k3d simple config": {
 			config: &v1alpha5.SimpleConfig{
-				ObjectMeta: configtypes.ObjectMeta{Name: "k3d-custom"},
+				Name: "k3d-custom",
 			},
 			wantName: "k3d-custom",
 		},

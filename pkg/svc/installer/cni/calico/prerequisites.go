@@ -392,10 +392,14 @@ func (plan *prerequisitePlan) save(ctx context.Context) error {
 		return fmt.Errorf("encode Calico inventory: %w", err)
 	}
 
-	object := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
-		Name: prerequisiteInventory, Namespace: prerequisiteNamespace,
-		Labels: map[string]string{prerequisiteOwnerKey: prerequisiteOwner},
-	}, Data: map[string]string{"inventory.json": string(data)}}
+	object := &corev1.ConfigMap{
+		Name:      prerequisiteInventory,
+		Namespace: prerequisiteNamespace,
+		Labels: map[string]string{
+			prerequisiteOwnerKey: prerequisiteOwner,
+		},
+		Data: map[string]string{"inventory.json": string(data)},
+	}
 	if plan.inventory == nil {
 		plan.inventory, err = plan.core.CoreV1().
 			ConfigMaps(prerequisiteNamespace).

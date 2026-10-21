@@ -15,7 +15,6 @@ import (
 	k3dprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kind"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
-	k3dTypes "github.com/k3d-io/k3d/v5/pkg/config/types"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -50,9 +49,7 @@ func TestCreateProvisioner_WithDistributionConfig(t *testing.T) {
 			distribution: v1alpha1.DistributionK3s,
 			distributionConfig: &clusterprovisioner.DistributionConfig{
 				K3d: &k3dv1alpha5.SimpleConfig{
-					ObjectMeta: k3dTypes.ObjectMeta{
-						Name: "test-k3d",
-					},
+					Name: "test-k3d",
 				},
 			},
 			expectedType: &k3dprovisioner.Provisioner{},
@@ -374,7 +371,7 @@ func TestCreateK3dProvisioner_ImageVerificationVolumeMountApplied(t *testing.T) 
 	)
 
 	k3dConfig := &k3dv1alpha5.SimpleConfig{
-		ObjectMeta: k3dTypes.ObjectMeta{Name: "test-k3d"},
+		Name: "test-k3d",
 	}
 
 	factory := clusterprovisioner.DefaultFactory{
@@ -417,7 +414,7 @@ func TestCreateK3dProvisioner_ImageVerificationMissingTemplate(t *testing.T) {
 	t.Chdir(t.TempDir())
 
 	k3dConfig := &k3dv1alpha5.SimpleConfig{
-		ObjectMeta: k3dTypes.ObjectMeta{Name: "test-k3d"},
+		Name: "test-k3d",
 	}
 
 	factory := clusterprovisioner.DefaultFactory{
@@ -444,7 +441,7 @@ func TestCreateK3dProvisioner_ImageVerificationDisabledNoVolumeMount(t *testing.
 	t.Setenv("DOCKER_HOST", "://invalid")
 
 	k3dConfig := &k3dv1alpha5.SimpleConfig{
-		ObjectMeta: k3dTypes.ObjectMeta{Name: "test-k3d"},
+		Name: "test-k3d",
 	}
 
 	factory := clusterprovisioner.DefaultFactory{

@@ -7,7 +7,6 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	rbacv1 "k8s.io/api/rbac/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 )
 
@@ -222,15 +221,11 @@ func marshalServiceAccount(
 
 func marshalRoleBinding(name, saName, namespace, saNamespace, clusterRole string) (string, error) {
 	roleBinding := rbacv1.RoleBinding{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "rbac.authorization.k8s.io/v1",
-			Kind:       "RoleBinding",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels:    ManagedByLabels(),
-		},
+		APIVersion: "rbac.authorization.k8s.io/v1",
+		Kind:       "RoleBinding",
+		Name:       name,
+		Namespace:  namespace,
+		Labels:     ManagedByLabels(),
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",

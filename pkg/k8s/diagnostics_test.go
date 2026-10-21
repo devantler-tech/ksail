@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
@@ -352,7 +351,7 @@ func makePod(
 	extraStatuses []corev1.ContainerStatus,
 ) corev1.Pod {
 	pod := corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Name: name, Namespace: namespace,
 		Status: corev1.PodStatus{
 			Phase: phase,
 		},
@@ -377,7 +376,7 @@ func makePodWithInit(
 	initStatuses []corev1.ContainerStatus,
 ) corev1.Pod {
 	pod := corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Name: name, Namespace: namespace,
 		Status: corev1.PodStatus{
 			Phase:                 phase,
 			ContainerStatuses:     containerStatuses,
@@ -391,7 +390,7 @@ func makePodWithInit(
 // makePodWithReason creates a test pod with a status reason.
 func makePodWithReason(name, namespace string, phase corev1.PodPhase, reason string) corev1.Pod {
 	return corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Name: name, Namespace: namespace,
 		Status: corev1.PodStatus{
 			Phase:  phase,
 			Reason: reason,
@@ -431,15 +430,15 @@ func TestDiagnoseClusterReport_HealthyClusterReturns100(t *testing.T) {
 	t.Parallel()
 
 	clientset := k8sfake.NewClientset(
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Namespace{Name: "default"},
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
+			Name: "node-1",
 			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
 				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
 			}},
 		},
 		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "healthy", Namespace: "default"},
+			Name: "healthy", Namespace: "default",
 			Status: corev1.PodStatus{
 				Phase:             corev1.PodRunning,
 				ContainerStatuses: []corev1.ContainerStatus{{Ready: true}},
@@ -459,16 +458,16 @@ func TestDiagnoseClusterReport_FailingPodReducesScore(t *testing.T) {
 	t.Parallel()
 
 	clientset := k8sfake.NewClientset(
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Namespace{Name: "default"},
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "node-ok"},
+			Name: "node-ok",
 			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
 				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
 			}},
 		},
 		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "crasher", Namespace: "default"},
-			Status:     corev1.PodStatus{Phase: corev1.PodFailed},
+			Name: "crasher", Namespace: "default",
+			Status: corev1.PodStatus{Phase: corev1.PodFailed},
 		},
 	)
 
@@ -485,9 +484,9 @@ func TestDiagnoseClusterReport_NotReadyNodeReducesScore(t *testing.T) {
 	t.Parallel()
 
 	clientset := k8sfake.NewClientset(
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Namespace{Name: "default"},
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "broken-node"},
+			Name: "broken-node",
 			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
 				{Type: corev1.NodeReady, Status: corev1.ConditionFalse, Message: "disk pressure"},
 			}},
@@ -508,13 +507,13 @@ func TestDiagnoseClusterReport_ScoreFloorsAtZero(t *testing.T) {
 
 	pods := make([]runtime.Object, 0, 5)
 	pods = append(pods,
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Namespace{Name: "default"},
 	)
 
 	for i := range 5 {
 		pods = append(pods, &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("fail-%d", i), Namespace: "default"},
-			Status:     corev1.PodStatus{Phase: corev1.PodFailed},
+			Name: fmt.Sprintf("fail-%d", i), Namespace: "default",
+			Status: corev1.PodStatus{Phase: corev1.PodFailed},
 		})
 	}
 
@@ -548,7 +547,7 @@ func TestDiagnoseClusterReport_PodListErrorCreatesWarningFinding(t *testing.T) {
 	t.Parallel()
 
 	clientset := k8sfake.NewClientset(
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "broken-ns"}},
+		&corev1.Namespace{Name: "broken-ns"},
 	)
 	clientset.PrependReactor(
 		"list",
@@ -572,7 +571,7 @@ func TestDiagnoseClusterReport_PVCListErrorCreatesWarningFinding(t *testing.T) {
 	t.Parallel()
 
 	clientset := k8sfake.NewClientset(
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "broken-ns"}},
+		&corev1.Namespace{Name: "broken-ns"},
 	)
 	clientset.PrependReactor(
 		"list",
@@ -596,15 +595,15 @@ func TestDiagnoseClusterReport_CrashLoopBackOffIncludesRemediation(t *testing.T)
 	t.Parallel()
 
 	clientset := k8sfake.NewClientset(
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Namespace{Name: "default"},
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "node-ok"},
+			Name: "node-ok",
 			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
 				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
 			}},
 		},
 		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "crash-pod", Namespace: "default"},
+			Name: "crash-pod", Namespace: "default",
 			Status: corev1.PodStatus{
 				Phase: corev1.PodRunning,
 				ContainerStatuses: []corev1.ContainerStatus{
@@ -632,15 +631,15 @@ func TestDiagnoseClusterReport_ImagePullBackOffIncludesRemediation(t *testing.T)
 	t.Parallel()
 
 	clientset := k8sfake.NewClientset(
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Namespace{Name: "default"},
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "node-ok"},
+			Name: "node-ok",
 			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
 				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
 			}},
 		},
 		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "pull-fail", Namespace: "default"},
+			Name: "pull-fail", Namespace: "default",
 			Status: corev1.PodStatus{
 				Phase: corev1.PodPending,
 				ContainerStatuses: []corev1.ContainerStatus{
@@ -666,15 +665,15 @@ func TestDiagnoseClusterReport_OOMKilledIncludesRemediation(t *testing.T) {
 	t.Parallel()
 
 	clientset := k8sfake.NewClientset(
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Namespace{Name: "default"},
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "node-ok"},
+			Name: "node-ok",
 			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
 				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
 			}},
 		},
 		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "oom-pod", Namespace: "default"},
+			Name: "oom-pod", Namespace: "default",
 			Status: corev1.PodStatus{
 				Phase: corev1.PodFailed,
 				ContainerStatuses: []corev1.ContainerStatus{
@@ -703,9 +702,9 @@ func TestDiagnoseClusterReport_NotReadyNodeIncludesRemediation(t *testing.T) {
 	t.Parallel()
 
 	clientset := k8sfake.NewClientset(
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Namespace{Name: "default"},
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "bad-node"},
+			Name: "bad-node",
 			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
 				{Type: corev1.NodeReady, Status: corev1.ConditionFalse, Message: "disk pressure"},
 			}},
@@ -723,10 +722,10 @@ func TestDiagnoseClusterReport_UnknownReasonHasEmptyRemediation(t *testing.T) {
 	t.Parallel()
 
 	clientset := k8sfake.NewClientset(
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Namespace{Name: "default"},
 		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "mystery", Namespace: "default"},
-			Status:     corev1.PodStatus{Phase: corev1.PodFailed},
+			Name: "mystery", Namespace: "default",
+			Status: corev1.PodStatus{Phase: corev1.PodFailed},
 		},
 	)
 
@@ -741,10 +740,10 @@ func TestDiagnoseClusterReport_PendingPVCCreatesWarningFinding(t *testing.T) {
 	t.Parallel()
 
 	clientset := k8sfake.NewClientset(
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Namespace{Name: "default"},
 		&corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{Name: "stuck-pvc", Namespace: "default"},
-			Status:     corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimPending},
+			Name: "stuck-pvc", Namespace: "default",
+			Status: corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimPending},
 		},
 	)
 
@@ -763,10 +762,10 @@ func TestDiagnoseClusterReport_BoundPVCIsIgnored(t *testing.T) {
 	t.Parallel()
 
 	clientset := k8sfake.NewClientset(
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Namespace{Name: "default"},
 		&corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{Name: "bound-pvc", Namespace: "default"},
-			Status:     corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimBound},
+			Name: "bound-pvc", Namespace: "default",
+			Status: corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimBound},
 		},
 	)
 
@@ -781,20 +780,20 @@ func TestDiagnoseClusterReport_MixedFindingsComputeCorrectScore(t *testing.T) {
 	t.Parallel()
 
 	clientset := k8sfake.NewClientset(
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Namespace{Name: "default"},
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "bad-node"},
+			Name: "bad-node",
 			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
 				{Type: corev1.NodeReady, Status: corev1.ConditionFalse, Message: "not ready"},
 			}},
 		},
 		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "fail-pod", Namespace: "default"},
-			Status:     corev1.PodStatus{Phase: corev1.PodFailed},
+			Name: "fail-pod", Namespace: "default",
+			Status: corev1.PodStatus{Phase: corev1.PodFailed},
 		},
 		&corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{Name: "pending-pvc", Namespace: "default"},
-			Status:     corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimPending},
+			Name: "pending-pvc", Namespace: "default",
+			Status: corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimPending},
 		},
 	)
 

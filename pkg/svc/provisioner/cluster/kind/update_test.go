@@ -262,11 +262,9 @@ func TestCreateProvisioner_WithConfig(t *testing.T) {
 	t.Parallel()
 
 	cfg := &v1alpha4.Cluster{
-		TypeMeta: v1alpha4.TypeMeta{
-			Kind:       "Cluster",
-			APIVersion: "kind.x-k8s.io/v1alpha4",
-		},
-		Name: "test-cluster",
+		Kind:       "Cluster",
+		APIVersion: "kind.x-k8s.io/v1alpha4",
+		Name:       "test-cluster",
 	}
 
 	infraProvider := provider.NewMockProvider()
@@ -284,11 +282,9 @@ func TestCreateProvisioner_DefaultKubeconfig(t *testing.T) {
 	t.Setenv("KUBECONFIG", "")
 
 	cfg := &v1alpha4.Cluster{
-		TypeMeta: v1alpha4.TypeMeta{
-			Kind:       "Cluster",
-			APIVersion: "kind.x-k8s.io/v1alpha4",
-		},
-		Name: "test-cluster",
+		Kind:       "Cluster",
+		APIVersion: "kind.x-k8s.io/v1alpha4",
+		Name:       "test-cluster",
 	}
 
 	infraProvider := provider.NewMockProvider()
@@ -305,11 +301,9 @@ func TestCreateProvisioner_KubeconfigEnvFallback(t *testing.T) {
 	t.Setenv("KUBECONFIG", "/tmp/env-kubeconfig")
 
 	cfg := &v1alpha4.Cluster{
-		TypeMeta: v1alpha4.TypeMeta{
-			Kind:       "Cluster",
-			APIVersion: "kind.x-k8s.io/v1alpha4",
-		},
-		Name: "test-cluster",
+		Kind:       "Cluster",
+		APIVersion: "kind.x-k8s.io/v1alpha4",
+		Name:       "test-cluster",
 	}
 
 	infraProvider := provider.NewMockProvider()
@@ -399,11 +393,9 @@ func TestCreateProvisioner_KubeconfigEnvListPrefersExistingFile(t *testing.T) {
 	t.Setenv("KUBECONFIG", "/tmp/nosuch-kubeconfig"+string(os.PathListSeparator)+existing)
 
 	cfg := &v1alpha4.Cluster{
-		TypeMeta: v1alpha4.TypeMeta{
-			Kind:       "Cluster",
-			APIVersion: "kind.x-k8s.io/v1alpha4",
-		},
-		Name: "test-cluster",
+		Kind:       "Cluster",
+		APIVersion: "kind.x-k8s.io/v1alpha4",
+		Name:       "test-cluster",
 	}
 
 	infraProvider := provider.NewMockProvider()
@@ -447,11 +439,9 @@ func TestCreateProvisioner_KubeconfigEnvListFallsBackToLastEntry(t *testing.T) {
 	)
 
 	cfg := &v1alpha4.Cluster{
-		TypeMeta: v1alpha4.TypeMeta{
-			Kind:       "Cluster",
-			APIVersion: "kind.x-k8s.io/v1alpha4",
-		},
-		Name: "test-cluster",
+		Kind:       "Cluster",
+		APIVersion: "kind.x-k8s.io/v1alpha4",
+		Name:       "test-cluster",
 	}
 
 	infraProvider := provider.NewMockProvider()
@@ -474,11 +464,9 @@ func TestCreateProvisioner_KubeconfigEnvListDeduplicates(t *testing.T) {
 	)
 
 	cfg := &v1alpha4.Cluster{
-		TypeMeta: v1alpha4.TypeMeta{
-			Kind:       "Cluster",
-			APIVersion: "kind.x-k8s.io/v1alpha4",
-		},
-		Name: "test-cluster",
+		Kind:       "Cluster",
+		APIVersion: "kind.x-k8s.io/v1alpha4",
+		Name:       "test-cluster",
 	}
 
 	infraProvider := provider.NewMockProvider()

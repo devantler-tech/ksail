@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -40,7 +39,7 @@ func TestWaitForMultipleResources_SingleDeploymentReady(t *testing.T) {
 	)
 
 	client := fake.NewClientset(&appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Name: name, Namespace: namespace,
 		Status: appsv1.DeploymentStatus{
 			Replicas:          1,
 			UpdatedReplicas:   1,
@@ -70,7 +69,7 @@ func TestWaitForMultipleResources_SingleDaemonSetReady(t *testing.T) {
 	)
 
 	client := fake.NewClientset(&appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Name: name, Namespace: namespace,
 		Status: appsv1.DaemonSetStatus{
 			DesiredNumberScheduled: 1,
 			NumberUnavailable:      0,
@@ -96,7 +95,7 @@ func TestWaitForMultipleResources_MultipleResources(t *testing.T) {
 
 	client := fake.NewClientset(
 		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "deploy1", Namespace: "ns1"},
+			Name: "deploy1", Namespace: "ns1",
 			Status: appsv1.DeploymentStatus{
 				Replicas:          1,
 				UpdatedReplicas:   1,
@@ -104,7 +103,7 @@ func TestWaitForMultipleResources_MultipleResources(t *testing.T) {
 			},
 		},
 		&appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{Name: "ds1", Namespace: "ns2"},
+			Name: "ds1", Namespace: "ns2",
 			Status: appsv1.DaemonSetStatus{
 				DesiredNumberScheduled: 1,
 				NumberUnavailable:      0,
@@ -155,7 +154,7 @@ func TestWaitForMultipleResources_ResourceNotReady(t *testing.T) {
 
 	// Deployment with mismatched replicas (not ready)
 	client := fake.NewClientset(&appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Name: name, Namespace: namespace,
 		Status: appsv1.DeploymentStatus{
 			Replicas:          2,
 			UpdatedReplicas:   1, // Only 1 of 2 updated
@@ -182,7 +181,7 @@ func TestWaitForMultipleResources_FirstResourceFails(t *testing.T) {
 
 	// Second resource is ready, but first will fail
 	client := fake.NewClientset(&appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "second-deploy", Namespace: "ns"},
+		Name: "second-deploy", Namespace: "ns",
 		Status: appsv1.DeploymentStatus{
 			Replicas:          1,
 			UpdatedReplicas:   1,
@@ -246,7 +245,7 @@ func TestWaitForMultipleResources_MixedTypes(t *testing.T) {
 
 	client := fake.NewClientset(
 		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "coredns", Namespace: "kube-system"},
+			Name: "coredns", Namespace: "kube-system",
 			Status: appsv1.DeploymentStatus{
 				Replicas:          2,
 				UpdatedReplicas:   2,
@@ -254,7 +253,7 @@ func TestWaitForMultipleResources_MixedTypes(t *testing.T) {
 			},
 		},
 		&appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{Name: "cilium", Namespace: "kube-system"},
+			Name: "cilium", Namespace: "kube-system",
 			Status: appsv1.DaemonSetStatus{
 				DesiredNumberScheduled: 3,
 				NumberUnavailable:      0,
@@ -262,7 +261,7 @@ func TestWaitForMultipleResources_MixedTypes(t *testing.T) {
 			},
 		},
 		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "traefik", Namespace: "traefik"},
+			Name: "traefik", Namespace: "traefik",
 			Status: appsv1.DeploymentStatus{
 				Replicas:          1,
 				UpdatedReplicas:   1,
@@ -295,7 +294,7 @@ func TestWaitForMultipleResources_SingleStatefulSetReady(t *testing.T) {
 	)
 
 	client := fake.NewClientset(&appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Name: name, Namespace: namespace,
 		Status: appsv1.StatefulSetStatus{
 			Replicas:        1,
 			ReadyReplicas:   1,

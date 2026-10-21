@@ -78,13 +78,13 @@ type hostPortInfo struct {
 // parseHostPort parses a host:port string into separate host and port values.
 // If the port is not a valid number, it's treated as part of the host (e.g., ghcr.io).
 func parseHostPort(hostPort string) hostPortInfo {
-	colonIdx := strings.LastIndex(hostPort, ":")
-	if colonIdx == -1 {
+	before, after, ok := strings.CutLast(hostPort, ":")
+	if !ok {
 		return hostPortInfo{host: hostPort}
 	}
 
-	host := hostPort[:colonIdx]
-	portStr := hostPort[colonIdx+1:]
+	host := before
+	portStr := after
 
 	port64, err := strconv.ParseInt(portStr, 10, 32)
 	if err == nil && port64 > 0 {
@@ -345,13 +345,13 @@ func parseRegistryFlag(registryFlag string) *Info {
 	info := &Info{}
 
 	// Check for credentials (user:pass@)
-	atIdx := strings.LastIndex(registryFlag, "@")
+	before, after, ok := strings.CutLast(registryFlag, "@")
 
 	var hostAndPath string
 
-	if atIdx != -1 {
-		credentials := registryFlag[:atIdx]
-		hostAndPath = registryFlag[atIdx+1:]
+	if ok {
+		credentials := before
+		hostAndPath = after
 
 		before, after, ok := strings.Cut(credentials, ":")
 		if ok {

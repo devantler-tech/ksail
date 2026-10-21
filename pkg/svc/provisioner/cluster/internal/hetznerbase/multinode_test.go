@@ -360,10 +360,8 @@ func newHAMultiNodeBase(
 	base.BringUpPollInterval = testPollInterval
 
 	strategy := &fakeHAMultiNodeStrategy{
-		fakeMultiNodeStrategy: fakeMultiNodeStrategy{
-			kubeconfigPath: testKubeconfigPath,
-			agents:         testMultiNodeAgents,
-		},
+		kubeconfigPath:      testKubeconfigPath,
+		agents:              testMultiNodeAgents,
 		controlPlaneJoiners: testHAControlPlaneJoiners,
 		sentinelPath:        testSentinelPath,
 	}

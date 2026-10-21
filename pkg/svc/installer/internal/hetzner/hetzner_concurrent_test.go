@@ -39,11 +39,9 @@ func TestEnsureSecret_UpdateWithDifferentToken(t *testing.T) {
 	t.Parallel()
 
 	existing := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            hetzner.SecretName,
-			Namespace:       hetzner.Namespace,
-			ResourceVersion: "42",
-		},
+		Name:            hetzner.SecretName,
+		Namespace:       hetzner.Namespace,
+		ResourceVersion: "42",
 		Data: map[string][]byte{
 			"token": []byte("old-token"),
 		},
@@ -68,11 +66,9 @@ func TestEnsureSecret_CreateConflictThenUpdate(t *testing.T) {
 
 	// Pre-create the secret so that after AlreadyExists, the Get succeeds.
 	existing := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            hetzner.SecretName,
-			Namespace:       hetzner.Namespace,
-			ResourceVersion: "1",
-		},
+		Name:            hetzner.SecretName,
+		Namespace:       hetzner.Namespace,
+		ResourceVersion: "1",
 		Data: map[string][]byte{
 			"token": []byte("old-token"),
 		},

@@ -79,11 +79,9 @@ func ensureSecret(
 	}
 
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      SecretName,
-			Namespace: Namespace,
-		},
-		Data: desiredData,
+		Name:      SecretName,
+		Namespace: Namespace,
+		Data:      desiredData,
 	}
 
 	secretsClient := client.CoreV1().Secrets(Namespace)

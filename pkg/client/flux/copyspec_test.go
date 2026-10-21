@@ -18,7 +18,7 @@ func TestCopySpec_GitRepository(t *testing.T) {
 	t.Parallel()
 
 	src := &sourcev1.GitRepository{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-git"},
+		Name: "test-git",
 		Spec: sourcev1.GitRepositorySpec{
 			URL: "https://github.com/example/repo",
 		},
@@ -35,7 +35,7 @@ func TestCopySpec_HelmRepository(t *testing.T) {
 	t.Parallel()
 
 	src := &sourcev1.HelmRepository{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-helm-repo"},
+		Name: "test-helm-repo",
 		Spec: sourcev1.HelmRepositorySpec{
 			URL: "https://charts.example.com",
 		},
@@ -52,7 +52,7 @@ func TestCopySpec_OCIRepository(t *testing.T) {
 	t.Parallel()
 
 	src := &sourcev1.OCIRepository{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-oci"},
+		Name: "test-oci",
 		Spec: sourcev1.OCIRepositorySpec{
 			URL: "oci://ghcr.io/org/repo",
 		},
@@ -69,7 +69,7 @@ func TestCopySpec_Kustomization(t *testing.T) {
 	t.Parallel()
 
 	src := &kustomizev1.Kustomization{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-ks"},
+		Name: "test-ks",
 		Spec: kustomizev1.KustomizationSpec{
 			Path:  "./deploy",
 			Prune: true,
@@ -88,7 +88,7 @@ func TestCopySpec_HelmRelease(t *testing.T) {
 	t.Parallel()
 
 	src := &helmv2.HelmRelease{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-hr"},
+		Name: "test-hr",
 		Spec: helmv2.HelmReleaseSpec{
 			TargetNamespace: "production",
 		},

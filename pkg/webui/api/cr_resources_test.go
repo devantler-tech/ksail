@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
@@ -33,9 +32,9 @@ func testDeployment(namespace, name string, replicas int32) *appsv1.Deployment {
 	count := replicas
 
 	return &appsv1.Deployment{
-		TypeMeta:   metav1.TypeMeta{Kind: kindDeployment, APIVersion: "apps/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec:       appsv1.DeploymentSpec{Replicas: &count},
+		Kind: kindDeployment, APIVersion: "apps/v1",
+		Name: name, Namespace: namespace,
+		Spec: appsv1.DeploymentSpec{Replicas: &count},
 	}
 }
 
@@ -79,7 +78,7 @@ func TestCRConnectedListsAndGetsChildResources(t *testing.T) {
 	t.Parallel()
 
 	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: configMapName, Namespace: nsDefault},
+		Name: configMapName, Namespace: nsDefault,
 	}
 	dyn := dynamicfake.NewSimpleDynamicClient(clientgoscheme.Scheme, configMap)
 
@@ -252,7 +251,7 @@ func TestCRConnectedDeleteResource(t *testing.T) {
 	t.Parallel()
 
 	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: configMapName, Namespace: nsDefault},
+		Name: configMapName, Namespace: nsDefault,
 	}
 	dyn := dynamicfake.NewSimpleDynamicClient(clientgoscheme.Scheme, configMap)
 	service := newConnectedService(t, dyn)

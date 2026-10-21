@@ -10,7 +10,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
-	"github.com/k3d-io/k3d/v5/pkg/config/types"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -270,7 +269,7 @@ func otherDistributionCases() []otherDistributionCase {
 			distribution: v1alpha1.DistributionK3s,
 			configure: func(ctx *localregistry.Context) {
 				ctx.K3dConfig = &v1alpha5.SimpleConfig{
-					ObjectMeta: types.ObjectMeta{Name: otherConfigName},
+					Name: otherConfigName,
 				}
 			},
 			wantRenamed: otherOverrideName,

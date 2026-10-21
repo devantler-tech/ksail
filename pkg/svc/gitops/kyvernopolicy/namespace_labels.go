@@ -120,7 +120,7 @@ func overrideNamespaceSelectors(
 // not a rendered namespaceObject: expressions reading that object remain
 // unsupported until its Namespace is present in the rendered source.
 func namespaceForMatching(name string) *corev1.Namespace {
-	return &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+	return &corev1.Namespace{
 		Name: name, Labels: map[string]string{corev1.LabelMetadataName: name},
-	}}
+	}
 }

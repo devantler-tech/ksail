@@ -9,7 +9,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/runner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	k3dprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/k3d"
-	k3dtypes "github.com/k3d-io/k3d/v5/pkg/config/types"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -24,7 +23,7 @@ const twoClusterJSON = `[{"name":"alpha"},{"name":"beta"}]`
 // namedConfig builds a SimpleConfig with the given cluster name. The name lives
 // on the embedded ObjectMeta, so it cannot be set in a flat struct literal.
 func namedConfig(name string) *v1alpha5.SimpleConfig {
-	return &v1alpha5.SimpleConfig{ObjectMeta: k3dtypes.ObjectMeta{Name: name}}
+	return &v1alpha5.SimpleConfig{Name: name}
 }
 
 // TestProvisioner_List verifies that List parses the cluster-list output into

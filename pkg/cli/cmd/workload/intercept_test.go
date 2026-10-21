@@ -86,9 +86,7 @@ func newSteerPod(withSteerSpec bool) *corev1.Pod {
 		pod.Spec.EphemeralContainers = append(
 			pod.Spec.EphemeralContainers,
 			corev1.EphemeralContainer{
-				EphemeralContainerCommon: corev1.EphemeralContainerCommon{
-					Name: mirror.SteerContainerName,
-				},
+				Name:                mirror.SteerContainerName,
 				TargetContainerName: mirrorTestContainer,
 			},
 		)

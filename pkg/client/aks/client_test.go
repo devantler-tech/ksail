@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	azfake "github.com/Azure/azure-sdk-for-go/sdk/azcore/fake"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v7"
@@ -43,9 +42,7 @@ func newTestClientPolling(
 		testSubscription,
 		aks.WithCredential(&azfake.TokenCredential{}),
 		aks.WithClientOptions(&arm.ClientOptions{
-			ClientOptions: azcore.ClientOptions{
-				Transport: fake.NewServerFactoryTransport(factory),
-			},
+			Transport: fake.NewServerFactoryTransport(factory),
 		}),
 		aks.WithPollInterval(pollInterval),
 	)
@@ -342,9 +339,7 @@ func userCredentialsFactory(
 			resp.SetResponse(
 				http.StatusOK,
 				armcontainerservice.ManagedClustersClientListClusterUserCredentialsResponse{
-					CredentialResults: armcontainerservice.CredentialResults{
-						Kubeconfigs: kubeconfigs,
-					},
+					Kubeconfigs: kubeconfigs,
 				},
 				nil,
 			)
@@ -428,14 +423,10 @@ func TestListClustersAcrossSubscriptionDrainsAllPages(t *testing.T) {
 			second := namedCluster("cluster-b")
 
 			resp.AddPage(http.StatusOK, armcontainerservice.ManagedClustersClientListResponse{
-				ManagedClusterListResult: armcontainerservice.ManagedClusterListResult{
-					Value: []*armcontainerservice.ManagedCluster{&first},
-				},
+				Value: []*armcontainerservice.ManagedCluster{&first},
 			}, nil)
 			resp.AddPage(http.StatusOK, armcontainerservice.ManagedClustersClientListResponse{
-				ManagedClusterListResult: armcontainerservice.ManagedClusterListResult{
-					Value: []*armcontainerservice.ManagedCluster{&second},
-				},
+				Value: []*armcontainerservice.ManagedCluster{&second},
 			}, nil)
 
 			return resp
@@ -467,9 +458,7 @@ func TestListClustersInResourceGroupScopesTheRequest(t *testing.T) {
 			resp.AddPage(
 				http.StatusOK,
 				armcontainerservice.ManagedClustersClientListByResourceGroupResponse{
-					ManagedClusterListResult: armcontainerservice.ManagedClusterListResult{
-						Value: []*armcontainerservice.ManagedCluster{&scoped},
-					},
+					Value: []*armcontainerservice.ManagedCluster{&scoped},
 				},
 				nil,
 			)
@@ -520,11 +509,9 @@ func threeNodePoolGet(
 	)
 
 	resp.SetResponse(http.StatusOK, armcontainerservice.AgentPoolsClientGetResponse{
-		AgentPool: armcontainerservice.AgentPool{
-			Name: new(poolName),
-			Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
-				Count: new(int32(3)),
-			},
+		Name: new(poolName),
+		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
+			Count: new(int32(3)),
 		},
 	}, nil)
 
@@ -605,7 +592,7 @@ func TestSetAgentPoolCountRejectsPoolWithoutProperties(t *testing.T) {
 			)
 
 			resp.SetResponse(http.StatusOK, armcontainerservice.AgentPoolsClientGetResponse{
-				AgentPool: armcontainerservice.AgentPool{Name: new(poolName)},
+				Name: new(poolName),
 			}, nil)
 
 			return resp, errResp

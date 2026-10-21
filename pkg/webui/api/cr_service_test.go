@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -200,7 +199,7 @@ func TestCreateWrapsClusterCreateError(t *testing.T) {
 
 	// The namespace already exists, so ensureNamespace short-circuits and the failing call under
 	// test is the Cluster create itself.
-	existingNS := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: defaultNS}}
+	existingNS := &corev1.Namespace{Name: defaultNS}
 
 	service := operator.NewCRClusterService(newInterceptedClient(t, interceptor.Funcs{
 		Create: func(ctx context.Context, clt client.WithWatch, obj client.Object, opts ...client.CreateOption) error {

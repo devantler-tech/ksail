@@ -278,13 +278,9 @@ func TestCluster_MarshalRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	original := v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       v1alpha1.Kind,
-			APIVersion: v1alpha1.APIVersion,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "roundtrip-cluster",
-		},
+		Kind:       v1alpha1.Kind,
+		APIVersion: v1alpha1.APIVersion,
+		Name:       "roundtrip-cluster",
 		Spec: v1alpha1.Spec{
 			Editor: "nano",
 			Cluster: v1alpha1.ClusterSpec{
@@ -391,10 +387,8 @@ func TestCluster_DefaultDistributionConfigPruning(t *testing.T) {
 			t.Parallel()
 
 			cluster := v1alpha1.Cluster{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       v1alpha1.Kind,
-					APIVersion: v1alpha1.APIVersion,
-				},
+				Kind:       v1alpha1.Kind,
+				APIVersion: v1alpha1.APIVersion,
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
 						Distribution:       testCase.distribution,
@@ -462,10 +456,8 @@ func TestCluster_DefaultContextPruning(t *testing.T) {
 			t.Parallel()
 
 			cluster := v1alpha1.Cluster{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       v1alpha1.Kind,
-					APIVersion: v1alpha1.APIVersion,
-				},
+				Kind:       v1alpha1.Kind,
+				APIVersion: v1alpha1.APIVersion,
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
 						Distribution: testCase.distribution,
@@ -499,10 +491,8 @@ func TestCluster_MarshalYAML_Direct(t *testing.T) {
 	t.Parallel()
 
 	cluster := v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       v1alpha1.Kind,
-			APIVersion: v1alpha1.APIVersion,
-		},
+		Kind:       v1alpha1.Kind,
+		APIVersion: v1alpha1.APIVersion,
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution: v1alpha1.DistributionK3s,
@@ -527,10 +517,8 @@ func TestCluster_MarshalYAML_ViaYAMLv3(t *testing.T) {
 	t.Parallel()
 
 	cluster := v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       v1alpha1.Kind,
-			APIVersion: v1alpha1.APIVersion,
-		},
+		Kind:       v1alpha1.Kind,
+		APIVersion: v1alpha1.APIVersion,
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution: v1alpha1.DistributionTalos,
@@ -557,10 +545,8 @@ func TestCluster_MarshalJSON_TalosDefaultsPruned(t *testing.T) {
 	t.Parallel()
 
 	cluster := v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       v1alpha1.Kind,
-			APIVersion: v1alpha1.APIVersion,
-		},
+		Kind:       v1alpha1.Kind,
+		APIVersion: v1alpha1.APIVersion,
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:  v1alpha1.DistributionTalos,
@@ -586,10 +572,8 @@ func TestCluster_MarshalJSON_TalosNonDefaultsKept(t *testing.T) {
 	t.Parallel()
 
 	cluster := v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       v1alpha1.Kind,
-			APIVersion: v1alpha1.APIVersion,
-		},
+		Kind:       v1alpha1.Kind,
+		APIVersion: v1alpha1.APIVersion,
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution: v1alpha1.DistributionTalos,
@@ -636,10 +620,8 @@ func TestCluster_MarshalJSON_HetznerDefaultsPruned(t *testing.T) {
 	t.Parallel()
 
 	cluster := v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       v1alpha1.Kind,
-			APIVersion: v1alpha1.APIVersion,
-		},
+		Kind:       v1alpha1.Kind,
+		APIVersion: v1alpha1.APIVersion,
 		Spec: v1alpha1.Spec{
 			Provider: v1alpha1.ProviderSpec{
 				Hetzner: v1alpha1.OptionsHetzner{
@@ -667,10 +649,8 @@ func TestCluster_MarshalJSON_HetznerNonDefaultsKept(t *testing.T) {
 	t.Parallel()
 
 	cluster := v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       v1alpha1.Kind,
-			APIVersion: v1alpha1.APIVersion,
-		},
+		Kind:       v1alpha1.Kind,
+		APIVersion: v1alpha1.APIVersion,
 		Spec: v1alpha1.Spec{
 			Provider: v1alpha1.ProviderSpec{
 				//nolint:gosec // env var name fixture, not a credential.
@@ -709,10 +689,8 @@ func TestCluster_MarshalJSON_HetznerPublicNet(t *testing.T) {
 
 	boolFalse := false
 	cluster := v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       v1alpha1.Kind,
-			APIVersion: v1alpha1.APIVersion,
-		},
+		Kind:       v1alpha1.Kind,
+		APIVersion: v1alpha1.APIVersion,
 		Spec: v1alpha1.Spec{
 			Provider: v1alpha1.ProviderSpec{
 				Hetzner: v1alpha1.OptionsHetzner{
@@ -744,10 +722,8 @@ func TestCluster_MarshalJSON_WorkloadDefaultsPruned(t *testing.T) {
 	t.Parallel()
 
 	cluster := v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       v1alpha1.Kind,
-			APIVersion: v1alpha1.APIVersion,
-		},
+		Kind:       v1alpha1.Kind,
+		APIVersion: v1alpha1.APIVersion,
 		Spec: v1alpha1.Spec{
 			Workload: v1alpha1.WorkloadSpec{
 				SourceDirectory: "k8s",
@@ -774,10 +750,8 @@ func TestCluster_MarshalJSON_SOPSDefaultsPruned(t *testing.T) {
 	t.Parallel()
 
 	cluster := v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       v1alpha1.Kind,
-			APIVersion: v1alpha1.APIVersion,
-		},
+		Kind:       v1alpha1.Kind,
+		APIVersion: v1alpha1.APIVersion,
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				SOPS: v1alpha1.SOPS{
@@ -802,10 +776,8 @@ func TestCluster_MarshalJSON_ConnectionDefaultsPruned(t *testing.T) {
 	t.Parallel()
 
 	cluster := v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       v1alpha1.Kind,
-			APIVersion: v1alpha1.APIVersion,
-		},
+		Kind:       v1alpha1.Kind,
+		APIVersion: v1alpha1.APIVersion,
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Connection: v1alpha1.Connection{
@@ -830,10 +802,8 @@ func TestCluster_MarshalJSON_PlacementGroupStrategyDefaultPruned(t *testing.T) {
 	t.Parallel()
 
 	cluster := v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       v1alpha1.Kind,
-			APIVersion: v1alpha1.APIVersion,
-		},
+		Kind:       v1alpha1.Kind,
+		APIVersion: v1alpha1.APIVersion,
 		Spec: v1alpha1.Spec{
 			Provider: v1alpha1.ProviderSpec{
 				Hetzner: v1alpha1.OptionsHetzner{
@@ -854,10 +824,8 @@ func TestCluster_MarshalJSON_PlacementGroupStrategyNoneKept(t *testing.T) {
 	t.Parallel()
 
 	cluster := v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       v1alpha1.Kind,
-			APIVersion: v1alpha1.APIVersion,
-		},
+		Kind:       v1alpha1.Kind,
+		APIVersion: v1alpha1.APIVersion,
 		Spec: v1alpha1.Spec{
 			Provider: v1alpha1.ProviderSpec{
 				Hetzner: v1alpha1.OptionsHetzner{
@@ -905,10 +873,8 @@ func TestCluster_VClusterDistributionConfigPruning(t *testing.T) {
 			t.Parallel()
 
 			cluster := v1alpha1.Cluster{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       v1alpha1.Kind,
-					APIVersion: v1alpha1.APIVersion,
-				},
+				Kind:       v1alpha1.Kind,
+				APIVersion: v1alpha1.APIVersion,
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
 						Distribution:       v1alpha1.DistributionVCluster,
@@ -955,10 +921,8 @@ func TestCluster_VClusterContextPruning(t *testing.T) {
 			t.Parallel()
 
 			cluster := v1alpha1.Cluster{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       v1alpha1.Kind,
-					APIVersion: v1alpha1.APIVersion,
-				},
+				Kind:       v1alpha1.Kind,
+				APIVersion: v1alpha1.APIVersion,
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
 						Distribution: v1alpha1.DistributionVCluster,
@@ -990,10 +954,8 @@ func TestCluster_MarshalJSON_WithSliceAndBoolFields(t *testing.T) {
 	t.Parallel()
 
 	cluster := v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       v1alpha1.Kind,
-			APIVersion: v1alpha1.APIVersion,
-		},
+		Kind:       v1alpha1.Kind,
+		APIVersion: v1alpha1.APIVersion,
 		Spec: v1alpha1.Spec{
 			Provider: v1alpha1.ProviderSpec{
 				Hetzner: v1alpha1.OptionsHetzner{
@@ -1041,10 +1003,8 @@ func TestCluster_MarshalJSON_OmniDefaultsPruned(t *testing.T) {
 	t.Parallel()
 
 	cluster := v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       v1alpha1.Kind,
-			APIVersion: v1alpha1.APIVersion,
-		},
+		Kind:       v1alpha1.Kind,
+		APIVersion: v1alpha1.APIVersion,
 		Spec: v1alpha1.Spec{
 			Provider: v1alpha1.ProviderSpec{
 				Omni: v1alpha1.OptionsOmni{
@@ -1067,10 +1027,8 @@ func TestCluster_MarshalJSON_OmniNonDefaultsKept(t *testing.T) {
 	t.Parallel()
 
 	cluster := v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       v1alpha1.Kind,
-			APIVersion: v1alpha1.APIVersion,
-		},
+		Kind:       v1alpha1.Kind,
+		APIVersion: v1alpha1.APIVersion,
 		Spec: v1alpha1.Spec{
 			Provider: v1alpha1.ProviderSpec{
 				Omni: v1alpha1.OptionsOmni{
@@ -1107,10 +1065,8 @@ func TestCluster_MarshalJSON_ExtraPortMappings(t *testing.T) {
 	t.Parallel()
 
 	cluster := v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       v1alpha1.Kind,
-			APIVersion: v1alpha1.APIVersion,
-		},
+		Kind:       v1alpha1.Kind,
+		APIVersion: v1alpha1.APIVersion,
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution: v1alpha1.DistributionTalos,
@@ -1155,10 +1111,8 @@ func TestCluster_MarshalJSON_SOPSEnabled(t *testing.T) {
 	t.Parallel()
 
 	cluster := v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       v1alpha1.Kind,
-			APIVersion: v1alpha1.APIVersion,
-		},
+		Kind:       v1alpha1.Kind,
+		APIVersion: v1alpha1.APIVersion,
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				SOPS: v1alpha1.SOPS{
@@ -1194,10 +1148,8 @@ func TestCluster_MarshalJSON_SOPSEnabledDisabled(t *testing.T) {
 	t.Parallel()
 
 	cluster := v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       v1alpha1.Kind,
-			APIVersion: v1alpha1.APIVersion,
-		},
+		Kind:       v1alpha1.Kind,
+		APIVersion: v1alpha1.APIVersion,
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				SOPS: v1alpha1.SOPS{Enabled: v1alpha1.SOPSEnabledDisabled},
@@ -1237,10 +1189,8 @@ func TestCluster_MarshalYAML_ViaYAMLv3_Comprehensive(t *testing.T) {
 	t.Parallel()
 
 	cluster := v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       v1alpha1.Kind,
-			APIVersion: v1alpha1.APIVersion,
-		},
+		Kind:       v1alpha1.Kind,
+		APIVersion: v1alpha1.APIVersion,
 		Spec: v1alpha1.Spec{
 			Editor: "vim",
 			Cluster: v1alpha1.ClusterSpec{
@@ -1297,10 +1247,8 @@ func TestCluster_MarshalJSON_AllEnumDefaultsPruned(t *testing.T) {
 	t.Parallel()
 
 	cluster := v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       v1alpha1.Kind,
-			APIVersion: v1alpha1.APIVersion,
-		},
+		Kind:       v1alpha1.Kind,
+		APIVersion: v1alpha1.APIVersion,
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:  v1alpha1.DistributionVanilla,

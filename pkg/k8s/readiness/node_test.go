@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -17,7 +16,7 @@ func TestWaitForNodeReady_NodeAlreadyReady(t *testing.T) {
 	t.Parallel()
 
 	clientset := fake.NewClientset(&corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
+		Name: "node-1",
 		Status: corev1.NodeStatus{
 			Conditions: []corev1.NodeCondition{
 				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
@@ -33,7 +32,7 @@ func TestWaitForNodeReady_NodeNotReady(t *testing.T) {
 	t.Parallel()
 
 	clientset := fake.NewClientset(&corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
+		Name: "node-1",
 		Status: corev1.NodeStatus{
 			Conditions: []corev1.NodeCondition{
 				{Type: corev1.NodeReady, Status: corev1.ConditionFalse},
@@ -71,7 +70,7 @@ func TestWaitForAllNodesReady_AllReady(t *testing.T) {
 
 	clientset := fake.NewClientset(
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "control-plane"},
+			Name: "control-plane",
 			Status: corev1.NodeStatus{
 				Conditions: []corev1.NodeCondition{
 					{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
@@ -79,7 +78,7 @@ func TestWaitForAllNodesReady_AllReady(t *testing.T) {
 			},
 		},
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
+			Name: "worker-1",
 			Status: corev1.NodeStatus{
 				Conditions: []corev1.NodeCondition{
 					{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
@@ -97,7 +96,7 @@ func TestWaitForAllNodesReady_OneNotReady(t *testing.T) {
 
 	clientset := fake.NewClientset(
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "control-plane"},
+			Name: "control-plane",
 			Status: corev1.NodeStatus{
 				Conditions: []corev1.NodeCondition{
 					{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
@@ -105,7 +104,7 @@ func TestWaitForAllNodesReady_OneNotReady(t *testing.T) {
 			},
 		},
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
+			Name: "worker-1",
 			Status: corev1.NodeStatus{
 				Conditions: []corev1.NodeCondition{
 					{Type: corev1.NodeReady, Status: corev1.ConditionFalse},
@@ -131,7 +130,7 @@ func TestWaitForAllNodesReady_SingleNode(t *testing.T) {
 	t.Parallel()
 
 	clientset := fake.NewClientset(&corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: "kind-control-plane"},
+		Name: "kind-control-plane",
 		Status: corev1.NodeStatus{
 			Conditions: []corev1.NodeCondition{
 				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
@@ -160,7 +159,7 @@ func TestWaitForAllNodesReadyAndSchedulable_AllReadyNoTaints(t *testing.T) {
 
 	clientset := fake.NewClientset(
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "control-plane"},
+			Name: "control-plane",
 			Status: corev1.NodeStatus{
 				Conditions: []corev1.NodeCondition{
 					{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
@@ -168,7 +167,7 @@ func TestWaitForAllNodesReadyAndSchedulable_AllReadyNoTaints(t *testing.T) {
 			},
 		},
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
+			Name: "worker-1",
 			Status: corev1.NodeStatus{
 				Conditions: []corev1.NodeCondition{
 					{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
@@ -188,7 +187,7 @@ func TestWaitForAllNodesReadyAndSchedulable_ControlPlaneTaintBlocks(t *testing.T
 
 	clientset := fake.NewClientset(
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "kind-control-plane"},
+			Name: "kind-control-plane",
 			Spec: corev1.NodeSpec{
 				Taints: []corev1.Taint{
 					{
@@ -216,7 +215,7 @@ func TestWaitForAllNodesReadyAndSchedulable_WorkerSchedulableControlPlaneTainted
 
 	clientset := fake.NewClientset(
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "control-plane"},
+			Name: "control-plane",
 			Spec: corev1.NodeSpec{
 				Taints: []corev1.Taint{
 					{
@@ -232,7 +231,7 @@ func TestWaitForAllNodesReadyAndSchedulable_WorkerSchedulableControlPlaneTainted
 			},
 		},
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
+			Name: "worker-1",
 			Status: corev1.NodeStatus{
 				Conditions: []corev1.NodeCondition{
 					{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
@@ -252,7 +251,7 @@ func TestWaitForAllNodesReadyAndSchedulable_NotReadyBlocks(t *testing.T) {
 
 	clientset := fake.NewClientset(
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "control-plane"},
+			Name: "control-plane",
 			Status: corev1.NodeStatus{
 				Conditions: []corev1.NodeCondition{
 					{Type: corev1.NodeReady, Status: corev1.ConditionFalse},
@@ -297,7 +296,7 @@ func TestWaitForAllNodesReadyAndSchedulable_NoExecuteTaintBlocks(t *testing.T) {
 	// have no matching toleration, just as it does for NoSchedule.
 	clientset := fake.NewClientset(
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
+			Name: "node-1",
 			Spec: corev1.NodeSpec{
 				Taints: []corev1.Taint{
 					{
@@ -326,7 +325,7 @@ func TestWaitForAllNodesReadyAndSchedulable_CordonedNodeBlocks(t *testing.T) {
 	// Cordoned nodes (spec.unschedulable=true) reject new pod scheduling.
 	clientset := fake.NewClientset(
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
+			Name: "node-1",
 			Spec: corev1.NodeSpec{
 				Unschedulable: true,
 			},
@@ -352,7 +351,7 @@ func TestWaitForAllNodesReadyAndSchedulableIgnoringTaints_ToleratesIgnoredTaint(
 	// let the readiness check pass.
 	clientset := fake.NewClientset(
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "control-plane"},
+			Name: "control-plane",
 			Spec: corev1.NodeSpec{
 				Taints: []corev1.Taint{
 					{
@@ -368,7 +367,7 @@ func TestWaitForAllNodesReadyAndSchedulableIgnoringTaints_ToleratesIgnoredTaint(
 			},
 		},
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
+			Name: "worker-1",
 			Spec: corev1.NodeSpec{
 				Taints: []corev1.Taint{
 					{
@@ -398,7 +397,7 @@ func TestWaitForAllNodesReadyAndSchedulableIgnoringTaints_NonIgnoredTaintStillBl
 	// Node has a non-ignored NoSchedule taint — should still block.
 	clientset := fake.NewClientset(
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
+			Name: "node-1",
 			Spec: corev1.NodeSpec{
 				Taints: []corev1.Taint{
 					{
@@ -430,7 +429,7 @@ func TestWaitForAllNodesReadyAndSchedulableIgnoringTaints_MixedTaintsIgnoredAndB
 	// Node has both an ignored taint and a blocking taint — should block.
 	clientset := fake.NewClientset(
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
+			Name: "node-1",
 			Spec: corev1.NodeSpec{
 				Taints: []corev1.Taint{
 					{
@@ -470,7 +469,7 @@ func TestWaitForAllNodesReadyAndSchedulableIgnoringTaints_NoIgnoredTaintsBehaves
 	// No ignored taints — should behave like WaitForAllNodesReadyAndSchedulable.
 	clientset := fake.NewClientset(
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
+			Name: "node-1",
 			Status: corev1.NodeStatus{
 				Conditions: []corev1.NodeCondition{
 					{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
@@ -492,16 +491,12 @@ func TestWaitForAllNodesLabeled_AllLabeled(t *testing.T) {
 
 	clientset := fake.NewClientset(
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "control-plane",
-				Labels: map[string]string{labelKey: "cloud"},
-			},
+			Name:   "control-plane",
+			Labels: map[string]string{labelKey: "cloud"},
 		},
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "worker-1",
-				Labels: map[string]string{labelKey: "cloud"},
-			},
+			Name:   "worker-1",
+			Labels: map[string]string{labelKey: "cloud"},
 		},
 	)
 
@@ -518,13 +513,11 @@ func TestWaitForAllNodesLabeled_OneMissing(t *testing.T) {
 
 	clientset := fake.NewClientset(
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "control-plane",
-				Labels: map[string]string{labelKey: "cloud"},
-			},
+			Name:   "control-plane",
+			Labels: map[string]string{labelKey: "cloud"},
 		},
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
+			Name: "worker-1",
 		},
 	)
 
@@ -553,7 +546,7 @@ func TestWaitForAllNodesLabeled_ContextCanceled(t *testing.T) {
 
 	clientset := fake.NewClientset(
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
+			Name: "worker-1",
 		},
 	)
 

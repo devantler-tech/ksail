@@ -135,10 +135,8 @@ func (p *KubernetesProvisioner) Create(
 	// via `ksail cluster list --provider Kubernetes`. Setting CreateNamespace: false
 	// below prevents the Helm driver from creating it without our labels.
 	nsObj := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   namespace,
-			Labels: kubernetesprovider.CommonLabels(clusterName),
-		},
+		Name:   namespace,
+		Labels: kubernetesprovider.CommonLabels(clusterName),
 	}
 
 	_, nsErr := p.hostClientset.CoreV1().Namespaces().Create(

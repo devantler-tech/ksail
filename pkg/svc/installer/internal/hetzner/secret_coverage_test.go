@@ -60,11 +60,9 @@ func TestEnsureSecret_UpdateWithSameToken(t *testing.T) {
 	token := "same-token"
 
 	existing := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            hetzner.SecretName,
-			Namespace:       hetzner.Namespace,
-			ResourceVersion: "100",
-		},
+		Name:            hetzner.SecretName,
+		Namespace:       hetzner.Namespace,
+		ResourceVersion: "100",
 		Data: map[string][]byte{
 			"token": []byte(token),
 		},

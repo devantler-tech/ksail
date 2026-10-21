@@ -46,11 +46,9 @@ func createKindTestCases() []validatorTestCase[*kindapi.Cluster] {
 		{
 			Name: "valid_kind_config",
 			Config: &kindapi.Cluster{
-				TypeMeta: kindapi.TypeMeta{
-					APIVersion: "kind.x-k8s.io/v1alpha4",
-					Kind:       "Cluster",
-				},
-				Name: "test-cluster",
+				APIVersion: "kind.x-k8s.io/v1alpha4",
+				Kind:       "Cluster",
+				Name:       "test-cluster",
 				Nodes: []kindapi.Node{
 					{Role: kindapi.ControlPlaneRole},
 					{Role: kindapi.WorkerRole},
@@ -62,10 +60,8 @@ func createKindTestCases() []validatorTestCase[*kindapi.Cluster] {
 		{
 			Name: "valid_kind_config_no_name",
 			Config: &kindapi.Cluster{
-				TypeMeta: kindapi.TypeMeta{
-					APIVersion: "kind.x-k8s.io/v1alpha4",
-					Kind:       "Cluster",
-				},
+				APIVersion: "kind.x-k8s.io/v1alpha4",
+				Kind:       "Cluster",
 				Nodes: []kindapi.Node{
 					{Role: kindapi.ControlPlaneRole},
 				},

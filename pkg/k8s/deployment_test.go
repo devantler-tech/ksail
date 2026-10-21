@@ -29,11 +29,9 @@ var errPatchFailed = errors.New("patch deployment failed")
 // annotations so tests can assert they are preserved.
 func newLabeledDeployment(name string, templateAnnotations map[string]string) *appsv1.Deployment {
 	return &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: "kube-system",
-			Labels:    map[string]string{"app.kubernetes.io/instance": "cluster-autoscaler"},
-		},
+		Name:      name,
+		Namespace: "kube-system",
+		Labels:    map[string]string{"app.kubernetes.io/instance": "cluster-autoscaler"},
 		Spec: appsv1.DeploymentSpec{
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Annotations: templateAnnotations},

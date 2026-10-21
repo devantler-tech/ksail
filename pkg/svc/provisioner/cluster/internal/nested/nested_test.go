@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
@@ -41,7 +40,7 @@ func TestNamespaceExists(t *testing.T) {
 	t.Parallel()
 
 	clientset := k8sfake.NewClientset(&corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{Name: "vcluster-present"},
+		Name: "vcluster-present",
 	})
 
 	exists, err := nested.NamespaceExists(context.Background(), clientset, "vcluster-present")
@@ -57,8 +56,8 @@ func TestWaitForKubeconfigSecret_ReturnsData(t *testing.T) {
 	t.Parallel()
 
 	clientset := k8sfake.NewClientset(&corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "vc-demo", Namespace: "vcluster-demo"},
-		Data:       map[string][]byte{"config": []byte("kubeconfig-bytes")},
+		Name: "vc-demo", Namespace: "vcluster-demo",
+		Data: map[string][]byte{"config": []byte("kubeconfig-bytes")},
 	})
 
 	data, err := nested.WaitForKubeconfigSecret(
@@ -110,8 +109,8 @@ func TestFetchKubeconfigSecret_EmptyKeyIsNotReady(t *testing.T) {
 	t.Parallel()
 
 	clientset := k8sfake.NewClientset(&corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "k3k-demo-kubeconfig", Namespace: "k3k-demo"},
-		Data:       map[string][]byte{"other": []byte("x")},
+		Name: "k3k-demo-kubeconfig", Namespace: "k3k-demo",
+		Data: map[string][]byte{"other": []byte("x")},
 	})
 
 	_, err := nested.FetchKubeconfigSecret(
@@ -124,8 +123,8 @@ func TestFetchKubeconfigSecret_ReturnsData(t *testing.T) {
 	t.Parallel()
 
 	clientset := k8sfake.NewClientset(&corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "vc-demo", Namespace: "vcluster-demo"},
-		Data:       map[string][]byte{"config": []byte("kubeconfig-bytes")},
+		Name: "vc-demo", Namespace: "vcluster-demo",
+		Data: map[string][]byte{"config": []byte("kubeconfig-bytes")},
 	})
 
 	raw, err := nested.FetchKubeconfigSecret(

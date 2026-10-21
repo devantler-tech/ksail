@@ -777,9 +777,7 @@ func (p *Provider) listServersByLabelSelector(
 		p.calculateRetryDelay,
 		func() ([]*hcloud.Server, error) {
 			return p.client.Server.AllWithOpts(ctx, hcloud.ServerListOpts{
-				ListOpts: hcloud.ListOpts{
-					LabelSelector: labelSelector,
-				},
+				LabelSelector: labelSelector,
 			})
 		},
 	)
