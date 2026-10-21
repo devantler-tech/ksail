@@ -435,11 +435,9 @@ func ApplyAutoscalerConfigSecret(
 	}
 
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      autoscalerConfigSecretName,
-			Namespace: autoscalerConfigSecretNamespace,
-		},
-		Data: desiredData,
+		Name:      autoscalerConfigSecretName,
+		Namespace: autoscalerConfigSecretNamespace,
+		Data:      desiredData,
 	}
 
 	secretsClient := kubeclient.CoreV1().Secrets(autoscalerConfigSecretNamespace)

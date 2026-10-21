@@ -97,7 +97,7 @@ func TestKubeconfig_NotReadyWhileSecretKeyEmpty(t *testing.T) {
 
 	conn := talosprovisioner.ConnectionFor(talosConnectorTestCluster)
 	clientset := k8sfake.NewClientset(&corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: conn.SecretName, Namespace: conn.Namespace},
+		Name: conn.SecretName, Namespace: conn.Namespace,
 	})
 	provisioner := newTalosKubernetesProvisionerWithClientset(t, clientset)
 
@@ -112,8 +112,8 @@ func TestKubeconfig_ReturnsSecretAsPublished(t *testing.T) {
 	published := []byte("apiVersion: v1\nkind: Config\n")
 	conn := talosprovisioner.ConnectionFor(talosConnectorTestCluster)
 	clientset := k8sfake.NewClientset(&corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: conn.SecretName, Namespace: conn.Namespace},
-		Data:       map[string][]byte{"kubeconfig.yaml": published},
+		Name: conn.SecretName, Namespace: conn.Namespace,
+		Data: map[string][]byte{"kubeconfig.yaml": published},
 	})
 	provisioner := newTalosKubernetesProvisionerWithClientset(t, clientset)
 
@@ -170,8 +170,8 @@ func TestPublishConnectorKubeconfig_UpdatesExistingSecret(t *testing.T) {
 
 	conn := talosprovisioner.ConnectionFor(talosConnectorTestCluster)
 	clientset := k8sfake.NewClientset(&corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: conn.SecretName, Namespace: conn.Namespace},
-		Data:       map[string][]byte{"kubeconfig.yaml": []byte("stale")},
+		Name: conn.SecretName, Namespace: conn.Namespace,
+		Data: map[string][]byte{"kubeconfig.yaml": []byte("stale")},
 	})
 	provisioner := newTalosKubernetesProvisionerWithClientset(t, clientset)
 
@@ -196,12 +196,10 @@ func TestPublishConnectorKubeconfig_UpdateCarriesLiveResourceVersion(t *testing.
 
 	conn := talosprovisioner.ConnectionFor(talosConnectorTestCluster)
 	clientset := k8sfake.NewClientset(&corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            conn.SecretName,
-			Namespace:       conn.Namespace,
-			ResourceVersion: "42",
-		},
-		Data: map[string][]byte{"kubeconfig.yaml": []byte("stale")},
+		Name:            conn.SecretName,
+		Namespace:       conn.Namespace,
+		ResourceVersion: "42",
+		Data:            map[string][]byte{"kubeconfig.yaml": []byte("stale")},
 	})
 
 	var submittedResourceVersion string

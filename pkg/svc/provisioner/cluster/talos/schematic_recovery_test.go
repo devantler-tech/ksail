@@ -8,7 +8,6 @@ import (
 
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
@@ -59,10 +58,8 @@ func TestDistributionImageChangedFindsPendingAutoscalerImage(t *testing.T) {
 		{IP: "10.0.0.2", Role: talosprovisioner.RoleWorker},
 	}
 	client := fake.NewClientset(nodeWithIP("static-worker", "10.0.0.2"), &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "cluster-autoscaler-config", Namespace: "kube-system",
-			Annotations: map[string]string{"ksail.io/autoscaler-image-rollout-pending": "2"},
-		},
+		Name: "cluster-autoscaler-config", Namespace: "kube-system",
+		Annotations: map[string]string{"ksail.io/autoscaler-image-rollout-pending": "2"},
 	})
 
 	changed, err := talosprovisioner.DistributionImageChangedForTest(
@@ -88,11 +85,9 @@ func TestDistributionImageChangedFindsInterruptedCordon(t *testing.T) {
 	read := func(context.Context, string) (string, error) { return testSchematic, nil }
 	newClient := func() (kubernetes.Interface, error) {
 		return fake.NewClientset(&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "worker-1",
-				Annotations: map[string]string{
-					testImageUpgradeCordonAnnotation: "true",
-				},
+			Name: "worker-1",
+			Annotations: map[string]string{
+				testImageUpgradeCordonAnnotation: "true",
 			},
 			Spec: corev1.NodeSpec{Unschedulable: true},
 			Status: corev1.NodeStatus{Addresses: []corev1.NodeAddress{
@@ -120,8 +115,8 @@ func TestDistributionImageChangedIgnoresIntentionalManagedNodeCordon(t *testing.
 	}
 	read := func(context.Context, string) (string, error) { return testSchematic, nil }
 	clientset := fake.NewClientset(&corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
-		Spec:       corev1.NodeSpec{Unschedulable: true},
+		Name: "worker-1",
+		Spec: corev1.NodeSpec{Unschedulable: true},
 		Status: corev1.NodeStatus{Addresses: []corev1.NodeAddress{
 			{Type: corev1.NodeInternalIP, Address: "10.0.0.2"},
 		}},
@@ -148,11 +143,9 @@ func TestDistributionImageChangedFindsPendingStorageGateAfterUncordon(t *testing
 	}
 	read := func(context.Context, string) (string, error) { return testSchematic, nil }
 	clientset := fake.NewClientset(&corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "worker-1",
-			Annotations: map[string]string{
-				testImageUpgradeStoragePendingAnnotation: "true",
-			},
+		Name: "worker-1",
+		Annotations: map[string]string{
+			testImageUpgradeStoragePendingAnnotation: "true",
 		},
 		Status: corev1.NodeStatus{Addresses: []corev1.NodeAddress{
 			{Type: corev1.NodeInternalIP, Address: "10.0.0.2"},
@@ -182,14 +175,14 @@ func TestDistributionImageChangedIgnoresUnrelatedCordon(t *testing.T) {
 	newClient := func() (kubernetes.Interface, error) {
 		return fake.NewClientset(
 			&corev1.Node{
-				ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
+				Name: "worker-1",
 				Status: corev1.NodeStatus{Addresses: []corev1.NodeAddress{
 					{Type: corev1.NodeInternalIP, Address: "10.0.0.2"},
 				}},
 			},
 			&corev1.Node{
-				ObjectMeta: metav1.ObjectMeta{Name: "other-cluster"},
-				Spec:       corev1.NodeSpec{Unschedulable: true},
+				Name: "other-cluster",
+				Spec: corev1.NodeSpec{Unschedulable: true},
 				Status: corev1.NodeStatus{Addresses: []corev1.NodeAddress{
 					{Type: corev1.NodeInternalIP, Address: "10.0.0.3"},
 				}},

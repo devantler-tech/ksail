@@ -61,15 +61,13 @@ func encryptTestFile(t *testing.T, dir, name string, keyGroups []sops.KeyGroup) 
 	}
 
 	opts := sopsclient.EncryptOpts{
-		EncryptConfig: sopsclient.EncryptConfig{
-			KeyGroups:      keyGroups,
-			GroupThreshold: 0,
-		},
-		Cipher:      aes.NewCipher(),
-		InputStore:  inputStore,
-		OutputStore: outputStore,
-		InputPath:   filePath,
-		KeyServices: []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
+		KeyGroups:      keyGroups,
+		GroupThreshold: 0,
+		Cipher:         aes.NewCipher(),
+		InputStore:     inputStore,
+		OutputStore:    outputStore,
+		InputPath:      filePath,
+		KeyServices:    []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
 	}
 
 	encrypted, err := sopsclient.Encrypt(opts)

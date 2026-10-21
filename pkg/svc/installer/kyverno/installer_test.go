@@ -153,7 +153,7 @@ func expectKyvernoInstall(t *testing.T, client *helm.MockInterface, installErr e
 // caBundle, simulating a fully-initialised Kyverno admission controller.
 func readyWebhookConfig() *admissionregistrationv1.MutatingWebhookConfiguration {
 	return &admissionregistrationv1.MutatingWebhookConfiguration{
-		ObjectMeta: metav1.ObjectMeta{Name: "kyverno-resource-mutating-webhook-cfg"},
+		Name: "kyverno-resource-mutating-webhook-cfg",
 		Webhooks: []admissionregistrationv1.MutatingWebhook{
 			{
 				Name: "mutate.kyverno.svc",
@@ -170,7 +170,7 @@ func readyWebhookConfig() *admissionregistrationv1.MutatingWebhookConfiguration 
 // initialised its TLS certificate.
 func unreadyWebhookConfig() *admissionregistrationv1.MutatingWebhookConfiguration {
 	return &admissionregistrationv1.MutatingWebhookConfiguration{
-		ObjectMeta: metav1.ObjectMeta{Name: "kyverno-resource-mutating-webhook-cfg"},
+		Name: "kyverno-resource-mutating-webhook-cfg",
 		Webhooks: []admissionregistrationv1.MutatingWebhook{
 			{
 				Name:         "mutate.kyverno.svc",

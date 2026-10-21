@@ -92,7 +92,7 @@ func (plan *prerequisitePlan) ensureNamespace(ctx context.Context) error {
 	if apierrors.IsNotFound(err) {
 		_, err = plan.core.CoreV1().Namespaces().Create(ctx,
 			&corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{Name: prerequisiteNamespace},
+				Name: prerequisiteNamespace,
 			}, metav1.CreateOptions{})
 	}
 

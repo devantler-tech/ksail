@@ -32,11 +32,9 @@ func TestRestartAutoscalerAfterConfigChange_RestartsWhenRunning(t *testing.T) {
 	prov := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(&logBuf)
 
 	clientset := fake.NewClientset(&appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels:    map[string]string{"app.kubernetes.io/instance": name},
-		},
+		Name:      name,
+		Namespace: namespace,
+		Labels:    map[string]string{"app.kubernetes.io/instance": name},
 	})
 
 	err := prov.RestartAutoscalerAfterConfigChangeForTest(context.Background(), clientset)

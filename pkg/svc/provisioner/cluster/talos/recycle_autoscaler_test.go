@@ -75,11 +75,9 @@ func TestRecycleAutoscalerNodes_NoopWhenAutoscalerDisabled(t *testing.T) {
 // instance label. When ready, its status reports one updated, available replica.
 func autoscalerDeployment(ready bool) *appsv1.Deployment {
 	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      autoscalerDeploymentName,
-			Namespace: autoscalerNamespace,
-			Labels:    map[string]string{"app.kubernetes.io/instance": autoscalerDeploymentName},
-		},
+		Name:      autoscalerDeploymentName,
+		Namespace: autoscalerNamespace,
+		Labels:    map[string]string{"app.kubernetes.io/instance": autoscalerDeploymentName},
 	}
 
 	if ready {
@@ -130,7 +128,7 @@ func TestWaitForAutoscalerRollout_NotReadyTimesOut(t *testing.T) {
 // nodeWithIP builds a Ready Kubernetes node reachable at the given internal IP.
 func nodeWithIP(name, ip string) *corev1.Node {
 	return &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Name: name,
 		Status: corev1.NodeStatus{
 			Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: ip}},
 		},

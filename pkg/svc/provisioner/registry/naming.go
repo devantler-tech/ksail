@@ -93,12 +93,12 @@ func firstAvailableEndpointPort(
 
 // ExtractPortFromEndpoint extracts the port from an endpoint URL. Returns 0 if not found.
 func ExtractPortFromEndpoint(endpoint string) int {
-	lastColon := strings.LastIndex(endpoint, ":")
-	if lastColon < 0 {
+	_, after, ok := strings.CutLast(endpoint, ":")
+	if !ok {
 		return 0
 	}
 
-	portStr := endpoint[lastColon+1:]
+	portStr := after
 	if slashIdx := strings.Index(portStr, "/"); slashIdx >= 0 {
 		portStr = portStr[:slashIdx]
 	}

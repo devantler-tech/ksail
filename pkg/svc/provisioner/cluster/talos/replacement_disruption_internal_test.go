@@ -18,16 +18,16 @@ const (
 // drainPod returns a running pod on node with labels in the shared test namespace.
 func drainPod(name, node string, labels map[string]string) corev1.Pod {
 	return corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: drainNamespace, Labels: labels},
-		Spec:       corev1.PodSpec{NodeName: node},
-		Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+		Name: name, Namespace: drainNamespace, Labels: labels,
+		Spec:   corev1.PodSpec{NodeName: node},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
 	}
 }
 
 // drainBudget returns a budget selecting match whose status is current and allows allowed disruptions.
 func drainBudget(name string, match map[string]string, allowed int32) policyv1.PodDisruptionBudget {
 	return policyv1.PodDisruptionBudget{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: drainNamespace, Generation: 3},
+		Name: name, Namespace: drainNamespace, Generation: 3,
 		Spec: policyv1.PodDisruptionBudgetSpec{
 			Selector: &metav1.LabelSelector{MatchLabels: match},
 		},

@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -126,10 +125,8 @@ func TestDetectCSI_K3s_Enabled(t *testing.T) {
 	helmClient := helm.NewMockInterface(t)
 
 	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      detector.DeploymentLocalPathProvisionerK3s,
-			Namespace: detector.NamespaceKubeSystem,
-		},
+		Name:      detector.DeploymentLocalPathProvisionerK3s,
+		Namespace: detector.NamespaceKubeSystem,
 	}
 	k8sClientset := fake.NewClientset(deployment)
 
@@ -195,10 +192,8 @@ func TestDetectCSI_Vanilla_Default_WithDeployment(t *testing.T) {
 	helmClient := helm.NewMockInterface(t)
 
 	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      detector.DeploymentLocalPathProvisioner,
-			Namespace: detector.NamespaceLocalPathStorage,
-		},
+		Name:      detector.DeploymentLocalPathProvisioner,
+		Namespace: detector.NamespaceLocalPathStorage,
 	}
 	k8sClientset := fake.NewClientset(deployment)
 
@@ -247,10 +242,8 @@ func TestDetectMetricsServer_K3s_Default(t *testing.T) {
 	helmClient := helm.NewMockInterface(t)
 
 	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      detector.DeploymentMetricsServerK3s,
-			Namespace: detector.NamespaceKubeSystem,
-		},
+		Name:      detector.DeploymentMetricsServerK3s,
+		Namespace: detector.NamespaceKubeSystem,
 	}
 	k8sClientset := fake.NewClientset(deployment)
 
@@ -288,12 +281,10 @@ func TestDetectLoadBalancer_K3s_Enabled(t *testing.T) {
 	helmClient := helm.NewMockInterface(t)
 
 	daemonSet := &appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "svclb-traefik",
-			Namespace: detector.NamespaceKubeSystem,
-			Labels: map[string]string{
-				detector.LabelServiceLBK3s: "traefik",
-			},
+		Name:      "svclb-traefik",
+		Namespace: detector.NamespaceKubeSystem,
+		Labels: map[string]string{
+			detector.LabelServiceLBK3s: "traefik",
 		},
 	}
 	k8sClientset := fake.NewClientset(daemonSet)
@@ -316,10 +307,8 @@ func TestDetectLoadBalancer_K3s_Disabled(t *testing.T) {
 	helmClient := helm.NewMockInterface(t)
 
 	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "traefik",
-			Namespace: detector.NamespaceKubeSystem,
-		},
+		Name:      "traefik",
+		Namespace: detector.NamespaceKubeSystem,
 	}
 	k8sClientset := fake.NewClientset(deployment)
 
@@ -956,10 +945,8 @@ func TestDeploymentExists_Found(t *testing.T) {
 	helmClient := helm.NewMockInterface(t)
 
 	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-deployment",
-			Namespace: "test-namespace",
-		},
+		Name:      "test-deployment",
+		Namespace: "test-namespace",
 	}
 	k8sClientset := fake.NewClientset(deployment)
 
@@ -1001,12 +988,10 @@ func TestDaemonSetExistsWithLabel_Found(t *testing.T) {
 	helmClient := helm.NewMockInterface(t)
 
 	daemonSet := &appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-daemonset",
-			Namespace: "test-namespace",
-			Labels: map[string]string{
-				"test-label": "test-value",
-			},
+		Name:      "test-daemonset",
+		Namespace: "test-namespace",
+		Labels: map[string]string{
+			"test-label": "test-value",
 		},
 	}
 	k8sClientset := fake.NewClientset(daemonSet)

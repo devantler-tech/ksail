@@ -29,10 +29,10 @@ func DefaultK3sVersion() string {
 	// Strip the digest, then take the tag after the final ':' in "repo:tag".
 	ref, _, _ := strings.Cut(DefaultK3sImage, "@")
 
-	idx := strings.LastIndex(ref, ":")
-	if idx < 0 {
+	_, after, ok := strings.CutLast(ref, ":")
+	if !ok {
 		return ""
 	}
 
-	return ref[idx+1:]
+	return after
 }

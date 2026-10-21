@@ -10,7 +10,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
@@ -81,11 +80,9 @@ func EnsureHostCluster(ctx context.Context, hub client.Client, namespace string)
 	}
 
 	cluster := &v1alpha1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      HostClusterName,
-			Namespace: namespace,
-			Labels:    map[string]string{v1alpha1.HostClusterLabel: "true"},
-		},
+		Name:      HostClusterName,
+		Namespace: namespace,
+		Labels:    map[string]string{v1alpha1.HostClusterLabel: "true"},
 	}
 
 	createErr := hub.Create(ctx, cluster)

@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	k3dvalidator "github.com/devantler-tech/ksail/v7/pkg/fsutil/validator/k3d"
-	configtypes "github.com/k3d-io/k3d/v5/pkg/config/types"
 	k3dapi "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,14 +17,10 @@ func TestValidate_MissingName(t *testing.T) {
 	validatorInstance := k3dvalidator.NewValidator()
 
 	config := &k3dapi.SimpleConfig{
-		TypeMeta: configtypes.TypeMeta{
-			APIVersion: "k3d.io/v1alpha5",
-			Kind:       "Simple",
-		},
-		ObjectMeta: configtypes.ObjectMeta{
-			Name: "",
-		},
-		Servers: 1,
+		APIVersion: "k3d.io/v1alpha5",
+		Kind:       "Simple",
+		Name:       "",
+		Servers:    1,
 	}
 
 	result := validatorInstance.Validate(config)
@@ -41,15 +36,11 @@ func TestValidate_MultipleAgents(t *testing.T) {
 	validatorInstance := k3dvalidator.NewValidator()
 
 	config := &k3dapi.SimpleConfig{
-		TypeMeta: configtypes.TypeMeta{
-			APIVersion: "k3d.io/v1alpha5",
-			Kind:       "Simple",
-		},
-		ObjectMeta: configtypes.ObjectMeta{
-			Name: "agent-test",
-		},
-		Servers: 1,
-		Agents:  3,
+		APIVersion: "k3d.io/v1alpha5",
+		Kind:       "Simple",
+		Name:       "agent-test",
+		Servers:    1,
+		Agents:     3,
 	}
 
 	result := validatorInstance.Validate(config)
@@ -64,14 +55,10 @@ func TestValidate_WithK3sArgs(t *testing.T) {
 	validatorInstance := k3dvalidator.NewValidator()
 
 	config := &k3dapi.SimpleConfig{
-		TypeMeta: configtypes.TypeMeta{
-			APIVersion: "k3d.io/v1alpha5",
-			Kind:       "Simple",
-		},
-		ObjectMeta: configtypes.ObjectMeta{
-			Name: "args-test",
-		},
-		Servers: 1,
+		APIVersion: "k3d.io/v1alpha5",
+		Kind:       "Simple",
+		Name:       "args-test",
+		Servers:    1,
 		Options: k3dapi.SimpleConfigOptions{
 			K3sOptions: k3dapi.SimpleConfigOptionsK3s{
 				ExtraArgs: []k3dapi.K3sArgWithNodeFilters{
@@ -94,14 +81,10 @@ func TestValidate_MultipleServers(t *testing.T) {
 	validatorInstance := k3dvalidator.NewValidator()
 
 	config := &k3dapi.SimpleConfig{
-		TypeMeta: configtypes.TypeMeta{
-			APIVersion: "k3d.io/v1alpha5",
-			Kind:       "Simple",
-		},
-		ObjectMeta: configtypes.ObjectMeta{
-			Name: "multi-server-test",
-		},
-		Servers: 3,
+		APIVersion: "k3d.io/v1alpha5",
+		Kind:       "Simple",
+		Name:       "multi-server-test",
+		Servers:    3,
 	}
 
 	result := validatorInstance.Validate(config)

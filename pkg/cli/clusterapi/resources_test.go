@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
@@ -33,8 +32,8 @@ const (
 
 func testPod(namespace, name string) *corev1.Pod {
 	return &corev1.Pod{
-		TypeMeta:   metav1.TypeMeta{Kind: kindPod, APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Kind: kindPod, APIVersion: "v1",
+		Name: name, Namespace: namespace,
 	}
 }
 
@@ -42,9 +41,9 @@ func testDeployment(namespace, name string, replicas int32) *appsv1.Deployment {
 	count := replicas
 
 	return &appsv1.Deployment{
-		TypeMeta:   metav1.TypeMeta{Kind: kindDeployment, APIVersion: "apps/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec:       appsv1.DeploymentSpec{Replicas: &count},
+		Kind: kindDeployment, APIVersion: "apps/v1",
+		Name: name, Namespace: namespace,
+		Spec: appsv1.DeploymentSpec{Replicas: &count},
 	}
 }
 

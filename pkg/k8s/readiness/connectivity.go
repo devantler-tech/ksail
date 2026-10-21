@@ -290,10 +290,8 @@ func connectivityCheckPod(apiServerIP string) *corev1.Pod {
 	gracePeriod := int64(0)
 
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      connectivityPodName,
-			Namespace: connectivityPodNS,
-		},
+		Name:      connectivityPodName,
+		Namespace: connectivityPodNS,
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{
 				Name:            "check",

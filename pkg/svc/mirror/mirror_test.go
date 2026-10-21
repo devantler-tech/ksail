@@ -41,7 +41,7 @@ func newDeployment(containers ...string) *appsv1.Deployment {
 	}
 
 	return &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: testDeploy, Namespace: testNamespace},
+		Name: testDeploy, Namespace: testNamespace,
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{MatchLabels: selectorLabels()},
 			Template: corev1.PodTemplateSpec{
@@ -54,8 +54,8 @@ func newDeployment(containers ...string) *appsv1.Deployment {
 // newPod builds a pod in testNamespace with the given name, labels, and phase.
 func newPod(name string, labels map[string]string, phase corev1.PodPhase) *corev1.Pod {
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: testNamespace, Labels: labels},
-		Status:     corev1.PodStatus{Phase: phase},
+		Name: name, Namespace: testNamespace, Labels: labels,
+		Status: corev1.PodStatus{Phase: phase},
 	}
 }
 

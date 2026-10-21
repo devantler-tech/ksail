@@ -9,7 +9,6 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // TestNewValidatorForVCluster verifies the VCluster constructor.
@@ -37,10 +36,8 @@ func TestValidate_VClusterContextValidation(t *testing.T) {
 	v := ksailvalidator.NewValidatorForVCluster(vclusterConfig)
 
 	config := &v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Cluster",
-			APIVersion: "ksail.io/v1alpha1",
-		},
+		Kind:       "Cluster",
+		APIVersion: "ksail.io/v1alpha1",
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:       v1alpha1.DistributionVCluster,
@@ -73,10 +70,8 @@ func TestValidate_VClusterContextMismatch(t *testing.T) {
 	v := ksailvalidator.NewValidatorForVCluster(vclusterConfig)
 
 	config := &v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Cluster",
-			APIVersion: "ksail.io/v1alpha1",
-		},
+		Kind:       "Cluster",
+		APIVersion: "ksail.io/v1alpha1",
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:       v1alpha1.DistributionVCluster,
@@ -114,10 +109,8 @@ func TestValidate_TalosCiliumCNIAlignment(t *testing.T) {
 	v := ksailvalidator.NewValidatorForTalos(talosConfig)
 
 	config := &v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Cluster",
-			APIVersion: "ksail.io/v1alpha1",
-		},
+		Kind:       "Cluster",
+		APIVersion: "ksail.io/v1alpha1",
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:       v1alpha1.DistributionTalos,
@@ -157,10 +150,8 @@ func TestValidate_TalosDefaultCNIAlignment(t *testing.T) {
 	v := ksailvalidator.NewValidatorForTalos(nil)
 
 	config := &v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Cluster",
-			APIVersion: "ksail.io/v1alpha1",
-		},
+		Kind:       "Cluster",
+		APIVersion: "ksail.io/v1alpha1",
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:       v1alpha1.DistributionTalos,
@@ -189,10 +180,8 @@ func TestValidate_VClusterCiliumCNI(t *testing.T) {
 	v := ksailvalidator.NewValidator()
 
 	config := &v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Cluster",
-			APIVersion: "ksail.io/v1alpha1",
-		},
+		Kind:       "Cluster",
+		APIVersion: "ksail.io/v1alpha1",
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:       v1alpha1.DistributionVCluster,
@@ -220,10 +209,8 @@ func TestValidate_ExternalRegistryPort(t *testing.T) {
 	v := ksailvalidator.NewValidator()
 
 	config := &v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Cluster",
-			APIVersion: "ksail.io/v1alpha1",
-		},
+		Kind:       "Cluster",
+		APIVersion: "ksail.io/v1alpha1",
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:       v1alpha1.DistributionVanilla,
@@ -253,10 +240,8 @@ func TestValidate_FluxValidation(t *testing.T) {
 	v := ksailvalidator.NewValidator()
 
 	config := &v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Cluster",
-			APIVersion: "ksail.io/v1alpha1",
-		},
+		Kind:       "Cluster",
+		APIVersion: "ksail.io/v1alpha1",
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:       v1alpha1.DistributionVanilla,
@@ -284,10 +269,8 @@ func TestValidate_GetVClusterConfigNameEmpty(t *testing.T) {
 	v := ksailvalidator.NewValidatorForVCluster(vclusterConfig)
 
 	config := &v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Cluster",
-			APIVersion: "ksail.io/v1alpha1",
-		},
+		Kind:       "Cluster",
+		APIVersion: "ksail.io/v1alpha1",
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:       v1alpha1.DistributionVCluster,
@@ -318,10 +301,8 @@ func TestValidate_TalosConfigName(t *testing.T) {
 	v := ksailvalidator.NewValidatorForTalos(talosConfig)
 
 	config := &v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Cluster",
-			APIVersion: "ksail.io/v1alpha1",
-		},
+		Kind:       "Cluster",
+		APIVersion: "ksail.io/v1alpha1",
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:       v1alpha1.DistributionTalos,
@@ -349,7 +330,7 @@ func TestValidate_HetznerPublicNetWarnsFullyPrivateWorker(t *testing.T) {
 	disabled := false
 
 	config := &v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{Kind: "Cluster", APIVersion: "ksail.io/v1alpha1"},
+		Kind: "Cluster", APIVersion: "ksail.io/v1alpha1",
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution: v1alpha1.DistributionTalos,
@@ -385,7 +366,7 @@ func TestValidate_HetznerPublicNetSkippedForNonHetzner(t *testing.T) {
 	disabled := false
 
 	config := &v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{Kind: "Cluster", APIVersion: "ksail.io/v1alpha1"},
+		Kind: "Cluster", APIVersion: "ksail.io/v1alpha1",
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution: v1alpha1.DistributionTalos,
@@ -434,10 +415,8 @@ func TestValidate_KWOKContextValidation(t *testing.T) {
 	v := ksailvalidator.NewValidatorForKWOK(kwokConfig)
 
 	config := &v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Cluster",
-			APIVersion: "ksail.io/v1alpha1",
-		},
+		Kind:       "Cluster",
+		APIVersion: "ksail.io/v1alpha1",
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:       v1alpha1.DistributionKWOK,
@@ -471,10 +450,8 @@ func TestValidate_KWOKContextMismatch(t *testing.T) {
 	v := ksailvalidator.NewValidatorForKWOK(kwokConfig)
 
 	config := &v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Cluster",
-			APIVersion: "ksail.io/v1alpha1",
-		},
+		Kind:       "Cluster",
+		APIVersion: "ksail.io/v1alpha1",
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:       v1alpha1.DistributionKWOK,
@@ -515,10 +492,8 @@ func TestValidate_KWOKEmptyNameSkipsContextValidation(t *testing.T) {
 	v := ksailvalidator.NewValidatorForKWOK(kwokConfig)
 
 	config := &v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Cluster",
-			APIVersion: "ksail.io/v1alpha1",
-		},
+		Kind:       "Cluster",
+		APIVersion: "ksail.io/v1alpha1",
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:       v1alpha1.DistributionKWOK,

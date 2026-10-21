@@ -12,7 +12,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -285,12 +284,10 @@ func FilterKeysByPublicKeys(privateKeys, publicKeys []string) ([]string, error) 
 // in the given namespace. This shared helper is used by both the Flux and ArgoCD installers.
 func BuildSopsAgeSecret(namespace, ageKey string) *corev1.Secret {
 	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      SopsAgeSecretName,
-			Namespace: namespace,
-			Labels: map[string]string{
-				"app.kubernetes.io/managed-by": "ksail",
-			},
+		Name:      SopsAgeSecretName,
+		Namespace: namespace,
+		Labels: map[string]string{
+			"app.kubernetes.io/managed-by": "ksail",
 		},
 		Type: corev1.SecretTypeOpaque,
 		Data: map[string][]byte{

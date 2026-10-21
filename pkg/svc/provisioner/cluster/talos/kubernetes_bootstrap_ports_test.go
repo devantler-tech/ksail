@@ -25,11 +25,10 @@ func newNestedBootstrapPortReader(
 	client.EXPECT().ContainerInspect(mock.Anything, "control-plane").
 		Return(container.InspectResponse{
 			NetworkSettings: &container.NetworkSettings{
-				NetworkSettingsBase: container.NetworkSettingsBase{ //nolint:staticcheck
-					Ports: nat.PortMap{
-						"50000/tcp": {{HostIP: "0.0.0.0", HostPort: "33333"}},
-						"6443/tcp":  bindings,
-					},
+				//nolint:staticcheck
+				Ports: nat.PortMap{
+					"50000/tcp": {{HostIP: "0.0.0.0", HostPort: "33333"}},
+					"6443/tcp":  bindings,
 				},
 			},
 		}, nil)

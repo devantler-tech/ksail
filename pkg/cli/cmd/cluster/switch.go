@@ -404,13 +404,13 @@ func resolveContextName(
 // stripParenthetical removes a trailing " (<text>)" suffix from input.
 // Returns input unchanged if no such suffix is present.
 func stripParenthetical(input string) string {
-	idx := strings.LastIndex(input, " (")
-	if idx < 0 {
+	before, _, ok := strings.CutLast(input, " (")
+	if !ok {
 		return input
 	}
 
 	if strings.HasSuffix(input, ")") {
-		return input[:idx]
+		return before
 	}
 
 	return input

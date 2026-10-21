@@ -378,16 +378,14 @@ func handleEncryptRunE(cmd *cobra.Command, args []string) error {
 	}
 
 	opts := sopsclient.EncryptOpts{
-		EncryptConfig: sopsclient.EncryptConfig{
-			KeyGroups:      []sops.KeyGroup{},
-			GroupThreshold: 0,
-		},
-		Cipher:        aes.NewCipher(),
-		InputStore:    inputStore,
-		OutputStore:   outputStore,
-		InputPath:     inputPath,
-		ReadFromStdin: false,
-		KeyServices:   []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
+		KeyGroups:      []sops.KeyGroup{},
+		GroupThreshold: 0,
+		Cipher:         aes.NewCipher(),
+		InputStore:     inputStore,
+		OutputStore:    outputStore,
+		InputPath:      inputPath,
+		ReadFromStdin:  false,
+		KeyServices:    []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
 	}
 
 	encryptedData, err := sopsclient.Encrypt(opts)

@@ -51,7 +51,7 @@ func mirrorSelectorLabels() map[string]string {
 // newMirrorDeployment builds a single-container Deployment for the mirror tests.
 func newMirrorDeployment() *appsv1.Deployment {
 	return &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: mirrorTestDeploy, Namespace: mirrorTestNamespace},
+		Name: mirrorTestDeploy, Namespace: mirrorTestNamespace,
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{MatchLabels: mirrorSelectorLabels()},
 			Template: corev1.PodTemplateSpec{
@@ -69,11 +69,9 @@ func newMirrorDeployment() *appsv1.Deployment {
 // the tap into the pod spec, making InjectTap take its reuse path.
 func newMirrorPod(withTapSpec bool) *corev1.Pod {
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      mirrorTestPod,
-			Namespace: mirrorTestNamespace,
-			Labels:    mirrorSelectorLabels(),
-		},
+		Name:      mirrorTestPod,
+		Namespace: mirrorTestNamespace,
+		Labels:    mirrorSelectorLabels(),
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{Name: mirrorTestContainer}},
 		},
@@ -93,9 +91,7 @@ func newMirrorPod(withTapSpec bool) *corev1.Pod {
 	if withTapSpec {
 		pod.Spec.EphemeralContainers = []corev1.EphemeralContainer{
 			{
-				EphemeralContainerCommon: corev1.EphemeralContainerCommon{
-					Name: mirror.TapContainerName,
-				},
+				Name:                mirror.TapContainerName,
 				TargetContainerName: mirrorTestContainer,
 			},
 		}
