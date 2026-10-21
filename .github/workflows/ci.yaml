@@ -240,6 +240,7 @@ jobs:
             # the same reason todos-contract does. TestReleaseConfigFilterCoversTheReleaseFiles
             # fails if a release file is dropped from it.
             release-config:
+              - '.github/scripts/download-go-modules.sh'
               - '.goreleaser.yaml'
               - '.goreleaser.desktop.yaml'
               - '.github/workflows/cd.yaml'
@@ -273,6 +274,7 @@ jobs:
               - '.govulncheck-allow.txt'
             # Release inputs are outside Go's cache and the shared Go source filter.
             release-graph-audit:
+              - '.github/scripts/download-go-modules.sh'
               - '.goreleaser.yaml'
               - '.goreleaser.desktop.yaml'
               - '.github/workflows/cd.yaml'

@@ -391,10 +391,11 @@ func auditedReleaseConfigDigests() map[string]string {
 	return map[string]string{
 		".goreleaser.yaml":                                   "603b04ca07558b8e1acb3d9c4e00e3c49ceaa10ea9f5af0ed2f84f01f96496c2",
 		".goreleaser.desktop.yaml":                           "46eef12c0c592f5fae1a76082d897a1f63099a4a87b268ed7a39629c8e7c4eb6",
-		".github/actions/setup-desktop-build/action.yml":     "09d319886697e84b880a9744cacb0928daa9a6998f24600cf09183e152592c6a",
+		".github/actions/setup-desktop-build/action.yml":     "473bc1c1f3e940ba58a76320cf8b6ff5e798bf5e9cbe68830469640ef1ef7cac",
+		".github/scripts/download-go-modules.sh":             "e5af8edf61a77de4397e952a05b1cc6ca0f83cd848523c4cf6b3aaa2539561fa",
 		"scripts/stage-webui.sh":                             "5b3d7b0fa8b237f77ee9a88e6807e070c1b35c97df3d5f17357b3ecb8b2938a6",
 		".github/actions/free-disk-space/free-disk-space.sh": "2dd12fcf3779137ca1cb5f21194947f6a10d3f94f8fb438a1a29ec9021fbdc30",
-		".github/workflows/cd.yaml#without-uses":             "ec2e457affddc8ceb3628055c23e2b78d1330f352c8a5a8cc1ce5ecf6e055e6f",
+		".github/workflows/cd.yaml#without-uses":             "2c08a70791f069eca0d4705a8908594bf48f15b6cd944304b3612320b5f13a16",
 	}
 }
 
@@ -436,6 +437,7 @@ func releaseConfigDigests(t *testing.T, root string) map[string]string {
 	for _, name := range []string{
 		".goreleaser.yaml", ".goreleaser.desktop.yaml", ".github/actions/setup-desktop-build/action.yml",
 		"scripts/stage-webui.sh",
+		".github/scripts/download-go-modules.sh",
 		".github/actions/free-disk-space/free-disk-space.sh",
 	} {
 		path := filepath.Join(root, name)
