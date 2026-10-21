@@ -389,8 +389,8 @@ func goreleaserCGO(t *testing.T, path string) string {
 //nolint:lll // file-path keys and 64-character SHA-256 digests do not wrap
 func auditedReleaseConfigDigests() map[string]string {
 	return map[string]string{
-		".goreleaser.yaml":                                   "b11880e9d5d5394214848aba6ec5ca3cad3aa045441cfdddb56e726d801bb93c",
-		".goreleaser.desktop.yaml":                           "4ec0043cfe1b36fc1cd7b6c929062a6a41085d2b8d4da425fef5ee70a9d19dcd",
+		".goreleaser.yaml":                                   "b1af79ef53df6f2312993e9f4b5f7057ef70bd7d901ebd68b1b2bcf4213eeafd",
+		".goreleaser.desktop.yaml":                           "f8a40cfdfd23cb96160aa251c9dd293d22f6818b3b67adeeb9973a7811298de8",
 		".github/actions/setup-desktop-build/action.yml":     "473bc1c1f3e940ba58a76320cf8b6ff5e798bf5e9cbe68830469640ef1ef7cac",
 		".github/scripts/download-go-modules.sh":             "e5af8edf61a77de4397e952a05b1cc6ca0f83cd848523c4cf6b3aaa2539561fa",
 		"scripts/stage-webui.sh":                             "5b3d7b0fa8b237f77ee9a88e6807e070c1b35c97df3d5f17357b3ecb8b2938a6",

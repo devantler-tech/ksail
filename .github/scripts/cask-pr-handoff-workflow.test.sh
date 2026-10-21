@@ -504,7 +504,7 @@ assert_contains "if: needs.cask-checkpoint.outputs.cask-publish == 'true'" "${ho
 [[ "$(grep -Fc 'KSAIL_CASK_PUBLISH: ${{ needs.cask-checkpoint.outputs.cask-publish }}' "${cd_workflow}")" == 2 ]] ||
 	fail 'both GoReleaser cask writers must receive the cask order decision'
 for config_name in .goreleaser.yaml .goreleaser.desktop.yaml; do
-	assert_contains 'skip_upload: "{{ if eq (envOrDefault \"KSAIL_CASK_PUBLISH\" \"false\") \"true\" }}false{{ else }}true{{ end }}"' \
+	assert_contains "skip_upload: '{{ if eq (envOrDefault \"KSAIL_CASK_PUBLISH\" \"false\") \"true\" }}false{{ else }}true{{ end }}'" \
 		"${repo_root}/${config_name}" \
 		"${config_name} must upload its cask only when the order decision is exactly true"
 done
