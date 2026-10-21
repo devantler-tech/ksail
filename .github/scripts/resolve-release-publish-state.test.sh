@@ -252,6 +252,60 @@ fi
 pass_count=$((pass_count + 1))
 printf 'PASS: workflow-release-lookups-paginate\n'
 
+# Execute the actual publication script at its GitHub API boundary. Omitting make_latest lets
+# GitHub's default promote an older release that finishes after a newer one (#7898).
+node - "${publish_block}" <<'NODE'
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+const workflow = fs.readFileSync(process.argv[2], 'utf8');
+const scripts = [...workflow.matchAll(/^          script: \|\n((?: {12}.*\n|\n)+)/gm)];
+assert.equal(scripts.length, 1, 'extract exactly one publish script');
+const script = scripts[0][1].replace(/^ {12}/gm, '');
+const publish = new AsyncFunction('github', 'core', 'context', 'process', script);
+
+async function run(tag, draft, others = []) {
+  const version = tag.replace(/^v/, '');
+  const release = {
+    id: 42, tag_name: tag, draft,
+    assets: [
+      {name: 'install.sh', size: 10},
+      {name: `ksail_${version}_checksums.txt`, size: 10},
+    ],
+  };
+  const updates = [];
+  const github = {
+    paginate: async () => [...others, release],
+    rest: {repos: {
+      listReleases() {},
+      updateRelease: async request => updates.push(request),
+    }},
+  };
+  await publish(github, {setFailed: message => assert.fail(message)},
+    {repo: {owner: 'devantler-tech', repo: 'ksail'}}, {env: {RELEASE_TAG: tag}});
+  return updates;
+}
+
+(async () => {
+  for (const [tag, others] of [
+    ['v7.204.1', [{id: 43, tag_name: 'v7.204.4', draft: false}]],
+    ['v7.204.5', [{id: 43, tag_name: 'v7.204.4', draft: false}]],
+    ['v7.205.0-rc.1', [{id: 43, tag_name: 'v7.204.4', draft: false}]],
+  ]) {
+    const updates = await run(tag, true, others);
+    assert.equal(updates.length, 1, `${tag}: publish exactly the selected draft`);
+    assert.deepEqual(updates[0], {
+      owner: 'devantler-tech', repo: 'ksail', release_id: 42,
+      draft: false, make_latest: 'legacy',
+    }, `${tag}: delegate latest selection to GitHub's version-aware policy`);
+  }
+  assert.deepEqual(await run('v7.204.1', false), [],
+    'an already-published immutable release remains a no-op');
+  console.log('PASS: workflow-publication-preserves-version-aware-latest-selection');
+})().catch(error => { console.error(error); process.exitCode = 1; });
+NODE
+pass_count=$((pass_count + 1))
+
 # CI must execute this suite, not only lint it: path filter, shellcheck, and the run line.
 ci_workflow="${repo_root}/.github/workflows/ci.yaml"
 executed="$(grep -cxE '[[:space:]]*\.github/scripts/resolve-release-publish-state\.test\.sh' "${ci_workflow}" || true)"
