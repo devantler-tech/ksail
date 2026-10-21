@@ -62,6 +62,10 @@ archives:
 
 homebrew_casks:
   - name: ksail-desktop
+    # Upload only when the CD cask-checkpoint job found this tag at least as new as every current
+    # cask and the latest release (#7898). Anything else, including an unset value, keeps the cask
+    # in dist/ so an older or prerelease tag can never move the shared cask pointer.
+    skip_upload: '{{ if eq (envOrDefault "KSAIL_CASK_PUBLISH" "false") "true" }}false{{ else }}true{{ end }}'
     ids: [ksail-desktop]
     # The release pipe is disabled (see above), so GoReleaser refuses to derive the default cask
     # download URL ("release is disabled, cannot use default url_template"). Set it explicitly to the

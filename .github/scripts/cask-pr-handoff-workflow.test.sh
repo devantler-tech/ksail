@@ -483,4 +483,32 @@ assert_contains "- '.goreleaser.yaml'" "${ci_workflow}" \
 assert_contains "- '.goreleaser.desktop.yaml'" "${ci_workflow}" \
 	'CI paths filter must trigger the handoff job on desktop GoReleaser config changes'
 
+# An older or prerelease tag must never move a shared cask pointer (#7898). The order decision is
+# taken before anything is written, and each writer consumes it fail-closed.
+checkpoint_block="${tmp_dir}/cask-checkpoint.yaml"
+awk '
+  /^  cask-checkpoint:/ { in_checkpoint = 1; print; next }
+  in_checkpoint && /^  [a-z][a-z-]*:/ { exit }
+  in_checkpoint { print }
+' "${cd_workflow}" >"${checkpoint_block}"
+assert_contains 'cask-publish: ${{ steps.cask-order.outputs.publish }}' "${checkpoint_block}" \
+	'cask-checkpoint must export the cask order decision'
+assert_contains '.github/scripts/resolve-cask-publication.sh' "${checkpoint_block}" \
+	'cask-checkpoint must run the cask order resolver'
+[[ "$(grep -n 'resolve-cask-publication.sh' "${checkpoint_block}" | cut -d: -f1)" -lt "$(grep -n 'redraft-evergreen-cask-prs.sh' "${checkpoint_block}" | cut -d: -f1)" ]] ||
+	fail 'the cask order decision must be taken before any evergreen PR is re-drafted'
+assert_contains "if: steps.cask-order.outputs.publish == 'true'" "${checkpoint_block}" \
+	'an older tag must not re-draft the evergreen cask PRs it will never deliver'
+assert_contains "if: needs.cask-checkpoint.outputs.cask-publish == 'true'" "${homebrew_block}" \
+	'the cask delivery job must run only when this tag may move the casks'
+[[ "$(grep -Fc 'KSAIL_CASK_PUBLISH: ${{ needs.cask-checkpoint.outputs.cask-publish }}' "${cd_workflow}")" == 2 ]] ||
+	fail 'both GoReleaser cask writers must receive the cask order decision'
+for config_name in .goreleaser.yaml .goreleaser.desktop.yaml; do
+	assert_contains "skip_upload: '{{ if eq (envOrDefault \"KSAIL_CASK_PUBLISH\" \"false\") \"true\" }}false{{ else }}true{{ end }}'" \
+		"${repo_root}/${config_name}" \
+		"${config_name} must upload its cask only when the order decision is exactly true"
+done
+assert_contains "- '.github/scripts/resolve-cask-publication.sh'" "${ci_workflow}" \
+	'CI paths filter must trigger the handoff job on cask order resolver changes'
+
 printf 'Cask PR handoff workflow contract passed.\n'

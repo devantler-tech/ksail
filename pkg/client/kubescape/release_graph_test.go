@@ -389,13 +389,13 @@ func goreleaserCGO(t *testing.T, path string) string {
 //nolint:lll // file-path keys and 64-character SHA-256 digests do not wrap
 func auditedReleaseConfigDigests() map[string]string {
 	return map[string]string{
-		".goreleaser.yaml":                                   "603b04ca07558b8e1acb3d9c4e00e3c49ceaa10ea9f5af0ed2f84f01f96496c2",
-		".goreleaser.desktop.yaml":                           "46eef12c0c592f5fae1a76082d897a1f63099a4a87b268ed7a39629c8e7c4eb6",
+		".goreleaser.yaml":                                   "b1af79ef53df6f2312993e9f4b5f7057ef70bd7d901ebd68b1b2bcf4213eeafd",
+		".goreleaser.desktop.yaml":                           "f8a40cfdfd23cb96160aa251c9dd293d22f6818b3b67adeeb9973a7811298de8",
 		".github/actions/setup-desktop-build/action.yml":     "473bc1c1f3e940ba58a76320cf8b6ff5e798bf5e9cbe68830469640ef1ef7cac",
 		".github/scripts/download-go-modules.sh":             "e5af8edf61a77de4397e952a05b1cc6ca0f83cd848523c4cf6b3aaa2539561fa",
 		"scripts/stage-webui.sh":                             "5b3d7b0fa8b237f77ee9a88e6807e070c1b35c97df3d5f17357b3ecb8b2938a6",
 		".github/actions/free-disk-space/free-disk-space.sh": "2dd12fcf3779137ca1cb5f21194947f6a10d3f94f8fb438a1a29ec9021fbdc30",
-		".github/workflows/cd.yaml#without-uses":             "5f685759be3711e90891686665ee8632858d85bca8c8d6bc7a1f721f44b993cf",
+		".github/workflows/cd.yaml#without-uses":             "aac86281d6787e7ef08dfdfe2ef8549364a8813d8333c534a0bc79ffc5272957",
 	}
 }
 

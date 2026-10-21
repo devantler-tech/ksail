@@ -39,6 +39,10 @@ archives:
 
 homebrew_casks:
   - name: ksail
+    # Upload only when the CD cask-checkpoint job found this tag at least as new as every current
+    # cask and the latest release (#7898). Anything else, including an unset value, keeps the cask
+    # in dist/ so an older or prerelease tag can never move the shared cask pointer.
+    skip_upload: '{{ if eq (envOrDefault "KSAIL_CASK_PUBLISH" "false") "true" }}false{{ else }}true{{ end }}'
     # The download URL host (github.com) differs from the homepage host
     # (ksail.devantler.tech), so `brew audit --strict` requires the URL to be
     # marked `verified:` with a trusted prefix. Applied to the default url_template.

@@ -410,6 +410,8 @@ jobs:
               - '.github/scripts/find-merged-cask-pr-handoff.test.sh'
               - '.github/scripts/redraft-evergreen-cask-prs.sh'
               - '.github/scripts/redraft-evergreen-cask-prs.test.sh'
+              - '.github/scripts/resolve-cask-publication.sh'
+              - '.github/scripts/resolve-cask-publication.test.sh'
               - '.github/scripts/resolve-release-publish-state.sh'
               - '.github/scripts/resolve-release-publish-state.test.sh'
               - '.github/scripts/style-clean-cask-branch.sh'
@@ -623,6 +625,8 @@ jobs:
             .github/scripts/find-merged-cask-pr-handoff.test.sh \
             .github/scripts/redraft-evergreen-cask-prs.sh \
             .github/scripts/redraft-evergreen-cask-prs.test.sh \
+            .github/scripts/resolve-cask-publication.sh \
+            .github/scripts/resolve-cask-publication.test.sh \
             .github/scripts/resolve-release-publish-state.sh \
             .github/scripts/resolve-release-publish-state.test.sh \
             .github/scripts/style-clean-cask-branch.sh \
@@ -638,6 +642,7 @@ jobs:
           .github/scripts/finish-cask-pr-handoff.test.sh
           .github/scripts/find-merged-cask-pr-handoff.test.sh
           .github/scripts/redraft-evergreen-cask-prs.test.sh
+          .github/scripts/resolve-cask-publication.test.sh
           .github/scripts/resolve-release-publish-state.test.sh
           .github/scripts/style-clean-cask-branch.test.sh
           .github/scripts/upload-release-assets.test.sh

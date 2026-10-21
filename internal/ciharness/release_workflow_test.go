@@ -57,14 +57,19 @@ func TestReleaseJobsRequireValidatedRef(t *testing.T) {
 			assert.True(t, releaseDependsOnValidation(jobs, name, map[string]bool{}),
 				"release job must be downstream of ref validation")
 
-			if name == "cleanup-failed-release" {
+			switch name {
+			case "cleanup-failed-release":
 				assert.Contains(t, job.Needs, "validate-release-ref")
 				assert.Contains(t, job.Needs, "publish-release")
 				// This approved condition allows cleanup after a valid release fails,
 				// but never lets always() delete a ref that failed validation.
 				assert.Equal(t, "always() && needs.publish-release.result != 'success' && "+
 					"needs.validate-release-ref.result == 'success'", job.If)
-			} else {
+			case "homebrew":
+				// A condition without a status function keeps GitHub's implicit success() gate,
+				// so this approved condition only narrows delivery to tags allowed to move the casks.
+				assert.Equal(t, "needs.cask-checkpoint.outputs.cask-publish == 'true'", job.If)
+			default:
 				assert.Empty(t, job.If,
 					"release jobs must retain the default success dependency gate")
 			}
