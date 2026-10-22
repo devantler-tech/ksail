@@ -122,38 +122,44 @@ func TestCiliumDispositionRejectsUnauditedGraph(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			packages := ciliumGraphFixture()
-
-			switch name {
-			case "controller":
-				packages = append(
-					packages,
-					goListPackage{ImportPath: ciliumModulePath + "/operator/pkg/gateway-api"},
-				)
-			case "version":
-				packages[0].Module.Version = "v1.20.4"
-			case "previous-version":
-				packages[0].Module.Version = "v1.20.2"
-			case "replacement":
-				packages[0].Module.Replace = &goListModule{
-					Path:    "example.test/cilium",
-					Version: "v1.20.3",
-				}
-			case "missing-module":
-				packages[0].Module = nil
-			case "wrong-module":
-				packages[0].Module.Path = "example.test/cilium"
-			case "empty":
-				packages = nil
-			case "partial":
-				packages = packages[:1]
-			}
+			packages := unauditedCiliumGraphFixture(name)
 
 			if failure := validateCiliumLinkedPackages(packages); failure == "" {
 				t.Fatal("unaudited graph must invalidate the advisory disposition")
 			}
 		})
 	}
+}
+
+func unauditedCiliumGraphFixture(name string) []goListPackage {
+	packages := ciliumGraphFixture()
+
+	switch name {
+	case "controller":
+		packages = append(
+			packages,
+			goListPackage{ImportPath: ciliumModulePath + "/operator/pkg/gateway-api"},
+		)
+	case "version":
+		packages[0].Module.Version = "v1.20.4"
+	case "previous-version":
+		packages[0].Module.Version = "v1.20.2"
+	case "replacement":
+		packages[0].Module.Replace = &goListModule{
+			Path:    "example.test/cilium",
+			Version: "v1.20.3",
+		}
+	case "missing-module":
+		packages[0].Module = nil
+	case "wrong-module":
+		packages[0].Module.Path = "example.test/cilium"
+	case "empty":
+		packages = nil
+	case "partial":
+		packages = packages[:1]
+	}
+
+	return packages
 }
 
 func TestCiliumDispositionAcceptsCompleteAuditedGraph(t *testing.T) {
