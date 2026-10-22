@@ -11,7 +11,7 @@ import (
 const ciliumModulePath = "github.com/cilium/cilium"
 
 // GO-2026-6596 concerns Cilium's HTTP route controller. The corrected Go record
-// excludes KSail's selected v1.20.2, so its exception has been removed (#7439).
+// excludes KSail's selected v1.20.3, whose complete graph is assessed in #7940.
 // Retain the audited Hubble API and label-utility graph, excluding the controller.
 // Any new package, changed version or replacement requires another assessment.
 func TestCiliumHTTPRouteControllerStaysUnlinked(t *testing.T) {
@@ -88,7 +88,7 @@ func validateCiliumLinkedPackages(packages []goListPackage) string {
 
 		if !ciliumModuleIsAudited(pkg.Module) {
 			return fmt.Sprintf(
-				"unaudited module for %q; require unreplaced Cilium v1.20.2",
+				"unaudited module for %q; require unreplaced Cilium v1.20.3",
 				pkg.ImportPath,
 			)
 		}
@@ -110,14 +110,14 @@ func validateCiliumLinkedPackages(packages []goListPackage) string {
 
 func ciliumModuleIsAudited(module *goListModule) bool {
 	return module != nil && module.Path == ciliumModulePath &&
-		module.Version == "v1.20.2" && module.Replace == nil
+		module.Version == "v1.20.3" && module.Replace == nil
 }
 
 func TestCiliumDispositionRejectsUnauditedGraph(t *testing.T) {
 	t.Parallel()
 
 	for _, name := range []string{
-		"controller", "version", "replacement", "missing-module", "wrong-module", "empty", "partial",
+		"controller", "version", "previous-version", "replacement", "missing-module", "wrong-module", "empty", "partial",
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -131,11 +131,13 @@ func TestCiliumDispositionRejectsUnauditedGraph(t *testing.T) {
 					goListPackage{ImportPath: ciliumModulePath + "/operator/pkg/gateway-api"},
 				)
 			case "version":
-				packages[0].Module.Version = "v1.20.3"
+				packages[0].Module.Version = "v1.20.4"
+			case "previous-version":
+				packages[0].Module.Version = "v1.20.2"
 			case "replacement":
 				packages[0].Module.Replace = &goListModule{
 					Path:    "example.test/cilium",
-					Version: "v1.20.2",
+					Version: "v1.20.3",
 				}
 			case "missing-module":
 				packages[0].Module = nil
@@ -176,7 +178,7 @@ func ciliumGraphFixture() []goListPackage {
 	for _, name := range names {
 		packages = append(packages, goListPackage{
 			ImportPath: ciliumModulePath + "/" + name,
-			Module:     &goListModule{Path: ciliumModulePath, Version: "v1.20.2"},
+			Module:     &goListModule{Path: ciliumModulePath, Version: "v1.20.3"},
 		})
 	}
 
