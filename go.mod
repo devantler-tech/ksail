@@ -30,7 +30,7 @@ require (
 	github.com/charmbracelet/glamour v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/charmbracelet/x/ansi v0.11.7
-	github.com/cilium/cilium v1.20.2
+	github.com/cilium/cilium v1.20.3
 	github.com/cli/go-gh/v2 v2.16.2
 	github.com/coder/websocket v1.8.15
 	github.com/containerd/errdefs v1.0.0
