@@ -2417,8 +2417,12 @@ jobs:
       - name: 🧪 Test
         run: go test ./... -count=1
   test-cask-rendering:
-    name: 🍺 Test Generated Cask Loading
-    runs-on: macos-latest
+    name: 🍺 Test Generated Cask Loading (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     needs: [changes]
     if: needs.changes.outputs.release-config == 'true'
