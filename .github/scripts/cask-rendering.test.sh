@@ -19,6 +19,7 @@ export XDG_CONFIG_HOME="$work/config"
 tap="agentic-validation/cask-render-$$-${RANDOM}"
 tap_added=false
 completed=false
+# cleanup retires the temporary tap and fixtures while preserving any failure status.
 cleanup() {
 	result=$?
 	if ! "$completed" && [[ "$result" -eq 0 ]]; then result=1; fi
