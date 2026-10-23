@@ -48,7 +48,7 @@ require (
 	github.com/getsops/sops/v3 v3.13.3
 	github.com/github/copilot-sdk/go v1.0.22
 	github.com/gkampitakis/go-snaps v0.5.23
-	github.com/go-jose/go-jose/v4 v4.1.5
+	github.com/go-jose/go-jose/v4 v4.1.6
 	github.com/go-logr/logr v1.4.4
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/gofrs/flock v0.13.1
