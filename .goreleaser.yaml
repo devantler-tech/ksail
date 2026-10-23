@@ -74,21 +74,11 @@ homebrew_casks:
     # Conventional commit-message ruleset that rejects GoReleaser's default ("Brew cask update for
     # ..."). Match the title the cd.yaml handoff normalizes to (#6975).
     commit_msg_template: "chore(cask): update {{ .ProjectName }} to {{ .Tag }}"
-    # macOS builds are Apple Silicon only, so the template emits no macOS-Intel `url`. Homebrew 6 loads
-    # every OS and architecture when adding a tap and refuses the whole tap if any variant lacks a
-    # `url` (#7034). The `on_intel` branch gives Intel Macs the Apple Silicon download and refuses the
-    # install by architecture, so the tap loads everywhere and Intel users get a clear message.
-    # `.github/scripts/validate-cask-pr-handoff.sh` accepts its `sha256 :no_check` only because the
-    # same url is pinned to a verified digest in the Apple Silicon branch.
+    # GoReleaser 2.19 emits the macOS URL/checksum for both architectures and an arm64 dependency.
+    # An extra Intel fallback would override that checksum twice (#7943). Keep the generated
+    # checksum and architecture refusal; cask-rendering.test.sh loads every host variant.
     # Escape Homebrew's install-time token through GoReleaser's template pass.
     custom_block: |
-      on_macos do
-        on_intel do
-          sha256 :no_check
-          url "https://github.com/devantler-tech/ksail/releases/download/v#{version}/ksail_#{version}_darwin_arm64.tar.gz"
-          depends_on arch: :arm64
-        end
-      end
       postflight_steps do
         on_macos do
           run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/ksail"]

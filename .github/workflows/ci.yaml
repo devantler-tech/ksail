@@ -241,6 +241,7 @@ jobs:
             # fails if a release file is dropped from it.
             release-config:
               - '.github/scripts/download-go-modules.sh'
+              - '.github/scripts/cask-rendering.test.sh'
               - '.goreleaser.yaml'
               - '.goreleaser.desktop.yaml'
               - '.github/workflows/cd.yaml'
@@ -2415,6 +2416,41 @@ jobs:
       # so a cached PASS from an earlier run would be replayed over the changed configuration.
       - name: 🧪 Test
         run: go test ./... -count=1
+  test-cask-rendering:
+    name: 🍺 Test Generated Cask Loading (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    needs: [changes]
+    if: needs.changes.outputs.release-config == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: ⚙️ Setup GoReleaser
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          install-only: true
+      - name: ⚙️ Install YAML tooling
+        run: brew list yq >/dev/null 2>&1 || brew install yq
+      - name: 🍺 Render, style and load every cask platform
+        run: bash .github/scripts/cask-rendering.test.sh
+
   release-graph-audit:
     name: 🔐 Audit Shipped Dependency Graphs
     runs-on: ubuntu-latest
@@ -2639,6 +2675,7 @@ jobs:
         verify-todos-workflow-contract,
         verify-bash-32-workflow-contract,
         test-release-config,
+        test-cask-rendering,
         release-graph-audit,
         cask-pr-handoff,
         eks-smoke-scripts,
@@ -2681,6 +2718,7 @@ jobs:
             ${{ needs.verify-todos-workflow-contract.result }}
             ${{ needs.verify-bash-32-workflow-contract.result }}
             ${{ needs.test-release-config.result }}
+            ${{ needs.test-cask-rendering.result }}
             ${{ needs.release-graph-audit.result }}
             ${{ needs.cask-pr-handoff.result }}
             ${{ needs.eks-smoke-scripts.result }}
