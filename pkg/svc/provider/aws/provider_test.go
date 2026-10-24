@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
@@ -714,21 +715,114 @@ func TestStartNodesWithoutSnapshotPreflightsEveryNodegroup(t *testing.T) {
 	assert.Empty(t, scaleCalls(runner.calls))
 }
 
+// newProviderWithReadback builds a provider whose post-start readback polls quickly, so tests can
+// exercise a lagging or never-converging EKS scaling update without waiting real minutes.
+func newProviderWithReadback(
+	t *testing.T,
+	responses map[string][]response,
+	interval, timeout time.Duration,
+) (*aws.Provider, *scriptedRunner) {
+	t.Helper()
+
+	runner := &scriptedRunner{t: t, responses: responses}
+
+	client := eksctlclient.NewClient(
+		eksctlclient.WithBinary("eksctl-under-test"),
+		eksctlclient.WithRunner(runner),
+	)
+
+	prov, err := aws.NewProvider(
+		client,
+		"us-east-1",
+		aws.WithClusterDescriber(
+			&fakeDescriber{cluster: &ekstypes.Cluster{Endpoint: awssdk.String(testEndpoint)}},
+		),
+		aws.WithNodegroupRestoreReadback(interval, timeout),
+	)
+	require.NoError(t, err)
+
+	return prov, runner
+}
+
+func stoppedReadbacks(count int) []response {
+	readbacks := make([]response, 0, count)
+	for range count {
+		readbacks = append(readbacks, response{stdout: nodegroupJSON(0, 0)})
+	}
+
+	return readbacks
+}
+
+// TestStartNodesRetainsCapacityStateUntilReadbackMatches keeps the fail-closed half: when EKS never
+// reports the saved capacity within the deadline, start fails, names both value sets, and keeps
+// the saved state for a retry.
 func TestStartNodesRetainsCapacityStateUntilReadbackMatches(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	saveNodegroupState(t, "demo", "us-east-1", 3, 2, 5)
 
-	prov, _ := newProvider(t, map[string][]response{
-		"get nodegroup": {
-			{stdout: nodegroupJSON(0, 0)},
-			{stdout: nodegroupJSON(0, 0)},
-		},
+	prov, _ := newProviderWithReadback(t, map[string][]response{
+		"get nodegroup":   stoppedReadbacks(20),
 		"scale nodegroup": {{}},
-	})
+	}, 20*time.Millisecond, 50*time.Millisecond)
 
 	err := prov.StartNodes(t.Context(), "demo")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not restored")
+	assert.Contains(t, err.Error(), "saved desired/min/max 3/2/5, live 0/0/5")
+
+	_, loadErr := state.LoadEKSNodegroupState("demo", "us-east-1")
+	require.NoError(t, loadErr)
+}
+
+// TestStartNodesWaitsForLaggingReadback covers the real-cluster failure behind ksail#7851: EKS
+// applies a scaling update asynchronously, so the first reads after the restore request can still
+// show the stopped group. Start must keep reading until the saved capacity appears, then clear the
+// saved state.
+func TestStartNodesWaitsForLaggingReadback(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	saveNodegroupStateAt(t, "demo", "us-east-1", "us-east-1", 3, 2, 5)
+
+	readbacks := append(stoppedReadbacks(3), response{stdout: nodegroupJSON(3, 2)})
+
+	prov, runner := newProviderWithReadback(t, map[string][]response{
+		"get nodegroup":   readbacks,
+		"scale nodegroup": {{}},
+	}, time.Millisecond, 5*time.Second)
+
+	require.NoError(t, prov.StartNodes(t.Context(), "demo"))
+	assert.Len(t, scaleCalls(runner.calls), 1, "the restore request is sent exactly once")
+
+	_, err := state.LoadEKSNodegroupState("demo", "us-east-1")
+	require.ErrorIs(t, err, state.ErrEKSNodegroupStateNotFound)
+}
+
+// TestStartNodesFailsFastOnNonPendingReadbackDrift keeps every drift other than "still stopped"
+// fatal on the first read: a group at a size that is neither saved nor stopped is never waited on.
+func TestStartNodesFailsFastOnNonPendingReadbackDrift(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	saveNodegroupStateAt(t, "demo", "us-east-1", "us-east-1", 3, 2, 5)
+
+	prov, runner := newProviderWithReadback(t, map[string][]response{
+		"get nodegroup": {
+			{stdout: nodegroupJSON(0, 0)},
+			{stdout: nodegroupJSON(1, 1)},
+		},
+		"scale nodegroup": {{}},
+	}, time.Millisecond, 5*time.Second)
+
+	err := prov.StartNodes(t.Context(), "demo")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "neither saved nor safely stopped")
+
+	reads := 0
+
+	for _, call := range runner.calls {
+		if len(call) >= 2 && call[0] == "get" && call[1] == nodegroupSubcommand {
+			reads++
+		}
+	}
+
+	assert.Equal(t, 2, reads, "a non-pending drift must not be retried")
 
 	_, loadErr := state.LoadEKSNodegroupState("demo", "us-east-1")
 	require.NoError(t, loadErr)
