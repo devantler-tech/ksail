@@ -44,8 +44,7 @@ There is no offline phase any more: manifest generation, the `open mcp --help` s
 
 - Automatic Kubernetes diagnostic output on failure
 - **Cluster Switch** (switch kubeconfig context) — a normal test step placed after the debug step; it runs only when everything before it passed
-- Diagnostics and logs are uploaded as artifacts on failure (unless `upload-artifacts` is `"false"`)
-- The autoscaler inventory trial (`test-autoscaler-inventory`) runs after this phase, so a failure in that trial is not covered by the diagnostics above; read its output in the job log
+- Diagnostics and logs are uploaded as artifacts on failure (unless `upload-artifacts` is `"false"`). Every test phase, the autoscaler inventory trial included, runs before this capture, so any failing phase leaves the same diagnostics
 
 ### Phase 7 — Cleanup
 
