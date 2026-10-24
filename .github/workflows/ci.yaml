@@ -358,10 +358,12 @@ jobs:
               - 'vsce/**'
               - '.github/workflows/ci.yaml'
             docs:
-              # Matches docs content (MDX, Astro, config) but not Go generators.
+              # Matches docs content (MDX, Astro, config) and the docs' own tests,
+              # which only the docs build runs, but not Go generators.
               # Avoid negative patterns — see system-test comment above.
               - 'docs/src/**'
               - 'docs/public/**'
+              - 'docs/tests/**'
               - 'docs/astro.config.*'
               - 'docs/tsconfig.json'
               - 'docs/package*.json'
