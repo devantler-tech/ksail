@@ -213,6 +213,10 @@ jobs:
               - '.github/fixtures/workflow-run-cleanup/**'
               - '.github/fixtures/talos-schematic-trial.yaml'
               - 'internal/ciharness/**'
+              # TestDocsFilterSelectsEveryDocsTest reads the docs tests and the scripts that
+              # run them, so renaming or adding one re-checks the docs filter.
+              - 'docs/tests/**'
+              - 'docs/package.json'
               # Authenticate every copied byte, including embedded data and
               # metadata edits that the shared Go source filter does not select.
               - 'third_party/cel-go/**'

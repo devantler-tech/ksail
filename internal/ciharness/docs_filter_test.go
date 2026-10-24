@@ -1,10 +1,12 @@
 package ciharness_test
 
 import (
+	"encoding/json"
 	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -16,9 +18,8 @@ import (
 // docsTestsPattern is the docs filter entry that selects the documentation's own tests.
 const docsTestsPattern = "docs/tests/**"
 
-// knownDocsTestPath guards discovery: the docs build runs this test today, so a walk that
-// does not find it has looked in the wrong place.
-const knownDocsTestPath = "docs/tests/" + "dependency-compatibility.test.mjs"
+// docsScriptTestPath matches a test file a docs npm script runs, relative to docs/.
+var docsScriptTestPath = regexp.MustCompile(`tests/[^\s"'&|;]+`)
 
 // TestDocsFilterSelectsEveryDocsTest keeps the docs build selected for a change to any
 // documentation test.
@@ -32,9 +33,12 @@ func TestDocsFilterSelectsEveryDocsTest(t *testing.T) {
 
 	patterns := changesFilterPatterns(t, "docs")
 	tests := docsTestPaths(t)
+	runByBuild := docsBuildTestPaths(t)
 
-	require.Contains(t, tests, knownDocsTestPath,
-		"docs test discovery must find the tests the docs build is known to run")
+	for _, test := range runByBuild {
+		require.Containsf(t, tests, test,
+			"docs/package.json runs %s, so docs test discovery must find it", test)
+	}
 
 	var unselected []string
 
@@ -59,9 +63,34 @@ func TestDocsFilterSelectsEveryDocsTest(t *testing.T) {
 	})
 	assert.False(
 		t,
-		pathFilterMatches(t, withoutTests, knownDocsTestPath),
+		pathFilterMatches(t, withoutTests, runByBuild[0]),
 		"negative control: without the docs tests pattern a docs test must be unselected",
 	)
+}
+
+// docsBuildTestPaths returns the repository-relative test files docs/package.json's scripts
+// run, so discovery is checked against what the docs build actually executes.
+func docsBuildTestPaths(t *testing.T) []string {
+	t.Helper()
+
+	var manifest struct {
+		Scripts map[string]string `json:"scripts"`
+	}
+
+	require.NoError(t, json.Unmarshal(readRepoFile(t, "docs/package.json"), &manifest))
+
+	var paths []string
+
+	for _, script := range manifest.Scripts {
+		for _, match := range docsScriptTestPath.FindAllString(script, -1) {
+			paths = append(paths, "docs/"+match)
+		}
+	}
+
+	require.NotEmpty(t, paths, "docs/package.json must run at least one docs test")
+	slices.Sort(paths)
+
+	return slices.Compact(paths)
 }
 
 // TestPathFilterMatches pins the matcher's reading of the two pattern shapes ci.yaml's
