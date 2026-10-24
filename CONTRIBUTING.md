@@ -315,7 +315,7 @@ The KSail operator does not use Kubebuilder's project layout: it starts through 
 3. **Scheme.** A kind added to an existing API package is registered through that package's `AddToScheme`. A new API package must also be added to `newScheme` in `pkg/operator/manager.go`.
 4. **Controller.** Put the reconciler in `internal/controller/` with a `SetupWithManager` method, and call it from `setupManager` in `pkg/operator/manager.go`.
 5. **RBAC.** Update `charts/ksail-operator/templates/rbac.yaml` by hand. The `+kubebuilder:rbac` markers in `internal/controller` record the permissions a controller needs, but nothing generates RBAC from them, so change the chart's rules in the same pull request as any marker.
-6. **Tests.** Test the controller with testify (`assert` and `require`) and controller-runtime's fake client, following `internal/controller/cluster_controller_test.go`. KSail does not use Ginkgo or Gomega.
+6. **Tests.** Test the controller with testify (`assert` and `require`) and controller-runtime's fake client, following `internal/controller/cluster_controller_test.go`. KSail's own tests, the operator's included, do not use Ginkgo or Gomega; only vendored code under `third_party/` does.
 
 Revisit this checklist in favour of a KSail-owned scaffold once a second operator API is actually planned.
 
