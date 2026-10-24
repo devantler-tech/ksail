@@ -3,6 +3,7 @@ package kubescape_test
 import (
 	"context"
 	"errors"
+	"math"
 	"strings"
 	"testing"
 
@@ -159,17 +160,13 @@ func TestScanDirectoryNilOptionsCancelledContext(t *testing.T) {
 
 	client := kubescape.NewClient()
 
-	result, err := client.ScanDirectory(ctx, testPath, nil)
+	err := client.ScanDirectory(ctx, testPath, nil)
 	if err == nil {
 		t.Fatal("expected error from cancelled context, got nil")
 	}
 
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("expected context.Canceled, got %v", err)
-	}
-
-	if result != nil {
-		t.Errorf("expected no result from a cancelled scan, got %+v", result)
 	}
 }
 
@@ -183,7 +180,7 @@ func TestScanDirectoryCancelledContext(t *testing.T) {
 
 	client := kubescape.NewClient()
 
-	result, err := client.ScanDirectory(
+	err := client.ScanDirectory(
 		ctx,
 		testPath,
 		&kubescape.ScanOptions{Frameworks: []string{testFwNSA}},
@@ -195,6 +192,22 @@ func TestScanDirectoryCancelledContext(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("expected context.Canceled, got %v", err)
 	}
+}
+
+// TestScanDirectoryWithResultCancelledContext asserts the context guard fires
+// for the result-returning scan too, and that no result accompanies the error.
+func TestScanDirectoryWithResultCancelledContext(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	client := kubescape.NewClient()
+
+	result, err := client.ScanDirectoryWithResult(ctx, testPath, nil)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
 
 	if result != nil {
 		t.Errorf("expected no result from a cancelled scan, got %+v", result)
@@ -202,8 +215,9 @@ func TestScanDirectoryCancelledContext(t *testing.T) {
 }
 
 // TestCheckComplianceThreshold pins the compliance gate: a score below a
-// positive threshold fails with both values in the message, and a score at or
-// above it, or a zero (disabled) threshold, passes.
+// positive threshold, or a score that is not a number, fails with both values
+// in the message; a score at or above it, or a zero (disabled) threshold,
+// passes.
 func TestCheckComplianceThreshold(t *testing.T) {
 	t.Parallel()
 
@@ -218,6 +232,12 @@ func TestCheckComplianceThreshold(t *testing.T) {
 			score:     94.99,
 			threshold: 100,
 			wantErr:   "compliance score 94.99% is below threshold 100.00%",
+		},
+		{
+			name:      "unmeasured score fails",
+			score:     float32(math.NaN()),
+			threshold: 85,
+			wantErr:   "compliance score NaN% is below threshold 85.00%",
 		},
 		{name: "at threshold passes", score: 85, threshold: 85},
 		{name: "above threshold passes", score: 98.87, threshold: 85},

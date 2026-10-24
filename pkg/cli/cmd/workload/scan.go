@@ -218,7 +218,7 @@ func runScanCmdInner(
 		Exceptions:          settings.exceptions,
 	}
 
-	result, err := kubescapeClient.ScanDirectory(ctx, scanPath, scanOpts)
+	result, err := kubescapeClient.ScanDirectoryWithResult(ctx, scanPath, scanOpts)
 	if err != nil {
 		return fmt.Errorf("scan directory: %w", err)
 	}
@@ -231,8 +231,10 @@ func runScanCmdInner(
 // writeComplianceScore reports the compliance score of a scan that passed, so a
 // CI log shows the score a --compliance-threshold can be raised to and gradual
 // posture drift stays visible without a failing run. A failing gate reports the
-// score in its error instead, so every run ends with exactly one score line. It
-// writes to stderr so the report on stdout (json, sarif, junit) stays parseable.
+// score in its error instead, so a run states its score once either way. With
+// --ephemeral the line covers the offline scan; the admission checks that follow
+// report their own result. It writes to stderr so a report on stdout (json,
+// sarif, junit) stays parseable.
 func writeComplianceScore(writer io.Writer, score, threshold float32) {
 	if threshold > 0 {
 		notify.Successf(writer, "compliance score %.2f%% (threshold %.2f%%)", score, threshold)
