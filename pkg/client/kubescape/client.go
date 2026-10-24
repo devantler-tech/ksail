@@ -76,15 +76,28 @@ func buildScanInfo(path string, opts *ScanOptions) *cautils.ScanInfo {
 	return scanInfo
 }
 
+// ScanResult is the outcome of a scan that passed its compliance gate.
+type ScanResult struct {
+	// ComplianceScore is the measured compliance score (0-100) across the
+	// scanned frameworks.
+	ComplianceScore float32
+}
+
 // ScanDirectory scans Kubernetes manifests in the given directory path
-// against the configured security frameworks.
-func (c *Client) ScanDirectory(ctx context.Context, path string, opts *ScanOptions) error {
+// against the configured security frameworks and returns the measured
+// compliance score. A score below a positive ComplianceThreshold fails the
+// scan with an error that states both values.
+func (c *Client) ScanDirectory(
+	ctx context.Context,
+	path string,
+	opts *ScanOptions,
+) (*ScanResult, error) {
 	if opts == nil {
 		opts = &ScanOptions{}
 	}
 
 	if ctx.Err() != nil {
-		return fmt.Errorf("%w", ctx.Err())
+		return nil, fmt.Errorf("%w", ctx.Err())
 	}
 
 	kubescapeRunner := core.NewKubescape(ctx)
@@ -92,19 +105,31 @@ func (c *Client) ScanDirectory(ctx context.Context, path string, opts *ScanOptio
 
 	results, err := kubescapeRunner.Scan(scanInfo)
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrScanFailed, err)
+		return nil, fmt.Errorf("%w: %w", ErrScanFailed, err)
 	}
 
 	err = results.HandleResults(ctx, scanInfo)
 	if err != nil {
-		return fmt.Errorf("handle scan results: %w", err)
+		return nil, fmt.Errorf("handle scan results: %w", err)
 	}
 
-	if opts.ComplianceThreshold > 0 &&
-		results.GetComplianceScore() < float32(opts.ComplianceThreshold) {
+	score := results.GetComplianceScore()
+
+	err = checkComplianceThreshold(score, opts.ComplianceThreshold)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ScanResult{ComplianceScore: score}, nil
+}
+
+// checkComplianceThreshold fails when a positive threshold is set and the
+// score is below it. A zero threshold disables the gate.
+func checkComplianceThreshold(score, threshold float32) error {
+	if threshold > 0 && score < threshold {
 		return fmt.Errorf(
 			"%w: compliance score %.2f%% is below threshold %.2f%%",
-			ErrScanFailed, results.GetComplianceScore(), opts.ComplianceThreshold,
+			ErrScanFailed, score, threshold,
 		)
 	}
 

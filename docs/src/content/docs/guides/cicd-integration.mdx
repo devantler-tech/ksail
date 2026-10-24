@@ -54,7 +54,8 @@ ksail --config ksail.prod.yaml workload scan --framework nsa --compliance-thresh
 ```
 
 `scan` fails the job when the compliance score drops below `--compliance-threshold`, so a regression in
-security posture blocks the merge. Both commands also read their defaults from `spec.workload` in
+security posture blocks the merge. A passing scan prints the score it measured, so the job log shows how
+much headroom the threshold has. Both commands also read their defaults from `spec.workload` in
 `ksail.yaml`, so `ksail workload scan` with no flags is a turnkey gate once configured.
 
 :::tip[Render-aware checks]

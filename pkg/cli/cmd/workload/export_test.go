@@ -237,6 +237,12 @@ func ExportResolveScanOutput(output string) (string, error) {
 	return resolveScanOutput(output)
 }
 
+// ExportWriteComplianceScore exposes writeComplianceScore for testing the score
+// line a passing scan prints.
+func ExportWriteComplianceScore(writer io.Writer, score, threshold float32) {
+	writeComplianceScore(writer, score, threshold)
+}
+
 // ExportCanonicalizeSchemaLocations exposes canonicalizeSchemaLocations for
 // testing local-path canonicalization vs URL/template passthrough.
 func ExportCanonicalizeSchemaLocations(locations []string) []string {

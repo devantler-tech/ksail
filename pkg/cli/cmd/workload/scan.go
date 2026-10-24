@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	kubescapeclient "github.com/devantler-tech/ksail/v7/pkg/client/kubescape"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/spf13/cobra"
 )
 
@@ -216,12 +218,29 @@ func runScanCmdInner(
 		Exceptions:          settings.exceptions,
 	}
 
-	err = kubescapeClient.ScanDirectory(ctx, scanPath, scanOpts)
+	result, err := kubescapeClient.ScanDirectory(ctx, scanPath, scanOpts)
 	if err != nil {
 		return fmt.Errorf("scan directory: %w", err)
 	}
 
+	writeComplianceScore(cmd.ErrOrStderr(), result.ComplianceScore, settings.complianceThreshold)
+
 	return nil
+}
+
+// writeComplianceScore reports the compliance score of a scan that passed, so a
+// CI log shows the score a --compliance-threshold can be raised to and gradual
+// posture drift stays visible without a failing run. A failing gate reports the
+// score in its error instead, so every run ends with exactly one score line. It
+// writes to stderr so the report on stdout (json, sarif, junit) stays parseable.
+func writeComplianceScore(writer io.Writer, score, threshold float32) {
+	if threshold > 0 {
+		notify.Successf(writer, "compliance score %.2f%% (threshold %.2f%%)", score, threshold)
+
+		return
+	}
+
+	notify.Infof(writer, "compliance score %.2f%%", score)
 }
 
 // scanSettings carries the scan gate settings after merging CLI flags with
