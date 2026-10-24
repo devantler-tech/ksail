@@ -58,10 +58,11 @@ const (
 // the mirrors users get by default (ksail#7668).
 //
 // CI's mirror check fails a system-test image whose registry is in neither its MIRRORED nor
-// its DIRECT list, and ksail-cluster falls back to its own list of mirror hosts. Nothing tied
-// those lists to KSail's default mirrors, so widening them made CI pass for images users
-// still pull from upstream: that is how ksail#7336 went unnoticed after #7333 added the ECR
-// Public mirror to CI only.
+// its DIRECT list, so those two lists are the allowlist every CI mirror setting is bounded by;
+// ksail-cluster also falls back to its own list of mirror volumes. Nothing tied these lists to
+// KSail's default mirrors, so widening them made CI pass for images users still pull from
+// upstream: that is how ksail#7336 went unnoticed after #7333 added the ECR Public mirror to
+// CI only.
 func TestCIRegistryListsMatchDefaultMirrorsPlusKnownGaps(t *testing.T) {
 	t.Parallel()
 
@@ -76,15 +77,25 @@ func TestCIRegistryListsMatchDefaultMirrorsPlusKnownGaps(t *testing.T) {
 	).Run
 
 	for _, list := range []struct {
-		name string
-		got  []string
+		name     string
+		script   string
+		variable string
+		// sole requires the literal to be the variable's only assignment. The allowlist must
+		// not be widened anywhere else in its step; the volume list is also built from the
+		// action's input at runtime, and only its literal fallback is pinned.
+		sole bool
 		want []string
 	}{
-		{"warm-mirror-cache MIRRORED", shellListAssignment(t, coverage, "MIRRORED"), wantMirrored},
-		{"warm-mirror-cache DIRECT", shellListAssignment(t, coverage, "DIRECT"), wantDirect},
-		{"ksail-cluster fallback mirror hosts", shellListAssignment(t, volumes, "hosts"), wantMirrored},
+		{"warm-mirror-cache MIRRORED", coverage, "MIRRORED", true, wantMirrored},
+		{"warm-mirror-cache DIRECT", coverage, "DIRECT", true, wantDirect},
+		{"ksail-cluster fallback mirror volumes", volumes, "hosts", false, mirrorVolumeNames(wantMirrored)},
 	} {
-		assert.Empty(t, registryListDrift(list.name, list.got, list.want))
+		t.Run(list.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := shellListAssignment(t, list.script, list.variable, list.sole)
+			assert.Empty(t, registryListDrift(list.name, got, list.want))
+		})
 	}
 }
 
@@ -129,20 +140,58 @@ func TestRegistryListDriftNamesBothFixes(t *testing.T) {
 	}
 }
 
-// defaultMirrorHosts returns the registry host of every default mirror.
+// TestShellAssignmentCountSeesEveryWidening proves a list widened after its literal, by
+// reassignment or by appending, is counted, so the sole-assignment check cannot be bypassed,
+// while reading the variable is not.
+func TestShellAssignmentCountSeesEveryWidening(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name   string
+		script string
+		want   int
+	}{
+		{"literal only", `MIRRORED=" docker.io "`, 1},
+		{"reassigned from itself", "MIRRORED=\" docker.io \"\nMIRRORED=\"$MIRRORED example.io\"", 2},
+		{"appended", "MIRRORED=\" docker.io \"\n  MIRRORED+=\" example.io \"", 2},
+		{"assigned after a command", `true; MIRRORED="example.io"`, 1},
+		{"only read", `[[ "$MIRRORED" != *" $HOST "* ]]`, 0},
+		{"another variable", `NOT_MIRRORED="example.io"`, 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, test.want, shellAssignmentCount(test.script, "MIRRORED"))
+		})
+	}
+}
+
+// defaultMirrorHosts returns the registry host of every default mirror. A spec has the form
+// [user:pass@]host[=endpoint]; any credentials are dropped so they never reach a message.
 func defaultMirrorHosts(t *testing.T) []string {
 	t.Helper()
 
 	hosts := make([]string, 0, len(mirrorregistry.DefaultMirrors))
 	for _, spec := range mirrorregistry.DefaultMirrors {
 		host, _, _ := strings.Cut(spec, "=")
-		hosts = append(hosts, host)
+		hosts = append(hosts, host[strings.LastIndex(host, "@")+1:])
 	}
 
 	require.Contains(t, hosts, "docker.io",
 		"default mirror discovery must find the Docker Hub mirror KSail is known to create")
 
 	return hosts
+}
+
+// mirrorVolumeNames returns the Docker volume KSail creates for each mirror host: the host
+// with "/" and ":" replaced by "-", as ksail-cluster's volume list names them.
+func mirrorVolumeNames(hosts []string) []string {
+	names := make([]string, 0, len(hosts))
+	for _, host := range hosts {
+		names = append(names, strings.NewReplacer("/", "-", ":", "-").Replace(host))
+	}
+
+	return names
 }
 
 // expectedCIRegistries returns what CI's MIRRORED and DIRECT lists must hold: every default
@@ -191,12 +240,13 @@ func sortedUnique(values []string) []string {
 
 // shellListAssignment returns the words of the single non-empty, literal assignment
 // variable="..." in script. An assignment that expands a variable is not a literal list and
-// is skipped, so a list built at runtime is never mistaken for the declared one.
-func shellListAssignment(t *testing.T, script, variable string) []string {
+// is not returned. With sole set, the literal must also be the variable's only assignment,
+// so a list reassigned or appended to elsewhere in the step fails instead of being skipped.
+func shellListAssignment(t *testing.T, script, variable string, sole bool) []string {
 	t.Helper()
 
-	assignment := regexp.MustCompile(`(?m)^\s*` + regexp.QuoteMeta(variable) + `="([^"$]+)"\s*$`)
-	matches := assignment.FindAllStringSubmatch(script, -1)
+	literal := regexp.MustCompile(`(?m)^\s*` + regexp.QuoteMeta(variable) + `="([^"$]+)"\s*$`)
+	matches := literal.FindAllStringSubmatch(script, -1)
 	require.Lenf(
 		t,
 		matches,
@@ -206,8 +256,22 @@ func shellListAssignment(t *testing.T, script, variable string) []string {
 		len(matches),
 	)
 
+	if sole {
+		require.Equalf(t, 1, shellAssignmentCount(script, variable),
+			"%s must be assigned only by its literal list: a later assignment or append "+
+				"widens it where this check cannot read it", variable)
+	}
+
 	words := strings.Fields(matches[0][1])
 	require.NotEmptyf(t, words, "the %s list must name at least one registry", variable)
 
 	return words
+}
+
+// shellAssignmentCount counts the assignments and appends (variable= and variable+=) to
+// variable in script, wherever they start a word.
+func shellAssignmentCount(script, variable string) int {
+	assignment := regexp.MustCompile(`(?:^|[^A-Za-z0-9_$])` + regexp.QuoteMeta(variable) + `\+?=`)
+
+	return len(assignment.FindAllStringIndex(script, -1))
 }
