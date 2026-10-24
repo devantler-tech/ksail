@@ -4,7 +4,8 @@ description: 'Execute git commit with conventional commit message analysis, inte
 license: MIT
 metadata:
     github-path: skills/git-commit
-    github-ref: refs/heads/main
+    github-pinned: e24be77e6f203409cf99ab7d5a67e1540cb386d3
+    github-ref: e24be77e6f203409cf99ab7d5a67e1540cb386d3
     github-repo: https://github.com/github/awesome-copilot
     github-tree-sha: 883a6a7466f55a9cd9f22cf1cce2d9333fc9b998
     internal: true
