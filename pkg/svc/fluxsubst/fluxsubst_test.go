@@ -165,6 +165,12 @@ func TestExpandFluxSubstitutions_UsesKubeconformCache(t *testing.T) {
 	got := string(fluxsubst.ExpandFluxSubstitutions(input))
 	assert.Contains(t, got, "size: 0")
 	assert.NotContains(t, got, "placeholder")
+
+	// A default that is not a whole integer stays the string Flux would substitute, so
+	// validation still rejects it.
+	invalid := []byte("apiVersion: example.ksail.io/v1\nkind: SubstCacheWidget\n" +
+		"spec:\n  size: ${SIZE:-3oops}\n")
+	assert.Contains(t, string(fluxsubst.ExpandFluxSubstitutions(invalid)), "size: 3oops")
 }
 
 func TestGetSchemaTypeAtPath(t *testing.T) {

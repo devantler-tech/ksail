@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -299,10 +300,10 @@ func parseTypedDefault(defaultVal, schemaType string) any {
 	}
 }
 
+// parseInteger returns trimmed as an int64 only when the whole value is an integer, so a
+// default such as "3oops" stays the string Flux would substitute and still fails validation.
 func parseInteger(trimmed, defaultVal string) any {
-	var intVal int64
-
-	_, err := fmt.Sscanf(trimmed, "%d", &intVal)
+	intVal, err := strconv.ParseInt(trimmed, 10, 64)
 	if err == nil {
 		return intVal
 	}
@@ -310,10 +311,9 @@ func parseInteger(trimmed, defaultVal string) any {
 	return defaultVal
 }
 
+// parseNumber returns trimmed as a float64 only when the whole value is a number.
 func parseNumber(trimmed, defaultVal string) any {
-	var floatVal float64
-
-	_, err := fmt.Sscanf(trimmed, "%f", &floatVal)
+	floatVal, err := strconv.ParseFloat(trimmed, 64)
 	if err == nil {
 		return floatVal
 	}

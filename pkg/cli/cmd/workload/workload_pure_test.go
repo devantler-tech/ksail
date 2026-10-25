@@ -39,7 +39,10 @@ func TestParseInteger(t *testing.T) {
 		{"valid negative integer", "-7", "default", int64(-7)},
 		{"zero", "0", "default", int64(0)},
 		{"non-numeric falls back", "abc", "fallback", "fallback"},
-		{"float string parses integer part", "3.14", "fallback", int64(3)},
+		// Only a whole integer converts: Flux would substitute "3.14" or "3oops" as written,
+		// so an integer field must still fail validation on them.
+		{"float string falls back", "3.14", "fallback", "fallback"},
+		{"numeric prefix falls back", "3oops", "fallback", "fallback"},
 		{"empty string falls back", "", "fallback", "fallback"},
 		{"large number", "999999999", "default", int64(999999999)},
 		{"whitespace falls back", " ", "fallback", "fallback"},
@@ -75,6 +78,7 @@ func TestParseNumber(t *testing.T) {
 		{"non-numeric falls back", "abc", "fallback", "fallback"},
 		{"empty string falls back", "", "fallback", "fallback"},
 		{"scientific notation", "1e3", "default", float64(1000)},
+		{"numeric prefix falls back", "2.5x", "fallback", "fallback"},
 	}
 
 	for _, tt := range tests {

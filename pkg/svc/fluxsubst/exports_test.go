@@ -29,6 +29,7 @@ func TestParseInteger(t *testing.T) {
 		"9223372036854775808":  "9223372036854775808",  // overflow → defaultVal verbatim
 		"-9223372036854775809": "-9223372036854775809", // underflow → defaultVal verbatim
 		"abc":                  "abc",                  // not parseable → defaultVal verbatim
+		"3oops":                "3oops",                // numeric prefix only → defaultVal verbatim
 		"":                     "",                     // empty → defaultVal verbatim
 	}
 
@@ -55,6 +56,7 @@ func TestParseNumber(t *testing.T) {
 		"+Inf":                    math.Inf(1),
 		"-Inf":                    math.Inf(-1),
 		"notafloat":               "notafloat", // not parseable → defaultVal verbatim
+		"2.5x":                    "2.5x",      // numeric prefix only → defaultVal verbatim
 		"":                        "",          // empty → defaultVal verbatim
 	}
 
