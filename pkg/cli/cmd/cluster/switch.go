@@ -30,6 +30,11 @@ var ErrAmbiguousCluster = errors.New("ambiguous cluster name")
 // ErrNoClusters is returned when the kubeconfig holds no context to switch to.
 var ErrNoClusters = errors.New("no clusters found in kubeconfig")
 
+// ErrInvalidContextFlag is returned when --context is empty or combined with a cluster-name argument.
+var ErrInvalidContextFlag = errors.New(
+	"--context requires a non-empty context name and no cluster-name argument",
+)
+
 // unmanagedMarker labels a kubeconfig context KSail does not manage in the interactive picker.
 // It matches the "Unmanaged" status `ksail cluster list` shows for the same context, and a
 // marker is display text; picker targets retain their context identity separately.
@@ -215,10 +220,14 @@ func NewSwitchCmd() *cobra.Command {
 
 			if cmd.Flags().Changed("context") {
 				if len(args) != 0 || contextName == "" {
-					return errors.New("--context requires a non-empty context name and no cluster-name argument")
+					return ErrInvalidContextFlag
 				}
 
-				return handleSwitchTarget(cmd, switchTarget{name: contextName, mode: exactContextTarget}, deps)
+				return handleSwitchTarget(
+					cmd,
+					switchTarget{name: contextName, mode: exactContextTarget},
+					deps,
+				)
 			}
 
 			if len(args) > 0 {
@@ -404,34 +413,14 @@ func pickCluster(cmd *cobra.Command, deps SwitchDeps) (switchTarget, error) {
 		loadHistory = loadSwitchHistory
 	}
 
-	names := buildOrderedClusterNames(loadHistory(), clusterNames)
-	targets := make(map[string]switchTarget, len(otherContexts))
-	for _, other := range otherContexts {
-		label := other.pickerLabel()
-		for slices.Contains(names, label) {
-			label += " (context)"
-		}
+	names, targets := appendOtherContexts(
+		buildOrderedClusterNames(loadHistory(), clusterNames),
+		otherContexts,
+	)
 
-		names = append(names, label)
-		targets[label] = switchTarget{name: other.name, mode: exactContextTarget}
-	}
-
-	pick := deps.PickCluster
-	if pick == nil {
-		pick = picker.Run
-
-		// The default bubbletea picker needs a TTY. Fail fast with an actionable
-		// error in non-interactive environments (AI tool clients, CI, piped
-		// stdin) instead of hanging or crashing the alt-screen renderer. Tests
-		// inject deps.PickCluster (bypassing this guard) or deps.IsTTY.
-		isTTY := deps.IsTTY
-		if isTTY == nil {
-			isTTY = confirm.IsTTY
-		}
-
-		if !isTTY() {
-			return switchTarget{}, ErrInteractivePickerNoTTY
-		}
+	pick, err := resolveClusterPicker(deps)
+	if err != nil {
+		return switchTarget{}, err
 	}
 
 	selected, err := pick("Select a cluster:", names)
@@ -448,6 +437,53 @@ func pickCluster(cmd *cobra.Command, deps SwitchDeps) (switchTarget, error) {
 	}
 
 	return switchTarget{name: selected, mode: prefixedContextTarget}, nil
+}
+
+// appendOtherContexts appends a picker label for each context without a
+// distribution prefix and maps each label back to its exact context name.
+// A label that collides with an earlier entry gets a " (context)" suffix.
+func appendOtherContexts(
+	names []string,
+	otherContexts []kubeconfigContext,
+) ([]string, map[string]switchTarget) {
+	targets := make(map[string]switchTarget, len(otherContexts))
+
+	for _, other := range otherContexts {
+		label := other.pickerLabel()
+		for slices.Contains(names, label) {
+			label += " (context)"
+		}
+
+		names = append(names, label)
+		targets[label] = switchTarget{name: other.name, mode: exactContextTarget}
+	}
+
+	return names, targets
+}
+
+// resolveClusterPicker returns the injected picker, or the default bubbletea
+// picker when stdin is a terminal.
+func resolveClusterPicker(
+	deps SwitchDeps,
+) (func(title string, items []string) (string, error), error) {
+	if deps.PickCluster != nil {
+		return deps.PickCluster, nil
+	}
+
+	// The default bubbletea picker needs a TTY. Fail fast with an actionable
+	// error in non-interactive environments (AI tool clients, CI, piped
+	// stdin) instead of hanging or crashing the alt-screen renderer. Tests
+	// inject deps.PickCluster (bypassing this guard) or deps.IsTTY.
+	isTTY := deps.IsTTY
+	if isTTY == nil {
+		isTTY = confirm.IsTTY
+	}
+
+	if !isTTY() {
+		return nil, ErrInteractivePickerNoTTY
+	}
+
+	return picker.Run, nil
 }
 
 // resolveContextName finds the matching kubeconfig context for a cluster name
@@ -582,13 +618,18 @@ func (target switchTarget) resolve(config *clientcmdapi.Config) (string, error) 
 
 	if target.mode == prefixedContextTarget {
 		prefixed := clientcmdapi.NewConfig()
+
 		for name, context := range config.Contexts {
 			if stripDistributionPrefix(name) != "" {
 				prefixed.Contexts[name] = context
 			}
 		}
 
-		return resolveContextMatches(prefixed, target.name, clusterdetector.MatchContexts(prefixed, target.name))
+		return resolveContextMatches(
+			prefixed,
+			target.name,
+			clusterdetector.MatchContexts(prefixed, target.name),
+		)
 	}
 
 	if _, exists := config.Contexts[target.name]; !exists {
