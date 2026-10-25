@@ -237,6 +237,17 @@ func ExportResolveKubeContext(ctx *localregistry.Context) string {
 	return resolveKubeContext(ctx)
 }
 
+// ExportQueryLiveDrift exports queryLiveDrift for testing the warn-and-skip
+// policy the update drift checks share.
+func ExportQueryLiveDrift[T any](
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	check, queryAction string,
+	query func(goCtx context.Context, kubeconfigPath, kubeContext string) (T, error),
+) (T, bool) {
+	return queryLiveDrift(cmd, ctx, check, queryAction, query)
+}
+
 // ExportEnsureClusterManaged exports ensureClusterManaged for testing, driving it from a fixed
 // managed-set + completeness pair (instead of the live cross-provider discoverer) so the
 // unmanaged-cluster guard can be exercised fully offline.

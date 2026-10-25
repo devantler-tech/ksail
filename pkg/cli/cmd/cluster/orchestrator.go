@@ -1232,47 +1232,66 @@ func checkWorkloadTagDrift(
 		return
 	}
 
-	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(ctx.ClusterCfg)
-	if err != nil {
-		notify.Warningf(cmd.ErrOrStderr(),
-			"Cannot resolve kubeconfig path for workload tag drift detection: %v", err)
+	currentTag, queried := queryLiveDrift(cmd, ctx,
+		"workload tag", "query current GitOps sync ref",
+		func(goCtx context.Context, kubeconfigPath, kubeContext string) (string, error) {
+			switch gitOpsEngine {
+			case v1alpha1.GitOpsEngineFlux:
+				return fluxinstaller.GetCurrentSyncRef(goCtx, kubeconfigPath, kubeContext)
+			case v1alpha1.GitOpsEngineArgoCD:
+				return getCurrentArgoCDTargetRevision(goCtx, kubeconfigPath, kubeContext)
+			case v1alpha1.GitOpsEngineNone:
+				return "", nil
+			default:
+				return "", nil
+			}
+		},
+	)
 
+	// Empty current tag means the resource does not exist yet (or the engine has
+	// no sync resource to read) — no drift to fix.
+	if !queried || currentTag == "" {
 		return
 	}
 
 	desiredTag := fluxinstaller.ResolveDesiredTag(ctx.ClusterCfg)
-	kubeContext := resolveKubeContext(ctx)
-
-	var currentTag string
-
-	switch gitOpsEngine {
-	case v1alpha1.GitOpsEngineFlux:
-		currentTag, err = fluxinstaller.GetCurrentSyncRef(
-			cmd.Context(), kubeconfigPath, kubeContext,
-		)
-	case v1alpha1.GitOpsEngineArgoCD:
-		currentTag, err = getCurrentArgoCDTargetRevision(
-			cmd.Context(), kubeconfigPath, kubeContext,
-		)
-	case v1alpha1.GitOpsEngineNone:
-		return
-	default:
-		return
-	}
-
-	if err != nil {
-		notify.Warningf(cmd.ErrOrStderr(),
-			"Cannot query current GitOps sync ref for drift detection: %v", err)
-
-		return
-	}
-
-	// Empty current tag means the resource does not exist yet — no drift to fix.
-	if currentTag == "" {
-		return
-	}
 
 	diffEngine.CheckWorkloadTag(currentTag, desiredTag, gitOpsEngine, diff)
+}
+
+// queryLiveDrift runs one drift check's cluster query under the policy every
+// update drift check shares: warn and skip, never fail the update. When the
+// kubeconfig path cannot be resolved, or the query itself fails, it prints a
+// warning and returns false so the caller skips that check while the rest of
+// the update carries on. check names the drift check in the kubeconfig warning;
+// queryAction describes the query in the query-failure warning ("Cannot
+// <queryAction> for drift detection"). The query receives the kubeconfig path and
+// the kube context the update targets (resolveKubeContext).
+func queryLiveDrift[T any](
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	check, queryAction string,
+	query func(goCtx context.Context, kubeconfigPath, kubeContext string) (T, error),
+) (T, bool) {
+	var zero T
+
+	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(ctx.ClusterCfg)
+	if err != nil {
+		notify.Warningf(cmd.ErrOrStderr(),
+			"Cannot resolve kubeconfig path for %s drift detection: %v", check, err)
+
+		return zero, false
+	}
+
+	result, err := query(cmd.Context(), kubeconfigPath, resolveKubeContext(ctx))
+	if err != nil {
+		notify.Warningf(cmd.ErrOrStderr(),
+			"Cannot %s for drift detection: %v", queryAction, err)
+
+		return zero, false
+	}
+
+	return result, true
 }
 
 // checkFluxDistributionVersionDrift queries the running FluxInstance for its
@@ -1292,21 +1311,11 @@ func checkFluxDistributionVersionDrift(
 		return
 	}
 
-	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(ctx.ClusterCfg)
-	if err != nil {
-		notify.Warningf(cmd.ErrOrStderr(),
-			"Cannot resolve kubeconfig path for Flux distribution-version drift detection: %v", err)
-
-		return
-	}
-
-	instance, err := fluxinstaller.GetCurrentFluxInstance(
-		cmd.Context(), kubeconfigPath, resolveKubeContext(ctx),
+	instance, queried := queryLiveDrift(cmd, ctx,
+		"Flux distribution-version", "query current Flux distribution version",
+		fluxinstaller.GetCurrentFluxInstance,
 	)
-	if err != nil {
-		notify.Warningf(cmd.ErrOrStderr(),
-			"Cannot query current Flux distribution version for drift detection: %v", err)
-
+	if !queried {
 		return
 	}
 
@@ -1352,21 +1361,15 @@ func checkRegistryCredentialDrift(
 		return
 	}
 
-	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(ctx.ClusterCfg)
-	if err != nil {
-		notify.Warningf(cmd.ErrOrStderr(),
-			"Cannot resolve kubeconfig path for registry credential drift detection: %v", err)
-
-		return
-	}
-
-	drifted, err := fluxinstaller.RegistryCredentialDrifted(
-		cmd.Context(), kubeconfigPath, resolveKubeContext(ctx), ctx.ClusterCfg,
+	drifted, queried := queryLiveDrift(cmd, ctx,
+		"registry credential", "compare registry credentials",
+		func(goCtx context.Context, kubeconfigPath, kubeContext string) (bool, error) {
+			return fluxinstaller.RegistryCredentialDrifted(
+				goCtx, kubeconfigPath, kubeContext, ctx.ClusterCfg,
+			)
+		},
 	)
-	if err != nil {
-		notify.Warningf(cmd.ErrOrStderr(),
-			"Cannot compare registry credentials for drift detection: %v", err)
-
+	if !queried {
 		return
 	}
 
@@ -1401,21 +1404,13 @@ func checkFluxVerifyDrift(
 		return
 	}
 
-	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(ctx.ClusterCfg)
-	if err != nil {
-		notify.Warningf(cmd.ErrOrStderr(),
-			"Cannot resolve kubeconfig path for Flux verify drift detection: %v", err)
-
-		return
-	}
-
-	drifted, err := fluxinstaller.VerifyDrifted(
-		cmd.Context(), kubeconfigPath, resolveKubeContext(ctx), ctx.ClusterCfg,
+	drifted, queried := queryLiveDrift(cmd, ctx,
+		"Flux verify", "compare Flux artifact verification",
+		func(goCtx context.Context, kubeconfigPath, kubeContext string) (bool, error) {
+			return fluxinstaller.VerifyDrifted(goCtx, kubeconfigPath, kubeContext, ctx.ClusterCfg)
+		},
 	)
-	if err != nil {
-		notify.Warningf(cmd.ErrOrStderr(),
-			"Cannot compare Flux artifact verification for drift detection: %v", err)
-
+	if !queried {
 		return
 	}
 
