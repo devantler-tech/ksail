@@ -1,154 +1,72 @@
 ---
 title: KSail Documentation
-description: One CLI to spin up Kubernetes clusters and run them with GitOps — the same workflow from your laptop to production.
+description: KSail is one CLI to create Kubernetes clusters on your laptop or in the cloud and deliver workloads to them with GitOps.
 template: splash
 hero:
-  tagline: One CLI to spin up Kubernetes clusters and run them with GitOps — the same workflow from your laptop to production.
+  tagline: One CLI to create Kubernetes clusters and deliver to them with GitOps — the same workflow from your laptop to production.
   image:
     alt: KSail CLI showing ASCII art banner and help output
     dark: ../../assets/header-dark.png
     light: ../../assets/header-light.png
   actions:
-    - text: Get Started
+    - text: Get started
       link: /start/quickstart/
       icon: right-arrow
       variant: primary
       attrs:
         data-umami-event: home-hero-get-started
-    - text: View on GitHub
-      link: https://github.com/devantler-tech/ksail
-      icon: external
+    - text: Install KSail
+      link: /installation/
+      icon: download
       variant: secondary
       attrs:
-        data-umami-event: home-hero-github
+        data-umami-event: home-hero-install
 ---
 
 import { Card, CardGrid } from "@astrojs/starlight/components";
 import Features from "../../components/Features.astro";
 
-## Why KSail?
+## What is KSail?
 
-Standing up Kubernetes the real way means juggling kind or k3d, helm, kubectl, a GitOps engine, SOPS, and a pile of glue scripts — and every distribution and environment does it a little differently.
-
-KSail collapses all of that into **one binary and one declarative config**. The same workflow — `init` → `create` → `push` → `reconcile` — works across Vanilla, K3s, Talos, VCluster, KWOK, and EKS, and from your laptop to production. No tool sprawl, and no lock-in: KSail generates native `kind.yaml`, Talos patches, and friends that you can run with or without it.
-
-## See It in Action
-
-From nothing to a running Kubernetes cluster, a deployed workload, and a clean teardown — all with `ksail`:
+Running Kubernetes usually means installing and wiring together kind or k3d, kubectl, Helm, a GitOps
+engine and SOPS — and every distribution does it a little differently. KSail embeds those tools in a
+single binary driven by one `ksail.yaml`, so the same commands create, update and delete a cluster
+whether it runs in Docker on your laptop or on cloud infrastructure. It writes native configs such as
+`kind.yaml` and Talos patches, so you can keep using the underlying tools with or without KSail.
 
 <video class="demo-recording" autoplay loop muted playsinline controls aria-label="KSail full cluster lifecycle demo">
   <source src="/demos/cluster-lifecycle.mp4" type="video/mp4" />
   <img class="demo-recording" src="/demos/cluster-lifecycle.gif" alt="KSail creates a real Kind cluster, shows cluster info, deploys an nginx workload that reaches Running, then deletes the cluster" />
 </video>
 
-## Key Features
+## What you can do
 
 export const features = [
-  { icon: "📦", title: "One Binary", body: "Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl." },
-  { icon: "☸️", title: "Simple Clusters", body: "Spin up Vanilla, K3s, Talos, VCluster, or KWOK clusters with one command — EKS scaffolding included. Same workflow across distributions." },
-  { icon: "🚀", title: "Local to Production", body: "The same <code>ksail</code> workflow drives every environment — a config per environment, selected with <code>--config</code>." },
-  { icon: "🔄", title: "GitOps Native", body: "Built-in Flux or ArgoCD. Compile your manifests to an OCI artifact with <code>workload push</code>, then <code>reconcile</code>." },
-  { icon: "✅", title: "Offline Validation", body: "Validate and security-scan your whole GitOps repo — schema, Flux vars, and posture — with no cluster. An ideal CI gate." },
-  { icon: "🔓", title: "No Lock-In", body: "Uses native configs (<code>kind.yaml</code>, <code>k3d.yaml</code>, Talos patches, <code>vcluster.yaml</code>, <code>kwok/</code>). Run clusters with or without KSail." },
-  { icon: "📥", title: "Mirror Registries", body: "Avoid rate limits, and store images once. Same mirrors used by different clusters." },
-  { icon: "📄", title: "Everything as Code", body: "Cluster settings, distribution configs, and workloads in version-controlled files." },
-  { icon: "🏢", title: "Multi-Tenancy", body: "Generate RBAC isolation, GitOps sync resources, and scaffold tenant repositories with <code>ksail tenant create</code> and <code>ksail tenant delete</code>." },
-  { icon: "⚙️", title: "Customizable Stack", body: "Select your CNI, CSI, policy engine, cert-manager, and mirror registries." },
-  { icon: "🔐", title: "SOPS Built In", body: "Encrypt, decrypt, and edit secrets with integrated cipher commands." },
-  { icon: "💾", title: "Backup & Restore", body: "Export cluster resources to a compressed archive and restore to any cluster with provenance labels." },
-  { icon: "🩺", title: "Built-In Diagnostics", body: "Health-scored cluster diagnostics with remediation hints via <code>ksail cluster diagnose</code>." },
-  { icon: "🖥️", title: "Web UI & Desktop", body: "Manage clusters visually with <code>ksail open web</code> in the browser or the native desktop app." },
-  { icon: "⚓", title: "Kubernetes Operator", body: "Reconcile <code>Cluster</code> custom resources in-cluster, with an optional OIDC-protected dashboard." },
-  { icon: "🤖", title: "AI Assistant", body: "Interactive chat with your choice of AI API provider or Copilot, plus an MCP server for external assistants." },
-  { icon: "💻", title: "VS Code Extension", body: "Manage clusters from VS Code via the Kubernetes extension (Cloud Explorer and Cluster Explorer), wizards, and command palette." },
+  { icon: "☸️", title: "Create clusters anywhere", event: "home-feature-clusters", href: "/distributions/", body: "Vanilla, K3s, Talos, VCluster and KWOK in Docker or on cloud servers, or managed EKS, GKE and AKS — with your choice of CNI, CSI and policy engine." },
+  { icon: "🔄", title: "Deliver with GitOps", event: "home-feature-gitops", href: "/guides/gitops-workflows/", body: "Flux or ArgoCD built in. <code>workload push</code> packages your manifests as an OCI artifact and <code>workload reconcile</code> rolls them out." },
+  { icon: "✅", title: "Validate before you deploy", event: "home-feature-validate", href: "/configuration/workload-validate/", body: "Schema-check and security-scan your manifests offline, with no cluster — an ideal CI gate." },
+  { icon: "🔐", title: "Keep secrets in Git", event: "home-feature-secrets", href: "/guides/secret-management/", body: "Encrypt, decrypt and edit secrets with built-in SOPS and Age." },
+  { icon: "🩺", title: "Run day-2 operations", event: "home-feature-operations", href: "/guides/day-2-operations/", body: "Diagnose cluster health, back up and restore, mirror registries and onboard tenants." },
+  { icon: "🖥️", title: "Work your way", event: "home-feature-interfaces", href: "/guides/web-ui/", body: "Use the terminal, the web UI or desktop app, the VS Code extension, or an AI assistant over chat or MCP." },
 ];
 
 <Features items={features} />
 
-## Quick Start
+Browse <span data-umami-event="home-browse-guides">[every feature by task](/guides/)</span>.
 
-Scaffold a project, create a cluster, and deploy a workload — then follow the full
-<span data-umami-event="home-quick-start-quickstart">[Quickstart](/start/quickstart/)</span> and <span data-umami-event="home-quick-start-gitops">[Deliver with GitOps](/start/deliver-with-gitops/)</span> tutorials.
-
-<img class="demo-recording" src="/demos/cluster-init.gif" alt="ksail project init scaffolds ksail.yaml and kind.yaml, cat shows the minimal declarative config, and re-running with --distribution K3s switches the distribution" />
-
-```bash
-# 1. Initialize a new project (pick any distribution)
-ksail project init --name my-cluster --distribution Vanilla
-
-# 2. Create and start the cluster
-ksail cluster create
-
-# 3. Add manifests under k8s/, then deploy
-ksail workload apply -k ./k8s
-
-# 4. Open K9s to explore
-ksail cluster connect
-```
-
-**Prerequisites:** KSail runs on Linux, macOS, and Windows (WSL2). Local clusters need
-[Docker](/installation/); the [Kubernetes (Nested) provider](/providers/kubernetes/) runs inside an
-existing cluster instead. See the [Support Matrix](/support-matrix/) for every distribution × provider
-combination.
-
-## How It Works
-
-````mermaid
-flowchart TD
-    Dev["🧑‍💻 Developer"]
-
-    Dev -->|"edits"| Project
-    Dev -->|"runs"| KSail
-
-    subgraph Project ["📁 Project Repository"]
-        Config["ksail.yaml"] ~~~ DistConfig["kind.yaml · k3d.yaml<br/>vcluster.yaml"] ~~~ Manifests["k8s/ manifests"]
-    end
-
-    KSail -->|"scaffolds & reads"| Project
-    KSail -->|"provisions & operates"| Cluster
-
-    subgraph KSail ["🛥️ KSail — One Binary"]
-        CLI["CLI Commands"] ~~~ Tools["Kind · K3d · Talos · vCluster<br/>Flux · ArgoCD · SOPS<br/>Helm · Kustomize"]
-    end
-
-    subgraph Cluster ["☸️ Kubernetes Cluster"]
-        Infra["CNI · CSI · Metrics<br/>Cert-Manager · Policy Engine"] ~~~ Workloads["Your Workloads ✅"]
-    end
-
-    Manifests -.->|"GitOps sync"| Workloads
-
-    style Dev fill:#f59e0b,stroke:#d97706,color:#000
-    style Project fill:#7c3aed22,stroke:#7c3aed
-    style KSail fill:#10b98122,stroke:#10b981
-    style Cluster fill:#3b82f622,stroke:#3b82f6
-    style CLI fill:#10b981,stroke:#059669,color:#000
-    style Tools fill:#065f46,stroke:#10b981,color:#fff
-    style Infra fill:#1e40af,stroke:#3b82f6,color:#fff
-    style Workloads fill:#166534,stroke:#22c55e,color:#fff
-    style Config fill:#5b21b6,stroke:#7c3aed,color:#fff
-    style DistConfig fill:#5b21b6,stroke:#7c3aed,color:#fff
-    style Manifests fill:#5b21b6,stroke:#7c3aed,color:#fff
-````
-
-## Where to next
+## Where to go next
 
 <CardGrid>
-  <Card title="Quickstart" icon="rocket">
-    Zero to a running cluster with a workload in ~10 minutes. <span data-umami-event="home-next-quickstart">[Start here →](/start/quickstart/)</span>
-  </Card>
-  <Card title="Deliver with GitOps" icon="setting">
-    The recommended workflow: package manifests as an OCI artifact and reconcile. <span data-umami-event="home-next-gitops">[Learn more →](/start/deliver-with-gitops/)</span>
-  </Card>
   <Card title="Choose your setup" icon="puzzle">
-    Pick the right distribution and provider for your goal. <span data-umami-event="home-next-setup">[Compare →](/distributions/)</span>
+    Pick the distribution and provider that fit your goal. <span data-umami-event="home-next-setup">[Compare →](/distributions/)</span>
   </Card>
-  <Card title="Guides" icon="open-book">
-    Task-focused how-tos: registries, secrets, tenants, CI/CD, and more. <span data-umami-event="home-next-guides">[Browse →](/guides/)</span>
+  <Card title="Deliver with GitOps" icon="rocket">
+    The recommended workflow once your first cluster is running. <span data-umami-event="home-next-gitops">[Learn it →](/start/deliver-with-gitops/)</span>
   </Card>
-  <Card title="Concepts" icon="information">
-    How KSail works, the architecture, and the recommended project structure. <span data-umami-event="home-next-concepts">[Understand →](/concepts/)</span>
+  <Card title="Core concepts" icon="information">
+    How KSail separates what runs from where it runs. <span data-umami-event="home-next-concepts">[Understand →](/concepts/)</span>
   </Card>
   <Card title="Configuration" icon="document">
-    The complete `ksail.yaml` reference and configuration precedence. <span data-umami-event="home-next-configuration">[Reference →](/configuration/)</span>
+    Every `ksail.yaml` field and how settings combine. <span data-umami-event="home-next-configuration">[Reference →](/configuration/)</span>
   </Card>
 </CardGrid>

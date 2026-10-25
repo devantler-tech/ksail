@@ -3,6 +3,8 @@ title: Talos Native Patches Migration
 description: Migrate from ksail.yaml wrapper fields to native Talos machine config patches.
 ---
 
+import { FileTree } from "@astrojs/starlight/components";
+
 KSail is shifting to a patch-first model for Talos clusters. Several `ksail.yaml` fields that previously
 generated Talos machine config patches at runtime are now deprecated. Users should manage these patches
 directly in their `talos/` patch directories.
@@ -77,20 +79,22 @@ See [Talos Image Verification docs](https://docs.siderolabs.com/talos/v1.13/talo
 
 ## Patch Directory Structure
 
-```
-talos/
-├── cluster/              # Applied to ALL nodes
-│   ├── allow-scheduling-on-control-planes.yaml
-│   ├── disable-cdi.yaml
-│   ├── disable-default-cni.yaml
-│   ├── oidc.yaml
-│   ├── ingress-firewall-default-action.yaml
-│   └── image-verification.yaml
-├── control-planes/       # Applied to control-plane nodes only
-│   └── ingress-firewall-rules.yaml
-└── workers/              # Applied to worker nodes only
-    └── ingress-firewall-rules.yaml
-```
+<FileTree>
+
+- talos/
+  - cluster/ Applied to ALL nodes
+    - allow-scheduling-on-control-planes.yaml
+    - disable-cdi.yaml
+    - disable-default-cni.yaml
+    - oidc.yaml
+    - ingress-firewall-default-action.yaml
+    - image-verification.yaml
+  - control-planes/ Applied to control-plane nodes only
+    - ingress-firewall-rules.yaml
+  - workers/ Applied to worker nodes only
+    - ingress-firewall-rules.yaml
+
+</FileTree>
 
 ## How KSail Handles Patches
 

@@ -3,13 +3,17 @@
  * Features — a responsive grid of product highlights for the splash page.
  * Each item renders an emoji "tile", a display-face title, and a short blurb.
  *
+ * An optional `href` turns the whole card into a link to that page.
+ *
  * Usage (from MDX):
- *   <Features items={[{ icon: "📦", title: "One Binary", body: "…" }, …]} />
+ *   <Features items={[{ icon: "📦", title: "One Binary", body: "…", href: "/guides/" }, …]} />
  */
 interface FeatureItem {
   icon: string;
   title: string;
   body: string;
+  href?: string;
+  event?: string;
 }
 
 interface Props {
@@ -24,7 +28,7 @@ const { items } = Astro.props;
     items.map((item) => (
       <article class="feature">
         <span class="tile" aria-hidden="true">{item.icon}</span>
-        <h3 class="title">{item.title}</h3>
+        <h3 class="title">{item.href ? <a href={item.href} data-umami-event={item.event}>{item.title}</a> : item.title}</h3>
         <p class="body" set:html={item.body} />
       </article>
     ))
@@ -98,6 +102,22 @@ const { items } = Astro.props;
     font-weight: 700;
     letter-spacing: -0.01em;
     color: var(--sl-color-white);
+  }
+
+  .title a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  /* Stretch the title link over the card so the whole card is one click target. */
+  .title a::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+  }
+
+  .feature:has(.title a):focus-within {
+    border-color: var(--ksail-cyan);
   }
 
   .body {
