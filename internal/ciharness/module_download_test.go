@@ -19,6 +19,7 @@ type moduleDownloadScenario struct {
 	backoff                            string
 }
 
+// The desktop release must reach the guarded module download before compilation.
 func TestDesktopReleaseUsesModuleDownloadSetup(t *testing.T) {
 	t.Parallel()
 
@@ -79,6 +80,7 @@ func TestReleaseModuleDownloadRetries(t *testing.T) {
 	}
 }
 
+// Select the real audit invocation or the existing synthetic release-build control.
 func moduleDownloadOperation(t *testing.T, target string, steps []harnessStep) string {
 	t.Helper()
 
@@ -89,6 +91,17 @@ func moduleDownloadOperation(t *testing.T, target string, steps []harnessStep) s
 	prefetch := findHarnessStep(t, steps, "📥 Download Go modules before the audit")
 	require.Equal(t, "bash .github/scripts/download-go-modules.sh", strings.TrimSpace(prefetch.Run))
 
+	auditSteps := 0
+
+	for _, step := range steps {
+		if step.Name == "🔐 Audit Shipped Dependency Graphs" {
+			auditSteps++
+		}
+	}
+
+	require.Equal(t, 1, auditSteps,
+		"workflow must contain exactly one shipped dependency audit step")
+
 	step := findHarnessStep(t, steps, "🔐 Audit Shipped Dependency Graphs")
 	require.Equal(t, "go test ./pkg/client/kubescape/... -count=1", strings.TrimSpace(step.Run),
 		"audit findings must not be retried or hidden by a shell wrapper")
@@ -98,6 +111,7 @@ func moduleDownloadOperation(t *testing.T, target string, steps []harnessStep) s
 	return step.Run
 }
 
+// Require a single unconditional prefetch between Go setup and the downstream operation.
 func releaseModuleDownloadStep(t *testing.T, steps []harnessStep) harnessStep {
 	t.Helper()
 
@@ -131,6 +145,7 @@ func releaseModuleDownloadStep(t *testing.T, steps []harnessStep) harnessStep {
 	return prefetch
 }
 
+// Execute the checked-in downloader with recorded transport, backoff and downstream results.
 func runModuleDownloadScenario(
 	t *testing.T,
 	prefetch harnessStep,
@@ -181,6 +196,7 @@ func runModuleDownloadScenario(
 	}
 }
 
+// Distinguish exhausted downloads from the original downstream command's failure.
 func assertModuleDownloadResult(
 	t *testing.T,
 	scenario moduleDownloadScenario,
@@ -212,6 +228,7 @@ func assertModuleDownloadResult(
 	}
 }
 
+// Replace network and sleep effects while retaining the production retry script's decisions.
 func writeModuleDownloadStubs(t *testing.T, directory string) {
 	t.Helper()
 	writeExecutableStub(t, filepath.Join(directory, "go"), `#!/usr/bin/env bash
