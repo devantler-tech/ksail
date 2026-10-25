@@ -2496,6 +2496,10 @@ jobs:
       - name: ♻️ Restore Go modules
         uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
 
+      - name: 📥 Download Go modules before the audit
+        # Retry transport failures here; the audit verdict itself remains a single run.
+        run: bash .github/scripts/download-go-modules.sh
+
       - name: 🔐 Audit Shipped Dependency Graphs
         # Release files are outside Go's test-cache inputs; always execute the audit.
         run: go test ./pkg/client/kubescape/... -count=1
