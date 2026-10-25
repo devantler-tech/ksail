@@ -60,11 +60,6 @@ func SchemaCacheDir() string {
 	return schemaCacheDir()
 }
 
-// SchemaCacheFileName produces a deterministic cache filename for a schema URL.
-func SchemaCacheFileName(schemaURL string) string {
-	return schemaCacheFileName(schemaURL)
-}
-
 // SchemaNodeType extracts the declared type from a JSON schema node.
 func SchemaNodeType(schema map[string]any) string {
 	return schemaNodeType(schema)
