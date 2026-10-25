@@ -612,7 +612,7 @@ func TestExportSchemaURLs(t *testing.T) {
 		},
 		{
 			"CRD", "gateway.networking.k8s.io/v1", "HTTPRoute",
-			"httproute-gateway.networking.k8s.io-v1.json",
+			"httproute-gateway-v1.json",
 		},
 	}
 
