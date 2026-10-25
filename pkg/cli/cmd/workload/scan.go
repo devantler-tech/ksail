@@ -18,6 +18,21 @@ import (
 // ErrInvalidComplianceThreshold is returned when --compliance-threshold is outside the valid 0-100 range.
 var ErrInvalidComplianceThreshold = errors.New("--compliance-threshold must be between 0 and 100")
 
+// directoryScanner is the part of the Kubescape client the scan command runs.
+type directoryScanner interface {
+	ScanDirectoryWithResult(
+		ctx context.Context,
+		path string,
+		opts *kubescapeclient.ScanOptions,
+	) (*kubescapeclient.ScanResult, error)
+}
+
+// newDirectoryScanner builds the scanner a scan runs. Tests replace it to give the command a
+// known result without running Kubescape.
+//
+//nolint:gochecknoglobals // Test seam, like newFlowObserver and newEphemeralBackend in this package.
+var newDirectoryScanner = func() directoryScanner { return kubescapeclient.NewClient() }
+
 // scanCmdLong is the long help for the scan command.
 const scanCmdLong = `Run security scans on Kubernetes manifests using Kubescape.
 
@@ -207,7 +222,7 @@ func runScanCmdInner(
 
 	defer cleanup()
 
-	kubescapeClient := kubescapeclient.NewClient()
+	kubescapeClient := newDirectoryScanner()
 
 	scanOpts := &kubescapeclient.ScanOptions{
 		Frameworks:          settings.frameworks,
