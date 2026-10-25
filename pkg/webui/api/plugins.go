@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"mime"
-	"net"
 	"net/http"
-	"net/url"
 	"path"
 	"strings"
 )
@@ -339,32 +337,7 @@ func isCrossSiteBrowserRequest(request *http.Request) bool {
 		return false
 	}
 
-	// The desktop shell serves the SPA from this one fixed origin (see desktop/main.go). Compare the
-	// raw header so crafted values with otherwise invisible empty delimiters (`?` or `#`) cannot be
-	// normalized into the trusted value by url.Parse.
-	if origin == "wails://wails" {
-		return false
-	}
-
-	parsed, err := url.Parse(origin)
-	if err != nil {
-		return true
-	}
-
-	return !isLoopbackOriginHost(parsed.Hostname())
-}
-
-// isLoopbackOriginHost reports whether a URL hostname names this machine's loopback interface.
-// "localhost" is included: an attacker can rebind their own name to 127.0.0.1, but cannot make a
-// browser report "localhost" as the origin of a page they serve.
-func isLoopbackOriginHost(host string) bool {
-	if strings.EqualFold(host, "localhost") {
-		return true
-	}
-
-	ip := net.ParseIP(host)
-
-	return ip != nil && ip.IsLoopback()
+	return !isTrustedLocalOrigin(origin)
 }
 
 // handleUninstallPlugin removes an installed plugin by id. The id is validated here (and again in the
