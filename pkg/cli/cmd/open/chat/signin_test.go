@@ -75,3 +75,26 @@ func TestCopilotFixAdviceOffersSignInBeforeToken(t *testing.T) {
 		}
 	}
 }
+
+// TestCopilotFixAdviceForSetTokenStartsWithTheToken pins the advice when a Copilot token was set:
+// the token replaces the stored sign-in, so the first fix is to replace or unset the token.
+func TestCopilotFixAdviceForSetTokenStartsWithTheToken(t *testing.T) {
+	t.Parallel()
+
+	message := buildClientStartupError(
+		&copilot.ClientOptions{GitHubToken: "set-token"},
+		errProviderStartupTest,
+		"",
+	).Error()
+
+	_, fixes, found := strings.Cut(message, "To fix:\n")
+	require.True(t, found, "no fix list in %q", message)
+
+	first, _, _ := strings.Cut(fixes, "\n")
+	assert.Contains(t, first, "KSAIL_COPILOT_TOKEN")
+	assert.Contains(t, first, "unset it")
+	assert.Contains(t, first, "copilot auth login")
+	assert.ErrorIs(t, buildClientStartupError(
+		&copilot.ClientOptions{GitHubToken: "set-token"}, errProviderStartupTest, "",
+	), errStartCopilotClient)
+}

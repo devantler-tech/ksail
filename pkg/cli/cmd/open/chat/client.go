@@ -50,6 +50,12 @@ const (
 		"  - Verify the CLI works: copilot --version\n" +
 		"  - Sign in once with the Copilot CLI: copilot auth login\n" +
 		nonInteractiveFix
+	// copilotTokenStartupFixes is the fix list when a Copilot token was set: a set token replaces the
+	// stored sign-in, so signing in cannot help until the token is fixed or removed.
+	copilotTokenStartupFixes = "  - Check the token in KSAIL_COPILOT_TOKEN or COPILOT_TOKEN: replace it, or unset it " +
+		"to sign in with the Copilot CLI instead (copilot auth login)\n" +
+		"  - Install the Copilot CLI if it is missing: npm install -g @github/copilot\n" +
+		"  - Verify the CLI works: copilot --version"
 	// startupErrFmt is the static format string for Copilot client startup errors.
 	// %w is the underlying error; %s is an optional diagnostic block (empty or
 	// "CLI diagnostic output:\n  ...\n\n").
@@ -225,6 +231,15 @@ func buildClientStartupError(opts *copilot.ClientOptions, cause error, diagnosti
 				"  - Verify the CLI works without logging in: copilot --version\n"+
 				"  - Check the selected AI provider endpoint and API key",
 			errStartChatRuntime,
+			cause,
+			diagnostic,
+		)
+	}
+
+	if opts.GitHubToken != "" {
+		return fmt.Errorf(
+			"%w: %w\n\n%sTo fix:\n"+copilotTokenStartupFixes,
+			errStartCopilotClient,
 			cause,
 			diagnostic,
 		)
