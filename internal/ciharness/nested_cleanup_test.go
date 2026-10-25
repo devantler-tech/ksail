@@ -27,6 +27,7 @@ if [[ "${1:-}" == --context ]]; then
       ready-ok-error) echo ok; exit 1 ;;
       ready-hang) echo ok; trap '' TERM; exec sleep 60 ;;
       ready-invalid) echo 'not ready' ;;
+      ready-delayed) /bin/sleep 4; echo ok ;;
       ready-flaky)
         if [[ -e "$FIXTURE_CALLS.ready-seen" ]]; then
           echo ok
@@ -78,6 +79,11 @@ if [[ "$FIXTURE_MODE" == create-error && "$2" == create && "$*" == *nested-vanil
   echo 'fixture create failed' >&2
   exit 1
 fi
+if [[ "$FIXTURE_MODE" == create-hang && "$2" == create ]]; then
+  echo 'fixture create stuck' >&2
+  trap '' TERM
+  exec sleep 60
+fi
 if [[ "$2" == info && "$FIXTURE_MODE" == ready-error ]]; then
   echo 'Status: UNKNOWN'
   echo 'Ready: 0/0'
@@ -115,6 +121,19 @@ exec "$@"
 
 func runNestedCleanup(t *testing.T, mode string, distributions ...string) (string, string, error) {
 	t.Helper()
+
+	// This bounds the whole fixture, not a product operation. Each real readiness
+	// and cleanup deadline is independently exercised by the timeout stub below.
+	return runNestedCleanupWithWatchdog(t, false, mode, distributions...)
+}
+
+func runNestedCleanupWithWatchdog(
+	t *testing.T,
+	shortWatchdog bool,
+	mode string,
+	distributions ...string,
+) (string, string, error) {
+	t.Helper()
 	version, err := exec.CommandContext(t.Context(), "bash", "-c", `printf '%s' "${BASH_VERSINFO[0]}"`).
 		Output()
 	require.NoError(t, err)
@@ -137,9 +156,18 @@ func runNestedCleanup(t *testing.T, mode string, distributions ...string) (strin
 	writeExecutableStub(t, filepath.Join(dir, "timeout"), nestedCleanupTimeoutStub)
 	timeoutPath := nestedFixtureTimeoutPath(t)
 
-	command := exec.CommandContext(t.Context(), "timeout", "--kill-after=0.1s", "3s", "bash")
+	command := exec.CommandContext(t.Context(), "timeout", "--kill-after=0.1s", "30s", "bash")
 	if filepath.Base(timeoutPath) == "gtimeout" {
-		command = exec.CommandContext(t.Context(), "gtimeout", "--kill-after=0.1s", "3s", "bash")
+		command = exec.CommandContext(t.Context(), "gtimeout", "--kill-after=0.1s", "30s", "bash")
+	}
+
+	if shortWatchdog {
+		command = exec.CommandContext(t.Context(), "timeout", "--kill-after=0.1s", "5s", "bash")
+		if filepath.Base(timeoutPath) == "gtimeout" {
+			command = exec.CommandContext(
+				t.Context(), "gtimeout", "--kill-after=0.1s", "5s", "bash",
+			)
+		}
 	}
 
 	command.Stdin = strings.NewReader(script)
@@ -223,6 +251,27 @@ func TestNestedReadinessBindsEachDistributionContext(t *testing.T) {
 	}
 
 	assert.NotContains(t, calls, "kubectl --context fixture-host get --raw=/readyz")
+}
+
+func TestNestedReadinessAllowsSlowSuccessfulFixture(t *testing.T) {
+	t.Parallel()
+
+	output, calls, err := runNestedCleanup(t, "ready-delayed", "Vanilla")
+	require.NoError(t, err,
+		"a successful readiness response within its own deadline must finish: %s", output)
+	assert.Contains(t, calls, "kubectl --context kind-nested-vanilla get --raw=/readyz")
+	assert.Contains(t, output, "Vanilla resources drained")
+	assert.Contains(t, output, "All Kubernetes provider tests passed")
+}
+
+func TestNestedFixtureWatchdogRejectsAHungCommand(t *testing.T) {
+	t.Parallel()
+
+	output, _, err := runNestedCleanupWithWatchdog(t, true, "create-hang", "Vanilla")
+	require.Error(t, err, output)
+	assert.Contains(t, output, "fixture create stuck",
+		"the fixture must reach the deliberately hung command")
+	assert.NotContains(t, output, "All Kubernetes provider tests passed")
 }
 
 func TestNestedReadinessReportsAPIErrorBeforeInfo(t *testing.T) {
