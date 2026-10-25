@@ -13,12 +13,13 @@ import (
 )
 
 type moduleDownloadScenario struct {
-	name                           string
-	failures, buildExit, downloads int
-	builds                         int
-	backoff                        string
+	name                               string
+	failures, operationExit, downloads int
+	operations                         int
+	backoff                            string
 }
 
+// The desktop release must reach the guarded module download before compilation.
 func TestDesktopReleaseUsesModuleDownloadSetup(t *testing.T) {
 	t.Parallel()
 
@@ -43,7 +44,7 @@ func TestDesktopReleaseUsesModuleDownloadSetup(t *testing.T) {
 	assert.Less(t, setupIndex, buildIndex, "downloads must precede desktop compilation")
 }
 
-// Every release path must recover downloads without retrying compilation.
+// Release builds and the shipped graph audit recover downloads without retrying their verdict.
 func TestReleaseModuleDownloadRetries(t *testing.T) {
 	t.Parallel()
 	requireTestExecutable(t, "bash")
@@ -52,30 +53,65 @@ func TestReleaseModuleDownloadRetries(t *testing.T) {
 	desktop := readCompositeAction(t, ".github/actions/setup-desktop-build/action.yml")
 
 	targets := map[string][]harnessStep{
-		"cli":     jobs["goreleaser"].Steps,
-		"macos":   jobs["desktop-macos"].Steps,
-		"desktop": desktop.Runs.Steps,
+		"cli":              jobs["goreleaser"].Steps,
+		"macos":            jobs["desktop-macos"].Steps,
+		"desktop":          desktop.Runs.Steps,
+		"dependency_audit": readCIWorkflow(t, ".github/workflows/ci.yaml").Jobs["release-graph-audit"].Steps,
 	}
 	for target, steps := range targets {
 		t.Run(target, func(t *testing.T) {
 			t.Parallel()
 
 			prefetch := releaseModuleDownloadStep(t, steps)
+
+			downstreamRun := moduleDownloadOperation(t, target, steps)
 			for _, scenario := range []moduleDownloadScenario{
-				{name: "cache_warm", downloads: 1, builds: 1},
-				{name: "two_proxy_blips", failures: 2, downloads: 3, builds: 1, backoff: "5\n10\n"},
+				{name: "cache_warm", downloads: 1, operations: 1},
+				{name: "two_proxy_blips", failures: 2, downloads: 3, operations: 1, backoff: "5\n10\n"},
 				{name: "exhausted", failures: 3, downloads: 3, backoff: "5\n10\n"},
-				{name: "compiler_error", buildExit: 37, downloads: 1, builds: 1},
+				{name: "downstream_error", operationExit: 37, downloads: 1, operations: 1},
 			} {
 				t.Run(scenario.name, func(t *testing.T) {
 					t.Parallel()
-					runModuleDownloadScenario(t, prefetch, scenario)
+					runModuleDownloadScenario(t, prefetch, downstreamRun, scenario)
 				})
 			}
 		})
 	}
 }
 
+// Select the real audit invocation or the existing synthetic release-build control.
+func moduleDownloadOperation(t *testing.T, target string, steps []harnessStep) string {
+	t.Helper()
+
+	if target != "dependency_audit" {
+		return "go build"
+	}
+
+	prefetch := findHarnessStep(t, steps, "📥 Download Go modules before the audit")
+	require.Equal(t, "bash .github/scripts/download-go-modules.sh", strings.TrimSpace(prefetch.Run))
+
+	auditSteps := 0
+
+	for _, step := range steps {
+		if step.Name == "🔐 Audit Shipped Dependency Graphs" {
+			auditSteps++
+		}
+	}
+
+	require.Equal(t, 1, auditSteps,
+		"workflow must contain exactly one shipped dependency audit step")
+
+	step := findHarnessStep(t, steps, "🔐 Audit Shipped Dependency Graphs")
+	require.Equal(t, "go test ./pkg/client/kubescape/... -count=1", strings.TrimSpace(step.Run),
+		"audit findings must not be retried or hidden by a shell wrapper")
+	require.Empty(t, step.If)
+	require.False(t, step.ContinueOnError)
+
+	return step.Run
+}
+
+// Require a single unconditional prefetch between Go setup and the downstream operation.
 func releaseModuleDownloadStep(t *testing.T, steps []harnessStep) harnessStep {
 	t.Helper()
 
@@ -93,7 +129,8 @@ func releaseModuleDownloadStep(t *testing.T, steps []harnessStep) harnessStep {
 			prefetch, prefetchIndex = step, index
 		}
 
-		if strings.HasPrefix(step.Uses, "goreleaser/goreleaser-action@") {
+		if strings.HasPrefix(step.Uses, "goreleaser/goreleaser-action@") ||
+			step.Name == "🔐 Audit Shipped Dependency Graphs" {
 			buildIndex = index
 		}
 	}
@@ -108,9 +145,11 @@ func releaseModuleDownloadStep(t *testing.T, steps []harnessStep) harnessStep {
 	return prefetch
 }
 
+// Execute the checked-in downloader with recorded transport, backoff and downstream results.
 func runModuleDownloadScenario(
 	t *testing.T,
 	prefetch harnessStep,
+	downstreamRun string,
 	scenario moduleDownloadScenario,
 ) {
 	t.Helper()
@@ -126,7 +165,7 @@ func runModuleDownloadScenario(
 	require.NoError(t, err)
 
 	command := exec.CommandContext(t.Context(), "bash", "-e", "-o", "pipefail")
-	command.Stdin = strings.NewReader(prefetch.Run + "\ngo build")
+	command.Stdin = strings.NewReader(prefetch.Run + "\n" + downstreamRun)
 	command.Dir = root
 	command.Env = append(os.Environ(),
 		"PATH="+directory+string(os.PathListSeparator)+os.Getenv("PATH"),
@@ -134,7 +173,7 @@ func runModuleDownloadScenario(
 		"DOWNLOAD_CALLS="+filepath.Join(directory, "calls"),
 		"DOWNLOAD_DELAYS="+filepath.Join(directory, "delays"),
 		"DOWNLOAD_FAILURES="+strconv.Itoa(scenario.failures),
-		"BUILD_EXIT="+strconv.Itoa(scenario.buildExit))
+		"OPERATION_EXIT="+strconv.Itoa(scenario.operationExit))
 
 	output, runErr := command.CombinedOutput()
 	assertModuleDownloadResult(t, scenario, string(output), runErr)
@@ -142,7 +181,7 @@ func runModuleDownloadScenario(
 	actual, err := fixtures.ReadFile("calls")
 	require.NoError(t, err)
 	assert.Equal(t, scenario.downloads, strings.Count(string(actual), "download\n"))
-	assert.Equal(t, scenario.builds, strings.Count(string(actual), "build\n"))
+	assert.Equal(t, scenario.operations, strings.Count(string(actual), "operation\n"))
 
 	if scenario.backoff != "" {
 		actualDelays, readErr := fixtures.ReadFile("delays")
@@ -157,6 +196,7 @@ func runModuleDownloadScenario(
 	}
 }
 
+// Distinguish exhausted downloads from the original downstream command's failure.
 func assertModuleDownloadResult(
 	t *testing.T,
 	scenario moduleDownloadScenario,
@@ -165,7 +205,7 @@ func assertModuleDownloadResult(
 ) {
 	t.Helper()
 
-	if scenario.failures < 3 && scenario.buildExit == 0 {
+	if scenario.failures < 3 && scenario.operationExit == 0 {
 		require.NoErrorf(t, err, "recovery failed: %s", output)
 
 		return
@@ -181,13 +221,14 @@ func assertModuleDownloadResult(
 	} else {
 		assert.Equal(
 			t,
-			scenario.buildExit,
+			scenario.operationExit,
 			exitErr.ExitCode(),
-			"retain the compiler's actual failure",
+			"retain the downstream command's actual failure",
 		)
 	}
 }
 
+// Replace network and sleep effects while retaining the production retry script's decisions.
 func writeModuleDownloadStubs(t *testing.T, directory string) {
 	t.Helper()
 	writeExecutableStub(t, filepath.Join(directory, "go"), `#!/usr/bin/env bash
@@ -199,9 +240,9 @@ case "$*" in
 	printf 'download\n' >> "$DOWNLOAD_CALLS"
 	[[ "$count" -ge "$DOWNLOAD_FAILURES" ]]
 	;;
-"build")
-	printf 'build\n' >> "$DOWNLOAD_CALLS"
-	exit "$BUILD_EXIT"
+"build"|"test ./pkg/client/kubescape/... -count=1")
+	printf 'operation\n' >> "$DOWNLOAD_CALLS"
+	exit "$OPERATION_EXIT"
 	;;
 *) printf 'unexpected Go command: %s\n' "$*" >&2; exit 64 ;;
 esac
