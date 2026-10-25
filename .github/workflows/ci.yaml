@@ -422,6 +422,8 @@ jobs:
               - '.github/scripts/resolve-cask-publication.test.sh'
               - '.github/scripts/resolve-release-publish-state.sh'
               - '.github/scripts/resolve-release-publish-state.test.sh'
+              - '.github/scripts/publish-mcp-registry.sh'
+              - '.github/scripts/publish-mcp-registry.test.sh'
               - '.github/scripts/style-clean-cask-branch.sh'
               - '.github/scripts/style-clean-cask-branch.test.sh'
               - '.github/scripts/upload-release-assets.sh'
@@ -657,6 +659,11 @@ jobs:
           .github/scripts/validate-cask-pr-handoff.test.sh
           .github/scripts/wait-for-github-api-budget.test.sh
           .github/scripts/cask-pr-handoff-workflow.test.sh
+
+      - name: 🔐 Verify exact MCP publication replay and failure boundaries
+        run: |
+          shellcheck .github/scripts/publish-mcp-registry.sh .github/scripts/publish-mcp-registry.test.sh
+          bash .github/scripts/publish-mcp-registry.test.sh
 
   ci-go:
     name: ✅ Validate Main Go and Allowlist Changes
