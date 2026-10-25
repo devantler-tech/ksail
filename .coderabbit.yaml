@@ -16,6 +16,14 @@ reviews:
   # is green. Schema default is already false; pin it so an inherited UI/org override
   # cannot re-enable failing statuses.
   fail_commit_status: false
+  # pkg/svc/chat/docs_generated.go embeds every docs page as one Go string on a single line,
+  # so any docs change rewrites the whole line and a review reads the full documentation as
+  # new, unrelated content (ksail#7244). The file is generated: CI regenerates it from
+  # docs/src/content/docs and commits or rejects any difference, and the docs sources stay
+  # in review, so skipping the generated copy hides nothing a reviewer could act on. With
+  # inheritance enabled, these filters are added to any inherited ones, not swapped for them.
+  path_filters:
+    - "!pkg/svc/chat/docs_generated.go"
   pre_merge_checks:
     # Docstring Coverage counts every function in a PR's changed files against a single
     # coverage threshold, and it cannot be scoped per-path (the only path mechanism,
