@@ -21,6 +21,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/yannh/kubeconform/pkg/cache"
 	yamlio "k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/yaml"
 )
@@ -31,7 +32,8 @@ import (
 var fluxVarPattern = regexp.MustCompile(`\$\{([a-zA-Z_][a-zA-Z0-9_]*)(?:(:-|:=)([^}]*))?\}`)
 
 const (
-	schemaCacheFileMaxChars = 200
+	// kubeconformSchemaURLCount is the most URLs schemaURLs returns for one kind.
+	kubeconformSchemaURLCount = 3
 
 	placeholderString = "placeholder"
 
@@ -368,15 +370,20 @@ func (reg *schemaRegistry) load(apiVersion, kind string) map[string]any {
 	return schema
 }
 
-// fetchSchemaFromDisk tries to load a schema from the disk cache.
+// fetchSchemaFromDisk tries to load a schema from kubeconform's disk cache. The cache is
+// read through kubeconform's own cache package, so the lookup uses exactly the file name
+// kubeconform stores a downloaded schema under.
 func fetchSchemaFromDisk(apiVersion, kind string) map[string]any {
-	cacheDir := schemaCacheDir()
+	diskCache := cache.NewOnDiskCache(schemaCacheDir())
 
 	for _, schemaURL := range schemaURLs(apiVersion, kind) {
-		cachedPath := filepath.Join(cacheDir, schemaCacheFileName(schemaURL))
-
-		data, err := os.ReadFile(cachedPath) //nolint:gosec // controlled cache directory
+		cached, err := diskCache.Get(schemaURL)
 		if err != nil {
+			continue
+		}
+
+		data, ok := cached.([]byte)
+		if !ok {
 			continue
 		}
 
@@ -399,50 +406,41 @@ func schemaCacheDir() string {
 	return filepath.Join(userCacheDir, "ksail", "kubeconform")
 }
 
-// schemaCacheFileName produces a deterministic filename for caching a schema URL.
-func schemaCacheFileName(schemaURL string) string {
-	safe := strings.NewReplacer(
-		"://", "_",
-		"/", "_",
-		".", "_",
-	).Replace(schemaURL) + ".json"
-
-	if len(safe) > schemaCacheFileMaxChars {
-		safe = safe[len(safe)-schemaCacheFileMaxChars:]
-	}
-
-	return safe
-}
-
-// schemaURLs returns the candidate schema URLs for a given apiVersion/kind.
+// schemaURLs returns the URLs kubeconform downloads (and caches) a schema for the given
+// apiVersion/kind from, in lookup order: the built-in Kubernetes schemas, in kubeconform's
+// default and strict variants, then the datree CRDs catalog for a grouped API.
+//
+// The built-in URL mirrors kubeconform's "default" schema location at Kubernetes version
+// "master": its kind suffix uses only the first label of the API group, so
+// networking.k8s.io/v1 Ingress is ingress-networking-v1.json.
 func schemaURLs(apiVersion, kind string) []string {
 	kindLower := strings.ToLower(kind)
 	group, version := splitAPIVersion(apiVersion)
 
+	kindSuffix := "-" + strings.ToLower(version)
+
 	if group != "" {
-		// Try Kubernetes JSON schema first (for core API groups like apps, batch, etc.),
-		// then fall back to CRDs catalog for custom resources.
-		return []string{
-			fmt.Sprintf(
-				"https://raw.githubusercontent.com/yannh/kubernetes-json-schema/master/master-standalone/%s-%s-%s.json",
-				kindLower,
-				group,
-				version,
-			),
-			fmt.Sprintf(
-				"https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/%s/%s_%s.json",
-				group, kindLower, version,
-			),
-		}
+		firstLabel, _, _ := strings.Cut(group, ".")
+		kindSuffix = "-" + strings.ToLower(firstLabel) + kindSuffix
 	}
 
-	return []string{
-		fmt.Sprintf(
-			"https://raw.githubusercontent.com/yannh/kubernetes-json-schema/master/master-standalone/%s-%s.json",
-			kindLower,
-			version,
-		),
+	urls := make([]string, 0, kubeconformSchemaURLCount)
+
+	for _, variant := range []string{"master-standalone", "master-standalone-strict"} {
+		urls = append(urls, fmt.Sprintf(
+			"https://raw.githubusercontent.com/yannh/kubernetes-json-schema/master/%s/%s%s.json",
+			variant, kindLower, kindSuffix,
+		))
 	}
+
+	if group != "" {
+		urls = append(urls, fmt.Sprintf(
+			"https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/%s/%s_%s.json",
+			group, kindLower, version,
+		))
+	}
+
+	return urls
 }
 
 // splitAPIVersion splits "apps/v1" into ("apps", "v1") or "v1" into ("", "v1").

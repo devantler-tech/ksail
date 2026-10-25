@@ -11,9 +11,8 @@ import (
 )
 
 const (
-	stringType             = "string"
-	booleanType            = "boolean"
-	maxCacheFileNameLength = 200
+	stringType  = "string"
+	booleanType = "boolean"
 )
 
 func TestParseInteger(t *testing.T) {
@@ -169,27 +168,6 @@ func TestSchemaCacheDir(t *testing.T) {
 	suffix := filepath.Join("ksail", "kubeconform")
 	if !strings.HasSuffix(got, suffix) {
 		t.Errorf("SchemaCacheDir() = %q, want suffix %q", got, suffix)
-	}
-}
-
-func TestSchemaCacheFileName(t *testing.T) {
-	t.Parallel()
-
-	// "://", "/", and "." are each replaced with "_", then ".json" is appended.
-	if got := fluxsubst.SchemaCacheFileName("a://b/c.d"); got != "a_b_c_d.json" {
-		t.Errorf("SchemaCacheFileName(a://b/c.d) = %q, want a_b_c_d.json", got)
-	}
-
-	// Over-long names are truncated to a bounded length while keeping the suffix.
-	long := "http://example.com/" + strings.Repeat("seg/", 200) + "schema.json"
-
-	got := fluxsubst.SchemaCacheFileName(long)
-	if len(got) != maxCacheFileNameLength {
-		t.Errorf("SchemaCacheFileName(long) len = %d, want %d", len(got), maxCacheFileNameLength)
-	}
-
-	if !strings.HasSuffix(got, ".json") {
-		t.Errorf("SchemaCacheFileName(long) = %q, want .json suffix", got)
 	}
 }
 

@@ -1,10 +1,16 @@
 package fluxsubst_test
 
 import (
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/fluxsubst"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/yannh/kubeconform/pkg/cache"
 )
 
 const integerType = "integer"
@@ -78,18 +84,87 @@ func TestSplitAPIVersion(t *testing.T) {
 	}
 }
 
-func TestSchemaURLs_CoreVsGroup(t *testing.T) {
+func TestSchemaURLs_MatchKubeconformLocations(t *testing.T) {
 	t.Parallel()
 
-	core := fluxsubst.SchemaURLs("v1", "ConfigMap")
-	if len(core) != 1 {
-		t.Fatalf("core SchemaURLs len = %d, want 1", len(core))
+	const (
+		builtin = "https://raw.githubusercontent.com/yannh/kubernetes-json-schema/master/"
+		catalog = "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/"
+	)
+
+	tests := []struct {
+		apiVersion string
+		kind       string
+		want       []string
+	}{
+		{
+			apiVersion: "v1",
+			kind:       "ConfigMap",
+			want: []string{
+				builtin + "master-standalone/configmap-v1.json",
+				builtin + "master-standalone-strict/configmap-v1.json",
+			},
+		},
+		{
+			apiVersion: "apps/v1",
+			kind:       "Deployment",
+			want: []string{
+				builtin + "master-standalone/deployment-apps-v1.json",
+				builtin + "master-standalone-strict/deployment-apps-v1.json",
+				catalog + "apps/deployment_v1.json",
+			},
+		},
+		{
+			// kubeconform keeps only the first label of a dotted API group.
+			apiVersion: "networking.k8s.io/v1",
+			kind:       "Ingress",
+			want: []string{
+				builtin + "master-standalone/ingress-networking-v1.json",
+				builtin + "master-standalone-strict/ingress-networking-v1.json",
+				catalog + "networking.k8s.io/ingress_v1.json",
+			},
+		},
+		{
+			apiVersion: "helm.toolkit.fluxcd.io/v2",
+			kind:       "HelmRelease",
+			want: []string{
+				builtin + "master-standalone/helmrelease-helm-v2.json",
+				builtin + "master-standalone-strict/helmrelease-helm-v2.json",
+				catalog + "helm.toolkit.fluxcd.io/helmrelease_v2.json",
+			},
+		},
 	}
 
-	grouped := fluxsubst.SchemaURLs("apps/v1", "Deployment")
-	if len(grouped) != 2 {
-		t.Fatalf("grouped SchemaURLs len = %d, want 2", len(grouped))
+	for _, test := range tests {
+		got := fluxsubst.SchemaURLs(test.apiVersion, test.kind)
+		if !slices.Equal(got, test.want) {
+			t.Errorf("SchemaURLs(%q, %q) = %q, want %q", test.apiVersion, test.kind, got, test.want)
+		}
 	}
+}
+
+// TestExpandFluxSubstitutions_UsesKubeconformCache warms the schema cache the way
+// kubeconform does, through its own cache package, and expects the typed placeholder.
+func TestExpandFluxSubstitutions_UsesKubeconformCache(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+
+	cacheDir := fluxsubst.SchemaCacheDir()
+	require.NoError(t, os.MkdirAll(cacheDir, 0o700))
+
+	// A kind no other test uses, so the process-wide schema registry has no entry for it.
+	schemaURL := "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/" +
+		"example.ksail.io/substcachewidget_v1.json"
+	schema := []byte(`{"properties":{"spec":{"properties":{"size":{"type":"integer"}}}}}`)
+	require.NoError(t, cache.NewOnDiskCache(cacheDir).Set(schemaURL, schema))
+
+	input := []byte("apiVersion: example.ksail.io/v1\nkind: SubstCacheWidget\n" +
+		"spec:\n  size: ${SIZE}\n")
+
+	got := string(fluxsubst.ExpandFluxSubstitutions(input))
+	assert.Contains(t, got, "size: 0")
+	assert.NotContains(t, got, "placeholder")
 }
 
 func TestGetSchemaTypeAtPath(t *testing.T) {

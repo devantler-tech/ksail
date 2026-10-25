@@ -572,53 +572,6 @@ func TestSchemaCacheDir(t *testing.T) {
 }
 
 // ===========================================================================
-// schemaCacheFileName — URL to safe filename
-// ===========================================================================
-
-func TestSchemaCacheFileName(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		url  string
-	}{
-		{"simple URL", "https://example.com/schema.json"},
-		{"URL with path", "https://raw.githubusercontent.com/org/repo/main/schema.json"},
-		{"short URL", "http://a.com/s"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := workload.ExportSchemaCacheFileName(tt.url)
-			assert.NotEmpty(t, got)
-			assert.True(t, strings.HasSuffix(got, ".json"), "expected .json suffix, got %q", got)
-			assert.NotContains(t, got, "://")
-			assert.NotContains(t, got, "/")
-		})
-	}
-}
-
-func TestSchemaCacheFileName_MaxLength(t *testing.T) {
-	t.Parallel()
-
-	longURL := "https://example.com/" + strings.Repeat("abcdefgh", 100) + "/schema.json"
-	got := workload.ExportSchemaCacheFileName(longURL)
-	assert.LessOrEqual(t, len(got), 200)
-	assert.True(t, strings.HasSuffix(got, ".json"))
-}
-
-func TestSchemaCacheFileName_Deterministic(t *testing.T) {
-	t.Parallel()
-
-	url := "https://example.com/schema.json"
-	a := workload.ExportSchemaCacheFileName(url)
-	b := workload.ExportSchemaCacheFileName(url)
-	assert.Equal(t, a, b, "same URL should produce same filename")
-}
-
-// ===========================================================================
 // distributionToLabelScheme — distribution enum mapping
 // ===========================================================================
 

@@ -417,11 +417,6 @@ func ExportSchemaCacheDir() string {
 	return fluxsubst.SchemaCacheDir()
 }
 
-// ExportSchemaCacheFileName exposes the engine's schemaCacheFileName for testing.
-func ExportSchemaCacheFileName(schemaURL string) string {
-	return fluxsubst.SchemaCacheFileName(schemaURL)
-}
-
 // ExportDistributionToLabelScheme exposes the hostdebug engine's
 // DistributionToLabelScheme for testing (the mapping moved to pkg/svc/hostdebug).
 func ExportDistributionToLabelScheme(
