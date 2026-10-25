@@ -8,6 +8,13 @@
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f8fafc" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#020617" />
     <title>KSail</title>
+    <!-- Install metadata: lets iOS, iPadOS, macOS and Chromium add the UI to a Home Screen or Dock as
+         a standalone app. Root-absolute like theme-init.js, because index.html is also served for
+         nested client-side routes, where a relative href would resolve under that route. -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="apple-mobile-web-app-title" content="KSail" />
     <!-- Render-blocking, same-origin theme init (no inline script, so it passes the operator CSP). -->
     <script src="/theme-init.js"></script>
   </head>
