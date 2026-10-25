@@ -295,13 +295,17 @@ func HandleSwitchRunE(
 		)
 	}
 
-	// Persist the cluster name to switch history (errors silently ignored).
-	save := deps.SaveToSwitchHistory
-	if save == nil {
-		save = saveToSwitchHistory
-	}
+	// Persist the cluster name to switch history (errors silently ignored). Unmanaged contexts
+	// are left out: the picker orders only managed clusters by recency, and an unmanaged entry
+	// would evict managed ones or promote a managed cluster that shares its name.
+	if managed {
+		save := deps.SaveToSwitchHistory
+		if save == nil {
+			save = saveToSwitchHistory
+		}
 
-	save(stripParenthetical(clusterName))
+		save(stripParenthetical(clusterName))
+	}
 
 	return nil
 }

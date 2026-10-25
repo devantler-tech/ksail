@@ -198,7 +198,7 @@ func TestSwitchCmd_TypedUnmanagedNameBeatsSubstringMatches(t *testing.T) {
 	t.Parallel()
 
 	// Typing an unmanaged context's exact name switches to it, even when other
-	// contexts contain that name and would otherwise make it ambiguous.
+	// contexts contain that name.
 	path := writeSwitchKubeconfig(t, map[string]string{
 		"corp":    "https://corp.example.com",
 		"corp-eu": "https://corp-eu.example.com",
@@ -264,4 +264,28 @@ func TestSwitchCmd_StaleUnmanagedLabelDoesNotSwitchElsewhere(t *testing.T) {
 	})
 	require.ErrorIs(t, err, cluster.ErrContextNotFound)
 	assert.Empty(t, currentContext(t, path))
+}
+
+func TestSwitchHistory_SkipsUnmanagedContexts(t *testing.T) {
+	t.Parallel()
+
+	path := writeSwitchKubeconfig(t, map[string]string{
+		"kind-dev": "https://127.0.0.1:6443",
+		"dev":      "https://dev.example.com",
+	})
+
+	var saved []string
+
+	cmd, _ := newSwitchTestCmd()
+	deps := cluster.SwitchDeps{
+		KubeconfigPath:      path,
+		SaveToSwitchHistory: func(name string) { saved = append(saved, name) },
+	}
+
+	// An unmanaged switch is not remembered: it would promote the managed "dev".
+	require.NoError(t, cluster.HandleSwitchRunE(cmd, "dev (unmanaged)", deps))
+	assert.Empty(t, saved)
+
+	require.NoError(t, cluster.HandleSwitchRunE(cmd, "kind-dev", deps))
+	assert.Equal(t, []string{"kind-dev"}, saved)
 }
