@@ -10,6 +10,8 @@
 //   - Configuration reference at docs/src/content/docs/configuration/declarative-configuration.mdx
 //   - MCP tool catalog partial at docs/src/partials/mcp-available-tools.mdx
 //     (imported by src/content/docs/mcp.mdx)
+//   - The distribution × provider table inside
+//     docs/src/content/docs/support-matrix.mdx, between its generated-region markers
 //
 // Rendering helpers live in the importable docs package (render.go,
 // fielddocs.go) so they stay unit-testable; this file wires them to the
@@ -35,10 +37,11 @@ import (
 )
 
 const (
-	cliDocsDir      = "src/content/docs/cli-flags"
-	configDoc       = "src/content/docs/configuration/declarative-configuration.mdx"
-	mcpToolsPartial = "src/partials/mcp-available-tools.mdx"
-	apiTypesDir     = "../pkg/apis/cluster/v1alpha1"
+	cliDocsDir        = "src/content/docs/cli-flags"
+	configDoc         = "src/content/docs/configuration/declarative-configuration.mdx"
+	mcpToolsPartial   = "src/partials/mcp-available-tools.mdx"
+	supportMatrixPage = "src/content/docs/support-matrix.mdx"
+	apiTypesDir       = "../pkg/apis/cluster/v1alpha1"
 
 	dirPermissions  = 0o750
 	filePermissions = 0o600
@@ -64,6 +67,11 @@ func run() error {
 	// changes what toolgen sees versus a freshly constructed command.
 	if err := generateMCPToolsPartial(cmd.NewRootCmd("dev", "", "")); err != nil {
 		return fmt.Errorf("generating MCP tools partial: %w", err)
+	}
+
+	// --- Distribution × provider support table ---
+	if err := generateSupportMatrixTable(); err != nil {
+		return fmt.Errorf("generating support matrix table: %w", err)
 	}
 
 	// --- Configuration reference ---
@@ -131,6 +139,33 @@ func generateMCPToolsPartial(root *cobra.Command) error {
 	}
 
 	fmt.Printf("gen_docs: wrote %s (%d bytes)\n", mcpToolsPartial, len(content))
+
+	return nil
+}
+
+// generateSupportMatrixTable rewrites the generated distribution × provider table inside
+// src/content/docs/support-matrix.mdx, leaving the rest of the page as authored.
+func generateSupportMatrixTable() error {
+	table, err := docs.RenderDistributionProviderTable()
+	if err != nil {
+		return fmt.Errorf("rendering the table for %s: %w", supportMatrixPage, err)
+	}
+
+	page, err := os.ReadFile(supportMatrixPage)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", supportMatrixPage, err)
+	}
+
+	updated, err := docs.ReplaceDistributionProviderTable(string(page), table)
+	if err != nil {
+		return fmt.Errorf("updating %s: %w", supportMatrixPage, err)
+	}
+
+	if err := os.WriteFile(supportMatrixPage, []byte(updated), filePermissions); err != nil {
+		return fmt.Errorf("writing %s: %w", supportMatrixPage, err)
+	}
+
+	fmt.Printf("gen_docs: wrote the distribution × provider table in %s\n", supportMatrixPage)
 
 	return nil
 }
