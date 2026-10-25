@@ -740,6 +740,11 @@ func ExportPickCluster(cmd *cobra.Command, deps SwitchDeps) (string, error) {
 	return pickCluster(cmd, deps)
 }
 
+// ExportListClusterNames exposes the switch command's shell-completion candidates.
+func ExportListClusterNames(cmd *cobra.Command) []string {
+	return listClusterNames(cmd)
+}
+
 // ExportPrintRestoreHeader exposes printRestoreHeader for testing.
 // Parameters mirror restoreFlags fields so the unexported struct is not needed.
 func ExportPrintRestoreHeader(writer io.Writer, inputPath, policy string, dryRun bool) {

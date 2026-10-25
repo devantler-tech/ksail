@@ -16,6 +16,11 @@ nested K3s clusters on the Kubernetes provider, and kwok- matches KWOK clusters.
 If multiple distributions have contexts for the same cluster name, the
 command returns an error listing the matching contexts.
 
+Contexts the kubeconfig does not show as clusters KSail manages, such as a
+cloud cluster or a colleague's cluster, can be switched to by their exact
+context name. The picker and shell completion list them too, marked
+unmanaged as in ksail cluster list, and switching to one prints a notice.
+
 The kubeconfig is resolved in the following priority order:
   1. From KUBECONFIG environment variable
   2. From ksail.yaml config file (if present)

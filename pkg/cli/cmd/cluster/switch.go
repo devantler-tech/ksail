@@ -27,8 +27,16 @@ var ErrContextNotFound = errors.New("no matching context found for cluster")
 // ErrAmbiguousCluster is returned when multiple distribution contexts match the cluster name.
 var ErrAmbiguousCluster = errors.New("ambiguous cluster name")
 
-// ErrNoClusters is returned when no KSail-managed clusters are found in the kubeconfig.
-var ErrNoClusters = errors.New("no KSail-managed clusters found in kubeconfig")
+// ErrNoClusters is returned when the kubeconfig holds no context to switch to.
+var ErrNoClusters = errors.New("no clusters found in kubeconfig")
+
+// unmanagedMarker labels a kubeconfig context KSail does not manage in the interactive picker.
+// It matches the "Unmanaged" status `ksail cluster list` shows for the same context, and a
+// picker label carrying it resolves to exactly that context.
+const unmanagedMarker = " (unmanaged)"
+
+// unmanagedCompletionDescription is the shell-completion description of an unmanaged context.
+const unmanagedCompletionDescription = "unmanaged"
 
 // ErrInteractivePickerNoTTY is returned when the interactive picker is requested
 // (switch invoked without a cluster-name argument) but stdin is not a terminal —
@@ -143,6 +151,11 @@ nested K3s clusters on the Kubernetes provider, and kwok- matches KWOK clusters.
 
 If multiple distributions have contexts for the same cluster name, the
 command returns an error listing the matching contexts.
+
+Contexts the kubeconfig does not show as clusters KSail manages, such as a
+cloud cluster or a colleague's cluster, can be switched to by their exact
+context name. The picker and shell completion list them too, marked
+unmanaged as in ksail cluster list, and switching to one prints a notice.
 
 The kubeconfig is resolved in the following priority order:
   1. From KUBECONFIG environment variable
@@ -261,7 +274,7 @@ func HandleSwitchRunE(
 		return err
 	}
 
-	contextName, err := switchContext(kubeconfigPath, clusterName)
+	contextName, managed, err := switchContext(kubeconfigPath, clusterName)
 	if err != nil {
 		return err
 	}
@@ -269,9 +282,18 @@ func HandleSwitchRunE(
 	notify.Successf(
 		cmd.OutOrStdout(),
 		"Switched to cluster '%s' (context: %s)",
-		clusterName,
+		strings.TrimSuffix(clusterName, unmanagedMarker),
 		contextName,
 	)
+
+	if !managed {
+		notify.Infof(
+			cmd.OutOrStdout(),
+			"context '%s' is unmanaged: the kubeconfig does not show it as a cluster "+
+				"KSail manages, so cluster lifecycle commands may refuse it",
+			contextName,
+		)
+	}
 
 	// Persist the cluster name to switch history (errors silently ignored).
 	save := deps.SaveToSwitchHistory
@@ -313,15 +335,17 @@ func buildOrderedClusterNames(recent, allNames []string) []string {
 
 // pickCluster resolves the kubeconfig, lists available cluster names ordered
 // by recency (recently switched clusters appear first), and presents an
-// interactive picker for the user to select one.
+// interactive picker for the user to select one. Contexts without a distribution
+// prefix follow those clusters by their raw names, and the ones KSail does not
+// manage are labelled with unmanagedMarker.
 func pickCluster(cmd *cobra.Command, deps SwitchDeps) (string, error) {
 	kubeconfigPath, err := resolveSwitchKubeconfig(cmd, deps)
 	if err != nil {
 		return "", err
 	}
 
-	allNames := clusterNamesFromPath(kubeconfigPath)
-	if len(allNames) == 0 {
+	clusterNames, otherContexts := kubeconfigClusterNames(kubeconfigPath)
+	if len(clusterNames) == 0 && len(otherContexts) == 0 {
 		return "", fmt.Errorf("%w", ErrNoClusters)
 	}
 
@@ -330,7 +354,10 @@ func pickCluster(cmd *cobra.Command, deps SwitchDeps) (string, error) {
 		loadHistory = loadSwitchHistory
 	}
 
-	names := buildOrderedClusterNames(loadHistory(), allNames)
+	names := buildOrderedClusterNames(loadHistory(), clusterNames)
+	for _, other := range otherContexts {
+		names = append(names, other.pickerLabel())
+	}
 
 	pick := deps.PickCluster
 	if pick == nil {
@@ -366,6 +393,14 @@ func resolveContextName(
 	config *clientcmdapi.Config,
 	clusterName string,
 ) (string, error) {
+	// A picker label for an unmanaged context names that exact context, even when
+	// a managed cluster of the same name also exists.
+	if contextName, labelled := strings.CutSuffix(clusterName, unmanagedMarker); labelled {
+		if _, exists := config.Contexts[contextName]; exists {
+			return contextName, nil
+		}
+	}
+
 	// Strip trailing parenthetical suffix (e.g., " (Vanilla)") that may be
 	// present if the name was copied from enriched list output.
 	cleanName := stripParenthetical(clusterName)
@@ -416,45 +451,51 @@ func stripParenthetical(input string) string {
 	return input
 }
 
-// switchContext loads the kubeconfig, resolves the cluster name to a context, and sets current-context.
-func switchContext(kubeconfigPath, clusterName string) (string, error) {
+// switchContext loads the kubeconfig, resolves the cluster name to a context, and sets
+// current-context. It returns the context switched to and whether KSail manages it.
+func switchContext(kubeconfigPath, clusterName string) (string, bool, error) {
 	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to read kubeconfig: %w", err)
+		return "", false, fmt.Errorf("failed to read kubeconfig: %w", err)
 	}
 
 	configBytes, err := os.ReadFile(canonicalPath) //nolint:gosec // canonicalized above
 	if err != nil {
-		return "", fmt.Errorf("failed to read kubeconfig: %w", err)
+		return "", false, fmt.Errorf("failed to read kubeconfig: %w", err)
 	}
 
 	config, err := clientcmd.Load(configBytes)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse kubeconfig: %w", err)
+		return "", false, fmt.Errorf("failed to parse kubeconfig: %w", err)
 	}
 
 	contextName, err := resolveContextName(config, clusterName)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
+
+	managed := isManagedContext(config, contextName)
 
 	config.CurrentContext = contextName
 
 	result, err := clientcmd.Write(*config)
 	if err != nil {
-		return "", fmt.Errorf("failed to serialize kubeconfig: %w", err)
+		return "", false, fmt.Errorf("failed to serialize kubeconfig: %w", err)
 	}
 
 	err = fsutil.AtomicWriteFile(canonicalPath, result, switchKubeconfigFileMode)
 	if err != nil {
-		return "", fmt.Errorf("failed to write kubeconfig: %w", err)
+		return "", false, fmt.Errorf("failed to write kubeconfig: %w", err)
 	}
 
-	return contextName, nil
+	return contextName, managed, nil
 }
 
-// listClusterNames returns deduplicated cluster names from the kubeconfig for shell completion.
-// It strips known distribution prefixes from context names to produce cluster names.
+// listClusterNames returns the shell-completion candidates from the kubeconfig: the
+// deduplicated cluster names of its distribution-prefixed contexts (prefix stripped),
+// then the raw names of its other contexts, with each context KSail does not manage
+// described as unmanaged. A raw name equal to one of those cluster names is left out,
+// because it is already offered.
 // When cmd is non-nil, the --config persistent flag is honored for config loading.
 func listClusterNames(cmd *cobra.Command) []string {
 	kubeconfigPath, err := resolveKubeconfigForSwitch(cmd)
@@ -462,40 +503,106 @@ func listClusterNames(cmd *cobra.Command) []string {
 		return nil
 	}
 
-	return clusterNamesFromPath(kubeconfigPath)
+	clusterNames, otherContexts := kubeconfigClusterNames(kubeconfigPath)
+
+	candidates := make([]string, 0, len(clusterNames)+len(otherContexts))
+	candidates = append(candidates, clusterNames...)
+
+	for _, other := range otherContexts {
+		if slices.Contains(clusterNames, other.name) {
+			continue
+		}
+
+		if other.managed {
+			candidates = append(candidates, other.name)
+
+			continue
+		}
+
+		candidates = append(candidates, other.name+"\t"+unmanagedCompletionDescription)
+	}
+
+	return candidates
 }
 
-// clusterNamesFromPath reads the given kubeconfig and returns sorted, deduplicated
-// cluster names by stripping distribution prefixes from context names.
+// kubeconfigContext is a kubeconfig context without a distribution prefix, and whether
+// KSail manages the cluster it points at.
+type kubeconfigContext struct {
+	name    string
+	managed bool
+}
+
+// pickerLabel returns the picker entry for the context: its raw name, followed by
+// unmanagedMarker when KSail does not manage it.
+func (c kubeconfigContext) pickerLabel() string {
+	if c.managed {
+		return c.name
+	}
+
+	return c.name + unmanagedMarker
+}
+
+// kubeconfigClusterNames reads the given kubeconfig and returns the sorted, deduplicated
+// cluster names encoded in its distribution-prefixed contexts (prefix stripped), and
+// every other context sorted by name. The other contexts are those KSail does not
+// manage, plus managed ones whose names carry no distribution prefix, such as eksctl's
+// or a Sidero Omni service-account context. A missing or unreadable kubeconfig yields
+// neither.
 //
 //nolint:gosec // G304: kubeconfigPath is resolved from trusted config or default
-func clusterNamesFromPath(kubeconfigPath string) []string {
+func kubeconfigClusterNames(kubeconfigPath string) ([]string, []kubeconfigContext) {
 	configBytes, err := os.ReadFile(kubeconfigPath)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 
 	config, err := clientcmd.Load(configBytes)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 
 	seen := make(map[string]struct{})
+	otherContexts := make([]kubeconfigContext, 0)
 
 	for contextName := range config.Contexts {
 		if name := stripDistributionPrefix(contextName); name != "" {
 			seen[name] = struct{}{}
+
+			continue
 		}
+
+		otherContexts = append(otherContexts, kubeconfigContext{
+			name:    contextName,
+			managed: isManagedContext(config, contextName),
+		})
 	}
 
-	names := make([]string, 0, len(seen))
+	clusterNames := make([]string, 0, len(seen))
 	for name := range seen {
-		names = append(names, name)
+		clusterNames = append(clusterNames, name)
 	}
 
-	slices.Sort(names)
+	slices.Sort(clusterNames)
+	slices.SortFunc(otherContexts, func(a, b kubeconfigContext) int {
+		return strings.Compare(a.name, b.name)
+	})
 
-	return names
+	return clusterNames, otherContexts
+}
+
+// isManagedContext reports whether a kubeconfig context points at a cluster KSail
+// manages, judged offline from the kubeconfig alone: a distribution prefix (including
+// the nested-K3s "k3k-" alias), the eksctl context shape, or a Sidero Omni server URL.
+// Every other context belongs to a cluster KSail did not create, which
+// `ksail cluster list` shows as Unmanaged.
+func isManagedContext(config *clientcmdapi.Config, contextName string) bool {
+	if stripDistributionPrefix(contextName) != "" {
+		return true
+	}
+
+	_, _, err := clusterdetector.DetectDistributionFromConfigContext(config, contextName)
+
+	return err == nil
 }
 
 // stripDistributionPrefix removes the distribution-specific prefix from a context name,

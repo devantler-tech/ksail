@@ -16,6 +16,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 // hetznerProbeTimeout bounds the cloud-provider ownership probe so DetectInfo
@@ -221,6 +222,38 @@ func DetectDistributionFromContext(contextName string) (v1alpha1.Distribution, s
 	}
 
 	return "", "", fmt.Errorf("%w: %s", ErrUnknownContextPattern, contextName)
+}
+
+// DetectDistributionFromConfigContext detects the distribution and cluster name of
+// one context in an already loaded kubeconfig. It applies the same offline rules as
+// DetectInfo: the context name pattern first, then the server URL of the context's
+// cluster (a Sidero Omni endpoint, whose context name is a service-account
+// identifier). It makes no network call and never probes a cloud provider, so
+// listings such as shell completion can call it for every context.
+func DetectDistributionFromConfigContext(
+	config *clientcmdapi.Config,
+	contextName string,
+) (v1alpha1.Distribution, string, error) {
+	distribution, clusterName, err := DetectDistributionFromContext(contextName)
+	if !errors.Is(err, ErrUnknownContextPattern) {
+		return distribution, clusterName, err
+	}
+
+	if config == nil {
+		return "", "", fmt.Errorf("%w: %s", ErrContextNotFound, contextName)
+	}
+
+	kubeCtx, exists := config.Contexts[contextName]
+	if !exists || kubeCtx == nil {
+		return "", "", fmt.Errorf("%w: %s", ErrContextNotFound, contextName)
+	}
+
+	cluster, exists := config.Clusters[kubeCtx.Cluster]
+	if !exists || cluster == nil {
+		return "", "", fmt.Errorf("%w: %s", ErrClusterNotFound, kubeCtx.Cluster)
+	}
+
+	return detectFromServerURL(cluster.Server, kubeCtx.Cluster)
 }
 
 // detectFromServerURL infers distribution and cluster name from the server URL
