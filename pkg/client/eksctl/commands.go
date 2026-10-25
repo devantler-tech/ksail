@@ -342,26 +342,6 @@ func (c *Client) ScaleNodegroup(
 	return c.execWithProgress(ctx, args...)
 }
 
-// UpgradeCluster invokes `eksctl upgrade cluster -f <configPath>`.
-// When approve is true, `--approve` is appended, which eksctl requires to
-// perform (rather than preview) the upgrade.
-func (c *Client) UpgradeCluster(
-	ctx context.Context,
-	configPath string,
-	approve bool,
-) error {
-	if strings.TrimSpace(configPath) == "" {
-		return ErrEmptyConfigPath
-	}
-
-	args := []string{"upgrade", subcommandCluster, "--config-file", configPath}
-	if approve {
-		args = append(args, "--approve")
-	}
-
-	return c.execWithProgress(ctx, args...)
-}
-
 // parseClusterSummaries unmarshals the JSON output of `eksctl get cluster`.
 // eksctl returns `null` (not `[]`) when no clusters exist, so we handle both.
 func parseClusterSummaries(data []byte) ([]ClusterSummary, error) {
