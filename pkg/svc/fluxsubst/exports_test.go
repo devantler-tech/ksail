@@ -30,6 +30,9 @@ func TestParseInteger(t *testing.T) {
 		"-9223372036854775809": "-9223372036854775809", // underflow → defaultVal verbatim
 		"abc":                  "abc",                  // not parseable → defaultVal verbatim
 		"3oops":                "3oops",                // numeric prefix only → defaultVal verbatim
+		"0x10":                 int64(16),              // YAML hexadecimal integer
+		"0o20":                 int64(16),              // YAML octal integer
+		"3.14":                 "3.14",                 // a YAML float, not an integer
 		"":                     "",                     // empty → defaultVal verbatim
 	}
 
@@ -46,15 +49,16 @@ func TestParseNumber(t *testing.T) {
 	tests := map[string]any{
 		"2.5": 2.5,
 		"10":  10.0,
-		// Scientific notation and the float64 magnitude limits round-trip; %f also
-		// recognises the IEEE-754 specials NaN/Infinity.
+		// Values follow YAML scalar rules, as the substituted manifest is parsed: scientific
+		// notation and the float64 limits round-trip, and the specials are .nan and .inf.
 		"1e10":                    1e10,
 		"1e-10":                   1e-10,
 		"1.7976931348623157e+308": math.MaxFloat64,
-		"NaN":                     math.NaN(),
-		"Infinity":                math.Inf(1),
-		"+Inf":                    math.Inf(1),
-		"-Inf":                    math.Inf(-1),
+		".nan":                    math.NaN(),
+		".inf":                    math.Inf(1),
+		"-.inf":                   math.Inf(-1),
+		"NaN":                     "NaN",       // a YAML string, not a number
+		"Infinity":                "Infinity",  // a YAML string, not a number
 		"notafloat":               "notafloat", // not parseable → defaultVal verbatim
 		"2.5x":                    "2.5x",      // numeric prefix only → defaultVal verbatim
 		"":                        "",          // empty → defaultVal verbatim
@@ -79,8 +83,7 @@ func TestParseNumber(t *testing.T) {
 }
 
 // floatEqual compares two float64 values, treating NaN as equal to NaN and
-// matching signed infinities — parseNumber routes through fmt.Sscanf's %f verb,
-// which accepts "NaN", "Infinity", "+Inf", and "-Inf".
+// matching signed infinities (YAML .nan, .inf and -.inf).
 func floatEqual(got, want float64) bool {
 	switch {
 	case math.IsNaN(want):

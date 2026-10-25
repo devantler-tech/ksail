@@ -18,11 +18,11 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/yannh/kubeconform/pkg/cache"
+	yamlv3 "gopkg.in/yaml.v3"
 	yamlio "k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/yaml"
 )
@@ -300,25 +300,44 @@ func parseTypedDefault(defaultVal, schemaType string) any {
 	}
 }
 
-// parseInteger returns trimmed as an int64 only when the whole value is an integer, so a
-// default such as "3oops" stays the string Flux would substitute and still fails validation.
+// yamlScalar returns the value YAML reads trimmed as: what the field holds once Flux has
+// substituted the text and the manifest is parsed. It returns nil when trimmed is not
+// valid YAML.
+func yamlScalar(trimmed string) any {
+	var value any
+
+	err := yamlv3.Unmarshal([]byte(trimmed), &value)
+	if err != nil {
+		return nil
+	}
+
+	return value
+}
+
+// parseInteger returns the default as an int64 when YAML reads the whole value as an integer
+// (decimal, 0x hexadecimal or 0o octal). Anything else, such as "3oops" or "3.14", stays the
+// string Flux substitutes, so an integer field still fails validation on it.
 func parseInteger(trimmed, defaultVal string) any {
-	intVal, err := strconv.ParseInt(trimmed, 10, 64)
-	if err == nil {
-		return intVal
+	if value, ok := yamlScalar(trimmed).(int); ok {
+		return int64(value)
 	}
 
 	return defaultVal
 }
 
-// parseNumber returns trimmed as a float64 only when the whole value is a number.
+// parseNumber returns the default as a float64 when YAML reads the whole value as a number,
+// including .inf and .nan. Anything else stays the string Flux substitutes.
 func parseNumber(trimmed, defaultVal string) any {
-	floatVal, err := strconv.ParseFloat(trimmed, 64)
-	if err == nil {
-		return floatVal
+	switch value := yamlScalar(trimmed).(type) {
+	case int:
+		return float64(value)
+	case uint64:
+		return float64(value)
+	case float64:
+		return value
+	default:
+		return defaultVal
 	}
-
-	return defaultVal
 }
 
 func parseBoolean(trimmed, defaultVal string) any {

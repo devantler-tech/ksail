@@ -171,6 +171,11 @@ func TestExpandFluxSubstitutions_UsesKubeconformCache(t *testing.T) {
 	invalid := []byte("apiVersion: example.ksail.io/v1\nkind: SubstCacheWidget\n" +
 		"spec:\n  size: ${SIZE:-3oops}\n")
 	assert.Contains(t, string(fluxsubst.ExpandFluxSubstitutions(invalid)), "size: 3oops")
+
+	// A hexadecimal default is the integer YAML reads it as.
+	hex := []byte("apiVersion: example.ksail.io/v1\nkind: SubstCacheWidget\n" +
+		"spec:\n  size: ${SIZE:-0x10}\n")
+	assert.Contains(t, string(fluxsubst.ExpandFluxSubstitutions(hex)), "size: 16")
 }
 
 func TestGetSchemaTypeAtPath(t *testing.T) {
