@@ -395,7 +395,7 @@ func auditedReleaseConfigDigests() map[string]string {
 		".github/scripts/download-go-modules.sh":             "e5af8edf61a77de4397e952a05b1cc6ca0f83cd848523c4cf6b3aaa2539561fa",
 		"scripts/stage-webui.sh":                             "5b3d7b0fa8b237f77ee9a88e6807e070c1b35c97df3d5f17357b3ecb8b2938a6",
 		".github/actions/free-disk-space/free-disk-space.sh": "2dd12fcf3779137ca1cb5f21194947f6a10d3f94f8fb438a1a29ec9021fbdc30",
-		".github/workflows/cd.yaml#without-uses":             "aac86281d6787e7ef08dfdfe2ef8549364a8813d8333c534a0bc79ffc5272957",
+		".github/workflows/cd.yaml#without-uses":             "41eebc911f69e2072de2cb94bb6faf9eb2b21b72c338ba4fdd7c3e5a9d17de8e",
 	}
 }
 
