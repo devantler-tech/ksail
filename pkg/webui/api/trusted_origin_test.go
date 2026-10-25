@@ -33,6 +33,16 @@ func TestLocalPageEndpointsAgreeOnTrustedOrigins(t *testing.T) {
 		{origin: "wails://127.0.0.1", trusted: false},
 		{origin: "WAILS://WAILS", trusted: false},
 		{origin: "Wails://wails", trusted: false},
+		// Extra URL components, including empty delimiters that parsing can discard, must never
+		// turn another value into the desktop shell's exact origin.
+		{origin: "wails://wails:8080", trusted: false},
+		{origin: "wails://user@wails", trusted: false},
+		{origin: "wails://wails/", trusted: false},
+		{origin: "wails://wails/path", trusted: false},
+		{origin: "wails://wails?query=value", trusted: false},
+		{origin: "wails://wails?", trusted: false},
+		{origin: "wails://wails#fragment", trusted: false},
+		{origin: "wails://wails#", trusted: false},
 		// Only http and https pages on loopback are trusted; another scheme on a loopback host is not.
 		{origin: "https://localhost:8443", trusted: true},
 		{origin: "ftp://localhost", trusted: false},
