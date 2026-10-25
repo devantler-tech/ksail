@@ -399,6 +399,9 @@ func resolveContextName(
 		if _, exists := config.Contexts[contextName]; exists {
 			return contextName, nil
 		}
+
+		// Never fall back to another context that merely contains the name.
+		return "", fmt.Errorf("%w: %s", ErrContextNotFound, contextName)
 	}
 
 	// Strip trailing parenthetical suffix (e.g., " (Vanilla)") that may be

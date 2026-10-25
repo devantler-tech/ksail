@@ -245,3 +245,23 @@ func TestSwitchCompletion_OnlyUnmanagedContexts(t *testing.T) {
 
 	assert.Equal(t, []string{"unknown-cluster\tunmanaged"}, cluster.ExportListClusterNames(cmd))
 }
+
+func TestSwitchCmd_StaleUnmanagedLabelDoesNotSwitchElsewhere(t *testing.T) {
+	t.Parallel()
+
+	// The labelled context is gone; a context that merely contains its name must not
+	// be selected instead.
+	path := writeSwitchKubeconfig(t, map[string]string{
+		"kind-dev":     "https://127.0.0.1:6443",
+		"corp-prod-eu": "https://corp-prod-eu.example.com",
+	})
+
+	cmd, _ := newSwitchTestCmd()
+
+	err := cluster.HandleSwitchRunE(cmd, "corp-prod (unmanaged)", cluster.SwitchDeps{
+		KubeconfigPath:      path,
+		SaveToSwitchHistory: func(string) {},
+	})
+	require.ErrorIs(t, err, cluster.ErrContextNotFound)
+	assert.Empty(t, currentContext(t, path))
+}
