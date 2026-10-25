@@ -67,7 +67,7 @@ require (
 	github.com/kubescape/opa-utils v0.0.315
 	github.com/kyverno/api v0.0.1-alpha.3.0.20260723090831-fb2785727f98
 	github.com/kyverno/kyverno v1.19.1
-	github.com/loft-sh/log v0.0.0-20260812120051-874a69680b18
+	github.com/loft-sh/log v0.0.0-20261016082928-2e30e984f250
 	github.com/loft-sh/vcluster v0.37.3
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
@@ -1087,11 +1087,6 @@ replace (
 	// the split universe).
 	github.com/kubescape/kubescape/v3 => github.com/devantler/kubescape/v3 v3.0.49-0.20260529230755-084b6f1ebcc8
 	github.com/kyverno/go-jmespath v0.4.1-0.20231124160150-95e59c162877 => ./third_party/kyverno-jmespath
-
-	// loft-sh/log uses tablewriter v0.0.5 API which is incompatible with v1.x
-	// required by k9s, grype, and syft. This replace can be removed once
-	// https://github.com/loft-sh/log/pull/3 is merged and tagged.
-	github.com/loft-sh/log => github.com/devantler/log v0.0.0-20260407144227-16cc61ebdb79
 
 	// Local v0.3.0 compatibility module for Docker 28.5.2. See
 	// third_party/go-archive/KSail-PATCH.md.
