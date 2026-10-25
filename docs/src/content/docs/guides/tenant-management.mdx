@@ -3,7 +3,7 @@ title: Tenant Management
 description: Onboard and offboard tenants with RBAC isolation and GitOps sync resources using ksail tenant create and ksail tenant delete.
 ---
 
-import { Steps } from "@astrojs/starlight/components";
+import { FileTree, Steps } from "@astrojs/starlight/components";
 
 Onboard a workload team onto a shared cluster without hand-writing RBAC. `ksail tenant create` scaffolds
 a tenant — a namespace, scoped RBAC, and the GitOps sync resources that point at the team's manifests —
@@ -22,10 +22,14 @@ its own repo and publishes its manifests as a versioned OCI artifact; the platfo
 pointing a GitOps source at that artifact. The scaffolding `ksail tenant create` writes is exactly that
 registration:
 
-```text
-edit platform/  ──►  ksail tenant create  ──►  GitOps source points at  ──►  tenant publishes
-   (your repo)        (namespace + RBAC +        the tenant's OCI artifact      its own artifact
-                       sync resources)                                          (their repo)
+```mermaid
+flowchart TD
+    accTitle: How a tenant is registered
+    accDescr: You edit platform/ in your repo. ksail tenant create scaffolds the namespace, RBAC and sync resources. The GitOps source points at the tenant's OCI artifact. The tenant publishes its own artifact from their repo.
+
+    Edit["edit platform/<br/>(your repo)"] --> Create["ksail tenant create<br/>(namespace + RBAC +<br/>sync resources)"]
+    Create --> Source["GitOps source points at<br/>the tenant's OCI artifact"]
+    Source --> Publish["tenant publishes<br/>its own artifact<br/>(their repo)"]
 ```
 
 Isolation is layered, and the generated manifests give you each layer:
@@ -69,14 +73,16 @@ The `--type` flag defaults to auto-detect from `ksail.yaml` `gitOpsEngine`.
 
    Namespaces default to the tenant name; the bound ClusterRole defaults to `edit`. The command writes:
 
-   ```text
-   platform/tenants/my-team/
-   ├── kustomization.yaml
-   ├── namespace.yaml
-   ├── serviceaccount.yaml
-   ├── rolebinding.yaml
-   └── (flux or argocd sync resources if applicable)
-   ```
+   <FileTree>
+
+   - platform/tenants/my-team/
+     - kustomization.yaml
+     - namespace.yaml
+     - serviceaccount.yaml
+     - rolebinding.yaml
+     - … (flux or argocd sync resources if applicable)
+
+   </FileTree>
 
 2. **Register it** in the platform's `kustomization.yaml` so GitOps picks it up. `--register` appends the
    tenant to the nearest `kustomization.yaml` for you:
@@ -165,15 +171,17 @@ ksail tenant create my-team --type argocd \
   --tenant-repo my-org/my-team-infra
 ```
 
-```text
-platform/tenants/my-team/
-├── kustomization.yaml
-├── namespace.yaml
-├── serviceaccount.yaml
-├── rolebinding.yaml
-├── project.yaml
-└── app.yaml
-```
+<FileTree>
+
+- platform/tenants/my-team/
+  - kustomization.yaml
+  - namespace.yaml
+  - serviceaccount.yaml
+  - rolebinding.yaml
+  - project.yaml
+  - app.yaml
+
+</FileTree>
 
 Add `--register` to also merge the tenant RBAC policy into the shared `argocd-rbac-cm` ConfigMap:
 
@@ -212,12 +220,14 @@ ksail tenant create my-team --type kubectl \
 
 The scaffolded repo contains a plain kustomize setup for manual workflows:
 
-```text
-/
-├── README.md
-└── k8s/
-    └── kustomization.yaml
-```
+<FileTree>
+
+- /
+  - README.md
+  - k8s/
+    - kustomization.yaml
+
+</FileTree>
 
 The tenant applies their manifests with `kubectl apply -k k8s/`.
 
@@ -237,16 +247,18 @@ ksail tenant create my-team --production
 a LimitRange, a hardened ServiceAccount, and (for Flux tenants) a hardened sync. Any granular flag you set
 explicitly overrides the umbrella default. The resulting tenant directory adds:
 
-```text
-platform/tenants/my-team/
-├── kustomization.yaml
-├── namespace.yaml          # + Pod Security Standards labels
-├── serviceaccount.yaml     # + automountServiceAccountToken: false
-├── rolebinding.yaml
-├── networkpolicy.yaml      # default-deny + DNS + intra-namespace
-├── resourcequota.yaml
-└── limitrange.yaml
-```
+<FileTree>
+
+- platform/tenants/my-team/
+  - kustomization.yaml
+  - namespace.yaml + Pod Security Standards labels
+  - serviceaccount.yaml + automountServiceAccountToken: false
+  - rolebinding.yaml
+  - networkpolicy.yaml default-deny + DNS + intra-namespace
+  - resourcequota.yaml
+  - limitrange.yaml
+
+</FileTree>
 
 ### Granular flags
 
