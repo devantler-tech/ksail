@@ -236,6 +236,17 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+    # Kyverno 1.20 (chart 3.10, every chart minor carries one Kyverno minor) removes the
+    # kyverno.io ClusterPolicy and Policy APIs. `ksail cluster create` installs the pinned
+    # chart, and ksail.yaml cannot choose another one, so a consumer whose GitOps manifests
+    # still use those APIs would get an engine that cannot run them on its next create or
+    # disaster-recovery rebuild (ksail#7848). Hold the 1.20 line until consumers can choose
+    # the version or have migrated; patches on the 1.19 line still come through.
+    # internal/depcontract fails a release pinned at or past 3.10.0 and fails if this rule
+    # changes. Lifting it is a release-noted decision recorded on ksail#7848.
+    ignore:
+      - dependency-name: "kyverno/charts/kyverno"
+        versions: [">= 3.10.0"]
 
   - package-ecosystem: docker
     registries: [dockerhub]

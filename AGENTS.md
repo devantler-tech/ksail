@@ -381,7 +381,9 @@ Workflows and other files → `mega-linter-runner -f go` (MegaLinter runs `actio
 dependency order and is THE regeneration command. The artifacts, for reference:
 `schemas/ksail-config.schema.json` (`go generate ./schemas/...`), CRD + deepcopy
 (`go generate ./pkg/apis/...`), `docs/src/content/docs/cli-flags/` +
-`docs/src/content/docs/configuration/declarative-configuration.mdx` (`go generate ./docs/...`),
+`docs/src/content/docs/configuration/declarative-configuration.mdx` + the marked
+distribution × provider table in `docs/src/content/docs/support-matrix.mdx`
+(`go generate ./docs/...`),
 `pkg/svc/chat/docs_generated.go` (`go generate ./pkg/svc/chat/...`, after docs), `mocks.go` files
 (`mockery`), and `web/ui/src/generated/ksail-config.ts` (`npm --prefix web/ui run gen:types`,
 after schemas). See also `.github/instructions/`.

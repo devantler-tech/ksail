@@ -262,8 +262,8 @@ jobs:
               - 'go.mod'
               - 'go.sum'
               - '.github/workflows/ci.yaml'
-            # The contracts in internal/depcontract read two files the Go build cannot see: the
-            # Dependabot configuration and the Cilium chart pin. A change to either one alone
+            # The contracts in internal/depcontract read files the Go build cannot see: the
+            # Dependabot configuration and the Cilium and Kyverno chart pins. A change to one alone
             # skips the shared Go tests, for the reason todos-contract gives above, and would
             # merge with its contract unexecuted. This filter feeds a job of its own for that
             # class of change. TestDependencyContractsRunWhenOnlyTheirInputsChange fails if a
@@ -271,6 +271,7 @@ jobs:
             dependency-contracts:
               - 'internal/depcontract/**'
               - 'pkg/svc/installer/cni/cilium/Dockerfile'
+              - 'pkg/svc/installer/kyverno/Dockerfile'
               - '.github/dependabot.yaml'
               - 'go.mod'
               - 'go.sum'
@@ -2693,7 +2694,7 @@ jobs:
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/.github/actions/aggregate-job-checks@0c7b6c3509b73adbc7537e030935bb01987e625b # v7.23.0
+      - uses: devantler-tech/.github/actions/aggregate-job-checks@26a761ff74a2d625d4cfbe1ed1ebae2780d7aacd # v13.2.6
         with:
           job-results: >-
             ${{ needs.retired-repo-links.result }}
