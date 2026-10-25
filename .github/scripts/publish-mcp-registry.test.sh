@@ -10,6 +10,12 @@ fail() {
 	printf 'FAIL: %s\n' "$*" >&2
 	exit 1
 }
+yq -r '.jobs.changes.steps[] | select(.id=="filter") | .with.filters' \
+	"$root/.github/workflows/ci.yaml" >"$work/ci-filters.yaml"
+yq -o=json '."cask-pr-handoff"' "$work/ci-filters.yaml" |
+	jq -e 'index("server.json") != null' >/dev/null ||
+	fail 'manifest-only changes must select MCP publication controls'
+
 yq -r '.jobs["mcp-publish"].steps[-2].run' "$root/.github/workflows/cd.yaml" >"$work/auth.sh"
 yq -r '.jobs["mcp-publish"].steps[-1].run' "$root/.github/workflows/cd.yaml" >"$work/publish.sh"
 yq -o=json '.jobs["mcp-publish"]' "$root/.github/workflows/cd.yaml" |

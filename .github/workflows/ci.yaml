@@ -406,6 +406,7 @@ jobs:
               - 'pkg/svc/installer/cni/calico/Dockerfile'
               - '.github/workflows/ci.yaml'
             cask-pr-handoff:
+              - 'server.json'
               - '.goreleaser.yaml'
               - '.goreleaser.desktop.yaml'
               - '.github/fixtures/cask-pr-handoff/**'
