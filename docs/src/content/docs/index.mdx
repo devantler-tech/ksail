@@ -13,10 +13,14 @@ hero:
       link: /start/quickstart/
       icon: right-arrow
       variant: primary
+      attrs:
+        data-umami-event: home-hero-get-started
     - text: Install KSail
       link: /installation/
       icon: download
       variant: secondary
+      attrs:
+        data-umami-event: home-hero-install
 ---
 
 import { Card, CardGrid } from "@astrojs/starlight/components";
@@ -38,31 +42,31 @@ whether it runs in Docker on your laptop or on cloud infrastructure. It writes n
 ## What you can do
 
 export const features = [
-  { icon: "☸️", title: "Create clusters anywhere", href: "/distributions/", body: "Vanilla, K3s, Talos, VCluster and KWOK in Docker or on cloud servers, or managed EKS, GKE and AKS — with your choice of CNI, CSI and policy engine." },
-  { icon: "🔄", title: "Deliver with GitOps", href: "/guides/gitops-workflows/", body: "Flux or ArgoCD built in. <code>workload push</code> packages your manifests as an OCI artifact and <code>workload reconcile</code> rolls them out." },
-  { icon: "✅", title: "Validate before you deploy", href: "/configuration/workload-validate/", body: "Schema-check and security-scan your manifests offline, with no cluster — an ideal CI gate." },
-  { icon: "🔐", title: "Keep secrets in Git", href: "/guides/secret-management/", body: "Encrypt, decrypt and edit secrets with built-in SOPS and Age." },
-  { icon: "🩺", title: "Run day-2 operations", href: "/guides/day-2-operations/", body: "Diagnose cluster health, back up and restore, mirror registries and onboard tenants." },
-  { icon: "🖥️", title: "Work your way", href: "/guides/web-ui/", body: "Use the terminal, the web UI or desktop app, the VS Code extension, or an AI assistant over chat or MCP." },
+  { icon: "☸️", title: "Create clusters anywhere", event: "home-feature-clusters", href: "/distributions/", body: "Vanilla, K3s, Talos, VCluster and KWOK in Docker or on cloud servers, or managed EKS, GKE and AKS — with your choice of CNI, CSI and policy engine." },
+  { icon: "🔄", title: "Deliver with GitOps", event: "home-feature-gitops", href: "/guides/gitops-workflows/", body: "Flux or ArgoCD built in. <code>workload push</code> packages your manifests as an OCI artifact and <code>workload reconcile</code> rolls them out." },
+  { icon: "✅", title: "Validate before you deploy", event: "home-feature-validate", href: "/configuration/workload-validate/", body: "Schema-check and security-scan your manifests offline, with no cluster — an ideal CI gate." },
+  { icon: "🔐", title: "Keep secrets in Git", event: "home-feature-secrets", href: "/guides/secret-management/", body: "Encrypt, decrypt and edit secrets with built-in SOPS and Age." },
+  { icon: "🩺", title: "Run day-2 operations", event: "home-feature-operations", href: "/guides/day-2-operations/", body: "Diagnose cluster health, back up and restore, mirror registries and onboard tenants." },
+  { icon: "🖥️", title: "Work your way", event: "home-feature-interfaces", href: "/guides/web-ui/", body: "Use the terminal, the web UI or desktop app, the VS Code extension, or an AI assistant over chat or MCP." },
 ];
 
 <Features items={features} />
 
-Browse [every feature by task](/guides/).
+Browse <span data-umami-event="home-browse-guides">[every feature by task](/guides/)</span>.
 
 ## Where to go next
 
 <CardGrid>
   <Card title="Choose your setup" icon="puzzle">
-    Pick the distribution and provider that fit your goal. [Compare →](/distributions/)
+    Pick the distribution and provider that fit your goal. <span data-umami-event="home-next-setup">[Compare →](/distributions/)</span>
   </Card>
   <Card title="Deliver with GitOps" icon="rocket">
-    The recommended workflow once your first cluster is running. [Learn it →](/start/deliver-with-gitops/)
+    The recommended workflow once your first cluster is running. <span data-umami-event="home-next-gitops">[Learn it →](/start/deliver-with-gitops/)</span>
   </Card>
   <Card title="Core concepts" icon="information">
-    How KSail separates what runs from where it runs. [Understand →](/concepts/)
+    How KSail separates what runs from where it runs. <span data-umami-event="home-next-concepts">[Understand →](/concepts/)</span>
   </Card>
   <Card title="Configuration" icon="document">
-    Every `ksail.yaml` field and how settings combine. [Reference →](/configuration/)
+    Every `ksail.yaml` field and how settings combine. <span data-umami-event="home-next-configuration">[Reference →](/configuration/)</span>
   </Card>
 </CardGrid>

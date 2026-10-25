@@ -13,6 +13,7 @@ interface FeatureItem {
   title: string;
   body: string;
   href?: string;
+  event?: string;
 }
 
 interface Props {
@@ -27,7 +28,7 @@ const { items } = Astro.props;
     items.map((item) => (
       <article class="feature">
         <span class="tile" aria-hidden="true">{item.icon}</span>
-        <h3 class="title">{item.href ? <a href={item.href}>{item.title}</a> : item.title}</h3>
+        <h3 class="title">{item.href ? <a href={item.href} data-umami-event={item.event}>{item.title}</a> : item.title}</h3>
         <p class="body" set:html={item.body} />
       </article>
     ))
