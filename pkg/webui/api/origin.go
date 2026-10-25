@@ -20,16 +20,17 @@ const desktopOrigin = "wails://wails"
 //
 // The desktop origin is compared as the raw header, not as parsed fields. A browser-sent Origin is a
 // scheme and an authority and nothing else, and an empty delimiter parses away to nothing:
-// "wails://wails?" and "wails://wails#" both leave RawQuery and Fragment empty. Every other value under
-// the wails scheme (another authority, a port, user info, a path, a different letter case) is
-// rejected rather than falling through to the loopback test, so "wails://localhost" is not trusted.
+// "wails://wails?" and "wails://wails#" both leave RawQuery and Fragment empty. Apart from that one
+// value, only an http or https page on loopback is trusted. Every other scheme is rejected before the
+// loopback test, so neither another wails value (another authority, a port, user info, a path, a
+// different letter case) nor an origin such as "ftp://localhost" or "ws://127.0.0.1" is trusted.
 func isTrustedLocalOrigin(origin string) bool {
 	if origin == desktopOrigin {
 		return true
 	}
 
 	parsed, err := url.Parse(origin)
-	if err != nil || strings.EqualFold(parsed.Scheme, "wails") {
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
 		return false
 	}
 

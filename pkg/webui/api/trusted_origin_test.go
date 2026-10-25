@@ -33,6 +33,11 @@ func TestLocalPageEndpointsAgreeOnTrustedOrigins(t *testing.T) {
 		{origin: "wails://127.0.0.1", trusted: false},
 		{origin: "WAILS://WAILS", trusted: false},
 		{origin: "Wails://wails", trusted: false},
+		// Only http and https pages on loopback are trusted; another scheme on a loopback host is not.
+		{origin: "https://localhost:8443", trusted: true},
+		{origin: "ftp://localhost", trusted: false},
+		{origin: "ws://127.0.0.1:8080", trusted: false},
+		{origin: "null", trusted: false},
 	} {
 		t.Run(testCase.origin, func(t *testing.T) {
 			t.Parallel()
