@@ -18,6 +18,23 @@ underlying tools. You can run those clusters, or migrate away, **without KSail**
 *consistent workflow* layered on top: the same `init → create → update → delete` commands across every
 distribution.
 
+```mermaid
+flowchart TD
+    accTitle: How KSail fits together
+    accDescr: You edit a project repository that KSail scaffolds — ksail.yaml, native distribution configs and k8s manifests. KSail commands read it, then provision and operate a Kubernetes cluster and its components. A GitOps engine syncs the manifests to your workloads.
+
+    You["You"] -->|"edit"| Project["<b>Project repository</b><br/>ksail.yaml<br/>kind.yaml · talos/ · …<br/>k8s/ manifests"]
+    Project -->|"scaffolded and read by"| KSail["<b>KSail — one binary</b><br/>Kind · K3d · Talos · vCluster<br/>Flux · ArgoCD · Helm · SOPS"]
+    KSail -->|"provisions and operates"| Cluster
+
+    subgraph Cluster ["Kubernetes cluster"]
+        Infra["CNI · CSI · metrics<br/>cert-manager · policies"]
+        Workloads["Your workloads"]
+    end
+
+    Project -.->|"GitOps sync"| Workloads
+```
+
 ## Distribution vs Provider: *what* runs *where*
 
 The single most important idea in KSail is the separation of two concerns:
