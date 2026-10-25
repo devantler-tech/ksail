@@ -58,7 +58,7 @@ ksail cluster backup ./snapshot            # snapshot Kubernetes resources over 
 ksail cluster restore ./snapshot           # restore them
 ```
 
-`ksail cluster switch` with no name opens a picker that lists unmanaged contexts after your KSail clusters, each marked `(unmanaged)`, and shell completion offers their names too. Switching to one prints a notice that the cluster is unmanaged; the switch itself works the same as for any other context.
+`ksail cluster switch` with no name opens a picker that lists unmanaged contexts after your KSail clusters, each marked `(unmanaged)`. Shell completion offers them as `--context=<name>`, which selects that exact kubeconfig context even when a managed cluster shares its name. You can type the same flag directly, for example `ksail cluster switch --context dev`. Positional cluster names keep their existing distribution matching. Switching to an unmanaged context prints a notice; the switch itself works the same as for any other context.
 
 > [!IMPORTANT]
 > **The context must live in the kubeconfig KSail reads.** `cluster list`, `cluster switch`, the web UI and the desktop app read the first file `KUBECONFIG` names — `cluster connect` and the `ksail workload` wrappers resolve their kubeconfig from `spec.cluster.connection.kubeconfig` in `ksail.yaml`, falling back to the **default** `~/.kube/config`, and never read `KUBECONFIG`. So if your unmanaged context exists only in a non-default `KUBECONFIG` file, `cluster switch` will select it while `apply`, `logs` or `connect` quietly target a *different* kubeconfig. Merge the context into `~/.kube/config`, or point `spec.cluster.connection.kubeconfig` at the file, before operating.

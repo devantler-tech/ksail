@@ -32,7 +32,7 @@ var ErrNoClusters = errors.New("no clusters found in kubeconfig")
 
 // unmanagedMarker labels a kubeconfig context KSail does not manage in the interactive picker.
 // It matches the "Unmanaged" status `ksail cluster list` shows for the same context, and a
-// picker label carrying it resolves to exactly that context.
+// marker is display text; picker targets retain their context identity separately.
 const unmanagedMarker = " (unmanaged)"
 
 // unmanagedCompletionDescription is the shell-completion description of an unmanaged context.
@@ -156,6 +156,8 @@ Contexts the kubeconfig does not show as clusters KSail manages, such as a
 cloud cluster or a colleague's cluster, can be switched to by their exact
 context name. The picker and shell completion list them too, marked
 unmanaged as in ksail cluster list, and switching to one prints a notice.
+Use --context to select an exact kubeconfig context without managed-name matching.
+Unmanaged shell completions use this flag so colliding names remain selectable.
 
 The kubeconfig is resolved in the following priority order:
   1. From KUBECONFIG environment variable
@@ -178,11 +180,16 @@ Examples:
   # Switch to a cluster named "staging"
   ksail cluster switch staging
 
+  # Select an exact kubeconfig context, even if its name matches a managed cluster
+  ksail cluster switch --context dev
+
   # Select a cluster interactively (recent clusters shown first)
   ksail cluster switch`
 
 // NewSwitchCmd creates the switch command for clusters.
 func NewSwitchCmd() *cobra.Command {
+	var contextName string
+
 	cmd := &cobra.Command{
 		Use:   "switch [cluster-name]",
 		Short: "Switch active cluster context",
@@ -206,21 +213,40 @@ func NewSwitchCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			deps := SwitchDeps{}
 
+			if cmd.Flags().Changed("context") {
+				if len(args) != 0 || contextName == "" {
+					return errors.New("--context requires a non-empty context name and no cluster-name argument")
+				}
+
+				return handleSwitchTarget(cmd, switchTarget{name: contextName, mode: exactContextTarget}, deps)
+			}
+
 			if len(args) > 0 {
 				return HandleSwitchRunE(cmd, args[0], deps)
 			}
 
-			clusterName, err := pickCluster(cmd, deps)
-			if err != nil {
-				return err
-			}
-
-			return HandleSwitchRunE(cmd, clusterName, deps)
+			return HandleSwitchRunE(cmd, "", deps)
 		},
 	}
 
+	cmd.Flags().StringVar(&contextName, "context", "", "Switch to this exact kubeconfig context")
+
 	return cmd
 }
+
+// switchTarget keeps context identity separate from a picker label or managed cluster name.
+type switchTarget struct {
+	name string
+	mode switchTargetMode
+}
+
+type switchTargetMode uint8
+
+const (
+	clusterNameTarget switchTargetMode = iota
+	exactContextTarget
+	prefixedContextTarget
+)
 
 // SwitchDeps captures injectable dependencies for the switch command.
 type SwitchDeps struct {
@@ -269,20 +295,40 @@ func HandleSwitchRunE(
 	clusterName string,
 	deps SwitchDeps,
 ) error {
+	target := switchTarget{name: clusterName}
+	if clusterName == "" {
+		selected, err := pickCluster(cmd, deps)
+		if err != nil {
+			return err
+		}
+
+		target = selected
+	}
+
+	return handleSwitchTarget(cmd, target, deps)
+}
+
+// handleSwitchTarget applies a resolved selection without interpreting its display label.
+func handleSwitchTarget(cmd *cobra.Command, target switchTarget, deps SwitchDeps) error {
 	kubeconfigPath, err := resolveSwitchKubeconfig(cmd, deps)
 	if err != nil {
 		return err
 	}
 
-	contextName, managed, err := switchContext(kubeconfigPath, clusterName)
+	contextName, managed, err := switchContext(kubeconfigPath, target)
 	if err != nil {
 		return err
+	}
+
+	displayName := target.name
+	if !managed {
+		displayName = contextName
 	}
 
 	notify.Successf(
 		cmd.OutOrStdout(),
 		"Switched to cluster '%s' (context: %s)",
-		strings.TrimSuffix(clusterName, unmanagedMarker),
+		displayName,
 		contextName,
 	)
 
@@ -304,7 +350,7 @@ func HandleSwitchRunE(
 			save = saveToSwitchHistory
 		}
 
-		save(stripParenthetical(clusterName))
+		save(stripParenthetical(target.name))
 	}
 
 	return nil
@@ -342,15 +388,15 @@ func buildOrderedClusterNames(recent, allNames []string) []string {
 // interactive picker for the user to select one. Contexts without a distribution
 // prefix follow those clusters by their raw names, and the ones KSail does not
 // manage are labelled with unmanagedMarker.
-func pickCluster(cmd *cobra.Command, deps SwitchDeps) (string, error) {
+func pickCluster(cmd *cobra.Command, deps SwitchDeps) (switchTarget, error) {
 	kubeconfigPath, err := resolveSwitchKubeconfig(cmd, deps)
 	if err != nil {
-		return "", err
+		return switchTarget{}, err
 	}
 
 	clusterNames, otherContexts := kubeconfigClusterNames(kubeconfigPath)
 	if len(clusterNames) == 0 && len(otherContexts) == 0 {
-		return "", fmt.Errorf("%w", ErrNoClusters)
+		return switchTarget{}, fmt.Errorf("%w", ErrNoClusters)
 	}
 
 	loadHistory := deps.LoadSwitchHistory
@@ -359,8 +405,15 @@ func pickCluster(cmd *cobra.Command, deps SwitchDeps) (string, error) {
 	}
 
 	names := buildOrderedClusterNames(loadHistory(), clusterNames)
+	targets := make(map[string]switchTarget, len(otherContexts))
 	for _, other := range otherContexts {
-		names = append(names, other.pickerLabel())
+		label := other.pickerLabel()
+		for slices.Contains(names, label) {
+			label += " (context)"
+		}
+
+		names = append(names, label)
+		targets[label] = switchTarget{name: other.name, mode: exactContextTarget}
 	}
 
 	pick := deps.PickCluster
@@ -377,16 +430,24 @@ func pickCluster(cmd *cobra.Command, deps SwitchDeps) (string, error) {
 		}
 
 		if !isTTY() {
-			return "", ErrInteractivePickerNoTTY
+			return switchTarget{}, ErrInteractivePickerNoTTY
 		}
 	}
 
 	selected, err := pick("Select a cluster:", names)
 	if err != nil {
-		return "", fmt.Errorf("cluster selection: %w", err)
+		return switchTarget{}, fmt.Errorf("cluster selection: %w", err)
 	}
 
-	return selected, nil
+	if !slices.Contains(names, selected) {
+		return switchTarget{}, fmt.Errorf("%w: %s", ErrContextNotFound, selected)
+	}
+
+	if target, ok := targets[selected]; ok {
+		return target, nil
+	}
+
+	return switchTarget{name: selected, mode: prefixedContextTarget}, nil
 }
 
 // resolveContextName finds the matching kubeconfig context for a cluster name
@@ -397,9 +458,15 @@ func resolveContextName(
 	config *clientcmdapi.Config,
 	clusterName string,
 ) (string, error) {
-	// A picker label for an unmanaged context names that exact context, even when
-	// a managed cluster of the same name also exists.
+	// Preserve typed labels from earlier picker/completion output. Current picker
+	// and --context selections carry their exact identity separately.
 	if contextName, labelled := strings.CutSuffix(clusterName, unmanagedMarker); labelled {
+		// A literal context may itself end in the marker. Typed full names retain
+		// that identity; picker selections carry their exact identity separately.
+		if _, exists := config.Contexts[clusterName]; exists {
+			return clusterName, nil
+		}
+
 		if _, exists := config.Contexts[contextName]; exists {
 			return contextName, nil
 		}
@@ -414,6 +481,15 @@ func resolveContextName(
 
 	matches := clusterdetector.MatchContexts(config, cleanName)
 
+	return resolveContextMatches(config, clusterName, matches)
+}
+
+// resolveContextMatches reports missing and ambiguous targets consistently for each input mode.
+func resolveContextMatches(
+	config *clientcmdapi.Config,
+	clusterName string,
+	matches []string,
+) (string, error) {
 	switch len(matches) {
 	case 0:
 		available := make([]string, 0, len(config.Contexts))
@@ -460,7 +536,7 @@ func stripParenthetical(input string) string {
 
 // switchContext loads the kubeconfig, resolves the cluster name to a context, and sets
 // current-context. It returns the context switched to and whether KSail manages it.
-func switchContext(kubeconfigPath, clusterName string) (string, bool, error) {
+func switchContext(kubeconfigPath string, target switchTarget) (string, bool, error) {
 	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
 	if err != nil {
 		return "", false, fmt.Errorf("failed to read kubeconfig: %w", err)
@@ -476,7 +552,7 @@ func switchContext(kubeconfigPath, clusterName string) (string, bool, error) {
 		return "", false, fmt.Errorf("failed to parse kubeconfig: %w", err)
 	}
 
-	contextName, err := resolveContextName(config, clusterName)
+	contextName, err := target.resolve(config)
 	if err != nil {
 		return "", false, err
 	}
@@ -498,11 +574,34 @@ func switchContext(kubeconfigPath, clusterName string) (string, bool, error) {
 	return contextName, managed, nil
 }
 
+// resolve preserves typed managed-name matching and requires exact picker/flag targets to exist.
+func (target switchTarget) resolve(config *clientcmdapi.Config) (string, error) {
+	if target.mode == clusterNameTarget {
+		return resolveContextName(config, target.name)
+	}
+
+	if target.mode == prefixedContextTarget {
+		prefixed := clientcmdapi.NewConfig()
+		for name, context := range config.Contexts {
+			if stripDistributionPrefix(name) != "" {
+				prefixed.Contexts[name] = context
+			}
+		}
+
+		return resolveContextMatches(prefixed, target.name, clusterdetector.MatchContexts(prefixed, target.name))
+	}
+
+	if _, exists := config.Contexts[target.name]; !exists {
+		return "", fmt.Errorf("%w: %s", ErrContextNotFound, target.name)
+	}
+
+	return target.name, nil
+}
+
 // listClusterNames returns the shell-completion candidates from the kubeconfig: the
 // deduplicated cluster names of its distribution-prefixed contexts (prefix stripped),
-// then the raw names of its other contexts, with each context KSail does not manage
-// described as unmanaged. A raw name equal to one of those cluster names is left out,
-// because it is already offered.
+// then exact --context targets for unmanaged contexts, described as unmanaged. A managed
+// raw name equal to one of those cluster names is left out, because it is already offered.
 // When cmd is non-nil, the --config persistent flag is honored for config loading.
 func listClusterNames(cmd *cobra.Command) []string {
 	kubeconfigPath, err := resolveKubeconfigForSwitch(cmd)
@@ -516,7 +615,7 @@ func listClusterNames(cmd *cobra.Command) []string {
 	candidates = append(candidates, clusterNames...)
 
 	for _, other := range otherContexts {
-		if slices.Contains(clusterNames, other.name) {
+		if other.managed && slices.Contains(clusterNames, other.name) {
 			continue
 		}
 
@@ -526,7 +625,7 @@ func listClusterNames(cmd *cobra.Command) []string {
 			continue
 		}
 
-		candidates = append(candidates, other.name+"\t"+unmanagedCompletionDescription)
+		candidates = append(candidates, "--context="+other.name+"\t"+unmanagedCompletionDescription)
 	}
 
 	return candidates

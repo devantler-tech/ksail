@@ -226,12 +226,85 @@ func TestSwitchCompletion_ListsUnmanagedContexts(t *testing.T) {
 
 	cmd, _ := newSwitchTestCmd()
 
-	// The unmanaged "dev" context is left out: "dev" is already offered.
+	// The colliding unmanaged context needs an explicit context target; its bare
+	// name still follows the existing managed-cluster matching rules.
 	assert.Equal(t, []string{
 		"dev",
-		"corp-prod\tunmanaged",
+		"--context=corp-prod\tunmanaged",
 		"deployer@shop.eu-west-1.eksctl.io",
+		"--context=dev\tunmanaged",
 	}, cluster.ExportListClusterNames(cmd))
+}
+
+func TestSwitchCmd_LiteralUnmanagedSuffixSelectsFullContext(t *testing.T) {
+	t.Parallel()
+
+	path := writeSwitchKubeconfig(t, map[string]string{
+		"corp":             "https://corp.example.com",
+		"corp (unmanaged)": "https://literal.example.com",
+	})
+	cmd, _ := newSwitchTestCmd()
+	require.NoError(t, cluster.HandleSwitchRunE(cmd, "corp (unmanaged)", cluster.SwitchDeps{
+		KubeconfigPath:      path,
+		SaveToSwitchHistory: func(string) {},
+	}))
+	assert.Equal(t, "corp (unmanaged)", currentContext(t, path))
+}
+
+func TestSwitchCmd_PickerCarriesExactContextIdentity(t *testing.T) {
+	t.Parallel()
+
+	path := writeSwitchKubeconfig(t, map[string]string{
+		"kind-dev":        "https://127.0.0.1:6443",
+		"dev":             "https://dev.example.com",
+		"dev (unmanaged)": "https://literal.example.com",
+	})
+	cmd, _ := newSwitchTestCmd()
+	var items []string
+	deps := capturePickerItems(path, "dev (unmanaged) (unmanaged)", &items)
+	require.NoError(t, cluster.HandleSwitchRunE(cmd, "", deps))
+	assert.Equal(t, "dev (unmanaged)", currentContext(t, path))
+}
+
+func TestSwitchCmd_PickerManagedEntryDoesNotSelectUnmanagedCollision(t *testing.T) {
+	t.Parallel()
+
+	path := writeSwitchKubeconfig(t, map[string]string{
+		"kind-dev": "https://127.0.0.1:6443",
+		"dev":      "https://dev.example.com",
+	})
+	cmd, _ := newSwitchTestCmd()
+	var items []string
+	deps := capturePickerItems(path, "dev", &items)
+	require.NoError(t, cluster.HandleSwitchRunE(cmd, "", deps))
+	assert.Equal(t, "kind-dev", currentContext(t, path))
+}
+
+func TestSwitchCmd_PickerDisambiguatesAnExistingManagedLabel(t *testing.T) {
+	t.Parallel()
+
+	path := writeSwitchKubeconfig(t, map[string]string{
+		"kind-dev (unmanaged)": "https://127.0.0.1:6443",
+		"dev":                  "https://dev.example.com",
+	})
+	cmd, _ := newSwitchTestCmd()
+	var items []string
+	deps := capturePickerItems(path, "dev (unmanaged) (context)", &items)
+	require.NoError(t, cluster.HandleSwitchRunE(cmd, "", deps))
+	assert.Equal(t, "dev", currentContext(t, path))
+	assert.Equal(t, []string{"dev (unmanaged)", "dev (unmanaged) (context)"}, items)
+}
+
+func TestSwitchCompletion_ExplicitContextSelectsCollidingUnmanaged(t *testing.T) {
+	path := writeSwitchKubeconfig(t, map[string]string{
+		"kind-dev": "https://127.0.0.1:6443",
+		"dev":      "https://dev.example.com",
+	})
+	t.Setenv("KUBECONFIG", path)
+	cmd := cluster.NewSwitchCmd()
+	cmd.SetArgs([]string{"--context=dev"})
+	require.NoError(t, cmd.Execute())
+	assert.Equal(t, "dev", currentContext(t, path))
 }
 
 func TestSwitchCompletion_OnlyUnmanagedContexts(t *testing.T) {
@@ -243,7 +316,7 @@ func TestSwitchCompletion_OnlyUnmanagedContexts(t *testing.T) {
 
 	cmd, _ := newSwitchTestCmd()
 
-	assert.Equal(t, []string{"unknown-cluster\tunmanaged"}, cluster.ExportListClusterNames(cmd))
+	assert.Equal(t, []string{"--context=unknown-cluster\tunmanaged"}, cluster.ExportListClusterNames(cmd))
 }
 
 func TestSwitchCmd_StaleUnmanagedLabelDoesNotSwitchElsewhere(t *testing.T) {
