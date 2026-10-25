@@ -13,6 +13,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/client/hubble"
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubeconform"
+	kubescapeclient "github.com/devantler-tech/ksail/v7/pkg/client/kubescape"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/crdschema"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/ephemeral"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/fluxsubst"
@@ -235,6 +236,39 @@ func ExportResolveScanInput(
 // --output directory creation and canonicalization.
 func ExportResolveScanOutput(output string) (string, error) {
 	return resolveScanOutput(output)
+}
+
+// ExportWriteComplianceScore exposes writeComplianceScore for testing the score
+// line a passing scan prints.
+func ExportWriteComplianceScore(writer io.Writer, score, threshold float32) {
+	writeComplianceScore(writer, score, threshold)
+}
+
+// scanFunc adapts a function to the scan command's directoryScanner.
+type scanFunc func(
+	ctx context.Context,
+	path string,
+	opts *kubescapeclient.ScanOptions,
+) (*kubescapeclient.ScanResult, error)
+
+func (scan scanFunc) ScanDirectoryWithResult(
+	ctx context.Context,
+	path string,
+	opts *kubescapeclient.ScanOptions,
+) (*kubescapeclient.ScanResult, error) {
+	return scan(ctx, path, opts)
+}
+
+// ExportSetDirectoryScanner swaps the scan command's Kubescape scanner so tests can give
+// the command a scan result without running Kubescape. It returns a restore function that
+// reinstates the original scanner.
+func ExportSetDirectoryScanner(
+	scan func(context.Context, string, *kubescapeclient.ScanOptions) (*kubescapeclient.ScanResult, error),
+) func() {
+	original := newDirectoryScanner
+	newDirectoryScanner = func() directoryScanner { return scanFunc(scan) }
+
+	return func() { newDirectoryScanner = original }
 }
 
 // ExportCanonicalizeSchemaLocations exposes canonicalizeSchemaLocations for

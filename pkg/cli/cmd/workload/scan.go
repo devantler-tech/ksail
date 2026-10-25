@@ -4,17 +4,34 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	kubescapeclient "github.com/devantler-tech/ksail/v7/pkg/client/kubescape"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/spf13/cobra"
 )
 
 // ErrInvalidComplianceThreshold is returned when --compliance-threshold is outside the valid 0-100 range.
 var ErrInvalidComplianceThreshold = errors.New("--compliance-threshold must be between 0 and 100")
+
+// directoryScanner is the part of the Kubescape client the scan command runs.
+type directoryScanner interface {
+	ScanDirectoryWithResult(
+		ctx context.Context,
+		path string,
+		opts *kubescapeclient.ScanOptions,
+	) (*kubescapeclient.ScanResult, error)
+}
+
+// newDirectoryScanner builds the scanner a scan runs. Tests replace it to give the command a
+// known result without running Kubescape.
+//
+//nolint:gochecknoglobals // Test seam, like newFlowObserver and newEphemeralBackend in this package.
+var newDirectoryScanner = func() directoryScanner { return kubescapeclient.NewClient() }
 
 // scanCmdLong is the long help for the scan command.
 const scanCmdLong = `Run security scans on Kubernetes manifests using Kubescape.
@@ -205,7 +222,7 @@ func runScanCmdInner(
 
 	defer cleanup()
 
-	kubescapeClient := kubescapeclient.NewClient()
+	kubescapeClient := newDirectoryScanner()
 
 	scanOpts := &kubescapeclient.ScanOptions{
 		Frameworks:          settings.frameworks,
@@ -216,12 +233,31 @@ func runScanCmdInner(
 		Exceptions:          settings.exceptions,
 	}
 
-	err = kubescapeClient.ScanDirectory(ctx, scanPath, scanOpts)
+	result, err := kubescapeClient.ScanDirectoryWithResult(ctx, scanPath, scanOpts)
 	if err != nil {
 		return fmt.Errorf("scan directory: %w", err)
 	}
 
+	writeComplianceScore(cmd.ErrOrStderr(), result.ComplianceScore, settings.complianceThreshold)
+
 	return nil
+}
+
+// writeComplianceScore reports the compliance score of a scan that passed, so a
+// CI log shows the score a --compliance-threshold can be raised to and gradual
+// posture drift stays visible without a failing run. A failing gate reports the
+// score in its error instead, so a run states its score once either way. With
+// --ephemeral the line covers the offline scan; the admission checks that follow
+// report their own result. It writes to stderr so a report on stdout (json,
+// sarif, junit) stays parseable.
+func writeComplianceScore(writer io.Writer, score, threshold float32) {
+	if threshold > 0 {
+		notify.Successf(writer, "compliance score %.2f%% (threshold %.2f%%)", score, threshold)
+
+		return
+	}
+
+	notify.Infof(writer, "compliance score %.2f%%", score)
 }
 
 // scanSettings carries the scan gate settings after merging CLI flags with
