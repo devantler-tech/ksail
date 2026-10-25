@@ -102,7 +102,11 @@ printf 'timeout %s\n' "$*" >> "$FIXTURE_CALLS"
 if [[ "${1:-}" == --kill-after=* ]]; then
   shift
 fi
+duration="${1:-}"
 shift
+if [[ "$FIXTURE_MODE" == ready-delayed && "$*" == *--raw=/readyz* ]]; then
+  exec "$FIXTURE_TIMEOUT" --kill-after=0.1s "$duration" "$@"
+fi
 if [[ "$FIXTURE_MODE" == ready-timeout && "$*" == *--raw=/readyz* ]]; then
   echo ok
   exit 124
@@ -168,6 +172,9 @@ func runNestedCleanupWithWatchdog(
 				t.Context(), "gtimeout", "--kill-after=0.1s", "5s", "bash",
 			)
 		}
+
+		require.Equal(t, "5s", command.Args[2],
+			"the deliberate hang must use the short watchdog, not the normal fixture bound")
 	}
 
 	command.Stdin = strings.NewReader(script)
@@ -262,6 +269,28 @@ func TestNestedReadinessAllowsSlowSuccessfulFixture(t *testing.T) {
 	assert.Contains(t, calls, "kubectl --context kind-nested-vanilla get --raw=/readyz")
 	assert.Contains(t, output, "Vanilla resources drained")
 	assert.Contains(t, output, "All Kubernetes provider tests passed")
+}
+
+func TestNestedDelayedReadHonorsItsOperationDeadline(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeExecutableStub(t, filepath.Join(dir, "kubectl"), nestedCleanupKubectlStub)
+	command := exec.CommandContext(t.Context(), "bash", "-s", "--",
+		"--kill-after=0.1s", "0.2s", "kubectl", "--context", "kind-nested-vanilla",
+		"get", "--raw=/readyz", "--request-timeout=15s")
+	command.Stdin = strings.NewReader(nestedCleanupTimeoutStub)
+
+	command.Env = append(nestedCleanupEnvironment(dir, "ready-delayed"),
+		"FIXTURE_TIMEOUT="+nestedFixtureTimeoutPath(t))
+	output, err := command.CombinedOutput()
+
+	var exitError *exec.ExitError
+
+	require.ErrorAs(t, err, &exitError,
+		"the four-second response must exceed the supplied operation deadline: %s", output)
+	assert.Equal(t, 124, exitError.ExitCode())
+	assert.NotContains(t, string(output), "ok")
 }
 
 func TestNestedFixtureWatchdogRejectsAHungCommand(t *testing.T) {
