@@ -13,10 +13,14 @@ hero:
       link: /start/quickstart/
       icon: right-arrow
       variant: primary
+      attrs:
+        data-umami-event: home-hero-get-started
     - text: View on GitHub
       link: https://github.com/devantler-tech/ksail
       icon: external
       variant: secondary
+      attrs:
+        data-umami-event: home-hero-github
 ---
 
 import { Card, CardGrid } from "@astrojs/starlight/components";
@@ -64,7 +68,7 @@ export const features = [
 ## Quick Start
 
 Scaffold a project, create a cluster, and deploy a workload — then follow the full
-[Quickstart](/start/quickstart/) and [Deliver with GitOps](/start/deliver-with-gitops/) tutorials.
+<a href="/start/quickstart/" data-umami-event="home-quick-start-quickstart">Quickstart</a> and <a href="/start/deliver-with-gitops/" data-umami-event="home-quick-start-gitops">Deliver with GitOps</a> tutorials.
 
 <img class="demo-recording" src="/demos/cluster-init.gif" alt="ksail project init scaffolds ksail.yaml and kind.yaml, cat shows the minimal declarative config, and re-running with --distribution K3s switches the distribution" />
 
@@ -130,21 +134,21 @@ flowchart TD
 
 <CardGrid>
   <Card title="Quickstart" icon="rocket">
-    Zero to a running cluster with a workload in ~10 minutes. [Start here →](/start/quickstart/)
+    Zero to a running cluster with a workload in ~10 minutes. <a href="/start/quickstart/" data-umami-event="home-next-quickstart">Start here →</a>
   </Card>
   <Card title="Deliver with GitOps" icon="setting">
-    The recommended workflow: package manifests as an OCI artifact and reconcile. [Learn more →](/start/deliver-with-gitops/)
+    The recommended workflow: package manifests as an OCI artifact and reconcile. <a href="/start/deliver-with-gitops/" data-umami-event="home-next-gitops">Learn more →</a>
   </Card>
   <Card title="Choose your setup" icon="puzzle">
-    Pick the right distribution and provider for your goal. [Compare →](/distributions/)
+    Pick the right distribution and provider for your goal. <a href="/distributions/" data-umami-event="home-next-setup">Compare →</a>
   </Card>
   <Card title="Guides" icon="open-book">
-    Task-focused how-tos: registries, secrets, tenants, CI/CD, and more. [Browse →](/guides/)
+    Task-focused how-tos: registries, secrets, tenants, CI/CD, and more. <a href="/guides/" data-umami-event="home-next-guides">Browse →</a>
   </Card>
   <Card title="Concepts" icon="information">
-    How KSail works, the architecture, and the recommended project structure. [Understand →](/concepts/)
+    How KSail works, the architecture, and the recommended project structure. <a href="/concepts/" data-umami-event="home-next-concepts">Understand →</a>
   </Card>
   <Card title="Configuration" icon="document">
-    The complete `ksail.yaml` reference and configuration precedence. [Reference →](/configuration/)
+    The complete `ksail.yaml` reference and configuration precedence. <a href="/configuration/" data-umami-event="home-next-configuration">Reference →</a>
   </Card>
 </CardGrid>
