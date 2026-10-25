@@ -323,22 +323,13 @@ func TestSwitchCmd_InteractivePicker(t *testing.T) {
 func TestSwitchCmd_InteractivePicker_NoClusters(t *testing.T) {
 	t.Parallel()
 
-	// Kubeconfig with no KSail-managed contexts (no known distribution prefix)
+	// Kubeconfig with no contexts at all: there is nothing to offer.
 	kubeconfig := `apiVersion: v1
 kind: Config
 current-context: ""
-clusters:
-- cluster:
-    server: https://127.0.0.1:6443
-  name: unknown-cluster
-contexts:
-- context:
-    cluster: unknown-cluster
-    user: some-user
-  name: unknown-cluster
-users:
-- name: some-user
-  user: {}
+clusters: []
+contexts: []
+users: []
 `
 
 	tmpDir := t.TempDir()

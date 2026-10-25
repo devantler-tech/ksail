@@ -162,9 +162,9 @@ func StripContextPrefixForDistribution(
 // MatchContexts returns the kubeconfig context names that correspond to the
 // given cluster name. It first builds candidates from every known distribution
 // prefix (plus the "k3k-" alias) and keeps those present in the kubeconfig; if
-// none match, it falls back to substring matching so providers whose context
-// format does not follow the standard prefix conventions (e.g. Omni's
-// "<org>-<cluster>-<sa>") still resolve.
+// none match, an exact context name wins, and otherwise it falls back to
+// substring matching so providers whose context format does not follow the
+// standard prefix conventions (e.g. Omni's "<org>-<cluster>-<sa>") still resolve.
 func MatchContexts(config *clientcmdapi.Config, clusterName string) []string {
 	var matches []string
 
@@ -192,10 +192,24 @@ func MatchContexts(config *clientcmdapi.Config, clusterName string) []string {
 	}
 
 	if len(matches) == 0 {
-		for ctxName := range config.Contexts {
-			if strings.Contains(ctxName, clusterName) {
-				matches = append(matches, ctxName)
-			}
+		return fallbackMatches(config, clusterName)
+	}
+
+	return matches
+}
+
+// fallbackMatches resolves a name no distribution convention matched: an exact context name
+// wins over contexts that merely contain it, and otherwise every containing context matches.
+func fallbackMatches(config *clientcmdapi.Config, clusterName string) []string {
+	if _, exists := config.Contexts[clusterName]; exists {
+		return []string{clusterName}
+	}
+
+	var matches []string
+
+	for ctxName := range config.Contexts {
+		if strings.Contains(ctxName, clusterName) {
+			matches = append(matches, ctxName)
 		}
 	}
 

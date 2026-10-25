@@ -737,7 +737,14 @@ func ExportApplyDistributionSpecOverrides(spec *v1alpha1.ClusterSpec) {
 
 // ExportPickCluster exposes pickCluster for unit testing.
 func ExportPickCluster(cmd *cobra.Command, deps SwitchDeps) (string, error) {
-	return pickCluster(cmd, deps)
+	target, err := pickCluster(cmd, deps)
+
+	return target.name, err
+}
+
+// ExportListClusterNames exposes the switch command's shell-completion candidates.
+func ExportListClusterNames(cmd *cobra.Command) []string {
+	return listClusterNames(cmd)
 }
 
 // ExportPrintRestoreHeader exposes printRestoreHeader for testing.
