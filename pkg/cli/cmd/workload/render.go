@@ -28,6 +28,7 @@ type gitopsRenderer struct {
 	chartCache *render.ChartCache
 	// Validation shares its effective options before CRD discovery and rendering.
 	validationOptions *kubeconform.ValidationOptions
+	discoveringCRDs   bool
 
 	// CRD discovery retains each complete result for the following validation pass.
 	// Parallel consumers remove their entries as validation takes ownership of them.
@@ -115,7 +116,9 @@ func (g *gitopsRenderer) expand(ctx context.Context, kustDir string) (render.Res
 		return render.Result{}, fmt.Errorf("create helm template client: %w", err)
 	}
 
-	expanded, err := expandValidationSubstitutions(ctx, output.Bytes(), g.validationOptions)
+	expanded, err := expandValidationSubstitutionsForStage(
+		ctx, output.Bytes(), g.validationOptions, g.discoveringCRDs,
+	)
 	if err != nil {
 		return render.Result{}, fmt.Errorf("prepare validation schemas: %w", err)
 	}

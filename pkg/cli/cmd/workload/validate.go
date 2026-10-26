@@ -523,6 +523,9 @@ func addCRDSchemas(
 	}
 
 	cleanup := func() { _ = os.RemoveAll(tempDir) }
+	// Discovery and final validation share this directory as schemas are added.
+	// Register it before rendering so refresh can already use raw-tree CRDs.
+	opts.SchemaLocations = append(opts.SchemaLocations, crdschema.SchemaLocation(tempDir))
 
 	result, err := crdschema.Materialize(path, tempDir)
 	if err != nil {
@@ -552,10 +555,6 @@ func addCRDSchemas(
 		})
 	}
 
-	if result.Written > 0 {
-		opts.SchemaLocations = append(opts.SchemaLocations, crdschema.SchemaLocation(tempDir))
-	}
-
 	return cleanup, nil
 }
 
@@ -574,6 +573,9 @@ func addRenderedCRDSchemas(
 	destDir string,
 ) (crdschema.Result, error) {
 	var result crdschema.Result
+
+	renderer.discoveringCRDs = true
+	defer func() { renderer.discoveringCRDs = false }()
 
 	kustomizations, err := findKustomizations(path)
 	if err != nil {
@@ -1265,7 +1267,9 @@ func (v *kustomizationValidator) manifests(
 
 		v.sink.add(result.Degradations)
 
-		return result.Bytes(), attributionFromDocuments(result.Documents), nil
+		data, err := finishRenderedValidationSubstitutions(ctx, result, v.opts)
+
+		return data, attributionFromDocuments(result.Documents), err
 	}
 
 	output, err := v.kustomize.Build(ctx, kustDir)
@@ -1390,6 +1394,15 @@ func expandValidationSubstitutions(
 	data []byte,
 	opts *kubeconform.ValidationOptions,
 ) ([]byte, error) {
+	return expandValidationSubstitutionsForStage(ctx, data, opts, false)
+}
+
+func expandValidationSubstitutionsForStage(
+	ctx context.Context,
+	data []byte,
+	opts *kubeconform.ValidationOptions,
+	discoveringCRDs bool,
+) ([]byte, error) {
 	if opts == nil {
 		return fluxsubst.ExpandFluxSubstitutions(data), nil
 	}
@@ -1399,11 +1412,20 @@ func expandValidationSubstitutions(
 		Strict:          opts.Strict,
 		CacheDirectory:  opts.CacheDirectory,
 	}
+	if discoveringCRDs {
+		_, schemaOpts.DeferredKinds = discoverySchemaInput(data)
+	}
+
 	expanded := fluxsubst.ExpandFluxSubstitutionsWithOptions(data, schemaOpts)
 	// Only an explicit CLI refresh supplies a private cache override. Resolve
 	// metadata defaults, fetch schemas, then type the original input afresh.
 	if opts.CacheDirectory != "" {
-		err := kubeconform.NewClient().PrecacheSchemas(ctx, expanded, opts)
+		input := expanded
+		if discoveringCRDs {
+			input, _ = discoverySchemaInput(expanded)
+		}
+
+		err := kubeconform.NewClient().PrecacheSchemas(ctx, input, opts)
 		if err != nil {
 			return nil, fmt.Errorf("refresh validation schemas: %w", err)
 		}

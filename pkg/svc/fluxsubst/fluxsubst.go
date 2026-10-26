@@ -158,7 +158,13 @@ func (reg *schemaRegistry) expandDocument(doc []byte) []byte {
 func (reg *schemaRegistry) expandMapDocument(obj map[string]any, doc []byte) []byte {
 	apiVersion, _ := obj["apiVersion"].(string)
 	kind, _ := obj["kind"].(string)
+
 	schema := reg.load(apiVersion, kind)
+	if schema == nil && reg.options != nil {
+		if _, deferred := reg.options.DeferredKinds[apiVersion+"/"+kind]; deferred {
+			return doc
+		}
+	}
 
 	walkAndExpand(obj, "", schema)
 

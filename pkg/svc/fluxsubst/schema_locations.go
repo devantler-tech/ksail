@@ -26,6 +26,10 @@ type SchemaOptions struct {
 	SchemaLocations []string
 	Strict          bool
 	CacheDirectory  string
+	// DeferredKinds is keyed by apiVersion/kind. During CRD discovery, a
+	// matching document without a schema retains its original placeholders.
+	// Callers must subsequently expand it and validate against the derived schemas.
+	DeferredKinds map[string]struct{}
 }
 
 // fetchSchemaWithOptions preserves validator precedence: built-in Kubernetes,
