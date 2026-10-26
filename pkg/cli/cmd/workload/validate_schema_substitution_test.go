@@ -1,7 +1,6 @@
 package workload_test
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -116,7 +115,8 @@ func seedSuppliedTypesCache(t *testing.T) {
 			"master-standalone/suppliedtypes-supplied-v1.json",
 		"https://raw.githubusercontent.com/yannh/kubernetes-json-schema/master/" +
 			"master-standalone-strict/suppliedtypes-supplied-v1.json",
-		"https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/supplied.ksail.io/suppliedtypes_v1.json",
+		"https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/" +
+			"supplied.ksail.io/suppliedtypes_v1.json",
 	} {
 		require.NoError(t, store.Set(url, []byte("null")))
 	}
@@ -167,11 +167,12 @@ func suppliedTypesLocation(t *testing.T, source string) string {
 	}
 
 	warm := []byte(
-		"apiVersion: supplied.ksail.io/v1\nkind: SuppliedTypes\nspec:\n  size: 3\n  enabled: true\n",
+		"apiVersion: supplied.ksail.io/v1\nkind: SuppliedTypes\n" +
+			"spec:\n  size: 3\n  enabled: true\n",
 	)
 	require.NoError(
 		t,
-		kubeconform.NewClient().ValidateBytes(context.Background(), "warm.yaml", warm,
+		kubeconform.NewClient().ValidateBytes(t.Context(), "warm.yaml", warm,
 			&kubeconform.ValidationOptions{Strict: true, SchemaLocations: []string{location}}),
 	)
 	// The command must use cached remote schema bytes for substitution offline.

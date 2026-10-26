@@ -41,7 +41,8 @@ func TestExpandFluxSubstitutionsReadsCurrentCache(t *testing.T) {
 			cacheDir := fluxsubst.SchemaCacheDir()
 			require.NoError(t, os.MkdirAll(cacheDir, 0o700))
 
-			url := "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/refresh.ksail.io/" + testCase.filename
+			url := "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/" +
+				"refresh.ksail.io/" + testCase.filename
 			store := cache.NewOnDiskCache(cacheDir)
 
 			writeSchema := func(schemaType string) {
@@ -58,7 +59,8 @@ func TestExpandFluxSubstitutionsReadsCurrentCache(t *testing.T) {
 			}
 
 			input := []byte(
-				"apiVersion: refresh.ksail.io/v1\nkind: " + testCase.kind + "\nspec:\n  size: ${SIZE}\n",
+				"apiVersion: refresh.ksail.io/v1\nkind: " + testCase.kind +
+					"\nspec:\n  size: ${SIZE}\n",
 			)
 			assert.Contains(t, string(fluxsubst.ExpandFluxSubstitutions(input)), testCase.before)
 

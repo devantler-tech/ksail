@@ -13,8 +13,10 @@ import (
 // schemaFallbackLocationCount includes Kubernetes built-ins and the CRD catalogue.
 const schemaFallbackLocationCount = 2
 
-const defaultSchemaLocation = "https://raw.githubusercontent.com/yannh/kubernetes-json-schema/master/" +
-	"{{.NormalizedKubernetesVersion}}-standalone{{.StrictSuffix}}/{{.ResourceKind}}{{.KindSuffix}}.json"
+const defaultSchemaLocation = "https://raw.githubusercontent.com/" +
+	"yannh/kubernetes-json-schema/master/" +
+	"{{.NormalizedKubernetesVersion}}-standalone{{.StrictSuffix}}/" +
+	"{{.ResourceKind}}{{.KindSuffix}}.json"
 
 const catalogSchemaLocation = "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/" +
 	"{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
@@ -106,11 +108,15 @@ func readCachedSchema(disk cache.Cache, url string) map[string]any {
 // template rules so a remote lookup can use its exact cache key without invoking
 // its network loader. Command tests warm the native validator and then close the
 // fixture server before exercising these template and directory lookups.
-func resolveSchemaLocation(location, apiVersion, kind string, strict bool) (string, error) {
+func resolveSchemaLocation(
+	location, apiVersion, kind string,
+	strict bool,
+) (string, error) {
 	if location == "default" {
 		location = defaultSchemaLocation
 	} else if !strings.HasSuffix(location, "json") {
-		location += "/{{.NormalizedKubernetesVersion}}-standalone{{.StrictSuffix}}/{{.ResourceKind}}{{.KindSuffix}}.json"
+		location += "/{{.NormalizedKubernetesVersion}}-standalone{{.StrictSuffix}}/" +
+			"{{.ResourceKind}}{{.KindSuffix}}.json"
 	}
 
 	parts := strings.Split(apiVersion, "/")
@@ -134,7 +140,12 @@ func resolveSchemaLocation(location, apiVersion, kind string, strict bool) (stri
 	var result bytes.Buffer
 
 	err = tpl.Execute(&result, struct {
-		NormalizedKubernetesVersion, StrictSuffix, ResourceKind, ResourceAPIVersion, Group, KindSuffix string
+		NormalizedKubernetesVersion string
+		StrictSuffix                string
+		ResourceKind                string
+		ResourceAPIVersion          string
+		Group                       string
+		KindSuffix                  string
 	}{"master", strictSuffix, strings.ToLower(kind), parts[len(parts)-1], parts[0], kindSuffix})
 	if err != nil {
 		return "", fmt.Errorf("execute schema location: %w", err)

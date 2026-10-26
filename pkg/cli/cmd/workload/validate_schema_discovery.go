@@ -62,7 +62,8 @@ func finishRenderedValidationSubstitutions(
 ) ([]byte, error) {
 	result.Documents = slices.Clone(result.Documents)
 	for index, document := range result.Documents {
-		if document.Provenance.Origin != render.OriginStream {
+		if document.Provenance.Origin != render.OriginStream ||
+			!bytes.Contains(document.Bytes, []byte("${")) {
 			continue
 		}
 
