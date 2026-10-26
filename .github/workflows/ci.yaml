@@ -1929,7 +1929,15 @@ jobs:
     # has a ~77-min worst case. 120 gives comfortable headroom to absorb runtime variance
     # without trimming test coverage.
     timeout-minutes: 120
-    needs: [changes, build-artifact, build-calico-baseline, warm-helm-cache, warm-mirror-cache, wait-for-validate-go]
+    needs:
+      [
+        changes,
+        build-artifact,
+        build-calico-baseline,
+        warm-helm-cache,
+        warm-mirror-cache,
+        wait-for-validate-go,
+      ]
     if: >-
       !cancelled()
       && needs.build-calico-baseline.result == 'success'

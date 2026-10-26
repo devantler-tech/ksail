@@ -291,7 +291,7 @@ KSail separates infrastructure management from distribution configuration:
 - **Provisioners** configure and manage Kubernetes distributions
 
 | Distribution | Provisioner            | Tool             | Provider                          | Description                                      |
-| ------------ | ---------------------- | ---------------- | --------------------------------- | ------------------------------------------------ |
+|--------------|------------------------|------------------|-----------------------------------|--------------------------------------------------|
 | `Vanilla`    | KindClusterProvisioner | Kind             | Docker, Hetzner, Kubernetes       | Standard upstream Kubernetes                     |
 | `K3s`        | K3dClusterProvisioner  | K3d              | Docker, Hetzner, Kubernetes       | Lightweight K3s                                  |
 | `Talos`      | TalosProvisioner       | Talos            | Docker, Hetzner, Omni, Kubernetes | Immutable Talos Linux                            |
@@ -336,7 +336,7 @@ go test ./...
 System tests exercise full cluster lifecycle scenarios on real clusters. They are split by where the cluster runs:
 
 | Workflow                         | Covers                                                        | Runs                                                                                                |
-| -------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+|----------------------------------|---------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
 | `ci.yaml` (`system-test-docker`) | Vanilla, K3s, Talos, VCluster and KWOK on the Docker provider | On pull requests (see below) and on manual dispatch                                                 |
 | `system-test-hetzner.yaml`       | Talos in full; K3s and Vanilla as a smoke check, on Hetzner   | Weekly (Sunday 03:00 UTC) and on manual dispatch                                                    |
 | `system-test-omni.yaml`          | Talos on Sidero Omni                                          | Manual dispatch only (the schedule is paused)                                                       |
@@ -418,7 +418,7 @@ The workflow also sets **`KSAIL_SPEC_CLUSTER_OMNI_MACHINECLASS`** to `ksail` via
 #### Scheduled Workflows
 
 | Workflow                   | Schedule                                       | Purpose                                           |
-| -------------------------- | ---------------------------------------------- | ------------------------------------------------- |
+|----------------------------|------------------------------------------------|---------------------------------------------------|
 | `update-skills`            | Daily (06:00 UTC)                              | Copilot skills upgrades                           |
 | `maintenance`              | Daily (00:00 UTC) and monthly (1st, 00:15 UTC) | Old workflow run cleanup; monthly package cleanup |
 | `update-hetzner-talos-iso` | Every 6 hours                                  | Track Hetzner's latest compatible Talos ISO       |
