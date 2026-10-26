@@ -636,18 +636,16 @@ func installMetalLB(
 		return nil
 	}
 
-	helmClient, kubeconfigPath, timeout, err := helmClientSetup(clusterCfg, factories)
-	if err != nil {
-		return fmt.Errorf("failed to setup helm client for metallb: %w", err)
+	// Factories assembled by hand (tests, embedders) may leave the field unset.
+	factory := factories.MetalLB
+	if factory == nil {
+		factory = metalLBFactory(factories)
 	}
 
-	lbInstaller := metallbinstaller.NewInstaller(
-		helmClient,
-		kubeconfigPath,
-		clusterCfg.Spec.Cluster.Connection.Context,
-		timeout,
-		"", // Use default IP range
-	)
+	lbInstaller, err := factory(clusterCfg)
+	if err != nil {
+		return fmt.Errorf("failed to create metallb installer: %w", err)
+	}
 
 	installErr := lbInstaller.Install(ctx)
 	if installErr != nil {
@@ -655,6 +653,51 @@ func installMetalLB(
 	}
 
 	return nil
+}
+
+// metalLBFactory creates the MetalLB factory function. Installing and
+// comparing rendered chart values both build the installer here, so they
+// always render the same values for a cluster.
+func metalLBFactory(
+	factories *InstallerFactories,
+) func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+	return kubeconfigChartFactory(factories, "metallb", func(
+		clusterCfg *v1alpha1.Cluster,
+		helmClient *helm.Client,
+		kubeconfigPath string,
+		timeout time.Duration,
+	) installer.Installer {
+		return metallbinstaller.NewInstaller(
+			helmClient,
+			kubeconfigPath,
+			clusterCfg.Spec.Cluster.Connection.Context,
+			timeout,
+			"", // Use default IP range
+		)
+	})
+}
+
+// kubeconfigChartFactory returns an installer factory for a chart whose
+// installer also needs the kubeconfig path, resolving the Helm client and the
+// install timeout the same way for every such component.
+func kubeconfigChartFactory(
+	factories *InstallerFactories,
+	component string,
+	build func(
+		clusterCfg *v1alpha1.Cluster,
+		helmClient *helm.Client,
+		kubeconfigPath string,
+		timeout time.Duration,
+	) installer.Installer,
+) func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+		helmClient, kubeconfigPath, timeout, err := helmClientSetup(clusterCfg, factories)
+		if err != nil {
+			return nil, fmt.Errorf("failed to setup helm client for %s: %w", component, err)
+		}
+
+		return build(clusterCfg, helmClient, kubeconfigPath, timeout), nil
+	}
 }
 
 // installHcloudCCM initializes Talos × Hetzner nodes and enables optional load balancing.
@@ -692,12 +735,12 @@ func installHcloudCCM(
 func hcloudCCMFactory(
 	factories *InstallerFactories,
 ) func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
-	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
-		helmClient, kubeconfigPath, timeout, err := helmClientSetup(clusterCfg, factories)
-		if err != nil {
-			return nil, fmt.Errorf("failed to setup helm client for hcloud-ccm: %w", err)
-		}
-
+	return kubeconfigChartFactory(factories, "hcloud-ccm", func(
+		clusterCfg *v1alpha1.Cluster,
+		helmClient *helm.Client,
+		kubeconfigPath string,
+		timeout time.Duration,
+	) installer.Installer {
 		networkName := hcloudccminstaller.ResolveHetznerNetworkName(
 			clusterCfg,
 			resolveClusterNameFromContext(clusterCfg),
@@ -711,8 +754,8 @@ func hcloudCCMFactory(
 			networkName,
 			installer.IsHAEnabled(clusterCfg.Spec.Cluster.TotalNodeCount()),
 			hcloudccminstaller.LoadBalancerOptions(clusterCfg.Spec.Cluster.LoadBalancer)...,
-		), nil
-	}
+		)
+	})
 }
 
 // installKubeletCSRApproverSilent installs kubelet-csr-approver silently for parallel execution.
