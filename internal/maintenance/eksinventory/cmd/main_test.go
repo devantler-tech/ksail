@@ -32,7 +32,7 @@ func prepareBaselineAWS(t *testing.T) string {
 			"'eks describe-cluster') echo '{\"cluster\":{\"arn\":\"arn:aws:eks:eu-central-1:123456789012:cluster/trial\",\"createdAt\":1700000000}}' ;;\n"+
 			"'eks list-nodegroups') echo '{\"nodegroups\":[]}' ;;\n"+
 			"'eks list-clusters') echo '{\"clusters\":[]}' ;;\n"+
-			"'cloudformation describe-stacks') echo '{\"Stacks\":[{\"StackId\":\"arn:aws:cloudformation:eu-central-1:123456789012:stack/root/one\"}]}' ;;\n"+
+			"'cloudformation describe-stacks') echo '{\"Stacks\":[{\"StackId\":\"arn:aws:cloudformation:eu-central-1:123456789012:stack/eksctl-trial-cluster/one\"}]}' ;;\n"+
 			"'cloudformation list-stack-resources') echo '{\"StackResourceSummaries\":[]}' ;;\n"+
 			"'cloudformation list-stacks') echo '{\"StackSummaries\":[]}' ;;\n"+
 			"'ec2 describe-fleets') echo '{\"Fleets\":[]}' ;;\n"+
