@@ -1889,7 +1889,7 @@ jobs:
       # This job already waits for the producer. Reuse its exact sealed bytes
       # instead of restoring Go modules or compiling again after cache eviction.
       - name: 📥 Restore KSail binary
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@09244704b86ffff4dfc5868d3e6a67bb770336c6
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@828038bd40591ad94391554e4b41a529c8e917f4
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2081,7 +2081,7 @@ jobs:
 
       - name: 📥 Restore KSail binary
         # Pin the identical published action until actionlint supports $/ references.
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@09244704b86ffff4dfc5868d3e6a67bb770336c6
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@828038bd40591ad94391554e4b41a529c8e917f4
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
