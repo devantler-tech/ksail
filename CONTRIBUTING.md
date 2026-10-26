@@ -64,7 +64,8 @@ For detailed package and API documentation, refer to the Go documentation at [pk
 Before you begin developing, ensure you have the following installed:
 
 - [Go](https://go.dev/doc/install) — the version in the `go` line of [`go.mod`](go.mod) or newer (CI installs exactly that version)
-- [mockery (v3.5+)](https://vektra.github.io/mockery/v3.5/installation/)
+- [mockery v3.8.1](https://vektra.github.io/mockery/v3.8/installation/) — install with
+  `go install github.com/vektra/mockery/v3@v3.8.1`; earlier releases cannot read Go 1.27 export data
 - [golangci-lint](https://golangci-lint.run/docs/welcome/install/)
 - [mega-linter](https://github.com/oxsecurity/megalinter/tree/main/mega-linter-runner#installation)
 - [Node.js (v24+)](https://nodejs.org/en/download/) — Required for the documentation site, the web UI (and therefore `make build`) and the VSCode extension; CI uses Node.js 24. A plain `go build` does not need it.
@@ -290,7 +291,7 @@ KSail separates infrastructure management from distribution configuration:
 - **Provisioners** configure and manage Kubernetes distributions
 
 | Distribution | Provisioner            | Tool             | Provider                          | Description                                      |
-|--------------|------------------------|------------------|-----------------------------------|--------------------------------------------------|
+| ------------ | ---------------------- | ---------------- | --------------------------------- | ------------------------------------------------ |
 | `Vanilla`    | KindClusterProvisioner | Kind             | Docker, Hetzner, Kubernetes       | Standard upstream Kubernetes                     |
 | `K3s`        | K3dClusterProvisioner  | K3d              | Docker, Hetzner, Kubernetes       | Lightweight K3s                                  |
 | `Talos`      | TalosProvisioner       | Talos            | Docker, Hetzner, Omni, Kubernetes | Immutable Talos Linux                            |
@@ -335,7 +336,7 @@ go test ./...
 System tests exercise full cluster lifecycle scenarios on real clusters. They are split by where the cluster runs:
 
 | Workflow                         | Covers                                                        | Runs                                                                                                |
-|----------------------------------|---------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
+| -------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `ci.yaml` (`system-test-docker`) | Vanilla, K3s, Talos, VCluster and KWOK on the Docker provider | On pull requests (see below) and on manual dispatch                                                 |
 | `system-test-hetzner.yaml`       | Talos in full; K3s and Vanilla as a smoke check, on Hetzner   | Weekly (Sunday 03:00 UTC) and on manual dispatch                                                    |
 | `system-test-omni.yaml`          | Talos on Sidero Omni                                          | Manual dispatch only (the schedule is paused)                                                       |
@@ -417,7 +418,7 @@ The workflow also sets **`KSAIL_SPEC_CLUSTER_OMNI_MACHINECLASS`** to `ksail` via
 #### Scheduled Workflows
 
 | Workflow                   | Schedule                                       | Purpose                                           |
-|----------------------------|------------------------------------------------|---------------------------------------------------|
+| -------------------------- | ---------------------------------------------- | ------------------------------------------------- |
 | `update-skills`            | Daily (06:00 UTC)                              | Copilot skills upgrades                           |
 | `maintenance`              | Daily (00:00 UTC) and monthly (1st, 00:15 UTC) | Old workflow run cleanup; monthly package cleanup |
 | `update-hetzner-talos-iso` | Every 6 hours                                  | Track Hetzner's latest compatible Talos ISO       |

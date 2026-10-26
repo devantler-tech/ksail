@@ -17,10 +17,19 @@ func NewMockCommandRunner(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockCommandRunner {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockCommandRunner{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -73,7 +82,7 @@ type MockCommandRunner_Run_Call struct {
 //   - ctx context.Context
 //   - cmd *cobra.Command
 //   - args []string
-func (_e *MockCommandRunner_Expecter) Run(ctx interface{}, cmd interface{}, args interface{}) *MockCommandRunner_Run_Call {
+func (_e *MockCommandRunner_Expecter) Run(ctx any, cmd any, args any) *MockCommandRunner_Run_Call {
 	return &MockCommandRunner_Run_Call{Call: _e.mock.On("Run", ctx, cmd, args)}
 }
 

@@ -9,9 +9,9 @@ import (
 	"sync"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v7/pkg/client/kubeconform"
 	"github.com/devantler-tech/ksail/v7/pkg/client/kustomize"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
-	"github.com/devantler-tech/ksail/v7/pkg/svc/fluxsubst"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/render"
 	"github.com/spf13/cobra"
 )
@@ -26,6 +26,8 @@ const renderedManifestPerm = 0o600
 type gitopsRenderer struct {
 	build      func(context.Context, string) (*bytes.Buffer, error)
 	chartCache *render.ChartCache
+	// Validation shares its effective options before CRD discovery and rendering.
+	validationOptions *kubeconform.ValidationOptions
 
 	// CRD discovery retains each complete result for the following validation pass.
 	// Parallel consumers remove their entries as validation takes ownership of them.
@@ -113,7 +115,10 @@ func (g *gitopsRenderer) expand(ctx context.Context, kustDir string) (render.Res
 		return render.Result{}, fmt.Errorf("create helm template client: %w", err)
 	}
 
-	expanded := fluxsubst.ExpandFluxSubstitutions(output.Bytes())
+	expanded, err := expandValidationSubstitutions(ctx, output.Bytes(), g.validationOptions)
+	if err != nil {
+		return render.Result{}, fmt.Errorf("prepare validation schemas: %w", err)
+	}
 
 	result, err := render.Expand(ctx, expanded, render.Options{
 		Resolver: render.NewHelmChartResolver(

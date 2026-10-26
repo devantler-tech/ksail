@@ -15,12 +15,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
 
+	"github.com/devantler-tech/ksail/v7/pkg/client/kubeconform"
 	"github.com/yannh/kubeconform/pkg/cache"
 	yamlv3 "gopkg.in/yaml.v3"
 	yamlio "k8s.io/apimachinery/pkg/util/yaml"
@@ -43,10 +42,9 @@ const (
 
 // schemaRegistry provides thread-safe caching of parsed JSON schemas keyed by "apiVersion/kind".
 type schemaRegistry struct {
-	cache sync.Map
+	cache   sync.Map
+	options *SchemaOptions
 }
-
-var schemas = &schemaRegistry{} //nolint:gochecknoglobals // singleton schema cache for validation lifecycle
 
 // ExpandFluxSubstitutions expands Flux postBuild variable references in YAML
 // data using type-aware placeholders derived from JSON schemas.
@@ -59,6 +57,17 @@ var schemas = &schemaRegistry{} //nolint:gochecknoglobals // singleton schema ca
 //
 // Falls back to regex-based string placeholder expansion when YAML parsing fails.
 func ExpandFluxSubstitutions(data []byte) []byte {
+	return expandFluxSubstitutions(data, nil)
+}
+
+// ExpandFluxSubstitutionsWithOptions uses validation's effective schema locations
+// and strictness while retaining offline, cache-only remote schema lookup.
+func ExpandFluxSubstitutionsWithOptions(data []byte, opts SchemaOptions) []byte {
+	return expandFluxSubstitutions(data, &opts)
+}
+
+// expandFluxSubstitutions shares one parsed-schema registry only within this input stream.
+func expandFluxSubstitutions(data []byte, opts *SchemaOptions) []byte {
 	if !fluxVarPattern.Match(data) {
 		return data
 	}
@@ -68,9 +77,13 @@ func ExpandFluxSubstitutions(data []byte) []byte {
 		return data
 	}
 
+	// Cache parsed schemas only within this invocation. Later validation runs must
+	// observe refreshed files and schemas that were absent on an earlier run.
+	schemas := &schemaRegistry{options: opts}
+
 	expanded := make([][]byte, 0, len(docs))
 	for _, doc := range docs {
-		expanded = append(expanded, expandDocument(doc))
+		expanded = append(expanded, schemas.expandDocument(doc))
 	}
 
 	return bytes.Join(expanded, []byte("\n---\n"))
@@ -119,7 +132,7 @@ func splitYAMLDocuments(data []byte) [][]byte {
 }
 
 // expandDocument expands variable references in a single YAML document.
-func expandDocument(doc []byte) []byte {
+func (reg *schemaRegistry) expandDocument(doc []byte) []byte {
 	if !fluxVarPattern.Match(doc) {
 		return doc
 	}
@@ -133,7 +146,7 @@ func expandDocument(doc []byte) []byte {
 
 	switch typedObj := obj.(type) {
 	case map[string]any:
-		return expandMapDocument(typedObj, doc)
+		return reg.expandMapDocument(typedObj, doc)
 	case []any:
 		return expandListDocument(typedObj, doc)
 	default:
@@ -142,10 +155,10 @@ func expandDocument(doc []byte) []byte {
 }
 
 // expandMapDocument expands variable references in a YAML document with a map root.
-func expandMapDocument(obj map[string]any, doc []byte) []byte {
+func (reg *schemaRegistry) expandMapDocument(obj map[string]any, doc []byte) []byte {
 	apiVersion, _ := obj["apiVersion"].(string)
 	kind, _ := obj["kind"].(string)
-	schema := schemas.load(apiVersion, kind)
+	schema := reg.load(apiVersion, kind)
 
 	walkAndExpand(obj, "", schema)
 
@@ -382,7 +395,12 @@ func (reg *schemaRegistry) load(apiVersion, kind string) map[string]any {
 		return schema
 	}
 
-	schema := fetchSchemaFromDisk(apiVersion, kind)
+	var schema map[string]any
+	if reg.options == nil {
+		schema = fetchSchemaFromDisk(apiVersion, kind)
+	} else {
+		schema = fetchSchemaWithOptions(apiVersion, kind, *reg.options)
+	}
 
 	reg.cache.Store(cacheKey, schema)
 
@@ -396,18 +414,7 @@ func fetchSchemaFromDisk(apiVersion, kind string) map[string]any {
 	diskCache := cache.NewOnDiskCache(schemaCacheDir())
 
 	for _, schemaURL := range schemaURLs(apiVersion, kind) {
-		cached, err := diskCache.Get(schemaURL)
-		if err != nil {
-			continue
-		}
-
-		data, ok := cached.([]byte)
-		if !ok {
-			continue
-		}
-
-		schema := parseJSONSchema(data)
-		if schema != nil {
+		if schema := readCachedSchema(diskCache, schemaURL); schema != nil {
 			return schema
 		}
 	}
@@ -417,12 +424,7 @@ func fetchSchemaFromDisk(apiVersion, kind string) map[string]any {
 
 // schemaCacheDir returns the schema cache directory.
 func schemaCacheDir() string {
-	userCacheDir, err := os.UserCacheDir()
-	if err != nil {
-		return filepath.Join(os.TempDir(), "ksail", "kubeconform")
-	}
-
-	return filepath.Join(userCacheDir, "ksail", "kubeconform")
+	return kubeconform.DefaultSchemaCacheDir()
 }
 
 // schemaURLs returns the URLs kubeconform downloads (and caches) a schema for the given

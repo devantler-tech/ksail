@@ -67,8 +67,16 @@ The validation process:
     when no schema type is available, the default is parsed using YAML-native type inference
   - Mixed text (e.g., "prefix.${VAR}"): substitutes "placeholder" in string context
 
-Schema lookups use a local disk cache and require no network access. When no cached
-JSON schema is available, placeholders fall back to strings with YAML-native parsing.
+Typed substitution reads remote schemas from the local cache and supplied local schemas
+from disk, using the same schema locations and strictness as validation. Without a schema,
+placeholders fall back to strings with YAML-native parsing.
+
+Use --refresh-schemas to fetch selected schemas into a temporary cache before typing
+placeholders. The persistent cache is updated only after the complete validation succeeds.
+This requires access to remote schema locations; unavailable selected schemas fail even
+when --ignore-missing-schemas is enabled. Kind exclusions still apply. Normal runs reuse
+the persistent cache without automatic expiry. Registry locations are tried in order: an
+unreachable earlier location can stop validation before a later cached schema is used.
 
 By default, Kubernetes Secrets are skipped to avoid validation failures due to SOPS fields.`
 
@@ -113,6 +121,8 @@ type validateFlags struct {
 	children                  ephemeralChildOptions
 	skipKinds                 []string
 	schemaLocations           []string
+	refreshSchemas            bool
+	schemaRefresh             *kubeconform.SchemaRefresh
 	rules                     string
 	kyvernoAPICallResponses   string
 }
@@ -165,6 +175,13 @@ func addKubeconformValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 			"of skipped (merged with spec.workload.validation.schemaLocations from ksail.yaml)",
 	)
 	cmd.Flags().BoolVar(
+		&flags.refreshSchemas,
+		"refresh-schemas",
+		false,
+		"Download selected schemas anew and update the cache only after validation succeeds; "+
+			"unavailable selected schemas fail even when missing schemas are normally ignored",
+	)
+	cmd.Flags().BoolVar(
 		&flags.includeCRDSchemas,
 		"include-crd-schemas",
 		false,
@@ -206,9 +223,9 @@ func addKyvernoAPICallResponsesFlag(cmd *cobra.Command, flags *validateFlags) {
 	)
 }
 
-// runValidateCmd runs the offline schema gate and, when explicitly requested,
+// runValidateCmdWithSchemaCache runs the offline schema gate and, when explicitly requested,
 // checks admission in an isolated cluster with guaranteed teardown.
-func runValidateCmd(
+func runValidateCmdWithSchemaCache(
 	ctx context.Context,
 	cmd *cobra.Command,
 	args []string,
@@ -440,6 +457,10 @@ func buildValidationOptions(
 		IgnoreMissingSchemas: flags.ignoreMissingSchemas,
 	}
 
+	if flags.schemaRefresh != nil {
+		validationOpts = flags.schemaRefresh.ValidationOptions(validationOpts)
+	}
+
 	if flags.skipSecrets {
 		validationOpts.SkipKinds = append(validationOpts.SkipKinds, "Secret")
 	}
@@ -463,6 +484,10 @@ func buildValidationOptions(
 	)
 
 	cleanup := func() {}
+
+	if renderer != nil {
+		renderer.validationOptions = validationOpts
+	}
 
 	if flags.includeCRDSchemas {
 		crdCleanup, err := addCRDSchemas(ctx, cmd, path, renderer, validationOpts)
@@ -1248,7 +1273,9 @@ func (v *kustomizationValidator) manifests(
 		return nil, nil, err //nolint:wrapcheck // unwrapped so simplifyBuildError strips the kustomize prefix
 	}
 
-	return fluxsubst.ExpandFluxSubstitutions(output.Bytes()), nil, nil
+	expanded, err := expandValidationSubstitutions(ctx, output.Bytes(), v.opts)
+
+	return expanded, nil, err
 }
 
 // attributionFromDocuments maps each rendered document's identity to a source
@@ -1332,7 +1359,10 @@ func validateFileSilent(
 		return fmt.Errorf("read file %s: %w", filePath, err)
 	}
 
-	expanded := fluxsubst.ExpandFluxSubstitutions(data)
+	expanded, err := expandValidationSubstitutions(ctx, data, opts)
+	if err != nil {
+		return fmt.Errorf("prepare validation schemas: %w", err)
+	}
 
 	err = kubeconformClient.ValidateBytes(ctx, filePath, expanded, opts)
 	if err != nil {
@@ -1351,6 +1381,37 @@ func validateFileSilent(
 	}
 
 	return nil
+}
+
+// expandValidationSubstitutions supplies the same schema choices as the validator.
+// A nil options value retains the standalone renderer's existing cache behavior.
+func expandValidationSubstitutions(
+	ctx context.Context,
+	data []byte,
+	opts *kubeconform.ValidationOptions,
+) ([]byte, error) {
+	if opts == nil {
+		return fluxsubst.ExpandFluxSubstitutions(data), nil
+	}
+
+	schemaOpts := fluxsubst.SchemaOptions{
+		SchemaLocations: opts.SchemaLocations,
+		Strict:          opts.Strict,
+		CacheDirectory:  opts.CacheDirectory,
+	}
+	expanded := fluxsubst.ExpandFluxSubstitutionsWithOptions(data, schemaOpts)
+	// Only an explicit CLI refresh supplies a private cache override. Resolve
+	// metadata defaults, fetch schemas, then type the original input afresh.
+	if opts.CacheDirectory != "" {
+		err := kubeconform.NewClient().PrecacheSchemas(ctx, expanded, opts)
+		if err != nil {
+			return nil, fmt.Errorf("refresh validation schemas: %w", err)
+		}
+
+		expanded = fluxsubst.ExpandFluxSubstitutionsWithOptions(data, schemaOpts)
+	}
+
+	return expanded, nil
 }
 
 // simplifyBuildError extracts an actionable error message from a kustomize build error.
