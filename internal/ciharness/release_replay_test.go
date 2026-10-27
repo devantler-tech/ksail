@@ -31,6 +31,10 @@ func TestReleaseReplayEntrypoint(t *testing.T) {
 	}{
 		{"new", "build", ""},
 		{"published", "verify", ""},
+		{"annotated-tag", "verify", ""},
+		{"annotated-wrong-source", "", "source/tag"},
+		{"annotated-unreadable", "", "annotated source tag"},
+		{"annotated-cycle", "", "source/tag"},
 		{"missing-asset", "", "asset set"},
 		{"wrong-source", "", "source"},
 		{"read-failure", "", "release state"},
@@ -311,7 +315,17 @@ else
     'api repos/devantler-tech/ksail/git/ref/tags/v1.2.3')
       if [[ $REPLAY_CASE == wrong-source ]]; then
         jq '.object.sha = "cccccccccccccccccccccccccccccccccccccccc"' "$REPLAY_FIXTURE/ref.json"
+      elif [[ $REPLAY_CASE == annotated-* ]]; then
+        jq '.object = {"type":"tag","sha":"dddddddddddddddddddddddddddddddddddddddd"}' "$REPLAY_FIXTURE/ref.json"
       else cat "$REPLAY_FIXTURE/ref.json"; fi ;;
+    'api repos/devantler-tech/ksail/git/tags/dddddddddddddddddddddddddddddddddddddddd')
+      case $REPLAY_CASE in
+        annotated-unreadable) exit 23 ;;
+        annotated-cycle) printf '{"object":{"type":"tag","sha":"dddddddddddddddddddddddddddddddddddddddd"}}\n' ;;
+        annotated-wrong-source)
+          printf '{"object":{"type":"commit","sha":"cccccccccccccccccccccccccccccccccccccccc"}}\n' ;;
+        *) printf '{"object":{"type":"commit","sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}\n' ;;
+      esac ;;
     'api repos/devantler-tech/ksail/releases/55')
       if [[ $REPLAY_CASE == mutable-release ]]; then
         jq '.immutable = false' "$REPLAY_FIXTURE/release.json"

@@ -665,8 +665,8 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read # Checkout the local admission guard.
-      pages: write
-      id-token: write
+      pages: write # Publish the verified documentation artifact.
+      id-token: write # Authenticate the Pages deployment through OIDC.
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
