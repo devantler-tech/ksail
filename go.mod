@@ -22,7 +22,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.33.9
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.9
 	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.82.1
-	github.com/aws/aws-sdk-go-v2/service/eks v1.104.1
+	github.com/aws/aws-sdk-go-v2/service/eks v1.104.2
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.4
 	github.com/aws/smithy-go v1.28.5
 	github.com/charmbracelet/bubbles v1.0.0
@@ -90,7 +90,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.12.1
 	github.com/uptrace/opentelemetry-go-extra/otelzap v0.3.2
-	github.com/wailsapp/wails/v3 v3.0.0-beta.33
+	github.com/wailsapp/wails/v3 v3.0.0-beta.34
 	github.com/yannh/kubeconform v0.8.0
 	github.com/zalando/go-keyring v0.2.8
 	go.etcd.io/bbolt v1.5.0
