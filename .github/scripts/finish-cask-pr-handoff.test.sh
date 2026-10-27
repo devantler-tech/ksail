@@ -34,8 +34,8 @@ line="$*"
 # The personal write token is deliberately exhausted for reads. The real
 # finisher must still complete through the independent read credential, while
 # promotion and the pinned merge must retain the write credential.
-if [[ "$scenario" == isolated-read-budget || "$scenario" == write-budget-* ]]; then
-  if [[ "$line" == *'mutation CaskPromote'* || "$line" == *'api -X PUT '* || "$line" == 'api --include '* ]]; then
+if [[ "$scenario" == isolated-read-budget || "$scenario" == write-budget-* || "$scenario" == async-pending-isolated-read-budget ]]; then
+  if [[ "$line" == *'mutation CaskPromote'* || "$line" == *'api -X PUT '* || "$line" == 'api --include '* || "$line" == *'api repos/devantler-tech/homebrew-tap/pulls/42/merge-async/'* ]]; then
     [[ "${GH_TOKEN:-}" == personal-writer ]] || { echo 'wrong mutation credential' >&2; exit 1; }
   else
     [[ "${GH_TOKEN:-}" == repository-reader ]] || { echo 'gh: API rate limit exceeded for personal write identity' >&2; exit 1; }
@@ -135,7 +135,7 @@ case "${line}" in
 		touch "${state}/merged"
 		printf '%s\n' '{"status":"merged","details":{"sha":"4444444444444444444444444444444444444444","uuid":"730b9d5e-3f2a-4f7e-8b0c-2d5f9a8c1e42"}}' ;;
 	async-final-missing-sha) printf '%s\n' '{"status":"merged","details":{"message":"Merged"}}' ;;
-	async-pending-success)
+	async-pending-success | async-pending-isolated-read-budget)
 		if [[ "${n}" -eq 1 ]]; then pending_result poll
 		else
 			touch "${state}/merged"
@@ -304,7 +304,7 @@ run_case() {
 	mkdir -p "${state}"
 	: >"${state}/mutations"
 	local write_token="${GH_TOKEN:-}" read_token="${KSAIL_CASK_READ_TOKEN:-}" write_deadline=""
-	if [[ "$scenario" == isolated-read-budget || "$scenario" == write-budget-* ]]; then
+	if [[ "$scenario" == isolated-read-budget || "$scenario" == write-budget-* || "$scenario" == async-pending-isolated-read-budget ]]; then
 		write_token=personal-writer
 		read_token=repository-reader
 	fi
@@ -387,6 +387,7 @@ run_case delayed-current-aggregate true 1 1
 run_case paginated-success true 1 1
 run_case admin-capable true 1 1
 run_case async-pending-success true 1 1
+run_case async-pending-isolated-read-budget true 1 1
 run_case async-already-merged true 1 1
 for scenario in draft-release unpublished-release wrong-release-tag release-read-error digest-mismatch \
 	no-required no-checks failed-before-required failed-required missing-required-flag pending-required state-read-error checks-read-error \

@@ -488,7 +488,8 @@ merge_result() {
 				return 1
 			fi
 			if ((polls > 0)); then sleep "${interval}"; fi
-			if ! read_api "${endpoint}/${merge_uuid}" \
+			# GitHub requires Contents:write for this result read as well as the request.
+			if ! gh api "${endpoint}/${merge_uuid}" \
 				-H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2026-03-10' \
 				>"${work}/merge.json"; then
 				blocked 'asynchronous merge result read failed; delivery is unknown'
