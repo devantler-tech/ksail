@@ -11,10 +11,17 @@ fixture="${repo_root}/.github/fixtures/cask-pr-handoff/valid.json"
 
 cat >"${work}/bin/date" <<'EOF'
 #!/usr/bin/env bash
-printf '2030-01-01T00:00:00Z\n'
+if [[ "${1:-}" == +%s ]]; then
+  if [[ -f "${FINISH_STATE}/clock" ]]; then cat "${FINISH_STATE}/clock"; else printf '1000\n'; fi
+else printf '2030-01-01T00:00:00Z\n'; fi
 EOF
 cat >"${work}/bin/sleep" <<'EOF'
 #!/usr/bin/env bash
+if [[ "${FINISH_SCENARIO:-}" == write-budget-* ]]; then
+  now=1000
+  [[ ! -f "${FINISH_STATE}/clock" ]] || now="$(<"${FINISH_STATE}/clock")"
+  printf '%s\n' "$((now + $1))" > "${FINISH_STATE}/clock"
+fi
 exit 0
 EOF
 cat >"${work}/bin/gh" <<'EOF'
@@ -24,6 +31,16 @@ scenario="${FINISH_SCENARIO}"
 state="${FINISH_STATE}"
 fixture="${FINISH_FIXTURE}"
 line="$*"
+# The personal write token is deliberately exhausted for reads. The real
+# finisher must still complete through the independent read credential, while
+# promotion and the pinned merge must retain the write credential.
+if [[ "$scenario" == isolated-read-budget || "$scenario" == write-budget-* ]]; then
+  if [[ "$line" == *'mutation CaskPromote'* || "$line" == *'api -X PUT '* || "$line" == 'api --include '* ]]; then
+    [[ "${GH_TOKEN:-}" == personal-writer ]] || { echo 'wrong mutation credential' >&2; exit 1; }
+  else
+    [[ "${GH_TOKEN:-}" == repository-reader ]] || { echo 'gh: API rate limit exceeded for personal write identity' >&2; exit 1; }
+  fi
+fi
 head=1111111111111111111111111111111111111111
 base=3333333333333333333333333333333333333333
 promoted=false
@@ -32,6 +49,26 @@ cursor=null
 for arg in "$@"; do
 	[[ "${arg}" == cursor=* ]] && cursor="${arg#cursor=}"
 done
+# A real rate-limit recovery is required before writes in these cases.
+if [[ "$scenario" == write-budget-* ]]; then
+  now=1000
+  [[ ! -f "$state/clock" ]] || now="$(<"$state/clock")"
+  if [[ "$line" == 'api --include '* ]]; then
+    resource=core
+    [[ "$line" != 'api --include graphql '* ]] || resource=graphql
+    remaining=4900
+    [[ "$resource" != core || "$now" -ge 1105 ]] || remaining=0
+    printf 'HTTP/2.0 200 OK\r\nX-Ratelimit-Resource: %s\r\nX-Ratelimit-Remaining: %s\r\nX-Ratelimit-Reset: 1100\r\n\r\n' "$resource" "$remaining"
+    if [[ "$resource" == core ]]; then
+      printf '{"resources":{"core":{"remaining":%s,"reset":1100}}}\n' "$remaining"
+    else printf '{"data":{"rateLimit":{"remaining":4900,"resetAt":"2030-01-01T00:00:00Z"}}}\n'; fi
+    exit 0
+  fi
+  if [[ ("$line" == *'mutation CaskPromote'* || "$line" == *'api -X PUT '*) && "$now" -lt 1105 ]]; then
+    echo 'gh: API rate limit exceeded for personal write identity' >&2
+    exit 1
+  fi
+fi
 # Track transport calls so scenarios can detect forbidden promotion or merge attempts.
 count() {
 	local name="$1" n=0
@@ -142,9 +179,10 @@ case "${line}" in
 	 check("CI - Required Checks";true;"SUCCESS";(if $ready then "2030-01-01T00:00:01Z" else "2029-01-01T00:00:00Z" end)),
 	 check("🔍 Audit Casks";false;(if $ready then "SUCCESS" else "SKIPPED" end);(if $ready then "2030-01-01T00:00:01Z" else "2029-01-01T00:00:00Z" end))
 	 ]}}}}]}}}}}' |
-	 jq --arg scenario "${scenario}" --arg cursor "${cursor}" --argjson n "${n}" --argjson ready "${promoted}" '
+	 jq --arg scenario "${scenario}" --arg cursor "${cursor}" --argjson n "${n}" --argjson now "${now:-1000}" --argjson ready "${promoted}" '
 	 .data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts |=
-	 (if $scenario == "no-required" or $scenario == "failed-before-required" or
+	 (if $scenario == "write-budget-checks-failed" and $now >= 1105 then .nodes[0].conclusion="FAILURE"
+	 elif $scenario == "no-required" or $scenario == "failed-before-required" or
 	     (($scenario == "first-required-then-pass" or $scenario == "head-moved-waiting-for-required") and ($ready|not) and $n == 1) then
 	   .nodes |= map(.isRequired=false) |
 	   if $scenario == "failed-before-required" then .nodes[1].conclusion="FAILURE" else . end
@@ -265,7 +303,15 @@ run_case() {
 	local state="${work}/${scenario}"
 	mkdir -p "${state}"
 	: >"${state}/mutations"
-	PATH="${work}/bin:${PATH}" FINISH_FIXTURE="${fixture}" FINISH_STATE="${state}" FINISH_SCENARIO="${scenario}" \
+	local write_token="${GH_TOKEN:-}" read_token="${KSAIL_CASK_READ_TOKEN:-}" write_deadline=""
+	if [[ "$scenario" == isolated-read-budget || "$scenario" == write-budget-* ]]; then
+		write_token=personal-writer
+		read_token=repository-reader
+	fi
+	[[ "$scenario" != write-budget-recovered ]] || write_deadline=1250
+	[[ "$scenario" != write-budget-expired ]] || write_deadline=1050
+	[[ "$scenario" != write-budget-checks-failed ]] || write_deadline=1250
+	GH_TOKEN="${write_token}" KSAIL_CASK_READ_TOKEN="${read_token}" KSAIL_GITHUB_WRITE_BUDGET_DEADLINE="${write_deadline}" PATH="${work}/bin:${PATH}" FINISH_FIXTURE="${fixture}" FINISH_STATE="${state}" FINISH_SCENARIO="${scenario}" \
 		bash "${script_dir}/finish-cask-pr-handoff.sh" \
 		--tap devantler-tech/homebrew-tap --pr 42 --cask-name ksail --source-repo devantler-tech/ksail \
 		--tag v7.166.1 --attempts 2 --interval 0 >"${state}/output" 2>&1 || code=$?
@@ -323,6 +369,10 @@ run_case() {
 }
 
 # Removing the direct merge, SHA pin, post-promotion audit, or immutable readback breaks these.
+run_case isolated-read-budget true 1 1
+run_case write-budget-recovered true 1 1
+run_case write-budget-expired false 0 0
+run_case write-budget-checks-failed false 0 0
 run_case both-phases-then-pass true 1 1
 run_case first-required-then-pass true 1 1
 run_case first-checks-then-pass true 1 1
