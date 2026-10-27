@@ -14,8 +14,6 @@ import (
 
 // TestExpandFluxSubstitutionsReadsCurrentCache catches parsed schemas and misses
 // surviving a validation invocation after the on-disk schema has been refreshed.
-//
-
 func TestExpandFluxSubstitutionsReadsCurrentCache(t *testing.T) {
 	cases := []struct {
 		name, kind, filename, initialType, before, nextType, after string
