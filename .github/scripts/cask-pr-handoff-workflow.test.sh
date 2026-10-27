@@ -497,8 +497,8 @@ assert_contains '.github/scripts/resolve-cask-publication.sh' "${checkpoint_bloc
 	'cask-checkpoint must run the cask order resolver'
 [[ "$(grep -n 'resolve-cask-publication.sh' "${checkpoint_block}" | cut -d: -f1)" -lt "$(grep -n 'redraft-evergreen-cask-prs.sh' "${checkpoint_block}" | cut -d: -f1)" ]] ||
 	fail 'the cask order decision must be taken before any evergreen PR is re-drafted'
-assert_contains "if: steps.cask-order.outputs.publish == 'true'" "${checkpoint_block}" \
-	'an older tag must not re-draft the evergreen cask PRs it will never deliver'
+assert_contains "if: (steps.cask-order.outputs.publish == 'true') && needs.validate-release-ref.outputs.release-mode == 'build'" "${checkpoint_block}" \
+	'only an admitted new publication may re-draft the evergreen cask PRs it can deliver'
 assert_contains "if: needs.cask-checkpoint.outputs.cask-publish == 'true'" "${homebrew_block}" \
 	'the cask delivery job must run only when this tag may move the casks'
 [[ "$(grep -Fc 'KSAIL_CASK_PUBLISH: ${{ needs.cask-checkpoint.outputs.cask-publish }}' "${cd_workflow}")" == 2 ]] ||

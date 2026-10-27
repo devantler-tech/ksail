@@ -228,9 +228,9 @@ if [[ -z "${attach_line}" || -z "${publish_line}" ]] ||
 	printf 'FAIL: publish-release must resolve the release state before attaching and publishing\n' >&2
 	exit 1
 fi
-gated="$(grep -cF -- "if: steps.release_state.outputs.state == 'draft'" "${publish_block}" || true)"
+gated="$(grep -cF -- "if: (steps.release_state.outputs.state == 'draft') && needs.goreleaser.outputs.release-mode == 'build'" "${publish_block}" || true)"
 if [[ "${gated}" -ne 2 ]]; then
-	printf 'FAIL: both the attach and publish steps must run only for a draft release (found %s gates)\n' "${gated}" >&2
+	printf 'FAIL: attach and publish must require a draft release and normal build admission (found %s gates)\n' "${gated}" >&2
 	exit 1
 fi
 # GoReleaser attaches the Cluster CRD itself, so the resolver must be told to require it.
