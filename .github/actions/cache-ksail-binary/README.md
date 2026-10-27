@@ -65,19 +65,19 @@ go test ./internal/ciharness -run '^TestBinaryCacheKey' -count=1
 
 ## Inputs
 
-| Input | Required | Default | Purpose |
-|---|---|---|---|
-| `go-version` | Yes | — | Exact active version from `setup-go`; a mismatch fails. |
-| `output-path` | No | `ksail` | Relative or absolute destination; parent traversal is refused. |
-| `save` | No | `"true"` | Save a newly built cache entry. |
-| `copilot-cli-version` | No | See `action.yaml` | Copilot CLI version bundled on a miss and included in the key. |
+| Input                 | Required | Default           | Purpose                                                        |
+|-----------------------|----------|-------------------|----------------------------------------------------------------|
+| `go-version`          | Yes      | —                 | Exact active version from `setup-go`; a mismatch fails.        |
+| `output-path`         | No       | `ksail`           | Relative or absolute destination; parent traversal is refused. |
+| `save`                | No       | `"true"`          | Save a newly built cache entry.                                |
+| `copilot-cli-version` | No       | See `action.yaml` | Copilot CLI version bundled on a miss and included in the key. |
 
 ## Outputs
 
-| Output | Meaning |
-|---|---|
-| `cache-hit` | Whether the key matched exactly. |
-| `binary-path` | Absolute prepared-executable path. |
+| Output                   | Meaning                                  |
+|--------------------------|------------------------------------------|
+| `cache-hit`              | Whether the key matched exactly.         |
+| `binary-path`            | Absolute prepared-executable path.       |
 | `output-path-normalized` | Destination with a leading `./` removed. |
 
 The key follows Go's documented [build-input fields](https://pkg.go.dev/cmd/go#hdr-List_packages_or_modules)
