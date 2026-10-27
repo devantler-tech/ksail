@@ -17,10 +17,19 @@ func NewMockBackend(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockBackend {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockBackend{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -63,7 +72,7 @@ type MockBackend_CreateRegistry_Call struct {
 // CreateRegistry is a helper method to define mock.On call
 //   - ctx context.Context
 //   - config docker.RegistryConfig
-func (_e *MockBackend_Expecter) CreateRegistry(ctx interface{}, config interface{}) *MockBackend_CreateRegistry_Call {
+func (_e *MockBackend_Expecter) CreateRegistry(ctx any, config any) *MockBackend_CreateRegistry_Call {
 	return &MockBackend_CreateRegistry_Call{Call: _e.mock.On("CreateRegistry", ctx, config)}
 }
 
@@ -124,7 +133,7 @@ type MockBackend_DeleteRegistry_Call struct {
 //   - deleteVolume bool
 //   - networkName string
 //   - volumeName string
-func (_e *MockBackend_Expecter) DeleteRegistry(ctx interface{}, name interface{}, clusterName interface{}, deleteVolume interface{}, networkName interface{}, volumeName interface{}) *MockBackend_DeleteRegistry_Call {
+func (_e *MockBackend_Expecter) DeleteRegistry(ctx any, name any, clusterName any, deleteVolume any, networkName any, volumeName any) *MockBackend_DeleteRegistry_Call {
 	return &MockBackend_DeleteRegistry_Call{Call: _e.mock.On("DeleteRegistry", ctx, name, clusterName, deleteVolume, networkName, volumeName)}
 }
 
@@ -210,7 +219,7 @@ type MockBackend_GetRegistryPort_Call struct {
 // GetRegistryPort is a helper method to define mock.On call
 //   - ctx context.Context
 //   - name string
-func (_e *MockBackend_Expecter) GetRegistryPort(ctx interface{}, name interface{}) *MockBackend_GetRegistryPort_Call {
+func (_e *MockBackend_Expecter) GetRegistryPort(ctx any, name any) *MockBackend_GetRegistryPort_Call {
 	return &MockBackend_GetRegistryPort_Call{Call: _e.mock.On("GetRegistryPort", ctx, name)}
 }
 
@@ -277,7 +286,7 @@ type MockBackend_ListRegistries_Call struct {
 
 // ListRegistries is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockBackend_Expecter) ListRegistries(ctx interface{}) *MockBackend_ListRegistries_Call {
+func (_e *MockBackend_Expecter) ListRegistries(ctx any) *MockBackend_ListRegistries_Call {
 	return &MockBackend_ListRegistries_Call{Call: _e.mock.On("ListRegistries", ctx)}
 }
 
@@ -329,7 +338,7 @@ type MockBackend_WaitForRegistriesReady_Call struct {
 // WaitForRegistriesReady is a helper method to define mock.On call
 //   - ctx context.Context
 //   - registryIPs map[string]string
-func (_e *MockBackend_Expecter) WaitForRegistriesReady(ctx interface{}, registryIPs interface{}) *MockBackend_WaitForRegistriesReady_Call {
+func (_e *MockBackend_Expecter) WaitForRegistriesReady(ctx any, registryIPs any) *MockBackend_WaitForRegistriesReady_Call {
 	return &MockBackend_WaitForRegistriesReady_Call{Call: _e.mock.On("WaitForRegistriesReady", ctx, registryIPs)}
 }
 

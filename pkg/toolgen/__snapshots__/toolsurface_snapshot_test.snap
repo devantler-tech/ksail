@@ -1926,6 +1926,10 @@ workload_write
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: describe, explain, get, wait)",
         "type": "boolean"
       },
+      "refresh-schemas": {
+        "description": "Download selected schemas anew and update the cache only after validation succeeds; unavailable selected schemas fail even when missing schemas are normally ignored (applies to: validate)",
+        "type": "boolean"
+      },
       "release-name": {
         "description": "name used for the Helm release (applies to: gen_helmrelease)",
         "type": "string"

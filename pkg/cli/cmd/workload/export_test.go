@@ -700,6 +700,24 @@ func ExportSetEphemeralAdmissionClient(
 // ExportWithPreparedEphemeralCluster exposes the shared validate/scan admission lifecycle.
 var ExportWithPreparedEphemeralCluster = withPreparedEphemeralCluster //nolint:gochecknoglobals // test export
 
+// ExportExpandValidationSubstitutions exposes schema-cache mode selection for tests.
+func ExportExpandValidationSubstitutions(
+	ctx context.Context,
+	data []byte,
+	opts *kubeconform.ValidationOptions,
+) ([]byte, error) {
+	return expandValidationSubstitutions(ctx, data, opts)
+}
+
+// ExportFinishRenderedValidationSubstitutions exposes final schema preparation for tests.
+func ExportFinishRenderedValidationSubstitutions(
+	ctx context.Context,
+	result render.Result,
+	opts *kubeconform.ValidationOptions,
+) ([]byte, error) {
+	return finishRenderedValidationSubstitutions(ctx, result, opts)
+}
+
 // ExportResolveKubeconfigFlag exposes resolveKubeconfigFlag for testing.
 func ExportResolveKubeconfigFlag(
 	child *cobra.Command,
