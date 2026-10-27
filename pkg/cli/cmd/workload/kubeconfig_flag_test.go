@@ -163,6 +163,8 @@ func TestResolveKubeconfigFlag_NamedTildeRemainsLiteral(t *testing.T) {
 	assert.Equal(t, want, flag.Value.String())
 }
 
+// TestResolveKubeconfigFlag_MissingParentRefuses keeps canonicalization failures
+// fatal rather than falling back to an unresolved kubeconfig path.
 func TestResolveKubeconfigFlag_MissingParentRefuses(t *testing.T) {
 	t.Parallel()
 
