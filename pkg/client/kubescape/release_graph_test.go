@@ -428,6 +428,66 @@ func TestReleaseBuildConfigMatchesAudit(t *testing.T) {
 	}
 }
 
+// TestReleaseActionPinsMatchAuditedContent binds audited snapshots to the commits CD executes.
+// The content witnesses were read from these exact Git commits, not the working tree.
+// Changing an audited action requires a new reviewed pin and its matching content witness.
+func TestReleaseActionPinsMatchAuditedContent(t *testing.T) {
+	t.Parallel()
+	root := moduleRoot(t)
+	actual := releaseConfigDigests(t, root)
+
+	var workflow struct {
+		Jobs map[string]struct {
+			Steps []struct {
+				Uses string `yaml:"uses"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	readYAML(t, filepath.Join(root, ".github", "workflows", "cd.yaml"), &workflow)
+
+	for _, binding := range []struct{ path, reference, content string }{
+		{
+			".github/actions/release-admission/action.yaml",
+			"devantler-tech/ksail/.github/actions/release-admission@ac2dd2ee401030b2fac81dc985b42fae45b0788b",
+			"a8ac217c7e2195fee64b364748a6724b99aa0aa4a9988127084f1d6b45953f0c",
+		},
+		{
+			".github/actions/setup-desktop-build/action.yml",
+			"devantler-tech/ksail/.github/actions/setup-desktop-build@207d9cb1f66f479b55dcee093152fbb8eb71f7b2",
+			"473bc1c1f3e940ba58a76320cf8b6ff5e798bf5e9cbe68830469640ef1ef7cac",
+		},
+	} {
+		t.Run(binding.path, func(t *testing.T) {
+			t.Parallel()
+
+			if actual[binding.path] != binding.content {
+				t.Errorf("audited content no longer matches pinned action %s", binding.reference)
+			}
+
+			prefix := strings.Split(binding.reference, "@")[0] + "@"
+			found := false
+
+			for _, job := range workflow.Jobs {
+				for _, step := range job.Steps {
+					if !strings.HasPrefix(step.Uses, prefix) {
+						continue
+					}
+
+					found = true
+
+					if step.Uses != binding.reference {
+						t.Errorf("action pin %s has no matching audited content witness", step.Uses)
+					}
+				}
+			}
+
+			if !found {
+				t.Errorf("audited action %s is absent from CD", binding.reference)
+			}
+		})
+	}
+}
+
 // releaseConfigDigests hashes each audited release configuration: whole files, and for cd.yaml the
 // whole workflow (workflow-level env such as GOFLAGS reaches every release job) canonicalised through
 // JSON with every `uses:` value removed, so formatting and action-version bumps do not count.
