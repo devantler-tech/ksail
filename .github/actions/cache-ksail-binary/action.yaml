@@ -6,9 +6,6 @@ inputs:
   go-version:
     description: Go version from setup-go output, used to compute cache key.
     required: true
-  source-hash:
-    description: Hash of source files (from hashFiles() in workflow).
-    required: true
   output-path:
     description: Target path for the binary. Can be relative (e.g., 'ksail') or absolute (e.g., '/usr/local/bin/ksail').
     required: false
@@ -37,15 +34,25 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: 📚 Generate embedded chat documentation
+      shell: bash
+      run: go generate ./pkg/svc/chat/...
+
     - name: 🔑 Compute ksail cache key
       id: ksail-cache-key
       shell: bash
       env:
         GO_VERSION: ${{ inputs.go-version }}
-        SOURCE_HASH: ${{ inputs.source-hash }}
         COPILOT_CLI_VERSION: ${{ inputs.copilot-cli-version }}
       run: |
-        KSAIL_CACHE_KEY="${RUNNER_OS}-ksail-bin-${GO_VERSION}-${SOURCE_HASH}-cli${COPILOT_CLI_VERSION}"
+        set -Eeuo pipefail
+        target_goos=$(go env GOOS)
+        target_goarch=$(go env GOARCH)
+        host_goos=$(go env GOHOSTOS)
+        host_goarch=$(go env GOHOSTARCH)
+        KSAIL_CACHE_KEY=$(GOOS="$host_goos" GOARCH="$host_goarch" go run "$GITHUB_ACTION_PATH/key.go" \
+          -go-version "$GO_VERSION" -cli-version "$COPILOT_CLI_VERSION" \
+          -action-path "$GITHUB_ACTION_PATH" -goos "$target_goos" -goarch "$target_goarch")
         printf 'value=%s\n' "$KSAIL_CACHE_KEY" >> "$GITHUB_OUTPUT"
 
     - name: ♻️ Restore cached ksail binary
@@ -107,11 +114,10 @@ runs:
             chmod +x "$output_target"
           fi
         else
-          # Build binary (generate embedded docs + bundle Copilot CLI)
+          # The key already covers generated docs. Bundle the selected Copilot CLI.
           mkdir -p ./.cache
-          go generate ./pkg/svc/chat/...
           go tool bundler --cli-version "$COPILOT_CLI_VERSION"
-          go build -trimpath -ldflags="-s -w" -o ./.cache/ksail .
+          go build -buildvcs=false -trimpath -ldflags="-s -w" -o ./.cache/ksail .
           # Copy to target location
           if [[ "$output_target" = /* ]]; then
             sudo cp ./.cache/ksail "$output_target"
