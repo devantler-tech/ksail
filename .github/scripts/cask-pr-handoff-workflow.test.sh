@@ -21,13 +21,13 @@ awk '
 ' "${cd_workflow}" >"${homebrew_block}"
 
 awk '1' \
-	"${homebrew_block}" \
-	"${repo_root}/.github/scripts/collect-cask-pr-handoff.sh" \
-	"${repo_root}/.github/scripts/find-merged-cask-pr-handoff.sh" \
-	"${repo_root}/.github/scripts/validate-cask-pr-handoff.sh" \
-	"${repo_root}/.github/scripts/finish-cask-pr-handoff.sh" \
-	"${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
-	>"${execution_surface}"
+  "${homebrew_block}" \
+  "${repo_root}/.github/scripts/collect-cask-pr-handoff.sh" \
+  "${repo_root}/.github/scripts/find-merged-cask-pr-handoff.sh" \
+  "${repo_root}/.github/scripts/validate-cask-pr-handoff.sh" \
+  "${repo_root}/.github/scripts/finish-cask-pr-handoff.sh" \
+  "${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
+  >"${execution_surface}"
 
 # Once an open PR is selected it can auto-merge between any API call. No later failure may set the
 # global failure bit directly: it must first pass through the immutable merged-current-main proof.
@@ -52,22 +52,22 @@ awk '
 
 # Stop the workflow contract harness when an expected behavior is missing.
 fail() {
-	printf 'FAIL: %s\n' "$1" >&2
-	exit 1
+  printf 'FAIL: %s\n' "$1" >&2
+  exit 1
 }
 
 # Require a workflow fragment that preserves the release handoff contract.
 assert_contains() {
-	local pattern="$1" file="$2" message="$3"
-	grep -Fq -- "${pattern}" "${file}" || fail "${message}"
+  local pattern="$1" file="$2" message="$3"
+  grep -Fq -- "${pattern}" "${file}" || fail "${message}"
 }
 
 # Reject a workflow fragment that would contradict the release handoff contract.
 assert_not_contains() {
-	local pattern="$1" file="$2" message="$3"
-	if grep -Fq -- "${pattern}" "${file}"; then
-		fail "${message}"
-	fi
+  local pattern="$1" file="$2" message="$3"
+  if grep -Fq -- "${pattern}" "${file}"; then
+    fail "${message}"
+  fi
 }
 
 race_root="${tmp_dir}/merged-race"
@@ -93,26 +93,26 @@ printf '42\n'
 EOF
 chmod +x "${race_root}/.github/scripts/find-merged-cask-pr-handoff.sh"
 for known_pr in '' 42; do
-	rm -f "${race_root}/calls"
-	(
-		cd "${race_root}"
-		TAP="devantler-tech/homebrew-tap"
-		GITHUB_REPOSITORY="devantler-tech/ksail"
-		TAG="v7.175.1"
-		evidence_dir="${race_root}/evidence"
-		GITHUB_STEP_SUMMARY="${race_root}/summary.md"
-		RECONCILE_RACE_STATE="${race_root}/calls"
-		RECONCILE_EXPECT_PR="${known_pr}"
-		export TAP GITHUB_REPOSITORY TAG evidence_dir GITHUB_STEP_SUMMARY RECONCILE_RACE_STATE RECONCILE_EXPECT_PR
-		handoff_failed=0
-		# shellcheck disable=SC2317,SC2329 # Invoked by the sourced workflow function.
-		sleep() { :; }
-		# shellcheck source=/dev/null
-		source "${reconcile_function}"
-		reconcile_merged_handoff ksail 'simulated open-to-merged race' "${known_pr}"
-		[[ "${handoff_failed}" -eq 0 ]] || exit 1
-		[[ "$(<"${RECONCILE_RACE_STATE}")" -eq 2 ]] || exit 1
-	) || fail 'merged reconciliation must retry a just-merged PR before recording failure'
+  rm -f "${race_root}/calls"
+  (
+    cd "${race_root}"
+    TAP="devantler-tech/homebrew-tap"
+    GITHUB_REPOSITORY="devantler-tech/ksail"
+    TAG="v7.175.1"
+    evidence_dir="${race_root}/evidence"
+    GITHUB_STEP_SUMMARY="${race_root}/summary.md"
+    RECONCILE_RACE_STATE="${race_root}/calls"
+    RECONCILE_EXPECT_PR="${known_pr}"
+    export TAP GITHUB_REPOSITORY TAG evidence_dir GITHUB_STEP_SUMMARY RECONCILE_RACE_STATE RECONCILE_EXPECT_PR
+    handoff_failed=0
+    # shellcheck disable=SC2317,SC2329 # Invoked by the sourced workflow function.
+    sleep() { :; }
+    # shellcheck source=/dev/null
+    source "${reconcile_function}"
+    reconcile_merged_handoff ksail 'simulated open-to-merged race' "${known_pr}"
+    [[ "${handoff_failed}" -eq 0 ]] || exit 1
+    [[ "$(<"${RECONCILE_RACE_STATE}")" -eq 2 ]] || exit 1
+  ) || fail 'merged reconciliation must retry a just-merged PR before recording failure'
 done
 
 # Run the workflow's actual ready-retry block. A completed validation and a failed
@@ -137,80 +137,80 @@ printf 'PASS: verified exact-head merge completed\n'
 EOF
 chmod +x "${retry_root}/.github/scripts/finish-cask-pr-handoff.sh"
 for retry_case in validation-failed delivery-failed delivered; do
-	retry_log="${tmp_dir}/${retry_case}.log"
-	retry_summary="${tmp_dir}/${retry_case}.summary"
-	(
-		cd "${retry_root}"
-		READY_RETRY_SCENARIO="${retry_case}"
-		READY_RETRY_CALLS="${tmp_dir}/${retry_case}.calls"
-		export READY_RETRY_SCENARIO READY_RETRY_CALLS
-		TAP="devantler-tech/homebrew-tap" TAG="v7.175.1" pr=42
-		GITHUB_REPOSITORY="devantler-tech/ksail" GITHUB_STEP_SUMMARY="${retry_summary}"
-		pr_is_draft=false
-		evidence="${tmp_dir}/unused-evidence.json" handoff_failed=0
-		export TAP TAG pr GITHUB_REPOSITORY GITHUB_STEP_SUMMARY pr_is_draft evidence
-		: >"${READY_RETRY_CALLS}"
-		: >"${GITHUB_STEP_SUMMARY}"
-		# shellcheck disable=SC2317,SC2329 # Invoked by the actual sourced workflow block.
-		validate_handoff() {
-			if [[ "${READY_RETRY_SCENARIO}" == validation-failed ]]; then
-				printf 'scope mismatch\n' >&2
-				return 1
-			fi
-			printf 'validation fixture passed\n'
-		}
-		# shellcheck disable=SC2317,SC2329 # Invoked by the actual sourced workflow block.
-		reconcile_merged_handoff() {
-			printf 'reconciled: %s\n' "$2"
-			handoff_failed=1
-		}
-		for name in ksail ksail-desktop; do
-			pr_title="chore(cask): update ${name} to ${TAG}"
-			export pr_title
-			# shellcheck source=/dev/null
-			source "${ready_retry_block}"
-		done
-		if [[ "${READY_RETRY_SCENARIO}" == delivered ]]; then
-			[[ "${handoff_failed}" -eq 0 ]] || exit 1
-		else
-			[[ "${handoff_failed}" -eq 1 ]] || exit 1
-		fi
-		if [[ "${READY_RETRY_SCENARIO}" == validation-failed ]]; then
-			[[ ! -s "${READY_RETRY_CALLS}" ]] || exit 1
-		else
-			[[ "$(wc -l <"${READY_RETRY_CALLS}" | tr -d ' ')" -eq 2 ]] || exit 1
-		fi
-	) >"${retry_log}" 2>&1 || fail "ready retry ${retry_case} must retain its actual outcome"
-	case "${retry_case}" in
-	validation-failed)
-		assert_contains 'failed prepared revalidation: scope mismatch' "${retry_log}" \
-			'validation failure must retain its scope diagnostic'
-		assert_contains 'scope mismatch' "${retry_summary}" \
-			'validation failure must reach the step summary'
-		;;
-	delivery-failed)
-		assert_contains 'asynchronous result read unavailable' "${retry_log}" \
-			'delivery failure must retain the finisher diagnostic'
-		assert_contains 'asynchronous result read unavailable' "${retry_summary}" \
-			'delivery failure must reach the step summary'
-		assert_not_contains 'revalidation failed' "${retry_summary}" \
-			'a successful validation must not be reported as failed'
-		assert_not_contains 'validation fixture passed' "${retry_summary}" \
-			'successful validation output must not become the delivery failure reason'
-		;;
-	delivered)
-		assert_contains 'delivered for v7.175.1' "${retry_log}" \
-			'successful ready retry must still report completed delivery'
-		assert_contains 'delivered for v7.175.1' "${retry_summary}" \
-			'successful ready retry must reach the step summary'
-		assert_not_contains 'reconciled:' "${retry_log}" \
-			'a completed delivery must not enter failure reconciliation'
-		;;
-	esac
+  retry_log="${tmp_dir}/${retry_case}.log"
+  retry_summary="${tmp_dir}/${retry_case}.summary"
+  (
+    cd "${retry_root}"
+    READY_RETRY_SCENARIO="${retry_case}"
+    READY_RETRY_CALLS="${tmp_dir}/${retry_case}.calls"
+    export READY_RETRY_SCENARIO READY_RETRY_CALLS
+    TAP="devantler-tech/homebrew-tap" TAG="v7.175.1" pr=42
+    GITHUB_REPOSITORY="devantler-tech/ksail" GITHUB_STEP_SUMMARY="${retry_summary}"
+    pr_is_draft=false
+    evidence="${tmp_dir}/unused-evidence.json" handoff_failed=0
+    export TAP TAG pr GITHUB_REPOSITORY GITHUB_STEP_SUMMARY pr_is_draft evidence
+    : >"${READY_RETRY_CALLS}"
+    : >"${GITHUB_STEP_SUMMARY}"
+    # shellcheck disable=SC2317,SC2329 # Invoked by the actual sourced workflow block.
+    validate_handoff() {
+      if [[ "${READY_RETRY_SCENARIO}" == validation-failed ]]; then
+        printf 'scope mismatch\n' >&2
+        return 1
+      fi
+      printf 'validation fixture passed\n'
+    }
+    # shellcheck disable=SC2317,SC2329 # Invoked by the actual sourced workflow block.
+    reconcile_merged_handoff() {
+      printf 'reconciled: %s\n' "$2"
+      handoff_failed=1
+    }
+    for name in ksail ksail-desktop; do
+      pr_title="chore(cask): update ${name} to ${TAG}"
+      export pr_title
+      # shellcheck source=/dev/null
+      source "${ready_retry_block}"
+    done
+    if [[ "${READY_RETRY_SCENARIO}" == delivered ]]; then
+      [[ "${handoff_failed}" -eq 0 ]] || exit 1
+    else
+      [[ "${handoff_failed}" -eq 1 ]] || exit 1
+    fi
+    if [[ "${READY_RETRY_SCENARIO}" == validation-failed ]]; then
+      [[ ! -s "${READY_RETRY_CALLS}" ]] || exit 1
+    else
+      [[ "$(wc -l <"${READY_RETRY_CALLS}" | tr -d ' ')" -eq 2 ]] || exit 1
+    fi
+  ) >"${retry_log}" 2>&1 || fail "ready retry ${retry_case} must retain its actual outcome"
+  case "${retry_case}" in
+  validation-failed)
+    assert_contains 'failed prepared revalidation: scope mismatch' "${retry_log}" \
+      'validation failure must retain its scope diagnostic'
+    assert_contains 'scope mismatch' "${retry_summary}" \
+      'validation failure must reach the step summary'
+    ;;
+  delivery-failed)
+    assert_contains 'asynchronous result read unavailable' "${retry_log}" \
+      'delivery failure must retain the finisher diagnostic'
+    assert_contains 'asynchronous result read unavailable' "${retry_summary}" \
+      'delivery failure must reach the step summary'
+    assert_not_contains 'revalidation failed' "${retry_summary}" \
+      'a successful validation must not be reported as failed'
+    assert_not_contains 'validation fixture passed' "${retry_summary}" \
+      'successful validation output must not become the delivery failure reason'
+    ;;
+  delivered)
+    assert_contains 'delivered for v7.175.1' "${retry_log}" \
+      'successful ready retry must still report completed delivery'
+    assert_contains 'delivered for v7.175.1' "${retry_summary}" \
+      'successful ready retry must reach the step summary'
+    assert_not_contains 'reconciled:' "${retry_log}" \
+      'a completed delivery must not enter failure reconciliation'
+    ;;
+  esac
 done
 
 assert_contains 'name: 🍺 Deliver Homebrew cask PRs' "${homebrew_block}" \
-	'release job must complete cask delivery'
+  'release job must complete cask delivery'
 # Both casks can consume the full pre-promotion, online-audit, and async-merge wait
 # bounds. Leave ten minutes for checkout, evidence collection, and cold brew style.
 finisher="${repo_root}/.github/scripts/finish-cask-pr-handoff.sh"
@@ -218,84 +218,84 @@ poll_attempts="$(sed -nE 's/^attempts=([0-9]+) interval=[0-9]+$/\1/p' "${finishe
 poll_interval="$(sed -nE 's/^attempts=[0-9]+ interval=([0-9]+)$/\1/p' "${finisher}")"
 job_minutes="$(awk '/timeout-minutes:/ { print $2 }' "${homebrew_block}")"
 for budget in "${poll_attempts}" "${poll_interval}" "${job_minutes}"; do
-	[[ "${budget}" =~ ^[1-9][0-9]*$ ]] || fail 'cask delivery wait budget is not completely observed'
+  [[ "${budget}" =~ ^[1-9][0-9]*$ ]] || fail 'cask delivery wait budget is not completely observed'
 done
 required_seconds=$((2 * 3 * poll_attempts * poll_interval + 10 * 60))
 if ((job_minutes * 60 < required_seconds)); then
-	fail 'release job timeout cannot accommodate both casks full independent wait bounds and setup'
+  fail 'release job timeout cannot accommodate both casks full independent wait bounds and setup'
 fi
 assert_contains 'validate-cask-pr-handoff.sh' "${homebrew_block}" \
-	'release job must validate generated PR identity and file scope'
+  'release job must validate generated PR identity and file scope'
 assert_contains 'collect-cask-pr-handoff.sh' "${homebrew_block}" \
-	'release job must use the behavior-tested paginated collector'
+  'release job must use the behavior-tested paginated collector'
 assert_contains 'title="chore(cask): update ${name} to ${TAG}"' "${homebrew_block}" \
-	'release job must normalize the Conventional title'
+  'release job must normalize the Conventional title'
 assert_contains 'for label in automation dependencies' "${homebrew_block}" \
-	'release job must add available automation/dependencies labels'
+  'release job must add available automation/dependencies labels'
 assert_contains 'pulls?state=open&head=' "${homebrew_block}" \
-	'release job must enumerate cask PRs with the server-side head filter (no client-side page cap)'
+  'release job must enumerate cask PRs with the server-side head filter (no client-side page cap)'
 assert_contains 'head.repo.full_name == $full' "${homebrew_block}" \
-	'release job must scope matches to the tap-owned devantler PR (full head-repo name)'
+  'release job must scope matches to the tap-owned devantler PR (full head-repo name)'
 # A partial two-cask release leaves the job red with the first cask already promoted; a rerun must be
 # idempotent — an already-ready, correctly-titled cask PR for this tag is treated as done rather than
 # re-validated against the DRAFT requirement (which would fail the rerun forever). But "ready + right
 # title" is not proof the tap will merge the correct cask, so the rerun re-runs the non-draft
 # (`prepared`) validator first; only a revalidated ready PR is skipped. See #6134.
 assert_contains 'delivered for ${TAG} (ready retry, revalidated and merged)' "${homebrew_block}" \
-	'release job must complete an already-ready retry through validated merging'
+  'release job must complete an already-ready retry through validated merging'
 assert_contains 'failed prepared revalidation' "${homebrew_block}" \
-	'release job must fail the rerun red when an already-ready cask PR no longer passes prepared revalidation'
+  'release job must fail the rerun red when an already-ready cask PR no longer passes prepared revalidation'
 # A partial rerun may find the first cask ALREADY MERGED by the tap auto-merge; the open-only query
 # then returns zero, so the job must check for a merged, this-tag cask before failing red (#6134).
 assert_contains 'find-merged-cask-pr-handoff.sh' "${homebrew_block}" \
-	'release job must route every zero-open-PR result through the fully validated merged finder'
+  'release job must route every zero-open-PR result through the fully validated merged finder'
 assert_contains 'reconcile_merged_handoff "$name"' "${selected_open_block}" \
-	'open-PR failures must retry through the merged-current-main proof after an auto-merge race'
+  'open-PR failures must retry through the merged-current-main proof after an auto-merge race'
 assert_not_contains 'handoff_failed=1' "${selected_open_block}" \
-	'no failure after selecting an open PR may bypass merged-current-main reconciliation'
+  'no failure after selecting an open PR may bypass merged-current-main reconciliation'
 reconciliation_calls="$(grep -Fc -- 'reconcile_merged_handoff "$name"' \
-	"${selected_open_block}" || true)"
+  "${selected_open_block}" || true)"
 if [[ "${reconciliation_calls}" -ne 10 ]]; then
-	fail "every selected-open failure must reconcile an auto-merge race; expected 10 call sites, found ${reconciliation_calls}"
+  fail "every selected-open failure must reconcile an auto-merge race; expected 10 call sites, found ${reconciliation_calls}"
 fi
 for context in \
-	'failed ready-PR revalidation' \
-	'failed draft validation after open enumeration' \
-	'brew became unavailable while preparing' \
-	'could not be confirmed brew-style-clean' \
-	'failed post-style validation' \
-	'could not receive normalized metadata' \
-	'metadata could not be completed' \
-	'failed prepared validation' \
-	'could not be delivered'; do
-	assert_contains "${context}" "${selected_open_block}" \
-		"selected-open failure is missing merged reconciliation context: ${context}"
+  'failed ready-PR revalidation' \
+  'failed draft validation after open enumeration' \
+  'brew became unavailable while preparing' \
+  'could not be confirmed brew-style-clean' \
+  'failed post-style validation' \
+  'could not receive normalized metadata' \
+  'metadata could not be completed' \
+  'failed prepared validation' \
+  'could not be delivered'; do
+  assert_contains "${context}" "${selected_open_block}" \
+    "selected-open failure is missing merged reconciliation context: ${context}"
 done
 assert_not_contains 'and .title == $title' "${homebrew_block}" \
-	'release job must not trust an exact merged PR title without immutable cask evidence'
+  'release job must not trust an exact merged PR title without immutable cask evidence'
 assert_contains 'pulls?state=closed&head=' \
-	"${repo_root}/.github/scripts/find-merged-cask-pr-handoff.sh" \
-	'release job must check for an already-merged cask PR on a rerun (open-only query misses it)'
+  "${repo_root}/.github/scripts/find-merged-cask-pr-handoff.sh" \
+  'release job must check for an already-merged cask PR on a rerun (open-only query misses it)'
 assert_contains '--include-main' \
-	"${repo_root}/.github/scripts/find-merged-cask-pr-handoff.sh" \
-	'merged finder must collect pinned-main and immutable merge evidence before accepting a handoff'
+  "${repo_root}/.github/scripts/find-merged-cask-pr-handoff.sh" \
+  'merged finder must collect pinned-main and immutable merge evidence before accepting a handoff'
 assert_contains '--merged' \
-	"${repo_root}/.github/scripts/find-merged-cask-pr-handoff.sh" \
-	'merged finder must apply the fail-closed merged validator to every candidate'
+  "${repo_root}/.github/scripts/find-merged-cask-pr-handoff.sh" \
+  'merged finder must apply the fail-closed merged validator to every candidate'
 # A generated cask the runner could not style-clean (clone/tempdir/push failure) would be rejected by
 # the tap's brew-style gate, silently blocking auto-merge — the job must go red, not promote it (#6134).
 assert_contains 'could not ensure it is brew-style-clean' "${homebrew_block}" \
-	'release job must fail red (not promote) when it cannot ensure the cask is brew-style-clean'
+  'release job must fail red (not promote) when it cannot ensure the cask is brew-style-clean'
 # The tap's CI autocorrects the same branch, so a bare push loses that race and strands a clean cask
 # (#6628). The job must style-clean through the script that re-checks a moved tip.
 assert_contains '.github/scripts/style-clean-cask-branch.sh' "${homebrew_block}" \
-	'release job must style-clean casks through the race-tolerant script (#6628)'
+  'release job must style-clean casks through the race-tolerant script (#6628)'
 assert_not_contains 'style: brew style --fix generated cask' "${homebrew_block}" \
-	'release job must not commit and push autocorrections itself; a bare push fails when the tap CI autocorrects first (#6628)'
+  'release job must not commit and push autocorrections itself; a bare push fails when the tap CI autocorrects first (#6628)'
 assert_contains '.github/scripts/style-clean-cask-branch.test.sh' "${ci_workflow}" \
-	'CI must execute the cask style-clean race suite'
+  'CI must execute the cask style-clean race suite'
 assert_contains '--source-repo "$GITHUB_REPOSITORY"' "${homebrew_block}" \
-	'release job must collect release-asset digest evidence for the sha256 handoff check'
+  'release job must collect release-asset digest evidence for the sha256 handoff check'
 # Cask PRs are a trusted programmed release path (maintainer direction ksail#6095): after full
 # validation the job promotes, verifies the actual online audit and completes an exact-head merge.
 # Server-side rules must remain enforced even for a token with administrative bypass capability.
@@ -303,29 +303,29 @@ assert_contains '--source-repo "$GITHUB_REPOSITORY"' "${homebrew_block}" \
 # subcommand resolves the viewer's `login`, a scope the tap token does not have, so it failed on every
 # release and stranded each cask PR as a draft (#6134). Assert the mechanism that actually promotes.
 assert_contains 'markPullRequestReadyForReview' "${execution_surface}" \
-	'release job must promote through the guarded completion helper'
+  'release job must promote through the guarded completion helper'
 assert_not_contains 'gh pr ready' "${execution_surface}" \
-	'release job must not promote via `gh pr ready` (needs a login scope the tap token lacks; see #6134)'
+  'release job must not promote via `gh pr ready` (needs a login scope the tap token lacks; see #6134)'
 assert_contains '.github/scripts/finish-cask-pr-handoff.sh' "${homebrew_block}" \
-	'release job must complete a validated cask through the guarded exact-head merge helper'
+  'release job must complete a validated cask through the guarded exact-head merge helper'
 assert_contains '.github/scripts/finish-cask-pr-handoff.test.sh' "${ci_workflow}" \
-	'CI must execute the guarded cask completion behavior tests'
+  'CI must execute the guarded cask completion behavior tests'
 assert_not_contains '--auto' "${execution_surface}" \
-	'release job and its helpers must never arm auto-merge themselves'
+  'release job and its helpers must never arm auto-merge themselves'
 assert_not_contains '--admin' "${execution_surface}" \
-	'release job and its helpers must never bypass branch protections'
+  'release job and its helpers must never bypass branch protections'
 assert_contains '/merge-async' "${execution_surface}" \
-	'cask delivery must use the merge endpoint with explicit rule enforcement'
+  'cask delivery must use the merge endpoint with explicit rule enforcement'
 assert_contains '-F bypass_rules=false' "${execution_surface}" \
-	'cask delivery must explicitly refuse administrative rule bypass'
+  'cask delivery must explicitly refuse administrative rule bypass'
 assert_contains 'merge_action=direct_merge' "${execution_surface}" \
-	'cask delivery must request a direct merge rather than an enduring queue decision'
+  'cask delivery must request a direct merge rather than an enduring queue decision'
 assert_contains 'X-GitHub-Api-Version: 2026-03-10' "${execution_surface}" \
-	'cask delivery must select the documented async merge API version'
+  'cask delivery must select the documented async merge API version'
 
 validator_calls="$(grep -Fc -- 'validate_handoff "$pr"' "${homebrew_block}" || true)"
 if [ "${validator_calls}" -lt 3 ]; then
-	fail "expected pre-style, post-style, and prepared validation; found ${validator_calls} calls"
+  fail "expected pre-style, post-style, and prepared validation; found ${validator_calls} calls"
 fi
 ready_line="$(grep -Fn -- '.github/scripts/finish-cask-pr-handoff.sh' "${homebrew_block}" | tail -1 | cut -d: -f1)"
 # There are now two `prepared` calls — the idempotency-rerun revalidation and the final pre-promotion
@@ -333,24 +333,24 @@ ready_line="$(grep -Fn -- '.github/scripts/finish-cask-pr-handoff.sh' "${homebre
 # validation, so key on the last match.
 prepared_line="$(grep -Fn -- '"$evidence" prepared' "${homebrew_block}" | tail -1 | cut -d: -f1)"
 if [ -z "${ready_line}" ] || [ -z "${prepared_line}" ] || [ "${ready_line}" -le "${prepared_line}" ]; then
-	fail 'guarded cask completion must come after the final prepared validation'
+  fail 'guarded cask completion must come after the final prepared validation'
 fi
 
 # The pre-release checkpoint: a reused, still-promoted evergreen PR is demoted BEFORE GoReleaser
 # rewrites its branch, so the tap can never auto-merge unvalidated freshly-rewritten content.
 assert_contains 'cask-checkpoint:' "${cd_workflow}" \
-	'cd must define the pre-release cask draft checkpoint job'
+  'cd must define the pre-release cask draft checkpoint job'
 assert_contains 'redraft-evergreen-cask-prs.sh --tap devantler-tech/homebrew-tap ksail ksail-desktop' "${cd_workflow}" \
-	'the checkpoint job must re-draft both evergreen cask PRs'
+  'the checkpoint job must re-draft both evergreen cask PRs'
 if [ "$(grep -Fc -- 'needs: [cask-checkpoint]' "${cd_workflow}")" -lt 2 ]; then
-	fail 'both cask-writing release jobs (goreleaser, desktop-macos) must gate on cask-checkpoint'
+  fail 'both cask-writing release jobs (goreleaser, desktop-macos) must gate on cask-checkpoint'
 fi
 # Both jobs that spend the tap token's request budget wait for it first. The token's account
 # shares its hourly budget with other automation, and two releases stopped at the checkpoint on an
 # exhausted budget (devantler-tech/monorepo#4055). The wait must come before the step it protects,
 # and its job must outlast GitHub's one-hour window.
 if [ "$(grep -Fc -- 'run: .github/scripts/wait-for-github-api-budget.sh' "${cd_workflow}")" -lt 2 ]; then
-	fail 'the checkpoint and the cask delivery job must each wait for the tap token request budget'
+  fail 'the checkpoint and the cask delivery job must each wait for the tap token request budget'
 fi
 awk '
   /^  [a-z-]+:$/ { job = $1; waited = 0 }
@@ -373,73 +373,73 @@ awk '
   END { exit (timeout["cask-checkpoint:"] >= 65 && timeout["homebrew:"] >= 100) ? 0 : 1 }
 ' "${cd_workflow}" || fail 'jobs that wait for the request budget must outlast the one-hour window'
 for wait_file in wait-for-github-api-budget.sh wait-for-github-api-budget.test.sh; do
-	if [ "$(grep -Fc -- ".github/scripts/${wait_file}" "${ci_workflow}")" -lt 2 ]; then
-		fail "CI must path-filter and shellcheck ${wait_file}"
-	fi
+  if [ "$(grep -Fc -- ".github/scripts/${wait_file}" "${ci_workflow}")" -lt 2 ]; then
+    fail "CI must path-filter and shellcheck ${wait_file}"
+  fi
 done
 if [ "$(grep -Fc -- '.github/scripts/wait-for-github-api-budget.test.sh' "${ci_workflow}")" -lt 3 ]; then
-	fail 'CI must execute the request-budget wait test'
+  fail 'CI must execute the request-budget wait test'
 fi
 assert_contains 'convertPullRequestToDraft' \
-	"${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
-	'the checkpoint script must demote via the draft conversion mutation'
+  "${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
+  'the checkpoint script must demote via the draft conversion mutation'
 assert_contains 'pulls?state=open&head=' \
-	"${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
-	'the checkpoint script must enumerate cask PRs with the server-side head filter (no client-side page cap)'
+  "${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
+  'the checkpoint script must enumerate cask PRs with the server-side head filter (no client-side page cap)'
 assert_contains 'head.repo.full_name == $full' \
-	"${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
-	'the checkpoint script must scope matches to the tap-owned devantler PR (full head-repo name)'
+  "${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
+  'the checkpoint script must scope matches to the tap-owned devantler PR (full head-repo name)'
 assert_contains 'git/matching-refs/heads/${branch}' \
-	"${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
-	'the checkpoint script must inspect retained evergreen branch refs when no PR is open'
+  "${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
+  'the checkpoint script must inspect retained evergreen branch refs when no PR is open'
 assert_contains '--force-with-lease="refs/heads/${branch}:${branch_sha}"' \
-	"${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
-	'the checkpoint script must delete terminal branches with an exact-SHA compare-and-swap'
+  "${repo_root}/.github/scripts/redraft-evergreen-cask-prs.sh" \
+  'the checkpoint script must delete terminal branches with an exact-SHA compare-and-swap'
 # The checkpoint script is release-critical: CI must both re-run this suite when it
 # changes and shellcheck it (a filter/shellcheck omission lets it break unnoticed).
 assert_contains "- '.github/scripts/redraft-evergreen-cask-prs.sh'" "${ci_workflow}" \
-	'CI paths filter must trigger the handoff job on checkpoint-script changes'
+  'CI paths filter must trigger the handoff job on checkpoint-script changes'
 if [ "$(grep -Fc -- '.github/scripts/redraft-evergreen-cask-prs.sh' "${ci_workflow}")" -lt 2 ]; then
-	fail 'CI must also shellcheck the checkpoint script, not just path-filter it'
+  fail 'CI must also shellcheck the checkpoint script, not just path-filter it'
 fi
 assert_contains "- '.github/scripts/redraft-evergreen-cask-prs.test.sh'" "${ci_workflow}" \
-	'CI paths filter must trigger the handoff job on checkpoint-test changes'
+  'CI paths filter must trigger the handoff job on checkpoint-test changes'
 if [ "$(grep -Fc -- '.github/scripts/redraft-evergreen-cask-prs.test.sh' "${ci_workflow}")" -lt 3 ]; then
-	fail 'CI must shellcheck and execute the checkpoint behavior test'
+  fail 'CI must shellcheck and execute the checkpoint behavior test'
 fi
 assert_contains 'release-asset digest evidence is missing' \
-	"${repo_root}/.github/scripts/validate-cask-pr-handoff.sh" \
-	'the validator must require release-asset digest evidence'
+  "${repo_root}/.github/scripts/validate-cask-pr-handoff.sh" \
+  'the validator must require release-asset digest evidence'
 assert_contains 'does not match the published digest of' \
-	"${repo_root}/.github/scripts/validate-cask-pr-handoff.sh" \
-	'the validator must verify each cask sha256 against the digest of the asset its url names'
+  "${repo_root}/.github/scripts/validate-cask-pr-handoff.sh" \
+  'the validator must verify each cask sha256 against the digest of the asset its url names'
 
 assert_contains 'if: always() && needs.publish-release.result != '\''success'\''' "${cd_workflow}" \
-	'a pending cask handoff must not delete a published release'
+  'a pending cask handoff must not delete a published release'
 assert_contains 'cask-pr-handoff:' "${ci_workflow}" \
-	'CI must include the cask PR handoff fixture job'
+  'CI must include the cask PR handoff fixture job'
 assert_contains '.github/scripts/validate-cask-pr-handoff.test.sh' "${ci_workflow}" \
-	'CI must execute the handoff fixture suite'
+  'CI must execute the handoff fixture suite'
 assert_contains '.github/scripts/collect-cask-pr-handoff.test.sh' "${ci_workflow}" \
-	'CI must execute the handoff collector suite'
+  'CI must execute the handoff collector suite'
 assert_contains '.github/scripts/find-merged-cask-pr-handoff.test.sh' "${ci_workflow}" \
-	'CI must include the paginated merged-handoff finder suite'
+  'CI must include the paginated merged-handoff finder suite'
 assert_contains "- '.github/scripts/find-merged-cask-pr-handoff.sh'" "${ci_workflow}" \
-	'CI paths filter must trigger the handoff job on merged-finder changes'
+  'CI paths filter must trigger the handoff job on merged-finder changes'
 assert_contains "- '.github/scripts/find-merged-cask-pr-handoff.test.sh'" "${ci_workflow}" \
-	'CI paths filter must trigger the handoff job on merged-finder test changes'
+  'CI paths filter must trigger the handoff job on merged-finder test changes'
 if [[ "$(grep -Fc -- '.github/scripts/find-merged-cask-pr-handoff.sh' "${ci_workflow}" || true)" -lt 2 ]]; then
-	fail 'CI must shellcheck the merged finder in addition to path-filtering it'
+  fail 'CI must shellcheck the merged finder in addition to path-filtering it'
 fi
 if [[ "$(grep -Fc -- '.github/scripts/find-merged-cask-pr-handoff.test.sh' "${ci_workflow}" || true)" -lt 3 ]]; then
-	fail 'CI must path-filter, shellcheck, and execute the merged-finder test'
+  fail 'CI must path-filter, shellcheck, and execute the merged-finder test'
 fi
 if ! grep -Eq '^[[:space:]]+\.github/scripts/find-merged-cask-pr-handoff\.test\.sh[[:space:]]*$' \
-	"${ci_workflow}"; then
-	fail 'CI must execute the paginated merged-handoff finder suite as a standalone command'
+  "${ci_workflow}"; then
+  fail 'CI must execute the paginated merged-handoff finder suite as a standalone command'
 fi
 assert_contains '.github/scripts/cask-pr-handoff-workflow.test.sh' "${ci_workflow}" \
-	'CI must execute the handoff workflow contract suite'
+  'CI must execute the handoff workflow contract suite'
 
 # GoReleaser opens each cask PR with its commit message as the title, and the tap squash-merges on
 # that title under a Conventional commit-message ruleset. The default message ("Brew cask update for
@@ -448,40 +448,40 @@ assert_contains '.github/scripts/cask-pr-handoff-workflow.test.sh' "${ci_workflo
 tap_title_pattern='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test){1}(\([[:alnum:]_.-]+\))?(!)?:'
 sample_tag='v7.183.3'
 for goreleaser_config in "${repo_root}/.goreleaser.yaml" "${repo_root}/.goreleaser.desktop.yaml"; do
-	config_name="$(basename -- "${goreleaser_config}")"
-	casks_block="${tmp_dir}/${config_name}.casks"
-	awk '
+  config_name="$(basename -- "${goreleaser_config}")"
+  casks_block="${tmp_dir}/${config_name}.casks"
+  awk '
 		/^homebrew_casks:/ { in_casks = 1; next }
 		in_casks && /^[^[:space:]#]/ { in_casks = 0 }
 		in_casks { print }
 	' "${goreleaser_config}" >"${casks_block}"
 
-	cask_name="$(sed -nE 's/^  - name: *"?([^"[:space:]]+)"?[[:space:]]*$/\1/p' "${casks_block}")"
-	[[ -n "${cask_name}" && "${cask_name}" != *$'\n'* ]] ||
-		fail "${config_name} must define exactly one homebrew cask"
-	project_name="$(sed -nE 's/^project_name: *"?([^"[:space:]]+)"?[[:space:]]*$/\1/p' \
-		"${goreleaser_config}")"
-	project_name="${project_name:-ksail}"
+  cask_name="$(sed -nE 's/^  - name: *"?([^"[:space:]]+)"?[[:space:]]*$/\1/p' "${casks_block}")"
+  [[ -n "${cask_name}" && "${cask_name}" != *$'\n'* ]] ||
+    fail "${config_name} must define exactly one homebrew cask"
+  project_name="$(sed -nE 's/^project_name: *"?([^"[:space:]]+)"?[[:space:]]*$/\1/p' \
+    "${goreleaser_config}")"
+  project_name="${project_name:-ksail}"
 
-	templates="$(sed -nE 's/^    commit_msg_template: *"(.*)"[[:space:]]*$/\1/p' "${casks_block}")"
-	[[ -n "${templates}" && "${templates}" != *$'\n'* ]] ||
-		fail "${config_name} must set exactly one commit_msg_template on its cask (GoReleaser's default title is not Conventional)"
-	[[ "${templates}" == 'chore(cask): update {{ .ProjectName }} to {{ .Tag }}' ]] ||
-		fail "${config_name} commit_msg_template must be 'chore(cask): update {{ .ProjectName }} to {{ .Tag }}', got '${templates}'"
+  templates="$(sed -nE 's/^    commit_msg_template: *"(.*)"[[:space:]]*$/\1/p' "${casks_block}")"
+  [[ -n "${templates}" && "${templates}" != *$'\n'* ]] ||
+    fail "${config_name} must set exactly one commit_msg_template on its cask (GoReleaser's default title is not Conventional)"
+  [[ "${templates}" == 'chore(cask): update {{ .ProjectName }} to {{ .Tag }}' ]] ||
+    fail "${config_name} commit_msg_template must be 'chore(cask): update {{ .ProjectName }} to {{ .Tag }}', got '${templates}'"
 
-	rendered="${templates//\{\{ .ProjectName \}\}/${project_name}}"
-	rendered="${rendered//\{\{ .Tag \}\}/${sample_tag}}"
-	[[ "${rendered}" =~ ${tap_title_pattern} ]] ||
-		fail "${config_name} cask PR title '${rendered}' does not match the tap's Conventional ruleset"
-	[[ "${rendered}" == "chore(cask): update ${cask_name} to ${sample_tag}" ]] ||
-		fail "${config_name} cask PR title '${rendered}' must equal the handoff's normalized title for cask ${cask_name}"
+  rendered="${templates//\{\{ .ProjectName \}\}/${project_name}}"
+  rendered="${rendered//\{\{ .Tag \}\}/${sample_tag}}"
+  [[ "${rendered}" =~ ${tap_title_pattern} ]] ||
+    fail "${config_name} cask PR title '${rendered}' does not match the tap's Conventional ruleset"
+  [[ "${rendered}" == "chore(cask): update ${cask_name} to ${sample_tag}" ]] ||
+    fail "${config_name} cask PR title '${rendered}' must equal the handoff's normalized title for cask ${cask_name}"
 done
 [[ ! 'Brew cask update for ksail version v7.183.3' =~ ${tap_title_pattern} ]] ||
-	fail 'the tap title pattern must reject GoReleaser default cask titles (negative control)'
+  fail 'the tap title pattern must reject GoReleaser default cask titles (negative control)'
 assert_contains "- '.goreleaser.yaml'" "${ci_workflow}" \
-	'CI paths filter must trigger the handoff job on GoReleaser config changes'
+  'CI paths filter must trigger the handoff job on GoReleaser config changes'
 assert_contains "- '.goreleaser.desktop.yaml'" "${ci_workflow}" \
-	'CI paths filter must trigger the handoff job on desktop GoReleaser config changes'
+  'CI paths filter must trigger the handoff job on desktop GoReleaser config changes'
 
 # An older or prerelease tag must never move a shared cask pointer (#7898). The order decision is
 # taken before anything is written, and each writer consumes it fail-closed.
@@ -492,23 +492,23 @@ awk '
   in_checkpoint { print }
 ' "${cd_workflow}" >"${checkpoint_block}"
 assert_contains 'cask-publish: ${{ steps.cask-order.outputs.publish }}' "${checkpoint_block}" \
-	'cask-checkpoint must export the cask order decision'
+  'cask-checkpoint must export the cask order decision'
 assert_contains '.github/scripts/resolve-cask-publication.sh' "${checkpoint_block}" \
-	'cask-checkpoint must run the cask order resolver'
+  'cask-checkpoint must run the cask order resolver'
 [[ "$(grep -n 'resolve-cask-publication.sh' "${checkpoint_block}" | cut -d: -f1)" -lt "$(grep -n 'redraft-evergreen-cask-prs.sh' "${checkpoint_block}" | cut -d: -f1)" ]] ||
-	fail 'the cask order decision must be taken before any evergreen PR is re-drafted'
-assert_contains "if: steps.cask-order.outputs.publish == 'true'" "${checkpoint_block}" \
-	'an older tag must not re-draft the evergreen cask PRs it will never deliver'
+  fail 'the cask order decision must be taken before any evergreen PR is re-drafted'
+assert_contains "if: (steps.cask-order.outputs.publish == 'true') && needs.validate-release-ref.outputs.release-mode == 'build'" "${checkpoint_block}" \
+  'only an admitted new publication may re-draft the evergreen cask PRs it can deliver'
 assert_contains "if: needs.cask-checkpoint.outputs.cask-publish == 'true'" "${homebrew_block}" \
-	'the cask delivery job must run only when this tag may move the casks'
+  'the cask delivery job must run only when this tag may move the casks'
 [[ "$(grep -Fc 'KSAIL_CASK_PUBLISH: ${{ needs.cask-checkpoint.outputs.cask-publish }}' "${cd_workflow}")" == 2 ]] ||
-	fail 'both GoReleaser cask writers must receive the cask order decision'
+  fail 'both GoReleaser cask writers must receive the cask order decision'
 for config_name in .goreleaser.yaml .goreleaser.desktop.yaml; do
-	assert_contains "skip_upload: '{{ if eq (envOrDefault \"KSAIL_CASK_PUBLISH\" \"false\") \"true\" }}false{{ else }}true{{ end }}'" \
-		"${repo_root}/${config_name}" \
-		"${config_name} must upload its cask only when the order decision is exactly true"
+  assert_contains "skip_upload: '{{ if eq (envOrDefault \"KSAIL_CASK_PUBLISH\" \"false\") \"true\" }}false{{ else }}true{{ end }}'" \
+    "${repo_root}/${config_name}" \
+    "${config_name} must upload its cask only when the order decision is exactly true"
 done
 assert_contains "- '.github/scripts/resolve-cask-publication.sh'" "${ci_workflow}" \
-	'CI paths filter must trigger the handoff job on cask order resolver changes'
+  'CI paths filter must trigger the handoff job on cask order resolver changes'
 
 printf 'Cask PR handoff workflow contract passed.\n'
