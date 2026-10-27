@@ -45,7 +45,7 @@ func TestReleaseJobsRequireValidatedRef(t *testing.T) {
 	assert.Empty(t, gate.Needs)
 	assert.Empty(t, gate.If)
 	assert.False(t, gate.ContinueOnError)
-	assert.Equal(t, map[string]string{"contents": "read"}, gate.Permissions)
+	assert.Equal(t, map[string]string{"contents": "read", "actions": "read"}, gate.Permissions)
 
 	for name, job := range jobs {
 		if name == "validate-release-ref" {
@@ -109,7 +109,7 @@ func TestReleaseRefValidationStep(t *testing.T) {
 
 	gate, exists := readReleaseJobs(t)["validate-release-ref"]
 	require.True(t, exists)
-	require.Len(t, gate.Steps, 2, "checkout followed immediately by validation")
+	require.Len(t, gate.Steps, 4, "checkout and ref validation precede replay verification")
 	assert.Contains(t, gate.Steps[0].Uses, "actions/checkout@")
 	assert.Equal(t, false, gate.Steps[0].With["persist-credentials"])
 	validation := gate.Steps[1]
