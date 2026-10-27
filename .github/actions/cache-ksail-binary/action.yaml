@@ -36,12 +36,15 @@ runs:
   steps:
     - name: 📚 Generate embedded chat documentation
       shell: bash
+      env:
+        CGO_ENABLED: "0"
       run: go generate ./pkg/svc/chat/...
 
     - name: 🔑 Compute ksail cache key
       id: ksail-cache-key
       shell: bash
       env:
+        CGO_ENABLED: "0"
         GO_VERSION: ${{ inputs.go-version }}
         COPILOT_CLI_VERSION: ${{ inputs.copilot-cli-version }}
       run: |
@@ -76,6 +79,7 @@ runs:
         # memory on cache-miss builds.
         GOMEMLIMIT: "6GiB"
         CACHE_HIT: ${{ steps.ksail-cache.outputs.cache-hit }}
+        CGO_ENABLED: "0"
         OUTPUT_PATH: ${{ inputs.output-path }}
         COPILOT_CLI_VERSION: ${{ inputs.copilot-cli-version }}
       run: |

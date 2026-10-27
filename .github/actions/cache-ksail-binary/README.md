@@ -29,9 +29,9 @@ run-specific artifact through `restore-ksail-binary`.
 
 Before lookup, the action generates the embedded chat documentation. It asks
 `go list -deps -json .` which files the target executable uses and hashes the
-selected Go/native sources and embedded files, including local replacement modules.
+selected Go sources, linked object files and embedded files, including local replacement modules.
 Module manifests, checksums and vendor metadata bind dependency selection. The active toolchain,
-target and architecture settings, build flags, C compiler settings, runner image,
+target and architecture settings, build flags, runner image,
 bundled Copilot CLI version and the action's complete build/key recipe also enter
 the digest. Checkout paths do not.
 
@@ -43,6 +43,10 @@ content. Release-build identity and run-specific artifact checks remain separate
 
 The action does not build the web UI: stage real assets before calling it when
 that executable needs them. Otherwise the committed placeholder is the input.
+
+Discovery, generation and compilation use `CGO_ENABLED=0`, matching the official
+CLI release recipe. Local C/C++/assembly or SWIG inputs are refused: their
+transitive native headers need a separately reviewed dependency-discovery recipe.
 
 Workspace builds, local replacements outside the checkout and custom `GOFLAGS`
 other than `-tags=…`, `-mod=readonly` or `-mod=vendor` need a separately reviewed

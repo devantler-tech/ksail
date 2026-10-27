@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -86,7 +87,7 @@ func TestBinaryCacheKeyTracksTargetAndBundledCLI(t *testing.T) {
 	before := binaryKeyFixture(t, directory)
 	for _, change := range []string{
 		"RUNNER_ARCH=other", "COPILOT_CLI_VERSION=1.0.88", "GOOS=darwin",
-		"GOARCH=arm64", "GOFLAGS=-tags=fixture", "ImageVersion=changed",
+		"GOARCH=arm64", "GOFLAGS=-tags=fixture", "ImageVersion=changed", "GOFIPS140=latest",
 	} {
 		t.Run(change, func(t *testing.T) {
 			t.Parallel()
@@ -114,6 +115,62 @@ func TestBinaryCacheKeyTracksLocalReplacements(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(replacement, "go.mod"),
 		[]byte("module example.invalid/dep\n\ngo 1.22.0\n"), 0o600))
 	require.NotEqual(t, afterSource, binaryKeyFixture(t, directory))
+}
+
+func TestBinaryCacheKeyRefusesUntrackedNativeInputs(t *testing.T) {
+	t.Parallel()
+
+	for _, kind := range []string{"cgo", "assembly"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			directory := newBinaryKeyFixture(t)
+			require.NoError(t, os.Mkdir(filepath.Join(directory, "headers"), 0o700))
+			require.NoError(t, os.WriteFile(filepath.Join(directory, "headers/value.h"),
+				[]byte("#define VALUE 1\n"), 0o600))
+
+			var overrides []string
+
+			if kind == "cgo" {
+				require.NoError(t, os.WriteFile(
+					filepath.Join(directory, "main.go"),
+					[]byte(
+						"package main\n/*\n#include \"headers/value.h\"\n*/\nimport \"C\"\nfunc main() { _ = C.VALUE }\n",
+					),
+					0o600,
+				))
+
+				overrides = []string{
+					"CGO_ENABLED=1",
+					"GOOS=" + runtime.GOOS,
+					"GOARCH=" + runtime.GOARCH,
+				}
+			} else {
+				require.NoError(t, os.WriteFile(filepath.Join(directory, "fixture.s"),
+					[]byte("#include \"headers/value.h\"\n"), 0o600))
+			}
+
+			output, err := binaryKeyFixtureResult(t, directory, overrides...)
+			require.Error(
+				t,
+				err,
+				"untracked transitive native inputs must not select an executable",
+			)
+			require.Contains(t, output, "requires a separate reviewed cache recipe")
+			require.NotContains(t, output, "ksail-bin-v2-")
+		})
+	}
+}
+
+func TestBinaryCacheRecipePinsPureGoBuilds(t *testing.T) {
+	t.Parallel()
+
+	action := readCompositeAction(t, ".github/actions/cache-ksail-binary/action.yaml")
+	for _, name := range []string{
+		"📚 Generate embedded chat documentation", "🔑 Compute ksail cache key", "📦 Cache KSail Binary",
+	} {
+		require.Equal(t, "0", findHarnessStep(t, action.Runs.Steps, name).Env["CGO_ENABLED"],
+			"discovery and compilation must use the same pure-Go recipe as CLI releases")
+	}
 }
 
 func TestBinaryCacheKeyRefusesOutsideReplacement(t *testing.T) {
@@ -222,6 +279,7 @@ func binaryKeyFixtureResult(t *testing.T, directory string, overrides ...string)
 		"RUNNER_ARCH=X64",
 		"GOOS=linux",
 		"GOARCH=amd64",
+		"CGO_ENABLED=0",
 		"GO_VERSION="+strings.TrimPrefix(strings.TrimSpace(string(version)), "go"),
 		"COPILOT_CLI_VERSION=1.0.87",
 		"GITHUB_ACTION_PATH="+actionPath,

@@ -189,10 +189,35 @@ func readEnvironment(
 	version string,
 	environment []string,
 ) (map[string]string, error) {
-	command := exec.CommandContext(ctx, "go", "env", "-json",
-		"GOVERSION", "GOOS", "GOARCH", "CGO_ENABLED", "GOAMD64", "GOARM64", "GOARM", "GO386",
-		"GOMIPS", "GOMIPS64", "GOPPC64", "GORISCV64", "GOEXPERIMENT", "GOFLAGS", "CC", "CXX",
-		"CGO_CFLAGS", "CGO_CPPFLAGS", "CGO_CXXFLAGS", "CGO_FFLAGS", "CGO_LDFLAGS", "GOWORK")
+	command := exec.CommandContext(
+		ctx,
+		"go",
+		"env",
+		"-json",
+		"GOVERSION",
+		"GOOS",
+		"GOARCH",
+		"CGO_ENABLED",
+		"GOAMD64",
+		"GOARM64",
+		"GOARM",
+		"GO386",
+		"GOMIPS",
+		"GOMIPS64",
+		"GOPPC64",
+		"GORISCV64",
+		"GOEXPERIMENT",
+		"GOFIPS140",
+		"GOFLAGS",
+		"CC",
+		"CXX",
+		"CGO_CFLAGS",
+		"CGO_CPPFLAGS",
+		"CGO_CXXFLAGS",
+		"CGO_FFLAGS",
+		"CGO_LDFLAGS",
+		"GOWORK",
+	)
 	command.Env = environment
 
 	output, err := command.Output()
@@ -222,6 +247,13 @@ func readEnvironment(
 }
 
 func validateEnvironment(version string, settings map[string]string) error {
+	if settings["CGO_ENABLED"] != "0" {
+		return fmt.Errorf(
+			"%w: a cgo build requires a separate reviewed cache recipe",
+			errIncomplete,
+		)
+	}
+
 	for option := range strings.FieldsSeq(settings["GOFLAGS"]) {
 		if option != "-mod=readonly" && option != "-mod=vendor" &&
 			(!strings.HasPrefix(option, "-tags=") || len(option) <= len("-tags=")) {
@@ -354,6 +386,13 @@ func collectPackage(
 		return false, nil
 	}
 
+	if usesNativeHeaders(pkg) {
+		return false, fmt.Errorf(
+			"%w: local native source requires a separate reviewed cache recipe",
+			errIncomplete,
+		)
+	}
+
 	err = collectSourceFiles(pkg, relative, root, files)
 	if err != nil {
 		return false, err
@@ -365,6 +404,19 @@ func collectPackage(
 	}
 
 	return relative == "." && pkg.Name == "main", nil
+}
+
+func usesNativeHeaders(pkg goPackage) bool {
+	for _, files := range [][]string{
+		pkg.CgoFiles, pkg.CFiles, pkg.CXXFiles, pkg.MFiles,
+		pkg.FFiles, pkg.SFiles, pkg.SwigFiles, pkg.SwigCXXFiles,
+	} {
+		if len(files) > 0 {
+			return true
+		}
+	}
+
+	return false
 }
 
 func packagePath(pkg goPackage, directory string) (string, error) {
