@@ -29,9 +29,9 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/glamour v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
-	github.com/charmbracelet/x/ansi v0.11.7
+	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/cilium/cilium v1.20.3
-	github.com/cli/go-gh/v2 v2.16.2
+	github.com/cli/go-gh/v2 v2.17.0
 	github.com/coder/websocket v1.8.15
 	github.com/containerd/errdefs v1.0.0
 	github.com/coreos/go-oidc/v3 v3.21.0
@@ -656,7 +656,7 @@ require (
 	github.com/loft-sh/external-types v0.1.0-alpha.2.0.20260409132559-a38365a8cbf2 // indirect
 	github.com/loft-sh/image v0.0.0-20250818103249-5e7d53b59343 // indirect
 	github.com/loft-sh/utils v0.0.29 // indirect
-	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
+	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/macabu/inamedparam v0.2.0 // indirect
 	github.com/mackerelio/go-osstat v0.2.7 // indirect
 	github.com/magefile/mage v1.17.2 // indirect
@@ -933,7 +933,7 @@ require (
 	github.com/ykadowak/zerologlint v0.1.5 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
-	github.com/yuin/goldmark v1.7.17 // indirect
+	github.com/yuin/goldmark v1.8.5 // indirect
 	github.com/yuin/goldmark-emoji v1.0.6 // indirect
 	github.com/zach-klippenstein/goregen v0.0.0-20160303162051-795b5e3961ea // indirect
 	github.com/zclconf/go-cty v1.17.0 // indirect
@@ -1052,7 +1052,7 @@ replace (
 	github.com/charmbracelet/glamour v1.0.0 => ./third_party/glamour
 
 	// Preserve the selected runtime version with validated protocol parsing.
-	github.com/charmbracelet/x/ansi v0.11.7 => ./third_party/ansi-runtime
+	github.com/charmbracelet/x/ansi v0.11.8 => ./third_party/ansi-runtime
 
 	// k3d v5.9.0-rc.0 uses docker/docker monolith types. docker/cli v29 migrated
 	// to the new moby/moby/api and moby/moby/client split modules whose types are
