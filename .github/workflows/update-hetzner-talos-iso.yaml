@@ -6,8 +6,9 @@ on:
       cask_api_probe:
         description: Read-only probe of existing App access for cask handoff
         required: false
-        type: boolean
-        default: false
+        type: choice
+        options: [none, app, builtin]
+        default: none
   schedule:
     # Poll away from the top of the hour, where GitHub warns scheduled runs
     # can be delayed or dropped under high load.
@@ -21,7 +22,7 @@ permissions: {}
 
 jobs:
   update:
-    if: inputs.cask_api_probe != true
+    if: inputs.cask_api_probe != 'app' && inputs.cask_api_probe != 'builtin'
     name: Track public ISO compatibility
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -114,7 +115,7 @@ jobs:
 
   cask-api-probe:
     name: Read-only existing App handoff access
-    if: github.event_name == 'workflow_dispatch' && inputs.cask_api_probe == true
+    if: github.event_name == 'workflow_dispatch' && inputs.cask_api_probe == 'app'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -180,3 +181,58 @@ jobs:
           gh api repos/devantler-tech/ksail/releases/tags/v7.206.27 --jq '.assets | length > 0' > "$work/source-read"
           [[ "$(<"$work/source-read")" == true ]]
           echo 'Existing App reads the real cross-repository handoff and source-release evidence.'
+  cask-token-probe:
+    name: Read-only built-in token handoff access
+    if: github.event_name == 'workflow_dispatch' && inputs.cask_api_probe == 'builtin'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Read actual handoff evidence surfaces without mutations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+          # Match the production handoff reader, including required-check and
+          # workflow identity fields. This tests access, never merge readiness.
+          query='query CaskAccess {
+            repository(owner:"devantler-tech",name:"homebrew-tap") {
+              pullRequest(number:2246) {
+                id state isDraft headRefOid mergeable mergeStateStatus
+                reviewThreads(first:1) { nodes { isResolved } }
+                commits(last:1) { nodes { commit {
+                  oid statusCheckRollup { contexts(first:100) {
+                    nodes { __typename
+                      ... on CheckRun { name status conclusion isRequired(pullRequestNumber:2246)
+                        checkSuite { app { id slug } commit { oid }
+                          workflowRun { id runNumber event workflow { id } } } }
+                      ... on StatusContext { context state isRequired(pullRequestNumber:2246) }
+                    } pageInfo { hasNextPage }
+                  } }
+                } } }
+              }
+            }
+            rateLimit { remaining resetAt }
+          }'
+          if ! gh api graphql -f "query=$query" > "$work/access.json" 2> "$work/error"; then
+            echo '::error::Built-in token cannot read the complete required handoff surface.'
+            exit 1
+          fi
+          jq -e '
+            (.errors == null or .errors == []) and
+            (.data.repository.pullRequest as $pr |
+              ($pr.id | type == "string") and
+              ($pr.commits.nodes | length == 1) and
+              ($pr.commits.nodes[0].commit.oid == $pr.headRefOid) and
+              ($pr.commits.nodes[0].commit.statusCheckRollup.contexts as $checks |
+                $checks.pageInfo.hasNextPage == false and
+                ($checks.nodes | length > 0) and
+                all($checks.nodes[]; (.isRequired | type == "boolean"))))
+          ' "$work/access.json" >/dev/null
+          gh api repos/devantler-tech/ksail/releases/tags/v7.206.27 --jq '.assets | length > 0' > "$work/source-read"
+          [[ "$(<"$work/source-read")" == true ]]
+          echo 'Built-in token reads the real cross-repository handoff and source-release evidence.'
