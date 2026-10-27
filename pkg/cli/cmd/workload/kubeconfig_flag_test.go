@@ -128,3 +128,49 @@ func TestResolveKubeconfigFlag_ExplicitEmptyStaysEmpty(t *testing.T) {
 	assert.Empty(t, flag.Value.String(),
 		"an explicitly empty --kubeconfig must stay empty, not become the working directory")
 }
+
+//nolint:paralleltest // uses t.Chdir to expose a literal-tilde collision
+func TestResolveKubeconfigFlag_ExpandsHomeBeforeCanonicalization(t *testing.T) {
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+	canonicalHome, err := filepath.EvalSymlinks(home)
+	require.NoError(t, err)
+
+	// A literal ~ directory must not shadow the supported home prefix. This
+	// exercises path selection without opening the real kubeconfig.
+	dir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "~"), 0o700))
+	t.Chdir(dir)
+
+	cmd, flag := newKubeconfigFlagCommand(t, "~/", true)
+	require.NoError(t, workload.ExportResolveKubeconfigFlag(cmd, flag, "/config/derived/path"))
+	assert.Equal(t, canonicalHome, flag.Value.String())
+}
+
+//nolint:paralleltest // uses t.Chdir for an ordinary named-tilde relative path
+func TestResolveKubeconfigFlag_NamedTildeRemainsLiteral(t *testing.T) {
+	dir := t.TempDir()
+	literalDir := filepath.Join(dir, "~other-user")
+	require.NoError(t, os.Mkdir(literalDir, 0o700))
+	path := filepath.Join(literalDir, "config")
+	require.NoError(t, os.WriteFile(path, []byte("apiVersion: v1\n"), 0o600))
+	want, err := filepath.EvalSymlinks(path)
+	require.NoError(t, err)
+	t.Chdir(dir)
+
+	cmd, flag := newKubeconfigFlagCommand(t, filepath.Join("~other-user", "config"), true)
+	require.NoError(t, workload.ExportResolveKubeconfigFlag(cmd, flag, "/config/derived/path"))
+	assert.Equal(t, want, flag.Value.String())
+}
+
+func TestResolveKubeconfigFlag_MissingParentRefuses(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "missing-parent", "config")
+	cmd, flag := newKubeconfigFlagCommand(t, path, true)
+	require.ErrorContains(
+		t,
+		workload.ExportResolveKubeconfigFlag(cmd, flag, "/config/derived/path"),
+		"failed to canonicalize kubeconfig flag",
+	)
+}
