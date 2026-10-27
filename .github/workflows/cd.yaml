@@ -31,6 +31,11 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      actions: read # Bind a replay to successful artifact producers in the original run.
+    outputs:
+      release-mode: ${{ steps.release-replay.outputs.mode }}
+      release-attempt: ${{ steps.release-replay.outputs.attempt }}
+      replay-proof: ${{ steps.release-replay.outputs.proof }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -38,6 +43,14 @@ jobs:
           persist-credentials: false
       - name: 🏷️ Validate release ref
         run: .github/scripts/validate-release-ref.sh
+      - name: 🔏 Install Cosign for replay verification
+        if: github.run_attempt > 1
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: 🔎 Resolve release replay
+        id: release-replay
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash .github/scripts/resolve-release-replay.sh
 
   # A reused evergreen cask PR can still be ready-for-review (auto-merge armed by the tap) from a
   # previous release that never merged. Demote it to draft BEFORE GoReleaser rewrites its branch —
@@ -58,12 +71,22 @@ jobs:
     permissions:
       contents: read
     outputs:
+      release-mode: ${{ needs.validate-release-ref.outputs.release-mode }}
+      release-attempt: ${{ needs.validate-release-ref.outputs.release-attempt }}
+      replay-proof: ${{ needs.validate-release-ref.outputs.replay-proof }}
       cask-publish: ${{ steps.cask-order.outputs.publish }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: 🔒 Verify release admission
+        uses: devantler-tech/ksail/.github/actions/release-admission@ac2dd2ee401030b2fac81dc985b42fae45b0788b
+        with:
+          attempt: ${{ needs.validate-release-ref.outputs.release-attempt }}
+          mode: ${{ needs.validate-release-ref.outputs.release-mode }}
+          proof: ${{ needs.validate-release-ref.outputs.replay-proof }}
       # Two releases stopped here on 2026-10-09 with "API rate limit exceeded" while that shared
       # budget was at zero (devantler-tech/monorepo#4055). Waiting for the reset costs at most an hour
       # and nothing is published yet; it also starts the cask-writing jobs on a fresh budget.
@@ -83,7 +106,7 @@ jobs:
             --tag "$TAG" \
             ksail ksail-desktop
       - name: 🍺 Re-draft reused evergreen cask PRs
-        if: steps.cask-order.outputs.publish == 'true'
+        if: (steps.cask-order.outputs.publish == 'true') && needs.validate-release-ref.outputs.release-mode == 'build'
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
         run: .github/scripts/redraft-evergreen-cask-prs.sh --tap devantler-tech/homebrew-tap ksail ksail-desktop
@@ -97,6 +120,11 @@ jobs:
       contents: write
       packages: write
       id-token: write # OIDC token for keyless cosign image signing (docker_signs)
+    outputs:
+      release-mode: ${{ needs.cask-checkpoint.outputs.release-mode }}
+      release-attempt: ${{ needs.cask-checkpoint.outputs.release-attempt }}
+      replay-proof: ${{ needs.cask-checkpoint.outputs.replay-proof }}
+      cask-publish: ${{ needs.cask-checkpoint.outputs.cask-publish }}
     steps:
       - name: 📑 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -104,12 +132,20 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: 🔒 Verify release admission
+        uses: devantler-tech/ksail/.github/actions/release-admission@ac2dd2ee401030b2fac81dc985b42fae45b0788b
+        with:
+          attempt: ${{ needs.cask-checkpoint.outputs.release-attempt }}
+          mode: ${{ needs.cask-checkpoint.outputs.release-mode }}
+          proof: ${{ needs.cask-checkpoint.outputs.replay-proof }}
+
       # GoReleaser cross-compiles every OS/arch and builds+signs the images in one job. That outgrew the
       # runner's root filesystem: v7.169.3 died 32 minutes in with `mkdir /tmp/go-build…: no space left
       # on device`, which surfaces as a compiler error and silently dropped the release (#6137).
       # So: reclaim more of the preinstalled toolchains, keep Go's scratch off the root filesystem, and
       # PRINT the headroom — a disk failure must never again look like a build failure.
       - name: 🧹 Cleanup node
+        if: needs.cask-checkpoint.outputs.release-mode == 'build'
         run: |
           set -euo pipefail
           echo "::group::Disk before cleanup"
@@ -140,6 +176,7 @@ jobs:
       # root filesystem. Move them to whichever volume actually has the most room — verified at runtime
       # rather than assumed, so this stays correct if the runner image changes.
       - name: 💽 Put Go build scratch on the roomiest volume
+        if: needs.cask-checkpoint.outputs.release-mode == 'build'
         run: |
           set -euo pipefail
           root_free=$(df -Pk / | awk 'NR==2 {print $4}')
@@ -165,6 +202,7 @@ jobs:
           echo "Go build scratch and cache moved to $scratch_root ($(df -h "$scratch_root" | awk 'NR==2 {print $4}') free)."
 
       - name: ⚙️ Setup Go
+        if: needs.cask-checkpoint.outputs.release-mode == 'build'
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -173,12 +211,15 @@ jobs:
           cache: false
 
       - name: 📦 Download Go modules
+        if: needs.cask-checkpoint.outputs.release-mode == 'build'
         run: bash .github/scripts/download-go-modules.sh
 
       - name: ⚙️ Setup Docker Buildx
+        if: needs.cask-checkpoint.outputs.release-mode == 'build'
         uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4.4.0
 
       - name: 🔐 Login to GHCR
+        if: needs.cask-checkpoint.outputs.release-mode == 'build'
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
@@ -186,16 +227,18 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 🔐 Login to Docker Hub
-        if: ${{ vars.DOCKERHUB_USERNAME != '' }}
+        if: (vars.DOCKERHUB_USERNAME != '') && needs.cask-checkpoint.outputs.release-mode == 'build'
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: 🔏 Install Cosign
+        if: needs.cask-checkpoint.outputs.release-mode == 'build'
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
       - name: 🏗️ Run GoReleaser
+        if: needs.cask-checkpoint.outputs.release-mode == 'build'
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           distribution: goreleaser
@@ -207,6 +250,11 @@ jobs:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
           # .goreleaser.yaml uploads the cask only when this is exactly "true".
           KSAIL_CASK_PUBLISH: ${{ needs.cask-checkpoint.outputs.cask-publish }}
+
+      - name: ♻️ Reuse verified publication
+        if: needs.cask-checkpoint.outputs.release-mode == 'verify'
+        shell: bash
+        run: printf 'Reusing the immutable publication verified for %s.\n' "$GITHUB_SHA"
 
   # The web UI is embedded into the binary (go:embed via pkg/webui, staged by the GoReleaser
   # before-hook) and served by the operator and `ksail open web`/`ksail open desktop` themselves — no separate UI image.
@@ -227,25 +275,38 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: 🔒 Verify release admission
+        uses: devantler-tech/ksail/.github/actions/release-admission@ac2dd2ee401030b2fac81dc985b42fae45b0788b
+        with:
+          attempt: ${{ needs.validate-release-ref.outputs.release-attempt }}
+          mode: ${{ needs.validate-release-ref.outputs.release-mode }}
+          proof: ${{ needs.validate-release-ref.outputs.replay-proof }}
+
       - name: ⚙️ Setup Node.js
+        if: needs.validate-release-ref.outputs.release-mode == 'build'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6.4.0 # zizmor: ignore[cache-poisoning]
         with:
           node-version: "24"
 
       - name: 🏷️ Extract version from tag
+        if: needs.validate-release-ref.outputs.release-mode == 'build'
         id: get_version
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
 
       - name: 📦 Install dependencies
+        if: needs.validate-release-ref.outputs.release-mode == 'build'
         run: npm ci
 
       - name: 🏗️ Compile
+        if: needs.validate-release-ref.outputs.release-mode == 'build'
         run: npm run compile
 
       - name: 📦 Package extension
+        if: needs.validate-release-ref.outputs.release-mode == 'build'
         run: npm run package
 
       - name: 📤 Publish to VS Code Marketplace
+        if: needs.validate-release-ref.outputs.release-mode == 'build'
         run: npx @vscode/vsce publish "$VERSION"
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
@@ -259,11 +320,13 @@ jobs:
       #   continue-on-error: true
 
       - name: 📦 Create VSIX package
+        if: needs.validate-release-ref.outputs.release-mode == 'build'
         run: npx @vscode/vsce package "$VERSION" --out ksail_"$VERSION".vsix
         env:
           VERSION: ${{ steps.get_version.outputs.version }}
 
       - name: 📤 Upload VSIX artifact
+        if: needs.validate-release-ref.outputs.release-mode == 'build'
         # Action inputs are workspace-relative — the job's `working-directory: vsce` default applies
         # only to `run` steps — so the vsix lives under vsce/. publish-release attaches it to the draft.
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -271,6 +334,11 @@ jobs:
           name: release-vscode
           path: vsce/ksail_*.vsix
           if-no-files-found: error
+
+      - name: ♻️ Reuse verified publication
+        if: needs.validate-release-ref.outputs.release-mode == 'verify'
+        shell: bash
+        run: printf 'Reusing the immutable publication verified for %s.\n' "$GITHUB_SHA"
 
   # The macOS desktop app ships as a Homebrew cask. The desktop app is a tagged entry point in the shared Go module that
   # links a system webview via CGO and cannot be cross-compiled in the main release, so this job runs
@@ -295,21 +363,32 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: 🔒 Verify release admission
+        uses: devantler-tech/ksail/.github/actions/release-admission@ac2dd2ee401030b2fac81dc985b42fae45b0788b
+        with:
+          attempt: ${{ needs.cask-checkpoint.outputs.release-attempt }}
+          mode: ${{ needs.cask-checkpoint.outputs.release-mode }}
+          proof: ${{ needs.cask-checkpoint.outputs.replay-proof }}
+
       - name: ⚙️ Setup Go
+        if: needs.cask-checkpoint.outputs.release-mode == 'build'
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: false
 
       - name: ⚙️ Setup Node.js
+        if: needs.cask-checkpoint.outputs.release-mode == 'build'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6.4.0 # zizmor: ignore[cache-poisoning]
         with:
           node-version: "24"
 
       - name: 📦 Download Go modules
+        if: needs.cask-checkpoint.outputs.release-mode == 'build'
         run: bash .github/scripts/download-go-modules.sh
 
       - name: 🏗️ Run GoReleaser (desktop cask)
+        if: needs.cask-checkpoint.outputs.release-mode == 'build'
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           distribution: goreleaser
@@ -325,11 +404,17 @@ jobs:
       # workflow artifact; `publish-release` attaches it to the draft before publishing, so every asset
       # is present before the release is locked by immutable releases (see #4874).
       - name: 📤 Upload desktop archive artifact
+        if: needs.cask-checkpoint.outputs.release-mode == 'build'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-desktop-macos
           path: dist-desktop/KSail_*_darwin_*.zip
           if-no-files-found: error
+
+      - name: ♻️ Reuse verified publication
+        if: needs.cask-checkpoint.outputs.release-mode == 'verify'
+        shell: bash
+        run: printf 'Reusing the immutable publication verified for %s.\n' "$GITHUB_SHA"
 
   # Linux and Windows desktop binaries are convenience downloads (no cask). They build on native
   # runners (CGO + the system webview) in parallel with the CLI release and emit their archives as
@@ -356,21 +441,32 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: 🔒 Verify release admission
+        uses: devantler-tech/ksail/.github/actions/release-admission@ac2dd2ee401030b2fac81dc985b42fae45b0788b
+        with:
+          attempt: ${{ needs.validate-release-ref.outputs.release-attempt }}
+          mode: ${{ needs.validate-release-ref.outputs.release-mode }}
+          proof: ${{ needs.validate-release-ref.outputs.replay-proof }}
+
       - name: 🛠️ Setup desktop build (Go, Node.js, webview deps, staged web UI)
-        uses: ./.github/actions/setup-desktop-build
+        if: needs.validate-release-ref.outputs.release-mode == 'build'
+        uses: devantler-tech/ksail/.github/actions/setup-desktop-build@207d9cb1f66f479b55dcee093152fbb8eb71f7b2
 
       - name: 🏷️ Extract version from tag
+        if: needs.validate-release-ref.outputs.release-mode == 'build'
         id: get_version
         shell: bash
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
 
       - name: 🏗️ Build desktop app
+        if: needs.validate-release-ref.outputs.release-mode == 'build'
         shell: bash
         run: cd desktop && go build -tags desktop -ldflags "-s -w" -o "ksail-desktop${{ matrix.ext }}" .
 
       # Package so the artifact extracts to the name the `ksail open desktop` launcher looks for: a
       # ksail-desktop binary the user puts on their PATH. Naming mirrors the main GoReleaser archives.
       - name: 📦 Package desktop app
+        if: needs.validate-release-ref.outputs.release-mode == 'build'
         id: package
         shell: bash
         env:
@@ -391,11 +487,17 @@ jobs:
           echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
 
       - name: 📤 Upload desktop archive artifact
+        if: needs.validate-release-ref.outputs.release-mode == 'build'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-desktop-${{ matrix.goos }}
           path: ${{ steps.package.outputs.artifact }}
           if-no-files-found: error
+
+      - name: ♻️ Reuse verified publication
+        if: needs.validate-release-ref.outputs.release-mode == 'verify'
+        shell: bash
+        run: printf 'Reusing the immutable publication verified for %s.\n' "$GITHUB_SHA"
 
   operator-chart:
     name: ⛵ Release Operator Chart
@@ -422,7 +524,15 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: 🔒 Verify release admission
+        uses: devantler-tech/ksail/.github/actions/release-admission@ac2dd2ee401030b2fac81dc985b42fae45b0788b
+        with:
+          attempt: ${{ needs.goreleaser.outputs.release-attempt }}
+          mode: ${{ needs.goreleaser.outputs.release-mode }}
+          proof: ${{ needs.goreleaser.outputs.replay-proof }}
+
       - name: 🔐 Login to GHCR
+        if: needs.goreleaser.outputs.release-mode == 'build'
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
@@ -434,10 +544,17 @@ jobs:
       # matching operator image (operator.image.tag defaults to .Chart.AppVersion); helm bundles crds/
       # automatically. The chart lands at ghcr.io/devantler-tech/charts/ksail-operator:<version>.
       - name: 🔏 Install Cosign
+        if: needs.goreleaser.outputs.release-mode == 'build'
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
       - name: 📦 Publish signed operator chart
+        if: needs.goreleaser.outputs.release-mode == 'build'
         run: bash .github/scripts/publish-operator-chart.sh
+
+      - name: ♻️ Reuse verified publication
+        if: needs.goreleaser.outputs.release-mode == 'verify'
+        shell: bash
+        run: printf 'Reusing the immutable publication verified for %s.\n' "$GITHUB_SHA"
 
   mcp-publish:
     name: 📤 Publish to MCP Registry
@@ -456,6 +573,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: 🔒 Verify release admission
+        uses: devantler-tech/ksail/.github/actions/release-admission@ac2dd2ee401030b2fac81dc985b42fae45b0788b
+        with:
+          attempt: ${{ needs.goreleaser.outputs.release-attempt }}
+          mode: ${{ needs.goreleaser.outputs.release-mode }}
+          proof: ${{ needs.goreleaser.outputs.replay-proof }}
 
       - name: 🏷️ Extract version from tag
         id: get_version
@@ -504,6 +628,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: 🔒 Verify release admission
+        uses: devantler-tech/ksail/.github/actions/release-admission@ac2dd2ee401030b2fac81dc985b42fae45b0788b
+        with:
+          attempt: ${{ needs.validate-release-ref.outputs.release-attempt }}
+          mode: ${{ needs.validate-release-ref.outputs.release-mode }}
+          proof: ${{ needs.validate-release-ref.outputs.replay-proof }}
+
       - name: ⚙️ Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6.4.0 # zizmor: ignore[cache-poisoning]
         with:
@@ -546,10 +677,18 @@ jobs:
       ]
     timeout-minutes: 10
     permissions:
-      pages: write
-      id-token: write
+      pages: write # Publish the verified documentation artifact.
+      id-token: write # Authenticate the Pages deployment through OIDC.
     steps:
+      - name: 🔒 Verify release admission
+        uses: devantler-tech/ksail/.github/actions/release-admission@ac2dd2ee401030b2fac81dc985b42fae45b0788b
+        with:
+          attempt: ${{ needs.goreleaser.outputs.release-attempt }}
+          mode: ${{ needs.goreleaser.outputs.release-mode }}
+          proof: ${{ needs.goreleaser.outputs.replay-proof }}
+
       - name: 🚀 Deploy to GitHub Pages
+        if: needs.goreleaser.outputs.release-mode == 'build' || needs.goreleaser.outputs.cask-publish == 'true'
         id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
 
@@ -579,6 +718,7 @@ jobs:
       ]
     permissions:
       contents: write
+      actions: read # Independently recheck the original publisher jobs.
     steps:
       - name: 🏷️ Extract version from tag
         id: get_version
@@ -591,7 +731,15 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: 🔒 Verify release admission
+        uses: devantler-tech/ksail/.github/actions/release-admission@ac2dd2ee401030b2fac81dc985b42fae45b0788b
+        with:
+          attempt: ${{ needs.goreleaser.outputs.release-attempt }}
+          mode: ${{ needs.goreleaser.outputs.release-mode }}
+          proof: ${{ needs.goreleaser.outputs.replay-proof }}
+
       - name: 📥 Download release asset artifacts
+        if: needs.goreleaser.outputs.release-mode == 'build'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: release-*
@@ -603,6 +751,7 @@ jobs:
       # release rejects the upload — so the rerun succeeds as a no-op. Missing, duplicate or
       # incomplete releases fail closed here (see #6263).
       - name: 🔎 Resolve release publish state
+        if: needs.goreleaser.outputs.release-mode == 'build'
         id: release_state
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -620,7 +769,7 @@ jobs:
       # The upload retries with backoff: a single transient failure from uploads.github.com would
       # otherwise skip publishing and every downstream job, stranding the release as a draft (#6292).
       - name: 📤 Attach assets to draft release
-        if: steps.release_state.outputs.state == 'draft'
+        if: (steps.release_state.outputs.state == 'draft') && needs.goreleaser.outputs.release-mode == 'build'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -628,7 +777,7 @@ jobs:
         run: .github/scripts/upload-release-assets.sh --tag "$RELEASE_TAG" --assets-dir dist-assets
 
       - name: 📢 Publish draft release
-        if: steps.release_state.outputs.state == 'draft'
+        if: (steps.release_state.outputs.state == 'draft') && needs.goreleaser.outputs.release-mode == 'build'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           RELEASE_TAG: ${{ steps.get_version.outputs.version }}
@@ -707,6 +856,16 @@ jobs:
 
             console.log(`Successfully published release ${tag}`);
 
+      - name: 🔏 Install Cosign for replay readback
+        if: needs.goreleaser.outputs.release-mode == 'verify'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: 🔎 Recheck immutable release proof
+        if: needs.goreleaser.outputs.release-mode == 'verify'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPLAY_EXPECTED: ${{ needs.goreleaser.outputs.replay-proof }}
+        run: bash .github/scripts/resolve-release-replay.sh
+
   # GoReleaser opens the Homebrew cask PRs during the build (CLI in `goreleaser`, macOS in
   # `desktop-macos`) as DRAFTS, so the tap cannot merge them while the cask still points at a draft
   # (not-yet-public, 404) release. Now that `publish-release` has made the release public, this job
@@ -737,6 +896,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: 🔒 Verify release admission
+        uses: devantler-tech/ksail/.github/actions/release-admission@ac2dd2ee401030b2fac81dc985b42fae45b0788b
+        with:
+          attempt: ${{ needs.cask-checkpoint.outputs.release-attempt }}
+          mode: ${{ needs.cask-checkpoint.outputs.release-mode }}
+          proof: ${{ needs.cask-checkpoint.outputs.replay-proof }}
 
       - name: Provide the request timeout utility
         run: brew install coreutils
@@ -1074,6 +1240,13 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: 🔒 Verify release admission
+        uses: devantler-tech/ksail/.github/actions/release-admission@ac2dd2ee401030b2fac81dc985b42fae45b0788b
+        with:
+          attempt: ${{ needs.validate-release-ref.outputs.release-attempt }}
+          mode: ${{ needs.validate-release-ref.outputs.release-mode }}
+          proof: ${{ needs.validate-release-ref.outputs.replay-proof }}
+
       - name: 🧹 Delete orphaned draft release and tag
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:

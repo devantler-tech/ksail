@@ -244,6 +244,8 @@ jobs:
             # the same reason todos-contract does. TestReleaseConfigFilterCoversTheReleaseFiles
             # fails if a release file is dropped from it.
             release-config:
+              - '.github/scripts/resolve-release-replay.sh'
+              - '.github/actions/release-admission/**'
               - '.github/scripts/download-go-modules.sh'
               - '.github/scripts/cask-rendering.test.sh'
               - '.goreleaser.yaml'
@@ -280,6 +282,8 @@ jobs:
               - '.govulncheck-allow.txt'
             # Release inputs are outside Go's cache and the shared Go source filter.
             release-graph-audit:
+              - '.github/scripts/resolve-release-replay.sh'
+              - '.github/actions/release-admission/**'
               - '.github/scripts/download-go-modules.sh'
               - '.goreleaser.yaml'
               - '.goreleaser.desktop.yaml'
@@ -923,7 +927,6 @@ jobs:
         uses: ./.github/actions/cache-ksail-binary
         with:
           go-version: ${{ steps.setup-go.outputs.go-version }}
-          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
 
       - name: 🧪 Repeat schema cancellation acceptance
@@ -1834,7 +1837,6 @@ jobs:
         uses: ./.github/actions/cache-ksail-binary
         with:
           go-version: ${{ steps.setup-go.outputs.go-version }}
-          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
           save: "false"
 
