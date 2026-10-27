@@ -450,7 +450,7 @@ jobs:
 
       - name: 🛠️ Setup desktop build (Go, Node.js, webview deps, staged web UI)
         if: needs.validate-release-ref.outputs.release-mode == 'build'
-        uses: devantler-tech/ksail/.github/actions/setup-desktop-build@207d9cb1f66f479b55dcee093152fbb8eb71f7b2
+        uses: devantler-tech/ksail/.github/actions/setup-desktop-build@297b5ce208dd9989e84aed46f2ed45bea9aaedd3
 
       - name: 🏷️ Extract version from tag
         if: needs.validate-release-ref.outputs.release-mode == 'build'
