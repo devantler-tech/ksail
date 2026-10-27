@@ -142,9 +142,9 @@ func TestResolveKubeconfigFlag_ExpandsHomeBeforeCanonicalization(t *testing.T) {
 	require.NoError(t, os.Mkdir(filepath.Join(dir, "~"), 0o700))
 	t.Chdir(dir)
 
-	cmd, flag := newKubeconfigFlagCommand(t, "~/", true)
+	cmd, flag := newKubeconfigFlagCommand(t, "~/kubeconfig", true)
 	require.NoError(t, workload.ExportResolveKubeconfigFlag(cmd, flag, "/config/derived/path"))
-	assert.Equal(t, canonicalHome, flag.Value.String())
+	assert.Equal(t, filepath.Join(canonicalHome, "kubeconfig"), flag.Value.String())
 }
 
 //nolint:paralleltest // uses t.Chdir for an ordinary named-tilde relative path
