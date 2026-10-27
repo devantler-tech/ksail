@@ -1,14 +1,10 @@
 package ciharness_test
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -16,8 +12,7 @@ import (
 )
 
 // Execute the actual action's key step against a small, dependency-free module.
-// The legacy caller hashes only Go/module files, so an embedded Dockerfile
-// mutation must reproduce unchanged-key reuse before this action is repaired.
+// A compiled embedded asset must invalidate the cached executable.
 func TestBinaryCacheKeyIncludesEmbeddedDockerfile(t *testing.T) {
 	t.Parallel()
 	directory := newBinaryKeyFixture(t)
@@ -75,6 +70,15 @@ func TestBinaryCacheKeyIsIndependentOfCheckoutPath(t *testing.T) {
 	require.Equal(t, first, second)
 }
 
+func TestBinaryCacheKeySupportsLogicalCheckoutPath(t *testing.T) {
+	t.Parallel()
+	directory := newBinaryKeyFixture(t)
+	link := filepath.Join(t.TempDir(), "checkout")
+	require.NoError(t, os.Symlink(directory, link))
+	require.Equal(t, binaryKeyFixture(t, directory, "PWD="+directory),
+		binaryKeyFixture(t, link, "PWD="+link))
+}
+
 func TestBinaryCacheKeyTracksTargetAndBundledCLI(t *testing.T) {
 	t.Parallel()
 	directory := newBinaryKeyFixture(t)
@@ -89,6 +93,77 @@ func TestBinaryCacheKeyTracksTargetAndBundledCLI(t *testing.T) {
 			require.NotEqual(t, before, binaryKeyFixture(t, directory, change))
 		})
 	}
+}
+
+func TestBinaryCacheKeyTracksLocalReplacements(t *testing.T) {
+	t.Parallel()
+	directory := newBinaryKeyFixture(t)
+	replacement := filepath.Join(directory, "dep")
+	addBinaryKeyReplacement(t, directory, replacement)
+	before := binaryKeyFixture(t, directory)
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(replacement, "data.txt"), []byte("new data\n"), 0o600),
+	)
+	afterEmbed := binaryKeyFixture(t, directory)
+	require.NotEqual(t, before, afterEmbed)
+	require.NoError(t, os.WriteFile(filepath.Join(replacement, "version.go"),
+		[]byte("package dep\nconst Version = 2\n"), 0o600))
+	afterSource := binaryKeyFixture(t, directory)
+	require.NotEqual(t, afterEmbed, afterSource)
+	require.NoError(t, os.WriteFile(filepath.Join(replacement, "go.mod"),
+		[]byte("module example.invalid/dep\n\ngo 1.22.0\n"), 0o600))
+	require.NotEqual(t, afterSource, binaryKeyFixture(t, directory))
+}
+
+func TestBinaryCacheKeyRefusesOutsideReplacement(t *testing.T) {
+	t.Parallel()
+	directory := newBinaryKeyFixture(t)
+	addBinaryKeyReplacement(t, directory, t.TempDir())
+	output, err := binaryKeyFixtureResult(t, directory)
+	require.Error(t, err)
+	require.Contains(t, output, "a local replacement escapes the checkout")
+	require.NotContains(t, output, "ksail-bin-v2-")
+}
+
+func TestBinaryCacheKeyTracksVendoredInputs(t *testing.T) {
+	t.Parallel()
+	directory := newBinaryKeyFixture(t)
+	vendor := filepath.Join(directory, "vendor")
+	dependency := filepath.Join(vendor, "example.invalid", "dep")
+	require.NoError(t, os.MkdirAll(dependency, 0o700))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(directory, "go.mod"),
+		[]byte(
+			"module example.invalid/binary-key\n\ngo 1.23.0\n\nrequire example.invalid/dep v1.0.0\n",
+		),
+		0o600,
+	))
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "main.go"),
+		[]byte("package main\nimport _ \"example.invalid/dep\"\nfunc main() {}\n"), 0o600))
+	manifest := filepath.Join(vendor, "modules.txt")
+	require.NoError(t, os.WriteFile(
+		manifest,
+		[]byte(
+			"# example.invalid/dep v1.0.0\n## explicit; go 1.23.0\nexample.invalid/dep\n",
+		),
+		0o600,
+	))
+	require.NoError(t, os.WriteFile(filepath.Join(dependency, "dep.go"),
+		[]byte("package dep\nconst Value = 1\n"), 0o600))
+	before := binaryKeyFixture(t, directory, "GOFLAGS=-mod=vendor")
+	require.NoError(t, os.WriteFile(filepath.Join(dependency, "dep.go"),
+		[]byte("package dep\nconst Value = 2\n"), 0o600))
+	afterSource := binaryKeyFixture(t, directory, "GOFLAGS=-mod=vendor")
+	require.NotEqual(t, before, afterSource)
+	require.NoError(t, os.WriteFile(
+		manifest,
+		[]byte(
+			"# example.invalid/dep v1.0.0\n## explicit; go 1.23.1\nexample.invalid/dep\n",
+		),
+		0o600,
+	))
+	require.NotEqual(t, afterSource, binaryKeyFixture(t, directory, "GOFLAGS=-mod=vendor"))
 }
 
 func newBinaryKeyFixture(t *testing.T) string {
@@ -148,7 +223,6 @@ func binaryKeyFixtureResult(t *testing.T, directory string, overrides ...string)
 		"GOOS=linux",
 		"GOARCH=amd64",
 		"GO_VERSION="+strings.TrimPrefix(strings.TrimSpace(string(version)), "go"),
-		"SOURCE_HASH="+legacyBinarySourceHash(t, directory),
 		"COPILOT_CLI_VERSION=1.0.87",
 		"GITHUB_ACTION_PATH="+actionPath,
 		"GITHUB_OUTPUT="+output,
@@ -182,13 +256,18 @@ func TestBinaryCacheKeyRefusesUnhashedOverlay(t *testing.T) {
 		"file-based compiler overrides must not select a key that omits their contents",
 	)
 	require.NotContains(t, output, "ksail-bin-v2-")
+	require.Contains(t, output, "custom GOFLAGS")
 }
 
 func TestBinaryCacheKeyRefusesIncompleteInputs(t *testing.T) {
 	t.Parallel()
 
-	for _, fault := range []string{
-		"missing-embed", "missing-module", "unresolved-import", "wrong-toolchain", "escaping-source",
+	for fault, diagnostic := range map[string]string{
+		"missing-embed":     "no matching files found",
+		"missing-module":    "read build input go.mod",
+		"unresolved-import": "no required module provides package",
+		"wrong-toolchain":   "setup-go version does not match",
+		"escaping-source":   "path escapes from parent",
 	} {
 		t.Run(fault, func(t *testing.T) {
 			t.Parallel()
@@ -224,50 +303,25 @@ func TestBinaryCacheKeyRefusesIncompleteInputs(t *testing.T) {
 			output, err := binaryKeyFixtureResult(t, directory, overrides...)
 			require.Error(t, err, "an incomplete observation must never select a cached executable")
 			require.NotContains(t, output, "ksail-bin-v2-")
+			require.Contains(t, output, diagnostic)
 		})
 	}
 }
 
-func legacyBinarySourceHash(t *testing.T, directory string) string {
+func addBinaryKeyReplacement(t *testing.T, directory, replacement string) {
 	t.Helper()
+	require.NoError(t, os.MkdirAll(replacement, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "go.mod"),
+		[]byte("module example.invalid/binary-key\n\ngo 1.23.0\n"+
+			"\nrequire example.invalid/dep v0.0.0\nreplace example.invalid/dep => "+replacement+"\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "main.go"),
+		[]byte("package main\nimport _ \"example.invalid/dep\"\nfunc main() {}\n"), 0o600))
 
-	root, err := os.OpenRoot(directory)
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, root.Close()) })
-
-	var names []string
-
-	require.NoError(
-		t,
-		filepath.WalkDir(directory, func(path string, entry fs.DirEntry, err error) error {
-			if err != nil || entry.IsDir() {
-				return err
-			}
-
-			if entry.Type()&os.ModeSymlink != 0 {
-				return nil
-			}
-
-			if entry.Name() == "go.mod" || entry.Name() == "go.sum" ||
-				strings.HasSuffix(path, ".go") {
-				names = append(names, path)
-			}
-
-			return nil
-		}),
-	)
-	slices.Sort(names)
-
-	digest := sha256.New()
-
-	for _, name := range names {
-		relative, err := filepath.Rel(directory, name)
-		require.NoError(t, err)
-		contents, err := root.ReadFile(relative)
-		require.NoError(t, err)
-		_, err = fmt.Fprintf(digest, "%x", sha256.Sum256(contents))
-		require.NoError(t, err)
+	for name, content := range map[string]string{
+		"go.mod":   "module example.invalid/dep\n\ngo 1.23.0\n",
+		"dep.go":   "package dep\nimport _ \"embed\"\n//go:embed data.txt\nvar Data string\n",
+		"data.txt": "data\n",
+	} {
+		require.NoError(t, os.WriteFile(filepath.Join(replacement, name), []byte(content), 0o600))
 	}
-
-	return hex.EncodeToString(digest.Sum(nil))
 }

@@ -30,6 +30,7 @@ var (
 	errLocalReplacement = errors.New("a local replacement escapes the checkout")
 	errModuleMetadata   = errors.New("local module metadata escapes the checkout")
 	errMainMissing      = errors.New("no main executable was resolved")
+	errIncomplete       = errors.New("package input discovery is incomplete")
 )
 
 type module struct {
@@ -41,6 +42,10 @@ type module struct {
 // These are go list's build inputs, excluding TestGoFiles/TestEmbedFiles.
 // EmbedFiles still includes an explicitly embedded *_test.go file.
 type goPackage struct {
+	Incomplete bool `json:"incomplete"`
+	Error      *struct {
+		Err string `json:"err"`
+	} `json:"error"`
 	Dir          string   `json:"dir"`
 	Name         string   `json:"name"`
 	GoFiles      []string `json:"goFiles"`
@@ -127,6 +132,11 @@ func calculate(
 		if err != nil {
 			return "", err
 		}
+	}
+
+	err = addFile(root, "vendor/modules.txt", data.Files, true)
+	if err != nil {
+		return "", err
 	}
 
 	err = collectPackages(ctx, directory, root, environment, data.Files)
@@ -330,9 +340,9 @@ func collectPackage(
 	root *os.Root,
 	files map[string]string,
 ) (bool, error) {
-	relative, err := filepath.Rel(directory, pkg.Dir)
+	relative, err := packagePath(pkg, directory)
 	if err != nil {
-		return false, fmt.Errorf("resolve package directory: %w", err)
+		return false, err
 	}
 
 	if !filepath.IsLocal(relative) {
@@ -355,6 +365,29 @@ func collectPackage(
 	}
 
 	return relative == "." && pkg.Name == "main", nil
+}
+
+func packagePath(pkg goPackage, directory string) (string, error) {
+	if pkg.Error != nil {
+		return "", fmt.Errorf("%w: %s", errIncomplete, pkg.Error.Err)
+	}
+
+	if pkg.Incomplete || pkg.Dir == "" {
+		return "", errIncomplete
+	}
+
+	// Normalize both sides: Go can retain PWD and local-replacement aliases independently.
+	resolved, err := filepath.EvalSymlinks(pkg.Dir)
+	if err != nil {
+		return "", fmt.Errorf("resolve package links: %w", err)
+	}
+
+	relative, err := filepath.Rel(directory, resolved)
+	if err != nil {
+		return "", fmt.Errorf("resolve package directory: %w", err)
+	}
+
+	return relative, nil
 }
 
 func collectSourceFiles(
@@ -394,7 +427,12 @@ func collectModule(mod *module, directory string, root *os.Root, files map[strin
 		return nil
 	}
 
-	name, err := filepath.Rel(directory, mod.GoMod)
+	resolved, err := filepath.EvalSymlinks(mod.GoMod)
+	if err != nil {
+		return fmt.Errorf("resolve local module links: %w", err)
+	}
+
+	name, err := filepath.Rel(directory, resolved)
 	if err != nil || !filepath.IsLocal(name) {
 		return errModuleMetadata
 	}

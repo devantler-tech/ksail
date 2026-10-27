@@ -30,7 +30,7 @@ run-specific artifact through `restore-ksail-binary`.
 Before lookup, the action generates the embedded chat documentation. It asks
 `go list -deps -json .` which files the target executable uses and hashes the
 selected Go/native sources and embedded files, including local replacement modules.
-Module manifests and checksums bind registry dependencies. The active toolchain,
+Module manifests, checksums and vendor metadata bind dependency selection. The active toolchain,
 target and architecture settings, build flags, C compiler settings, runner image,
 bundled Copilot CLI version and the action's complete build/key recipe also enter
 the digest. Checkout paths do not.
