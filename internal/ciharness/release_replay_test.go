@@ -77,6 +77,7 @@ func TestReleaseReplayEntrypoint(t *testing.T) {
 	}
 }
 
+// releaseReplayEnvironment isolates replay fixtures from the host and binds their original run identity.
 func releaseReplayEnvironment(t *testing.T, directory, scenario string) []string {
 	t.Helper()
 
@@ -108,6 +109,7 @@ func releaseReplayEnvironment(t *testing.T, directory, scenario string) []string
 	}
 }
 
+// releaseReplayFixture assembles release metadata and substitutes only the external readers.
 func releaseReplayFixture(t *testing.T) string {
 	t.Helper()
 
@@ -146,6 +148,7 @@ func releaseReplayFixture(t *testing.T) string {
 	return directory
 }
 
+// releaseReplayMetadata records the original successful publishers and immutable source identity.
 func releaseReplayMetadata(t *testing.T, directory string) {
 	t.Helper()
 
@@ -196,6 +199,7 @@ func releaseReplayMetadata(t *testing.T, directory string) {
 	)
 }
 
+// releaseReplayAssets supplies the complete asset census and source-bound checksum controls.
 func releaseReplayAssets(t *testing.T, directory string, installer, crd []byte) []map[string]any {
 	t.Helper()
 
@@ -247,6 +251,7 @@ func releaseReplayAssets(t *testing.T, directory string, installer, crd []byte) 
 	return assets
 }
 
+// releaseReplayAttestation binds every fixture asset and the source to the release statement.
 func releaseReplayAttestation(t *testing.T, directory string, assets []map[string]any) {
 	t.Helper()
 
@@ -285,6 +290,7 @@ func releaseReplayAttestation(t *testing.T, directory string, assets []map[strin
 	)
 }
 
+// releaseReplayJSON writes one fixture response without changing the shipping parser.
 func releaseReplayJSON(t *testing.T, directory, name string, value any) {
 	t.Helper()
 
@@ -358,6 +364,7 @@ if [[ $REPLAY_CASE == changed-image ]]; then digest="sha256:$(printf 'c%.0s' {1.
 printf '[{"critical":{"image":{"docker-manifest-digest":"%s"}}}]\n' "$digest"
 `
 
+// TestReleaseReplayFinalReadback rejects publication changes between preflight and final verification.
 func TestReleaseReplayFinalReadback(t *testing.T) {
 	t.Parallel()
 	jobs := readReleaseJobs(t)
@@ -388,6 +395,7 @@ func TestReleaseReplayFinalReadback(t *testing.T) {
 	}
 }
 
+// executeReleaseReplay executes a shipping workflow step with explicit fixture overrides.
 func executeReleaseReplay(t *testing.T, step harnessStep, directory, scenario string,
 	overrides ...string,
 ) (string, string, error) {
@@ -417,6 +425,7 @@ func executeReleaseReplay(t *testing.T, step harnessStep, directory, scenario st
 	return string(values), string(diagnostic), runErr
 }
 
+// releaseReplayDependencies names each publisher’s direct admission source.
 func releaseReplayDependencies() map[string]string {
 	return map[string]string{
 		"cask-checkpoint": "validate-release-ref", "goreleaser": "cask-checkpoint",
@@ -429,6 +438,7 @@ func releaseReplayDependencies() map[string]string {
 }
 
 // A partial rerun must never carry a stale first-attempt build decision into expensive work.
+// TestReleaseReplayJobsRequireFreshAdmission keeps every downstream job bound to the current attempt.
 func TestReleaseReplayJobsRequireFreshAdmission(t *testing.T) {
 	t.Parallel()
 
@@ -456,6 +466,7 @@ func TestReleaseReplayJobsRequireFreshAdmission(t *testing.T) {
 	}
 }
 
+// TestReleaseAdmissionBindsAttemptModeAndProof exercises the installed admission action’s refusal boundaries.
 func TestReleaseAdmissionBindsAttemptModeAndProof(t *testing.T) {
 	t.Parallel()
 	action := readCompositeAction(t, ".github/actions/release-admission/action.yaml")
@@ -502,12 +513,15 @@ func TestReleaseAdmissionBindsAttemptModeAndProof(t *testing.T) {
 	}
 }
 
-func TestReleaseReplayReusesPublishedGoArtifacts(t *testing.T) {
+// TestReleaseReplayReusesPublishedArtifacts keeps verified replay out of all asset producers.
+func TestReleaseReplayReusesPublishedArtifacts(t *testing.T) {
 	t.Parallel()
 	jobs := readReleaseJobs(t)
 	dependencies := releaseReplayDependencies()
 
-	for _, name := range []string{"goreleaser", "desktop-macos", "desktop", "operator-chart"} {
+	for _, name := range []string{
+		"goreleaser", "vscode-extension", "desktop-macos", "desktop", "operator-chart",
+	} {
 		job := jobs[name]
 		for _, step := range job.Steps {
 			if strings.HasPrefix(step.Uses, "actions/checkout@") ||

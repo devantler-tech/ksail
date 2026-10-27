@@ -24,9 +24,8 @@ need to finish.
    verify the complete GitHub release attestation and asset set, and verify each
    OCI publication's signature against the original workflow and source commit.
    A conflict, missing publication or failed read stops the attempt here.
-4. The CLI, desktop and chart jobs report reuse of the verified publication.
-   The existing VS Code Marketplace path still runs, retaining its current
-   optional-publish policy. Documentation is rebuilt, MCP uses its existing
+4. The CLI, desktop, VS Code package and chart jobs report reuse of the verified
+   publication. Documentation is rebuilt, MCP uses its existing
    identical-version verification, and Homebrew retains its protected handoff.
 5. **Publish Release** independently repeats the publication verification and
    compares the GitHub asset IDs/digests and OCI manifest digests with preflight.
@@ -45,6 +44,9 @@ publication; rerun the complete workflow to obtain a fresh decision.
 Replay never deletes or unlocks an immutable release, moves its tag, replaces its
 assets, rebuilds its published Go executables or overwrites its OCI publications.
 Missing or conflicting immutable content needs a separate reviewed recovery.
+VS Code Marketplace publication is attempted only during normal first publication;
+this replay path does not recover a missing optional Marketplace publication.
+It reuses the verified VSIX release asset without rebuilding or uploading it.
 Normal first publication retains the complete build, signing, asset-completeness
 and publication gates. CD keeps its existing serialized release queue and cask
 ordering checks.
