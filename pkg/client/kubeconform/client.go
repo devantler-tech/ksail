@@ -282,6 +282,11 @@ type ValidationOptions struct {
 	Attribution map[string]string
 }
 
+// Refreshing reports whether these options belong to an explicit schema refresh session.
+func (opts *ValidationOptions) Refreshing() bool {
+	return opts != nil && opts.schemaRefresh != nil
+}
+
 // createValidator creates a kubeconform validator with the given options.
 func (c *Client) createValidator(opts *ValidationOptions) (validator.Validator, error) {
 	// Preserve built-in Kubernetes validation, then prefer the caller's CRD schemas

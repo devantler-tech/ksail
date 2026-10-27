@@ -76,7 +76,7 @@ func finishRenderedValidationSubstitutions(
 	}
 
 	data := result.Bytes()
-	if opts != nil && opts.CacheDirectory != "" {
+	if opts.Refreshing() {
 		err := kubeconform.NewClient().PrecacheSchemas(ctx, data, opts)
 		if err != nil {
 			return nil, fmt.Errorf("refresh rendered schemas: %w", err)

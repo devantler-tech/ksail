@@ -1417,9 +1417,9 @@ func expandValidationSubstitutionsForStage(
 	}
 
 	expanded := fluxsubst.ExpandFluxSubstitutionsWithOptions(data, schemaOpts)
-	// Only an explicit CLI refresh supplies a private cache override. Resolve
-	// metadata defaults, fetch schemas, then type the original input afresh.
-	if opts.CacheDirectory != "" {
+	// Explicit refresh resolves metadata defaults, fetches schemas, then types
+	// the original input afresh. Cache isolation alone must not enable refresh.
+	if opts.Refreshing() {
 		input := expanded
 		if discoveringCRDs {
 			input, _ = discoverySchemaInput(expanded)
