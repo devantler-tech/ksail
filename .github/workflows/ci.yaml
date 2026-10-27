@@ -971,7 +971,8 @@ jobs:
           name: ksail-binary-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ steps.binary.outputs.binary-path }}
           if-no-files-found: error
-          compression-level: 0
+          # Level 1 cut the measured candidate by 53% with byte-identical restores.
+          compression-level: 1
           retention-days: 1
 
   # Reuse the immutable migration CLI from a main-populated, exact-key cache.
@@ -2579,7 +2580,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          go install github.com/vektra/mockery/v3@v3.5.4
+          go install github.com/vektra/mockery/v3@v3.8.1
           make generate 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/generate.log"
       - name: 📚 Build the documentation
         if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}

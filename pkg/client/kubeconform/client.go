@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -266,6 +265,10 @@ type ValidationOptions struct {
 	// CRDs-catalog. They let a repo validate CRDs that are absent from (or stale in)
 	// the catalog against a supplied schema instead of skipping the kind entirely.
 	SchemaLocations []string
+	// CacheDirectory selects an isolated schema cache; empty uses the shared default.
+	CacheDirectory string
+	// schemaRefresh coordinates native writes only within an explicit refresh session.
+	schemaRefresh *SchemaRefresh
 	// Strict enables strict validation mode.
 	Strict bool
 	// IgnoreMissingSchemas ignores resources with missing schemas.
@@ -277,6 +280,11 @@ type ValidationOptions struct {
 	// a multi-layer render points at the originating layer. A nil map (the default)
 	// disables attribution and leaves failure messages unchanged.
 	Attribution map[string]string
+}
+
+// Refreshing reports whether these options belong to an explicit schema refresh session.
+func (opts *ValidationOptions) Refreshing() bool {
+	return opts != nil && opts.schemaRefresh != nil
 }
 
 // createValidator creates a kubeconform validator with the given options.
@@ -298,26 +306,14 @@ func (c *Client) createValidator(opts *ValidationOptions) (validator.Validator, 
 		skipKinds[kind] = struct{}{}
 	}
 
-	// Set up schema cache directory
-	var cacheDir string
+	cacheDir := opts.CacheDirectory
+	if cacheDir == "" {
+		cacheDir = DefaultSchemaCacheDir()
+	}
 
-	userCacheDir, userCacheDirErr := os.UserCacheDir()
-	if userCacheDirErr == nil {
-		cacheDir = filepath.Join(userCacheDir, "ksail", "kubeconform")
-
-		err := os.MkdirAll(cacheDir, schemaCacheDirPerm)
-		if err != nil {
-			return nil, fmt.Errorf("create schema cache directory: %w", err)
-		}
-	} else {
-		// Fallback: use a stable cache directory under the system temp dir to avoid leaking
-		// unique directories on every validator construction when $HOME is unavailable (e.g. CI).
-		cacheDir = filepath.Join(os.TempDir(), "ksail", "kubeconform")
-
-		err := os.MkdirAll(cacheDir, schemaCacheDirPerm)
-		if err != nil {
-			return nil, fmt.Errorf("create fallback schema cache directory: %w", err)
-		}
+	err := os.MkdirAll(cacheDir, schemaCacheDirPerm)
+	if err != nil {
+		return nil, fmt.Errorf("create schema cache directory: %w", err)
 	}
 
 	// Create validator options
