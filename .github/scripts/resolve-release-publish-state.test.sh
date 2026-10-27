@@ -122,37 +122,37 @@ chmod +x "${fake_bin}/gh"
 # GITHUB_OUTPUT. Arguments: name scenario expected_status expected_output [checksums] [extra_glob].
 # Set resolver_under_test to run a modified copy of the resolver instead of the real one.
 run_case() {
-  local name="$1" scenario="$2" expected_status="$3" expected_output="$4"
-  local checksums="${5:-complete}" glob="${6:-${crd_glob}}"
-  local output status github_output="${tmp_dir}/${name}.output"
+	local name="$1" scenario="$2" expected_status="$3" expected_output="$4"
+	local checksums="${5:-complete}" glob="${6:-${crd_glob}}"
+	local output status github_output="${tmp_dir}/${name}.output"
 
-  : >"${github_output}"
-  set +e
-  output="$(PATH="${fake_bin}:${PATH}" FAKE_GH_SCENARIO="${scenario}" FAKE_GH_CHECKSUMS="${checksums}" \
-    GITHUB_OUTPUT="${github_output}" GH_REPO=devantler-tech/ksail \
-    "${resolver_under_test:-${resolver}}" --tag v7.175.1 --assets-dir "${assets_dir}" --extra-assets-glob "${glob}" 2>&1)"
-  status=$?
-  set -e
+	: >"${github_output}"
+	set +e
+	output="$(PATH="${fake_bin}:${PATH}" FAKE_GH_SCENARIO="${scenario}" FAKE_GH_CHECKSUMS="${checksums}" \
+		GITHUB_OUTPUT="${github_output}" GH_REPO=devantler-tech/ksail \
+		"${resolver_under_test:-${resolver}}" --tag v7.175.1 --assets-dir "${assets_dir}" --extra-assets-glob "${glob}" 2>&1)"
+	status=$?
+	set -e
 
-  if [[ "${status}" -ne "${expected_status}" ]]; then
-    printf 'FAIL: %s: expected status %s, got %s\n%s\n' "${name}" "${expected_status}" "${status}" "${output}" >&2
-    exit 1
-  fi
-  if [[ "${output}" != *"${expected_output}"* ]]; then
-    printf 'FAIL: %s: expected output containing %q, got:\n%s\n' "${name}" "${expected_output}" "${output}" >&2
-    exit 1
-  fi
-  if [[ "${expected_status}" -eq 0 ]] && ! grep -Fxq -- "${expected_output}" "${github_output}"; then
-    printf 'FAIL: %s: GITHUB_OUTPUT does not carry %s\n' "${name}" "${expected_output}" >&2
-    exit 1
-  fi
-  if [[ "${expected_status}" -ne 0 && -s "${github_output}" ]]; then
-    printf 'FAIL: %s: a blocked resolution must not write a state output\n' "${name}" >&2
-    exit 1
-  fi
+	if [[ "${status}" -ne "${expected_status}" ]]; then
+		printf 'FAIL: %s: expected status %s, got %s\n%s\n' "${name}" "${expected_status}" "${status}" "${output}" >&2
+		exit 1
+	fi
+	if [[ "${output}" != *"${expected_output}"* ]]; then
+		printf 'FAIL: %s: expected output containing %q, got:\n%s\n' "${name}" "${expected_output}" "${output}" >&2
+		exit 1
+	fi
+	if [[ "${expected_status}" -eq 0 ]] && ! grep -Fxq -- "${expected_output}" "${github_output}"; then
+		printf 'FAIL: %s: GITHUB_OUTPUT does not carry %s\n' "${name}" "${expected_output}" >&2
+		exit 1
+	fi
+	if [[ "${expected_status}" -ne 0 && -s "${github_output}" ]]; then
+		printf 'FAIL: %s: a blocked resolution must not write a state output\n' "${name}" >&2
+		exit 1
+	fi
 
-  pass_count=$((pass_count + 1))
-  printf 'PASS: %s\n' "${name}"
+	pass_count=$((pass_count + 1))
+	printf 'PASS: %s\n' "${name}"
 }
 
 run_case draft-release draft 0 'state=draft'
@@ -192,8 +192,8 @@ mutant="${tmp_dir}/resolve-release-publish-state.mutant.sh"
 if ! awk 'index($0, ".[0].draft") && index($0, "== \"true\"") { print "if true; then"; mutated++; next }
 	{ print }
 	END { exit mutated == 1 ? 0 : 1 }' "${resolver}" >"${mutant}"; then
-  printf 'FAIL: the published-state guard was not found exactly once in the resolver\n' >&2
-  exit 1
+	printf 'FAIL: the published-state guard was not found exactly once in the resolver\n' >&2
+	exit 1
 fi
 chmod +x "${mutant}"
 resolver_under_test="${mutant}" run_case published-guard-removed-republishes published 0 'state=draft'
@@ -202,15 +202,15 @@ resolver_under_test="${mutant}" run_case published-guard-removed-republishes pub
 # the upload is what failed on a rerun against the already-published v7.175.1.
 publish_block="${tmp_dir}/publish-release.yaml"
 awk '/^  publish-release:/ { inside = 1; print; next } inside && /^  [a-z]/ { exit } inside { print }' \
-  "${cd_workflow}" >"${publish_block}"
+	"${cd_workflow}" >"${publish_block}"
 [[ -s "${publish_block}" ]] || {
-  printf 'FAIL: publish-release job not found in cd.yaml\n' >&2
-  exit 1
+	printf 'FAIL: publish-release job not found in cd.yaml\n' >&2
+	exit 1
 }
 # line_of prints the first line number of the given text in the publish-release job, or nothing when
 # the text is absent, so the ordering checks below report a missing step instead of passing.
 line_of() {
-  grep -nF -- "$1" "${publish_block}" | head -n 1 | cut -d: -f1 || true
+	grep -nF -- "$1" "${publish_block}" | head -n 1 | cut -d: -f1 || true
 }
 checkout_line="$(line_of 'uses: actions/checkout@')"
 download_line="$(line_of 'name: 📥 Download release asset artifacts')"
@@ -219,24 +219,24 @@ attach_line="$(line_of 'name: 📤 Attach assets to draft release')"
 publish_line="$(line_of 'name: 📢 Publish draft release')"
 # A checkout into a fresh workspace clears it, so it must run before the assets are downloaded.
 if [[ -z "${checkout_line}" || -z "${download_line}" || -z "${resolve_line}" ]] ||
-  ((checkout_line >= download_line || download_line >= resolve_line)); then
-  printf 'FAIL: publish-release must check out before downloading the release assets it resolves\n' >&2
-  exit 1
+	((checkout_line >= download_line || download_line >= resolve_line)); then
+	printf 'FAIL: publish-release must check out before downloading the release assets it resolves\n' >&2
+	exit 1
 fi
 if [[ -z "${attach_line}" || -z "${publish_line}" ]] ||
-  ((resolve_line >= attach_line || attach_line >= publish_line)); then
-  printf 'FAIL: publish-release must resolve the release state before attaching and publishing\n' >&2
-  exit 1
+	((resolve_line >= attach_line || attach_line >= publish_line)); then
+	printf 'FAIL: publish-release must resolve the release state before attaching and publishing\n' >&2
+	exit 1
 fi
 gated="$(grep -cF -- "if: (steps.release_state.outputs.state == 'draft') && needs.goreleaser.outputs.release-mode == 'build'" "${publish_block}" || true)"
 if [[ "${gated}" -ne 2 ]]; then
-  printf 'FAIL: attach and publish must require a draft release and normal build admission (found %s gates)\n' "${gated}" >&2
-  exit 1
+	printf 'FAIL: attach and publish must require a draft release and normal build admission (found %s gates)\n' "${gated}" >&2
+	exit 1
 fi
 # GoReleaser attaches the Cluster CRD itself, so the resolver must be told to require it.
 if ! grep -qF -- "--extra-assets-glob 'charts/ksail-operator/crds/*.yaml'" "${publish_block}"; then
-  printf 'FAIL: publish-release must require the attached Cluster CRD when accepting a published release\n' >&2
-  exit 1
+	printf 'FAIL: publish-release must require the attached Cluster CRD when accepting a published release\n' >&2
+	exit 1
 fi
 pass_count=$((pass_count + 1))
 printf 'PASS: workflow-gates-release-mutations\n'
@@ -246,8 +246,8 @@ printf 'PASS: workflow-gates-release-mutations\n'
 single_page="$(grep -cF -- 'await github.rest.repos.listReleases(' "${cd_workflow}" || true)"
 paginated="$(grep -cF -- 'await github.paginate(github.rest.repos.listReleases,' "${cd_workflow}" || true)"
 if [[ "${single_page}" -ne 0 || "${paginated}" -lt 2 ]]; then
-  printf 'FAIL: cd.yaml release lookups must read every page (single-page=%s paginated=%s)\n' "${single_page}" "${paginated}" >&2
-  exit 1
+	printf 'FAIL: cd.yaml release lookups must read every page (single-page=%s paginated=%s)\n' "${single_page}" "${paginated}" >&2
+	exit 1
 fi
 pass_count=$((pass_count + 1))
 printf 'PASS: workflow-release-lookups-paginate\n'
@@ -310,8 +310,8 @@ pass_count=$((pass_count + 1))
 ci_workflow="${repo_root}/.github/workflows/ci.yaml"
 executed="$(grep -cxE '[[:space:]]*\.github/scripts/resolve-release-publish-state\.test\.sh' "${ci_workflow}" || true)"
 if [[ "${executed}" -lt 1 ]]; then
-  printf 'FAIL: ci.yaml must execute .github/scripts/resolve-release-publish-state.test.sh\n' >&2
-  exit 1
+	printf 'FAIL: ci.yaml must execute .github/scripts/resolve-release-publish-state.test.sh\n' >&2
+	exit 1
 fi
 pass_count=$((pass_count + 1))
 printf 'PASS: ci-executes-release-publish-state-suite\n'
