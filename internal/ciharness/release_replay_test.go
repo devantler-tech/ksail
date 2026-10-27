@@ -443,7 +443,17 @@ func TestReleaseReplayJobsRequireFreshAdmission(t *testing.T) {
 	t.Parallel()
 
 	jobs := readReleaseJobs(t)
-	for name, dependency := range releaseReplayDependencies() {
+	dependencies := releaseReplayDependencies()
+
+	for name := range jobs {
+		if name == "validate-release-ref" {
+			continue
+		}
+
+		require.Containsf(t, dependencies, name, "CD job %s has no admission coverage", name)
+	}
+
+	for name, dependency := range dependencies {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 

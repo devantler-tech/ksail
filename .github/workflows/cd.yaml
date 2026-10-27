@@ -677,15 +677,9 @@ jobs:
       ]
     timeout-minutes: 10
     permissions:
-      contents: read # Checkout the local admission guard.
       pages: write # Publish the verified documentation artifact.
       id-token: write # Authenticate the Pages deployment through OIDC.
     steps:
-      - name: 📄 Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
       - name: 🔒 Verify release admission
         uses: devantler-tech/ksail/.github/actions/release-admission@ac2dd2ee401030b2fac81dc985b42fae45b0788b
         with:
@@ -1246,11 +1240,6 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: 📄 Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
       - name: 🔒 Verify release admission
         uses: devantler-tech/ksail/.github/actions/release-admission@ac2dd2ee401030b2fac81dc985b42fae45b0788b
         with:
