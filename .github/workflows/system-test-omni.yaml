@@ -107,7 +107,6 @@ jobs:
         uses: ./.github/actions/cache-ksail-binary
         with:
           go-version: ${{ steps.setup-go.outputs.go-version }}
-          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
 
   warm-helm-cache:
@@ -137,7 +136,6 @@ jobs:
         uses: ./.github/actions/cache-ksail-binary
         with:
           go-version: ${{ steps.setup-go.outputs.go-version }}
-          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
           save: "false"
 
@@ -184,7 +182,6 @@ jobs:
         uses: ./.github/actions/cache-ksail-binary
         with:
           go-version: ${{ steps.setup-go.outputs.go-version }}
-          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
           save: "false"
 
@@ -259,7 +256,6 @@ jobs:
         uses: ./.github/actions/cache-ksail-binary
         with:
           go-version: ${{ steps.setup-go.outputs.go-version }}
-          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
           save: "false"
 
