@@ -55,9 +55,27 @@ head="" base="" draft="" node="" boundary="" merge_state=""
 # Report a refusal without converting missing or invalid evidence into delivery success.
 blocked() { printf 'BLOCKED: %s\n' "$1" >&2; }
 
+# Public evidence reads use the workflow's independently scoped allowance.
+read_api() { GH_TOKEN="${KSAIL_CASK_READ_TOKEN:-${GH_TOKEN:-}}" gh api "$@"; }
+# The production caller binds all write waits to one shared, finite window.
+wait_write_budget() {
+	if [[ -n "${KSAIL_GITHUB_WRITE_BUDGET_DEADLINE:-}" ]]; then
+		local readiness_status=0
+		screen || readiness_status=$?
+		case "${readiness_status}" in
+		0 | 3) ;; # Ready or still pending; terminal failures must not wait for quota.
+		*) return 1 ;;
+		esac
+		"${script_dir}/wait-for-github-api-budget.sh" || return 1
+	fi
+	# Reuse this phase's existing retry budget after quota recovery. A rerun
+	# becoming pending must not fail immediately or add a second wait phase.
+	wait_screen
+}
+
 # Require the requested source tag to identify a published, non-draft release.
 published_release() {
-	if ! gh api "repos/${source_repo}/releases/tags/${tag}" >"${work}/release.json"; then
+	if ! read_api "repos/${source_repo}/releases/tags/${tag}" >"${work}/release.json"; then
 		blocked 'release read failed; publication is unknown'
 		return 1
 	fi
@@ -76,7 +94,7 @@ published_release() {
 # These identities/messages mirror the canonical monorepo programmed-bot exemption's cask arm.
 # Admit only the programmed cask updater's expected author and commit sequence.
 provenance() {
-	if ! gh api --paginate --slurp "repos/${tap}/pulls/${pr}/commits?per_page=100" >"${work}/commits.json"; then
+	if ! read_api --paginate --slurp "repos/${tap}/pulls/${pr}/commits?per_page=100" >"${work}/commits.json"; then
 		blocked 'commit provenance read failed'
 		return 1
 	fi
@@ -106,7 +124,7 @@ provenance() {
 
 # Verify the captured PR identity and metadata still describe the same head and base.
 rebind_rest() {
-	if ! gh api "repos/${tap}/pulls/${pr}" >"${work}/rebound-pr.json"; then
+	if ! read_api "repos/${tap}/pulls/${pr}" >"${work}/rebound-pr.json"; then
 		blocked 'PR rebind read failed'
 		return 1
 	fi
@@ -159,7 +177,7 @@ graphql() {
 			gql_args+=(-f "cursor=${cursor}")
 		fi
 	fi
-	if ! gh api graphql "${gql_args[@]}" >"${work}/graphql.json"; then
+	if ! read_api graphql "${gql_args[@]}" >"${work}/graphql.json"; then
 		blocked 'GraphQL read failed; readiness is unknown'
 		return 1
 	fi
@@ -386,6 +404,13 @@ wait_screen() {
 	while ((remaining > 0)); do
 		code=0
 		screen || code=$?
+		if [[ "${code}" -eq 0 && -n "${KSAIL_GITHUB_WRITE_BUDGET_DEADLINE:-}" ]]; then
+			# Pending checks can outlive the earlier quota observation. Recheck
+			# capacity when they settle, then refresh readiness after any quota
+			# wait without granting this phase another retry budget.
+			"${script_dir}/wait-for-github-api-budget.sh" || return 1
+			screen || code=$?
+		fi
 		case "${code}" in
 		0) return 0 ;;
 		3)
@@ -400,7 +425,7 @@ wait_screen() {
 }
 
 capture
-wait_screen
+wait_write_budget
 capture
 read_state
 if [[ "${draft}" == true ]]; then
@@ -418,7 +443,7 @@ if [[ "${draft}" == true ]]; then
 	fi
 	draft=false
 fi
-wait_screen
+wait_write_budget
 capture
 if ! screen || ! read_state || [[ "${merge_state}" != CLEAN ]] || ! rebind_rest || ! published_release; then exit 1; fi
 
@@ -474,6 +499,7 @@ merge_result() {
 				return 1
 			fi
 			if ((polls > 0)); then sleep "${interval}"; fi
+			# GitHub requires Contents:write for this result read as well as the request.
 			if ! gh api "${endpoint}/${merge_uuid}" \
 				-H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2026-03-10' \
 				>"${work}/merge.json"; then
@@ -490,7 +516,7 @@ merge_result() {
 	done
 }
 merge_result
-if ! gh api "repos/${tap}/pulls/${pr}" >"${work}/merged-pr.json" ||
+if ! read_api "repos/${tap}/pulls/${pr}" >"${work}/merged-pr.json" ||
 	! jq -e --arg head "${head}" --arg sha "${merge_sha}" '
 	 .state == "closed" and .merged == true and .draft == false
 	 and .head.sha == $head and .merge_commit_sha == $sha

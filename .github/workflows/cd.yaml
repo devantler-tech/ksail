@@ -907,6 +907,10 @@ jobs:
       - name: Provide the request timeout utility
         run: brew install coreutils
 
+      - name: Bind the shared write-budget wait window
+        shell: bash
+        run: printf 'KSAIL_GITHUB_WRITE_BUDGET_DEADLINE=%s\n' "$(( $(date +%s) + 3700 ))" >> "$GITHUB_ENV"
+
       # This job polls the tap for several minutes; starting it on an exhausted budget fails the
       # delivery after the release is already published (devantler-tech/monorepo#4055).
       - name: ⏳ Wait for the tap token's request budget
@@ -917,10 +921,14 @@ jobs:
       - name: 🍺 Style-clean and deliver cask PRs
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
+          KSAIL_CASK_READ_TOKEN: ${{ github.token }}
           TAP: devantler-tech/homebrew-tap
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
+
+          # Evidence reads have a separate repository allowance; only writes use the tap token.
+          read_api() { GH_TOKEN="$KSAIL_CASK_READ_TOKEN" gh api "$@"; }
 
           collect_handoff_evidence() {
             .github/scripts/collect-cask-pr-handoff.sh \
@@ -1013,7 +1021,7 @@ jobs:
             # same-name fork branches fill a client-side page before any jq filter runs); the owner
             # qualifier still admits a same-owner sibling repo's branch, so keep the full_name +
             # author checks.
-            matches="$(gh api \
+            matches="$(read_api \
               "repos/$TAP/pulls?state=open&head=${TAP%%/*}:${branch}&per_page=100" 2>/dev/null \
               | jq -ec --arg full "$TAP" \
                   '[.[] | select(.head.repo.full_name == $full and .user.login == "devantler")]' \
@@ -1050,7 +1058,7 @@ jobs:
             # variable (an external command inside `if` is exempt from `set -e`, so a crash there would
             # read as "not handed off" and re-drive it); a non-draft PR with a DIFFERENT title is NOT
             # ours — it falls through to the draft-requiring validation, preserving race detection.
-            pr_state="$(gh api "repos/${TAP}/pulls/${pr}" --jq '[(.draft|tostring), .title] | @tsv' 2>/dev/null || true)"
+            pr_state="$(read_api "repos/${TAP}/pulls/${pr}" --jq '[(.draft|tostring), .title] | @tsv' 2>/dev/null || true)"
             pr_is_draft="${pr_state%%$'\t'*}"
             pr_title="${pr_state#*$'\t'}"
             evidence="${evidence_dir}/${pr}.json"
@@ -1135,6 +1143,13 @@ jobs:
 
             # Recollect after the possible style push. A concurrent promotion, cross-repository head,
             # or extra changed file stops all further mutation and leaves the PR to the maintainer.
+            # A later write must not inherit the budget observation from job start.
+            # This wait shares the original finite window; re-collect proof afterwards.
+            if ! .github/scripts/wait-for-github-api-budget.sh; then
+              reconcile_merged_handoff "$name" \
+                "Write budget cannot recover within the shared window" "$pr"
+              continue
+            fi
             if ! validation="$(validate_handoff "$pr" "$name" "$evidence" 2>&1)"; then
               validation="${validation//$'\n'/; }"
               echo "::warning::Post-style validation failed for ${TAP}#${pr}: ${validation}"
