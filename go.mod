@@ -68,7 +68,7 @@ require (
 	github.com/kyverno/api v0.0.1-alpha.3.0.20260723090831-fb2785727f98
 	github.com/kyverno/kyverno v1.19.2
 	github.com/loft-sh/log v0.0.0-20261016082928-2e30e984f250
-	github.com/loft-sh/vcluster v0.37.3
+	github.com/loft-sh/vcluster v0.37.4
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/opencontainers/image-spec v1.1.1
