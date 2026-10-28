@@ -181,7 +181,9 @@ case "${line}" in
 	 ]}}}}]}}}}}' |
 	 jq --arg scenario "${scenario}" --arg cursor "${cursor}" --argjson n "${n}" --argjson now "${now:-1000}" --argjson ready "${promoted}" '
 	 .data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts |=
-	 (if $scenario == "write-budget-checks-failed" and $now >= 1105 then .nodes[0].conclusion="FAILURE"
+	 (if $scenario == "write-budget-checks-terminal" or ($scenario == "write-budget-checks-failed" and $now >= 1105) then .nodes[0].conclusion="FAILURE"
+	 elif ($scenario == "write-budget-checks-pending" or $scenario == "write-budget-checks-stuck") and $now >= 1105 and ($ready|not) and ($scenario == "write-budget-checks-stuck" or $n == 2) then
+	   .nodes[0].status="IN_PROGRESS" | .nodes[0].conclusion=null
 	 elif $scenario == "no-required" or $scenario == "failed-before-required" or
 	     (($scenario == "first-required-then-pass" or $scenario == "head-moved-waiting-for-required") and ($ready|not) and $n == 1) then
 	   .nodes |= map(.isRequired=false) |
@@ -310,7 +312,7 @@ run_case() {
 	fi
 	[[ "$scenario" != write-budget-recovered ]] || write_deadline=1250
 	[[ "$scenario" != write-budget-expired ]] || write_deadline=1050
-	[[ "$scenario" != write-budget-checks-failed ]] || write_deadline=1250
+	[[ "$scenario" != write-budget-checks-* ]] || write_deadline=1250
 	GH_TOKEN="${write_token}" KSAIL_CASK_READ_TOKEN="${read_token}" KSAIL_GITHUB_WRITE_BUDGET_DEADLINE="${write_deadline}" PATH="${work}/bin:${PATH}" FINISH_FIXTURE="${fixture}" FINISH_STATE="${state}" FINISH_SCENARIO="${scenario}" \
 		bash "${script_dir}/finish-cask-pr-handoff.sh" \
 		--tap devantler-tech/homebrew-tap --pr 42 --cask-name ksail --source-repo devantler-tech/ksail \
@@ -330,6 +332,12 @@ run_case() {
 	if [[ "${success}" == true ]]; then
 		grep -q '1111111111111111111111111111111111111111' "${state}/output" || fail "${scenario}: verified head missing from delivery result"
 		[[ -f "${state}/merged" ]] || fail "${scenario}: readiness incorrectly counted as delivered"
+	fi
+	if [[ "${scenario}" == write-budget-checks-terminal ]]; then
+		[[ ! -f "${state}/clock" ]] || fail "terminal readiness waited for the request budget"
+	fi
+	if [[ "${scenario}" == write-budget-checks-stuck ]]; then
+		[[ "$(cat "${state}/checks-false")" -eq 3 ]] || fail "pending readiness exceeded its two-attempt retry bound"
 	fi
 	if [[ "${scenario}" == async-timeout || "${scenario}" == async-pending-success ]]; then
 		[[ "$(<"${state}/async-polls")" -eq 2 ]] || fail "${scenario}: result polling did not honor its independent bound"
@@ -373,6 +381,9 @@ run_case isolated-read-budget true 1 1
 run_case write-budget-recovered true 1 1
 run_case write-budget-expired false 0 0
 run_case write-budget-checks-failed false 0 0
+run_case write-budget-checks-terminal false 0 0
+run_case write-budget-checks-pending true 1 1
+run_case write-budget-checks-stuck false 0 0
 run_case both-phases-then-pass true 1 1
 run_case first-required-then-pass true 1 1
 run_case first-checks-then-pass true 1 1

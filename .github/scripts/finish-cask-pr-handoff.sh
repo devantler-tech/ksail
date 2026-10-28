@@ -60,11 +60,17 @@ read_api() { GH_TOKEN="${KSAIL_CASK_READ_TOKEN:-${GH_TOKEN:-}}" gh api "$@"; }
 # The production caller binds all write waits to one shared, finite window.
 wait_write_budget() {
 	if [[ -n "${KSAIL_GITHUB_WRITE_BUDGET_DEADLINE:-}" ]]; then
+		local readiness_status=0
+		screen || readiness_status=$?
+		case "${readiness_status}" in
+		0 | 3) ;; # Ready or still pending; terminal failures must not wait for quota.
+		*) return 1 ;;
+		esac
 		"${script_dir}/wait-for-github-api-budget.sh" || return 1
-		# A quota wait can outlive a CI rerun: refresh every readiness surface
-		# before the following immutable recapture and protected write.
-		screen || return 1
 	fi
+	# Reuse this phase's existing retry budget after quota recovery. A rerun
+	# becoming pending must not fail immediately or add a second wait phase.
+	wait_screen
 }
 
 # Require the requested source tag to identify a published, non-draft release.
@@ -412,7 +418,6 @@ wait_screen() {
 }
 
 capture
-wait_screen
 wait_write_budget
 capture
 read_state
@@ -431,7 +436,6 @@ if [[ "${draft}" == true ]]; then
 	fi
 	draft=false
 fi
-wait_screen
 wait_write_budget
 capture
 if ! screen || ! read_state || [[ "${merge_state}" != CLEAN ]] || ! rebind_rest || ! published_release; then exit 1; fi
