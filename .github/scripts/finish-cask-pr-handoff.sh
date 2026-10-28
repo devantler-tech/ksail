@@ -404,6 +404,13 @@ wait_screen() {
 	while ((remaining > 0)); do
 		code=0
 		screen || code=$?
+		if [[ "${code}" -eq 0 && -n "${KSAIL_GITHUB_WRITE_BUDGET_DEADLINE:-}" ]]; then
+			# Pending checks can outlive the earlier quota observation. Recheck
+			# capacity when they settle, then refresh readiness after any quota
+			# wait without granting this phase another retry budget.
+			"${script_dir}/wait-for-github-api-budget.sh" || return 1
+			screen || code=$?
+		fi
 		case "${code}" in
 		0) return 0 ;;
 		3)

@@ -57,14 +57,16 @@ if [[ "$scenario" == write-budget-* ]]; then
     resource=core
     [[ "$line" != 'api --include graphql '* ]] || resource=graphql
     remaining=4900
+    reset=1100
     [[ "$resource" != core || "$now" -ge 1105 ]] || remaining=0
-    printf 'HTTP/2.0 200 OK\r\nX-Ratelimit-Resource: %s\r\nX-Ratelimit-Remaining: %s\r\nX-Ratelimit-Reset: 1100\r\n\r\n' "$resource" "$remaining"
+    if [[ "$scenario" == write-budget-checks-postpromotion-depleted && -f "$state/depleted" && "$resource" == core && "$now" -lt 1205 ]]; then remaining=0; reset=1200; fi
+    printf 'HTTP/2.0 200 OK\r\nX-Ratelimit-Resource: %s\r\nX-Ratelimit-Remaining: %s\r\nX-Ratelimit-Reset: %s\r\n\r\n' "$resource" "$remaining" "$reset"
     if [[ "$resource" == core ]]; then
-      printf '{"resources":{"core":{"remaining":%s,"reset":1100}}}\n' "$remaining"
+      printf '{"resources":{"core":{"remaining":%s,"reset":%s}}}\n' "$remaining" "$reset"
     else printf '{"data":{"rateLimit":{"remaining":4900,"resetAt":"2030-01-01T00:00:00Z"}}}\n'; fi
     exit 0
   fi
-  if [[ ("$line" == *'mutation CaskPromote'* || "$line" == *'api -X PUT '*) && "$now" -lt 1105 ]]; then
+  if [[ ("$line" == *'mutation CaskPromote'* || "$line" == *'api -X PUT '*) && ("$now" -lt 1105 || ("$scenario" == write-budget-checks-postpromotion-depleted && -f "$state/depleted" && "$now" -lt 1205)) ]]; then
     echo 'gh: API rate limit exceeded for personal write identity' >&2
     exit 1
   fi
@@ -169,6 +171,9 @@ case "${line}" in
 *'query CaskChecks'*)
 	[[ "${scenario}" != checks-read-error ]] || exit 1
 	n="$(count "checks-${promoted}")"
+	if [[ "$scenario" == write-budget-checks-postpromotion-depleted && "$promoted" == true && "$n" -eq 2 ]]; then
+		touch "$state/depleted"
+	fi
 	jq -n --arg head "${head}" --arg base "${base}" --argjson ready "${promoted}" '
 	 def check($name;$required;$result;$time):
 	 {__typename:"CheckRun",name:$name,isRequired:$required,status:"COMPLETED",conclusion:$result,startedAt:$time,
@@ -182,6 +187,8 @@ case "${line}" in
 	 jq --arg scenario "${scenario}" --arg cursor "${cursor}" --argjson n "${n}" --argjson now "${now:-1000}" --argjson ready "${promoted}" '
 	 .data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts |=
 	 (if $scenario == "write-budget-checks-terminal" or ($scenario == "write-budget-checks-failed" and $now >= 1105) then .nodes[0].conclusion="FAILURE"
+	 elif $scenario == "write-budget-checks-postpromotion-depleted" and $ready and $n == 2 then
+	   .nodes[1].status="IN_PROGRESS" | .nodes[1].conclusion=null
 	 elif ($scenario == "write-budget-checks-pending" or $scenario == "write-budget-checks-stuck") and $now >= 1105 and ($ready|not) and ($scenario == "write-budget-checks-stuck" or $n == 2) then
 	   .nodes[0].status="IN_PROGRESS" | .nodes[0].conclusion=null
 	 elif $scenario == "no-required" or $scenario == "failed-before-required" or
@@ -383,6 +390,7 @@ run_case write-budget-expired false 0 0
 run_case write-budget-checks-failed false 0 0
 run_case write-budget-checks-terminal false 0 0
 run_case write-budget-checks-pending true 1 1
+run_case write-budget-checks-postpromotion-depleted true 1 1
 run_case write-budget-checks-stuck false 0 0
 run_case both-phases-then-pass true 1 1
 run_case first-required-then-pass true 1 1
