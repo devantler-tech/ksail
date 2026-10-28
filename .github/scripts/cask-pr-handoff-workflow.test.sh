@@ -255,8 +255,8 @@ assert_not_contains 'handoff_failed=1' "${selected_open_block}" \
 	'no failure after selecting an open PR may bypass merged-current-main reconciliation'
 reconciliation_calls="$(grep -Fc -- 'reconcile_merged_handoff "$name"' \
 	"${selected_open_block}" || true)"
-if [[ "${reconciliation_calls}" -ne 10 ]]; then
-	fail "every selected-open failure must reconcile an auto-merge race; expected 10 call sites, found ${reconciliation_calls}"
+if [[ "${reconciliation_calls}" -ne 11 ]]; then
+	fail "every selected-open failure must reconcile an auto-merge race; expected 11 call sites, found ${reconciliation_calls}"
 fi
 for context in \
 	'failed ready-PR revalidation' \

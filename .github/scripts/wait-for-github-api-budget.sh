@@ -30,6 +30,10 @@ improves availability; the step after it still fails closed on its own
 errors, so a broken budget read must not stop a release by itself. A known secondary
 restriction is held until a complete budget read confirms recovery.
 
+KSAIL_GITHUB_WRITE_BUDGET_DEADLINE optionally binds repeated write waits to one
+absolute epoch deadline. It can shorten, never extend, --max-wait. An expired
+window still permits a currently available budget without sleeping.
+
 Defaults: --min-core 300, --min-graphql 50, --max-wait 3700 (GitHub's window
 is one hour, so a full wait always reaches the reset).
 EOF
@@ -64,6 +68,12 @@ while [[ $# -gt 0 ]]; do
 		;;
 	esac
 done
+
+write_deadline="${KSAIL_GITHUB_WRITE_BUDGET_DEADLINE:-}"
+if [[ -n "$write_deadline" && ! "$write_deadline" =~ ^[1-9][0-9]{0,9}$ ]]; then
+	printf 'ERROR: invalid write-budget deadline\n' >&2
+	exit 2
+fi
 
 api_timeout=timeout
 if ! command -v "${api_timeout}" >/dev/null 2>&1; then
@@ -166,6 +176,11 @@ read_budget() {
 
 started="$(date +%s)"
 deadline=$((started + max_wait))
+if [[ -n "$write_deadline" ]] && ((write_deadline < deadline)); then
+	deadline="$write_deadline"
+	((deadline >= started)) || deadline="$started"
+	max_wait=$((deadline - started))
+fi
 unreadable=0
 secondary_attempts=0
 secondary_backoff=0

@@ -2,6 +2,9 @@
 
 set -euo pipefail
 
+# These commands only collect evidence; keep their allowance independent of writes.
+export GH_TOKEN="${KSAIL_CASK_READ_TOKEN:-${GH_TOKEN:-}}"
+
 # Describe the required release identity and optional known-PR reconciliation lead.
 usage() {
 	cat <<'EOF'
