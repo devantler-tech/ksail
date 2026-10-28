@@ -160,7 +160,7 @@ func TestCalicoBaselineSetupPinsReviewedAction(t *testing.T) {
 	step := findHarnessStep(t, workflow.Jobs["build-calico-baseline"].Steps, "🧹 Free disk space")
 	assert.Equal(
 		t,
-		"devantler-tech/ksail/.github/actions/free-disk-space@828038bd40591ad94391554e4b41a529c8e917f4",
+		"devantler-tech/ksail/.github/actions/free-disk-space@6c48c4c282c27545d059733b011d98f0b49585ff",
 		step.Uses,
 	)
 
