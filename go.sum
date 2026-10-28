@@ -229,8 +229,6 @@ github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/cloudmock v0
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/cloudmock v0.58.0/go.mod h1:dzcEjy1WJ0Q4u9twNR3LcLhNoYMRCrMCMafpxa0TjPQ=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.58.0 h1:SBZzZCiPmDrUV7NSCWY54OnKikO/oTydPCvyEyYaDDE=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.58.0/go.mod h1:YqwkQPrWSC7+byyc1VlKbWLBF5JsW5IoL6xUkemYSXk=
-github.com/IGLOU-EU/go-wildcard v1.0.3 h1:r8T46+8/9V1STciXJomTWRpPEv4nGJATDbJkdU0Nou0=
-github.com/IGLOU-EU/go-wildcard v1.0.3/go.mod h1:/qeV4QLmydCbwH0UMQJmXDryrFKJknWi/jjO8IiuQfY=
 github.com/Intevation/gval v1.3.0 h1:+Ze5sft5MmGbZrHj06NVUbcxCb67l9RaPTLMNr37mjw=
 github.com/Intevation/gval v1.3.0/go.mod h1:xmGyGpP5be12EL0P12h+dqiYG8qn2j3PJxIgkoOHO5o=
 github.com/Intevation/jsonpath v0.2.1 h1:rINNQJ0Pts5XTFEG+zamtdL7l9uuE1z0FBA+r55Sw+A=
@@ -1685,12 +1683,12 @@ github.com/kyverno/api v0.0.1-alpha.3.0.20260723090831-fb2785727f98 h1:wGbyqQNc5
 github.com/kyverno/api v0.0.1-alpha.3.0.20260723090831-fb2785727f98/go.mod h1:fldpQuQfCtqRNffZAS6pvS8gdizji0Y/rFCnoQ+Bay4=
 github.com/kyverno/go-jmespath/internal/testify v1.5.2-0.20230630133209-945021c749d9 h1:lL311dF3a2aeNibJj8v+uhFU3XkvRHZmCtAdSPOrQYY=
 github.com/kyverno/go-jmespath/internal/testify v1.5.2-0.20230630133209-945021c749d9/go.mod h1:XRxUGHIiCy1WYma1CdfdO1WOhIe8dLPTENaZr5D1ex4=
-github.com/kyverno/kyverno v1.19.1 h1:/MkgFii3/VlQfKR1JpC9tVwNNVNQTt2S4U6qCsafsTU=
-github.com/kyverno/kyverno v1.19.1/go.mod h1:j4oc847WUsfY16WBCgjYuVL/syUP8YTOZoR3AabOQ2E=
+github.com/kyverno/kyverno v1.19.2 h1:U530Y14Nvqsdije864ofWiKUI96dhPuxjBtFqUg0yEs=
+github.com/kyverno/kyverno v1.19.2/go.mod h1:xheyG+W5zAvasOu8P1joSxtCt/saJY8hQ6S4SugDQLM=
 github.com/kyverno/pod-security-admission v0.0.0-20251031094455-46f20778634f h1:9u+4QYMLdZPC8qeUB1TnfiUYRrFGYHxjYQsPiHKgJjI=
 github.com/kyverno/pod-security-admission v0.0.0-20251031094455-46f20778634f/go.mod h1:2oJ/wAoh8hld09eMTT1KzlN3dHjKEQn1xJdu1WAZMa0=
-github.com/kyverno/sdk v0.0.0-20260825082632-68d74afcb07a h1:Oh5sST+MT/r4FcTGdTKQhr1kuB4IzoO8wxA8vAP4GTE=
-github.com/kyverno/sdk v0.0.0-20260825082632-68d74afcb07a/go.mod h1:LBPB/TdWmJ8VWZvRbc27SVHMutYX/lJIZnlFMm2xWes=
+github.com/kyverno/sdk v0.0.0-20261008171927-5a61cbc9e077 h1:XvVLhi6JhY5xaDCharBepFHTXnHs+NGYbOKwM3oe12k=
+github.com/kyverno/sdk v0.0.0-20261008171927-5a61cbc9e077/go.mod h1:4YUdsQjxroCGInE5dvnlaPcZ0nV+5MQruyO+7PeTruI=
 github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 h1:SOEGU9fKiNWd/HOJuq6+3iTQz8KNCLtVX6idSoTLdUw=
 github.com/lann/builder v0.0.0-20180802200727-47ae307949d0/go.mod h1:dXGbAdH5GtBTC4WfIxhKZfyBF/HBFgRZSWwZ9g/He9o=
 github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 h1:P6pPBnrTSX3DEVR4fDembhRWSsG5rVo6hYhAB/ADZrk=
