@@ -164,6 +164,7 @@ jobs:
       hetzner-cleanup-script: ${{ steps.filter.outputs.hetzner-cleanup-script }}
       gitops-assert-scripts: ${{ steps.filter.outputs.gitops-assert-scripts }}
       kubeconform-cancellation: ${{ steps.filter.outputs.kubeconform-cancellation }}
+      native-home-paths: ${{ steps.filter.outputs.native-home-paths }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -175,6 +176,11 @@ jobs:
         id: filter
         with:
           filters: |
+            native-home-paths:
+              - 'pkg/fsutil/**'
+              - 'go.mod'
+              - 'go.sum'
+              - '.github/workflows/ci.yaml'
             kubeconform-cancellation:
               - 'pkg/client/kubeconform/**'
               - '.github/workflows/ci.yaml'
@@ -472,6 +478,31 @@ jobs:
               - '.github/actions/ksail-test-workload/**'
               - '.github/actions/ksail-system-test/helm-values-precedence.sh'
               - '.github/workflows/ci.yaml'
+
+  native-home-paths:
+    name: 🪟 Validate Native Home Paths
+    runs-on: windows-latest
+    timeout-minutes: 5
+    needs: [changes]
+    if: needs.changes.outputs.native-home-paths == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # This black-box test file imports the actual filesystem API without
+      # loading unrelated test fixtures into the native Windows check.
+      - name: 🔎 Verify native home prefixes and literal paths
+        run: go test ./pkg/fsutil/path_test.go -count=1
 
   eks-smoke-scripts:
     name: 🧹 Validate EKS Smoke Teardown
@@ -2700,6 +2731,7 @@ jobs:
         test-cask-rendering,
         release-graph-audit,
         cask-pr-handoff,
+        native-home-paths,
         eks-smoke-scripts,
         k3k-sentinel-scripts,
         rate-limit-gate-script,
@@ -2743,6 +2775,7 @@ jobs:
             ${{ needs.test-cask-rendering.result }}
             ${{ needs.release-graph-audit.result }}
             ${{ needs.cask-pr-handoff.result }}
+            ${{ needs.native-home-paths.result }}
             ${{ needs.eks-smoke-scripts.result }}
             ${{ needs.k3k-sentinel-scripts.result }}
             ${{ needs.rate-limit-gate-script.result }}

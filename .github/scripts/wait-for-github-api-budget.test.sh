@@ -177,6 +177,18 @@ run_case() {
 	fi
 }
 
+# One job-wide deadline bounds all later write waits, including a late reset.
+KSAIL_GITHUB_WRITE_BUDGET_DEADLINE=1050 run_case scoped-window-refuses-late-reset 1 "" "does not return within 50 s" \
+	"0 1600 4900 1600" "5000 5200 4900 5200"
+KSAIL_GITHUB_WRITE_BUDGET_DEADLINE=1700 run_case scoped-window-allows-recovery 0 "605" "budget is available" \
+	"0 1600 4900 1600" "5000 5200 4900 5200"
+KSAIL_GITHUB_WRITE_BUDGET_DEADLINE=999 run_case scoped-expired-available 0 "" "budget is available" \
+	"4000 5000 4900 5000"
+KSAIL_GITHUB_WRITE_BUDGET_DEADLINE=999 run_case scoped-expired-exhausted 1 "" "does not return within 0 s" \
+	"0 1600 4900 1600"
+KSAIL_GITHUB_WRITE_BUDGET_DEADLINE=invalid run_case scoped-invalid-deadline 2 "" "invalid write-budget deadline" \
+	"4000 5000 4900 5000"
+
 # Budget present: no wait at all.
 run_case available 0 "" "budget is available: REST 4000, GraphQL 4900" \
 	"4000 5000 4900 5000"
