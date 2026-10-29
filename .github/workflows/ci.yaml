@@ -1082,7 +1082,7 @@ jobs:
       - name: 🧹 Free disk space
         if: steps.calico-cache.outputs.cache-hit != 'true'
         # Only cold compilation needs the large working-space reclamation.
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@6c48c4c282c27545d059733b011d98f0b49585ff
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@4f121c41ed28c160a53ede1ecd1542900d0e9694
 
       - name: ♻️ Restore Go modules
         if: steps.calico-cache.outputs.cache-hit != 'true'
@@ -2555,7 +2555,7 @@ jobs:
         with:
           persist-credentials: false
       - name: 🧹 Free runner disk
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@6c48c4c282c27545d059733b011d98f0b49585ff
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@4f121c41ed28c160a53ede1ecd1542900d0e9694
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
