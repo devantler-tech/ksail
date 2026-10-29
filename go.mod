@@ -24,7 +24,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.82.1
 	github.com/aws/aws-sdk-go-v2/service/eks v1.104.2
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.4
-	github.com/aws/smithy-go v1.28.5
+	github.com/aws/smithy-go v1.28.6
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/glamour v1.0.0
