@@ -241,10 +241,11 @@ func (c *Client) exec(
 	result := RunResult{Stdout: stdout.Bytes(), Stderr: stderr.Bytes(), ExitCode: 0}
 
 	// A remote exit can arrive alongside cancellation. Keep cancellation ahead
-	// of exit-status interpretation so a canceled file probe cannot become a
-	// successful "missing file" result and start another bootstrap operation.
-	if err != nil && ctx.Err() != nil {
-		return result, fmt.Errorf("run %q: %w", command, ctx.Err())
+	// of every exit status so a canceled probe cannot report a present or
+	// missing file and let bootstrap continue without its cancellation cleanup.
+	contextErr := ctx.Err()
+	if contextErr != nil {
+		return result, fmt.Errorf("run %q: %w", command, contextErr)
 	}
 
 	if exitErr, ok := errors.AsType[*ssh.ExitError](err); ok {
@@ -294,7 +295,9 @@ func (c *Client) openSession(ctx context.Context) (*ssh.Session, error) {
 		contextErr = ctx.Err()
 		if contextErr != nil {
 			if got.session != nil {
-				_ = got.session.Close()
+				// A channel close can itself wait for the SSH transport. Let
+				// the caller regain control and close that connection.
+				go func() { _ = got.session.Close() }()
 			}
 
 			return nil, fmt.Errorf("open session: %w", contextErr)

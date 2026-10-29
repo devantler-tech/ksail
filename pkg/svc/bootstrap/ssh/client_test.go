@@ -24,28 +24,40 @@ const (
 
 var errUnknownClientKey = errors.New("unknown client key")
 
-func TestFileExistsPreservesCancellationAlongsideMissingFileExit(t *testing.T) {
+func TestFileExistsPreservesCancellationAlongsideRemoteExit(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
+	for _, testCase := range []struct {
+		name string
+		code uint32
+	}{
+		{name: "present file", code: 0},
+		{name: "missing file", code: 1},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
 
-	pair := mustGenerateKeyPair(t)
-	handler := func(_ string, _ io.Reader) (string, string, uint32) {
-		cancel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
 
-		return "", "", 1
-	}
-	addr, hostKey := startServer(t, pair.Signer.PublicKey(), handler, 0)
-	client := mustDial(t, addr, pair, hostKey)
+			pair := mustGenerateKeyPair(t)
+			handler := func(_ string, _ io.Reader) (string, string, uint32) {
+				cancel()
 
-	exists, err := client.FileExists(ctx, "/missing")
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("FileExists error = %v, want context.Canceled", err)
-	}
+				return "", "", testCase.code
+			}
+			addr, hostKey := startServer(t, pair.Signer.PublicKey(), handler, 0)
+			client := mustDial(t, addr, pair, hostKey)
 
-	if exists {
-		t.Fatal("canceled probe reported that the file exists")
+			exists, err := client.FileExists(ctx, "/probe")
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("FileExists error = %v, want context.Canceled", err)
+			}
+
+			if exists {
+				t.Fatal("canceled probe reported that the file exists")
+			}
+		})
 	}
 }
 
