@@ -266,7 +266,17 @@ func (c *Client) exec(
 // request, so a server that never answers would otherwise outlive the caller's
 // deadline. A session that opens after ctx ended is closed when it arrives; the
 // open itself ends at the latest when the connection closes.
+//
+// Once ctx has ended, the result is always the context's error. Cancelling a
+// caller closes its session in flight, which can break the connection, so an
+// open that fails after cancellation fails because of it; callers match
+// context.Canceled to tell a cancelled bring-up from a broken node.
 func (c *Client) openSession(ctx context.Context) (*ssh.Session, error) {
+	ctxErr := ctx.Err()
+	if ctxErr != nil {
+		return nil, fmt.Errorf("open session: %w", ctxErr)
+	}
+
 	type opened struct {
 		session *ssh.Session
 		err     error
@@ -282,6 +292,11 @@ func (c *Client) openSession(ctx context.Context) (*ssh.Session, error) {
 	select {
 	case got := <-result:
 		if got.err != nil {
+			lateErr := ctx.Err()
+			if lateErr != nil {
+				return nil, fmt.Errorf("open session: %w (open failed: %w)", lateErr, got.err)
+			}
+
 			return nil, fmt.Errorf("open session: %w", got.err)
 		}
 
