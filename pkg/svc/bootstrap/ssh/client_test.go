@@ -24,6 +24,29 @@ const (
 
 var errUnknownClientKey = errors.New("unknown client key")
 
+func TestFileExistsPreservesCancellationAlongsideMissingFileExit(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	pair := mustGenerateKeyPair(t)
+	addr, hostKey := startServer(t, pair.Signer.PublicKey(), func(_ string, _ io.Reader) (string, string, uint32) {
+		cancel()
+
+		return "", "", 1
+	}, 0)
+	client := mustDial(t, addr, pair, hostKey)
+
+	exists, err := client.FileExists(ctx, "/missing")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("FileExists error = %v, want context.Canceled", err)
+	}
+	if exists {
+		t.Fatal("canceled probe reported that the file exists")
+	}
+}
+
 // execHandler scripts the in-process server's response to one exec request.
 // execHandler scripts one exec request. stdin carries everything the client
 // streamed on the session's input channel, so a write test can assert that

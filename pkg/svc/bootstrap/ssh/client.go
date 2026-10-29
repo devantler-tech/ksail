@@ -240,6 +240,13 @@ func (c *Client) exec(
 
 	result := RunResult{Stdout: stdout.Bytes(), Stderr: stderr.Bytes(), ExitCode: 0}
 
+	// A remote exit can arrive alongside cancellation. Keep cancellation ahead
+	// of exit-status interpretation so a canceled file probe cannot become a
+	// successful "missing file" result and start another bootstrap operation.
+	if err != nil && ctx.Err() != nil {
+		return result, fmt.Errorf("run %q: %w", command, ctx.Err())
+	}
+
 	if exitErr, ok := errors.AsType[*ssh.ExitError](err); ok {
 		result.ExitCode = exitErr.ExitStatus()
 
@@ -251,10 +258,6 @@ func (c *Client) exec(
 	}
 
 	if err != nil {
-		if ctx.Err() != nil {
-			return result, fmt.Errorf("run %q: %w", command, ctx.Err())
-		}
-
 		return result, fmt.Errorf("run %q: %w", command, err)
 	}
 
@@ -267,6 +270,10 @@ func (c *Client) exec(
 // deadline. A session that opens after ctx ended is closed when it arrives; the
 // open itself ends at the latest when the connection closes.
 func (c *Client) openSession(ctx context.Context) (*ssh.Session, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("open session: %w", err)
+	}
+
 	type opened struct {
 		session *ssh.Session
 		err     error
@@ -281,6 +288,16 @@ func (c *Client) openSession(ctx context.Context) (*ssh.Session, error) {
 
 	select {
 	case got := <-result:
+		// Both cases may be ready. Preserve the caller's cancellation even if
+		// NewSession completed concurrently, and close any session it opened.
+		if err := ctx.Err(); err != nil {
+			if got.session != nil {
+				_ = got.session.Close()
+			}
+
+			return nil, fmt.Errorf("open session: %w", err)
+		}
+
 		if got.err != nil {
 			return nil, fmt.Errorf("open session: %w", got.err)
 		}
