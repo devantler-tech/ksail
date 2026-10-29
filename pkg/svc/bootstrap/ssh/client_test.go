@@ -31,17 +31,19 @@ func TestFileExistsPreservesCancellationAlongsideMissingFileExit(t *testing.T) {
 	defer cancel()
 
 	pair := mustGenerateKeyPair(t)
-	addr, hostKey := startServer(t, pair.Signer.PublicKey(), func(_ string, _ io.Reader) (string, string, uint32) {
+	handler := func(_ string, _ io.Reader) (string, string, uint32) {
 		cancel()
 
 		return "", "", 1
-	}, 0)
+	}
+	addr, hostKey := startServer(t, pair.Signer.PublicKey(), handler, 0)
 	client := mustDial(t, addr, pair, hostKey)
 
 	exists, err := client.FileExists(ctx, "/missing")
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("FileExists error = %v, want context.Canceled", err)
 	}
+
 	if exists {
 		t.Fatal("canceled probe reported that the file exists")
 	}

@@ -270,8 +270,9 @@ func (c *Client) exec(
 // deadline. A session that opens after ctx ended is closed when it arrives; the
 // open itself ends at the latest when the connection closes.
 func (c *Client) openSession(ctx context.Context) (*ssh.Session, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("open session: %w", err)
+	contextErr := ctx.Err()
+	if contextErr != nil {
+		return nil, fmt.Errorf("open session: %w", contextErr)
 	}
 
 	type opened struct {
@@ -290,12 +291,13 @@ func (c *Client) openSession(ctx context.Context) (*ssh.Session, error) {
 	case got := <-result:
 		// Both cases may be ready. Preserve the caller's cancellation even if
 		// NewSession completed concurrently, and close any session it opened.
-		if err := ctx.Err(); err != nil {
+		contextErr = ctx.Err()
+		if contextErr != nil {
 			if got.session != nil {
 				_ = got.session.Close()
 			}
 
-			return nil, fmt.Errorf("open session: %w", err)
+			return nil, fmt.Errorf("open session: %w", contextErr)
 		}
 
 		if got.err != nil {
