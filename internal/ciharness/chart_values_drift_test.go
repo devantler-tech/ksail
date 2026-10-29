@@ -1,6 +1,7 @@
 package ciharness_test
 
 import (
+	"cmp"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,6 +32,7 @@ type valuesTrialProfile struct {
 	seedFlags    string
 	extraArgs    string
 	rollouts     int
+	helmVersion  string
 }
 
 func certManagerTrialProfile() valuesTrialProfile {
@@ -115,15 +117,32 @@ printf 'helm %s\n' "$*" >> "$FIXTURE_CALLS"
 context_flag=--kube-context
 [[ "$1" == version ]] || validate_target "$@"
 revision=$(cat "$FIXTURE_REVISION")
+# Match the published CLI boundary, rather than accepting Helm 3 flags on Helm 4.
+rollback_flag=--atomic
+if [[ "$FIXTURE_HELM_VERSION" == v4.* ]]; then
+  rollback_flag=--rollback-on-failure
+  for arg in "$@"; do
+    case "$arg" in
+      --all) echo "unknown flag: $arg" >&2; exit 1 ;;
+    esac
+  done
+fi
 case "$1 $2" in
-  'version --short') printf 'v3.19.1\n' ;;
-  'list --all')
+  'version --short') printf '%s\n' "$FIXTURE_HELM_VERSION" ;;
+  'list --all'|'list --namespace')
+    # Helm 3 needs --all to include pending releases; Helm 4 includes all states by default.
+    [[ "$FIXTURE_HELM_VERSION" != v3.* || "$2" == --all ]] || exit 99
     status=deployed
     [[ "$revision" == 1 || "$revision" == 2 || "$FIXTURE_MODE" != latest_failed ]] || status=failed
+    [[ "$revision" == 1 || "$revision" == 2 || "$FIXTURE_MODE" != latest_pending ]] || status=pending-upgrade
     if [[ "$FIXTURE_MODE" == other_release ]]; then
       printf '[{"name":"another-release","status":"deployed","chart":"another-v9.9.9","revision":"1"},\n'
     else
       printf '['
+    fi
+    if [[ "$FIXTURE_MODE" == duplicate_release ]]; then
+      printf '{"name":"%s","status":"deployed","chart":"%s","revision":"1"},\n' \
+        "$FIXTURE_RELEASE" "$FIXTURE_CHART"
     fi
     printf '{"name":"%s","status":"%s",\n"chart":"%s","revision":"%s"}]\n' \
       "$FIXTURE_RELEASE" "$status" "$FIXTURE_CHART" "$revision"
@@ -138,7 +157,7 @@ case "$1 $2" in
     ;;
   "upgrade $FIXTURE_RELEASE")
     IFS='|' read -r -a seed_flags <<<"$FIXTURE_SEED_FLAGS"
-    for flag in '--atomic' '--wait' '--wait-for-jobs' '--reuse-values' "${seed_flags[@]}"; do
+    for flag in "$rollback_flag" '--wait' '--wait-for-jobs' '--reuse-values' "${seed_flags[@]}"; do
       [[ " $* " == *" $flag "* ]] || exit 99
     done
     printf 2 > "$FIXTURE_REVISION"
@@ -300,6 +319,7 @@ func runValuesTrial(
 		"FIXTURE_REVISION="+revisionFile,
 		"FIXTURE_CALLS="+callsFile,
 		"FIXTURE_MODE="+mode,
+		"FIXTURE_HELM_VERSION="+cmp.Or(profile.helmVersion, "v4.3.1"),
 		"FIXTURE_KUBECONFIG="+kubeconfigFile,
 		"VALUES_TRIAL_COMPONENT="+profile.component,
 		"FIXTURE_RELEASE="+profile.release,
@@ -346,6 +366,42 @@ func TestCertManagerValuesTrialConverges(t *testing.T) {
 	}
 }
 
+func TestValuesTrialRetainsHelm3Compatibility(t *testing.T) {
+	t.Parallel()
+
+	for _, profile := range []valuesTrialProfile{
+		certManagerTrialProfile(), kyvernoTrialProfile(), metricsServerTrialProfile(), ciliumTrialProfile(),
+	} {
+		t.Run(profile.release, func(t *testing.T) {
+			t.Parallel()
+
+			profile.helmVersion = "v3.19.1"
+			output, _, err := runValuesTrial(t, profile, "success")
+			require.NoError(t, err, output)
+			assert.Contains(t, output, "one Helm upgrade and a repeated no-op")
+		})
+	}
+}
+
+func TestValuesTrialRejectsUnsupportedHelmBeforeMutation(t *testing.T) {
+	t.Parallel()
+
+	for _, version := range []string{"v2.17.0", "v5.0.0", "unknown"} {
+		t.Run(version, func(t *testing.T) {
+			t.Parallel()
+
+			profile := certManagerTrialProfile()
+			profile.helmVersion = version
+			output, calls, err := runValuesTrial(t, profile, "success")
+			require.Error(t, err, output)
+			assert.Contains(t, output, "unsupported Helm major version")
+			assert.NotContains(t, calls, "helm upgrade ")
+			assert.NotContains(t, calls, "ksail cluster update ")
+			assert.NotContains(t, calls, "kubectl ")
+		})
+	}
+}
+
 func TestCertManagerValuesTrialRejectsIncompleteProof(t *testing.T) {
 	t.Parallel()
 
@@ -361,6 +417,8 @@ func TestCertManagerValuesTrialRejectsIncompleteProof(t *testing.T) {
 		{mode: "unknown_baseline", want: "expected only one in-place cert-manager values change"},
 		{mode: "two_documents", want: "expected only one in-place cert-manager values change"},
 		{mode: "latest_failed", want: "latest release is not a single deployed revision"},
+		{mode: "latest_pending", want: "latest release is not a single deployed revision"},
+		{mode: "duplicate_release", want: "latest release is not a single deployed revision"},
 		{mode: "helm_list_nonzero", want: "could not read latest Helm release"},
 	} {
 		t.Run(testCase.mode, func(t *testing.T) {
