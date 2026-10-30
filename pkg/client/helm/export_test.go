@@ -187,3 +187,8 @@ func OptionalAPIVersionPostRendererForTest(enabled bool) helmpostrenderer.PostRe
 
 	return optionalAPIVersionPostRenderer(renderer)
 }
+
+// LastReleaseApplyMethod exposes the apply-method lookup the upgrade path uses.
+func (c *Client) LastReleaseApplyMethod(releaseName string) string {
+	return c.lastReleaseApplyMethod(releaseName)
+}

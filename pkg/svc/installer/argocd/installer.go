@@ -45,9 +45,25 @@ func NewInstaller(
 	}
 }
 
-// Install installs or upgrades Argo CD via its Helm chart.
+// Install installs or upgrades Argo CD via its Helm chart. A release a GitOps controller
+// owns is left alone, as for every other KSail component.
 func (a *Installer) Install(ctx context.Context) error {
-	err := a.helmInstallOrUpgrade(ctx)
+	skip, err := helmutil.SkipIfGitOpsManaged(
+		ctx,
+		a.client,
+		"argocd",
+		argoCDReleaseName,
+		argoCDNamespace,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to install Argo CD: %w", err)
+	}
+
+	if skip {
+		return nil
+	}
+
+	err = a.helmInstallOrUpgrade(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to install Argo CD: %w", err)
 	}

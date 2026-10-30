@@ -674,7 +674,7 @@ func (c *Client) upgradeRelease(
 	spec *ChartSpec,
 	postRenderer *apiVersionPostRenderer,
 ) (*v1.Release, error) {
-	client := newUpgradeAction(c.actionConfig, spec)
+	client := newUpgradeAction(c.actionConfig, spec, c.lastReleaseApplyMethod(spec.ReleaseName))
 	client.PostRenderer = optionalAPIVersionPostRenderer(postRenderer)
 
 	chart, vals, err := c.loadChartAndValues(ctx, spec, client)
@@ -689,17 +689,43 @@ func (c *Client) upgradeRelease(
 	return executeAndExtractRelease(runFn)
 }
 
+// lastReleaseApplyMethod returns how the latest revision of a release was applied ("ssa" or
+// "csa"), or "" when it cannot be read. The upgrade itself reports a missing release.
+func (c *Client) lastReleaseApplyMethod(releaseName string) string {
+	if c.actionConfig == nil || c.actionConfig.Releases == nil {
+		return ""
+	}
+
+	last, err := c.actionConfig.Releases.Last(releaseName)
+	if err != nil {
+		return ""
+	}
+
+	rel, ok := last.(*v1.Release)
+	if !ok || rel == nil {
+		return ""
+	}
+
+	return rel.ApplyMethod
+}
+
 // newUpgradeAction configures the Helm upgrade KSail runs to bring a release back to its
-// declared state. Helm 4 upgrades with server-side apply, so a field another manager has
-// applied (for example the Helm CLI) would otherwise reject KSail's apply. KSail owns the
-// components it installs, so the upgrade takes those fields back, as the Helm CLI does
-// with --force-conflicts. KSail installers skip releases a GitOps controller owns
-// (helmutil.SkipIfGitOpsManaged) before they upgrade, so this never takes fields from Flux
-// or Argo CD.
-func newUpgradeAction(cfg *helmv4action.Configuration, spec *ChartSpec) *helmv4action.Upgrade {
+// declared state. The upgrade keeps Helm's default apply method: a release last applied with
+// server-side apply is upgraded with server-side apply, and one last applied client-side stays
+// client-side. Under server-side apply a field another manager has applied (for example the
+// Helm CLI) would otherwise reject KSail's apply, so for those releases the upgrade takes the
+// fields back, as the Helm CLI does with --force-conflicts. Client-side apply has no field
+// conflicts, and Helm refuses ForceConflicts without server-side apply, so it stays off there.
+// KSail installers skip releases a GitOps controller owns (helmutil.SkipIfGitOpsManaged)
+// before they upgrade, so this never takes fields from Flux or Argo CD.
+func newUpgradeAction(
+	cfg *helmv4action.Configuration,
+	spec *ChartSpec,
+	lastApplyMethod string,
+) *helmv4action.Upgrade {
 	client := helmv4action.NewUpgrade(cfg)
 	client.Namespace = spec.Namespace
-	client.ForceConflicts = true
+	client.ForceConflicts = lastApplyMethod == string(v1.ApplyMethodServerSideApply)
 
 	applyCommonActionConfig(upgradeActionAdapter{client}, spec)
 

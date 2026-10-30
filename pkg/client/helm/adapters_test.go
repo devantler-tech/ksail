@@ -6,8 +6,13 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	helmv4action "helm.sh/helm/v4/pkg/action"
 	helmv4kube "helm.sh/helm/v4/pkg/kube"
+	"helm.sh/helm/v4/pkg/release/common"
+	v1 "helm.sh/helm/v4/pkg/release/v1"
+	"helm.sh/helm/v4/pkg/storage"
+	"helm.sh/helm/v4/pkg/storage/driver"
 )
 
 //nolint:funlen // Table-driven test coverage is naturally long.
@@ -90,15 +95,62 @@ func TestApplyCommonActionConfig(t *testing.T) {
 	}
 }
 
-func TestNewUpgradeActionForcesServerSideApplyConflicts(t *testing.T) {
+func TestNewUpgradeActionForcesConflictsOnlyForServerSideApply(t *testing.T) {
 	t.Parallel()
 
-	upgrade := helm.NewConfiguredUpgrade(helmv4action.NewConfiguration(), &helm.ChartSpec{
-		Namespace:   "cert-manager",
-		UpgradeCRDs: true,
-	})
+	tests := []struct {
+		name            string
+		lastApplyMethod string
+		wantForce       bool
+	}{
+		{name: "server-side applied release", lastApplyMethod: "ssa", wantForce: true},
+		{name: "client-side applied release", lastApplyMethod: "csa", wantForce: false},
+		{name: "release without a recorded apply method", lastApplyMethod: "", wantForce: false},
+	}
 
-	assert.True(t, upgrade.ForceConflicts, "KSail must take back fields another manager applied")
-	assert.Equal(t, "cert-manager", upgrade.Namespace)
-	assert.False(t, upgrade.SkipCRDs)
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			upgrade := helm.NewConfiguredUpgrade(helmv4action.NewConfiguration(), &helm.ChartSpec{
+				Namespace:   "cert-manager",
+				UpgradeCRDs: true,
+			}, testCase.lastApplyMethod)
+
+			assert.Equal(t, testCase.wantForce, upgrade.ForceConflicts,
+				"ForceConflicts must follow the apply method Helm will use")
+			assert.Equal(
+				t, "auto", upgrade.ServerSideApply, "KSail keeps the default Helm apply method",
+			)
+			assert.Equal(t, "cert-manager", upgrade.Namespace)
+			assert.False(t, upgrade.SkipCRDs)
+		})
+	}
+}
+
+func TestLastReleaseApplyMethodReadsLatestRevision(t *testing.T) {
+	t.Parallel()
+
+	cfg := helmv4action.NewConfiguration()
+	cfg.Releases = storage.Init(driver.NewMemory())
+
+	for version, method := range map[int]string{1: "ssa", 2: "csa"} {
+		require.NoError(t, cfg.Releases.Create(&v1.Release{
+			Name:        "cert-manager",
+			Namespace:   "default",
+			Version:     version,
+			ApplyMethod: method,
+			Info:        &v1.Info{Status: common.StatusDeployed},
+		}))
+	}
+
+	client := helm.NewClientFromParts(cfg, nil)
+
+	assert.Equal(t, "csa", client.LastReleaseApplyMethod("cert-manager"),
+		"the upgrade must follow how the latest revision was applied")
+	assert.Empty(
+		t,
+		client.LastReleaseApplyMethod("missing"),
+		"a missing release has no apply method",
+	)
 }
