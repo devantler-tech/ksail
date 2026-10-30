@@ -171,9 +171,21 @@ SH
 cat >"$fixture/bin/helm" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
-# Model the Helm 4 CLI the runners ship: --all is rejected, and every status is listed by default.
-if [[ "$*" == "version --short" ]]; then printf 'v4.3.1+gc0d08d0\n'; exit 0; fi
-[[ " $* " != *" --all "* ]] || { echo 'Error: unknown flag: --all' >&2; exit 1; }
+# Model the Helm 4 CLI the runners ship (--all is rejected, every status is listed by default),
+# Helm 3 (--all is required to see every status) and an unsupported major.
+if [[ "$*" == "version --short" ]]; then
+  case "$CASE" in
+  helm3) printf 'v3.19.0+g3d8990f\n' ;;
+  helm-unsupported) printf 'v5.0.0+g0000000\n' ;;
+  *) printf 'v4.3.1+gc0d08d0\n' ;;
+  esac
+  exit 0
+fi
+if [[ "$CASE" == helm3 ]]; then
+  [[ " $* " == *" --all "* ]] || { echo 'fixture: Helm 3 list without --all hides failed releases' >&2; exit 1; }
+else
+  [[ " $* " != *" --all "* ]] || { echo 'Error: unknown flag: --all' >&2; exit 1; }
+fi
 [[ " $* " == *" --kubeconfig $FIXTURE/calico-migration.kubeconfig "* && " $* " == *' --kube-context fixture '* ]]
 if [[ -f "$FIXTURE/updated" ]]; then cat "$FIXTURE/after-releases.json"
 elif [[ "$CASE" == baseline ]]; then printf '[]\n'
@@ -209,7 +221,7 @@ esac
 SH
 chmod +x "$fixture/bin/kubectl" "$fixture/bin/helm" "$fixture/bin/ksail"
 
-for scenario in valid k3s vcluster dependencies annotated-dependency annotated-reclassified dependency-incomplete dependency-overlap dependency-replaced dependency-adopted dependency-reclassified baseline legacy-incomplete legacy-extra incomplete inventory-short uid config history-missing history-replaced history-unrecorded diff-status update-failure; do
+for scenario in valid helm3 helm-unsupported k3s vcluster dependencies annotated-dependency annotated-reclassified dependency-incomplete dependency-overlap dependency-replaced dependency-adopted dependency-reclassified baseline legacy-incomplete legacy-extra incomplete inventory-short uid config history-missing history-replaced history-unrecorded diff-status update-failure; do
 	rm -f "$fixture/updated"
 	printf 'apiVersion: ksail.io/v1alpha1\nkind: Cluster\nspec:\n  cluster:\n    connection:\n      kubeconfig: %s/calico-migration.kubeconfig\n' "$fixture" >"$fixture/project/ksail.yaml"
 	status=0
@@ -221,7 +233,7 @@ for scenario in valid k3s vcluster dependencies annotated-dependency annotated-r
 		DISTRIBUTION="$distribution" GITHUB_WORKSPACE="$action_dir/../../.." \
 		SYSTEM_TEST_LOG_DIR="$fixture/logs-$scenario" bash "$subject" migrate) \
 		>"$fixture/migrate-$scenario.log" 2>&1 || status=$?
-	if [[ "$scenario" == valid || "$scenario" == k3s || "$scenario" == vcluster || "$scenario" == dependencies || "$scenario" == annotated-dependency ]]; then
+	if [[ "$scenario" == valid || "$scenario" == helm3 || "$scenario" == k3s || "$scenario" == vcluster || "$scenario" == dependencies || "$scenario" == annotated-dependency ]]; then
 		[[ "$status" == 0 ]] || {
 			cat "$fixture/migrate-$scenario.log" >&2
 			exit 1
@@ -231,6 +243,12 @@ for scenario in valid k3s vcluster dependencies annotated-dependency annotated-r
 			echo "FAIL: accepted invalid migration: $scenario" >&2
 			exit 1
 		}
+		if [[ "$scenario" == helm-unsupported ]]; then
+			grep -q 'Calico migration trial: unsupported Helm major version' "$fixture/migrate-$scenario.log" || {
+				echo 'FAIL: an unsupported Helm major was not refused by name' >&2
+				exit 1
+			}
+		fi
 		if [[ "$scenario" == update-failure ]]; then
 			grep -q 'candidate update exited 7; see update.json, update.stderr and prerequisite-ownership.json' "$fixture/migrate-$scenario.log" || {
 				echo 'FAIL: update refusal lacks saved diagnostic context' >&2
@@ -258,7 +276,7 @@ for scenario in valid k3s vcluster dependencies annotated-dependency annotated-r
 		jq -e '.operatorDependencyIdentitiesPreserved == true and .operatorDependenciesUnadopted == true' \
 			"$fixture/logs-$scenario/calico-migration/dependency-verdict.json" >/dev/null
 	fi
-	if [[ "$scenario" == baseline || "$scenario" == legacy-incomplete || "$scenario" == legacy-extra ]]; then
+	if [[ "$scenario" == helm-unsupported || "$scenario" == baseline || "$scenario" == legacy-incomplete || "$scenario" == legacy-extra ]]; then
 		[[ ! -f "$fixture/updated" ]] || {
 			echo 'FAIL: candidate updated an unverified baseline' >&2
 			exit 1

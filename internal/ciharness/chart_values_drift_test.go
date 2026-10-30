@@ -166,7 +166,9 @@ case "$1 $2" in
     ;;
   "upgrade $FIXTURE_RELEASE")
     IFS='|' read -r -a seed_flags <<<"$FIXTURE_SEED_FLAGS"
-    for flag in "$rollback_flag" ${conflict_flags[@]+"${conflict_flags[@]}"} '--wait' '--wait-for-jobs' '--reuse-values' "${seed_flags[@]}"; do
+    expected=("$rollback_flag" ${conflict_flags[@]+"${conflict_flags[@]}"})
+    expected+=('--wait' '--wait-for-jobs' '--reuse-values' "${seed_flags[@]}")
+    for flag in "${expected[@]}"; do
       [[ " $* " == *" $flag "* ]] || exit 99
     done
     printf 2 > "$FIXTURE_REVISION"
