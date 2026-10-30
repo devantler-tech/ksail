@@ -58,11 +58,15 @@ case "$(cat "$log_dir/helm-version.txt")" in
 v3.*)
 	helm_list_args=(--all --namespace "$namespace")
 	helm_rollback_flag=--atomic
+	helm_conflict_args=()
 	;;
 v4.*)
 	# Helm 4 lists all states by default and renamed the rollback option.
 	helm_list_args=(--namespace "$namespace")
 	helm_rollback_flag=--rollback-on-failure
+	# KSail installs through the Helm 4 SDK with server-side apply under its own field
+	# manager, so an out-of-band CLI edit must take ownership of the fields it seeds.
+	helm_conflict_args=(--server-side=true --force-conflicts)
 	;;
 *) fail 'unsupported Helm major version' ;;
 esac
@@ -248,7 +252,8 @@ jq -eS --arg seed "$seed_value" "$seed_filter" \
 
 helm upgrade "$release" "$release" --repo "$chart_repo" \
 	--namespace "$namespace" --version "$chart_version" --reuse-values "${seed_args[@]}" \
-	"$helm_rollback_flag" --wait --wait-for-jobs --timeout 10m "${helm_target_args[@]}" >"$log_dir/seed-upgrade.log" 2>&1
+	"$helm_rollback_flag" ${helm_conflict_args[@]+"${helm_conflict_args[@]}"} --wait --wait-for-jobs --timeout 10m "${helm_target_args[@]}" >"$log_dir/seed-upgrade.log" 2>&1 ||
+	fail "seeding upgrade failed; see $log_dir/seed-upgrade.log"
 seed_revision=$(release_state seeded)
 [[ "$seed_revision" == "$((original_revision + 1))" ]] || fail 'seeding did not create exactly one revision'
 assert_ownership "$seed_revision"

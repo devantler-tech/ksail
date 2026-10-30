@@ -119,11 +119,20 @@ context_flag=--kube-context
 revision=$(cat "$FIXTURE_REVISION")
 # Match the published CLI boundary, rather than accepting Helm 3 flags on Helm 4.
 rollback_flag=--atomic
+conflict_flags=()
 if [[ "$FIXTURE_HELM_VERSION" == v4.* ]]; then
   rollback_flag=--rollback-on-failure
+  # KSail owns its release fields through server-side apply; a CLI seed conflicts without these.
+  conflict_flags=(--server-side=true --force-conflicts)
   for arg in "$@"; do
     case "$arg" in
       --all) echo "unknown flag: $arg" >&2; exit 1 ;;
+    esac
+  done
+else
+  for arg in "$@"; do
+    case "$arg" in
+      --server-side*|--force-conflicts) echo "unknown flag: $arg" >&2; exit 1 ;;
     esac
   done
 fi
@@ -157,7 +166,7 @@ case "$1 $2" in
     ;;
   "upgrade $FIXTURE_RELEASE")
     IFS='|' read -r -a seed_flags <<<"$FIXTURE_SEED_FLAGS"
-    for flag in "$rollback_flag" '--wait' '--wait-for-jobs' '--reuse-values' "${seed_flags[@]}"; do
+    for flag in "$rollback_flag" ${conflict_flags[@]+"${conflict_flags[@]}"} '--wait' '--wait-for-jobs' '--reuse-values' "${seed_flags[@]}"; do
       [[ " $* " == *" $flag "* ]] || exit 99
     done
     printf 2 > "$FIXTURE_REVISION"

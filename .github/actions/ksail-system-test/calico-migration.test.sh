@@ -171,6 +171,9 @@ SH
 cat >"$fixture/bin/helm" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
+# Model the Helm 4 CLI the runners ship: --all is rejected, and every status is listed by default.
+if [[ "$*" == "version --short" ]]; then printf 'v4.3.1+gc0d08d0\n'; exit 0; fi
+[[ " $* " != *" --all "* ]] || { echo 'Error: unknown flag: --all' >&2; exit 1; }
 [[ " $* " == *" --kubeconfig $FIXTURE/calico-migration.kubeconfig "* && " $* " == *' --kube-context fixture '* ]]
 if [[ -f "$FIXTURE/updated" ]]; then cat "$FIXTURE/after-releases.json"
 elif [[ "$CASE" == baseline ]]; then printf '[]\n'
