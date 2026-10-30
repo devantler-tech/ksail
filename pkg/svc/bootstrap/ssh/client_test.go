@@ -24,6 +24,43 @@ const (
 
 var errUnknownClientKey = errors.New("unknown client key")
 
+func TestFileExistsPreservesCancellationAlongsideRemoteExit(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name string
+		code uint32
+	}{
+		{name: "present file", code: 0},
+		{name: "missing file", code: 1},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+
+			pair := mustGenerateKeyPair(t)
+			handler := func(_ string, _ io.Reader) (string, string, uint32) {
+				cancel()
+
+				return "", "", testCase.code
+			}
+			addr, hostKey := startServer(t, pair.Signer.PublicKey(), handler, 0)
+			client := mustDial(t, addr, pair, hostKey)
+
+			exists, err := client.FileExists(ctx, "/probe")
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("FileExists error = %v, want context.Canceled", err)
+			}
+
+			if exists {
+				t.Fatal("canceled probe reported that the file exists")
+			}
+		})
+	}
+}
+
 // execHandler scripts the in-process server's response to one exec request.
 // execHandler scripts one exec request. stdin carries everything the client
 // streamed on the session's input channel, so a write test can assert that
