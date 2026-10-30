@@ -6,6 +6,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/stretchr/testify/assert"
+	helmv4action "helm.sh/helm/v4/pkg/action"
 	helmv4kube "helm.sh/helm/v4/pkg/kube"
 )
 
@@ -87,4 +88,17 @@ func TestApplyCommonActionConfig(t *testing.T) {
 			assert.Equal(t, tc.wantVersion, action.Version, "Version")
 		})
 	}
+}
+
+func TestNewUpgradeActionForcesServerSideApplyConflicts(t *testing.T) {
+	t.Parallel()
+
+	upgrade := helm.NewConfiguredUpgrade(helmv4action.NewConfiguration(), &helm.ChartSpec{
+		Namespace:   "cert-manager",
+		UpgradeCRDs: true,
+	})
+
+	assert.True(t, upgrade.ForceConflicts, "KSail must take back fields another manager applied")
+	assert.Equal(t, "cert-manager", upgrade.Namespace)
+	assert.False(t, upgrade.SkipCRDs)
 }
