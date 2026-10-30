@@ -674,14 +674,8 @@ func (c *Client) upgradeRelease(
 	spec *ChartSpec,
 	postRenderer *apiVersionPostRenderer,
 ) (*v1.Release, error) {
-	client := helmv4action.NewUpgrade(c.actionConfig)
-	client.Namespace = spec.Namespace
+	client := newUpgradeAction(c.actionConfig, spec)
 	client.PostRenderer = optionalAPIVersionPostRenderer(postRenderer)
-
-	applyCommonActionConfig(upgradeActionAdapter{client}, spec)
-
-	// Note: Atomic is not supported in Helm v4 Upgrade action
-	client.SkipCRDs = !spec.UpgradeCRDs // Inverted logic in v4
 
 	chart, vals, err := c.loadChartAndValues(ctx, spec, client)
 	if err != nil {
@@ -693,6 +687,26 @@ func (c *Client) upgradeRelease(
 	}
 
 	return executeAndExtractRelease(runFn)
+}
+
+// newUpgradeAction configures the Helm upgrade KSail runs to bring a release back to its
+// declared state. Helm 4 upgrades with server-side apply, so a field another manager has
+// applied (for example the Helm CLI) would otherwise reject KSail's apply. KSail owns the
+// components it installs, so the upgrade takes those fields back, as the Helm CLI does
+// with --force-conflicts. KSail installers skip releases a GitOps controller owns
+// (helmutil.SkipIfGitOpsManaged) before they upgrade, so this never takes fields from Flux
+// or Argo CD.
+func newUpgradeAction(cfg *helmv4action.Configuration, spec *ChartSpec) *helmv4action.Upgrade {
+	client := helmv4action.NewUpgrade(cfg)
+	client.Namespace = spec.Namespace
+	client.ForceConflicts = true
+
+	applyCommonActionConfig(upgradeActionAdapter{client}, spec)
+
+	// Note: Atomic is not supported in Helm v4 Upgrade action
+	client.SkipCRDs = !spec.UpgradeCRDs // Inverted logic in v4
+
+	return client
 }
 
 func (c *Client) templateInstall(spec *ChartSpec) (*helmv4action.Install, error) {

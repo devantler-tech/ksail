@@ -31,6 +31,7 @@ var (
 	ExecuteAndExtractRelease = executeAndExtractRelease
 	ApplyCommonActionConfig  = applyCommonActionConfig
 	LocateChartWithRetry     = locateChartWithRetry
+	NewConfiguredUpgrade     = newUpgradeAction
 )
 
 // Expose unexported error sentinels and repository helpers for test assertions.
