@@ -211,6 +211,8 @@ func (r *componentReconciler) handlerForField(
 	handlers[specdiff.CSIValuesField] = r.reconcileCSIValues
 	handlers[specdiff.HcloudCCMValuesField] = r.reconcileHcloudCCMValues
 	handlers[specdiff.ArgoCDValuesField] = r.reconcileArgoCDValues
+	handlers[specdiff.MetalLBValuesField] = r.reconcileLoadBalancerValues
+	handlers[specdiff.AWSLoadBalancerControllerValuesField] = r.reconcileLoadBalancerValues
 
 	if handler, ok := handlers[field]; ok {
 		return handler, true
@@ -248,7 +250,9 @@ func isComponentReconcileField(field string) bool {
 		specdiff.CiliumValuesField,
 		specdiff.CSIValuesField,
 		specdiff.HcloudCCMValuesField,
-		specdiff.ArgoCDValuesField:
+		specdiff.ArgoCDValuesField,
+		specdiff.MetalLBValuesField,
+		specdiff.AWSLoadBalancerControllerValuesField:
 		return true
 	default:
 		return strings.HasPrefix(field, "cluster.autoscaler.node.")
@@ -569,6 +573,24 @@ func (r *componentReconciler) reconcileHcloudCCMValues(
 	}
 
 	return r.installHcloudCCMOnce(ctx)
+}
+
+// reconcileLoadBalancerValues upgrades MetalLB or the AWS Load Balancer
+// Controller to the chart values this KSail version renders when the installed
+// release carries other values (ksail#7771). It shares the load-balancer
+// reconcile, so a cluster.loadBalancer change in the same pass runs one Helm
+// upgrade and EKS ownership is recorded the same way. It re-checks that KSail
+// installs the release, so a stale drift change never installs one.
+func (r *componentReconciler) reconcileLoadBalancerValues(
+	ctx context.Context,
+	change clusterupdate.Change,
+) error {
+	if !ksailInstallsMetalLB(r.clusterCfg) &&
+		!ksailInstallsAWSLoadBalancerController(r.clusterCfg) {
+		return nil
+	}
+
+	return r.reconcileLoadBalancer(ctx, change)
 }
 
 // installHcloudCCMOnce runs the Hetzner cloud controller Helm install/upgrade
