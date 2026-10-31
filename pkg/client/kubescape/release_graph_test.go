@@ -453,7 +453,7 @@ func TestReleaseActionPinsMatchAuditedContent(t *testing.T) {
 		},
 		{
 			".github/actions/setup-desktop-build/action.yml",
-			"devantler-tech/ksail/.github/actions/setup-desktop-build@297b5ce208dd9989e84aed46f2ed45bea9aaedd3",
+			"devantler-tech/ksail/.github/actions/setup-desktop-build@da546b96d2982707343117ef44d98083d8e4c36a",
 			"473bc1c1f3e940ba58a76320cf8b6ff5e798bf5e9cbe68830469640ef1ef7cac",
 		},
 	} {
