@@ -109,7 +109,7 @@ func TestReleaseRefValidationStep(t *testing.T) {
 
 	gate, exists := readReleaseJobs(t)["validate-release-ref"]
 	require.True(t, exists)
-	require.Len(t, gate.Steps, 4, "checkout and ref validation precede replay verification")
+	require.Len(t, gate.Steps, 5, "checkout and ref validation precede replay verification")
 	assert.Contains(t, gate.Steps[0].Uses, "actions/checkout@")
 	assert.Equal(t, false, gate.Steps[0].With["persist-credentials"])
 	validation := gate.Steps[1]

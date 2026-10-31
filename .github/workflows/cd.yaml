@@ -28,7 +28,9 @@ jobs:
   validate-release-ref:
     name: 🏷️ Validate release ref
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # The checks themselves take seconds. The rest is room to wait out an exhausted request budget;
+    # GitHub's window is one hour.
+    timeout-minutes: 70
     permissions:
       contents: read
       actions: read # Bind a replay to successful artifact producers in the original run.
@@ -46,6 +48,12 @@ jobs:
       - name: 🔏 Install Cosign for replay verification
         if: github.run_attempt > 1
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      # A previous release's cask polling reads with this token, so the next queued tag can start
+      # with its budget at zero and stop before anything is built (devantler-tech/ksail#7907).
+      - name: ⏳ Wait for the repository token's request budget
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: .github/scripts/wait-for-github-api-budget.sh
       - name: 🔎 Resolve release replay
         id: release-replay
         env:
