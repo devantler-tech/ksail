@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 )
@@ -19,6 +20,11 @@ const (
 	// through its Helm integration.
 	ArgoCDManagedByLabel = "argocd.argoproj.io/managed-by"
 )
+
+// ownershipLookupTimeout bounds the release ownership read. It runs before the Helm operation
+// creates its own deadline, and the Kubernetes client sets no request timeout by default, so an
+// unresponsive API server would otherwise hang the caller.
+const ownershipLookupTimeout = time.Minute
 
 // IsGitOpsManaged inspects Helm release Secret labels for known GitOps
 // controller ownership markers. It returns the controller name and true when
@@ -55,7 +61,10 @@ func SkipIfGitOpsManaged(
 	client helm.Interface,
 	name, releaseName, namespace string,
 ) (bool, error) {
-	labels, err := client.GetReleaseStorageLabels(ctx, releaseName, namespace)
+	lookupCtx, cancel := context.WithTimeout(ctx, ownershipLookupTimeout)
+	defer cancel()
+
+	labels, err := client.GetReleaseStorageLabels(lookupCtx, releaseName, namespace)
 	if err != nil && !errors.Is(err, helm.ErrNoReleaseStorage) {
 		return false, fmt.Errorf("check release ownership for %s: %w", name, err)
 	}
