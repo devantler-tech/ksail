@@ -1209,7 +1209,30 @@ runs:
         fi
         } 2>&1 | tee /tmp/ksail-system-test-logs/cluster-switch.log
 
+    - name: 📦 Setup hcloud for autoscaler inventory trial
+      if: inputs.test-autoscaler-inventory == 'true'
+      uses: hetznercloud/setup-hcloud@4ff9bbeda4053fb69dd7fa1fcbdfcce7e648bf33 # v1
+
+    - name: 🧪 Hetzner autoscaler inventory — unchanged update and retry
+      if: inputs.test-autoscaler-inventory == 'true'
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        CLUSTER_NAME: st-hetzner-dispatch-${{ github.run_id }}
+        TRIAL_SERVER_TYPE: ${{ inputs.inventory-trial-server-type }}
+        TRIAL_LOCATION: ${{ inputs.inventory-trial-location }}
+        K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
+      run: |
+        set -euo pipefail
+        [[ "$DISTRIBUTION" == Talos && "$PROVIDER" == Hetzner && "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
+        export K8S_VERSION="${K8S_VERSION_FLAG#--kubernetes-version }"
+        timeout --kill-after=6m 20m bash "$GITHUB_WORKSPACE/.github/actions/ksail-system-test/autoscaler-audit-trial.sh"
+
     # ── Diagnostic artifact upload (on failure) ─────────────────────
+    # Every test phase runs above this point: these steps run on failure() and
+    # capture the cluster before cleanup, so a phase placed after them would fail
+    # without diagnostics (ksail#7700). internal/ciharness holds this order.
     # Captures cluster state before cleanup so failures are diagnosable
     # even when HardenRunner telemetry fills the job log tail.
 
@@ -1282,26 +1305,6 @@ runs:
         path: /tmp/system-test-diagnostics/
         retention-days: 7
         if-no-files-found: ignore
-
-    - name: 📦 Setup hcloud for autoscaler inventory trial
-      if: inputs.test-autoscaler-inventory == 'true'
-      uses: hetznercloud/setup-hcloud@4ff9bbeda4053fb69dd7fa1fcbdfcce7e648bf33 # v1
-
-    - name: 🧪 Hetzner autoscaler inventory — unchanged update and retry
-      if: inputs.test-autoscaler-inventory == 'true'
-      shell: bash
-      env:
-        DISTRIBUTION: ${{ inputs.distribution }}
-        PROVIDER: ${{ inputs.provider }}
-        CLUSTER_NAME: st-hetzner-dispatch-${{ github.run_id }}
-        TRIAL_SERVER_TYPE: ${{ inputs.inventory-trial-server-type }}
-        TRIAL_LOCATION: ${{ inputs.inventory-trial-location }}
-        K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
-      run: |
-        set -euo pipefail
-        [[ "$DISTRIBUTION" == Talos && "$PROVIDER" == Hetzner && "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
-        export K8S_VERSION="${K8S_VERSION_FLAG#--kubernetes-version }"
-        timeout --kill-after=6m 20m bash "$GITHUB_WORKSPACE/.github/actions/ksail-system-test/autoscaler-audit-trial.sh"
 
     # ── Phase 7 — Cleanup ────────────────────────────────────────────
 
