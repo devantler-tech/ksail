@@ -370,8 +370,22 @@ awk '
 awk '
   /^  [a-z-]+:$/ { job = $1 }
   /timeout-minutes:/ { timeout[job] = $2 }
-  END { exit (timeout["cask-checkpoint:"] >= 65 && timeout["homebrew:"] >= 100) ? 0 : 1 }
+  END { exit (timeout["cask-checkpoint:"] >= 65 && timeout["homebrew:"] >= 100 && timeout["validate-release-ref:"] >= 65) ? 0 : 1 }
 ' "${cd_workflow}" || fail 'jobs that wait for the request budget must outlast the one-hour window'
+# The first read of every release spends the repository token, and a previous release's cask polling
+# can leave that token at zero while the next queued tag starts (devantler-tech/ksail#7907). The wait
+# must read the same token that the replay resolver spends, and must run before it.
+awk '
+  /^  [a-z-]+:$/ { job = $1; token = ""; waited = 0 }
+  /GH_TOKEN:/ { token = $2 " " $3 " " $4 }
+  /run: \.github\/scripts\/wait-for-github-api-budget\.sh/ {
+    if (job == "validate-release-ref:" && token == "${{ secrets.GITHUB_TOKEN }}") waited = 1
+  }
+  /run: bash \.github\/scripts\/resolve-release-replay\.sh/ {
+    if (job == "validate-release-ref:") { resolver = 1; if (!waited) bad = 1 }
+  }
+  END { exit (bad || !resolver) ? 1 : 0 }
+' "${cd_workflow}" || fail 'the replay resolver must wait for the repository token request budget first'
 for wait_file in wait-for-github-api-budget.sh wait-for-github-api-budget.test.sh; do
 	if [ "$(grep -Fc -- ".github/scripts/${wait_file}" "${ci_workflow}")" -lt 2 ]; then
 		fail "CI must path-filter and shellcheck ${wait_file}"
