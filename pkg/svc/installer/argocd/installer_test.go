@@ -163,6 +163,9 @@ func newArgoCDInstallerWithDefaults(
 func expectArgoCDInstall(t *testing.T, client *helm.MockInterface, installErr error) {
 	t.Helper()
 	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "argocd", "argocd").
+		Return(nil, helm.ErrNoReleaseStorage)
+	client.EXPECT().
 		InstallOrUpgradeChart(
 			mock.Anything,
 			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
@@ -184,4 +187,31 @@ func expectArgoCDUninstall(t *testing.T, client *helm.MockInterface, err error) 
 	client.EXPECT().
 		UninstallRelease(mock.Anything, "argocd", "argocd").
 		Return(err)
+}
+
+func TestInstallSkipsGitOpsManagedRelease(t *testing.T) {
+	t.Parallel()
+
+	installer, client := newArgoCDInstallerWithDefaults(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "argocd", "argocd").
+		Return(map[string]string{"argocd.argoproj.io/managed-by": "argocd"}, nil)
+
+	err := installer.Install(context.Background())
+
+	require.NoError(t, err)
+	client.AssertNotCalled(t, "InstallOrUpgradeChart", mock.Anything, mock.Anything)
+}
+
+func TestInstallReportsOwnershipLookupFailure(t *testing.T) {
+	t.Parallel()
+
+	installer, client := newArgoCDInstallerWithDefaults(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "argocd", "argocd").
+		Return(nil, assert.AnError)
+
+	err := installer.Install(context.Background())
+
+	require.ErrorIs(t, err, assert.AnError)
 }
