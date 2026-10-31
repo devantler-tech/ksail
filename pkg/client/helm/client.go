@@ -674,7 +674,12 @@ func (c *Client) upgradeRelease(
 	spec *ChartSpec,
 	postRenderer *apiVersionPostRenderer,
 ) (*v1.Release, error) {
-	client := newUpgradeAction(c.actionConfig, spec, c.lastReleaseApplyMethod(spec.ReleaseName))
+	lastApplyMethod, err := c.lastReleaseApplyMethod(spec.ReleaseName)
+	if err != nil {
+		return nil, fmt.Errorf("read apply method of release %q: %w", spec.ReleaseName, err)
+	}
+
+	client := newUpgradeAction(c.actionConfig, spec, lastApplyMethod)
 	client.PostRenderer = optionalAPIVersionPostRenderer(postRenderer)
 
 	chart, vals, err := c.loadChartAndValues(ctx, spec, client)
@@ -690,23 +695,29 @@ func (c *Client) upgradeRelease(
 }
 
 // lastReleaseApplyMethod returns how the latest revision of a release was applied ("ssa" or
-// "csa"), or "" when it cannot be read. The upgrade itself reports a missing release.
-func (c *Client) lastReleaseApplyMethod(releaseName string) string {
+// "csa"), or "" for a release with no recorded method. A missing release also returns "", as
+// the upgrade itself reports it. Any other read failure is an error: guessing "" would leave
+// ForceConflicts off for a release Helm may still upgrade with server-side apply.
+func (c *Client) lastReleaseApplyMethod(releaseName string) (string, error) {
 	if c.actionConfig == nil || c.actionConfig.Releases == nil {
-		return ""
+		return "", nil
 	}
 
 	last, err := c.actionConfig.Releases.Last(releaseName)
+	if errors.Is(err, helmv4driver.ErrReleaseNotFound) {
+		return "", nil
+	}
+
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("read latest revision: %w", err)
 	}
 
 	rel, ok := last.(*v1.Release)
 	if !ok || rel == nil {
-		return ""
+		return "", nil
 	}
 
-	return rel.ApplyMethod
+	return rel.ApplyMethod, nil
 }
 
 // newUpgradeAction configures the Helm upgrade KSail runs to bring a release back to its
@@ -716,8 +727,9 @@ func (c *Client) lastReleaseApplyMethod(releaseName string) string {
 // Helm CLI) would otherwise reject KSail's apply, so for those releases the upgrade takes the
 // fields back, as the Helm CLI does with --force-conflicts. Client-side apply has no field
 // conflicts, and Helm refuses ForceConflicts without server-side apply, so it stays off there.
-// KSail installers skip releases a GitOps controller owns (helmutil.SkipIfGitOpsManaged)
-// before they upgrade, so this never takes fields from Flux or Argo CD.
+// KSail installers skip releases whose record names a GitOps owner
+// (helmutil.SkipIfGitOpsManaged) before they upgrade. An Argo CD Application that adopted a
+// release without marking its record is not detected yet (ksail#8089).
 func newUpgradeAction(
 	cfg *helmv4action.Configuration,
 	spec *ChartSpec,

@@ -1,6 +1,7 @@
 package helm_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	helmv4action "helm.sh/helm/v4/pkg/action"
 	helmv4kube "helm.sh/helm/v4/pkg/kube"
+	"helm.sh/helm/v4/pkg/release"
 	"helm.sh/helm/v4/pkg/release/common"
 	v1 "helm.sh/helm/v4/pkg/release/v1"
 	"helm.sh/helm/v4/pkg/storage"
@@ -146,11 +148,35 @@ func TestLastReleaseApplyMethodReadsLatestRevision(t *testing.T) {
 
 	client := helm.NewClientFromParts(cfg, nil)
 
-	assert.Equal(t, "csa", client.LastReleaseApplyMethod("cert-manager"),
-		"the upgrade must follow how the latest revision was applied")
-	assert.Empty(
-		t,
-		client.LastReleaseApplyMethod("missing"),
-		"a missing release has no apply method",
-	)
+	method, err := client.LastReleaseApplyMethod("cert-manager")
+	require.NoError(t, err)
+	assert.Equal(t, "csa", method, "the upgrade must follow how the latest revision was applied")
+
+	method, err = client.LastReleaseApplyMethod("missing")
+	require.NoError(t, err, "the upgrade itself reports a missing release")
+	assert.Empty(t, method, "a missing release has no apply method")
+}
+
+// unreadableReleaseDriver fails every history read, as an unreachable API server does.
+type unreadableReleaseDriver struct {
+	*driver.Memory
+}
+
+var errReleaseHistoryUnreadable = errors.New("release history unreadable")
+
+func (unreadableReleaseDriver) Query(map[string]string) ([]release.Releaser, error) {
+	return nil, errReleaseHistoryUnreadable
+}
+
+func TestLastReleaseApplyMethodPropagatesLookupErrors(t *testing.T) {
+	t.Parallel()
+
+	cfg := helmv4action.NewConfiguration()
+	cfg.Releases = storage.Init(unreadableReleaseDriver{Memory: driver.NewMemory()})
+
+	client := helm.NewClientFromParts(cfg, nil)
+
+	_, err := client.LastReleaseApplyMethod("cert-manager")
+	require.ErrorIs(t, err, errReleaseHistoryUnreadable,
+		"an unknown apply method must not read as a release without one")
 }
