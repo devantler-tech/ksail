@@ -54,6 +54,22 @@ log_dir="${SYSTEM_TEST_LOG_DIR:-/tmp/ksail-system-test-logs}/$component-values-d
 mkdir -p "$log_dir"
 command -v helm >/dev/null || fail 'Helm CLI is required to seed the live release'
 helm version --short >"$log_dir/helm-version.txt"
+case "$(cat "$log_dir/helm-version.txt")" in
+v3.*)
+	helm_list_args=(--all --namespace "$namespace")
+	helm_rollback_flag=--atomic
+	helm_conflict_args=()
+	;;
+v4.*)
+	# Helm 4 lists all states by default and renamed the rollback option.
+	helm_list_args=(--namespace "$namespace")
+	helm_rollback_flag=--rollback-on-failure
+	# KSail installs through the Helm 4 SDK with server-side apply under its own field
+	# manager, so an out-of-band CLI edit must take ownership of the fields it seeds.
+	helm_conflict_args=(--server-side=true --force-conflicts)
+	;;
+*) fail 'unsupported Helm major version' ;;
+esac
 config_file="$PWD/ksail.yaml"
 cp "$config_file" "$log_dir/ksail-before.yaml"
 
@@ -114,8 +130,8 @@ read -r -a version_args <<<"$K8S_VERSION_FLAG"
 
 release_state() {
 	local phase="$1"
-	helm list --all --namespace "$namespace" --output json "${helm_target_args[@]}" >"$log_dir/$phase-release.json" || fail 'could not read latest Helm release'
-	# --all includes the latest failed/pending revision. A deployed-only query could
+	helm list "${helm_list_args[@]}" --output json "${helm_target_args[@]}" >"$log_dir/$phase-release.json" || fail 'could not read latest Helm release'
+	# Include the latest failed/pending revision on either major. A deployed-only query could
 	# hide a second attempted upgrade and falsely report convergence.
 	jq -er --arg release "$release" 'map(select(.name == $release)) |
     select(length == 1) | .[0] |
@@ -236,7 +252,8 @@ jq -eS --arg seed "$seed_value" "$seed_filter" \
 
 helm upgrade "$release" "$release" --repo "$chart_repo" \
 	--namespace "$namespace" --version "$chart_version" --reuse-values "${seed_args[@]}" \
-	--atomic --wait --wait-for-jobs --timeout 10m "${helm_target_args[@]}" >"$log_dir/seed-upgrade.log" 2>&1
+	"$helm_rollback_flag" ${helm_conflict_args[@]+"${helm_conflict_args[@]}"} --wait --wait-for-jobs --timeout 10m "${helm_target_args[@]}" >"$log_dir/seed-upgrade.log" 2>&1 ||
+	fail "seeding upgrade failed; see $log_dir/seed-upgrade.log"
 seed_revision=$(release_state seeded)
 [[ "$seed_revision" == "$((original_revision + 1))" ]] || fail 'seeding did not create exactly one revision'
 assert_ownership "$seed_revision"
