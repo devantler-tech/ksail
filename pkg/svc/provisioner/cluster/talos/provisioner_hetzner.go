@@ -376,6 +376,26 @@ func (p *Provisioner) ensureFloatingIPEndpoint(
 	return endpointIP, certSANs, nil
 }
 
+// checkStrayFloatingIPs runs the read-only stray check on an update that changes
+// neither the endpoint nor the control plane (ksail#7695). Every other path
+// reaches the check through ensureFloatingIPEndpoint, so without this an
+// ordinary update never reported a stray address. Like that check, it never
+// fails the update.
+func (p *Provisioner) checkStrayFloatingIPs(ctx context.Context, clusterName string) {
+	if !p.floatingIPEnabled() {
+		return
+	}
+
+	hzProvider, err := p.hetznerProvider()
+	if err != nil {
+		_, _ = fmt.Fprintf(p.logWriter, "  ⚠ Failed to check for stray floating IPs: %v\n", err)
+
+		return
+	}
+
+	p.warnAboutStrayFloatingIPs(ctx, hzProvider, clusterName)
+}
+
 // warnAboutStrayFloatingIPs surfaces ksail-owned floating IPs labelled for the
 // cluster that reconcile does not manage (ksail#6277). Reconcile adopts by name,
 // so a leaked address under another name is never attached or released, yet it
@@ -389,6 +409,14 @@ func (p *Provisioner) warnAboutStrayFloatingIPs(
 	strays, err := hzProvider.StrayFloatingIPs(ctx, clusterName)
 	if err != nil {
 		_, _ = fmt.Fprintf(p.logWriter, "  ⚠ Failed to check for stray floating IPs: %v\n", err)
+
+		return
+	}
+
+	// Say that the check ran, so a log without a warning reads as "checked, none found"
+	// rather than "never checked" (ksail#7695).
+	if len(strays) == 0 {
+		_, _ = fmt.Fprintln(p.logWriter, "  ✓ No stray floating IPs labelled for this cluster")
 
 		return
 	}
@@ -469,6 +497,8 @@ func (p *Provisioner) prepareFloatingIPEndpointBeforeNodeChanges(
 		oldSpec, newSpec, result,
 	)
 	if !hasEndpointDrift && !hasControlPlaneChange {
+		p.checkStrayFloatingIPs(ctx, clusterName)
+
 		return nil
 	}
 
