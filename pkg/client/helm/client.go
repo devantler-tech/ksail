@@ -674,14 +674,13 @@ func (c *Client) upgradeRelease(
 	spec *ChartSpec,
 	postRenderer *apiVersionPostRenderer,
 ) (*v1.Release, error) {
-	client := helmv4action.NewUpgrade(c.actionConfig)
-	client.Namespace = spec.Namespace
+	lastApplyMethod, err := c.lastReleaseApplyMethod(spec.ReleaseName)
+	if err != nil {
+		return nil, fmt.Errorf("read apply method of release %q: %w", spec.ReleaseName, err)
+	}
+
+	client := newUpgradeAction(c.actionConfig, spec, lastApplyMethod)
 	client.PostRenderer = optionalAPIVersionPostRenderer(postRenderer)
-
-	applyCommonActionConfig(upgradeActionAdapter{client}, spec)
-
-	// Note: Atomic is not supported in Helm v4 Upgrade action
-	client.SkipCRDs = !spec.UpgradeCRDs // Inverted logic in v4
 
 	chart, vals, err := c.loadChartAndValues(ctx, spec, client)
 	if err != nil {
@@ -693,6 +692,59 @@ func (c *Client) upgradeRelease(
 	}
 
 	return executeAndExtractRelease(runFn)
+}
+
+// lastReleaseApplyMethod returns how the latest revision of a release was applied ("ssa" or
+// "csa"), or "" for a release with no recorded method. A missing release also returns "", as
+// the upgrade itself reports it. Any other read failure is an error: guessing "" would leave
+// ForceConflicts off for a release Helm may still upgrade with server-side apply.
+func (c *Client) lastReleaseApplyMethod(releaseName string) (string, error) {
+	if c.actionConfig == nil || c.actionConfig.Releases == nil {
+		return "", nil
+	}
+
+	last, err := c.actionConfig.Releases.Last(releaseName)
+	if errors.Is(err, helmv4driver.ErrReleaseNotFound) {
+		return "", nil
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("read latest revision: %w", err)
+	}
+
+	rel, ok := last.(*v1.Release)
+	if !ok || rel == nil {
+		return "", nil
+	}
+
+	return rel.ApplyMethod, nil
+}
+
+// newUpgradeAction configures the Helm upgrade KSail runs to bring a release back to its
+// declared state. The upgrade keeps Helm's default apply method: a release last applied with
+// server-side apply is upgraded with server-side apply, and one last applied client-side stays
+// client-side. Under server-side apply a field another manager has applied (for example the
+// Helm CLI) would otherwise reject KSail's apply, so for those releases the upgrade takes the
+// fields back, as the Helm CLI does with --force-conflicts. Client-side apply has no field
+// conflicts, and Helm refuses ForceConflicts without server-side apply, so it stays off there.
+// KSail installers skip releases whose record names a GitOps owner
+// (helmutil.SkipIfGitOpsManaged) before they upgrade. An Argo CD Application that adopted a
+// release without marking its record is not detected yet (ksail#8089).
+func newUpgradeAction(
+	cfg *helmv4action.Configuration,
+	spec *ChartSpec,
+	lastApplyMethod string,
+) *helmv4action.Upgrade {
+	client := helmv4action.NewUpgrade(cfg)
+	client.Namespace = spec.Namespace
+	client.ForceConflicts = lastApplyMethod == string(v1.ApplyMethodServerSideApply)
+
+	applyCommonActionConfig(upgradeActionAdapter{client}, spec)
+
+	// Note: Atomic is not supported in Helm v4 Upgrade action
+	client.SkipCRDs = !spec.UpgradeCRDs // Inverted logic in v4
+
+	return client
 }
 
 func (c *Client) templateInstall(spec *ChartSpec) (*helmv4action.Install, error) {

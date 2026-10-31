@@ -123,6 +123,13 @@ updates:
         patterns:
           - "github/codeql-action"
           - "github/codeql-action/*"
+      # KSail's own composite actions are released together, and the workflow
+      # contract tests in internal/ciharness pin each reference to a reviewed
+      # commit. Moving them in one PR means one reviewed re-pin per release
+      # instead of one red PR per action.
+      ksail-actions:
+        patterns:
+          - "devantler-tech/ksail/.github/actions/*"
 
   - package-ecosystem: npm
     directory: /docs
