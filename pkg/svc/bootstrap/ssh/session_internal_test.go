@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -119,5 +120,65 @@ func TestOpenSessionCancellationDoesNotWaitForChannelClose(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("openSession waited for a blocked channel close after cancellation")
+	}
+}
+
+type countingCloser struct {
+	closes *atomic.Int32
+}
+
+func (c countingCloser) Close() error {
+	c.closes.Add(1)
+
+	return nil
+}
+
+// TestCloseOnDoneIgnoresContextEndingAfterStop stops the watch and then ends the
+// context before its goroutine has run, as a dial does when it returns a client
+// and its caller cancels the dial's context. The goroutine then finds both
+// signals ready, and the client it was watching must stay open.
+func TestCloseOnDoneIgnoresContextEndingAfterStop(t *testing.T) {
+	t.Parallel()
+
+	const attempts = 2000
+
+	var closes atomic.Int32
+
+	for range attempts {
+		ctx, cancel := context.WithCancel(t.Context())
+		stop := closeOnDone(ctx, countingCloser{closes: &closes})
+
+		stop()
+		cancel()
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	if got := closes.Load(); got != 0 {
+		t.Fatalf("closed %d of %d stopped watches", got, attempts)
+	}
+}
+
+// TestCloseOnDoneClosesWhenContextEndsBeforeStop keeps cancellation working: a
+// hung handshake or command is only unblocked by this close.
+func TestCloseOnDoneClosesWhenContextEndsBeforeStop(t *testing.T) {
+	t.Parallel()
+
+	var closes atomic.Int32
+
+	ctx, cancel := context.WithCancel(t.Context())
+	stop := closeOnDone(ctx, countingCloser{closes: &closes})
+
+	defer stop()
+
+	cancel()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for closes.Load() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("a watch whose context ended did not close")
+		}
+
+		time.Sleep(time.Millisecond)
 	}
 }

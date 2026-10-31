@@ -329,7 +329,14 @@ func closeOnDone(ctx context.Context, closer interface{ Close() error }) func() 
 	go func() {
 		select {
 		case <-ctx.Done():
-			_ = closer.Close()
+			// A goroutine that first runs after both signals fired can land
+			// here at random. A stop that came first still wins, because a
+			// dial's caller cancels the dial's context once it has the client.
+			select {
+			case <-done:
+			default:
+				_ = closer.Close()
+			}
 		case <-done:
 		}
 	}()
