@@ -132,7 +132,7 @@ if [[ "$FIXTURE_HELM_VERSION" == v4.* ]]; then
 else
   for arg in "$@"; do
     case "$arg" in
-      --server-side*|--force-conflicts) echo "unknown flag: $arg" >&2; exit 1 ;;
+      --server-side*|--force-conflicts|--rollback-on-failure) echo "unknown flag: $arg" >&2; exit 1 ;;
     esac
   done
 fi
