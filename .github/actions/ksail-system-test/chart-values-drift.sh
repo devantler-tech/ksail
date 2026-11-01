@@ -197,11 +197,118 @@ update_cluster() {
 		>"$log_dir/$phase.stdout" 2>"$log_dir/$phase.stderr" || fail 'cluster update failed'
 }
 
+# These observations use the existing isolated Vanilla job. Keep certificate bytes
+# and service endpoints out of artifacts; record only names and CA-presence flags.
+capture_kyverno_webhooks() {
+	local phase="$1" resource_required="$2"
+	kubectl get mutatingwebhookconfigurations \
+		kyverno-policy-mutating-webhook-cfg kyverno-resource-mutating-webhook-cfg \
+		--request-timeout=15s --output json "${cli_target_args[@]}" |
+		jq -eS '
+      .items | select(type=="array" and length==2) |
+      map(select(.kind=="MutatingWebhookConfiguration") |
+        {name:.metadata.name,
+         entries:((if .webhooks==null then []
+           elif (.webhooks|type)=="array" then .webhooks
+           else error("webhooks must be an array") end) |
+           map({caPublished:(.clientConfig.caBundle | type=="string" and length>0)}))}) |
+      sort_by(.name) |
+      select(map(.name)==["kyverno-policy-mutating-webhook-cfg","kyverno-resource-mutating-webhook-cfg"])
+    ' >"$log_dir/$phase-webhooks.json" || fail 'could not capture Kyverno webhook publication'
+	jq -e --argjson resource_required "$resource_required" '
+    (.[0].entries | length>0 and all(.[]; .caPublished==true)) and
+    (.[1].entries | if $resource_required then length>0 and all(.[]; .caPublished==true)
+     else length==0 end)
+  ' "$log_dir/$phase-webhooks.json" >/dev/null || fail 'Kyverno webhook publication is incomplete'
+}
+
+# shellcheck disable=SC2317 # Invoked by the Kyverno proof's EXIT trap.
+cleanup_kyverno_proof() {
+	local result=$?
+	trap - EXIT
+	if [[ "$proof_namespace_created" == true ]]; then
+		# Raw DELETE forwards this body. Bind deletion to the namespace UID and
+		# separately wait for disappearance; raw mode does not wait for cleanup.
+		if ! jq -n --arg uid "$proof_namespace_uid" \
+			'{apiVersion:"v1",kind:"DeleteOptions",preconditions:{uid:$uid}}' \
+			>"$log_dir/admission-delete-options.json"; then
+			echo 'could not remove the owned Kyverno proof namespace' >&2
+			result=1
+		elif ! kubectl delete --raw "/api/v1/namespaces/$proof_namespace" \
+			--filename "$log_dir/admission-delete-options.json" --request-timeout=15s \
+			"${cli_target_args[@]}" >"$log_dir/admission-cleanup.log" 2>&1; then
+			echo 'could not remove the owned Kyverno proof namespace' >&2
+			result=1
+		elif ! kubectl wait --for=delete "namespace/$proof_namespace" --timeout=60s \
+			--request-timeout=15s "${cli_target_args[@]}" >>"$log_dir/admission-cleanup.log" 2>&1; then
+			echo 'could not verify owned Kyverno proof namespace removal' >&2
+			result=1
+		fi
+	fi
+	if [[ "$result" -eq 0 ]]; then
+		echo 'kyverno admission proof: policy-free CAs, persisted mutation and owned cleanup verified'
+	fi
+	exit "$result"
+}
+
+prove_kyverno_admission() {
+	# Creation must succeed before cleanup is authorized; a pre-existing namespace
+	# is never adopted or deleted. The cluster target is the job's bound Kind context.
+	proof_namespace="ksail-kyverno-admission-$$"
+	proof_namespace_created=false
+	trap cleanup_kyverno_proof EXIT
+	kubectl create namespace "$proof_namespace" --request-timeout=15s \
+		--output json "${cli_target_args[@]}" >"$log_dir/admission-namespace.json" ||
+		fail 'could not create the owned Kyverno proof namespace'
+	proof_namespace_uid=$(jq -er --arg name "$proof_namespace" '
+    select(.apiVersion=="v1" and .kind=="Namespace" and .metadata.name==$name) |
+    .metadata.uid | select(type=="string" and length>0)
+  ' "$log_dir/admission-namespace.json") || fail 'created Kyverno proof namespace identity is unknown'
+	proof_namespace_created=true
+	jq -n --arg namespace "$proof_namespace" '
+    {apiVersion:"kyverno.io/v1",kind:"Policy",
+     metadata:{name:"ksail-admission-proof",namespace:$namespace},
+     spec:{background:false,rules:[{name:"label-owned-configmap",
+       match:{any:[{resources:{kinds:["ConfigMap"],operations:["CREATE"]}}]},
+       mutate:{patchStrategicMerge:{metadata:{labels:{"ksail.dev/admission-proof":"verified"}}}}
+     }]}}
+  ' >"$log_dir/admission-policy.json"
+	kubectl create --filename "$log_dir/admission-policy.json" --namespace "$proof_namespace" \
+		--request-timeout=15s "${cli_target_args[@]}" >"$log_dir/admission-policy-create.log" 2>&1 ||
+		fail 'could not create the owned Kyverno proof policy'
+
+	local admitted=false attempt
+	for ((attempt = 1; attempt <= 20; attempt++)); do
+		# Server dry-run traverses admission without persisting a probe. Neither
+		# this request nor the real create below supplies the expected label.
+		if kubectl create configmap ksail-admission-proof --namespace "$proof_namespace" \
+			--dry-run=server --request-timeout=3s --output json "${cli_target_args[@]}" \
+			>"$log_dir/admission-dry-run.json" 2>"$log_dir/admission-dry-run.stderr" &&
+			jq -e '.metadata.labels["ksail.dev/admission-proof"]=="verified"' \
+				"$log_dir/admission-dry-run.json" >/dev/null; then
+			admitted=true
+			break
+		fi
+		[[ "$attempt" -eq 20 ]] || sleep 1
+	done
+	[[ "$admitted" == true ]] || fail 'Kyverno admission mutation did not converge'
+	kubectl create configmap ksail-admission-proof --namespace "$proof_namespace" \
+		--request-timeout=15s --output json "${cli_target_args[@]}" \
+		>"$log_dir/admission-created.json" || fail 'could not create the admitted ConfigMap'
+	kubectl get configmap ksail-admission-proof --namespace "$proof_namespace" \
+		--request-timeout=15s --output json "${cli_target_args[@]}" \
+		>"$log_dir/admission-readback.json" || fail 'could not read the admitted ConfigMap'
+	jq -e '.metadata.labels["ksail.dev/admission-proof"]=="verified"' \
+		"$log_dir/admission-readback.json" >/dev/null || fail 'persisted ConfigMap lacks the Kyverno admission label'
+	capture_kyverno_webhooks admitted true
+}
+
 original_revision=$(release_state original)
 assert_ownership "$original_revision"
 read_values original "$original_revision"
 jq -e "$initial_values_filter" "$log_dir/original-values.json" >/dev/null || fail 'initial KSail values are missing'
 assert_diff initial 0
+if [[ "$component" == kyverno ]]; then capture_kyverno_webhooks policy-free false; fi
 chart_version=$(jq -er --arg release "$release" 'map(select(.name == $release)) | .[0].chart |
   sub("^" + $release + "-"; "")' "$log_dir/original-release.json")
 
@@ -284,4 +391,5 @@ assert_ownership "$repeated_revision"
 read_values repeated "$repeated_revision"
 cmp -s "$log_dir/original-values.json" "$log_dir/repeated-values.json" || fail 'repeated update changed desired values'
 cmp -s ksail.yaml "$log_dir/ksail-before.yaml" || fail 'trial changed the declared KSail spec'
+if [[ "$component" == kyverno ]]; then prove_kyverno_admission; fi
 echo "$component values trial: one Helm upgrade and a repeated no-op (revisions $seed_revision → $updated_revision → $repeated_revision)"
