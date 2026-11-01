@@ -243,6 +243,18 @@ func TestMirrorHelperImagePullIsRetriedAndNamed(t *testing.T) {
 	)
 }
 
+// assertHelperPullAttempts requires three attempts on each helper source and no other source.
+func assertHelperPullAttempts(t *testing.T, recorded string) {
+	t.Helper()
+
+	assert.Equal(t, 3, strings.Count(recorded, "pull --quiet mirror.gcr.io/"),
+		"the pull must stop after three attempts")
+	assert.Equal(t, 3, strings.Count(recorded, "pull --quiet public.ecr.aws/"),
+		"the recovery must stop after three attempts")
+	assert.Equal(t, 6, strings.Count(recorded, "pull --quiet "),
+		"no other source may be tried")
+}
+
 func TestMirrorWarmStopsBeforeExportWithoutHelperImage(t *testing.T) {
 	t.Parallel()
 	action := readCompositeAction(t, ".github/actions/warm-mirror-cache/action.yaml")
@@ -282,24 +294,7 @@ exit 1
 
 	recorded, err := os.ReadFile(calls) //nolint:gosec // G304: fixture path created by this test
 	require.NoError(t, err)
-	assert.Equal(
-		t,
-		3,
-		strings.Count(string(recorded), "pull --quiet mirror.gcr.io/"),
-		"the pull must stop after three attempts",
-	)
-	assert.Equal(
-		t,
-		3,
-		strings.Count(string(recorded), "pull --quiet public.ecr.aws/"),
-		"the recovery must stop after three attempts",
-	)
-	assert.Equal(
-		t,
-		6,
-		strings.Count(string(recorded), "pull --quiet "),
-		"no other source may be tried",
-	)
+	assertHelperPullAttempts(t, string(recorded))
 	assert.NotContains(
 		t,
 		string(recorded),
