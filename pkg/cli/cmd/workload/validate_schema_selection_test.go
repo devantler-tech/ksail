@@ -1,9 +1,12 @@
 package workload_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -25,7 +28,7 @@ const selectionCatalogue = "https://raw.githubusercontent.com/datreeio/CRDs-cata
 const selectionSchemaURL = "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/" +
 	"helm.toolkit.fluxcd.io/helmrelease_v2.json"
 
-const selectionSchemaDigest = "73e96c113f28b430121890e75b5980c3712bda9b7bde223a82149b40b83406bb"
+const selectionSchemaContentDigest = "c853417c55e892ae5ea7041629af046477fd70a07485c92fa656fd6dfdb65d38"
 
 const selectionHelmRelease = `apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
@@ -38,6 +41,35 @@ spec:
     kind: OCIRepository
     name: podinfo
 `
+
+// TestSelectedSchemaFixtureProvenance permits formatting while retaining every
+// upstream JSON token, including validation rules and whitespace inside strings.
+func TestSelectedSchemaFixtureProvenance(t *testing.T) {
+	t.Parallel()
+
+	data, err := os.ReadFile("testdata/schema-selection/helmrelease-v2.json")
+	require.NoError(t, err)
+	digest, err := schemaTokenDigest(data)
+	require.NoError(t, err)
+	require.Equal(t, selectionSchemaContentDigest, digest)
+
+	var indented bytes.Buffer
+
+	require.NoError(t, json.Indent(&indented, data, "", "    "))
+	require.NotEqual(t, data, indented.Bytes())
+	formattedDigest, err := schemaTokenDigest(indented.Bytes())
+	require.NoError(t, err)
+	require.Equal(t, digest, formattedDigest)
+
+	changed := bytes.Replace(data, []byte(`"OCIRepository"`), []byte(`"UnsupportedSource"`), 1)
+	require.NotEqual(t, data, changed)
+	changedDigest, err := schemaTokenDigest(changed)
+	require.NoError(t, err)
+	require.NotEqual(t, selectionSchemaContentDigest, changedDigest)
+
+	_, err = schemaTokenDigest(append(data, '\n', '{', '}'))
+	require.Error(t, err, "additional JSON values must not disappear during normalization")
+}
 
 // TestValidateSelectedSchemaLocations uses the actual catalogue schema and real
 // command. Real HTTP 404 misses never insert fictional built-in cache entries.
@@ -249,8 +281,8 @@ func selectedTypingFixture(t *testing.T) (string, string) {
 	return "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: typing\ndata:\n  attempts: ${ATTEMPTS}\n", location
 }
 
-// selectedCachedSchema proves the later offline process sees the exact original
-// downloaded bytes, without trusting a path supplied through the environment.
+// selectedCachedSchema proves the later offline process sees the pinned schema's
+// JSON tokens, without trusting a path supplied through the environment.
 func selectedCachedSchema(t *testing.T) []byte {
 	t.Helper()
 
@@ -260,10 +292,26 @@ func selectedCachedSchema(t *testing.T) []byte {
 	data, ok := stored.([]byte)
 	require.True(t, ok, "the native cache must contain schema bytes")
 
-	digest := sha256.Sum256(data)
-	require.Equal(t, selectionSchemaDigest, hex.EncodeToString(digest[:]))
+	digest, err := schemaTokenDigest(data)
+	require.NoError(t, err)
+	require.Equal(t, selectionSchemaContentDigest, digest)
 
 	return data
+}
+
+// schemaTokenDigest removes only insignificant JSON whitespace. It preserves
+// key order, duplicate keys, number spellings and string contents without decoding.
+func schemaTokenDigest(data []byte) (string, error) {
+	var compact bytes.Buffer
+
+	err := json.Compact(&compact, data)
+	if err != nil {
+		return "", fmt.Errorf("compact schema fixture: %w", err)
+	}
+
+	digest := sha256.Sum256(compact.Bytes())
+
+	return hex.EncodeToString(digest[:]), nil
 }
 
 // selectedSchemaArguments retains full strictness and disables chart rendering
