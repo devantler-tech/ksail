@@ -139,7 +139,19 @@ func handleDiffRunE(
 		return err
 	}
 
+	// Diff is read-only, so a context it cannot select stays a warning, recorded as an
+	// unknown baseline so the result can never read as a clean "no drift".
+	contextErr := resolveImplicitEKSKubeContext(cmd.Context(), ctx)
+	if contextErr != nil {
+		notify.Warningf(
+			cmd.ErrOrStderr(),
+			"Cannot select the eksctl kubeconfig context (drift detection may be incomplete): %v",
+			contextErr,
+		)
+	}
+
 	diff := computeSpecOnlyDiff(cmd, ctx)
+	recordUnselectableKubeContext(diff, contextErr)
 
 	// Also try provisioner-level diff for Updater-capable provisioners.
 	// This adds distribution-specific changes (e.g., node counts, Talos config).
@@ -238,4 +250,20 @@ func mergeProvisionerDiff(
 	}
 
 	specdiff.MergeProvisionerDiff(mainDiff, provisionerDiff)
+}
+
+// recordUnselectableKubeContext marks the live baseline unknown when the cluster's
+// kubeconfig context could not be selected, so diff never reports a false clean.
+func recordUnselectableKubeContext(diff *clusterupdate.UpdateResult, err error) {
+	if err == nil || diff == nil {
+		return
+	}
+
+	diff.UnknownBaseline = append(diff.UnknownBaseline, clusterupdate.Change{
+		Field:    "cluster.connection.context",
+		OldValue: clusterupdate.UnknownBaselineValue,
+		NewValue: "selected kubeconfig context",
+		Category: clusterupdate.ChangeCategoryUnknown,
+		Reason:   "the cluster's kubeconfig context could not be selected; live state was not read",
+	})
 }
