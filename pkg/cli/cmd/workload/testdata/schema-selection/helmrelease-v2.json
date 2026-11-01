@@ -60,10 +60,7 @@
                 "reconcileStrategy": {
                   "default": "ChartVersion",
                   "description": "Determines what enables the creation of a new artifact. Valid values are\n('ChartVersion', 'Revision').\nSee the documentation of the values for an explanation on their behavior.\nDefaults to ChartVersion when omitted.",
-                  "enum": [
-                    "ChartVersion",
-                    "Revision"
-                  ],
+                  "enum": ["ChartVersion", "Revision"],
                   "type": "string"
                 },
                 "sourceRef": {
@@ -75,11 +72,7 @@
                     },
                     "kind": {
                       "description": "Kind of the referent.",
-                      "enum": [
-                        "HelmRepository",
-                        "GitRepository",
-                        "Bucket"
-                      ],
+                      "enum": ["HelmRepository", "GitRepository", "Bucket"],
                       "type": "string"
                     },
                     "name": {
@@ -95,10 +88,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "kind",
-                    "name"
-                  ],
+                  "required": ["kind", "name"],
                   "type": "object",
                   "additionalProperties": false
                 },
@@ -115,10 +105,7 @@
                     "provider": {
                       "default": "cosign",
                       "description": "Provider specifies the technology used to sign the OCI Helm chart.",
-                      "enum": [
-                        "cosign",
-                        "notation"
-                      ],
+                      "enum": ["cosign", "notation"],
                       "type": "string"
                     },
                     "secretRef": {
@@ -129,16 +116,12 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "name"
-                      ],
+                      "required": ["name"],
                       "type": "object",
                       "additionalProperties": false
                     }
                   },
-                  "required": [
-                    "provider"
-                  ],
+                  "required": ["provider"],
                   "type": "object",
                   "additionalProperties": false
                 },
@@ -148,17 +131,12 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "chart",
-                "sourceRef"
-              ],
+              "required": ["chart", "sourceRef"],
               "type": "object",
               "additionalProperties": false
             }
           },
-          "required": [
-            "spec"
-          ],
+          "required": ["spec"],
           "type": "object",
           "additionalProperties": false
         },
@@ -171,11 +149,7 @@
             },
             "kind": {
               "description": "Kind of the referent.",
-              "enum": [
-                "OCIRepository",
-                "HelmChart",
-                "ExternalArtifact"
-              ],
+              "enum": ["OCIRepository", "HelmChart", "ExternalArtifact"],
               "type": "string"
             },
             "name": {
@@ -191,10 +165,7 @@
               "type": "string"
             }
           },
-          "required": [
-            "kind",
-            "name"
-          ],
+          "required": ["kind", "name"],
           "type": "object",
           "additionalProperties": false
         },
@@ -237,9 +208,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "name"
-            ],
+            "required": ["name"],
             "type": "object",
             "additionalProperties": false
           },
@@ -296,9 +265,7 @@
                     "additionalProperties": false
                   }
                 },
-                "required": [
-                  "paths"
-                ],
+                "required": ["paths"],
                 "type": "object",
                 "additionalProperties": false
               },
@@ -306,11 +273,7 @@
             },
             "mode": {
               "description": "Mode defines how differences should be handled between the Helm manifest\nand the manifest currently applied to the cluster.\nIf not explicitly set, it defaults to DiffModeDisabled.",
-              "enum": [
-                "enabled",
-                "warn",
-                "disabled"
-              ],
+              "enum": ["enabled", "warn", "disabled"],
               "type": "string"
             }
           },
@@ -343,10 +306,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "apiVersion",
-              "current"
-            ],
+            "required": ["apiVersion", "current"],
             "type": "object",
             "additionalProperties": false
           },
@@ -357,11 +317,7 @@
           "properties": {
             "crds": {
               "description": "CRDs upgrade CRDs from the Helm Chart's crds directory according\nto the CRD upgrade policy provided here. Valid values are `Skip`,\n`Create` or `CreateReplace`. Default is `Create` and if omitted\nCRDs are installed but not updated.\n\nSkip: do neither install nor replace (update) any CRDs.\n\nCreate: new CRDs are created, existing CRDs are neither updated nor deleted.\n\nCreateReplace: new CRDs are created, existing CRDs are updated (replaced)\nbut not deleted.\n\nBy default, CRDs are applied (installed) during Helm install action.\nWith this option users can opt in to CRD replace existing CRDs on Helm\ninstall actions, which is not (yet) natively supported by Helm.\nhttps://helm.sh/docs/chart_best_practices/custom_resource_definitions.",
-              "enum": [
-                "Skip",
-                "Create",
-                "CreateReplace"
-              ],
+              "enum": ["Skip", "Create", "CreateReplace"],
               "type": "string"
             },
             "createNamespace": {
@@ -428,10 +384,7 @@
               "properties": {
                 "name": {
                   "description": "Name of the install strategy.",
-                  "enum": [
-                    "RemediateOnFailure",
-                    "RetryOnFailure"
-                  ],
+                  "enum": ["RemediateOnFailure", "RetryOnFailure"],
                   "type": "string"
                 },
                 "retryInterval": {
@@ -440,9 +393,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "name"
-              ],
+              "required": ["name"],
               "type": "object",
               "x-kubernetes-validations": [
                 {
@@ -477,9 +428,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "name"
-              ],
+              "required": ["name"],
               "type": "object",
               "additionalProperties": false
             },
@@ -495,9 +444,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "name"
-              ],
+              "required": ["name"],
               "type": "object",
               "additionalProperties": false
             }
@@ -525,11 +472,7 @@
         },
         "postRenderStrategy": {
           "description": "PostRenderStrategy defines the strategy for sending hooks to post-renderers.\nValid values are 'nohooks' (hooks not sent to post-renderers, Helm 3 behavior),\n'combined' (hooks and templates sent together, Helm 4 default), and 'separate'\n(hooks and templates sent in separate streams, Helm 4.2 opt-in).\nDefaults to 'combined', or 'nohooks' when the UseHelm3Defaults feature gate is enabled.",
-          "enum": [
-            "nohooks",
-            "combined",
-            "separate"
-          ],
+          "enum": ["nohooks", "combined", "separate"],
           "type": "string"
         },
         "postRenderers": {
@@ -562,9 +505,7 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "name"
-                      ],
+                      "required": ["name"],
                       "type": "object",
                       "additionalProperties": false
                     },
@@ -615,9 +556,7 @@
                           "additionalProperties": false
                         }
                       },
-                      "required": [
-                        "patch"
-                      ],
+                      "required": ["patch"],
                       "type": "object",
                       "additionalProperties": false
                     },
@@ -668,11 +607,7 @@
             },
             "serverSideApply": {
               "description": "ServerSideApply enables server-side apply for resources during rollback.\nCan be \"enabled\", \"disabled\", or \"auto\".\nWhen \"auto\", server-side apply usage will be based on the release's previous usage.\nDefaults to \"auto\".",
-              "enum": [
-                "enabled",
-                "disabled",
-                "auto"
-              ],
+              "enum": ["enabled", "disabled", "auto"],
               "type": "string"
             },
             "timeout": {
@@ -729,9 +664,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "name"
-                ],
+                "required": ["name"],
                 "type": "object",
                 "additionalProperties": false
               },
@@ -761,11 +694,7 @@
             "deletionPropagation": {
               "default": "background",
               "description": "DeletionPropagation specifies the deletion propagation policy when\na Helm uninstall is performed.",
-              "enum": [
-                "background",
-                "foreground",
-                "orphan"
-              ],
+              "enum": ["background", "foreground", "orphan"],
               "type": "string"
             },
             "disableHooks": {
@@ -794,10 +723,7 @@
           "properties": {
             "chartNameChangeStrategy": {
               "description": "ChartNameChangeStrategy defines the strategy to use when a Helm chart name changes.\nValid values are 'Reinstall' or 'InPlaceUpdate'. Defaults to 'Reinstall' if omitted.\n\nReinstall: Reinstall the Helm release, uninstalling the existing Helm release.\n\nInPlaceUpdate: Update the Helm release in place.",
-              "enum": [
-                "InPlaceUpdate",
-                "Reinstall"
-              ],
+              "enum": ["InPlaceUpdate", "Reinstall"],
               "type": "string"
             },
             "cleanupOnFail": {
@@ -806,11 +732,7 @@
             },
             "crds": {
               "description": "CRDs upgrade CRDs from the Helm Chart's crds directory according\nto the CRD upgrade policy provided here. Valid values are `Skip`,\n`Create` or `CreateReplace`. Default is `Skip` and if omitted\nCRDs are neither installed nor upgraded.\n\nSkip: do neither install nor replace (update) any CRDs.\n\nCreate: new CRDs are created, existing CRDs are neither updated nor deleted.\n\nCreateReplace: new CRDs are created, existing CRDs are updated (replaced)\nbut not deleted.\n\nBy default, CRDs are not applied during Helm upgrade action. With this\noption users can opt-in to CRD upgrade, which is not (yet) natively supported by Helm.\nhttps://helm.sh/docs/chart_best_practices/custom_resource_definitions.",
-              "enum": [
-                "Skip",
-                "Create",
-                "CreateReplace"
-              ],
+              "enum": ["Skip", "Create", "CreateReplace"],
               "type": "string"
             },
             "disableHooks": {
@@ -862,10 +784,7 @@
                 },
                 "strategy": {
                   "description": "Strategy to use for failure remediation. Defaults to 'rollback'.",
-                  "enum": [
-                    "rollback",
-                    "uninstall"
-                  ],
+                  "enum": ["rollback", "uninstall"],
                   "type": "string"
                 }
               },
@@ -874,11 +793,7 @@
             },
             "serverSideApply": {
               "description": "ServerSideApply enables server-side apply for resources during upgrade.\nCan be \"enabled\", \"disabled\", or \"auto\".\nWhen \"auto\", server-side apply usage will be based on the release's previous usage.\nDefaults to \"auto\".",
-              "enum": [
-                "enabled",
-                "disabled",
-                "auto"
-              ],
+              "enum": ["enabled", "disabled", "auto"],
               "type": "string"
             },
             "strategy": {
@@ -886,10 +801,7 @@
               "properties": {
                 "name": {
                   "description": "Name of the upgrade strategy.",
-                  "enum": [
-                    "RemediateOnFailure",
-                    "RetryOnFailure"
-                  ],
+                  "enum": ["RemediateOnFailure", "RetryOnFailure"],
                   "type": "string"
                 },
                 "retryInterval": {
@@ -898,9 +810,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "name"
-              ],
+              "required": ["name"],
               "type": "object",
               "x-kubernetes-validations": [
                 {
@@ -930,10 +840,7 @@
             "properties": {
               "kind": {
                 "description": "Kind of the values referent, valid values are ('Secret', 'ConfigMap').",
-                "enum": [
-                  "Secret",
-                  "ConfigMap"
-                ],
+                "enum": ["Secret", "ConfigMap"],
                 "type": "string"
               },
               "literal": {
@@ -963,10 +870,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "kind",
-              "name"
-            ],
+            "required": ["kind", "name"],
             "type": "object",
             "additionalProperties": false
           },
@@ -977,23 +881,16 @@
           "properties": {
             "name": {
               "description": "Name is Helm's wait strategy for waiting for applied resources to\nbecome ready. One of 'poller' or 'legacy'. The 'poller' strategy uses\nkstatus to poll resource statuses, while the 'legacy' strategy uses\nHelm v3's waiting logic.\nDefaults to 'poller', or to 'legacy' when UseHelm3Defaults feature\ngate is enabled.",
-              "enum": [
-                "poller",
-                "legacy"
-              ],
+              "enum": ["poller", "legacy"],
               "type": "string"
             }
           },
-          "required": [
-            "name"
-          ],
+          "required": ["name"],
           "type": "object",
           "additionalProperties": false
         }
       },
-      "required": [
-        "interval"
-      ],
+      "required": ["interval"],
       "type": "object",
       "x-kubernetes-validations": [
         {
@@ -1039,11 +936,7 @@
               },
               "status": {
                 "description": "status of the condition, one of True, False, Unknown.",
-                "enum": [
-                  "True",
-                  "False",
-                  "Unknown"
-                ],
+                "enum": ["True", "False", "Unknown"],
                 "type": "string"
               },
               "type": {
@@ -1207,19 +1100,14 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "id",
-                  "v"
-                ],
+                "required": ["id", "v"],
                 "type": "object",
                 "additionalProperties": false
               },
               "type": "array"
             }
           },
-          "required": [
-            "entries"
-          ],
+          "required": ["entries"],
           "type": "object",
           "additionalProperties": false
         },
@@ -1234,10 +1122,7 @@
         },
         "lastAttemptedReleaseAction": {
           "description": "LastAttemptedReleaseAction is the last release action performed for this\nHelmRelease. It is used to determine the active retry or remediation\nstrategy.",
-          "enum": [
-            "install",
-            "upgrade"
-          ],
+          "enum": ["install", "upgrade"],
           "type": "string"
         },
         "lastAttemptedReleaseActionDuration": {
