@@ -51,12 +51,14 @@ cleanup() {
 	exit "${code}"
 }
 trap cleanup EXIT
+export KSAIL_CASK_READ_RECOVERY_MARKER="${work}/read-recoveries"
+: >"$KSAIL_CASK_READ_RECOVERY_MARKER"
 head="" base="" draft="" node="" boundary="" merge_state=""
 # Report a refusal without converting missing or invalid evidence into delivery success.
 blocked() { printf 'BLOCKED: %s\n' "$1" >&2; }
 
 # Public evidence reads use the workflow's independently scoped allowance.
-read_api() { GH_TOKEN="${KSAIL_CASK_READ_TOKEN:-${GH_TOKEN:-}}" gh api "$@"; }
+read_api() { "${script_dir}/cask-read-api.sh" "$@"; }
 # The production caller binds all write waits to one shared, finite window.
 wait_write_budget() {
 	if [[ -n "${KSAIL_GITHUB_WRITE_BUDGET_DEADLINE:-}" ]]; then
@@ -424,10 +426,41 @@ wait_screen() {
 	return 1
 }
 
+# Verify every gate without adding a readiness retry phase.
+complete_readiness() {
+	capture || return 1
+	if ! screen || ! read_state || ! rebind_rest || ! published_release; then return 1; fi
+	if [[ "$1" == merge && "$merge_state" != CLEAN ]]; then return 1; fi
+}
+
+# Preserve the original phase and its retries. A recovered read requires one
+# complete fresh pass; another recovery during that pass refuses the mutation.
+stable_mutation_gate() {
+	local phase="$1" before after
+	before="$(wc -c <"$KSAIL_CASK_READ_RECOVERY_MARKER")" || return 1
+	wait_write_budget || return 1
+	if [[ "$phase" == promotion ]]; then
+		capture && read_state || return 1
+	else
+		complete_readiness "$phase" || return 1
+	fi
+	after="$(wc -c <"$KSAIL_CASK_READ_RECOVERY_MARKER")" || return 1
+	if [[ "$before" -eq "$after" ]]; then return 0; fi
+	printf 'Recovered read invalidated the snapshot; rechecking every delivery gate.\n' >&2
+	if [[ -n "${KSAIL_GITHUB_WRITE_BUDGET_DEADLINE:-}" ]]; then
+		"${script_dir}/wait-for-github-api-budget.sh" || return 1
+	fi
+	before="$(wc -c <"$KSAIL_CASK_READ_RECOVERY_MARKER")" || return 1
+	complete_readiness "$phase" || return 1
+	after="$(wc -c <"$KSAIL_CASK_READ_RECOVERY_MARKER")" || return 1
+	if [[ "$before" -ne "$after" ]]; then
+		blocked 'read recovery repeated during final verification; reevaluation is required'
+		return 1
+	fi
+}
+
 capture
-wait_write_budget
-capture
-read_state
+stable_mutation_gate promotion
 if [[ "${draft}" == true ]]; then
 	boundary="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 	if [[ ! "${boundary}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
@@ -443,9 +476,7 @@ if [[ "${draft}" == true ]]; then
 	fi
 	draft=false
 fi
-wait_write_budget
-capture
-if ! screen || ! read_state || [[ "${merge_state}" != CLEAN ]] || ! rebind_rest || ! published_release; then exit 1; fi
+stable_mutation_gate merge
 
 # The async API provides the explicit non-bypass contract the synchronous merge endpoint lacks
 # for privileged actors. Accepted requests are not delivery; only the merged result and exact

@@ -17,7 +17,7 @@ else printf '2030-01-01T00:00:00Z\n'; fi
 EOF
 cat >"${work}/bin/sleep" <<'EOF'
 #!/usr/bin/env bash
-if [[ "${FINISH_SCENARIO:-}" == write-budget-* ]]; then
+if [[ "${FINISH_SCENARIO:-}" == write-budget-* || "${FINISH_SCENARIO:-}" == read-budget-* ]]; then
   now=1000
   [[ ! -f "${FINISH_STATE}/clock" ]] || now="$(<"${FINISH_STATE}/clock")"
   printf '%s\n' "$((now + $1))" > "${FINISH_STATE}/clock"
@@ -34,17 +34,64 @@ line="$*"
 # The personal write token is deliberately exhausted for reads. The real
 # finisher must still complete through the independent read credential, while
 # promotion and the pinned merge must retain the write credential.
-if [[ "$scenario" == isolated-read-budget || "$scenario" == write-budget-* || "$scenario" == async-pending-isolated-read-budget ]]; then
-  if [[ "$line" == *'mutation CaskPromote'* || "$line" == *'api -X PUT '* || "$line" == 'api --include '* || "$line" == *'api repos/devantler-tech/homebrew-tap/pulls/42/merge-async/'* ]]; then
+if [[ "$scenario" == isolated-read-budget || "$scenario" == write-budget-* || "$scenario" == read-budget-* || "$scenario" == async-pending-isolated-read-budget ]]; then
+  if [[ "$scenario" == read-budget-* && "$line" == 'api --include '* ]]; then
+    [[ "${GH_TOKEN:-}" == personal-writer || "${GH_TOKEN:-}" == repository-reader ]] || exit 1
+  elif [[ "$line" == *'mutation CaskPromote'* || "$line" == *'api -X PUT '* || "$line" == 'api --include '* || "$line" == *'api repos/devantler-tech/homebrew-tap/pulls/42/merge-async/'* ]]; then
     [[ "${GH_TOKEN:-}" == personal-writer ]] || { echo 'wrong mutation credential' >&2; exit 1; }
   else
     [[ "${GH_TOKEN:-}" == repository-reader ]] || { echo 'gh: API rate limit exceeded for personal write identity' >&2; exit 1; }
   fi
 fi
+if [[ "$scenario" == read-budget-* ]]; then
+  now=1000
+  [[ ! -f "$state/clock" ]] || now="$(<"$state/clock")"
+  if [[ "$line" == 'api --include '* ]]; then
+    [[ "$scenario" != read-budget-unreadable ]] || exit 1
+    resource=core
+    [[ "$line" != 'api --include graphql '* ]] || resource=graphql
+    remaining=4900
+    # The late-release cases begin with usable quota and deplete only at the
+    # last release read, after all of the original pre-merge readiness reads.
+    if [[ "$scenario" != read-budget-final-release-* || -f "$state/final-release-quota" ]]; then
+      [[ "${GH_TOKEN:-}" != repository-reader || "$resource" != core || "$now" -ge 1105 ]] || remaining=0
+    fi
+    printf 'HTTP/2.0 200 OK\r\nX-Ratelimit-Resource: %s\r\nX-Ratelimit-Remaining: %s\r\nX-Ratelimit-Reset: 1100\r\n\r\n' "$resource" "$remaining"
+    if [[ "$resource" == core ]]; then
+      printf '{"resources":{"core":{"remaining":%s,"reset":1100}}}\n' "$remaining"
+    else
+      printf '{"data":{"rateLimit":{"remaining":%s,"resetAt":"2030-01-01T00:00:00Z"}}}\n' "$remaining"
+    fi
+    exit 0
+  fi
+  if [[ ("$line" == 'api repos/devantler-tech/homebrew-tap/pulls/42' && "$scenario" != read-budget-readiness* && "$scenario" != read-budget-final-release-*) ||
+    ("$line" == 'api graphql -f query=query CaskChecks'* && "$scenario" == read-budget-readiness*) ]]; then
+    reads=0
+    [[ ! -f "$state/read-attempts" ]] || reads="$(<"$state/read-attempts")"
+    printf '%s\n' "$((reads + 1))" > "$state/read-attempts"
+    if [[ "$now" -lt 1105 || "$scenario" == read-budget-repeated ]]; then
+      printf 'PARTIAL_EVIDENCE_MUST_NOT_ESCAPE\n'
+      if [[ "$scenario" == read-budget-forbidden ]]; then
+        printf 'gh: Resource not accessible by integration (HTTP 403)\n' >&2
+      elif [[ "$scenario" == read-budget-secondary ]]; then
+        printf 'gh: You have exceeded a secondary rate limit (HTTP 403)\n' >&2
+      else
+        printf 'gh: API rate limit exceeded for installation (HTTP 403)\n' >&2
+      fi
+      exit 1
+    fi
+  fi
+fi
 head=1111111111111111111111111111111111111111
+[[ "$scenario" != read-budget-readiness-moved || "$now" -lt 1105 ]] ||
+  head=2222222222222222222222222222222222222222
 base=3333333333333333333333333333333333333333
+[[ "$scenario" != read-budget-final-release-base-moved || "$now" -lt 1105 ]] ||
+  base=5555555555555555555555555555555555555555
 promoted=false
-[[ -f "${state}/promoted" || "${scenario}" == ready-retry ]] && promoted=true
+# Start the late-release cases ready so they isolate the final merge guard and
+# remain independent of how many evidence reads the promotion guard requires.
+[[ -f "${state}/promoted" || "${scenario}" == ready-retry || "$scenario" == read-budget-final-release-* ]] && promoted=true
 cursor=null
 for arg in "$@"; do
 	[[ "${arg}" == cursor=* ]] && cursor="${arg#cursor=}"
@@ -271,7 +318,7 @@ case "${line}" in
 		 jq --arg scenario "${scenario}" 'if $scenario == "readback-wrong-head" then .head.sha="2222222222222222222222222222222222222222" else . end'
 	else
 		n="$(count rest-reads)"
-		jq --argjson ready "${promoted}" --argjson n "${n}" --arg scenario "${scenario}" '.pr | .node_id="PR_42" | .draft=($ready|not) | .base.sha="3333333333333333333333333333333333333333" |
+		jq --arg base "${base}" --argjson ready "${promoted}" --argjson n "${n}" --arg scenario "${scenario}" '.pr | .node_id="PR_42" | .draft=($ready|not) | .base.sha=$base |
 		 if $scenario == "head-moved-during-collection" and $n > 1 then .head.sha="2222222222222222222222222222222222222222" else . end' "${fixture}"
 	fi ;;
 'api --paginate --slurp repos/devantler-tech/homebrew-tap/pulls/42/files?per_page=100')
@@ -281,6 +328,18 @@ case "${line}" in
 'api repos/devantler-tech/ksail/releases/tags/v7.166.1')
 	[[ "${scenario}" != release-read-error ]] || exit 1
 	n="$(count release-reads)"
+	# The seventh read is the final publication rebind in the original finisher.
+	# Its first failure must not let the earlier readiness snapshot authorize a
+	# merge after the real reader waits for quota. The retry overwrites partial data.
+	if [[ "$scenario" == read-budget-final-release-* && "$n" -ge 7 &&
+		("$now" -lt 1105 || "$scenario" == read-budget-final-release-repeated ||
+			("$scenario" == read-budget-final-release-twice && ("$n" -eq 7 || "$n" -eq 9))) ]]; then
+		touch "$state/final-release-quota"
+		count final-release-failures >/dev/null
+		printf 'PARTIAL_EVIDENCE_MUST_NOT_ESCAPE\n'
+		printf 'gh: API rate limit exceeded for installation (HTTP 403)\n' >&2
+		exit 1
+	fi
 	jq '{tag_name:"v7.166.1",draft:false,published_at:"2029-01-01T00:00:00Z",assets:.releaseAssets}' "${fixture}" |
 	 jq --arg scenario "${scenario}" --argjson ready "${promoted}" --argjson n "${n}" '
 	 if $scenario == "draft-release" then .draft=true
@@ -313,13 +372,16 @@ run_case() {
 	mkdir -p "${state}"
 	: >"${state}/mutations"
 	local write_token="${GH_TOKEN:-}" read_token="${KSAIL_CASK_READ_TOKEN:-}" write_deadline=""
-	if [[ "$scenario" == isolated-read-budget || "$scenario" == write-budget-* || "$scenario" == async-pending-isolated-read-budget ]]; then
+	if [[ "$scenario" == isolated-read-budget || "$scenario" == write-budget-* || "$scenario" == read-budget-* || "$scenario" == async-pending-isolated-read-budget ]]; then
 		write_token=personal-writer
 		read_token=repository-reader
 	fi
 	[[ "$scenario" != write-budget-recovered ]] || write_deadline=1250
 	[[ "$scenario" != write-budget-expired ]] || write_deadline=1050
 	[[ "$scenario" != write-budget-checks-* ]] || write_deadline=1250
+	[[ "$scenario" != read-budget-* ]] || write_deadline=1250
+	[[ "$scenario" != read-budget-expired ]] || write_deadline=1050
+	[[ "$scenario" != read-budget-no-deadline ]] || write_deadline=""
 	GH_TOKEN="${write_token}" KSAIL_CASK_READ_TOKEN="${read_token}" KSAIL_GITHUB_WRITE_BUDGET_DEADLINE="${write_deadline}" PATH="${work}/bin:${PATH}" FINISH_FIXTURE="${fixture}" FINISH_STATE="${state}" FINISH_SCENARIO="${scenario}" \
 		bash "${script_dir}/finish-cask-pr-handoff.sh" \
 		--tap devantler-tech/homebrew-tap --pr 42 --cask-name ksail --source-repo devantler-tech/ksail \
@@ -339,6 +401,38 @@ run_case() {
 	if [[ "${success}" == true ]]; then
 		grep -q '1111111111111111111111111111111111111111' "${state}/output" || fail "${scenario}: verified head missing from delivery result"
 		[[ -f "${state}/merged" ]] || fail "${scenario}: readiness incorrectly counted as delivered"
+	fi
+	if [[ "$scenario" == read-budget-* ]]; then
+		! grep -q 'PARTIAL_EVIDENCE_MUST_NOT_ESCAPE' "${state}/output" ||
+			fail "${scenario}: failed-read bytes escaped into handoff output"
+		if [[ "$scenario" == read-budget-forbidden || "$scenario" == read-budget-secondary ]]; then
+			[[ ! -f "${state}/clock" && "$(<"${state}/read-attempts")" -eq 1 ]] ||
+				fail "${scenario}: unrelated failure was retried"
+		fi
+		if [[ "$scenario" == read-budget-repeated ]]; then
+			[[ "$(<"${state}/read-attempts")" -eq 2 ]] ||
+				fail "${scenario}: primary recovery exceeded one retry"
+		fi
+		if [[ "$scenario" == read-budget-unreadable || "$scenario" == read-budget-expired || "$scenario" == read-budget-no-deadline ]]; then
+			[[ ! -f "${state}/clock" && "$(<"${state}/read-attempts")" -eq 1 ]] ||
+				fail "${scenario}: resumed without confirmed quota and a valid deadline"
+		fi
+	fi
+	if [[ "$scenario" == read-budget-final-release-* ]]; then
+		[[ -f "$state/final-release-quota" && "$(<"$state/clock")" -eq 1105 ]] ||
+			fail "${scenario}: final-release quota recovery was not exercised inside the original window"
+		if [[ "$scenario" == read-budget-final-release-twice ]]; then
+			[[ "$(<"$state/final-release-failures")" -eq 2 && "$(<"$state/release-reads")" -eq 12 ]] ||
+				fail "${scenario}: second recovery exceeded the single complete revalidation"
+			grep -q 'read recovery repeated during final verification' "$state/output" ||
+				fail "${scenario}: no stable snapshot was required"
+		elif [[ "$scenario" == read-budget-final-release-repeated ]]; then
+			[[ "$(<"$state/final-release-failures")" -eq 2 && "$(<"$state/release-reads")" -eq 8 ]] ||
+				fail "${scenario}: final-release primary failure exceeded one complete retry"
+		else
+			[[ "$(<"$state/final-release-failures")" -eq 1 && "$(<"$state/release-reads")" -ge 8 ]] ||
+				fail "${scenario}: final-release read did not recover exactly once"
+		fi
 	fi
 	if [[ "${scenario}" == write-budget-checks-terminal ]]; then
 		[[ ! -f "${state}/clock" ]] || fail "terminal readiness waited for the request budget"
@@ -384,6 +478,19 @@ run_case() {
 }
 
 # Removing the direct merge, SHA pin, post-promotion audit, or immutable readback breaks these.
+run_case read-budget-final-release-stable true 0 1
+run_case read-budget-final-release-repeated false 0 0
+run_case read-budget-final-release-base-moved false 0 0
+run_case read-budget-final-release-twice false 0 0
+run_case read-budget-recovered true 1 1
+run_case read-budget-readiness true 1 1
+run_case read-budget-readiness-moved false 0 0
+run_case read-budget-expired false 0 0
+run_case read-budget-no-deadline false 0 0
+run_case read-budget-unreadable false 0 0
+run_case read-budget-repeated false 0 0
+run_case read-budget-forbidden false 0 0
+run_case read-budget-secondary false 0 0
 run_case isolated-read-budget true 1 1
 run_case write-budget-recovered true 1 1
 run_case write-budget-expired false 0 0

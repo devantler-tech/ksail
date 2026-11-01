@@ -272,7 +272,14 @@ run_case exhausted-again 0 "605 3605" "budget is available" \
 run_case beyond-max-wait 1 "" "does not return within 60 s" \
 	"0 1600 4900 1600" -- --max-wait 60
 
-# An unreadable budget never stops a release: three attempts, then a warning and exit 0.
+# Strict recovery refuses an unreadable budget; the default preflight retains
+# its three-attempt warning because the following operation validates itself.
+run_case required-unreadable 1 "" "Could not confirm an available GitHub request budget" \
+	"fail" -- --require-readable
+run_case required-malformed 1 "" "Could not confirm an available GitHub request budget" \
+	"garbage" -- --require-readable
+run_case required-available 0 "" "budget is available" \
+	"4000 5000 4900 5000" -- --require-readable
 run_case unreadable 0 "10 10" "Could not read the GitHub request budget (3 attempt(s))" \
 	"fail"
 run_case malformed 0 "10 10" "Could not read the GitHub request budget (3 attempt(s))" \

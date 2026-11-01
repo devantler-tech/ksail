@@ -416,6 +416,8 @@ jobs:
               - 'pkg/svc/installer/cni/calico/Dockerfile'
               - '.github/workflows/ci.yaml'
             cask-pr-handoff:
+              - '.github/scripts/cask-read-api.sh'
+              - '.github/scripts/cask-read-api.test.sh'
               - 'server.json'
               - '.goreleaser.yaml'
               - '.goreleaser.desktop.yaml'
@@ -663,6 +665,8 @@ jobs:
         run: |
           shellcheck \
             .github/fixtures/cask-pr-handoff/fake-bin/gh \
+            .github/scripts/cask-read-api.sh \
+            .github/scripts/cask-read-api.test.sh \
             .github/scripts/collect-cask-pr-handoff.sh \
             .github/scripts/collect-cask-pr-handoff.test.sh \
             .github/scripts/finish-cask-pr-handoff.sh \
@@ -684,6 +688,7 @@ jobs:
             .github/scripts/wait-for-github-api-budget.sh \
             .github/scripts/wait-for-github-api-budget.test.sh \
             .github/scripts/cask-pr-handoff-workflow.test.sh
+          .github/scripts/cask-read-api.test.sh
           .github/scripts/collect-cask-pr-handoff.test.sh
           .github/scripts/finish-cask-pr-handoff.test.sh
           .github/scripts/find-merged-cask-pr-handoff.test.sh

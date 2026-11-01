@@ -6,7 +6,7 @@ set -euo pipefail
 usage() {
 	cat <<'EOF'
 Usage:
-  wait-for-github-api-budget.sh [--min-core N] [--min-graphql N] [--max-wait SECONDS]
+  wait-for-github-api-budget.sh [--min-core N] [--min-graphql N] [--max-wait SECONDS] [--require-readable]
 
 Release pre-step: wait until the token in GH_TOKEN has request budget left
 before a step that spends it. The tap token belongs to an account whose hourly
@@ -25,9 +25,12 @@ Exit codes:
   1  a known rate limit cannot recover safely within the retry or wait bounds
   2  usage error
 
-An unreadable budget is reported as a warning and exits 0. This script only
-improves availability; the step after it still fails closed on its own
-errors, so a broken budget read must not stop a release by itself. A known secondary
+An unreadable budget is reported as a warning and exits 0 unless
+--require-readable is set. A caller recovering from a known primary quota
+failure uses that option: unavailable evidence then exits 1 without replay.
+By default this preflight improves availability; the following operation still
+fails closed on its own errors, so an unreadable preliminary budget is a warning.
+A known secondary
 restriction is held until a complete budget read confirms recovery.
 
 KSAIL_GITHUB_WRITE_BUDGET_DEADLINE optionally binds repeated write waits to one
@@ -42,12 +45,17 @@ EOF
 min_core=300
 min_graphql=50
 max_wait=3700
+require_readable=0
 
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 	--help | -h)
 		usage
 		exit 0
+		;;
+	--require-readable)
+		require_readable=1
+		shift
 		;;
 	--min-core | --min-graphql | --max-wait)
 		if [[ $# -lt 2 || ! "$2" =~ ^(0|[1-9][0-9]{0,8})$ ]]; then
@@ -188,6 +196,10 @@ recovering=0
 
 while true; do
 	if ! budget="$(read_budget)"; then
+		if [[ "$require_readable" -eq 1 ]]; then
+			printf '::error::Could not confirm an available GitHub request budget; holding release delivery.\n' >&2
+			exit 1
+		fi
 		if [[ "$recovering" -eq 1 ]]; then
 			printf '::error::Could not confirm recovery from the GitHub secondary rate limit; holding release delivery.\n' >&2
 			exit 1
