@@ -93,12 +93,16 @@ func (i *Installer) waitForWebhookReady(ctx context.Context) error {
 // kyvernoWebhookCAsReady observes policy and resource CA publication together.
 // Empty resource entries are valid only alongside a populated policy configuration.
 func kyvernoWebhookCAsReady(ctx context.Context, clientset kubernetes.Interface) (bool, error) {
+	ready := true
+
 	for _, name := range []string{kyvernoPolicyWebhookName, kyvernoResourceWebhookName} {
 		config, err := clientset.AdmissionregistrationV1().
 			MutatingWebhookConfigurations().
 			Get(ctx, name, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
-			return false, nil
+			ready = false
+
+			continue
 		}
 
 		if err != nil {
@@ -106,17 +110,17 @@ func kyvernoWebhookCAsReady(ctx context.Context, clientset kubernetes.Interface)
 		}
 
 		if name == kyvernoPolicyWebhookName && len(config.Webhooks) == 0 {
-			return false, nil
+			ready = false
 		}
 
 		for _, webhook := range config.Webhooks {
 			if len(webhook.ClientConfig.CABundle) == 0 {
-				return false, nil
+				ready = false
 			}
 		}
 	}
 
-	return true, nil
+	return ready, nil
 }
 
 // isDeadlineError reports whether err represents the webhook-readiness deadline being

@@ -240,29 +240,51 @@ func TestWebhookResourceWaitRechecksPolicyTLS(t *testing.T) {
 
 //nolint:paralleltest // Overrides the shared clientset factory.
 func TestWebhookResourceReadFailurePropagates(t *testing.T) {
-	clientset := k8sfake.NewClientset(webhookObservationFixture(
-		"kyverno-policy-mutating-webhook-cfg", []byte("policy-ca"),
-	))
-	clientset.PrependReactor("get", "mutatingwebhookconfigurations",
-		func(action k8stesting.Action) (bool, runtime.Object, error) {
-			getAction, ok := action.(k8stesting.GetAction)
-			if !ok || getAction.GetName() != "kyverno-resource-mutating-webhook-cfg" {
-				return false, nil, nil
+	tests := map[string]*admissionregistrationv1.MutatingWebhookConfiguration{
+		"ready policy": webhookObservationFixture(
+			"kyverno-policy-mutating-webhook-cfg", []byte("policy-ca"),
+		),
+		"missing policy": nil,
+		"empty policy entries": webhookObservationFixture(
+			"kyverno-policy-mutating-webhook-cfg",
+		),
+		"unpublished policy CA": webhookObservationFixture(
+			"kyverno-policy-mutating-webhook-cfg", nil,
+		),
+	}
+	for name, policy := range tests {
+		t.Run(name, func(t *testing.T) {
+			clientset := k8sfake.NewClientset()
+			if policy != nil {
+				require.NoError(t, clientset.Tracker().Add(policy))
 			}
 
-			return true, nil, apierrors.NewForbidden(
-				schema.GroupResource{
-					Group:    "admissionregistration.k8s.io",
-					Resource: "mutatingwebhookconfigurations",
-				},
-				getAction.GetName(), errConnRefused,
-			)
-		},
-	)
-	installer := webhookObserver(t, clientset)
+			clientset.PrependReactor("get", "mutatingwebhookconfigurations",
+				func(action k8stesting.Action) (bool, runtime.Object, error) {
+					getAction, ok := action.(k8stesting.GetAction)
+					if !ok || getAction.GetName() != "kyverno-resource-mutating-webhook-cfg" {
+						return false, nil, nil
+					}
 
-	err := installer.WaitForWebhookReadyForTest(t.Context())
-	require.True(t, apierrors.IsForbidden(err), "expected forbidden resource read, got %v", err)
+					return true, nil, apierrors.NewForbidden(
+						schema.GroupResource{
+							Group:    "admissionregistration.k8s.io",
+							Resource: "mutatingwebhookconfigurations",
+						},
+						getAction.GetName(), errConnRefused,
+					)
+				},
+			)
+			installer := webhookObserver(t, clientset)
+
+			ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+			defer cancel()
+
+			err := installer.WaitForWebhookReadyForTest(ctx)
+			require.True(t, apierrors.IsForbidden(err),
+				"expected forbidden resource read, got %v", err)
+		})
+	}
 }
 
 //nolint:paralleltest // Overrides the shared clientset factory.
