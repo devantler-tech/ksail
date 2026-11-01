@@ -14,6 +14,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/hubble"
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubeconform"
 	kubescapeclient "github.com/devantler-tech/ksail/v7/pkg/client/kubescape"
+	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/crdschema"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/ephemeral"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/fluxsubst"
@@ -469,8 +470,19 @@ func ExportPollUntilKustomizationReady(
 	name string,
 	dependsOn []string,
 	failed *ExportFailedKustomizations,
+	requestToken string,
 ) error {
-	return pollUntilKustomizationReady(ctx, fluxReconciler, name, dependsOn, failed)
+	return pollUntilKustomizationReady(ctx, fluxReconciler, name, dependsOn, failed, requestToken)
+}
+
+// ExportBuildKustomizationTasks exposes the request-and-wait task boundary for testing.
+func ExportBuildKustomizationTasks(
+	sorted []flux.KustomizationInfo,
+	excludeSet map[string]bool,
+	fluxReconciler *flux.Reconciler,
+	failed *ExportFailedKustomizations,
+) []notify.ProgressTask {
+	return buildKustomizationTasks(sorted, excludeSet, fluxReconciler, failed)
 }
 
 // ExportIsKustomizationExcluded exposes isKustomizationExcluded for testing.

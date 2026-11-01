@@ -3462,6 +3462,7 @@ func TestPollUntilKustomizationReadyFailsFastOnDependencyFailure(t *testing.T) {
 		"apps",
 		[]string{"infra"},
 		&tracker,
+		"test-request",
 	)
 
 	require.Error(t, err)
@@ -3480,7 +3481,7 @@ func TestPollUntilKustomizationReadyRecordsCascadeFailure(t *testing.T) {
 
 	// "apps" depends on "infra" (already failed).
 	_ = workload.ExportPollUntilKustomizationReady(
-		ctx, nil, "apps", []string{"infra"}, &tracker,
+		ctx, nil, "apps", []string{"infra"}, &tracker, "test-request",
 	)
 
 	// "apps" itself should now be recorded as failed, enabling further cascade.
