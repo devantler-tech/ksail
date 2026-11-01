@@ -1914,28 +1914,6 @@ jobs:
           bash .github/actions/ksail-system-test/offline-ecr-upstream.test.sh
           bash .github/actions/ksail-system-test/verify-offline-ecr-pull.test.sh
 
-      - name: TEMP prove the helper recovery on a real Docker daemon (#7922)
-        shell: bash
-        run: |
-          set -euo pipefail
-          helper=mirror.gcr.io/library/busybox:1.37
-          docker image rm -f "$helper" >/dev/null 2>&1 || true
-          real_docker=$(command -v docker)
-          shim=$(mktemp -d)
-          cat >"$shim/docker" <<SH
-          #!/bin/sh
-          if [ "\$1 \$2 \$3" = "pull --quiet $helper" ]; then
-            echo "toomanyrequests: refused by the #7922 proof" >&2
-            exit 1
-          fi
-          exec "$real_docker" "\$@"
-          SH
-          chmod +x "$shim/docker"
-          PATH="$shim:$PATH" bash .github/actions/warm-mirror-cache/pull-helper-image.sh
-          docker image inspect --format "RepoTags={{.RepoTags}} RepoDigests={{.RepoDigests}}" "$helper"
-          docker run --rm "$helper" tar --version 2>&1 | sed -n 1p
-          docker image rm -f "$helper" >/dev/null
-
       - name: 🧹 Free disk space
         # Pulls every system-test image through five mirror registries and tars
         # the volumes (multi-GB) — the prime "no space left on device" offender
