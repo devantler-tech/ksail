@@ -202,6 +202,15 @@ reference.
 `ksail workload reconcile` does more than trigger a sync — it self-heals common failures and surfaces
 diagnostics so you rarely need to reach for `kubectl`.
 
+### Fresh Kustomization results
+
+For Flux, each monitored Kustomization receives its own reconcile request on each attempt. KSail waits
+for the controller to acknowledge that request before trusting its result, so retrying the same source
+revision cannot immediately reuse a previous failure or success. A fresh failure is still reported
+promptly, including one that Flux marks as awaiting a retry. Your Kubernetes credentials must allow
+patching the monitored Kustomizations in `flux-system`. Suspended Kustomizations stay suspended and
+their waiting step is skipped. The existing per-attempt timeout still applies.
+
 ### Automatic HelmRelease recovery
 
 Before polling Kustomizations, `reconcile` detects HelmReleases stuck in a non-recoverable state
