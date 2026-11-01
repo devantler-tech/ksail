@@ -273,6 +273,23 @@ runs:
             echo "--- Calico Node Logs (last $LOG_TAIL_LINES lines) ---"
             $KUBECTL_CMD logs --namespace calico-system -l k8s-app=calico-node --tail="$LOG_TAIL_LINES" 2>/dev/null | head -200 || true
             echo ""
+            # A calico-node Pod that never restarts leaves only its last logs behind and is
+            # no error Pod (phase Running or Succeeded), so read its state directly.
+            echo "--- Calico Node DaemonSet ---"
+            $KUBECTL_CMD get daemonset --namespace calico-system calico-node -o wide 2>/dev/null || true
+            echo ""
+            echo "--- Calico Node Pod Status ---"
+            $KUBECTL_CMD get pods --namespace calico-system -l k8s-app=calico-node -o jsonpath='{range .items[*]}{.metadata.name}{" deletionTimestamp="}{.metadata.deletionTimestamp}{"\n"}{.status}{"\n"}{end}' 2>/dev/null || true
+            echo ""
+            echo "--- Calico Node Pod Describe ---"
+            $KUBECTL_CMD describe pods --namespace calico-system -l k8s-app=calico-node 2>/dev/null | head -200 || true
+            echo ""
+            echo "--- Calico Node Previous Logs (last $LOG_TAIL_LINES lines) ---"
+            $KUBECTL_CMD logs --namespace calico-system -l k8s-app=calico-node --previous --all-containers=true --tail="$LOG_TAIL_LINES" 2>/dev/null | head -200 || true
+            echo ""
+            echo "--- Calico System Events ---"
+            $KUBECTL_CMD get events --namespace calico-system --sort-by=.lastTimestamp 2>/dev/null | tail -n 50 || true
+            echo ""
             echo "--- Tigera Operator Logs (last $LOG_TAIL_LINES lines) ---"
             $KUBECTL_CMD logs --namespace tigera-operator -l app.kubernetes.io/name=tigera-operator --tail="$LOG_TAIL_LINES" 2>/dev/null || true
           else
