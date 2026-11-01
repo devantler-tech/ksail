@@ -4,6 +4,8 @@ set -euo pipefail
 
 # These commands only collect evidence; keep their allowance independent of writes.
 export GH_TOKEN="${KSAIL_CASK_READ_TOKEN:-${GH_TOKEN:-}}"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+read_api() { "${script_dir}/cask-read-api.sh" "$@"; }
 
 usage() {
 	cat <<'EOF'
@@ -80,12 +82,12 @@ fi
 work="$(mktemp -d)"
 trap 'rm -rf "${work}"' EXIT
 
-gh api "repos/${tap}/pulls/${pr}" >"${work}/pr.json"
-gh api --paginate --slurp \
+read_api "repos/${tap}/pulls/${pr}" >"${work}/pr.json"
+read_api --paginate --slurp \
 	"repos/${tap}/pulls/${pr}/files?per_page=100" >"${work}/file-pages.json"
-gh api --paginate --slurp \
+read_api --paginate --slurp \
 	"repos/${tap}/labels?per_page=100" >"${work}/label-pages.json"
-gh api "repos/${source_repo}/releases/tags/${tag}" >"${work}/release.json"
+read_api "repos/${source_repo}/releases/tags/${tag}" >"${work}/release.json"
 
 jq -e 'type == "object"' "${work}/pr.json" >/dev/null
 jq -e 'type == "array" and all(.[]; type == "array")' \
@@ -115,7 +117,7 @@ head_sha="$(jq -r '.head.sha // empty' "${work}/pr.json")"
 single_file="$(jq -r 'if ([.[][]] | length) == 1 then [.[][]][0].filename else "" end' \
 	"${work}/file-pages.json")"
 if [[ -n "${head_sha}" && -n "${single_file}" ]]; then
-	gh api "repos/${tap}/contents/${single_file}?ref=${head_sha}" >"${work}/head-file.json"
+	read_api "repos/${tap}/contents/${single_file}?ref=${head_sha}" >"${work}/head-file.json"
 	jq -e '
     type == "object"
     and (.path | type == "string" and length > 0)
@@ -143,7 +145,7 @@ if [[ "${include_main}" == true ]]; then
 		exit 1
 	fi
 
-	gh api "repos/${tap}/git/ref/heads/main" >"${work}/main-ref-raw.json"
+	read_api "repos/${tap}/git/ref/heads/main" >"${work}/main-ref-raw.json"
 	jq -e '
     .object.sha
     | type == "string" and test("^[0-9a-fA-F]{40}$")
@@ -151,11 +153,11 @@ if [[ "${include_main}" == true ]]; then
 	merge_commit_sha="$(jq -r '.merge_commit_sha' "${work}/pr.json")"
 	main_sha="$(jq -r '.object.sha' "${work}/main-ref-raw.json")"
 
-	gh api "repos/${tap}/contents/${single_file}?ref=${merge_commit_sha}" \
+	read_api "repos/${tap}/contents/${single_file}?ref=${merge_commit_sha}" \
 		>"${work}/merge-file.json"
-	gh api "repos/${tap}/contents/${single_file}?ref=${main_sha}" \
+	read_api "repos/${tap}/contents/${single_file}?ref=${main_sha}" \
 		>"${work}/main-file.json"
-	gh api "repos/${tap}/compare/${merge_commit_sha}...${main_sha}" \
+	read_api "repos/${tap}/compare/${merge_commit_sha}...${main_sha}" \
 		>"${work}/merge-comparison.json"
 	for content_file in merge-file main-file; do
 		jq -e --arg path "${single_file}" '
@@ -172,7 +174,7 @@ if [[ "${include_main}" == true ]]; then
     and (.merge_base_commit.sha | type == "string")
   ' "${work}/merge-comparison.json" >/dev/null
 
-	gh api "repos/${tap}/git/ref/heads/main" >"${work}/main-ref-after.json"
+	read_api "repos/${tap}/git/ref/heads/main" >"${work}/main-ref-after.json"
 	if [[ "$(jq -r '.object.sha // empty' "${work}/main-ref-after.json")" != "${main_sha}" ]]; then
 		printf 'ERROR: tap main moved while merged handoff evidence was collected\n' >&2
 		exit 1
