@@ -11,6 +11,9 @@ cat >"$work/bin/gh" <<'EOF'
 set -euo pipefail
 printf 'call\n' >>"$CASK_READ_STATE/calls"
 if [[ "$*" == 'api --include '* ]]; then
+  if [[ -n "${CASK_READ_ADVANCE_TO:-}" ]]; then
+    printf '%s\n' "$CASK_READ_ADVANCE_TO" >"$CASK_READ_STATE/now"
+  fi
   resource=core
   [[ "$*" != 'api --include graphql '* ]] || resource=graphql
   remaining=4900
@@ -72,3 +75,29 @@ if grep -q PARTIAL_PAGE_PRIVATE_SENTINEL "$work/output" "$work/error"; then
 fi
 [[ "$(cat "$work/now")" == 1105 ]]
 printf 'PASS: failed pagination is discarded before one complete retry\n'
+
+reject_expired_recovery() {
+	local recovered_at="$1" status=0
+	rm -f "$work/calls" "$work/attempted" "$work/recovery-marker"
+	printf '1000\n' >"$work/now"
+	KSAIL_GITHUB_WRITE_BUDGET_DEADLINE=1250 CASK_READ_ADVANCE_TO="$recovered_at" \
+		KSAIL_CASK_READ_RECOVERY_MARKER="$work/recovery-marker" \
+		"${script_dir}/cask-read-api.sh" --paginate --slurp \
+		repos/devantler-tech/homebrew-tap/pulls/42/files >"$work/output" 2>"$work/error" || status=$?
+	if [[ "$status" -eq 0 || -s "$work/output" || -e "$work/recovery-marker" ||
+		"$(wc -l <"$work/calls")" -ne 3 ]]; then
+		printf 'FAIL: expired recovery started another read at %s\n' "$recovered_at" >&2
+		exit 1
+	fi
+	grep -q 'BLOCKED: primary read recovery reached the original deadline' "$work/error" || {
+		printf 'FAIL: expired recovery has no bounded diagnostic\n' >&2
+		exit 1
+	}
+	if grep -q PARTIAL_PAGE_PRIVATE_SENTINEL "$work/output" "$work/error"; then
+		printf 'FAIL: expired recovery exposed failed-read bytes\n' >&2
+		exit 1
+	fi
+}
+reject_expired_recovery 1250
+reject_expired_recovery 1251
+printf 'PASS: quota probes reaching or exceeding the deadline cannot start a retry\n'

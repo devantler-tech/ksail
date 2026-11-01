@@ -43,6 +43,17 @@ if [[ "$status" -ne 0 ]] &&
 	printf 'Primary read quota exhausted; checking recovery within the existing deadline.\n' >&2
 	"${script_dir}/wait-for-github-api-budget.sh" \
 		--min-core 1 --min-graphql 1 --require-readable >&2 || exit 1
+
+	# Quota probes can consume the remaining time while returning usable quota.
+	# Recovery cannot start another evidence request at or after the original bound.
+	if ! recovered_at="$(date +%s)" || [[ ! "$recovered_at" =~ ^[1-9][0-9]{0,9}$ ]]; then
+		printf 'BLOCKED: primary read recovery clock is unreadable\n' >&2
+		exit 1
+	fi
+	if ((recovered_at >= KSAIL_GITHUB_WRITE_BUDGET_DEADLINE)); then
+		printf 'BLOCKED: primary read recovery reached the original deadline\n' >&2
+		exit 1
+	fi
 	# The finisher owns this private generation counter. A recovered read can
 	# invalidate gates collected before the wait, even when quota is now high.
 	if [[ -n "${KSAIL_CASK_READ_RECOVERY_MARKER:-}" ]]; then
