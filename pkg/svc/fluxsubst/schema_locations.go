@@ -26,22 +26,29 @@ const catalogSchemaLocation = "https://raw.githubusercontent.com/datreeio/CRDs-c
 // locations are read through kubeconform's native filesystem registry.
 type SchemaOptions struct {
 	SchemaLocations []string
-	Strict          bool
-	CacheDirectory  string
+	// SchemaLocationsOnly keeps typing aligned with explicit validator selection.
+	SchemaLocationsOnly bool
+	Strict              bool
+	CacheDirectory      string
 	// DeferredKinds is keyed by apiVersion/kind. During CRD discovery, a
 	// matching document without a schema retains its original placeholders.
 	// Callers must subsequently expand it and validate against the derived schemas.
 	DeferredKinds map[string]struct{}
 }
 
-// fetchSchemaWithOptions preserves validator precedence: built-in Kubernetes,
-// caller-supplied locations, then the CRD catalogue. A missing or malformed schema
-// keeps the existing string fallback; actual validation still reports its errors.
+// fetchSchemaWithOptions follows the validator's ordinary or exclusive location
+// order. Missing or malformed schemas retain string fallback; validation reports
+// the actual schema errors and never treats fallback typing as a valid verdict.
 func fetchSchemaWithOptions(apiVersion, kind string, opts SchemaOptions) map[string]any {
 	locations := make([]string, 0, len(opts.SchemaLocations)+schemaFallbackLocationCount)
-	locations = append(locations, "default")
+	if !opts.SchemaLocationsOnly {
+		locations = append(locations, "default")
+	}
+
 	locations = append(locations, opts.SchemaLocations...)
-	locations = append(locations, catalogSchemaLocation)
+	if !opts.SchemaLocationsOnly {
+		locations = append(locations, catalogSchemaLocation)
+	}
 
 	cacheDir := opts.CacheDirectory
 	if cacheDir == "" {

@@ -374,6 +374,14 @@ func (state *refreshSchemaState) waitForSchemaRequest(request *http.Request, sta
 func localSchemaRegistry(t *testing.T) (*httptest.Server, string) {
 	t.Helper()
 
+	return localSchemaRegistryWithHandler(t, http.NotFoundHandler())
+}
+
+// localSchemaRegistryWithHandler keeps every registry response behind the same
+// test-only verified TLS boundary, including the explicit selection fixtures.
+func localSchemaRegistryWithHandler(t *testing.T, handler http.Handler) (*httptest.Server, string) {
+	t.Helper()
+
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
@@ -396,7 +404,7 @@ func localSchemaRegistry(t *testing.T) (*httptest.Server, string) {
 		),
 	)
 
-	registry := httptest.NewUnstartedServer(http.NotFoundHandler())
+	registry := httptest.NewUnstartedServer(handler)
 	registry.TLS = &tls.Config{
 		MinVersion:   tls.VersionTLS12,
 		Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: privateKey}},

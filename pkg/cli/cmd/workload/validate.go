@@ -78,6 +78,12 @@ when --ignore-missing-schemas is enabled. Kind exclusions still apply. Normal ru
 the persistent cache without automatic expiry. Registry locations are tried in order: an
 unreachable earlier location can stop validation before a later cached schema is used.
 
+Use --schema-location-mode only to select exactly the supplied/configured locations,
+including derived CRD schemas, without implicit built-in or catalogue registries.
+Offline use requires all selected schemas and remote references in the native cache,
+or a complete local schema graph. This option does not prohibit network requests;
+cache misses may still download and fail. Missing required schemas remain errors.
+
 By default, Kubernetes Secrets are skipped to avoid validation failures due to SOPS fields.`
 
 // NewValidateCmd creates the workload validate command.
@@ -121,6 +127,7 @@ type validateFlags struct {
 	children                  ephemeralChildOptions
 	skipKinds                 []string
 	schemaLocations           []string
+	schemaLocationMode        string
 	refreshSchemas            bool
 	schemaRefresh             *kubeconform.SchemaRefresh
 	rules                     string
@@ -170,9 +177,16 @@ func addKubeconformValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 		&flags.schemaLocations,
 		"schema-location",
 		nil,
-		"Additional kubeconform schema locations (local directory or URL/path template) for CRDs "+
-			"with missing or stale CRDs-catalog entries, so they are validated against a supplied schema instead "+
-			"of skipped (merged with spec.workload.validation.schemaLocations from ksail.yaml)",
+		"Supplied kubeconform schema locations (local directory or URL/path template), "+
+			"after built-ins by default or exclusively with --schema-location-mode only "+
+			"(merged with spec.workload.validation.schemaLocations from ksail.yaml)",
+	)
+	cmd.Flags().StringVar(
+		&flags.schemaLocationMode,
+		"schema-location-mode",
+		"additional",
+		"Schema search mode: additional keeps built-in and catalogue defaults; "+
+			"only uses the supplied schema locations without implicit registries",
 	)
 	cmd.Flags().BoolVar(
 		&flags.refreshSchemas,
@@ -231,6 +245,11 @@ func runValidateCmdWithSchemaCache(
 	args []string,
 	flags validateFlags,
 ) error {
+	if flags.schemaLocationMode != "additional" && flags.schemaLocationMode != "only" &&
+		(flags.schemaLocationMode != "" || cmd.Flags().Changed("schema-location-mode")) {
+		return fmt.Errorf("%w: --schema-location-mode must be additional or only", os.ErrInvalid)
+	}
+
 	err := flags.children.validate(cmd, flags.ephemeral)
 	if err != nil {
 		return err
@@ -455,6 +474,7 @@ func buildValidationOptions(
 	validationOpts := &kubeconform.ValidationOptions{
 		Strict:               flags.strict,
 		IgnoreMissingSchemas: flags.ignoreMissingSchemas,
+		SchemaLocationsOnly:  flags.schemaLocationMode == "only",
 	}
 
 	if flags.schemaRefresh != nil {
@@ -1408,9 +1428,10 @@ func expandValidationSubstitutionsForStage(
 	}
 
 	schemaOpts := fluxsubst.SchemaOptions{
-		SchemaLocations: opts.SchemaLocations,
-		Strict:          opts.Strict,
-		CacheDirectory:  opts.CacheDirectory,
+		SchemaLocations:     opts.SchemaLocations,
+		SchemaLocationsOnly: opts.SchemaLocationsOnly,
+		Strict:              opts.Strict,
+		CacheDirectory:      opts.CacheDirectory,
 	}
 	if discoveringCRDs {
 		_, schemaOpts.DeferredKinds = discoverySchemaInput(data)
