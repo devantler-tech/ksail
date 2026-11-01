@@ -64,7 +64,8 @@ For detailed package and API documentation, refer to the Go documentation at [pk
 Before you begin developing, ensure you have the following installed:
 
 - [Go](https://go.dev/doc/install) — the version in the `go` line of [`go.mod`](go.mod) or newer (CI installs exactly that version)
-- [mockery (v3.5+)](https://vektra.github.io/mockery/v3.5/installation/)
+- [mockery v3.8.1](https://vektra.github.io/mockery/v3.8/installation/) — install with
+  `go install github.com/vektra/mockery/v3@v3.8.1`; earlier releases cannot read Go 1.27 export data
 - [golangci-lint](https://golangci-lint.run/docs/welcome/install/)
 - [mega-linter](https://github.com/oxsecurity/megalinter/tree/main/mega-linter-runner#installation)
 - [Node.js (v24+)](https://nodejs.org/en/download/) — Required for the documentation site, the web UI (and therefore `make build`) and the VSCode extension; CI uses Node.js 24. A plain `go build` does not need it.

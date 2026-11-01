@@ -213,7 +213,7 @@ func wrapWithKubeconfigResolution(cmd *cobra.Command) {
 
 // resolveKubeconfigFlag settles the kubeconfig flag's value before the command
 // runs. An unset flag takes the path KSail resolved from the config; a value the
-// user supplied is canonicalized, because client-go opens it directly and a
+// user supplied is home-expanded and canonicalized, because client-go opens it directly and a
 // relative path or a symlink would otherwise reach the filesystem unresolved
 // (AGENTS.md requires every user-supplied path argument to go through
 // fsutil.EvalCanonicalPath). Canonicalization tolerates a path that does not
@@ -234,7 +234,12 @@ func resolveKubeconfigFlag(
 			return nil
 		}
 
-		canonical, err := fsutil.EvalCanonicalPath(supplied)
+		expanded, err := fsutil.ExpandHomePath(supplied)
+		if err != nil {
+			return fmt.Errorf("failed to expand kubeconfig flag: %w", err)
+		}
+
+		canonical, err := fsutil.EvalCanonicalPath(expanded)
 		if err != nil {
 			return fmt.Errorf("failed to canonicalize kubeconfig flag: %w", err)
 		}

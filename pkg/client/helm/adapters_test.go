@@ -1,12 +1,20 @@
 package helm_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	helmv4action "helm.sh/helm/v4/pkg/action"
 	helmv4kube "helm.sh/helm/v4/pkg/kube"
+	"helm.sh/helm/v4/pkg/release"
+	"helm.sh/helm/v4/pkg/release/common"
+	v1 "helm.sh/helm/v4/pkg/release/v1"
+	"helm.sh/helm/v4/pkg/storage"
+	"helm.sh/helm/v4/pkg/storage/driver"
 )
 
 //nolint:funlen // Table-driven test coverage is naturally long.
@@ -87,4 +95,88 @@ func TestApplyCommonActionConfig(t *testing.T) {
 			assert.Equal(t, tc.wantVersion, action.Version, "Version")
 		})
 	}
+}
+
+func TestNewUpgradeActionForcesConflictsOnlyForServerSideApply(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		lastApplyMethod string
+		wantForce       bool
+	}{
+		{name: "server-side applied release", lastApplyMethod: "ssa", wantForce: true},
+		{name: "client-side applied release", lastApplyMethod: "csa", wantForce: false},
+		{name: "release without a recorded apply method", lastApplyMethod: "", wantForce: false},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			upgrade := helm.NewConfiguredUpgrade(helmv4action.NewConfiguration(), &helm.ChartSpec{
+				Namespace:   "cert-manager",
+				UpgradeCRDs: true,
+			}, testCase.lastApplyMethod)
+
+			assert.Equal(t, testCase.wantForce, upgrade.ForceConflicts,
+				"ForceConflicts must follow the apply method Helm will use")
+			assert.Equal(
+				t, "auto", upgrade.ServerSideApply, "KSail keeps the default Helm apply method",
+			)
+			assert.Equal(t, "cert-manager", upgrade.Namespace)
+			assert.False(t, upgrade.SkipCRDs)
+		})
+	}
+}
+
+func TestLastReleaseApplyMethodReadsLatestRevision(t *testing.T) {
+	t.Parallel()
+
+	cfg := helmv4action.NewConfiguration()
+	cfg.Releases = storage.Init(driver.NewMemory())
+
+	for version, method := range map[int]string{1: "ssa", 2: "csa"} {
+		require.NoError(t, cfg.Releases.Create(&v1.Release{
+			Name:        "cert-manager",
+			Namespace:   "default",
+			Version:     version,
+			ApplyMethod: method,
+			Info:        &v1.Info{Status: common.StatusDeployed},
+		}))
+	}
+
+	client := helm.NewClientFromParts(cfg, nil)
+
+	method, err := client.LastReleaseApplyMethod("cert-manager")
+	require.NoError(t, err)
+	assert.Equal(t, "csa", method, "the upgrade must follow how the latest revision was applied")
+
+	method, err = client.LastReleaseApplyMethod("missing")
+	require.NoError(t, err, "the upgrade itself reports a missing release")
+	assert.Empty(t, method, "a missing release has no apply method")
+}
+
+// unreadableReleaseDriver fails every history read, as an unreachable API server does.
+type unreadableReleaseDriver struct {
+	*driver.Memory
+}
+
+var errReleaseHistoryUnreadable = errors.New("release history unreadable")
+
+func (unreadableReleaseDriver) Query(map[string]string) ([]release.Releaser, error) {
+	return nil, errReleaseHistoryUnreadable
+}
+
+func TestLastReleaseApplyMethodPropagatesLookupErrors(t *testing.T) {
+	t.Parallel()
+
+	cfg := helmv4action.NewConfiguration()
+	cfg.Releases = storage.Init(unreadableReleaseDriver{Memory: driver.NewMemory()})
+
+	client := helm.NewClientFromParts(cfg, nil)
+
+	_, err := client.LastReleaseApplyMethod("cert-manager")
+	require.ErrorIs(t, err, errReleaseHistoryUnreadable,
+		"an unknown apply method must not read as a release without one")
 }

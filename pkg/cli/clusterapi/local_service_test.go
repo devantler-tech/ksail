@@ -886,6 +886,11 @@ func TestProvisioningSurfacesProgressCondition(t *testing.T) {
 		v1alpha1.DistributionVCluster: provisioner,
 	})
 
+	t.Cleanup(func() {
+		close(gate)
+		requireEventuallyPhase(t, service, "wip", v1alpha1.ClusterPhaseReady)
+	})
+
 	_, err := service.Create(
 		context.Background(),
 		clusterFor("wip", v1alpha1.DistributionVCluster),
@@ -899,8 +904,6 @@ func TestProvisioningSurfacesProgressCondition(t *testing.T) {
 	conditions := conditionsOf(list, "wip")
 	require.Len(t, conditions, 1)
 	assert.Equal(t, "Provisioning", conditions[0].Reason)
-
-	close(gate)
 }
 
 func TestCreateValidatesInput(t *testing.T) {
@@ -2371,6 +2374,15 @@ func TestDeleteResolvesAPersistedEKSTargetOutsideTheSelectedRegion(t *testing.T)
 	err := service.Delete(context.Background(), "default", clusterName)
 	require.NotErrorIs(t, err, api.ErrNotFound,
 		"a cluster KSail holds an ownership record for is not missing; the selected region is")
+
+	if err == nil {
+		// An accepted delete must finish before this test restores HOME or removes its state.
+		require.Eventually(t, func() bool {
+			_, getErr := service.Get(context.Background(), "default", clusterName)
+
+			return errors.Is(getErr, api.ErrNotFound)
+		}, eventuallyTimeout, eventuallyTick)
+	}
 }
 
 // TestLifecycleReportsAnUnreadableOwnershipRecordInsteadOfNotFound covers a cluster reachable only

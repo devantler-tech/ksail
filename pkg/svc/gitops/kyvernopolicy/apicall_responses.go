@@ -137,7 +137,7 @@ func apiCallFixtureLoaderFactory(responses APICallResponses) engineapi.ContextLo
 	base := factories.DefaultContextLoaderFactory(nil)
 	client := newAPICallResponseClient(responses)
 
-	return func(policy kyvernov1.PolicyInterface, rule kyvernov1.Rule) engineapi.ContextLoader {
+	return func(policy engineapi.PolicyScope, rule kyvernov1.Rule) engineapi.ContextLoader {
 		return &apiCallFixtureLoader{delegate: base(policy, rule), client: client}
 	}
 }

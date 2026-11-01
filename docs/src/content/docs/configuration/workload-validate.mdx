@@ -25,20 +25,20 @@ Instead, KSail uses **typed schema-aware placeholders** derived from the Kuberne
 
 A bare `${VAR}` is replaced with a **typed placeholder** based on the JSON schema type of the field it occupies.
 
-| Schema type | Placeholder value |
-|-------------|------------------|
-| `string`    | `"placeholder"` |
-| `integer`   | `0`             |
-| `number`    | `0.0`           |
-| `boolean`   | `true`          |
-| unknown / no schema | `"placeholder"` |
+| Schema type         | Placeholder value |
+| ------------------- | ----------------- |
+| `string`            | `"placeholder"`   |
+| `integer`           | `0`               |
+| `number`            | `0.0`             |
+| `boolean`           | `true`            |
+| unknown / no schema | `"placeholder"`   |
 
 **Example:**
 
 ```yaml
 spec:
-  replicas: ${REPLICA_COUNT}   # integer field → 0
-  image: ${IMAGE_REF}          # string field  → "placeholder"
+  replicas: ${REPLICA_COUNT} # integer field → 0
+  image: ${IMAGE_REF} # string field  → "placeholder"
   enableFeature: ${FEATURE_ON} # boolean field → true
 ```
 
@@ -57,9 +57,9 @@ When a default is provided (either `:-` or `:=` syntax), the default value is us
 
 ```yaml
 spec:
-  replicas: ${REPLICA_COUNT:-3}    # integer field → 3 (not "3")
-  name: ${APP_NAME:-my-app}        # string field  → "my-app"
-  debug: ${DEBUG_MODE:-false}      # boolean field → false
+  replicas: ${REPLICA_COUNT:-3} # integer field → 3 (not "3")
+  name: ${APP_NAME:-my-app} # string field  → "my-app"
+  debug: ${DEBUG_MODE:-false} # boolean field → false
 ```
 
 > [!NOTE]
@@ -71,23 +71,43 @@ When a variable reference is embedded inside a larger string, the result is alwa
 
 ```yaml
 spec:
-  hostname: ${ENV}-app.example.com   # → "placeholder-app.example.com"
-  image: myrepo/${IMAGE_NAME:-nginx}:latest  # → "myrepo/nginx:latest"
+  hostname: ${ENV}-app.example.com # → "placeholder-app.example.com"
+  image: myrepo/${IMAGE_NAME:-nginx}:latest # → "myrepo/nginx:latest"
 ```
 
 ## Schema Inference
 
-KSail loads JSON schemas from the kubeconform disk cache (populated on previous `workload validate` runs). Schema files are looked up from the OS user cache directory (for example `~/.cache/ksail/kubeconform/`), or from `${TMPDIR}/ksail/kubeconform` when the user cache directory is unavailable (such as in some CI environments).
+KSail uses the same schema locations and strictness for typed substitution and validation. Built-in Kubernetes schemas take precedence, followed by supplied locations and then the CRD catalogue. Remote schemas are read from kubeconform's disk cache (populated by previous validations or an explicit refresh); supplied local directories and path templates are read directly. Schema files are looked up from the OS user cache directory (for example `~/.cache/ksail/kubeconform/`), or from `${TMPDIR}/ksail/kubeconform` when the user cache directory is unavailable (such as in some CI environments).
 
 - **Core Kubernetes resources** (Deployment, Service, ConfigMap, …): typed via [kubernetes-json-schema](https://github.com/yannh/kubernetes-json-schema) **when the relevant schema is present in the kubeconform disk cache**
 - **CRDs** (FluxCD, cert-manager, …): typed via the [CRDs-catalog](https://github.com/datreeio/CRDs-catalog) **when their schemas are present in the kubeconform disk cache**
-- **Resources without a cached schema** (including core kinds or CRDs whose schemas have not yet been cached): all bare `${VAR}` expand to `"placeholder"` (string)
+- **Supplied schemas** (`--schema-location` or `spec.workload.validation.schemaLocations`): local files are read directly; remote templates and registry directories use the same cache keys as kubeconform
+- **Resources without an available schema**: all bare `${VAR}` expand to `"placeholder"` (string)
 
 > [!NOTE]
-> Placeholder type inference reads schemas **only from the local kubeconform cache** — it does not itself make any network requests while deciding how to type `${VAR}` placeholders.
+> Placeholder type inference reads local schemas and cached remote responses. It does not itself make network requests.
 > Kubeconform may still download missing schemas from its configured remote schema locations on a cache miss (typically the first time it sees a given kind), and then caches them under the same directory for subsequent validations.
 
 ## Practical Guidance
+
+### Refresh Stale Schemas
+
+If a valid new field is rejected because an older schema is cached, fetch current schemas and validate again:
+
+```bash
+ksail workload validate ./k8s --refresh-schemas
+```
+
+Refresh uses a temporary cache for the selected resources, fetches their schemas before typing Flux placeholders, and still performs full validation afterward. The persistent cache receives the downloaded entries only after all validation stages succeed. Unrelated cached schemas remain; normal validation reuses the refreshed entries without automatic expiry. If downloading or validation fails, the existing cache is preserved. The temporary cache is removed on both success and failure.
+
+Registry locations are tried in order. An unreachable earlier location can stop ordinary validation before a later cached CRD schema is considered; see [the tracked offline fallback limitation](https://github.com/devantler-tech/ksail/issues/7999). Built-in schemas already present in the cache remain usable offline.
+
+Remote locations must be reachable during refresh. An unavailable selected schema fails refresh even when `--ignore-missing-schemas` would normally permit it; explicit kind exclusions still apply. Invalid enum values and incorrectly typed defaults continue to fail. A private schema absent from the catalogue can be supplied at the same time:
+
+```bash
+ksail workload validate ./k8s --refresh-schemas \
+  --schema-location './schemas/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+```
 
 ### Avoid False Validation Failures
 
@@ -121,7 +141,7 @@ spec:
 
 `workload validate` checks each resource against its JSON schema from the [CRDs-catalog](https://github.com/datreeio/CRDs-catalog). When a CRD's catalog schema is **stale or missing**, kubeconform can reject otherwise-valid manifests — for example flagging a newer field as `additional properties ... not allowed`. (Kubernetes `Secret`s are already skipped by default to avoid SOPS-related failures.)
 
-Skip such kinds with the `--skip-kinds` flag:
+Refresh a stale cached schema first, or supply the current schema with `--schema-location`. Skip only kinds whose schemas are genuinely unavailable, using `--skip-kinds`:
 
 ```bash
 ksail workload validate --skip-kinds Coroot,SealedSecret
@@ -168,11 +188,11 @@ See [Multi-Environment Workflows](/guides/multi-environment/) for how to structu
 
 KSail supports the standard Flux postBuild variable syntax:
 
-| Syntax | Behavior during validation |
-|--------|---------------------------|
-| `${VAR}` | Typed placeholder (schema-derived) |
-| `${VAR:-default}` | `default` value, coerced to schema type |
-| `${VAR:=default}` | `default` value, coerced to schema type |
-| `${VAR}` in mixed text | Replaced with `"placeholder"` (string) |
+| Syntax                 | Behavior during validation              |
+| ---------------------- | --------------------------------------- |
+| `${VAR}`               | Typed placeholder (schema-derived)      |
+| `${VAR:-default}`      | `default` value, coerced to schema type |
+| `${VAR:=default}`      | `default` value, coerced to schema type |
+| `${VAR}` in mixed text | Replaced with `"placeholder"` (string)  |
 
 Other Flux substitution forms (e.g., shell-style `$VAR` without braces, `$(VAR)` command substitution) are **not** expanded by KSail and are left as-is.

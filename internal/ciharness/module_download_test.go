@@ -27,10 +27,11 @@ func TestDesktopReleaseUsesModuleDownloadSetup(t *testing.T) {
 	setupIndex, buildIndex := -1, -1
 
 	for index, step := range steps {
-		if step.Uses == "./.github/actions/setup-desktop-build" {
+		if step.Uses == "./.github/actions/setup-desktop-build" ||
+			step.Uses == "devantler-tech/ksail/.github/actions/setup-desktop-build@da546b96d2982707343117ef44d98083d8e4c36a" {
 			setupIndex = index
 
-			assert.Empty(t, step.If)
+			assert.Equal(t, "needs.validate-release-ref.outputs.release-mode == 'build'", step.If)
 			assert.False(t, step.ContinueOnError)
 		}
 
@@ -139,7 +140,14 @@ func releaseModuleDownloadStep(t *testing.T, steps []harnessStep) harnessStep {
 	require.NotEqual(t, -1, setupIndex, "release job must configure Go before downloading")
 	assert.Greater(t, prefetchIndex, setupIndex, "use the configured Go toolchain")
 	assert.Less(t, prefetchIndex, buildIndex, "downloads must finish before GoReleaser")
-	assert.Empty(t, prefetch.If)
+
+	if buildIndex < len(steps) &&
+		strings.HasPrefix(steps[buildIndex].Uses, "goreleaser/goreleaser-action@") {
+		assert.Equal(t, "needs.cask-checkpoint.outputs.release-mode == 'build'", prefetch.If)
+	} else {
+		assert.Empty(t, prefetch.If)
+	}
+
 	assert.False(t, prefetch.ContinueOnError)
 
 	return prefetch

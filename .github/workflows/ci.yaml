@@ -164,6 +164,7 @@ jobs:
       hetzner-cleanup-script: ${{ steps.filter.outputs.hetzner-cleanup-script }}
       gitops-assert-scripts: ${{ steps.filter.outputs.gitops-assert-scripts }}
       kubeconform-cancellation: ${{ steps.filter.outputs.kubeconform-cancellation }}
+      native-home-paths: ${{ steps.filter.outputs.native-home-paths }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -175,6 +176,11 @@ jobs:
         id: filter
         with:
           filters: |
+            native-home-paths:
+              - 'pkg/fsutil/**'
+              - 'go.mod'
+              - 'go.sum'
+              - '.github/workflows/ci.yaml'
             kubeconform-cancellation:
               - 'pkg/client/kubeconform/**'
               - '.github/workflows/ci.yaml'
@@ -244,6 +250,8 @@ jobs:
             # the same reason todos-contract does. TestReleaseConfigFilterCoversTheReleaseFiles
             # fails if a release file is dropped from it.
             release-config:
+              - '.github/scripts/resolve-release-replay.sh'
+              - '.github/actions/release-admission/**'
               - '.github/scripts/download-go-modules.sh'
               - '.github/scripts/cask-rendering.test.sh'
               - '.goreleaser.yaml'
@@ -280,6 +288,8 @@ jobs:
               - '.govulncheck-allow.txt'
             # Release inputs are outside Go's cache and the shared Go source filter.
             release-graph-audit:
+              - '.github/scripts/resolve-release-replay.sh'
+              - '.github/actions/release-admission/**'
               - '.github/scripts/download-go-modules.sh'
               - '.goreleaser.yaml'
               - '.goreleaser.desktop.yaml'
@@ -468,6 +478,31 @@ jobs:
               - '.github/actions/ksail-test-workload/**'
               - '.github/actions/ksail-system-test/helm-values-precedence.sh'
               - '.github/workflows/ci.yaml'
+
+  native-home-paths:
+    name: 🪟 Validate Native Home Paths
+    runs-on: windows-latest
+    timeout-minutes: 5
+    needs: [changes]
+    if: needs.changes.outputs.native-home-paths == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # This black-box test file imports the actual filesystem API without
+      # loading unrelated test fixtures into the native Windows check.
+      - name: 🔎 Verify native home prefixes and literal paths
+        run: go test ./pkg/fsutil/path_test.go -count=1
 
   eks-smoke-scripts:
     name: 🧹 Validate EKS Smoke Teardown
@@ -694,7 +729,7 @@ jobs:
       || (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
       && needs.changes.outputs.govuln-allowlist == 'true')
-    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@eec706368bdc0114c010afea778bf5efb17ced23 # v7.24.0
+    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@af042c540ce8db4d64add98c34b5c57691e0e812 # v19.0.5
     # The canonical defaults make a default-branch run answer "did the check run" rather than
     # "did the diff touch a Go file". On main the branch's green IS the protection
     # signal, so a path filter that skips the suite or the scan leaves main green
@@ -923,7 +958,6 @@ jobs:
         uses: ./.github/actions/cache-ksail-binary
         with:
           go-version: ${{ steps.setup-go.outputs.go-version }}
-          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
 
       - name: 🧪 Repeat schema cancellation acceptance
@@ -971,7 +1005,8 @@ jobs:
           name: ksail-binary-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ steps.binary.outputs.binary-path }}
           if-no-files-found: error
-          compression-level: 0
+          # Level 1 cut the measured candidate by 53% with byte-identical restores.
+          compression-level: 1
           retention-days: 1
 
   # Reuse the immutable migration CLI from a main-populated, exact-key cache.
@@ -1047,7 +1082,7 @@ jobs:
       - name: 🧹 Free disk space
         if: steps.calico-cache.outputs.cache-hit != 'true'
         # Only cold compilation needs the large working-space reclamation.
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@09244704b86ffff4dfc5868d3e6a67bb770336c6
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@da546b96d2982707343117ef44d98083d8e4c36a
 
       - name: ♻️ Restore Go modules
         if: steps.calico-cache.outputs.cache-hit != 'true'
@@ -1833,7 +1868,6 @@ jobs:
         uses: ./.github/actions/cache-ksail-binary
         with:
           go-version: ${{ steps.setup-go.outputs.go-version }}
-          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
           save: "false"
 
@@ -1889,7 +1923,7 @@ jobs:
       # This job already waits for the producer. Reuse its exact sealed bytes
       # instead of restoring Go modules or compiling again after cache eviction.
       - name: 📥 Restore KSail binary
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@09244704b86ffff4dfc5868d3e6a67bb770336c6
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@da546b96d2982707343117ef44d98083d8e4c36a
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2081,7 +2115,7 @@ jobs:
 
       - name: 📥 Restore KSail binary
         # Pin the identical published action until actionlint supports $/ references.
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@09244704b86ffff4dfc5868d3e6a67bb770336c6
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@da546b96d2982707343117ef44d98083d8e4c36a
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2521,7 +2555,7 @@ jobs:
         with:
           persist-credentials: false
       - name: 🧹 Free runner disk
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@09244704b86ffff4dfc5868d3e6a67bb770336c6
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@da546b96d2982707343117ef44d98083d8e4c36a
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -2579,7 +2613,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          go install github.com/vektra/mockery/v3@v3.5.4
+          go install github.com/vektra/mockery/v3@v3.8.1
           make generate 2>&1 | tee "$RUNNER_TEMP/local-recovery-evidence/generate.log"
       - name: 📚 Build the documentation
         if: ${{ !cancelled() && steps.local-safety.outcome == 'success' }}
@@ -2697,6 +2731,7 @@ jobs:
         test-cask-rendering,
         release-graph-audit,
         cask-pr-handoff,
+        native-home-paths,
         eks-smoke-scripts,
         k3k-sentinel-scripts,
         rate-limit-gate-script,
@@ -2706,7 +2741,7 @@ jobs:
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/.github/actions/aggregate-job-checks@26a761ff74a2d625d4cfbe1ed1ebae2780d7aacd # v13.2.6
+      - uses: devantler-tech/.github/actions/aggregate-job-checks@1dae1b0f84a0432151ea99ff2d70efa59a28f8bf # v17.1.1
         with:
           job-results: >-
             ${{ needs.retired-repo-links.result }}
@@ -2740,6 +2775,7 @@ jobs:
             ${{ needs.test-cask-rendering.result }}
             ${{ needs.release-graph-audit.result }}
             ${{ needs.cask-pr-handoff.result }}
+            ${{ needs.native-home-paths.result }}
             ${{ needs.eks-smoke-scripts.result }}
             ${{ needs.k3k-sentinel-scripts.result }}
             ${{ needs.rate-limit-gate-script.result }}
