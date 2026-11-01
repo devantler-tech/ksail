@@ -33,7 +33,7 @@ trap 'rm -rf "$work"' EXIT
 status=0
 gh api "$@" >"$work/output" 2>"$work/error" || status=$?
 if [[ "$status" -ne 0 ]] &&
-	LC_ALL=C grep -Eq '^gh: API rate limit exceeded([[:space:]]|$)' "$work/error"; then
+	LC_ALL=C grep -Eq '^gh: API rate limit (already )?exceeded([[:space:]]|$)' "$work/error"; then
 	# No new wait window: interactive callers without the production deadline
 	# retain their immediate refusal. This also excludes secondary-limit retries.
 	if [[ ! "${KSAIL_GITHUB_WRITE_BUDGET_DEADLINE:-}" =~ ^[1-9][0-9]{0,9}$ ]]; then

@@ -428,8 +428,15 @@ wait_screen() {
 
 # Verify every gate without adding a readiness retry phase.
 complete_readiness() {
+	local screen_status=0
 	capture || return 1
-	if ! screen || ! read_state || ! rebind_rest || ! published_release; then return 1; fi
+	screen || screen_status=$?
+	if [[ "$screen_status" -eq 3 ]]; then
+		blocked 'required checks or the online audit are pending during final verification'
+		return 1
+	fi
+	[[ "$screen_status" -eq 0 ]] || return 1
+	if ! read_state || ! rebind_rest || ! published_release; then return 1; fi
 	if [[ "$1" == merge && "$merge_state" != CLEAN ]]; then return 1; fi
 }
 

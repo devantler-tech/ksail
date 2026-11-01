@@ -54,13 +54,15 @@ if [[ "$scenario" == read-budget-* ]]; then
     # The late-release cases begin with usable quota and deplete only at the
     # last release read, after all of the original pre-merge readiness reads.
     if [[ "$scenario" != read-budget-final-release-* || -f "$state/final-release-quota" ]]; then
-      [[ "${GH_TOKEN:-}" != repository-reader || "$resource" != core || "$now" -ge 1105 ]] || remaining=0
+      primary_resource=core
+      [[ "$scenario" != read-budget-readiness* ]] || primary_resource=graphql
+      [[ "${GH_TOKEN:-}" != repository-reader || "$resource" != "$primary_resource" || "$now" -ge 1105 ]] || remaining=0
     fi
     printf 'HTTP/2.0 200 OK\r\nX-Ratelimit-Resource: %s\r\nX-Ratelimit-Remaining: %s\r\nX-Ratelimit-Reset: 1100\r\n\r\n' "$resource" "$remaining"
     if [[ "$resource" == core ]]; then
       printf '{"resources":{"core":{"remaining":%s,"reset":1100}}}\n' "$remaining"
     else
-      printf '{"data":{"rateLimit":{"remaining":%s,"resetAt":"2030-01-01T00:00:00Z"}}}\n' "$remaining"
+      printf '{"data":{"rateLimit":{"remaining":%s,"resetAt":"1970-01-01T00:18:20Z"}}}\n' "$remaining"
     fi
     exit 0
   fi
@@ -75,6 +77,8 @@ if [[ "$scenario" == read-budget-* ]]; then
         printf 'gh: Resource not accessible by integration (HTTP 403)\n' >&2
       elif [[ "$scenario" == read-budget-secondary ]]; then
         printf 'gh: You have exceeded a secondary rate limit (HTTP 403)\n' >&2
+      elif [[ "$scenario" == read-budget-readiness* ]]; then
+        printf 'gh: API rate limit already exceeded for user ID 12345.\n' >&2
       else
         printf 'gh: API rate limit exceeded for installation (HTTP 403)\n' >&2
       fi
@@ -91,7 +95,7 @@ base=3333333333333333333333333333333333333333
 promoted=false
 # Start the late-release cases ready so they isolate the final merge guard and
 # remain independent of how many evidence reads the promotion guard requires.
-[[ -f "${state}/promoted" || "${scenario}" == ready-retry || "$scenario" == read-budget-final-release-* ]] && promoted=true
+[[ -f "${state}/promoted" || "${scenario}" == ready-retry || "$scenario" == final-screen-pending || "$scenario" == read-budget-final-release-* ]] && promoted=true
 cursor=null
 for arg in "$@"; do
 	[[ "${arg}" == cursor=* ]] && cursor="${arg#cursor=}"
@@ -246,6 +250,7 @@ case "${line}" in
 	   .nodes=[] | .totalCount=0
 	 elif $scenario == "failed-required" then .nodes[0].conclusion="FAILURE"
 	 elif $scenario == "missing-required-flag" then del(.nodes[0].isRequired)
+	 elif ($scenario == "final-screen-pending" and $ready and $n == 3) or ($scenario == "read-budget-final-release-pending" and $now >= 1105) then .nodes[0].status="IN_PROGRESS" | .nodes[0].conclusion=null
 	 elif $scenario == "pending-required" or (($scenario == "pending-then-pass" or $scenario == "both-phases-then-pass") and ($ready|not) and $n == 1) then .nodes[0].status="IN_PROGRESS" | .nodes[0].conclusion=null
 	 elif $scenario == "missing-audit" and $ready then .nodes[1].conclusion="SKIPPED"
 	 elif $scenario == "stale-audit" and $ready then .nodes[1].startedAt="2029-01-01T00:00:00Z"
@@ -434,6 +439,13 @@ run_case() {
 				fail "${scenario}: final-release read did not recover exactly once"
 		fi
 	fi
+	if [[ "$scenario" == final-screen-pending || "$scenario" == read-budget-final-release-pending ]]; then
+		grep -q 'BLOCKED: required checks or the online audit are pending during final verification' "$state/output" ||
+			fail "$scenario: pending final verification has no actionable diagnostic"
+	fi
+	if [[ "$scenario" == final-screen-pending ]]; then
+		[[ "$(<"$state/checks-true")" -eq 3 ]] || fail "$scenario: final verification gained a retry budget"
+	fi
 	if [[ "${scenario}" == write-budget-checks-terminal ]]; then
 		[[ ! -f "${state}/clock" ]] || fail "terminal readiness waited for the request budget"
 	fi
@@ -479,6 +491,8 @@ run_case() {
 
 # Removing the direct merge, SHA pin, post-promotion audit, or immutable readback breaks these.
 run_case read-budget-final-release-stable true 0 1
+run_case final-screen-pending false 0 0
+run_case read-budget-final-release-pending false 0 0
 run_case read-budget-final-release-repeated false 0 0
 run_case read-budget-final-release-base-moved false 0 0
 run_case read-budget-final-release-twice false 0 0
