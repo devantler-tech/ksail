@@ -153,10 +153,10 @@ func expectKyvernoInstall(t *testing.T, client *helm.MockInterface, installErr e
 // caBundle, simulating a fully-initialised Kyverno admission controller.
 func readyWebhookConfig() *admissionregistrationv1.MutatingWebhookConfiguration {
 	return &admissionregistrationv1.MutatingWebhookConfiguration{
-		Name: "kyverno-resource-mutating-webhook-cfg",
+		Name: "kyverno-policy-mutating-webhook-cfg",
 		Webhooks: []admissionregistrationv1.MutatingWebhook{
 			{
-				Name: "mutate.kyverno.svc",
+				Name: "mutate-policy.kyverno.svc",
 				ClientConfig: admissionregistrationv1.WebhookClientConfig{
 					CABundle: []byte("fake-ca-bundle"),
 				},
@@ -170,10 +170,10 @@ func readyWebhookConfig() *admissionregistrationv1.MutatingWebhookConfiguration 
 // initialised its TLS certificate.
 func unreadyWebhookConfig() *admissionregistrationv1.MutatingWebhookConfiguration {
 	return &admissionregistrationv1.MutatingWebhookConfiguration{
-		Name: "kyverno-resource-mutating-webhook-cfg",
+		Name: "kyverno-policy-mutating-webhook-cfg",
 		Webhooks: []admissionregistrationv1.MutatingWebhook{
 			{
-				Name:         "mutate.kyverno.svc",
+				Name:         "mutate-policy.kyverno.svc",
 				ClientConfig: admissionregistrationv1.WebhookClientConfig{},
 			},
 		},
@@ -233,8 +233,8 @@ func TestInstallWebhookTimeoutIsNonBlocking(t *testing.T) {
 	expectKyvernoInstall(t, client, nil)
 
 	// The caBundle is never populated, but Install should return nil because the
-	// webhook wait is best-effort — failurePolicy: Ignore ensures API operations
-	// succeed even without a fully initialised webhook.
+	// webhook wait retains its best-effort timeout behavior. This does not
+	// establish that policy admission requests will succeed.
 	err := installer.Install(context.Background())
 
 	require.NoError(t, err)
