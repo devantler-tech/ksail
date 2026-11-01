@@ -1567,11 +1567,11 @@ jobs:
           hist_before="$(sha256sum "$sandbox/.ksail/switch-history.json" | cut -d' ' -f1)"
           tree_before="$(find "$sandbox/.kube" "$sandbox/.ksail" | sort)"
 
-          # Run the whole suite with $HOME redirected to the sandbox. Test
-          # pass/fail is the main test workflow's job; this guard only asserts
-          # that no test mutated the real home directory, so failures here are
-          # tolerated.
-          HOME="$sandbox" go test ./... >/dev/null 2>&1 || true
+          # A failed command cannot prove isolation, and cached test verdicts
+          # cannot prove that this run left the canaries untouched. Retain the
+          # result so even a failing suite reaches every canary check below.
+          test_status=0
+          HOME="$sandbox" go test -count=1 ./... >"$sandbox/test.log" 2>&1 || test_status=$?
 
           # Capture the post-run state with errexit disabled: a test that
           # deletes the canary files/dirs is itself a violation, and the empty
@@ -1584,6 +1584,10 @@ jobs:
           set -e
 
           status=0
+          if [ "$test_status" -ne 0 ]; then
+            echo "::error::Home isolation was not verified: go test exited $test_status."
+            status=1
+          fi
           if [ "$kube_before" != "$kube_after" ]; then
             echo "::error::A test mutated \$HOME/.kube/config. Add a homeenv.Run/Isolate TestMain to the offending package (see internal/testutil/homeenv)."
             status=1
@@ -1596,6 +1600,19 @@ jobs:
             echo "::error::A test created or removed files under \$HOME/.kube or \$HOME/.ksail. Add a homeenv.Run/Isolate TestMain to the offending package."
             diff <(printf '%s\n' "$tree_before") <(printf '%s\n' "$tree_after") || true
             status=1
+          fi
+          if [ "$test_status" -ne 0 ] && [ -f "$sandbox/test.log" ]; then
+            # Publish only bounded package identifiers from this public module,
+            # never arbitrary test output or environment-derived error details.
+            awk '
+              $1 == "FAIL" && $2 ~ /^github\.com\/devantler-tech\/ksail\/v7(\/[[:alnum:]_.-]+)*$/ {
+                print "::error::Failed test package: " $2
+                if (++count == 40) exit
+              }
+              END {
+                if (count == 0) print "::error::No failed-package summary was emitted; reproduce the guard locally."
+              }
+            ' "$sandbox/test.log"
           fi
           exit "$status"
 
