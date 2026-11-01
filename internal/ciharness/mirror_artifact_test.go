@@ -285,8 +285,20 @@ exit 1
 	assert.Equal(
 		t,
 		3,
-		strings.Count(string(recorded), "pull --quiet "),
+		strings.Count(string(recorded), "pull --quiet mirror.gcr.io/"),
 		"the pull must stop after three attempts",
+	)
+	assert.Equal(
+		t,
+		3,
+		strings.Count(string(recorded), "pull --quiet public.ecr.aws/"),
+		"the recovery must stop after three attempts",
+	)
+	assert.Equal(
+		t,
+		6,
+		strings.Count(string(recorded), "pull --quiet "),
+		"no other source may be tried",
 	)
 	assert.NotContains(
 		t,
