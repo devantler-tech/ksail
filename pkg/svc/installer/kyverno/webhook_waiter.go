@@ -9,16 +9,20 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
-	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/webhookwait"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
 const (
 	// kyvernoPolicyWebhookName is always registered, including in clusters with no
-	// mutation policies. Resource webhooks may legitimately have no entries then.
-	// A populated policy caBundle observes TLS publication, not policy convergence
-	// or a successful admission request.
+	// mutation policies. It must contain CA-bearing entries before readiness passes.
 	kyvernoPolicyWebhookName = "kyverno-policy-mutating-webhook-cfg"
+
+	// kyvernoResourceWebhookName may legitimately have no entries when no policies
+	// apply. Any entries it does contain must retain their CA-publication check.
+	kyvernoResourceWebhookName = "kyverno-resource-mutating-webhook-cfg"
 )
 
 // errNoTimeRemaining is returned when the context deadline has already elapsed
@@ -47,7 +51,9 @@ var newClientsetFn = func(kubeconfig, kubecontext string) (kubernetes.Interface,
 }
 
 // waitForWebhookReady polls the always-registered policy webhook configuration
-// until every entry has a non-empty caBundle. Helm deployment readiness can
+// and the resource configuration in each iteration. Policy entries must exist;
+// every policy or resource entry must have a non-empty caBundle. An existing,
+// empty resource configuration is valid without applicable policies. Helm readiness can
 // precede asynchronous CA publication. This observation does not establish
 // policy-rule convergence or verify an admission request.
 //
@@ -67,14 +73,9 @@ func (i *Installer) waitForWebhookReady(ctx context.Context) error {
 		return fmt.Errorf("creating clientset for Kyverno webhook readiness check: %w", err)
 	}
 
-	err = webhookwait.Poll(
-		ctx,
-		clientset,
-		webhookwait.Mutating,
-		kyvernoPolicyWebhookName,
-		"polling Kyverno webhook readiness",
-		remaining,
-	)
+	err = readiness.PollForReadiness(ctx, remaining, func(pollCtx context.Context) (bool, error) {
+		return kyvernoWebhookCAsReady(pollCtx, clientset)
+	})
 	if err != nil {
 		// Preserve the caller's existing best-effort deadline handling. The REST
 		// rate limiter may decline a wait that would exceed the deadline without
@@ -83,10 +84,39 @@ func (i *Installer) waitForWebhookReady(ctx context.Context) error {
 			return fmt.Errorf("polling Kyverno webhook readiness: %w", context.DeadlineExceeded)
 		}
 
-		return err //nolint:wrapcheck // webhookwait.Poll already wraps with the readiness description
+		return fmt.Errorf("polling Kyverno webhook readiness: %w", err)
 	}
 
 	return nil
+}
+
+// kyvernoWebhookCAsReady observes policy and resource CA publication together.
+// Empty resource entries are valid only alongside a populated policy configuration.
+func kyvernoWebhookCAsReady(ctx context.Context, clientset kubernetes.Interface) (bool, error) {
+	for _, name := range []string{kyvernoPolicyWebhookName, kyvernoResourceWebhookName} {
+		config, err := clientset.AdmissionregistrationV1().
+			MutatingWebhookConfigurations().
+			Get(ctx, name, metav1.GetOptions{})
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+
+		if err != nil {
+			return false, fmt.Errorf("getting Kyverno webhook configuration %q: %w", name, err)
+		}
+
+		if name == kyvernoPolicyWebhookName && len(config.Webhooks) == 0 {
+			return false, nil
+		}
+
+		for _, webhook := range config.Webhooks {
+			if len(webhook.ClientConfig.CABundle) == 0 {
+				return false, nil
+			}
+		}
+	}
+
+	return true, nil
 }
 
 // isDeadlineError reports whether err represents the webhook-readiness deadline being

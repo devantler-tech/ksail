@@ -70,7 +70,9 @@ func TestWebhookReadinessRequiresPolicyTLS(t *testing.T) {
 
 //nolint:paralleltest // Overrides the shared clientset factory.
 func TestWebhookReadinessWaitsForPolicyCA(t *testing.T) {
-	clientset := k8sfake.NewClientset()
+	clientset := k8sfake.NewClientset(
+		webhookObservationFixture("kyverno-resource-mutating-webhook-cfg"),
+	)
 	policyReads := 0
 
 	clientset.PrependReactor("get", "mutatingwebhookconfigurations",
@@ -159,4 +161,177 @@ func webhookObservationFixture(
 	}
 
 	return config
+}
+
+//nolint:paralleltest // Overrides the shared clientset factory.
+func TestWebhookResourceTLSRemainsRequired(t *testing.T) {
+	tests := map[string]*admissionregistrationv1.MutatingWebhookConfiguration{
+		"missing resource configuration": nil,
+		"resource CA not published": webhookObservationFixture(
+			"kyverno-resource-mutating-webhook-cfg", nil,
+		),
+		"one resource CA is still empty": webhookObservationFixture(
+			"kyverno-resource-mutating-webhook-cfg", []byte("first-resource-ca"), nil,
+		),
+	}
+	for name, resource := range tests {
+		t.Run(name, func(t *testing.T) {
+			clientset := k8sfake.NewClientset(webhookObservationFixture(
+				"kyverno-policy-mutating-webhook-cfg", []byte("policy-ca"),
+			))
+			if resource != nil {
+				require.NoError(t, clientset.Tracker().Add(resource))
+			}
+
+			installer := webhookObserver(t, clientset)
+
+			ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+			defer cancel()
+
+			require.ErrorIs(t, installer.WaitForWebhookReadyForTest(ctx), context.DeadlineExceeded)
+		})
+	}
+}
+
+//nolint:paralleltest // Overrides the shared clientset factory.
+func TestWebhookResourceWaitRechecksPolicyTLS(t *testing.T) {
+	clientset := k8sfake.NewClientset()
+	policyReads, resourceReads := 0, 0
+
+	clientset.PrependReactor("get", "mutatingwebhookconfigurations",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			getAction, ok := action.(k8stesting.GetAction)
+			if !ok {
+				return false, nil, nil
+			}
+
+			switch getAction.GetName() {
+			case "kyverno-policy-mutating-webhook-cfg":
+				policyReads++
+
+				var bundle []byte
+				if policyReads == 1 {
+					bundle = []byte("policy-ca")
+				}
+
+				return true, webhookObservationFixture(getAction.GetName(), bundle), nil
+			case "kyverno-resource-mutating-webhook-cfg":
+				resourceReads++
+
+				var bundle []byte
+				if resourceReads > 1 {
+					bundle = []byte("resource-ca")
+				}
+
+				return true, webhookObservationFixture(getAction.GetName(), bundle), nil
+			default:
+				return false, nil, nil
+			}
+		},
+	)
+	installer := webhookObserver(t, clientset)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 2500*time.Millisecond)
+	defer cancel()
+
+	// Resource publication cannot finish against an earlier policy observation.
+	require.ErrorIs(t, installer.WaitForWebhookReadyForTest(ctx), context.DeadlineExceeded)
+}
+
+//nolint:paralleltest // Overrides the shared clientset factory.
+func TestWebhookResourceReadFailurePropagates(t *testing.T) {
+	clientset := k8sfake.NewClientset(webhookObservationFixture(
+		"kyverno-policy-mutating-webhook-cfg", []byte("policy-ca"),
+	))
+	clientset.PrependReactor("get", "mutatingwebhookconfigurations",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			getAction, ok := action.(k8stesting.GetAction)
+			if !ok || getAction.GetName() != "kyverno-resource-mutating-webhook-cfg" {
+				return false, nil, nil
+			}
+
+			return true, nil, apierrors.NewForbidden(
+				schema.GroupResource{
+					Group:    "admissionregistration.k8s.io",
+					Resource: "mutatingwebhookconfigurations",
+				},
+				getAction.GetName(), errConnRefused,
+			)
+		},
+	)
+	installer := webhookObserver(t, clientset)
+
+	err := installer.WaitForWebhookReadyForTest(t.Context())
+	require.True(t, apierrors.IsForbidden(err), "expected forbidden resource read, got %v", err)
+}
+
+//nolint:paralleltest // Overrides the shared clientset factory.
+func TestWebhookResourceCAEventuallyPublished(t *testing.T) {
+	clientset := k8sfake.NewClientset(
+		webhookObservationFixture("kyverno-policy-mutating-webhook-cfg", []byte("policy-ca")),
+		webhookObservationFixture("kyverno-resource-mutating-webhook-cfg", nil),
+	)
+	resourceReads := 0
+
+	clientset.PrependReactor("get", "mutatingwebhookconfigurations",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			getAction, ok := action.(k8stesting.GetAction)
+			if !ok || getAction.GetName() != "kyverno-resource-mutating-webhook-cfg" {
+				return false, nil, nil
+			}
+
+			resourceReads++
+			if resourceReads > 1 {
+				config := webhookObservationFixture(
+					getAction.GetName(), []byte("published-resource-ca"),
+				)
+
+				updateErr := clientset.Tracker().Update(
+					admissionregistrationv1.SchemeGroupVersion.WithResource("mutatingwebhookconfigurations"),
+					config, "",
+				)
+				if updateErr != nil {
+					return true, nil, fmt.Errorf("publishing resource CA: %w", updateErr)
+				}
+			}
+
+			return false, nil, nil
+		},
+	)
+	installer := webhookObserver(t, clientset)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	require.NoError(t, installer.WaitForWebhookReadyForTest(ctx))
+
+	observed, err := clientset.Tracker().Get(
+		admissionregistrationv1.SchemeGroupVersion.WithResource("mutatingwebhookconfigurations"),
+		"", "kyverno-resource-mutating-webhook-cfg",
+	)
+	require.NoError(t, err)
+
+	config, ok := observed.(*admissionregistrationv1.MutatingWebhookConfiguration)
+	require.True(t, ok)
+	require.NotEmpty(t, config.Webhooks[0].ClientConfig.CABundle,
+		"readiness returned before the resource CA was published")
+}
+
+//nolint:paralleltest // Overrides the shared clientset factory.
+func TestWebhookReadinessAcceptsPublishedPolicyAndResourceCAs(t *testing.T) {
+	clientset := k8sfake.NewClientset(
+		webhookObservationFixture(
+			"kyverno-policy-mutating-webhook-cfg", []byte("policy-ca-1"), []byte("policy-ca-2"),
+		),
+		webhookObservationFixture(
+			"kyverno-resource-mutating-webhook-cfg",
+			[]byte("resource-ca-1"), []byte("resource-ca-2"),
+		),
+	)
+	installer := webhookObserver(t, clientset)
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+
+	require.NoError(t, installer.WaitForWebhookReadyForTest(ctx))
 }

@@ -28,7 +28,10 @@ func TestNewInstaller(t *testing.T) {
 //nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
 func TestInstallSuccess(t *testing.T) {
 	// Not parallel: overrides the package-level newClientsetFn var.
-	fakeClientset := k8sfake.NewClientset(readyWebhookConfig())
+	fakeClientset := k8sfake.NewClientset(
+		readyWebhookConfig(),
+		webhookObservationFixture("kyverno-resource-mutating-webhook-cfg"),
+	)
 
 	restore := kyvernoinstaller.SetNewClientsetFn(
 		func(_, _ string) (kubernetes.Interface, error) { return fakeClientset, nil },
@@ -183,7 +186,10 @@ func unreadyWebhookConfig() *admissionregistrationv1.MutatingWebhookConfiguratio
 //nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
 func TestInstallWebhookDelayedReadiness(t *testing.T) {
 	// Not parallel: overrides the package-level newClientsetFn var.
-	fakeClientset := k8sfake.NewClientset(unreadyWebhookConfig())
+	fakeClientset := k8sfake.NewClientset(
+		unreadyWebhookConfig(),
+		webhookObservationFixture("kyverno-resource-mutating-webhook-cfg"),
+	)
 
 	restore := kyvernoinstaller.SetNewClientsetFn(
 		func(_, _ string) (kubernetes.Interface, error) { return fakeClientset, nil },
@@ -218,7 +224,10 @@ func TestInstallWebhookDelayedReadiness(t *testing.T) {
 func TestInstallWebhookTimeoutIsNonBlocking(t *testing.T) {
 	// Not parallel: overrides the package-level newClientsetFn and
 	// webhookReadinessTimeout vars.
-	fakeClientset := k8sfake.NewClientset(unreadyWebhookConfig())
+	fakeClientset := k8sfake.NewClientset(
+		unreadyWebhookConfig(),
+		webhookObservationFixture("kyverno-resource-mutating-webhook-cfg"),
+	)
 
 	restoreClientset := kyvernoinstaller.SetNewClientsetFn(
 		func(_, _ string) (kubernetes.Interface, error) { return fakeClientset, nil },
