@@ -1981,11 +1981,16 @@ workload_write
         "type": "string"
       },
       "schema-location": {
-        "description": "Additional kubeconform schema locations (local directory or URL/path template) for CRDs with missing or stale CRDs-catalog entries... (applies to: validate)",
+        "description": "Supplied kubeconform schema locations (local directory or URL/path template)... (applies to: validate)",
         "items": {
           "type": "string"
         },
         "type": "array"
+      },
+      "schema-location-mode": {
+        "default": "additional",
+        "description": "Schema search mode: additional keeps built-in and catalogue defaults; only uses the supplied schema locations without implicit registries (applies to: validate)",
+        "type": "string"
       },
       "scopes": {
         "description": "A comma-delimited set of quota scopes that must all match each object tracked by the quota. (applies to: gen_quota)",
