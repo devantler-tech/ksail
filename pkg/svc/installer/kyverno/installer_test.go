@@ -28,7 +28,10 @@ func TestNewInstaller(t *testing.T) {
 //nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
 func TestInstallSuccess(t *testing.T) {
 	// Not parallel: overrides the package-level newClientsetFn var.
-	fakeClientset := k8sfake.NewClientset(readyWebhookConfig())
+	fakeClientset := k8sfake.NewClientset(
+		readyWebhookConfig(),
+		webhookObservationFixture("kyverno-resource-mutating-webhook-cfg"),
+	)
 
 	restore := kyvernoinstaller.SetNewClientsetFn(
 		func(_, _ string) (kubernetes.Interface, error) { return fakeClientset, nil },
@@ -153,10 +156,10 @@ func expectKyvernoInstall(t *testing.T, client *helm.MockInterface, installErr e
 // caBundle, simulating a fully-initialised Kyverno admission controller.
 func readyWebhookConfig() *admissionregistrationv1.MutatingWebhookConfiguration {
 	return &admissionregistrationv1.MutatingWebhookConfiguration{
-		Name: "kyverno-resource-mutating-webhook-cfg",
+		Name: "kyverno-policy-mutating-webhook-cfg",
 		Webhooks: []admissionregistrationv1.MutatingWebhook{
 			{
-				Name: "mutate.kyverno.svc",
+				Name: "mutate-policy.kyverno.svc",
 				ClientConfig: admissionregistrationv1.WebhookClientConfig{
 					CABundle: []byte("fake-ca-bundle"),
 				},
@@ -170,10 +173,10 @@ func readyWebhookConfig() *admissionregistrationv1.MutatingWebhookConfiguration 
 // initialised its TLS certificate.
 func unreadyWebhookConfig() *admissionregistrationv1.MutatingWebhookConfiguration {
 	return &admissionregistrationv1.MutatingWebhookConfiguration{
-		Name: "kyverno-resource-mutating-webhook-cfg",
+		Name: "kyverno-policy-mutating-webhook-cfg",
 		Webhooks: []admissionregistrationv1.MutatingWebhook{
 			{
-				Name:         "mutate.kyverno.svc",
+				Name:         "mutate-policy.kyverno.svc",
 				ClientConfig: admissionregistrationv1.WebhookClientConfig{},
 			},
 		},
@@ -183,7 +186,10 @@ func unreadyWebhookConfig() *admissionregistrationv1.MutatingWebhookConfiguratio
 //nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
 func TestInstallWebhookDelayedReadiness(t *testing.T) {
 	// Not parallel: overrides the package-level newClientsetFn var.
-	fakeClientset := k8sfake.NewClientset(unreadyWebhookConfig())
+	fakeClientset := k8sfake.NewClientset(
+		unreadyWebhookConfig(),
+		webhookObservationFixture("kyverno-resource-mutating-webhook-cfg"),
+	)
 
 	restore := kyvernoinstaller.SetNewClientsetFn(
 		func(_, _ string) (kubernetes.Interface, error) { return fakeClientset, nil },
@@ -218,7 +224,10 @@ func TestInstallWebhookDelayedReadiness(t *testing.T) {
 func TestInstallWebhookTimeoutIsNonBlocking(t *testing.T) {
 	// Not parallel: overrides the package-level newClientsetFn and
 	// webhookReadinessTimeout vars.
-	fakeClientset := k8sfake.NewClientset(unreadyWebhookConfig())
+	fakeClientset := k8sfake.NewClientset(
+		unreadyWebhookConfig(),
+		webhookObservationFixture("kyverno-resource-mutating-webhook-cfg"),
+	)
 
 	restoreClientset := kyvernoinstaller.SetNewClientsetFn(
 		func(_, _ string) (kubernetes.Interface, error) { return fakeClientset, nil },
@@ -233,8 +242,8 @@ func TestInstallWebhookTimeoutIsNonBlocking(t *testing.T) {
 	expectKyvernoInstall(t, client, nil)
 
 	// The caBundle is never populated, but Install should return nil because the
-	// webhook wait is best-effort — failurePolicy: Ignore ensures API operations
-	// succeed even without a fully initialised webhook.
+	// webhook wait retains its best-effort timeout behavior. This does not
+	// establish that policy admission requests will succeed.
 	err := installer.Install(context.Background())
 
 	require.NoError(t, err)

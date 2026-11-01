@@ -183,6 +183,7 @@ printf 'kubectl %s\n' "$*" >> "$FIXTURE_CALLS"
 ` + certManagerTargetGuard + `
 context_flag=--context
 validate_target "$@"
+` + kyvernoAdmissionKubectlStub + `
 case "$1" in
   config)
     target=kind-fixture-cluster
@@ -296,7 +297,6 @@ func runValuesTrial(
 	step := findHarnessStep(t, action.Runs.Steps, profile.step)
 	dir := t.TempDir()
 	revisionFile := filepath.Join(dir, "revision")
-	callsFile := filepath.Join(dir, "calls")
 
 	require.NoError(t, os.WriteFile(revisionFile, []byte("1"), 0o600))
 
@@ -309,6 +309,7 @@ func runValuesTrial(
 	writeExecutableStub(t, filepath.Join(dir, "helm"), certManagerHelmStub)
 	writeExecutableStub(t, filepath.Join(dir, "kubectl"), certManagerKubectlStub)
 	writeExecutableStub(t, filepath.Join(dir, "ksail"), certManagerKSailStub)
+	writeExecutableStub(t, filepath.Join(dir, "sleep"), "#!/usr/bin/env bash\nexit 0\n")
 
 	args := "--name fixture-cluster --kubeconfig " + kubeconfigFile +
 		profile.extraArgs + " --image-verification Disabled"
@@ -319,7 +320,24 @@ func runValuesTrial(
 	command := exec.CommandContext(t.Context(), "bash")
 	command.Stdin = strings.NewReader(step.Run)
 	command.Dir = dir
-	command.Env = append(
+	command.Env = valuesTrialEnv(t, profile, dir, mode, args)
+	output, err := command.CombinedOutput()
+	fixtureRoot, openErr := os.OpenRoot(dir)
+	require.NoError(t, openErr)
+	t.Cleanup(func() { require.NoError(t, fixtureRoot.Close()) })
+	calls := readOptionalVersionFixture(t, fixtureRoot, "calls")
+
+	return string(output), string(calls), err
+}
+
+func valuesTrialEnv(
+	t *testing.T,
+	profile valuesTrialProfile,
+	dir, mode, args string,
+) []string {
+	t.Helper()
+
+	return append(
 		os.Environ(),
 		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"GITHUB_WORKSPACE="+repositoryRootForCertTrial(t),
@@ -327,11 +345,15 @@ func runValuesTrial(
 		"ARGS="+args,
 		"K8S_VERSION_FLAG=--kubernetes-version v1.36.2",
 		"SYSTEM_TEST_LOG_DIR="+dir,
-		"FIXTURE_REVISION="+revisionFile,
-		"FIXTURE_CALLS="+callsFile,
+		"FIXTURE_REVISION="+filepath.Join(dir, "revision"),
+		"FIXTURE_ADMISSION_NAMESPACE="+filepath.Join(dir, "admission-namespace"),
+		"FIXTURE_ADMISSION_POLICY="+filepath.Join(dir, "admission-policy"),
+		"FIXTURE_ADMISSION_PERSISTED="+filepath.Join(dir, "admission-persisted"),
+		"FIXTURE_ADMISSION_DELETE_ACCEPTED="+filepath.Join(dir, "admission-delete-accepted"),
+		"FIXTURE_CALLS="+filepath.Join(dir, "calls"),
 		"FIXTURE_MODE="+mode,
 		"FIXTURE_HELM_VERSION="+cmp.Or(profile.helmVersion, "v4.3.1"),
-		"FIXTURE_KUBECONFIG="+kubeconfigFile,
+		"FIXTURE_KUBECONFIG="+filepath.Join(dir, "kubeconfig"),
 		"VALUES_TRIAL_COMPONENT="+profile.component,
 		"FIXTURE_RELEASE="+profile.release,
 		"FIXTURE_CHART="+profile.chart,
@@ -340,13 +362,6 @@ func runValuesTrial(
 		"FIXTURE_SEEDED_VALUES="+profile.seededValues,
 		"FIXTURE_SEED_FLAGS="+profile.seedFlags,
 	)
-	output, err := command.CombinedOutput()
-	fixtureRoot, openErr := os.OpenRoot(dir)
-	require.NoError(t, openErr)
-	t.Cleanup(func() { require.NoError(t, fixtureRoot.Close()) })
-	calls := readOptionalVersionFixture(t, fixtureRoot, "calls")
-
-	return string(output), string(calls), err
 }
 
 func repositoryRootForCertTrial(t *testing.T) string {
@@ -647,4 +662,189 @@ func TestCiliumValuesTrialUsesExistingRealNodeLeg(t *testing.T) {
 	assert.Equal(t, "cilium", step.Env["VALUES_TRIAL_COMPONENT"])
 	assert.Equal(t, "${{ steps.resolve-args.outputs.args }}", step.Env["ARGS"])
 	assert.Equal(t, "${{ steps.k8s-version-pin.outputs.flag }}", step.Env["K8S_VERSION_FLAG"])
+}
+
+const kyvernoAdmissionKubectlStub = `
+# Only the Kyverno profile uses these admission endpoints. Keep the real target guard.
+if [[ "$FIXTURE_RELEASE" == kyverno ]]; then
+  case "$1 $2" in
+    'get mutatingwebhookconfigurations')
+      [[ "$FIXTURE_MODE" != kyverno_webhook_read_failure ]] || exit 55
+      installed=false
+      [[ ! -f "$FIXTURE_ADMISSION_POLICY" ]] || installed=true
+      jq -n --arg mode "$FIXTURE_MODE" --argjson installed "$installed" '
+        {kind:"List",items:[
+          {kind:"MutatingWebhookConfiguration",metadata:{name:"kyverno-policy-mutating-webhook-cfg"},
+           webhooks:[{clientConfig:{caBundle:"Y2E="}}]},
+          {kind:"MutatingWebhookConfiguration",metadata:{name:"kyverno-resource-mutating-webhook-cfg"},
+           webhooks:(if $installed or $mode=="kyverno_existing_resource_policy"
+             then [{clientConfig:{caBundle:"Y2E="}}] else [] end)}
+        ]} |
+        if $mode=="kyverno_missing_resource" then .items=[.items[0]]
+        elif $mode=="kyverno_missing_policy" then .items=[.items[1]]
+        elif $mode=="kyverno_empty_policy" then .items[0].webhooks=[]
+        elif $mode=="kyverno_empty_policy_ca" then .items[0].webhooks[0].clientConfig.caBundle=""
+        elif $mode=="kyverno_malformed_resource_entries" and ($installed|not) then .items[1].webhooks=false
+        elif $mode=="kyverno_object_resource_entries" and ($installed|not) then .items[1].webhooks={}
+        elif $mode=="kyverno_object_policy_entries" then
+          .items[0].webhooks={x:{clientConfig:{caBundle:"Y2E="}}}
+        elif $mode=="kyverno_omitted_resource_entries" and ($installed|not) then del(.items[1].webhooks)
+        elif $mode=="kyverno_post_resource_ca_missing" and $installed then
+          .items[1].webhooks[0].clientConfig.caBundle=""
+        else . end'
+      exit 0 ;;
+    'create namespace')
+      proof_name="$3"
+      [[ "$proof_name" =~ ^ksail-kyverno-admission-[1-9][0-9]*$ && "${#proof_name}" -le 63 ]] || exit 65
+      [[ "$FIXTURE_MODE" != kyverno_namespace_collision ]] || exit 1
+      printf '%s' "$3" >"$FIXTURE_ADMISSION_NAMESPACE"
+      jq -n --arg ns "$3" --arg mode "$FIXTURE_MODE" '
+        {apiVersion:"v1",kind:"Namespace",metadata:{
+          name:(if $mode=="kyverno_wrong_namespace_identity" then "another-namespace" else $ns end),
+          uid:(if $mode=="kyverno_empty_namespace_uid" then "" else "owned-fixture-namespace" end)}}'
+      exit 0 ;;
+    'create --filename')
+      expected_namespace=$(cat "$FIXTURE_ADMISSION_NAMESPACE")
+      jq -e --arg ns "$expected_namespace" '
+        .apiVersion=="kyverno.io/v1" and .kind=="Policy" and
+        .metadata.namespace==$ns and .spec.background==false and
+        (.spec.rules|length)==1 and
+        .spec.rules[0].match.any[0].resources.kinds==["ConfigMap"] and
+        .spec.rules[0].mutate.patchStrategicMerge.metadata.labels["ksail.dev/admission-proof"]=="verified"
+      ' "$3" >/dev/null || exit 65
+      [[ " $* " == *" --namespace $expected_namespace "* ]] || exit 65
+      touch "$FIXTURE_ADMISSION_POLICY"
+      printf '{}\n'
+      exit 0 ;;
+    'create configmap')
+      [[ -f "$FIXTURE_ADMISSION_POLICY" && "$3" == ksail-admission-proof ]] || exit 65
+      [[ " $* " != *' --label'* ]] || exit 65
+      if [[ " $* " != *' --dry-run=server '* ]]; then
+        touch "$FIXTURE_ADMISSION_PERSISTED"
+      fi
+      jq -n --arg mode "$FIXTURE_MODE" '
+        {metadata:{labels:(if $mode=="kyverno_unmutated" then {}
+         else {"ksail.dev/admission-proof":"verified"} end)}}'
+      exit 0 ;;
+    'get configmap')
+      [[ "$3" == ksail-admission-proof && -f "$FIXTURE_ADMISSION_PERSISTED" ]] || exit 65
+      jq -n --arg mode "$FIXTURE_MODE" '
+        {metadata:{labels:(if $mode=="kyverno_unmutated_readback" then {}
+         else {"ksail.dev/admission-proof":"verified"} end)}}'
+      exit 0 ;;
+
+    'delete --raw')
+      expected_namespace=$(cat "$FIXTURE_ADMISSION_NAMESPACE")
+      [[ "$3" == "/api/v1/namespaces/$expected_namespace" ]] || exit 65
+      options_file=""
+      argv=("$@")
+      for ((index=0;index<${#argv[@]};index++)); do
+        if [[ "${argv[index]}" == --filename ]]; then
+          index=$((index+1))
+          options_file="${argv[index]}"
+        fi
+      done
+      [[ -n "$options_file" ]] || exit 65
+      jq -e '.apiVersion=="v1" and .kind=="DeleteOptions" and
+        .preconditions.uid=="owned-fixture-namespace" and
+        .gracePeriodSeconds==null' "$options_file" >/dev/null || exit 65
+      [[ "$FIXTURE_MODE" != kyverno_cleanup_failure && "$FIXTURE_MODE" != kyverno_uid_conflict ]] || exit 55
+      touch "$FIXTURE_ADMISSION_DELETE_ACCEPTED"
+      printf '{"status":"Success"}\n'
+      exit 0 ;;
+    'wait --for=delete')
+      [[ "$3" == "namespace/$(cat "$FIXTURE_ADMISSION_NAMESPACE")" &&
+        -f "$FIXTURE_ADMISSION_DELETE_ACCEPTED" ]] || exit 65
+      [[ "$FIXTURE_MODE" != kyverno_cleanup_wait_failure ]] || exit 1
+      [[ " $* " == *' --timeout=60s '* ]] || exit 65
+      rm "$FIXTURE_ADMISSION_NAMESPACE"
+      exit 0 ;;
+    'delete namespace')
+      [[ "$3" == "$(cat "$FIXTURE_ADMISSION_NAMESPACE")" ]] || exit 65
+      [[ "$FIXTURE_MODE" != kyverno_cleanup_failure ]] || exit 55
+      [[ " $* " == *' --wait=true '* && " $* " == *' --timeout=60s '* ]] || exit 65
+      rm "$FIXTURE_ADMISSION_NAMESPACE"
+      exit 0 ;;
+  esac
+fi
+`
+
+func TestKyvernoAdmissionProofUsesActualMutationAndOwnedCleanup(t *testing.T) {
+	t.Parallel()
+
+	for _, mode := range []string{"success", "kyverno_omitted_resource_entries"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			output, calls, err := runValuesTrial(t, kyvernoTrialProfile(), mode)
+			require.NoError(t, err, output)
+			assert.Contains(t, calls, "kubectl get mutatingwebhookconfigurations ")
+			assert.Contains(t, calls, "kubectl create --filename ")
+			assert.Contains(t, calls, "kubectl create configmap ksail-admission-proof ")
+			assert.Contains(t, calls, "--dry-run=server")
+			assert.Contains(t, calls, "kubectl get configmap ksail-admission-proof ")
+			assert.Contains(t, calls,
+				"kubectl delete --raw /api/v1/namespaces/ksail-kyverno-admission-")
+			assert.Contains(
+				t,
+				calls,
+				"kubectl wait --for=delete namespace/ksail-kyverno-admission-",
+			)
+			assert.Contains(
+				t,
+				output,
+				"kyverno admission proof: policy-free CAs, persisted mutation and owned cleanup verified",
+			)
+		})
+	}
+}
+
+func TestKyvernoAdmissionProofRejectsIncompleteEvidence(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct{ mode, want string }{
+		{"kyverno_webhook_read_failure", "could not capture Kyverno webhook publication"},
+		{"kyverno_missing_resource", "could not capture Kyverno webhook publication"},
+		{"kyverno_missing_policy", "could not capture Kyverno webhook publication"},
+		{"kyverno_empty_policy", "Kyverno webhook publication is incomplete"},
+		{"kyverno_empty_policy_ca", "Kyverno webhook publication is incomplete"},
+		{"kyverno_existing_resource_policy", "Kyverno webhook publication is incomplete"},
+		{"kyverno_malformed_resource_entries", "could not capture Kyverno webhook publication"},
+		{"kyverno_object_resource_entries", "could not capture Kyverno webhook publication"},
+		{"kyverno_object_policy_entries", "could not capture Kyverno webhook publication"},
+		{"kyverno_post_resource_ca_missing", "Kyverno webhook publication is incomplete"},
+		{"kyverno_unmutated", "Kyverno admission mutation did not converge"},
+		{"kyverno_unmutated_readback", "persisted ConfigMap lacks the Kyverno admission label"},
+		{"kyverno_namespace_collision", "could not create the owned Kyverno proof namespace"},
+		{"kyverno_wrong_namespace_identity", "created Kyverno proof namespace identity is unknown"},
+		{"kyverno_empty_namespace_uid", "created Kyverno proof namespace identity is unknown"},
+		{"kyverno_uid_conflict", "could not remove the owned Kyverno proof namespace"},
+		{"kyverno_cleanup_wait_failure", "could not verify owned Kyverno proof namespace removal"},
+		{"kyverno_cleanup_failure", "could not remove the owned Kyverno proof namespace"},
+	} {
+		t.Run(testCase.mode, func(t *testing.T) {
+			t.Parallel()
+			output, calls, err := runValuesTrial(t, kyvernoTrialProfile(), testCase.mode)
+			require.Error(t, err, output)
+			assert.Contains(t, output, testCase.want)
+			assert.NotContains(
+				t,
+				output,
+				"kyverno admission proof: policy-free CAs, persisted mutation and owned cleanup verified",
+			)
+
+			if testCase.mode == "kyverno_namespace_collision" ||
+				testCase.mode == "kyverno_wrong_namespace_identity" ||
+				testCase.mode == "kyverno_empty_namespace_uid" {
+				assert.NotContains(t, calls, "kubectl delete ")
+			}
+
+			if testCase.mode == "kyverno_uid_conflict" {
+				assert.NotContains(t, calls, "kubectl wait --for=delete ")
+			}
+
+			if testCase.mode == "kyverno_unmutated" {
+				assert.Equal(t, 20, strings.Count(calls, "--dry-run=server"), calls)
+			}
+		})
+	}
 }

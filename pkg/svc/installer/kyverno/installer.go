@@ -98,12 +98,10 @@ func NewInstaller(
 //
 // The wait is best-effort: if the caBundle is not populated within
 // webhookReadinessTimeout, Install returns success rather than an error.
-// This is safe because the webhook is configured with failurePolicy: Ignore,
-// which means API operations succeed even when the webhook is not yet fully
-// initialised. In some environments (e.g. Cilium + cert-manager CI) the
-// Kyverno certmanager-controller informer cache sync takes longer than any
-// practical timeout, so treating the timeout as non-fatal avoids permanent
-// CI failures while still confirming readiness when the environment is fast.
+// This preserves the existing installation contract, not a guarantee that all
+// admission requests will succeed: policy webhooks can use failurePolicy: Fail.
+// Helm readiness remains required, and policy convergence and actual admission
+// behavior need their own observations.
 //
 // Base.Install manages its own context deadline (timeout + buffer) internally,
 // so ctx is passed through as-is. The webhook readiness poll derives from ctx
