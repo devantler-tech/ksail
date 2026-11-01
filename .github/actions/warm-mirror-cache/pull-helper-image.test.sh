@@ -109,7 +109,6 @@ run_case false 99 0 false
 [ "$status" -eq 1 ] || fail "a failed tag must fail with status 1, saw $status"
 grep -Fq "could not tag it as $helper_image" <<<"$output" || fail "a failed tag must be named: $output"
 
-
 run_case true 99 99
 [ "$status" -eq 0 ] || fail "an image that is already present must pass: $output"
 [ "$primary_pulls" -eq 0 ] || fail "an image that is already present must not be pulled, saw $primary_pulls"
