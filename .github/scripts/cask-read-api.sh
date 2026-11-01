@@ -9,12 +9,15 @@ export GH_TOKEN="${KSAIL_CASK_READ_TOKEN:-${GH_TOKEN:-}}"
 query_found=false
 for arg in "$@"; do
 	case "$arg" in
-	-X* | --method* | --input* | --hostname*)
-		printf 'ERROR: cask evidence accepts read operations only\n' >&2
-		exit 2
-		;;
-	-f* | -F* | --field* | --raw-field*)
+	--paginate | --slurp | --jq) ;;
+	-f | -F | --field | --raw-field)
 		[[ "$1" == graphql ]] || exit 2
+		;;
+	-*)
+		# Only exact supported options are safe: short-flag clusters can hide
+		# attached field values from the query-document validation below.
+		printf 'ERROR: unsupported option for bounded cask evidence reads\n' >&2
+		exit 2
 		;;
 	query=*)
 		query_document="${arg#query=}"

@@ -10,6 +10,20 @@ cat >"$work/bin/gh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'call\n' >>"$CASK_READ_STATE/calls"
+if [[ "$*" == 'api repos/devantler-tech/homebrew-tap/pulls/42 --jq '* ]]; then
+  [[ "$#" -eq 4 && "$4" == '[(.draft|tostring), .title] | @tsv' ]] || exit 2
+  printf '%s\n' '{"draft":false,"title":"chore(cask): update ksail-desktop to v0.0.0"}' | jq -r "$4"
+  exit 0
+fi
+if [[ "$*" == 'api repos/devantler-tech/homebrew-tap/pulls/42' ]]; then
+  printf 'PARTIAL_STDOUT_PRIVATE_SENTINEL\n'
+  printf 'gh: API_MESSAGE_PRIVATE_SENTINEL (HTTP 403)\ngh: SCOPE_PRIVATE_SENTINEL\nSSO_PRIVATE_SENTINEL\n' >&2
+  exit 7
+fi
+if [[ "$*" == 'api graphql '* ]]; then
+  printf '{"data":{"viewer":{"login":"fixture"}}}\n'
+  exit 0
+fi
 if [[ "$*" == 'api --include '* ]]; then
   if [[ -n "${CASK_READ_ADVANCE_TO:-}" ]]; then
     printf '%s\n' "$CASK_READ_ADVANCE_TO" >"$CASK_READ_STATE/now"
@@ -64,6 +78,51 @@ reject_write graphql -f 'query=query Read { viewer { login } } mutation Write { 
 reject_write graphql --input hidden-query.json
 reject_write graphql -f 'query={ viewer { login } }'
 printf 'PASS: seven write or ambiguous-query forms never reach transport\n'
+
+for attached in '-fquery=mutation { anything }' '-Fquery=mutation { anything }' \
+	'--field=query=mutation { anything }' '--raw-field=query=mutation { anything }'; do
+	reject_write graphql -f 'query=query Read { viewer { login } }' "$attached"
+done
+printf 'PASS: four attached-value fields cannot replace a validated read query\n'
+for clustered in '-ifquery=mutation { anything }' '-iFquery=mutation { anything }'; do
+	reject_write graphql -f 'query=query Read { viewer { login } }' "$clustered"
+done
+printf 'PASS: clustered short flags cannot hide an overriding query field\n'
+
+for field_flag in -f -F --field --raw-field; do
+	rm -f "$work/calls"
+	"$script_dir/cask-read-api.sh" graphql "$field_flag" \
+		'query=query Read { viewer { login } }' >"$work/output" 2>"$work/error"
+	jq -e '.data.viewer.login == "fixture"' "$work/output" >/dev/null
+	[[ "$(wc -l <"$work/calls")" -eq 1 && ! -s "$work/error" ]]
+done
+printf 'PASS: all four separate GraphQL field flags retain ordinary reads\n'
+
+rm -f "$work/calls"
+jq_status=0
+"$script_dir/cask-read-api.sh" repos/devantler-tech/homebrew-tap/pulls/42 \
+	--jq '[(.draft|tostring), .title] | @tsv' >"$work/output" 2>"$work/error" || jq_status=$?
+if [[ "$jq_status" -ne 0 || ! -f "$work/calls" ]]; then
+	printf 'FAIL: production filtered ready-PR read was rejected\n' >&2
+	exit 1
+fi
+[[ "$(cat "$work/output")" == $'false\tchore(cask): update ksail-desktop to v0.0.0' ]]
+[[ "$(wc -l <"$work/calls")" -eq 1 && ! -s "$work/error" ]]
+printf 'PASS: the production ready-PR jq filter retains exact output and one request\n'
+
+rm -f "$work/calls"
+status=0
+"$script_dir/cask-read-api.sh" repos/devantler-tech/homebrew-tap/pulls/42 \
+	>"$work/output" 2>"$work/error" || status=$?
+[[ "$status" -eq 7 && ! -s "$work/output" && "$(wc -l <"$work/calls")" -eq 1 ]]
+printf 'BLOCKED: GitHub evidence read failed (exit 7); no partial response accepted\n' >"$work/expected-error"
+cmp -s "$work/expected-error" "$work/error"
+if grep -q PRIVATE_SENTINEL "$work/output" "$work/error"; then
+	printf 'FAIL: private response or stderr reached public diagnostics\n' >&2
+	exit 1
+fi
+printf 'PASS: private stderr and partial stdout remain suppressed with original failure status\n'
+rm -f "$work/calls"
 
 KSAIL_GITHUB_WRITE_BUDGET_DEADLINE=1250 \
 	"${script_dir}/cask-read-api.sh" --paginate --slurp \
