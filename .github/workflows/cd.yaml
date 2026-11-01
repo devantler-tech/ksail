@@ -936,7 +936,7 @@ jobs:
           set -euo pipefail
 
           # Evidence reads have a separate repository allowance; only writes use the tap token.
-          read_api() { GH_TOKEN="$KSAIL_CASK_READ_TOKEN" gh api "$@"; }
+          read_api() { .github/scripts/cask-read-api.sh "$@"; }
 
           collect_handoff_evidence() {
             .github/scripts/collect-cask-pr-handoff.sh \

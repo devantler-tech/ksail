@@ -4,6 +4,7 @@ set -euo pipefail
 
 # These commands only collect evidence; keep their allowance independent of writes.
 export GH_TOKEN="${KSAIL_CASK_READ_TOKEN:-${GH_TOKEN:-}}"
+read_api() { "${script_dir}/cask-read-api.sh" "$@"; }
 
 # Describe the required release identity and optional known-PR reconciliation lead.
 usage() {
@@ -117,7 +118,7 @@ if [[ -n "${known_pr}" ]]; then
 	printf '%s\n' "${known_pr}" >>"${work}/rejected"
 fi
 
-if ! gh api --paginate --slurp \
+if ! read_api --paginate --slurp \
 	"repos/${tap}/pulls?state=closed&head=${tap%%/*}:${branch}&per_page=100" \
 	>"${work}/pages.json" 2>"${work}/discovery.log"; then
 	if [[ -n "${known_pr}" ]] && validate_candidate "${known_pr}"; then
