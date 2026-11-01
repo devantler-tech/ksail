@@ -111,7 +111,7 @@ ksail workload validate ./k8s --refresh-schemas \
 
 ### Validate Cached or Local Schemas
 
-Select `only` to omit implicit built-in and catalogue locations. Supplied CLI locations come first, followed by configured locations and any derived CRD schemas. At least one nonblank effective location is required. Resources still need an applicable schema; selecting only a CRD catalogue does not supply schemas for core Kubernetes kinds.
+Select `only` to omit implicit built-in and catalogue locations. Supplied CLI locations come first, followed by configured locations and any derived CRD schemas. At least one nonblank effective location is required. By default, resources without an applicable schema are skipped because `--ignore-missing-schemas` is `true`. Set `--ignore-missing-schemas=false` when missing schemas must fail. Selecting only a CRD catalogue does not supply schemas for core Kubernetes kinds.
 
 For an unrendered HelmRelease, run this command while online to populate its native cache, then repeat it without network access:
 
