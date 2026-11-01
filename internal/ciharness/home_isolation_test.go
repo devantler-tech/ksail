@@ -18,7 +18,7 @@ type homeGuardCase struct {
 	wantFailure                bool
 }
 
-// Execute the actual workflow fence. Discarding a failed Go command must not
+// TestHomeIsolationGuardWorkflow executes the actual workflow fence. A failed command must not
 // turn an unexamined home into a verified one, and retaining its status must
 // not short-circuit the existing canary diagnostics or cleanup.
 func TestHomeIsolationGuardWorkflow(t *testing.T) {
@@ -73,6 +73,7 @@ func TestHomeIsolationGuardWorkflow(t *testing.T) {
 	}
 }
 
+// exerciseHomeIsolationGuard checks execution, privacy, canaries and cleanup.
 func exerciseHomeIsolationGuard(t *testing.T, script string, test homeGuardCase) {
 	t.Helper()
 
@@ -97,13 +98,18 @@ func exerciseHomeIsolationGuard(t *testing.T, script string, test homeGuardCase)
 	}
 
 	assert.NotContains(t, string(output), "PRIVATE_FIXTURE_DETAIL")
+	assert.LessOrEqual(t, strings.Count(string(output), "::error::Failed test package:"), 40)
 
 	// This boundary records only after checking redirected HOME and external
 	// cache paths. An early shell failure cannot satisfy a refusal case, and
 	// a cached test verdict cannot satisfy the isolation guard.
 	arguments, readErr := directory.ReadFile("arguments")
 	require.NoError(t, readErr)
-	assert.Equal(t, "test\n-count=1\n./...\n", string(arguments))
+	assert.Equal(t, "test\n-count=1\n-json\n./...\n", string(arguments))
+
+	hashCalls, readErr := directory.ReadFile("hash-calls")
+	require.NoError(t, readErr)
+	assert.Equal(t, 4, strings.Count(string(hashCalls), "hash\n"))
 
 	for _, name := range []string{"tmp", "real-home"} {
 		entries, readErr := os.ReadDir(filepath.Join(fixture, name))
@@ -112,6 +118,7 @@ func exerciseHomeIsolationGuard(t *testing.T, script string, test homeGuardCase)
 	}
 }
 
+// homeIsolationGuardCommand isolates the workflow while retaining real hashing.
 func homeIsolationGuardCommand(
 	t *testing.T,
 	script, mutation string,
@@ -126,7 +133,27 @@ func homeIsolationGuardCommand(
 
 	mktemp, err := exec.LookPath("mktemp")
 	require.NoError(t, err)
+
+	hashProgram, hashErr := exec.LookPath("shasum")
+	hashKind := "shasum"
+
+	if hashErr != nil {
+		hashProgram, hashErr = exec.LookPath("sha256sum")
+		hashKind = "sha256sum"
+	}
+
+	require.NoError(t, hashErr)
 	writeExecutableStub(t, filepath.Join(fixture, "bin", "go"), homeGuardGoBoundary)
+	// Stock macOS provides shasum. The fixture must not require unprefixed
+	// GNU coreutils; both backends still calculate the real canary digests.
+	writeExecutableStub(t, filepath.Join(fixture, "bin", "sha256sum"), `#!/usr/bin/env bash
+set -euo pipefail
+printf 'hash\n' >> "$HOME_GUARD_FIXTURE/hash-calls"
+if [[ "$HOME_GUARD_HASH_KIND" == shasum ]]; then
+  exec "$HOME_GUARD_HASH" -a 256 "$@"
+fi
+exec "$HOME_GUARD_HASH" "$@"
+`)
 	// An explicit template with the real utility keeps every temporary file
 	// inside this fixture on both developer OSes and CI.
 	writeExecutableStub(t, filepath.Join(fixture, "bin", "mktemp"), `#!/usr/bin/env bash
@@ -144,6 +171,8 @@ exec "$HOME_GUARD_MKTEMP" -d "$HOME_GUARD_FIXTURE/tmp/sandbox.XXXXXXXX"
 		"TMPDIR="+filepath.Join(fixture, "tmp"),
 		"HOME_GUARD_FIXTURE="+fixture,
 		"HOME_GUARD_MKTEMP="+mktemp,
+		"HOME_GUARD_HASH="+hashProgram,
+		"HOME_GUARD_HASH_KIND="+hashKind,
 		"HOME_GUARD_EXIT="+strconv.Itoa(exitCode),
 		"HOME_GUARD_MUTATION="+mutation,
 	)
@@ -186,7 +215,13 @@ case "$1" in
     esac
     printf '%s' "$HOME_GUARD_EXIT" > "$HOME_GUARD_FIXTURE/control"
     if [[ "$HOME_GUARD_EXIT" != 0 ]]; then
-      printf 'FAIL\tgithub.com/devantler-tech/ksail/v7/internal/ciharness\t0.001s\n'
+      printf '{"Action":"fail","Package":"github.com/devantler-tech/ksail/v7/internal/ciharness"}\n'
+      printf 'FAIL\tgithub.com/devantler-tech/ksail/v7/PRIVATE_FIXTURE_DETAIL\t0.001s\n'
+      printf '{"Action":"output","Output":"FAIL github.com/devantler-tech/ksail/v7/PRIVATE_FIXTURE_DETAIL"}\n'
+      printf '{"Action":"fail","Package":"github.com/devantler-tech/ksail/v7/PRIVATE_FIXTURE_DETAIL","Test":"x"}\n'
+      for ((i = 0; i < 50; i++)); do
+        printf '{"Action":"fail","Package":"github.com/devantler-tech/ksail/v7/internal/ciharness/package%s"}\n' "$i"
+      done
       printf 'PRIVATE_FIXTURE_DETAIL\n'
       for ((i = 0; i < 100; i++)); do printf 'package summary\n'; done
       printf 'PRIVATE_FIXTURE_DETAIL\n'
