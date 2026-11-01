@@ -77,7 +77,11 @@ spec:
 
 ## Schema Inference
 
-KSail uses the same schema locations and strictness for typed substitution and validation. In the default `additional` mode, built-in Kubernetes schemas take precedence, followed by supplied locations and then the CRD catalogue. In `only` mode, both validation and typing use the supplied locations without implicit registries. Remote schemas are read from kubeconform's disk cache (populated by previous validations or an explicit refresh); supplied local directories and path templates are read directly. Schema files are looked up from the OS user cache directory (for example `~/.cache/ksail/kubeconform/`), or from `${TMPDIR}/ksail/kubeconform` when the user cache directory is unavailable (such as in some CI environments).
+KSail configures the same ordered schema locations and strictness for typed substitution and validation. In the default `additional` mode, built-in Kubernetes schemas take precedence, followed by supplied locations and then the CRD catalogue. In `only` mode, both passes receive the supplied locations without implicit registries.
+
+Placeholder inference reads remote schemas only from kubeconform's disk cache; supplied local directories and path templates are read directly. If an earlier remote schema is uncached, inference can fall through to a later local schema while validation downloads and uses the earlier remote schema. This can cause misleading type errors. Use `--refresh-schemas` to fetch the selected schemas before inference when both passes must use the same schema precedence.
+
+Schema files are looked up from the OS user cache directory (for example `~/.cache/ksail/kubeconform/`), or from `${TMPDIR}/ksail/kubeconform` when the user cache directory is unavailable (such as in some CI environments).
 
 - **Core Kubernetes resources** (Deployment, Service, ConfigMap, …): typed via [kubernetes-json-schema](https://github.com/yannh/kubernetes-json-schema) **when the relevant schema is present in the kubeconform disk cache**
 - **CRDs** (FluxCD, cert-manager, …): typed via the [CRDs-catalog](https://github.com/datreeio/CRDs-catalog) **when their schemas are present in the kubeconform disk cache**
