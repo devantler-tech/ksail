@@ -281,12 +281,16 @@ runs:
             echo "--- Calico Node Pod Status ---"
             $KUBECTL_CMD get pods --namespace calico-system -l k8s-app=calico-node -o jsonpath='{range .items[*]}{.metadata.name}{" deletionTimestamp="}{.metadata.deletionTimestamp}{"\n"}{.status}{"\n"}{end}' 2>/dev/null || true
             echo ""
-            echo "--- Calico Node Pod Describe ---"
-            $KUBECTL_CMD describe pods --namespace calico-system -l k8s-app=calico-node 2>/dev/null | head -200 || true
-            echo ""
-            echo "--- Calico Node Previous Logs (last $LOG_TAIL_LINES lines) ---"
-            $KUBECTL_CMD logs --namespace calico-system -l k8s-app=calico-node --previous --all-containers=true --tail="$LOG_TAIL_LINES" 2>/dev/null | head -200 || true
-            echo ""
+            CALICO_NODE_PODS=$($KUBECTL_CMD get pods --namespace calico-system -l k8s-app=calico-node -o name 2>/dev/null || true)
+            for CALICO_NODE_POD in $CALICO_NODE_PODS; do
+              echo "--- Calico Node Describe: $CALICO_NODE_POD ---"
+              $KUBECTL_CMD describe --namespace calico-system "$CALICO_NODE_POD" 2>/dev/null | head -200 || true
+              echo ""
+              # A container with no previous instance must not hide the others' logs.
+              echo "--- Calico Node Previous Logs: $CALICO_NODE_POD (last $LOG_TAIL_LINES lines per container) ---"
+              $KUBECTL_CMD logs --namespace calico-system "$CALICO_NODE_POD" --previous --all-containers=true --ignore-errors=true --prefix=true --tail="$LOG_TAIL_LINES" 2>/dev/null || true
+              echo ""
+            done
             echo "--- Calico System Events ---"
             $KUBECTL_CMD get events --namespace calico-system --sort-by=.lastTimestamp 2>/dev/null | tail -n 50 || true
             echo ""
