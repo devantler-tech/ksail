@@ -1,14 +1,10 @@
 package ciharness_test
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -17,13 +13,14 @@ import (
 
 // Generated bundle imports must not change the module graph just before release
 // compilation. Exercise Go's real tidy with the tracked dependency declaration
-// and locally resolved libraries; no network or test doubles are used.
+// and a minimal local codec module, independent of network and module caches.
+// This fixture checks import classification; actual SDK generation is separate
+// integration evidence rather than a claim made by the fixture package.
 func TestGeneratedBundleKeepsModuleGraphStable(t *testing.T) {
 	t.Parallel()
 
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	require.NoError(t, err)
-	modules := resolvedBundleModules(t, root)
 	fixture := t.TempDir()
 	fixtureFiles, err := os.OpenRoot(fixture)
 	require.NoError(t, err)
@@ -33,20 +30,24 @@ func TestGeneratedBundleKeepsModuleGraphStable(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, sourceFiles.Close()) })
 
-	var module strings.Builder
-	module.WriteString("module example.test/bundlegraph\n\ngo 1.27.0\n")
-
-	for _, dependency := range modules {
-		_, err := fmt.Fprintf(&module, "require %s %s\nreplace %s => %q\n",
-			dependency.Path, dependency.Version, dependency.Path, dependency.Dir)
-		require.NoError(t, err)
-	}
-
 	const permissions = 0o600
 
-	require.NoError(t, fixtureFiles.WriteFile("go.mod", []byte(module.String()), permissions))
+	const module = `module example.test/bundlegraph
+
+go 1.27.0
+
+require github.com/klauspost/compress v0.0.0
+
+replace github.com/klauspost/compress => ./codec
+`
+	require.NoError(t, fixtureFiles.WriteFile("go.mod", []byte(module), permissions))
 	require.NoError(t, fixtureFiles.WriteFile("main.go",
 		[]byte("package main\nfunc main() {}\n"), permissions))
+	require.NoError(t, fixtureFiles.MkdirAll("codec/zstd", 0o700))
+	require.NoError(t, fixtureFiles.WriteFile("codec/go.mod",
+		[]byte("module github.com/klauspost/compress\n\ngo 1.27.0\n"), permissions))
+	require.NoError(t, fixtureFiles.WriteFile("codec/zstd/codec.go",
+		[]byte("package zstd\n"), permissions))
 
 	declaration, err := sourceFiles.ReadFile("internal/copilotbundledeps/deps.go")
 	if !os.IsNotExist(err) {
@@ -59,7 +60,7 @@ func TestGeneratedBundleKeepsModuleGraphStable(t *testing.T) {
 		)
 	}
 
-	runBundleGo(t, fixture, "tidy")
+	tidyBundleFixture(t, fixture)
 
 	before, err := fixtureFiles.ReadFile("go.mod")
 	require.NoError(t, err)
@@ -68,7 +69,7 @@ func TestGeneratedBundleKeepsModuleGraphStable(t *testing.T) {
 	// bundle. The real producer is also exercised before publishing the fix.
 	require.NoError(t, fixtureFiles.WriteFile("zcopilot_probe.go",
 		[]byte("package main\nimport _ \"github.com/klauspost/compress/zstd\"\n"), permissions))
-	runBundleGo(t, fixture, "tidy")
+	tidyBundleFixture(t, fixture)
 
 	after, err := fixtureFiles.ReadFile("go.mod")
 	require.NoError(t, err)
@@ -76,45 +77,13 @@ func TestGeneratedBundleKeepsModuleGraphStable(t *testing.T) {
 		"adding the generated bundle changed go.mod before release compilation")
 }
 
-type bundleModule struct {
-	Path    string `json:"path"`
-	Version string `json:"version"`
-	Dir     string `json:"dir"`
-}
-
-func resolvedBundleModules(t *testing.T, root string) []bundleModule {
-	t.Helper()
-	output := runBundleGo(t, root, "list-modules")
-	decoder := json.NewDecoder(bytes.NewReader(output))
-
-	modules := make([]bundleModule, 2)
-	for index := range modules {
-		require.NoError(t, decoder.Decode(&modules[index]))
-		require.NotEmpty(t, modules[index].Dir)
-		require.NotEmpty(t, modules[index].Version)
-	}
-
-	return modules
-}
-
-func runBundleGo(t *testing.T, directory, operation string) []byte {
+func tidyBundleFixture(t *testing.T, directory string) {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 	defer cancel()
 
-	var command *exec.Cmd
-
-	switch operation {
-	case "tidy":
-		command = exec.CommandContext(ctx, "go", "mod", "tidy")
-	case "list-modules":
-		command = exec.CommandContext(ctx, "go", "list", "-m", "-json",
-			"github.com/klauspost/compress", "github.com/klauspost/cpuid/v2")
-	default:
-		t.Fatalf("unsupported Go operation %q", operation)
-	}
-
+	command := exec.CommandContext(ctx, "go", "mod", "tidy")
 	command.Dir = directory
 
 	command.Env = append(
@@ -125,9 +94,8 @@ func runBundleGo(t *testing.T, directory, operation string) []byte {
 		"GOSUMDB=off",
 		"GOFLAGS=",
 		"GOENV=off",
+		"GOMODCACHE="+filepath.Join(directory, "module-cache"),
 	)
 	output, err := command.CombinedOutput()
 	require.NoError(t, err, "%s", output)
-
-	return output
 }
