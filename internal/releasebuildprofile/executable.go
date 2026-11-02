@@ -7,20 +7,13 @@ import (
 	"io"
 	"io/fs"
 	"os"
-
-	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 )
 
 // InspectOutputs checks all target/toolchain/VCS settings and executable hashes.
 // -trimpath omits -ldflags from build info. Injected metadata is instead bound
 // by the audited configuration, the native Linux version and cross-arm hashes.
 func InspectOutputs(directory string) ([]Output, error) {
-	canonical, err := fsutil.EvalCanonicalPath(directory)
-	if err != nil {
-		return nil, errInvalid
-	}
-
-	root, err := os.OpenRoot(canonical)
+	root, err := openExperimentRoot(directory)
 	if err != nil {
 		return nil, errInvalid
 	}

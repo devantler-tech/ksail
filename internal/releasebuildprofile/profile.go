@@ -343,12 +343,7 @@ func CompareFiles(directory string, expected Expected) (Result, error) {
 }
 
 func readReports(directory string, expected Expected) (map[int]map[string]Report, error) {
-	canonical, err := fsutil.EvalCanonicalPath(directory)
-	if err != nil {
-		return nil, errInvalid
-	}
-
-	root, err := os.OpenRoot(canonical)
+	root, err := openExperimentRoot(directory)
 	if err != nil {
 		return nil, errInvalid
 	}
@@ -477,4 +472,18 @@ func CheckCredentials() error {
 	}
 
 	return nil
+}
+
+func openExperimentRoot(directory string) (*os.Root, error) {
+	canonical, err := fsutil.EvalCanonicalPath(directory)
+	if err != nil {
+		return nil, errInvalid
+	}
+
+	root, err := os.OpenRoot(canonical)
+	if err != nil {
+		return nil, errInvalid
+	}
+
+	return root, nil
 }
