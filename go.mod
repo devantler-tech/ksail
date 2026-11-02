@@ -8,7 +8,7 @@ go 1.27.3
 exclude google.golang.org/grpc/stats/opentelemetry v0.0.0-20241028142157-ada6787961b3
 
 require (
-	cel.dev/cel-go v0.32.0
+	cel.dev/cel-go v0.33.0
 	cloud.google.com/go/container v1.55.0
 	filippo.io/age v1.3.2
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.3
