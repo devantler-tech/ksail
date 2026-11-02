@@ -77,7 +77,11 @@ spec:
 
 ## Schema Inference
 
-KSail uses the same schema locations and strictness for typed substitution and validation. Built-in Kubernetes schemas take precedence, followed by supplied locations and then the CRD catalogue. Remote schemas are read from kubeconform's disk cache (populated by previous validations or an explicit refresh); supplied local directories and path templates are read directly. Schema files are looked up from the OS user cache directory (for example `~/.cache/ksail/kubeconform/`), or from `${TMPDIR}/ksail/kubeconform` when the user cache directory is unavailable (such as in some CI environments).
+KSail configures the same ordered schema locations and strictness for typed substitution and validation. In the default `additional` mode, built-in Kubernetes schemas take precedence, followed by supplied locations and then the CRD catalogue. In `only` mode, both passes receive the supplied locations without implicit registries.
+
+Placeholder inference reads remote schemas only from kubeconform's disk cache; supplied local directories and path templates are read directly. If an earlier remote schema is uncached, inference can fall through to a later local schema while validation downloads and uses the earlier remote schema. This can cause misleading type errors. Use `--refresh-schemas` to fetch the selected schemas before inference when both passes must use the same schema precedence.
+
+Schema files are looked up from the OS user cache directory (for example `~/.cache/ksail/kubeconform/`), or from `${TMPDIR}/ksail/kubeconform` when the user cache directory is unavailable (such as in some CI environments).
 
 - **Core Kubernetes resources** (Deployment, Service, ConfigMap, …): typed via [kubernetes-json-schema](https://github.com/yannh/kubernetes-json-schema) **when the relevant schema is present in the kubeconform disk cache**
 - **CRDs** (FluxCD, cert-manager, …): typed via the [CRDs-catalog](https://github.com/datreeio/CRDs-catalog) **when their schemas are present in the kubeconform disk cache**
@@ -100,7 +104,7 @@ ksail workload validate ./k8s --refresh-schemas
 
 Refresh uses a temporary cache for the selected resources, fetches their schemas before typing Flux placeholders, and still performs full validation afterward. The persistent cache receives the downloaded entries only after all validation stages succeed. Unrelated cached schemas remain; normal validation reuses the refreshed entries without automatic expiry. If downloading or validation fails, the existing cache is preserved. The temporary cache is removed on both success and failure.
 
-Registry locations are tried in order. An unreachable earlier location can stop ordinary validation before a later cached CRD schema is considered; see [the tracked offline fallback limitation](https://github.com/devantler-tech/ksail/issues/7999). Built-in schemas already present in the cache remain usable offline.
+Registry locations are tried in order. An unreachable earlier location can stop ordinary validation before a later cached CRD schema is considered. Use explicit location selection when the default registries are not part of the intended schema set, as described below.
 
 Remote locations must be reachable during refresh. An unavailable selected schema fails refresh even when `--ignore-missing-schemas` would normally permit it; explicit kind exclusions still apply. Invalid enum values and incorrectly typed defaults continue to fail. A private schema absent from the catalogue can be supplied at the same time:
 
@@ -108,6 +112,23 @@ Remote locations must be reachable during refresh. An unavailable selected schem
 ksail workload validate ./k8s --refresh-schemas \
   --schema-location './schemas/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
 ```
+
+### Validate Cached or Local Schemas
+
+Select `only` to omit implicit built-in and catalogue locations. Supplied CLI locations come first, followed by configured locations and any derived CRD schemas. At least one nonblank effective location is required. By default, resources without an applicable schema are skipped because `--ignore-missing-schemas` is `true`. Set `--ignore-missing-schemas=false` when missing schemas must fail. Selecting only a CRD catalogue does not supply schemas for core Kubernetes kinds.
+
+For an unrendered HelmRelease, run this command while online to populate its native cache, then repeat it without network access:
+
+```bash
+ksail workload validate ./k8s/helmrelease.yaml \
+  --strict --skip-helm-render --skip-secrets=false --ignore-missing-schemas=false \
+  --schema-location-mode only \
+  --schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+```
+
+Add `--refresh-schemas` while online if placeholders require schemas before validation or the cached response is stale. Offline reuse requires **every selected schema and remote reference** to be cached already, or supplied as a complete local reference graph. `only` chooses locations; it does not disable transport. Missing cache entries may still attempt a download and fail. TLS verification remains enabled, and invalid values or missing required schemas still fail.
+
+For a local schema tree, replace the location with `'./schemas/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'`. Omit `--schema-location-mode only` or choose `additional` to retain the ordinary registry order.
 
 ### Avoid False Validation Failures
 
