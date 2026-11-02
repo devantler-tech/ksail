@@ -47,7 +47,11 @@ mkdir "$scratch/cohort"
 # Synthetic reports exercise admission and never claim a measured improvement.
 make_report() {
 	local pair=$1 arm=$2 elapsed=600 phase=500 child=4
-	if [[ "$arm" == candidate ]]; then elapsed=450; phase=360; child=1; fi
+	if [[ "$arm" == candidate ]]; then
+		elapsed=450
+		phase=360
+		child=1
+	fi
 	jq -n --argjson pair "$pair" --arg arm "$arm" --argjson elapsed "$elapsed" \
 		--argjson phase "$phase" --argjson child "$child" '{
 		schemaVersion:1,complete:true,pair:$pair,arm:$arm,
@@ -105,37 +109,37 @@ reject call compare "$scratch/cohort" "$scratch/malformed-result.json"
 jq '.elapsedSeconds=700|.binaryBuildSeconds=600' "$scratch/original.json" >"$scratch/cohort/1-candidate.json"
 call compare "$scratch/cohort" "$scratch/negative.json"
 jq -e '.complete==true and .decision=="retain-baseline"' "$scratch/negative.json" >/dev/null
-jq '.binaryBuildSeconds=400' "$scratch/original.json" > "$scratch/cohort/1-candidate.json"
+jq '.binaryBuildSeconds=400' "$scratch/original.json" >"$scratch/cohort/1-candidate.json"
 call compare "$scratch/cohort" "$scratch/exact-threshold.json"
 jq -e '.complete==true and .decision=="candidate-qualified"' "$scratch/exact-threshold.json" >/dev/null
 for arm in baseline candidate; do
-  cp "$scratch/cohort/2-$arm.json" "$scratch/2-$arm.json"
-  jq '.inputs.uiHash=("f"*64)' "$scratch/2-$arm.json" > "$scratch/cohort/2-$arm.json"
+	cp "$scratch/cohort/2-$arm.json" "$scratch/2-$arm.json"
+	jq '.inputs.uiHash=("f"*64)' "$scratch/2-$arm.json" >"$scratch/cohort/2-$arm.json"
 done
 reject call compare "$scratch/cohort" "$scratch/changed-program.json"
 for arm in baseline candidate; do cp "$scratch/2-$arm.json" "$scratch/cohort/2-$arm.json"; done
 # A nested target-hook receipt must never masquerade as the binary phase.
-printf '2026-11-02T00:00:00Z\t  • building binaries\n2026-11-02T00:01:00Z\t      • took: 1m0s\n2026-11-02T00:01:00Z\t  • writing artifacts metadata\n' > "$scratch/phase.log"
+printf '2026-11-02T00:00:00Z\t  • building binaries\n2026-11-02T00:01:00Z\t      • took: 1m0s\n2026-11-02T00:01:00Z\t  • writing artifacts metadata\n' >"$scratch/phase.log"
 test "$(call phase "$scratch/phase.log")" = 60
-sed 's/took: 1m0s/took: 10s/' "$scratch/phase.log" > "$scratch/nested.log"
+sed 's/took: 1m0s/took: 10s/' "$scratch/phase.log" >"$scratch/nested.log"
 reject call phase "$scratch/nested.log"
-head -n 2 "$scratch/phase.log" > "$scratch/missing-end.log"
+head -n 2 "$scratch/phase.log" >"$scratch/missing-end.log"
 reject call phase "$scratch/missing-end.log"
 # Verify polling coverage itself, rather than trusting a claimed sample count.
 # shellcheck source=.github/scripts/release-build-samples.lib.sh
 source "$here/release-build-samples.lib.sh"
 if [[ $(uname -s) == Linux ]]; then
-  mkdir "$scratch/sampling"
-  GOCACHE=$scratch GOMODCACHE=$scratch GOTMPDIR=$scratch sample_once "$scratch" "$scratch/sampling"
-  test "$(wc -l < "$scratch/sampling/disk-samples")" -eq 1
-  awk 'NF!=2 || $1 !~ /^[0-9]+[.][0-9]+$/ || $2 !~ /^[0-9]+$/ {exit 1}' "$scratch/sampling/disk-samples"
+	mkdir "$scratch/sampling"
+	GOCACHE=$scratch GOMODCACHE=$scratch GOTMPDIR=$scratch sample_once "$scratch" "$scratch/sampling"
+	test "$(wc -l <"$scratch/sampling/disk-samples")" -eq 1
+	awk 'NF!=2 || $1 !~ /^[0-9]+[.][0-9]+$/ || $2 !~ /^[0-9]+$/ {exit 1}' "$scratch/sampling/disk-samples"
 fi
-printf '100 10000000000\n105 9000000000\n110 9000000000\n' > "$scratch/disk-samples"
+printf '100 10000000000\n105 9000000000\n110 9000000000\n' >"$scratch/disk-samples"
 validate_disk_samples "$scratch/disk-samples" 100 110
-printf '100 10000000000\n' > "$scratch/disk-samples"
+printf '100 10000000000\n' >"$scratch/disk-samples"
 reject validate_disk_samples "$scratch/disk-samples" 100 110
-printf '100 10000000000\n130 9000000000\n' > "$scratch/disk-samples"
+printf '100 10000000000\n130 9000000000\n' >"$scratch/disk-samples"
 reject validate_disk_samples "$scratch/disk-samples" 100 130
-printf '100 10000000000\n105 9000000000\n' > "$scratch/disk-samples"
+printf '100 10000000000\n105 9000000000\n' >"$scratch/disk-samples"
 reject validate_disk_samples "$scratch/disk-samples" 100 130
 printf 'PASS: frozen release configuration and adversarial comparison cohort\n'
