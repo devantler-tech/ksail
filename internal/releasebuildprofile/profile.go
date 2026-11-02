@@ -81,15 +81,15 @@ type Environment struct {
 
 // Resources records aggregate job observations, with incomplete reads explicit.
 type Resources struct {
-	Scope                 string `json:"scope"`
-	SampleIntervalSeconds int    `json:"sampleIntervalSeconds"`
-	CPUUsageMicros        uint64 `json:"cpuUsageMicros"`
-	Complete              bool   `json:"complete"`
-	MemoryPeakBytes       uint64 `json:"memoryPeakBytes"`
-	MinimumFreeDiskBytes  uint64 `json:"minimumFreeDiskBytes"`
-	OOMKills              uint64 `json:"oomKills"`
-	SwapOutPages          uint64 `json:"swapOutPages"`
-	SampleCount           int    `json:"sampleCount"`
+	Scope                 string  `json:"scope"`
+	SampleIntervalSeconds int     `json:"sampleIntervalSeconds"`
+	CPUUsageMicros        uint64  `json:"cpuUsageMicros"`
+	Complete              bool    `json:"complete"`
+	MemoryPeakBytes       uint64  `json:"memoryPeakBytes"`
+	MinimumFreeDiskBytes  uint64  `json:"minimumFreeDiskBytes"`
+	OOMKills              *uint64 `json:"oomKills"`
+	SwapOutPages          *uint64 `json:"swapOutPages"`
+	SampleCount           int     `json:"sampleCount"`
 }
 
 // Report is the bounded evidence from one declared pair member.
@@ -260,7 +260,11 @@ func validResources(resources Resources) bool {
 	return resources.Complete && resources.Scope == "job-cgroup-peak;host-swap;sampled-disk" &&
 		resources.SampleIntervalSeconds == intervalSeconds && resources.CPUUsageMicros > 0 &&
 		resources.SampleCount >= minimumSamples && resources.MemoryPeakBytes > 0 &&
-		resources.MinimumFreeDiskBytes >= minimumDiskBytes && resources.OOMKills == 0
+		resources.MinimumFreeDiskBytes >= minimumDiskBytes && validAccounting(resources)
+}
+
+func validAccounting(resources Resources) bool {
+	return resources.OOMKills != nil && *resources.OOMKills == 0 && resources.SwapOutPages != nil
 }
 
 func validInputs(report Report) bool {
@@ -423,7 +427,7 @@ func qualifies(baseline, candidate Report) bool {
 
 	return candidate.BinaryBuildSeconds*thresholdDenominator <= baseline.BinaryBuildSeconds*thresholdNumerator &&
 		candidate.ElapsedSeconds <= baseline.ElapsedSeconds &&
-		candidate.Resources.SwapOutPages <= baseline.Resources.SwapOutPages &&
+		*candidate.Resources.SwapOutPages <= *baseline.Resources.SwapOutPages &&
 		candidate.Resources.MemoryPeakBytes <= baseline.Resources.MemoryPeakBytes
 }
 

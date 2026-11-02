@@ -89,6 +89,9 @@ for expression in \
 	'.childProcs=2' \
 	'.resources.complete=false' \
 	'.resources.oomKills=1' \
+	'del(.resources.oomKills)' \
+	'del(.resources.swapOutPages)' \
+	'del(.environment.hostSwapBytes)' \
 	'.outputs|=.[0:4]' \
 	'.outputs[0]=.outputs[1]' \
 	'.outputs[0].sha256=("f"*64)' \
