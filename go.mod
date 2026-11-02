@@ -1011,7 +1011,7 @@ require (
 	k8s.io/kubernetes v1.36.0 // indirect
 	k8s.io/metrics v0.36.5 // indirect
 	k8s.io/pod-security-admission v0.36.2 // indirect
-	k8s.io/streaming v0.37.1 // indirect
+	k8s.io/streaming v0.36.5 // indirect
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 // indirect
 	modernc.org/libc v1.73.4 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
@@ -1143,7 +1143,7 @@ tool (
 	golang.org/x/tools/cmd/deadcode
 )
 
-// Flux meta v1.32.0 has unchanged Go APIs but requires Kubernetes v0.37.0.
+// Flux meta v1.38.0 has unchanged Go APIs but requires Kubernetes v0.37.1.
 // Keep its runtime compatible with the embedded v0.36 tools until #7259 lands.
 // Qualify this mapping so a later requirement cannot reuse it without validation.
-replace k8s.io/apimachinery v0.37.0 => k8s.io/apimachinery v0.36.5
+replace k8s.io/apimachinery v0.37.1 => k8s.io/apimachinery v0.36.5
