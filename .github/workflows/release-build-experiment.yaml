@@ -93,7 +93,7 @@ jobs:
           PAIR: ${{ matrix.pair }}
           ARM: ${{ matrix.arm }}
         run: |
-          bash harness/.github/scripts/collect-release-build-experiment.sh \
+          bash "$GITHUB_WORKSPACE/harness/.github/scripts/collect-release-build-experiment.sh" \
             "$RUNNER_TEMP/release-experiment" "$GITHUB_WORKSPACE/measured" \
             "$RUNNER_TEMP/release-report" "$PAIR" "$ARM"
       - name: Preserve compact evidence, including failed observations

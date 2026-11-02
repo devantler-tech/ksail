@@ -2,6 +2,7 @@
 # One protected-main, cold build. This script never publishes its binaries.
 set -euo pipefail
 export LC_ALL=C TZ=UTC NO_COLOR=1 TERM=dumb
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 helper=$(realpath "$1")
 source_dir=$(realpath "$2")
 report_dir=$(realpath "$3")
@@ -73,7 +74,7 @@ jq -n --slurpfile runtime "$report_dir/runtime.json" --slurpfile limits "$report
     goMemLimit:"6GiB",nodeVersion:$node,npmVersion:$npm,limits:$limits[0]}' > "$report_dir/environment.json"
 
 # shellcheck source=.github/scripts/release-build-samples.lib.sh
-source "$(dirname "${BASH_SOURCE[0]}")/release-build-samples.lib.sh"
+source "$script_dir/release-build-samples.lib.sh"
 sample_disk() {
   while :; do
     # Sample every filesystem carrying source, modules, cache or scratch. This
