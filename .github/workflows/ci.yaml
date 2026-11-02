@@ -734,7 +734,7 @@ jobs:
       || (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
       && needs.changes.outputs.govuln-allowlist == 'true')
-    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@af042c540ce8db4d64add98c34b5c57691e0e812 # v19.0.5
+    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@0966f4b015e85ef14be37411d424a7028a858550 # v19.0.8
     # The canonical defaults make a default-branch run answer "did the check run" rather than
     # "did the diff touch a Go file". On main the branch's green IS the protection
     # signal, so a path filter that skips the suite or the scan leaves main green
@@ -752,8 +752,8 @@ jobs:
     # retirement remains tracked in devantler-tech/.github#285; the separate
     # default-branch maintenance pilot is tracked in #276.
     with:
-      # Run module hygiene and dead-code checks on main without enabling fixes.
-      maintenance-default-branch: true
+      # This released default also runs read-only module hygiene and dead-code
+      # checks on main. Final maintenance input retirement remains in #276.
       # The org-required direct run is the sole signed-fix writer for a PR.
       # Keep this additional invocation read-only while retaining its checks.
       apply-signed-fixes: false
