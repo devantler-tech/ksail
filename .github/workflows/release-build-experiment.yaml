@@ -1,0 +1,153 @@
+name: Cold release build comparison
+
+# A bounded measurement, never a PR check or a publishing path. Each workflow
+# run is one fixed cohort; partial attempts cannot be retried into a verdict.
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: cold-release-build-comparison
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    if: github.repository == 'devantler-tech/ksail' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    name: Pair ${{ matrix.pair }} / ${{ matrix.arm }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        pair: [1, 2, 3]
+        arm: [baseline, candidate]
+    env:
+      GOMEMLIMIT: 6GiB
+      GOPROXY: https://proxy.golang.org,direct
+    steps:
+      - name: Checkout the reviewed measurement harness
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: harness
+          persist-credentials: false
+      - name: Checkout the same complete release source in both arms
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: a3a3957d45f8071c3be2fd2fc96e699459d01d73 # v7.206.65
+          fetch-depth: 0
+          path: measured
+          persist-credentials: false
+      - name: Preserve an explicit incomplete observation before preparation
+        run: |
+          mkdir -p "$RUNNER_TEMP/release-report"
+          printf '{"complete":false}\n' > "$RUNNER_TEMP/release-report/report.json"
+      - name: Reclaim the same disposable runner toolchains as release CD
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/share/boost /usr/local/share/powershell
+          sudo docker image prune --all --force
+          sudo docker builder prune -a
+          df -h / /mnt
+      - name: Install the frozen Go toolchain without shared caches
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 1.27.3
+          cache: false
+      - name: Install the frozen GoReleaser without running a release
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          distribution: goreleaser
+          version: v2.19.0
+          install-only: true
+      - name: Build the harness outside the measured caches
+        working-directory: harness
+        env:
+          GOCACHE: ${{ runner.temp }}/harness-build-cache
+          GOMODCACHE: ${{ runner.temp }}/harness-module-cache
+        run: go build -o "$RUNNER_TEMP/release-experiment" ./internal/releasebuildprofile/cmd
+      - name: Prepare empty measured caches on the roomiest filesystem
+        run: |
+          scratch_root="$RUNNER_TEMP"
+          if mountpoint -q /mnt; then
+            root_free=$(df -Pk "$RUNNER_TEMP" | awk 'NR==2 {print $4}')
+            mnt_free=$(df -Pk /mnt | awk 'NR==2 {print $4}')
+            if [[ $mnt_free -gt $root_free ]]; then
+              sudo mkdir -p /mnt/release-experiment
+              sudo chown "$(id -u):$(id -g)" /mnt/release-experiment
+              scratch_root=/mnt/release-experiment
+            fi
+          fi
+          for name in build modules tmp npm; do mkdir "$scratch_root/measured-$name"; done
+          {
+            printf 'GOCACHE=%s/measured-build\n' "$scratch_root"
+            printf 'GOMODCACHE=%s/measured-modules\n' "$scratch_root"
+            printf 'GOTMPDIR=%s/measured-tmp\n' "$scratch_root"
+            printf 'npm_config_cache=%s/measured-npm\n' "$scratch_root"
+          } >> "$GITHUB_ENV"
+      - name: Measure the full build and inspect all five executables
+        env:
+          PAIR: ${{ matrix.pair }}
+          ARM: ${{ matrix.arm }}
+        run: |
+          bash harness/.github/scripts/collect-release-build-experiment.sh \
+            "$RUNNER_TEMP/release-experiment" "$GITHUB_WORKSPACE/measured" \
+            "$RUNNER_TEMP/release-report" "$PAIR" "$ARM"
+      - name: Preserve compact evidence, including failed observations
+        if: ${{ always() && !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-build-${{ github.sha }}-attempt${{ github.run_attempt }}-${{ matrix.pair }}-${{ matrix.arm }}
+          path: ${{ runner.temp }}/release-report/report.json
+          if-no-files-found: error
+          retention-days: 14
+
+  compare:
+    if: ${{ always() && !cancelled() && github.repository == 'devantler-tech/ksail' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
+    needs: measure
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout this cohort's immutable harness
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Install the same Go toolchain
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 1.27.3
+          cache: false
+      - name: Download only this attempt's reports
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: release-build-${{ github.sha }}-attempt${{ github.run_attempt }}-*
+          path: ${{ runner.temp }}/cohort
+      - name: Reject missing or incompatible evidence and retain adverse samples
+        env:
+          BUILD_JOBS_RESULT: ${{ needs.measure.result }}
+        run: |
+          mkdir "$RUNNER_TEMP/reports"
+          find "$RUNNER_TEMP/cohort" -mindepth 2 -maxdepth 2 -type f -name report.json -print0 |
+            while IFS= read -r -d '' report; do
+              cp "$report" "$RUNNER_TEMP/reports/$(basename "$(dirname "$report")").json"
+            done
+          status=0
+          go run ./internal/releasebuildprofile/cmd compare "$RUNNER_TEMP/reports" "$RUNNER_TEMP/comparison.json" || status=$?
+          jq . "$RUNNER_TEMP/comparison.json"
+          [[ $BUILD_JOBS_RESULT == success ]] && exit "$status"
+          exit 1
+      - name: Preserve the decision without publishing executables
+        if: ${{ always() && !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-build-comparison-${{ github.sha }}-attempt${{ github.run_attempt }}
+          path: ${{ runner.temp }}/comparison.json
+          if-no-files-found: error
+          retention-days: 14

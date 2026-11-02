@@ -2423,6 +2423,11 @@ jobs:
             exit 1
           fi
 
+      - name: Verify bounded release build experiment admission
+        run: |
+          shellcheck .github/scripts/collect-release-build-experiment.sh .github/scripts/release-build-samples.lib.sh .github/scripts/release-build-experiment.test.sh
+          bash .github/scripts/release-build-experiment.test.sh
+
   verify-bash-32-workflow-contract:
     name: 🧪 Verify Bash 3.2 Workflow Contract
     runs-on: macos-latest
