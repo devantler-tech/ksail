@@ -81,7 +81,7 @@ func runMultiNodeExportTest(t *testing.T, testCase multiNodeExportCase) {
 	}, testCase.expectedExport...)
 	setupExecMockWithCmdForExporter(ctx, t, mockClient, testCase.exportNode, exportCmd)
 
-	tarContent := createExportTar(t, []byte("fake image data"))
+	tarContent := createExportTar(t, namedNodeArchive(t, testCase.expectedExport...))
 	mockClient.EXPECT().
 		CopyFromContainer(ctx, testCase.exportNode, testCase.tmpPath).
 		Return(io.NopCloser(bytes.NewReader(tarContent)), container.PathStat{}, nil)
@@ -133,7 +133,7 @@ func TestExportStopsProbingAtFirstNodeHoldingAllImages(t *testing.T) {
 	})
 }
 
-// With images split across nodes, the node holding the most requested images wins.
+// Prefer one node that covers the whole request over multiple partial sources.
 func TestExportPrefersNodeHoldingMostRequestedImages(t *testing.T) {
 	t.Parallel()
 
@@ -148,11 +148,10 @@ func TestExportPrefersNodeHoldingMostRequestedImages(t *testing.T) {
 		},
 		exportNode: "my-cluster-worker2",
 		tmpPath:    kindExporterTarPath,
-		requested:  []string{"nginx:latest", "redis:alpine", "busybox:latest"},
+		requested:  []string{"nginx:latest", "redis:alpine"},
 		expectedExport: []string{
 			"docker.io/library/nginx:latest",
 			"docker.io/library/redis:alpine",
-			"docker.io/library/busybox:latest",
 		},
 	})
 }
@@ -227,8 +226,7 @@ func TestExportSkipsNodeWhoseImagesCannotBeListed(t *testing.T) {
 	})
 }
 
-// An image held by no node keeps the preferred node, and the export fails
-// there with an error naming the image.
+// Refuse a request held by no node before starting any export.
 func TestExportFailsNamingImageHeldByNoNode(t *testing.T) {
 	t.Parallel()
 
@@ -243,16 +241,7 @@ func TestExportFailsNamingImageHeldByNoNode(t *testing.T) {
 		)
 	}
 
-	setupPlatformDetectMockForExporter(ctx, t, mockClient, kindExporterNodeName)
-
 	const missingImage = "docker.io/library/busybox:latest"
-
-	exportCmd := buildKindCtrExportCommand(missingImage)
-	notFound := `ctr: image "` + missingImage + `": not found`
-	// The bulk export and the per-image fallback both fail on the preferred node.
-	setupKindExecFailWithCmdForExporter(ctx, t, mockClient, exportCmd, notFound)
-	setupKindExecFailWithCmdForExporter(ctx, t, mockClient, exportCmd, notFound)
-	setupExecMockForExporter(ctx, t, mockClient, kindExporterNodeName)
 
 	err := image.NewExporter(mockClient).Export(
 		ctx, "my-cluster", v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker,
@@ -260,5 +249,6 @@ func TestExportFailsNamingImageHeldByNoNode(t *testing.T) {
 	)
 
 	require.Error(t, err)
+	require.ErrorIs(t, err, image.ErrIncompleteExport)
 	assert.Contains(t, err.Error(), missingImage)
 }
