@@ -2771,7 +2771,7 @@ jobs:
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/.github/actions/aggregate-job-checks@1dae1b0f84a0432151ea99ff2d70efa59a28f8bf # v17.1.1
+      - uses: devantler-tech/.github/actions/aggregate-job-checks@39ad5ddb1b89c404d9054fb0a6e5430a67120fe7 # v19.0.11
         with:
           job-results: >-
             ${{ needs.retired-repo-links.result }}
