@@ -28,7 +28,7 @@ func TestDesktopReleaseUsesModuleDownloadSetup(t *testing.T) {
 
 	for index, step := range steps {
 		if step.Uses == "./.github/actions/setup-desktop-build" ||
-			step.Uses == "devantler-tech/ksail/.github/actions/setup-desktop-build@da546b96d2982707343117ef44d98083d8e4c36a" {
+			step.Uses == "devantler-tech/ksail/.github/actions/setup-desktop-build@ccc4de63c6f1259ecbdd604c2260559d810c7cfc" {
 			setupIndex = index
 
 			assert.Equal(t, "needs.validate-release-ref.outputs.release-mode == 'build'", step.If)
