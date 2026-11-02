@@ -155,16 +155,24 @@ if [[ $(uname -s) == Linux ]]; then
 		native_sampler=
 		trap 'if [[ -n $native_sampler ]]; then kill "$native_sampler" 2>/dev/null || true; wait "$native_sampler" 2>/dev/null || true; fi' EXIT
 		mkdir "$scratch/live-sampling" "$scratch/full-sampling"
+		mkfifo "$scratch/sampler-ready"
+		exec 9<>"$scratch/sampler-ready"
 		sample_loop() {
+			local samples=0
 			while :; do
 				sample_once "$scratch" "$scratch/live-sampling" || return
+				samples=$((samples + 1))
+				if [[ $samples == 2 ]]; then printf '%s\n' sampled >&9; fi
 				sleep 5
 			done
 		}
 		started=$(date +%s.%N)
 		GOCACHE=$scratch GOMODCACHE=$scratch GOTMPDIR=$scratch sample_loop &
 		native_sampler=$!
-		sleep 6
+		sampler_ready=
+		IFS= read -r -t 20 sampler_ready <&9
+		test "$sampler_ready" = sampled
+		exec 9>&-
 		finished=$(date +%s.%N)
 		native_status=0
 		finish_release_sampler "$native_sampler" || native_status=$?
