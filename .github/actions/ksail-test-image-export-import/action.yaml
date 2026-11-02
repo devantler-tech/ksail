@@ -13,6 +13,10 @@ description: |
   Does NOT create or delete the cluster — the orchestrator handles that.
 
 inputs:
+  multi-node-cluster-name:
+    description: Optional explicit two-node Vanilla fixture for split-image export verification
+    required: false
+    default: ""
   test-workload-name:
     description: Name for the test workload deployment
     required: false
@@ -94,8 +98,17 @@ runs:
         ksail workload wait --for=condition=Available deployment/"$WORKLOAD_NAME" --timeout="$TIMEOUT"
         echo "✅ Import round-trip validated (pods restarted and healthy)"
 
+    - name: 🧪 Verify split-image archives across nodes
+      id: multi-node
+      if: inputs.multi-node-cluster-name != ''
+      shell: bash
+      env:
+        IMAGE_EXPORT_CLUSTER: ${{ inputs.multi-node-cluster-name }}
+        WORKLOAD_IMAGE: ${{ inputs.test-workload-image }}
+      run: timeout --kill-after=15s 300s bash "$GITHUB_WORKSPACE/.github/actions/ksail-test-image-export-import/multi-node-roundtrip.sh"
+
     - name: 🐞 Debug failure
-      if: failure() && (steps.deploy.outcome == 'failure' || steps.export.outcome == 'failure' || steps.import.outcome == 'failure')
+      if: failure() && (steps.deploy.outcome == 'failure' || steps.export.outcome == 'failure' || steps.import.outcome == 'failure' || steps.multi-node.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
