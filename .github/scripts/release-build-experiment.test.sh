@@ -131,6 +131,65 @@ reject call phase "$scratch/missing-end.log"
 # Verify polling coverage itself, rather than trusting a claimed sample count.
 # shellcheck source=.github/scripts/release-build-samples.lib.sh
 source "$here/release-build-samples.lib.sh"
+# Exercise the collector's actual post-build tail without launching another
+# frozen cohort. These files are fixtures, not release artifacts or timings.
+awk '/^# Include the actual staged UI / {copy=1} copy {print}' \
+	"$here/collect-release-build-experiment.sh" >"$scratch/output-checks.sh"
+test -s "$scratch/output-checks.sh"
+mkdir -p "$scratch/output-fixture/pkg/webui/dist" "$scratch/output-fixture/dist/linux_amd64"
+cat >"$scratch/output-fixture/dist/linux_amd64/ksail" <<'CLI'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ ${RELEASE_OUTPUT_FAILURE:-} == status ]]; then exit 7; fi
+case "$*" in
+--version)
+	if [[ ${RELEASE_OUTPUT_FAILURE:-} == version ]]; then printf 'wrong-version\n'; else
+		printf '7.206.65 a3a3957d45f8071c3be2fd2fc96e699459d01d73 2026-11-02T00:00:00Z\n'
+	fi
+	;;
+--help)
+	if [[ ${RELEASE_OUTPUT_FAILURE:-} == help ]]; then printf 'no synopsis\n'; else printf 'Usage\n'; fi
+	;;
+'workload apply --help')
+	if [[ ${RELEASE_OUTPUT_FAILURE:-} == schema ]]; then printf 'no schema option\n'; else printf '%s\n' --schema-location-mode; fi
+	;;
+*) exit 2 ;;
+esac
+CLI
+chmod +x "$scratch/output-fixture/dist/linux_amd64/ksail"
+run_output_checks() {
+	local failure=$1 output_report="$scratch/output-report-$1"
+	mkdir "$output_report"
+	printf '{"complete":false}\n' >"$output_report/report.json"
+	printf '60\n' >"$output_report/phase.json"
+	printf '[]\n' >"$output_report/outputs.json"
+	if [[ $failure == json ]]; then printf '{invalid\n' >"$output_report/outputs.json"; fi
+	rm -f "$scratch/output-fixture/pkg/webui/dist/index.html" "$scratch/output-fixture/bundle-1.0.87-5"
+	if [[ $failure != ui ]]; then printf 'fixture UI\n' >"$scratch/output-fixture/pkg/webui/dist/index.html"; fi
+	for bundle in 1 2 3 4; do touch "$scratch/output-fixture/bundle-1.0.87-$bundle"; done
+	if [[ $failure != bundle ]]; then touch "$scratch/output-fixture/bundle-1.0.87-5"; fi
+	(
+		cd "$scratch/output-fixture"
+		export report_dir="$output_report" expected=a3a3957d45f8071c3be2fd2fc96e699459d01d73
+		export commit_date=2026-11-02T00:00:00Z RELEASE_OUTPUT_FAILURE="$failure"
+		bash -euo pipefail "$scratch/output-checks.sh"
+	)
+}
+run_output_checks success
+jq -e '.complete == true and .nativeCli == {version:true,help:true,schemaFlag:true}' \
+	"$scratch/output-report-success/report.json" >/dev/null
+for failure in ui bundle version help schema json status; do
+	output_status=0
+	run_output_checks "$failure" >"$scratch/rejected.log" 2>&1 || output_status=$?
+	test "$output_status" -ne 0
+	if [[ $failure == status ]]; then test "$output_status" -eq 7; fi
+	if ! grep -Fxq "release experiment stage outputs failed: status=$output_status" "$scratch/rejected.log"; then
+		printf 'FAIL: %s output failure had no stage diagnostic\n' "$failure" >&2
+		exit 1
+	fi
+	jq -e '.complete == false' "$scratch/output-report-$failure/report.json" >/dev/null
+done
+printf 'PASS: post-build output failures identify their stage and retain incomplete reports\n'
 mkdir "$scratch/sampling"
 # The caller handles failure explicitly; sample_once must not depend on errexit.
 (

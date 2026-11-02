@@ -167,6 +167,16 @@ tracked_source=$(git status --porcelain --untracked-files=no) || {
 release_stage source test -z "$tracked_source"
 
 # Include the actual staged UI and all generated, platform-bound Copilot bundles.
+# Sampling is already joined. Preserve errexit for this entire validation tail;
+# wrapping it in a handled shell function would disable its fail-fast behavior.
+# EXIT retains the original status while identifying failures beyond inspection.
+report_output_failure() {
+	local status=$?
+	if [[ $status -ne 0 ]]; then
+		printf 'release experiment stage outputs failed: status=%s\n' "$status" >&2
+	fi
+}
+trap report_output_failure EXIT
 tree_hash() {
 	local directory=$1 pattern=$2
 	(
