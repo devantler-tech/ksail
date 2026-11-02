@@ -88,11 +88,34 @@ jq -n --slurpfile runtime "$report_dir/runtime.json" --slurpfile limits "$report
 # shellcheck source=.github/scripts/release-build-samples.lib.sh
 source "$script_dir/release-build-samples.lib.sh"
 sample_disk() {
+	local stop_requested=0 sample_status
+	# Finish an in-flight observation before honoring TERM. Killing Bash during
+	# a foreground read can otherwise replace its failure with signal status 143.
+	trap 'stop_requested=1' TERM
 	while :; do
 		# Sample every filesystem carrying source, modules, cache or scratch. This
 		# records sampled headroom, not an assertion about between-sample minima.
-		sample_once "$source_dir" "$report_dir"
-		sleep 5
+		if sample_once "$source_dir" "$report_dir"; then
+			:
+		else
+			sample_status=$?
+			printf 'release experiment observation failed: status=%s\n' "$sample_status" >&2
+			# 143 is reserved for a completed intentional stop. A reader itself
+			# can fail with that status too; retain it in the diagnostic and fail.
+			if [[ $sample_status == 143 ]]; then return 1; fi
+			return "$sample_status"
+		fi
+		if [[ $stop_requested == 1 ]]; then return 143; fi
+		if sleep 5; then
+			:
+		else
+			sample_status=$?
+			if [[ $sample_status == 143 && $stop_requested == 1 ]]; then return 143; fi
+			printf 'release experiment sampler wait failed: status=%s\n' "$sample_status" >&2
+			if [[ $sample_status == 143 ]]; then return 1; fi
+			return "$sample_status"
+		fi
+		if [[ $stop_requested == 1 ]]; then return 143; fi
 	done
 }
 sample_disk &
@@ -155,7 +178,8 @@ jq -n --slurpfile environment "$report_dir/environment.json" --argjson pair "$pa
     resources:{complete:true,scope:"job-cgroup-peak;host-swap;sampled-disk",sampleIntervalSeconds:5,
       cpuUsageMicros:$cpu,memoryPeakBytes:$peak,minimumFreeDiskBytes:$disk,oomKills:$oom,swapOutPages:$swap,sampleCount:$count},
     inputs:{},nativeCli:{},outputs:[]}' >"$report_dir/report.json"
-release_stage build test "$status" -eq 0
+# status is only the numeric exit status captured from the measured pipeline.
+release_stage build bash -c "exit $status"
 release_stage phase "$helper" phase "$report_dir/build.log" >"$report_dir/phase.json"
 commit_date=$(git show -s --format=%cI HEAD)
 commit_date=$(date -u -d "$commit_date" +%Y-%m-%dT%H:%M:%SZ)

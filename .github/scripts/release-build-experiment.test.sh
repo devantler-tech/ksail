@@ -202,6 +202,104 @@ mkdir "$scratch/sampling"
 )
 reject release_stage build bash -c 'exit 7'
 grep -Fq 'stage build failed: status=7' "$scratch/rejected.log"
+# Exercise the actual sampler function while its real sample_once is blocked
+# in a controlled df. Sending TERM before releasing that read reproduces the
+# shutdown race; no frozen build, cloud call or process-wide signal is used.
+awk '/^sample_disk\(\) \{/ {copy=1} copy {print} copy && /^}/ {exit}' \
+	"$here/collect-release-build-experiment.sh" >"$scratch/actual-sampler.sh"
+test -s "$scratch/actual-sampler.sh"
+mkdir "$scratch/race-bin"
+cat >"$scratch/race-bin/df" <<'DF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ $# == 5 && $1 == -Pk ]]
+printf 'ready\n' >"${SAMPLER_READY:?}"
+IFS= read -r action <"${SAMPLER_RELEASE:?}"
+case "$action" in
+7 | 143) exit "$action" ;;
+valid)
+	printf 'Filesystem 1024-blocks Used Available Capacity Mounted\n'
+	for row in 1 2 3 4; do printf 'fixture 100 0 100 0%% /\n'; done
+	;;
+*) exit 2 ;;
+esac
+DF
+cat >"$scratch/race-bin/date" <<'DATE'
+#!/usr/bin/env bash
+[[ $# == 1 && $1 == +%s.%N ]] || exit 2
+printf '100.000000000\n'
+DATE
+# The collector is Linux-only; emulate GNU wc's unpadded stdin count on macOS.
+cat >"$scratch/race-bin/wc" <<'WC'
+#!/usr/bin/env bash
+[[ $# == 1 && $1 == -l ]] || exit 2
+/usr/bin/wc -l | tr -d '[:space:]'
+WC
+chmod +x "$scratch/race-bin/df" "$scratch/race-bin/date" "$scratch/race-bin/wc"
+cat >"$scratch/sampler-race.sh" <<'RACE'
+#!/usr/bin/env bash
+set -euo pipefail
+source "$1"
+source "$2"
+source_dir=$3
+report_dir=$4
+action=$5
+export GOCACHE="$source_dir" GOMODCACHE="$source_dir" GOTMPDIR="$source_dir"
+export SAMPLER_READY="$report_dir/ready" SAMPLER_RELEASE="$report_dir/release"
+mkfifo "$SAMPLER_READY" "$SAMPLER_RELEASE"
+exec 9<>"$SAMPLER_READY"
+sampler=
+trap 'if [[ -n $sampler ]]; then builtin kill "$sampler" 2>/dev/null || true; wait "$sampler" 2>/dev/null || true; fi' EXIT
+# Keep the helper's actual kill/wait path, but release the reader only after
+# the real TERM has been sent. This avoids timing-based sleeps in the control.
+kill() {
+	builtin kill "$@" || return
+	if [[ $1 != -0 ]]; then printf '%s\n' "$action" >"$SAMPLER_RELEASE"; fi
+}
+sample_disk &
+sampler=$!
+ready=
+IFS= read -r -t 10 ready <&9
+[[ $ready == ready ]]
+collection_status=0
+finish_release_sampler "$sampler" || collection_status=$?
+sampler=
+printf 'collection_status=%s\n' "$collection_status"
+RACE
+for mode in valid 7 143 append; do
+	race_dir="$scratch/sampler-race-$mode"
+	mkdir "$race_dir"
+	read_result=$mode
+	if [[ $mode == append ]]; then
+		read_result=valid
+		mkdir "$race_dir/disk-samples"
+	fi
+	if ! PATH="$scratch/race-bin:$PATH" bash "$scratch/sampler-race.sh" \
+		"$here/release-build-samples.lib.sh" "$scratch/actual-sampler.sh" \
+		"$scratch" "$race_dir" "$read_result" >"$race_dir/result" 2>&1; then
+		cat "$race_dir/result" >&2
+		printf 'FAIL: actual sampler control %s did not complete\n' "$mode" >&2
+		exit 1
+	fi
+	if [[ $mode == valid ]]; then
+		if ! grep -Fxq collection_status=0 "$race_dir/result"; then
+			cat "$race_dir/result" >&2
+			exit 1
+		fi
+		test "$(wc -l <"$race_dir/disk-samples")" -eq 1
+	else
+		if ! grep -Fxq collection_status=1 "$race_dir/result"; then
+			cat "$race_dir/result" >&2
+			printf 'FAIL: actual sampler control %s accepted failure\n' "$mode" >&2
+			exit 1
+		fi
+		observation_status=$mode
+		if [[ $mode == append ]]; then observation_status=1; fi
+		grep -Fxq "release experiment observation failed: status=$observation_status" "$race_dir/result"
+	fi
+done
+printf 'PASS: actual in-flight sampler read/append failures survive TERM, including status 143\n'
+bash "$here/release-build-collector.test.sh"
 for stage in phase outputs source; do
 	reject release_stage "$stage" false
 	grep -Fq "stage $stage failed: status=1" "$scratch/rejected.log"
