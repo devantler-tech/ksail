@@ -1611,7 +1611,7 @@ jobs:
             # only public package identifiers and the root function name: subtest
             # arguments, FailedBuild details and raw Output remain private.
             failures="$(jq -Rnr '
-              limit(40; inputs | fromjson? | objects
+              limit(40; foreach (inputs | fromjson? | objects
                 | select(.Action == "fail")
                 | select(.Package | strings
                     | test("^github\\.com/devantler-tech/ksail/v7(/[[:alnum:]_.-]+)*$"))
@@ -1625,7 +1625,11 @@ jobs:
                     (.Test | split("/")[0]) as $test
                     | select($test | test("^Test[A-Z0-9_][A-Za-z0-9_]{0,127}$"))
                     | "::error::Failed test function: " + .Package + "/" + $test
-                  else empty end)
+                  else empty end) as $failure
+                ({seen: {}, emit: null};
+                  if .seen[$failure] then .emit = null
+                  else .seen[$failure] = true | .emit = $failure end;
+                  .emit // empty))
             ' "$sandbox/test.log")"
             if [ -n "$failures" ]; then
               printf '%s\n' "$failures"

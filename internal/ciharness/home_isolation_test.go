@@ -14,6 +14,7 @@ import (
 
 type homeGuardCase struct {
 	name, mutation, diagnostic string
+	failureClass               string
 	exitCode                   int
 	wantFailure                bool
 }
@@ -31,15 +32,15 @@ func TestHomeIsolationGuardWorkflow(t *testing.T) {
 	for _, test := range []homeGuardCase{
 		{name: "successful unchanged home"},
 		{
-			name: "startup failure", exitCode: 74, wantFailure: true,
+			name: "startup failure", exitCode: 74, wantFailure: true, failureClass: "package",
 			diagnostic: "Failed test package: github.com/devantler-tech/ksail/v7/internal/ciharness",
 		},
 		{
-			name: "test failure", exitCode: 1, wantFailure: true,
+			name: "test failure", exitCode: 1, wantFailure: true, failureClass: "test",
 			diagnostic: "Failed test function: github.com/devantler-tech/ksail/v7/internal/ciharness/TestIsolationProbe",
 		},
 		{
-			name: "build failure", exitCode: 1, wantFailure: true,
+			name: "build failure", exitCode: 1, wantFailure: true, failureClass: "build",
 			diagnostic: "Failed test build for package: github.com/devantler-tech/ksail/v7/internal/ciharness/build",
 		},
 		{name: "interrupted execution", exitCode: 130, wantFailure: true},
@@ -80,11 +81,29 @@ func TestHomeIsolationGuardWorkflow(t *testing.T) {
 	}
 }
 
+// TestHomeIsolationGuardRepeatedFailures preserves distinct later failures within the annotation budget.
+func TestHomeIsolationGuardRepeatedFailures(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
+	step := findHarnessStep(t, workflow.Jobs["home-isolation"].Steps,
+		"🏠 Verify tests never touch the real home directory")
+	exerciseHomeIsolationGuard(t, step.Run, homeGuardCase{
+		name:         "repeated subtests retain later failures",
+		exitCode:     1,
+		wantFailure:  true,
+		failureClass: "repeated",
+		diagnostic:   "Failed test build for package: github.com/devantler-tech/ksail/v7/internal/ciharness/build",
+	})
+}
+
 // exerciseHomeIsolationGuard checks execution, privacy, canaries and cleanup.
 func exerciseHomeIsolationGuard(t *testing.T, script string, test homeGuardCase) {
 	t.Helper()
 
-	command, fixture := homeIsolationGuardCommand(t, script, test.mutation, test.exitCode)
+	command, fixture := homeIsolationGuardCommand(
+		t, script, test.mutation, test.failureClass, test.exitCode,
+	)
 	directory, err := os.OpenRoot(fixture)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, directory.Close()) })
@@ -107,6 +126,7 @@ func exerciseHomeIsolationGuard(t *testing.T, script string, test homeGuardCase)
 	assert.NotContains(t, string(output), "PRIVATE_FIXTURE_DETAIL")
 	assert.LessOrEqual(t, strings.Count(string(output), "::error::Failed test package:"), 40)
 	assert.LessOrEqual(t, strings.Count(string(output), "::error::Failed test "), 40)
+	assertHomeFailureClasses(t, string(output), test.failureClass)
 
 	// This boundary records only after checking redirected HOME and external
 	// cache paths. An early shell failure cannot satisfy a refusal case, and
@@ -126,10 +146,39 @@ func exerciseHomeIsolationGuard(t *testing.T, script string, test homeGuardCase)
 	}
 }
 
+// assertHomeFailureClasses excludes unrelated diagnostics and bounds distinct failure summaries.
+func assertHomeFailureClasses(t *testing.T, output, failureClass string) {
+	t.Helper()
+
+	counts := []int{
+		strings.Count(output, "::error::Failed test package:"),
+		strings.Count(output, "::error::Failed test function:"),
+		strings.Count(output, "::error::Failed test build for package:"),
+	}
+	wantCounts := []int{0, 0, 0}
+
+	switch failureClass {
+	case "package":
+		wantCounts[0] = 1
+	case "test":
+		wantCounts[1] = 1
+	case "build":
+		wantCounts[2] = 1
+	case "repeated":
+		wantCounts = []int{36, 3, 1}
+
+		assert.Equal(t, 1, strings.Count(output, "::error::Failed test function: "+
+			"github.com/devantler-tech/ksail/v7/internal/ciharness/TestIsolationProbe\n"))
+	}
+
+	assert.Equal(t, wantCounts, counts,
+		"only the selected distinct failure classes should be emitted: %s", output)
+}
+
 // homeIsolationGuardCommand isolates the workflow while retaining real hashing.
 func homeIsolationGuardCommand(
 	t *testing.T,
-	script, mutation string,
+	script, mutation, failureClass string,
 	exitCode int,
 ) (*exec.Cmd, string) {
 	t.Helper()
@@ -183,6 +232,7 @@ exec "$HOME_GUARD_MKTEMP" -d "$HOME_GUARD_FIXTURE/tmp/sandbox.XXXXXXXX"
 		"HOME_GUARD_HASH_KIND="+hashKind,
 		"HOME_GUARD_EXIT="+strconv.Itoa(exitCode),
 		"HOME_GUARD_MUTATION="+mutation,
+		"HOME_GUARD_FAILURE_CLASS="+failureClass,
 	)
 
 	return command, fixture
@@ -223,17 +273,44 @@ case "$1" in
     esac
     printf '%s' "$HOME_GUARD_EXIT" > "$HOME_GUARD_FIXTURE/control"
     if [[ "$HOME_GUARD_EXIT" != 0 ]]; then
-      printf '{"Action":"fail","Package":"github.com/devantler-tech/ksail/v7/internal/ciharness"}\n'
-      printf '{"Action":"fail","Package":"%s","Test":"%s"}\n' \
-        'github.com/devantler-tech/ksail/v7/internal/ciharness' 'TestIsolationProbe/PRIVATE_FIXTURE_DETAIL'
-      printf '{"Action":"fail","Package":"%s","FailedBuild":"%s"}\n' \
-        'github.com/devantler-tech/ksail/v7/internal/ciharness/build' 'PRIVATE_FIXTURE_DETAIL'
+      case "$HOME_GUARD_FAILURE_CLASS" in
+        package)
+          printf '{"Action":"fail","Package":"github.com/devantler-tech/ksail/v7/internal/ciharness"}\n'
+          ;;
+        test)
+          printf '{"Action":"fail","Package":"%s","Test":"%s"}\n' \
+            'github.com/devantler-tech/ksail/v7/internal/ciharness' 'TestIsolationProbe/PRIVATE_FIXTURE_DETAIL'
+          printf '{"Action":"fail","Package":"%s","Test":"TestIsolationProbe"}\n' \
+            'github.com/devantler-tech/ksail/v7/internal/ciharness'
+          ;;
+        build)
+          printf '{"Action":"fail","Package":"%s","FailedBuild":"%s"}\n' \
+            'github.com/devantler-tech/ksail/v7/internal/ciharness/build' 'PRIVATE_FIXTURE_DETAIL'
+          ;;
+        repeated)
+          for ((i = 0; i < 50; i++)); do
+            printf '{"Action":"fail","Package":"%s","Test":"TestIsolationProbe/PRIVATE_FIXTURE_DETAIL_%s"}\n' \
+              'github.com/devantler-tech/ksail/v7/internal/ciharness' "$i"
+          done
+          printf '{"Action":"fail","Package":"%s","Test":"TestIsolationProbe"}\n' \
+            'github.com/devantler-tech/ksail/v7/internal/ciharness'
+          printf '{"Action":"fail","Package":"%s","Test":"TestIsolationProbe"}\n' \
+            'github.com/devantler-tech/ksail/v7/internal/ciharness/other'
+          printf '{"Action":"fail","Package":"%s","Test":"TestOtherProbe"}\n' \
+            'github.com/devantler-tech/ksail/v7/internal/ciharness'
+          printf '{"Action":"fail","Package":"%s","FailedBuild":"%s"}\n' \
+            'github.com/devantler-tech/ksail/v7/internal/ciharness/build' 'PRIVATE_FIXTURE_DETAIL'
+          for ((i = 0; i < 50; i++)); do
+            printf '{"Action":"fail","Package":"%s/package%s"}\n' \
+              'github.com/devantler-tech/ksail/v7/internal/ciharness' "$i"
+          done
+          ;;
+        '') ;;
+        *) exit 75 ;;
+      esac
       printf 'FAIL\tgithub.com/devantler-tech/ksail/v7/PRIVATE_FIXTURE_DETAIL\t0.001s\n'
       printf '{"Action":"output","Output":"FAIL github.com/devantler-tech/ksail/v7/PRIVATE_FIXTURE_DETAIL"}\n'
       printf '{"Action":"fail","Package":"github.com/devantler-tech/ksail/v7/PRIVATE_FIXTURE_DETAIL","Test":"x"}\n'
-      for ((i = 0; i < 50; i++)); do
-        printf '{"Action":"fail","Package":"github.com/devantler-tech/ksail/v7/internal/ciharness/package%s"}\n' "$i"
-      done
       printf 'PRIVATE_FIXTURE_DETAIL\n'
       for ((i = 0; i < 100; i++)); do printf 'package summary\n'; done
       printf 'PRIVATE_FIXTURE_DETAIL\n'
