@@ -34,7 +34,14 @@ func TestHomeIsolationGuardWorkflow(t *testing.T) {
 			name: "startup failure", exitCode: 74, wantFailure: true,
 			diagnostic: "Failed test package: github.com/devantler-tech/ksail/v7/internal/ciharness",
 		},
-		{name: "test failure", exitCode: 1, wantFailure: true},
+		{
+			name: "test failure", exitCode: 1, wantFailure: true,
+			diagnostic: "Failed test function: github.com/devantler-tech/ksail/v7/internal/ciharness/TestIsolationProbe",
+		},
+		{
+			name: "build failure", exitCode: 1, wantFailure: true,
+			diagnostic: "Failed test build for package: github.com/devantler-tech/ksail/v7/internal/ciharness/build",
+		},
 		{name: "interrupted execution", exitCode: 130, wantFailure: true},
 		{
 			name: "changed kubeconfig", mutation: "kube", wantFailure: true,
@@ -99,6 +106,7 @@ func exerciseHomeIsolationGuard(t *testing.T, script string, test homeGuardCase)
 
 	assert.NotContains(t, string(output), "PRIVATE_FIXTURE_DETAIL")
 	assert.LessOrEqual(t, strings.Count(string(output), "::error::Failed test package:"), 40)
+	assert.LessOrEqual(t, strings.Count(string(output), "::error::Failed test "), 40)
 
 	// This boundary records only after checking redirected HOME and external
 	// cache paths. An early shell failure cannot satisfy a refusal case, and
@@ -216,6 +224,10 @@ case "$1" in
     printf '%s' "$HOME_GUARD_EXIT" > "$HOME_GUARD_FIXTURE/control"
     if [[ "$HOME_GUARD_EXIT" != 0 ]]; then
       printf '{"Action":"fail","Package":"github.com/devantler-tech/ksail/v7/internal/ciharness"}\n'
+      printf '{"Action":"fail","Package":"%s","Test":"%s"}\n' \
+        'github.com/devantler-tech/ksail/v7/internal/ciharness' 'TestIsolationProbe/PRIVATE_FIXTURE_DETAIL'
+      printf '{"Action":"fail","Package":"%s","FailedBuild":"%s"}\n' \
+        'github.com/devantler-tech/ksail/v7/internal/ciharness/build' 'PRIVATE_FIXTURE_DETAIL'
       printf 'FAIL\tgithub.com/devantler-tech/ksail/v7/PRIVATE_FIXTURE_DETAIL\t0.001s\n'
       printf '{"Action":"output","Output":"FAIL github.com/devantler-tech/ksail/v7/PRIVATE_FIXTURE_DETAIL"}\n'
       printf '{"Action":"fail","Package":"github.com/devantler-tech/ksail/v7/PRIVATE_FIXTURE_DETAIL","Test":"x"}\n'
