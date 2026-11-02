@@ -98,8 +98,10 @@ sample_disk() {
 sample_disk &
 sampler=$!
 stop_sampler() {
-	kill "$sampler" 2>/dev/null || true
-	wait "$sampler" 2>/dev/null || true
+	if [[ -n ${sampler:-} ]]; then
+		kill "$sampler" 2>/dev/null || true
+		wait "$sampler" 2>/dev/null || true
+	fi
 }
 trap stop_sampler EXIT
 started=$(date +%s.%N)
@@ -113,11 +115,11 @@ timeout --signal=TERM --kill-after=30s 55m \
 		printf '%s\n' "$line"
 	done || status=$?
 finished=$(date +%s.%N)
-kill -0 "$sampler"
-kill "$sampler"
 sampler_status=0
-wait "$sampler" || sampler_status=$?
-[[ $sampler_status == 143 ]]
+finish_release_sampler "$sampler" || sampler_status=$?
+sampler=
+printf 'release experiment collection: build_status=%s sampler_collection_status=%s\n' "$status" "$sampler_status" >&2
+[[ $sampler_status == 0 ]] || exit 1
 sample_once "$source_dir" "$report_dir"
 trap - EXIT
 "$helper" limits >"$report_dir/limits-after.json"
@@ -153,12 +155,16 @@ jq -n --slurpfile environment "$report_dir/environment.json" --argjson pair "$pa
     resources:{complete:true,scope:"job-cgroup-peak;host-swap;sampled-disk",sampleIntervalSeconds:5,
       cpuUsageMicros:$cpu,memoryPeakBytes:$peak,minimumFreeDiskBytes:$disk,oomKills:$oom,swapOutPages:$swap,sampleCount:$count},
     inputs:{},nativeCli:{},outputs:[]}' >"$report_dir/report.json"
-[[ $status == 0 ]]
-"$helper" phase "$report_dir/build.log" >"$report_dir/phase.json"
+release_stage build test "$status" -eq 0
+release_stage phase "$helper" phase "$report_dir/build.log" >"$report_dir/phase.json"
 commit_date=$(git show -s --format=%cI HEAD)
 commit_date=$(date -u -d "$commit_date" +%Y-%m-%dT%H:%M:%SZ)
-"$helper" inspect dist >"$report_dir/outputs.json"
-[[ -z $(git status --porcelain --untracked-files=no) ]]
+release_stage outputs "$helper" inspect dist >"$report_dir/outputs.json"
+tracked_source=$(git status --porcelain --untracked-files=no) || {
+	printf 'release experiment stage source failed: status=unknown\n' >&2
+	exit 1
+}
+release_stage source test -z "$tracked_source"
 
 # Include the actual staged UI and all generated, platform-bound Copilot bundles.
 tree_hash() {

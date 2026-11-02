@@ -131,11 +131,68 @@ reject call phase "$scratch/missing-end.log"
 # Verify polling coverage itself, rather than trusting a claimed sample count.
 # shellcheck source=.github/scripts/release-build-samples.lib.sh
 source "$here/release-build-samples.lib.sh"
+mkdir "$scratch/sampling"
+# The caller handles failure explicitly; sample_once must not depend on errexit.
+(
+	mkdir "$scratch/read-failure-bin"
+	printf '#!/bin/sh\nexit 7\n' >"$scratch/read-failure-bin/df"
+	chmod +x "$scratch/read-failure-bin/df"
+	printf 'Checking disk-read failure propagation under a conditional caller\n'
+	PATH=$scratch/read-failure-bin:$PATH GOCACHE=$scratch GOMODCACHE=$scratch GOTMPDIR=$scratch \
+		reject sample_once "$scratch" "$scratch/sampling"
+)
+reject release_stage build bash -c 'exit 7'
+grep -Fq 'stage build failed: status=7' "$scratch/rejected.log"
+for stage in phase outputs source; do
+	reject release_stage "$stage" false
+	grep -Fq "stage $stage failed: status=1" "$scratch/rejected.log"
+done
 if [[ $(uname -s) == Linux ]]; then
-	mkdir "$scratch/sampling"
 	GOCACHE=$scratch GOMODCACHE=$scratch GOTMPDIR=$scratch sample_once "$scratch" "$scratch/sampling"
 	test "$(wc -l <"$scratch/sampling/disk-samples")" -eq 1
 	awk 'NF!=2 || $1 !~ /^[0-9]+[.][0-9]+$/ || $2 !~ /^[0-9]+$/ {exit 1}' "$scratch/sampling/disk-samples"
+	(
+		native_sampler=
+		trap 'if [[ -n $native_sampler ]]; then kill "$native_sampler" 2>/dev/null || true; wait "$native_sampler" 2>/dev/null || true; fi' EXIT
+		mkdir "$scratch/live-sampling" "$scratch/full-sampling"
+		sample_loop() {
+			while :; do
+				sample_once "$scratch" "$scratch/live-sampling" || return
+				sleep 5
+			done
+		}
+		started=$(date +%s.%N)
+		GOCACHE=$scratch GOMODCACHE=$scratch GOTMPDIR=$scratch sample_loop &
+		native_sampler=$!
+		sleep 6
+		finished=$(date +%s.%N)
+		native_status=0
+		finish_release_sampler "$native_sampler" || native_status=$?
+		native_sampler=
+		test "$native_status" -eq 0
+		GOCACHE=$scratch GOMODCACHE=$scratch GOTMPDIR=$scratch sample_once "$scratch" "$scratch/live-sampling"
+		validate_disk_samples "$scratch/live-sampling/disk-samples" "$started" "$finished"
+
+		(exit 9) &
+		native_sampler=$!
+		wait "$native_sampler" || true
+		native_status=0
+		finish_release_sampler "$native_sampler" >"$scratch/early-sampler.log" 2>&1 || native_status=$?
+		native_sampler=
+		test "$native_status" -ne 0
+		grep -Fq 'sampler_status=9' "$scratch/early-sampler.log"
+
+		ln -s /dev/full "$scratch/full-sampling/disk-samples"
+		GOCACHE=$scratch GOMODCACHE=$scratch GOTMPDIR=$scratch sample_once "$scratch" "$scratch/full-sampling" &
+		native_sampler=$!
+		wait "$native_sampler" || true
+		native_status=0
+		finish_release_sampler "$native_sampler" >"$scratch/full-sampler.log" 2>&1 || native_status=$?
+		native_sampler=
+		test "$native_status" -ne 0
+		grep -Fq 'sampler_status=1' "$scratch/full-sampler.log"
+		printf 'PASS: native Linux sampler collection, early exit and failed append\n'
+	)
 fi
 printf '100 10000000000\n105 9000000000\n110 9000000000\n' >"$scratch/disk-samples"
 validate_disk_samples "$scratch/disk-samples" 100 110
