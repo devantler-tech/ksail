@@ -1,5 +1,5 @@
 
-[TestCommandErrorErrorCauseOnlyWhenMessageEmpty - 1]
+[TestCommandErrorErrorIsTheCause - 1]
 boom
 ---
 

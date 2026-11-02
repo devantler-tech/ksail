@@ -203,7 +203,7 @@ func TestCommandErrorErrorEmptyStruct(t *testing.T) {
 	}
 }
 
-func TestCommandErrorErrorCauseOnlyWhenMessageEmpty(t *testing.T) {
+func TestCommandErrorErrorIsTheCause(t *testing.T) {
 	t.Parallel()
 
 	cmd := &cobra.Command{
@@ -452,5 +452,24 @@ func TestExecutorExecuteRestoresCommand(t *testing.T) {
 
 	if cmd.ErrOrStderr() != &stderr {
 		t.Fatal("expected the original error writer restored")
+	}
+}
+
+// TestExecutorExecuteInvalidSubcommandHonoursSilenceErrors guards that a root command
+// which silences errors itself gets no usage hint, as Cobra gives it none either.
+func TestExecutorExecuteInvalidSubcommandHonoursSilenceErrors(t *testing.T) {
+	t.Parallel()
+
+	root := &cobra.Command{Use: "test", SilenceErrors: true}
+	root.AddCommand(&cobra.Command{Use: "valid"})
+	root.SetArgs([]string{"invalid"})
+
+	err := errorhandler.NewExecutor().Execute(root)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if got := err.Error(); got != `unknown command "invalid" for "test"` {
+		t.Fatalf("expected the error without a usage hint, got %q", got)
 	}
 }
