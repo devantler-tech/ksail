@@ -27,21 +27,33 @@ type strictLicenseClassifier struct {
 	delegate licenses.Classifier
 	mutex    sync.Mutex
 	failed   bool
+	cache    map[string][]licenses.License
 }
 
 func (classifier *strictLicenseClassifier) Identify(path string) ([]licenses.License, error) {
-	identified, err := classifier.delegate.Identify(path)
-	if err != nil {
-		classifier.mutex.Lock()
-		classifier.failed = true
-		classifier.mutex.Unlock()
+	// Libraries shares this classifier across workers. Its delegate has mutable
+	// diff state, and the same immutable source evidence is used by every target.
+	classifier.mutex.Lock()
+	defer classifier.mutex.Unlock()
+
+	if identified, exists := classifier.cache[path]; exists {
+		return slices.Clone(identified), nil
 	}
 
+	identified, err := classifier.delegate.Identify(path)
 	if err != nil {
+		classifier.failed = true
+
 		return nil, fmt.Errorf("classify license evidence: %w", err)
 	}
 
-	return identified, nil
+	if classifier.cache == nil {
+		classifier.cache = make(map[string][]licenses.License)
+	}
+
+	classifier.cache[path] = slices.Clone(identified)
+
+	return slices.Clone(identified), nil
 }
 
 func (classifier *strictLicenseClassifier) hadFailure() bool {

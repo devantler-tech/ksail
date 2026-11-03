@@ -2,10 +2,15 @@ package kubescape_test
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/internal/licensepolicy"
 	"github.com/google/go-licenses/v2/licenses"
@@ -112,6 +117,106 @@ type licenseClassifierFunc func(string) ([]licenses.License, error)
 
 func (function licenseClassifierFunc) Identify(path string) ([]licenses.License, error) {
 	return function(path)
+}
+
+func TestClassifierSerializesConcurrentEvidenceReads(t *testing.T) {
+	t.Parallel()
+
+	var (
+		active, calls atomic.Int32
+		overlapped    atomic.Bool
+	)
+
+	classifier := strictLicenseClassifier{
+		delegate: licenseClassifierFunc(func(string) ([]licenses.License, error) {
+			calls.Add(1)
+
+			if active.Add(1) != 1 {
+				overlapped.Store(true)
+			}
+			defer active.Add(-1)
+
+			time.Sleep(time.Millisecond)
+
+			return nil, nil
+		}),
+	}
+	start := make(chan struct{})
+
+	var workers sync.WaitGroup
+	for index := range 32 {
+		workers.Go(func() {
+			<-start
+
+			_, _ = classifier.Identify("fixture-license-" + strconv.Itoa(index))
+		})
+	}
+
+	close(start)
+	workers.Wait()
+
+	if overlapped.Load() || calls.Load() != 32 {
+		t.Fatal("concurrent scanner workers must not share mutable classifier state")
+	}
+}
+
+func TestClassifierReusesImmutableEvidenceWithoutAliasingResults(t *testing.T) {
+	t.Parallel()
+
+	calls := 0
+	delegateResult := []licenses.License{{Name: "MIT"}}
+	classifier := strictLicenseClassifier{
+		delegate: licenseClassifierFunc(func(string) ([]licenses.License, error) {
+			calls++
+
+			return delegateResult, nil
+		}),
+	}
+
+	first, err := classifier.Identify("same-immutable-source")
+	if err != nil || len(first) != 1 {
+		t.Fatal("first classification failed")
+	}
+
+	first[0].Name = "caller-mutation"
+	delegateResult[0].Name = "delegate-mutation"
+
+	second, err := classifier.Identify("same-immutable-source")
+	if err != nil || len(second) != 1 || second[0].Name != "MIT" || calls != 1 {
+		t.Fatal("classification reuse must retain its own evidence and isolate callers")
+	}
+}
+
+func TestClassifierRetainsFailuresAndCachesSuccessfulUnknownEvidence(t *testing.T) {
+	t.Parallel()
+
+	calls := 0
+	classifier := strictLicenseClassifier{
+		delegate: licenseClassifierFunc(func(string) ([]licenses.License, error) {
+			calls++
+			if calls == 1 {
+				return nil, os.ErrPermission
+			}
+
+			return nil, nil
+		}),
+	}
+
+	_, err := classifier.Identify("same-immutable-source")
+	if !errors.Is(err, os.ErrPermission) || !classifier.hadFailure() {
+		t.Fatal("classification failure must retain its cause and fail the inventory")
+	}
+
+	for range 2 {
+		result, retryErr := classifier.Identify("same-immutable-source")
+		if retryErr != nil || len(result) != 0 {
+			t.Fatal("successful unknown classification must remain unknown")
+		}
+	}
+
+	if calls != 2 || !classifier.hadFailure() {
+		t.Fatal("errors must stay uncached and successful reuse must not clear a prior failure")
+	}
 }
 
 func TestClassifierReadErrorsCannotBecomeUnknownApprovals(t *testing.T) {
