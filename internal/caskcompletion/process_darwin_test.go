@@ -7,8 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -36,7 +34,12 @@ func TestNativeCancellationKillsCompletionIgnoringHangupAndTerminate(t *testing.
 		finished <- err
 	}()
 
-	pid := recordedCompletionChild(t, pidPath)
+	startup := observeCompletionChild(pidPath, finished)
+	if startup.DeadlineReached || startup.ProbeState == "returned" || startup.Read.PID <= 1 {
+		failCompletionStartup(t, startup, finished, cancel)
+	}
+
+	pid := confirmCompletionChild(t, pidPath, startup.Read.PID)
 	processGroup, err := unix.Getpgid(pid)
 	require.NoError(t, err)
 	assert.NotEqual(t, unix.Getpgrp(), processGroup, "the PTY owns a separate kernel process group")
@@ -71,6 +74,42 @@ func TestNativeCancellationKillsCompletionIgnoringHangupAndTerminate(t *testing.
 		t,
 		unix.Kill(sentinel.Process.Pid, 0),
 		"cleanup must preserve the caller's other child",
+	)
+}
+
+// failCompletionStartup preserves the pre-cancellation result and joins cleanup separately.
+func failCompletionStartup(t *testing.T, startup completionPIDStart,
+	finished <-chan error, cancel context.CancelFunc,
+) {
+	t.Helper()
+
+	if startup.ProbeState != "returned" {
+		startup.takeProbeResult(finished)
+	}
+
+	cancel()
+
+	cleanupErr := startup.ProbeErr
+	cleanupState := "already-returned"
+
+	if startup.ProbeState != "returned" {
+		select {
+		case cleanupErr = <-finished:
+			cleanupState = "joined"
+		case <-time.After(4 * time.Second):
+			cleanupState = "not-joined"
+		}
+	}
+
+	t.Fatalf(
+		"completion must actually start: deadline=%t last-read=%s before-cancel=%s "+
+			"probe-error=%v cleanup=%s cleanup-error=%v",
+		startup.DeadlineReached,
+		startup.Read.Class,
+		startup.ProbeState,
+		startup.ProbeErr,
+		cleanupState,
+		cleanupErr,
 	)
 }
 
@@ -133,21 +172,52 @@ func stubbornCompletion(t *testing.T, root string, background bool) (string, str
 func recordedCompletionChild(t *testing.T, pidPath string) int {
 	t.Helper()
 
-	var pid int
+	startup := observeCompletionChild(pidPath, nil)
+	require.True(t, !startup.DeadlineReached && startup.Read.PID > 1,
+		"completion must actually start: last-read=%s", startup.Read.Class)
 
-	require.Eventually(t, func() bool {
-		//nolint:gosec // This is the t.TempDir-owned fixture's PID file.
-		data, err := os.ReadFile(
-			pidPath,
-		)
-		if err != nil {
-			return false
+	return confirmCompletionChild(t, pidPath, startup.Read.PID)
+}
+
+// observeCompletionChild preserves the original startup deadline and poll interval.
+// File reads run off the waiter so a read cannot hide an early probe result or deadline.
+func observeCompletionChild(pidPath string, finished <-chan error) completionPIDStart {
+	deadline := time.NewTimer(3 * time.Second)
+	defer deadline.Stop()
+
+	poll := time.NewTicker(10 * time.Millisecond)
+	defer poll.Stop()
+
+	reads := make(chan completionPIDRead, 1)
+
+	stop := make(chan struct{})
+	defer close(stop)
+
+	go func() {
+		defer close(reads)
+
+		for {
+			select {
+			case <-poll.C:
+				//nolint:gosec // This is the t.TempDir-owned fixture's PID file.
+				data, err := os.ReadFile(pidPath)
+				select {
+				case reads <- readCompletionPID(data, err):
+				case <-stop:
+					return
+				}
+			case <-stop:
+				return
+			}
 		}
+	}()
 
-		pid, err = strconv.Atoi(strings.TrimSpace(string(data)))
+	return waitCompletionPID(reads, finished, deadline.C)
+}
 
-		return err == nil && pid > 1
-	}, 3*time.Second, 10*time.Millisecond, "completion must actually start")
+// confirmCompletionChild retains the original kernel identity, owned cleanup and release checks.
+func confirmCompletionChild(t *testing.T, pidPath string, pid int) int {
+	t.Helper()
 
 	process, err := unix.SysctlKinfoProc("kern.proc.pid", pid)
 	require.NoError(t, err)
@@ -237,6 +307,7 @@ func TestNativeTerminationRefusesPersistentProcessQueryFailure(t *testing.T) {
 }
 
 // ownedTerminal starts script's real Darwin PTY and a disowned child with its own job group.
+// Shell programs are constant; the owned PID path is command-local environment data.
 func ownedTerminal(t *testing.T) (*caskcompletion.TerminalGuardForTest, int, int) {
 	t.Helper()
 	root := t.TempDir()
@@ -245,18 +316,24 @@ func ownedTerminal(t *testing.T) (*caskcompletion.TerminalGuardForTest, int, int
 	require.NoError(t, sentinel.Start())
 	t.Cleanup(func() { _ = sentinel.Process.Kill(); _ = sentinel.Wait() })
 
-	child := `/bin/zsh -c 'trap "" HUP TERM; print -r -- $$ > "$1"; while true; do :; done' child ` + shellQuote(
-		pidPath,
+	const (
+		child    = `trap "" HUP TERM; print -r -- $$ > "$1"; while true; do :; done`
+		terminal = "/bin/zsh -f -c '" + child + "' fixture \"$KSAIL_COMPLETION_PID_FILE\" &!\n" +
+			"while true; do /bin/sleep 1; done"
 	)
-	command := exec.CommandContext( //nolint:gosec // Fixed zsh code with a quoted, t.TempDir-owned PID path.
+
+	command := exec.CommandContext(
 		t.Context(),
 		"/usr/bin/script",
 		"-q",
 		"/dev/null",
 		"/bin/zsh",
+		"-f",
 		"-c",
-		child+" &!\nwhile true; do /bin/sleep 1; done",
+		terminal,
+		"fixture",
 	)
+	command.Env = []string{"KSAIL_COMPLETION_PID_FILE=" + pidPath}
 	guard := caskcompletion.NewTerminalGuardForTest(command)
 	require.NoError(t, command.Start())
 	t.Cleanup(func() { _ = command.Process.Kill(); _ = command.Wait() })

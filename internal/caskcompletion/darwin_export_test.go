@@ -1,4 +1,6 @@
-package caskcompletion //nolint:testpackage // Darwin-only export_test.go seam; consumers remain black-box tests.
+//go:build darwin
+
+package caskcompletion
 
 import (
 	"os/exec"
