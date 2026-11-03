@@ -247,7 +247,7 @@ func (k *Provisioner) Create(ctx context.Context, name string) error {
 
 	_, err = k.runner.Run(ctx, cmd, args)
 	if err != nil {
-		return fmt.Errorf("failed to create kind cluster: %w", err)
+		return fmt.Errorf("failed to create kind cluster%s: %w", kindBootstrapDiagnostic(err), err)
 	}
 
 	return nil
