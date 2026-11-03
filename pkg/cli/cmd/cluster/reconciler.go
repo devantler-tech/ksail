@@ -11,6 +11,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	specdiff "github.com/devantler-tech/ksail/v7/pkg/svc/diff"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
 	fluxinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/flux"
@@ -458,11 +459,34 @@ func (r *componentReconciler) doReconcileLoadBalancer(
 		return r.reconcileLoadBalancerInstall(ctx)
 	}
 
+	// Talos on Hetzner keeps its cloud controller, which also initialises nodes,
+	// when load balancers are switched off: it is upgraded with its service
+	// controller off rather than removed (ksail#7678).
+	if ksailInstallsHcloudCCM(r.clusterCfg) {
+		r.reportRetainedHetznerLoadBalancers()
+
+		return r.installHcloudCCMOnce(ctx)
+	}
+
 	if r.clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS {
 		return nil
 	}
 
 	return r.reconcileLoadBalancerUninstall(ctx)
+}
+
+// reportRetainedHetznerLoadBalancers tells the user that switching load
+// balancers off leaves the Hetzner load balancers that already exist in place.
+// With its service controller off the cloud controller stops creating,
+// updating and deleting them, so they keep running and billing until the user
+// removes them.
+func (r *componentReconciler) reportRetainedHetznerLoadBalancers() {
+	notify.WriteMessage(notify.Message{
+		Type: notify.WarningType,
+		Content: "load balancers are disabled: existing Hetzner load balancers are left in place " +
+			"and no longer managed; delete any you no longer need in the Hetzner Console",
+		Writer: r.cmd.ErrOrStderr(),
+	})
 }
 
 func (r *componentReconciler) reconcileLoadBalancerInstall(ctx context.Context) error {

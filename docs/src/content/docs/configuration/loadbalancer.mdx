@@ -160,6 +160,12 @@ spec:
 
 See the [Hetzner CCM documentation](https://github.com/hetznercloud/hcloud-cloud-controller-manager#service) for all available annotations.
 
+#### Disabling LoadBalancer Support
+
+Set `loadBalancer: Disabled` and run `ksail cluster update`. The cloud controller stays installed, because it also initialises nodes, but KSail upgrades it with its service controller switched off, so it no longer creates load balancers for `LoadBalancer` Services. Setting `Enabled` or `Default` again switches the service controller back on.
+
+Hetzner load balancers that already exist are left in place and `cluster update` prints a warning about them: the cloud controller no longer updates or deletes them, and they keep billing. Delete the ones you no longer need in the Hetzner Console.
+
 ## Troubleshooting
 
 ### LoadBalancer Service Stuck in Pending
