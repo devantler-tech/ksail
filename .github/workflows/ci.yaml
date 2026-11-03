@@ -288,6 +288,10 @@ jobs:
               - '.govulncheck-allow.txt'
             # Release inputs are outside Go's cache and the shared Go source filter.
             release-graph-audit:
+              - '.github/go-license-policy.json'
+              - 'LICENSE'
+              - 'internal/licensepolicy/**'
+              - 'internal/moduleintegrity/**'
               - '.github/scripts/resolve-release-replay.sh'
               - '.github/actions/release-admission/**'
               - '.github/scripts/download-go-modules.sh'
@@ -2580,8 +2584,21 @@ jobs:
         run: bash .github/scripts/download-go-modules.sh
 
       - name: 🔐 Audit Shipped Dependency Graphs
+        id: audit
         # Release files are outside Go's test-cache inputs; always execute the audit.
+        # Go source admission and redistribution scope: .github/go-license-policy.md.
+        env:
+          KSAIL_GO_LICENSE_REPORT_DIR: ${{ runner.temp }}/ksail-go-licenses
         run: go test ./pkg/client/kubescape/... -count=1
+
+      - name: 📤 Preserve Go license admission evidence
+        if: ${{ always() && steps.audit.outcome != 'skipped' && steps.audit.outcome != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: go-license-admission-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ksail-go-licenses/*.json
+          if-no-files-found: error
+          retention-days: 14
 
   local-recovery-trial:
     name: 🧪 Local Connection Recovery Acceptance

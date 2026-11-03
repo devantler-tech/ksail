@@ -1279,9 +1279,13 @@ github.com/google/go-github/v72 v72.0.0 h1:FcIO37BLoVPBO9igQQ6tStsv2asG4IPcYFi65
 github.com/google/go-github/v72 v72.0.0/go.mod h1:WWtw8GMRiL62mvIquf1kO3onRHeWWKmK01qdCY8c5fg=
 github.com/google/go-github/v88 v88.0.0 h1:dZA9IKkPK1eXZj4ypngnpRj5FwdpTv4whix2PrQMP7M=
 github.com/google/go-github/v88 v88.0.0/go.mod h1:rufTDgn2N45wjhukLTyxmvc9nilSp3mr3Rgtt6b1MPw=
+github.com/google/go-licenses/v2 v2.0.1 h1:ti+9bi5o7DKbeeg5eBb/uZTgsaPNoJaLCh93cRcXsW8=
+github.com/google/go-licenses/v2 v2.0.1/go.mod h1:efibo0EDNGkau6AIMOViGW+rTNPudhxX9rCxtfw5zKE=
 github.com/google/go-querystring v1.0.0/go.mod h1:odCYkC5MyYFN7vkCjXpyrEuKhc/BUO6wN/zVPAxq5ck=
 github.com/google/go-querystring v1.2.0 h1:yhqkPbu2/OH+V9BfpCVPZkNmUXhb2gBxJArfhIxNtP0=
 github.com/google/go-querystring v1.2.0/go.mod h1:8IFJqpSRITyJ8QhQ13bmbeMBDfmeEJZD5A0egEOmkqU=
+github.com/google/go-replayers/httpreplay v1.2.0 h1:VM1wEyyjaoU53BwrOnaf9VhAyQQEEioJvFYxYcLRKzk=
+github.com/google/go-replayers/httpreplay v1.2.0/go.mod h1:WahEFFZZ7a1P4VM1qEeHy+tME4bwyqPcwWbNlUI1Mcg=
 github.com/google/gofuzz v1.0.0/go.mod h1:dBl0BpW6vV/+mYPU4Po3pmUjxk6FQPldtuIdl/M65Eg=
 github.com/google/gofuzz v1.2.0 h1:xRy4A+RhZaiKjJ1bPfwQ8sedCA+YS2YcCHW6ec7JMi0=
 github.com/google/gofuzz v1.2.0/go.mod h1:dBl0BpW6vV/+mYPU4Po3pmUjxk6FQPldtuIdl/M65Eg=
@@ -1291,6 +1295,8 @@ github.com/google/jsonschema-go v0.4.3 h1:/DBOLZTfDow7pe2GmaJNhltueGTtDKICi8V8p+
 github.com/google/jsonschema-go v0.4.3/go.mod h1:r5quNTdLOYEz95Ru18zA0ydNbBuYoo9tgaYcxEYhJVE=
 github.com/google/licensecheck v0.3.1 h1:QoxgoDkaeC4nFrtGN1jV7IPmDCHFNIVh54e5hSt6sPs=
 github.com/google/licensecheck v0.3.1/go.mod h1:ORkR35t/JjW+emNKtfJDII0zlciG9JgbT7SmsohlHmY=
+github.com/google/licenseclassifier/v2 v2.0.0 h1:1Y57HHILNf4m0ABuMVb6xk4vAJYEUO0gDxNpog0pyeA=
+github.com/google/licenseclassifier/v2 v2.0.0/go.mod h1:cOjbdH0kyC9R22sdQbYsFkto4NGCAc+ZSwbeThazEtM=
 github.com/google/martian v2.1.0+incompatible h1:/CP5g8u/VJHijgedC/Legn3BAbAaWPgecwXBIDzw5no=
 github.com/google/martian v2.1.0+incompatible/go.mod h1:9I4somxYTbIHy5NJKHRl3wXiIaQGbYVAs8BPL6v8lEs=
 github.com/google/martian/v3 v3.0.0/go.mod h1:y5Zk1BBys9G+gd6Jrk0W3cC1+ELVxBWuIGO+w/tUAp0=
@@ -1744,8 +1750,8 @@ github.com/loft-sh/api/v4 v4.12.2-rc.3 h1:0V/Sk845ZKiJHSp9LdM3WrKL6RbmEVGNvmbbqv
 github.com/loft-sh/api/v4 v4.12.2-rc.3/go.mod h1:gHuK4Mz29nJaJgiR1rNcoa2xV1bRrHejYpw4sbIV0Zs=
 github.com/loft-sh/apiserver v0.0.0-20260707184419-aef558a5ae8d h1:i+nBgAm6Wuc/9ALNniOdRWJfgz/og5AOgbs4pJVolqE=
 github.com/loft-sh/apiserver v0.0.0-20260707184419-aef558a5ae8d/go.mod h1:YfIUirXHfVcUb3bVtj7yzIAVT6etrHj9wkOkMgnEuz0=
-github.com/loft-sh/external-types v0.1.0-alpha.2.0.20260409132559-a38365a8cbf2 h1:WZWBuzM3QtIW/9qNXHFcfFEKGcpi602hGI8wYjkidUM=
-github.com/loft-sh/external-types v0.1.0-alpha.2.0.20260409132559-a38365a8cbf2/go.mod h1:cpx5mpwOZZjQaiFbydE9VjhRTap9Yho3wdNk/KJm03c=
+github.com/loft-sh/external-types v0.1.0-alpha.2.0.20260701070938-a59fea7bcfce h1:7P+WOKhStF2cvVOChlC21YIhQQhMCMbfB+9sxR4W3Gk=
+github.com/loft-sh/external-types v0.1.0-alpha.2.0.20260701070938-a59fea7bcfce/go.mod h1:cpx5mpwOZZjQaiFbydE9VjhRTap9Yho3wdNk/KJm03c=
 github.com/loft-sh/image v0.0.0-20250818103249-5e7d53b59343 h1:ADOGhVZ995JR3mqdL1w6Au/HgYG6aaMenl6vhfqey4c=
 github.com/loft-sh/image v0.0.0-20250818103249-5e7d53b59343/go.mod h1:niVPRwWFUSA8FihY9e5hGAp5IbKmbCdckGxJGSTKTUs=
 github.com/loft-sh/log v0.0.0-20261016082928-2e30e984f250 h1:4vvEZubOimXMEqkR0njjFut0WW79Pr+R6ksE2M8hNsI=
@@ -2031,8 +2037,8 @@ github.com/opencontainers/runc v1.3.6 h1:SLGIymCtsk80iNPWgbc8dtjI30r+5mTVV+4dN8/
 github.com/opencontainers/runc v1.3.6/go.mod h1:o1wyv76EDlTkcf0KTFgN8bMWLPvgF/HfX709lDv+rr4=
 github.com/opencontainers/runtime-spec v1.3.0 h1:YZupQUdctfhpZy3TM39nN9Ika5CBWT5diQ8ibYCRkxg=
 github.com/opencontainers/runtime-spec v1.3.0/go.mod h1:jwyrGlmzljRJv/Fgzds9SsS/C5hL+LL3ko9hs6T5lQ0=
-github.com/openreports/reports-api v0.2.1 h1:g9KS3yle9Y1elmww4TK9EkD1rl6inIaiIJPX6e+u680=
-github.com/openreports/reports-api v0.2.1/go.mod h1:Es52ppXibHHVWs8dEd322rEzCP6R6/7Wu+3rdwuRndU=
+github.com/openreports/reports-api v0.2.2-0.20250910074307-302c81040424 h1:Su10irUJFxJ9J0TqIIbMoPn9o87oNPvq5QE0+Xu8t8o=
+github.com/openreports/reports-api v0.2.2-0.20250910074307-302c81040424/go.mod h1:Es52ppXibHHVWs8dEd322rEzCP6R6/7Wu+3rdwuRndU=
 github.com/openvex/go-vex v0.2.8 h1:m/iH6+0fc7QXwfx7vJ0UeT8Z1oN1zVcyHjcVK+UO11Y=
 github.com/openvex/go-vex v0.2.8/go.mod h1:V09jOICYN/3VS4oU2hthSN8wGI6UAv3FvvYbpYS1xCE=
 github.com/openzipkin/zipkin-go v0.1.1/go.mod h1:NtoC/o8u3JlF1lSlyPNswIbeQH9bJTmOf0Erfk+hxe8=

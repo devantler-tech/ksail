@@ -91,15 +91,27 @@ func listDependencyPackages(
 ) []goListPackage {
 	t.Helper()
 
+	return listDependencyEntry(t, moduleDir, target, cgo, tags, "./...")
+}
+
+func listDependencyEntry(
+	t *testing.T,
+	moduleDir string,
+	target platform,
+	cgo, tags, entry string,
+) []goListPackage {
+	t.Helper()
+
 	//nolint:gosec // G204: a fixed go subcommand; tags come from moduleBuildTags.
 	cmd := exec.CommandContext(
 		t.Context(),
 		"go",
 		"list",
 		"-deps",
+		"-mod=readonly",
 		"-tags="+tags,
 		"-json="+goListPackageFields,
-		"./...",
+		entry,
 	)
 	cmd.Dir = moduleDir
 
