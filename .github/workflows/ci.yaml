@@ -753,11 +753,10 @@ jobs:
     #
     # Both default true at this immutable canonical revision, so the caller
     # inherits the corrected coverage without redundant arguments. Scan input
-    # retirement remains tracked in devantler-tech/.github#285; the separate
-    # default-branch maintenance pilot is tracked in #276.
+    # retirement remains tracked in devantler-tech/.github#285.
     with:
-      # This released default also runs read-only module hygiene and dead-code
-      # checks on main. Final maintenance input retirement remains in #276.
+      # The callee always runs read-only module hygiene and dead-code checks on
+      # main pushes; it takes no input to turn them off.
       # The org-required direct run is the sole signed-fix writer for a PR.
       # Keep this additional invocation read-only while retaining its checks.
       apply-signed-fixes: false
