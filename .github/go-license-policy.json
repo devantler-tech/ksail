@@ -20,21 +20,15 @@
   "firstPartyLicense": "PolyForm-Shield-1.0.0",
   "exceptions": [
     {
-      "packages": [
-        "github.com/alibabacloud-go/cr-20160607/client"
-      ],
+      "packages": ["github.com/alibabacloud-go/cr-20160607/client"],
       "module": "github.com/alibabacloud-go/cr-20160607",
       "version": "v1.0.1",
       "sum": "h1:WEnP1iPFKJU74ryUKh/YDPHoxMZawqlPajOymyNAkts=",
       "evidence": "README.md",
       "sha256": "c0dd414ee7134fb8b42b2813c78e58b09d416b87d110d35a1664d61570fe5c40",
       "reportedFile": "",
-      "detected": [
-        "Unknown"
-      ],
-      "effective": [
-        "Apache-2.0"
-      ],
+      "detected": ["Unknown"],
+      "effective": ["Apache-2.0"],
       "rationale": "Exact selected source declares these terms; retain independently licensed nested packages.",
       "sourceUrl": "https://github.com/alibabacloud-go/cr-20160607/blob/263452db4d04935fefb001da2f1128f5d7a57384/README.md"
     },
@@ -48,12 +42,8 @@
       "evidence": "LICENSE",
       "sha256": "6821faaddedf2d78c95bb6d98b127e9e616097afd2f6bcc34389f000d13ab12d",
       "reportedFile": "",
-      "detected": [
-        "Unknown"
-      ],
-      "effective": [
-        "Apache-2.0"
-      ],
+      "detected": ["Unknown"],
+      "effective": ["Apache-2.0"],
       "rationale": "Exact selected source declares these terms; retain independently licensed nested packages.",
       "sourceUrl": "https://github.com/cyberphone/json-canonicalization/blob/19d51d7fe467d4706a3ff08adf8a748f29fc21e0/LICENSE"
     },
@@ -69,12 +59,8 @@
       "evidence": "LICENSE",
       "sha256": "2423c6eb9948e617a61f7a2d1cb463c69d60e599fbae5931551631d2a8730838",
       "reportedFile": "",
-      "detected": [
-        "Unknown"
-      ],
-      "effective": [
-        "Apache-2.0"
-      ],
+      "detected": ["Unknown"],
+      "effective": ["Apache-2.0"],
       "rationale": "Exact selected source declares these terms; retain independently licensed nested packages.",
       "sourceUrl": "https://github.com/deitch/magic/blob/c67ab88f10cb7323bd698f7fe7fb0c41f3af4da5/LICENSE"
     },
@@ -90,12 +76,8 @@
       "evidence": "LICENSE",
       "sha256": "b3a6ac899861c2c28a1abd5c7ea8733fefaed6938d730e099c42671386032aeb",
       "reportedFile": "",
-      "detected": [
-        "Unknown"
-      ],
-      "effective": [
-        "Apache-2.0"
-      ],
+      "detected": ["Unknown"],
+      "effective": ["Apache-2.0"],
       "rationale": "Exact selected source declares these terms; retain independently licensed nested packages.",
       "sourceUrl": "https://github.com/in-toto/attestation/blob/df02077bf97218a8860a5c534eff1f1381f56984/LICENSE"
     },
@@ -113,31 +95,21 @@
       "evidence": "LICENSE",
       "sha256": "b5c26c8a2ad6dd7cac6646e470a32ee42d23c36124caac4e66c989b6545b2a44",
       "reportedFile": "",
-      "detected": [
-        "Unknown"
-      ],
-      "effective": [
-        "Apache-2.0"
-      ],
+      "detected": ["Unknown"],
+      "effective": ["Apache-2.0"],
       "rationale": "Exact selected source declares these terms; retain independently licensed nested packages.",
       "sourceUrl": "https://github.com/in-toto/in-toto-golang/blob/36d782ffb2ca3adbffcdce1fd971c23319dd4469/LICENSE"
     },
     {
-      "packages": [
-        "github.com/inconshreveable/go-update"
-      ],
+      "packages": ["github.com/inconshreveable/go-update"],
       "module": "github.com/inconshreveable/go-update",
       "version": "v0.0.0-20160112193335-8152e7eb6ccf",
       "sum": "h1:WfD7VjIE6z8dIvMsI4/s+1qr5EL+zoIGev1BQj1eoJ8=",
       "evidence": "LICENSE",
       "sha256": "737e1cfb4ce24e701a37ebd22d1dafcc27bd75864f85ba6b0ac81326a5f14039",
       "reportedFile": "",
-      "detected": [
-        "Unknown"
-      ],
-      "effective": [
-        "Apache-2.0"
-      ],
+      "detected": ["Unknown"],
+      "effective": ["Apache-2.0"],
       "rationale": "Exact selected source declares these terms; retain independently licensed nested packages.",
       "sourceUrl": "https://github.com/inconshreveable/go-update/blob/8152e7eb6ccf8679a64582a66b78519688d156ad/LICENSE"
     },
@@ -159,31 +131,21 @@
       "evidence": "LICENSE",
       "sha256": "cca993712df289a5958bdef69031a5dac0f951ac15afeb313f9eeea55ed59443",
       "reportedFile": "",
-      "detected": [
-        "Unknown"
-      ],
-      "effective": [
-        "MIT-0"
-      ],
+      "detected": ["Unknown"],
+      "effective": ["MIT-0"],
       "rationale": "Exact selected source declares these terms; retain independently licensed nested packages.",
       "sourceUrl": "https://github.com/segmentio/asm/blob/1cfacc81a878d4a07b13f51f2368cd86893d23fa/LICENSE"
     },
     {
-      "packages": [
-        "github.com/loft-sh/admin-apis/pkg/licenseapi"
-      ],
+      "packages": ["github.com/loft-sh/admin-apis/pkg/licenseapi"],
       "module": "github.com/loft-sh/admin-apis",
       "version": "v0.0.0-20260721223200-58c89e54604e",
       "sum": "h1:A2KvOyV+gWsdo34lMkmYNi1T8/LmbQ3qXBKb16UiH3M=",
       "evidence": "LICENSE",
       "sha256": "aba851442e6e14935d015beae5d867724728818889d223afa536a8959e8e5745",
       "reportedFile": "",
-      "detected": [
-        "Unknown"
-      ],
-      "effective": [
-        "LicenseRef-Loft-KSail-Binary-Permission"
-      ],
+      "detected": ["Unknown"],
+      "effective": ["LicenseRef-Loft-KSail-Binary-Permission"],
       "rationale": "Maintainer-verified permission for this identified component as compiled into KSail binaries. No source grant, later revisions, duration, irrevocability or downstream rights are inferred. Original correspondence remains private.",
       "sourceUrl": "https://github.com/loft-sh/admin-apis/blob/58c89e54604e/LICENSE",
       "permissionRecord": "LOFT-ADMIN-APIS-KSAIL-001"
@@ -214,32 +176,21 @@
       "evidence": "LICENSE.code",
       "sha256": "e914fb1f3927226e04b0438e0b541b3c6e3c65de4d64aa8f5cdaa803f05448fd",
       "reportedFile": "LICENSE.code",
-      "detected": [
-        "Apache-2.0",
-        "GPL-2.0"
-      ],
-      "effective": [
-        "Apache-2.0"
-      ],
+      "detected": ["Apache-2.0", "GPL-2.0"],
+      "effective": ["Apache-2.0"],
       "rationale": "The exact source expressly offers Apache-2.0 OR GPL-2.0-or-later. Select Apache-2.0 for these packages; GPL is not generally allowed.",
       "sourceUrl": "https://github.com/spdx/tools-golang/blob/28116d2a82c9999a10b186d88e4132e20ac67462/LICENSE.code"
     },
     {
-      "packages": [
-        "github.com/xi2/xz"
-      ],
+      "packages": ["github.com/xi2/xz"],
       "module": "github.com/xi2/xz",
       "version": "v0.0.0-20171230120015-48954b6210f8",
       "sum": "h1:nIPpBwaJSVYIxUFsDv3M8ofmx9yWTog9BfvIu0q41lo=",
       "evidence": "LICENSE",
       "sha256": "5c640056d513f276d56635af7a0bed81cb7eac02a31b6e56d40c416557a8d8ce",
       "reportedFile": "LICENSE",
-      "detected": [
-        "XZ"
-      ],
-      "effective": [
-        "LicenseRef-Xi2-Public-Domain"
-      ],
+      "detected": ["XZ"],
+      "effective": ["LicenseRef-Xi2-Public-Domain"],
       "rationale": "The exact declaration places this package's files in the public domain. The classifier label is not a general approval of other XZ projects.",
       "sourceUrl": "https://github.com/xi2/xz/blob/48954b6210f8d154cb5f8484d3a3e1f83489309e/LICENSE"
     },
@@ -258,34 +209,21 @@
       "evidence": "COPYING",
       "sha256": "13654b052f885cb3fa47d7343e13975d9c8a64c3bcd84993c35d5eb01f22b23f",
       "reportedFile": "COPYING",
-      "detected": [
-        "MIT",
-        "OFL-1.1"
-      ],
-      "effective": [
-        "MIT"
-      ],
+      "detected": ["MIT", "OFL-1.1"],
+      "effective": ["MIT"],
       "rationale": "The source declares the software MIT; the separate font terms are retained on its actual containing package.",
       "sourceUrl": "https://github.com/alecthomas/chroma/blob/a6d00fe2cdfc88da0b91396e577da16c75c9c7fb/COPYING"
     },
     {
-      "packages": [
-        "github.com/alecthomas/chroma/v2/formatters/svg"
-      ],
+      "packages": ["github.com/alecthomas/chroma/v2/formatters/svg"],
       "module": "github.com/alecthomas/chroma/v2",
       "version": "v2.27.0",
       "sum": "h1:FodwmyOBgJULFYmDqibcp9pvfDLWdtPRh9v/r5BXYZs=",
       "evidence": "COPYING",
       "sha256": "13654b052f885cb3fa47d7343e13975d9c8a64c3bcd84993c35d5eb01f22b23f",
       "reportedFile": "COPYING",
-      "detected": [
-        "MIT",
-        "OFL-1.1"
-      ],
-      "effective": [
-        "MIT",
-        "OFL-1.1"
-      ],
+      "detected": ["MIT", "OFL-1.1"],
+      "effective": ["MIT", "OFL-1.1"],
       "rationale": "This exact Go package contains the reachable Liberation Mono font. OFL is an additional obligation, not an alternative to MIT.",
       "sourceUrl": "https://github.com/alecthomas/chroma/blob/a6d00fe2cdfc88da0b91396e577da16c75c9c7fb/COPYING"
     }
