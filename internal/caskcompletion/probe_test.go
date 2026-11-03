@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -14,6 +15,55 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// Sequential: the public entrypoint discovers prerequisites from the process environment.
+func TestVerifyRejectsUnavailablePrerequisitesBeforeCreatingTrial(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("PATH", root)
+	unavailable := filepath.Join(root, "unavailable-temp-parent")
+	t.Setenv("TMPDIR", unavailable)
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+
+	result, err := caskcompletion.Verify(ctx)
+	if runtime.GOOS == "darwin" {
+		require.ErrorIs(t, err, exec.ErrNotFound, "retain the actual missing-Homebrew cause")
+		require.ErrorContains(t, err, "find Homebrew")
+	} else {
+		require.ErrorIs(t, err, caskcompletion.ErrUnsupportedHost,
+			"refuse unsupported hosts before discovering Homebrew or starting a terminal")
+	}
+
+	assert.Equal(t, caskcompletion.Result{}, result, "a refused trial has no observed completion")
+	assert.NoDirExists(t, unavailable, "prerequisite refusal must not stage a terminal profile")
+}
+
+// Sequential: isolate discovery to the fixture Homebrew, without using a host installation.
+func TestVerifyUsesDiscoveredHomebrewForNativeTab(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("the public native trial uses macOS /usr/bin/script")
+	}
+
+	root := t.TempDir()
+	brew := fixtureBrew(t, root, true)
+	bin := filepath.Dir(brew)
+	require.NoError(t, os.Symlink(brew, filepath.Join(bin, "brew")))
+	t.Setenv("PATH", bin+":/usr/bin:/bin")
+	t.Setenv("TMPDIR", root)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	result, err := caskcompletion.Verify(ctx)
+	require.NoError(t, err)
+	assert.True(t, result.TabObserved)
+	assert.Equal(t, "ksail cluster ", result.ObservedBuffer)
+
+	matches, err := filepath.Glob(filepath.Join(root, "ksail-zsh-tab-*"))
+	require.NoError(t, err)
+	assert.Empty(t, matches, "the public trial must retire its private profile")
+}
 
 func TestObservationRequiresAnchoredNonceAndActualBuffer(t *testing.T) {
 	t.Parallel()
