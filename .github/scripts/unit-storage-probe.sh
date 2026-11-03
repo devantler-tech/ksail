@@ -43,9 +43,10 @@ prepare() {
     ([.GOCACHE,.GOMODCACHE,.GOROOT] | all(type == "string" and startswith("/") and (test("[\\r\\n]")|not)))' \
 		"$state/go-env.json" >/dev/null || die 'unexpected control Go environment'
 	[[ "${TMPDIR:-/tmp}" == /tmp ]] || die 'unexpected control temporary storage'
-	local build_cache cache_entry
+	local build_cache module_cache cache_entry
 	build_cache="$(jq -r .GOCACHE "$state/go-env.json")"
-	mkdir -p "$build_cache"
+	module_cache="$(jq -r .GOMODCACHE "$state/go-env.json")"
+	mkdir -p "$build_cache" "$module_cache" 2>/dev/null || die 'cache directories could not be prepared'
 	cache_entry="$(find "$build_cache" -mindepth 1 ! -name README ! -name trim.txt -print -quit 2>/dev/null)" ||
 		die 'compilation cache could not be examined'
 	[[ -z "$cache_entry" ]] ||

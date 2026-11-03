@@ -184,6 +184,50 @@ func TestUnitStorageProbeRejectsUnreadableColdCache(t *testing.T) {
 	assert.ErrorIs(t, err, os.ErrNotExist)
 }
 
+func TestUnitStorageProbeMeasuresInitiallyAbsentCachesWithoutWarmingThem(t *testing.T) {
+	t.Parallel()
+
+	fixture := newUnitStorageFixture(t, "cold-cache")
+	for _, name := range []string{"module", "build"} {
+		require.NoError(t, os.Remove(filepath.Join(fixture.root, name)))
+	}
+
+	fixture.prepare(t)
+
+	for _, name := range []string{"module", "build"} {
+		entries, err := os.ReadDir(filepath.Join(fixture.root, name))
+		require.NoError(t, err, "prepare must create the empty %s cache", name)
+		assert.Empty(t, entries, "preparation must not warm the cache")
+	}
+
+	assert.NoFileExists(t, filepath.Join(fixture.root, "go-invocation"))
+
+	output, err := fixture.run(t, "run")
+	require.NoError(t, err, output)
+	output, err = fixture.run(t, "publish")
+	require.NoError(t, err, output)
+	contents, err := os.ReadFile(filepath.Join(fixture.state, "public", "report.json"))
+	require.NoError(t, err)
+	assert.Contains(t, string(contents), `"countersComplete":true`)
+	assert.Contains(t, string(contents), `"componentsComplete":true`)
+}
+
+func TestUnitStorageProbeRejectsAnUncreatableModuleCache(t *testing.T) {
+	t.Parallel()
+	fixture := newUnitStorageFixture(t, "success")
+	modulePath := filepath.Join(fixture.root, "module")
+	require.NoError(t, os.Remove(modulePath))
+	require.NoError(t, os.WriteFile(modulePath, []byte("retained"), 0o600))
+	output, err := fixture.run(t, "prepare")
+	require.Error(t, err)
+	assert.Contains(t, output, "cache directories could not be prepared")
+	assert.NoFileExists(t, filepath.Join(fixture.state, "prepared"))
+	assert.NoFileExists(t, filepath.Join(fixture.root, "go-invocation"))
+	contents, err := os.ReadFile(filepath.Join(fixture.root, "module"))
+	require.NoError(t, err)
+	assert.Equal(t, "retained", string(contents))
+}
+
 func TestUnitStorageProbeCannotRunWithoutItsExactCache(t *testing.T) {
 	t.Parallel()
 	fixture := newUnitStorageFixture(t, "success")
@@ -434,6 +478,7 @@ fi`,
 		"du": `[[ "$UNIT_STORAGE_FIXTURE_MODE" != du-failure ]] || exit 1
 printf '42\tPRIVATE_FIXTURE_DETAIL\n'`,
 		"df": `[[ "$UNIT_STORAGE_FIXTURE_MODE" != df-failure ]] || exit 1
+if [[ "$UNIT_STORAGE_FIXTURE_MODE" == cold-cache ]]; then [[ -e "${!#}" ]] || exit 1; fi
 if [[ "$UNIT_STORAGE_FIXTURE_MODE" == cleanup-df-failure &&
       ! -f "$UNIT_STORAGE_FIXTURE_ROOT/runner/unit-storage-probe/prepared" ]]; then exit 1; fi
 [[ "$UNIT_STORAGE_FIXTURE_MODE" != df-timeout ]] || exit 124
