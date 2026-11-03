@@ -5,10 +5,10 @@ text="$(head -c 65536)"
 text="${text,,}"
 seen=false
 while IFS='|' read -r needle label; do
-  if [[ "$text" == *"$needle"* ]]; then
-    printf 'Nested kubelet journal signal: %s\n' "$label"
-    seen=true
-  fi
+	if [[ "$text" == *"$needle"* ]]; then
+		printf 'Nested kubelet journal signal: %s\n' "$label"
+		seen=true
+	fi
 done <<'SIGNALS'
 too many open files|file-descriptors
 no space left on device|storage-full
@@ -30,5 +30,5 @@ kubelet needs to run as uid 0|kubelet-privileges
 failed to run kubelet|kubelet-startup
 SIGNALS
 if [[ "$seen" == false ]]; then
-  echo 'Nested kubelet journal signal: unclassified'
+	echo 'Nested kubelet journal signal: unclassified'
 fi
