@@ -250,7 +250,10 @@ jobs:
             # the same reason todos-contract does. TestReleaseConfigFilterCoversTheReleaseFiles
             # fails if a release file is dropped from it.
             release-config:
+              - '.gitattributes'
               - '.github/scripts/resolve-release-replay.sh'
+              - '.github/scripts/resolve-release-publish-state.sh'
+              - '.github/scripts/go-notices.go'
               - '.github/actions/release-admission/**'
               - '.github/scripts/download-go-modules.sh'
               - '.github/scripts/cask-rendering.test.sh'
@@ -288,7 +291,15 @@ jobs:
               - '.govulncheck-allow.txt'
             # Release inputs are outside Go's cache and the shared Go source filter.
             release-graph-audit:
+              - '.gitattributes'
+              - '.github/scripts/resolve-release-publish-state.sh'
               - '.github/go-license-policy.json'
+              - '.github/go-notice-materials.json'
+              - '.github/go-notice-receipts.json'
+              - 'internal/gonotices/**'
+              - 'notices/go/**'
+              - '.github/scripts/go-notices.go'
+              - '.github/scripts/go-notices-release.test.sh'
               - 'LICENSE'
               - 'internal/licensepolicy/**'
               - 'internal/moduleintegrity/**'
@@ -882,6 +893,9 @@ jobs:
 
       - name: 📦 Verify release installer
         run: .github/scripts/install-release.test.sh
+
+      - name: 📦 Verify Go notice release wiring
+        run: bash .github/scripts/go-notices-release.test.sh
 
       - name: 🧪 Verify parity guard behavior
         run: .github/scripts/verify-go-archive-parity.test.sh

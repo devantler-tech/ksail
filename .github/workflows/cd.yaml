@@ -259,6 +259,12 @@ jobs:
           # .goreleaser.yaml uploads the cask only when this is exactly "true".
           KSAIL_CASK_PUBLISH: ${{ needs.cask-checkpoint.outputs.cask-publish }}
 
+      - name: 🔎 Verify CLI archive Go notices
+        id: verify_cli_notices
+        if: needs.cask-checkpoint.outputs.release-mode == 'build'
+        shell: bash
+        run: go run .github/scripts/go-notices.go verify-cli "$GITHUB_REF_NAME" "$GITHUB_SHA"
+
       - name: ♻️ Reuse verified publication
         if: needs.cask-checkpoint.outputs.release-mode == 'verify'
         shell: bash
@@ -411,6 +417,12 @@ jobs:
       # GoReleaser's release pipe is disabled (.goreleaser.desktop.yaml). Emit the macOS archive as a
       # workflow artifact; `publish-release` attaches it to the draft before publishing, so every asset
       # is present before the release is locked by immutable releases (see #4874).
+      - name: 🔎 Verify macOS desktop archive Go notices
+        id: verify_macos_notices
+        if: needs.cask-checkpoint.outputs.release-mode == 'build'
+        shell: bash
+        run: go run .github/scripts/go-notices.go verify desktop-darwin-arm64 "$GITHUB_REF_NAME" "$GITHUB_SHA"
+
       - name: 📤 Upload desktop archive artifact
         if: needs.cask-checkpoint.outputs.release-mode == 'build'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -482,17 +494,34 @@ jobs:
           GOOS: ${{ matrix.goos }}
           ARCH: ${{ matrix.arch }}
         run: |
+          set -euo pipefail
+          target="desktop-$GOOS-$ARCH"
+          go run .github/scripts/go-notices.go stage "$target" "$GITHUB_REF_NAME" "$GITHUB_SHA"
           case "$GOOS" in
             linux)
               artifact="ksail-desktop_${VERSION}_linux_${ARCH}.tar.gz"
-              tar -C desktop -czf "$artifact" ksail-desktop
+              if [ -e "$artifact" ] || [ -L "$artifact" ]; then exit 1; fi
+              tar -czf "$artifact" -C desktop ksail-desktop -C "$PWD" LICENSE -C "$PWD/.cache/go-notices/$target" GoNotices
               ;;
             windows)
               artifact="ksail-desktop_${VERSION}_windows_${ARCH}.zip"
-              7z a "$artifact" "./desktop/ksail-desktop.exe"
+              if [ -e "$artifact" ] || [ -L "$artifact" ]; then exit 1; fi
+              7z a "$artifact" "./desktop/ksail-desktop.exe" LICENSE
+              archive_path="$PWD/$artifact"
+              (cd ".cache/go-notices/$target" && 7z a "$archive_path" GoNotices)
               ;;
+            *) exit 1 ;;
           esac
           echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
+
+      - name: 🔎 Verify desktop archive Go notices
+        id: verify_desktop_notices
+        if: needs.validate-release-ref.outputs.release-mode == 'build'
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          ARCH: ${{ matrix.arch }}
+        run: go run .github/scripts/go-notices.go verify "desktop-$GOOS-$ARCH" "$GITHUB_REF_NAME" "$GITHUB_SHA"
 
       - name: 📤 Upload desktop archive artifact
         if: needs.validate-release-ref.outputs.release-mode == 'build'
@@ -712,8 +741,8 @@ jobs:
     # guaranteed before it. This is the maintainer's required invariant: a published release is always
     # complete (#5061). The inverse failure — an asset job failing and leaving an unpublished draft —
     # is prevented up front by the `Release` workflow, which validates every artifact BEFORE the tag is
-    # created, and backstopped by `cleanup-failed-release` below, which deletes the orphaned draft and
-    # tag if a publish is ever blocked so no empty/incomplete tag flows downstream (#5060).
+    # created, and backstopped by `cleanup-failed-release` below, which deletes an orphaned draft
+    # while retaining the protected tag and reporting the failed version (#7694).
     # Runs in parallel with `pages-deploy` and `mcp-publish`.
     needs:
       [
@@ -745,6 +774,14 @@ jobs:
           attempt: ${{ needs.goreleaser.outputs.release-attempt }}
           mode: ${{ needs.goreleaser.outputs.release-mode }}
           proof: ${{ needs.goreleaser.outputs.replay-proof }}
+
+      # The fixed networkless verifier uses the release's existing Go toolchain, without a
+      # second product build, dependency audit, or restored release cache.
+      - name: ⚙️ Setup Go for notice readback
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
 
       - name: 📥 Download release asset artifacts
         if: needs.goreleaser.outputs.release-mode == 'build'
@@ -783,6 +820,72 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.get_version.outputs.version }}
         run: .github/scripts/upload-release-assets.sh --tag "$RELEASE_TAG" --assets-dir dist-assets
+
+      # Download actual draft bytes independently of the producer workspace/artifacts. Reuse the
+      # resolver's already selected ID; do not add another full release-catalogue enumeration.
+      - name: 🔎 Verify draft archive Go notices
+        id: draft_notices
+        if: (steps.release_state.outputs.state == 'draft') && needs.goreleaser.outputs.release-mode == 'build'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.get_version.outputs.version }}
+          RELEASE_ID: ${{ steps.release_state.outputs.release_id }}
+          PHASE: draft
+        run: &go-notices-readback |
+          set -euo pipefail
+          umask 077
+          case "$PHASE" in draft|published) ;; *) exit 1 ;; esac
+          # Never admit prior downloads or symlinked staging/readback directories.
+          for parent in .cache .cache/go-notices; do
+            if [ -e "$parent" ] || [ -L "$parent" ]; then
+              test -d "$parent"
+              test ! -L "$parent"
+            else
+              mkdir "$parent"
+            fi
+          done
+          directory=".cache/go-notices/$PHASE-readback"
+          test ! -e "$directory"
+          test ! -L "$directory"
+          mkdir "$directory"
+          go run .github/scripts/go-notices.go assets "$RELEASE_TAG" "$GITHUB_SHA" > "$directory/expected.txt"
+          test "$(wc -l < "$directory/expected.txt" | tr -d ' ')" = 8
+          test "$(sort -u "$directory/expected.txt" | wc -l | tr -d ' ')" = 8
+          while IFS= read -r name; do
+            [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]
+          done < "$directory/expected.txt"
+          if [ "$PHASE" = draft ]; then
+            [[ "$RELEASE_ID" =~ ^[1-9][0-9]*$ ]]
+            endpoint="repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID"
+          else
+            encoded_tag="$(jq -rn --arg tag "$RELEASE_TAG" '$tag | @uri')"
+            endpoint="repos/$GITHUB_REPOSITORY/releases/tags/$encoded_tag"
+          fi
+          gh api "$endpoint" > "$directory/release.json"
+          release_id="$(jq -er --arg tag "$RELEASE_TAG" --arg phase "$PHASE" '
+            select(.tag_name == $tag and .draft == ($phase == "draft")) | .id |
+            select(type == "number" and . > 0 and floor == .)' "$directory/release.json")"
+          if [ "$PHASE" = draft ]; then test "$release_id" = "$RELEASE_ID"; fi
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100" > "$directory/pages.json"
+          jq -e 'type == "array" and length > 0 and all(.[]; type == "array")' "$directory/pages.json" > /dev/null
+          while IFS= read -r name; do
+            asset_record="$(jq -er --arg name "$name" '
+              [ .[][] | select(.name == $name) ] | select(length == 1) | .[0] |
+              select(.size | type == "number" and . > 0 and . <= 536870912 and floor == .) |
+              select(.id | type == "number" and . > 0 and . <= 9007199254740991 and floor == .) |
+              [.id, .size] | @tsv
+            ' "$directory/pages.json")"
+            printf '%s\t%s\n' "$name" "$asset_record" >> "$directory/assets.tsv"
+          done < "$directory/expected.txt"
+          # Refuse every oversized declaration before any body request. Bound actual
+          # streamed copies too, then require the observed length to match the snapshot.
+          while IFS=$'\t' read -r name asset_id asset_size; do
+            gh api -H 'Accept: application/octet-stream' "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" |
+              head -c 536870913 > "$directory/$name"
+            test "$(wc -c < "$directory/$name" | tr -d ' ')" = "$asset_size"
+          done < "$directory/assets.tsv"
+          go run .github/scripts/go-notices.go verify-all "$PHASE" "$RELEASE_TAG" "$GITHUB_SHA"
 
       - name: 📢 Publish draft release
         if: (steps.release_state.outputs.state == 'draft') && needs.goreleaser.outputs.release-mode == 'build'
@@ -863,6 +966,16 @@ jobs:
             });
 
             console.log(`Successfully published release ${tag}`);
+
+      # This also runs for an already published build/replay: remote names alone are not proof.
+      - name: 🔎 Verify published archive Go notices
+        id: published_notices
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.get_version.outputs.version }}
+          PHASE: published
+        run: *go-notices-readback
 
       - name: 🔏 Install Cosign for replay readback
         if: needs.goreleaser.outputs.release-mode == 'verify'
@@ -1248,12 +1361,10 @@ jobs:
           fi
 
   # Backstop for the immutable-release model: if the release did NOT publish — any asset job failed,
-  # or the publish step bailed (so `publish-release` is skipped or failed) — delete the orphaned draft
-  # AND the tag so an incomplete/empty release never lingers or flows downstream to tag-tracking
-  # consumers (see #5060, #5061). The `Release` workflow validates every artifact BEFORE the tag is
-  # cut, so this should rarely fire — only on a post-tag transient (a GitHub/registry blip during the
-  # real build). On the happy path `publish-release` succeeds and this is skipped. Recovery is to
-  # re-run the `Release` workflow: it recomputes the same version and re-tags after validation.
+  # or the publish step bailed (so `publish-release` is skipped or failed) — delete only its eligible
+  # orphaned draft. Release tags remain undeletable, including failed attempts; a newer published
+  # version supersedes a failed version (#7694). This cleanup never changes the failed publisher's
+  # outcome and never removes a published release or an ambiguous draft set.
   cleanup-failed-release:
     name: 🧹 Clean up incomplete release
     runs-on: ubuntu-latest
@@ -1270,7 +1381,7 @@ jobs:
           mode: ${{ needs.validate-release-ref.outputs.release-mode }}
           proof: ${{ needs.validate-release-ref.outputs.replay-proof }}
 
-      - name: 🧹 Delete orphaned draft release and tag
+      - name: 🧹 Delete orphaned draft release and retain its tag
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           RELEASE_TAG: ${{ github.ref_name }}
@@ -1278,12 +1389,22 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const tag = process.env.RELEASE_TAG;
+            const source = process.env.GITHUB_SHA;
             const { owner, repo } = context.repo;
+            if (!/^v\d+\.\d+\.\d+(-.+)?$/.test(tag || '') || !/^[0-9a-f]{40}$/.test(source || '')) {
+              throw new Error('Cleanup requires the admitted release tag and source commit.');
+            }
 
             // listReleases returns drafts (getReleaseByTag does not), so use it to find everything
             // attached to this tag, reading every page so a release beyond the first 100 is not missed.
             const releases = await github.paginate(github.rest.repos.listReleases, { owner, repo, per_page: 100 });
+            if (!Array.isArray(releases) || releases.some(r => !r || typeof r.tag_name !== 'string')) {
+              throw new Error('Release listing is unreadable; leaving releases and tags untouched.');
+            }
             const forTag = releases.filter(r => r.tag_name === tag);
+            if (forTag.some(r => typeof r.draft !== 'boolean' || !Number.isSafeInteger(r.id) || r.id <= 0)) {
+              throw new Error('Release identity is incomplete; leaving releases and tags untouched.');
+            }
             const drafts = forTag.filter(r => r.draft);
             const published = forTag.filter(r => !r.draft);
 
@@ -1297,50 +1418,48 @@ jobs:
               return;
             }
 
-            // No published release for this tag — the draft(s), if any, are orphans from a blocked
-            // publish. Remove them and the tag so no empty/incomplete release flows downstream.
+            if (drafts.length > 1) {
+              throw new Error(`Multiple draft releases exist for ${tag}; leaving the ambiguous drafts untouched.`);
+            }
+
+            // Match the preflight's bounded annotated-tag resolution. Only fixed same-repository
+            // API operands are used; a missing, unreadable or moved source tag refuses cleanup.
+            async function verifyRetainedTag() {
+              const ref = await github.rest.git.getRef({ owner, repo, ref: `tags/${tag}` });
+              if (ref.data.ref !== `refs/tags/${tag}`) throw new Error('Source tag identity differs.');
+              let object = ref.data.object;
+              for (let depth = 0; depth < 4; depth++) {
+                if (!object || !/^[0-9a-f]{40}$/.test(object.sha || '')) break;
+                if (object.type === 'commit') {
+                  if (object.sha === source) return;
+                  break;
+                }
+                if (object.type !== 'tag') break;
+                const annotated = await github.rest.git.getTag({ owner, repo, tag_sha: object.sha });
+                object = annotated.data.object;
+              }
+              throw new Error('Retained tag does not identify the admitted source commit.');
+            }
+
+            await verifyRetainedTag();
             for (const d of drafts) {
+              const current = await github.rest.repos.getRelease({ owner, repo, release_id: d.id });
+              if (current.data.id !== d.id || current.data.tag_name !== tag || current.data.draft !== true) {
+                throw new Error('Draft identity changed before cleanup; leaving it untouched.');
+              }
               await github.rest.repos.deleteRelease({ owner, repo, release_id: d.id });
+              try {
+                await github.rest.repos.getRelease({ owner, repo, release_id: d.id });
+                throw new Error('Draft release still exists after cleanup.');
+              } catch (error) {
+                if (error.status !== 404) throw error;
+              }
               console.log(`Deleted orphaned draft release ${tag} (id=${d.id}).`);
             }
-
-            // The delete is verified by READING THE TAG BACK, never by the delete call's own status.
-            // The repository's "Protect release tags" ruleset carries a deletion rule with no bypass
-            // actors, so the workflow token's delete is refused with a 422 — the same status the API
-            // uses for "reference does not exist". Treating that status as "already absent" reported
-            // every refused delete as a success and left the orphaned tag behind (v7.178.26 logged
-            // exactly that while the tag survived; #6136). Only a 404 on the read-back proves the tag
-            // is gone; anything else fails the job and names the manual cleanup.
-            let deleteError = null;
-            try {
-              await github.rest.git.deleteRef({ owner, repo, ref: `tags/${tag}` });
-            } catch (error) {
-              deleteError = error;
-            }
-
-            let stillPresent = true;
-            try {
-              await github.rest.git.getRef({ owner, repo, ref: `tags/${tag}` });
-            } catch (error) {
-              if (error.status !== 404) {
-                throw error;
-              }
-              stillPresent = false;
-            }
-
-            if (!stillPresent) {
-              console.log(deleteError
-                ? `Tag ${tag} already absent; nothing to delete.`
-                : `Deleted orphaned tag ${tag}; downstream tag-tracking consumers will not see an empty release.`);
-              return;
-            }
-
-            const detail = deleteError ? ` (delete refused: ${deleteError.status} ${deleteError.message})` : '';
-            core.setFailed(
-              `Orphaned tag ${tag} still exists after the cleanup${detail}. ` +
-              `It has no release, so tag-tracking consumers would see an empty release. ` +
-              `A repository ruleset protecting tag deletion blocks this workflow token; ` +
-              `delete it with a bypass-capable identity ` +
-              `(gh api -X DELETE repos/${owner}/${repo}/git/refs/tags/${tag}) ` +
-              `or grant this workflow a bypass on that ruleset.`
-            );
+            await verifyRetainedTag();
+            await core.summary.addHeading('Incomplete release cleanup').addRaw(
+              `Retained tag ${tag} at source ${source}. ` +
+              `Removed ${drafts.length} orphaned draft release(s); tag protection is unchanged.\n\n` +
+              `Recovery requires a newer published version; this job does not verify a successor. ` +
+              `Cleanup does not change the original failed publication outcome.\n`
+            ).write();
