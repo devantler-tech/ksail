@@ -23,7 +23,7 @@ if [[ "${1:-}" == --context ]]; then
     esac
     [[ "$3 ${4:-}" == 'get --raw=/readyz' ]] || exit 99
     case "$FIXTURE_MODE" in
-      ready-error) echo 'fixture nested API unreachable' >&2; exit 1 ;;
+      ready-error|ready-evidence-error) echo 'fixture nested API unreachable' >&2; exit 1 ;;
       ready-ok-error) echo ok; exit 1 ;;
       ready-hang) echo ok; trap '' TERM; exec sleep 60 ;;
       ready-invalid) echo 'not ready' ;;
@@ -46,7 +46,8 @@ case "$1 $2" in
   'config current-context') echo fixture-host ;;
   'config use-context') [[ "$FIXTURE_MODE" != host-error ]] ;;
   'get --raw=/readyz') echo ok ;;
-  '-n ksail-nested-talos')
+  '-n ksail-nested-talos'|'-n ksail-nested-vanilla')
+    [[ "$FIXTURE_MODE" != ready-evidence-error ]] || exit 1
     case "${3:-}" in
       get|exec) echo 'fixture endpoint diagnostics' ;;
       *) exit 99 ;;
@@ -242,6 +243,46 @@ func TestNestedReadinessRetriesATransientFailure(t *testing.T) {
 		strings.Count("\n"+calls, "\nkubectl --context kind-nested-vanilla get --raw=/readyz"),
 		"one failed read must be followed by exactly one retry",
 	)
+}
+
+func TestNestedReadinessRetainsVanillaEndpointEvidenceBeforeDelete(t *testing.T) {
+	t.Parallel()
+
+	for _, mode := range []string{"ready-error", "ready-evidence-error"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			output, calls, err := runNestedCleanup(t, mode, "Vanilla")
+			require.Error(t, err, output)
+
+			deletion := strings.Index(calls, "ksail cluster delete")
+			require.NotEqual(t, -1, deletion)
+
+			for _, command := range []string{
+				"get service apiserver",
+				"get endpointslices",
+				"get pod dind",
+				"docker inspect --type container --format {{json .NetworkSettings.Ports}} nested-vanilla-control-plane",
+				"docker network inspect kind",
+				"docker exec nested-vanilla-control-plane ip route",
+				"docker exec nested-vanilla-control-plane kubectl " +
+					"--kubeconfig=/etc/kubernetes/admin.conf --request-timeout=5s get --raw=/readyz",
+			} {
+				position := strings.Index(calls, command)
+				require.NotEqual(t, -1, position, command)
+				assert.Less(t, position, deletion, command)
+			}
+
+			assert.Contains(
+				t,
+				calls,
+				"timeout --kill-after=1s 10s kubectl --context fixture-host -n ksail-nested-vanilla",
+			)
+			assert.Contains(t, output, "Vanilla nested API readiness FAILED")
+			assert.Contains(t, output, "Vanilla resources drained")
+			assert.NotContains(t, calls, "get secret")
+			assert.NotContains(t, calls, ".Config.Env")
+		})
+	}
 }
 
 func TestNestedReadinessBindsEachDistributionContext(t *testing.T) {
