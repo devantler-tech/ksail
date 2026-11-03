@@ -1,6 +1,7 @@
 package ciharness_test
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -102,12 +103,18 @@ func TestUnitStorageProbePreservesCommandAndUnknownObservations(t *testing.T) {
 			t.Parallel()
 			fixture := newUnitStorageFixture(t, mode)
 			fixture.prepare(t)
-			_, runErr := fixture.run(t, "run")
-			assert.Equal(t, mode == "command-failure", runErr != nil)
-			_, publishErr := fixture.run(t, "publish")
+			runOutput, runErr := fixture.run(t, "run")
+			assert.Equal(t, mode == "command-failure", runErr != nil, "run: %s", runOutput)
+			publishOutput, publishErr := fixture.run(t, "publish")
 			unknown := mode == "df-failure" || mode == "df-timeout" || mode == "bad-inodes" ||
 				mode == "cleanup-df-failure"
-			assert.Equal(t, unknown || mode == "du-failure", publishErr != nil)
+			assert.Equal(
+				t,
+				unknown || mode == "du-failure",
+				publishErr != nil,
+				"publish: %s",
+				publishOutput,
+			)
 
 			contents, err := os.ReadFile(filepath.Join(fixture.state, "public", "report.json"))
 			require.NoError(t, err)
@@ -247,27 +254,46 @@ func unitStorageCommand(t *testing.T, arguments ...string) *exec.Cmd {
 	t.Helper()
 
 	const script = "../../.github/scripts/unit-storage-probe.sh"
+	// The fake workload waits for an observed sampler frame, not an assumed
+	// scheduling interval. Bound the operation and use the script's tested
+	// cancellation trap to stop its owned sampler and workload.
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	t.Cleanup(cancel)
+
+	var command *exec.Cmd
 
 	switch strings.Join(arguments, " ") {
 	case "run":
-		return exec.CommandContext(t.Context(), "bash", script, "run")
+		command = exec.CommandContext(ctx, "bash", script, "run")
 	case "prepare":
-		return exec.CommandContext(t.Context(), "bash", script, "prepare")
+		command = exec.CommandContext(ctx, "bash", script, "prepare")
 	case "publish":
-		return exec.CommandContext(t.Context(), "bash", script, "publish")
+		command = exec.CommandContext(ctx, "bash", script, "publish")
 	case "snapshot before-cleanup":
-		return exec.CommandContext(t.Context(), "bash", script, "snapshot", "before-cleanup")
+		command = exec.CommandContext(ctx, "bash", script, "snapshot", "before-cleanup")
 	case "snapshot after-cleanup":
-		return exec.CommandContext(t.Context(), "bash", script, "snapshot", "after-cleanup")
+		command = exec.CommandContext(ctx, "bash", script, "snapshot", "after-cleanup")
 	case "snapshot after-setup":
-		return exec.CommandContext(t.Context(), "bash", script, "snapshot", "after-setup")
+		command = exec.CommandContext(ctx, "bash", script, "snapshot", "after-setup")
 	case "snapshot after-restore":
-		return exec.CommandContext(t.Context(), "bash", script, "snapshot", "after-restore")
+		command = exec.CommandContext(ctx, "bash", script, "snapshot", "after-restore")
 	default:
 		t.Fatal("unknown fixture operation")
 
 		return nil
 	}
+
+	command.Cancel = func() error {
+		err := command.Process.Signal(syscall.SIGTERM)
+		if err != nil {
+			return fmt.Errorf("terminate unit storage fixture: %w", err)
+		}
+
+		return nil
+	}
+	command.WaitDelay = 5 * time.Second
+
+	return command
 }
 
 func (fixture unitStorageFixture) prepare(t *testing.T) {
@@ -364,10 +390,7 @@ else
     for ((i=0;i<300;i++)); do /bin/sleep 0.01; done
     exit 11
   fi
-  for ((i=0;i<300;i++)); do
-    if grep -q '"phase":"during-test"' "$UNIT_STORAGE_FIXTURE_ROOT/runner/unit-storage-probe/frames.jsonl"; then
-      break
-    fi
+  until grep -q '"phase":"during-test"' "$UNIT_STORAGE_FIXTURE_ROOT/runner/unit-storage-probe/frames.jsonl"; do
     /bin/sleep 0.01
   done
   echo PRIVATE_FIXTURE_DETAIL
