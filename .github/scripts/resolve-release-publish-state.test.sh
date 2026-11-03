@@ -254,17 +254,22 @@ printf 'PASS: workflow-release-lookups-paginate\n'
 
 # Execute the actual publication script at its GitHub API boundary. Omitting make_latest lets
 # GitHub's default promote an older release that finishes after a newer one (#7898).
-node - "${publish_block}" <<'NODE'
+node - "${publish_block}" "${cd_workflow}" <<'NODE'
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-const workflow = fs.readFileSync(process.argv[2], 'utf8');
-const scripts = [...workflow.matchAll(/^          script: \|\n((?: {12}.*\n|\n)+)/gm)];
-assert.equal(scripts.length, 1, 'extract exactly one publish script');
-const script = scripts[0][1].replace(/^ {12}/gm, '');
-const publish = new AsyncFunction('github', 'core', 'context', 'process', script);
+function productionScript(path, job) {
+  const workflow = fs.readFileSync(path, 'utf8');
+  const block = job ? workflow.split(new RegExp(`^  ${job}:\\n`, 'm'))[1] : workflow;
+  assert.ok(block, 'inspect the actual workflow job');
+  const scripts = [...block.matchAll(/^          script: \|\n((?: {12}.*\n|\n)+)/gm)];
+  assert.equal(scripts.length, 1, 'extract exactly one production script');
+  return new AsyncFunction('github', 'core', 'context', 'process',
+    scripts[0][1].replace(/^ {12}/gm, ''));
+}
+const publish = productionScript(process.argv[2]);
 
-async function run(tag, draft, others = []) {
+async function runPublication(tag, draft, others = []) {
   const version = tag.replace(/^v/, '');
   const release = {
     id: 42, tag_name: tag, draft,
@@ -286,39 +291,26 @@ async function run(tag, draft, others = []) {
   return updates;
 }
 
-(async () => {
+async function verifyPublication() {
   for (const [tag, others] of [
     ['v7.204.1', [{id: 43, tag_name: 'v7.204.4', draft: false}]],
     ['v7.204.5', [{id: 43, tag_name: 'v7.204.4', draft: false}]],
     ['v7.205.0-rc.1', [{id: 43, tag_name: 'v7.204.4', draft: false}]],
   ]) {
-    const updates = await run(tag, true, others);
+    const updates = await runPublication(tag, true, others);
     assert.equal(updates.length, 1, `${tag}: publish exactly the selected draft`);
     assert.deepEqual(updates[0], {
       owner: 'devantler-tech', repo: 'ksail', release_id: 42,
       draft: false, make_latest: 'legacy',
     }, `${tag}: delegate latest selection to GitHub's version-aware policy`);
   }
-  assert.deepEqual(await run('v7.204.1', false), [],
+  assert.deepEqual(await runPublication('v7.204.1', false), [],
     'an already-published immutable release remains a no-op');
   console.log('PASS: workflow-publication-preserves-version-aware-latest-selection');
-})().catch(error => { console.error(error); process.exitCode = 1; });
-NODE
-pass_count=$((pass_count + 1))
+}
 
-# Execute the production cleanup script with both tag policies. Only the release API boundary
-# is replaced: a removable tag must be retained just like a protected one, without a delete attempt.
-node - "${cd_workflow}" <<'NODE'
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-const workflow = fs.readFileSync(process.argv[2], 'utf8');
-const block = workflow.split(/^  cleanup-failed-release:\n/m)[1];
-assert.ok(block, 'inspect the actual cleanup job');
-const scripts = [...block.matchAll(/^          script: \|\n((?: {12}.*\n|\n)+)/gm)];
-assert.equal(scripts.length, 1, 'extract exactly one cleanup script');
-const cleanup = new AsyncFunction('github', 'core', 'context', 'process',
-  scripts[0][1].replace(/^ {12}/gm, ''));
+// Exercise cleanup with both tag policies at the same production API boundary.
+const cleanup = productionScript(process.argv[3], 'cleanup-failed-release');
 const tag = 'v7.202.52';
 const source = 'a'.repeat(40);
 const draft = {id: 42, tag_name: tag, draft: true, target_commitish: source, assets: []};
@@ -326,7 +318,7 @@ const other = {id: 99, tag_name: 'v7.202.53', draft: true, target_commitish: sou
 const published = {...draft, id: 43, draft: false};
 const apiError = status => Object.assign(new Error(`API ${status}`), {status});
 
-async function run(options = {}) {
+async function runCleanup(options = {}) {
   const deleted = [];
   let tagDeletes = 0, tagReads = 0, tagPresent = true, summary = '', failed = false, error;
   const github = {
@@ -386,9 +378,9 @@ async function run(options = {}) {
   return {deleted, tagDeletes, tagReads, tagPresent, summary, failed: failed || !!error};
 }
 
-(async () => {
+async function verifyCleanup() {
   for (const options of [{}, {removable: true}, {annotated: true}, {releases: [other]}]) {
-    const result = await run(options);
+    const result = await runCleanup(options);
     assert.equal(result.failed, false, 'allowed draft cleanup must succeed with its tag retained');
     assert.equal(result.tagDeletes, 0, 'never attempt tag deletion, even when deletion is permitted');
     assert.equal(result.tagPresent, true, 'the original version identity must remain');
@@ -400,7 +392,7 @@ async function run(options = {}) {
     console.log(`PASS: cleanup-retains-${options.removable ? 'removable' : options.annotated ? 'annotated' : options.releases ? 'draftless' : 'protected'}-tag`);
   }
   for (const releases of [[published], [draft, published]]) {
-    const result = await run({releases});
+    const result = await runCleanup({releases});
     assert.equal(result.failed, false, 'published release guard is a safe no-op');
     assert.deepEqual(result.deleted, []);
     assert.equal(result.tagDeletes, 0);
@@ -411,7 +403,7 @@ async function run(options = {}) {
     {retainedDraft: true}, {publishedBeforeDelete: true},
     {releases: [draft, {...draft, id: 44}]}, {releases: [{...draft, draft: null}]},
   ]) {
-    const result = await run(options);
+    const result = await runCleanup(options);
     assert.equal(result.failed, true, `unknown or failed cleanup must fail: ${JSON.stringify(options)}`);
     assert.equal(result.tagDeletes, 0, 'failure cannot authorize a tag deletion');
     if (options.wrongSource || options.refError || options.missingTag || options.publishedBeforeDelete || options.releases) {
@@ -419,9 +411,13 @@ async function run(options = {}) {
     }
   }
   console.log('PASS: cleanup-published-ambiguous-and-API-failure-controls');
+}
+(async () => {
+  await verifyPublication();
+  await verifyCleanup();
 })().catch(error => { console.error(error); process.exitCode = 1; });
 NODE
-pass_count=$((pass_count + 1))
+pass_count=$((pass_count + 2))
 
 # CI must execute this suite, not only lint it: path filter, shellcheck, and the run line.
 ci_workflow="${repo_root}/.github/workflows/ci.yaml"
