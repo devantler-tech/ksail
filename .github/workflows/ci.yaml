@@ -288,6 +288,10 @@ jobs:
               - '.govulncheck-allow.txt'
             # Release inputs are outside Go's cache and the shared Go source filter.
             release-graph-audit:
+              - '.github/go-license-policy.json'
+              - 'LICENSE'
+              - 'internal/licensepolicy/**'
+              - 'internal/moduleintegrity/**'
               - '.github/scripts/resolve-release-replay.sh'
               - '.github/actions/release-admission/**'
               - '.github/scripts/download-go-modules.sh'
@@ -1607,14 +1611,29 @@ jobs:
             status=1
           fi
           if [ "$test_status" -ne 0 ] && [ -f "$sandbox/test.log" ]; then
-            # Only Go's package-level events identify failures. Test output is
-            # nested in Output events and must never become a public annotation.
+            # Go metadata distinguishes build failures and test functions. Keep
+            # only public package identifiers and the root function name: subtest
+            # arguments, FailedBuild details and raw Output remain private.
             failures="$(jq -Rnr '
-              limit(40; inputs | fromjson? | objects
-                | select(.Action == "fail" and (has("Test") | not))
-                | .Package | strings
-                | select(test("^github\\.com/devantler-tech/ksail/v7(/[[:alnum:]_.-]+)*$")))
-              | "::error::Failed test package: " + .
+              limit(40; foreach (inputs | fromjson? | objects
+                | select(.Action == "fail")
+                | select(.Package | strings
+                    | test("^github\\.com/devantler-tech/ksail/v7(/[[:alnum:]_.-]+)*$"))
+                | if (has("Test") | not) then
+                    if ((.FailedBuild | type) == "string" and .FailedBuild != "") then
+                      "::error::Failed test build for package: " + .Package
+                    else
+                      "::error::Failed test package: " + .Package
+                    end
+                  elif (.Test | type) == "string" then
+                    (.Test | split("/")[0]) as $test
+                    | select($test | test("^Test[A-Z0-9_][A-Za-z0-9_]{0,127}$"))
+                    | "::error::Failed test function: " + .Package + "/" + $test
+                  else empty end) as $failure
+                ({seen: {}, emit: null};
+                  if .seen[$failure] then .emit = null
+                  else .seen[$failure] = true | .emit = $failure end;
+                  .emit // empty))
             ' "$sandbox/test.log")"
             if [ -n "$failures" ]; then
               printf '%s\n' "$failures"
@@ -2568,8 +2587,21 @@ jobs:
         run: bash .github/scripts/download-go-modules.sh
 
       - name: 🔐 Audit Shipped Dependency Graphs
+        id: audit
         # Release files are outside Go's test-cache inputs; always execute the audit.
+        # Go source admission and redistribution scope: .github/go-license-policy.md.
+        env:
+          KSAIL_GO_LICENSE_REPORT_DIR: ${{ runner.temp }}/ksail-go-licenses
         run: go test ./pkg/client/kubescape/... -count=1
+
+      - name: 📤 Preserve Go license admission evidence
+        if: ${{ always() && steps.audit.outcome != 'skipped' && steps.audit.outcome != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: go-license-admission-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ksail-go-licenses/*.json
+          if-no-files-found: error
+          retention-days: 14
 
   local-recovery-trial:
     name: 🧪 Local Connection Recovery Acceptance
@@ -2730,6 +2762,8 @@ jobs:
   require-checks-in-pr:
     name: ${{ github.event_name == 'workflow_dispatch' && inputs.run_local_recovery_trial && 'Local Recovery Trial - Checks' || 'CI - Required Checks' }}
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
     timeout-minutes: 5
     needs:
       [
@@ -2774,8 +2808,9 @@ jobs:
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/.github/actions/aggregate-job-checks@39ad5ddb1b89c404d9054fb0a6e5430a67120fe7 # v19.0.11
+      - uses: devantler-tech/.github/actions/aggregate-job-checks@15e2fb1af4b5525ff96202661ca4b87d6affade0 # v19.1.1
         with:
+          check-workflow-startup: ${{ contains(fromJSON('["pull_request","push","merge_group"]'), github.event_name) }}
           job-results: >-
             ${{ needs.retired-repo-links.result }}
             ${{ needs.rate-limit-gate.result }}
