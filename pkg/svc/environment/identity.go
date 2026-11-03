@@ -43,22 +43,16 @@ type Identity struct {
 // context, so the rewrites have nothing to repoint and a clone would resolve to the
 // same default cluster as its source.
 func MaterializeIdentity(content string, identity Identity) (string, error) {
-	var doc yamlv3.Node
-
-	err := yamlv3.Unmarshal([]byte(content), &doc)
+	doc, err := parseIdentityConfig(content)
 	if err != nil {
-		return "", fmt.Errorf("parsing config: %w", err)
-	}
-
-	if len(doc.Content) == 0 || doc.Content[0].Kind != yamlv3.MappingNode {
-		return "", fmt.Errorf("%w: config is not a YAML mapping", ErrInvalidConfig)
+		return "", err
 	}
 
 	if !applyIdentity(doc.Content[0], identity) {
 		return content, nil
 	}
 
-	return encodeConfig(&doc)
+	return encodeConfig(doc)
 }
 
 // applyIdentity writes identity's non-empty fields into root where they are unset and
@@ -83,15 +77,9 @@ func applyIdentity(root *yamlv3.Node, identity Identity) bool {
 // the environment label. Provider overrides also need an insertion when default
 // omission left no scalar for the value-exact rewrites to match.
 func materializeCloneTarget(content string, target CloneTarget) (string, error) {
-	var doc yamlv3.Node
-
-	err := yamlv3.Unmarshal([]byte(content), &doc)
+	doc, err := parseIdentityConfig(content)
 	if err != nil {
-		return "", fmt.Errorf("parsing config: %w", err)
-	}
-
-	if len(doc.Content) == 0 || doc.Content[0].Kind != yamlv3.MappingNode {
-		return "", ErrInvalidConfig
+		return "", err
 	}
 
 	fields := []cloneTargetField{
@@ -124,7 +112,22 @@ func materializeCloneTarget(content string, target CloneTarget) (string, error) 
 		return content, nil
 	}
 
-	return encodeConfig(&doc)
+	return encodeConfig(doc)
+}
+
+func parseIdentityConfig(content string) (*yamlv3.Node, error) {
+	var doc yamlv3.Node
+
+	err := yamlv3.Unmarshal([]byte(content), &doc)
+	if err != nil {
+		return nil, fmt.Errorf("parsing config: %w", err)
+	}
+
+	if len(doc.Content) == 0 || doc.Content[0].Kind != yamlv3.MappingNode {
+		return nil, fmt.Errorf("%w: config is not a YAML mapping", ErrInvalidConfig)
+	}
+
+	return &doc, nil
 }
 
 func replaceRootScalar(root *yamlv3.Node, keyPath []string, value string) (bool, error) {
