@@ -143,6 +143,17 @@ func (e *Exporter) fallbackExportImages(
 		platform,
 		images,
 	)
+	if e.ociOnly && len(failures) > 0 {
+		return fmt.Errorf(
+			"%w: node %s could not export every required image "+
+				"(initial bulk export error: %w; individual export errors: %w)",
+			ErrIncompleteExport,
+			nodeName,
+			bulkErr,
+			errors.Join(failures...),
+		)
+	}
+
 	if len(successfulImages) == 0 {
 		return fmt.Errorf(
 			"ctr export failed for all images during individual export attempts "+

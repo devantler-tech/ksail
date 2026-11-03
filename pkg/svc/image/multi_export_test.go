@@ -102,6 +102,82 @@ func TestExportAllRefusesUnreadableNodeInventory(t *testing.T) {
 	require.Equal(t, "existing export", string(contents))
 }
 
+var (
+	errFixtureBulkExport  = errors.New("fixture bulk export refused")
+	errFixtureAliasExport = errors.New("fixture alias export refused")
+)
+
+func TestExportPartialNodeFailureRetainsOriginalDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client := docker.NewMockAPIClient(t)
+	client.EXPECT().ContainerList(ctx, mock.Anything).Return(kindMultiNodeSummaries()[:2], nil)
+
+	const (
+		good = "docker.io/library/fixture-a:v1"
+		bad  = "import-2026-11-03@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+	)
+
+	optionalNodeExec(ctx, client, kindExporterNodeName, "list", []string{
+		ctrCommand, "--namespace=k8s.io", "images", "list", "-q",
+	}, good+"\n"+bad+"\n")
+	optionalNodeExec(
+		ctx,
+		client,
+		kindExporterNodeName,
+		"platform",
+		[]string{"uname", "-m"},
+		"x86_64\n",
+	)
+	optionalNodeExec(ctx, client, kindExporterNodeName, "help", []string{
+		ctrCommand, "--namespace=k8s.io", "images", "export", "--help",
+	}, "OPTIONS:\n   --local  Use client-side export\n   --help, -h  Show help\n")
+	optionalNodeExport(ctx, client, kindExporterNodeName, []string{good})
+
+	expectPartialExportFailures(ctx, client, bad)
+
+	contents := createExportTar(t, namedNodeArchive(t, good))
+
+	client.EXPECT().CopyFromContainer(ctx, kindExporterNodeName, kindExporterTarPath).
+		RunAndReturn(func(context.Context, string, string) (io.ReadCloser, container.PathStat, error) {
+			return io.NopCloser(bytes.NewReader(contents)), container.PathStat{}, nil
+		}).
+		Maybe()
+	optionalNodeExec(ctx, client, kindExporterNodeName, "cleanup",
+		[]string{"rm", "-f", kindExporterTarPath}, "")
+	setupNodeArchive(ctx, t, client, "my-cluster-worker", "docker.io/library/fixture-b:v1")
+	output := filepath.Join(t.TempDir(), "images.tar")
+	require.NoError(t, os.WriteFile(output, []byte("existing export"), 0o600))
+	err := image.NewExporter(client).Export(ctx, "my-cluster", v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker, image.ExportOptions{OutputPath: output})
+	require.ErrorIs(t, err, image.ErrIncompleteExport)
+	require.ErrorIs(t, err, errFixtureBulkExport)
+	require.ErrorIs(t, err, errFixtureAliasExport)
+	require.ErrorContains(t, err, bad)
+
+	root, rootErr := os.OpenRoot(filepath.Dir(output))
+	require.NoError(t, rootErr)
+	t.Cleanup(func() { require.NoError(t, root.Close()) })
+
+	preserved, readErr := root.ReadFile("images.tar")
+	require.NoError(t, readErr)
+	require.Equal(t, "existing export", string(preserved))
+}
+
+func expectPartialExportFailures(ctx context.Context, client *docker.MockAPIClient, bad string) {
+	for _, failure := range []struct {
+		count int
+		err   error
+	}{{2, errFixtureBulkExport}, {1, errFixtureAliasExport}} {
+		client.EXPECT().ContainerExecCreate(ctx, kindExporterNodeName,
+			mock.MatchedBy(func(options container.ExecOptions) bool {
+				return len(options.Cmd) == 9+failure.count && options.Cmd[3] == "export" &&
+					slices.Contains(options.Cmd[9:], bad)
+			})).Return(container.ExecCreateResponse{}, failure.err).Once()
+	}
+}
+
 // Docker is the external boundary; selection, export collection and archive
 // processing remain real. Only refs actually held by this node can be exported.
 func setupNodeArchive(
