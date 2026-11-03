@@ -83,7 +83,6 @@ func TestAWSBoundaryAllowsOnlyOwnershipReadOperations(t *testing.T) {
 		{"eks", "describe-nodegroup"},
 		{"cloudformation", "describe-stacks"},
 		{"cloudformation", "list-stack-resources"},
-		{"cloudformation", "describe-stack-resources"},
 		{"ec2", "describe-vpcs"},
 	} {
 		_, err := eksinventory.QueryAWSForTest(
@@ -94,6 +93,35 @@ func TestAWSBoundaryAllowsOnlyOwnershipReadOperations(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ownership read %s %s rejected: %v", operation[0], operation[1], err)
 		}
+	}
+}
+
+// A stack lookup by physical resource ID names no stack, so the smoke role's stack-scoped
+// CloudFormation grant cannot authorize it. The capture reads node group stacks by name instead,
+// and the boundary keeps the unscoped lookup out.
+//
+//nolint:paralleltest // The subprocess fixture mutates PATH and process-control environment variables.
+func TestAWSBoundaryRejectsTheUnscopedStackLookup(t *testing.T) {
+	if os.Getenv("KSAIL_EKS_TEST_PROCESS") != "" {
+		helperProcess()
+
+		return
+	}
+
+	dir := prepareAWSProcess(t)
+
+	_, err := eksinventory.QueryAWSForTest(
+		context.Background(), "cloudformation", "describe-stack-resources",
+		"--region", "eu-central-1", "--output", "json", "--no-paginate",
+		"--cli-input-json", `{"PhysicalResourceId":"cluster/nodegroup"}`, "--no-cli-pager",
+	)
+	if err == nil {
+		t.Fatal("the unscoped stack lookup was accepted")
+	}
+
+	_, err = os.Stat(filepath.Join(dir, "invoked"))
+	if !os.IsNotExist(err) {
+		t.Fatal("the unscoped stack lookup started a process")
 	}
 }
 

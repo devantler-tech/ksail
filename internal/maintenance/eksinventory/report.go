@@ -68,6 +68,7 @@ const (
 	vpcIDField                     = "VpcId"
 	describeNodegroup              = "describe-nodegroup"
 	describeStacks                 = "describe-stacks"
+	listStacks                     = "list-stacks"
 	describeVPCs                   = "describe-vpcs"
 	instanceKind                   = "instance"
 	fleetKind                      = "fleet"
@@ -831,7 +832,6 @@ func ownershipReadAllowed(service, command string) bool {
 		{eksService, describeNodegroup},
 		{cloudFormationService, describeStacks},
 		{cloudFormationService, "list-stack-resources"},
-		{cloudFormationService, "describe-stack-resources"},
 		{ec2Service, describeVPCs},
 	}, [2]string{service, command})
 }
