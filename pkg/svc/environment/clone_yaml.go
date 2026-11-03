@@ -12,6 +12,72 @@ type cloneTargetField struct {
 	allowMergedLeaf bool
 }
 
+// cloneContextDestination reads aliases/merges without mutating them. Path
+// validation below still refuses any operation that would change shared values
+// or hide an inherited mapping. An unmatched custom context is preserved.
+func cloneContextDestination(root *yamlv3.Node, plan cloneTargetPlan) (string, error) {
+	if len(plan.contextRewrites) == 0 && plan.target.Identity.Context == "" {
+		return "", nil
+	}
+
+	var decoded map[string]any
+
+	err := root.Decode(&decoded)
+	if err != nil {
+		return "", fmt.Errorf("%w: reading clone context: %w", ErrInvalidConfig, err)
+	}
+
+	var value any = decoded
+	for _, key := range []string{specKey, clusterKey, connectionKey, contextKey} {
+		mapping, ok := value.(map[string]any)
+		if !ok {
+			value = nil
+
+			break
+		}
+
+		value = mapping[key]
+	}
+
+	context, _ := value.(string)
+	if context == "" {
+		return plan.target.Identity.Context, nil
+	}
+
+	original := context
+	for _, rewrite := range plan.contextRewrites {
+		if context == rewrite.Old {
+			context = rewrite.New
+		}
+	}
+
+	if context == original {
+		return "", nil
+	}
+
+	return context, nil
+}
+
+// applyCloneFields runs only after all requested paths have been validated.
+func applyCloneFields(root *yamlv3.Node, fields []cloneTargetField) (bool, error) {
+	changed := false
+
+	for _, field := range fields {
+		if field.value == "" || cloneFieldMatches(root, field.path, field.value) {
+			continue
+		}
+
+		updated, err := replaceRootScalar(root, field.path, field.value)
+		if err != nil {
+			return false, err
+		}
+
+		changed = changed || updated
+	}
+
+	return changed, nil
+}
+
 // validateCloneFields checks only paths whose requested values would change.
 func validateCloneFields(root *yamlv3.Node, fields []cloneTargetField) error {
 	for _, field := range fields {

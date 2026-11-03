@@ -217,7 +217,7 @@ func cloneEnvironmentConfig(
 	rewrites []Rewrite,
 	identity Identity,
 	force bool,
-	target *CloneTarget,
+	target *cloneTargetPlan,
 ) (string, bool, error) {
 	clone, err := prepareCloneEnvironmentConfig(
 		repoRoot,
@@ -241,7 +241,7 @@ func prepareCloneEnvironmentConfig(
 	repoRoot, srcConfigRel, dstConfigRel string,
 	rewrites []Rewrite,
 	identity Identity,
-	target *CloneTarget,
+	target *cloneTargetPlan,
 ) (ConfigClone, error) {
 	repoRoot, err := fsutil.EvalCanonicalPath(repoRoot)
 	if err != nil {
@@ -306,7 +306,7 @@ func prepareCloneEnvironmentConfig(
 // [MaterializeIdentity]). Ciphertext is cloned verbatim, so identity is only written
 // into a plaintext config, and an empty identity leaves the content unchanged.
 func materializeCloneIdentity(
-	content, srcConfigRel string, identity Identity, target *CloneTarget,
+	content, srcConfigRel string, identity Identity, target *cloneTargetPlan,
 ) (string, error) {
 	if strings.HasSuffix(srcConfigRel, encryptedFileSuffix) {
 		return content, nil

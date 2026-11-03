@@ -6,10 +6,12 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/project/env"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/yaml"
 )
 
 // addEnvSourceConfig is a minimal but realistic ksail.<env>.yaml for the source
@@ -23,8 +25,8 @@ spec:
   cluster:
     distribution: Vanilla
     provider: Docker
-  connection:
-    context: kind-prod
+    connection:
+      context: kind-prod
   workload:
     sourceDirectory: k8s
 `
@@ -123,6 +125,11 @@ func TestHandleAddEnvironmentRunE_ClonesOverlayAndConfig(t *testing.T) {
 	assert.NotContains(t, config, "name: prod")
 	// The context is repointed distribution-awarely (Vanilla -> kind-<env>).
 	assert.Contains(t, config, "context: kind-staging")
+
+	var cloned v1alpha1.Cluster
+
+	require.NoError(t, yaml.UnmarshalStrict([]byte(config), &cloned))
+	assert.Equal(t, "kind-staging", cloned.Spec.Cluster.Connection.Context)
 }
 
 //nolint:paralleltest // uses t.Chdir to set the working directory

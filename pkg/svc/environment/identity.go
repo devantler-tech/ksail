@@ -22,6 +22,7 @@ const (
 	providerKey    = "provider"
 	clusterKey     = "cluster"
 	contextKey     = "context"
+	connectionKey  = "connection"
 	yamlStringTag  = "!!str"
 )
 
@@ -67,7 +68,7 @@ func applyIdentity(root *yamlv3.Node, identity Identity) bool {
 
 	if identity.Context != "" {
 		changed = ensureScalar(
-			root, []string{specKey, clusterKey, "connection", contextKey}, identity.Context,
+			root, []string{specKey, clusterKey, connectionKey, contextKey}, identity.Context,
 		) || changed
 	}
 
@@ -77,8 +78,18 @@ func applyIdentity(root *yamlv3.Node, identity Identity) bool {
 // A root config's cluster name is its source identity even when it differs from
 // the environment label. Provider overrides also need an insertion when default
 // omission left no scalar for the value-exact rewrites to match.
-func materializeCloneTarget(content string, target CloneTarget) (string, error) {
+func materializeCloneTarget(content string, plan cloneTargetPlan) (string, error) {
+	target := plan.target
+	if target.Identity.Name == "" {
+		return "", fmt.Errorf("%w: clone target requires a destination name", ErrInvalidConfig)
+	}
+
 	doc, err := parseIdentityConfig(content)
+	if err != nil {
+		return "", err
+	}
+
+	context, err := cloneContextDestination(doc.Content[0], plan)
 	if err != nil {
 		return "", err
 	}
@@ -86,7 +97,7 @@ func materializeCloneTarget(content string, target CloneTarget) (string, error) 
 	fields := []cloneTargetField{
 		{[]string{metadataKey, nameKey}, target.Identity.Name, true},
 		{[]string{specKey, clusterKey, providerKey}, target.Provider, true},
-		{[]string{specKey, clusterKey, "connection", contextKey}, target.Identity.Context, false},
+		{[]string{specKey, clusterKey, connectionKey, contextKey}, context, false},
 	}
 
 	err = validateCloneFields(doc.Content[0], fields)
@@ -94,19 +105,9 @@ func materializeCloneTarget(content string, target CloneTarget) (string, error) 
 		return "", err
 	}
 
-	changed := applyIdentity(doc.Content[0], target.Identity)
-
-	for _, field := range fields[:2] {
-		if field.value == "" || cloneFieldMatches(doc.Content[0], field.path, field.value) {
-			continue
-		}
-
-		updated, err := replaceRootScalar(doc.Content[0], field.path, field.value)
-		if err != nil {
-			return "", err
-		}
-
-		changed = changed || updated
+	changed, err := applyCloneFields(doc.Content[0], fields)
+	if err != nil {
+		return "", err
 	}
 
 	if !changed {
