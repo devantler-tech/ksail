@@ -243,7 +243,7 @@ func prepareCloneEnvironmentConfig(
 	identity Identity,
 	target *CloneTarget,
 ) (ConfigClone, error) {
-	canonicalRoot, err := fsutil.EvalCanonicalPath(repoRoot)
+	repoRoot, err := fsutil.EvalCanonicalPath(repoRoot)
 	if err != nil {
 		return ConfigClone{}, fmt.Errorf(
 			"%w: resolving repository root: %w",
@@ -252,7 +252,6 @@ func prepareCloneEnvironmentConfig(
 		)
 	}
 
-	repoRoot = canonicalRoot
 	srcConfigRel = filepath.ToSlash(srcConfigRel)
 	srcAbs := filepath.Join(repoRoot, filepath.FromSlash(srcConfigRel))
 
