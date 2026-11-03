@@ -15,13 +15,16 @@ tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 gh api --method GET "repos/${GITHUB_REPOSITORY:?}/actions/runs/$GITHUB_RUN_ID/artifacts" \
 	-f name="$name" -f per_page=100 >"$tmp"
-jq -e --arg name "$name" --arg mode "$FIXTURE_MODE" --arg head "$EXPECTED_HEAD" \
+jq -es --arg name "$name" --arg mode "$FIXTURE_MODE" --arg head "$EXPECTED_HEAD" \
 	--argjson run "$GITHUB_RUN_ID" '
+  length == 1 and (.[0] |
   (.total_count | type == "number") and (.artifacts | type == "array") and
   .total_count == (.artifacts | length) and
   if $mode == "baseline" then .total_count == 0 else
     .total_count == 1 and all(.artifacts[];
-      .name == $name and .expired == false and .size_in_bytes > 0 and
+      .name == $name and .expired == false and
+      (.size_in_bytes | type == "number") and .size_in_bytes > 0 and
+      (.size_in_bytes | floor) == .size_in_bytes and
       .workflow_run.id == $run and .workflow_run.head_sha == $head)
-  end' "$tmp" >/dev/null
+  end)' "$tmp" >/dev/null
 printf 'Native diagnostics artifact %s: complete outcomes and artifact identity verified\n' "$FIXTURE_MODE"

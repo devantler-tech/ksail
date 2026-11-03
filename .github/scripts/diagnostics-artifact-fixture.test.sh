@@ -114,6 +114,14 @@ for mutation in \
 	'.artifacts[0].workflow_run.id = 124' \
 	'.artifacts[0].expired = true' \
 	'.artifacts[0].name = "other"' \
+	'.artifacts[0].size_in_bytes = "42"' \
+	'.artifacts[0].size_in_bytes = null' \
+	'.artifacts[0].size_in_bytes = true' \
+	'.artifacts[0].size_in_bytes = []' \
+	'.artifacts[0].size_in_bytes = {}' \
+	'.artifacts[0].size_in_bytes = 0' \
+	'.artifacts[0].size_in_bytes = -1' \
+	'.artifacts[0].size_in_bytes = 1.5' \
 	'.artifacts = []'; do
 	jq "$mutation" "$tmp/valid.json" >"$tmp/reply.json"
 	if verify candidate success >"$tmp/rejected.log" 2>&1; then
@@ -121,8 +129,21 @@ for mutation in \
 		exit 1
 	fi
 done
+# A successful final JSON document must not hide an earlier invalid response.
+printf '{"total_count":2,"artifacts":[]}\n' >"$tmp/reply.json"
+cat "$tmp/valid.json" >>"$tmp/reply.json"
+if verify candidate success >"$tmp/rejected.log" 2>&1; then
+	echo 'multiple API response documents were accepted' >&2
+	exit 1
+fi
 printf '{"total_count":0,"artifacts":[]}' >"$tmp/reply.json"
 verify baseline skipped
+printf '{"total_count":1,"artifacts":[]}\n{"total_count":0,"artifacts":[]}' >"$tmp/reply.json"
+if verify baseline skipped >"$tmp/rejected.log" 2>&1; then
+	echo 'multiple API response documents authorized baseline absence' >&2
+	exit 1
+fi
+printf '{"total_count":0,"artifacts":[]}' >"$tmp/reply.json"
 if FIXTURE_API_STATUS=1 verify baseline skipped >"$tmp/rejected.log" 2>&1; then
 	echo 'failed API read was accepted as baseline absence' >&2
 	exit 1
