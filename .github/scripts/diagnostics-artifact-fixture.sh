@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Derive a small native Actions probe from the real failing-phase programs (#7700).
+set -euo pipefail
+[[ "$#" == 2 ]] || { echo 'usage: diagnostics-artifact-fixture.sh MODE OUTPUT' >&2; exit 2; }
+mode="$1"
+target="$2"
+case "$mode" in baseline | candidate) ;; *) echo 'expected baseline or candidate' >&2; exit 2 ;; esac
+[[ ! -e "$target/action.yaml" ]] || { echo 'refusing to overwrite an existing fixture' >&2; exit 2; }
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+tmp="$(mktemp -d)"
+completed=0
+cleanup() {
+  local status=$?
+  rm -rf "$tmp"
+  if [[ "$completed" != 1 && "$status" == 0 ]]; then status=1; fi
+  exit "$status"
+}
+trap cleanup EXIT
+yq -o=json '.' "$root/.github/actions/ksail-system-test/action.yaml" >"$tmp/source.json"
+cat >"$tmp/fixture.jq" <<'JQ'
+. as $source |
+"🧪 Hetzner autoscaler inventory — unchanged update and retry" as $trial |
+"📋 Save system test diagnostics" as $save |
+"📤 Upload system test diagnostics" as $upload |
+[.runs.steps[] | select(.name == $trial or .name == $save or .name == $upload)] as $steps |
+if ($steps | length) != 3 or ($steps | map(.name) | unique | length) != 3 or
+   any($steps[]; has("id") or has("continue-on-error")) then
+  error("production diagnostic probe steps changed")
+else . end |
+($steps[] | select(.name == $trial) | .run) as $program |
+if ($program | startswith("set -euo pipefail\n[[ \"$DISTRIBUTION\" == Talos && \"$PROVIDER\" == Hetzner && \"$GITHUB_EVENT_NAME\" == workflow_dispatch ]]\n") | not) then
+  error("trial input guard changed; refusing an unsafe probe")
+else . end |
+($steps | map(. + {id: (if .name == $trial then "fixture-trial" elif .name == $save then "fixture-save" else "fixture-upload" end)})) as $identified |
+{
+  name: "Native diagnostics artifact fixture",
+  description: "Exercise the production failure and artifact steps without a cluster",
+  inputs: $source.inputs,
+  outputs: {
+    "trial-outcome": {description:"Native trial outcome",value:"${{ steps.fixture-trial.outcome }}"},
+    "save-outcome": {description:"Native capture outcome",value:"${{ steps.fixture-save.outcome }}"},
+    "upload-outcome": {description:"Native upload outcome",value:"${{ steps.fixture-upload.outcome }}"}
+  },
+  runs: {using:"composite",steps: ([
+    {name:"Identify isolated fixture artifact",id:"generate-tag",shell:"bash",env:{FIXTURE_MODE:$mode},
+     run:"printf 'tag=fixture-%s-%s-%s\\n' \"$GITHUB_RUN_ID\" \"$GITHUB_RUN_ATTEMPT\" \"$FIXTURE_MODE\" >> \"$GITHUB_OUTPUT\""},
+    {name:"Declare unused version input",id:"k8s-version-pin",shell:"bash",run:"printf 'flag=\\n' >> \"$GITHUB_OUTPUT\""}
+  ] + (if $mode == "candidate" then $identified else
+    [($identified[] | select(.id == "fixture-save")), ($identified[] | select(.id == "fixture-upload")), ($identified[] | select(.id == "fixture-trial"))]
+  end))}
+}
+JQ
+jq --arg mode "$mode" -f "$tmp/fixture.jq" "$tmp/source.json" >"$tmp/action.yaml"
+mkdir -p "$target"
+# Atomic no-clobber creation also protects a target created after the earlier check.
+(set -C; cat "$tmp/action.yaml" >"$target/action.yaml")
+completed=1
+trap - EXIT
+cleanup

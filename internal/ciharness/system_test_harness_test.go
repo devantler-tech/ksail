@@ -85,6 +85,7 @@ type ciWorkflow struct {
 	Jobs map[string]struct {
 		TimeoutMinutes  int               `yaml:"timeout-minutes"`
 		Permissions     map[string]string `yaml:"permissions"`
+		Strategy        map[string]any    `yaml:"strategy"`
 		Outputs         map[string]string `yaml:"outputs"`
 		Steps           []harnessStep     `yaml:"steps"`
 		ContinueOnError bool              `yaml:"continue-on-error"`

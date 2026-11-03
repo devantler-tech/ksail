@@ -46,6 +46,12 @@ There is no offline phase any more: manifest generation, the `open mcp --help` s
 - **Cluster Switch** (switch kubeconfig context) — a normal test step placed after the debug step; it runs only when everything before it passed
 - Diagnostics and logs are uploaded as artifacts on failure (unless `upload-artifacts` is `"false"`). Every test phase, the autoscaler inventory trial included, runs before this capture, so any failing phase leaves the same diagnostics
 
+The blocking CI diagnostics-artifact probe runs both the old and current order with the
+production failure, capture and upload programs. A deliberately invalid distribution stops the
+trial before cloud work; a synthetic CLI supplies diagnostic text. CI checks native step outcomes,
+artifact identity and downloaded content, and confirms the old order produces no artifact.
+This verifies failure handling and artifact delivery; it does not evaluate the cloud trial itself.
+
 ### Phase 7 — Cleanup
 
 - **Cluster Delete** (`ksail-system-test-cleanup`) — Deletes the cluster when `cleanup` is `"true"` (the default). A caller that must upload diagnostics first sets `cleanup: "false"` and runs the cleanup action itself afterwards; the Docker job in `ci.yaml` does this.
