@@ -29,6 +29,13 @@ func (k *KubernetesProvisioner) PublishConnectorKubeconfigForTest(
 	return k.publishConnectorKubeconfig(ctx, target)
 }
 
+// FinalizeKubeconfigForTest exposes the create-time exposure verification and publication path.
+func (k *KubernetesProvisioner) FinalizeKubeconfigForTest(
+	ctx context.Context, target, serverURL string,
+) error {
+	return k.finalizeKubeconfig(ctx, target, serverURL)
+}
+
 // KubeConfigForTest returns the kubeConfig field for testing purposes.
 func (k *Provisioner) KubeConfigForTest() string {
 	return k.kubeConfig

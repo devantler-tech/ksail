@@ -75,6 +75,17 @@ func (p *Provider) CreateDinDPod(
 	persistence v1alpha1.KubernetesPersistence,
 ) error {
 	namespace := NamespaceName(clusterName)
+	pod := buildDinDPod(clusterName, distribution, persistence)
+
+	if distribution == string(v1alpha1.DistributionVanilla) {
+		pool, err := p.kindDinDAddressPool(ctx)
+		if err != nil {
+			return fmt.Errorf("plan nested Docker network: %w", err)
+		}
+
+		pod.Spec.Containers[0].Args = append(pod.Spec.Containers[0].Args,
+			"--default-address-pool=base="+pool+",size=24")
+	}
 
 	if persistence.Enabled {
 		err := p.ensurePVC(ctx, namespace, clusterName, persistence)
@@ -83,7 +94,6 @@ func (p *Provider) CreateDinDPod(
 		}
 	}
 
-	pod := buildDinDPod(clusterName, distribution, persistence)
 	svc := buildDinDService(clusterName)
 
 	_, err := p.client.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{})

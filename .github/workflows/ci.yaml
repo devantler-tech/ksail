@@ -2110,6 +2110,15 @@ jobs:
             test-kubernetes-provider: "true"
             kubernetes-provider-distributions: "K3s"
             kubernetes-provider-cni: "Calico"
+          # Reproduce the nested Kind return-route collision with DinD on the
+          # worker and the advertised NodePort on a different outer node.
+          # Other nested distributions retain their complete default-host legs.
+          - distribution: Vanilla
+            provider: Docker
+            init: true
+            args: "--name nested-kind-routing --workers 1"
+            test-kubernetes-provider: "true"
+            kubernetes-provider-distributions: "Vanilla"
           # Keep the fresh 3.33 installations above, and also create these with
           # the immutable 3.32.2 CLI before the candidate's unchanged-config update.
           - distribution: Vanilla

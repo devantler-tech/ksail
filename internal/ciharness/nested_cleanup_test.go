@@ -46,7 +46,8 @@ case "$1 $2" in
   'config current-context') echo fixture-host ;;
   'config use-context') [[ "$FIXTURE_MODE" != host-error ]] ;;
   'get --raw=/readyz') echo ok ;;
-  '-n ksail-nested-talos')
+  '-n ksail-nested-talos'|'-n ksail-nested-vanilla')
+    [[ "$FIXTURE_MODE" != create-diag-error ]] || exit 1
     case "${3:-}" in
       get|exec) echo 'fixture endpoint diagnostics' ;;
       *) exit 99 ;;
@@ -75,7 +76,8 @@ if [[ "$FIXTURE_MODE" == info-delete-error && "$2" == info ]]; then
   echo 'fixture info failed' >&2
   exit 1
 fi
-if [[ "$FIXTURE_MODE" == create-error && "$2" == create && "$*" == *nested-vanilla* ]]; then
+if [[ "$FIXTURE_MODE" == create-error || "$FIXTURE_MODE" == create-diag-error ]] &&
+  [[ "$2" == create && "$*" == *nested-vanilla* ]]; then
   echo 'fixture create failed' >&2
   exit 1
 fi
@@ -123,6 +125,14 @@ fi
 exec "$@"
 `
 
+const nestedCleanupDockerStub = `#!/usr/bin/env bash
+set -euo pipefail
+printf 'docker %s\n' "$*" >> "$FIXTURE_CALLS"
+[[ "$*" == "network inspect kind --format {{json .IPAM.Config}}" ]] || exit 99
+[[ "$FIXTURE_MODE" != create-diag-error ]] || exit 1
+echo '[{"Subnet":"172.18.0.0/16"}]'
+`
+
 func runNestedCleanup(t *testing.T, mode string, distributions ...string) (string, string, error) {
 	t.Helper()
 
@@ -155,9 +165,7 @@ func runNestedCleanupWithWatchdog(
 	// Advance the actual Bash loop's clock without a two-minute test or changed production deadline.
 	script = "trap '' TERM\nsleep() { SECONDS=$((SECONDS + 121)); }\n" + script
 
-	writeExecutableStub(t, filepath.Join(dir, "kubectl"), nestedCleanupKubectlStub)
-	writeExecutableStub(t, filepath.Join(dir, "ksail"), nestedCleanupKSailStub)
-	writeExecutableStub(t, filepath.Join(dir, "timeout"), nestedCleanupTimeoutStub)
+	writeNestedCleanupStubs(t, dir)
 	timeoutPath := nestedFixtureTimeoutPath(t)
 
 	command := exec.CommandContext(t.Context(), "timeout", "--kill-after=0.1s", "30s", "bash")
@@ -193,6 +201,14 @@ func runNestedCleanupWithWatchdog(
 	calls := readOptionalVersionFixture(t, root, "calls")
 
 	return string(output), string(calls), err
+}
+
+func writeNestedCleanupStubs(t *testing.T, dir string) {
+	t.Helper()
+	writeExecutableStub(t, filepath.Join(dir, "kubectl"), nestedCleanupKubectlStub)
+	writeExecutableStub(t, filepath.Join(dir, "ksail"), nestedCleanupKSailStub)
+	writeExecutableStub(t, filepath.Join(dir, "timeout"), nestedCleanupTimeoutStub)
+	writeExecutableStub(t, filepath.Join(dir, "docker"), nestedCleanupDockerStub)
 }
 
 func nestedFixtureTimeoutPath(t *testing.T) string {
@@ -430,6 +446,45 @@ func TestNestedCleanupPreservesCreateFailureAndStillDeletes(t *testing.T) {
 	)
 	assert.NotContains(t, calls, "ksail cluster info --name nested-vanilla")
 	assert.NotContains(t, output, "All Kubernetes provider tests passed")
+}
+
+func TestNestedKindDiagnosticsPrecedeDeletion(t *testing.T) {
+	t.Parallel()
+
+	for _, mode := range []string{"create-error", "ready-error", "create-diag-error"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			output, calls, err := runNestedCleanup(t, mode, "Vanilla")
+			require.Error(t, err, output)
+
+			diagnostics := strings.Index(calls, "-n ksail-nested-vanilla get service apiserver")
+			deletion := strings.Index(
+				calls,
+				"ksail cluster delete --provider Kubernetes --name nested-vanilla",
+			)
+
+			require.NotEqual(
+				t,
+				-1,
+				diagnostics,
+				"failed create/readiness must preserve endpoint evidence",
+			)
+			require.Greater(
+				t,
+				deletion,
+				diagnostics,
+				"collect evidence before deleting the owned fixture",
+			)
+			assert.Contains(t, calls, "-n ksail-nested-vanilla get endpointslices")
+			assert.Contains(t, calls, "exec dind -c dind -- docker inspect --type container")
+			assert.Contains(t, calls, "nested-vanilla-control-plane")
+			assert.Contains(t, calls, "exec dind -c dind -- docker network inspect kind")
+			assert.Contains(t, calls, "\ndocker network inspect kind --format")
+			assert.NotContains(t, calls, "get secret")
+			assert.NotContains(t, calls, "config view")
+			assert.NotContains(t, output, "All Kubernetes provider tests passed")
+		})
+	}
 }
 
 // nestedSummary returns the lifecycle counts the action prints for a trial of

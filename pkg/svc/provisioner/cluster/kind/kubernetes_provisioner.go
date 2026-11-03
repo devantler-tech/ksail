@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
@@ -14,6 +15,10 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
+
+// Match the existing caller-side readiness budget; a broken exposure must not
+// spend the much longer cluster provisioning deadline before refusing publication.
+const kindExposureReadinessTimeout = time.Minute
 
 // KubernetesProvisioner wraps a Kind provisioner with DinD lifecycle management.
 // It port-forwards the DinD pod's Docker API to localhost, sets DOCKER_HOST so
@@ -207,9 +212,9 @@ func (p *KubernetesProvisioner) dindLifecycle() nested.DinDLifecycle {
 	}
 }
 
-// finalizeKubeconfig points the on-disk kubeconfig at the stable exposure address and then publishes
-// the nested cluster's kubeconfig as a host-cluster Secret for the operator Connector (see
-// connector.go). It groups the two kubeconfig-finalization steps that close out Create.
+// finalizeKubeconfig verifies the rewritten exposure with the nested credentials before publishing
+// it as a host-cluster Secret. Kind's successful bootstrap only proves its internal API path;
+// it does not establish that the stable, externally advertised route works.
 func (p *KubernetesProvisioner) finalizeKubeconfig(
 	ctx context.Context,
 	target, serverURL string,
@@ -217,6 +222,14 @@ func (p *KubernetesProvisioner) finalizeKubeconfig(
 	err := p.rewriteKindKubeconfig(target, serverURL)
 	if err != nil {
 		return fmt.Errorf("rewrite kubeconfig: %w", err)
+	}
+
+	readyCtx, cancel := context.WithTimeout(ctx, kindExposureReadinessTimeout)
+	defer cancel()
+
+	err = p.waitForReady(readyCtx, p.kubeconfigPath, ConnectionFor(target).ContextName)
+	if err != nil {
+		return fmt.Errorf("verify exposed Kind API before publishing connector: %w", err)
 	}
 
 	err = p.publishConnectorKubeconfig(ctx, target)
