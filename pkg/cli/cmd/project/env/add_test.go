@@ -490,6 +490,111 @@ func TestAddEnvironmentRepointsOnlyDerivedCustomClusterContexts(t *testing.T) {
 }
 
 //nolint:paralleltest // each command resolves its workspace through t.Chdir
+func TestAddEnvironmentRejectsSourceEKSContextBeforeWrites(t *testing.T) {
+	for _, baseSynced := range []bool{false, true} {
+		for _, force := range []bool{false, true} {
+			for _, context := range []string{
+				"iam@local.eu-west-1.eksctl.io",
+				"r73-local.eu-west-1.eksctl.io",
+				"arn:aws:iam::123456789012:user/operator@r73-local.eu-west-1.eksctl.io",
+				"operator@example.test@local.eu-west-1.eksctl.io",
+			} {
+				t.Run(
+					fmt.Sprintf("base=%t/force=%t/%s", baseSynced, force, context),
+					func(t *testing.T) {
+						root, sourceFile, source := writeCloneIdentitySource(
+							t,
+							baseSynced,
+							"r73-local",
+							"    provider: AWS\n    connection:\n      context: "+context+"\n",
+						)
+						source = strings.Replace(
+							source,
+							"distribution: Talos",
+							"distribution: EKS",
+							1,
+						)
+						require.NoError(
+							t,
+							os.WriteFile(filepath.Join(root, sourceFile), []byte(source), 0o600),
+						)
+
+						args := []string{"prod", "--from", "local"}
+						if force {
+							args = append(args, "--force")
+
+							writeAddEnvDestination(t, root)
+						}
+
+						t.Chdir(root)
+						output, err := runAddEnvironment(t, args...)
+						require.Error(t, err, output)
+						require.ErrorIs(t, err, env.ErrSourceEKSContext)
+						assert.Equal(t, source, readAddEnv(t, root, sourceFile))
+
+						if force {
+							assert.Equal(
+								t,
+								"existing config\n",
+								readAddEnv(t, root, "ksail.prod.yaml"),
+							)
+							assert.Equal(t, "existing overlay\n", readAddEnv(t, root,
+								"k8s/clusters/prod/kustomization.yaml"))
+						} else {
+							assert.NoFileExists(t, filepath.Join(root, "ksail.prod.yaml"))
+							assert.NoDirExists(t, filepath.Join(root, "k8s/clusters/prod"))
+						}
+					},
+				)
+			}
+		}
+	}
+}
+
+func writeAddEnvDestination(t *testing.T, root string) {
+	t.Helper()
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(root, "ksail.prod.yaml"), []byte("existing config\n"), 0o600),
+	)
+	overlay := filepath.Join(root, "k8s/clusters/prod/kustomization.yaml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(overlay), 0o750))
+	require.NoError(t, os.WriteFile(overlay, []byte("existing overlay\n"), 0o600))
+}
+
+//nolint:paralleltest // each command resolves its workspace through t.Chdir
+func TestAddEnvironmentPreservesUnmatchedEKSContexts(t *testing.T) {
+	for _, baseSynced := range []bool{false, true} {
+		for _, context := range []string{
+			"operator@other.eu-west-1.eksctl.io", "operator-context",
+			"iam@local.eksctl.io", "iam@local..eksctl.io", "",
+		} {
+			t.Run(fmt.Sprintf("base=%t/%s", baseSynced, context), func(t *testing.T) {
+				root, sourceFile, source := writeCloneIdentitySource(t, baseSynced, "r73-local",
+					"    provider: AWS\n    connection:\n      context: '"+context+"'\n")
+				source = strings.Replace(source, "distribution: Talos", "distribution: EKS", 1)
+				require.NoError(
+					t,
+					os.WriteFile(filepath.Join(root, sourceFile), []byte(source), 0o600),
+				)
+				t.Chdir(root)
+				output, err := runAddEnvironment(t, "prod", "--from", "local")
+				require.NoError(t, err, output)
+
+				var cloned v1alpha1.Cluster
+				require.NoError(
+					t,
+					yaml.UnmarshalStrict([]byte(readAddEnv(t, root, "ksail.prod.yaml")), &cloned),
+				)
+				assert.Equal(t, "prod", cloned.Name)
+				assert.Equal(t, context, cloned.Spec.Cluster.Connection.Context)
+				assert.Equal(t, source, readAddEnv(t, root, sourceFile))
+			})
+		}
+	}
+}
+
+//nolint:paralleltest // each command resolves its workspace through t.Chdir
 func TestAddEnvironmentRejectsInvalidTargetBeforeWritingOverlay(t *testing.T) {
 	for _, force := range []bool{false, true} {
 		t.Run(fmt.Sprintf("force=%t", force), func(t *testing.T) {

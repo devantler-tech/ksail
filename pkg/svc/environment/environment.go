@@ -124,10 +124,11 @@ func DeriveConfigRewrites(srcName, dstName, dstProvider, srcProvider string) []R
 // derivation never drifts from the rest of KSail. The rewrite is value-exact (like
 // the `name` rewrite in [DeriveConfigRewrites]): it only fires when the config's
 // `context:` scalar equals the source context exactly, so a config carrying a
-// hand-edited or post-creation context is left untouched. This also makes it safe
-// for EKS, whose `ContextName` yields only the `<name>.eksctl.io` suffix because the
+// hand-edited or post-creation context is left untouched. For EKS, `ContextName`
+// yields only the `<name>.eksctl.io` suffix because the
 // full `<iam>@<cluster>.<region>.eksctl.io` context is unknown until the cluster
-// exists — the value-exact match simply no-ops against the real eksctl context.
+// exists. The command preflight separately refuses recognized full source EKS
+// contexts; this generic helper leaves other custom contexts unchanged.
 //
 // ok is false when either context name is empty (an empty environment name or an
 // unknown distribution), in which case the returned Rewrite is the zero value and

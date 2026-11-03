@@ -15,6 +15,7 @@ import (
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
+	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/environment"
 	"github.com/spf13/cobra"
 )
@@ -38,6 +39,9 @@ var ErrSameEnvironment = errors.New(
 // (ksail.<env>.yaml) cannot be loaded, e.g. it does not exist.
 var ErrSourceConfigLoad = errors.New("failed to load source environment config")
 
+// ErrSourceEKSContext prevents a clone retaining the source cluster's full context.
+var ErrSourceEKSContext = errors.New("explicit EKS context selects the source cluster")
+
 // addEnvironmentLongDesc documents the command, including the SOPS caveat the
 // clone deliberately does not handle (re-encryption to the new environment's
 // recipients) so the user knows to follow up.
@@ -52,6 +56,10 @@ clusters/<env> path segment and content references, the root config's metadata
 name, the connection context (distribution-aware), and — when --provider is given
 — the provider. Unrelated configuration is preserved, including the kustomize
 replacements block, base wiring, version pins and comments.
+
+A full eksctl context selecting the source cluster is refused before writing.
+Remove spec.cluster.connection.context from the source config before cloning so
+the destination discovers its own context after cluster creation.
 
 SOPS-encrypted files (*.enc.yaml) are copied verbatim with only their path
 repointed; re-encrypt them to the new environment's recipients afterwards with
@@ -182,19 +190,12 @@ func resolveAddEnvironmentParams(
 		return addEnvironmentParams{}, enrichSourceConfigError(cmd, repoRoot, err)
 	}
 
-	distribution := srcCfg.Spec.Cluster.Distribution
-
-	// A provider override must be valid for the (inherited) distribution, mirroring
-	// the init command's early provider×distribution validation so the clone fails
-	// fast rather than writing an unusable config.
-	if dstProvider != "" {
-		provider := v1alpha1.Provider(dstProvider)
-
-		err = provider.ValidateForDistribution(distribution)
-		if err != nil {
-			return addEnvironmentParams{}, fmt.Errorf("invalid --provider flag: %w", err)
-		}
+	err = validateCloneSource(srcCfg, srcName, dstProvider)
+	if err != nil {
+		return addEnvironmentParams{}, err
 	}
+
+	distribution := srcCfg.Spec.Cluster.Distribution
 
 	sourceDir, err := repoRelativeSourceDir(repoRoot, srcCfg.Spec.Workload.SourceDirectory)
 	if err != nil {
@@ -213,6 +214,34 @@ func resolveAddEnvironmentParams(
 		sourceDir:      sourceDir,
 		force:          force,
 	}, nil
+}
+
+// validateCloneSource validates identity and provider before any clone writes.
+// The account and region of a destination EKS context cannot be guessed safely.
+func validateCloneSource(cfg *v1alpha1.Cluster, sourceName, provider string) error {
+	if cfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS {
+		name, _, known := clusterdetector.ParseEksctlContextTarget(
+			cfg.Spec.Cluster.Connection.Context,
+		)
+		if known && (name == sourceName || name == cfg.Name) {
+			return fmt.Errorf(
+				"%w; remove spec.cluster.connection.context before cloning",
+				ErrSourceEKSContext,
+			)
+		}
+	}
+
+	// Mirror init's early provider/distribution check rather than writing an unusable clone.
+	if provider != "" {
+		requestedProvider := v1alpha1.Provider(provider)
+
+		err := requestedProvider.ValidateForDistribution(cfg.Spec.Cluster.Distribution)
+		if err != nil {
+			return fmt.Errorf("invalid --provider flag: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // repoRelativeSourceDir returns the source directory as a path relative to
