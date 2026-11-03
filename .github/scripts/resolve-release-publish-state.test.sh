@@ -407,6 +407,9 @@ async function verifyCleanup() {
     const result = await runCleanup(options);
     assert.equal(result.failed, true, `unknown or failed cleanup must fail: ${JSON.stringify(options)}`);
     assert.equal(result.tagDeletes, 0, 'failure cannot authorize a tag deletion');
+    if (!options.summaryError) {
+      assert.equal(result.summary, '', `failed cleanup must not report a retained tag: ${JSON.stringify(options)}`);
+    }
     if (options.wrongSource || options.refError || options.missingTag || options.publishedBeforeDelete || options.releases) {
       assert.deepEqual(result.deleted, [], 'unbound or ambiguous releases must be untouched');
     }
