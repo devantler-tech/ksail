@@ -57,6 +57,10 @@ func TestUnitStorageProbeHasOneReadOnlyManualJob(t *testing.T) {
 	)
 	assert.NotContains(t, string(contents), "actions/cache/save@")
 	assert.NotContains(t, string(contents), "restore-keys:")
+	receipt := findHarnessStep(t, job.Steps, "Preserve bounded structured receipt")
+	upload := findHarnessStep(t, job.Steps, "Upload structured receipt only")
+	assert.Equal(t, receipt.If, upload.If)
+	assert.Contains(t, upload.If, "!cancelled()")
 }
 
 func TestUnitStorageProbeRefusesLocalExecutionBeforeWriting(t *testing.T) {
@@ -93,24 +97,47 @@ func TestUnitStorageControlIsTheActualFailedSharedCleanup(t *testing.T) {
 	assert.NotContains(t, string(contents), "/usr/local/lib/python")
 }
 
+type unitStorageCase struct {
+	mode                 string
+	exit                 int
+	counters, components bool
+}
+
+func unitStorageCases() []unitStorageCase {
+	return []unitStorageCase{
+		{"success", 0, true, true},
+		{"command-failure", 7, true, true},
+		{"df-failure", 0, false, false},
+		{"df-timeout", 0, false, false},
+		{"bad-inodes", 0, false, false},
+		{"du-failure", 0, true, false},
+		{"cleanup-df-failure", 0, false, true},
+		{"frame-failure", 0, false, true},
+		{"sampler-term", 0, false, true},
+		{"sampler-kill", 0, false, true},
+		{"sampler-timeout", 0, false, true},
+		{"sampler-stuck", 0, false, true},
+		{"after-frame-failure", 0, false, false},
+		{"after-frame-command-failure", 7, false, false},
+		{"final-record-failure", 0, false, false},
+		{"final-record-command-failure", 7, false, false},
+	}
+}
+
 func TestUnitStorageProbePreservesCommandAndUnknownObservations(t *testing.T) {
 	t.Parallel()
 
-	for _, mode := range []string{
-		"success", "command-failure", "df-failure", "df-timeout", "bad-inodes", "du-failure", "cleanup-df-failure",
-	} {
-		t.Run(mode, func(t *testing.T) {
+	for _, testCase := range unitStorageCases() {
+		t.Run(testCase.mode, func(t *testing.T) {
 			t.Parallel()
-			fixture := newUnitStorageFixture(t, mode)
+			fixture := newUnitStorageFixture(t, testCase.mode)
 			fixture.prepare(t)
 			runOutput, runErr := fixture.run(t, "run")
-			assert.Equal(t, mode == "command-failure", runErr != nil, "run: %s", runOutput)
+			assert.Equal(t, testCase.exit != 0, runErr != nil, "run: %s", runOutput)
 			publishOutput, publishErr := fixture.run(t, "publish")
-			unknown := mode == "df-failure" || mode == "df-timeout" || mode == "bad-inodes" ||
-				mode == "cleanup-df-failure"
 			assert.Equal(
 				t,
-				unknown || mode == "du-failure",
+				!testCase.counters || !testCase.components,
 				publishErr != nil,
 				"publish: %s",
 				publishOutput,
@@ -131,21 +158,12 @@ func TestUnitStorageProbePreservesCommandAndUnknownObservations(t *testing.T) {
 				} `json:"command"`
 			}
 			require.NoError(t, json.Unmarshal(contents, &report))
-			assert.Equal(t, !unknown, report.Complete)
-			assert.Equal(
-				t,
-				(!unknown || mode == "cleanup-df-failure") && mode != "du-failure",
-				report.ComponentsComplete,
-			)
+			assert.Equal(t, testCase.counters, report.Complete)
+			assert.Equal(t, testCase.components, report.ComponentsComplete)
 			assert.True(t, report.Command.Executed)
 			assert.True(t, report.Command.Completed)
 
-			wantExit := 0
-			if mode == "command-failure" {
-				wantExit = 7
-			}
-
-			assert.Equal(t, wantExit, report.Command.Exit)
+			assert.Equal(t, testCase.exit, report.Command.Exit)
 
 			invocation, err := os.ReadFile(filepath.Join(fixture.root, "go-invocation"))
 			require.NoError(t, err)
@@ -177,6 +195,22 @@ func TestUnitStorageProbeCannotRunWithoutItsExactCache(t *testing.T) {
 
 	_, err = os.Stat(filepath.Join(fixture.root, "go-invocation"))
 	assert.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func TestUnitStorageProbeCannotReuseACompletedObservation(t *testing.T) {
+	t.Parallel()
+	fixture := newUnitStorageFixture(t, "success")
+	fixture.prepare(t)
+	output, err := fixture.run(t, "run")
+	require.NoError(t, err, output)
+	output, err = fixture.run(t, "run")
+	require.Error(t, err)
+	assert.Contains(t, output, "observation is not reusable")
+	output, err = fixture.run(t, "publish")
+	require.Error(t, err, output)
+	contents, err := os.ReadFile(filepath.Join(fixture.state, "public", "report.json"))
+	require.NoError(t, err)
+	assert.Contains(t, string(contents), `"countersComplete":false`)
 }
 
 func TestUnitStorageProbeAdmissionPrecedesPrivateState(t *testing.T) {
@@ -316,6 +350,9 @@ func (fixture unitStorageFixture) prepare(t *testing.T) {
 func newUnitStorageFixture(t *testing.T, mode string) unitStorageFixture {
 	t.Helper()
 
+	jqPath, err := exec.LookPath("jq")
+	require.NoError(t, err)
+
 	root := t.TempDir()
 	for _, name := range []string{"bin", "runner", ".unit-consumer", "module", "build", "toolchain", "home"} {
 		require.NoError(t, os.Mkdir(filepath.Join(root, name), 0o700))
@@ -346,6 +383,7 @@ func newUnitStorageFixture(t *testing.T, mode string) unitStorageFixture {
 		"UNIT_STORAGE_CACHE_KEY=go-mod-v1-Linux-X64-.-7c4839f70b57f520b6effc59074c3d5bd9199ccbc893762f484f974b97f58853",
 		"UNIT_STORAGE_FIXTURE_ROOT="+root,
 		"UNIT_STORAGE_FIXTURE_MODE="+mode,
+		"UNIT_STORAGE_REAL_JQ="+jqPath,
 	)
 	writeUnitStorageStubs(t, root)
 
@@ -360,9 +398,35 @@ func writeUnitStorageStubs(t *testing.T, root string) {
 	t.Helper()
 
 	stubs := map[string]string{
+		"jq": unitStorageJQStub(),
+		"sleep": `case "$UNIT_STORAGE_FIXTURE_MODE" in
+  frame-failure) touch "$UNIT_STORAGE_FIXTURE_ROOT/sampler-after-snapshot" ;;
+  sampler-term|sampler-kill)
+    printf '%s\n' "$PPID" > "$UNIT_STORAGE_FIXTURE_ROOT/sampler-pid"
+    if [[ "$UNIT_STORAGE_FIXTURE_MODE" == sampler-term ]]; then kill -TERM "$PPID"
+    else kill -KILL "$PPID"; fi ;;
+  sampler-stuck)
+    printf '%s\n' "$PPID" > "$UNIT_STORAGE_FIXTURE_ROOT/sampler-pid"
+    while kill -0 "$PPID" 2>/dev/null; do
+      process_state=$(ps -o stat= -p "$PPID" 2>/dev/null || true)
+      [[ "$process_state" != *Z* ]] || break
+      /bin/sleep 0.01
+    done ;;
+  *) exec /bin/sleep "$@" ;;
+esac`,
 		"git": `if [[ "$*" == *rev-parse* ]]; then echo bab0963e3c16b91e8a236e9679a29ffcde276b8f; fi`,
-		"gnutimeout": `[[ "$1" != --kill-after=* ]] || shift
+		"gnutimeout": `[[ "$UNIT_STORAGE_FIXTURE_MODE $*" != 'sampler-timeout --kill-after=5s 240s tail '* ]] || exit 124
+[[ "$UNIT_STORAGE_FIXTURE_MODE $*" != 'sampler-stuck '*' tail '* ]] || exit 124
+[[ "$1" != --kill-after=* ]] || shift
 shift; exec "$@"`,
+		"tail": `[[ "$#" == 3 && "$1" == --pid=* && "$2 $3" == '-f /dev/null' ]] || exit 92
+pid=${1#--pid=}
+[[ "$pid" =~ ^[1-9][0-9]*$ ]] || exit 93
+while kill -0 "$pid" 2>/dev/null; do
+  process_state=$(ps -o stat= -p "$pid" 2>/dev/null || true)
+  [[ "$process_state" != *Z* ]] || break
+  /bin/sleep 0.01
+done`,
 		"stat": `echo 17`,
 		"find": `if [[ "$UNIT_STORAGE_FIXTURE_MODE" == find-failure ]]; then
   echo PRIVATE_FIXTURE_DETAIL >&2; exit 1
@@ -378,7 +442,39 @@ if [[ "$1" == -Pi ]]; then
   [[ "$UNIT_STORAGE_FIXTURE_MODE" != bad-inodes ]] || { echo 'private 100 200 300 0% /'; exit; }
   echo 'private 10000 2000 8000 20% /'
 else echo 'private 100000 20000 80000 20% /'; fi`,
-		"go": `if [[ "$1" == env ]]; then
+		"go": unitStorageGoStub(),
+	}
+	for name, body := range stubs {
+		writeExecutableStub(
+			t,
+			filepath.Join(root, "bin", name),
+			"#!/usr/bin/env bash\nset -euo pipefail\n"+body+"\n",
+		)
+	}
+}
+
+func unitStorageJQStub() string {
+	return `if [[ "$UNIT_STORAGE_FIXTURE_MODE" == frame-failure &&
+    " $* " == *' --arg phase during-test '* ]]; then
+  printf '%s\n' "$PPID" > "$UNIT_STORAGE_FIXTURE_ROOT/sampler-pid"
+  "$UNIT_STORAGE_REAL_JQ" "$@"
+  exit 23
+fi
+if [[ "$UNIT_STORAGE_FIXTURE_MODE" == after-frame-* &&
+    " $* " == *' --arg phase after-test '* ]]; then
+  "$UNIT_STORAGE_REAL_JQ" "$@"
+  exit 23
+fi
+if [[ "$UNIT_STORAGE_FIXTURE_MODE" == final-record-* &&
+    " $* " == *' --argjson sampling_complete '* ]]; then
+  "$UNIT_STORAGE_REAL_JQ" "$@"
+  exit 23
+fi
+exec "$UNIT_STORAGE_REAL_JQ" "$@"`
+}
+
+func unitStorageGoStub() string {
+	return `if [[ "$1" == env ]]; then
   jq -nc --arg root "$UNIT_STORAGE_FIXTURE_ROOT" '{
     GOCACHE:($root+"/build"),GOMODCACHE:($root+"/module"),GOROOT:($root+"/toolchain"),
     GOVERSION:"go1.27.3",GOTOOLCHAIN:"local",CGO_ENABLED:"1",GOFLAGS:"",GOTMPDIR:""}'
@@ -390,18 +486,25 @@ else
     for ((i=0;i<300;i++)); do /bin/sleep 0.01; done
     exit 11
   fi
-  until grep -q '"phase":"during-test"' "$UNIT_STORAGE_FIXTURE_ROOT/runner/unit-storage-probe/frames.jsonl"; do
-    /bin/sleep 0.01
-  done
+  case "$UNIT_STORAGE_FIXTURE_MODE" in
+    sampler-stuck)
+      until [[ -s "$UNIT_STORAGE_FIXTURE_ROOT/sampler-pid" ]]; do /bin/sleep 0.01; done ;;
+    frame-failure|sampler-term|sampler-kill)
+      until [[ -s "$UNIT_STORAGE_FIXTURE_ROOT/sampler-pid" ]]; do /bin/sleep 0.01; done
+      sampler=$(cat "$UNIT_STORAGE_FIXTURE_ROOT/sampler-pid")
+      [[ "$sampler" =~ ^[1-9][0-9]*$ ]] || exit 91
+      until [[ -f "$UNIT_STORAGE_FIXTURE_ROOT/sampler-after-snapshot" ]]; do
+        kill -0 "$sampler" 2>/dev/null || break
+        process_state=$(ps -o stat= -p "$sampler" 2>/dev/null || true)
+        [[ "$process_state" != *Z* ]] || break
+        /bin/sleep 0.01
+      done ;;
+    *)
+      until grep -q '"phase":"during-test"' "$UNIT_STORAGE_FIXTURE_ROOT/runner/unit-storage-probe/frames.jsonl"; do
+        /bin/sleep 0.01
+      done ;;
+  esac
   echo PRIVATE_FIXTURE_DETAIL
-  [[ "$UNIT_STORAGE_FIXTURE_MODE" != command-failure ]] || exit 7
-fi`,
-	}
-	for name, body := range stubs {
-		writeExecutableStub(
-			t,
-			filepath.Join(root, "bin", name),
-			"#!/usr/bin/env bash\nset -euo pipefail\n"+body+"\n",
-		)
-	}
+  [[ "$UNIT_STORAGE_FIXTURE_MODE" != *command-failure ]] || exit 7
+fi`
 }

@@ -74,10 +74,10 @@ sample_path() {
 		jq -nc --arg label "$label" '{label:$label,status:"unknown"}'
 		return
 	fi
-	touch "$state/devices"
+	touch "$state/devices" || return 1
 	group="$(awk -v device="$device" '$0==device {print NR; found=1; exit} END {if(!found) exit 1}' "$state/devices")" || {
-		printf '%s\n' "$device" >>"$state/devices"
-		group="$(wc -l <"$state/devices" | tr -d ' ')"
+		printf '%s\n' "$device" >>"$state/devices" || return 1
+		group="$(wc -l <"$state/devices" | tr -d ' ')" || return 1
 	}
 	if [[ "$components" == true && "$label" != root ]]; then
 		size_status=unknown
@@ -94,22 +94,62 @@ sample_path() {
 }
 
 snapshot() {
-	local phase="$1" components="$2" module_cache='' build_cache='' toolchain='' index
+	local phase="$1" components="$2" module_cache='' build_cache='' toolchain='' index rows_file frame size
 	case "$phase" in before-cleanup | after-cleanup | after-setup | after-restore | before-test | during-test | after-test) ;; *) die 'invalid snapshot phase' ;; esac
 	if [[ -f "$state/go-env.json" ]]; then
-		module_cache="$(jq -r .GOMODCACHE "$state/go-env.json")"
-		build_cache="$(jq -r .GOCACHE "$state/go-env.json")"
-		toolchain="$(jq -r .GOROOT "$state/go-env.json")"
+		module_cache="$(jq -r .GOMODCACHE "$state/go-env.json")" || return 1
+		build_cache="$(jq -r .GOCACHE "$state/go-env.json")" || return 1
+		toolchain="$(jq -r .GOROOT "$state/go-env.json")" || return 1
 	fi
 	local labels=(root workspace go-temp runner-temp module-cache build-cache toolchain)
 	local paths=(/ "$consumer" /tmp "$RUNNER_TEMP" "$module_cache" "$build_cache" "$toolchain")
-	: >"$state/rows.jsonl"
+	# A terminated sampler cannot leave rows for a later snapshot to reuse.
+	# Failed snapshots retain only private temporary data, never a public frame.
+	rows_file="$(mktemp "$state/rows.XXXXXX")" || return 1
 	for index in "${!labels[@]}"; do
-		sample_path "${labels[$index]}" "${paths[$index]}" "$components" >>"$state/rows.jsonl"
+		sample_path "${labels[$index]}" "${paths[$index]}" "$components" >>"$rows_file" || return 1
 	done
-	jq -nc --arg phase "$phase" --argjson epoch "$(date +%s)" --slurpfile entries "$state/rows.jsonl" \
-		'{phase:$phase,epoch:$epoch,entries:$entries}' >>"$state/frames.jsonl"
-	[[ "$(wc -c <"$state/frames.jsonl")" -le 8388608 ]] || die 'observation size budget exceeded'
+	frame="$(jq -nc --arg phase "$phase" --argjson epoch "$(date +%s)" --slurpfile entries "$rows_file" \
+		'{phase:$phase,epoch:$epoch,entries:$entries}')" || return 1
+	printf '%s\n' "$frame" >>"$state/frames.jsonl" || return 1
+	size="$(wc -c <"$state/frames.jsonl")" || return 1
+	if [[ "$size" -gt 8388608 ]]; then
+		printf '%s\n' 'observation size budget exceeded' >&2
+		return 1
+	fi
+	rm -f -- "$rows_file" || return 1
+}
+
+# Only a cooperative boundary after successful work can acknowledge normal stop.
+# A signal always records failure, including a signal deferred by a child command.
+sample_until_stopped() {
+	trap 'exit 130' INT
+	trap 'exit 143' TERM
+	local sample components
+	for ((sample = 0; sample < 1800; sample++)); do
+		[[ ! -f "$state/sampler-stop-requested" ]] || return 0
+		components=false
+		if ((sample % 60 == 0)); then components=true; fi
+		if ! snapshot during-test "$components"; then return 2; fi
+		[[ ! -f "$state/sampler-stop-requested" ]] || return 0
+		sleep 1 || return 2
+	done
+	return 2
+}
+
+record_command() {
+	if jq -nc "$@" >"$state/command.json.pending" &&
+		mv "$state/command.json.pending" "$state/command.json"; then return 0; fi
+	rm -f -- "$state/command.json.pending"
+	return 1
+}
+
+terminate_owned_process() {
+	local pid="$1"
+	kill "$pid" 2>/dev/null || true
+	if ! "$timeout_command" --kill-after=1s 5s tail --pid="$pid" -f /dev/null >/dev/null 2>&1; then
+		kill -KILL "$pid" 2>/dev/null || true
+	fi
 }
 
 run_control() {
@@ -117,19 +157,24 @@ run_control() {
 	[[ "${UNIT_STORAGE_CACHE_HIT:-}" == true && "${UNIT_STORAGE_CACHE_KEY:-}" == "$cache_key" ]] ||
 		die 'exact control cache unavailable; workload not examined'
 	[[ -f "$state/go-env.json" ]] || die 'control toolchain was not prepared'
+	if [[ -e "$state/command.json" || -e "$state/sampler-stop-requested" ]]; then
+		touch "$state/observation-incomplete" || die 'cannot invalidate reused observation'
+		die 'control already executed; observation is not reusable'
+	fi
 	touch "$state/cache-verified"
 	snapshot before-test true
 	local sampler_pid='' command_pid='' completed=false result=2
+	local stop_requested=false sampler_result=2 wait_result=2 sampling_complete=false after_complete=false metadata_complete=true
 	finish_run() {
 		local exit_status=$?
 		trap - EXIT INT TERM
 		if [[ -n "$sampler_pid" ]]; then
-			kill "$sampler_pid" 2>/dev/null || true
+			terminate_owned_process "$sampler_pid"
 			wait "$sampler_pid" 2>/dev/null || true
 		fi
 		if [[ "$completed" != true ]]; then
 			if [[ -n "$command_pid" ]]; then
-				kill "$command_pid" 2>/dev/null || true
+				terminate_owned_process "$command_pid"
 				wait "$command_pid" 2>/dev/null || true
 			fi
 			jq -nc --argjson status "$exit_status" '{executed:true,completed:false,exit:$status}' >"$state/command.json"
@@ -138,19 +183,7 @@ run_control() {
 	trap finish_run EXIT
 	trap 'exit 130' INT
 	trap 'exit 143' TERM
-	(
-		trap 'exit 0' INT TERM
-		for ((sample = 0; sample < 1800; sample++)); do
-			components=false
-			if ((sample % 60 == 0)); then components=true; fi
-			if ! snapshot during-test "$components"; then
-				touch "$state/observation-incomplete"
-				exit 2
-			fi
-			sleep 1
-		done
-		touch "$state/observation-incomplete"
-	) &
+	(sample_until_stopped) &
 	sampler_pid=$!
 	(
 		cd "$consumer"
@@ -162,12 +195,36 @@ run_control() {
 	result=$?
 	set -e
 	completed=true
-	kill "$sampler_pid" 2>/dev/null || true
-	wait "$sampler_pid" 2>/dev/null || true
-	sampler_pid=''
-	snapshot after-test true
-	jq -nc --argjson result "$result" '{executed:true,completed:true,exit:$result}' >"$state/command.json"
 	printf 'UNIT_STORAGE_COMMAND exit=%s\n' "$result"
+	# Preserve the workload result even if a later observation is interrupted.
+	if ! record_command --argjson result "$result" -f /dev/stdin <<'JQ'; then
+{executed:true,completed:true,exit:$result,sampling:{completed:false},afterSnapshotComplete:false}
+JQ
+		metadata_complete=false
+	fi
+	if touch "$state/sampler-stop-requested"; then stop_requested=true; fi
+	if [[ "$stop_requested" == true ]]; then
+		# Seven paths each bound three 5s reads plus six 10s component walks.
+		# 240s includes their kill grace and scheduling headroom; never wait forever.
+		if "$timeout_command" --kill-after=5s 240s tail --pid="$sampler_pid" -f /dev/null >/dev/null 2>&1; then
+			wait_result=0
+		else wait_result=$?; fi
+	fi
+	if [[ "$wait_result" != 0 ]]; then terminate_owned_process "$sampler_pid"; fi
+	if wait "$sampler_pid" 2>/dev/null; then sampler_result=0; else sampler_result=$?; fi
+	sampler_pid=''
+	if [[ "$stop_requested" == true && "$wait_result" == 0 && "$sampler_result" == 0 && "$metadata_complete" == true ]]; then
+		sampling_complete=true
+	fi
+	if snapshot after-test true; then after_complete=true; fi
+	if ! record_command --argjson result "$result" --argjson requested "$stop_requested" \
+		--argjson waited "$wait_result" --argjson sampled "$sampler_result" \
+		--argjson sampling_complete "$sampling_complete" --argjson after_complete "$after_complete" -f /dev/stdin <<'JQ'; then
+{executed:true,completed:true,exit:$result,afterSnapshotComplete:$after_complete,
+ sampling:{completed:$sampling_complete,stopRequested:$requested,waitExit:$waited,exit:$sampled}}
+JQ
+		printf '%s\n' 'final command observation could not be preserved' >&2
+	fi
 	trap - EXIT INT TERM
 	return "$result"
 }
@@ -186,14 +243,16 @@ publish() {
 		--arg attempt "$GITHUB_RUN_ATTEMPT" --arg image "${ImageOS:-unknown}" --arg image_version "${ImageVersion:-unknown}" \
 		--arg key "$cache_key" --argjson prepared "$prepared" --argjson cache_verified "$cache_verified" \
 		--argjson incomplete "$incomplete" --slurpfile frames "$state/frames.jsonl" --slurpfile command "$command_file" \
-		'{schema:1,source:$source,harness:$harness,run:$run,attempt:$attempt,runnerImage:$image,runnerImageVersion:$image_version,
+		'def covers($phases): all($phases[]; . as $phase | any($frames[]; .phase == $phase));
+    {schema:1,source:$source,harness:$harness,run:$run,attempt:$attempt,runnerImage:$image,runnerImageVersion:$image_version,
       expectedGo:"go1.27.3",actualGo:(if $prepared then "go1.27.3" else null end),
       expectedModuleCacheKey:$key,moduleCacheVerified:$cache_verified,
       compilationCache:(if $prepared then "verified-empty" else "unverified" end),schemaCache:"not-restored",
       quotaLimits:"not-established",command:$command[0],frames:$frames,
       countersComplete:($prepared and $cache_verified and ($incomplete|not) and
-        (["before-cleanup","after-cleanup","after-setup","after-restore","before-test","during-test","after-test"] | all(. as $phase |
-          any($frames[]; .phase == $phase))) and
+        $command[0].completed == true and $command[0].sampling.completed == true and
+        $command[0].afterSnapshotComplete == true and
+        covers(["before-cleanup","after-cleanup","after-setup","after-restore","before-test","during-test","after-test"]) and
         all($frames[];
           (.entries|length)==7 and
           if (.phase=="before-cleanup" or .phase=="after-cleanup") then
@@ -201,8 +260,11 @@ publish() {
               then .status=="not-yet-resolved" else .status=="measured" end)
           else all(.entries[]; .status=="measured") end)),
       componentsComplete:($prepared and $cache_verified and
-        all($frames[] | select(.phase=="after-setup" or .phase=="after-restore" or .phase=="before-test" or .phase=="after-test");
-          (.entries|length)==7 and all(.entries[] | select(.label!="root"); .componentStatus=="measured"))),
+        $command[0].afterSnapshotComplete == true and
+        covers(["after-setup","after-restore","before-test","after-test"]) and
+        all($frames[] | select(.phase!="before-cleanup" and .phase!="after-cleanup");
+          (.entries|length)==7 and all(.entries[] | select(.label!="root" and .componentStatus!="not-collected");
+            .componentStatus=="measured"))),
       limitations:["Sampled counters are not instantaneous peaks.","Component walks can delay samples.","Per-user and project quota limits are not established."]}' \
 		>"$state/receipt.json"
 	[[ "$(wc -c <"$state/receipt.json")" -le 8388608 ]] || die 'storage receipt oversized'

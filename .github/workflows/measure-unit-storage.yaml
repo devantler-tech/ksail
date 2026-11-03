@@ -93,7 +93,7 @@ jobs:
         run: bash .github/scripts/unit-storage-probe.sh publish
 
       - name: Upload structured receipt only
-        if: ${{ always() }}
+        if: ${{ always() && !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: unit-storage-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
