@@ -4,6 +4,8 @@ package hetzner
 import (
 	"context"
 	"io"
+	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
@@ -126,7 +128,26 @@ func NewSnapshotManagerWithUploaderForTest(
 		uploader:     uploader,
 		logWriter:    logWriter,
 		settle:       testSnapshotBuildSettle,
+		retryDelay:   testSnapshotDownloadRetryDelay,
+		probeImage:   imageServed,
 	}
+}
+
+// testSnapshotDownloadRetryDelay keeps the backoff between snapshot build attempts short in tests.
+const testSnapshotDownloadRetryDelay = time.Millisecond
+
+// imageServed is the image probe test managers use by default: it answers as the Image Factory
+// does for an image it serves, without a network request.
+func imageServed(context.Context, *url.URL) (int, error) {
+	return http.StatusOK, nil
+}
+
+// SetImageProbeForTest replaces the request that checks whether the Image Factory serves an
+// image after a failed download.
+func (sm *SnapshotManager) SetImageProbeForTest(
+	probe func(ctx context.Context, imageURL *url.URL) (int, error),
+) {
+	sm.probeImage = probe
 }
 
 // BuildSSHFirewallRulesForTest exports buildSSHFirewallRules for testing.
