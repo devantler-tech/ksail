@@ -47,6 +47,10 @@ prepare() {
 	build_cache="$(jq -r .GOCACHE "$state/go-env.json")"
 	module_cache="$(jq -r .GOMODCACHE "$state/go-env.json")"
 	mkdir -p "$build_cache" "$module_cache" 2>/dev/null || die 'cache directories could not be prepared'
+	# This control admits physical cache directories only, never aliases whose
+	# traversal could differ between the cold-cache check and the Go workload.
+	[[ -d "$build_cache" && ! -L "$build_cache" && -d "$module_cache" && ! -L "$module_cache" ]] ||
+		die 'cache directories must be physical directories'
 	cache_entry="$(find "$build_cache" -mindepth 1 ! -name README ! -name trim.txt -print -quit 2>/dev/null)" ||
 		die 'compilation cache could not be examined'
 	[[ -z "$cache_entry" ]] ||

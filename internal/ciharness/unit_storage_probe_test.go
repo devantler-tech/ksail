@@ -134,6 +134,13 @@ func TestUnitStorageProbePreservesCommandAndUnknownObservations(t *testing.T) {
 			fixture.prepare(t)
 			runOutput, runErr := fixture.run(t, "run")
 			assert.Equal(t, testCase.exit != 0, runErr != nil, "run: %s", runOutput)
+
+			if testCase.exit != 0 {
+				var exitErr *exec.ExitError
+				require.ErrorAs(t, runErr, &exitErr, "run: %s", runOutput)
+				assert.Equal(t, testCase.exit, exitErr.ExitCode(), "run: %s", runOutput)
+			}
+
 			publishOutput, publishErr := fixture.run(t, "publish")
 			assert.Equal(
 				t,
@@ -226,6 +233,49 @@ func TestUnitStorageProbeRejectsAnUncreatableModuleCache(t *testing.T) {
 	contents, err := os.ReadFile(filepath.Join(fixture.root, "module"))
 	require.NoError(t, err)
 	assert.Equal(t, "retained", string(contents))
+}
+
+func TestUnitStorageProbeRejectsAliasedCacheDirectories(t *testing.T) {
+	t.Parallel()
+
+	for _, cache := range []string{"build", "module"} {
+		for _, warm := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/warm=%t", cache, warm), func(t *testing.T) {
+				t.Parallel()
+				fixture := newUnitStorageFixture(t, "success")
+				cachePath := filepath.Join(fixture.root, cache)
+				target := filepath.Join(fixture.root, "cache-target")
+				require.NoError(t, os.Rename(cachePath, target))
+				require.NoError(t, os.Symlink(target, cachePath))
+				require.NoError(t, os.Remove(filepath.Join(fixture.root, "bin", "find")))
+
+				if warm {
+					require.NoError(
+						t,
+						os.WriteFile(
+							filepath.Join(target, "retained-entry"),
+							[]byte("retained"),
+							0o600,
+						),
+					)
+				}
+
+				output, err := fixture.run(t, "prepare")
+				require.Error(t, err, output)
+				assert.Contains(t, output, "cache directories must be physical directories")
+				assert.NoFileExists(t, filepath.Join(fixture.state, "prepared"))
+				assert.NoFileExists(t, filepath.Join(fixture.root, "go-invocation"))
+
+				if warm {
+					contents, readErr := os.ReadFile(
+						filepath.Join(fixture.root, "cache-target", "retained-entry"),
+					)
+					require.NoError(t, readErr)
+					assert.Equal(t, "retained", string(contents))
+				}
+			})
+		}
+	}
 }
 
 func TestUnitStorageProbeCannotRunWithoutItsExactCache(t *testing.T) {
