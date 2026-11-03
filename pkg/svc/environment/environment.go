@@ -66,10 +66,11 @@ func (r Rewrite) validate() error {
 }
 
 // DeriveRewrites returns the structured substitutions that turn a clone
-// of the srcName environment overlay into the dstName environment. cluster_name is
-// always repointed and the clusters/<env>/ path segment always swapped; the
+// of the srcName environment overlay into the dstName environment. A cluster_name
+// equal to srcName is repointed and the clusters/<env>/ path segment is swapped; the
 // provider is repointed only when dstProvider is non-empty and differs from
 // srcProvider (an empty dstProvider inherits the source environment's provider).
+// Callers cloning a different declared cluster name add that value-exact rewrite.
 func DeriveRewrites(srcName, dstName, dstProvider, srcProvider string) []Rewrite {
 	rewrites := []Rewrite{
 		{Kind: MetaFieldValue, Field: "cluster_name", Old: srcName, New: dstName},

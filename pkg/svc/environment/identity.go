@@ -22,6 +22,7 @@ const (
 	providerKey    = "provider"
 	clusterKey     = "cluster"
 	contextKey     = "context"
+	yamlStringTag  = "!!str"
 )
 
 // Identity is the cluster identity a cloned root config must declare so the new
@@ -96,7 +97,7 @@ func materializeCloneTarget(content string, target CloneTarget) (string, error) 
 	changed := applyIdentity(doc.Content[0], target.Identity)
 
 	for _, field := range fields[:2] {
-		if field.value == "" {
+		if field.value == "" || cloneFieldMatches(doc.Content[0], field.path, field.value) {
 			continue
 		}
 
@@ -115,6 +116,7 @@ func materializeCloneTarget(content string, target CloneTarget) (string, error) 
 	return encodeConfig(doc)
 }
 
+// parseIdentityConfig requires a YAML mapping before any identity traversal.
 func parseIdentityConfig(content string) (*yamlv3.Node, error) {
 	var doc yamlv3.Node
 
@@ -130,6 +132,7 @@ func parseIdentityConfig(content string) (*yamlv3.Node, error) {
 	return &doc, nil
 }
 
+// replaceRootScalar replaces one validated, explicit root field as a string.
 func replaceRootScalar(root *yamlv3.Node, keyPath []string, value string) (bool, error) {
 	changed := ensureScalar(root, keyPath, value)
 
@@ -142,7 +145,8 @@ func replaceRootScalar(root *yamlv3.Node, keyPath []string, value string) (bool,
 		node = mappingValue(node, key)
 	}
 
-	if node == nil || node.Kind != yamlv3.ScalarNode || (!changed && node.ShortTag() != "!!str") {
+	if node == nil || node.Kind != yamlv3.ScalarNode ||
+		(!changed && node.ShortTag() != yamlStringTag) {
 		return false, fmt.Errorf("%w: clone identity field is not a string", ErrInvalidConfig)
 	}
 
@@ -151,7 +155,7 @@ func replaceRootScalar(root *yamlv3.Node, keyPath []string, value string) (bool,
 		changed = true
 	}
 
-	node.Tag = "!!str"
+	node.Tag = yamlStringTag
 
 	return changed, nil
 }

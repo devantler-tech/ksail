@@ -7,7 +7,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
@@ -194,22 +193,18 @@ func CloneEnvironmentConfigForTarget(
 	target CloneTarget,
 	force bool,
 ) (string, bool, error) {
-	// These two values belong to exact root paths. Applying their old broadcast
-	// substitutions first would also rename unrelated annotations or node groups.
-	rootRewrites := slices.DeleteFunc(slices.Clone(rewrites), func(rewrite Rewrite) bool {
-		return rewrite.Kind == MetaFieldValue &&
-			(rewrite.Field == nameKey || rewrite.Field == providerKey)
-	})
-
-	return cloneEnvironmentConfig(
+	clone, err := PrepareEnvironmentConfigCloneForTarget(
 		repoRoot,
 		srcConfigRel,
 		dstConfigRel,
-		rootRewrites,
-		target.Identity,
-		force,
-		&target,
+		rewrites,
+		target,
 	)
+	if err != nil {
+		return "", false, err
+	}
+
+	return clone.Write(force)
 }
 
 // cloneEnvironmentConfig is the shared implementation behind CloneEnvironmentConfig
@@ -224,29 +219,63 @@ func cloneEnvironmentConfig(
 	force bool,
 	target *CloneTarget,
 ) (string, bool, error) {
+	clone, err := prepareCloneEnvironmentConfig(
+		repoRoot,
+		srcConfigRel,
+		dstConfigRel,
+		rewrites,
+		identity,
+		target,
+	)
+	if err != nil {
+		return "", false, err
+	}
+
+	return clone.Write(force)
+}
+
+// prepareCloneEnvironmentConfig validates the complete target without writing.
+// The plan retains these exact source bytes, avoiding a second source read after
+// the caller begins cloning its overlay.
+func prepareCloneEnvironmentConfig(
+	repoRoot, srcConfigRel, dstConfigRel string,
+	rewrites []Rewrite,
+	identity Identity,
+	target *CloneTarget,
+) (ConfigClone, error) {
+	canonicalRoot, err := fsutil.EvalCanonicalPath(repoRoot)
+	if err != nil {
+		return ConfigClone{}, fmt.Errorf(
+			"%w: resolving repository root: %w",
+			ErrSourceConfigMissing,
+			err,
+		)
+	}
+
+	repoRoot = canonicalRoot
 	srcConfigRel = filepath.ToSlash(srcConfigRel)
 	srcAbs := filepath.Join(repoRoot, filepath.FromSlash(srcConfigRel))
 
 	// Containment guard: a srcConfigRel with ".." segments or a symlink escape must
 	// not let the clone read from outside repoRoot.
 	if !fsutil.IsPathWithinDirectory(srcAbs, repoRoot) {
-		return "", false, fmt.Errorf("%w: %s escapes the repository root",
+		return ConfigClone{}, fmt.Errorf("%w: %s escapes the repository root",
 			ErrSourceConfigMissing, srcConfigRel)
 	}
 
 	info, err := os.Stat(srcAbs)
 	if err != nil || !info.Mode().IsRegular() {
-		return "", false, fmt.Errorf("%w: %s", ErrSourceConfigMissing, srcConfigRel)
+		return ConfigClone{}, fmt.Errorf("%w: %s", ErrSourceConfigMissing, srcConfigRel)
 	}
 
 	newRelPath, content, err := cloneFile(repoRoot, repoRoot, srcAbs, rewrites)
 	if err != nil {
-		return "", false, err
+		return ConfigClone{}, err
 	}
 
 	content, err = materializeCloneIdentity(content, srcConfigRel, identity, target)
 	if err != nil {
-		return "", false, err
+		return ConfigClone{}, err
 	}
 
 	if dstConfigRel != "" {
@@ -254,15 +283,24 @@ func cloneEnvironmentConfig(
 	}
 
 	if newRelPath == path.Clean(srcConfigRel) {
-		return "", false, fmt.Errorf("%w: %s", ErrDestinationIsSource, srcConfigRel)
+		return ConfigClone{}, fmt.Errorf("%w: %s", ErrDestinationIsSource, srcConfigRel)
 	}
 
-	wrote, err := writeClone(repoRoot, newRelPath, content, force)
+	err = validateCloneDestination(
+		repoRoot,
+		filepath.Join(repoRoot, filepath.FromSlash(newRelPath)),
+		newRelPath,
+	)
 	if err != nil {
-		return "", false, err
+		return ConfigClone{}, err
 	}
 
-	return newRelPath, wrote, nil
+	return ConfigClone{
+		repoRoot:     repoRoot,
+		relativePath: newRelPath,
+		content:      content,
+		prepared:     true,
+	}, nil
 }
 
 // materializeCloneIdentity writes identity into a cloned config's content (see

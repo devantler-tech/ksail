@@ -12,9 +12,10 @@ type cloneTargetField struct {
 	allowMergedLeaf bool
 }
 
+// validateCloneFields checks only paths whose requested values would change.
 func validateCloneFields(root *yamlv3.Node, fields []cloneTargetField) error {
 	for _, field := range fields {
-		if field.value == "" {
+		if field.value == "" || cloneFieldMatches(root, field.path, field.value) {
 			continue
 		}
 
@@ -47,14 +48,7 @@ func validateClonePath(root *yamlv3.Node, keyPath []string, allowMergedLeaf bool
 
 		child := mappingValue(node, key)
 		if child == nil {
-			if (!allowMergedLeaf || index < len(keyPath)-1) && mappingValue(node, "<<") != nil {
-				return fmt.Errorf(
-					"%w: clone identity would shadow a merged parent mapping",
-					ErrInvalidConfig,
-				)
-			}
-
-			return nil
+			return validateMissingCloneKey(node, key, allowMergedLeaf && index == len(keyPath)-1)
 		}
 
 		node = child
@@ -63,6 +57,58 @@ func validateClonePath(root *yamlv3.Node, keyPath []string, allowMergedLeaf bool
 	return validateCloneNode(root, node)
 }
 
+// validateMissingCloneKey distinguishes an absent field from an inherited value
+// that an insertion would hide. Explicit replacement is allowed only at a leaf.
+func validateMissingCloneKey(node *yamlv3.Node, key string, allowMergedLeaf bool) error {
+	if allowMergedLeaf || mappingValue(node, "<<") == nil {
+		return nil
+	}
+
+	var merged map[string]any
+
+	err := node.Decode(&merged)
+	if err != nil {
+		return fmt.Errorf("%w: reading merged clone mapping: %w", ErrInvalidConfig, err)
+	}
+
+	if _, inherited := merged[key]; inherited {
+		return fmt.Errorf(
+			"%w: clone identity would shadow a merged parent mapping",
+			ErrInvalidConfig,
+		)
+	}
+
+	return nil
+}
+
+// cloneFieldMatches permits a shared value only when no mutation is needed.
+// Aliases are read without altering their anchor or other users.
+func cloneFieldMatches(root *yamlv3.Node, keyPath []string, value string) bool {
+	node := root
+	for _, key := range keyPath {
+		if node.Kind == yamlv3.AliasNode {
+			node = node.Alias
+		}
+
+		if node == nil || node.Kind != yamlv3.MappingNode {
+			return false
+		}
+
+		node = mappingValue(node, key)
+		if node == nil {
+			return false
+		}
+	}
+
+	if node.Kind == yamlv3.AliasNode {
+		node = node.Alias
+	}
+
+	return node != nil && node.Kind == yamlv3.ScalarNode && node.ShortTag() == yamlStringTag &&
+		node.Value == value
+}
+
+// validateCloneNode rejects writes through aliases or into a shared anchor.
 func validateCloneNode(root, node *yamlv3.Node) error {
 	if node.Kind == yamlv3.AliasNode || (node.Anchor != "" && referencesAlias(root, node)) {
 		return fmt.Errorf(
@@ -74,6 +120,7 @@ func validateCloneNode(root, node *yamlv3.Node) error {
 	return nil
 }
 
+// referencesAlias checks alias edges without traversing them recursively.
 func referencesAlias(root, target *yamlv3.Node) bool {
 	if root.Kind == yamlv3.AliasNode && root.Alias == target {
 		return true

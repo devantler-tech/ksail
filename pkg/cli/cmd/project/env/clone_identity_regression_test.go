@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -68,6 +69,14 @@ func TestAddEnvironmentRepointsCustomSourceClusterName(t *testing.T) {
 		t.Run(fmt.Sprintf("base=%t", baseSynced), func(t *testing.T) {
 			root, sourceFile, source := writeCloneIdentitySource(t, baseSynced,
 				"r73-local", "    provider: Docker\n")
+
+			const overlay = "apiVersion: v1\nkind: ConfigMap\nmetadata: {name: cluster-meta}\n" +
+				"data:\n  cluster_name: r73-local\n  saved: r73-local\n"
+			require.NoError(
+				t,
+				os.WriteFile(filepath.Join(root, "k8s/clusters/local/cluster-meta.yaml"),
+					[]byte(overlay), 0o600),
+			)
 			t.Chdir(root)
 			output, err := runAddEnvironment(t, "prod", "--from", "local")
 			require.NoError(t, err, output)
@@ -86,6 +95,61 @@ func TestAddEnvironmentRepointsCustomSourceClusterName(t *testing.T) {
 				"the source must remain unchanged",
 			)
 			assert.Contains(t, content, "# preserve local-config and localhost user text")
+			assert.Contains(
+				t,
+				readAddEnv(t, root, "k8s/clusters/prod/cluster-meta.yaml"),
+				"cluster_name: prod",
+			)
+			assert.Contains(
+				t,
+				readAddEnv(t, root, "k8s/clusters/prod/cluster-meta.yaml"),
+				"saved: r73-local",
+			)
+			assert.Equal(t, overlay, readAddEnv(t, root, "k8s/clusters/local/cluster-meta.yaml"))
+		})
+	}
+}
+
+//nolint:paralleltest // each command resolves its workspace through t.Chdir
+func TestAddEnvironmentRejectsInvalidTargetBeforeWritingOverlay(t *testing.T) {
+	for _, force := range []bool{false, true} {
+		t.Run(fmt.Sprintf("force=%t", force), func(t *testing.T) {
+			root, sourceFile, source := writeCloneIdentitySource(
+				t,
+				false,
+				"local",
+				"    provider: Docker\n",
+			)
+			source = strings.Replace(source, "name: local", "name: &shared local", 1)
+			source = strings.Replace(source, "unrelated-name: local", "unrelated-name: *shared", 1)
+			require.NoError(t, os.WriteFile(filepath.Join(root, sourceFile), []byte(source), 0o600))
+			destination := filepath.Join(root, "k8s/clusters/prod/kustomization.yaml")
+
+			args := []string{"prod", "--from", "local"}
+			if force {
+				args = append(args, "--force")
+
+				require.NoError(t, os.MkdirAll(filepath.Dir(destination), 0o750))
+				require.NoError(t, os.WriteFile(destination, []byte("existing overlay\n"), 0o600))
+			}
+
+			t.Chdir(root)
+			output, err := runAddEnvironment(t, args...)
+			require.Error(t, err, output)
+			assert.Contains(t, output+err.Error(), "shared YAML alias")
+
+			if force {
+				assert.Equal(
+					t,
+					"existing overlay\n",
+					readAddEnv(t, root, "k8s/clusters/prod/kustomization.yaml"),
+				)
+			} else {
+				assert.NoDirExists(t, filepath.Dir(destination))
+			}
+
+			assert.NoFileExists(t, filepath.Join(root, "ksail.prod.yaml"))
+			assert.Equal(t, source, readAddEnv(t, root, sourceFile))
 		})
 	}
 }

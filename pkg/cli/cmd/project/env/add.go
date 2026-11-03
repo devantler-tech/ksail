@@ -95,15 +95,16 @@ func NewAddCmd() *cobra.Command {
 
 // addEnvironmentParams holds the resolved inputs for a clone.
 type addEnvironmentParams struct {
-	repoRoot      string
-	srcName       string
-	srcConfigFile string
-	dstName       string
-	srcProvider   string
-	dstProvider   string
-	distribution  v1alpha1.Distribution
-	sourceDir     string
-	force         bool
+	repoRoot       string
+	srcName        string
+	srcClusterName string
+	srcConfigFile  string
+	dstName        string
+	srcProvider    string
+	dstProvider    string
+	distribution   v1alpha1.Distribution
+	sourceDir      string
+	force          bool
 }
 
 // HandleAddRunE handles the `project env add` command. It is exported for
@@ -201,15 +202,16 @@ func resolveAddEnvironmentParams(
 	}
 
 	return addEnvironmentParams{
-		repoRoot:      repoRoot,
-		srcName:       srcName,
-		srcConfigFile: srcConfigFile,
-		dstName:       dstName,
-		srcProvider:   string(srcCfg.Spec.Cluster.Provider),
-		dstProvider:   dstProvider,
-		distribution:  distribution,
-		sourceDir:     sourceDir,
-		force:         force,
+		repoRoot:       repoRoot,
+		srcName:        srcName,
+		srcClusterName: srcCfg.Name,
+		srcConfigFile:  srcConfigFile,
+		dstName:        dstName,
+		srcProvider:    string(srcCfg.Spec.Cluster.Provider),
+		dstProvider:    dstProvider,
+		distribution:   distribution,
+		sourceDir:      sourceDir,
+		force:          force,
 	}, nil
 }
 
@@ -373,9 +375,21 @@ func cloneEnvironment(cmd *cobra.Command, params addEnvironmentParams) error {
 
 	notify.Activityf(out, "Cloning environment %q from %q...", params.dstName, params.srcName)
 
+	configClone, err := prepareEnvironmentConfigClone(params)
+	if err != nil {
+		return fmt.Errorf("preparing environment config: %w", err)
+	}
+
 	overlayRewrites := environment.DeriveRewrites(
 		params.srcName, params.dstName, params.dstProvider, params.srcProvider,
 	)
+	if params.srcClusterName != "" && params.srcClusterName != params.srcName {
+		overlayRewrites = append(overlayRewrites, environment.Rewrite{
+			Kind: environment.MetaFieldValue, Field: "cluster_name",
+			Old: params.srcClusterName, New: params.dstName,
+		})
+	}
+
 	srcOverlayDir := path.Join(params.sourceDir, clustersDirSegment, params.srcName)
 
 	written, err := environment.CloneOverlay(
@@ -385,6 +399,19 @@ func cloneEnvironment(cmd *cobra.Command, params addEnvironmentParams) error {
 		return fmt.Errorf("cloning environment overlay: %w", err)
 	}
 
+	configPath, wroteConfig, err := configClone.Write(params.force)
+	if err != nil {
+		return fmt.Errorf("cloning environment config: %w", err)
+	}
+
+	reportClone(out, written, configPath, wroteConfig)
+
+	return nil
+}
+
+// prepareEnvironmentConfigClone validates the target before overlay writes and
+// captures the exact transformed source that will be committed afterwards.
+func prepareEnvironmentConfigClone(params addEnvironmentParams) (environment.ConfigClone, error) {
 	configRewrites := environment.DeriveConfigRewrites(
 		params.srcName, params.dstName, params.dstProvider, params.srcProvider,
 	)
@@ -403,21 +430,18 @@ func cloneEnvironment(cmd *cobra.Command, params addEnvironmentParams) error {
 		identity.Context = materializedContext(params.distribution, params.dstName)
 	}
 
-	configPath, wroteConfig, err := environment.CloneEnvironmentConfigForTarget(
+	clone, err := environment.PrepareEnvironmentConfigCloneForTarget(
 		params.repoRoot,
 		params.srcConfigFile,
 		environmentConfigFile(params.dstName),
 		configRewrites,
 		environment.CloneTarget{Identity: identity, Provider: params.dstProvider},
-		params.force,
 	)
 	if err != nil {
-		return fmt.Errorf("cloning environment config: %w", err)
+		return environment.ConfigClone{}, fmt.Errorf("preparing clone target: %w", err)
 	}
 
-	reportClone(out, written, configPath, wroteConfig)
-
-	return nil
+	return clone, nil
 }
 
 // materializedContext returns the kubeconfig context to write into a clone of a
