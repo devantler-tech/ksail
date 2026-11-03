@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -74,6 +75,106 @@ func TestExportCombinesImagesHeldByDifferentNodes(t *testing.T) {
 	}
 }
 
+// Cleanup cannot turn a committed export into a failed operation, but a failed
+// prepublication operation must retain both its cause and any cleanup failure.
+func TestExportStagingCleanupDoesNotUndoPublishedResult(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("the real removal-failure control requires non-root Unix directory permissions")
+	}
+
+	for _, failCopy := range []bool{false, true} {
+		t.Run(
+			map[bool]string{false: "published", true: "copy failed"}[failCopy],
+			func(t *testing.T) {
+				t.Parallel()
+
+				runExportStagingCleanupCase(t, failCopy)
+			},
+		)
+	}
+}
+
+func runExportStagingCleanupCase(t *testing.T, failCopy bool) {
+	t.Helper()
+
+	ctx := context.Background()
+	client := docker.NewMockAPIClient(t)
+	client.EXPECT().
+		ContainerList(ctx, mock.Anything).
+		Return(kindMultiNodeSummaries()[:2], nil)
+
+	directory := t.TempDir()
+	output := filepath.Join(directory, "images.tar")
+	root, err := os.OpenRoot(directory)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, root.Close()) })
+	require.NoError(t, root.WriteFile("images.tar", []byte("previous export"), 0o600))
+
+	refs := []string{"docker.io/library/cleanup-a:v1", "docker.io/library/cleanup-b:v1"}
+	contents := createExportTar(t, namedNodeArchive(t, refs[0]))
+
+	var blocked string
+
+	client.EXPECT().CopyFromContainer(ctx, kindExporterNodeName, kindExporterTarPath).
+		RunAndReturn(func(context.Context, string, string) (io.ReadCloser, container.PathStat, error) {
+			blocked = blockExportStagingCleanup(t, directory)
+
+			if failCopy {
+				return nil, container.PathStat{}, errFixtureStagingCopy
+			}
+
+			return io.NopCloser(bytes.NewReader(contents)), container.PathStat{}, nil
+		}).
+		Once()
+	setupNodeArchive(ctx, t, client, kindExporterNodeName, refs[0])
+	setupNodeArchive(ctx, t, client, "my-cluster-worker", refs[1])
+
+	err = image.NewExporter(client).
+		Export(ctx, "my-cluster", v1alpha1.DistributionVanilla,
+			v1alpha1.ProviderDocker, image.ExportOptions{OutputPath: output})
+	if failCopy {
+		require.ErrorIs(t, err, errFixtureStagingCopy)
+		require.ErrorIs(t, err, fs.ErrPermission)
+
+		preserved, readErr := root.ReadFile("images.tar")
+		require.NoError(t, readErr)
+		require.Equal(t, "previous export", string(preserved))
+	} else {
+		require.ElementsMatch(t, refs, archiveNamedReferences(t, output))
+		assertImageArchiveReadable(t, output, len(refs))
+		require.NoError(t, err, "the complete destination has already been published")
+	}
+
+	require.DirExists(
+		t,
+		blocked,
+		"the real cleanup failure must leave its owned staging residue",
+	)
+}
+
+func blockExportStagingCleanup(t *testing.T, directory string) string {
+	t.Helper()
+
+	staged, err := filepath.Glob(filepath.Join(directory, ".ksail-export-*"))
+	require.NoError(t, err)
+	require.Len(t, staged, 1)
+	blocked := filepath.Join(staged[0], "cleanup-blocked")
+	require.NoError(t, os.Mkdir(blocked, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(blocked, "owned"), []byte("fixture"), 0o600))
+	t.Cleanup(func() {
+		//nolint:gosec // Restore traversal and write access to this test-owned directory for cleanup.
+		require.NoError(t, os.Chmod(blocked, 0o700))
+	})
+	//nolint:gosec // Read and traversal remain necessary; removing write permission is the real fault.
+	require.NoError(t, os.Chmod(blocked, 0o500))
+	require.ErrorIs(t, os.Remove(filepath.Join(blocked, "owned")), fs.ErrPermission,
+		"the actual filesystem must refuse cleanup before this control can establish the boundary")
+
+	return blocked
+}
+
 // A failed inventory cannot establish the union, even when another node has
 // valid images. Refusal must preserve an existing destination archive.
 func TestExportAllRefusesUnreadableNodeInventory(t *testing.T) {
@@ -105,6 +206,7 @@ func TestExportAllRefusesUnreadableNodeInventory(t *testing.T) {
 var (
 	errFixtureBulkExport  = errors.New("fixture bulk export refused")
 	errFixtureAliasExport = errors.New("fixture alias export refused")
+	errFixtureStagingCopy = errors.New("fixture staging copy refused")
 )
 
 func TestExportPartialNodeFailureRetainsOriginalDiagnostics(t *testing.T) {

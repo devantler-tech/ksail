@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -29,14 +30,15 @@ func (e *Exporter) exportSources(
 	if err != nil {
 		return fmt.Errorf("create export staging directory: %w", err)
 	}
-	defer func() { resultErr = errors.Join(resultErr, os.RemoveAll(directory)) }()
 
-	root, err := os.OpenRoot(directory)
+	var root *os.Root
+
+	defer func() { resultErr = cleanupExportSources(ctx, root, directory, resultErr) }()
+
+	root, err = os.OpenRoot(directory)
 	if err != nil {
 		return fmt.Errorf("open export staging directory: %w", err)
 	}
-
-	defer func() { resultErr = errors.Join(resultErr, root.Close()) }()
 
 	merger, err := newImageArchiveMerger(filepath.Join(directory, "content"))
 	if err != nil {
@@ -66,6 +68,33 @@ func (e *Exporter) exportSources(
 	}
 
 	return publishExportSources(ctx, root, merger, len(sources), opts.OutputPath)
+}
+
+func cleanupExportSources(
+	ctx context.Context,
+	root *os.Root,
+	directory string,
+	resultErr error,
+) error {
+	var closeErr error
+	if root != nil {
+		closeErr = root.Close()
+	}
+
+	cleanupErr := errors.Join(closeErr, os.RemoveAll(directory))
+	if cleanupErr == nil {
+		return resultErr
+	}
+
+	if resultErr != nil {
+		return errors.Join(resultErr, cleanupErr)
+	}
+
+	// A nil result means the complete archive was already atomically published.
+	slog.WarnContext(ctx,
+		"Image archive exported but staging cleanup failed", "error", cleanupErr)
+
+	return nil
 }
 
 func publishExportSources(

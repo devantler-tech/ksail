@@ -195,10 +195,11 @@ runs:
             # Retain compatibility results for both actual bridges even when Create
             # refuses an unreachable advertised API before publishing a Connector.
             # Uploaded artifacts contain fixed labels/booleans, never raw topology.
-            if ! timeout --kill-after=1s 10s kubectl --context "$HOST_CONTEXT" -n "ksail-$NESTED_NAME" \
+            timeout --kill-after=1s 10s kubectl --context "$HOST_CONTEXT" -n "ksail-$NESTED_NAME" \
               exec dind -c dind -- docker network inspect bridge kind \
               --format '{{if eq .Name "bridge"}}bridge{{else}}kind{{end}} driver-compatible={{eq .Driver "bridge"}} allocation-present={{gt (len .IPAM.Config) 0}}' \
-              > "$LOG_DIR/vanilla-networks.log" 2>/dev/null; then
+              > "$LOG_DIR/vanilla-networks.log" 2>/dev/null || true
+            if [ ! -s "$LOG_DIR/vanilla-networks.log" ]; then
               printf '%s\n' 'network-inspection=unavailable' > "$LOG_DIR/vanilla-networks.log"
             fi
           fi
@@ -214,7 +215,7 @@ runs:
             nested_ready=false
             ready_deadline=$((SECONDS + 60))
             while true; do
-              if NESTED_READY=$(timeout --kill-after=1s 20s kubectl --context "$NESTED_CONTEXT" get --raw=/readyz --request-timeout=15s) && [ "$NESTED_READY" = ok ]; then
+              if NESTED_READY=$(timeout --kill-after=1s 20s kubectl --context "$NESTED_CONTEXT" get --raw=/readyz --request-timeout=15s 2>/dev/null) && [ "$NESTED_READY" = ok ]; then
                 nested_ready=true
                 break
               fi
@@ -235,39 +236,35 @@ runs:
               echo "  ❌ $DIST nested API readiness FAILED"
               record_failure
               if [ "${DIST,,}" = talos ] || [ "${DIST,,}" = vanilla ]; then
-                # Capture only this failed cluster's endpoint/port evidence before
-                # deletion. Never dump kubeconfig, Secret data, or container env.
+                # Capture only fixed compatibility results before deletion. Raw
+                # endpoint addresses, node identities, ports and errors stay private.
                 NESTED_NODE="$NESTED_NAME-control-plane-1"
                 if [ "${DIST,,}" = vanilla ]; then NESTED_NODE="$NESTED_NAME-control-plane"; fi
                 {
                   timeout --kill-after=1s 10s kubectl --context "$HOST_CONTEXT" -n "ksail-$NESTED_NAME" \
                     get service apiserver --request-timeout=5s \
-                    -o 'custom-columns=NAME:.metadata.name,PORT:.spec.ports[*].port,TARGET:.spec.ports[*].targetPort,NODEPORT:.spec.ports[*].nodePort' \
-                    || echo 'Nested Service evidence unavailable'
+                    -o 'go-template=service port-present={{if .spec.ports}}true{{else}}false{{end}}{{"\n"}}' \
+                    2>/dev/null || echo 'service observation=unavailable'
                   timeout --kill-after=1s 10s kubectl --context "$HOST_CONTEXT" -n "ksail-$NESTED_NAME" \
                     get endpointslices -l kubernetes.io/service-name=apiserver --request-timeout=5s \
-                    -o 'custom-columns=NAME:.metadata.name,ADDRESS:.endpoints[*].addresses[*],READY:.endpoints[*].conditions.ready,PORT:.ports[*].port' \
-                    || echo 'Nested EndpointSlice evidence unavailable'
+                    -o 'go-template=endpoint-slices present={{if .items}}true{{else}}false{{end}}{{"\n"}}' \
+                    2>/dev/null || echo 'endpoint-slices observation=unavailable'
                   timeout --kill-after=1s 10s kubectl --context "$HOST_CONTEXT" -n "ksail-$NESTED_NAME" \
                     get pod dind --request-timeout=5s \
-                    -o 'custom-columns=NAME:.metadata.name,NODE:.spec.nodeName,ADDRESS:.status.podIP' \
-                    || echo 'Nested pod placement evidence unavailable'
+                    -o 'go-template=pod scheduled={{if .spec.nodeName}}true{{else}}false{{end}} address-present={{if .status.podIP}}true{{else}}false{{end}}{{"\n"}}' \
+                    2>/dev/null || echo 'pod observation=unavailable'
                   timeout --kill-after=1s 10s kubectl --context "$HOST_CONTEXT" -n "ksail-$NESTED_NAME" \
                     exec dind -c dind -- docker inspect --type container \
-                    --format '{{json .NetworkSettings.Ports}}' "$NESTED_NODE" \
-                    || echo 'Nested port-binding evidence unavailable'
+                    --format 'container api-binding-present={{if index .NetworkSettings.Ports "6443/tcp"}}true{{else}}false{{end}}' "$NESTED_NODE" \
+                    2>/dev/null || echo 'container observation=unavailable'
                   if [ "${DIST,,}" = vanilla ]; then
-                    timeout --kill-after=1s 10s kubectl --context "$HOST_CONTEXT" -n "ksail-$NESTED_NAME" \
-                      exec dind -c dind -- docker network inspect kind \
-                      --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}' \
-                      || echo 'Nested Kind subnet evidence unavailable'
-                    timeout --kill-after=1s 10s kubectl --context "$HOST_CONTEXT" -n "ksail-$NESTED_NAME" \
-                      exec dind -c dind -- docker exec "$NESTED_NODE" ip route \
-                      || echo 'Nested Kind route evidence unavailable'
-                    timeout --kill-after=1s 10s kubectl --context "$HOST_CONTEXT" -n "ksail-$NESTED_NAME" \
+                    if BACKEND_READY=$(timeout --kill-after=1s 10s kubectl --context "$HOST_CONTEXT" -n "ksail-$NESTED_NAME" \
                       exec dind -c dind -- docker exec "$NESTED_NODE" kubectl \
-                      --kubeconfig=/etc/kubernetes/admin.conf --request-timeout=5s get --raw=/readyz \
-                      || echo 'Nested Kind authenticated backend readiness unavailable'
+                      --kubeconfig=/etc/kubernetes/admin.conf --request-timeout=5s get --raw=/readyz 2>/dev/null) && [ "$BACKEND_READY" = ok ]; then
+                      echo 'backend authenticated-ready=true'
+                    else
+                      echo 'backend authenticated-ready=false'
+                    fi
                   fi
                 } 2>&1 | tee "$LOG_DIR/${DIST,,}-endpoint.log" || echo 'Endpoint evidence could not be recorded'
               fi
