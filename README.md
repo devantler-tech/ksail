@@ -42,6 +42,9 @@ The installer verifies the download and prints where it installed KSail. Follow 
 instruction if needed. Prefer Homebrew or a Windows download? See
 [installation options](docs/reader-reference.md#installation-options).
 
+Homebrew installs include Bash, zsh and fish completion scripts. Enable completions
+using Homebrew's standard shell setup; no KSail-specific profile changes are needed.
+
 ## Quick start
 
 Create a project in a new directory:

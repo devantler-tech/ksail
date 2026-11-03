@@ -39,15 +39,33 @@ for name in ksail ksail-desktop; do
 	mkdir -p "$fixture"
 	printf 'module cask-render-fixture\n\ngo 1.27.3\n' >"$fixture/go.mod"
 	printf 'package main\nfunc main() {}\n' >"$fixture/main.go"
+	# Packaging uses literal payloads here; the command-package tests exercise the real generator.
+	if [[ "$name" == ksail ]]; then
+		cat >"$fixture/fixture-completions.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$1" != linux/amd64 ]]; then exit 0; fi
+mkdir -p dist/completions
+for shell in bash zsh fish; do
+	printf '# completion archive fixture: %s\n' "$shell" >"dist/completions/ksail.$shell"
+done
+EOF
+	fi
 	# Keep the real archive/target/cask shapes. Remove application-only build hooks and publication
 	# credentials, and force upload off; this fixture must never publish or use a credential.
 	yq '.project_name = "'"$name"'" | .dist = "dist" |
 		.before.hooks = [] | .builds[].main = "." | .builds[].tags = [] |
 		.builds[].env = ["CGO_ENABLED=0"] | .builds[].hooks = {} | .builds[].ldflags = [] |
-		.archives[].files = [] | .homebrew_casks[].skip_upload = "true" |
+		.homebrew_casks[].skip_upload = "true" |
 		.homebrew_casks[].repository.token = "" |
 		del(.homebrew_casks[].commit_author.signing, .dockers_v2, .docker_signs, .release.extra_files)' \
 		"$root/$config" >"$fixture/.goreleaser.yaml"
+	if [[ "$name" == ksail ]]; then
+		yq -i '.builds[].hooks.post = [{"cmd": "bash fixture-completions.sh {{ .Os }}/{{ .Arch }}"}]' \
+			"$fixture/.goreleaser.yaml"
+	else
+		yq -i '.archives[].files = []' "$fixture/.goreleaser.yaml"
+	fi
 	git -C "$fixture" init --quiet
 	git -C "$fixture" remote add origin https://github.com/devantler-tech/ksail.git
 	git -C "$fixture" add go.mod main.go .goreleaser.yaml
@@ -58,6 +76,23 @@ for name in ksail ksail-desktop; do
 		cd "$fixture"
 		goreleaser release --snapshot --clean --skip=validate,publish,announce,sign
 	)
+	if [[ "$name" == ksail ]]; then
+		shopt -s nullglob
+		archives=("$fixture"/dist/*.tar.gz "$fixture"/dist/*.zip)
+		[[ ${#archives[@]} -eq 5 ]] || {
+			printf 'expected all five CLI archives\n' >&2
+			exit 1
+		}
+		for archive in "${archives[@]}"; do
+			for shell in bash zsh fish; do
+				actual="$(tar -xOf "$archive" "completions/ksail.$shell")"
+				[[ "$actual" == "# completion archive fixture: $shell" ]] || {
+					printf 'missing or changed %s completion in %s\n' "$shell" "$archive" >&2
+					exit 1
+				}
+			done
+		done
+	fi
 	casks=()
 	while IFS= read -r file; do casks+=("$file"); done < <(find "$fixture/dist" -name "$name.rb" -type f)
 	[[ ${#casks[@]} -eq 1 ]] || {
@@ -85,5 +120,10 @@ for name in ksail ksail-desktop; do
 	jq -e '.casks[0].sha256 | test("^[0-9a-f]{64}$")' "$work/$name.json" >/dev/null
 	jq -e '.casks[0].depends_on.arch | any(.type == "arm" and .bits == 64)' "$work/$name.json" >/dev/null
 done
+jq -e '.casks[0].artifacts as $a |
+	($a | any(.bash_completion?[0] == "completions/ksail.bash")) and
+	($a | any(.zsh_completion?[0] == "completions/ksail.zsh")) and
+	($a | any(.fish_completion?[0] == "completions/ksail.fish")) and
+	($a | all(has("generate_completions_from_executable") | not))' "$work/ksail.json" >/dev/null
 printf 'PASS: both rendered casks load on every platform and preserve checksum/architecture guards\n'
 completed=true
