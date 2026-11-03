@@ -96,22 +96,62 @@ func countNodes(
 // countReadyNodes returns the number of Ready and total nodes reported by the clientset. Shared by
 // the vcluster status observer and the host cluster status observer.
 func countReadyNodes(ctx context.Context, clientset kubernetes.Interface) (int32, int32, error) {
-	nodes, err := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	nodes, err := listNodes(ctx, clientset)
 	if err != nil {
-		return 0, 0, fmt.Errorf("list nodes: %w", err)
+		return 0, 0, err
 	}
 
+	ready, total := summarizeNodes(nodes)
+
+	return ready, total, nil
+}
+
+// observeHostNodes reads the host cluster's nodes once and reports their readiness together with
+// the distribution and provider they prove (empty when they prove none). On a failed read nothing
+// is reported as observed, so the reconciler keeps the previous counts and identity.
+func observeHostNodes(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+) (controller.ObservedStatus, error) {
+	nodes, err := listNodes(ctx, clientset)
+	if err != nil {
+		return controller.ObservedStatus{}, err
+	}
+
+	ready, total := summarizeNodes(nodes)
+
+	return controller.ObservedStatus{
+		NodesReady:    ready,
+		NodesTotal:    total,
+		NodesObserved: true,
+		Distribution:  detectDistribution(nodes),
+		Provider:      detectProvider(nodes),
+	}, nil
+}
+
+// listNodes lists every node the clientset can see.
+func listNodes(ctx context.Context, clientset kubernetes.Interface) ([]corev1.Node, error) {
+	nodes, err := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list nodes: %w", err)
+	}
+
+	return nodes.Items, nil
+}
+
+// summarizeNodes returns the number of Ready and total nodes.
+func summarizeNodes(nodes []corev1.Node) (int32, int32) {
 	var ready, total int32
 
-	for i := range nodes.Items {
+	for i := range nodes {
 		total++
 
-		if isNodeReady(&nodes.Items[i]) {
+		if isNodeReady(&nodes[i]) {
 			ready++
 		}
 	}
 
-	return ready, total, nil
+	return ready, total
 }
 
 // isNodeReady reports whether a node's Ready condition is True.
