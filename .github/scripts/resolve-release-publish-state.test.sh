@@ -306,6 +306,123 @@ async function run(tag, draft, others = []) {
 NODE
 pass_count=$((pass_count + 1))
 
+# Execute the production cleanup script with both tag policies. Only the release API boundary
+# is replaced: a removable tag must be retained just like a protected one, without a delete attempt.
+node - "${cd_workflow}" <<'NODE'
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+const workflow = fs.readFileSync(process.argv[2], 'utf8');
+const block = workflow.split(/^  cleanup-failed-release:\n/m)[1];
+assert.ok(block, 'inspect the actual cleanup job');
+const scripts = [...block.matchAll(/^          script: \|\n((?: {12}.*\n|\n)+)/gm)];
+assert.equal(scripts.length, 1, 'extract exactly one cleanup script');
+const cleanup = new AsyncFunction('github', 'core', 'context', 'process',
+  scripts[0][1].replace(/^ {12}/gm, ''));
+const tag = 'v7.202.52';
+const source = 'a'.repeat(40);
+const draft = {id: 42, tag_name: tag, draft: true, target_commitish: source, assets: []};
+const other = {id: 99, tag_name: 'v7.202.53', draft: true, target_commitish: source, assets: []};
+const published = {...draft, id: 43, draft: false};
+const apiError = status => Object.assign(new Error(`API ${status}`), {status});
+
+async function run(options = {}) {
+  const deleted = [];
+  let tagDeletes = 0, tagReads = 0, tagPresent = true, summary = '', failed = false, error;
+  const github = {
+    paginate: async (method, request) => {
+      assert.equal(method, github.rest.repos.listReleases);
+      assert.deepEqual(request, {owner: 'devantler-tech', repo: 'ksail', per_page: 100});
+      if (options.listError) throw apiError(503);
+      return options.releases ?? [other, draft];
+    },
+    rest: {
+      repos: {
+        listReleases() {},
+        getRelease: async request => {
+          assert.deepEqual(request, {owner: 'devantler-tech', repo: 'ksail', release_id: 42});
+          if (deleted.length && !options.retainedDraft) throw apiError(404);
+          return {data: options.publishedBeforeDelete ? {...draft, draft: false} : draft};
+        },
+        deleteRelease: async request => {
+          assert.deepEqual(request, {owner: 'devantler-tech', repo: 'ksail', release_id: 42});
+          if (options.deleteError) throw apiError(403);
+          deleted.push(request.release_id);
+        },
+      },
+      git: {
+        getRef: async request => {
+          assert.deepEqual(request, {owner: 'devantler-tech', repo: 'ksail', ref: `tags/${tag}`});
+          tagReads++;
+          if (!tagPresent || options.missingTag) throw apiError(404);
+          if (options.refError || (tagReads > 1 && options.afterRefError)) throw apiError(503);
+          return {data: {ref: `refs/tags/${tag}`, object: {
+            type: options.annotated ? 'tag' : 'commit',
+            sha: options.wrongSource || (tagReads > 1 && options.changedSource) ? 'c'.repeat(40) :
+              options.annotated ? 'b'.repeat(40) : source,
+          }}};
+        },
+        getTag: async request => {
+          assert.deepEqual(request, {owner: 'devantler-tech', repo: 'ksail', tag_sha: 'b'.repeat(40)});
+          return {data: {object: {type: 'commit', sha: source}}};
+        },
+        deleteRef: async () => {
+          tagDeletes++;
+          if (!options.removable) throw apiError(422);
+          tagPresent = false;
+        },
+      },
+    },
+  };
+  const core = {warning() {}, setFailed() { failed = true; }, summary: {
+    addHeading(value) { summary += value + '\n'; return this; },
+    addRaw(value) { summary += value; return this; },
+    async write() { if (options.summaryError) throw new Error('summary write failed'); },
+  }};
+  try {
+    await cleanup(github, core, {repo: {owner: 'devantler-tech', repo: 'ksail'}},
+      {env: {RELEASE_TAG: tag, GITHUB_SHA: source}});
+  } catch (caught) { error = caught; }
+  return {deleted, tagDeletes, tagReads, tagPresent, summary, failed: failed || !!error};
+}
+
+(async () => {
+  for (const options of [{}, {removable: true}, {annotated: true}, {releases: [other]}]) {
+    const result = await run(options);
+    assert.equal(result.failed, false, 'allowed draft cleanup must succeed with its tag retained');
+    assert.equal(result.tagDeletes, 0, 'never attempt tag deletion, even when deletion is permitted');
+    assert.equal(result.tagPresent, true, 'the original version identity must remain');
+    assert.deepEqual(result.deleted, options.releases ? [] : [42], 'delete only this tag\'s orphaned draft');
+    assert.ok(result.tagReads >= 2, 'verify retained tag/source before and after cleanup');
+    assert.match(result.summary, /v7\.202\.52/);
+    assert.match(result.summary, /retained/i);
+    assert.match(result.summary, /newer.*version.*supersedes/i);
+    console.log(`PASS: cleanup-retains-${options.removable ? 'removable' : options.annotated ? 'annotated' : options.releases ? 'draftless' : 'protected'}-tag`);
+  }
+  for (const releases of [[published], [draft, published]]) {
+    const result = await run({releases});
+    assert.equal(result.failed, false, 'published release guard is a safe no-op');
+    assert.deepEqual(result.deleted, []);
+    assert.equal(result.tagDeletes, 0);
+  }
+  for (const options of [
+    {listError: true}, {deleteError: true}, {refError: true}, {afterRefError: true},
+    {wrongSource: true}, {changedSource: true}, {missingTag: true}, {summaryError: true},
+    {retainedDraft: true}, {publishedBeforeDelete: true},
+    {releases: [draft, {...draft, id: 44}]}, {releases: [{...draft, draft: null}]},
+  ]) {
+    const result = await run(options);
+    assert.equal(result.failed, true, `unknown or failed cleanup must fail: ${JSON.stringify(options)}`);
+    assert.equal(result.tagDeletes, 0, 'failure cannot authorize a tag deletion');
+    if (options.wrongSource || options.refError || options.missingTag || options.publishedBeforeDelete || options.releases) {
+      assert.deepEqual(result.deleted, [], 'unbound or ambiguous releases must be untouched');
+    }
+  }
+  console.log('PASS: cleanup-published-ambiguous-and-API-failure-controls');
+})().catch(error => { console.error(error); process.exitCode = 1; });
+NODE
+pass_count=$((pass_count + 1))
+
 # CI must execute this suite, not only lint it: path filter, shellcheck, and the run line.
 ci_workflow="${repo_root}/.github/workflows/ci.yaml"
 executed="$(grep -cxE '[[:space:]]*\.github/scripts/resolve-release-publish-state\.test\.sh' "${ci_workflow}" || true)"
