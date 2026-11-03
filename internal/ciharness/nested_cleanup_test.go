@@ -48,6 +48,13 @@ case "$1 $2" in
   'get --raw=/readyz') echo ok ;;
   '-n ksail-nested-talos'|'-n ksail-nested-vanilla')
     [[ "$FIXTURE_MODE" != ready-evidence-error ]] || exit 1
+    if [[ "$*" == *'docker network inspect bridge kind'* ]]; then
+      if [[ "$*" == *'.Subnet'* ]]; then echo fixture-private-address; else
+        echo 'bridge driver-compatible=true allocation-present=true'
+        echo 'kind driver-compatible=true allocation-present=true'
+      fi
+      exit 0
+    fi
     case "${3:-}" in
       get|exec) echo 'fixture endpoint diagnostics' ;;
       *) exit 99 ;;
@@ -191,9 +198,17 @@ func runNestedCleanupWithWatchdog(
 	root, openErr := os.OpenRoot(dir)
 	require.NoError(t, openErr)
 	t.Cleanup(func() { require.NoError(t, root.Close()) })
-	calls := readOptionalVersionFixture(t, root, "calls")
 
-	return string(output), string(calls), err
+	return string(output), nestedFixtureCallsAndProof(t, root), err
+}
+
+func nestedFixtureCallsAndProof(t *testing.T, root *os.Root) string {
+	t.Helper()
+	proof := readOptionalVersionFixture(t, root, "logs/vanilla-networks.log")
+	assert.NotContains(t, string(proof), "fixture-private-address",
+		"the uploaded proof must contain compatibility results, not raw topology")
+
+	return string(readOptionalVersionFixture(t, root, "calls"))
 }
 
 func nestedFixtureTimeoutPath(t *testing.T) string {
@@ -281,6 +296,42 @@ func TestNestedReadinessRetainsVanillaEndpointEvidenceBeforeDelete(t *testing.T)
 			assert.Contains(t, output, "Vanilla resources drained")
 			assert.NotContains(t, calls, "get secret")
 			assert.NotContains(t, calls, ".Config.Env")
+		})
+	}
+}
+
+func TestNestedCreateRetainsVanillaBridgeEvidenceBeforeDelete(t *testing.T) {
+	t.Parallel()
+
+	for _, mode := range []string{"empty", "create-error"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+
+			output, calls, err := runNestedCleanup(t, mode, "Vanilla")
+			if mode == "empty" {
+				require.NoError(t, err, output)
+			} else {
+				require.Error(t, err, output)
+			}
+
+			inspection := strings.Index(calls, "docker network inspect bridge kind")
+			deletion := strings.Index(calls, "ksail cluster delete")
+
+			require.NotEqual(
+				t,
+				-1,
+				inspection,
+				"retain allocations even when gated Create refuses success",
+			)
+			require.NotEqual(t, -1, deletion)
+			assert.Less(t, inspection, deletion)
+			assert.NotContains(
+				t,
+				output,
+				"fixture endpoint diagnostics",
+				"network evidence belongs in the log artifact",
+			)
+			assert.NotContains(t, calls, "get secret")
 		})
 	}
 }

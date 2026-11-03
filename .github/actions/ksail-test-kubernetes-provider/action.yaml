@@ -191,6 +191,18 @@ runs:
             record_failure
           fi
 
+          if [ "${DIST,,}" = vanilla ]; then
+            # Retain compatibility results for both actual bridges even when Create
+            # refuses an unreachable advertised API before publishing a Connector.
+            # Uploaded artifacts contain fixed labels/booleans, never raw topology.
+            if ! timeout --kill-after=1s 10s kubectl --context "$HOST_CONTEXT" -n "ksail-$NESTED_NAME" \
+              exec dind -c dind -- docker network inspect bridge kind \
+              --format '{{if eq .Name "bridge"}}bridge{{else}}kind{{end}} driver-compatible={{eq .Driver "bridge"}} allocation-present={{gt (len .IPAM.Config) 0}}' \
+              > "$LOG_DIR/vanilla-networks.log" 2>/dev/null; then
+              printf '%s\n' 'network-inspection=unavailable' > "$LOG_DIR/vanilla-networks.log"
+            fi
+          fi
+
           # Probe the saved endpoint first. Info can hang on an unreachable API,
           # hiding the useful network/TLS error before cleanup removes its evidence.
           # A healthy host must never satisfy this nested-cluster readiness read.

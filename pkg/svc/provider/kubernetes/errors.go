@@ -4,6 +4,9 @@ import "errors"
 
 // Provider-specific errors.
 var (
+	// ErrDinDNetworkPolicyMismatch refuses reuse without changing an existing daemon.
+	ErrDinDNetworkPolicyMismatch = errors.New("existing DinD pod uses a different network policy")
+
 	// ErrHostClientRequired is returned when a nil Kubernetes client is provided.
 	ErrHostClientRequired = errors.New("host cluster Kubernetes client is required")
 

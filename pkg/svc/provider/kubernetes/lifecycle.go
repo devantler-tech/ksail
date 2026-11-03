@@ -15,31 +15,16 @@ func (p *Provider) SetupDinD(
 	clusterName, distribution string,
 	persistence v1alpha1.KubernetesPersistence,
 ) error {
-	err := p.EnsureNamespace(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("ensure namespace: %w", err)
-	}
+	return p.setupDinD(ctx, clusterName, distribution, persistence, nil)
+}
 
-	// The DinD pod references the namespace's default ServiceAccount, which the
-	// ServiceAccount controller provisions asynchronously. Wait for it so pod creation
-	// does not race ahead with "serviceaccount default not found" (notably right after a
-	// cluster restart, when the controller is still reconciling new namespaces).
-	err = p.WaitForDefaultServiceAccount(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("wait for default service account: %w", err)
-	}
-
-	err = p.CreateDinDPod(ctx, clusterName, distribution, persistence)
-	if err != nil {
-		return fmt.Errorf("create DinD pod: %w", err)
-	}
-
-	err = p.WaitForDinD(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("wait for DinD: %w", err)
-	}
-
-	return nil
+// SetupDinDWithAddressPools starts or reuses DinD with the exact requested Docker
+// pool options. A running pod with different startup arguments is refused unchanged.
+func (p *Provider) SetupDinDWithAddressPools(
+	ctx context.Context, clusterName, distribution string,
+	persistence v1alpha1.KubernetesPersistence, addressPools []string,
+) error {
+	return p.setupDinD(ctx, clusterName, distribution, persistence, addressPools)
 }
 
 // TeardownDinD is a composite operation that removes API exposure, DinD pod,
@@ -62,6 +47,37 @@ func (p *Provider) TeardownDinD(
 	err = p.DeleteNodes(ctx, clusterName)
 	if err != nil {
 		return fmt.Errorf("delete namespace: %w", err)
+	}
+
+	return nil
+}
+
+func (p *Provider) setupDinD(
+	ctx context.Context, clusterName, distribution string,
+	persistence v1alpha1.KubernetesPersistence, addressPools []string,
+) error {
+	err := p.EnsureNamespace(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("ensure namespace: %w", err)
+	}
+
+	// The DinD pod references the namespace's default ServiceAccount, which the
+	// ServiceAccount controller provisions asynchronously. Wait for it so pod creation
+	// does not race ahead with "serviceaccount default not found" (notably right after a
+	// cluster restart, when the controller is still reconciling new namespaces).
+	err = p.WaitForDefaultServiceAccount(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("wait for default service account: %w", err)
+	}
+
+	err = p.createDinDPod(ctx, clusterName, distribution, persistence, addressPools)
+	if err != nil {
+		return fmt.Errorf("create DinD pod: %w", err)
+	}
+
+	err = p.WaitForDinD(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("wait for DinD: %w", err)
 	}
 
 	return nil
