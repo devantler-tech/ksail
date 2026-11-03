@@ -162,7 +162,7 @@ func optionalNodeExport(
 ) {
 	exportPrefix := []string{
 		ctrCommand, "--namespace=k8s.io", "images", "export", "--platform", "linux/amd64",
-		"--local", kindExporterTarPath,
+		"--local", "--skip-manifest-json", kindExporterTarPath,
 	}
 
 	client.EXPECT().
@@ -261,8 +261,17 @@ func fixtureImage(t *testing.T, payload string) v1.Image {
 func TestExportResolvesContainerdImportAliases(t *testing.T) {
 	t.Parallel()
 
-	for _, selected := range []bool{false, true} {
-		t.Run(map[bool]string{false: "all", true: "selected"}[selected], func(t *testing.T) {
+	for _, mode := range []struct {
+		name     string
+		selected bool
+		fixture  func(*testing.T, string) (string, []byte)
+	}{
+		{name: "all", fixture: importAliasFixture},
+		{name: "selected", selected: true, fixture: importAliasFixture},
+		{name: "nested-all", fixture: nestedImportAliasFixture},
+		{name: "nested-selected", selected: true, fixture: nestedImportAliasFixture},
+	} {
+		t.Run(mode.name, func(t *testing.T) {
 			t.Parallel()
 
 			ctx := context.Background()
@@ -271,22 +280,7 @@ func TestExportResolvesContainerdImportAliases(t *testing.T) {
 				ContainerList(ctx, mock.Anything).
 				Return(kindMultiNodeSummaries()[:2], nil)
 
-			refs := make([]string, 0, 2)
-			rawRefs := make([]string, 0, 2)
-
-			for index, node := range []string{kindExporterNodeName, "my-cluster-worker"} {
-				ref, archive := importAliasFixture(t, fmt.Sprintf("imported image %d", index))
-				setupNodeArchiveContents(
-					ctx,
-					t,
-					client,
-					node,
-					[]string{ref},
-					archive,
-				)
-				refs = append(refs, image.NormalizeImageRef(ref))
-				rawRefs = append(rawRefs, ref)
-			}
+			refs, rawRefs := setupImportAliasNodes(ctx, t, client, mode.fixture)
 
 			client.EXPECT().ContainerExecCreate(ctx, mock.Anything, mock.Anything).
 				Return(container.ExecCreateResponse{}, fmt.Errorf("unknown raw fixture operand: %w", os.ErrNotExist)).
@@ -295,7 +289,7 @@ func TestExportResolvesContainerdImportAliases(t *testing.T) {
 			output := filepath.Join(t.TempDir(), "images.tar")
 
 			options := image.ExportOptions{OutputPath: output}
-			if selected {
+			if mode.selected {
 				options.Images = slices.Clone(refs)
 			}
 
@@ -316,6 +310,47 @@ func TestExportResolvesContainerdImportAliases(t *testing.T) {
 	}
 }
 
+func setupImportAliasNodes(
+	ctx context.Context, t *testing.T, client *docker.MockAPIClient,
+	fixture func(*testing.T, string) (string, []byte),
+) ([]string, []string) {
+	t.Helper()
+
+	refs := make([]string, 0, 2)
+	rawRefs := make([]string, 0, 2)
+
+	for index, node := range []string{kindExporterNodeName, "my-cluster-worker"} {
+		ref, archive := fixture(t, fmt.Sprintf("imported image %d", index))
+		setupNodeArchiveContents(ctx, t, client, node, []string{ref}, archive)
+		refs = append(refs, image.NormalizeImageRef(ref))
+		rawRefs = append(rawRefs, ref)
+	}
+
+	return refs, rawRefs
+}
+
+// Transfer import can retain an alias for the entire archive index, whose
+// immediate child is another index rather than a platform image manifest.
+func nestedImportAliasFixture(t *testing.T, payload string) (string, []byte) {
+	t.Helper()
+	platformIndex := mutate.AppendManifests(empty.Index, mutate.IndexAddendum{
+		Add:      fixtureImage(t, payload),
+		Platform: &v1.Platform{OS: "linux", Architecture: "amd64"},
+	})
+	importedIndex := mutate.AppendManifests(empty.Index, mutate.IndexAddendum{Add: platformIndex})
+	digest, err := importedIndex.Digest()
+	require.NoError(t, err)
+
+	ref := "import-2026-08-26@" + digest.String()
+	store, err := layout.Write(t.TempDir(), empty.Index)
+	require.NoError(t, err)
+	require.NoError(t, store.AppendIndex(importedIndex, layout.WithAnnotations(map[string]string{
+		"io.containerd.image.name": ref, "org.opencontainers.image.ref.name": "v1",
+	})))
+
+	return ref, tarFixtureDirectory(t, string(store))
+}
+
 func assertNodeRawExports(
 	ctx context.Context,
 	t *testing.T,
@@ -332,7 +367,13 @@ func assertNodeRawExports(
 			ctx,
 			node,
 			mock.MatchedBy(func(options container.ExecOptions) bool {
-				return slices.Equal(options.Cmd, buildKindCtrExportCommand(refs[index]))
+				want := slices.Insert(
+					buildKindCtrExportCommand(refs[index]),
+					7,
+					"--skip-manifest-json",
+				)
+
+				return slices.Equal(options.Cmd, want)
 			}),
 		)
 	}

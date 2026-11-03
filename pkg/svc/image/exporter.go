@@ -57,6 +57,7 @@ type Exporter struct {
 	dockerClient dockerclient.Client
 	executor     *ContainerExecutor
 	localExport  bool
+	ociOnly      bool
 }
 
 // NewExporter creates a new image exporter.

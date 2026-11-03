@@ -333,6 +333,10 @@ func (e *Exporter) tryExportImages(
 		cmd = append(cmd, "--local")
 	}
 
+	if e.ociOnly {
+		cmd = append(cmd, "--skip-manifest-json")
+	}
+
 	cmd = append(cmd, tmpPath)
 	cmd = append(cmd, images...)
 

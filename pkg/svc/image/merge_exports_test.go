@@ -13,6 +13,7 @@ import (
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/image"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/layout"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -152,8 +153,25 @@ func assertImageArchiveReadable(t *testing.T, path string, count int) {
 	manifest, err := index.IndexManifest()
 	require.NoError(t, err)
 	require.Len(t, manifest.Manifests, count)
+	assertFixtureIndexContent(t, index)
+}
+
+func assertFixtureIndexContent(t *testing.T, index v1.ImageIndex) {
+	t.Helper()
+
+	manifest, err := index.IndexManifest()
+	require.NoError(t, err)
+	require.NotEmpty(t, manifest.Manifests)
 
 	for _, descriptor := range manifest.Manifests {
+		if descriptor.MediaType.IsIndex() {
+			nested, indexErr := index.ImageIndex(descriptor.Digest)
+			require.NoError(t, indexErr)
+			assertFixtureIndexContent(t, nested)
+
+			continue
+		}
+
 		img, imageErr := index.Image(descriptor.Digest)
 		require.NoError(t, imageErr)
 		_, imageErr = img.ConfigFile()

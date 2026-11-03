@@ -20,6 +20,11 @@ func (e *Exporter) exportSources(
 	distribution v1alpha1.Distribution,
 	opts ExportOptions,
 ) (resultErr error) {
+	// Imported digest aliases can target nested indexes. Preserve their OCI
+	// structure instead of asking ctr to synthesize a flat Docker manifest.
+	ociExporter := *e
+	ociExporter.ociOnly = true
+
 	directory, err := os.MkdirTemp(filepath.Dir(opts.OutputPath), ".ksail-export-")
 	if err != nil {
 		return fmt.Errorf("create export staging directory: %w", err)
@@ -42,7 +47,7 @@ func (e *Exporter) exportSources(
 		part := opts
 		part.OutputPath = filepath.Join(directory, "part.tar")
 
-		platform, exportErr := e.exportSource(ctx, source, distribution, part)
+		platform, exportErr := ociExporter.exportSource(ctx, source, distribution, part)
 		if exportErr != nil {
 			return exportErr
 		}

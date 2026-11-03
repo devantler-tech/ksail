@@ -77,7 +77,7 @@ func runMultiNodeExportTest(t *testing.T, testCase multiNodeExportCase) {
 
 	exportCmd := append([]string{
 		ctrCommand, "--namespace=k8s.io", "images", "export",
-		"--platform", "linux/amd64", "--local", testCase.tmpPath,
+		"--platform", "linux/amd64", "--local", "--skip-manifest-json", testCase.tmpPath,
 	}, testCase.expectedExport...)
 	setupExecMockWithCmdForExporter(ctx, t, mockClient, testCase.exportNode, exportCmd)
 

@@ -143,6 +143,7 @@ func (m *imageArchiveMerger) addTarget(
 
 func (m *imageArchiveMerger) write(ctx context.Context, writer io.Writer) error {
 	defaults := []ctrdarchive.ExportOpt{
+		ctrdarchive.WithSkipDockerManifest(),
 		ctrdarchive.WithAllPlatforms(),
 		ctrdarchive.WithSkipMissing(m.store),
 		ctrdarchive.WithPlatform(platforms.Ordered(m.platforms...)),
