@@ -93,8 +93,9 @@ func countNodes(
 	return countReadyNodes(ctx, clientset)
 }
 
-// countReadyNodes returns the number of Ready and total nodes reported by the clientset. Shared by
-// the vcluster status observer and the host cluster status observer.
+// countReadyNodes returns the number of Ready and total nodes reported by the clientset. Used by
+// the vcluster status observer; the host cluster status observer uses observeHostNodes, which reads
+// the same list once for counts and identity.
 func countReadyNodes(ctx context.Context, clientset kubernetes.Interface) (int32, int32, error) {
 	nodes, err := listNodes(ctx, clientset)
 	if err != nil {
