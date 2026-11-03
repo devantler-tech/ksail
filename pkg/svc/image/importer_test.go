@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -407,9 +408,18 @@ func TestImportExecFails(t *testing.T) {
 		Return(nil)
 
 	// Mock exec for import - fails with non-zero exit code
+	setupExecMockWithStdoutForExporter(ctx, t, mockClient, "my-cluster-control-plane",
+		importHelpCommand(), "OPTIONS:\n --digests  Create digest refs\n --help, -h  Show help\n")
+	setupExecMockForImporter(ctx, t, mockClient, "my-cluster-control-plane")
+
 	execID := "exec-import-fail"
 	mockClient.EXPECT().
-		ContainerExecCreate(ctx, "my-cluster-control-plane", mock.Anything).
+		ContainerExecCreate(ctx, "my-cluster-control-plane", mock.MatchedBy(func(opts container.ExecOptions) bool {
+			return slices.Equal(opts.Cmd, []string{
+				ctrCommand, "--namespace=k8s.io", "images", "import",
+				"--digests", "/root/ksail-images-import.tar",
+			})
+		})).
 		Return(container.ExecCreateResponse{ID: execID}, nil)
 
 	mockClient.EXPECT().
@@ -607,7 +617,10 @@ func setupExecMockForImporter(
 	execID := "exec-" + containerName
 
 	mockClient.EXPECT().
-		ContainerExecCreate(ctx, containerName, mock.Anything).
+		ContainerExecCreate(ctx, containerName, mock.MatchedBy(func(opts container.ExecOptions) bool {
+			return slices.Equal(opts.Cmd, []string{"rm", "-f", "/root/ksail-images-import.tar"}) ||
+				slices.Equal(opts.Cmd, []string{"rm", "-f", "/tmp/ksail-images-import.tar"})
+		})).
 		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
 
 	mockClient.EXPECT().
@@ -630,17 +643,15 @@ func setupImportExecMockForImporter(
 	t.Helper()
 
 	execID := "exec-import-" + containerName
+	setupExecMockWithStdoutForExporter(ctx, t, mockClient, containerName,
+		importHelpCommand(), "OPTIONS:\n --digests  Create digest refs\n --help, -h  Show help\n")
 
 	mockClient.EXPECT().
 		ContainerExecCreate(ctx, containerName, mock.MatchedBy(func(opts container.ExecOptions) bool {
-			// Verify the import command structure
-			return len(opts.Cmd) >= 5 &&
-				opts.Cmd[0] == ctrCommand &&
-				opts.Cmd[1] == "--namespace=k8s.io" &&
-				opts.Cmd[2] == "images" &&
-				opts.Cmd[3] == "import" &&
-				opts.Cmd[4] == "--digests" &&
-				opts.Cmd[5] == importPath
+			return slices.Equal(opts.Cmd, []string{
+				ctrCommand, "--namespace=k8s.io", "images", "import",
+				"--digests", importPath,
+			})
 		})).
 		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
 

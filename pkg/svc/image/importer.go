@@ -168,6 +168,14 @@ func (i *Importer) importImagesToNode(
 	if err != nil {
 		return fmt.Errorf("failed to copy import file to container: %w", err)
 	}
+	defer func() {
+		_, _ = i.executor.ExecInContainer(ctx, nodeName, []string{"rm", "-f", tmpPath})
+	}()
+
+	local, err := i.executor.localImageMode(ctx, nodeName, "import")
+	if err != nil {
+		return err
+	}
 
 	// Build ctr import command
 	// Note: We don't use --all-platforms because multi-platform images may have
@@ -175,17 +183,20 @@ func (i *Importer) importImagesToNode(
 	cmd := []string{
 		ctrCommand, ctrNamespaceArg, ctrImages, "import",
 		"--digests",
-		tmpPath,
 	}
+	// Local import preserves named images and child digest aliases without
+	// registering the input archive's top-level index as another image.
+	if local {
+		cmd = append(cmd, "--local")
+	}
+
+	cmd = append(cmd, tmpPath)
 
 	// Execute import command
 	_, err = i.executor.ExecInContainer(ctx, nodeName, cmd)
 	if err != nil {
 		return fmt.Errorf("ctr import failed: %w", err)
 	}
-
-	// Clean up temporary file in container
-	_, _ = i.executor.ExecInContainer(ctx, nodeName, []string{"rm", "-f", tmpPath})
 
 	return nil
 }

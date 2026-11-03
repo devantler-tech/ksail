@@ -25,6 +25,18 @@ for index in 0 1; do
 	}
 done
 
+case "${1:-roundtrip}" in
+assert-import-metadata)
+	bash "$(dirname "${BASH_SOURCE[0]}")/assert-import-metadata.sh" "${nodes[@]}"
+	exit
+	;;
+roundtrip) ;;
+*)
+	echo 'Unknown split-image fixture operation.' >&2
+	exit 1
+	;;
+esac
+
 ref_a="localhost/ksail-export-a:fixture"
 ref_b="localhost/ksail-export-b:fixture"
 staging=$(mktemp -d "${RUNNER_TEMP:?}/image-export-union.XXXXXX")

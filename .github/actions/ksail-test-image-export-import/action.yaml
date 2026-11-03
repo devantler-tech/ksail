@@ -88,10 +88,14 @@ runs:
       env:
         WORKLOAD_NAME: ${{ inputs.test-workload-name }}
         TIMEOUT: ${{ inputs.workload-timeout }}
+        IMAGE_EXPORT_CLUSTER: ${{ inputs.multi-node-cluster-name }}
       run: |
         # Import the previously exported images back
         ksail workload import /tmp/test-images.tar
         echo "✅ Image import succeeded"
+        if [ -n "$IMAGE_EXPORT_CLUSTER" ]; then
+          timeout --kill-after=15s 30s bash "$GITHUB_WORKSPACE/.github/actions/ksail-test-image-export-import/multi-node-roundtrip.sh" assert-import-metadata
+        fi
         # Restart pods to force an image lookup from containerd, validating
         # that the imported images are actually usable on the node.
         ksail workload rollout restart deployment/"$WORKLOAD_NAME"
