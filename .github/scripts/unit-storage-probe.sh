@@ -4,13 +4,16 @@
 set -euo pipefail
 umask 077
 
-die() { printf '%s\n' "$1" >&2; exit 2; }
+die() {
+  printf '%s\n' "$1" >&2
+  exit 2
+}
 [[ "${GITHUB_ACTIONS:-}" == true && "${RUNNER_ENVIRONMENT:-}" == github-hosted &&
-   "${GITHUB_REPOSITORY:-}" == devantler-tech/ksail && "${GITHUB_REF:-}" == refs/heads/main &&
-   "${RUNNER_OS:-}" == Linux ]] || die 'unit storage probe requires GitHub-hosted main'
+  "${GITHUB_REPOSITORY:-}" == devantler-tech/ksail && "${GITHUB_REF:-}" == refs/heads/main &&
+  "${RUNNER_OS:-}" == Linux ]] || die 'unit storage probe requires GitHub-hosted main'
 [[ "${RUNNER_TEMP:-}" == /* && "${GITHUB_WORKSPACE:-}" == /* ]] || die 'invalid probe workspace'
 [[ "${GITHUB_SHA:-}" =~ ^[a-f0-9]{40}$ && "${GITHUB_RUN_ID:-}" =~ ^[0-9]+$ &&
-   "${GITHUB_RUN_ATTEMPT:-}" =~ ^[1-9][0-9]*$ ]] || die 'invalid probe identity'
+  "${GITHUB_RUN_ATTEMPT:-}" =~ ^[1-9][0-9]*$ ]] || die 'invalid probe identity'
 
 consumer="$GITHUB_WORKSPACE/.unit-consumer"
 state="$RUNNER_TEMP/unit-storage-probe"
@@ -31,7 +34,10 @@ verify_source() {
 
 prepare() {
   verify_source
-  (cd "$consumer"; go env -json GOCACHE GOMODCACHE GOROOT GOVERSION GOTOOLCHAIN CGO_ENABLED GOFLAGS GOTMPDIR) > "$state/go-env.json"
+  (
+    cd "$consumer"
+    go env -json GOCACHE GOMODCACHE GOROOT GOVERSION GOTOOLCHAIN CGO_ENABLED GOFLAGS GOTMPDIR
+  ) >"$state/go-env.json"
   jq -e '.GOVERSION == "go1.27.3" and .GOTOOLCHAIN == "local" and .CGO_ENABLED == "1" and
     .GOFLAGS == "" and .GOTMPDIR == "" and
     ([.GOCACHE,.GOMODCACHE,.GOROOT] | all(type == "string" and startswith("/") and (test("[\\r\\n]")|not)))' \
@@ -46,7 +52,7 @@ prepare() {
     die 'compilation cache is not controlled cold'
   touch "$state/prepared"
   if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-    printf 'module-cache=%s\n' "$(jq -r .GOMODCACHE "$state/go-env.json")" >> "$GITHUB_OUTPUT"
+    printf 'module-cache=%s\n' "$(jq -r .GOMODCACHE "$state/go-env.json")" >>"$GITHUB_OUTPUT"
   fi
 }
 
@@ -59,24 +65,24 @@ sample_path() {
     return
   fi
   if ! bytes="$("$timeout_command" --kill-after=1s 5s env LC_ALL=C df -Pk "$path" 2>/dev/null |
+    awk 'NR==2 && NF==6 {print $2,$3,$4} END {if(NR!=2) exit 1}')" ||
+    ! inodes="$("$timeout_command" --kill-after=1s 5s env LC_ALL=C df -Pi "$path" 2>/dev/null |
       awk 'NR==2 && NF==6 {print $2,$3,$4} END {if(NR!=2) exit 1}')" ||
-     ! inodes="$("$timeout_command" --kill-after=1s 5s env LC_ALL=C df -Pi "$path" 2>/dev/null |
-      awk 'NR==2 && NF==6 {print $2,$3,$4} END {if(NR!=2) exit 1}')" ||
-     ! device="$("$timeout_command" --kill-after=1s 5s stat -L -c '%d' -- "$path" 2>/dev/null)" ||
-     [[ ! "$bytes" =~ ^[0-9]{1,12}\ [0-9]{1,12}\ [0-9]{1,12}$ ||
-        ! "$inodes" =~ ^[0-9]{1,12}\ [0-9]{1,12}\ [0-9]{1,12}$ || ! "$device" =~ ^[0-9]{1,20}$ ]]; then
+    ! device="$("$timeout_command" --kill-after=1s 5s stat -L -c '%d' -- "$path" 2>/dev/null)" ||
+    [[ ! "$bytes" =~ ^[0-9]{1,12}\ [0-9]{1,12}\ [0-9]{1,12}$ ||
+      ! "$inodes" =~ ^[0-9]{1,12}\ [0-9]{1,12}\ [0-9]{1,12}$ || ! "$device" =~ ^[0-9]{1,20}$ ]]; then
     jq -nc --arg label "$label" '{label:$label,status:"unknown"}'
     return
   fi
   touch "$state/devices"
   group="$(awk -v device="$device" '$0==device {print NR; found=1; exit} END {if(!found) exit 1}' "$state/devices")" || {
-    printf '%s\n' "$device" >> "$state/devices"
-    group="$(wc -l < "$state/devices" | tr -d ' ')"
+    printf '%s\n' "$device" >>"$state/devices"
+    group="$(wc -l <"$state/devices" | tr -d ' ')"
   }
   if [[ "$components" == true && "$label" != root ]]; then
     size_status=unknown
     if size="$("$timeout_command" --kill-after=1s 10s du -sHk -- "$path" 2>/dev/null | awk 'NR==1 {print $1} END {if(NR!=1) exit 1}')" &&
-       [[ "$size" =~ ^[0-9]{1,12}$ ]]; then size_status=measured; else size=null; fi
+      [[ "$size" =~ ^[0-9]{1,12}$ ]]; then size_status=measured; else size=null; fi
   fi
   jq -nc --arg label "$label" --arg group "fs-$group" --arg bytes "$bytes" --arg inodes "$inodes" \
     --argjson size "$size" --arg size_status "$size_status" '
@@ -89,7 +95,7 @@ sample_path() {
 
 snapshot() {
   local phase="$1" components="$2" module_cache='' build_cache='' toolchain='' index
-  case "$phase" in before-cleanup|after-cleanup|after-setup|after-restore|before-test|during-test|after-test) ;; *) die 'invalid snapshot phase' ;; esac
+  case "$phase" in before-cleanup | after-cleanup | after-setup | after-restore | before-test | during-test | after-test) ;; *) die 'invalid snapshot phase' ;; esac
   if [[ -f "$state/go-env.json" ]]; then
     module_cache="$(jq -r .GOMODCACHE "$state/go-env.json")"
     build_cache="$(jq -r .GOCACHE "$state/go-env.json")"
@@ -97,13 +103,13 @@ snapshot() {
   fi
   local labels=(root workspace go-temp runner-temp module-cache build-cache toolchain)
   local paths=(/ "$consumer" /tmp "$RUNNER_TEMP" "$module_cache" "$build_cache" "$toolchain")
-  : > "$state/rows.jsonl"
+  : >"$state/rows.jsonl"
   for index in "${!labels[@]}"; do
-    sample_path "${labels[$index]}" "${paths[$index]}" "$components" >> "$state/rows.jsonl"
+    sample_path "${labels[$index]}" "${paths[$index]}" "$components" >>"$state/rows.jsonl"
   done
   jq -nc --arg phase "$phase" --argjson epoch "$(date +%s)" --slurpfile entries "$state/rows.jsonl" \
-    '{phase:$phase,epoch:$epoch,entries:$entries}' >> "$state/frames.jsonl"
-  [[ "$(wc -c < "$state/frames.jsonl")" -le 8388608 ]] || die 'observation size budget exceeded'
+    '{phase:$phase,epoch:$epoch,entries:$entries}' >>"$state/frames.jsonl"
+  [[ "$(wc -c <"$state/frames.jsonl")" -le 8388608 ]] || die 'observation size budget exceeded'
 }
 
 run_control() {
@@ -117,10 +123,16 @@ run_control() {
   finish_run() {
     local exit_status=$?
     trap - EXIT INT TERM
-    if [[ -n "$sampler_pid" ]]; then kill "$sampler_pid" 2>/dev/null || true; wait "$sampler_pid" 2>/dev/null || true; fi
+    if [[ -n "$sampler_pid" ]]; then
+      kill "$sampler_pid" 2>/dev/null || true
+      wait "$sampler_pid" 2>/dev/null || true
+    fi
     if [[ "$completed" != true ]]; then
-      if [[ -n "$command_pid" ]]; then kill "$command_pid" 2>/dev/null || true; wait "$command_pid" 2>/dev/null || true; fi
-      jq -nc --argjson status "$exit_status" '{executed:true,completed:false,exit:$status}' > "$state/command.json"
+      if [[ -n "$command_pid" ]]; then
+        kill "$command_pid" 2>/dev/null || true
+        wait "$command_pid" 2>/dev/null || true
+      fi
+      jq -nc --argjson status "$exit_status" '{executed:true,completed:false,exit:$status}' >"$state/command.json"
     fi
   }
   trap finish_run EXIT
@@ -128,16 +140,22 @@ run_control() {
   trap 'exit 143' TERM
   (
     trap 'exit 0' INT TERM
-    for ((sample=0; sample<1800; sample++)); do
+    for ((sample = 0; sample < 1800; sample++)); do
       components=false
       if ((sample % 60 == 0)); then components=true; fi
-      if ! snapshot during-test "$components"; then touch "$state/observation-incomplete"; exit 2; fi
+      if ! snapshot during-test "$components"; then
+        touch "$state/observation-incomplete"
+        exit 2
+      fi
       sleep 1
     done
     touch "$state/observation-incomplete"
   ) &
   sampler_pid=$!
-  (cd "$consumer"; exec "$timeout_command" --kill-after=15s 20m go test ./...) > "$state/private-test.log" 2>&1 &
+  (
+    cd "$consumer"
+    exec "$timeout_command" --kill-after=15s 20m go test ./...
+  ) >"$state/private-test.log" 2>&1 &
   command_pid=$!
   set +e
   wait "$command_pid"
@@ -148,7 +166,7 @@ run_control() {
   wait "$sampler_pid" 2>/dev/null || true
   sampler_pid=''
   snapshot after-test true
-  jq -nc --argjson result "$result" '{executed:true,completed:true,exit:$result}' > "$state/command.json"
+  jq -nc --argjson result "$result" '{executed:true,completed:true,exit:$result}' >"$state/command.json"
   printf 'UNIT_STORAGE_COMMAND exit=%s\n' "$result"
   trap - EXIT INT TERM
   return "$result"
@@ -161,9 +179,9 @@ publish() {
   [[ ! -f "$state/cache-verified" ]] || cache_verified=true
   [[ ! -f "$state/observation-incomplete" ]] || incomplete=true
   if [[ ! -f "$command_file" ]]; then
-    jq -nc '{executed:false,completed:false,exit:null}' > "$command_file"
+    jq -nc '{executed:false,completed:false,exit:null}' >"$command_file"
   fi
-  [[ -f "$state/frames.jsonl" && "$(wc -c < "$state/frames.jsonl")" -le 8388608 ]] || die 'storage observation missing or oversized'
+  [[ -f "$state/frames.jsonl" && "$(wc -c <"$state/frames.jsonl")" -le 8388608 ]] || die 'storage observation missing or oversized'
   jq -nc --arg source "$source_sha" --arg harness "$GITHUB_SHA" --arg run "$GITHUB_RUN_ID" \
     --arg attempt "$GITHUB_RUN_ATTEMPT" --arg image "${ImageOS:-unknown}" --arg image_version "${ImageVersion:-unknown}" \
     --arg key "$cache_key" --argjson prepared "$prepared" --argjson cache_verified "$cache_verified" \
@@ -186,16 +204,16 @@ publish() {
         all($frames[] | select(.phase=="after-setup" or .phase=="after-restore" or .phase=="before-test" or .phase=="after-test");
           (.entries|length)==7 and all(.entries[] | select(.label!="root"); .componentStatus=="measured"))),
       limitations:["Sampled counters are not instantaneous peaks.","Component walks can delay samples.","Per-user and project quota limits are not established."]}' \
-    > "$state/receipt.json"
-  [[ "$(wc -c < "$state/receipt.json")" -le 8388608 ]] || die 'storage receipt oversized'
+    >"$state/receipt.json"
+  [[ "$(wc -c <"$state/receipt.json")" -le 8388608 ]] || die 'storage receipt oversized'
   mv "$state/receipt.json" "$state/public/report.json"
   jq -e '.countersComplete and .componentsComplete' "$state/public/report.json" >/dev/null || die 'storage observations are incomplete'
 }
 
 case "${1:-}" in
-  prepare) prepare ;;
-  snapshot) snapshot "${2:-}" true ;;
-  run) run_control ;;
-  publish) publish ;;
-  *) die 'invalid unit storage probe operation' ;;
+prepare) prepare ;;
+snapshot) snapshot "${2:-}" true ;;
+run) run_control ;;
+publish) publish ;;
+*) die 'invalid unit storage probe operation' ;;
 esac
