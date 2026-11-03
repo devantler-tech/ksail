@@ -1643,7 +1643,7 @@ jobs:
               limit(4; foreach (inputs | fromjson? | objects
                 | select(.Action == "build-output")
                 | .Output | strings
-                | if contains("no space left on device") then "disk-full"
+                | if test("no space left on device|disk quota exceeded"; "i") then "disk-full"
                   elif test("out of memory|cannot allocate memory") then "memory-exhausted"
                   elif test("(compile|link): signal: killed") then "tool-killed"
                   elif test("resource temporarily unavailable|failed to create new OS thread")

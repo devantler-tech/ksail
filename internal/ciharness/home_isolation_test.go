@@ -90,6 +90,8 @@ func TestHomeIsolationGuardBuildResourceDiagnostics(t *testing.T) {
 
 	for _, test := range []struct{ class, category string }{
 		{"resource-disk", "disk-full"},
+		{"resource-disk-uppercase", "disk-full"},
+		{"resource-quota", "disk-full"},
 		{"resource-memory", "memory-exhausted"},
 		{"resource-killed", "tool-killed"},
 		{"resource-process", "process-limit"},
@@ -193,7 +195,8 @@ func assertHomeFailureClasses(t *testing.T, output, failureClass string) {
 		wantCounts[0] = 1
 	case "test":
 		wantCounts[1] = 1
-	case "build", "resource-disk", "resource-memory", "resource-killed", "resource-process":
+	case "build", "resource-disk", "resource-disk-uppercase", "resource-quota",
+		"resource-memory", "resource-killed", "resource-process":
 		wantCounts[2] = 1
 	case "repeated":
 		wantCounts = []int{36, 3, 1}
@@ -318,9 +321,11 @@ case "$1" in
           printf '{"Action":"fail","Package":"%s","FailedBuild":"%s"}\n' \
             'github.com/devantler-tech/ksail/v7/internal/ciharness/build' 'PRIVATE_FIXTURE_DETAIL'
           ;;
-        resource-disk|resource-memory|resource-killed|resource-process)
+        resource-disk|resource-disk-uppercase|resource-quota|resource-memory|resource-killed|resource-process)
           case "$HOME_GUARD_FAILURE_CLASS" in
             resource-disk) message='write PRIVATE_FIXTURE_DETAIL: no space left on device' ;;
+            resource-disk-uppercase) message='write PRIVATE_FIXTURE_DETAIL: No space left on device' ;;
+            resource-quota) message='write PRIVATE_FIXTURE_DETAIL: disk quota exceeded' ;;
             resource-memory) message='runtime: out of memory PRIVATE_FIXTURE_DETAIL' ;;
             resource-killed) message='PRIVATE_FIXTURE_DETAIL: compile: signal: killed' ;;
             resource-process) message='runtime: failed to create new OS thread PRIVATE_FIXTURE_DETAIL' ;;
