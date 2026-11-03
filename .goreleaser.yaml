@@ -196,6 +196,12 @@ release:
     # Stable one-line installer for Linux and macOS release archives.
     - glob: ./install.sh
   footer: |
+    ## Historical failed release attempts
+
+    The failed attempts v7.202.24, v7.202.29, v7.202.52, v7.202.60 and v7.202.88
+    left retained tags without published releases. Use a newer published version.
+    See [release cleanup history](https://github.com/devantler-tech/ksail/issues/7694).
+
     ## Quick Start
 
     **Homebrew Cask** (macOS):
