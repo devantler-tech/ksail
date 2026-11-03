@@ -4,9 +4,9 @@ set -euo pipefail
 case "${FIXTURE_MODE:?}" in baseline | candidate) ;; *) exit 2 ;; esac
 [[ "${PROBE_OUTCOME:?}" == failure && "${TRIAL_OUTCOME:?}" == failure ]]
 if [[ "$FIXTURE_MODE" == candidate ]]; then
-  [[ "${SAVE_OUTCOME:?}" == success && "${UPLOAD_OUTCOME:?}" == success ]]
+	[[ "${SAVE_OUTCOME:?}" == success && "${UPLOAD_OUTCOME:?}" == success ]]
 else
-  [[ "${SAVE_OUTCOME:?}" == skipped && "${UPLOAD_OUTCOME:?}" == skipped ]]
+	[[ "${SAVE_OUTCOME:?}" == skipped && "${UPLOAD_OUTCOME:?}" == skipped ]]
 fi
 [[ "${EXPECTED_HEAD:?}" =~ ^[0-9a-f]{40}$ ]]
 [[ "${GITHUB_RUN_ID:?}" =~ ^[0-9]+$ && "${GITHUB_RUN_ATTEMPT:?}" =~ ^[0-9]+$ ]]
@@ -14,9 +14,9 @@ name="system-test-diagnostics-fixture-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$FIXTUR
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 gh api --method GET "repos/${GITHUB_REPOSITORY:?}/actions/runs/$GITHUB_RUN_ID/artifacts" \
-  -f name="$name" -f per_page=100 >"$tmp"
+	-f name="$name" -f per_page=100 >"$tmp"
 jq -e --arg name "$name" --arg mode "$FIXTURE_MODE" --arg head "$EXPECTED_HEAD" \
-  --argjson run "$GITHUB_RUN_ID" '
+	--argjson run "$GITHUB_RUN_ID" '
   (.total_count | type == "number") and (.artifacts | type == "array") and
   .total_count == (.artifacts | length) and
   if $mode == "baseline" then .total_count == 0 else

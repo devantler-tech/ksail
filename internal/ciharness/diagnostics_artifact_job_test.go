@@ -24,14 +24,18 @@ func TestDiagnosticsArtifactProbeIsBlockingAndIncludesCounterfactual(t *testing.
 	matrix := requireStringMap(t, job.Strategy["matrix"])
 	assert.ElementsMatch(t, []any{"baseline", "candidate"}, requireAnySlice(t, matrix["mode"]))
 
-	probe := findHarnessStep(t, job.Steps, "Exercise production failure and artifact programs")
-	assert.Equal(t, "probe", probe.ID)
-	assert.True(t, probe.ContinueOnError, "the verifier must examine the intended failure")
-	assert.Equal(t, "./.github/actions/diagnostics-artifact-fixture", probe.Uses)
-	assert.Equal(t, map[string]any{
-		"distribution": "Vanilla", "provider": "Hetzner",
-		"test-autoscaler-inventory": "true", "upload-artifacts": "true",
-	}, probe.With, "Vanilla makes the real Talos trial refuse before any cloud operation")
+	for _, mode := range []string{"baseline", "candidate"} {
+		probe := findHarnessStep(t, job.Steps, "Exercise "+mode+" failure and artifact programs")
+		assert.Equal(t, "probe-"+mode, probe.ID)
+		assert.Equal(t, "matrix.mode == '"+mode+"'", probe.If)
+		assert.True(t, probe.ContinueOnError, "the verifier must examine the intended failure")
+		assert.Equal(t, "$/.github/actions/diagnostics-artifact-"+mode, probe.Uses,
+			"the native engine must load the immutable reviewed fixture")
+		assert.Equal(t, map[string]any{
+			"distribution": "Vanilla", "provider": "Hetzner",
+			"test-autoscaler-inventory": "true", "upload-artifacts": "true",
+		}, probe.With, "Vanilla makes the real Talos trial refuse before any cloud operation")
+	}
 
 	verify := findHarnessStep(t, job.Steps, "Verify native outcomes and artifact identity")
 	assert.Equal(t, "always()", verify.If)
@@ -39,11 +43,15 @@ func TestDiagnosticsArtifactProbeIsBlockingAndIncludesCounterfactual(t *testing.
 	assert.Equal(t, "bash .github/scripts/verify-diagnostics-artifact.sh\n", verify.Run)
 
 	for key, expression := range map[string]string{
-		"PROBE_OUTCOME":  "${{ steps.probe.outcome }}",
-		"TRIAL_OUTCOME":  "${{ steps.probe.outputs.trial-outcome }}",
-		"SAVE_OUTCOME":   "${{ steps.probe.outputs.save-outcome }}",
-		"UPLOAD_OUTCOME": "${{ steps.probe.outputs.upload-outcome }}",
-		"EXPECTED_HEAD":  "${{ github.event.pull_request.head.sha || github.sha }}",
+		"PROBE_OUTCOME": "${{ matrix.mode == 'candidate' && " +
+			"steps.probe-candidate.outcome || steps.probe-baseline.outcome }}",
+		"TRIAL_OUTCOME": "${{ matrix.mode == 'candidate' && " +
+			"steps.probe-candidate.outputs.trial-outcome || steps.probe-baseline.outputs.trial-outcome }}",
+		"SAVE_OUTCOME": "${{ matrix.mode == 'candidate' && " +
+			"steps.probe-candidate.outputs.save-outcome || steps.probe-baseline.outputs.save-outcome }}",
+		"UPLOAD_OUTCOME": "${{ matrix.mode == 'candidate' && " +
+			"steps.probe-candidate.outputs.upload-outcome || steps.probe-baseline.outputs.upload-outcome }}",
+		"EXPECTED_HEAD": "${{ github.event.pull_request.head.sha || github.sha }}",
 	} {
 		assert.Equal(t, expression, verify.Env[key])
 	}

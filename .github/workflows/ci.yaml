@@ -2477,16 +2477,27 @@ jobs:
         run: |
           shellcheck .github/scripts/diagnostics-artifact*.sh .github/scripts/verify-diagnostics-artifact.sh
           bash .github/scripts/diagnostics-artifact-fixture.test.sh
-          bash .github/scripts/diagnostics-artifact-fixture.sh "$FIXTURE_MODE" .github/actions/diagnostics-artifact-fixture
           fixture_bin="$(mktemp -d)"
           cp .github/scripts/diagnostics-artifact-ksail-fixture.sh "$fixture_bin/ksail"
           chmod +x "$fixture_bin/ksail"
           printf '%s\n' "$fixture_bin" >> "$GITHUB_PATH"
 
-      - name: Exercise production failure and artifact programs
-        id: probe
+      - name: Exercise baseline failure and artifact programs
+        id: probe-baseline
+        if: matrix.mode == 'baseline'
         continue-on-error: true
-        uses: ./.github/actions/diagnostics-artifact-fixture
+        uses: $/.github/actions/diagnostics-artifact-baseline
+        with:
+          distribution: Vanilla
+          provider: Hetzner
+          test-autoscaler-inventory: "true"
+          upload-artifacts: "true"
+
+      - name: Exercise candidate failure and artifact programs
+        id: probe-candidate
+        if: matrix.mode == 'candidate'
+        continue-on-error: true
+        uses: $/.github/actions/diagnostics-artifact-candidate
         with:
           distribution: Vanilla
           provider: Hetzner
@@ -2498,10 +2509,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           FIXTURE_MODE: ${{ matrix.mode }}
-          PROBE_OUTCOME: ${{ steps.probe.outcome }}
-          TRIAL_OUTCOME: ${{ steps.probe.outputs.trial-outcome }}
-          SAVE_OUTCOME: ${{ steps.probe.outputs.save-outcome }}
-          UPLOAD_OUTCOME: ${{ steps.probe.outputs.upload-outcome }}
+          PROBE_OUTCOME: ${{ matrix.mode == 'candidate' && steps.probe-candidate.outcome || steps.probe-baseline.outcome }}
+          TRIAL_OUTCOME: ${{ matrix.mode == 'candidate' && steps.probe-candidate.outputs.trial-outcome || steps.probe-baseline.outputs.trial-outcome }}
+          SAVE_OUTCOME: ${{ matrix.mode == 'candidate' && steps.probe-candidate.outputs.save-outcome || steps.probe-baseline.outputs.save-outcome }}
+          UPLOAD_OUTCOME: ${{ matrix.mode == 'candidate' && steps.probe-candidate.outputs.upload-outcome || steps.probe-baseline.outputs.upload-outcome }}
           EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           bash .github/scripts/verify-diagnostics-artifact.sh
