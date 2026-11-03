@@ -2742,6 +2742,8 @@ jobs:
   require-checks-in-pr:
     name: ${{ github.event_name == 'workflow_dispatch' && inputs.run_local_recovery_trial && 'Local Recovery Trial - Checks' || 'CI - Required Checks' }}
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
     timeout-minutes: 5
     needs:
       [
@@ -2786,8 +2788,9 @@ jobs:
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/.github/actions/aggregate-job-checks@39ad5ddb1b89c404d9054fb0a6e5430a67120fe7 # v19.0.11
+      - uses: devantler-tech/.github/actions/aggregate-job-checks@15e2fb1af4b5525ff96202661ca4b87d6affade0 # v19.1.1
         with:
+          check-workflow-startup: ${{ contains(fromJSON('["pull_request","push","merge_group"]'), github.event_name) }}
           job-results: >-
             ${{ needs.retired-repo-links.result }}
             ${{ needs.rate-limit-gate.result }}
