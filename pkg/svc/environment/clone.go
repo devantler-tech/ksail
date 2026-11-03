@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
@@ -129,7 +130,7 @@ func CloneEnvironmentConfig(
 	rewrites []Rewrite,
 	force bool,
 ) (string, bool, error) {
-	return cloneEnvironmentConfig(repoRoot, srcConfigRel, "", rewrites, Identity{}, force)
+	return cloneEnvironmentConfig(repoRoot, srcConfigRel, "", rewrites, Identity{}, force, nil)
 }
 
 // CloneEnvironmentConfigTo is [CloneEnvironmentConfig] with an explicit
@@ -144,7 +145,15 @@ func CloneEnvironmentConfigTo(
 	rewrites []Rewrite,
 	force bool,
 ) (string, bool, error) {
-	return cloneEnvironmentConfig(repoRoot, srcConfigRel, dstConfigRel, rewrites, Identity{}, force)
+	return cloneEnvironmentConfig(
+		repoRoot,
+		srcConfigRel,
+		dstConfigRel,
+		rewrites,
+		Identity{},
+		force,
+		nil,
+	)
 }
 
 // CloneBaseSyncedConfigTo is [CloneEnvironmentConfigTo] for a base-synced source: after
@@ -157,7 +166,50 @@ func CloneBaseSyncedConfigTo(
 	identity Identity,
 	force bool,
 ) (string, bool, error) {
-	return cloneEnvironmentConfig(repoRoot, srcConfigRel, dstConfigRel, rewrites, identity, force)
+	return cloneEnvironmentConfig(
+		repoRoot,
+		srcConfigRel,
+		dstConfigRel,
+		rewrites,
+		identity,
+		force,
+		nil,
+	)
+}
+
+// CloneTarget identifies the destination of a root-config clone. Its name replaces
+// only metadata.name; its context fills an omitted value without discarding a
+// custom context. A non-empty Provider is an explicit override, not an inherited default.
+type CloneTarget struct {
+	Identity Identity
+	Provider string
+}
+
+// CloneEnvironmentConfigForTarget clones a selected root config with a distinct
+// destination identity and optional explicit provider, using the same encrypted-copy,
+// containment, source-protection and no-overwrite behavior as the other clone APIs.
+func CloneEnvironmentConfigForTarget(
+	repoRoot, srcConfigRel, dstConfigRel string,
+	rewrites []Rewrite,
+	target CloneTarget,
+	force bool,
+) (string, bool, error) {
+	// These two values belong to exact root paths. Applying their old broadcast
+	// substitutions first would also rename unrelated annotations or node groups.
+	rootRewrites := slices.DeleteFunc(slices.Clone(rewrites), func(rewrite Rewrite) bool {
+		return rewrite.Kind == MetaFieldValue &&
+			(rewrite.Field == nameKey || rewrite.Field == providerKey)
+	})
+
+	return cloneEnvironmentConfig(
+		repoRoot,
+		srcConfigRel,
+		dstConfigRel,
+		rootRewrites,
+		target.Identity,
+		force,
+		&target,
+	)
 }
 
 // cloneEnvironmentConfig is the shared implementation behind CloneEnvironmentConfig
@@ -170,6 +222,7 @@ func cloneEnvironmentConfig(
 	rewrites []Rewrite,
 	identity Identity,
 	force bool,
+	target *CloneTarget,
 ) (string, bool, error) {
 	srcConfigRel = filepath.ToSlash(srcConfigRel)
 	srcAbs := filepath.Join(repoRoot, filepath.FromSlash(srcConfigRel))
@@ -191,7 +244,7 @@ func cloneEnvironmentConfig(
 		return "", false, err
 	}
 
-	content, err = materializeCloneIdentity(content, srcConfigRel, identity)
+	content, err = materializeCloneIdentity(content, srcConfigRel, identity, target)
 	if err != nil {
 		return "", false, err
 	}
@@ -215,17 +268,32 @@ func cloneEnvironmentConfig(
 // materializeCloneIdentity writes identity into a cloned config's content (see
 // [MaterializeIdentity]). Ciphertext is cloned verbatim, so identity is only written
 // into a plaintext config, and an empty identity leaves the content unchanged.
-func materializeCloneIdentity(content, srcConfigRel string, identity Identity) (string, error) {
-	if identity == (Identity{}) || strings.HasSuffix(srcConfigRel, encryptedFileSuffix) {
+func materializeCloneIdentity(
+	content, srcConfigRel string, identity Identity, target *CloneTarget,
+) (string, error) {
+	if strings.HasSuffix(srcConfigRel, encryptedFileSuffix) {
 		return content, nil
 	}
 
-	materialized, err := MaterializeIdentity(content, identity)
-	if err != nil {
-		return "", fmt.Errorf("writing clone identity: %w", err)
+	if target != nil {
+		materialized, err := materializeCloneTarget(content, *target)
+		if err != nil {
+			return "", fmt.Errorf("writing clone target: %w", err)
+		}
+
+		return materialized, nil
 	}
 
-	return materialized, nil
+	if identity != (Identity{}) {
+		materialized, err := MaterializeIdentity(content, identity)
+		if err != nil {
+			return "", fmt.Errorf("writing clone identity: %w", err)
+		}
+
+		content = materialized
+	}
+
+	return content, nil
 }
 
 // writeClone writes one cloned file's content to repoRoot/newRelPath, returning

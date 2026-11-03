@@ -79,7 +79,7 @@ func DeriveRewrites(srcName, dstName, dstProvider, srcProvider string) []Rewrite
 	if dstProvider != "" && dstProvider != srcProvider {
 		rewrites = append(rewrites, Rewrite{
 			Kind:  MetaFieldValue,
-			Field: "provider",
+			Field: providerKey,
 			Old:   srcProvider,
 			New:   dstProvider,
 		})
@@ -106,7 +106,7 @@ func DeriveRewrites(srcName, dstName, dstProvider, srcProvider string) []Rewrite
 func DeriveConfigRewrites(srcName, dstName, dstProvider, srcProvider string) []Rewrite {
 	return append(
 		DeriveRewrites(srcName, dstName, dstProvider, srcProvider),
-		Rewrite{Kind: MetaFieldValue, Field: "name", Old: srcName, New: dstName},
+		Rewrite{Kind: MetaFieldValue, Field: nameKey, Old: srcName, New: dstName},
 	)
 }
 
@@ -142,7 +142,7 @@ func DeriveContextRewrite(
 		return Rewrite{}, false
 	}
 
-	return Rewrite{Kind: MetaFieldValue, Field: "context", Old: srcContext, New: dstContext}, true
+	return Rewrite{Kind: MetaFieldValue, Field: contextKey, Old: srcContext, New: dstContext}, true
 }
 
 // RewriteOverlayFile applies the rewrites to one cloned overlay file, returning the

@@ -50,8 +50,8 @@ environment <name> with its own ksail.<name>.yaml, repointing the
 structured identity along the way: the cluster-meta cluster_name, the
 clusters/<env> path segment and content references, the root config's metadata
 name, the connection context (distribution-aware), and — when --provider is given
-— the provider. Every other byte is preserved, so the kustomize replacements block,
-base wiring, version pins and comments survive intact.
+— the provider. Unrelated configuration is preserved, including the kustomize
+replacements block, base wiring, version pins and comments.
 
 SOPS-encrypted files (*.enc.yaml) are copied verbatim with only their path
 repointed; re-encrypt them to the new environment's recipients afterwards with
@@ -398,17 +398,18 @@ func cloneEnvironment(cmd *cobra.Command, params addEnvironmentParams) error {
 	// ksail.yaml, whose name has no environment segment for the rewrites to repoint.
 	// That config usually declares no cluster name or context either, so the clone
 	// is given its own, or both environments would target the same default cluster.
-	var identity environment.Identity
+	identity := environment.Identity{Name: params.dstName}
 	if params.srcConfigFile == environment.BaseConfigFile {
-		identity = environment.Identity{
-			Name:    params.dstName,
-			Context: materializedContext(params.distribution, params.dstName),
-		}
+		identity.Context = materializedContext(params.distribution, params.dstName)
 	}
 
-	configPath, wroteConfig, err := environment.CloneBaseSyncedConfigTo(
-		params.repoRoot, params.srcConfigFile, environmentConfigFile(params.dstName),
-		configRewrites, identity, params.force,
+	configPath, wroteConfig, err := environment.CloneEnvironmentConfigForTarget(
+		params.repoRoot,
+		params.srcConfigFile,
+		environmentConfigFile(params.dstName),
+		configRewrites,
+		environment.CloneTarget{Identity: identity, Provider: params.dstProvider},
+		params.force,
 	)
 	if err != nil {
 		return fmt.Errorf("cloning environment config: %w", err)
