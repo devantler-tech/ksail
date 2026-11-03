@@ -2,20 +2,65 @@
 # Verify that the native artifact probe executes the production programs (#7700).
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+[[ $# -le 1 ]] || {
+	echo 'expected at most one immutable fixture source' >&2
+	exit 2
+}
+fixture_source=${1-}
+[[ $# == 0 || -d "$fixture_source" ]] || {
+	echo 'immutable fixture source unavailable' >&2
+	exit 2
+}
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
+
+compare_fixture_source() {
+	local source_root=$1 fixture_mode=$2
+	# Explicit failure propagation matters when a negative control calls this
+	# function in an if condition, where Bash does not apply errexit.
+	yq -o=json '.' "$source_root/.github/actions/diagnostics-artifact-$fixture_mode/action.yaml" |
+		jq -S . >"$tmp/source-check.json" || return 1
+	cmp "$tmp/$fixture_mode-generated.json" "$tmp/source-check.json"
+}
 
 for mode in baseline candidate; do
 	bash "$root/.github/scripts/diagnostics-artifact-fixture.sh" "$mode" "$tmp/$mode"
 	yq -o=json '.' "$tmp/$mode/action.yaml" >"$tmp/$mode.json"
-	# GitHub's immutable self-repository reference loads these reviewed files,
-	# not an action created in the checkout. Compare structurally so formatting
-	# cannot conceal stale generated programs or different failure conditions.
-	yq -o=json '.' "$root/.github/actions/diagnostics-artifact-$mode/action.yaml" |
-		jq -S . >"$tmp/$mode-committed.json"
 	jq -S . "$tmp/$mode.json" >"$tmp/$mode-generated.json"
-	cmp "$tmp/$mode-committed.json" "$tmp/$mode-generated.json"
+	# Both the reviewable local copies and the actually executed immutable
+	# source must equal freshly generated programs, including failure guards.
+	compare_fixture_source "$root" "$mode"
+	if [[ -n "$fixture_source" ]]; then compare_fixture_source "$fixture_source" "$mode"; fi
 done
+
+# Prove stale, missing, malformed and wrong-order source never authorizes a probe.
+source_control="$tmp/source-control"
+source_action="$source_control/.github/actions/diagnostics-artifact-candidate"
+mkdir -p "$source_action"
+cp "$tmp/candidate/action.yaml" "$source_action/action.yaml"
+compare_fixture_source "$source_control" candidate
+jq '.runs.steps[2].run = "echo replaced"' "$tmp/candidate.json" >"$source_action/action.yaml"
+if compare_fixture_source "$source_control" candidate >"$tmp/source-rejected.log" 2>&1; then
+	echo 'stale fixture program was accepted' >&2
+	exit 1
+fi
+if compare_fixture_source "$tmp/missing-source" candidate >"$tmp/source-rejected.log" 2>&1; then
+	echo 'missing fixture source was accepted' >&2
+	exit 1
+fi
+printf 'not: [yaml' >"$source_action/action.yaml"
+if compare_fixture_source "$source_control" candidate >"$tmp/source-rejected.log" 2>&1; then
+	echo 'malformed fixture source was accepted' >&2
+	exit 1
+fi
+cp "$tmp/baseline/action.yaml" "$source_action/action.yaml"
+if compare_fixture_source "$source_control" candidate >"$tmp/source-rejected.log" 2>&1; then
+	echo 'wrong-order fixture source was accepted' >&2
+	exit 1
+fi
+cp "$tmp/candidate/action.yaml" "$source_action/action.yaml"
+compare_fixture_source "$source_control" candidate
+
 yq -o=json '.' "$root/.github/actions/ksail-system-test/action.yaml" >"$tmp/source.json"
 jq -S '[.runs.steps[] | select(.name == "🧪 Hetzner autoscaler inventory — unchanged update and retry" or .name == "📋 Save system test diagnostics" or .name == "📤 Upload system test diagnostics")]' \
 	"$tmp/source.json" >"$tmp/expected.json"

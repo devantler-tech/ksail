@@ -13,8 +13,8 @@ func TestDiagnosticsArtifactProbeIsBlockingAndIncludesCounterfactual(t *testing.
 	t.Parallel()
 
 	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
-	job, ok := workflow.Jobs["system-test-diagnostics-artifact"]
-	require.True(t, ok, "missing native diagnostics artifact probe")
+	job, exists := workflow.Jobs["system-test-diagnostics-artifact"]
+	require.True(t, exists, "missing native diagnostics artifact probe")
 	assert.False(t, job.ContinueOnError)
 	assert.Equal(t, 10, job.TimeoutMinutes)
 	assert.Equal(t, []string{"changes"}, job.Needs)
@@ -24,13 +24,16 @@ func TestDiagnosticsArtifactProbeIsBlockingAndIncludesCounterfactual(t *testing.
 	matrix := requireStringMap(t, job.Strategy["matrix"])
 	assert.ElementsMatch(t, []any{"baseline", "candidate"}, requireAnySlice(t, matrix["mode"]))
 
+	ref := assertPinnedFixtureSource(t, job.Steps)
+
 	for _, mode := range []string{"baseline", "candidate"} {
+		expectedAction := "devantler-tech/ksail/.github/actions/diagnostics-artifact-" + mode + "@" + ref
 		probe := findHarnessStep(t, job.Steps, "Exercise "+mode+" failure and artifact programs")
 		assert.Equal(t, "probe-"+mode, probe.ID)
 		assert.Equal(t, "matrix.mode == '"+mode+"'", probe.If)
 		assert.True(t, probe.ContinueOnError, "the verifier must examine the intended failure")
-		assert.Equal(t, "$/.github/actions/diagnostics-artifact-"+mode, probe.Uses,
-			"the native engine must load the immutable reviewed fixture")
+		assert.Equal(t, expectedAction, probe.Uses,
+			"the native action and its source-equivalence proof must use the same immutable commit")
 		assert.Equal(t, map[string]any{
 			"distribution": "Vanilla", "provider": "Hetzner",
 			"test-autoscaler-inventory": "true", "upload-artifacts": "true",
@@ -67,4 +70,24 @@ func TestDiagnosticsArtifactProbeIsBlockingAndIncludesCounterfactual(t *testing.
 	require.NotEmpty(t, gate.Steps)
 	assert.Contains(t, gate.Steps[0].With["job-results"],
 		"${{ needs.system-test-diagnostics-artifact.result }}")
+}
+
+func assertPinnedFixtureSource(t *testing.T, steps []harnessStep) string {
+	t.Helper()
+
+	source := findHarnessStep(t, steps, "Checkout immutable fixture source")
+	ref, hasRef := source.With["ref"].(string)
+	require.True(t, hasRef, "fixture source must use a literal commit")
+	assert.Regexp(t, `^[0-9a-f]{40}$`, ref)
+	assert.NotEqual(t, "0000000000000000000000000000000000000000", ref)
+	assert.Equal(t, map[string]any{
+		"repository": "devantler-tech/ksail", "ref": ref,
+		"path": ".diagnostics-artifact-source", "persist-credentials": false,
+	}, source.With)
+	assert.Equal(t, findHarnessStep(t, steps, "Checkout").Uses, source.Uses)
+	prepare := findHarnessStep(t, steps, "Prepare isolated production-step probe")
+	assert.Contains(t, prepare.Run, `bash .github/scripts/diagnostics-artifact-fixture.test.sh `+
+		`"$GITHUB_WORKSPACE/.diagnostics-artifact-source"`)
+
+	return ref
 }

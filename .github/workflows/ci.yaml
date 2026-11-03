@@ -2471,12 +2471,22 @@ jobs:
           repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
+      # actionlint 1.7.12 cannot parse $/ yet (rhysd/actionlint#732). Keep the
+      # action calls immutable and prove their exact programs against this head.
+      - name: Checkout immutable fixture source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: devantler-tech/ksail
+          ref: 59b99284251a3bd70baaeb742cd44328971b7d09
+          path: .diagnostics-artifact-source
+          persist-credentials: false
+
       - name: Prepare isolated production-step probe
         env:
           FIXTURE_MODE: ${{ matrix.mode }}
         run: |
           shellcheck .github/scripts/diagnostics-artifact*.sh .github/scripts/verify-diagnostics-artifact.sh
-          bash .github/scripts/diagnostics-artifact-fixture.test.sh
+          bash .github/scripts/diagnostics-artifact-fixture.test.sh "$GITHUB_WORKSPACE/.diagnostics-artifact-source"
           fixture_bin="$(mktemp -d)"
           cp .github/scripts/diagnostics-artifact-ksail-fixture.sh "$fixture_bin/ksail"
           chmod +x "$fixture_bin/ksail"
@@ -2486,7 +2496,7 @@ jobs:
         id: probe-baseline
         if: matrix.mode == 'baseline'
         continue-on-error: true
-        uses: $/.github/actions/diagnostics-artifact-baseline
+        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-baseline@59b99284251a3bd70baaeb742cd44328971b7d09
         with:
           distribution: Vanilla
           provider: Hetzner
@@ -2497,7 +2507,7 @@ jobs:
         id: probe-candidate
         if: matrix.mode == 'candidate'
         continue-on-error: true
-        uses: $/.github/actions/diagnostics-artifact-candidate
+        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-candidate@59b99284251a3bd70baaeb742cd44328971b7d09
         with:
           distribution: Vanilla
           provider: Hetzner
