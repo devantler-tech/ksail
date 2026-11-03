@@ -40,6 +40,13 @@ There is no offline phase any more: manifest generation, the `open mcp --help` s
 
 - **Nested clusters** (`ksail-test-kubernetes-provider`, `test-kubernetes-provider: "true"`) — Create nested clusters on top of the running host cluster
 
+The explicit two-node nested Vanilla CI case prepares the disposable Linux runner's shared
+inotify budget before creating its host cluster. It raises only values below Kind's documented
+minimums (512 instances and 524288 watches), preserves higher values and requires successful
+readback. This follows descriptor exhaustion observed in the retained worker kubelet journal;
+native creation and authenticated API acceptance must still pass. See
+[Kind's host-capacity guidance](https://kind.sigs.k8s.io/docs/user/known-issues/#pod-errors-due-to-too-many-open-files).
+
 ### Phase 5 — Debug
 
 - Automatic Kubernetes diagnostic output on failure
@@ -163,7 +170,7 @@ Cloud credentials are read from environment variables, not inputs (see [Prerequi
 ### Core
 
 | Input                 | Description                                                   | Required | Default                |
-|-----------------------|---------------------------------------------------------------|----------|------------------------|
+| --------------------- | ------------------------------------------------------------- | -------- | ---------------------- |
 | `distribution`        | Kubernetes distribution (Vanilla, K3s, Talos, VCluster, KWOK) | Yes      | -                      |
 | `provider`            | Infrastructure provider (Docker, Hetzner, Omni)               | No       | `Docker`               |
 | `args`                | Additional arguments for project init/create                  | No       | `""`                   |
@@ -177,7 +184,7 @@ Cloud credentials are read from environment variables, not inputs (see [Prerequi
 ### Registries
 
 | Input                 | Description                                                                | Default                      |
-|-----------------------|----------------------------------------------------------------------------|------------------------------|
+| --------------------- | -------------------------------------------------------------------------- | ---------------------------- |
 | `ghcr-user`           | GitHub Container Registry username (external registry tests)               | `""`                         |
 | `ghcr-token`          | GitHub Container Registry token (external registry tests)                  | `""`                         |
 | `dockerhub-user`      | Docker Hub username, so nested clusters pull through authenticated mirrors | `""`                         |
@@ -189,7 +196,7 @@ Cloud credentials are read from environment variables, not inputs (see [Prerequi
 Each of these adds a phase and is off unless set. The action's `action.yaml` describes the exact preconditions of each.
 
 | Input                               | Description                                                                                   | Default                      |
-|-------------------------------------|-----------------------------------------------------------------------------------------------|------------------------------|
+| ----------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------- |
 | `test-workload-mirror`              | Docker provider only: smoke-test `workload mirror` against a live HTTP deployment             | `false`                      |
 | `test-kubernetes-provider`          | Create nested clusters on the running host cluster                                            | `false`                      |
 | `kubernetes-provider-distributions` | Comma-separated distributions for the nested clusters                                         | `Vanilla,K3s,VCluster,Talos` |
@@ -210,7 +217,7 @@ Each of these adds a phase and is off unless set. The action's `action.yaml` des
 ### Diagnostics and cleanup
 
 | Input                 | Description                                                                                       | Default |
-|-----------------------|---------------------------------------------------------------------------------------------------|---------|
+| --------------------- | ------------------------------------------------------------------------------------------------- | ------- |
 | `upload-artifacts`    | Upload diagnostics and logs from inside the action                                                | `true`  |
 | `comprehensive-debug` | Run the full Kubernetes debug action after a failure; the bounded core diagnostics run either way | `true`  |
 | `cleanup`             | Delete the cluster inside the action                                                              | `true`  |
@@ -218,7 +225,7 @@ Each of these adds a phase and is off unless set. The action's `action.yaml` des
 ## Outputs
 
 | Output         | Description                                                                                                                                                                                                                          |
-|----------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `artifact-tag` | Readable suffix for this matrix entry's diagnostic artifacts, built from the distribution, provider, init mode and the first 30 characters of the arguments. Two entries that differ only later in their arguments get the same tag. |
 
 ## Prerequisites

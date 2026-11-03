@@ -2145,6 +2145,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Prepare nested Kind watcher capacity
+        # Only the explicit two-node nested Vanilla reproducer. The worker
+        # journal reported descriptor exhaustion; outer and nested kubelets
+        # share the disposable runner's inotify budget (Kind known issues).
+        if: ${{ matrix.test-kubernetes-provider == 'true' && matrix.kubernetes-provider-distributions == 'Vanilla' }}
+        run: |
+          bash .github/scripts/prepare-nested-kind-host.sh
+
       - name: 🧹 Free disk space
         # Reclaim ~30 GB before pulling system-test images and spinning up
         # clusters in Docker; docker-prune also clears the Docker daemon.
