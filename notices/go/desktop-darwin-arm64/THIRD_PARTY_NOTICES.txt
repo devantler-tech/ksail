@@ -2092,9 +2092,9 @@ github.com/aws/aws-sdk-go-v2/service/ecrpublic/types
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE.txt
 
-Component: github.com/aws/aws-sdk-go-v2/service/eks@v1.104.2
-Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/eks/@v/v1.104.2.zip
-Selected Go source checksum: h1:WvY97C6Zyx8E2Q16jXaL5c8wjHTKMmrOEUDY6+DmtsM=
+Component: github.com/aws/aws-sdk-go-v2/service/eks@v1.105.0
+Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/eks/@v/v1.105.0.zip
+Selected Go source checksum: h1:+bTTJtMBFZQopQKHC/JhJP6liBN057nl6agVeQur17g=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -4413,9 +4413,9 @@ Material: m2b50515d53b4ae33 (copyright-header), SHA-256 7030fb5b2204affa78b4d86f
 Material: m7c49c1a683cef577 (license), SHA-256 24653fd8a39354396da1a265d68316399edc39b1df48c5866d55f9f06484fa9a
 Files: LICENSE
 
-Component: github.com/github/copilot-sdk/go@v1.0.26
-Source: https://proxy.golang.org/github.com/github/copilot-sdk/go/@v/v1.0.26.zip
-Selected Go source checksum: h1:ca/6Si8K6EJCKn5/x0x/7aAs0uS9XVgwFCuR+JElJB8=
+Component: github.com/github/copilot-sdk/go@v1.0.27
+Source: https://proxy.golang.org/github.com/github/copilot-sdk/go/@v/v1.0.27.zip
+Selected Go source checksum: h1:WrWgVzzrQYTJEstOpahNfWuX49/WGduqd9I1sgR24pI=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -6528,9 +6528,9 @@ github.com/kevinburke/ssh_config
 Material: m09193878b02fa8e8 (license), SHA-256 a15a6f732df3a033a71853ce1d255bd671f00fbc537fa629b78d71baecda0ace
 Files: LICENSE
 
-Component: github.com/klauspost/compress@v1.20.1
-Source: https://proxy.golang.org/github.com/klauspost/compress/@v/v1.20.1.zip
-Selected Go source checksum: h1:T7kKElXUMXrUJ2E9QhQhxFtcK5rPyLdsGZvdbLMPdiQ=
+Component: github.com/klauspost/compress@v1.20.3
+Source: https://proxy.golang.org/github.com/klauspost/compress/@v/v1.20.3.zip
+Selected Go source checksum: h1:zWNoFqq/lSuYQRim3dUXlXeA0IqwuZGicdG5ZTfY5j4=
 Raw classifier detections: MIT, Apache-2.0, BSD-3-Clause
 Effective package-admission terms: Apache-2.0, BSD-3-Clause, MIT
 Packages:
