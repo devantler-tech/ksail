@@ -154,6 +154,9 @@ func exerciseHomeIsolationGuard(t *testing.T, script string, test homeGuardCase)
 
 	if !strings.HasPrefix(test.failureClass, "resource-") {
 		assert.NotContains(t, string(output), "Go build resource error:")
+	} else {
+		assert.Equal(t, 1, strings.Count(string(output), "Go build resource error:"),
+			"a resource failure must emit exactly one deduplicated label")
 	}
 
 	// This boundary records only after checking redirected HOME and external
