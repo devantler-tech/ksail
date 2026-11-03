@@ -415,10 +415,14 @@ func prepareEnvironmentConfigClone(params addEnvironmentParams) (environment.Con
 	configRewrites := environment.DeriveConfigRewrites(
 		params.srcName, params.dstName, params.dstProvider, params.srcProvider,
 	)
-	if ctxRewrite, ok := environment.DeriveContextRewrite(
-		params.distribution, params.srcName, params.dstName,
-	); ok {
-		configRewrites = append(configRewrites, ctxRewrite)
+	// An explicit derived context can use either the environment label or the
+	// declared cluster name. Value-exact matching preserves genuinely custom ones.
+	for _, sourceName := range []string{params.srcName, params.srcClusterName} {
+		if ctxRewrite, ok := environment.DeriveContextRewrite(
+			params.distribution, sourceName, params.dstName,
+		); ok {
+			configRewrites = append(configRewrites, ctxRewrite)
+		}
 	}
 
 	// The destination is named explicitly: a base-synced source's root config is
