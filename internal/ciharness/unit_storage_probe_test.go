@@ -81,7 +81,7 @@ func TestUnitStorageProbeRefusesLocalExecutionBeforeWriting(t *testing.T) {
 
 func TestUnitStorageControlIsTheActualFailedSharedCleanup(t *testing.T) {
 	t.Parallel()
-	contents := readRepoFile(t, ".github/fixtures/unit-storage-control/cleanup.run")
+	contents := readRepoFile(t, "internal/ciharness/testdata/unit-storage-control/cleanup.run")
 	assert.Equal(
 		t,
 		"de095dc3e3283f2fefe05e10430f89bc22da53965b7877cce2494e760ecb6d71",

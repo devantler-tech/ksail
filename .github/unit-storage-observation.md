@@ -16,9 +16,9 @@ tested merge, installs Go 1.27.3, and runs the same complete `go test ./...`.
 Its twenty-minute command budget and thirty-minute disposable-job ceiling retain
 timeouts as failures.
 
-The [frozen cleanup](fixtures/unit-storage-control/cleanup.run) is generated
+The [frozen cleanup](../internal/ciharness/testdata/unit-storage-control/cleanup.run) is generated
 from the exact shared Test step's decoded `run` scalar, retaining its final
-newline. Its [provenance](fixtures/unit-storage-control/provenance.json)
+newline. Its [provenance](../internal/ciharness/testdata/unit-storage-control/provenance.json)
 records the immutable source commit, workflow blob and body SHA-256. This is a
 historical experimental control, rather than a second maintained cleanup policy.
 The workflow checks its fingerprint before running it. Its budget remains zero

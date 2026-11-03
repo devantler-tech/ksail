@@ -52,7 +52,7 @@ jobs:
           MEASURE_DISK_USAGE: "false"
         run: |
           set -euo pipefail
-          control=.github/fixtures/unit-storage-control/cleanup.run
+          control=internal/ciharness/testdata/unit-storage-control/cleanup.run
           [[ "$(sha256sum "$control" | cut -d' ' -f1)" == de095dc3e3283f2fefe05e10430f89bc22da53965b7877cce2494e760ecb6d71 ]]
           bash "$control"
 

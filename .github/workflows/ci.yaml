@@ -217,7 +217,6 @@ jobs:
               - '.github/actions/**'
               - '.github/scripts/**'
               - '.github/fixtures/workflow-run-cleanup/**'
-              - '.github/fixtures/unit-storage-control/**'
               - '.github/fixtures/talos-schematic-trial.yaml'
               - 'internal/ciharness/**'
               # TestDocsFilterSelectsEveryDocsTest reads the docs tests and the scripts that
