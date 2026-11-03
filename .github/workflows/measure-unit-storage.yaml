@@ -1,0 +1,102 @@
+name: Measure fixed unit-test storage
+
+on:
+  workflow_dispatch:
+    inputs:
+      enabled:
+        type: boolean
+        default: false
+        description: Observe the fixed failed workload on one disposable hosted runner
+
+permissions: {}
+
+concurrency:
+  group: unit-storage-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.enabled == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      GOTOOLCHAIN: local
+      CGO_ENABLED: '1'
+      GOFLAGS: ''
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout reviewed observation harness
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Checkout fixed failed workload
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: bab0963e3c16b91e8a236e9679a29ffcde276b8f
+          path: .unit-consumer
+          persist-credentials: false
+
+      - name: Observe before cleanup
+        run: bash .github/scripts/unit-storage-probe.sh snapshot before-cleanup
+
+      - name: Execute frozen shared cleanup control
+        env:
+          MINIMUM_FREE_DISK_GIB: '0'
+          MEASURE_DISK_USAGE: 'false'
+        run: |
+          set -euo pipefail
+          control=.github/fixtures/unit-storage-control/cleanup.run
+          [[ "$(sha256sum "$control" | cut -d' ' -f1)" == de095dc3e3283f2fefe05e10430f89bc22da53965b7877cce2494e760ecb6d71 ]]
+          bash "$control"
+
+      - name: Observe after cleanup
+        run: bash .github/scripts/unit-storage-probe.sh snapshot after-cleanup
+
+      - name: Setup fixed control toolchain
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.3'
+          cache: false
+
+      - name: Verify control identity and cold compilation cache
+        id: prepare
+        run: |
+          bash .github/scripts/unit-storage-probe.sh prepare
+          bash .github/scripts/unit-storage-probe.sh snapshot after-setup
+
+      - name: Restore exact control module cache
+        id: modules
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.prepare.outputs.module-cache }}
+          key: go-mod-v1-Linux-X64-.-7c4839f70b57f520b6effc59074c3d5bd9199ccbc893762f484f974b97f58853
+
+      - name: Observe restored control
+        run: bash .github/scripts/unit-storage-probe.sh snapshot after-restore
+
+      - name: Observe unchanged complete unit command
+        id: test
+        env:
+          UNIT_STORAGE_CACHE_HIT: ${{ steps.modules.outputs.cache-hit }}
+          UNIT_STORAGE_CACHE_KEY: ${{ steps.modules.outputs.cache-matched-key }}
+        run: bash .github/scripts/unit-storage-probe.sh run
+
+      - name: Preserve bounded structured receipt
+        if: ${{ always() && !cancelled() }}
+        run: bash .github/scripts/unit-storage-probe.sh publish
+
+      - name: Upload structured receipt only
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unit-storage-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/unit-storage-probe/public/report.json
+          if-no-files-found: error
+          retention-days: 7
