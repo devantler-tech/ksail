@@ -17,13 +17,18 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: devantler-tech/actions/.github/workflows/update-agent-skills.yaml@ea4df9004d4ab43b6c9af5b0c5f55712f7211328 # v13.10.12
+    uses: devantler-tech/update-agent-skills-action/.github/workflows/update-agent-skills.yaml@0e1d6010a3d8b04a59b64892a5879cd2b45c7432 # v1.0.1
     with:
       dir: .agents/skills
       # These are development skills our own agents use, not skills KSail publishes. Marking
       # them internal after every update keeps `npx skills add devantler-tech/ksail` offering
       # only the ksail skill (#6221).
       mark-internal: true
+      # Hold git-commit at the reviewed upstream version we already ship: the newer upstream text
+      # can drop a merge-conflict resolution and uses a Git option our hosts lack
+      # (devantler-tech/platform#5224). Remove the pin once upstream fixes both.
+      pins: |
+        .agents/skills/git-commit e24be77e6f203409cf99ab7d5a67e1540cb386d3
       # Open the PR with a GitHub App token so the caller's `on: pull_request`
       # CI runs (a PR opened with GITHUB_TOKEN does not trigger workflows, so
       # the required `CI - Required Checks` never reports and the PR stays

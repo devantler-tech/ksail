@@ -512,10 +512,8 @@ func TestApplyAutoscalerConfigSecret_PreservesExtraKeysOnUpdate(t *testing.T) {
 
 	// A pre-migration secret carries the legacy keys plus an unrelated extra key.
 	existing := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cluster-autoscaler-config",
-			Namespace: "kube-system",
-		},
+		Name:      "cluster-autoscaler-config",
+		Namespace: "kube-system",
 		Data: map[string][]byte{
 			"hcloud_image":      []byte("old-image-id"),
 			"hcloud_cloud_init": []byte("old-config"),
@@ -556,10 +554,8 @@ func TestApplyAutoscalerConfigSecret_UpdatesExistingSecret(t *testing.T) {
 	t.Parallel()
 
 	existing := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cluster-autoscaler-config",
-			Namespace: "kube-system",
-		},
+		Name:      "cluster-autoscaler-config",
+		Namespace: "kube-system",
 		Data: map[string][]byte{
 			clusterConfigSecretKey: []byte("old-cluster-config"),
 		},
@@ -632,11 +628,9 @@ func TestApplyAutoscalerConfigSecret_CreateConflictFallsBackToUpdate(t *testing.
 	t.Parallel()
 
 	preExisting := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "cluster-autoscaler-config",
-			Namespace:       "kube-system",
-			ResourceVersion: "1",
-		},
+		Name:            "cluster-autoscaler-config",
+		Namespace:       "kube-system",
+		ResourceVersion: "1",
 		Data: map[string][]byte{
 			clusterConfigSecretKey: []byte("old-cluster-config"),
 		},
@@ -894,11 +888,9 @@ func TestAutoscalerTemplateDrift_ReportsDriftWhenKeyMissing(t *testing.T) {
 	t.Parallel()
 
 	legacy := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cluster-autoscaler-config",
-			Namespace: autoscalerNamespace,
-		},
-		Data: map[string][]byte{"hcloud_cloud_init": []byte("legacy")},
+		Name:      "cluster-autoscaler-config",
+		Namespace: autoscalerNamespace,
+		Data:      map[string][]byte{"hcloud_cloud_init": []byte("legacy")},
 	}
 	pools := []talosprovisioner.AutoscalerPoolConfig{
 		autoscalerPoolFor(t, "pool1", newTestWorkerProvider(), nil),
@@ -917,11 +909,9 @@ func TestAutoscalerTemplateDrift_ReportsDriftWhenStoredValueCorrupt(t *testing.T
 	t.Parallel()
 
 	corrupt := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cluster-autoscaler-config",
-			Namespace: autoscalerNamespace,
-		},
-		Data: map[string][]byte{clusterConfigSecretKey: []byte("!!!not-valid-base64!!!")},
+		Name:      "cluster-autoscaler-config",
+		Namespace: autoscalerNamespace,
+		Data:      map[string][]byte{clusterConfigSecretKey: []byte("!!!not-valid-base64!!!")},
 	}
 	pools := []talosprovisioner.AutoscalerPoolConfig{
 		autoscalerPoolFor(t, "pool1", newTestWorkerProvider(), nil),

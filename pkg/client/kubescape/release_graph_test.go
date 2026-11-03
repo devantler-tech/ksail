@@ -91,15 +91,27 @@ func listDependencyPackages(
 ) []goListPackage {
 	t.Helper()
 
+	return listDependencyEntry(t, moduleDir, target, cgo, tags, "./...")
+}
+
+func listDependencyEntry(
+	t *testing.T,
+	moduleDir string,
+	target platform,
+	cgo, tags, entry string,
+) []goListPackage {
+	t.Helper()
+
 	//nolint:gosec // G204: a fixed go subcommand; tags come from moduleBuildTags.
 	cmd := exec.CommandContext(
 		t.Context(),
 		"go",
 		"list",
 		"-deps",
+		"-mod=readonly",
 		"-tags="+tags,
 		"-json="+goListPackageFields,
-		"./...",
+		entry,
 	)
 	cmd.Dir = moduleDir
 
@@ -389,12 +401,15 @@ func goreleaserCGO(t *testing.T, path string) string {
 //nolint:lll // file-path keys and 64-character SHA-256 digests do not wrap
 func auditedReleaseConfigDigests() map[string]string {
 	return map[string]string{
-		".goreleaser.yaml":                                   "603b04ca07558b8e1acb3d9c4e00e3c49ceaa10ea9f5af0ed2f84f01f96496c2",
-		".goreleaser.desktop.yaml":                           "46eef12c0c592f5fae1a76082d897a1f63099a4a87b268ed7a39629c8e7c4eb6",
-		".github/actions/setup-desktop-build/action.yml":     "09d319886697e84b880a9744cacb0928daa9a6998f24600cf09183e152592c6a",
+		".goreleaser.yaml":                                   "5ac329a9712c6fc075096468790c855fff3474085e337c13f3969cf465789f7a",
+		".goreleaser.desktop.yaml":                           "7cd674dbd13b4e93c33eb2751ab0c11be29c563e3533864130a6a48a1720c702",
+		".github/actions/setup-desktop-build/action.yml":     "473bc1c1f3e940ba58a76320cf8b6ff5e798bf5e9cbe68830469640ef1ef7cac",
+		".github/scripts/download-go-modules.sh":             "e5af8edf61a77de4397e952a05b1cc6ca0f83cd848523c4cf6b3aaa2539561fa",
+		".github/scripts/resolve-release-replay.sh":          "84418fef708bae31c86fb45fccc03b4e9186e312e5cb45951cc5a1dcd35af590",
+		".github/actions/release-admission/action.yaml":      "a8ac217c7e2195fee64b364748a6724b99aa0aa4a9988127084f1d6b45953f0c",
 		"scripts/stage-webui.sh":                             "5b3d7b0fa8b237f77ee9a88e6807e070c1b35c97df3d5f17357b3ecb8b2938a6",
 		".github/actions/free-disk-space/free-disk-space.sh": "2dd12fcf3779137ca1cb5f21194947f6a10d3f94f8fb438a1a29ec9021fbdc30",
-		".github/workflows/cd.yaml#without-uses":             "ec2e457affddc8ceb3628055c23e2b78d1330f352c8a5a8cc1ce5ecf6e055e6f",
+		".github/workflows/cd.yaml#without-uses":             "69665569762ee654f970589717e3088fcb6136cd8c9ec68ba73ea52bf3b68b3c",
 	}
 }
 
@@ -425,6 +440,66 @@ func TestReleaseBuildConfigMatchesAudit(t *testing.T) {
 	}
 }
 
+// TestReleaseActionPinsMatchAuditedContent binds audited snapshots to the commits CD executes.
+// The content witnesses were read from these exact Git commits, not the working tree.
+// Changing an audited action requires a new reviewed pin and its matching content witness.
+func TestReleaseActionPinsMatchAuditedContent(t *testing.T) {
+	t.Parallel()
+	root := moduleRoot(t)
+	actual := releaseConfigDigests(t, root)
+
+	var workflow struct {
+		Jobs map[string]struct {
+			Steps []struct {
+				Uses string `yaml:"uses"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	readYAML(t, filepath.Join(root, ".github", "workflows", "cd.yaml"), &workflow)
+
+	for _, binding := range []struct{ path, reference, content string }{
+		{
+			".github/actions/release-admission/action.yaml",
+			"devantler-tech/ksail/.github/actions/release-admission@ac2dd2ee401030b2fac81dc985b42fae45b0788b",
+			"a8ac217c7e2195fee64b364748a6724b99aa0aa4a9988127084f1d6b45953f0c",
+		},
+		{
+			".github/actions/setup-desktop-build/action.yml",
+			"devantler-tech/ksail/.github/actions/setup-desktop-build@ccc4de63c6f1259ecbdd604c2260559d810c7cfc",
+			"473bc1c1f3e940ba58a76320cf8b6ff5e798bf5e9cbe68830469640ef1ef7cac",
+		},
+	} {
+		t.Run(binding.path, func(t *testing.T) {
+			t.Parallel()
+
+			if actual[binding.path] != binding.content {
+				t.Errorf("audited content no longer matches pinned action %s", binding.reference)
+			}
+
+			prefix := strings.Split(binding.reference, "@")[0] + "@"
+			found := false
+
+			for _, job := range workflow.Jobs {
+				for _, step := range job.Steps {
+					if !strings.HasPrefix(step.Uses, prefix) {
+						continue
+					}
+
+					found = true
+
+					if step.Uses != binding.reference {
+						t.Errorf("action pin %s has no matching audited content witness", step.Uses)
+					}
+				}
+			}
+
+			if !found {
+				t.Errorf("audited action %s is absent from CD", binding.reference)
+			}
+		})
+	}
+}
+
 // releaseConfigDigests hashes each audited release configuration: whole files, and for cd.yaml the
 // whole workflow (workflow-level env such as GOFLAGS reaches every release job) canonicalised through
 // JSON with every `uses:` value removed, so formatting and action-version bumps do not count.
@@ -436,6 +511,9 @@ func releaseConfigDigests(t *testing.T, root string) map[string]string {
 	for _, name := range []string{
 		".goreleaser.yaml", ".goreleaser.desktop.yaml", ".github/actions/setup-desktop-build/action.yml",
 		"scripts/stage-webui.sh",
+		".github/scripts/download-go-modules.sh",
+		".github/scripts/resolve-release-replay.sh",
+		".github/actions/release-admission/action.yaml",
 		".github/actions/free-disk-space/free-disk-space.sh",
 	} {
 		path := filepath.Join(root, name)

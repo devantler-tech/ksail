@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -53,7 +52,7 @@ func statusReader(t *testing.T, objects ...*corev1.Secret) *fake.ClientBuilder {
 
 func clusterNamed(name, namespace string) *v1alpha1.Cluster {
 	return &v1alpha1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Name: name, Namespace: namespace,
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{Distribution: v1alpha1.DistributionVCluster},
 		},
@@ -82,11 +81,9 @@ func TestObserveVClusterStatus_ReportsEndpointEvenWhenNodeCountFails(t *testing.
 	t.Parallel()
 
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "vc-default-myc",
-			Namespace: "vcluster-default-myc",
-		},
-		Data: map[string][]byte{"config": []byte(minimalKubeconfig)},
+		Name:      "vc-default-myc",
+		Namespace: "vcluster-default-myc",
+		Data:      map[string][]byte{"config": []byte(minimalKubeconfig)},
 	}
 
 	reader := statusReader(t, secret).Build()

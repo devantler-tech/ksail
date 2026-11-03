@@ -255,8 +255,8 @@ assert_not_contains 'handoff_failed=1' "${selected_open_block}" \
 	'no failure after selecting an open PR may bypass merged-current-main reconciliation'
 reconciliation_calls="$(grep -Fc -- 'reconcile_merged_handoff "$name"' \
 	"${selected_open_block}" || true)"
-if [[ "${reconciliation_calls}" -ne 10 ]]; then
-	fail "every selected-open failure must reconcile an auto-merge race; expected 10 call sites, found ${reconciliation_calls}"
+if [[ "${reconciliation_calls}" -ne 11 ]]; then
+	fail "every selected-open failure must reconcile an auto-merge race; expected 11 call sites, found ${reconciliation_calls}"
 fi
 for context in \
 	'failed ready-PR revalidation' \
@@ -370,8 +370,22 @@ awk '
 awk '
   /^  [a-z-]+:$/ { job = $1 }
   /timeout-minutes:/ { timeout[job] = $2 }
-  END { exit (timeout["cask-checkpoint:"] >= 65 && timeout["homebrew:"] >= 100) ? 0 : 1 }
+  END { exit (timeout["cask-checkpoint:"] >= 65 && timeout["homebrew:"] >= 100 && timeout["validate-release-ref:"] >= 65) ? 0 : 1 }
 ' "${cd_workflow}" || fail 'jobs that wait for the request budget must outlast the one-hour window'
+# The first read of every release spends the repository token, and a previous release's cask polling
+# can leave that token at zero while the next queued tag starts (devantler-tech/ksail#7907). The wait
+# must read the same token that the replay resolver spends, and must run before it.
+awk '
+  /^  [a-z-]+:$/ { job = $1; token = ""; waited = 0 }
+  /GH_TOKEN:/ { token = $2 " " $3 " " $4 }
+  /run: \.github\/scripts\/wait-for-github-api-budget\.sh/ {
+    if (job == "validate-release-ref:" && token == "${{ secrets.GITHUB_TOKEN }}") waited = 1
+  }
+  /run: bash \.github\/scripts\/resolve-release-replay\.sh/ {
+    if (job == "validate-release-ref:") { resolver = 1; if (!waited) bad = 1 }
+  }
+  END { exit (bad || !resolver) ? 1 : 0 }
+' "${cd_workflow}" || fail 'the replay resolver must wait for the repository token request budget first'
 for wait_file in wait-for-github-api-budget.sh wait-for-github-api-budget.test.sh; do
 	if [ "$(grep -Fc -- ".github/scripts/${wait_file}" "${ci_workflow}")" -lt 2 ]; then
 		fail "CI must path-filter and shellcheck ${wait_file}"
@@ -482,5 +496,33 @@ assert_contains "- '.goreleaser.yaml'" "${ci_workflow}" \
 	'CI paths filter must trigger the handoff job on GoReleaser config changes'
 assert_contains "- '.goreleaser.desktop.yaml'" "${ci_workflow}" \
 	'CI paths filter must trigger the handoff job on desktop GoReleaser config changes'
+
+# An older or prerelease tag must never move a shared cask pointer (#7898). The order decision is
+# taken before anything is written, and each writer consumes it fail-closed.
+checkpoint_block="${tmp_dir}/cask-checkpoint.yaml"
+awk '
+  /^  cask-checkpoint:/ { in_checkpoint = 1; print; next }
+  in_checkpoint && /^  [a-z][a-z-]*:/ { exit }
+  in_checkpoint { print }
+' "${cd_workflow}" >"${checkpoint_block}"
+assert_contains 'cask-publish: ${{ steps.cask-order.outputs.publish }}' "${checkpoint_block}" \
+	'cask-checkpoint must export the cask order decision'
+assert_contains '.github/scripts/resolve-cask-publication.sh' "${checkpoint_block}" \
+	'cask-checkpoint must run the cask order resolver'
+[[ "$(grep -n 'resolve-cask-publication.sh' "${checkpoint_block}" | cut -d: -f1)" -lt "$(grep -n 'redraft-evergreen-cask-prs.sh' "${checkpoint_block}" | cut -d: -f1)" ]] ||
+	fail 'the cask order decision must be taken before any evergreen PR is re-drafted'
+assert_contains "if: (steps.cask-order.outputs.publish == 'true') && needs.validate-release-ref.outputs.release-mode == 'build'" "${checkpoint_block}" \
+	'only an admitted new publication may re-draft the evergreen cask PRs it can deliver'
+assert_contains "if: needs.cask-checkpoint.outputs.cask-publish == 'true'" "${homebrew_block}" \
+	'the cask delivery job must run only when this tag may move the casks'
+[[ "$(grep -Fc 'KSAIL_CASK_PUBLISH: ${{ needs.cask-checkpoint.outputs.cask-publish }}' "${cd_workflow}")" == 2 ]] ||
+	fail 'both GoReleaser cask writers must receive the cask order decision'
+for config_name in .goreleaser.yaml .goreleaser.desktop.yaml; do
+	assert_contains "skip_upload: '{{ if eq (envOrDefault \"KSAIL_CASK_PUBLISH\" \"false\") \"true\" }}false{{ else }}true{{ end }}'" \
+		"${repo_root}/${config_name}" \
+		"${config_name} must upload its cask only when the order decision is exactly true"
+done
+assert_contains "- '.github/scripts/resolve-cask-publication.sh'" "${ci_workflow}" \
+	'CI paths filter must trigger the handoff job on cask order resolver changes'
 
 printf 'Cask PR handoff workflow contract passed.\n'

@@ -380,7 +380,11 @@ func TestSystemTestHarnessBoundsReservedSandboxRecovery(t *testing.T) {
 	assert.Contains(t, workflowCleanup.If, "always()")
 	assert.Equal(t, "${{ matrix.distribution }}", stringValue(workflowCleanup.With["distribution"]))
 	assert.Equal(t, "${{ matrix.provider }}", stringValue(workflowCleanup.With["provider"]))
-	assert.Equal(t, "${{ matrix.args }}", stringValue(workflowCleanup.With["args"]))
+	assert.Equal(
+		t,
+		"${{ matrix.effective-args || matrix.args }}",
+		stringValue(workflowCleanup.With["args"]),
+	)
 
 	diagnosticUploadIndex := harnessStepIndex(
 		t,

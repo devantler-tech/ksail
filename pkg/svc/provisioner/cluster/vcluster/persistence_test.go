@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	storagev1 "k8s.io/api/storage/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
@@ -24,10 +23,8 @@ func clientWithDefaultStorageClass(t *testing.T, hasDefault bool) kubernetes.Int
 	}
 
 	return k8sfake.NewClientset(&storagev1.StorageClass{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        "standard",
-			Annotations: map[string]string{"storageclass.kubernetes.io/is-default-class": "true"},
-		},
+		Name:        "standard",
+		Annotations: map[string]string{"storageclass.kubernetes.io/is-default-class": "true"},
 	})
 }
 

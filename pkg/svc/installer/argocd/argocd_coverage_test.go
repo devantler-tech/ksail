@@ -137,6 +137,9 @@ func TestInstaller_Install_ContextCanceled(t *testing.T) {
 	cancel()
 
 	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "argocd", "argocd").
+		Return(nil, nil)
+	client.EXPECT().
 		InstallOrUpgradeChart(mock.Anything, mock.Anything).
 		Return(nil, ctx.Err())
 

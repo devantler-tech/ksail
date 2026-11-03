@@ -13,7 +13,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -148,36 +147,36 @@ func TestGenericDegradedVolumes(t *testing.T) {
 
 	clientset := fake.NewClientset(
 		&corev1.PersistentVolume{
-			ObjectMeta: metav1.ObjectMeta{Name: "pv-failed"},
-			Status:     corev1.PersistentVolumeStatus{Phase: corev1.VolumeFailed},
+			Name:   "pv-failed",
+			Status: corev1.PersistentVolumeStatus{Phase: corev1.VolumeFailed},
 		},
 		&corev1.PersistentVolume{
-			ObjectMeta: metav1.ObjectMeta{Name: "pv-bound"},
-			Status:     corev1.PersistentVolumeStatus{Phase: corev1.VolumeBound},
+			Name:   "pv-bound",
+			Status: corev1.PersistentVolumeStatus{Phase: corev1.VolumeBound},
 		},
 		&corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{Name: "data-lost", Namespace: "apps"},
-			Status:     corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimLost},
+			Name: "data-lost", Namespace: "apps",
+			Status: corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimLost},
 		},
 		&corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{Name: "data-pending", Namespace: "apps"},
-			Status:     corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimPending},
+			Name: "data-pending", Namespace: "apps",
+			Status: corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimPending},
 		},
 		&storagev1.VolumeAttachment{
-			ObjectMeta: metav1.ObjectMeta{Name: "va-attach-error"},
-			Status:     storagev1.VolumeAttachmentStatus{Attached: false, AttachError: attachErr},
+			Name:   "va-attach-error",
+			Status: storagev1.VolumeAttachmentStatus{Attached: false, AttachError: attachErr},
 		},
 		&storagev1.VolumeAttachment{
-			ObjectMeta: metav1.ObjectMeta{Name: "va-detach-error"},
-			Status:     storagev1.VolumeAttachmentStatus{Attached: true, DetachError: detachErr},
+			Name:   "va-detach-error",
+			Status: storagev1.VolumeAttachmentStatus{Attached: true, DetachError: detachErr},
 		},
 		&storagev1.VolumeAttachment{
-			ObjectMeta: metav1.ObjectMeta{Name: "va-stale-attach-error"},
-			Status:     storagev1.VolumeAttachmentStatus{Attached: true, AttachError: attachErr},
+			Name:   "va-stale-attach-error",
+			Status: storagev1.VolumeAttachmentStatus{Attached: true, AttachError: attachErr},
 		},
 		&storagev1.VolumeAttachment{
-			ObjectMeta: metav1.ObjectMeta{Name: "va-healthy"},
-			Status:     storagev1.VolumeAttachmentStatus{Attached: true},
+			Name:   "va-healthy",
+			Status: storagev1.VolumeAttachmentStatus{Attached: true},
 		},
 	)
 
@@ -277,7 +276,7 @@ func TestLonghornDetected(t *testing.T) {
 	prov := newGateProvisioner()
 
 	withNS := fake.NewClientset(&corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{Name: "longhorn-system"},
+		Name: "longhorn-system",
 	})
 	detected, err := prov.LonghornDetectedForTest(context.Background(), withNS)
 	require.NoError(t, err)

@@ -15,6 +15,7 @@ import (
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
+	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/environment"
 	"github.com/spf13/cobra"
 )
@@ -38,6 +39,9 @@ var ErrSameEnvironment = errors.New(
 // (ksail.<env>.yaml) cannot be loaded, e.g. it does not exist.
 var ErrSourceConfigLoad = errors.New("failed to load source environment config")
 
+// ErrSourceEKSContext prevents a clone retaining the source cluster's full context.
+var ErrSourceEKSContext = errors.New("explicit EKS context selects the source cluster")
+
 // addEnvironmentLongDesc documents the command, including the SOPS caveat the
 // clone deliberately does not handle (re-encryption to the new environment's
 // recipients) so the user knows to follow up.
@@ -50,8 +54,12 @@ environment <name> with its own ksail.<name>.yaml, repointing the
 structured identity along the way: the cluster-meta cluster_name, the
 clusters/<env> path segment and content references, the root config's metadata
 name, the connection context (distribution-aware), and — when --provider is given
-— the provider. Every other byte is preserved, so the kustomize replacements block,
-base wiring, version pins and comments survive intact.
+— the provider. Unrelated configuration is preserved, including the kustomize
+replacements block, base wiring, version pins and comments.
+
+A full eksctl context selecting the source cluster is refused before writing.
+Remove spec.cluster.connection.context from the source config before cloning so
+the destination discovers its own context after cluster creation.
 
 SOPS-encrypted files (*.enc.yaml) are copied verbatim with only their path
 repointed; re-encrypt them to the new environment's recipients afterwards with
@@ -95,15 +103,16 @@ func NewAddCmd() *cobra.Command {
 
 // addEnvironmentParams holds the resolved inputs for a clone.
 type addEnvironmentParams struct {
-	repoRoot      string
-	srcName       string
-	srcConfigFile string
-	dstName       string
-	srcProvider   string
-	dstProvider   string
-	distribution  v1alpha1.Distribution
-	sourceDir     string
-	force         bool
+	repoRoot       string
+	srcName        string
+	srcClusterName string
+	srcConfigFile  string
+	dstName        string
+	srcProvider    string
+	dstProvider    string
+	distribution   v1alpha1.Distribution
+	sourceDir      string
+	force          bool
 }
 
 // HandleAddRunE handles the `project env add` command. It is exported for
@@ -181,19 +190,12 @@ func resolveAddEnvironmentParams(
 		return addEnvironmentParams{}, enrichSourceConfigError(cmd, repoRoot, err)
 	}
 
-	distribution := srcCfg.Spec.Cluster.Distribution
-
-	// A provider override must be valid for the (inherited) distribution, mirroring
-	// the init command's early provider×distribution validation so the clone fails
-	// fast rather than writing an unusable config.
-	if dstProvider != "" {
-		provider := v1alpha1.Provider(dstProvider)
-
-		err = provider.ValidateForDistribution(distribution)
-		if err != nil {
-			return addEnvironmentParams{}, fmt.Errorf("invalid --provider flag: %w", err)
-		}
+	err = validateCloneSource(srcCfg, srcName, dstProvider)
+	if err != nil {
+		return addEnvironmentParams{}, err
 	}
+
+	distribution := srcCfg.Spec.Cluster.Distribution
 
 	sourceDir, err := repoRelativeSourceDir(repoRoot, srcCfg.Spec.Workload.SourceDirectory)
 	if err != nil {
@@ -201,16 +203,45 @@ func resolveAddEnvironmentParams(
 	}
 
 	return addEnvironmentParams{
-		repoRoot:      repoRoot,
-		srcName:       srcName,
-		srcConfigFile: srcConfigFile,
-		dstName:       dstName,
-		srcProvider:   string(srcCfg.Spec.Cluster.Provider),
-		dstProvider:   dstProvider,
-		distribution:  distribution,
-		sourceDir:     sourceDir,
-		force:         force,
+		repoRoot:       repoRoot,
+		srcName:        srcName,
+		srcClusterName: srcCfg.Name,
+		srcConfigFile:  srcConfigFile,
+		dstName:        dstName,
+		srcProvider:    string(srcCfg.Spec.Cluster.Provider),
+		dstProvider:    dstProvider,
+		distribution:   distribution,
+		sourceDir:      sourceDir,
+		force:          force,
 	}, nil
+}
+
+// validateCloneSource validates identity and provider before any clone writes.
+// The account and region of a destination EKS context cannot be guessed safely.
+func validateCloneSource(cfg *v1alpha1.Cluster, sourceName, provider string) error {
+	if cfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS {
+		name, _, known := clusterdetector.ParseEksctlContextTarget(
+			cfg.Spec.Cluster.Connection.Context,
+		)
+		if known && (name == sourceName || name == cfg.Name) {
+			return fmt.Errorf(
+				"%w; remove spec.cluster.connection.context before cloning",
+				ErrSourceEKSContext,
+			)
+		}
+	}
+
+	// Mirror init's early provider/distribution check rather than writing an unusable clone.
+	if provider != "" {
+		requestedProvider := v1alpha1.Provider(provider)
+
+		err := requestedProvider.ValidateForDistribution(cfg.Spec.Cluster.Distribution)
+		if err != nil {
+			return fmt.Errorf("invalid --provider flag: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // repoRelativeSourceDir returns the source directory as a path relative to
@@ -373,9 +404,21 @@ func cloneEnvironment(cmd *cobra.Command, params addEnvironmentParams) error {
 
 	notify.Activityf(out, "Cloning environment %q from %q...", params.dstName, params.srcName)
 
+	configClone, err := prepareEnvironmentConfigClone(params)
+	if err != nil {
+		return fmt.Errorf("preparing environment config: %w", err)
+	}
+
 	overlayRewrites := environment.DeriveRewrites(
 		params.srcName, params.dstName, params.dstProvider, params.srcProvider,
 	)
+	if params.srcClusterName != "" && params.srcClusterName != params.srcName {
+		overlayRewrites = append(overlayRewrites, environment.Rewrite{
+			Kind: environment.MetaFieldValue, Field: "cluster_name",
+			Old: params.srcClusterName, New: params.dstName,
+		})
+	}
+
 	srcOverlayDir := path.Join(params.sourceDir, clustersDirSegment, params.srcName)
 
 	written, err := environment.CloneOverlay(
@@ -385,31 +428,7 @@ func cloneEnvironment(cmd *cobra.Command, params addEnvironmentParams) error {
 		return fmt.Errorf("cloning environment overlay: %w", err)
 	}
 
-	configRewrites := environment.DeriveConfigRewrites(
-		params.srcName, params.dstName, params.dstProvider, params.srcProvider,
-	)
-	if ctxRewrite, ok := environment.DeriveContextRewrite(
-		params.distribution, params.srcName, params.dstName,
-	); ok {
-		configRewrites = append(configRewrites, ctxRewrite)
-	}
-
-	// The destination is named explicitly: a base-synced source's root config is
-	// ksail.yaml, whose name has no environment segment for the rewrites to repoint.
-	// That config usually declares no cluster name or context either, so the clone
-	// is given its own, or both environments would target the same default cluster.
-	var identity environment.Identity
-	if params.srcConfigFile == environment.BaseConfigFile {
-		identity = environment.Identity{
-			Name:    params.dstName,
-			Context: materializedContext(params.distribution, params.dstName),
-		}
-	}
-
-	configPath, wroteConfig, err := environment.CloneBaseSyncedConfigTo(
-		params.repoRoot, params.srcConfigFile, environmentConfigFile(params.dstName),
-		configRewrites, identity, params.force,
-	)
+	configPath, wroteConfig, err := configClone.Write(params.force)
 	if err != nil {
 		return fmt.Errorf("cloning environment config: %w", err)
 	}
@@ -417,6 +436,45 @@ func cloneEnvironment(cmd *cobra.Command, params addEnvironmentParams) error {
 	reportClone(out, written, configPath, wroteConfig)
 
 	return nil
+}
+
+// prepareEnvironmentConfigClone validates the target before overlay writes and
+// captures the exact transformed source that will be committed afterwards.
+func prepareEnvironmentConfigClone(params addEnvironmentParams) (environment.ConfigClone, error) {
+	configRewrites := environment.DeriveConfigRewrites(
+		params.srcName, params.dstName, params.dstProvider, params.srcProvider,
+	)
+	// An explicit derived context can use either the environment label or the
+	// declared cluster name. Value-exact matching preserves genuinely custom ones.
+	for _, sourceName := range []string{params.srcName, params.srcClusterName} {
+		if ctxRewrite, ok := environment.DeriveContextRewrite(
+			params.distribution, sourceName, params.dstName,
+		); ok {
+			configRewrites = append(configRewrites, ctxRewrite)
+		}
+	}
+
+	// The destination is named explicitly: a base-synced source's root config is
+	// ksail.yaml, whose name has no environment segment for the rewrites to repoint.
+	// That config usually declares no cluster name or context either, so the clone
+	// is given its own, or both environments would target the same default cluster.
+	identity := environment.Identity{Name: params.dstName}
+	if params.srcConfigFile == environment.BaseConfigFile {
+		identity.Context = materializedContext(params.distribution, params.dstName)
+	}
+
+	clone, err := environment.PrepareEnvironmentConfigCloneForTarget(
+		params.repoRoot,
+		params.srcConfigFile,
+		environmentConfigFile(params.dstName),
+		configRewrites,
+		environment.CloneTarget{Identity: identity, Provider: params.dstProvider},
+	)
+	if err != nil {
+		return environment.ConfigClone{}, fmt.Errorf("preparing clone target: %w", err)
+	}
+
+	return clone, nil
 }
 
 // materializedContext returns the kubeconfig context to write into a clone of a

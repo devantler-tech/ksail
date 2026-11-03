@@ -1197,6 +1197,12 @@ spec:
                         description: HelmRender controls whether HelmReleases are
                           rendered before validation.
                         type: boolean
+                      kyvernoApiCallResponses:
+                        description: |-
+                          KyvernoAPICallResponses is a path, relative to the working directory, to
+                          reviewed Kubernetes API responses used by Kyverno apiCall context entries.
+                          It never enables live cluster or service access.
+                        type: string
                       rules:
                         description: |-
                           Rules is the path to a YAML CEL rules file evaluated during validation, so

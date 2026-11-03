@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -52,9 +51,7 @@ func TestResolveExposureRejectsUnusableNodePortEndpoints(t *testing.T) {
 				corev1.NodeAddress{Type: corev1.NodeInternalIP, Address: "0.0.0.0"},
 				corev1.NodeAddress{Type: corev1.NodeInternalIP, Address: validIP},
 			), &corev1.Service{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: kubeprovider.APIServiceName, Namespace: testExposureNS,
-				},
+				Name: kubeprovider.APIServiceName, Namespace: testExposureNS,
 				Spec: corev1.ServiceSpec{Ports: []corev1.ServicePort{{
 					Name: "https", Port: 6443, NodePort: 31234,
 				}}},

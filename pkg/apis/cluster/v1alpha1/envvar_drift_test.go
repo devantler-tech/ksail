@@ -41,6 +41,7 @@ func expandedSpecStringFields() []string {
 		"Workload.Tag",
 		"Workload.KustomizationFile",
 		"Workload.Scan.Exceptions",
+		"Workload.Validation.KyvernoAPICallResponses",
 		"Chat.BaseURL",
 		"Chat.Model",
 	}

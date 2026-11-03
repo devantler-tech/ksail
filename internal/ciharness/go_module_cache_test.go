@@ -27,7 +27,9 @@ func TestGoModuleRestoreConsumerBindings(t *testing.T) {
 	for path, jobs := range map[string][]string{
 		"ci.yaml": {
 			"build-artifact", "generate", "home-isolation", "operator-chart-e2e",
-			"warm-helm-cache", "warm-mirror-cache", "test-release-config",
+			// Mirror warming is now a binary-only consumer, guarded by
+			// TestKSailBinaryArtifactMirrorWarmerConsumer instead.
+			"warm-helm-cache", "test-release-config",
 			"release-graph-audit", "local-recovery-trial",
 		},
 		"copilot-setup-steps.yml":       {"copilot-setup-steps"},

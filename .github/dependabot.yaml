@@ -23,6 +23,14 @@ updates:
   - package-ecosystem: gomod
     directory: /
     open-pull-requests-limit: 10
+    # Nearly every Go bump edits go.mod and go.sum, so merging one leaves every
+    # other open Go pull request conflicting. The default strategy rebases each
+    # of them, and every rebase re-runs the whole CI. Pull requests parked behind
+    # an upstream release cannot merge however often that happens: six of them
+    # were rebased 53 times between them (ksail#7579). Rebase on request instead:
+    # comment `@dependabot rebase` on the pull request you are about to merge.
+    # internal/depcontract holds this setting.
+    rebase-strategy: disabled
     schedule:
       interval: daily
     cooldown:
@@ -115,6 +123,13 @@ updates:
         patterns:
           - "github/codeql-action"
           - "github/codeql-action/*"
+      # KSail's own composite actions are released together, and the workflow
+      # contract tests in internal/ciharness pin each reference to a reviewed
+      # commit. Moving them in one PR means one reviewed re-pin per release
+      # instead of one red PR per action.
+      ksail-actions:
+        patterns:
+          - "devantler-tech/ksail/.github/actions/*"
 
   - package-ecosystem: npm
     directory: /docs
@@ -228,6 +243,17 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+    # Kyverno 1.20 (chart 3.10, every chart minor carries one Kyverno minor) removes the
+    # kyverno.io ClusterPolicy and Policy APIs. `ksail cluster create` installs the pinned
+    # chart, and ksail.yaml cannot choose another one, so a consumer whose GitOps manifests
+    # still use those APIs would get an engine that cannot run them on its next create or
+    # disaster-recovery rebuild (ksail#7848). Hold the 1.20 line until consumers can choose
+    # the version or have migrated; patches on the 1.19 line still come through.
+    # internal/depcontract fails a release pinned at or past 3.10.0 and fails if this rule
+    # changes. Lifting it is a release-noted decision recorded on ksail#7848.
+    ignore:
+      - dependency-name: "kyverno/charts/kyverno"
+        versions: [">= 3.10.0"]
 
   - package-ecosystem: docker
     registries: [dockerhub]

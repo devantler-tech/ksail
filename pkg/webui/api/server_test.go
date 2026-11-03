@@ -13,7 +13,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -38,7 +37,7 @@ func newClient(t *testing.T, objects ...client.Object) client.Client {
 
 func sampleCluster() *v1alpha1.Cluster {
 	return &v1alpha1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "c1", Namespace: defaultNS},
+		Name: "c1", Namespace: defaultNS,
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{Distribution: v1alpha1.DistributionVCluster},
 		},
@@ -139,7 +138,7 @@ func TestListClustersIncludesDefaultValuedFields(t *testing.T) {
 	t.Parallel()
 
 	vanilla := v1alpha1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "van", Namespace: defaultNS},
+		Name: "van", Namespace: defaultNS,
 		Spec: v1alpha1.Spec{Cluster: v1alpha1.ClusterSpec{
 			Distribution: v1alpha1.DistributionVanilla,
 			Provider:     v1alpha1.ProviderDocker,

@@ -4,6 +4,9 @@ FLAVOR_SUGGESTIONS: false
 IGNORE_GITIGNORED_FILES: true
 REPORTERS_MARKDOWN_SUMMARY_TYPE: sections
 LINTER_RULES_PATH: .
+# Keep per-cataloger completion timings when the native inventory scan stalls
+# (8078). This adds diagnostics; coverage and the 300-second deadline are unchanged.
+REPOSITORY_SYFT_ARGUMENTS: --verbose
 DISABLE_LINTERS:
   # zizmor runs as a dedicated, standalone CI check (the `zizmor` job) with the
   # repo's own configuration; MegaLinter's copy is redundant and, newly

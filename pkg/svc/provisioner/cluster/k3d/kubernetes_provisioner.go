@@ -665,20 +665,18 @@ func (p *K3kProvisioner) ensureNamespace(ctx context.Context, clusterName, names
 	}
 
 	nsObj := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: namespace,
-			Labels: map[string]string{
-				labelManagedBy: managedByKSail,
-				labelCluster:   clusterName,
-				// The k3k server runs embedded k3s and requires a privileged container.
-				// Hosts that enforce Pod Security Admission at the "baseline" level (e.g.
-				// Talos, which defaults namespaces to baseline) would otherwise reject the
-				// server StatefulSet's pod with a "violates PodSecurity baseline: privileged"
-				// FailedCreate error, leaving the k3k cluster stuck Provisioning. The
-				// admission guard created above scopes that namespace-wide PSA exemption so
-				// arbitrary pods cannot use it for privileged host access.
-				"pod-security.kubernetes.io/enforce": "privileged",
-			},
+		Name: namespace,
+		Labels: map[string]string{
+			labelManagedBy: managedByKSail,
+			labelCluster:   clusterName,
+			// The k3k server runs embedded k3s and requires a privileged container.
+			// Hosts that enforce Pod Security Admission at the "baseline" level (e.g.
+			// Talos, which defaults namespaces to baseline) would otherwise reject the
+			// server StatefulSet's pod with a "violates PodSecurity baseline: privileged"
+			// FailedCreate error, leaving the k3k cluster stuck Provisioning. The
+			// admission guard created above scopes that namespace-wide PSA exemption so
+			// arbitrary pods cannot use it for privileged host access.
+			"pod-security.kubernetes.io/enforce": "privileged",
 		},
 	}
 
@@ -790,33 +788,27 @@ func (p *K3kProvisioner) buildPrivilegedPodGuardPolicy(
 	serverPodNamePrefix := fmt.Sprintf("k3k-%s-server-", clusterName)
 
 	return &admissionv1.ValidatingAdmissionPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-			Labels: map[string]string{
-				labelManagedBy: managedByKSail,
-				labelCluster:   clusterName,
-			},
+		Name: name,
+		Labels: map[string]string{
+			labelManagedBy: managedByKSail,
+			labelCluster:   clusterName,
 		},
 		Spec: admissionv1.ValidatingAdmissionPolicySpec{
 			FailurePolicy: &failurePolicy,
 			MatchConstraints: &admissionv1.MatchResources{
 				ResourceRules: []admissionv1.NamedRuleWithOperations{
 					{
-						RuleWithOperations: admissionv1.RuleWithOperations{
-							Operations: []admissionv1.OperationType{
-								admissionv1.Create,
-								admissionv1.Update,
-							},
-							Rule: admissionv1.Rule{
-								APIGroups:   []string{""},
-								APIVersions: []string{"v1"},
-								// Ephemeral containers are added through their own
-								// subresource, so a rule matching only "pods" never sees
-								// them and unsafePodExpression's ephemeralContainers check
-								// would be unreachable in production.
-								Resources: []string{"pods", "pods/ephemeralcontainers"},
-							},
+						Operations: []admissionv1.OperationType{
+							admissionv1.Create,
+							admissionv1.Update,
 						},
+						APIGroups:   []string{""},
+						APIVersions: []string{"v1"},
+						// Ephemeral containers are added through their own
+						// subresource, so a rule matching only "pods" never sees
+						// them and unsafePodExpression's ephemeralContainers check
+						// would be unreachable in production.
+						Resources: []string{"pods", "pods/ephemeralcontainers"},
 					},
 				},
 				MatchPolicy: &matchPolicy,
@@ -915,12 +907,10 @@ func (p *K3kProvisioner) buildPrivilegedPodGuardBinding(
 	name, clusterName string,
 ) *admissionv1.ValidatingAdmissionPolicyBinding {
 	return &admissionv1.ValidatingAdmissionPolicyBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-			Labels: map[string]string{
-				labelManagedBy: managedByKSail,
-				labelCluster:   clusterName,
-			},
+		Name: name,
+		Labels: map[string]string{
+			labelManagedBy: managedByKSail,
+			labelCluster:   clusterName,
 		},
 		Spec: admissionv1.ValidatingAdmissionPolicyBindingSpec{
 			PolicyName: name,
@@ -999,17 +989,13 @@ func (p *K3kProvisioner) buildClusterCR(
 	}
 
 	cluster := &k3kv1beta1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "k3k.io/v1beta1",
-			Kind:       "Cluster",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      clusterName,
-			Namespace: namespace,
-			Labels: map[string]string{
-				labelManagedBy: managedByKSail,
-				labelCluster:   clusterName,
-			},
+		APIVersion: "k3k.io/v1beta1",
+		Kind:       "Cluster",
+		Name:       clusterName,
+		Namespace:  namespace,
+		Labels: map[string]string{
+			labelManagedBy: managedByKSail,
+			labelCluster:   clusterName,
 		},
 		Spec: k3kv1beta1.ClusterSpec{
 			Servers: &p.controlPlanes,

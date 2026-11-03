@@ -24,7 +24,6 @@ import (
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/siderolabs/talos/pkg/provision/access"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -478,12 +477,10 @@ func (p *KubernetesProvisioner) publishConnectorKubeconfig(
 	}
 
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      conn.SecretName,
-			Namespace: conn.Namespace,
-			Labels:    kubernetesprovider.CommonLabels(clusterName),
-		},
-		Data: map[string][]byte{talosKubeconfigKey: rewritten},
+		Name:      conn.SecretName,
+		Namespace: conn.Namespace,
+		Labels:    kubernetesprovider.CommonLabels(clusterName),
+		Data:      map[string][]byte{talosKubeconfigKey: rewritten},
 	}
 
 	err = nested.UpsertSecret(ctx, p.hostClientset, secret)

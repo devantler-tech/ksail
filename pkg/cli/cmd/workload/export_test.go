@@ -13,6 +13,8 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/client/hubble"
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubeconform"
+	kubescapeclient "github.com/devantler-tech/ksail/v7/pkg/client/kubescape"
+	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/crdschema"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/ephemeral"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/fluxsubst"
@@ -65,7 +67,7 @@ func (r *ExportValidationRenderer) Validate(
 		Strict: true, IgnoreMissingSchemas: true,
 		SkipKinds:       []string{"CustomResourceDefinition", "OCIRepository", "HelmRelease"},
 		SchemaLocations: []string{crdschema.SchemaLocation(schemas)},
-	}, r.renderer, nil, kyverno)
+	}, r.renderer, nil, kyverno, kyvernoAPICallFixture{})
 }
 
 // Test exports for unexported workload helpers used by external-package tests.
@@ -237,6 +239,39 @@ func ExportResolveScanOutput(output string) (string, error) {
 	return resolveScanOutput(output)
 }
 
+// ExportWriteComplianceScore exposes writeComplianceScore for testing the score
+// line a passing scan prints.
+func ExportWriteComplianceScore(writer io.Writer, score, threshold float32) {
+	writeComplianceScore(writer, score, threshold)
+}
+
+// scanFunc adapts a function to the scan command's directoryScanner.
+type scanFunc func(
+	ctx context.Context,
+	path string,
+	opts *kubescapeclient.ScanOptions,
+) (*kubescapeclient.ScanResult, error)
+
+func (scan scanFunc) ScanDirectoryWithResult(
+	ctx context.Context,
+	path string,
+	opts *kubescapeclient.ScanOptions,
+) (*kubescapeclient.ScanResult, error) {
+	return scan(ctx, path, opts)
+}
+
+// ExportSetDirectoryScanner swaps the scan command's Kubescape scanner so tests can give
+// the command a scan result without running Kubescape. It returns a restore function that
+// reinstates the original scanner.
+func ExportSetDirectoryScanner(
+	scan func(context.Context, string, *kubescapeclient.ScanOptions) (*kubescapeclient.ScanResult, error),
+) func() {
+	original := newDirectoryScanner
+	newDirectoryScanner = func() directoryScanner { return scanFunc(scan) }
+
+	return func() { newDirectoryScanner = original }
+}
+
 // ExportCanonicalizeSchemaLocations exposes canonicalizeSchemaLocations for
 // testing local-path canonicalization vs URL/template passthrough.
 func ExportCanonicalizeSchemaLocations(locations []string) []string {
@@ -383,11 +418,6 @@ func ExportSchemaCacheDir() string {
 	return fluxsubst.SchemaCacheDir()
 }
 
-// ExportSchemaCacheFileName exposes the engine's schemaCacheFileName for testing.
-func ExportSchemaCacheFileName(schemaURL string) string {
-	return fluxsubst.SchemaCacheFileName(schemaURL)
-}
-
 // ExportDistributionToLabelScheme exposes the hostdebug engine's
 // DistributionToLabelScheme for testing (the mapping moved to pkg/svc/hostdebug).
 func ExportDistributionToLabelScheme(
@@ -440,8 +470,19 @@ func ExportPollUntilKustomizationReady(
 	name string,
 	dependsOn []string,
 	failed *ExportFailedKustomizations,
+	requestToken string,
 ) error {
-	return pollUntilKustomizationReady(ctx, fluxReconciler, name, dependsOn, failed)
+	return pollUntilKustomizationReady(ctx, fluxReconciler, name, dependsOn, failed, requestToken)
+}
+
+// ExportBuildKustomizationTasks exposes the request-and-wait task boundary for testing.
+func ExportBuildKustomizationTasks(
+	sorted []flux.KustomizationInfo,
+	excludeSet map[string]bool,
+	fluxReconciler *flux.Reconciler,
+	failed *ExportFailedKustomizations,
+) []notify.ProgressTask {
+	return buildKustomizationTasks(sorted, excludeSet, fluxReconciler, failed)
 }
 
 // ExportIsKustomizationExcluded exposes isKustomizationExcluded for testing.
@@ -670,6 +711,24 @@ func ExportSetEphemeralAdmissionClient(
 
 // ExportWithPreparedEphemeralCluster exposes the shared validate/scan admission lifecycle.
 var ExportWithPreparedEphemeralCluster = withPreparedEphemeralCluster //nolint:gochecknoglobals // test export
+
+// ExportExpandValidationSubstitutions exposes schema-cache mode selection for tests.
+func ExportExpandValidationSubstitutions(
+	ctx context.Context,
+	data []byte,
+	opts *kubeconform.ValidationOptions,
+) ([]byte, error) {
+	return expandValidationSubstitutions(ctx, data, opts)
+}
+
+// ExportFinishRenderedValidationSubstitutions exposes final schema preparation for tests.
+func ExportFinishRenderedValidationSubstitutions(
+	ctx context.Context,
+	result render.Result,
+	opts *kubeconform.ValidationOptions,
+) ([]byte, error) {
+	return finishRenderedValidationSubstitutions(ctx, result, opts)
+}
 
 // ExportResolveKubeconfigFlag exposes resolveKubeconfigFlag for testing.
 func ExportResolveKubeconfigFlag(

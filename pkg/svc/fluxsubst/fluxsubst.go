@@ -15,12 +15,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
 
+	"github.com/devantler-tech/ksail/v7/pkg/client/kubeconform"
+	"github.com/yannh/kubeconform/pkg/cache"
+	yamlv3 "gopkg.in/yaml.v3"
 	yamlio "k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/yaml"
 )
@@ -31,7 +32,8 @@ import (
 var fluxVarPattern = regexp.MustCompile(`\$\{([a-zA-Z_][a-zA-Z0-9_]*)(?:(:-|:=)([^}]*))?\}`)
 
 const (
-	schemaCacheFileMaxChars = 200
+	// kubeconformSchemaURLCount is the most URLs schemaURLs returns for one kind.
+	kubeconformSchemaURLCount = 3
 
 	placeholderString = "placeholder"
 
@@ -40,10 +42,9 @@ const (
 
 // schemaRegistry provides thread-safe caching of parsed JSON schemas keyed by "apiVersion/kind".
 type schemaRegistry struct {
-	cache sync.Map
+	cache   sync.Map
+	options *SchemaOptions
 }
-
-var schemas = &schemaRegistry{} //nolint:gochecknoglobals // singleton schema cache for validation lifecycle
 
 // ExpandFluxSubstitutions expands Flux postBuild variable references in YAML
 // data using type-aware placeholders derived from JSON schemas.
@@ -56,6 +57,17 @@ var schemas = &schemaRegistry{} //nolint:gochecknoglobals // singleton schema ca
 //
 // Falls back to regex-based string placeholder expansion when YAML parsing fails.
 func ExpandFluxSubstitutions(data []byte) []byte {
+	return expandFluxSubstitutions(data, nil)
+}
+
+// ExpandFluxSubstitutionsWithOptions uses validation's effective schema locations
+// and strictness while retaining offline, cache-only remote schema lookup.
+func ExpandFluxSubstitutionsWithOptions(data []byte, opts SchemaOptions) []byte {
+	return expandFluxSubstitutions(data, &opts)
+}
+
+// expandFluxSubstitutions shares one parsed-schema registry only within this input stream.
+func expandFluxSubstitutions(data []byte, opts *SchemaOptions) []byte {
 	if !fluxVarPattern.Match(data) {
 		return data
 	}
@@ -65,9 +77,13 @@ func ExpandFluxSubstitutions(data []byte) []byte {
 		return data
 	}
 
+	// Cache parsed schemas only within this invocation. Later validation runs must
+	// observe refreshed files and schemas that were absent on an earlier run.
+	schemas := &schemaRegistry{options: opts}
+
 	expanded := make([][]byte, 0, len(docs))
 	for _, doc := range docs {
-		expanded = append(expanded, expandDocument(doc))
+		expanded = append(expanded, schemas.expandDocument(doc))
 	}
 
 	return bytes.Join(expanded, []byte("\n---\n"))
@@ -116,7 +132,7 @@ func splitYAMLDocuments(data []byte) [][]byte {
 }
 
 // expandDocument expands variable references in a single YAML document.
-func expandDocument(doc []byte) []byte {
+func (reg *schemaRegistry) expandDocument(doc []byte) []byte {
 	if !fluxVarPattern.Match(doc) {
 		return doc
 	}
@@ -130,7 +146,7 @@ func expandDocument(doc []byte) []byte {
 
 	switch typedObj := obj.(type) {
 	case map[string]any:
-		return expandMapDocument(typedObj, doc)
+		return reg.expandMapDocument(typedObj, doc)
 	case []any:
 		return expandListDocument(typedObj, doc)
 	default:
@@ -139,10 +155,16 @@ func expandDocument(doc []byte) []byte {
 }
 
 // expandMapDocument expands variable references in a YAML document with a map root.
-func expandMapDocument(obj map[string]any, doc []byte) []byte {
+func (reg *schemaRegistry) expandMapDocument(obj map[string]any, doc []byte) []byte {
 	apiVersion, _ := obj["apiVersion"].(string)
 	kind, _ := obj["kind"].(string)
-	schema := schemas.load(apiVersion, kind)
+
+	schema := reg.load(apiVersion, kind)
+	if schema == nil && reg.options != nil {
+		if _, deferred := reg.options.DeferredKinds[apiVersion+"/"+kind]; deferred {
+			return doc
+		}
+	}
 
 	walkAndExpand(obj, "", schema)
 
@@ -297,26 +319,44 @@ func parseTypedDefault(defaultVal, schemaType string) any {
 	}
 }
 
-func parseInteger(trimmed, defaultVal string) any {
-	var intVal int64
+// yamlScalar returns the value YAML reads trimmed as: what the field holds once Flux has
+// substituted the text and the manifest is parsed. It returns nil when trimmed is not
+// valid YAML.
+func yamlScalar(trimmed string) any {
+	var value any
 
-	_, err := fmt.Sscanf(trimmed, "%d", &intVal)
-	if err == nil {
-		return intVal
+	err := yamlv3.Unmarshal([]byte(trimmed), &value)
+	if err != nil {
+		return nil
+	}
+
+	return value
+}
+
+// parseInteger returns the default as an int64 when YAML reads the whole value as an integer
+// (decimal, 0x hexadecimal or 0o octal). Anything else, such as "3oops" or "3.14", stays the
+// string Flux substitutes, so an integer field still fails validation on it.
+func parseInteger(trimmed, defaultVal string) any {
+	if value, ok := yamlScalar(trimmed).(int); ok {
+		return int64(value)
 	}
 
 	return defaultVal
 }
 
+// parseNumber returns the default as a float64 when YAML reads the whole value as a number,
+// including .inf and .nan. Anything else stays the string Flux substitutes.
 func parseNumber(trimmed, defaultVal string) any {
-	var floatVal float64
-
-	_, err := fmt.Sscanf(trimmed, "%f", &floatVal)
-	if err == nil {
-		return floatVal
+	switch value := yamlScalar(trimmed).(type) {
+	case int:
+		return float64(value)
+	case uint64:
+		return float64(value)
+	case float64:
+		return value
+	default:
+		return defaultVal
 	}
-
-	return defaultVal
 }
 
 func parseBoolean(trimmed, defaultVal string) any {
@@ -361,27 +401,26 @@ func (reg *schemaRegistry) load(apiVersion, kind string) map[string]any {
 		return schema
 	}
 
-	schema := fetchSchemaFromDisk(apiVersion, kind)
+	var schema map[string]any
+	if reg.options == nil {
+		schema = fetchSchemaFromDisk(apiVersion, kind)
+	} else {
+		schema = fetchSchemaWithOptions(apiVersion, kind, *reg.options)
+	}
 
 	reg.cache.Store(cacheKey, schema)
 
 	return schema
 }
 
-// fetchSchemaFromDisk tries to load a schema from the disk cache.
+// fetchSchemaFromDisk tries to load a schema from kubeconform's disk cache. The cache is
+// read through kubeconform's own cache package, so the lookup uses exactly the file name
+// kubeconform stores a downloaded schema under.
 func fetchSchemaFromDisk(apiVersion, kind string) map[string]any {
-	cacheDir := schemaCacheDir()
+	diskCache := cache.NewOnDiskCache(schemaCacheDir())
 
 	for _, schemaURL := range schemaURLs(apiVersion, kind) {
-		cachedPath := filepath.Join(cacheDir, schemaCacheFileName(schemaURL))
-
-		data, err := os.ReadFile(cachedPath) //nolint:gosec // controlled cache directory
-		if err != nil {
-			continue
-		}
-
-		schema := parseJSONSchema(data)
-		if schema != nil {
+		if schema := readCachedSchema(diskCache, schemaURL); schema != nil {
 			return schema
 		}
 	}
@@ -391,58 +430,44 @@ func fetchSchemaFromDisk(apiVersion, kind string) map[string]any {
 
 // schemaCacheDir returns the schema cache directory.
 func schemaCacheDir() string {
-	userCacheDir, err := os.UserCacheDir()
-	if err != nil {
-		return filepath.Join(os.TempDir(), "ksail", "kubeconform")
-	}
-
-	return filepath.Join(userCacheDir, "ksail", "kubeconform")
+	return kubeconform.DefaultSchemaCacheDir()
 }
 
-// schemaCacheFileName produces a deterministic filename for caching a schema URL.
-func schemaCacheFileName(schemaURL string) string {
-	safe := strings.NewReplacer(
-		"://", "_",
-		"/", "_",
-		".", "_",
-	).Replace(schemaURL) + ".json"
-
-	if len(safe) > schemaCacheFileMaxChars {
-		safe = safe[len(safe)-schemaCacheFileMaxChars:]
-	}
-
-	return safe
-}
-
-// schemaURLs returns the candidate schema URLs for a given apiVersion/kind.
+// schemaURLs returns the URLs kubeconform downloads (and caches) a schema for the given
+// apiVersion/kind from, in lookup order: the built-in Kubernetes schemas, in kubeconform's
+// default and strict variants, then the datree CRDs catalog for a grouped API.
+//
+// The built-in URL mirrors kubeconform's "default" schema location at Kubernetes version
+// "master": its kind suffix uses only the first label of the API group, so
+// networking.k8s.io/v1 Ingress is ingress-networking-v1.json.
 func schemaURLs(apiVersion, kind string) []string {
 	kindLower := strings.ToLower(kind)
 	group, version := splitAPIVersion(apiVersion)
 
+	kindSuffix := "-" + strings.ToLower(version)
+
 	if group != "" {
-		// Try Kubernetes JSON schema first (for core API groups like apps, batch, etc.),
-		// then fall back to CRDs catalog for custom resources.
-		return []string{
-			fmt.Sprintf(
-				"https://raw.githubusercontent.com/yannh/kubernetes-json-schema/master/master-standalone/%s-%s-%s.json",
-				kindLower,
-				group,
-				version,
-			),
-			fmt.Sprintf(
-				"https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/%s/%s_%s.json",
-				group, kindLower, version,
-			),
-		}
+		firstLabel, _, _ := strings.Cut(group, ".")
+		kindSuffix = "-" + strings.ToLower(firstLabel) + kindSuffix
 	}
 
-	return []string{
-		fmt.Sprintf(
-			"https://raw.githubusercontent.com/yannh/kubernetes-json-schema/master/master-standalone/%s-%s.json",
-			kindLower,
-			version,
-		),
+	urls := make([]string, 0, kubeconformSchemaURLCount)
+
+	for _, variant := range []string{"master-standalone", "master-standalone-strict"} {
+		urls = append(urls, fmt.Sprintf(
+			"https://raw.githubusercontent.com/yannh/kubernetes-json-schema/master/%s/%s%s.json",
+			variant, kindLower, kindSuffix,
+		))
 	}
+
+	if group != "" {
+		urls = append(urls, fmt.Sprintf(
+			"https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/%s/%s_%s.json",
+			group, kindLower, version,
+		))
+	}
+
+	return urls
 }
 
 // splitAPIVersion splits "apps/v1" into ("apps", "v1") or "v1" into ("", "v1").

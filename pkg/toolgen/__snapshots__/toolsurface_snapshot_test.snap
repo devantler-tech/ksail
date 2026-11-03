@@ -1792,6 +1792,10 @@ workload_write
         "description": "Process the kustomization directory. This flag can't be used together with -f or -R. (applies to: describe, get)",
         "type": "string"
       },
+      "kyverno-api-call-responses": {
+        "description": "Path, relative to the working directory, to a reviewed offline response fixture for Kyverno Kubernetes apiCall context entries... (applies to: validate)",
+        "type": "string"
+      },
       "kyverno-policies": {
         "description": "Evaluate the source's own Kyverno ClusterPolicy and Policy validate rules, and its CEL-based ValidatingPolicy and NamespacedValidatingPolicy validations, against the rendered manifests... (applies to: validate)",
         "type": "boolean"
@@ -1922,6 +1926,10 @@ workload_write
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: describe, explain, get, wait)",
         "type": "boolean"
       },
+      "refresh-schemas": {
+        "description": "Download selected schemas anew and update the cache only after validation succeeds; unavailable selected schemas fail even when missing schemas are normally ignored (applies to: validate)",
+        "type": "boolean"
+      },
       "release-name": {
         "description": "name used for the Helm release (applies to: gen_helmrelease)",
         "type": "string"
@@ -1973,11 +1981,16 @@ workload_write
         "type": "string"
       },
       "schema-location": {
-        "description": "Additional kubeconform schema locations (local directory or URL/path template) for CRDs with missing or stale CRDs-catalog entries... (applies to: validate)",
+        "description": "Supplied kubeconform schema locations (local directory or URL/path template)... (applies to: validate)",
         "items": {
           "type": "string"
         },
         "type": "array"
+      },
+      "schema-location-mode": {
+        "default": "additional",
+        "description": "Schema search mode: additional keeps built-in and catalogue defaults; only uses the supplied schema locations without implicit registries (applies to: validate)",
+        "type": "string"
       },
       "scopes": {
         "description": "A comma-delimited set of quota scopes that must all match each object tracked by the quota. (applies to: gen_quota)",

@@ -300,12 +300,12 @@ func partialNestedDeletionHost(
 			}
 
 			if request.URL.Path == "/api/v1/namespaces/ksail-nested" && !namespaceDeleted.Load() {
-				_ = json.NewEncoder(writer).Encode(corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+				_ = json.NewEncoder(writer).Encode(corev1.Namespace{
 					Name:            "ksail-nested",
 					Labels:          nestedGuardOwnedLabels(),
 					UID:             "owned-uid",
 					ResourceVersion: "42",
-				}})
+				})
 
 				return
 			}
@@ -318,7 +318,7 @@ func partialNestedDeletionHost(
 			// A same-named but unowned namespace remains outside the deletion grant.
 			if request.URL.Path == "/api/v1/namespaces/vcluster-nested" {
 				_ = json.NewEncoder(writer).
-					Encode(corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "vcluster-nested"}})
+					Encode(corev1.Namespace{Name: "vcluster-nested"})
 
 				return
 			}
@@ -340,8 +340,8 @@ func writePartialDeletionDenied(t *testing.T, writer http.ResponseWriter) {
 
 	writer.WriteHeader(http.StatusForbidden)
 	assert.NoError(t, json.NewEncoder(writer).Encode(metav1.Status{
-		TypeMeta: metav1.TypeMeta{Kind: "Status", APIVersion: "v1"},
-		Status:   "Failure", Reason: metav1.StatusReasonForbidden,
+		Kind: "Status", APIVersion: "v1",
+		Status: "Failure", Reason: metav1.StatusReasonForbidden,
 		Message: "later ownership read denied", Code: http.StatusForbidden,
 	}))
 }
@@ -384,11 +384,9 @@ func nestedCleanupHost(t *testing.T, deletes *atomic.Int32) *httptest.Server {
 
 			assert.Equal(t, http.MethodGet, request.Method)
 			assert.NoError(t, json.NewEncoder(writer).Encode(corev1.Namespace{
-				TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "ksail-nested", Labels: nestedGuardOwnedLabels(),
-					UID: "owned-uid", ResourceVersion: "42",
-				},
+				APIVersion: "v1", Kind: "Namespace",
+				Name: "ksail-nested", Labels: nestedGuardOwnedLabels(),
+				UID: "owned-uid", ResourceVersion: "42",
 			}))
 		}),
 	)
@@ -442,8 +440,8 @@ func nestedGuardHost(
 
 				writer.WriteHeader(responseStatus)
 				assert.NoError(t, json.NewEncoder(writer).Encode(metav1.Status{
-					TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Status"},
-					Status:   "Failure", Code: int32(responseStatus),
+					APIVersion: "v1", Kind: "Status",
+					Status: "Failure", Code: int32(responseStatus),
 					Reason: metav1.StatusReason(http.StatusText(responseStatus)),
 				}))
 
@@ -451,8 +449,8 @@ func nestedGuardHost(
 			}
 
 			assert.NoError(t, json.NewEncoder(writer).Encode(corev1.Namespace{
-				TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
-				ObjectMeta: metav1.ObjectMeta{Name: name, Labels: labels},
+				APIVersion: "v1", Kind: "Namespace",
+				Name: name, Labels: labels,
 			}))
 		}),
 	)

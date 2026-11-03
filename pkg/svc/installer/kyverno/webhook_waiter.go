@@ -9,15 +9,19 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
-	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/webhookwait"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
 const (
-	// kyvernoResourceWebhookName is the MutatingWebhookConfiguration that intercepts
-	// all resource operations (create/update/delete). Kyverno populates its caBundle
-	// once the admission controller has initialised its TLS certificate — a non-empty
-	// caBundle is therefore a reliable signal that the webhook is ready to serve.
+	// kyvernoPolicyWebhookName is always registered, including in clusters with no
+	// mutation policies. It must contain CA-bearing entries before readiness passes.
+	kyvernoPolicyWebhookName = "kyverno-policy-mutating-webhook-cfg"
+
+	// kyvernoResourceWebhookName may legitimately have no entries when no policies
+	// apply. Any entries it does contain must retain their CA-publication check.
 	kyvernoResourceWebhookName = "kyverno-resource-mutating-webhook-cfg"
 )
 
@@ -25,13 +29,10 @@ const (
 // before the webhook readiness poll can begin.
 var errNoTimeRemaining = errors.New("no time remaining for webhook readiness check")
 
-// webhookReadinessTimeout is the independent deadline given to the webhook caBundle
-// readiness check after Helm install. The wait is best-effort: if the caBundle is not
-// populated within this window, Install returns success anyway because
-// failurePolicy: Ignore ensures API operations proceed even without a fully initialised
-// webhook. A dedicated constant (shorter than KyvernoInstallTimeout) prevents the
-// best-effort check from consuming an excessive share of the CI job's time budget in
-// environments where informer cache sync takes longer than expected.
+// webhookReadinessTimeout bounds the independent caBundle publication check
+// after Helm installation. Install retains its existing best-effort timeout
+// behavior; expiry does not establish TLS readiness or guarantee that policy
+// admission requests will succeed.
 //
 //nolint:gochecknoglobals // allows overriding in tests via export_test.go
 var webhookReadinessTimeout = 5 * time.Minute
@@ -49,14 +50,12 @@ var newClientsetFn = func(kubeconfig, kubecontext string) (kubernetes.Interface,
 	return k8s.NewClientset(canonical, kubecontext)
 }
 
-// waitForWebhookReady polls the Kyverno MutatingWebhookConfiguration until every
-// webhook entry has a non-empty caBundle. This guards against the race condition
-// where Helm reports the chart as installed and the admission controller pods are
-// Running/Ready, but the controller has not yet initialised its TLS certificate and
-// injected it into the webhook configuration. Workload operations that trigger the
-// webhook before the caBundle is populated are still admitted because the Kyverno
-// webhook is configured with failurePolicy: Ignore, but the caBundle check provides
-// an early signal that the controller is fully ready.
+// waitForWebhookReady polls the always-registered policy webhook configuration
+// and the resource configuration in each iteration. Policy entries must exist;
+// every policy or resource entry must have a non-empty caBundle. An existing,
+// empty resource configuration is valid without applicable policies. Helm readiness can
+// precede asynchronous CA publication. This observation does not establish
+// policy-rule convergence or verify an admission request.
 //
 // ctx should carry an appropriate deadline so the check does not wait indefinitely.
 // Callers treat context.DeadlineExceeded as non-fatal (see Installer.Install).
@@ -74,30 +73,54 @@ func (i *Installer) waitForWebhookReady(ctx context.Context) error {
 		return fmt.Errorf("creating clientset for Kyverno webhook readiness check: %w", err)
 	}
 
-	err = webhookwait.Poll(
-		ctx,
-		clientset,
-		webhookwait.Mutating,
-		kyvernoResourceWebhookName,
-		"polling Kyverno webhook readiness",
-		remaining,
-	)
+	err = readiness.PollForReadiness(ctx, remaining, func(pollCtx context.Context) (bool, error) {
+		return kyvernoWebhookCAsReady(pollCtx, clientset)
+	})
 	if err != nil {
-		// The webhook readiness wait is best-effort: callers treat a deadline timeout as
-		// non-fatal because the webhook uses failurePolicy: Ignore. When the poll runs out
-		// the clock, client-go's REST rate limiter can surface the timeout as
-		// "client rate limiter Wait returned an error: rate: Wait(n=1) would exceed context
-		// deadline" instead of a clean context.DeadlineExceeded (the limiter declines to
-		// wait past the imminent deadline). Normalize that variant to context.DeadlineExceeded
-		// so the best-effort caller doesn't treat a slow-but-harmless webhook as a fatal error.
+		// Preserve the caller's existing best-effort deadline handling. The REST
+		// rate limiter may decline a wait that would exceed the deadline without
+		// wrapping context.DeadlineExceeded. Cancellation remains a distinct error.
 		if isDeadlineError(ctx, err) {
 			return fmt.Errorf("polling Kyverno webhook readiness: %w", context.DeadlineExceeded)
 		}
 
-		return err //nolint:wrapcheck // webhookwait.Poll already wraps with the readiness description
+		return fmt.Errorf("polling Kyverno webhook readiness: %w", err)
 	}
 
 	return nil
+}
+
+// kyvernoWebhookCAsReady observes policy and resource CA publication together.
+// Empty resource entries are valid only alongside a populated policy configuration.
+func kyvernoWebhookCAsReady(ctx context.Context, clientset kubernetes.Interface) (bool, error) {
+	ready := true
+
+	for _, name := range []string{kyvernoPolicyWebhookName, kyvernoResourceWebhookName} {
+		config, err := clientset.AdmissionregistrationV1().
+			MutatingWebhookConfigurations().
+			Get(ctx, name, metav1.GetOptions{})
+		if apierrors.IsNotFound(err) {
+			ready = false
+
+			continue
+		}
+
+		if err != nil {
+			return false, fmt.Errorf("getting Kyverno webhook configuration %q: %w", name, err)
+		}
+
+		if name == kyvernoPolicyWebhookName && len(config.Webhooks) == 0 {
+			ready = false
+		}
+
+		for _, webhook := range config.Webhooks {
+			if len(webhook.ClientConfig.CABundle) == 0 {
+				ready = false
+			}
+		}
+	}
+
+	return ready, nil
 }
 
 // isDeadlineError reports whether err represents the webhook-readiness deadline being

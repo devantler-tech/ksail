@@ -1049,11 +1049,9 @@ func (p *Provisioner) getOrCreateHcloudSecret(
 	}
 
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      hcloudSecretName,
-			Namespace: hcloudSecretNamespace,
-		},
-		Data: desiredData,
+		Name:      hcloudSecretName,
+		Namespace: hcloudSecretNamespace,
+		Data:      desiredData,
 	}
 
 	_, createErr := secretsClient.Create(ctx, secret, metav1.CreateOptions{})

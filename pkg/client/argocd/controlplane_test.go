@@ -9,7 +9,6 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/argocd"
 	appsv1 "k8s.io/api/apps/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 )
@@ -18,7 +17,7 @@ const argoCDNamespace = "argocd"
 
 func readyDeployment(name string) *appsv1.Deployment {
 	return &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: argoCDNamespace},
+		Name: name, Namespace: argoCDNamespace,
 		Status: appsv1.DeploymentStatus{
 			Replicas:          1,
 			UpdatedReplicas:   1,
@@ -29,7 +28,7 @@ func readyDeployment(name string) *appsv1.Deployment {
 
 func notReadyDeployment(name string) *appsv1.Deployment {
 	return &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: argoCDNamespace},
+		Name: name, Namespace: argoCDNamespace,
 		Status: appsv1.DeploymentStatus{
 			Replicas:          1,
 			UpdatedReplicas:   0,
@@ -40,7 +39,7 @@ func notReadyDeployment(name string) *appsv1.Deployment {
 
 func readyStatefulSet(name string) *appsv1.StatefulSet {
 	return &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: argoCDNamespace},
+		Name: name, Namespace: argoCDNamespace,
 		Status: appsv1.StatefulSetStatus{
 			Replicas:        1,
 			ReadyReplicas:   1,
@@ -53,7 +52,7 @@ func readyStatefulSet(name string) *appsv1.StatefulSet {
 
 func notReadyStatefulSet(name string) *appsv1.StatefulSet {
 	return &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: argoCDNamespace},
+		Name: name, Namespace: argoCDNamespace,
 		Status: appsv1.StatefulSetStatus{
 			Replicas:        1,
 			ReadyReplicas:   0,

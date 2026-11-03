@@ -4,13 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 // Path expansion operations.
 
-// ExpandHomePath expands a path beginning with ~/ to the user's home directory
-// and converts relative paths to absolute paths.
+// ExpandHomePath expands ~/ and, on Windows, ~\ to the user's home directory.
+// It also converts relative paths to absolute paths.
 //
 // The home directory is resolved via os.UserHomeDir(), which honors $HOME (or
 // %USERPROFILE% on Windows). Resolving through the environment — rather than
@@ -26,7 +25,7 @@ import (
 //   - string: The expanded and absolute path
 //   - error: Error if unable to get the home directory or convert to absolute path
 func ExpandHomePath(path string) (string, error) {
-	if strings.HasPrefix(path, "~/") {
+	if len(path) > 1 && path[0] == '~' && os.IsPathSeparator(path[1]) {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
 			return "", fmt.Errorf("failed to get user home directory: %w", err)

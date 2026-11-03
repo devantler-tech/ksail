@@ -411,14 +411,10 @@ func buildHelmReleaseFromConfig(cfg helmReleaseConfig) (*helmv2.HelmRelease, err
 
 func createHelmReleaseBase(cfg helmReleaseConfig) *helmv2.HelmRelease {
 	return &helmv2.HelmRelease{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: helmv2.GroupVersion.String(),
-			Kind:       helmv2.HelmReleaseKind,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cfg.name,
-			Namespace: cfg.namespace,
-		},
+		APIVersion: helmv2.GroupVersion.String(),
+		Kind:       helmv2.HelmReleaseKind,
+		Name:       cfg.name,
+		Namespace:  cfg.namespace,
 		Spec: helmv2.HelmReleaseSpec{
 			Interval: metav1.Duration{Duration: cfg.interval},
 		},

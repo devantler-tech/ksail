@@ -12,7 +12,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -26,12 +25,10 @@ const (
 // cluster it runs on (empty spec, host-cluster label).
 func newHostCluster(withFinalizer bool) *v1alpha1.Cluster {
 	cluster := &v1alpha1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       hostName,
-			Namespace:  hostNamespace,
-			Generation: 1,
-			Labels:     map[string]string{v1alpha1.HostClusterLabel: "true"},
-		},
+		Name:       hostName,
+		Namespace:  hostNamespace,
+		Generation: 1,
+		Labels:     map[string]string{v1alpha1.HostClusterLabel: "true"},
 	}
 	if withFinalizer {
 		cluster.Finalizers = []string{controller.FinalizerName}
@@ -42,7 +39,7 @@ func newHostCluster(withFinalizer bool) *v1alpha1.Cluster {
 
 func hostRequest() ctrl.Request {
 	return ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: hostName, Namespace: hostNamespace},
+		Name: hostName, Namespace: hostNamespace,
 	}
 }
 
@@ -140,7 +137,7 @@ func TestReconcile_ForgedHostLabelUsesNormalDelete(t *testing.T) {
 	require.NoError(t, fakeClient.Delete(context.Background(), cluster))
 
 	_, err := reconciler.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace},
+		Name: cluster.Name, Namespace: cluster.Namespace,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 1, prov.deleteCalls, "forged host labels must not bypass normal teardown")

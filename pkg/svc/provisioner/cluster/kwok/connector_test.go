@@ -80,8 +80,8 @@ func TestKubeconfig_NotReadyWhileSecretKeyEmpty(t *testing.T) {
 
 	conn := kwokprovisioner.ConnectionFor(kwokConnectorTestCluster)
 	clientset := k8sfake.NewClientset(&corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: conn.SecretName, Namespace: conn.Namespace},
-		Data:       map[string][]byte{"kubeconfig.yaml": {}},
+		Name: conn.SecretName, Namespace: conn.Namespace,
+		Data: map[string][]byte{"kubeconfig.yaml": {}},
 	})
 	provisioner := kwokprovisioner.NewKubernetesProvisionerForConnectorTest(
 		clientset, kwokConnectorTestCluster, "",
@@ -97,8 +97,8 @@ func TestKubeconfig_ReturnsPublishedSecret(t *testing.T) {
 
 	conn := kwokprovisioner.ConnectionFor(kwokConnectorTestCluster)
 	clientset := k8sfake.NewClientset(&corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: conn.SecretName, Namespace: conn.Namespace},
-		Data:       map[string][]byte{"kubeconfig.yaml": []byte(kwokHostKubeconfig)},
+		Name: conn.SecretName, Namespace: conn.Namespace,
+		Data: map[string][]byte{"kubeconfig.yaml": []byte(kwokHostKubeconfig)},
 	})
 	provisioner := kwokprovisioner.NewKubernetesProvisionerForConnectorTest(
 		clientset, kwokConnectorTestCluster, "",
@@ -115,8 +115,8 @@ func TestKubeconfig_ResolvesNameFromArgument(t *testing.T) {
 
 	conn := kwokprovisioner.ConnectionFor(kwokConnectorTestCluster)
 	clientset := k8sfake.NewClientset(&corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: conn.SecretName, Namespace: conn.Namespace},
-		Data:       map[string][]byte{"kubeconfig.yaml": []byte("kubeconfig-bytes")},
+		Name: conn.SecretName, Namespace: conn.Namespace,
+		Data: map[string][]byte{"kubeconfig.yaml": []byte("kubeconfig-bytes")},
 	})
 	// Empty provisioner name — the Kubeconfig(name) argument must resolve the cluster.
 	provisioner := kwokprovisioner.NewKubernetesProvisionerForConnectorTest(clientset, "", "")

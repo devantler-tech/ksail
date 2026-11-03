@@ -16,7 +16,7 @@ import (
 // carrying the given caBundle (pass nil for an unready, empty caBundle).
 func mutatingConfig(name string, caBundle []byte) *admv1.MutatingWebhookConfiguration {
 	return &admv1.MutatingWebhookConfiguration{
-		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Name: name,
 		Webhooks: []admv1.MutatingWebhook{
 			{Name: "a", ClientConfig: admv1.WebhookClientConfig{CABundle: caBundle}},
 		},
@@ -27,7 +27,7 @@ func mutatingConfig(name string, caBundle []byte) *admv1.MutatingWebhookConfigur
 // entry carrying the given caBundle (pass nil for an unready, empty caBundle).
 func validatingConfig(name string, caBundle []byte) *admv1.ValidatingWebhookConfiguration {
 	return &admv1.ValidatingWebhookConfiguration{
-		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Name: name,
 		Webhooks: []admv1.ValidatingWebhook{
 			{Name: "a", ClientConfig: admv1.WebhookClientConfig{CABundle: caBundle}},
 		},

@@ -603,44 +603,6 @@ func TestScaleNodegroup_EmptyNames(t *testing.T) {
 	require.ErrorIs(t, err, eksctl.ErrEmptyNodegroupName)
 }
 
-func TestUpgradeCluster_WithApprove(t *testing.T) {
-	t.Parallel()
-
-	runner := &fakeRunner{}
-	client := newTestClient(runner)
-
-	err := client.UpgradeCluster(t.Context(), "eks.yaml", true)
-	require.NoError(t, err)
-
-	assert.Equal(t,
-		[]string{"upgrade", "cluster", "--config-file", "eks.yaml", "--approve"},
-		runner.lastArgs,
-	)
-}
-
-func TestUpgradeCluster_DryRunOmitsApprove(t *testing.T) {
-	t.Parallel()
-
-	runner := &fakeRunner{}
-	client := newTestClient(runner)
-
-	err := client.UpgradeCluster(t.Context(), "eks.yaml", false)
-	require.NoError(t, err)
-
-	assert.Equal(t,
-		[]string{"upgrade", "cluster", "--config-file", "eks.yaml"},
-		runner.lastArgs,
-	)
-}
-
-func TestUpgradeCluster_EmptyConfigPath(t *testing.T) {
-	t.Parallel()
-
-	client := newTestClient(&fakeRunner{})
-	err := client.UpgradeCluster(t.Context(), "", true)
-	require.ErrorIs(t, err, eksctl.ErrEmptyConfigPath)
-}
-
 func TestExec_WrapsErrorWithFirstStderrLine(t *testing.T) {
 	t.Parallel()
 

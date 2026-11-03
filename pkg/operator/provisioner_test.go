@@ -7,12 +7,11 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/operator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func clusterWithDistribution(name string, distribution v1alpha1.Distribution) *v1alpha1.Cluster {
 	return &v1alpha1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Name: name,
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{Distribution: distribution},
 		},

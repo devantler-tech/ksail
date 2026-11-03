@@ -66,6 +66,8 @@ Changes are classified the same way as `cluster update`: in-place, reboot-requir
 
 When a cluster has **3 or more nodes** (control planes + workers ≥ 3), KSail automatically applies HA-ready defaults to supported Helm-based component installers. Below the 3-node threshold, no HA values are injected to avoid unschedulable pods on single-node or dual-node clusters.
 
+Some charts ship a PodDisruptionBudget even without HA values. Below the threshold KSail relaxes those budgets, so draining a node during a Talos upgrade or node replacement can always finish. Today this applies to Gatekeeper, whose controller-manager budget is set to `minAvailable: 0`.
+
 The possible HA settings are:
 
 - **Replicas ≥ 2** — fast failover for controller workloads

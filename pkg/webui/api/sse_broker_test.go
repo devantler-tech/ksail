@@ -15,7 +15,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/webui/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // countingListService records how many times List is called so a test can prove the shared broker
@@ -30,7 +29,7 @@ func (c *countingListService) List(_ context.Context) (*v1alpha1.ClusterList, er
 	c.calls.Add(1)
 
 	cluster := v1alpha1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "c1", Namespace: defaultNS},
+		Name: "c1", Namespace: defaultNS,
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{Distribution: v1alpha1.DistributionVCluster},
 		},

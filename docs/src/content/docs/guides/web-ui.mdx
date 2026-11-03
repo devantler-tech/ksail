@@ -69,6 +69,17 @@ flowchart LR
   </TabItem>
 </Tabs>
 
+## Install on iPhone or iPad
+
+You can add the UI to an iPhone or iPad Home Screen, or to the Dock on a Mac, and open it in its own window with the KSail name and icon, like an app.
+
+To reach it from a phone or tablet, serve it from the cluster: install the [KSail operator](/guides/operator/) with `ui.enabled=true`, expose the UI through the chart's Ingress, and turn on OIDC sign-in so only signed-in users can reach the API. [Securing with OIDC](/guides/operator/#securing-with-oidc) shows the settings.
+
+1. Open the UI's address in Safari and sign in.
+2. Tap **Share**, then **Add to Home Screen**. On a Mac, choose **File** → **Add to Dock**.
+
+The installed app shows live cluster state, so it needs a connection to the operator. Nothing is cached for offline use.
+
 ## Read-Only Mode for GitOps
 
 In GitOps-enforced environments the Git repository should stay the single source of truth. Deploy the in-cluster UI with `ui.readOnly=true` to lock it to inspection: the restriction is enforced server-side by the REST API, not just hidden in the frontend.

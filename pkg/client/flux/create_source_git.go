@@ -74,10 +74,8 @@ func (c *Client) createGitRepository(
 	flags *sourceGitFlags,
 ) error {
 	gitRepo := &sourcev1.GitRepository{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		Name:      name,
+		Namespace: namespace,
 		Spec: sourcev1.GitRepositorySpec{
 			URL:      flags.url,
 			Interval: metav1.Duration{Duration: flags.interval},
