@@ -49,7 +49,12 @@ case "$1 $2" in
   '-n ksail-nested-talos'|'-n ksail-nested-vanilla')
     [[ "$FIXTURE_MODE" != create-diag-error ]] || exit 1
     case "${3:-}" in
-      get|exec) echo 'fixture endpoint diagnostics' ;;
+      get|exec)
+        if [[ "$*" == *'journalctl -u kubelet'* ]]; then
+          echo 'failed to create fsnotify watcher: too many open files opaque-bootstrap-token'
+        else
+          echo 'fixture endpoint diagnostics'
+        fi ;;
       *) exit 99 ;;
     esac ;;
   'get ns'|'get namespace')
@@ -128,9 +133,9 @@ exec "$@"
 const nestedCleanupDockerStub = `#!/usr/bin/env bash
 set -euo pipefail
 printf 'docker %s\n' "$*" >> "$FIXTURE_CALLS"
-[[ "$*" == "network inspect kind --format {{json .IPAM.Config}}" ]] || exit 99
+[[ "$*" == "network inspect kind --format {{len .IPAM.Config}}" ]] || exit 99
 [[ "$FIXTURE_MODE" != create-diag-error ]] || exit 1
-echo '[{"Subnet":"172.18.0.0/16"}]'
+echo 1
 `
 
 func runNestedCleanup(t *testing.T, mode string, distributions ...string) (string, string, error) {
@@ -187,7 +192,7 @@ func runNestedCleanupWithWatchdog(
 
 	command.Stdin = strings.NewReader(script)
 	command.Dir = filepath.Join("..", "..")
-	command.Env = nestedCleanupEnvironment(dir, mode)
+	command.Env = nestedCleanupEnvironment(t, dir, mode)
 	command.Env = append(command.Env, "FIXTURE_TIMEOUT="+timeoutPath)
 
 	if len(distributions) > 0 {
@@ -297,7 +302,7 @@ func TestNestedDelayedReadHonorsItsOperationDeadline(t *testing.T) {
 		"get", "--raw=/readyz", "--request-timeout=15s")
 	command.Stdin = strings.NewReader(nestedCleanupTimeoutStub)
 
-	command.Env = append(nestedCleanupEnvironment(dir, "ready-delayed"),
+	command.Env = append(nestedCleanupEnvironment(t, dir, "ready-delayed"),
 		"FIXTURE_TIMEOUT="+nestedFixtureTimeoutPath(t))
 	output, err := command.CombinedOutput()
 
@@ -342,7 +347,9 @@ func TestNestedReadinessCapturesOnlyEndpointEvidenceBeforeDeletion(t *testing.T)
 	require.Error(t, err, output)
 
 	diagnosticCall := "kubectl --context fixture-host -n ksail-nested-talos exec dind -c dind -- " +
-		"docker inspect --type container --format {{json .NetworkSettings.Ports}} nested-talos-control-plane-1"
+		"docker inspect --type container --format " +
+		"{{range .NetworkSettings.Ports}}{{range .}}{{.HostPort}}{{println}}{{end}}{{end}} " +
+		"nested-talos-control-plane-1"
 	assert.Contains(t, calls, diagnosticCall)
 	assert.Contains(t, calls, "get service apiserver")
 	assert.Contains(t, calls, "get endpointslices -l kubernetes.io/service-name=apiserver")
@@ -373,8 +380,14 @@ func TestNestedReadinessBoundsInfoAndStillCleansUp(t *testing.T) {
 	assert.NotContains(t, output, "All Kubernetes provider tests passed")
 }
 
-func nestedCleanupEnvironment(dir, mode string) []string {
+func nestedCleanupEnvironment(t *testing.T, dir, mode string) []string {
+	t.Helper()
+
+	workspace, err := filepath.Abs(filepath.Join("..", ".."))
+	require.NoError(t, err)
+
 	return append(os.Environ(),
+		"GITHUB_WORKSPACE="+workspace,
 		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"DISTRIBUTIONS=Vanilla,K3s", "TIMEOUT=1200", "CNI=", "ASSERT_K3K_SERVER_CREATOR=false",
 		"DOCKERHUB_USERNAME=", "DOCKERHUB_TOKEN=", "GHCR_USERNAME=", "GHCR_TOKEN=",
@@ -480,8 +493,21 @@ func TestNestedKindDiagnosticsPrecedeDeletion(t *testing.T) {
 			assert.Contains(t, calls, "nested-vanilla-control-plane")
 			assert.Contains(t, calls, "exec dind -c dind -- docker network inspect kind")
 			assert.Contains(t, calls, "\ndocker network inspect kind --format")
+			journal := strings.Index(
+				calls, "docker exec nested-vanilla-worker journalctl -u kubelet",
+			)
+			require.NotEqual(t, -1, journal)
+			assert.Greater(t, deletion, journal, "capture the worker before deleting it")
+			assert.NotContains(t, output, "opaque-bootstrap-token")
+
+			if mode != "create-diag-error" {
+				assert.Contains(t, output, "Nested kubelet journal signal: file-descriptors")
+			}
+
 			assert.NotContains(t, calls, "get secret")
 			assert.NotContains(t, calls, "config view")
+			assert.NotContains(t, calls, "{{json .IPAM.Config}}")
+			assert.NotContains(t, calls, ".endpoints[*].addresses")
 			assert.NotContains(t, output, "All Kubernetes provider tests passed")
 		})
 	}

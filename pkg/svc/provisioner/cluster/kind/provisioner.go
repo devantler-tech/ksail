@@ -134,6 +134,9 @@ type Provisioner struct {
 	infraProvider     provider.Provider
 	runner            runner.CommandRunner
 	componentDetector *detector.ComponentDetector
+	// Nested diagnostics keep failed nodes inside their existing owned DinD pod
+	// until the caller captures bounded evidence and performs the normal delete.
+	retainOnFailure bool
 	// waitForReady blocks until the cluster is genuinely ready (API reachable
 	// and a basic authorized read succeeds). It is a seam so tests can run
 	// Start() without a live cluster. Defaults to k8s.WaitForClusterReady.
@@ -240,6 +243,9 @@ func (k *Provisioner) Create(ctx context.Context, name string) error {
 	cmd := createcluster.NewCommand(logger, streams)
 
 	args := []string{"--name", target, "--config", tmpFile.Name()}
+	if k.retainOnFailure {
+		args = append(args, "--retain")
+	}
 
 	if k.kubeConfig != "" {
 		args = append(args, "--kubeconfig", k.kubeConfig)

@@ -70,6 +70,8 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 		return nil, fmt.Errorf("create inner Kind provisioner: %w", err)
 	}
 
+	innerProvisioner.retainOnFailure = nested.DebugEnabled()
+
 	return &KubernetesProvisioner{
 		Provisioner:      innerProvisioner,
 		hostClientset:    cfg.HostClientset,

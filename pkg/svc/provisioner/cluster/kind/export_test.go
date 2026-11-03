@@ -63,3 +63,8 @@ func NewStreamLoggerForTest(w interface {
 func SetNameForTest(name, kindConfigName string) string {
 	return setName(name, kindConfigName)
 }
+
+// WithRetainOnFailureForTest selects the nested diagnostic create path.
+func (k *Provisioner) WithRetainOnFailureForTest(retain bool) {
+	k.retainOnFailure = retain
+}
