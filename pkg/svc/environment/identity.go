@@ -14,7 +14,17 @@ import (
 var ErrInvalidConfig = errors.New("invalid environment config")
 
 // identityIndent matches the two-space indentation KSail writes its configs with.
-const identityIndent = 2
+const (
+	identityIndent = 2
+	metadataKey    = "metadata"
+	nameKey        = "name"
+	specKey        = "spec"
+	providerKey    = "provider"
+	clusterKey     = "cluster"
+	contextKey     = "context"
+	connectionKey  = "connection"
+	yamlStringTag  = "!!str"
+)
 
 // Identity is the cluster identity a cloned root config must declare so the new
 // environment targets its own cluster: the config's top-level metadata.name and its
@@ -35,22 +45,16 @@ type Identity struct {
 // context, so the rewrites have nothing to repoint and a clone would resolve to the
 // same default cluster as its source.
 func MaterializeIdentity(content string, identity Identity) (string, error) {
-	var doc yamlv3.Node
-
-	err := yamlv3.Unmarshal([]byte(content), &doc)
+	doc, err := parseIdentityConfig(content)
 	if err != nil {
-		return "", fmt.Errorf("parsing config: %w", err)
-	}
-
-	if len(doc.Content) == 0 || doc.Content[0].Kind != yamlv3.MappingNode {
-		return "", fmt.Errorf("%w: config is not a YAML mapping", ErrInvalidConfig)
+		return "", err
 	}
 
 	if !applyIdentity(doc.Content[0], identity) {
 		return content, nil
 	}
 
-	return encodeConfig(&doc)
+	return encodeConfig(doc)
 }
 
 // applyIdentity writes identity's non-empty fields into root where they are unset and
@@ -59,16 +63,102 @@ func applyIdentity(root *yamlv3.Node, identity Identity) bool {
 	changed := false
 
 	if identity.Name != "" {
-		changed = ensureScalar(root, []string{"metadata", "name"}, identity.Name) || changed
+		changed = ensureScalar(root, []string{metadataKey, nameKey}, identity.Name) || changed
 	}
 
 	if identity.Context != "" {
 		changed = ensureScalar(
-			root, []string{"spec", "cluster", "connection", "context"}, identity.Context,
+			root, []string{specKey, clusterKey, connectionKey, contextKey}, identity.Context,
 		) || changed
 	}
 
 	return changed
+}
+
+// A root config's cluster name is its source identity even when it differs from
+// the environment label. Provider overrides also need an insertion when default
+// omission left no scalar for the value-exact rewrites to match.
+func materializeCloneTarget(content string, plan cloneTargetPlan) (string, error) {
+	target := plan.target
+	if target.Identity.Name == "" {
+		return "", fmt.Errorf("%w: clone target requires a destination name", ErrInvalidConfig)
+	}
+
+	doc, err := parseIdentityConfig(content)
+	if err != nil {
+		return "", err
+	}
+
+	context, err := cloneContextDestination(doc.Content[0], plan)
+	if err != nil {
+		return "", err
+	}
+
+	fields := []cloneTargetField{
+		{[]string{metadataKey, nameKey}, target.Identity.Name, true},
+		{[]string{specKey, clusterKey, providerKey}, target.Provider, true},
+		{[]string{specKey, clusterKey, connectionKey, contextKey}, context, false},
+	}
+
+	err = validateCloneFields(doc.Content[0], fields)
+	if err != nil {
+		return "", err
+	}
+
+	changed, err := applyCloneFields(doc.Content[0], fields)
+	if err != nil {
+		return "", err
+	}
+
+	if !changed {
+		return content, nil
+	}
+
+	return encodeConfig(doc)
+}
+
+// parseIdentityConfig requires a YAML mapping before any identity traversal.
+func parseIdentityConfig(content string) (*yamlv3.Node, error) {
+	var doc yamlv3.Node
+
+	err := yamlv3.Unmarshal([]byte(content), &doc)
+	if err != nil {
+		return nil, fmt.Errorf("parsing config: %w", err)
+	}
+
+	if len(doc.Content) == 0 || doc.Content[0].Kind != yamlv3.MappingNode {
+		return nil, fmt.Errorf("%w: config is not a YAML mapping", ErrInvalidConfig)
+	}
+
+	return &doc, nil
+}
+
+// replaceRootScalar replaces one validated, explicit root field as a string.
+func replaceRootScalar(root *yamlv3.Node, keyPath []string, value string) (bool, error) {
+	changed := ensureScalar(root, keyPath, value)
+
+	node := root
+	for _, key := range keyPath {
+		if node == nil || node.Kind != yamlv3.MappingNode {
+			return false, fmt.Errorf("%w: clone identity path is not a mapping", ErrInvalidConfig)
+		}
+
+		node = mappingValue(node, key)
+	}
+
+	if node == nil || node.Kind != yamlv3.ScalarNode ||
+		(!changed && node.ShortTag() != yamlStringTag) {
+		return false, fmt.Errorf("%w: clone identity field is not a string", ErrInvalidConfig)
+	}
+
+	if node.Value != value {
+		node.Value = value
+		changed = true
+	}
+
+	node.Tag = yamlStringTag
+
+	return changed, nil
 }
 
 // encodeConfig renders doc with the indentation KSail writes its configs with.
