@@ -22,7 +22,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.33.9
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.11
 	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.82.2
-	github.com/aws/aws-sdk-go-v2/service/eks v1.104.2
+	github.com/aws/aws-sdk-go-v2/service/eks v1.105.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.5
 	github.com/aws/smithy-go v1.28.7
 	github.com/charmbracelet/bubbles v1.0.0
@@ -46,7 +46,7 @@ require (
 	github.com/fluxcd/source-controller/api v1.9.6
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/getsops/sops/v3 v3.13.3
-	github.com/github/copilot-sdk/go v1.0.26
+	github.com/github/copilot-sdk/go v1.0.27
 	github.com/gkampitakis/go-snaps v0.5.23
 	github.com/go-jose/go-jose/v4 v4.1.6
 	github.com/go-logr/logr v1.4.4
@@ -64,7 +64,7 @@ require (
 	github.com/invopop/jsonschema v0.14.0
 	github.com/jinzhu/copier v0.4.0
 	github.com/k3d-io/k3d/v5 v5.9.0
-	github.com/klauspost/compress v1.20.1
+	github.com/klauspost/compress v1.20.3
 	github.com/kubescape/kubescape/v3 v3.0.48
 	github.com/kubescape/opa-utils v0.0.315
 	github.com/kyverno/api v0.0.1-alpha.3.0.20260723090831-fb2785727f98
