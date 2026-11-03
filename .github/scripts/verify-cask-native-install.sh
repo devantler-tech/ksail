@@ -47,7 +47,7 @@ retire_owned() {
 	if "$install_attempted"; then
 		brew uninstall --cask devantler-tech/tap/ksail >>"$NATIVE_EVIDENCE_DIR/install.log" 2>&1 || status=1
 		installed="$(brew list --cask)" || status=1
-		if printf '%s\n' "$installed" | grep -Fxq ksail; then status=1; else install_attempted=false; fi
+		if [[ $'\n'"$installed"$'\n' == *$'\n'ksail$'\n'* ]]; then status=1; else install_attempted=false; fi
 		for path in "$prefix/bin/ksail" "$prefix/etc/bash_completion.d/ksail" \
 			"$prefix/share/zsh/site-functions/_ksail" "$prefix/share/fish/vendor_completions.d/ksail.fish"; do
 			[[ ! -e "$path" && ! -L "$path" ]] || status=1
@@ -56,7 +56,7 @@ retire_owned() {
 	if "$tap_added"; then
 		brew untap --force devantler-tech/tap >>"$NATIVE_EVIDENCE_DIR/install.log" 2>&1 || status=1
 		taps="$(brew tap)" || status=1
-		if printf '%s\n' "$taps" | grep -Fxq devantler-tech/tap; then status=1; else tap_added=false; fi
+		if [[ $'\n'"$taps"$'\n' == *$'\n'devantler-tech/tap$'\n'* ]]; then status=1; else tap_added=false; fi
 	fi
 	return "$status"
 }
@@ -73,9 +73,9 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 prefix="$(brew --prefix)"
 installed="$(brew list --cask)"
-printf '%s\n' "$installed" | grep -Fxq ksail && fail 'A fresh job must not already have the CLI cask'
+[[ $'\n'"$installed"$'\n' == *$'\n'ksail$'\n'* ]] && fail 'A fresh job must not already have the CLI cask'
 taps="$(brew tap)"
-printf '%s\n' "$taps" | grep -Fxq devantler-tech/tap && fail 'A fresh job must not already have this tap'
+[[ $'\n'"$taps"$'\n' == *$'\n'devantler-tech/tap$'\n'* ]] && fail 'A fresh job must not already have this tap'
 for path in "$prefix/bin/ksail" "$prefix/etc/bash_completion.d/ksail" \
 	"$prefix/share/zsh/site-functions/_ksail" "$prefix/share/fish/vendor_completions.d/ksail.fish"; do
 	[[ ! -e "$path" && ! -L "$path" ]] || fail 'Fresh completion destination is not empty'

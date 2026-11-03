@@ -56,6 +56,7 @@ func Verify(ctx context.Context) (Result, error) {
 	return probe(ctx, brew, "ksail cl\t", "")
 }
 
+// probe confines profile writes to an owned temporary directory and removes it after terminal cleanup.
 func probe(ctx context.Context, brew, input, root string) (Result, error) {
 	ctx, cancel := context.WithTimeout(ctx, trialTimeout)
 	defer cancel()
@@ -70,6 +71,8 @@ func probe(ctx context.Context, brew, input, root string) (Result, error) {
 	return result, errors.Join(probeErr, os.RemoveAll(work))
 }
 
+// probeInWork starts native script/zsh with a nonce-bound observer and standard Homebrew setup.
+// It changes only the child environment; host profiles and completion mappings stay untouched.
 func probeInWork(
 	ctx context.Context,
 	cancel context.CancelFunc,
@@ -103,6 +106,7 @@ type observation struct {
 	err           error
 }
 
+// runTerminal preserves the observation result while joining any owned-process cleanup failure.
 func runTerminal(ctx context.Context, cancel context.CancelFunc, command *exec.Cmd,
 	nonce, input string,
 ) (Result, error) {
@@ -112,6 +116,8 @@ func runTerminal(ctx context.Context, cancel context.CancelFunc, command *exec.C
 	return result, errors.Join(err, guard.stop())
 }
 
+// observeTerminal waits for setup, types the trial input, and reaps script on every started path.
+// Session capture precedes Tab so a completion cannot escape cleanup merely by disowning a job.
 func observeTerminal(ctx context.Context, cancel context.CancelFunc, command *exec.Cmd,
 	guard *terminalGuard, nonce, input string,
 ) (Result, error) {
@@ -173,6 +179,7 @@ func observeTerminal(ctx context.Context, cancel context.CancelFunc, command *ex
 	return completedBuffer(buffer)
 }
 
+// completedBuffer accepts only the expected fixed command after a genuine widget observation.
 func completedBuffer(buffer string) (Result, error) {
 	result := Result{ObservedBuffer: buffer}
 	if strings.TrimSpace(buffer) != "ksail cluster" {
@@ -184,6 +191,7 @@ func completedBuffer(buffer string) (Result, error) {
 	return result, nil
 }
 
+// observeBuffer waits for ready and captures ownership before typing Tab and the observation key.
 func observeBuffer(
 	ctx context.Context,
 	events <-chan observation,
@@ -209,6 +217,8 @@ func observeBuffer(
 	return awaitEvent(ctx, events, "BUFFER")
 }
 
+// scanEvents discards terminal noise and delivers only anchored, nonce-matched protocol events.
+// Bounded scanning and context-aware sends prevent an abandoned reader from leaking a goroutine.
 func scanEvents(ctx context.Context, output io.Reader, nonce string, events chan<- observation) {
 	defer close(events)
 
@@ -236,6 +246,7 @@ func scanEvents(ctx context.Context, output io.Reader, nonce string, events chan
 	}
 }
 
+// awaitEvent refuses EOF, scanner failure and cancellation until the requested protocol phase arrives.
 func awaitEvent(ctx context.Context, events <-chan observation, phase string) (string, error) {
 	for {
 		select {
@@ -257,6 +268,8 @@ func awaitEvent(ctx context.Context, events <-chan observation, phase string) (s
 	}
 }
 
+// decodeLine requires an entire READY line or an anchored BUFFER prefix with the current nonce.
+// Echoed commands and widget definitions therefore cannot impersonate a ZLE observation.
 func decodeLine(line, nonce string) (string, string, bool) {
 	line = strings.TrimRight(line, "\r")
 	if line == nonce+":READY" {

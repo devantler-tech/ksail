@@ -32,16 +32,25 @@ type terminalGuard struct {
 	sessions      map[int]struct{}
 	once          sync.Once
 	stopErr       error
+	processes     func() ([]unix.KinfoProc, error)
+	session       func(int) (int, error)
 }
 
+// newTerminalGuard gives script its own process group and binds cancellation to owned-session cleanup.
 func newTerminalGuard(command *exec.Cmd) *terminalGuard {
-	guard := &terminalGuard{command: command, sessions: make(map[int]struct{})}
+	guard := &terminalGuard{
+		command:   command,
+		sessions:  make(map[int]struct{}),
+		processes: func() ([]unix.KinfoProc, error) { return unix.SysctlKinfoProcSlice("kern.proc.all") },
+		session:   unix.Getsid,
+	}
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	command.Cancel = guard.stop
 
 	return guard
 }
 
+// identify pins the parent's kernel start time and caller session before observing descendants.
 func (guard *terminalGuard) identify() error {
 	process, err := unix.SysctlKinfoProc("kern.proc.pid", guard.command.Process.Pid)
 	if err != nil {
@@ -61,6 +70,8 @@ func (guard *terminalGuard) identify() error {
 	return nil
 }
 
+// capture admits only descendant-created sessions whose leaders are still in the verified ancestry.
+// The caller's session is never admitted, even though script initially inherits it.
 func (guard *terminalGuard) capture() error {
 	guard.mu.Lock()
 	defer guard.mu.Unlock()
@@ -69,14 +80,14 @@ func (guard *terminalGuard) capture() error {
 		return nil
 	}
 
-	processes, err := unix.SysctlKinfoProcSlice("kern.proc.all")
+	processes, err := guard.processes()
 	if err != nil {
 		return fmt.Errorf("observe owned terminal sessions: %w", err)
 	}
 
 	owned := guard.descendants(processes)
 	for pid := range owned {
-		session, queryErr := unix.Getsid(int(pid))
+		session, queryErr := guard.session(int(pid))
 		if errors.Is(queryErr, unix.ESRCH) {
 			continue
 		}
@@ -94,6 +105,7 @@ func (guard *terminalGuard) capture() error {
 	return nil
 }
 
+// descendants roots ancestry in both the parent PID and start time to reject a recycled PID.
 func (guard *terminalGuard) descendants(processes []unix.KinfoProc) map[int32]bool {
 	owned := map[int32]bool{}
 
@@ -117,11 +129,13 @@ func (guard *terminalGuard) descendants(processes []unix.KinfoProc) map[int32]bo
 	return owned
 }
 
+// groups returns live, same-user groups in admitted PTY sessions plus the verified parent group.
+// Failed ownership observations remain errors; zombies cannot keep cleanup pending.
 func (guard *terminalGuard) groups() (map[int]struct{}, error) {
 	guard.mu.Lock()
 	defer guard.mu.Unlock()
 
-	processes, err := unix.SysctlKinfoProcSlice("kern.proc.all")
+	processes, err := guard.processes()
 	if err != nil {
 		return nil, fmt.Errorf("read owned terminal liveness: %w", err)
 	}
@@ -142,7 +156,7 @@ func (guard *terminalGuard) groups() (map[int]struct{}, error) {
 			groups[pid] = struct{}{}
 		}
 
-		session, queryErr := unix.Getsid(pid)
+		session, queryErr := guard.session(pid)
 		if errors.Is(queryErr, unix.ESRCH) {
 			continue
 		}
@@ -159,6 +173,7 @@ func (guard *terminalGuard) groups() (map[int]struct{}, error) {
 	return groups, nil
 }
 
+// signal rechecks ownership before signaling groups, including disowned jobs within an admitted session.
 func (guard *terminalGuard) signal(signal unix.Signal) error {
 	groups, err := guard.groups()
 	if err != nil {
@@ -179,12 +194,15 @@ func (guard *terminalGuard) signal(signal unix.Signal) error {
 	return nil
 }
 
+// stop shares one termination result between CommandContext cancellation and normal-return cleanup.
 func (guard *terminalGuard) stop() error {
 	guard.once.Do(func() { guard.stopErr = guard.terminate() })
 
 	return guard.stopErr
 }
 
+// terminate escalates TERM to KILL only for proven owned groups and refuses incomplete liveness proof.
+// Query retries share the existing grace-plus-wait budget rather than granting each phase a new one.
 func (guard *terminalGuard) terminate() error {
 	if guard.command.Process == nil {
 		return nil
@@ -207,43 +225,58 @@ func (guard *terminalGuard) terminate() error {
 		return nil
 	}
 
-	err := guard.capture()
+	// Capture, signaling and liveness share the former grace-plus-wait allowance.
+	// A transient observation failure cannot bypass termination or extend its budget.
+	deadline := time.Now().Add(terminationGrace + terminationBound)
+
+	err := retryTerminalQuery(deadline, guard.capture)
 	if err != nil {
 		return err
 	}
 
-	err = guard.signal(unix.SIGTERM)
+	err = retryTerminalQuery(deadline, func() error { return guard.signal(unix.SIGTERM) })
 	if err != nil {
 		return err
 	}
 
-	time.Sleep(terminationGrace)
+	time.Sleep(min(terminationGrace, max(0, time.Until(deadline))))
 
-	err = guard.signal(unix.SIGKILL)
+	err = retryTerminalQuery(deadline, func() error { return guard.signal(unix.SIGKILL) })
 	if err != nil {
 		return err
 	}
 
-	return guard.waitStopped()
+	return guard.waitStopped(deadline)
 }
 
-func (guard *terminalGuard) waitStopped() error {
-	deadline := time.Now().Add(terminationBound)
-
+// retryTerminalQuery retains the last ownership/query error after a shared, bounded retry window.
+func retryTerminalQuery(deadline time.Time, query func() error) error {
 	for {
+		err := query()
+		if err == nil {
+			return nil
+		}
+
+		if !time.Now().Before(deadline) {
+			return err
+		}
+
+		time.Sleep(min(terminationPoll, time.Until(deadline)))
+	}
+}
+
+// waitStopped refuses success until a complete kernel observation finds no owned live groups.
+func (guard *terminalGuard) waitStopped(deadline time.Time) error {
+	return retryTerminalQuery(deadline, func() error {
 		groups, err := guard.groups()
 		if err != nil {
 			return err
 		}
 
-		if len(groups) == 0 {
-			return nil
-		}
-
-		if time.Now().After(deadline) {
+		if len(groups) != 0 {
 			return errTerminalStillAlive
 		}
 
-		time.Sleep(terminationPoll)
-	}
+		return nil
+	})
 }

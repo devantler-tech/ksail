@@ -48,6 +48,12 @@ cat >"$work/bin/brew" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'brew %s\n' "$*" >> "$FIXTURE_STATE/calls"
+large_tail() {
+  local index
+  for ((index=0; index<8192; index++)); do
+    printf 'unrelated-entry-%08d-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n' "$index"
+  done
+}
 case "${1:-}" in
   --prefix) printf '%s\n' "$FIXTURE_PREFIX" ;;
   --version) echo 'Homebrew fixture' ;;
@@ -55,14 +61,25 @@ case "${1:-}" in
   trust) : ;;
   tap)
     if [[ $# -eq 1 ]]; then
-      [[ ! -f "$FIXTURE_STATE/tapped" ]] || echo devantler-tech/tap
+      if [[ "$FIXTURE_MODE" == preexisting-tap-large || -f "$FIXTURE_STATE/tapped" ]]; then echo devantler-tech/tap; fi
+      if [[ "$FIXTURE_MODE" == *-large ]]; then
+        echo devantler-tech/tap-other
+        large_tail
+      fi
     else
       [[ "$2 $3" == '--custom-remote devantler-tech/tap' ]] || exit 99
       "$REAL_GIT" clone --quiet -- "$4" "$FIXTURE_STATE/tap"
       : > "$FIXTURE_STATE/tapped"
     fi ;;
-  untap) rm -f "$FIXTURE_STATE/tapped"; rm -rf "$FIXTURE_STATE/tap" ;;
-  list) [[ ! -f "$FIXTURE_STATE/installed" ]] || echo ksail ;;
+  untap)
+    [[ "$FIXTURE_MODE" == cleanup-tap-large ]] || rm -f "$FIXTURE_STATE/tapped"
+    rm -rf "$FIXTURE_STATE/tap" ;;
+  list)
+    if [[ "$FIXTURE_MODE" == preexisting-cask-large || -f "$FIXTURE_STATE/installed" ]]; then echo ksail; fi
+    if [[ "$FIXTURE_MODE" == *-large ]]; then
+      echo ksail-other
+      large_tail
+    fi ;;
   info)
     version="$("$REAL_GIT" -C "$FIXTURE_STATE/tap" show HEAD:Casks/ksail.rb | sed -n 's/  version "\([^"]*\)"/\1/p')"
     [[ "$FIXTURE_MODE" != wrong-version ]] || version=7.202.78
@@ -82,7 +99,8 @@ case "${1:-}" in
     [[ "$FIXTURE_MODE" != failed-install ]] ;;
   uninstall)
     [[ "$FIXTURE_MODE" != failed-cleanup ]] || exit 1
-    rm -f "$FIXTURE_STATE/installed" "$FIXTURE_PREFIX/bin/ksail" \
+    [[ "$FIXTURE_MODE" == cleanup-cask-large ]] || rm -f "$FIXTURE_STATE/installed"
+    rm -f "$FIXTURE_PREFIX/bin/ksail" \
       "$FIXTURE_PREFIX/etc/bash_completion.d/ksail" "$FIXTURE_PREFIX/share/zsh/site-functions/_ksail" \
       "$FIXTURE_PREFIX/share/fish/vendor_completions.d/ksail.fish" ;;
   *) exit 99 ;;
@@ -90,7 +108,12 @@ esac
 EOF
 chmod +x "$work/bin/"*
 sha="$(printf 'f%.0s' {1..64})"
-for mode in valid stale-tag wrong-observer wrong-blob wrong-version missing-zsh failed-install failed-tab unobserved-tab omitted-tab failed-cleanup; do
+modes=("$@")
+if [[ "${#modes[@]}" -eq 0 ]]; then
+	modes=(valid stale-tag wrong-observer wrong-blob wrong-version missing-zsh failed-install failed-tab unobserved-tab omitted-tab failed-cleanup
+		preexisting-cask-large preexisting-tap-large cleanup-cask-large cleanup-tap-large lookalike-large)
+fi
+for mode in "${modes[@]}"; do
 	case_dir="$work/$mode"
 	mkdir -p "$case_dir/input" "$case_dir/output" "$case_dir/state" "$case_dir/prefix"
 	jq -n --arg tap "$tap_sha" --arg blob "$blob_sha" --arg sha "$sha" '
@@ -114,7 +137,7 @@ for mode in valid stale-tag wrong-observer wrong-blob wrong-version missing-zsh 
 		RUNNER_TEMP="$case_dir" RECEIPT_DIR="$case_dir/input" NATIVE_EVIDENCE_DIR="$case_dir/output" \
 		EXPECTED_TAG=v7.202.77 EXPECTED_CLI_PR=2019 GITHUB_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
 		TAB_PROBE="$work/bin/probe" bash "$subject" >"$case_dir/log" 2>&1 || status=$?
-	if [[ "$mode" == valid ]]; then
+	if [[ "$mode" == valid || "$mode" == lookalike-large ]]; then
 		[[ "$status" -eq 0 ]] || {
 			cat "$case_dir/log"
 			exit 1
@@ -130,6 +153,12 @@ for mode in valid stale-tag wrong-observer wrong-blob wrong-version missing-zsh 
 		}
 	fi
 	case "$mode" in
+	preexisting-cask-large | preexisting-tap-large)
+		if grep -Eq '^brew (install |tap --custom-remote |untap |uninstall )' "$case_dir/state/calls"; then
+			echo 'FAIL: populated runner reached installation or unrelated cleanup'
+			exit 1
+		fi
+		;;
 	stale-tag | wrong-observer)
 		[[ ! -e "$case_dir/state/calls" ]] || {
 			echo 'FAIL: mismatched receipt reached external tools'
@@ -149,7 +178,7 @@ for mode in valid stale-tag wrong-observer wrong-blob wrong-version missing-zsh 
 		fi
 		;;
 	esac
-	if [[ "$mode" != failed-cleanup ]]; then
+	if [[ "$mode" != failed-cleanup && "$mode" != cleanup-cask-large && "$mode" != cleanup-tap-large ]]; then
 		[[ ! -e "$case_dir/state/installed" && ! -e "$case_dir/state/tapped" ]] || exit 1
 	fi
 done

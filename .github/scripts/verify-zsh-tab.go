@@ -21,6 +21,7 @@ func main() {
 	}
 }
 
+// run emits a machine-readable result only after the native trial and owned cleanup both succeed.
 func run() error {
 	result, err := caskcompletion.Verify(context.Background())
 	if err != nil {

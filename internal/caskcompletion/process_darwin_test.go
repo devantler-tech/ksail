@@ -173,3 +173,106 @@ func assertCompletionDead(t *testing.T, pid int) {
 		"owned completion must be dead when the probe returns",
 	)
 }
+
+// Transient query errors must not abandon a live, TERM-resistant owned PTY session.
+func TestNativeTerminationRetriesTransientProcessQueries(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name, query string
+		phase       int
+	}{
+		{"capture listing", "list", 1},
+		{"TERM listing", "list", 2},
+		{"KILL listing", "list", 3},
+		{"liveness listing", "list", 4},
+		{"capture session", "session", 1},
+		{"TERM session", "session", 2},
+		{"KILL session", "session", 3},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			guard, pid, sentinel := ownedTerminal(t)
+			err := guard.StopWithQueryFaultForTest(testCase.query, testCase.phase, false, unix.EIO)
+
+			assertCompletionDead(t, pid)
+			require.NoError(t, err)
+			assert.NoError(t, unix.Kill(sentinel, 0), "caller-session sibling must survive")
+		})
+	}
+}
+
+// Persistent uncertainty must remain an error within the existing cleanup budget.
+func TestNativeTerminationRefusesPersistentProcessQueryFailure(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name, query string
+		phase       int
+	}{
+		{"capture listing", "list", 1},
+		{"TERM session", "session", 2},
+		{"liveness listing", "list", 4},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			guard, _, sentinel := ownedTerminal(t)
+			started := time.Now()
+			err := guard.StopWithQueryFaultForTest(testCase.query, testCase.phase, true, unix.EIO)
+			require.ErrorIs(t, err, unix.EIO)
+			assert.GreaterOrEqual(
+				t,
+				time.Since(started),
+				time.Second,
+				"retry within the existing shared budget",
+			)
+			assert.Less(t, time.Since(started), 1500*time.Millisecond)
+			assert.NoError(
+				t,
+				unix.Kill(sentinel, 0),
+				"unknown ownership cannot authorize unrelated kills",
+			)
+		})
+	}
+}
+
+// ownedTerminal starts script's real Darwin PTY and a disowned child with its own job group.
+func ownedTerminal(t *testing.T) (*caskcompletion.TerminalGuardForTest, int, int) {
+	t.Helper()
+	root := t.TempDir()
+	pidPath := filepath.Join(root, "terminal-child.pid")
+	sentinel := exec.CommandContext(t.Context(), "/bin/sleep", "15")
+	require.NoError(t, sentinel.Start())
+	t.Cleanup(func() { _ = sentinel.Process.Kill(); _ = sentinel.Wait() })
+
+	child := `/bin/zsh -c 'trap "" HUP TERM; print -r -- $$ > "$1"; while true; do :; done' child ` + shellQuote(
+		pidPath,
+	)
+	command := exec.CommandContext( //nolint:gosec // Fixed zsh code with a quoted, t.TempDir-owned PID path.
+		t.Context(),
+		"/usr/bin/script",
+		"-q",
+		"/dev/null",
+		"/bin/zsh",
+		"-c",
+		child+" &!\nwhile true; do /bin/sleep 1; done",
+	)
+	guard := caskcompletion.NewTerminalGuardForTest(command)
+	require.NoError(t, command.Start())
+	t.Cleanup(func() { _ = command.Process.Kill(); _ = command.Wait() })
+	pid := recordedCompletionChild(t, pidPath)
+	require.NoError(t, guard.CaptureForTest())
+
+	session, err := unix.Getsid(pid)
+	require.NoError(t, err)
+	callerSession, err := unix.Getsid(0)
+	require.NoError(t, err)
+	require.NotEqual(
+		t,
+		callerSession,
+		session,
+		"test must exercise script's actual owned PTY session",
+	)
+
+	return guard, pid, sentinel.Process.Pid
+}
