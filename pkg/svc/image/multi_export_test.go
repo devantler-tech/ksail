@@ -19,6 +19,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/image"
 	"github.com/docker/docker/api/types/container"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/layout"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
@@ -226,6 +227,14 @@ func namedNodeArchive(t *testing.T, refs ...string) []byte {
 
 func appendNamedFixtureImage(t *testing.T, store layout.Path, ref string) {
 	t.Helper()
+	img := fixtureImage(t, ref)
+	require.NoError(t, store.AppendImage(img, layout.WithAnnotations(map[string]string{
+		"io.containerd.image.name": ref, "org.opencontainers.image.ref.name": "v1",
+	})))
+}
+
+func fixtureImage(t *testing.T, payload string) v1.Image {
+	t.Helper()
 
 	var layer bytes.Buffer
 
@@ -233,10 +242,10 @@ func appendNamedFixtureImage(t *testing.T, store layout.Path, ref string) {
 	require.NoError(
 		t,
 		layerWriter.WriteHeader(
-			&tar.Header{Name: "payload.txt", Mode: 0o644, Size: int64(len(ref))},
+			&tar.Header{Name: "payload.txt", Mode: 0o644, Size: int64(len(payload))},
 		),
 	)
-	_, err := layerWriter.Write([]byte(ref))
+	_, err := layerWriter.Write([]byte(payload))
 	require.NoError(t, err)
 	require.NoError(t, layerWriter.Close())
 
@@ -245,10 +254,159 @@ func appendNamedFixtureImage(t *testing.T, store layout.Path, ref string) {
 		static.NewLayer(layer.Bytes(), types.OCIUncompressedLayer),
 	)
 	require.NoError(t, err)
+
+	return img
+}
+
+func TestExportResolvesContainerdImportAliases(t *testing.T) {
+	t.Parallel()
+
+	for _, selected := range []bool{false, true} {
+		t.Run(map[bool]string{false: "all", true: "selected"}[selected], func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			client := docker.NewMockAPIClient(t)
+			client.EXPECT().
+				ContainerList(ctx, mock.Anything).
+				Return(kindMultiNodeSummaries()[:2], nil)
+
+			refs := make([]string, 0, 2)
+			rawRefs := make([]string, 0, 2)
+
+			for index, node := range []string{kindExporterNodeName, "my-cluster-worker"} {
+				ref, archive := importAliasFixture(t, fmt.Sprintf("imported image %d", index))
+				setupNodeArchiveContents(
+					ctx,
+					t,
+					client,
+					node,
+					[]string{ref},
+					archive,
+				)
+				refs = append(refs, image.NormalizeImageRef(ref))
+				rawRefs = append(rawRefs, ref)
+			}
+
+			client.EXPECT().ContainerExecCreate(ctx, mock.Anything, mock.Anything).
+				Return(container.ExecCreateResponse{}, fmt.Errorf("unknown raw fixture operand: %w", os.ErrNotExist)).
+				Maybe()
+
+			output := filepath.Join(t.TempDir(), "images.tar")
+
+			options := image.ExportOptions{OutputPath: output}
+			if selected {
+				options.Images = slices.Clone(refs)
+			}
+
+			err := image.NewExporter(client).Export(ctx, "my-cluster", v1alpha1.DistributionVanilla,
+				v1alpha1.ProviderDocker, options)
+			require.NoError(t, err)
+
+			assertNodeRawExports(ctx, t, client, rawRefs)
+
+			actual := archiveNamedReferences(t, output)
+			for index, ref := range actual {
+				actual[index] = image.NormalizeImageRef(ref)
+			}
+
+			require.ElementsMatch(t, refs, actual)
+			assertImageArchiveReadable(t, output, len(refs))
+		})
+	}
+}
+
+func assertNodeRawExports(
+	ctx context.Context,
+	t *testing.T,
+	client *docker.MockAPIClient,
+	refs []string,
+) {
+	t.Helper()
+	require.Len(t, refs, 2)
+
+	for index, node := range []string{kindExporterNodeName, "my-cluster-worker"} {
+		client.AssertCalled(
+			t,
+			"ContainerExecCreate",
+			ctx,
+			node,
+			mock.MatchedBy(func(options container.ExecOptions) bool {
+				return slices.Equal(options.Cmd, buildKindCtrExportCommand(refs[index]))
+			}),
+		)
+	}
+}
+
+func importAliasFixture(t *testing.T, payload string) (string, []byte) {
+	t.Helper()
+	img := fixtureImage(t, payload)
+	digest, err := img.Digest()
+	require.NoError(t, err)
+
+	ref := "import-2026-08-26@" + digest.String()
+	store, err := layout.Write(t.TempDir(), empty.Index)
+	require.NoError(t, err)
 	require.NoError(t, store.AppendImage(img, layout.WithAnnotations(map[string]string{
-		"io.containerd.image.name":          ref,
-		"org.opencontainers.image.ref.name": "v1",
+		"io.containerd.image.name": ref, "org.opencontainers.image.ref.name": "v1",
 	})))
+
+	return ref, tarFixtureDirectory(t, string(store))
+}
+
+func TestExportImportAliasRefusesWrongRepositoryAndDigest(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"different-repository", "different-digest"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			client := docker.NewMockAPIClient(t)
+			client.EXPECT().
+				ContainerList(ctx, mock.Anything).
+				Return(kindMultiNodeSummaries()[:2], nil)
+
+			img := fixtureImage(t, "available import")
+			digest, err := img.Digest()
+			require.NoError(t, err)
+
+			raw := "import-2026-08-26@" + digest.String()
+			for _, node := range []string{kindExporterNodeName, "my-cluster-worker"} {
+				optionalNodeExec(
+					ctx,
+					client,
+					node,
+					"list",
+					[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
+					raw+"\n",
+				)
+			}
+
+			requested := "docker.io/library/another-import@" + digest.String()
+
+			if name == "different-digest" {
+				other, otherErr := fixtureImage(t, "unavailable import").Digest()
+				require.NoError(t, otherErr)
+
+				requested = "docker.io/library/import-2026-08-26@" + other.String()
+			}
+
+			output := filepath.Join(t.TempDir(), "images.tar")
+			require.NoError(t, os.WriteFile(output, []byte("existing export"), 0o600))
+			err = image.NewExporter(client).Export(ctx, "my-cluster", v1alpha1.DistributionVanilla,
+				v1alpha1.ProviderDocker, image.ExportOptions{OutputPath: output, Images: []string{requested}})
+			require.ErrorContains(t, err, "unavailable references")
+
+			root, rootErr := os.OpenRoot(filepath.Dir(output))
+			require.NoError(t, rootErr)
+			t.Cleanup(func() { require.NoError(t, root.Close()) })
+
+			contents, readErr := root.ReadFile("images.tar")
+			require.NoError(t, readErr)
+			require.Equal(t, "existing export", string(contents))
+		})
+	}
 }
 
 func tarFixtureDirectory(t *testing.T, root string) []byte {
