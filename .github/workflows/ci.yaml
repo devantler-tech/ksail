@@ -250,6 +250,10 @@ jobs:
             # the same reason todos-contract does. TestReleaseConfigFilterCoversTheReleaseFiles
             # fails if a release file is dropped from it.
             release-config:
+              - '.github/workflows/verify-cask-handoff.yaml'
+              - '.github/scripts/verify-cask-native-install.sh'
+              - '.github/scripts/verify-cask-native-install.test.sh'
+              - '.github/scripts/verify-zsh-tab.go'
               - '.github/scripts/resolve-release-replay.sh'
               - '.github/actions/release-admission/**'
               - '.github/scripts/download-go-modules.sh'
@@ -422,6 +426,10 @@ jobs:
               - 'pkg/svc/installer/cni/calico/Dockerfile'
               - '.github/workflows/ci.yaml'
             cask-pr-handoff:
+              - '.github/workflows/verify-cask-handoff.yaml'
+              - '.github/scripts/verify-cask-native-install.sh'
+              - '.github/scripts/verify-cask-native-install.test.sh'
+              - '.github/scripts/verify-zsh-tab.go'
               - '.github/scripts/cask-read-api.sh'
               - '.github/scripts/cask-read-api.test.sh'
               - 'server.json'
