@@ -49,6 +49,8 @@ EXCLUDED_DIRECTORIES:
 # harness gate. Formatting their published source would invalidate provenance.
 # Owned compatibility modules and every guard remain in the lint surface.
 FILTER_REGEX_EXCLUDE: (megalinter-reports/.*|web/ui/.*|(^|/)third_party/(cel-go|glamour|go-macholibre|kyverno-jmespath|jmespath|ansi|ansi-runtime|redisotel|rediscmd|dynamiclistener)/.*)
+# The generator owns canonical manifest bytes; formatting would invalidate their authenticated hashes.
+JSON_PRETTIER_FILTER_REGEX_EXCLUDE: (^|/)notices/go/[^/]+/manifest\.json$
 SPELL_LYCHEE_FILTER_REGEX_EXCLUDE: (AGENTS\.md|.*\.mdx|docs/src/.*\.md)
 # Helm chart templates contain Go template directives ({{ ... }}) and are not valid standalone
 # YAML; generated CRDs (controller-gen output) are large and machine-managed. Exclude both from

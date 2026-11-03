@@ -410,18 +410,18 @@ func goreleaserCGO(t *testing.T, path string) string {
 //nolint:lll // file-path keys and 64-character SHA-256 digests do not wrap
 func auditedReleaseConfigDigests() map[string]string {
 	return map[string]string{
-		".gitattributes":                                    "0000000000000000000000000000000000000000000000000000000000000000",
-		".goreleaser.yaml":                                   "5ac329a9712c6fc075096468790c855fff3474085e337c13f3969cf465789f7a",
-		".goreleaser.desktop.yaml":                           "7cd674dbd13b4e93c33eb2751ab0c11be29c563e3533864130a6a48a1720c702",
+		".gitattributes":                                     "0a533a2cc323724b86c21f6b777760df4e91909b4f4959071df9f662a42895cd",
+		".goreleaser.yaml":                                   "c66aaf9e7a5ce16014b0b005cce83686ff96b36c006586c226c93a78ec08237b",
+		".goreleaser.desktop.yaml":                           "9f001a9219b7319f244147e4ca8e1f221d4949afcd8da7ed89c9e02dbd21fd7e",
 		".github/actions/setup-desktop-build/action.yml":     "473bc1c1f3e940ba58a76320cf8b6ff5e798bf5e9cbe68830469640ef1ef7cac",
 		".github/scripts/download-go-modules.sh":             "e5af8edf61a77de4397e952a05b1cc6ca0f83cd848523c4cf6b3aaa2539561fa",
 		".github/scripts/resolve-release-replay.sh":          "84418fef708bae31c86fb45fccc03b4e9186e312e5cb45951cc5a1dcd35af590",
-		".github/scripts/resolve-release-publish-state.sh":   "0000000000000000000000000000000000000000000000000000000000000000",
-		".github/scripts/go-notices.go":                      "0000000000000000000000000000000000000000000000000000000000000000",
+		".github/scripts/resolve-release-publish-state.sh":   "dc1a57790bb316fe2aedb8a28c362ad3a19b6ed438792942a2a951fc5e544f26",
+		".github/scripts/go-notices.go":                      "628033333065d1171688a60b4c5fbfcd556c5bab22d75bf2d79bee54cf8c97b2",
 		".github/actions/release-admission/action.yaml":      "a8ac217c7e2195fee64b364748a6724b99aa0aa4a9988127084f1d6b45953f0c",
 		"scripts/stage-webui.sh":                             "5b3d7b0fa8b237f77ee9a88e6807e070c1b35c97df3d5f17357b3ecb8b2938a6",
 		".github/actions/free-disk-space/free-disk-space.sh": "2dd12fcf3779137ca1cb5f21194947f6a10d3f94f8fb438a1a29ec9021fbdc30",
-		".github/workflows/cd.yaml#without-uses":             "ac5977b33132f5b6f2eb49414c7a11a2d1bfa8b6a3989ca0b3d2b031203f9a3e",
+		".github/workflows/cd.yaml#without-uses":             "fae6e2b5426cfcff9fed37b6f8b827a093e05e602881b07e7a3ab1231cca4a05",
 	}
 }
 

@@ -135,7 +135,8 @@ func TestLoadMaterialPolicyRefusesMalformedOrAmbiguousFacts(t *testing.T) {
 	t.Parallel()
 
 	for _, scenario := range []string{
-		"valid", "missing", "duplicate-key", "unknown-key", "trailing", "private",
+		"valid", "prettier", "missing", "duplicate-key", "nested-duplicate-key", "escaped-key",
+		"unknown-key", "trailing", "private",
 		"duplicate-rule", "empty-basis", "invalid-hash", "traversal",
 	} {
 		t.Run(scenario, func(t *testing.T) {
@@ -153,9 +154,10 @@ func TestLoadMaterialPolicyRefusesMalformedOrAmbiguousFacts(t *testing.T) {
 				writeNoticeFixture(t, root, ".github/go-notice-materials.json", string(data))
 			}
 
-			_, err = gonotices.LoadMaterialPolicy(root)
-			if scenario == "valid" {
+			loaded, err := gonotices.LoadMaterialPolicy(root)
+			if scenario == "valid" || scenario == "prettier" {
 				require.NoError(t, err)
+				require.Equal(t, policy, loaded)
 			} else {
 				require.ErrorIs(t, err, gonotices.ErrIncomplete)
 			}
@@ -180,6 +182,11 @@ func alterMaterialPolicy(policy *gonotices.MaterialPolicy, scenario string) {
 
 func alterMaterialPolicyEncoding(data []byte, scenario string) []byte {
 	switch scenario {
+	case "prettier":
+		// Native Prettier keeps singleton scalar arrays on one line.
+		data = []byte(
+			strings.ReplaceAll(string(data), "[\n        \"Unknown\"\n      ]", `["Unknown"]`),
+		)
 	case "duplicate-key":
 		data = []byte(
 			strings.Replace(
@@ -189,6 +196,11 @@ func alterMaterialPolicyEncoding(data []byte, scenario string) []byte {
 				1,
 			),
 		)
+	case "nested-duplicate-key":
+		data = []byte(strings.Replace(string(data), `"role": "license",`,
+			`"role": "license", "role": "license",`, 1))
+	case "escaped-key":
+		data = []byte(strings.Replace(string(data), `"schema": 1,`, `"\u0073chema": 1,`, 1))
 	case "unknown-key":
 		data = []byte(
 			strings.Replace(

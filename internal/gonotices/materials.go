@@ -54,8 +54,13 @@ func LoadMaterialPolicy(root string) (MaterialPolicy, error) {
 		return MaterialPolicy{}, ErrIncomplete
 	}
 
-	canonical, err := json.MarshalIndent(policy, "", "  ")
-	if err != nil || !bytes.Equal(append(canonical, '\n'), data) || !publicMaterial(data) ||
+	// Ignore formatting whitespace without erasing duplicate keys or changing canonical tokens.
+	var compact bytes.Buffer
+
+	canonical, err := json.Marshal(policy)
+	if err != nil || json.Compact(&compact, data) != nil ||
+		!bytes.Equal(canonical, compact.Bytes()) ||
+		!publicMaterial(data) ||
 		!validMaterialRules(policy.Files) {
 		return MaterialPolicy{}, ErrIncomplete
 	}

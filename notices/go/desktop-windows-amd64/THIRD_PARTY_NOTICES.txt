@@ -160,9 +160,9 @@ Material: m406074398f800eb4 (copyright-header), SHA-256 76c6046cb636a6ea9d694c14
 Material: m4efccfd21890f556 (copyright-header), SHA-256 e6951b8e194b03fb217b36d599a7cd6b24c6ebe784a7aeb6a557a5e11451f841
 Material: mcc2e9cb132665144 (copyright-header), SHA-256 7fee2556d9778558a6a54fba0718d3f19d4034cf6a6a702b1ecd7017d857bad6
 
-Component: cloud.google.com/go/container@v1.55.0
-Source: https://proxy.golang.org/cloud.google.com/go/container/@v/v1.55.0.zip
-Selected Go source checksum: h1:iC4riO/ENjxqqEogMdyTKi7bCueYVHNWz+WRf2XaJFQ=
+Component: cloud.google.com/go/container@v1.56.0
+Source: https://proxy.golang.org/cloud.google.com/go/container/@v/v1.56.0.zip
+Selected Go source checksum: h1:ySw+ybbeCaoEoYunWQjpcA96n+NG9echRil1/BMirIQ=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -2302,9 +2302,9 @@ github.com/aws/aws-sdk-go-v2/service/sts/types
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE.txt
 
-Component: github.com/aws/smithy-go@v1.28.6
-Source: https://proxy.golang.org/github.com/aws/smithy-go/@v/v1.28.6.zip
-Selected Go source checksum: h1:Pj+/sUviNYjow8ELRtNwKHZ9ECeF+7pATX3+shjLIrw=
+Component: github.com/aws/smithy-go@v1.28.7
+Source: https://proxy.golang.org/github.com/aws/smithy-go/@v/v1.28.7.zip
+Selected Go source checksum: h1:h/n1SHrwVtaDYLz8mR1/Kq4Xh4RaFbFW7bOYckg9mfE=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:

@@ -157,17 +157,25 @@ func TestCommandRefusesAMissingLastReadbackTarget(t *testing.T) {
 }
 
 func TestWindowsCheckoutPreservesExactNoticeAndInputBytes(t *testing.T) {
+	const filesPerTarget = 2
+
 	t.Parallel()
 	root, _ := commandInputFixture(t)
 	destination := t.TempDir()
-	runFixtureCommand(t, root, exec.CommandContext(t.Context(), "git", "-c", "core.autocrlf=true",
-		"checkout-index", "--all", "--force", "--prefix="+destination+string(os.PathSeparator)))
+	checkout := exec.CommandContext(t.Context(), "git", "-c", "core.autocrlf=true",
+		"checkout-index", "--all", "--force")
+	checkout.Env = []string{"GIT_WORK_TREE=" + destination}
+	runFixtureCommand(t, root, checkout)
 
-	paths := []string{
+	inputs := []string{
 		"go.mod", "go.sum", ".github/go-license-policy.json", ".github/go-notice-materials.json",
 		".github/go-notice-receipts.json",
 	}
-	for _, fixture := range recipientArchiveFixtures() {
+	fixtures := recipientArchiveFixtures()
+	paths := make([]string, 0, len(inputs)+filesPerTarget*len(fixtures))
+	paths = append(paths, inputs...)
+
+	for _, fixture := range fixtures {
 		paths = append(
 			paths,
 			filepath.Join("notices/go", fixture.target, "THIRD_PARTY_NOTICES.txt"),

@@ -33,9 +33,7 @@
         "github.com/derailed/k9s/internal/xray",
         "github.com/derailed/k9s/internal"
       ],
-      "detected": [
-        "Unknown"
-      ],
+      "detected": ["Unknown"],
       "role": "attribution",
       "evidence": [
         {
@@ -55,9 +53,7 @@
         "github.com/inconshreveable/go-update/internal/binarydist",
         "github.com/inconshreveable/go-update/internal/osext"
       ],
-      "detected": [
-        "Unknown"
-      ],
+      "detected": ["Unknown"],
       "role": "attribution",
       "evidence": [
         {
@@ -77,12 +73,8 @@
       "sum": "h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8Oi/yOhh5U=",
       "path": "LICENSE.docs",
       "sha256": "a1d1adec3ba691ef6e377a78bbe9e9e2501f2f4a1723d08857da1ac6564e4fed",
-      "packages": [
-        "github.com/opencontainers/go-digest"
-      ],
-      "detected": [
-        "CC-BY-SA-4.0"
-      ],
+      "packages": ["github.com/opencontainers/go-digest"],
+      "detected": ["CC-BY-SA-4.0"],
       "role": "excluded",
       "evidence": [
         {
@@ -118,9 +110,7 @@
         "github.com/spdx/tools-golang/tagvalue/reader",
         "github.com/spdx/tools-golang/tagvalue"
       ],
-      "detected": [
-        "CC-BY-4.0"
-      ],
+      "detected": ["CC-BY-4.0"],
       "role": "excluded",
       "evidence": [
         {
@@ -137,12 +127,8 @@
       "sum": "h1:o4QC8aMQzmcwCK3t3Ux/ZHmwFPzE6hf2Y5LbkRs+hbI=",
       "path": "LICENSE-LOGO",
       "sha256": "5ae5bee3072a841376451b48d8cfcec7188e10543926d5870828d36c8a750dc5",
-      "packages": [
-        "modernc.org/memory"
-      ],
-      "detected": [
-        "Unknown"
-      ],
+      "packages": ["modernc.org/memory"],
+      "detected": ["Unknown"],
       "role": "excluded",
       "evidence": [
         {
@@ -159,12 +145,8 @@
       "sum": "h1:GOfKw5RV2HDQZDJlru5KkfLO1tbxqMoyn1IYUxqBpNg=",
       "path": "LICENSE_TEMPLATE",
       "sha256": "4a3524b8a9c80ff8b3e8bcc5b5950bebbe8646c822cfc64fda97b6387531fac5",
-      "packages": [
-        "sigs.k8s.io/cli-utils/pkg/object"
-      ],
-      "detected": [
-        "Unknown"
-      ],
+      "packages": ["sigs.k8s.io/cli-utils/pkg/object"],
+      "detected": ["Unknown"],
       "role": "excluded",
       "evidence": [
         {
@@ -181,12 +163,8 @@
       "sum": "h1:GOfKw5RV2HDQZDJlru5KkfLO1tbxqMoyn1IYUxqBpNg=",
       "path": "LICENSE_TEMPLATE_GO",
       "sha256": "369c80edfd9000c7dcdf58df43b4c8669744a5135b1dd8ed51e1aef7bb46f4c2",
-      "packages": [
-        "sigs.k8s.io/cli-utils/pkg/object"
-      ],
-      "detected": [
-        "Unknown"
-      ],
+      "packages": ["sigs.k8s.io/cli-utils/pkg/object"],
+      "detected": ["Unknown"],
       "role": "excluded",
       "evidence": [
         {
