@@ -1347,6 +1347,6 @@ jobs:
             await core.summary.addHeading('Incomplete release cleanup').addRaw(
               `Retained tag ${tag} at source ${source}. ` +
               `Removed ${drafts.length} orphaned draft release(s); tag protection is unchanged.\n\n` +
-              `A newer published version supersedes this failed attempt. ` +
+              `Recovery requires a newer published version; this job does not verify a successor. ` +
               `Cleanup does not change the original failed publication outcome.\n`
             ).write();

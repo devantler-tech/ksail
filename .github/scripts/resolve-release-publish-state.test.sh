@@ -388,7 +388,8 @@ async function verifyCleanup() {
     assert.ok(result.tagReads >= 2, 'verify retained tag/source before and after cleanup');
     assert.match(result.summary, /v7\.202\.52/);
     assert.match(result.summary, /retained/i);
-    assert.match(result.summary, /newer.*version.*supersedes/i);
+    assert.match(result.summary, /recovery requires a newer published version/i);
+    assert.match(result.summary, /this job does not verify a successor/i);
     console.log(`PASS: cleanup-retains-${options.removable ? 'removable' : options.annotated ? 'annotated' : options.releases ? 'draftless' : 'protected'}-tag`);
   }
   for (const releases of [[published], [draft, published]]) {
