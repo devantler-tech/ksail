@@ -8,6 +8,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/flux"
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubectl"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 )
 
@@ -37,9 +38,9 @@ func newCreateCmd(ioStreams genericiooptions.IOStreams) *cobra.Command {
 
 	// Move the flux create sub-commands under the main create command. They read
 	// --namespace from the flux parent's persistent flags, which they would lose with that
-	// parent, so each one carries them along (kubectl's own sub-commands are unaffected).
+	// parent, so each runnable one carries them along (kubectl's own sub-commands are unaffected).
 	for _, subCmd := range fluxCreateCmd.Commands() {
-		subCmd.PersistentFlags().AddFlagSet(fluxCreateCmd.PersistentFlags())
+		addFlagsToRunnableCommands(subCmd, fluxCreateCmd.PersistentFlags())
 		createCmd.AddCommand(subCmd)
 	}
 
@@ -54,4 +55,19 @@ func newCreateCmd(ioStreams genericiooptions.IOStreams) *cobra.Command {
 	wrapWithKubeconfigResolution(createCmd)
 
 	return createCmd
+}
+
+// addFlagsToRunnableCommands registers flags as local flags on every command under cmd that
+// has no sub-commands. Local, not persistent, so the MCP tool generator (which reads each
+// command's own flags) offers them as well as the CLI.
+func addFlagsToRunnableCommands(cmd *cobra.Command, flags *pflag.FlagSet) {
+	if !cmd.HasSubCommands() {
+		cmd.Flags().AddFlagSet(flags)
+
+		return
+	}
+
+	for _, sub := range cmd.Commands() {
+		addFlagsToRunnableCommands(sub, flags)
+	}
 }

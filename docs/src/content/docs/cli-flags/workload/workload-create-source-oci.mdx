@@ -28,6 +28,7 @@ Flags:
       --export              export in YAML format to stdout
       --insecure            allow insecure connections
       --interval duration   source sync interval (default 1m0s)
+  -n, --namespace string    the namespace scope for this operation (default "flux-system")
       --provider string     OCI provider (default "generic")
       --secret-ref string   the name of an existing secret containing credentials
       --tag string          OCI artifact tag
@@ -35,9 +36,8 @@ Flags:
       --url string          OCI repository URL
 
 Global Flags:
-      --benchmark          Show per-activity benchmark output
-      --config string      Path to config file (default: ksail.yaml found via directory traversal)
-      --experimental       Enable experimental (unstable) commands and features
-  -n, --namespace string   the namespace scope for this operation (default "flux-system")
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ```

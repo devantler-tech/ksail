@@ -1588,8 +1588,7 @@ Available Commands:
   oci         Create or update an OCIRepository source
 
 Flags:
-  -h, --help               help for source
-  -n, --namespace string   the namespace scope for this operation (default "flux-system")
+  -h, --help   help for source
 
 Global Flags:
       --benchmark       Show per-activity benchmark output
@@ -1629,16 +1628,16 @@ Flags:
       --export              export in YAML format to stdout
   -h, --help                help for git
       --interval duration   source sync interval (default 1m0s)
+  -n, --namespace string    the namespace scope for this operation (default "flux-system")
       --secret-ref string   the name of an existing secret containing SSH or basic credentials
       --tag string          git tag
       --tag-semver string   git tag semver range
       --url string          git address, e.g. ssh://git@host/org/repository
 
 Global Flags:
-      --benchmark          Show per-activity benchmark output
-      --config string      Path to config file (default: ksail.yaml found via directory traversal)
-      --experimental       Enable experimental (unstable) commands and features
-  -n, --namespace string   the namespace scope for this operation (default "flux-system")
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -1662,16 +1661,16 @@ Flags:
       --export                export in YAML format to stdout
   -h, --help                  help for helm
       --interval duration     source sync interval (default 1m0s)
+  -n, --namespace string      the namespace scope for this operation (default "flux-system")
       --oci-provider string   OCI provider for authentication
       --pass-credentials      pass credentials to all domains
       --secret-ref string     the name of an existing secret containing credentials
       --url string            Helm repository address
 
 Global Flags:
-      --benchmark          Show per-activity benchmark output
-      --config string      Path to config file (default: ksail.yaml found via directory traversal)
-      --experimental       Enable experimental (unstable) commands and features
-  -n, --namespace string   the namespace scope for this operation (default "flux-system")
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
@@ -1699,6 +1698,7 @@ Flags:
   -h, --help                help for oci
       --insecure            allow insecure connections
       --interval duration   source sync interval (default 1m0s)
+  -n, --namespace string    the namespace scope for this operation (default "flux-system")
       --provider string     OCI provider (default "generic")
       --secret-ref string   the name of an existing secret containing credentials
       --tag string          OCI artifact tag
@@ -1706,10 +1706,9 @@ Flags:
       --url string          OCI repository URL
 
 Global Flags:
-      --benchmark          Show per-activity benchmark output
-      --config string      Path to config file (default: ksail.yaml found via directory traversal)
-      --experimental       Enable experimental (unstable) commands and features
-  -n, --namespace string   the namespace scope for this operation (default "flux-system")
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
 
 ---
 
