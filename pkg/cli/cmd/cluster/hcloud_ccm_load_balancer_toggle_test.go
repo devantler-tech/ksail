@@ -92,7 +92,7 @@ func TestReconcileLoadBalancer_TogglesHcloudCCMOnTalosHetzner(t *testing.T) {
 //
 //nolint:paralleltest // overrides the process-wide installer factories.
 func TestReconcileLoadBalancer_FailedHcloudCCMDisableIsReported(t *testing.T) {
-	result, _, err := loadBalancerToggle(
+	result, stderr, err := loadBalancerToggle(
 		t,
 		v1alpha1.LoadBalancerEnabled,
 		v1alpha1.LoadBalancerDisabled,
@@ -103,4 +103,5 @@ func TestReconcileLoadBalancer_FailedHcloudCCMDisableIsReported(t *testing.T) {
 	assert.Empty(t, result.AppliedChanges)
 	require.Len(t, result.FailedChanges, 1)
 	assert.Equal(t, "cluster.loadBalancer", result.FailedChanges[0].Field)
+	assert.NotContains(t, stderr, retainedLoadBalancersNotice, "no warning when the switch failed")
 }
