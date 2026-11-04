@@ -43,6 +43,13 @@ func kindPoolCases() []kindPoolCase {
 			podCIDRs: []string{"fd01::/64"},
 			wantPool: "198.18.0.0/16",
 		},
+		// Kind's own IPv6 subnet for a network named "kind" (fc00:f853:ccd:e793::/64): the
+		// nested network would get the same /64, so the guard must refuse rather than pass.
+		{name: "outer Kind IPv6 node address", address: "fc00:f853:ccd:e793::8"},
+		{
+			name: "outer Kind IPv6 pod range", address: "172.18.0.8",
+			podCIDRs: []string{"fc00:f853:ccd:e793::/64"},
+		},
 		{name: "unknown address", address: ""},
 		{name: "malformed address", address: "not-an-address"},
 		{name: "malformed pod range", address: "172.18.0.8", podCIDRs: []string{"not-a-prefix"}},

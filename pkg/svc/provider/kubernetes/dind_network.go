@@ -16,12 +16,15 @@ import (
 const (
 	dindNodePageSize  = 500
 	dindInventoryWait = 30 * time.Second
+	// kindIPv6Prefix holds every IPv6 subnet Kind assigns its Docker network.
+	kindIPv6Prefix = "fc00::/16"
 )
 
 // A nested daemon cannot see the host nodes' connected routes. Docker can therefore
 // allocate the same bridge subnet on both sides of the exposed API, sending replies
 // into the inner bridge instead of back to the host. Configure its automatic IPv4
-// pools before it starts; leave Kind's normal network creation and IPv6 behavior intact.
+// pools before it starts; leave Kind's normal network creation and IPv6 behavior intact, and
+// refuse a host whose networks already use Kind's IPv6 range, which no daemon pool can avoid.
 // The node inventory is a guard on the allow-list, not the selection itself: it fails
 // creation when a host node already uses a candidate rather than guessing another range.
 func (p *Provider) kindDinDAddressPool(ctx context.Context) (string, error) {
@@ -64,6 +67,18 @@ func (p *Provider) kindDinDAddressPool(ctx context.Context) (string, error) {
 
 	if len(excluded) == 0 {
 		return "", fmt.Errorf("empty host network inventory: %w", ErrDinDAddressPool)
+	}
+
+	// Kind fixes the first two bytes of its Docker network's IPv6 /64 to fc00 and derives the
+	// rest from the network name, so a nested `kind` network gets the same /64 as an outer one.
+	// The address pool cannot steer that choice, so a host already using this range is refused
+	// instead of reporting a guard that does not hold.
+	kindIPv6Range := netip.MustParsePrefix(kindIPv6Prefix)
+	if slices.ContainsFunc(excluded, kindIPv6Range.Overlaps) {
+		return "", fmt.Errorf(
+			"host network uses Kind's IPv6 range %s, which the nested Kind network would reuse: %w",
+			kindIPv6Range, ErrDinDAddressPool,
+		)
 	}
 
 	return selectDinDPool(excluded)
