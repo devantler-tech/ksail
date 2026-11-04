@@ -39,15 +39,15 @@ var (
 // fullCommitSHA matches a full, lower-case Git commit SHA.
 var fullCommitSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
-// TestReleaseActionPinsMatchAuditedContent binds audited snapshots to the commits CD executes.
-// Each witness is the SHA-256 of an action file's audited content. The check reads that file at
-// the commit CD actually pins and compares it with the witness, so a routine pin bump to a commit
+// TestReleaseActionPinsMatchAuditedContent binds audited snapshots to the commits CI and CD
+// execute for KSail's own composite actions. Each witness is the SHA-256 of an action file's
+// audited content. The check reads that file at the commit the workflows actually pin and compares
+// it with the witness, and the working tree must carry the same content, so a routine pin bump to a commit
 // with the same content passes on its own, while a pin to changed or unaudited content fails.
 // Changing an audited action requires a new reviewed content witness.
 func TestReleaseActionPinsMatchAuditedContent(t *testing.T) {
 	t.Parallel()
 	root := moduleRoot(t)
-	actual := releaseConfigDigests(t, root)
 	uses := releaseWorkflowUses(t, root)
 
 	for _, binding := range []struct{ path, action, content string }{
@@ -61,11 +61,26 @@ func TestReleaseActionPinsMatchAuditedContent(t *testing.T) {
 			"setup-desktop-build",
 			"473bc1c1f3e940ba58a76320cf8b6ff5e798bf5e9cbe68830469640ef1ef7cac",
 		},
+		{
+			".github/actions/free-disk-space/action.yaml",
+			"free-disk-space",
+			"bb40116a5901c77432b0d330b05e56228d9546dab26f98a31f05a0e87ffab96c",
+		},
+		{
+			".github/actions/free-disk-space/free-disk-space.sh",
+			"free-disk-space",
+			"2dd12fcf3779137ca1cb5f21194947f6a10d3f94f8fb438a1a29ec9021fbdc30",
+		},
+		{
+			".github/actions/restore-ksail-binary/action.yaml",
+			"restore-ksail-binary",
+			"f1c049de4094024f62b97f5f70c98ababf6ed639ee59a16065c9814cffa61176",
+		},
 	} {
 		t.Run(binding.path, func(t *testing.T) {
 			t.Parallel()
 
-			if actual[binding.path] != binding.content {
+			if workingTreeDigest(t, root, binding.path) != binding.content {
 				t.Errorf(
 					"audited content witness no longer matches the working tree's %s",
 					binding.path,
@@ -212,7 +227,11 @@ func readPinnedFile(ctx context.Context, root, commit, path string) ([]byte, err
 
 	for attempt := range pinnedContentAttempts {
 		if attempt > 0 {
-			time.Sleep(time.Duration(attempt) * time.Second)
+			select {
+			case <-ctx.Done():
+				return nil, fmt.Errorf("%w: %s at %s: %w", errPinnedRead, path, commit, ctx.Err())
+			case <-time.After(time.Duration(attempt) * time.Second):
+			}
 		}
 
 		data, err := fetchPinnedFile(ctx, url)
@@ -257,25 +276,30 @@ func fetchPinnedFile(ctx context.Context, url string) ([]byte, error) {
 	return data, nil
 }
 
-// releaseWorkflowUses returns every step's `uses:` value in CD.
+// releaseWorkflowUses returns every step's `uses:` value in CI and CD.
 func releaseWorkflowUses(t *testing.T, root string) []string {
 	t.Helper()
 
-	var workflow struct {
-		Jobs map[string]struct {
-			Steps []struct {
-				Uses string `yaml:"uses"`
-			} `yaml:"steps"`
-		} `yaml:"jobs"`
-	}
-	readYAML(t, filepath.Join(root, ".github", "workflows", "cd.yaml"), &workflow)
+	var (
+		workflow struct {
+			Jobs map[string]struct {
+				Steps []struct {
+					Uses string `yaml:"uses"`
+				} `yaml:"steps"`
+			} `yaml:"jobs"`
+		}
+		uses []string
+	)
 
-	var uses []string
+	for _, name := range []string{"ci.yaml", "cd.yaml"} {
+		workflow.Jobs = nil
+		readYAML(t, filepath.Join(root, ".github", "workflows", name), &workflow)
 
-	for _, job := range workflow.Jobs {
-		for _, step := range job.Steps {
-			if step.Uses != "" {
-				uses = append(uses, step.Uses)
+		for _, job := range workflow.Jobs {
+			for _, step := range job.Steps {
+				if step.Uses != "" {
+					uses = append(uses, step.Uses)
+				}
 			}
 		}
 	}
@@ -327,4 +351,18 @@ func commitFixtureFile(t *testing.T, repo, path string, contents []byte) string 
 	git("commit", "--quiet", "-m", "test: fixture "+path)
 
 	return git("rev-parse", "HEAD")
+}
+
+// workingTreeDigest returns the SHA-256 of the checked-out file at path, ignoring CRLF line endings.
+func workingTreeDigest(t *testing.T, root, path string) string {
+	t.Helper()
+
+	file := filepath.Join(root, filepath.FromSlash(path))
+
+	data, err := os.ReadFile(file) //nolint:gosec // G304: fixed audited paths.
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+
+	return fmt.Sprintf("%x", sha256.Sum256(bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))))
 }

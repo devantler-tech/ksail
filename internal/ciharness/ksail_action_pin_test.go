@@ -19,8 +19,9 @@ var ksailActionPinPattern = regexp.MustCompile(
 // ksailActionPin returns the one reference every CI and CD step uses for KSail's own composite
 // action, failing when the steps disagree or the pin is not a full commit SHA. Tests compare a
 // consumer against it instead of a copied SHA, so a grouped pin bump that moves every consumer
-// together passes without editing them. Whether the pinned content was audited is checked by
-// TestReleaseActionPinsMatchAuditedContent and the per-action content witnesses.
+// together passes without editing them. The content at the pinned commit is audited separately:
+// TestReleaseActionPinsMatchAuditedContent (pkg/client/kubescape) reads each audited action file
+// at the pin and compares it with its reviewed witness.
 func ksailActionPin(t *testing.T, action string) string {
 	t.Helper()
 

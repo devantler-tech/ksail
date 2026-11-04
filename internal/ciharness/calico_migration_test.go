@@ -160,8 +160,9 @@ func TestCalicoBaselineSetupPinsReviewedAction(t *testing.T) {
 	step := findHarnessStep(t, workflow.Jobs["build-calico-baseline"].Steps, "🧹 Free disk space")
 	assert.Equal(t, ksailActionPin(t, "free-disk-space"), step.Uses)
 
-	// The reviewed action has exactly these candidate bytes. Future action changes need a
-	// reviewed content witness rather than stale setup; a pin bump alone changes no bytes here.
+	// The working tree carries exactly the reviewed bytes. The bytes at the commit the workflows
+	// pin are audited against the same witnesses by TestReleaseActionPinsMatchAuditedContent
+	// (pkg/client/kubescape), so changing the action needs a reviewed witness in both places.
 	for path, digest := range map[string]string{
 		"action.yaml":        "bb40116a5901c77432b0d330b05e56228d9546dab26f98a31f05a0e87ffab96c",
 		"free-disk-space.sh": "2dd12fcf3779137ca1cb5f21194947f6a10d3f94f8fb438a1a29ec9021fbdc30",
