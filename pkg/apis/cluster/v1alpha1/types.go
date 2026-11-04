@@ -28,6 +28,8 @@ const (
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Endpoint",type=string,JSONPath=`.status.endpoint`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+// +kubebuilder:printcolumn:name="Observed Distribution",type=string,JSONPath=`.status.observedDistribution`,priority=1
+// +kubebuilder:printcolumn:name="Observed Provider",type=string,JSONPath=`.status.observedProvider`,priority=1
 type Cluster struct {
 	metav1.TypeMeta   `json:",inline"            mapstructure:",squash"`
 	metav1.ObjectMeta `json:"metadata,omitempty" mapstructure:"metadata,omitempty"`

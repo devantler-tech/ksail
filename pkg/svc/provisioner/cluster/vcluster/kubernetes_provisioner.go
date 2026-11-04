@@ -217,7 +217,7 @@ func (p *KubernetesProvisioner) Create(
 	}
 
 	// Step 4: Rewrite kubeconfig to point at the stable exposure address.
-	contextName := "vcluster-" + clusterName
+	contextName := KubernetesContextName(clusterName)
 
 	rewrittenKubeconfig, err := rewriteVClusterKubeconfig(
 		kubeconfigData, exposure.ServerURL(), clusterName,
@@ -275,7 +275,7 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	}
 
 	// Clean up kubeconfig entries
-	contextName := "vcluster-" + clusterName
+	contextName := KubernetesContextName(clusterName)
 	_ = k8s.CleanupKubeconfig(p.kubeconfigPath, contextName, contextName, contextName, os.Stdout)
 
 	_, _ = fmt.Fprintf(os.Stdout, "✓ vCluster %q deleted\n", clusterName)
@@ -432,7 +432,7 @@ func rewriteVClusterKubeconfig(
 		return nil, fmt.Errorf("parse vCluster kubeconfig: %w", err)
 	}
 
-	contextName := "vcluster-" + clusterName
+	contextName := KubernetesContextName(clusterName)
 
 	// Build a new config with renamed entries
 	newConfig := clientcmdapi.NewConfig()
@@ -481,4 +481,11 @@ func (p *KubernetesProvisioner) newHostGlobalFlags(namespace string) *flags.Glob
 // newLogger creates a loft-sh/log Logger that writes to stdout.
 func (p *KubernetesProvisioner) newLogger() loftlog.Logger {
 	return loftlog.NewStreamLogger(os.Stdout, os.Stderr, logrus.InfoLevel)
+}
+
+// KubernetesContextName is the kubeconfig context a vCluster created on the Kubernetes provider
+// is written under. It differs from the Docker driver's "vcluster-docker_<name>", so callers that
+// resolve the created context must use this rather than the distribution default.
+func KubernetesContextName(clusterName string) string {
+	return "vcluster-" + clusterName
 }
