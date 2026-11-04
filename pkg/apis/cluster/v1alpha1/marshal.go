@@ -316,8 +316,15 @@ func pruneClusterDefaults(cluster Cluster) Cluster {
 		rule(&cluster)
 	}
 
-	// Then apply automatic type-based pruning using reflection
+	// Then apply automatic type-based pruning using reflection. Defaults describe the desired-state
+	// config, not observed state: the operator's status must round-trip verbatim, or a value that
+	// happens to equal a spec default (for example an observed Vanilla distribution on Docker) would
+	// be dropped from every status write.
+	status := cluster.Status
+
 	pruneDefaults(reflect.ValueOf(&cluster).Elem())
+
+	cluster.Status = status
 
 	return cluster
 }
