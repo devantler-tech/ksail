@@ -15,7 +15,24 @@ import (
 
 func TestKSailBinaryArtifactProducerPublication(t *testing.T) {
 	t.Parallel()
-	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
+
+	// Every workflow whose later jobs install the build job's binary publishes it
+	// the same way, so a consumer never depends on a shared cache entry surviving.
+	for _, path := range []string{
+		".github/workflows/ci.yaml",
+		".github/workflows/system-test-eks.yaml",
+	} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			assertKSailBinaryArtifactProducer(t, path)
+		})
+	}
+}
+
+func assertKSailBinaryArtifactProducer(t *testing.T, path string) {
+	t.Helper()
+
+	workflow := readCIWorkflow(t, path)
 	producer := workflow.Jobs["build-artifact"]
 	assert.Equal(
 		t,
@@ -148,7 +165,22 @@ func TestKSailBinaryRestorePinnedSourceMatchesCandidate(t *testing.T) {
 
 func TestKSailBinaryProducerChecksum(t *testing.T) {
 	t.Parallel()
-	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
+
+	for _, path := range []string{
+		".github/workflows/ci.yaml",
+		".github/workflows/system-test-eks.yaml",
+	} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			assertKSailBinaryProducerChecksum(t, path)
+		})
+	}
+}
+
+func assertKSailBinaryProducerChecksum(t *testing.T, path string) {
+	t.Helper()
+
+	workflow := readCIWorkflow(t, path)
 
 	step := findHarnessStep(
 		t,
