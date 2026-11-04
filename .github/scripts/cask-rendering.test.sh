@@ -5,10 +5,10 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 for tool in go goreleaser yq brew jq git tar unzip cmp; do
-  command -v "$tool" >/dev/null || {
-    printf 'missing required tool: %s\n' "$tool" >&2
-    exit 1
-  }
+	command -v "$tool" >/dev/null || {
+		printf 'missing required tool: %s\n' "$tool" >&2
+		exit 1
+	}
 done
 
 export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ANALYTICS=1
@@ -21,106 +21,106 @@ tap_added=false
 completed=false
 # cleanup retires the temporary tap and fixtures while preserving any failure status.
 cleanup() {
-  result=$?
-  if ! "$completed" && [[ "$result" -eq 0 ]]; then result=1; fi
-  if "$tap_added"; then
-    brew untap --force "$tap" || result=1
-  fi
-  rm -rf "$work"
-  exit "$result"
+	result=$?
+	if ! "$completed" && [[ "$result" -eq 0 ]]; then result=1; fi
+	if "$tap_added"; then
+		brew untap --force "$tap" || result=1
+	fi
+	rm -rf "$work"
+	exit "$result"
 }
 trap cleanup EXIT
 
 stage_notice_fixtures() {
-  local fixture="$1" target member
-  for target in cli-darwin-arm64 cli-linux-amd64 cli-linux-arm64 cli-windows-amd64 cli-windows-arm64 desktop-darwin-arm64; do
-    mkdir -p "$fixture/.cache/go-notices/$target/GoNotices"
-    for member in THIRD_PARTY_NOTICES.txt manifest.json release.txt; do
-      printf 'cask notice placement fixture: %s %s\n' "$target" "$member" >"$fixture/.cache/go-notices/$target/GoNotices/$member"
-    done
-  done
+	local fixture="$1" target member
+	for target in cli-darwin-arm64 cli-linux-amd64 cli-linux-arm64 cli-windows-amd64 cli-windows-arm64 desktop-darwin-arm64; do
+		mkdir -p "$fixture/.cache/go-notices/$target/GoNotices"
+		for member in THIRD_PARTY_NOTICES.txt manifest.json release.txt; do
+			printf 'cask notice placement fixture: %s %s\n' "$target" "$member" >"$fixture/.cache/go-notices/$target/GoNotices/$member"
+		done
+	done
 }
 
 verify_notice_fixture_archives() {
-  local fixture="$1" product="$2" archive base target prefix member count=0 expected=5
-  if [[ "$product" == ksail-desktop ]]; then expected=1; fi
-  while IFS= read -r archive; do
-    base="${archive##*/}"
-    case "$product:$base" in
-    ksail:*_darwin_arm64.tar.gz) target=cli-darwin-arm64 ;;
-    ksail:*_linux_amd64.tar.gz) target=cli-linux-amd64 ;;
-    ksail:*_linux_arm64.tar.gz) target=cli-linux-arm64 ;;
-    ksail:*_windows_amd64.zip) target=cli-windows-amd64 ;;
-    ksail:*_windows_arm64.zip) target=cli-windows-arm64 ;;
-    ksail-desktop:*_darwin_arm64.zip) target=desktop-darwin-arm64 ;;
-    *)
-      printf 'unexpected cask fixture archive\n' >&2
-      return 1
-      ;;
-    esac
-    prefix=GoNotices
-    if [[ "$product" == ksail-desktop ]]; then prefix=KSail.app/Contents/Resources/GoNotices; fi
-    for member in THIRD_PARTY_NOTICES.txt manifest.json release.txt; do
-      case "$archive" in
-      *.tar.gz) tar -xOzf "$archive" "$prefix/$member" >"$fixture/member.actual" ;;
-      *.zip) unzip -p "$archive" "$prefix/$member" >"$fixture/member.actual" ;;
-      esac
-      cmp "$fixture/.cache/go-notices/$target/GoNotices/$member" "$fixture/member.actual"
-    done
-    if [[ "$product" == ksail-desktop ]]; then
-      unzip -p "$archive" KSail.app/Contents/Resources/LICENSE >"$fixture/member.actual"
-      cmp "$fixture/LICENSE" "$fixture/member.actual"
-    fi
-    count=$((count + 1))
-  done < <(find "$fixture/dist" -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' \))
-  [[ "$count" -eq "$expected" ]]
+	local fixture="$1" product="$2" archive base target prefix member count=0 expected=5
+	if [[ "$product" == ksail-desktop ]]; then expected=1; fi
+	while IFS= read -r archive; do
+		base="${archive##*/}"
+		case "$product:$base" in
+		ksail:*_darwin_arm64.tar.gz) target=cli-darwin-arm64 ;;
+		ksail:*_linux_amd64.tar.gz) target=cli-linux-amd64 ;;
+		ksail:*_linux_arm64.tar.gz) target=cli-linux-arm64 ;;
+		ksail:*_windows_amd64.zip) target=cli-windows-amd64 ;;
+		ksail:*_windows_arm64.zip) target=cli-windows-arm64 ;;
+		ksail-desktop:*_darwin_arm64.zip) target=desktop-darwin-arm64 ;;
+		*)
+			printf 'unexpected cask fixture archive\n' >&2
+			return 1
+			;;
+		esac
+		prefix=GoNotices
+		if [[ "$product" == ksail-desktop ]]; then prefix=KSail.app/Contents/Resources/GoNotices; fi
+		for member in THIRD_PARTY_NOTICES.txt manifest.json release.txt; do
+			case "$archive" in
+			*.tar.gz) tar -xOzf "$archive" "$prefix/$member" >"$fixture/member.actual" ;;
+			*.zip) unzip -p "$archive" "$prefix/$member" >"$fixture/member.actual" ;;
+			esac
+			cmp "$fixture/.cache/go-notices/$target/GoNotices/$member" "$fixture/member.actual"
+		done
+		if [[ "$product" == ksail-desktop ]]; then
+			unzip -p "$archive" KSail.app/Contents/Resources/LICENSE >"$fixture/member.actual"
+			cmp "$fixture/LICENSE" "$fixture/member.actual"
+		fi
+		count=$((count + 1))
+	done < <(find "$fixture/dist" -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' \))
+	[[ "$count" -eq "$expected" ]]
 }
 
 mkdir -p "$work/tap/Casks"
 for name in ksail ksail-desktop; do
-  config=.goreleaser.yaml
-  if [[ "$name" == ksail-desktop ]]; then config=.goreleaser.desktop.yaml; fi
-  fixture="$work/$name"
-  mkdir -p "$fixture"
-  printf 'module cask-render-fixture\n\ngo 1.27.3\n' >"$fixture/go.mod"
-  printf 'package main\nfunc main() {}\n' >"$fixture/main.go"
-  cp "$root/LICENSE" "$fixture/LICENSE"
-  stage_notice_fixtures "$fixture"
-  # Keep the real archive/target/cask shapes. Remove application-only build hooks and publication
-  # credentials, and force upload off; this fixture must never publish or use a credential.
-  yq '.project_name = "'"$name"'" | .dist = "dist" |
+	config=.goreleaser.yaml
+	if [[ "$name" == ksail-desktop ]]; then config=.goreleaser.desktop.yaml; fi
+	fixture="$work/$name"
+	mkdir -p "$fixture"
+	printf 'module cask-render-fixture\n\ngo 1.27.3\n' >"$fixture/go.mod"
+	printf 'package main\nfunc main() {}\n' >"$fixture/main.go"
+	cp "$root/LICENSE" "$fixture/LICENSE"
+	stage_notice_fixtures "$fixture"
+	# Keep the real archive/target/cask shapes. Remove application-only build hooks and publication
+	# credentials, and force upload off; this fixture must never publish or use a credential.
+	yq '.project_name = "'"$name"'" | .dist = "dist" |
 		.before.hooks = [] | .builds[].main = "." | .builds[].tags = [] |
 		.builds[].env = ["CGO_ENABLED=0"] | .builds[].hooks = {} | .builds[].ldflags = [] |
 		.archives[].files = ((.archives[].files // []) | map(select((.src // "") == "LICENSE" or ((.src // "") | test("^\\.cache/go-notices/"))))) |
 		.homebrew_casks[].skip_upload = "true" |
 		.homebrew_casks[].repository.token = "" |
 		del(.homebrew_casks[].commit_author.signing, .dockers_v2, .docker_signs, .release.extra_files)' \
-    "$root/$config" >"$fixture/.goreleaser.yaml"
-  git -C "$fixture" init --quiet
-  git -C "$fixture" remote add origin https://github.com/devantler-tech/ksail.git
-  git -C "$fixture" add go.mod main.go .goreleaser.yaml
-  git -C "$fixture" -c user.name=fixture -c user.email=fixture@example.invalid \
-    -c commit.gpgsign=false commit --quiet -m fixture
-  git -C "$fixture" tag v7.204.0
-  (
-    cd "$fixture"
-    goreleaser release --snapshot --clean --skip=validate,publish,announce,sign
-  )
-  verify_notice_fixture_archives "$fixture" "$name"
-  casks=()
-  while IFS= read -r file; do casks+=("$file"); done < <(find "$fixture/dist" -name "$name.rb" -type f)
-  [[ ${#casks[@]} -eq 1 ]] || {
-    printf 'expected one generated %s cask\n' "$name" >&2
-    exit 1
-  }
-  brew style --fix "${casks[0]}"
-  cp "${casks[0]}" "$work/tap/Casks/$name.rb"
+		"$root/$config" >"$fixture/.goreleaser.yaml"
+	git -C "$fixture" init --quiet
+	git -C "$fixture" remote add origin https://github.com/devantler-tech/ksail.git
+	git -C "$fixture" add go.mod main.go .goreleaser.yaml
+	git -C "$fixture" -c user.name=fixture -c user.email=fixture@example.invalid \
+		-c commit.gpgsign=false commit --quiet -m fixture
+	git -C "$fixture" tag v7.204.0
+	(
+		cd "$fixture"
+		goreleaser release --snapshot --clean --skip=validate,publish,announce,sign
+	)
+	verify_notice_fixture_archives "$fixture" "$name"
+	casks=()
+	while IFS= read -r file; do casks+=("$file"); done < <(find "$fixture/dist" -name "$name.rb" -type f)
+	[[ ${#casks[@]} -eq 1 ]] || {
+		printf 'expected one generated %s cask\n' "$name" >&2
+		exit 1
+	}
+	brew style --fix "${casks[0]}"
+	cp "${casks[0]}" "$work/tap/Casks/$name.rb"
 done
 
 git -C "$work/tap" init --quiet
 git -C "$work/tap" add Casks/ksail.rb Casks/ksail-desktop.rb
 git -C "$work/tap" -c user.name=fixture -c user.email=fixture@example.invalid \
-  -c commit.gpgsign=false commit --quiet -m fixture
+	-c commit.gpgsign=false commit --quiet -m fixture
 brew tap --custom-remote "$tap" "$work/tap"
 tap_added=true
 brew trust "$tap"
@@ -129,10 +129,10 @@ brew readall --os=all --arch=all "$tap"
 # This runner is macOS. Both casks must retain a real checksum and the architecture
 # requirement after rendering and style cleanup; no product binary is installed or executed.
 for name in ksail ksail-desktop; do
-  brew info --cask --json=v2 "$tap/$name" >"$work/$name.json"
-  jq -e '.casks | length == 1' "$work/$name.json" >/dev/null
-  jq -e '.casks[0].sha256 | test("^[0-9a-f]{64}$")' "$work/$name.json" >/dev/null
-  jq -e '.casks[0].depends_on.arch | any(.type == "arm" and .bits == 64)' "$work/$name.json" >/dev/null
+	brew info --cask --json=v2 "$tap/$name" >"$work/$name.json"
+	jq -e '.casks | length == 1' "$work/$name.json" >/dev/null
+	jq -e '.casks[0].sha256 | test("^[0-9a-f]{64}$")' "$work/$name.json" >/dev/null
+	jq -e '.casks[0].depends_on.arch | any(.type == "arm" and .bits == 64)' "$work/$name.json" >/dev/null
 done
 printf 'PASS: both rendered casks load on every platform and preserve checksum/architecture guards\n'
 completed=true
