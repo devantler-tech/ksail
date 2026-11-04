@@ -460,7 +460,7 @@ func TestAuditPinnedActionRejectsSiblingManifest(t *testing.T) {
 // the tree needs a reviewed tree witness.
 func auditedActionTrees() []struct{ dir, action, tree string } {
 	return []struct{ dir, action, tree string }{
-		{"web/ui", "setup-desktop-build", "2266ec429007d87812a12313b48b23c95556f355"},
+		{"web/ui", "setup-desktop-build", "b390d8ffcb7b778a7cdfe7da9c86d186cc0eca70"},
 	}
 }
 
