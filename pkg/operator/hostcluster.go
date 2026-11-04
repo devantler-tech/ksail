@@ -142,9 +142,11 @@ func AddHostClusterRegistration(mgr ctrl.Manager, namespace string) error {
 }
 
 // NewHostStatusObserver returns a StatusObserver for the self-registered host cluster, reporting
-// the API endpoint and node readiness through the operator's own credentials (the manager's REST
-// config). The hub reader argument is unused: the host cluster is observed directly, not through a
-// published kubeconfig Secret.
+// the API endpoint, node readiness, and the distribution and provider the nodes prove, through the
+// operator's own credentials (the manager's REST config). The identity goes to status only: the
+// spec stays empty, so the operator still does not own the host cluster's lifecycle. The hub reader
+// argument is unused: the host cluster is observed directly, not through a published kubeconfig
+// Secret.
 func NewHostStatusObserver(restConfig *rest.Config) controller.StatusObserver {
 	return func(
 		ctx context.Context,
@@ -156,17 +158,13 @@ func NewHostStatusObserver(restConfig *rest.Config) controller.StatusObserver {
 			return controller.ObservedStatus{}, fmt.Errorf("build host clientset: %w", err)
 		}
 
-		observed := controller.ObservedStatus{Endpoint: restConfig.Host}
+		observed, err := observeHostNodes(ctx, clientset)
+		observed.Endpoint = restConfig.Host
 
-		ready, total, err := countReadyNodes(ctx, clientset)
 		if err != nil {
-			// The endpoint is still useful; surface the node-count failure for logging.
-			return observed, fmt.Errorf("count host nodes: %w", err)
+			// The endpoint is still useful; surface the node-read failure for logging.
+			return observed, fmt.Errorf("observe host nodes: %w", err)
 		}
-
-		observed.NodesReady = ready
-		observed.NodesTotal = total
-		observed.NodesObserved = true
 
 		return observed, nil
 	}
