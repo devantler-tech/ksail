@@ -27,6 +27,7 @@ func TestMaterialDecisionCannotMaskAnotherSourceOrObligation(t *testing.T) {
 	for _, scenario := range []string{
 		"version", "module", "sum", "replacement", "package", "path", "hash", "evidence",
 		"detection", "denied", "unknown", "new-file", "duplicate", "embedded-exclusion",
+		"evidence-case", "path-case",
 	} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
@@ -100,7 +101,25 @@ func alterMaterialObligation(
 		pkg.EmbedFiles = []string{"README.md"}
 	}
 
-	return path, detected
+	return alterMaterialPathCase(policy, scenario, path), detected
+}
+
+// alterMaterialPathCase mis-cases a reviewed path. It must fail on every
+// filesystem, not only on case-sensitive ones.
+func alterMaterialPathCase(
+	policy *gonotices.MaterialPolicy,
+	scenario, path string,
+) string {
+	switch scenario {
+	case "evidence-case":
+		policy.Files[0].Evidence[0].Path = "readme.md"
+	case "path-case":
+		policy.Files[0].Path = "license.extra"
+
+		return "license.extra"
+	}
+
+	return path
 }
 
 func TestMaterialRolesCannotInventAnAdditionalPackageGrant(t *testing.T) {

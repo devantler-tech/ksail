@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -235,19 +236,52 @@ func materialRuleMatches(rule MaterialRule, pkg Package, path string) bool {
 }
 
 func verifyMaterialRuleFiles(directory string, rule MaterialRule) error {
-	data, err := readMaterial(directory, rule.Path)
+	data, err := readExactMaterial(directory, rule.Path)
 	if err != nil || digest(data) != rule.SHA256 {
 		return ErrIncomplete
 	}
 
 	for _, evidence := range rule.Evidence {
-		data, err = readMaterial(directory, evidence.Path)
+		data, err = readExactMaterial(directory, evidence.Path)
 		if err != nil || digest(data) != evidence.SHA256 {
 			return ErrIncomplete
 		}
 	}
 
 	return nil
+}
+
+// readExactMaterial reads a reviewed path only when every component names the
+// directory entry exactly. A case-insensitive filesystem (macOS by default)
+// would otherwise accept a mis-cased reviewed path that a case-sensitive one
+// (the Linux CI runners) refuses, so the same policy would pass on one host and
+// fail on another.
+func readExactMaterial(directory, name string) ([]byte, error) {
+	if !exactMaterialPath(directory, name) {
+		return nil, ErrIncomplete
+	}
+
+	return readMaterial(directory, name)
+}
+
+func exactMaterialPath(directory, name string) bool {
+	current := directory
+	for part := range strings.SplitSeq(filepath.Clean(name), string(filepath.Separator)) {
+		entries, err := os.ReadDir(current)
+		if err != nil {
+			return false
+		}
+
+		if !slices.ContainsFunc(entries, func(entry os.DirEntry) bool {
+			return entry.Name() == part
+		}) {
+			return false
+		}
+
+		current = filepath.Join(current, part)
+	}
+
+	return true
 }
 
 func permittedMaterialRole(rule MaterialRule, pkg Package, allowed []string) bool {

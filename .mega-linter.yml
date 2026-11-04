@@ -51,7 +51,8 @@ EXCLUDED_DIRECTORIES:
 FILTER_REGEX_EXCLUDE: (megalinter-reports/.*|web/ui/.*|(^|/)third_party/(cel-go|glamour|go-macholibre|kyverno-jmespath|jmespath|ansi|ansi-runtime|redisotel|rediscmd|dynamiclistener)/.*)
 # The generator owns canonical manifest bytes; formatting would invalidate their authenticated hashes.
 JSON_PRETTIER_FILTER_REGEX_EXCLUDE: (^|/)notices/go/[^/]+/manifest\.json$
-SPELL_LYCHEE_FILTER_REGEX_EXCLUDE: (AGENTS\.md|.*\.mdx|docs/src/.*\.md)
+# Recipient notices reproduce third-party license text verbatim; their historical links are not ours to fix.
+SPELL_LYCHEE_FILTER_REGEX_EXCLUDE: (AGENTS\.md|.*\.mdx|docs/src/.*\.md|(^|/)notices/go/.*)
 # Helm chart templates contain Go template directives ({{ ... }}) and are not valid standalone
 # YAML; generated CRDs (controller-gen output) are large and machine-managed. Exclude both from
 # the YAML linters.

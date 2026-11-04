@@ -57,7 +57,7 @@
       "role": "attribution",
       "evidence": [
         {
-          "path": "internal/binarydist/LICENSE",
+          "path": "internal/binarydist/License",
           "sha256": "4b6c0720c3a112229d5f8b8065641023db5cadf615bf98d3150c944adae283f2"
         },
         {
