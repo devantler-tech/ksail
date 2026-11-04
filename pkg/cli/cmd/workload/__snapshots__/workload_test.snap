@@ -1622,17 +1622,25 @@ Examples:
     --branch=master \
     --secret-ref=git-credentials
 
+  # Create a source that only accepts SSH- or OpenPGP-signed commits from trusted keys
+  ksail workload create source git podinfo \
+    --url=https://github.com/stefanprodan/podinfo \
+    --branch=master \
+    --verify-secret-ref=git-signing-keys
+
 Flags:
-      --branch string       git branch
-      --commit string       git commit
-      --export              export in YAML format to stdout
-  -h, --help                help for git
-      --interval duration   source sync interval (default 1m0s)
-  -n, --namespace string    the namespace scope for this operation (default "flux-system")
-      --secret-ref string   the name of an existing secret containing SSH or basic credentials
-      --tag string          git tag
-      --tag-semver string   git tag semver range
-      --url string          git address, e.g. ssh://git@host/org/repository
+      --branch string              git branch
+      --commit string              git commit
+      --export                     export in YAML format to stdout
+  -h, --help                       help for git
+      --interval duration          source sync interval (default 1m0s)
+  -n, --namespace string           the namespace scope for this operation (default "flux-system")
+      --secret-ref string          the name of an existing secret containing SSH or basic credentials
+      --tag string                 git tag
+      --tag-semver string          git tag semver range
+      --url string                 git address, e.g. ssh://git@host/org/repository
+      --verify-mode string         Git object to verify: HEAD, Tag or TagAndHEAD (default HEAD; requires --verify-secret-ref)
+      --verify-secret-ref string   verify the signature of the checked-out commit (or tag) against the public keys in this existing secret (SSH keys under *.sshpub keys, OpenPGP keys under *.asc)
 
 Global Flags:
       --benchmark       Show per-activity benchmark output
