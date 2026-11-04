@@ -1,12 +1,12 @@
 # Explicit local connection recovery
 
-Status: Proposed for #7505.
+Status: Accepted. Implements #7505; graduated to stable in #7510.
 
 Deleting a nested cluster requires current ownership evidence from its host. A deletion can remove
 the final owned namespace and then fail while reading another namespace. The connection remains,
 but its name cannot authorize further resource deletion. Host API failures remain visible errors.
 
-`cluster forget` is a separate, default-off experimental operation that edits one explicitly named
+`cluster forget` is a separate, explicitly invoked operation that edits one explicitly named
 kubeconfig file and one exact context. It never constructs a provider or REST client, runs credential
 plugins, or reads host resources. It does not certify that remote resources are absent. An operator
 chooses it only to retire a local connection, independently of resolving a failed resource deletion.
@@ -23,5 +23,6 @@ replacement, refuses a read-only destination, and refuses an observed content or
 Other writers must use the same canonical path and honor that lock; this protocol does not serialize
 arbitrary editors or symlink aliases that ignore it. A held lock is never removed to force recovery.
 
-The command requires `--experimental`, `--kubeconfig` and `--context`. It remains hidden from normal
-help and generated AI tools until the local recovery interface is explicitly graduated in #7510.
+The command requires `--kubeconfig` and `--context`. It shipped behind `--experimental`, hidden from
+help and generated AI tools, until a local evaluation of the published CLI confirmed these boundaries
+and #7510 graduated it to a stable, listed command.
