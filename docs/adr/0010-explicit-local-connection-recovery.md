@@ -24,5 +24,8 @@ Other writers must use the same canonical path and honor that lock; this protoco
 arbitrary editors or symlink aliases that ignore it. A held lock is never removed to force recovery.
 
 The command requires `--kubeconfig` and `--context`. It shipped behind `--experimental`, hidden from
-help and generated AI tools, until a local evaluation of the published CLI confirmed these boundaries
-and #7510 graduated it to a stable, listed command.
+help and generated AI tools, until a local evaluation of the published CLI (recorded on #7510)
+confirmed these boundaries and #7510 graduated it to a stable, listed command. As a write command it
+is also offered by the generated `cluster_write` tool with the same required file and context. That
+schema advertises no `kubeconfig` default, since other subcommands default the flag and this one must
+not inherit it.
