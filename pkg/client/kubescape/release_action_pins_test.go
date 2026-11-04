@@ -6,8 +6,6 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,18 +13,15 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 )
 
 // ksailActionsRepository is the repository whose composite actions CD pins by commit.
 const ksailActionsRepository = "devantler-tech/ksail"
 
-// pinnedContentAttempts and pinnedContentTimeout bound reading an action file at a pinned commit
-// from GitHub when the local clone does not hold that commit (CI checks out one commit only).
-const (
-	pinnedContentAttempts = 3
-	pinnedContentTimeout  = 30 * time.Second
-)
+// requirePinnedCommitsEnv makes a pinned commit missing from the local object store a failure. The
+// release-graph-audit CI job fetches every pinned commit and sets it; elsewhere, a single-commit
+// checkout skips the content audit visibly, because tests never read the network.
+const requirePinnedCommitsEnv = "KSAIL_REQUIRE_PINNED_ACTION_COMMITS"
 
 var (
 	errActionAbsent       = errors.New("audited action is absent from CD")
@@ -34,6 +29,7 @@ var (
 	errActionPinNotCommit = errors.New("audited action is not pinned to a full commit SHA")
 	errPinnedContent      = errors.New("pinned action content does not match its audited witness")
 	errPinnedRead         = errors.New("cannot read the action file at its pinned commit")
+	errPinnedAbsent       = errors.New("the pinned commit is not in the local object store")
 )
 
 // fullCommitSHA matches a full, lower-case Git commit SHA.
@@ -95,6 +91,11 @@ func TestReleaseActionPinsMatchAuditedContent(t *testing.T) {
 				binding.path,
 				binding.content,
 			)
+			if errors.Is(err, errPinnedAbsent) && os.Getenv(requirePinnedCommitsEnv) != "true" {
+				t.Skipf("%v; the release-graph-audit CI job fetches it and sets %s=true",
+					err, requirePinnedCommitsEnv)
+			}
+
 			if err != nil {
 				t.Error(err)
 			}
@@ -103,7 +104,8 @@ func TestReleaseActionPinsMatchAuditedContent(t *testing.T) {
 }
 
 // TestAuditPinnedActionRejectsUnauditedPins is the negative control for the pinned-content audit:
-// a pin to a commit whose action content changed fails, as do disagreeing and abbreviated pins.
+// a pin to a commit whose action content changed fails, as do disagreeing and abbreviated pins, a
+// pin to a tree object, and a pin whose commit is not in the local object store.
 func TestAuditPinnedActionRejectsUnauditedPins(t *testing.T) {
 	t.Parallel()
 
@@ -118,6 +120,8 @@ func TestAuditPinnedActionRejectsUnauditedPins(t *testing.T) {
 		path,
 		[]byte("name: Setup desktop build\nchanged: true\n"),
 	)
+
+	tree := fixtureTree(t, repo, auditedCommit)
 	witness := fmt.Sprintf("%x", sha256.Sum256(audited))
 	reference := func(commit string) string {
 		return ksailActionsRepository + "/.github/actions/setup-desktop-build@" + commit
@@ -144,6 +148,8 @@ func TestAuditPinnedActionRejectsUnauditedPins(t *testing.T) {
 		},
 		{name: "abbreviated pin", uses: []string{reference(auditedCommit[:12])}, want: errActionPinNotCommit},
 		{name: "absent", uses: []string{"actions/checkout@" + auditedCommit}, want: errActionAbsent},
+		{name: "tree object, not a commit", uses: []string{reference(tree)}, want: errActionPinNotCommit},
+		{name: "commit not held locally", uses: []string{reference(strings.Repeat("a", 40))}, want: errPinnedAbsent},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
@@ -188,6 +194,11 @@ func auditPinnedAction(
 		return fmt.Errorf("%w: %s@%s", errActionPinNotCommit, action, pins[0])
 	}
 
+	err := requireCommitObject(ctx, root, pins[0])
+	if err != nil {
+		return fmt.Errorf("%s@%s: %w", action, pins[0], err)
+	}
+
 	data, err := readPinnedFile(ctx, root, pins[0], path)
 	if err != nil {
 		return err
@@ -205,72 +216,31 @@ func auditPinnedAction(
 	return nil
 }
 
-// readPinnedFile returns path as committed at commit. It reads the local Git object store first
-// and falls back to GitHub's raw file endpoint, because CI checks out only the commit under test.
-func readPinnedFile(ctx context.Context, root, commit, path string) ([]byte, error) {
-	//nolint:gosec // G204: git with a commit SHA validated as 40 hex digits and a fixed audited path.
-	data, gitErr := exec.CommandContext(
-		ctx, "git", "-C", root, "cat-file", "blob", commit+":"+path,
-	).Output()
-	if gitErr == nil {
-		return data, nil
+// requireCommitObject checks that sha names a commit in the local object store. A tree or blob ID
+// also matches fullCommitSHA and would serve `cat-file blob <sha>:<path>`, but workflows can only
+// pin a commit. A missing object is errPinnedAbsent, never a pass.
+func requireCommitObject(ctx context.Context, root, sha string) error {
+	//nolint:gosec // G204: git with a SHA validated as 40 hex digits.
+	kind, err := exec.CommandContext(ctx, "git", "-C", root, "cat-file", "-t", sha).Output()
+	if err != nil {
+		return fmt.Errorf("%w: %w", errPinnedAbsent, err)
 	}
 
-	url := fmt.Sprintf(
-		"https://raw.githubusercontent.com/%s/%s/%s",
-		ksailActionsRepository,
-		commit,
-		path,
-	)
-
-	var errs []error
-
-	for attempt := range pinnedContentAttempts {
-		if attempt > 0 {
-			select {
-			case <-ctx.Done():
-				return nil, fmt.Errorf("%w: %s at %s: %w", errPinnedRead, path, commit, ctx.Err())
-			case <-time.After(time.Duration(attempt) * time.Second):
-			}
-		}
-
-		data, err := fetchPinnedFile(ctx, url)
-		if err == nil {
-			return data, nil
-		}
-
-		errs = append(errs, err)
+	if objectType := strings.TrimSpace(string(kind)); objectType != "commit" {
+		return fmt.Errorf("%w: the object is a %s", errActionPinNotCommit, objectType)
 	}
 
-	return nil, fmt.Errorf(
-		"%w: %s at %s (local Git: %w; GitHub: %w)",
-		errPinnedRead, path, commit, gitErr, errors.Join(errs...),
-	)
+	return nil
 }
 
-func fetchPinnedFile(ctx context.Context, url string) ([]byte, error) {
-	requestCtx, cancel := context.WithTimeout(ctx, pinnedContentTimeout)
-	defer cancel()
-
-	request, err := http.NewRequestWithContext(requestCtx, http.MethodGet, url, nil)
+// readPinnedFile returns path as committed at commit, from the local Git object store only.
+func readPinnedFile(ctx context.Context, root, commit, path string) ([]byte, error) {
+	//nolint:gosec // G204: git with a commit SHA validated as 40 hex digits and a fixed audited path.
+	data, err := exec.CommandContext(
+		ctx, "git", "-C", root, "cat-file", "blob", commit+":"+path,
+	).Output()
 	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
-
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return nil, fmt.Errorf("get %s: %w", url, err)
-	}
-
-	defer func() { _ = response.Body.Close() }()
-
-	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("get %s: %w: %s", url, errPinnedRead, response.Status)
-	}
-
-	data, err := io.ReadAll(response.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", url, err)
+		return nil, fmt.Errorf("%w: %s at %s: %w", errPinnedRead, path, commit, err)
 	}
 
 	return data, nil
@@ -332,7 +302,7 @@ func commitFixtureFile(t *testing.T, repo, path string, contents []byte) string 
 
 	_, statErr := os.Stat(filepath.Join(repo, ".git"))
 	if errors.Is(statErr, os.ErrNotExist) {
-		git("init", "--quiet")
+		git("init", "--quiet", "--object-format=sha1")
 	}
 
 	file := filepath.Join(repo, filepath.FromSlash(path))
@@ -365,4 +335,19 @@ func workingTreeDigest(t *testing.T, root, path string) string {
 	}
 
 	return fmt.Sprintf("%x", sha256.Sum256(bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))))
+}
+
+// fixtureTree returns the tree object ID of commit in the fixture repository at repo.
+func fixtureTree(t *testing.T, repo, commit string) string {
+	t.Helper()
+
+	//nolint:gosec // G204: git on this test's own temporary fixture repository.
+	output, err := exec.CommandContext(
+		t.Context(), "git", "-C", repo, "rev-parse", commit+"^{tree}",
+	).Output()
+	if err != nil {
+		t.Fatalf("resolve the fixture tree of %s: %v", commit, err)
+	}
+
+	return strings.TrimSpace(string(output))
 }
