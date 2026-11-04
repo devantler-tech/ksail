@@ -30,23 +30,13 @@ var (
 	errPinnedContent      = errors.New("pinned action content does not match its audited witness")
 	errPinnedRead         = errors.New("cannot read the action file at its pinned commit")
 	errPinnedAbsent       = errors.New("the pinned commit is not in the local object store")
+	errSiblingManifest    = errors.New("the pinned action has a sibling manifest")
 )
 
-// fullCommitSHA matches a full, lower-case Git commit SHA.
-var fullCommitSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)
-
-// TestReleaseActionPinsMatchAuditedContent binds audited snapshots to the commits CI and CD
-// execute for KSail's own composite actions. Each witness is the SHA-256 of an action file's
-// audited content. The check reads that file at the commit the workflows actually pin and compares
-// it with the witness, and the working tree must carry the same content, so a routine pin bump to a commit
-// with the same content passes on its own, while a pin to changed or unaudited content fails.
-// Changing an audited action requires a new reviewed content witness.
-func TestReleaseActionPinsMatchAuditedContent(t *testing.T) {
-	t.Parallel()
-	root := moduleRoot(t)
-	uses := releaseWorkflowUses(t, root)
-
-	for _, binding := range []struct{ path, action, content string }{
+// auditedActionBindings returns each audited file paired with the KSail action whose pinned commit runs it and
+// the SHA-256 witness of its reviewed content.
+func auditedActionBindings() []struct{ path, action, content string } {
+	return []struct{ path, action, content string }{
 		{
 			".github/actions/release-admission/action.yaml",
 			"release-admission",
@@ -72,8 +62,41 @@ func TestReleaseActionPinsMatchAuditedContent(t *testing.T) {
 			"restore-ksail-binary",
 			"f1c049de4094024f62b97f5f70c98ababf6ed639ee59a16065c9814cffa61176",
 		},
-	} {
-		t.Run(binding.path, func(t *testing.T) {
+		// setup-desktop-build runs these scripts from its own pinned checkout ($GITHUB_ACTION_PATH).
+		{
+			".github/actions/free-disk-space/free-disk-space.sh",
+			"setup-desktop-build",
+			"2dd12fcf3779137ca1cb5f21194947f6a10d3f94f8fb438a1a29ec9021fbdc30",
+		},
+		{
+			".github/scripts/download-go-modules.sh",
+			"setup-desktop-build",
+			"e5af8edf61a77de4397e952a05b1cc6ca0f83cd848523c4cf6b3aaa2539561fa",
+		},
+		{
+			"scripts/stage-webui.sh",
+			"setup-desktop-build",
+			"5b3d7b0fa8b237f77ee9a88e6807e070c1b35c97df3d5f17357b3ecb8b2938a6",
+		},
+	}
+}
+
+// fullCommitSHA matches a full, lower-case Git commit SHA.
+var fullCommitSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+// TestReleaseActionPinsMatchAuditedContent binds audited snapshots to the commits CI and CD
+// execute for KSail's own composite actions. Each witness is the SHA-256 of an action file's
+// audited content. The check reads that file at the commit the workflows actually pin and compares
+// it with the witness, and the working tree must carry the same content, so a routine pin bump to a commit
+// with the same content passes on its own, while a pin to changed or unaudited content fails.
+// Changing an audited action requires a new reviewed content witness.
+func TestReleaseActionPinsMatchAuditedContent(t *testing.T) {
+	t.Parallel()
+	root := moduleRoot(t)
+	uses := releaseWorkflowUses(t, root)
+
+	for _, binding := range auditedActionBindings() {
+		t.Run(binding.action+":"+binding.path, func(t *testing.T) {
 			t.Parallel()
 
 			if workingTreeDigest(t, root, binding.path) != binding.content {
@@ -174,6 +197,42 @@ func TestAuditPinnedActionRejectsUnauditedPins(t *testing.T) {
 func auditPinnedAction(
 	ctx context.Context, root string, uses []string, action, path, witness string,
 ) error {
+	pin, err := resolveActionPin(uses, action)
+	if err != nil {
+		return err
+	}
+
+	err = requireCommitObject(ctx, root, pin)
+	if err != nil {
+		return fmt.Errorf("%s@%s: %w", action, pin, err)
+	}
+
+	sibling, found := siblingManifest(path)
+	if found && pinnedFileExists(ctx, root, pin, sibling) {
+		return fmt.Errorf(
+			"%w: %s@%s has %s besides %s", errSiblingManifest, action, pin, sibling, path,
+		)
+	}
+
+	data, err := readPinnedFile(ctx, root, pin, path)
+	if err != nil {
+		return err
+	}
+
+	// A CRLF checkout (Windows, core.autocrlf) must not change the digest of unchanged content.
+	digest := fmt.Sprintf("%x", sha256.Sum256(bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))))
+	if digest != witness {
+		return fmt.Errorf(
+			"%w: %s@%s has %s, the audited witness is %s",
+			errPinnedContent, action, pin, digest, witness,
+		)
+	}
+
+	return nil
+}
+
+// resolveActionPin returns the one full commit SHA every step in uses pins action at.
+func resolveActionPin(uses []string, action string) (string, error) {
 	prefix := ksailActionsRepository + "/.github/actions/" + action + "@"
 
 	var pins []string
@@ -187,33 +246,19 @@ func auditPinnedAction(
 
 	switch {
 	case len(pins) == 0:
-		return fmt.Errorf("%w: %s", errActionAbsent, action)
+		return "", fmt.Errorf("%w: %s", errActionAbsent, action)
 	case len(pins) > 1:
-		return fmt.Errorf("%w: %s at %s", errActionPinsDisagree, action, strings.Join(pins, ", "))
-	case !fullCommitSHA.MatchString(pins[0]):
-		return fmt.Errorf("%w: %s@%s", errActionPinNotCommit, action, pins[0])
-	}
-
-	err := requireCommitObject(ctx, root, pins[0])
-	if err != nil {
-		return fmt.Errorf("%s@%s: %w", action, pins[0], err)
-	}
-
-	data, err := readPinnedFile(ctx, root, pins[0], path)
-	if err != nil {
-		return err
-	}
-
-	// A CRLF checkout (Windows, core.autocrlf) must not change the digest of unchanged content.
-	digest := fmt.Sprintf("%x", sha256.Sum256(bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))))
-	if digest != witness {
-		return fmt.Errorf(
-			"%w: %s@%s has %s, the audited witness is %s",
-			errPinnedContent, action, pins[0], digest, witness,
+		return "", fmt.Errorf(
+			"%w: %s at %s",
+			errActionPinsDisagree,
+			action,
+			strings.Join(pins, ", "),
 		)
+	case !fullCommitSHA.MatchString(pins[0]):
+		return "", fmt.Errorf("%w: %s@%s", errActionPinNotCommit, action, pins[0])
 	}
 
-	return nil
+	return pins[0], nil
 }
 
 // requireCommitObject checks that sha names a commit in the local object store. A tree or blob ID
@@ -350,4 +395,52 @@ func fixtureTree(t *testing.T, repo, commit string) string {
 	}
 
 	return strings.TrimSpace(string(output))
+}
+
+// siblingManifest returns the other action manifest name next to an action.yaml or action.yml. When
+// both exist, the runner loads action.yml, so auditing only one of them would miss the other.
+func siblingManifest(path string) (string, bool) {
+	if dir, found := strings.CutSuffix(path, "/action.yaml"); found {
+		return dir + "/action.yml", true
+	}
+
+	if dir, found := strings.CutSuffix(path, "/action.yml"); found {
+		return dir + "/action.yaml", true
+	}
+
+	return "", false
+}
+
+// pinnedFileExists reports whether path exists at commit. The commit is already known to be in the
+// local object store, so a failed lookup means the file is absent.
+func pinnedFileExists(ctx context.Context, root, commit, path string) bool {
+	//nolint:gosec // G204: git with a commit SHA validated as 40 hex digits and a fixed audited path.
+	return exec.CommandContext(ctx, "git", "-C", root, "cat-file", "-e", commit+":"+path).
+		Run() ==
+		nil
+}
+
+// TestAuditPinnedActionRejectsSiblingManifest is the negative control for a pinned commit that
+// carries both action.yml and action.yaml: the audited manifest matches, but the runner could load
+// the other one.
+func TestAuditPinnedActionRejectsSiblingManifest(t *testing.T) {
+	t.Parallel()
+
+	const path = ".github/actions/setup-desktop-build/action.yml"
+
+	repo := t.TempDir()
+	audited := []byte("name: Setup desktop build\n")
+	commitFixtureFile(t, repo, path, audited)
+	shadowed := commitFixtureFile(
+		t, repo, ".github/actions/setup-desktop-build/action.yaml", []byte("name: Unaudited\n"),
+	)
+	reference := ksailActionsRepository + "/.github/actions/setup-desktop-build@" + shadowed
+
+	err := auditPinnedAction(
+		t.Context(), repo, []string{reference}, "setup-desktop-build", path,
+		fmt.Sprintf("%x", sha256.Sum256(audited)),
+	)
+	if !errors.Is(err, errSiblingManifest) {
+		t.Fatalf("want %v, got %v", errSiblingManifest, err)
+	}
 }
