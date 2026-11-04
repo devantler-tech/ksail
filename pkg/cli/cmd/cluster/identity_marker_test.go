@@ -224,3 +224,66 @@ func TestUpdateRefreshesTheIdentityMarker(t *testing.T) {
 		})
 	}
 }
+
+// TestWriteClusterIdentityMarkerUsesTheNestedProvisionerContext pins the context the marker
+// connects to when none is configured: the one the provisioner writes. Real CI on ksail#8194
+// showed a nested vCluster written as "vcluster-nested-vcluster" while the marker looked for the
+// Docker driver's "vcluster-docker_nested-vcluster".
+func TestWriteClusterIdentityMarkerUsesTheNestedProvisionerContext(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name         string
+		distribution v1alpha1.Distribution
+		provider     v1alpha1.Provider
+		configured   string
+		want         string
+	}{
+		{
+			name:         "nested-vcluster",
+			distribution: v1alpha1.DistributionVCluster,
+			provider:     v1alpha1.ProviderKubernetes,
+			want:         "vcluster-nested",
+		},
+		{
+			name:         "nested-k3s",
+			distribution: v1alpha1.DistributionK3s,
+			provider:     v1alpha1.ProviderKubernetes,
+			want:         "k3k-nested",
+		},
+		{
+			name:         "docker-vcluster",
+			distribution: v1alpha1.DistributionVCluster,
+			provider:     v1alpha1.ProviderDocker,
+			want:         "vcluster-docker_nested",
+		},
+		{
+			name:         "configured-context-wins",
+			distribution: v1alpha1.DistributionVCluster,
+			provider:     v1alpha1.ProviderKubernetes,
+			configured:   "my-context",
+			want:         "my-context",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			clusterCfg := identityMarkerCluster(t)
+			clusterCfg.Spec.Cluster.Distribution = testCase.distribution
+			clusterCfg.Spec.Cluster.Provider = testCase.provider
+			clusterCfg.Spec.Cluster.Connection.Context = testCase.configured
+			cmd, _ := identityMarkerCmd()
+
+			var gotContext string
+
+			clusterpkg.ExportWriteClusterIdentityMarker(cmd, "nested", clusterCfg,
+				func(_, kubeContext string) (kubernetes.Interface, error) {
+					gotContext = kubeContext
+
+					return nil, errConnectionRefused
+				})
+
+			require.Equal(t, testCase.want, gotContext)
+		})
+	}
+}

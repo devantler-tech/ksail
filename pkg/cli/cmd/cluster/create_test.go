@@ -1642,16 +1642,16 @@ func TestRefreshAndVerifyKubeconfig_StatPermissionError(t *testing.T) {
 	assert.False(t, refresher.called, "should not attempt refresh on permission error")
 }
 
-func TestResolveCreatedContextName(t *testing.T) {
-	t.Parallel()
+type createdContextCase struct {
+	name         string
+	distribution v1alpha1.Distribution
+	provider     v1alpha1.Provider
+	clusterName  string
+	expected     string
+}
 
-	tests := []struct {
-		name         string
-		distribution v1alpha1.Distribution
-		provider     v1alpha1.Provider
-		clusterName  string
-		expected     string
-	}{
+func createdContextCases() []createdContextCase {
+	return []createdContextCase{
 		{
 			name:         "k3s on kubernetes provider uses k3k prefix",
 			distribution: v1alpha1.DistributionK3s,
@@ -1665,6 +1665,22 @@ func TestResolveCreatedContextName(t *testing.T) {
 			provider:     v1alpha1.ProviderDocker,
 			clusterName:  "my-cluster",
 			expected:     "k3d-my-cluster",
+		},
+		{
+			// The nested vCluster provisioner writes "vcluster-<name>", not the Docker
+			// driver's "vcluster-docker_<name>" (ksail#8194: the identity marker missed it).
+			name:         "vcluster on kubernetes provider uses the nested provisioner context",
+			distribution: v1alpha1.DistributionVCluster,
+			provider:     v1alpha1.ProviderKubernetes,
+			clusterName:  "nested-vcluster",
+			expected:     "vcluster-nested-vcluster",
+		},
+		{
+			name:         "vcluster on docker provider keeps the docker driver prefix",
+			distribution: v1alpha1.DistributionVCluster,
+			provider:     v1alpha1.ProviderDocker,
+			clusterName:  "my-cluster",
+			expected:     "vcluster-docker_my-cluster",
 		},
 		{
 			name:         "vanilla on kubernetes provider uses standalone kind prefix",
@@ -1681,8 +1697,12 @@ func TestResolveCreatedContextName(t *testing.T) {
 			expected:     "",
 		},
 	}
+}
 
-	for _, testCase := range tests {
+func TestResolveCreatedContextName(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range createdContextCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 

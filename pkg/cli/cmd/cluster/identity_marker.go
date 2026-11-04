@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/internal/buildmeta"
@@ -15,8 +16,9 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// identityMarkerTimeout bounds the marker write, so metadata can never hold up a create or update.
-const identityMarkerTimeout = 30 * time.Second
+// identityMarkerTimeout bounds the marker write, including the wait for a new API server to
+// accept connections, so metadata can never hold up a create or update for long.
+const identityMarkerTimeout = 60 * time.Second
 
 // identityMarkerClientFactory connects to the cluster the marker is written into.
 type identityMarkerClientFactory func(kubeconfigPath, kubeContext string) (kubernetes.Interface, error)
@@ -76,7 +78,7 @@ func writeIdentityMarker(
 		return fmt.Errorf("resolve kubeconfig path: %w", err)
 	}
 
-	client, err := newClient(kubeconfigPath, kubeContextFor(clusterCfg, clusterName))
+	client, err := newClient(kubeconfigPath, identityMarkerContext(clusterCfg, clusterName))
 	if err != nil {
 		return fmt.Errorf("connect to the cluster: %w", err)
 	}
@@ -100,4 +102,23 @@ func writeIdentityMarker(
 	}
 
 	return nil
+}
+
+// identityMarkerContext is the context of the cluster KSail just created or updated: the
+// configured one, else the context the provisioner writes. The distribution default alone is
+// wrong for nested clusters (a vCluster on the Kubernetes provider is "vcluster-<name>", not
+// "vcluster-docker_<name>"), so it goes through resolveCreatedContextName like create does.
+func identityMarkerContext(clusterCfg *v1alpha1.Cluster, clusterName string) string {
+	if configured := strings.TrimSpace(
+		clusterCfg.Spec.Cluster.Connection.Context,
+	); configured != "" {
+		return configured
+	}
+
+	provider := clusterCfg.Spec.Cluster.Provider
+	if provider == "" {
+		provider = v1alpha1.DefaultProviderForDistribution(clusterCfg.Spec.Cluster.Distribution)
+	}
+
+	return resolveCreatedContextName(clusterCfg.Spec.Cluster.Distribution, provider, clusterName)
 }

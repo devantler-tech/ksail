@@ -3,7 +3,12 @@ package clusteridentity_test
 import (
 	"context"
 	"errors"
+	"net"
+	"net/url"
+	"os"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusteridentity"
 	"github.com/stretchr/testify/require"
@@ -195,4 +200,62 @@ func TestWriteRetriesAConcurrentWrite(t *testing.T) {
 			)
 		})
 	}
+}
+
+func connectionRefused() error {
+	return &url.Error{
+		Op: "Get", URL: "https://10.5.0.2:31045/api/v1/namespaces/kube-system",
+		Err: &net.OpError{
+			Op: "dial", Net: "tcp",
+			Err: &os.SyscallError{Syscall: "connect", Err: syscall.ECONNREFUSED},
+		},
+	}
+}
+
+// TestWriteWaitsForANewAPIServer covers a nested cluster whose API is reported ready before its
+// NodePort accepts connections (ksail#8194, nested Talos in CI): the marker is written once the
+// server answers instead of warning on the first refused connection.
+func TestWriteWaitsForANewAPIServer(t *testing.T) {
+	t.Parallel()
+
+	client := fake.NewClientset(kubeSystem(liveUID))
+	refusals := 0
+
+	client.PrependReactor(
+		"get",
+		"namespaces",
+		func(k8stesting.Action) (bool, runtime.Object, error) {
+			if refusals < 2 {
+				refusals++
+
+				return true, nil, connectionRefused()
+			}
+
+			return false, nil, nil
+		},
+	)
+
+	require.NoError(t, clusteridentity.Write(context.Background(), client, marker()))
+	require.Equal(t, 2, refusals)
+	require.Equal(t, string(liveUID), readMarker(t, client).Data[clusteridentity.KeyKubeSystemUID])
+}
+
+func TestWriteReportsAnAPIServerThatNeverAnswers(t *testing.T) {
+	t.Parallel()
+
+	client := fake.NewClientset(kubeSystem(liveUID))
+	client.PrependReactor(
+		"get",
+		"namespaces",
+		func(k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, connectionRefused()
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+
+	err := clusteridentity.Write(ctx, client, marker())
+	require.ErrorContains(t, err, "connection refused", "the warning names the real cause")
+	requireNoMarker(t, client)
 }

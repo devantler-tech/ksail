@@ -9,10 +9,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	utilnet "k8s.io/apimachinery/pkg/util/net"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/util/retry"
@@ -38,6 +41,9 @@ const (
 
 	managedByLabel = "app.kubernetes.io/managed-by"
 	managedByValue = "ksail"
+
+	// readRetryInterval spaces the reads while a new API server comes up.
+	readRetryInterval = time.Second
 )
 
 // ErrNoKubeSystemUID is returned when the kube-system namespace reports no UID, so the
@@ -56,7 +62,7 @@ type Marker struct {
 // kube-system namespace UID. Replacing the whole data map means a stale or copied field never
 // survives a refresh.
 func Write(ctx context.Context, client kubernetes.Interface, marker Marker) error {
-	namespace, err := client.CoreV1().Namespaces().Get(ctx, Namespace, metav1.GetOptions{})
+	namespace, err := readKubeSystem(ctx, client)
 	if err != nil {
 		return fmt.Errorf("read the %s namespace: %w", Namespace, err)
 	}
@@ -81,6 +87,50 @@ func Write(ctx context.Context, client kubernetes.Interface, marker Marker) erro
 	return retry.OnError(retry.DefaultBackoff, isWriteRace, func() error {
 		return writeOnce(ctx, configMaps, data)
 	})
+}
+
+// readKubeSystem reads the kube-system namespace, waiting while a freshly created API server
+// still refuses connections: a nested cluster's NodePort can lag the provisioner's "ready"
+// report (ksail#8194, nested Talos in CI). Only transient connection errors are retried, until
+// ctx ends; the last one is returned so the warning names the real cause.
+func readKubeSystem(ctx context.Context, client kubernetes.Interface) (*corev1.Namespace, error) {
+	var (
+		namespace *corev1.Namespace
+		lastErr   error
+	)
+
+	err := wait.PollUntilContextCancel(ctx, readRetryInterval, true,
+		func(ctx context.Context) (bool, error) {
+			found, err := client.CoreV1().Namespaces().Get(ctx, Namespace, metav1.GetOptions{})
+			if err == nil {
+				namespace = found
+
+				return true, nil
+			}
+
+			if !isNotYetReachable(err) {
+				return false, err //nolint:wrapcheck // wrapped once by the caller below
+			}
+
+			lastErr = err
+
+			return false, nil
+		})
+	if err == nil {
+		return namespace, nil
+	}
+
+	if lastErr != nil && ctx.Err() != nil {
+		return nil, fmt.Errorf("API server still unreachable: %w", lastErr)
+	}
+
+	return nil, fmt.Errorf("get: %w", err)
+}
+
+// isNotYetReachable reports an API server that is not accepting requests yet.
+func isNotYetReachable(err error) bool {
+	return utilnet.IsConnectionRefused(err) || utilnet.IsConnectionReset(err) ||
+		utilnet.IsProbableEOF(err) || apierrors.IsServiceUnavailable(err)
 }
 
 func isWriteRace(err error) bool {
