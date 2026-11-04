@@ -38,22 +38,9 @@ read -r -a version_args <<<"${K8S_VERSION_FLAG:-}"
 [[ ${#version_args[@]} == 2 && ${version_args[0]} == --kubernetes-version ]] ||
 	fail 'missing create-time Kubernetes version pin'
 
-command -v helm >/dev/null || fail 'Helm CLI is required to seed the live release'
-helm version --short >"$log_dir/helm-version.txt"
-case "$(cat "$log_dir/helm-version.txt")" in
-v3.*)
-	helm_list_args=(--all --namespace "$namespace")
-	helm_rollback_flag=--atomic
-	helm_conflict_args=()
-	;;
-v4.*)
-	helm_list_args=(--namespace "$namespace")
-	helm_rollback_flag=--rollback-on-failure
-	# KSail installs with server-side apply under its own field manager.
-	helm_conflict_args=(--server-side=true --force-conflicts)
-	;;
-*) fail 'unsupported Helm major version' ;;
-esac
+# shellcheck source=.github/actions/ksail-system-test/helm-cli.sh
+source "$(dirname "${BASH_SOURCE[0]}")/helm-cli.sh"
+select_helm_cli_args "$namespace" "$log_dir"
 
 # Prints "<revision> <chart version>" of the single deployed release.
 release_state() {
