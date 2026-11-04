@@ -76,14 +76,9 @@ type trackedResource struct {
 func (c *Client) argoCDReleaseOwnershipLabels(
 	ctx context.Context, releaseName, namespace string,
 ) (map[string]string, error) {
-	config, err := c.settings.RESTClientGetter().ToRESTConfig()
+	config, client, err := c.ownershipClient("Argo CD")
 	if err != nil {
-		return nil, fmt.Errorf("get REST config for Argo CD release ownership: %w", err)
-	}
-
-	client, err := dynamic.NewForConfig(config)
-	if err != nil {
-		return nil, fmt.Errorf("create client for Argo CD release ownership: %w", err)
+		return nil, err
 	}
 
 	resource := client.Resource(schema.GroupVersionResource{
