@@ -1058,3 +1058,13 @@ func ExportChartValuesDriftFields() []string {
 
 	return fields
 }
+
+// ExportResolveImplicitEKSKubeContext exports resolveImplicitEKSKubeContext for testing.
+func ExportResolveImplicitEKSKubeContext(ctx *localregistry.Context) error {
+	return resolveImplicitEKSKubeContext(context.Background(), ctx)
+}
+
+// ExportRecordUnselectableKubeContext exports recordUnselectableKubeContext for testing.
+func ExportRecordUnselectableKubeContext(diff *clusterupdate.UpdateResult, err error) {
+	recordUnselectableKubeContext(diff, err)
+}
