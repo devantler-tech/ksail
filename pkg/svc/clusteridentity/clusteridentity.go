@@ -77,14 +77,10 @@ func Write(ctx context.Context, client kubernetes.Interface, marker Marker) erro
 
 	// Another writer may change the marker between the read and the write: retry from a fresh
 	// read on a conflict, or when it was created after our read found none.
-	err = retry.OnError(retry.DefaultBackoff, isWriteRace, func() error {
+	//nolint:wrapcheck // writeOnce already wraps every error it returns with its own context.
+	return retry.OnError(retry.DefaultBackoff, isWriteRace, func() error {
 		return writeOnce(ctx, configMaps, data)
 	})
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func isWriteRace(err error) bool {
