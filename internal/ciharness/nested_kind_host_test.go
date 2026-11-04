@@ -1,6 +1,7 @@
 package ciharness_test
 
 import (
+	"os"
 	"os/exec"
 	"testing"
 
@@ -38,6 +39,7 @@ func TestNestedKindHostPreparationRejectsUnsafeEvidence(t *testing.T) {
 		"bash",
 		"../../.github/scripts/prepare-nested-kind-host.test.sh",
 	)
+	command.Env = append(os.Environ(), "TMPDIR="+t.TempDir())
 	output, err := command.CombinedOutput()
 	require.NoError(t, err, string(output))
 }
