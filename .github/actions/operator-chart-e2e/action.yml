@@ -169,9 +169,11 @@ runs:
         echo "=== Host cluster observed identity ==="
         # The operator self-registers the kind hub as the "host" Cluster with an empty spec and
         # reports the identity its nodes prove in status: kind's kind:// provider IDs mean
-        # upstream Kubernetes (Vanilla) on Docker.
+        # upstream Kubernetes (Vanilla) on Docker. Poll for ~2 minutes: when the first node read
+        # fails, the host reconcile only retries after its 60s ready requeue, so the window must
+        # cover at least one full retry interval after polling starts.
         dist="" prov=""
-        for _ in $(seq 1 30); do
+        for _ in $(seq 1 60); do
           dist=$(kubectl -n "$NS" get clusters.ksail.io host -o jsonpath='{.status.observedDistribution}' 2>/dev/null || true)
           prov=$(kubectl -n "$NS" get clusters.ksail.io host -o jsonpath='{.status.observedProvider}' 2>/dev/null || true)
           [ "$dist" = "Vanilla" ] && [ "$prov" = "Docker" ] && break
@@ -182,9 +184,11 @@ runs:
           echo "❌ Expected the host cluster to report Vanilla/Docker, got '${dist}'/'${prov}'"
           exit 1
         fi
-        spec_dist=$(kubectl -n "$NS" get clusters.ksail.io host -o jsonpath='{.spec.cluster.distribution}')
-        if [ -n "$spec_dist" ]; then
-          echo "❌ The host cluster's spec must stay empty, got distribution '${spec_dist}'"
+        # The whole spec must be empty, not just its distribution: any populated leaf (a provider,
+        # a count, a flag) fails the check. Empty nested objects carry no desired state and pass.
+        host_spec=$(kubectl -n "$NS" get clusters.ksail.io host -o json | jq -c '.spec // {}')
+        if ! jq -e '[.. | scalars] | length == 0' <<<"$host_spec" >/dev/null; then
+          echo "❌ The host cluster's spec must stay empty, got ${host_spec}"
           exit 1
         fi
         echo "  ✅ host cluster reports Vanilla on Docker in status, spec left empty"

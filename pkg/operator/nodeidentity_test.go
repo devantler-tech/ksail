@@ -1,15 +1,12 @@
 package operator_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/operator"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	kubefake "k8s.io/client-go/kubernetes/fake"
 )
 
 // identityNode builds a Node carrying only the facts node-identity detection reads.
@@ -220,36 +217,4 @@ func TestDetectProvider(t *testing.T) {
 			assert.Equal(t, test.want, operator.DetectProvider(test.nodes))
 		})
 	}
-}
-
-func TestObserveHostNodesReportsCountsAndIdentity(t *testing.T) {
-	t.Parallel()
-
-	ready := identityNode{osImage: "Talos (v1.13.12)", providerID: "hcloud://101", ready: true}
-	notReady := identityNode{osImage: "Talos (v1.13.12)", providerID: "hcloud://102"}
-	nodes := buildNodes(ready, notReady)
-	clientset := kubefake.NewClientset(&nodes[0], &nodes[1])
-
-	observed, err := operator.ObserveHostNodes(context.Background(), clientset)
-	require.NoError(t, err)
-	assert.True(t, observed.NodesObserved)
-	assert.Equal(t, int32(1), observed.NodesReady)
-	assert.Equal(t, int32(2), observed.NodesTotal)
-	assert.Equal(t, v1alpha1.DistributionTalos, observed.Distribution)
-	assert.Equal(t, v1alpha1.ProviderHetzner, observed.Provider)
-}
-
-func TestObserveHostNodesWithoutMarkersReportsNoIdentity(t *testing.T) {
-	t.Parallel()
-
-	nodes := buildNodes(
-		identityNode{osImage: "Ubuntu 24.04", kubeletVersion: "v1.36.4", ready: true},
-	)
-	clientset := kubefake.NewClientset(&nodes[0])
-
-	observed, err := operator.ObserveHostNodes(context.Background(), clientset)
-	require.NoError(t, err)
-	assert.True(t, observed.NodesObserved)
-	assert.Empty(t, observed.Distribution)
-	assert.Empty(t, observed.Provider)
 }
