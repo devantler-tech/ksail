@@ -99,7 +99,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-read -r original_revision chart_version <<<"$(release_state original)"
+state=$(release_state original)
+read -r original_revision chart_version <<<"$state"
 [[ "$chart_version" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]] ||
 	fail 'could not read the installed chart version'
 read_values original "$original_revision"
@@ -114,7 +115,8 @@ helm upgrade "$release" "$release" --repo "$chart_repo" \
 	--wait --timeout 10m >"$log_dir/seed-upgrade.log" 2>&1 ||
 	fail "seeding upgrade failed; see $log_dir/seed-upgrade.log"
 seeded=true
-read -r seed_revision _ <<<"$(release_state seeded)"
+state=$(release_state seeded)
+read -r seed_revision _ <<<"$state"
 [[ "$seed_revision" == "$((original_revision + 1))" ]] || fail 'seeding did not create exactly one revision'
 read_values seeded "$seed_revision"
 jq -e '.podAnnotations["ksail-adoption-trial"] == "seeded"' "$log_dir/seeded-values.json" >/dev/null ||
@@ -156,18 +158,27 @@ for _ in $(seq 1 60); do
 done
 [[ "$tracked" == true ]] || fail 'Argo CD never tracked the Gatekeeper controller Deployment'
 
+# The release must now be recognised as adopted, not merely left alone: a failed ownership
+# lookup is only a warning to diff and update, which would also leave it untouched.
+diff_status=0
+ksail cluster diff --config "$config_file" --output json --exit-code \
+	>"$log_dir/adopted-diff.stdout" 2>"$log_dir/adopted-diff.stderr" || diff_status=$?
+[[ "$diff_status" == 0 || "$diff_status" == 2 ]] || fail "adopted diff failed (exit $diff_status)"
+jq -e -s 'length == 1 and (.[0].inPlaceChanges // [] | any(.field == "cluster.policyEngine.chartValues") | not)' \
+	"$log_dir/adopted-diff.stdout" >/dev/null || fail 'diff still reports the adopted Gatekeeper values'
+! grep -q 'Cannot compare policy-engine values' "$log_dir/adopted-diff.stderr" || fail 'diff could not compare values: the ownership lookup failed'
+
 # 3. Update: the adopted release must be left alone.
 ksail cluster update --config "$config_file" --yes "${version_args[@]}" \
 	>"$log_dir/update.stdout" 2>"$log_dir/update.stderr" || fail "cluster update failed; see $log_dir/update.stderr"
-read -r updated_revision _ <<<"$(release_state updated)"
+state=$(release_state updated)
+read -r updated_revision _ <<<"$state"
 [[ "$updated_revision" == "$seed_revision" ]] ||
 	fail "cluster update changed the adopted release (revision $seed_revision → $updated_revision)"
 read_values updated "$updated_revision"
 cmp -s "$log_dir/seeded-values.json" "$log_dir/updated-values.json" ||
 	fail 'cluster update changed the adopted release values'
+! grep -q 'Cannot compare policy-engine values' "$log_dir/update.stderr" || fail 'update could not compare values: the ownership lookup failed'
 cmp -s "$config_file" "$log_dir/ksail-before.yaml" || fail 'the trial changed the declared KSail spec'
-if grep -q "release \"$release\" is managed by ArgoCD" "$log_dir/update.stderr"; then
-	echo 'Argo CD adoption trial: update printed the skip notice for the adopted release'
-fi
 
 echo "Argo CD adoption trial: update left the adopted release at revision $seed_revision with its values"
