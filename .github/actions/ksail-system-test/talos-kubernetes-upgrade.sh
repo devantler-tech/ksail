@@ -37,12 +37,13 @@ read -r -a update_args <<<"$update_args_text"
 upgrade_stdout_file="$log_dir/talos-kubernetes-upgrade.stdout"
 upgrade_stderr_file="$log_dir/talos-kubernetes-upgrade.stderr"
 upgrade_status=0
+# Stream progress to the job log while it runs, so a cancelled or timed-out job still shows it.
 timeout --kill-after=10s 900s ksail cluster update --force --output json --distribution Talos --provider Docker \
 	${update_args[@]+"${update_args[@]}"} --kubernetes-version "$UPGRADE_TO" \
-	>"$upgrade_stdout_file" 2>"$upgrade_stderr_file" || upgrade_status=$?
-cat "$upgrade_stderr_file"
+	>"$upgrade_stdout_file" 2> >(tee "$upgrade_stderr_file" >&2) || upgrade_status=$?
 if [[ "$upgrade_status" -ne 0 ]]; then
 	echo "❌ ERROR: explicit Talos Kubernetes upgrade failed"
+	cat "$upgrade_stdout_file"
 	exit 1
 fi
 if ! jq -e -s 'length == 1 and (.[0] | type == "object")' "$upgrade_stdout_file" >/dev/null 2>&1; then
