@@ -362,6 +362,7 @@ jobs:
               - '.github/fixtures/**'
               - '.github/scripts/assert-gitops-deployed.sh'
               - '.github/scripts/build-calico-migration-baseline.sh'
+              - '.github/scripts/prepare-nested-kind-host.sh'
               - '.github/workflows/ci.yaml'
             schema:
               - 'pkg/apis/**/*.go'
@@ -2109,6 +2110,17 @@ jobs:
             test-kubernetes-provider: "true"
             kubernetes-provider-distributions: "K3s"
             kubernetes-provider-cni: "Calico"
+          # Reproduce the nested Kind return-route collision on a two-node host.
+          # Placement is not pinned: DinD and the advertised NodePort may share an
+          # outer node. The collision does not depend on it, because replies to any
+          # outer kind-network address are captured by an overlapping inner bridge.
+          # Other nested distributions retain their complete default-host legs.
+          - distribution: Vanilla
+            provider: Docker
+            init: true
+            args: "--name nested-kind-routing --workers 1"
+            test-kubernetes-provider: "true"
+            kubernetes-provider-distributions: "Vanilla"
           # Keep the fresh 3.33 installations above, and also create these with
           # the immutable 3.32.2 CLI before the candidate's unchanged-config update.
           - distribution: Vanilla
@@ -2134,6 +2146,14 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Prepare nested Kind watcher capacity
+        # Only the explicit two-node nested Vanilla reproducer. The worker
+        # journal reported descriptor exhaustion; outer and nested kubelets
+        # share the disposable runner's inotify budget (Kind known issues).
+        if: ${{ matrix.test-kubernetes-provider == 'true' && matrix.kubernetes-provider-distributions == 'Vanilla' }}
+        run: |
+          bash .github/scripts/prepare-nested-kind-host.sh
 
       - name: 🧹 Free disk space
         # Reclaim ~30 GB before pulling system-test images and spinning up
