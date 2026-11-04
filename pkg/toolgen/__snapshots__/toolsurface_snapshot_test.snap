@@ -1013,7 +1013,7 @@ workload_write
         "type": "string"
       },
       "namespace": {
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, create, debug, delete, exec, expose, install, intercept, mirror, rollout, scale)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, create, create_helmrelease, create_kustomization, create_source_git, create_source_helm, create_source_oci, debug, delete, exec, expose, install, intercept, mirror, rollout, scale)",
         "type": "string"
       },
       "node-port": {
