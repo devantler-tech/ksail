@@ -56,11 +56,11 @@ Distribution is chosen via `--distribution` (`Vanilla`, `K3s`, `Talos`, `VCluste
 
 - **When the tools are available**, prefer them for cluster and workload operations.
 - **When they are not**, run the same operations with the `ksail` CLI. Never block on the MCP server.
-- **If the user wants the tools and the client lacks them**, look for an existing `ksail` entry first (`claude mcp list` in Claude Code, `codex mcp list` in Codex) and fix it rather than adding a duplicate:
-  - *Disabled:* enable it. In Claude Code, use the `/mcp` panel. Codex has no enable command, so set `enabled = true` under `[mcp_servers.ksail]` in the Codex config file that defines it (usually `~/.codex/config.toml`).
+- **If the user wants the tools and the client lacks them**, change the client's MCP setup only with the user's agreement. Look for an existing ksail entry first (`claude mcp list` in Claude Code, where a plugin's server is listed as `plugin:<plugin>:ksail`; `codex mcp list` in Codex). Before enabling or approving one, confirm with `claude mcp get <name>` or `codex mcp get <name>` that it runs `ksail open mcp`; never approve an entry that runs anything else. Then:
+  - *Disabled:* enable it. In Claude Code, use the `/mcp` panel. Codex has no enable command, so set `enabled = true` in the existing `[mcp_servers.<name>]` table of the Codex config file that defines it (usually `~/.codex/config.toml`); never create a table that holds only `enabled`, which breaks Codex's config.
   - *Pending approval:* approve it from Claude Code's `/mcp` panel; Claude Code asks before starting a project-scoped server.
-  - *Failed to connect:* check that `ksail` is on the `PATH` the client sees and that `ksail open mcp` starts. See <https://ksail.devantler.tech/integrations/mcp/#troubleshooting>.
-  - *No entry:* register it with the user's agreement: `claude mcp add ksail -- ksail open mcp` in Claude Code, or `codex mcp add ksail -- ksail open mcp` in Codex. Clients that read an `mcpServers` map take `{"mcpServers": {"ksail": {"command": "ksail", "args": ["open", "mcp"]}}}`. Per-client steps: <https://ksail.devantler.tech/integrations/ai-mcp/>.
+  - *Failed to connect:* check that `ksail` is on the `PATH` the client sees and that `ksail open mcp </dev/null` starts and exits cleanly (without the redirect it waits on stdin). See <https://ksail.devantler.tech/integrations/mcp/#troubleshooting>.
+  - *No entry:* register it: `claude mcp add ksail -- ksail open mcp` in Claude Code, or `codex mcp add ksail -- ksail open mcp` in Codex. Clients that read an `mcpServers` map take `{"mcpServers": {"ksail": {"command": "ksail", "args": ["open", "mcp"]}}}`. Per-client steps: <https://ksail.devantler.tech/integrations/ai-mcp/>.
 
 ## Safety
 
