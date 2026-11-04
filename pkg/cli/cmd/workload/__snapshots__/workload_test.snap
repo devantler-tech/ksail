@@ -850,6 +850,7 @@ Flags:
       --export                    export in YAML format to stdout
   -h, --help                      help for helmrelease
       --interval duration         reconciliation interval (default 1m0s)
+  -n, --namespace string          the namespace scope for this operation (default "flux-system")
       --source string             source name in format 'Kind/name' or 'Kind/name.namespace'
       --source-kind string        source kind (HelmRepository, GitRepository, Bucket) (default "HelmRepository")
       --target-namespace string   namespace to install the Helm release
@@ -992,6 +993,7 @@ Flags:
   -h, --help                      help for kustomization
       --ignore-paths strings      JSON Pointer paths (RFC 6901) excluded from drift detection and apply for all objects, e.g. /spec/replicas
       --interval duration         reconciliation interval (default 1m0s)
+  -n, --namespace string          the namespace scope for this operation (default "flux-system")
       --path string               path to the directory containing a kustomization.yaml file (default "./")
       --prune                     enable garbage collection
       --source string             source name in format 'Kind/name' or 'Kind/name.namespace'
@@ -1632,6 +1634,7 @@ Flags:
       --export                     export in YAML format to stdout
   -h, --help                       help for git
       --interval duration          source sync interval (default 1m0s)
+  -n, --namespace string           the namespace scope for this operation (default "flux-system")
       --secret-ref string          the name of an existing secret containing SSH or basic credentials
       --tag string                 git tag
       --tag-semver string          git tag semver range
@@ -1666,6 +1669,7 @@ Flags:
       --export                export in YAML format to stdout
   -h, --help                  help for helm
       --interval duration     source sync interval (default 1m0s)
+  -n, --namespace string      the namespace scope for this operation (default "flux-system")
       --oci-provider string   OCI provider for authentication
       --pass-credentials      pass credentials to all domains
       --secret-ref string     the name of an existing secret containing credentials
@@ -1702,6 +1706,7 @@ Flags:
   -h, --help                help for oci
       --insecure            allow insecure connections
       --interval duration   source sync interval (default 1m0s)
+  -n, --namespace string    the namespace scope for this operation (default "flux-system")
       --provider string     OCI provider (default "generic")
       --secret-ref string   the name of an existing secret containing credentials
       --tag string          OCI artifact tag

@@ -1,15 +1,17 @@
 
-[TestCreateGitRepository_VerifySignedCommits/tag-and-head - 1]
+[TestCreateGitRepository_VerifySignedCommits/tag-semver - 1]
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
 metadata:
   name: podinfo
   namespace: flux-system
 spec:
   interval: 1m0s
   ref:
-    tag: 6.6.2
+    semver: '>=6.0.0'
   url: https://github.com/stefanprodan/podinfo
   verify:
-    mode: TagAndHEAD
+    mode: Tag
     secretRef:
       name: git-signing-keys
 status: {}
@@ -17,6 +19,8 @@ status: {}
 ---
 
 [TestCreateGitRepository_VerifySignedCommits/head-default - 1]
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
 metadata:
   name: podinfo
   namespace: flux-system
@@ -33,17 +37,19 @@ status: {}
 
 ---
 
-[TestCreateGitRepository_VerifySignedCommits/tag-semver - 1]
+[TestCreateGitRepository_VerifySignedCommits/tag-and-head - 1]
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
 metadata:
   name: podinfo
   namespace: flux-system
 spec:
   interval: 1m0s
   ref:
-    semver: '>=6.0.0'
+    tag: 6.6.2
   url: https://github.com/stefanprodan/podinfo
   verify:
-    mode: Tag
+    mode: TagAndHEAD
     secretRef:
       name: git-signing-keys
 status: {}

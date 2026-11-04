@@ -57,11 +57,16 @@ func TestCreateGitRepository_VerifySignedCommits(t *testing.T) {
 			require.Contains(t, output, "verify:")
 			snaps.MatchSnapshot(t, output)
 
-			// --export omits apiVersion and kind today, so name them to select the Flux
+			// --export writes apiVersion and kind (ksail#8190), which select the Flux
 			// GitRepository v1 schema the spec.verify block must satisfy.
+			require.Contains(
+				t,
+				output,
+				"apiVersion: source.toolkit.fluxcd.io/v1\nkind: GitRepository\n",
+			)
+
 			manifest := filepath.Join(t.TempDir(), "gitrepository.yaml")
-			require.NoError(t, os.WriteFile(manifest, []byte(
-				"apiVersion: source.toolkit.fluxcd.io/v1\nkind: GitRepository\n"+output), 0o600))
+			require.NoError(t, os.WriteFile(manifest, []byte(output), 0o600))
 			require.NoError(t, kubeconform.NewClient().ValidateFile(
 				context.Background(),
 				manifest, &kubeconform.ValidationOptions{SkipKinds: []string{}},
