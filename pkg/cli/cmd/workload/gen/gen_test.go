@@ -143,6 +143,22 @@ func genValidateCases() []genValidateCase {
 				"--export",
 			},
 		},
+		{
+			"receiver-generic-oidc", gen.NewReceiverCmd,
+			[]string{
+				"test-receiver", "--type=generic-oidc",
+				"--oidc-issuer=https://token.actions.githubusercontent.com",
+				"--oidc-validation=claims.repository_owner == 'my-org'",
+				"--resource=GitRepository/webapp=res.metadata.name == 'webapp'",
+			},
+		},
+		{
+			"receiver-github", gen.NewReceiverCmd,
+			[]string{
+				"test-receiver", "--type=github", "--events=push", "--secret-ref=token",
+				"--resource=Kustomization/apps.flux-system",
+			},
+		},
 	}
 }
 
@@ -216,6 +232,7 @@ func TestNewGenCmd_HasSubcommands(t *testing.T) {
 		"poddisruptionbudget",
 		"priorityclass",
 		"helmrelease",
+		"receiver",
 	}
 
 	for _, expected := range expectedSubcommands {
