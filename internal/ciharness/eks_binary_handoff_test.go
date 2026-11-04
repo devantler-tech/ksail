@@ -20,9 +20,7 @@ func TestEKSSmokeInstallsTheBuildJobBinary(t *testing.T) {
 	assert.Contains(t, consumer.Needs, "build-artifact")
 
 	restore := findHarnessStep(t, consumer.Steps, "📥 Restore KSail binary")
-	assert.Equal(t,
-		"devantler-tech/ksail/.github/actions/restore-ksail-binary@"+
-			"fc38423661fd6eaceb03ec49cd0634108c4ac18f", restore.Uses)
+	assert.Equal(t, ksailActionPin(t, "restore-ksail-binary"), restore.Uses)
 	assert.Equal(
 		t,
 		"${{ needs.build-artifact.outputs.artifact-id }}",

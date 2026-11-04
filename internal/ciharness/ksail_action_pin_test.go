@@ -79,7 +79,10 @@ func workflowStepUses(t *testing.T, path string) []string {
 func TestKSailActionPinsAgreeAcrossConsumers(t *testing.T) {
 	t.Parallel()
 
-	for _, action := range []string{"free-disk-space", "restore-ksail-binary", "setup-desktop-build"} {
+	for _, action := range []string{
+		"free-disk-space", "release-admission", "restore-go-modules", "restore-ksail-binary",
+		"setup-desktop-build",
+	} {
 		t.Run(action, func(t *testing.T) {
 			t.Parallel()
 
