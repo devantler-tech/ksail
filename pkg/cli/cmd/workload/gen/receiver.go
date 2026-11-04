@@ -3,6 +3,7 @@ package gen
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -16,6 +17,10 @@ const (
 	receiverKind           = "Receiver"
 	receiverTypeGenericOID = "generic-oidc"
 	defaultReceiverNS      = "flux-system"
+
+	sourceAPIVersion       = "source.toolkit.fluxcd.io/v1"
+	imageAPIVersion        = "image.toolkit.fluxcd.io/v1"
+	fluxOperatorAPIVersion = "fluxcd.controlplane.io/v1"
 )
 
 const receiverExamples = `  # Generate a secret-less Receiver that GitHub Actions can call with its OIDC
@@ -27,12 +32,12 @@ const receiverExamples = `  # Generate a secret-less Receiver that GitHub Action
     --oidc-validation-message="only my-org workflows may trigger a reconcile" \
     --resource=GitRepository/webapp
 
-  # Reconcile only the OCIRepositories labelled for the pushed repository
+  # Reconcile an OCIRepository only when the calling workflow ran in its own repository
   ksail workload gen receiver releases \
     --type=generic-oidc \
     --oidc-issuer=https://token.actions.githubusercontent.com \
     --oidc-validation="claims.repository_owner == 'my-org'" \
-    --resource="OCIRepository/*=res.metadata.labels['repo'] == claims.repository"
+    --resource="OCIRepository/webapp=res.metadata.annotations['repo'] == claims.repository"
 
   # Generate a GitHub webhook Receiver whose token is read from a Secret
   ksail workload gen receiver github-push \
@@ -60,6 +65,12 @@ var (
 	errOIDCMessageCount      = errors.New(
 		"give one --oidc-validation-message per --oidc-validation, or none",
 	)
+	errReceiverWildcard = errors.New(
+		"a wildcard name needs matchLabels, which this command does not generate; name each resource",
+	)
+	errBlankOIDCValue = errors.New(
+		"--oidc-validation and --oidc-validation-message must not be blank",
+	)
 
 	issuerURLPattern = regexp.MustCompile(`^https?://`)
 )
@@ -72,14 +83,28 @@ var receiverTypes = []string{
 	"harbor", "dockerhub", "quay", "gcr", "nexus", "acr", "cdevents",
 }
 
-// receiverResourceKinds are the kinds a Receiver can request a reconciliation for.
+// receiverResourceAPIVersions maps each kind a Receiver can request a reconciliation for (the
+// Receiver CRD's resources[].kind enum) to its API version. The notification-controller
+// defaults the API version for only some source kinds and refuses every webhook for the rest,
+// so it is always written.
 //
-//nolint:gochecknoglobals // fixed allow-list mirrored from the Receiver CRD's resources[].kind enum.
-var receiverResourceKinds = []string{
-	"Bucket", "GitRepository", "Kustomization", "HelmRelease", "HelmChart", "HelmRepository",
-	"ImageRepository", "ImagePolicy", "ImageUpdateAutomation", "OCIRepository",
-	"ArtifactGenerator", "ExternalArtifact", "FluxInstance", "ResourceSet",
-	"ResourceSetInputProvider",
+//nolint:gochecknoglobals // fixed mapping mirrored from the Receiver CRD and the Flux APIs.
+var receiverResourceAPIVersions = map[string]string{
+	"Bucket":                   sourceAPIVersion,
+	"GitRepository":            sourceAPIVersion,
+	"HelmChart":                sourceAPIVersion,
+	"HelmRepository":           sourceAPIVersion,
+	"OCIRepository":            sourceAPIVersion,
+	"ExternalArtifact":         sourceAPIVersion,
+	"ArtifactGenerator":        "source.extensions.fluxcd.io/v1beta1",
+	"Kustomization":            "kustomize.toolkit.fluxcd.io/v1",
+	"HelmRelease":              "helm.toolkit.fluxcd.io/v2",
+	"ImageRepository":          imageAPIVersion,
+	"ImagePolicy":              imageAPIVersion,
+	"ImageUpdateAutomation":    imageAPIVersion,
+	"FluxInstance":             fluxOperatorAPIVersion,
+	"ResourceSet":              fluxOperatorAPIVersion,
+	"ResourceSetInputProvider": fluxOperatorAPIVersion,
 }
 
 type receiverManifest struct {
@@ -104,10 +129,11 @@ type receiverSpec struct {
 }
 
 type receiverResource struct {
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace,omitempty"`
-	Filter    string `json:"filter,omitempty"`
+	APIVersion string `json:"apiVersion"`
+	Kind       string `json:"kind"`
+	Name       string `json:"name"`
+	Namespace  string `json:"namespace,omitempty"`
+	Filter     string `json:"filter,omitempty"`
 }
 
 type receiverSecretRef struct {
@@ -163,7 +189,7 @@ func NewReceiverCmd() *cobra.Command {
 	flags.StringArray(
 		"resource",
 		nil,
-		"resource to reconcile, repeatable (Kind/name[.namespace][=<CEL filter>]; name may be *)",
+		"resource to reconcile, repeatable (Kind/name[.namespace][=<CEL filter>])",
 	)
 	flags.String(
 		"resource-filter",
@@ -318,16 +344,20 @@ func validateOIDCReceiver(cfg receiverConfig) error {
 		return errOIDCReceiverSecret
 	case !issuerURLPattern.MatchString(cfg.oidcIssuer):
 		return errOIDCReceiverIssuer
-	case !slices.ContainsFunc(cfg.oidcValidations, func(v string) bool {
-		return strings.TrimSpace(v) != ""
-	}):
+	case len(cfg.oidcValidations) == 0:
 		return errOIDCReceiverValidation
+	case slices.ContainsFunc(cfg.oidcValidations, isBlank) || slices.ContainsFunc(cfg.oidcMessages, isBlank):
+		return errBlankOIDCValue
 	case len(cfg.oidcMessages) > 0 && len(cfg.oidcMessages) != len(cfg.oidcValidations):
 		return fmt.Errorf("%w: %d messages for %d validations",
 			errOIDCMessageCount, len(cfg.oidcMessages), len(cfg.oidcValidations))
 	}
 
 	return nil
+}
+
+func isBlank(value string) bool {
+	return strings.TrimSpace(value) == ""
 }
 
 // parseReceiverResources reads repeated "Kind/name[.namespace][=<CEL filter>]" values.
@@ -346,20 +376,33 @@ func parseReceiverResources(values []string) ([]receiverResource, error) {
 			return nil, fmt.Errorf("%w %q: %w", errInvalidReceiverResource, value, err)
 		}
 
-		if ref.Name == "" {
+		switch ref.Name {
+		case "":
 			return nil, fmt.Errorf("%w %q: the name is empty", errInvalidReceiverResource, value)
+		case "*":
+			// Flux accepts a wildcard only together with matchLabels, which this command does
+			// not generate, so a wildcard would fail on every webhook.
+			return nil, fmt.Errorf(
+				"%w %q: %w",
+				errInvalidReceiverResource,
+				value,
+				errReceiverWildcard,
+			)
 		}
 
-		err = validateKind(ref.Kind, receiverResourceKinds, "resource")
-		if err != nil {
-			return nil, fmt.Errorf("%w %q: %w", errInvalidReceiverResource, value, err)
+		apiVersion, known := receiverResourceAPIVersions[ref.Kind]
+		if !known {
+			return nil, fmt.Errorf("%w %q: %w: %s kind %q, must be one of: %s",
+				errInvalidReceiverResource, value, errInvalidKind, "resource", ref.Kind,
+				strings.Join(slices.Sorted(maps.Keys(receiverResourceAPIVersions)), ", "))
 		}
 
 		resources = append(resources, receiverResource{
-			Kind:      ref.Kind,
-			Name:      ref.Name,
-			Namespace: ref.Namespace,
-			Filter:    strings.TrimSpace(filter),
+			APIVersion: apiVersion,
+			Kind:       ref.Kind,
+			Name:       ref.Name,
+			Namespace:  ref.Namespace,
+			Filter:     strings.TrimSpace(filter),
 		})
 	}
 

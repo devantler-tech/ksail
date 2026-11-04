@@ -1,24 +1,4 @@
 
-[TestGenReceiverWithSecretToken - 1]
-apiVersion: notification.toolkit.fluxcd.io/v1
-kind: Receiver
-metadata:
-  name: github-push
-  namespace: apps
-spec:
-  events:
-  - push
-  - ping
-  resources:
-  - kind: GitRepository
-    name: webapp
-    namespace: apps
-  secretRef:
-    name: webhook-token
-  type: github
-
----
-
 [TestGenReceiverFilteredResourcesRoundTrip - 1]
 apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Receiver
@@ -33,16 +13,40 @@ spec:
       message: the token does not satisfy validation 1
   resourceFilter: res.metadata.namespace != 'kube-system'
   resources:
-  - filter: res.metadata.labels['repo'] == claims.repository
+  - apiVersion: source.toolkit.fluxcd.io/v1
+    filter: res.metadata.annotations['repo'] == claims.repository
     kind: OCIRepository
-    name: '*'
-  - filter: '[''main'', ''release''].exists(b, b == req.ref)'
+    name: webapp
+  - apiVersion: helm.toolkit.fluxcd.io/v2
+    filter: '[''main'', ''release''].exists(b, b == req.ref)'
     kind: HelmRelease
     name: podinfo
     namespace: apps
-  - kind: Kustomization
+  - apiVersion: kustomize.toolkit.fluxcd.io/v1
+    kind: Kustomization
     name: infra
   type: generic-oidc
+
+---
+
+[TestGenReceiverWithSecretToken - 1]
+apiVersion: notification.toolkit.fluxcd.io/v1
+kind: Receiver
+metadata:
+  name: github-push
+  namespace: apps
+spec:
+  events:
+  - push
+  - ping
+  resources:
+  - apiVersion: source.toolkit.fluxcd.io/v1
+    kind: GitRepository
+    name: webapp
+    namespace: apps
+  secretRef:
+    name: webhook-token
+  type: github
 
 ---
 
@@ -62,7 +66,8 @@ spec:
     - expression: claims.ref == 'refs/heads/main'
       message: only main may trigger a reconcile
   resources:
-  - kind: GitRepository
+  - apiVersion: source.toolkit.fluxcd.io/v1
+    kind: GitRepository
     name: webapp
   type: generic-oidc
 

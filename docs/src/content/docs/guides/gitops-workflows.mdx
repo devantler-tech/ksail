@@ -281,7 +281,7 @@ ksail workload gen receiver github-actions \
 
 Always constrain the caller's identity: a public issuer signs tokens for anyone on its platform, so a
 valid signature alone authorizes nothing. Each `--resource` may carry its own CEL filter after `=`
-(for example `OCIRepository/*=res.metadata.labels['repo'] == claims.repository`), and
+(for example `OCIRepository/webapp=res.metadata.annotations['repo'] == claims.repository`), and
 `--resource-filter` applies one to every resource. Other webhook types (`github`, `gitlab`, …) read
 their token from `--secret-ref`.
 

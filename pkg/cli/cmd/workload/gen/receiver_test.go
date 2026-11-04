@@ -1,6 +1,7 @@
 package gen_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload/gen"
@@ -59,35 +60,37 @@ func TestGenReceiverFilteredResourcesRoundTrip(t *testing.T) {
 		"--type=generic-oidc",
 		githubIssuer,
 		"--oidc-validation=claims.repository_owner == 'my-org'",
-		"--resource=OCIRepository/*=res.metadata.labels['repo'] == claims.repository",
+		"--resource=OCIRepository/webapp=res.metadata.annotations['repo'] == claims.repository",
 		"--resource=HelmRelease/podinfo.apps=['main', 'release'].exists(b, b == req.ref)",
 		"--resource=Kustomization/infra",
 		"--resource-filter=res.metadata.namespace != 'kube-system'",
 	})
 	require.NoError(t, err)
 
+	type resource = struct {
+		APIVersion                    string `json:"apiVersion"`
+		Kind, Name, Namespace, Filter string
+	}
+
 	var receiver struct {
 		Spec struct {
-			ResourceFilter string `json:"resourceFilter"`
-			Resources      []struct {
-				Kind, Name, Namespace, Filter string
-			} `json:"resources"`
+			ResourceFilter string     `json:"resourceFilter"`
+			Resources      []resource `json:"resources"`
 		} `json:"spec"`
 	}
 
 	require.NoError(t, yaml.Unmarshal([]byte(output), &receiver))
 	require.Equal(t, "res.metadata.namespace != 'kube-system'", receiver.Spec.ResourceFilter)
-	require.Equal(t, []struct{ Kind, Name, Namespace, Filter string }{
+	require.Equal(t, []resource{
 		{
-			Kind:   "OCIRepository",
-			Name:   "*",
-			Filter: "res.metadata.labels['repo'] == claims.repository",
+			APIVersion: "source.toolkit.fluxcd.io/v1", Kind: "OCIRepository", Name: "webapp",
+			Filter: "res.metadata.annotations['repo'] == claims.repository",
 		},
 		{
-			Kind: "HelmRelease", Name: "podinfo", Namespace: "apps",
-			Filter: "['main', 'release'].exists(b, b == req.ref)",
+			APIVersion: "helm.toolkit.fluxcd.io/v2", Kind: "HelmRelease", Name: "podinfo",
+			Namespace: "apps", Filter: "['main', 'release'].exists(b, b == req.ref)",
 		},
-		{Kind: "Kustomization", Name: "infra"},
+		{APIVersion: "kustomize.toolkit.fluxcd.io/v1", Kind: "Kustomization", Name: "infra"},
 	}, receiver.Spec.Resources)
 	snaps.MatchSnapshot(t, output)
 }
@@ -97,17 +100,27 @@ type receiverRefusal struct {
 	args       []string
 }
 
-func receiverRefusals() []receiverRefusal {
-	resource := "--resource=GitRepository/webapp"
-	validation := "--oidc-validation=claims.repository_owner == 'my-org'"
+const (
+	refusalResource   = "--resource=GitRepository/webapp"
+	refusalValidation = "--oidc-validation=claims.repository_owner == 'my-org'"
+)
 
+func receiverRefusals() []receiverRefusal {
+	return slices.Concat(tokenReceiverRefusals(), oidcReceiverRefusals(), oidcValueRefusals())
+}
+
+func tokenReceiverRefusals() []receiverRefusal {
 	return []receiverRefusal{
 		{
 			name: "missing-type",
-			args: []string{resource, "--secret-ref=t"},
+			args: []string{refusalResource, "--secret-ref=t"},
 			want: "--type is required",
 		},
-		{name: "unknown-type", args: []string{"--type=jenkins", resource}, want: "invalid --type"},
+		{
+			name: "unknown-type",
+			args: []string{"--type=jenkins", refusalResource},
+			want: "invalid --type",
+		},
 		{
 			name: "missing-resource",
 			args: []string{"--type=github", "--secret-ref=t"},
@@ -125,28 +138,33 @@ func receiverRefusals() []receiverRefusal {
 		},
 		{
 			name: "secret-type-without-secret",
-			args: []string{"--type=github", resource},
+			args: []string{"--type=github", refusalResource},
 			want: "--secret-ref is required",
 		},
 		{
 			name: "oidc-flags-on-secret-type",
-			args: []string{"--type=github", "--secret-ref=t", githubIssuer, resource},
+			args: []string{"--type=github", "--secret-ref=t", githubIssuer, refusalResource},
 			want: "require --type=generic-oidc",
 		},
+	}
+}
+
+func oidcReceiverRefusals() []receiverRefusal {
+	return []receiverRefusal{
 		{
 			name: "oidc-with-secret",
 			args: []string{
 				"--type=generic-oidc",
 				githubIssuer,
-				validation,
+				refusalValidation,
 				"--secret-ref=t",
-				resource,
+				refusalResource,
 			},
 			want: "not used by --type=generic-oidc",
 		},
 		{
 			name: "oidc-without-issuer",
-			args: []string{"--type=generic-oidc", validation, resource},
+			args: []string{"--type=generic-oidc", refusalValidation, refusalResource},
 			want: "--oidc-issuer",
 		},
 		{
@@ -154,22 +172,54 @@ func receiverRefusals() []receiverRefusal {
 			args: []string{
 				"--type=generic-oidc",
 				"--oidc-issuer=token.actions",
-				validation,
-				resource,
+				refusalValidation,
+				refusalResource,
 			},
 			want: "--oidc-issuer",
 		},
+	}
+}
+
+func oidcValueRefusals() []receiverRefusal {
+	return []receiverRefusal{
 		{
 			name: "oidc-message-count",
 			args: []string{
-				"--type=generic-oidc", githubIssuer, validation, resource,
+				"--type=generic-oidc", githubIssuer, refusalValidation, refusalResource,
 				"--oidc-validation-message=a", "--oidc-validation-message=b",
 			},
 			want: "one --oidc-validation-message per --oidc-validation",
 		},
 		{
+			name: "wildcard-name",
+			args: []string{"--type=github", "--secret-ref=t", "--resource=GitRepository/*"},
+			want: "a wildcard name needs matchLabels",
+		},
+		{
+			name: "blank-validation",
+			args: []string{
+				"--type=generic-oidc",
+				githubIssuer,
+				refusalValidation,
+				"--oidc-validation= ",
+				refusalResource,
+			},
+			want: "must not be blank",
+		},
+		{
+			name: "blank-message",
+			args: []string{
+				"--type=generic-oidc",
+				githubIssuer,
+				refusalValidation,
+				refusalResource,
+				"--oidc-validation-message= ",
+			},
+			want: "must not be blank",
+		},
+		{
 			name: "oidc-without-validation",
-			args: []string{"--type=generic-oidc", githubIssuer, resource},
+			args: []string{"--type=generic-oidc", githubIssuer, refusalResource},
 			want: "at least one --oidc-validation",
 		},
 	}

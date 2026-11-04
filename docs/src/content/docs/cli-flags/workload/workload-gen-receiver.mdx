@@ -21,12 +21,12 @@ Examples:
     --oidc-validation-message="only my-org workflows may trigger a reconcile" \
     --resource=GitRepository/webapp
 
-  # Reconcile only the OCIRepositories labelled for the pushed repository
+  # Reconcile an OCIRepository only when the calling workflow ran in its own repository
   ksail workload gen receiver releases \
     --type=generic-oidc \
     --oidc-issuer=https://token.actions.githubusercontent.com \
     --oidc-validation="claims.repository_owner == 'my-org'" \
-    --resource="OCIRepository/*=res.metadata.labels['repo'] == claims.repository"
+    --resource="OCIRepository/webapp=res.metadata.annotations['repo'] == claims.repository"
 
   # Generate a GitHub webhook Receiver whose token is read from a Secret
   ksail workload gen receiver github-push \
@@ -42,7 +42,7 @@ Flags:
       --oidc-issuer string                    OIDC issuer URL whose ID tokens are accepted (generic-oidc)
       --oidc-validation stringArray           CEL expression over the token claims that must be true, repeatable (generic-oidc)
       --oidc-validation-message stringArray   message returned when the matching --oidc-validation is false, repeatable in the same order (default: a generic refusal that does not reveal the expression)
-      --resource stringArray                  resource to reconcile, repeatable (Kind/name[.namespace][=<CEL filter>]; name may be *)
+      --resource stringArray                  resource to reconcile, repeatable (Kind/name[.namespace][=<CEL filter>])
       --resource-filter string                CEL expression every resource must pass before it is reconciled
       --secret-ref string                     Secret holding the webhook token (every type except generic-oidc)
       --type string                           webhook sender type (generic, generic-hmac, generic-oidc, github, gitlab, bitbucket, harbor, dockerhub, quay, gcr, nexus, acr, cdevents)
