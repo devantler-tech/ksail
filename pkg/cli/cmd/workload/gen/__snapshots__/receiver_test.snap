@@ -1,0 +1,74 @@
+
+[TestGenReceiverFilteredResourcesRoundTrip - 1]
+apiVersion: notification.toolkit.fluxcd.io/v1
+kind: Receiver
+metadata:
+  name: releases
+  namespace: flux-system
+spec:
+  oidcProviders:
+  - issuerURL: https://token.actions.githubusercontent.com
+    validations:
+    - expression: claims.repository_owner == 'my-org'
+      message: the token does not satisfy validation 1
+  resourceFilter: res.metadata.namespace != 'kube-system'
+  resources:
+  - apiVersion: source.toolkit.fluxcd.io/v1
+    filter: res.metadata.annotations['repo'] == claims.repository
+    kind: OCIRepository
+    name: webapp
+  - apiVersion: helm.toolkit.fluxcd.io/v2
+    filter: '[''main'', ''release''].exists(b, b == req.ref)'
+    kind: HelmRelease
+    name: podinfo
+    namespace: apps
+  - apiVersion: kustomize.toolkit.fluxcd.io/v1
+    kind: Kustomization
+    name: infra
+  type: generic-oidc
+
+---
+
+[TestGenReceiverWithSecretToken - 1]
+apiVersion: notification.toolkit.fluxcd.io/v1
+kind: Receiver
+metadata:
+  name: github-push
+  namespace: apps
+spec:
+  events:
+  - push
+  - ping
+  resources:
+  - apiVersion: source.toolkit.fluxcd.io/v1
+    kind: GitRepository
+    name: webapp
+    namespace: apps
+  secretRef:
+    name: webhook-token
+  type: github
+
+---
+
+[TestGenReceiverGenericOIDCNeedsNoSecret - 1]
+apiVersion: notification.toolkit.fluxcd.io/v1
+kind: Receiver
+metadata:
+  name: github-actions
+  namespace: flux-system
+spec:
+  oidcProviders:
+  - audience: flux
+    issuerURL: https://token.actions.githubusercontent.com
+    validations:
+    - expression: claims.repository_owner == 'my-org'
+      message: only my-org may trigger a reconcile
+    - expression: claims.ref == 'refs/heads/main'
+      message: only main may trigger a reconcile
+  resources:
+  - apiVersion: source.toolkit.fluxcd.io/v1
+    kind: GitRepository
+    name: webapp
+  type: generic-oidc
+
+---
