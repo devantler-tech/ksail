@@ -1520,7 +1520,7 @@ workload_write
         "type": "boolean"
       },
       "args": {
-        "description": "Positional arguments for the command (applies to: describe, explain, forward, gen_clusterrole, gen_clusterrolebinding, gen_configmap, gen_cronjob, gen_deployment, gen_helmrelease, gen_ingress, gen_job, gen_namespace, gen_poddisruptionbudget, gen_priorityclass, gen_quota, gen_role, gen_rolebinding, gen_secret_docker-registry, gen_secret_generic, gen_secret_tls, gen_service_clusterip, gen_service_externalname, gen_service_loadbalancer, gen_service_nodeport, gen_serviceaccount, get, logs, scan, validate, wait)",
+        "description": "Positional arguments for the command (applies to: describe, explain, forward, gen_clusterrole, gen_clusterrolebinding, gen_configmap, gen_cronjob, gen_deployment, gen_helmrelease, gen_ingress, gen_job, gen_namespace, gen_poddisruptionbudget, gen_priorityclass, gen_quota, gen_receiver, gen_role, gen_rolebinding, gen_secret_docker-registry, gen_secret_generic, gen_secret_tls, gen_service_clusterip, gen_service_externalname, gen_service_loadbalancer, gen_service_nodeport, gen_serviceaccount, get, logs, scan, validate, wait)",
         "items": {
           "type": "string"
         },
@@ -1649,6 +1649,13 @@ workload_write
         "default": "30s",
         "description": "Wait after admission before collecting children (positive, at most 5m; requires --ephemeral-children) (applies to: validate)",
         "type": "string"
+      },
+      "events": {
+        "description": "event types to handle, e.g. push for GitHub (applies to: gen_receiver)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
       },
       "exceptions": {
         "description": "Path to a Kubescape exceptions file (a JSON array of PostureExceptionPolicy objects) forwarded to Kubescape's --exceptions (overrides spec.workload.scan.exceptions from ksail.yaml) (applies to: scan)",
@@ -1843,7 +1850,7 @@ workload_write
         "type": "string"
       },
       "namespace": {
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: describe, explain, forward, gen_helmrelease, get, logs, network, wait)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: describe, explain, forward, gen_helmrelease, gen_receiver, get, logs, network, wait)",
         "type": "string"
       },
       "no-headers": {
@@ -1861,6 +1868,28 @@ workload_write
       },
       "non-resource-url": {
         "description": "A partial url that user should have access to. (applies to: gen_clusterrole)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "oidc-audience": {
+        "description": "expected token audience (generic-oidc; Flux defaults to notification-controller) (applies to: gen_receiver)",
+        "type": "string"
+      },
+      "oidc-issuer": {
+        "description": "OIDC issuer URL whose ID tokens are accepted (generic-oidc) (applies to: gen_receiver)",
+        "type": "string"
+      },
+      "oidc-validation": {
+        "description": "CEL expression over the token claims that must be true, repeatable (generic-oidc) (applies to: gen_receiver)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "oidc-validation-message": {
+        "description": "message returned when the matching --oidc-validation is false, repeatable in the same order (default: a generic refusal that does not reveal the expression) (applies to: gen_receiver)",
         "items": {
           "type": "string"
         },
@@ -1940,11 +1969,15 @@ workload_write
         "type": "integer"
       },
       "resource": {
-        "description": "Resource that the rule applies to (applies to: gen_clusterrole, gen_role)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: gen_clusterrole, gen_receiver, gen_role)",
         "items": {
           "type": "string"
         },
         "type": "array"
+      },
+      "resource-filter": {
+        "description": "CEL expression every resource must pass before it is reconciled (applies to: gen_receiver)",
+        "type": "string"
       },
       "resource-name": {
         "description": "Resource in the white list that the rule applies to, repeat this flag for multiple items (applies to: gen_clusterrole, gen_role)",
@@ -1994,6 +2027,10 @@ workload_write
       },
       "scopes": {
         "description": "A comma-delimited set of quota scopes that must all match each object tracked by the quota. (applies to: gen_quota)",
+        "type": "string"
+      },
+      "secret-ref": {
+        "description": "Secret holding the webhook token (every type except generic-oidc) (applies to: gen_receiver)",
         "type": "string"
       },
       "selector": {
@@ -2108,7 +2145,7 @@ workload_write
         "type": "boolean"
       },
       "type": {
-        "description": "The type of secret to create (applies to: gen_secret_generic)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: gen_receiver, gen_secret_generic)",
         "type": "string"
       },
       "validate": {
@@ -2162,7 +2199,7 @@ workload_write
         "type": "boolean"
       },
       "workload_command": {
-        "description": "The subcommand to execute. Options:\ndescribe: Describe resources\nexplain: Get documentation for a resource\nforward: Forward one or more local ports to a pod\ngen_clusterrole: Create a cluster role\ngen_clusterrolebinding: Create a cluster role binding for a particular cluster role\ngen_configmap: Create a config map from a local file...\ngen_cronjob: Create a cron job with the specified name\ngen_deployment: Create a deployment with the specified name\ngen_helmrelease: Generate a HelmRelease resource\ngen_ingress: Create an ingress with the specified name\ngen_job: Create a job with the specified name\ngen_namespace: Create a namespace with the specified name\ngen_poddisruptionbudget: Create a pod disruption budget with the specified name\ngen_priorityclass: Create a priority class with the specified name\ngen_quota: Create a quota with the specified name\ngen_role: Create a role with single rule\ngen_rolebinding: Create a role binding for a particular role or cluster role\ngen_secret_docker-registry: Create a secret for use with a Docker registry\ngen_secret_generic: Create a secret from a local file, directory...\ngen_secret_tls: Create a TLS secret\ngen_service_clusterip: Create a ClusterIP service\ngen_service_externalname: Create an ExternalName service\ngen_service_loadbalancer: Create a LoadBalancer service\ngen_service_nodeport: Create a NodePort service\ngen_serviceaccount: Create a service account with the specified name\nget: Get resources\nimages: List container images required by cluster components\nlogs: Print container logs\nnetwork: Inspect live network traffic flows via Cilium Hubble\nscan: Run security scans on Kubernetes manifests\nvalidate: Validate Kubernetes manifests and kustomizations\nwait: Wait for a specific condition on one or many resources",
+        "description": "The subcommand to execute. Options:\ndescribe: Describe resources\nexplain: Get documentation for a resource\nforward: Forward one or more local ports to a pod\ngen_clusterrole: Create a cluster role\ngen_clusterrolebinding: Create a cluster role binding for a particular cluster role\ngen_configmap: Create a config map from a local file...\ngen_cronjob: Create a cron job with the specified name\ngen_deployment: Create a deployment with the specified name\ngen_helmrelease: Generate a HelmRelease resource\ngen_ingress: Create an ingress with the specified name\ngen_job: Create a job with the specified name\ngen_namespace: Create a namespace with the specified name\ngen_poddisruptionbudget: Create a pod disruption budget with the specified name\ngen_priorityclass: Create a priority class with the specified name\ngen_quota: Create a quota with the specified name\ngen_receiver: Generate a Flux Receiver resource\ngen_role: Create a role with single rule\ngen_rolebinding: Create a role binding for a particular role or cluster role\ngen_secret_docker-registry: Create a secret for use with a Docker registry\ngen_secret_generic: Create a secret from a local file, directory...\ngen_secret_tls: Create a TLS secret\ngen_service_clusterip: Create a ClusterIP service\ngen_service_externalname: Create an ExternalName service\ngen_service_loadbalancer: Create a LoadBalancer service\ngen_service_nodeport: Create a NodePort service\ngen_serviceaccount: Create a service account with the specified name\nget: Get resources\nimages: List container images required by cluster components\nlogs: Print container logs\nnetwork: Inspect live network traffic flows via Cilium Hubble\nscan: Run security scans on Kubernetes manifests\nvalidate: Validate Kubernetes manifests and kustomizations\nwait: Wait for a specific condition on one or many resources",
         "enum": [
           "describe",
           "explain",
@@ -2179,6 +2216,7 @@ workload_write
           "gen_poddisruptionbudget",
           "gen_priorityclass",
           "gen_quota",
+          "gen_receiver",
           "gen_role",
           "gen_rolebinding",
           "gen_secret_docker-registry",
