@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 # Consume private journal text, publishing only fixed observed categories.
+# journalctl prints oldest first, so keep the newest bytes of a long read.
+# Empty input is not journal evidence: exit non-zero so the caller reports it
+# as unavailable rather than as an unclassified journal.
 set -euo pipefail
-text="$(head -c 65536)"
+text="$(tail -c 65536)"
+if [[ -z "${text//[[:space:]]/}" ]]; then
+	exit 1
+fi
 text="${text,,}"
 seen=false
 while IFS='|' read -r needle label; do
@@ -11,7 +17,8 @@ while IFS='|' read -r needle label; do
 	fi
 done <<'SIGNALS'
 too many open files|file-descriptors
-no space left on device|storage-full
+inotify_add_watch|inotify-watch-limit
+no space left on device|storage-or-watch-limit
 running with swap on is not supported|swap-enabled
 container runtime is down|container-runtime
 validate service connection|runtime-connection

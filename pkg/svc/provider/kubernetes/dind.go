@@ -77,14 +77,13 @@ func (p *Provider) CreateDinDPod(
 	namespace := NamespaceName(clusterName)
 	pod := buildDinDPod(clusterName, distribution, persistence)
 
-	if distribution == string(v1alpha1.DistributionVanilla) {
-		pool, err := p.kindDinDAddressPool(ctx)
-		if err != nil {
-			return fmt.Errorf("plan nested Docker network: %w", err)
-		}
+	poolArg, err := p.plannedDinDPoolArg(ctx, distribution)
+	if err != nil {
+		return err
+	}
 
-		pod.Spec.Containers[0].Args = append(pod.Spec.Containers[0].Args,
-			"--default-address-pool=base="+pool+",size=24")
+	if poolArg != "" {
+		pod.Spec.Containers[0].Args = append(pod.Spec.Containers[0].Args, poolArg)
 	}
 
 	if persistence.Enabled {
@@ -96,9 +95,9 @@ func (p *Provider) CreateDinDPod(
 
 	svc := buildDinDService(clusterName)
 
-	_, err := p.client.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{})
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("create DinD pod: %w", err)
+	err = p.createOrReuseDinDPod(ctx, namespace, pod, poolArg)
+	if err != nil {
+		return err
 	}
 
 	_, err = p.client.CoreV1().Services(namespace).Create(ctx, svc, metav1.CreateOptions{})

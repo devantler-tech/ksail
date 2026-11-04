@@ -231,3 +231,146 @@ func assertNoNetworkFixtureCreates(t *testing.T, client *fake.Clientset) {
 		)
 	}
 }
+
+type servicePoolCase struct {
+	name     string
+	services []runtime.Object
+	forbid   bool
+	wantPool string
+}
+
+func servicePoolCases() []servicePoolCase {
+	return []servicePoolCase{
+		{
+			name: "DNS ClusterIP in first free pool",
+			services: []runtime.Object{
+				fixtureService(metav1.NamespaceSystem, "kube-dns", "172.17.0.10"),
+			},
+			wantPool: "172.18.0.0/16",
+		},
+		{
+			name: "API ClusterIP in first free pool",
+			services: []runtime.Object{
+				fixtureService(metav1.NamespaceDefault, "kubernetes", "172.17.0.1"),
+			},
+			wantPool: "172.18.0.0/16",
+		},
+		{
+			name:     "headless and absent Services add nothing",
+			services: []runtime.Object{fixtureService(metav1.NamespaceSystem, "kube-dns", "None")},
+			wantPool: "172.17.0.0/16",
+		},
+		{
+			name: "unreadable Services add nothing",
+			services: []runtime.Object{
+				fixtureService(metav1.NamespaceSystem, "kube-dns", "172.17.0.10"),
+			},
+			forbid:   true,
+			wantPool: "172.17.0.0/16",
+		},
+	}
+}
+
+func TestKindDinDPoolAvoidsHostServiceAddresses(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range servicePoolCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			objects := append([]runtime.Object{&corev1.Node{
+				Status: corev1.NodeStatus{Addresses: []corev1.NodeAddress{
+					{Type: corev1.NodeInternalIP, Address: "172.16.0.8"},
+				}},
+			}}, testCase.services...)
+
+			client := fake.NewClientset(objects...)
+			if testCase.forbid {
+				client.PrependReactor(
+					"get",
+					"services",
+					func(clienttesting.Action) (bool, runtime.Object, error) {
+						return true, nil, assert.AnError
+					},
+				)
+			}
+
+			require.NoError(t, createKindNetworkFixture(t, client, false))
+			assert.Contains(
+				t,
+				kindNetworkFixturePod(t, client).Spec.Containers[0].Args,
+				"--default-address-pool=base="+testCase.wantPool+",size=24",
+			)
+		})
+	}
+}
+
+func TestKindDinDRejectsReusedPodWithDifferentPool(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name         string
+		distribution string
+		args         []string
+		wantErr      bool
+	}{
+		{
+			name: "matching pool", distribution: "Vanilla",
+			args: []string{"--mtu=1400", "--default-address-pool=base=172.17.0.0/16,size=24"},
+		},
+		{name: "pre-pool pod", distribution: "Vanilla", args: []string{"--mtu=1400"}, wantErr: true},
+		{
+			name: "different pool", distribution: "Vanilla",
+			args:    []string{"--mtu=1400", "--default-address-pool=base=172.16.0.0/16,size=24"},
+			wantErr: true,
+		},
+		{name: "other distribution", distribution: "Talos", args: []string{"--mtu=1400"}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			client := fake.NewClientset(
+				&corev1.Node{Status: corev1.NodeStatus{Addresses: []corev1.NodeAddress{
+					{Type: corev1.NodeInternalIP, Address: "172.16.0.8"},
+				}}},
+				&corev1.Pod{
+					Name:      kubeprovider.DinDPodName,
+					Namespace: kubeprovider.NamespaceName("fixture"),
+					Spec: corev1.PodSpec{Containers: []corev1.Container{
+						{Name: kubeprovider.DinDContainerName, Args: testCase.args},
+					}},
+				},
+			)
+			prov, err := kubeprovider.NewProvider(client, v1alpha1.OptionsKubernetes{})
+			require.NoError(t, err)
+
+			err = prov.CreateDinDPod(
+				t.Context(), "fixture", testCase.distribution, v1alpha1.KubernetesPersistence{},
+			)
+			if testCase.wantErr {
+				require.ErrorIs(t, err, kubeprovider.ErrDinDAddressPool)
+
+				return
+			}
+
+			require.NoError(t, err)
+
+			if testCase.distribution != "Vanilla" {
+				for _, action := range client.Actions() {
+					assert.False(
+						t,
+						action.Matches("get", "pods"),
+						"no pool comparison outside Vanilla",
+					)
+				}
+			}
+		})
+	}
+}
+
+func fixtureService(namespace, name, clusterIP string) *corev1.Service {
+	return &corev1.Service{
+		Namespace: namespace, Name: name,
+		Spec: corev1.ServiceSpec{ClusterIP: clusterIP},
+	}
+}

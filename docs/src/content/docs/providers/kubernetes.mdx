@@ -31,15 +31,16 @@ The Kubernetes provider is ideal when you:
 2. **Privileged pod policy** — nested cluster pods require `privileged: true` security context
 
 3. **A reachable exposure address** — the resolved Gateway/LoadBalancer/NodePort address must be routable from the machine running `ksail`. This is automatic for cloud host clusters and for local hosts that publish service addresses to the host (e.g. Docker Desktop, or `cloud-provider-kind`). On local Docker-based hosts on macOS/Windows, node and LoadBalancer IPs are frequently **not** routable from the host — prefer Docker Desktop's localhost LoadBalancer, `cloud-provider-kind`, or a routable Gateway address.
+4. **Cluster-scoped `list` on `nodes` (Vanilla only)** — before it starts the nested Docker daemon, KSail reads the host nodes' addresses and pod ranges to pick a disjoint Docker address pool, and aborts Vanilla creation if it cannot. Grant this to CLI kubeconfigs that lack cluster-scoped node access; the `ksail-operator` chart grants it by default.
 
 **Optional — Gateway API exposure** (preferred tier; used when `spec.provider.kubernetes.gatewayClassName` is set):
 
-4. **Gateway API experimental CRDs** (TCPRoute is in the experimental channel) — install from [gateway-api.sigs.k8s.io](https://gateway-api.sigs.k8s.io/guides/getting-started/#install-experimental-channel):
+5. **Gateway API experimental CRDs** (TCPRoute is in the experimental channel) — install from [gateway-api.sigs.k8s.io](https://gateway-api.sigs.k8s.io/guides/getting-started/#install-experimental-channel):
    ```bash
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml
    ```
-5. **Gateway controller with TCPRoute support** — e.g. [Envoy Gateway](https://gateway.envoyproxy.io/), [Cilium](https://cilium.io/), or [Istio](https://istio.io/). The controller must implement TCPRoute (v1alpha2), not only HTTPRoute.
-6. **GatewayClass** — must exist on the host cluster (created by the Gateway controller)
+6. **Gateway controller with TCPRoute support** — e.g. [Envoy Gateway](https://gateway.envoyproxy.io/), [Cilium](https://cilium.io/), or [Istio](https://istio.io/). The controller must implement TCPRoute (v1alpha2), not only HTTPRoute.
+7. **GatewayClass** — must exist on the host cluster (created by the Gateway controller)
 
 When `gatewayClassName` is empty (the default), KSail falls back to a LoadBalancer Service, then a NodePort Service.
 

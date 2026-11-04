@@ -362,6 +362,8 @@ jobs:
               - '.github/fixtures/**'
               - '.github/scripts/assert-gitops-deployed.sh'
               - '.github/scripts/build-calico-migration-baseline.sh'
+              - '.github/scripts/prepare-nested-kind-host.sh'
+              - '.github/scripts/summarize-nested-kubelet.sh'
               - '.github/workflows/ci.yaml'
             schema:
               - 'pkg/apis/**/*.go'
@@ -2110,8 +2112,10 @@ jobs:
             test-kubernetes-provider: "true"
             kubernetes-provider-distributions: "K3s"
             kubernetes-provider-cni: "Calico"
-          # Reproduce the nested Kind return-route collision with DinD on the
-          # worker and the advertised NodePort on a different outer node.
+          # Reproduce the nested Kind return-route collision on a two-node host.
+          # Placement is not pinned: DinD and the advertised NodePort may share an
+          # outer node. The collision does not depend on it, because replies to any
+          # outer kind-network address are captured by an overlapping inner bridge.
           # Other nested distributions retain their complete default-host legs.
           - distribution: Vanilla
             provider: Docker
