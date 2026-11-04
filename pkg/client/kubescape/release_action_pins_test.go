@@ -31,6 +31,7 @@ var (
 	errPinnedRead         = errors.New("cannot read the action file at its pinned commit")
 	errPinnedAbsent       = errors.New("the pinned commit is not in the local object store")
 	errSiblingManifest    = errors.New("the pinned action has a sibling manifest")
+	errPinnedTree         = errors.New("a pinned directory does not match its audited tree")
 )
 
 // auditedActionBindings returns each audited file paired with the KSail action whose pinned commit runs it and
@@ -61,6 +62,11 @@ func auditedActionBindings() []struct{ path, action, content string } {
 			".github/actions/restore-ksail-binary/action.yaml",
 			"restore-ksail-binary",
 			"f1c049de4094024f62b97f5f70c98ababf6ed639ee59a16065c9814cffa61176",
+		},
+		{
+			".github/actions/restore-go-modules/action.yaml",
+			"restore-go-modules",
+			"0cc2a584876350f4b355373c4a290e4a59b9cc0e0657acdb2a14e101e4d02f53",
 		},
 		// setup-desktop-build runs these scripts from its own pinned checkout ($GITHUB_ACTION_PATH).
 		{
@@ -144,7 +150,7 @@ func TestAuditPinnedActionRejectsUnauditedPins(t *testing.T) {
 		[]byte("name: Setup desktop build\nchanged: true\n"),
 	)
 
-	tree := fixtureTree(t, repo, auditedCommit)
+	tree := fixtureObject(t, repo, auditedCommit+"^{tree}")
 	witness := fmt.Sprintf("%x", sha256.Sum256(audited))
 	reference := func(commit string) string {
 		return ksailActionsRepository + "/.github/actions/setup-desktop-build@" + commit
@@ -382,16 +388,17 @@ func workingTreeDigest(t *testing.T, root, path string) string {
 	return fmt.Sprintf("%x", sha256.Sum256(bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))))
 }
 
-// fixtureTree returns the tree object ID of commit in the fixture repository at repo.
-func fixtureTree(t *testing.T, repo, commit string) string {
+// fixtureObject returns the object ID that spec (for example `<commit>^{tree}`) names in the fixture
+// repository at repo.
+func fixtureObject(t *testing.T, repo, spec string) string {
 	t.Helper()
 
 	//nolint:gosec // G204: git on this test's own temporary fixture repository.
 	output, err := exec.CommandContext(
-		t.Context(), "git", "-C", repo, "rev-parse", commit+"^{tree}",
+		t.Context(), "git", "-C", repo, "rev-parse", spec,
 	).Output()
 	if err != nil {
-		t.Fatalf("resolve the fixture tree of %s: %v", commit, err)
+		t.Fatalf("resolve %s in the fixture repository: %v", spec, err)
 	}
 
 	return strings.TrimSpace(string(output))
@@ -442,5 +449,125 @@ func TestAuditPinnedActionRejectsSiblingManifest(t *testing.T) {
 	)
 	if !errors.Is(err, errSiblingManifest) {
 		t.Fatalf("want %v, got %v", errSiblingManifest, err)
+	}
+}
+
+// auditedActionTrees pairs each directory that a pinned KSail action executes wholesale with the
+// Git tree ID it has at the reviewed pin. setup-desktop-build runs stage-webui.sh from its own pinned
+// checkout, and that script runs `npm ci` and `npm run build` in web/ui. So package.json lifecycle
+// scripts, the lockfile and the build configuration all execute from the pin. The working tree is
+// not compared, because web/ui changes on main independently of the pin. A pin bump that changes
+// the tree needs a reviewed tree witness.
+func auditedActionTrees() []struct{ dir, action, tree string } {
+	return []struct{ dir, action, tree string }{
+		{"web/ui", "setup-desktop-build", "2266ec429007d87812a12313b48b23c95556f355"},
+	}
+}
+
+// TestReleaseActionPinnedTreesMatchAuditedTrees binds the directories pinned actions execute
+// wholesale to their reviewed tree IDs at the pinned commit.
+func TestReleaseActionPinnedTreesMatchAuditedTrees(t *testing.T) {
+	t.Parallel()
+	root := moduleRoot(t)
+	uses := releaseWorkflowUses(t, root)
+
+	for _, binding := range auditedActionTrees() {
+		t.Run(binding.action+":"+binding.dir, func(t *testing.T) {
+			t.Parallel()
+
+			err := auditPinnedTree(
+				t.Context(),
+				root,
+				uses,
+				binding.action,
+				binding.dir,
+				binding.tree,
+			)
+			if errors.Is(err, errPinnedAbsent) && os.Getenv(requirePinnedCommitsEnv) != "true" {
+				t.Skipf("%v; the release-graph-audit CI job fetches it and sets %s=true",
+					err, requirePinnedCommitsEnv)
+			}
+
+			if err != nil {
+				t.Error(err)
+			}
+		})
+	}
+}
+
+// auditPinnedTree checks that every step pins action at one commit and that dir at that commit has
+// the audited tree ID.
+func auditPinnedTree(
+	ctx context.Context, root string, uses []string, action, dir, witness string,
+) error {
+	pin, err := resolveActionPin(uses, action)
+	if err != nil {
+		return err
+	}
+
+	err = requireCommitObject(ctx, root, pin)
+	if err != nil {
+		return fmt.Errorf("%s@%s: %w", action, pin, err)
+	}
+
+	//nolint:gosec // G204: git with a commit SHA validated as 40 hex digits and a fixed audited path.
+	output, err := exec.CommandContext(
+		ctx, "git", "-C", root, "rev-parse", "--verify", "--quiet", pin+":"+dir,
+	).Output()
+	if err != nil {
+		return fmt.Errorf("%w: %s at %s: %w", errPinnedRead, dir, pin, err)
+	}
+
+	tree := strings.TrimSpace(string(output))
+	if tree != witness {
+		return fmt.Errorf(
+			"%w: %s@%s has %s tree %s, the audited witness is %s",
+			errPinnedTree, action, pin, dir, tree, witness,
+		)
+	}
+
+	return nil
+}
+
+// TestAuditPinnedTreeRejectsChangedBuildInputs is the negative control for the tree audit: a pin to
+// a commit whose web/ui build inputs changed fails, even though the action manifest did not change.
+func TestAuditPinnedTreeRejectsChangedBuildInputs(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	audited := commitFixtureFile(t, repo, "web/ui/package.json", []byte(`{"scripts":{}}`))
+	changed := commitFixtureFile(
+		t,
+		repo,
+		"web/ui/package.json",
+		[]byte(`{"scripts":{"postinstall":"curl example.invalid"}}`),
+	)
+	witness := fixtureObject(t, repo, audited+":web/ui")
+	reference := func(commit string) []string {
+		return []string{ksailActionsRepository + "/.github/actions/setup-desktop-build@" + commit}
+	}
+
+	err := auditPinnedTree(
+		t.Context(),
+		repo,
+		reference(audited),
+		"setup-desktop-build",
+		"web/ui",
+		witness,
+	)
+	if err != nil {
+		t.Fatalf("a pin to the audited tree must pass: %v", err)
+	}
+
+	err = auditPinnedTree(
+		t.Context(),
+		repo,
+		reference(changed),
+		"setup-desktop-build",
+		"web/ui",
+		witness,
+	)
+	if !errors.Is(err, errPinnedTree) {
+		t.Fatalf("want %v, got %v", errPinnedTree, err)
 	}
 }
