@@ -2818,7 +2818,7 @@ jobs:
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/.github/actions/aggregate-job-checks@522038c41420f0c9508a586cb944eda995ad0068 # v20.1.0
+      - uses: devantler-tech/.github/actions/aggregate-job-checks@17ee7092d5ff1748164185ff37fcff5214f9f870 # v20.1.5
         with:
           check-workflow-startup: ${{ contains(fromJSON('["pull_request","push","merge_group"]'), github.event_name) }}
           job-results: >-
