@@ -51,6 +51,13 @@ func TestEKSSmokeInstallsTheBuildJobBinary(t *testing.T) {
 			"cache-ksail-binary",
 			"a missed cache must not trigger a second compilation",
 		)
+		// Small helpers may still `go run`; only a KSail build is ruled out here.
+		assert.NotRegexp(
+			t,
+			`\bgo (build|install)\b|go tool bundler`,
+			step.Run,
+			"the smoke job must not compile KSail",
+		)
 	}
 }
 

@@ -47,6 +47,7 @@ func assertKSailBinaryArtifactProducer(t *testing.T, path string) {
 	prepared := findHarnessStep(t, producer.Steps, "📦 Cache KSail Binary")
 	assert.Equal(t, "binary", prepared.ID)
 	checksum := findHarnessStep(t, producer.Steps, "🔍 Seal prepared KSail binary")
+	assert.Equal(t, "binary-checksum", checksum.ID)
 	assert.Equal(t, "${{ steps.binary.outputs.binary-path }}", checksum.Env["BINARY_PATH"])
 	upload := findHarnessStep(t, producer.Steps, "📤 Publish KSail binary")
 	assert.Equal(t, "binary-artifact", upload.ID)
