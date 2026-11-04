@@ -48,6 +48,13 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: cert-manager-controller
+---
+# A cluster-scoped object whose template still sets the release namespace.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: cert-manager-webhook
+  namespace: cert-manager
 `
 
 	inClusterDestination = `"destination":{"server":"https://kubernetes.default.svc"}`
@@ -118,6 +125,32 @@ func argoOwnershipFixtures() map[string]argoOwnershipFixture {
 	}
 }
 
+// argoOwnershipTrackingFixtures covers how Argo CD lists objects: a cluster-scoped object
+// without the namespace its template set, and an object it only lists for pruning.
+func argoOwnershipTrackingFixtures() map[string]argoOwnershipFixture {
+	return map[string]argoOwnershipFixture{
+		"tracks a cluster-scoped object templated with a namespace": {
+			items: []string{
+				argoApplication(
+					"certs",
+					inClusterDestination,
+					`{"group":"admissionregistration.k8s.io","kind":"ValidatingWebhookConfiguration","name":"cert-manager-webhook"}`,
+				),
+			},
+			wantOwner: "argocd/certs",
+		},
+		"object listed only for pruning": {
+			items: []string{
+				argoApplication(
+					"cert-manager",
+					inClusterDestination,
+					`{"group":"apps","kind":"Deployment","namespace":"cert-manager","name":"cert-manager","requiresPruning":true}`,
+				),
+			},
+		},
+	}
+}
+
 func argoOwnershipErrorFixtures() map[string]argoOwnershipFixture {
 	return map[string]argoOwnershipFixture{
 		"malformed Application": {
@@ -140,6 +173,7 @@ func argoOwnershipErrorFixtures() map[string]argoOwnershipFixture {
 
 func TestReleaseLabelsRecognizeArgoCDApplicationsThatTrackTheRelease(t *testing.T) {
 	fixtures := argoOwnershipFixtures()
+	maps.Copy(fixtures, argoOwnershipTrackingFixtures())
 	maps.Copy(fixtures, argoOwnershipErrorFixtures())
 
 	for name, fixture := range fixtures {

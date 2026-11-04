@@ -66,6 +66,9 @@ type trackedResource struct {
 	Kind      string `json:"kind"`
 	Namespace string `json:"namespace"`
 	Name      string `json:"name"`
+	// RequiresPruning marks a live object Argo CD considers extraneous: it is not part of the
+	// Application's desired state, so Argo CD does not own it.
+	RequiresPruning bool `json:"requiresPruning"`
 }
 
 // argoCDReleaseOwnershipLabels recognizes an Argo CD Application that tracks any object of the
@@ -171,6 +174,12 @@ func argoCDApplicationTracks(
 	}
 
 	for _, tracked := range application.Status.Resources {
+		// Under label tracking, an object that merely carries the Application's instance label
+		// is listed for pruning; that is not adoption.
+		if tracked.RequiresPruning {
+			continue
+		}
+
 		for _, object := range released {
 			if sameObject(tracked, object, namespace) {
 				return true
@@ -182,14 +191,16 @@ func argoCDApplicationTracks(
 }
 
 // sameObject reports whether an object Argo CD tracks is one of the release's objects. Helm
-// installs a namespaced object without a namespace into the release namespace, and Argo CD
-// lists a cluster-scoped object without one.
+// installs a namespaced object without a namespace into the release namespace. Argo CD lists a
+// cluster-scoped object without a namespace, even when the chart template set one that the API
+// server ignores, so such an entry matches on group, kind and name alone.
 func sameObject(tracked, object trackedResource, releaseNamespace string) bool {
 	if tracked.Group != object.Group || tracked.Kind != object.Kind || tracked.Name != object.Name {
 		return false
 	}
 
-	return tracked.Namespace == object.Namespace ||
+	return tracked.Namespace == "" ||
+		tracked.Namespace == object.Namespace ||
 		(object.Namespace == "" && tracked.Namespace == releaseNamespace)
 }
 
