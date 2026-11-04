@@ -49,12 +49,7 @@ case "$1 $2" in
   '-n ksail-nested-talos'|'-n ksail-nested-vanilla')
     [[ "$FIXTURE_MODE" != create-diag-error ]] || exit 1
     case "${3:-}" in
-      get|exec)
-        if [[ "$*" == *'journalctl -u kubelet'* ]]; then
-          echo 'failed to create fsnotify watcher: too many open files opaque-bootstrap-token'
-        else
-          echo 'fixture endpoint diagnostics'
-        fi ;;
+      get|exec) echo 'fixture endpoint diagnostics' ;;
       *) exit 99 ;;
     esac ;;
   'get ns'|'get namespace')
@@ -493,17 +488,6 @@ func TestNestedKindDiagnosticsPrecedeDeletion(t *testing.T) {
 			assert.Contains(t, calls, "nested-vanilla-control-plane")
 			assert.Contains(t, calls, "exec dind -c dind -- docker network inspect kind")
 			assert.Contains(t, calls, "\ndocker network inspect kind --format")
-			journal := strings.Index(
-				calls, "docker exec nested-vanilla-worker journalctl -u kubelet",
-			)
-			require.NotEqual(t, -1, journal)
-			assert.Greater(t, deletion, journal, "capture the worker before deleting it")
-			assert.NotContains(t, output, "opaque-bootstrap-token")
-
-			if mode != "create-diag-error" {
-				assert.Contains(t, output, "Nested kubelet journal signal: file-descriptors")
-			}
-
 			assert.NotContains(t, calls, "get secret")
 			assert.NotContains(t, calls, "config view")
 			assert.NotContains(t, calls, "{{json .IPAM.Config}}")

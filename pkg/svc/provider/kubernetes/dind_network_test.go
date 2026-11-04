@@ -28,25 +28,28 @@ func kindPoolCases() []kindPoolCase {
 	return []kindPoolCase{
 		{
 			name: "observed outer Kind network", address: "172.18.0.8",
-			podCIDRs: []string{"10.244.0.0/16"}, wantPool: "172.16.0.0/16",
+			podCIDRs: []string{"10.244.0.0/16"}, wantPool: "198.18.0.0/16",
 		},
-		{name: "host occupies first pool", address: "172.16.0.8", wantPool: "172.17.0.0/16"},
 		{
-			name: "pod range occupies private class B", address: "172.18.0.8",
-			podCIDRs: []string{"172.16.0.0/12"}, wantPool: "192.168.0.0/16",
+			// Every RFC 1918 range is in use on the host; the allow-list is outside all of them.
+			name: "host uses all private ranges", address: "172.18.0.8",
+			podCIDRs: []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"},
+			wantPool: "198.18.0.0/16",
 		},
+		{name: "host occupies first candidate", address: "198.18.0.8", wantPool: "198.19.0.0/16"},
 		{
 			name:     "IPv6 host",
 			address:  "2001:db8::8",
 			podCIDRs: []string{"fd01::/64"},
-			wantPool: "172.16.0.0/16",
+			wantPool: "198.18.0.0/16",
 		},
 		{name: "unknown address", address: ""},
 		{name: "malformed address", address: "not-an-address"},
 		{name: "malformed pod range", address: "172.18.0.8", podCIDRs: []string{"not-a-prefix"}},
 		{
-			name: "no disjoint private pool", address: "172.18.0.8",
-			podCIDRs: []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"},
+			// Never fall back to a range outside the allow-list.
+			name: "host occupies every candidate", address: "172.18.0.8",
+			podCIDRs: []string{"198.18.0.0/15"},
 		},
 		{name: "failed host inventory", address: "172.18.0.8", readError: true},
 	}
@@ -136,7 +139,7 @@ func TestKindDinDPoolRequiresCompleteHostInventory(t *testing.T) {
 						return true, &corev1.NodeList{}, nil
 					}
 
-					address := "172.16.0.8"
+					address := "172.17.0.8"
 
 					page := &corev1.NodeList{Continue: "next"}
 					if options.Continue != "" {
@@ -144,7 +147,7 @@ func TestKindDinDPoolRequiresCompleteHostInventory(t *testing.T) {
 							return true, nil, assert.AnError
 						}
 
-						address = "172.17.0.8"
+						address = "198.18.0.8"
 
 						if mode != "repeated-page" {
 							page.Continue = ""
@@ -175,7 +178,7 @@ func TestKindDinDPoolRequiresCompleteHostInventory(t *testing.T) {
 			assert.Contains(
 				t,
 				pod.Spec.Containers[0].Args,
-				"--default-address-pool=base=172.18.0.0/16,size=24",
+				"--default-address-pool=base=198.19.0.0/16,size=24",
 			)
 		})
 	}
@@ -232,79 +235,6 @@ func assertNoNetworkFixtureCreates(t *testing.T, client *fake.Clientset) {
 	}
 }
 
-type servicePoolCase struct {
-	name     string
-	services []runtime.Object
-	forbid   bool
-	wantPool string
-}
-
-func servicePoolCases() []servicePoolCase {
-	return []servicePoolCase{
-		{
-			name: "DNS ClusterIP in first free pool",
-			services: []runtime.Object{
-				fixtureService(metav1.NamespaceSystem, "kube-dns", "172.17.0.10"),
-			},
-			wantPool: "172.18.0.0/16",
-		},
-		{
-			name: "API ClusterIP in first free pool",
-			services: []runtime.Object{
-				fixtureService(metav1.NamespaceDefault, "kubernetes", "172.17.0.1"),
-			},
-			wantPool: "172.18.0.0/16",
-		},
-		{
-			name:     "headless and absent Services add nothing",
-			services: []runtime.Object{fixtureService(metav1.NamespaceSystem, "kube-dns", "None")},
-			wantPool: "172.17.0.0/16",
-		},
-		{
-			name: "unreadable Services add nothing",
-			services: []runtime.Object{
-				fixtureService(metav1.NamespaceSystem, "kube-dns", "172.17.0.10"),
-			},
-			forbid:   true,
-			wantPool: "172.17.0.0/16",
-		},
-	}
-}
-
-func TestKindDinDPoolAvoidsHostServiceAddresses(t *testing.T) {
-	t.Parallel()
-
-	for _, testCase := range servicePoolCases() {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			objects := append([]runtime.Object{&corev1.Node{
-				Status: corev1.NodeStatus{Addresses: []corev1.NodeAddress{
-					{Type: corev1.NodeInternalIP, Address: "172.16.0.8"},
-				}},
-			}}, testCase.services...)
-
-			client := fake.NewClientset(objects...)
-			if testCase.forbid {
-				client.PrependReactor(
-					"get",
-					"services",
-					func(clienttesting.Action) (bool, runtime.Object, error) {
-						return true, nil, assert.AnError
-					},
-				)
-			}
-
-			require.NoError(t, createKindNetworkFixture(t, client, false))
-			assert.Contains(
-				t,
-				kindNetworkFixturePod(t, client).Spec.Containers[0].Args,
-				"--default-address-pool=base="+testCase.wantPool+",size=24",
-			)
-		})
-	}
-}
-
 func TestKindDinDRejectsReusedPodWithDifferentPool(t *testing.T) {
 	t.Parallel()
 
@@ -316,12 +246,12 @@ func TestKindDinDRejectsReusedPodWithDifferentPool(t *testing.T) {
 	}{
 		{
 			name: "matching pool", distribution: "Vanilla",
-			args: []string{"--mtu=1400", "--default-address-pool=base=172.17.0.0/16,size=24"},
+			args: []string{"--mtu=1400", "--default-address-pool=base=198.18.0.0/16,size=24"},
 		},
 		{name: "pre-pool pod", distribution: "Vanilla", args: []string{"--mtu=1400"}, wantErr: true},
 		{
 			name: "different pool", distribution: "Vanilla",
-			args:    []string{"--mtu=1400", "--default-address-pool=base=172.16.0.0/16,size=24"},
+			args:    []string{"--mtu=1400", "--default-address-pool=base=198.19.0.0/16,size=24"},
 			wantErr: true,
 		},
 		{name: "other distribution", distribution: "Talos", args: []string{"--mtu=1400"}},
@@ -365,12 +295,5 @@ func TestKindDinDRejectsReusedPodWithDifferentPool(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func fixtureService(namespace, name, clusterIP string) *corev1.Service {
-	return &corev1.Service{
-		Namespace: namespace, Name: name,
-		Spec: corev1.ServiceSpec{ClusterIP: clusterIP},
 	}
 }

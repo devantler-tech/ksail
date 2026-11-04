@@ -14,15 +14,16 @@ import (
 )
 
 const (
-	dindPoolPrefixBits = 16
-	dindNodePageSize   = 500
-	dindInventoryWait  = 30 * time.Second
+	dindNodePageSize  = 500
+	dindInventoryWait = 30 * time.Second
 )
 
 // A nested daemon cannot see the host nodes' connected routes. Docker can therefore
 // allocate the same bridge subnet on both sides of the exposed API, sending replies
 // into the inner bridge instead of back to the host. Configure its automatic IPv4
 // pools before it starts; leave Kind's normal network creation and IPv6 behavior intact.
+// The node inventory is a guard on the allow-list, not the selection itself: it fails
+// creation when a host node already uses a candidate rather than guessing another range.
 func (p *Provider) kindDinDAddressPool(ctx context.Context) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, dindInventoryWait)
 	defer cancel()
@@ -64,8 +65,6 @@ func (p *Provider) kindDinDAddressPool(ctx context.Context) (string, error) {
 	if len(excluded) == 0 {
 		return "", fmt.Errorf("empty host network inventory: %w", ErrDinDAddressPool)
 	}
-
-	excluded = append(excluded, p.hostServiceAddresses(ctx)...)
 
 	return selectDinDPool(excluded)
 }
@@ -117,63 +116,23 @@ func hostNodeAddresses(node *corev1.Node) ([]netip.Prefix, error) {
 	return networks, nil
 }
 
+// selectDinDPool chooses the nested Docker pool from an allow-list: the two /16s of
+// 198.18.0.0/15, which RFC 2544 reserves for network benchmarking. Every host range a Kubernetes
+// cluster commonly routes (node networks, pod ranges, Service ranges, CNI IPAM pools and Docker's
+// own defaults) is drawn from RFC 1918 space by convention, and none of those can be enumerated
+// completely from the Kubernetes API. Choosing from a range outside them avoids the whole class
+// instead of excluding the ranges one inventory read happens to see.
 func selectDinDPool(excluded []netip.Prefix) (string, error) {
-	for _, block := range []netip.Prefix{
-		netip.MustParsePrefix("172.16.0.0/12"),
-		netip.MustParsePrefix("192.168.0.0/16"),
-		netip.MustParsePrefix("10.0.0.0/8"),
+	for _, candidate := range []netip.Prefix{
+		netip.MustParsePrefix("198.18.0.0/16"),
+		netip.MustParsePrefix("198.19.0.0/16"),
 	} {
-		for offset := range 1 << (dindPoolPrefixBits - block.Bits()) {
-			address := block.Addr().As4()
-			address[1] += byte(offset)
-			candidate := netip.PrefixFrom(netip.AddrFrom4(address), dindPoolPrefixBits)
-
-			if !slices.ContainsFunc(excluded, candidate.Overlaps) {
-				return candidate.String(), nil
-			}
+		if !slices.ContainsFunc(excluded, candidate.Overlaps) {
+			return candidate.String(), nil
 		}
 	}
 
 	return "", ErrDinDAddressPool
-}
-
-// hostServiceAddresses returns the ClusterIPs of the host's API and DNS Services. The DinD pod
-// resolves through the host DNS ClusterIP (dnsPolicy ClusterFirst), and a nested bridge whose
-// /24 contains that address would capture the pod's DNS queries. Node objects do not carry the
-// Service range, so exclude the /16 around these well-known addresses instead. This is
-// best-effort: a missing or unreadable Service only means no additional exclusion, never a
-// weaker one than the node inventory already established.
-func (p *Provider) hostServiceAddresses(ctx context.Context) []netip.Prefix {
-	var networks []netip.Prefix
-
-	for _, ref := range []struct{ namespace, name string }{
-		{metav1.NamespaceDefault, "kubernetes"},
-		{metav1.NamespaceSystem, "kube-dns"},
-	} {
-		svc, err := p.client.CoreV1().
-			Services(ref.namespace).
-			Get(ctx, ref.name, metav1.GetOptions{})
-		if err != nil {
-			continue
-		}
-
-		ips := slices.Clone(svc.Spec.ClusterIPs)
-		if svc.Spec.ClusterIP != "" {
-			ips = append(ips, svc.Spec.ClusterIP)
-		}
-
-		for _, ip := range ips {
-			addr, parseErr := netip.ParseAddr(ip)
-			if parseErr != nil {
-				continue // "None" for headless Services.
-			}
-
-			addr = addr.Unmap()
-			networks = append(networks, netip.PrefixFrom(addr, addr.BitLen()))
-		}
-	}
-
-	return networks
 }
 
 // verifyExistingDinDPool rejects a reused DinD pod whose daemon was not started with the planned

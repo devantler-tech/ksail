@@ -31,7 +31,7 @@ The Kubernetes provider is ideal when you:
 2. **Privileged pod policy** — nested cluster pods require `privileged: true` security context
 
 3. **A reachable exposure address** — the resolved Gateway/LoadBalancer/NodePort address must be routable from the machine running `ksail`. This is automatic for cloud host clusters and for local hosts that publish service addresses to the host (e.g. Docker Desktop, or `cloud-provider-kind`). On local Docker-based hosts on macOS/Windows, node and LoadBalancer IPs are frequently **not** routable from the host — prefer Docker Desktop's localhost LoadBalancer, `cloud-provider-kind`, or a routable Gateway address.
-4. **Cluster-scoped `list` on `nodes` (Vanilla only)** — before it starts the nested Docker daemon, KSail reads the host nodes' addresses and pod ranges to pick a disjoint Docker address pool, and aborts Vanilla creation if it cannot. Grant this to CLI kubeconfigs that lack cluster-scoped node access; the `ksail-operator` chart grants it by default.
+4. **Cluster-scoped `list` on `nodes` (Vanilla only)** — the nested Docker daemon takes its networks from the reserved benchmarking range `198.18.0.0/15`, which host clusters do not normally route. Before starting it, KSail reads the host nodes' addresses and pod ranges and aborts Vanilla creation if it cannot read them or if host addresses already reach into both halves of it. Grant this to CLI kubeconfigs that lack cluster-scoped node access; the `ksail-operator` chart grants it by default.
 
 **Optional — Gateway API exposure** (preferred tier; used when `spec.provider.kubernetes.gatewayClassName` is set):
 

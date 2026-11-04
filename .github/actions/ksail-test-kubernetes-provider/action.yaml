@@ -266,18 +266,6 @@ runs:
                 else
                   echo 'Nested internal API readiness unavailable'
                 fi
-                # Debug mode retains failed Kind nodes inside this owned DinD
-                # pod until the unconditional delete below. Never publish raw
-                # journals: emit only fixed categories from bounded reads.
-                for role in control-plane worker; do
-                  printf 'Nested Kind %s kubelet diagnostics:\n' "$role"
-                  if ! timeout --kill-after=1s 10s kubectl --context "$HOST_CONTEXT" -n "ksail-$NESTED_NAME" \
-                    exec dind -c dind -- docker exec "$NESTED_NAME-$role" \
-                    journalctl -u kubelet -b -n 120 --no-pager -o cat 2>/dev/null \
-                    | bash "$GITHUB_WORKSPACE/.github/scripts/summarize-nested-kubelet.sh"; then
-                    echo 'Nested kubelet journal evidence unavailable'
-                  fi
-                done
               fi
             } 2>&1 | tee "$LOG_DIR/${DIST,,}-endpoint.log" || echo 'Endpoint evidence could not be recorded'
           fi

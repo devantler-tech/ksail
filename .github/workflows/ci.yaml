@@ -363,7 +363,6 @@ jobs:
               - '.github/scripts/assert-gitops-deployed.sh'
               - '.github/scripts/build-calico-migration-baseline.sh'
               - '.github/scripts/prepare-nested-kind-host.sh'
-              - '.github/scripts/summarize-nested-kubelet.sh'
               - '.github/workflows/ci.yaml'
             schema:
               - 'pkg/apis/**/*.go'
