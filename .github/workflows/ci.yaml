@@ -2582,12 +2582,26 @@ jobs:
         # Retry transport failures here; the audit verdict itself remains a single run.
         run: bash .github/scripts/download-go-modules.sh
 
+      - name: 📥 Fetch the pinned KSail action commits
+        # The audit reads each KSail action at the commit CI and CD pin, from the local object store
+        # only, because tests never use the network. The checkout holds one commit, so fetch them here.
+        run: |
+          set -euo pipefail
+          mapfile -t pins < <(grep -rhoE 'devantler-tech/ksail/\.github/actions/[a-z0-9-]+@[0-9a-f]{40}' \
+            .github/workflows | sed 's/.*@//' | sort -u)
+          if [[ ${#pins[@]} -eq 0 ]]; then
+            echo "no pinned KSail action commits found in .github/workflows" >&2
+            exit 1
+          fi
+          git fetch --quiet --no-tags --depth=1 https://github.com/devantler-tech/ksail.git "${pins[@]}"
+
       - name: 🔐 Audit Shipped Dependency Graphs
         id: audit
         # Release files are outside Go's test-cache inputs; always execute the audit.
         # Go source admission and redistribution scope: .github/go-license-policy.md.
         env:
           KSAIL_GO_LICENSE_REPORT_DIR: ${{ runner.temp }}/ksail-go-licenses
+          KSAIL_REQUIRE_PINNED_ACTION_COMMITS: "true"
         run: go test ./pkg/client/kubescape/... -count=1
 
       - name: 📤 Preserve Go license admission evidence
