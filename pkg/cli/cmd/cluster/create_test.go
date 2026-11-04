@@ -48,6 +48,8 @@ func TestCreate_EnabledCertManager_PrintsInstallStage(t *testing.T) {
 	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
 
+	useFakeIdentityMarker(t)
+
 	fake := &fakeInstaller{}
 
 	restore := cluster.SetCertManagerInstallerFactoryForTests(
@@ -88,6 +90,8 @@ func TestCreate_DefaultCertManager_DoesNotInstall(t *testing.T) {
 	// Override cluster provisioner factory to use fake provisioner
 	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
+
+	useFakeIdentityMarker(t)
 
 	factoryCalled := false
 
@@ -132,6 +136,7 @@ func setupGitOpsTestMocks(
 
 	// Override cluster provisioner factory to use fake provisioner
 	t.Cleanup(cluster.SetProvisionerFactoryForTests(fakeFactory{}))
+	useFakeIdentityMarker(t)
 
 	// Set up the appropriate installer and ensure mocks based on the GitOps engine
 	switch engine {
@@ -570,8 +575,8 @@ spec:
 	)
 
 	// Override cluster provisioner factory to use fake provisioner
-	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
-	defer restoreFactory()
+	t.Cleanup(cluster.SetProvisionerFactoryForTests(fakeFactory{}))
+	useFakeIdentityMarker(t)
 
 	fake := &fakeInstaller{}
 
@@ -615,6 +620,8 @@ func TestCreate_DefaultCSI_DoesNotInstall(t *testing.T) {
 	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
 
+	useFakeIdentityMarker(t)
+
 	cmd := cluster.NewCreateCmd()
 
 	var out bytes.Buffer
@@ -645,6 +652,8 @@ func TestCreate_Minimal_PrintsOnlyClusterLifecycle(t *testing.T) {
 	// Override cluster provisioner factory to use fake provisioner
 	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
+
+	useFakeIdentityMarker(t)
 
 	cmd := cluster.NewCreateCmd()
 
@@ -694,6 +703,8 @@ func TestCreate_NoConfigFile_FlagsOnly(t *testing.T) {
 	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
 
+	useFakeIdentityMarker(t)
+
 	cmd := cluster.NewCreateCmd()
 
 	var out bytes.Buffer
@@ -741,6 +752,8 @@ func TestCreate_NonEKSNameOverrideReachesProvisioner(t *testing.T) {
 	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{createName: &createdName})
 	defer restoreFactory()
 
+	useFakeIdentityMarker(t)
+
 	cmd := cluster.NewCreateCmd()
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
@@ -776,6 +789,8 @@ func TestCreateRejectsWhitespaceOnlyName(t *testing.T) {
 
 	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{createName: &createdName})
 	defer restoreFactory()
+
+	useFakeIdentityMarker(t)
 
 	cmd := cluster.NewCreateCmd()
 	cmd.SetOut(io.Discard)
@@ -821,6 +836,8 @@ func TestCreate_NoConfigFile_WithComponentFlags(t *testing.T) {
 
 	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
+
+	useFakeIdentityMarker(t)
 
 	cmd := cluster.NewCreateCmd()
 
@@ -885,6 +902,8 @@ spec:
 	// Override cluster provisioner factory to use fake provisioner
 	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
+
+	useFakeIdentityMarker(t)
 
 	setupMockRegistryBackend(t)
 
