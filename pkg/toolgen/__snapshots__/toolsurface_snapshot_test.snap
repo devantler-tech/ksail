@@ -189,6 +189,10 @@ workload_write
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
         "type": "string"
       },
+      "git-verify-secret-ref": {
+        "description": "Secret in the tenant namespace with trusted committers' public keys (SSH under *.sshpub keys, OpenPGP under *.asc); Flux then verifies each synced commit's signature (requires --sync-source git)",
+        "type": "string"
+      },
       "image-pull-secret": {
         "description": "imagePullSecret to add to the tenant ServiceAccount (repeatable)",
         "items": {
@@ -1355,6 +1359,14 @@ workload_write
           "type": "string"
         },
         "type": "array"
+      },
+      "verify-mode": {
+        "description": "Git object to verify: HEAD, Tag or TagAndHEAD (default HEAD; requires --verify-secret-ref) (applies to: create_source_git)",
+        "type": "string"
+      },
+      "verify-secret-ref": {
+        "description": "verify commit signatures against the public keys in this existing secret (SSH keys under *.sshpub keys, OpenPGP keys under *.asc) (applies to: create_source_git)",
+        "type": "string"
       },
       "version": {
         "description": "chart version constraint (default: latest) (applies to: install)",

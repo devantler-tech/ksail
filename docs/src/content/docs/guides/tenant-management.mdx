@@ -161,6 +161,38 @@ ksail tenant create my-team --type flux \
   --git-token "${MY_BOT_TOKEN}"
 ```
 
+#### Accept only signed commits
+
+A Git-synced Flux tenant can require every synced commit to be signed by a trusted key. Pass
+`--git-verify-secret-ref` and KSail adds a `verify` block (mode `HEAD`) to the tenant's GitRepository, so
+Flux refuses a commit whose SSH or OpenPGP signature does not match one of the keys. It is off by
+default, so unsigned repositories keep working.
+
+```bash
+ksail tenant create my-team --type flux \
+  --sync-source git \
+  --git-provider github \
+  --tenant-repo my-org/my-team-infra \
+  --git-verify-secret-ref my-team-signing-keys
+```
+
+Create the Secret in the tenant's namespace (the GitRepository's namespace) before Flux syncs. Store each
+trusted SSH public key, in `authorized_keys` format, under a key ending in `.sshpub`, and each OpenPGP
+public key under a key ending in `.asc`:
+
+```bash
+kubectl create secret generic my-team-signing-keys \
+  --namespace my-team \
+  --from-file=alice.sshpub=./alice_ed25519.pub \
+  --from-file=bob.asc=./bob-public-key.asc
+```
+
+The same opt-in is available on a standalone source as
+`ksail workload create source git … --verify-secret-ref <secret>`. Its `--verify-mode` can also verify a
+tag (`Tag` or `TagAndHEAD`, with `--tag` or `--tag-semver`). See Flux's
+[commit verification](https://fluxcd.io/flux/components/source/gitrepositories/#verification) for the
+details.
+
 ### ArgoCD tenants
 
 ArgoCD tenants generate RBAC isolation manifests, an AppProject, and an Application:

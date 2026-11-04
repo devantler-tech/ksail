@@ -1,0 +1,51 @@
+
+[TestCreateGitRepository_VerifySignedCommits/tag-and-head - 1]
+metadata:
+  name: podinfo
+  namespace: flux-system
+spec:
+  interval: 1m0s
+  ref:
+    tag: 6.6.2
+  url: https://github.com/stefanprodan/podinfo
+  verify:
+    mode: TagAndHEAD
+    secretRef:
+      name: git-signing-keys
+status: {}
+
+---
+
+[TestCreateGitRepository_VerifySignedCommits/head-default - 1]
+metadata:
+  name: podinfo
+  namespace: flux-system
+spec:
+  interval: 1m0s
+  ref:
+    branch: master
+  url: https://github.com/stefanprodan/podinfo
+  verify:
+    mode: HEAD
+    secretRef:
+      name: git-signing-keys
+status: {}
+
+---
+
+[TestCreateGitRepository_VerifySignedCommits/tag-semver - 1]
+metadata:
+  name: podinfo
+  namespace: flux-system
+spec:
+  interval: 1m0s
+  ref:
+    semver: '>=6.0.0'
+  url: https://github.com/stefanprodan/podinfo
+  verify:
+    mode: Tag
+    secretRef:
+      name: git-signing-keys
+status: {}
+
+---

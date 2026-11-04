@@ -61,6 +61,10 @@ func NewCreateCmd() *cobra.Command {
 	cmd.Flags().
 		String("source-directory", "k8s",
 			"Directory name for tenant manifests in the tenant repo")
+	cmd.Flags().String("git-verify-secret-ref", "",
+		"Secret in the tenant namespace with trusted committers' public keys "+
+			"(SSH under *.sshpub keys, OpenPGP under *.asc); Flux then verifies each synced commit's "+
+			"signature (requires --sync-source git)")
 
 	// Phase 2 flags
 	cmd.Flags().Bool("register", false, "Register tenant in kustomization.yaml")
@@ -210,6 +214,7 @@ func resolveCreateOptions(
 	opts.GitToken, _ = cmd.Flags().GetString("git-token")
 	opts.RepoVisibility, _ = cmd.Flags().GetString("repo-visibility")
 	opts.SourceDirectory, _ = cmd.Flags().GetString("source-directory")
+	opts.GitVerifySecretRef, _ = cmd.Flags().GetString("git-verify-secret-ref")
 
 	register, _ := cmd.Flags().GetBool("register")
 	opts.Register = register
