@@ -8,8 +8,10 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusteridentity"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
@@ -18,6 +20,8 @@ import (
 const liveUID = types.UID("5f0c7c2e-live-kube-system")
 
 var errAPIUnavailable = errors.New("api unavailable")
+
+var errConcurrentWrite = errors.New("the object has been modified")
 
 func kubeSystem(uid types.UID) *corev1.Namespace {
 	return &corev1.Namespace{Name: "kube-system", UID: uid}
@@ -135,4 +139,60 @@ func requireNoMarker(t *testing.T, client *fake.Clientset) {
 	_, err := client.CoreV1().ConfigMaps("kube-system").
 		Get(context.Background(), clusteridentity.Name, metav1.GetOptions{})
 	require.Error(t, err, "no marker may be written without a bindable UID")
+}
+
+// TestWriteRetriesAConcurrentWrite rereads and rewrites the marker when another writer changed
+// it between the read and the write, instead of leaving a stale marker behind.
+func TestWriteRetriesAConcurrentWrite(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name, verb string
+		existing   bool
+		raceErr    error
+	}{
+		{
+			name: "update-conflict", verb: "update", existing: true,
+			raceErr: apierrors.NewConflict(schema.GroupResource{Resource: "configmaps"},
+				clusteridentity.Name, errConcurrentWrite),
+		},
+		{
+			name: "created-meanwhile", verb: "create",
+			raceErr: apierrors.NewAlreadyExists(schema.GroupResource{Resource: "configmaps"},
+				clusteridentity.Name),
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			objects := []runtime.Object{kubeSystem(liveUID)}
+			if testCase.existing {
+				objects = append(objects, &corev1.ConfigMap{
+					Name: clusteridentity.Name, Namespace: "kube-system",
+				})
+			}
+
+			client := fake.NewClientset(objects...)
+			raced := false
+
+			client.PrependReactor(testCase.verb, "configmaps",
+				func(k8stesting.Action) (bool, runtime.Object, error) {
+					if raced {
+						return false, nil, nil
+					}
+
+					raced = true
+
+					return true, nil, testCase.raceErr
+				})
+
+			require.NoError(t, clusteridentity.Write(context.Background(), client, marker()))
+			require.True(t, raced, "the race must have been injected")
+			require.Equal(
+				t,
+				string(liveUID),
+				readMarker(t, client).Data[clusteridentity.KeyKubeSystemUID],
+			)
+		})
+	}
 }

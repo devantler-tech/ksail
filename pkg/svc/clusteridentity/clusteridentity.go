@@ -14,6 +14,8 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/util/retry"
 )
 
 const (
@@ -73,6 +75,28 @@ func Write(ctx context.Context, client kubernetes.Interface, marker Marker) erro
 
 	configMaps := client.CoreV1().ConfigMaps(Namespace)
 
+	// Another writer may change the marker between the read and the write: retry from a fresh
+	// read on a conflict, or when it was created after our read found none.
+	err = retry.OnError(retry.DefaultBackoff, isWriteRace, func() error {
+		return writeOnce(ctx, configMaps, data)
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func isWriteRace(err error) bool {
+	return apierrors.IsConflict(err) || apierrors.IsAlreadyExists(err)
+}
+
+// writeOnce creates the marker or replaces the data of the one it just read.
+func writeOnce(
+	ctx context.Context,
+	configMaps typedcorev1.ConfigMapInterface,
+	data map[string]string,
+) error {
 	existing, err := configMaps.Get(ctx, Name, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		_, err = configMaps.Create(ctx, &corev1.ConfigMap{
