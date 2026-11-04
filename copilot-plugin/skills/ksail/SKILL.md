@@ -56,7 +56,7 @@ Distribution is chosen via `--distribution` (`Vanilla`, `K3s`, `Talos`, `VCluste
 
 - **When the tools are available**, prefer them for cluster and workload operations.
 - **When they are not**, run the same operations with the `ksail` CLI. Never block on the MCP server.
-- **If the user wants the tools and the client lacks them**, register the server with their agreement, for example `claude mcp add ksail -- ksail open mcp` in Claude Code or `codex mcp add ksail -- ksail open mcp` in Codex. Clients that read an `mcpServers` map take `{"mcpServers": {"ksail": {"command": "ksail", "args": ["open", "mcp"]}}}`. Per-client steps: <https://ksail.devantler.tech/integrations/ai-mcp/>.
+- **If the user wants the tools and the client lacks them**, first check for an existing `ksail` registration (`claude mcp list` in Claude Code, `codex mcp list` in Codex). If one is listed but disabled, enable it — in Claude Code, from the `/mcp` panel — rather than adding it again. Otherwise register the server with their agreement, for example `claude mcp add ksail -- ksail open mcp` in Claude Code or `codex mcp add ksail -- ksail open mcp` in Codex. Clients that read an `mcpServers` map take `{"mcpServers": {"ksail": {"command": "ksail", "args": ["open", "mcp"]}}}`. Per-client steps: <https://ksail.devantler.tech/integrations/ai-mcp/>.
 
 ## Safety
 
