@@ -262,6 +262,32 @@ after the second. Retryable conditions come from the shared `netretry.IsRetryabl
 and similar), and a warning is printed on each attempt. For `reconcile`, a `--timeout` is a **per-attempt**
 bound — total runtime can reach `maxAttempts × timeout` plus backoff.
 
+## Trigger a reconcile from outside the cluster (Flux)
+
+`ksail workload reconcile` needs the cluster's kubeconfig. When a pipeline or a registry should start a
+reconcile **without** cluster credentials, generate a Flux `Receiver` — the webhook endpoint Flux's
+notification-controller serves — with [`workload gen receiver`](/cli-flags/workload/workload-gen-receiver/).
+With `--type=generic-oidc` no shared Secret is needed: the caller sends its OIDC ID token (for example
+a GitHub Actions token), and every `--oidc-validation` CEL expression must accept the token's claims.
+
+```bash
+ksail workload gen receiver github-actions \
+  --type=generic-oidc \
+  --oidc-issuer=https://token.actions.githubusercontent.com \
+  --oidc-validation="claims.repository_owner == 'my-org'" \
+  --oidc-validation-message="only my-org workflows may trigger a reconcile" \
+  --resource=OCIRepository/flux-system > k8s/receiver.yaml
+```
+
+Always constrain the caller's identity: a public issuer signs tokens for anyone on its platform, so a
+valid signature alone authorizes nothing. Each `--resource` may carry its own CEL filter after `=`
+(for example `OCIRepository/*=res.metadata.labels['repo'] == claims.repository`), and
+`--resource-filter` applies one to every resource. Other webhook types (`github`, `gitlab`, …) read
+their token from `--secret-ref`.
+
+`workload reconcile` does not go through a Receiver: it already asks Flux to reconcile directly through
+the Kubernetes API, so a Receiver would only add a webhook hop and a credential to the same request.
+
 ## Related
 
 - [Deliver with GitOps](/start/deliver-with-gitops/) — the guided first run of this workflow.
