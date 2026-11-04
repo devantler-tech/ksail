@@ -1768,6 +1768,13 @@ workload_write
         "description": "A comma-delimited set of resource=quantity pairs that define a hard limit. (applies to: gen_quota)",
         "type": "string"
       },
+      "health-check-expr": {
+        "description": "CEL health check for custom resources the release creates, repeatable (\u003capiVersion\u003e[/\u003cKind\u003e][:current|inProgress|failed]=\u003cCEL\u003e; field defaults to current) (applies to: gen_helmrelease)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
       "ignore-errors": {
         "description": "If watching / following pod logs, allow for any errors that occur to be non-fatal (applies to: logs)",
         "type": "boolean"
