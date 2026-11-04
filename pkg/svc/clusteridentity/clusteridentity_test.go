@@ -100,12 +100,18 @@ func TestWriteReplacesStaleOrCopiedMarker(t *testing.T) {
 func TestWriteRefusesWithoutABindableUID(t *testing.T) {
 	t.Parallel()
 
-	t.Run("namespace-unreadable", func(t *testing.T) {
+	t.Run("namespace-not-creatable", func(t *testing.T) {
 		t.Parallel()
 
 		client := fake.NewClientset()
+		client.PrependReactor("create", "namespaces",
+			func(k8stesting.Action) (bool, runtime.Object, error) {
+				return true, nil, apierrors.NewForbidden(
+					schema.GroupResource{Resource: "namespaces"}, "kube-system", errAPIUnavailable)
+			})
+
 		err := clusteridentity.Write(context.Background(), client, marker())
-		require.ErrorContains(t, err, "read the kube-system namespace")
+		require.ErrorContains(t, err, "create the missing kube-system namespace")
 		requireNoMarker(t, client)
 	})
 
@@ -258,4 +264,31 @@ func TestWriteReportsAnAPIServerThatNeverAnswers(t *testing.T) {
 	err := clusteridentity.Write(ctx, client, marker())
 	require.ErrorContains(t, err, "connection refused", "the warning names the real cause")
 	requireNoMarker(t, client)
+}
+
+// TestWriteCreatesAMissingKubeSystem covers KWOK, whose create finishes before kube-system
+// exists (ksail#8194 CI): the marker creates the namespace, then binds to the UID the API server
+// gave it, instead of warning that the namespace was not found.
+func TestWriteCreatesAMissingKubeSystem(t *testing.T) {
+	t.Parallel()
+
+	client := fake.NewClientset()
+	client.PrependReactor("create", "namespaces",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			created, ok := action.(k8stesting.CreateAction).GetObject().(*corev1.Namespace)
+			require.True(t, ok)
+
+			created.UID = liveUID // the fake API server assigns no UID of its own
+
+			return false, nil, nil
+		})
+
+	require.NoError(t, clusteridentity.Write(context.Background(), client, marker()))
+
+	namespace, err := client.CoreV1().
+		Namespaces().
+		Get(context.Background(), "kube-system", metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, liveUID, namespace.UID)
+	require.Equal(t, string(liveUID), readMarker(t, client).Data[clusteridentity.KeyKubeSystemUID])
 }

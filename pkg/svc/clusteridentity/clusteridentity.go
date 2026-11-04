@@ -108,6 +108,12 @@ func readKubeSystem(ctx context.Context, client kubernetes.Interface) (*corev1.N
 				return true, nil
 			}
 
+			if apierrors.IsNotFound(err) {
+				// Some distributions (KWOK) finish creating a cluster before kube-system
+				// exists. The marker must live there, so create it and read it back.
+				return false, createKubeSystem(ctx, client)
+			}
+
 			if !isNotYetReachable(err) {
 				return false, err //nolint:wrapcheck // wrapped once by the caller below
 			}
@@ -125,6 +131,18 @@ func readKubeSystem(ctx context.Context, client kubernetes.Interface) (*corev1.N
 	}
 
 	return nil, fmt.Errorf("get: %w", err)
+}
+
+// createKubeSystem creates the kube-system namespace; one created meanwhile is not an error.
+func createKubeSystem(ctx context.Context, client kubernetes.Interface) error {
+	_, err := client.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{
+		Name: Namespace,
+	}, metav1.CreateOptions{})
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		return fmt.Errorf("create the missing %s namespace: %w", Namespace, err)
+	}
+
+	return nil
 }
 
 // isNotYetReachable reports an API server that is not accepting requests yet.
