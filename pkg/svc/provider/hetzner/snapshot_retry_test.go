@@ -130,8 +130,8 @@ func TestSnapshotManager_EnsureTalosSnapshot_DownloadFailureOutlastingTheBound(t
 	assert.Len(
 		t,
 		api.deletedPaths(),
-		4,
-		"the server and SSH key of each of the two retried attempts are deleted",
+		6,
+		"the server and SSH key of every attempt are deleted, the last one included",
 	)
 }
 
@@ -184,6 +184,52 @@ func TestSnapshotManager_EnsureTalosSnapshot_DoesNotRetryAMissingImage(t *testin
 		[]string{"https://factory.talos.dev/image/abc123/v9.99.0/hcloud-amd64.raw.xz"},
 		probed,
 	)
+	assert.ElementsMatch(
+		t,
+		[]string{buildServerPath, buildSSHKeyPath},
+		api.deletedPaths(),
+		"the failed attempt's temporary server and SSH key are deleted when the build stops",
+	)
+}
+
+func TestSnapshotManager_EnsureTalosSnapshot_CancelledWhileAMissingImageIsReported(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+
+	uploader := &sequenceUploader{results: []uploadOutcome{{err: errDownloadExited}}}
+	api := &buildResourcesAPI{}
+	client := newBuildResourcesAPI(t, api)
+	manager := hetzner.NewSnapshotManagerWithUploaderForTest(client, uploader, nil)
+	manager.SetImageProbeForTest(func(context.Context, *url.URL) (int, error) {
+		cancel()
+
+		return http.StatusNotFound, nil
+	})
+
+	_, err := manager.EnsureTalosSnapshot(ctx, "retry-cluster", "v9.99.0", "abc123", nil)
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, errDownloadExited)
+	assert.Equal(t, 1, uploader.callCount())
+	assert.ElementsMatch(t, []string{buildServerPath, buildSSHKeyPath}, api.deletedPaths())
+}
+
+func TestSnapshotManager_EnsureTalosSnapshot_ReportsAFailedCleanupWhenTheBuildStops(t *testing.T) {
+	t.Parallel()
+
+	uploader := &sequenceUploader{results: []uploadOutcome{{err: errDownloadExited}}}
+	client := newBuildResourcesAPI(t, &buildResourcesAPI{failListing: true})
+	manager := hetzner.NewSnapshotManagerWithUploaderForTest(client, uploader, nil)
+	manager.SetImageProbeForTest(func(context.Context, *url.URL) (int, error) {
+		return http.StatusNotFound, nil
+	})
+
+	_, err := manager.EnsureTalosSnapshot(t.Context(), "retry-cluster", "v9.99.0", "abc123", nil)
+
+	require.ErrorIs(t, err, errDownloadExited)
+	require.ErrorContains(t, err, "HTTP 404")
+	require.ErrorContains(t, err, "failed to list temporary snapshot build servers")
 }
 
 func TestSnapshotManager_EnsureTalosSnapshot_RetriesWhenTheImageProbeFails(t *testing.T) {

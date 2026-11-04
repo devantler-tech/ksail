@@ -231,7 +231,7 @@ func (sm *SnapshotManager) findExistingSnapshot(
 // which no retry fixes. So before repeating, it asks the Image Factory for the image and stops
 // when the answer is a client error such as 404. Before each new attempt it deletes the failed
 // attempt's temporary server and SSH key; if that deletion fails, it stops rather than leave a
-// second server running.
+// second server running. It deletes them too when a download failure ends the build.
 //
 // SIGINT and SIGTERM cancel the whole sequence, including the probe, the cleanup and the wait
 // between attempts, so an interrupt there ends the build instead of killing the process.
@@ -250,10 +250,10 @@ func (sm *SnapshotManager) buildSnapshotRetryingDownload(
 		}
 
 		if attempt == snapshotDownloadAttempts {
-			return nil, fmt.Errorf(
+			return nil, sm.withBuildCleanup(ctx, buildID, fmt.Errorf(
 				"downloading the Talos image from the Image Factory failed %d times: %w",
 				attempt, err,
-			)
+			))
 		}
 
 		retryErr := sm.prepareDownloadRetry(ctx, buildID, opts.ImageURL, attempt, err)
@@ -275,10 +275,19 @@ func (sm *SnapshotManager) prepareDownloadRetry(
 ) error {
 	status, probeErr := sm.probeImage(ctx, imageURL)
 	if probeErr == nil && imageMissing(status) {
-		return fmt.Errorf(
+		// A build cancelled while the probe was answered is reported as cancelled, as every
+		// other cancelled step of the build is.
+		ctxErr := ctx.Err()
+		if ctxErr != nil {
+			return sm.withBuildCleanup(ctx, buildID, fmt.Errorf(
+				"cancelled while checking the Talos image: %w", errors.Join(ctxErr, downloadErr),
+			))
+		}
+
+		return sm.withBuildCleanup(ctx, buildID, fmt.Errorf(
 			"the Image Factory has no image at %s (HTTP %d), so the download is not retried: %w",
 			imageURL, status, downloadErr,
-		)
+		))
 	}
 
 	delay := netretry.ExponentialDelay(
@@ -300,6 +309,25 @@ func (sm *SnapshotManager) prepareDownloadRetry(
 	}
 
 	return waitForBackoff(ctx, "cancelled while waiting to retry the Talos image download", delay)
+}
+
+// withBuildCleanup deletes the failed attempt's temporary server and SSH key before a download
+// failure ends the build, so a resource the uploader could not remove does not keep running.
+// A failed deletion is reported together with buildErr.
+func (sm *SnapshotManager) withBuildCleanup(
+	ctx context.Context,
+	buildID string,
+	buildErr error,
+) error {
+	cleanupErr := sm.deleteBuildResources(ctx, buildID)
+	if cleanupErr == nil {
+		return buildErr
+	}
+
+	return fmt.Errorf(
+		"%w; deleting the failed attempt's temporary resources also failed: %w",
+		buildErr, cleanupErr,
+	)
 }
 
 // imageMissing reports whether an Image Factory status means the image does not exist, as
