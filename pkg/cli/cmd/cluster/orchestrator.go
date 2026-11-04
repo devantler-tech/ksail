@@ -49,6 +49,8 @@ type updateOrchestrator struct {
 	consent     bool
 	forceDrain  bool
 	dryRun      bool
+	// cancelled records that the user declined the update at a confirmation prompt.
+	cancelled bool
 }
 
 // newUpdateOrchestrator builds the orchestrator from the resolved run state.
@@ -90,6 +92,37 @@ func (o *updateOrchestrator) run(outputTimer timer.Timer) error {
 	}
 
 	return o.runVerifiedProvisioner(provisioner, outputTimer)
+}
+
+// runAndRecordIdentity runs the update, then refreshes the cluster identity marker so it never
+// describes an older KSail or a replaced kube-system (best effort; ksail#7191). A dry run or a
+// declined update changes nothing, so it writes nothing either.
+func (o *updateOrchestrator) runAndRecordIdentity(outputTimer timer.Timer) error {
+	return recordIdentityAfterUpdate(o.cmd, o.clusterName, o.ctx.ClusterCfg, func() (bool, error) {
+		err := o.run(outputTimer)
+
+		return !o.dryRun && !o.cancelled, err
+	})
+}
+
+// recordIdentityAfterUpdate runs update and, when it succeeded and actually ran (not a dry run
+// or a declined prompt), refreshes the cluster identity marker.
+func recordIdentityAfterUpdate(
+	cmd *cobra.Command,
+	clusterName string,
+	clusterCfg *v1alpha1.Cluster,
+	update func() (applied bool, err error),
+) error {
+	applied, err := update()
+	if err != nil {
+		return err
+	}
+
+	if applied {
+		writeClusterIdentityMarker(cmd, clusterName, clusterCfg)
+	}
+
+	return nil
 }
 
 func (o *updateOrchestrator) runVerifiedProvisioner(
@@ -1470,6 +1503,8 @@ func (o *updateOrchestrator) applyOrReportChanges(
 
 	allowRolling, proceed := confirmDisruptiveChanges(o.cmd, diff, o.consent)
 	if !proceed {
+		o.cancelled = true
+
 		notify.Infof(o.cmd.OutOrStdout(), "Update cancelled")
 
 		return nil
@@ -1697,6 +1732,8 @@ func (o *updateOrchestrator) executeRecreateFlow() error {
 	outputTimer := flags.MaybeTimer(o.cmd, o.deps.Timer)
 
 	if !confirmRecreate(o.cmd, o.clusterName, o.consent) {
+		o.cancelled = true
+
 		return nil
 	}
 

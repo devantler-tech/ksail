@@ -39,15 +39,33 @@ for argument in "$@"; do
 done
 printf '%s\037' "$@" >> "$FIXTURE_CALLS"
 printf '\n' >> "$FIXTURE_CALLS"
+json=false
 if [[ " $* " == *" --output json "* ]]; then
-  printf '{"totalChanges":0}\n'
-  echo 'No changes detected' >&2
-  if [[ "${FIXTURE_REPEAT_UPGRADE:-false}" == true ]]; then
-    echo 'Kubernetes upgrade path: v1.36.2 → v1.37.1 (1 step(s))' >&2
-  fi
-else
+  json=true
+fi
+# The cluster's own state decides whether this request upgrades: the first request
+# finds the source version and upgrades, a repeated one finds the target already.
+if [[ "$(cat "$FIXTURE_VERSION")" != v1.37.1 ]]; then
   printf '%s' "${FIXTURE_OBSERVED:-v1.37.1}" > "$FIXTURE_VERSION"
-  echo 'Kubernetes upgraded to pinned version v1.37.1'
+  if [[ "$json" == false || "${FIXTURE_FIRST_STDOUT:-}" == progress ]]; then
+    echo 'Kubernetes upgraded to pinned version v1.37.1'
+  else
+    echo 'Kubernetes upgraded to pinned version v1.37.1' >&2
+  fi
+  if [[ "$json" == true ]]; then
+    printf '{"totalChanges":1}\n'
+  fi
+  if [[ "$json" == true && "${FIXTURE_FIRST_STDOUT:-}" == two-documents ]]; then
+    printf '{"totalChanges":1}\n'
+  fi
+  exit 0
+fi
+if [[ "$json" == true ]]; then
+  printf '{"totalChanges":0}\n'
+fi
+echo 'No changes detected' >&2
+if [[ "${FIXTURE_REPEAT_UPGRADE:-false}" == true ]]; then
+  echo 'Kubernetes upgrade path: v1.36.2 → v1.37.1 (1 step(s))' >&2
 fi
 `
 
@@ -165,10 +183,21 @@ func TestSystemTestTalosUpgradeObservesTargetAndRepeatsNoop(t *testing.T) {
 
 	for line := range strings.SplitSeq(strings.TrimSpace(calls), "\n") {
 		assert.Contains(t, line, "--kubernetes-version\x1fv1.37.1\x1f")
+		assert.Contains(
+			t,
+			line,
+			"--output\x1fjson\x1f",
+			"the first upgrade and the repeat both run in JSON mode",
+		)
 	}
 
-	assert.Contains(t, calls, "--output\x1fjson\x1f")
 	assert.Contains(t, output, "v1.36.2 → v1.37.1")
+	assert.Contains(
+		t,
+		output,
+		"Kubernetes upgraded to pinned version v1.37.1",
+		"the upgrade's progress is shown",
+	)
 }
 
 func TestSystemTestTalosUpgradePreservesUpdateArguments(t *testing.T) {
@@ -214,6 +243,14 @@ func TestSystemTestTalosUpgradeRejectsWrongLiveState(t *testing.T) {
 		{
 			name: "repeat_upgrades", env: map[string]string{"FIXTURE_REPEAT_UPGRADE": "true"},
 			want: "repeated update performed a Kubernetes upgrade",
+		},
+		{
+			name: "first_upgrade_progress_on_stdout", env: map[string]string{"FIXTURE_FIRST_STDOUT": "progress"},
+			want: "did not write exactly one JSON document to stdout",
+		},
+		{
+			name: "first_upgrade_two_documents", env: map[string]string{"FIXTURE_FIRST_STDOUT": "two-documents"},
+			want: "did not write exactly one JSON document to stdout",
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {

@@ -189,6 +189,10 @@ workload_write
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
         "type": "string"
       },
+      "git-verify-secret-ref": {
+        "description": "Secret in the tenant namespace with trusted committers' public keys (SSH under *.sshpub keys, OpenPGP under *.asc)...",
+        "type": "string"
+      },
       "image-pull-secret": {
         "description": "imagePullSecret to add to the tenant ServiceAccount (repeatable)",
         "items": {
@@ -1013,7 +1017,7 @@ workload_write
         "type": "string"
       },
       "namespace": {
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, create, debug, delete, exec, expose, install, intercept, mirror, rollout, scale)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, create, create_helmrelease, create_kustomization, create_source_git, create_source_helm, create_source_oci, debug, delete, exec, expose, install, intercept, mirror, rollout, scale)",
         "type": "string"
       },
       "node-port": {
@@ -1355,6 +1359,14 @@ workload_write
           "type": "string"
         },
         "type": "array"
+      },
+      "verify-mode": {
+        "description": "Git object to verify: HEAD, Tag or TagAndHEAD (default HEAD; requires --verify-secret-ref) (applies to: create_source_git)",
+        "type": "string"
+      },
+      "verify-secret-ref": {
+        "description": "verify the signature of the checked-out commit (or tag) against the public keys in this existing secret (SSH keys under *.sshpub keys, OpenPGP keys under *.asc) (applies to: create_source_git)",
+        "type": "string"
       },
       "version": {
         "description": "chart version constraint (default: latest) (applies to: install)",
@@ -1755,6 +1767,13 @@ workload_write
       "hard": {
         "description": "A comma-delimited set of resource=quantity pairs that define a hard limit. (applies to: gen_quota)",
         "type": "string"
+      },
+      "health-check-expr": {
+        "description": "CEL health check for custom resources the release creates, repeatable (\u003capiVersion\u003e[/\u003cKind\u003e][:current|inProgress|failed]=\u003cCEL\u003e; field defaults to current) (applies to: gen_helmrelease)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
       },
       "ignore-errors": {
         "description": "If watching / following pod logs, allow for any errors that occur to be non-fatal (applies to: logs)",
