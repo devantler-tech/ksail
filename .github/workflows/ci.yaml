@@ -749,7 +749,7 @@ jobs:
       || (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
       && needs.changes.outputs.govuln-allowlist == 'true')
-    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@0966f4b015e85ef14be37411d424a7028a858550 # v19.0.8
+    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@522038c41420f0c9508a586cb944eda995ad0068 # v20.1.0
     # The canonical defaults make a default-branch run answer "did the check run" rather than
     # "did the diff touch a Go file". On main the branch's green IS the protection
     # signal, so a path filter that skips the suite or the scan leaves main green
@@ -764,11 +764,10 @@ jobs:
     #
     # Both default true at this immutable canonical revision, so the caller
     # inherits the corrected coverage without redundant arguments. Scan input
-    # retirement remains tracked in devantler-tech/.github#285; the separate
-    # default-branch maintenance pilot is tracked in #276.
+    # retirement remains tracked in devantler-tech/.github#285.
     with:
-      # This released default also runs read-only module hygiene and dead-code
-      # checks on main. Final maintenance input retirement remains in #276.
+      # The callee always runs read-only module hygiene and dead-code checks on
+      # main pushes; it takes no input to turn them off.
       # The org-required direct run is the sole signed-fix writer for a PR.
       # Keep this additional invocation read-only while retaining its checks.
       apply-signed-fixes: false
@@ -1105,7 +1104,7 @@ jobs:
       - name: 🧹 Free disk space
         if: steps.calico-cache.outputs.cache-hit != 'true'
         # Only cold compilation needs the large working-space reclamation.
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@ccc4de63c6f1259ecbdd604c2260559d810c7cfc
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@fc38423661fd6eaceb03ec49cd0634108c4ac18f
 
       - name: ♻️ Restore Go modules
         if: steps.calico-cache.outputs.cache-hit != 'true'
@@ -1981,7 +1980,7 @@ jobs:
       # This job already waits for the producer. Reuse its exact sealed bytes
       # instead of restoring Go modules or compiling again after cache eviction.
       - name: 📥 Restore KSail binary
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@ccc4de63c6f1259ecbdd604c2260559d810c7cfc
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@fc38423661fd6eaceb03ec49cd0634108c4ac18f
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2173,7 +2172,7 @@ jobs:
 
       - name: 📥 Restore KSail binary
         # Pin the identical published action until actionlint supports $/ references.
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@ccc4de63c6f1259ecbdd604c2260559d810c7cfc
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@fc38423661fd6eaceb03ec49cd0634108c4ac18f
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2636,7 +2635,7 @@ jobs:
         with:
           persist-credentials: false
       - name: 🧹 Free runner disk
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@ccc4de63c6f1259ecbdd604c2260559d810c7cfc
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@fc38423661fd6eaceb03ec49cd0634108c4ac18f
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:

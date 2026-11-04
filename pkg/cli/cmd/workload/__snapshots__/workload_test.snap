@@ -850,6 +850,7 @@ Flags:
       --export                    export in YAML format to stdout
   -h, --help                      help for helmrelease
       --interval duration         reconciliation interval (default 1m0s)
+  -n, --namespace string          the namespace scope for this operation (default "flux-system")
       --source string             source name in format 'Kind/name' or 'Kind/name.namespace'
       --source-kind string        source kind (HelmRepository, GitRepository, Bucket) (default "HelmRepository")
       --target-namespace string   namespace to install the Helm release
@@ -992,6 +993,7 @@ Flags:
   -h, --help                      help for kustomization
       --ignore-paths strings      JSON Pointer paths (RFC 6901) excluded from drift detection and apply for all objects, e.g. /spec/replicas
       --interval duration         reconciliation interval (default 1m0s)
+  -n, --namespace string          the namespace scope for this operation (default "flux-system")
       --path string               path to the directory containing a kustomization.yaml file (default "./")
       --prune                     enable garbage collection
       --source string             source name in format 'Kind/name' or 'Kind/name.namespace'
@@ -1626,6 +1628,7 @@ Flags:
       --export              export in YAML format to stdout
   -h, --help                help for git
       --interval duration   source sync interval (default 1m0s)
+  -n, --namespace string    the namespace scope for this operation (default "flux-system")
       --secret-ref string   the name of an existing secret containing SSH or basic credentials
       --tag string          git tag
       --tag-semver string   git tag semver range
@@ -1658,6 +1661,7 @@ Flags:
       --export                export in YAML format to stdout
   -h, --help                  help for helm
       --interval duration     source sync interval (default 1m0s)
+  -n, --namespace string      the namespace scope for this operation (default "flux-system")
       --oci-provider string   OCI provider for authentication
       --pass-credentials      pass credentials to all domains
       --secret-ref string     the name of an existing secret containing credentials
@@ -1694,6 +1698,7 @@ Flags:
   -h, --help                help for oci
       --insecure            allow insecure connections
       --interval duration   source sync interval (default 1m0s)
+  -n, --namespace string    the namespace scope for this operation (default "flux-system")
       --provider string     OCI provider (default "generic")
       --secret-ref string   the name of an existing secret containing credentials
       --tag string          OCI artifact tag
@@ -2332,6 +2337,7 @@ Available Commands:
   poddisruptionbudget Create a pod disruption budget with the specified name
   priorityclass       Create a priority class with the specified name
   quota               Create a quota with the specified name
+  receiver            Generate a Flux Receiver resource
   role                Create a role with single rule
   rolebinding         Create a role binding for a particular role or cluster role
   secret              Create a secret using a specified subcommand
@@ -3989,6 +3995,56 @@ Flags:
       --steer-command stringArray   Command the in-cluster steering agent container runs, exec'd over the tunnel (default: derived from --service-port for the KSail steering image)
       --steer-image string          Image the injected steering container runs (must carry the agent binary and iptables) (default "ghcr.io/devantler-tech/ksail-steer:latest")
       --wait-timeout duration       How long to wait for the steering container to reach Running (default 1m0s)
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental    Enable experimental (unstable) commands and features
+
+---
+
+[TestWorkloadHelpSnapshots/gen_receiver - 1]
+Generate a Flux notification-controller Receiver, the webhook endpoint that asks Flux to reconcile the listed resources when an external system reports a change. --type=generic-oidc needs no Secret: callers present an OIDC ID token that the --oidc-validation expressions must accept.
+
+Usage:
+  ksail workload gen receiver [NAME] [flags]
+
+Examples:
+  # Generate a secret-less Receiver that GitHub Actions can call with its OIDC
+  # token to reconcile a GitRepository, accepting only one organization's workflows
+  ksail workload gen receiver github-actions \
+    --type=generic-oidc \
+    --oidc-issuer=https://token.actions.githubusercontent.com \
+    --oidc-validation="claims.repository_owner == 'my-org'" \
+    --oidc-validation-message="only my-org workflows may trigger a reconcile" \
+    --resource=GitRepository/webapp
+
+  # Reconcile an OCIRepository only when the calling workflow ran in its own repository
+  ksail workload gen receiver releases \
+    --type=generic-oidc \
+    --oidc-issuer=https://token.actions.githubusercontent.com \
+    --oidc-validation="claims.repository_owner == 'my-org'" \
+    --resource="OCIRepository/webapp=res.metadata.annotations['repo'] == claims.repository"
+
+  # Generate a GitHub webhook Receiver whose token is read from a Secret
+  ksail workload gen receiver github-push \
+    --type=github \
+    --events=push \
+    --secret-ref=webhook-token \
+    --resource=GitRepository/webapp.apps
+
+Flags:
+      --events strings                        event types to handle, e.g. push for GitHub
+  -h, --help                                  help for receiver
+  -n, --namespace string                      namespace for the Receiver (default "flux-system")
+      --oidc-audience string                  expected token audience (generic-oidc; Flux defaults to notification-controller)
+      --oidc-issuer string                    OIDC issuer URL whose ID tokens are accepted (generic-oidc)
+      --oidc-validation stringArray           CEL expression over the token claims that must be true, repeatable (generic-oidc)
+      --oidc-validation-message stringArray   message returned when the matching --oidc-validation is false, repeatable in the same order (default: a generic refusal that does not reveal the expression)
+      --resource stringArray                  resource to reconcile, repeatable (Kind/name[.namespace][=<CEL filter>])
+      --resource-filter string                CEL expression every resource must pass before it is reconciled
+      --secret-ref string                     Secret holding the webhook token (every type except generic-oidc)
+      --type string                           webhook sender type (generic, generic-hmac, generic-oidc, github, gitlab, bitbucket, harbor, dockerhub, quay, gcr, nexus, acr, cdevents)
 
 Global Flags:
       --benchmark       Show per-activity benchmark output
