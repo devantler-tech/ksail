@@ -56,7 +56,11 @@ Distribution is chosen via `--distribution` (`Vanilla`, `K3s`, `Talos`, `VCluste
 
 - **When the tools are available**, prefer them for cluster and workload operations.
 - **When they are not**, run the same operations with the `ksail` CLI. Never block on the MCP server.
-- **If the user wants the tools and the client lacks them**, first check for an existing `ksail` registration (`claude mcp list` in Claude Code, `codex mcp list` in Codex). If one is listed but disabled, enable it — in Claude Code, from the `/mcp` panel — rather than adding it again. Otherwise register the server with their agreement, for example `claude mcp add ksail -- ksail open mcp` in Claude Code or `codex mcp add ksail -- ksail open mcp` in Codex. Clients that read an `mcpServers` map take `{"mcpServers": {"ksail": {"command": "ksail", "args": ["open", "mcp"]}}}`. Per-client steps: <https://ksail.devantler.tech/integrations/ai-mcp/>.
+- **If the user wants the tools and the client lacks them**, look for an existing `ksail` entry first (`claude mcp list` in Claude Code, `codex mcp list` in Codex) and fix it rather than adding a duplicate:
+  - *Disabled:* enable it. In Claude Code, use the `/mcp` panel. Codex has no enable command, so set `enabled = true` under `[mcp_servers.ksail]` in the Codex config file that defines it (usually `~/.codex/config.toml`).
+  - *Pending approval:* approve it from Claude Code's `/mcp` panel; Claude Code asks before starting a project-scoped server.
+  - *Failed to connect:* check that `ksail` is on the `PATH` the client sees and that `ksail open mcp` starts. See <https://ksail.devantler.tech/integrations/mcp/#troubleshooting>.
+  - *No entry:* register it with the user's agreement: `claude mcp add ksail -- ksail open mcp` in Claude Code, or `codex mcp add ksail -- ksail open mcp` in Codex. Clients that read an `mcpServers` map take `{"mcpServers": {"ksail": {"command": "ksail", "args": ["open", "mcp"]}}}`. Per-client steps: <https://ksail.devantler.tech/integrations/ai-mcp/>.
 
 ## Safety
 
