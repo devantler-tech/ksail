@@ -48,6 +48,8 @@ func TestCreate_EnabledCertManager_PrintsInstallStage(t *testing.T) {
 	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
 
+	useFakeIdentityMarker(t)
+
 	fake := &fakeInstaller{}
 
 	restore := cluster.SetCertManagerInstallerFactoryForTests(
@@ -88,6 +90,8 @@ func TestCreate_DefaultCertManager_DoesNotInstall(t *testing.T) {
 	// Override cluster provisioner factory to use fake provisioner
 	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
+
+	useFakeIdentityMarker(t)
 
 	factoryCalled := false
 
@@ -132,6 +136,7 @@ func setupGitOpsTestMocks(
 
 	// Override cluster provisioner factory to use fake provisioner
 	t.Cleanup(cluster.SetProvisionerFactoryForTests(fakeFactory{}))
+	useFakeIdentityMarker(t)
 
 	// Set up the appropriate installer and ensure mocks based on the GitOps engine
 	switch engine {
@@ -570,8 +575,8 @@ spec:
 	)
 
 	// Override cluster provisioner factory to use fake provisioner
-	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
-	defer restoreFactory()
+	t.Cleanup(cluster.SetProvisionerFactoryForTests(fakeFactory{}))
+	useFakeIdentityMarker(t)
 
 	fake := &fakeInstaller{}
 
@@ -615,6 +620,8 @@ func TestCreate_DefaultCSI_DoesNotInstall(t *testing.T) {
 	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
 
+	useFakeIdentityMarker(t)
+
 	cmd := cluster.NewCreateCmd()
 
 	var out bytes.Buffer
@@ -645,6 +652,8 @@ func TestCreate_Minimal_PrintsOnlyClusterLifecycle(t *testing.T) {
 	// Override cluster provisioner factory to use fake provisioner
 	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
+
+	useFakeIdentityMarker(t)
 
 	cmd := cluster.NewCreateCmd()
 
@@ -694,6 +703,8 @@ func TestCreate_NoConfigFile_FlagsOnly(t *testing.T) {
 	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
 
+	useFakeIdentityMarker(t)
+
 	cmd := cluster.NewCreateCmd()
 
 	var out bytes.Buffer
@@ -741,6 +752,8 @@ func TestCreate_NonEKSNameOverrideReachesProvisioner(t *testing.T) {
 	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{createName: &createdName})
 	defer restoreFactory()
 
+	useFakeIdentityMarker(t)
+
 	cmd := cluster.NewCreateCmd()
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
@@ -776,6 +789,8 @@ func TestCreateRejectsWhitespaceOnlyName(t *testing.T) {
 
 	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{createName: &createdName})
 	defer restoreFactory()
+
+	useFakeIdentityMarker(t)
 
 	cmd := cluster.NewCreateCmd()
 	cmd.SetOut(io.Discard)
@@ -821,6 +836,8 @@ func TestCreate_NoConfigFile_WithComponentFlags(t *testing.T) {
 
 	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
+
+	useFakeIdentityMarker(t)
 
 	cmd := cluster.NewCreateCmd()
 
@@ -885,6 +902,8 @@ spec:
 	// Override cluster provisioner factory to use fake provisioner
 	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
+
+	useFakeIdentityMarker(t)
 
 	setupMockRegistryBackend(t)
 
@@ -1623,16 +1642,16 @@ func TestRefreshAndVerifyKubeconfig_StatPermissionError(t *testing.T) {
 	assert.False(t, refresher.called, "should not attempt refresh on permission error")
 }
 
-func TestResolveCreatedContextName(t *testing.T) {
-	t.Parallel()
+type createdContextCase struct {
+	name         string
+	distribution v1alpha1.Distribution
+	provider     v1alpha1.Provider
+	clusterName  string
+	expected     string
+}
 
-	tests := []struct {
-		name         string
-		distribution v1alpha1.Distribution
-		provider     v1alpha1.Provider
-		clusterName  string
-		expected     string
-	}{
+func createdContextCases() []createdContextCase {
+	return []createdContextCase{
 		{
 			name:         "k3s on kubernetes provider uses k3k prefix",
 			distribution: v1alpha1.DistributionK3s,
@@ -1646,6 +1665,22 @@ func TestResolveCreatedContextName(t *testing.T) {
 			provider:     v1alpha1.ProviderDocker,
 			clusterName:  "my-cluster",
 			expected:     "k3d-my-cluster",
+		},
+		{
+			// The nested vCluster provisioner writes "vcluster-<name>", not the Docker
+			// driver's "vcluster-docker_<name>" (ksail#8194: the identity marker missed it).
+			name:         "vcluster on kubernetes provider uses the nested provisioner context",
+			distribution: v1alpha1.DistributionVCluster,
+			provider:     v1alpha1.ProviderKubernetes,
+			clusterName:  "nested-vcluster",
+			expected:     "vcluster-nested-vcluster",
+		},
+		{
+			name:         "vcluster on docker provider keeps the docker driver prefix",
+			distribution: v1alpha1.DistributionVCluster,
+			provider:     v1alpha1.ProviderDocker,
+			clusterName:  "my-cluster",
+			expected:     "vcluster-docker_my-cluster",
 		},
 		{
 			name:         "vanilla on kubernetes provider uses standalone kind prefix",
@@ -1662,8 +1697,12 @@ func TestResolveCreatedContextName(t *testing.T) {
 			expected:     "",
 		},
 	}
+}
 
-	for _, testCase := range tests {
+func TestResolveCreatedContextName(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range createdContextCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
