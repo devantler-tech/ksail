@@ -232,11 +232,17 @@ func (sm *SnapshotManager) findExistingSnapshot(
 // when the answer is a client error such as 404. Before each new attempt it deletes the failed
 // attempt's temporary server and SSH key; if that deletion fails, it stops rather than leave a
 // second server running.
+//
+// SIGINT and SIGTERM cancel the whole sequence, including the probe, the cleanup and the wait
+// between attempts, so an interrupt there ends the build instead of killing the process.
 func (sm *SnapshotManager) buildSnapshotRetryingDownload(
-	ctx context.Context,
+	parent context.Context,
 	buildID string,
 	opts hcloudimages.UploadOptions,
 ) (*hcloud.Image, error) {
+	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	for attempt := 1; ; attempt++ {
 		image, err := sm.buildSnapshot(ctx, buildID, opts)
 		if err == nil || !strings.Contains(err.Error(), imageDownloadFailure) {
