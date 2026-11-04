@@ -2,12 +2,14 @@ package helm_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"maps"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -64,8 +66,59 @@ type argoOwnershipFixture struct {
 	items     []string
 	paginated bool
 	status    int
-	wantOwner string
-	wantError string
+	// clusterSecrets are the Argo CD cluster secrets the API serves; clusterSecretsStatus, when
+	// set, fails that list instead.
+	clusterSecrets       []string
+	clusterSecretsStatus int
+	wantOwner            string
+	wantError            string
+}
+
+// storedRecords is a release record list and the storage path the API serves it at.
+type storedRecords struct {
+	path string
+	list string
+}
+
+func argoClusterSecret(name, server string) string {
+	return fmt.Sprintf(
+		`{"metadata":{"name":%q,"namespace":"argocd","labels":{"argocd.argoproj.io/secret-type":"cluster"}},`+
+			`"data":{"name":%q,"server":%q}}`,
+		name,
+		base64.StdEncoding.EncodeToString([]byte(name)),
+		base64.StdEncoding.EncodeToString([]byte(server)),
+	)
+}
+
+// argoOwnershipDestinationFixtures covers destinations that name a registered cluster.
+func argoOwnershipDestinationFixtures() map[string]argoOwnershipFixture {
+	deployment := `{"group":"apps","kind":"Deployment","namespace":"cert-manager","name":"cert-manager"}`
+	named := `"destination":{"name":"local-cluster"}`
+
+	return map[string]argoOwnershipFixture{
+		"destination names the in-cluster server under another name": {
+			items: []string{argoApplication("certs", named, deployment)},
+			clusterSecrets: []string{
+				argoClusterSecret("remote", "https://remote.example:6443"),
+				argoClusterSecret("local-cluster", "https://kubernetes.default.svc"),
+			},
+			wantOwner: "argocd/certs",
+		},
+		"destination names a remote cluster": {
+			items: []string{argoApplication("certs", named, deployment)},
+			clusterSecrets: []string{
+				argoClusterSecret("local-cluster", "https://remote.example:6443"),
+			},
+		},
+		"destination names an unregistered cluster": {
+			items: []string{argoApplication("certs", named, deployment)},
+		},
+		"cluster secrets unreadable": {
+			items:                []string{argoApplication("certs", named, deployment)},
+			clusterSecretsStatus: http.StatusForbidden,
+			wantError:            "Argo CD cluster secrets",
+		},
+	}
 }
 
 func argoApplication(name, destination, resources string) string {
@@ -175,6 +228,7 @@ func TestReleaseLabelsRecognizeArgoCDApplicationsThatTrackTheRelease(t *testing.
 	fixtures := argoOwnershipFixtures()
 	maps.Copy(fixtures, argoOwnershipTrackingFixtures())
 	maps.Copy(fixtures, argoOwnershipErrorFixtures())
+	maps.Copy(fixtures, argoOwnershipDestinationFixtures())
 
 	for name, fixture := range fixtures {
 		t.Run(name, func(t *testing.T) {
@@ -202,6 +256,64 @@ func TestReleaseLabelsRecognizeArgoCDApplicationsThatTrackTheRelease(t *testing.
 	}
 }
 
+// argoReleaseRecordCase is a release stored in a way the Argo CD lookup must still read.
+type argoReleaseRecordCase struct {
+	driver  string
+	records []*v1.Release
+}
+
+func argoReleaseRecordCases() map[string]argoReleaseRecordCase {
+	return map[string]argoReleaseRecordCase{
+		"ConfigMap release storage": {
+			driver:  "configmap",
+			records: []*v1.Release{argoRelease(1, argoReleaseManifest, common.StatusDeployed)},
+		},
+		"failed upgrade dropped the tracked object": {
+			driver: "secret",
+			records: []*v1.Release{
+				argoRelease(1, argoReleaseManifest, common.StatusDeployed),
+				argoRelease(2, `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cert-manager-settings
+`, common.StatusFailed),
+			},
+		},
+		"object declared inside a List document": {
+			driver: "secret",
+			records: []*v1.Release{argoRelease(1, `apiVersion: v1
+kind: List
+items:
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: cert-manager
+`, common.StatusDeployed)},
+		},
+	}
+}
+
+func TestReleaseLabelsArgoCDLookupReadsEveryReleaseRecordShape(t *testing.T) {
+	deployment := `{"group":"apps","kind":"Deployment","namespace":"cert-manager","name":"cert-manager"}`
+
+	for name, recordCase := range argoReleaseRecordCases() {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("HELM_DRIVER", recordCase.driver)
+
+			client := newArgoOwnershipClient(t, argoOwnershipFixture{
+				items: []string{argoApplication("certs", inClusterDestination, deployment)},
+			}, releaseRecordList(t, recordCase.driver, recordCase.records...))
+
+			labels, err := client.GetReleaseStorageLabels(
+				context.Background(), argoReleaseName, argoReleaseNamespace,
+			)
+
+			require.NoError(t, err)
+			assert.Equal(t, "argocd/certs", labels[helm.ArgoCDManagedByLabel])
+		})
+	}
+}
+
 func TestReleaseLabelsFailClosedWhenTheReleaseRecordIsUnreadable(t *testing.T) {
 	t.Setenv("HELM_DRIVER", "secret")
 
@@ -210,7 +322,7 @@ func TestReleaseLabelsFailClosedWhenTheReleaseRecordIsUnreadable(t *testing.T) {
 "labels":{"name":"cert-manager","owner":"helm","version":"1"}},"data":{"release":"bm90IGEgcmVsZWFzZQ=="}}]}`
 	client := newArgoOwnershipClient(t, argoOwnershipFixture{
 		items: []string{argoApplication("certs", inClusterDestination, "")},
-	}, unreadable)
+	}, storedRecords{path: argoReleaseStoragePath("secrets"), list: unreadable})
 
 	labels, err := client.GetReleaseStorageLabels(
 		context.Background(), argoReleaseName, argoReleaseNamespace,
@@ -263,23 +375,66 @@ func TestReleaseLabelsArgoCDLookupHonoursTheCallerDeadline(t *testing.T) {
 	)
 }
 
-// releaseSecretList renders the Helm release Secret Kubernetes would return for the release,
-// encoded by Helm's own storage driver.
-func releaseSecretList(t *testing.T) string {
+func argoRelease(version int, manifest string, status common.Status) *v1.Release {
+	return &v1.Release{
+		Name:      argoReleaseName,
+		Namespace: argoReleaseNamespace,
+		Version:   version,
+		Manifest:  manifest,
+		Info:      &v1.Info{Status: status},
+	}
+}
+
+func argoReleaseStoragePath(resource string) string {
+	return "/api/v1/namespaces/" + argoReleaseNamespace + "/" + resource
+}
+
+// releaseSecretList renders the deployed Helm release Secret Kubernetes would return for the
+// release.
+func releaseSecretList(t *testing.T) storedRecords {
+	t.Helper()
+
+	return releaseRecordList(
+		t, "secret", argoRelease(1, argoReleaseManifest, common.StatusDeployed),
+	)
+}
+
+// releaseRecordList renders the release records Kubernetes would return from the storage the
+// HELM_DRIVER value selects, encoded by Helm's own storage driver.
+func releaseRecordList(t *testing.T, storage string, records ...*v1.Release) storedRecords {
 	t.Helper()
 
 	clientset := fake.NewClientset()
-	driver := helmv4driver.NewSecrets(clientset.CoreV1().Secrets(argoReleaseNamespace))
-	require.NoError(t, driver.Create(
-		"sh.helm.release.v1."+argoReleaseName+".v1",
-		&v1.Release{
-			Name:      argoReleaseName,
-			Namespace: argoReleaseNamespace,
-			Version:   1,
-			Manifest:  argoReleaseManifest,
-			Info:      &v1.Info{Status: common.StatusDeployed},
-		},
-	))
+
+	var driver helmv4driver.Driver = helmv4driver.NewSecrets(
+		clientset.CoreV1().Secrets(argoReleaseNamespace),
+	)
+	if storage == "configmap" {
+		driver = helmv4driver.NewConfigMaps(clientset.CoreV1().ConfigMaps(argoReleaseNamespace))
+	}
+
+	for _, record := range records {
+		require.NoError(t, driver.Create(
+			fmt.Sprintf("sh.helm.release.v1.%s.v%d", argoReleaseName, record.Version), record,
+		))
+	}
+
+	if storage == "configmap" {
+		configMaps, err := clientset.CoreV1().ConfigMaps(argoReleaseNamespace).List(
+			context.Background(), metav1.ListOptions{},
+		)
+		require.NoError(t, err)
+
+		configMaps.APIVersion, configMaps.Kind = "v1", "ConfigMapList"
+		for index := range configMaps.Items {
+			configMaps.Items[index].UID = "storage-uid"
+		}
+
+		encoded, err := json.Marshal(configMaps)
+		require.NoError(t, err)
+
+		return storedRecords{path: argoReleaseStoragePath("configmaps"), list: string(encoded)}
+	}
 
 	secrets, err := clientset.CoreV1().Secrets(argoReleaseNamespace).List(
 		context.Background(), metav1.ListOptions{},
@@ -294,11 +449,11 @@ func releaseSecretList(t *testing.T) string {
 	encoded, err := json.Marshal(secrets)
 	require.NoError(t, err)
 
-	return string(encoded)
+	return storedRecords{path: argoReleaseStoragePath("secrets"), list: string(encoded)}
 }
 
 func newArgoOwnershipClient(
-	t *testing.T, fixture argoOwnershipFixture, secretList string,
+	t *testing.T, fixture argoOwnershipFixture, records storedRecords,
 ) *helm.Client {
 	t.Helper()
 
@@ -306,13 +461,14 @@ func newArgoOwnershipClient(
 		func(response http.ResponseWriter, request *http.Request) {
 			response.Header().Set("Content-Type", "application/json")
 
-			if request.URL.Path == "/apis/argoproj.io/v1alpha1/applications" {
+			switch request.URL.Path {
+			case "/apis/argoproj.io/v1alpha1/applications":
 				writeArgoApplications(response, request, fixture)
-
-				return
+			case "/api/v1/secrets":
+				writeArgoClusterSecrets(response, fixture)
+			default:
+				writeArgoReleaseSecrets(response, request, records)
 			}
-
-			writeArgoReleaseSecrets(response, request, secretList)
 		},
 	))
 	t.Cleanup(server.Close)
@@ -361,15 +517,35 @@ func writeArgoApplications(
 func writeArgoReleaseSecrets(
 	response http.ResponseWriter,
 	request *http.Request,
-	secretList string,
+	records storedRecords,
 ) {
-	if request.URL.Path != "/api/v1/namespaces/"+argoReleaseNamespace+"/secrets" {
+	if request.URL.Path != records.path {
 		http.NotFound(response, request)
 
 		return
 	}
 
-	_, _ = fmt.Fprint(response, secretList)
+	_, _ = fmt.Fprint(response, records.list)
+}
+
+// writeArgoClusterSecrets serves the cluster-wide list of Argo CD cluster secrets.
+func writeArgoClusterSecrets(response http.ResponseWriter, fixture argoOwnershipFixture) {
+	if fixture.clusterSecretsStatus != 0 {
+		response.WriteHeader(fixture.clusterSecretsStatus)
+		_, _ = fmt.Fprintf(
+			response,
+			`{"apiVersion":"v1","kind":"Status","status":"Failure","code":%d}`,
+			fixture.clusterSecretsStatus,
+		)
+
+		return
+	}
+
+	_, _ = fmt.Fprintf(
+		response,
+		`{"apiVersion":"v1","kind":"SecretList","items":[%s]}`,
+		strings.Join(fixture.clusterSecrets, ","),
+	)
 }
 
 func argoTestSettings(t *testing.T, serverURL string) *helmcli.EnvSettings {
