@@ -10,11 +10,12 @@ import (
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
-// TestFluxCollector_HelmReleaseFailingHealthCheckExpr pins how `workload reconcile`
-// treats a HelmRelease generated with --health-check-expr. Flux evaluates the CEL
-// expressions in helm-controller and folds the verdict into the release's Ready
-// condition, so a false expression must surface as a not-ready release carrying the
-// controller's reason and message, while a passing one stays out of the report.
+// TestFluxCollector_HelmReleaseFailingHealthCheckExpr pins the contract `workload reconcile`
+// relies on for releases generated with --health-check-expr. KSail does not evaluate the CEL
+// expressions itself: helm-controller does, and folds the verdict into the release's Ready
+// condition. The report therefore judges such a release by Ready alone, exactly like any other
+// release: a release whose health check failed (Ready=False) is reported with the controller's
+// reason and message, and carrying healthCheckExprs neither hides it nor flags a ready one.
 func TestFluxCollector_HelmReleaseFailingHealthCheckExpr(t *testing.T) {
 	t.Parallel()
 
