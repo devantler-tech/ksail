@@ -36,6 +36,7 @@ Flags:
       --depends-on strings        HelmRelease that must be ready before this one
       --export                    export in YAML format to stdout
       --interval duration         reconciliation interval (default 1m0s)
+  -n, --namespace string          the namespace scope for this operation (default "flux-system")
       --source string             source name in format 'Kind/name' or 'Kind/name.namespace'
       --source-kind string        source kind (HelmRepository, GitRepository, Bucket) (default "HelmRepository")
       --target-namespace string   namespace to install the Helm release

@@ -850,6 +850,7 @@ Flags:
       --export                    export in YAML format to stdout
   -h, --help                      help for helmrelease
       --interval duration         reconciliation interval (default 1m0s)
+  -n, --namespace string          the namespace scope for this operation (default "flux-system")
       --source string             source name in format 'Kind/name' or 'Kind/name.namespace'
       --source-kind string        source kind (HelmRepository, GitRepository, Bucket) (default "HelmRepository")
       --target-namespace string   namespace to install the Helm release
@@ -992,6 +993,7 @@ Flags:
   -h, --help                      help for kustomization
       --ignore-paths strings      JSON Pointer paths (RFC 6901) excluded from drift detection and apply for all objects, e.g. /spec/replicas
       --interval duration         reconciliation interval (default 1m0s)
+  -n, --namespace string          the namespace scope for this operation (default "flux-system")
       --path string               path to the directory containing a kustomization.yaml file (default "./")
       --prune                     enable garbage collection
       --source string             source name in format 'Kind/name' or 'Kind/name.namespace'
@@ -1586,7 +1588,8 @@ Available Commands:
   oci         Create or update an OCIRepository source
 
 Flags:
-  -h, --help   help for source
+  -h, --help               help for source
+  -n, --namespace string   the namespace scope for this operation (default "flux-system")
 
 Global Flags:
       --benchmark       Show per-activity benchmark output
@@ -1632,9 +1635,10 @@ Flags:
       --url string          git address, e.g. ssh://git@host/org/repository
 
 Global Flags:
-      --benchmark       Show per-activity benchmark output
-      --config string   Path to config file (default: ksail.yaml found via directory traversal)
-      --experimental    Enable experimental (unstable) commands and features
+      --benchmark          Show per-activity benchmark output
+      --config string      Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental       Enable experimental (unstable) commands and features
+  -n, --namespace string   the namespace scope for this operation (default "flux-system")
 
 ---
 
@@ -1664,9 +1668,10 @@ Flags:
       --url string            Helm repository address
 
 Global Flags:
-      --benchmark       Show per-activity benchmark output
-      --config string   Path to config file (default: ksail.yaml found via directory traversal)
-      --experimental    Enable experimental (unstable) commands and features
+      --benchmark          Show per-activity benchmark output
+      --config string      Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental       Enable experimental (unstable) commands and features
+  -n, --namespace string   the namespace scope for this operation (default "flux-system")
 
 ---
 
@@ -1701,9 +1706,10 @@ Flags:
       --url string          OCI repository URL
 
 Global Flags:
-      --benchmark       Show per-activity benchmark output
-      --config string   Path to config file (default: ksail.yaml found via directory traversal)
-      --experimental    Enable experimental (unstable) commands and features
+      --benchmark          Show per-activity benchmark output
+      --config string      Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental       Enable experimental (unstable) commands and features
+  -n, --namespace string   the namespace scope for this operation (default "flux-system")
 
 ---
 

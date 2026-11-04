@@ -15,16 +15,17 @@ import (
 // The runtime parameter is kept for consistency with other workload command constructors,
 // though it's currently unused as this command wraps kubectl and flux directly.
 func NewCreateCmd() *cobra.Command {
-	// Resolve kubeconfig path from ksail.yaml (cheap — skips distribution config loading).
-	// This is re-resolved in PersistentPreRunE after flags are parsed.
-	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(nil)
-
-	// Create IO streams for kubectl and flux
-	ioStreams := genericiooptions.IOStreams{
+	return newCreateCmd(genericiooptions.IOStreams{
 		In:     os.Stdin,
 		Out:    os.Stdout,
 		ErrOut: os.Stderr,
-	}
+	})
+}
+
+func newCreateCmd(ioStreams genericiooptions.IOStreams) *cobra.Command {
+	// Resolve kubeconfig path from ksail.yaml (cheap — skips distribution config loading).
+	// This is re-resolved in PersistentPreRunE after flags are parsed.
+	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(nil)
 
 	// Create kubectl client and get the create command directly
 	kubectlClient := kubectl.NewClient(ioStreams)
@@ -34,8 +35,11 @@ func NewCreateCmd() *cobra.Command {
 	fluxClient := flux.NewClient(ioStreams, kubeconfigPath)
 	fluxCreateCmd := fluxClient.CreateCreateCommand(kubeconfigPath)
 
-	// Add all flux create sub-commands to the main create command
+	// Move the flux create sub-commands under the main create command. They read
+	// --namespace from the flux parent's persistent flags, which they would lose with that
+	// parent, so each one carries them along (kubectl's own sub-commands are unaffected).
 	for _, subCmd := range fluxCreateCmd.Commands() {
+		subCmd.PersistentFlags().AddFlagSet(fluxCreateCmd.PersistentFlags())
 		createCmd.AddCommand(subCmd)
 	}
 
