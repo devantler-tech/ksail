@@ -161,12 +161,13 @@ ksail tenant create my-team --type flux \
   --git-token "${MY_BOT_TOKEN}"
 ```
 
-#### Accept only signed commits
+#### Require a signed HEAD commit
 
-A Git-synced Flux tenant can require every synced commit to be signed by a trusted key. Pass
-`--git-verify-secret-ref` and KSail adds a `verify` block (mode `HEAD`) to the tenant's GitRepository, so
-Flux refuses a commit whose SSH or OpenPGP signature does not match one of the keys. It is off by
-default, so unsigned repositories keep working.
+A Git-synced Flux tenant can require the commit Flux applies to be signed by a trusted key. Pass
+`--git-verify-secret-ref` and KSail adds a `verify` block (mode `HEAD`) to the tenant's GitRepository.
+At each sync Flux checks the SSH or OpenPGP signature of the branch HEAD and refuses to apply it unless
+one of the keys signed it. Only HEAD is checked, not every commit beneath it, so protect the branch so
+that only signed commits can become its HEAD. It is off by default, so unsigned repositories keep working.
 
 ```bash
 ksail tenant create my-team --type flux \

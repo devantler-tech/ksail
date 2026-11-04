@@ -190,7 +190,7 @@ workload_write
         "type": "string"
       },
       "git-verify-secret-ref": {
-        "description": "Secret in the tenant namespace with trusted committers' public keys (SSH under *.sshpub keys, OpenPGP under *.asc); Flux then verifies each synced commit's signature (requires --sync-source git)",
+        "description": "Secret in the tenant namespace with trusted committers' public keys (SSH under *.sshpub keys, OpenPGP under *.asc)...",
         "type": "string"
       },
       "image-pull-secret": {
@@ -1365,7 +1365,7 @@ workload_write
         "type": "string"
       },
       "verify-secret-ref": {
-        "description": "verify commit signatures against the public keys in this existing secret (SSH keys under *.sshpub keys, OpenPGP keys under *.asc) (applies to: create_source_git)",
+        "description": "verify the signature of the checked-out commit (or tag) against the public keys in this existing secret (SSH keys under *.sshpub keys, OpenPGP keys under *.asc) (applies to: create_source_git)",
         "type": "string"
       },
       "version": {

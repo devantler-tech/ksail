@@ -102,6 +102,14 @@ func TestCreateGitRepository_RejectsInvalidVerification(t *testing.T) {
 			args:    []string{"--branch=master", "--verify-secret-ref=keys", "--verify-mode=Tag"},
 			wantErr: flux.ErrVerifyTagModeWithoutTag,
 		},
+		{
+			// --branch wins over --tag, so the written reference has no tag to verify.
+			name: "tag-mode-with-branch-and-tag",
+			args: []string{
+				"--branch=master", "--tag=6.6.2", "--verify-secret-ref=keys", "--verify-mode=TagAndHEAD",
+			},
+			wantErr: flux.ErrVerifyTagModeWithoutTag,
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()

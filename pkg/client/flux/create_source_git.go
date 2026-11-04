@@ -19,7 +19,9 @@ var (
 	// ErrInvalidVerifyMode is returned for a --verify-mode Flux does not support.
 	ErrInvalidVerifyMode = errors.New("invalid --verify-mode")
 	// ErrVerifyTagModeWithoutTag is returned when a tag verification mode has no tag reference.
-	ErrVerifyTagModeWithoutTag = errors.New("tag verification requires --tag or --tag-semver")
+	ErrVerifyTagModeWithoutTag = errors.New(
+		"tag verification requires a tag reference (--tag or --tag-semver, without --branch)",
+	)
 )
 
 type sourceGitFlags struct {
@@ -83,8 +85,8 @@ func (c *Client) newCreateSourceGitCmd() *cobra.Command {
 		StringVar(&flags.secretRef, "secret-ref", "", "the name of an existing secret containing SSH or basic credentials")
 	cmd.Flags().DurationVar(&flags.interval, "interval", time.Minute, "source sync interval")
 	cmd.Flags().StringVar(&flags.verifySecretRef, "verify-secret-ref", "",
-		"verify commit signatures against the public keys in this existing secret "+
-			"(SSH keys under *.sshpub keys, OpenPGP keys under *.asc)")
+		"verify the signature of the checked-out commit (or tag) against the public keys in this "+
+			"existing secret (SSH keys under *.sshpub keys, OpenPGP keys under *.asc)")
 	cmd.Flags().StringVar(&flags.verifyMode, "verify-mode", "",
 		"Git object to verify: HEAD, Tag or TagAndHEAD (default HEAD; requires --verify-secret-ref)")
 	cmd.Flags().BoolVar(&flags.export, "export", false, "export in YAML format to stdout")
@@ -169,7 +171,8 @@ func setGitVerification(spec *sourcev1.GitRepositorySpec, flags *sourceGitFlags)
 	switch mode {
 	case sourcev1.ModeGitHEAD:
 	case sourcev1.ModeGitTag, sourcev1.ModeGitTagAndHEAD:
-		if flags.tag == "" && flags.semver == "" {
+		// Judge the reference actually written: --branch wins over --tag in the switch above.
+		if spec.Reference == nil || (spec.Reference.Tag == "" && spec.Reference.SemVer == "") {
 			return fmt.Errorf("%w: --verify-mode=%s", ErrVerifyTagModeWithoutTag, mode)
 		}
 	default:

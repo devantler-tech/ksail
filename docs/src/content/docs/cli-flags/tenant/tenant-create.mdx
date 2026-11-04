@@ -22,7 +22,7 @@ Flags:
       --force                          Overwrite existing tenant directory
       --git-provider string            Git provider for manifest URLs: github, gitlab, gitea (repo scaffolding requires github)
       --git-token string               GitHub API token for repo scaffolding (--git-provider=github)
-      --git-verify-secret-ref string   Secret in the tenant namespace with trusted committers' public keys (SSH under *.sshpub keys, OpenPGP under *.asc); Flux then verifies each synced commit's signature (requires --sync-source git)
+      --git-verify-secret-ref string   Secret in the tenant namespace with trusted committers' public keys (SSH under *.sshpub keys, OpenPGP under *.asc); Flux then verifies the signature of the commit it checks out, the branch HEAD (requires --sync-source git)
       --image-pull-secret strings      imagePullSecret to add to the tenant ServiceAccount (repeatable)
       --kustomization-path string      Path to kustomization.yaml (fallback: auto-discover)
       --limit-default-cpu string       Default container CPU limit (default "500m")

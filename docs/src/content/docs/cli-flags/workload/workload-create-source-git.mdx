@@ -44,7 +44,7 @@ Flags:
       --tag-semver string          git tag semver range
       --url string                 git address, e.g. ssh://git@host/org/repository
       --verify-mode string         Git object to verify: HEAD, Tag or TagAndHEAD (default HEAD; requires --verify-secret-ref)
-      --verify-secret-ref string   verify commit signatures against the public keys in this existing secret (SSH keys under *.sshpub keys, OpenPGP keys under *.asc)
+      --verify-secret-ref string   verify the signature of the checked-out commit (or tag) against the public keys in this existing secret (SSH keys under *.sshpub keys, OpenPGP keys under *.asc)
 
 Global Flags:
       --benchmark       Show per-activity benchmark output

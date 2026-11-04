@@ -63,8 +63,8 @@ func NewCreateCmd() *cobra.Command {
 			"Directory name for tenant manifests in the tenant repo")
 	cmd.Flags().String("git-verify-secret-ref", "",
 		"Secret in the tenant namespace with trusted committers' public keys "+
-			"(SSH under *.sshpub keys, OpenPGP under *.asc); Flux then verifies each synced commit's "+
-			"signature (requires --sync-source git)")
+			"(SSH under *.sshpub keys, OpenPGP under *.asc); Flux then verifies the signature of the "+
+			"commit it checks out, the branch HEAD (requires --sync-source git)")
 
 	// Phase 2 flags
 	cmd.Flags().Bool("register", false, "Register tenant in kustomization.yaml")
