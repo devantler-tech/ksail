@@ -132,6 +132,17 @@ func genValidateCases() []genValidateCase {
 			"helmrelease", gen.NewHelmReleaseCmd,
 			[]string{"test-hr", "--source=HelmRepository/test", "--chart=test", "--export"},
 		},
+		{
+			"helmrelease-health-check-exprs",
+			gen.NewHelmReleaseCmd,
+			[]string{
+				"test-hr",
+				"--chart-ref=OCIRepository/test",
+				"--health-check-expr=bitnami.com/v1alpha1/SealedSecret=status.conditions.all(e, e.status == 'True')",
+				"--health-check-expr=bitnami.com/v1alpha1/SealedSecret:failed=status.conditions.all(e, e.status == 'False')",
+				"--export",
+			},
+		},
 	}
 }
 
