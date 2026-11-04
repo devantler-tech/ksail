@@ -152,3 +152,9 @@ func (sm *SnapshotManager) SetImageProbeForTest(
 
 // BuildSSHFirewallRulesForTest exports buildSSHFirewallRules for testing.
 var BuildSSHFirewallRulesForTest = buildSSHFirewallRules
+
+// HeadImageURLForTest exposes the real Image Factory probe for tests against a local server.
+var HeadImageURLForTest = headImageURL
+
+// ImageMissingForTest exposes imageMissing for testing.
+var ImageMissingForTest = imageMissing

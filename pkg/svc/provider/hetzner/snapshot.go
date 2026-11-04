@@ -252,7 +252,7 @@ func (sm *SnapshotManager) buildSnapshotRetryingDownload(
 		if attempt == snapshotDownloadAttempts {
 			return nil, sm.withBuildCleanup(ctx, buildID, fmt.Errorf(
 				"downloading the Talos image from the Image Factory failed %d times: %w",
-				attempt, err,
+				attempt, errors.Join(err, ctx.Err()),
 			))
 		}
 
@@ -304,7 +304,7 @@ func (sm *SnapshotManager) prepareDownloadRetry(
 		return fmt.Errorf(
 			"%w; deleting the failed attempt's temporary resources also failed, "+
 				"so the download is not retried: %w",
-			downloadErr, cleanupErr,
+			errors.Join(downloadErr, ctx.Err()), cleanupErr,
 		)
 	}
 
@@ -331,13 +331,17 @@ func (sm *SnapshotManager) withBuildCleanup(
 }
 
 // imageMissing reports whether an Image Factory status means the image does not exist, as
-// opposed to a failure that may pass. Timeouts and rate limits are client errors too, but
-// they say nothing about the image.
+// opposed to a failure that may pass. Only "not found", "gone" and "bad request" (an unknown
+// version or schematic) say that. Other client errors, such as a method a proxy does not allow,
+// a refused request, a timeout or a rate limit, say nothing about the image, so the download
+// is retried.
 func imageMissing(status int) bool {
-	return status >= http.StatusBadRequest &&
-		status < http.StatusInternalServerError &&
-		status != http.StatusRequestTimeout &&
-		status != http.StatusTooManyRequests
+	switch status {
+	case http.StatusBadRequest, http.StatusNotFound, http.StatusGone:
+		return true
+	default:
+		return false
+	}
 }
 
 // headImageURL asks the Image Factory for imageURL without downloading it and returns the

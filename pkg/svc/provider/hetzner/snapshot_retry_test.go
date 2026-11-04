@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"sync"
 	"testing"
@@ -243,6 +244,8 @@ func TestSnapshotManager_EnsureTalosSnapshot_RetriesWhenTheImageProbeFails(t *te
 		{name: "probe request fails", err: errProbeTimeout},
 		{name: "factory error", status: http.StatusBadGateway},
 		{name: "rate limited", status: http.StatusTooManyRequests},
+		{name: "method not allowed", status: http.StatusMethodNotAllowed},
+		{name: "forbidden by a proxy", status: http.StatusForbidden},
 	} {
 		t.Run(probe.name, func(t *testing.T) {
 			t.Parallel()
@@ -308,4 +311,56 @@ func TestSnapshotManager_EnsureTalosSnapshot_CancelledRetryWaitStops(t *testing.
 
 	require.ErrorIs(t, err, context.Canceled)
 	assert.Equal(t, 1, uploader.callCount())
+}
+
+func TestImageMissing_OnlyForStatusesThatSayTheImageDoesNotExist(t *testing.T) {
+	t.Parallel()
+
+	missing := map[int]bool{
+		http.StatusOK:                  false,
+		http.StatusBadRequest:          true,
+		http.StatusUnauthorized:        false,
+		http.StatusForbidden:           false,
+		http.StatusNotFound:            true,
+		http.StatusMethodNotAllowed:    false,
+		http.StatusRequestTimeout:      false,
+		http.StatusGone:                true,
+		http.StatusTooManyRequests:     false,
+		http.StatusInternalServerError: false,
+		http.StatusBadGateway:          false,
+	}
+
+	for status, want := range missing {
+		assert.Equal(t, want, hetzner.ImageMissingForTest(status), "HTTP %d", status)
+	}
+}
+
+func TestHeadImageURL_ReportsTheStatusOfAHeadRequest(t *testing.T) {
+	t.Parallel()
+
+	for _, status := range []int{http.StatusOK, http.StatusNotFound, http.StatusMethodNotAllowed} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			t.Parallel()
+
+			var method string
+
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					method = r.Method
+
+					w.WriteHeader(status)
+				}),
+			)
+			t.Cleanup(server.Close)
+
+			imageURL, err := url.Parse(server.URL + "/image/abc123/v1.9.0/hcloud-amd64.raw.xz")
+			require.NoError(t, err)
+
+			got, err := hetzner.HeadImageURLForTest(t.Context(), imageURL)
+
+			require.NoError(t, err)
+			assert.Equal(t, status, got)
+			assert.Equal(t, http.MethodHead, method, "the probe never downloads the image")
+		})
+	}
 }
