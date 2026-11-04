@@ -852,7 +852,7 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 		"🔐 Configure AWS credentials (OIDC)",
 		"🔐 Resolve EKS permissions boundary",
 		"⚙️ Setup Go",
-		"📦 Cache KSail Binary",
+		"📥 Restore KSail binary",
 		"📥 Install eksctl",
 		"🔧 Initialize EKS project",
 		"🔎 Check EKS capacity before create",
