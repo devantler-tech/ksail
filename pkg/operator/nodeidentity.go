@@ -31,6 +31,9 @@ const (
 	aksClusterLabel = "kubernetes.azure.com/cluster"
 	// kindProviderIDPrefix is the provider ID scheme kind's node provider sets.
 	kindProviderIDPrefix = "kind://"
+	// kindDockerProviderIDPrefix is the provider ID kind sets on Docker-backed nodes; kind writes its
+	// node backend (docker, podman or nerdctl) as the first path segment.
+	kindDockerProviderIDPrefix = kindProviderIDPrefix + "docker/"
 )
 
 // distributionRule names a distribution and the node marker that proves it.
@@ -108,7 +111,7 @@ var providerPrefixes = []providerPrefix{
 	{prefix: "aws://", provider: v1alpha1.ProviderAWS},
 	{prefix: "gce://", provider: v1alpha1.ProviderGCP},
 	{prefix: "azure://", provider: v1alpha1.ProviderAzure},
-	{prefix: kindProviderIDPrefix, provider: v1alpha1.ProviderDocker},
+	{prefix: kindDockerProviderIDPrefix, provider: v1alpha1.ProviderDocker},
 }
 
 // detectDistribution returns the distribution every node agrees on, or "" when there are no nodes

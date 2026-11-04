@@ -186,6 +186,11 @@ func TestDetectProvider(t *testing.T) {
 			want:  v1alpha1.ProviderDocker,
 		},
 		{
+			name:  "kind on another node backend is unknown",
+			nodes: buildNodes(identityNode{providerID: "kind://podman/dev/dev-control-plane"}),
+			want:  "",
+		},
+		{
 			name:  "a node not yet initialised supplies no evidence",
 			nodes: buildNodes(identityNode{providerID: "hcloud://101"}, identityNode{}),
 			want:  v1alpha1.ProviderHetzner,
