@@ -999,7 +999,8 @@ func TestUpdateApplyStep_KubeconfigFallsBackWhenFloatingIPUnreachable(t *testing
 // TestUpdateApplyStep_DoesNotPrepareFloatingIPForWorkerRoll keeps the pre-roll
 // refresh bounded to control-plane topology: the preceding secrets-sync step
 // already propagates the running floating endpoint to the worker bundle, so a
-// worker-only roll must not touch the Hetzner floating-IP API.
+// worker-only roll must not prepare the floating-IP endpoint. (Its read-only
+// stray check is covered in update_floating_ip_stray_test.go.)
 func TestUpdateApplyStep_DoesNotPrepareFloatingIPForWorkerRoll(t *testing.T) {
 	t.Parallel()
 
