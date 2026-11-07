@@ -1640,6 +1640,29 @@ jobs:
             else
               echo "::error::No failed-package summary was emitted; reproduce the guard locally."
             fi
+            # BuildEvent output may identify a runner resource failure, but it
+            # can also contain private paths and test data. Emit fixed labels
+            # only; ordinary test Output must never become a build diagnosis.
+            resource_errors="$(jq -Rnr '
+              limit(4; foreach (inputs | fromjson? | objects
+                | select(.Action == "build-output")
+                | .Output | strings
+                | if test("no space left on device|disk quota exceeded"; "i") then "disk-full"
+                  elif test("out of memory|cannot allocate memory") then "memory-exhausted"
+                  elif test("(compile|link): signal: killed") then "tool-killed"
+                  elif test("resource temporarily unavailable|failed to create new OS thread")
+                    then "process-limit"
+                  else empty end) as $category
+                ({seen: {}, emit: null};
+                  if .seen[$category] then .emit = null
+                  else .seen[$category] = true | .emit = $category end;
+                  .emit // empty))
+            ' "$sandbox/test.log")"
+            while IFS= read -r category; do
+              if [ -n "$category" ]; then
+                printf "::error::Go build resource error: %s\n" "$category"
+              fi
+            done <<< "$resource_errors"
           fi
           exit "$status"
 
