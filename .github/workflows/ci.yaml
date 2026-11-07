@@ -2563,6 +2563,10 @@ jobs:
           distribution: goreleaser
           version: "~> v2"
           install-only: true
+      # Judge the cask with the current Homebrew style rules, as the tap does. Runner images ship
+      # different Homebrew snapshots, and an older one crashes inside its own cask style rule (#8244).
+      - name: 🍺 Update Homebrew
+        run: brew update --quiet
       - name: ⚙️ Install YAML tooling
         run: brew list yq >/dev/null 2>&1 || brew install yq
       - name: 🍺 Render, style and load every cask platform
