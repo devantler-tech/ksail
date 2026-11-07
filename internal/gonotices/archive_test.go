@@ -294,6 +294,7 @@ func TestArchiveRefusesCoherentReplacementOfItsOwnEvidence(t *testing.T) {
 		forgedDigest, 1)
 	require.True(t, bytes.Contains(forged.Manifest, forgedDigest),
 		"the forged manifest must name the forged text digest")
+
 	release := recipientRelease(fixture.target)
 	archive := writeRecipientArchive(t, fixture, recipientEntries(fixture, release, forged))
 
