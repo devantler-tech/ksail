@@ -35,13 +35,34 @@ func TestReleaseCompletionGeneration(t *testing.T) {
 	}
 }
 
+// releaseCompletionFixture is an isolated copy of the release hook, its script and a fake
+// native binary, plus the environment the hook runs under.
 type releaseCompletionFixture struct {
 	root *os.Root
 	env  []string
 }
 
+// isNativeReleaseHost mirrors the host matrix in .github/scripts/generate-completions.sh.
+func isNativeReleaseHost(host string) bool {
+	return slices.Contains([]string{
+		"darwin/arm64", "linux/amd64", "linux/arm64", "windows/amd64", "windows/arm64",
+	}, host)
+}
+
+// newReleaseCompletionFixture renders the real release hook for targetOS on hostOS. It skips
+// when the actual host cannot run the hook natively: an explicitly supplied foreign hostOS
+// is still exercised, so the unsupported-host test keeps running everywhere bash exists.
 func newReleaseCompletionFixture(t *testing.T, targetOS, hostOS string) releaseCompletionFixture {
 	t.Helper()
+
+	_, bashErr := exec.LookPath("bash")
+	if bashErr != nil {
+		t.Skip("the release hook needs bash")
+	}
+
+	if hostOS == runtime.GOOS && !isNativeReleaseHost(runtime.GOOS+"/"+runtime.GOARCH) {
+		t.Skipf("%s/%s is not a native release host", runtime.GOOS, runtime.GOARCH)
+	}
 
 	repository, err := os.OpenRoot("../../..")
 	require.NoError(t, err)
@@ -87,6 +108,7 @@ func newReleaseCompletionFixture(t *testing.T, targetOS, hostOS string) releaseC
 	}
 }
 
+// readReleaseCompletionHook returns the single post-build hook command from .goreleaser.yaml.
 func readReleaseCompletionHook(t *testing.T, repository *os.Root) string {
 	t.Helper()
 
@@ -110,6 +132,7 @@ func readReleaseCompletionHook(t *testing.T, repository *os.Root) string {
 	return config.Builds[0].Hooks.Post[0].Cmd
 }
 
+// run executes the rendered hook, optionally making one shell fail or print nothing.
 func (fixture releaseCompletionFixture) run(
 	t *testing.T,
 	failedShell, emptyShell string,
@@ -133,6 +156,7 @@ if [[ -n "${KSAIL_TEST_COMPLETION_EMPTY-}" && "$KSAIL_TEST_COMPLETION_EMPTY" == 
 exec "$KSAIL_TEST_COMPLETION_EXECUTABLE" -test.run='^TestReleaseCompletionProcess$' -- "$@"
 `
 
+// TestReleaseCompletionProcess is the subprocess entry point the fake binary re-executes.
 func TestReleaseCompletionProcess(t *testing.T) {
 	t.Parallel()
 
@@ -157,6 +181,7 @@ func TestReleaseCompletionProcess(t *testing.T) {
 	os.Exit(0)
 }
 
+// TestReleaseCompletionFailurePublishesNoPartialFiles proves a failed or empty shell leaves no output.
 func TestReleaseCompletionFailurePublishesNoPartialFiles(t *testing.T) {
 	t.Parallel()
 
@@ -188,6 +213,7 @@ func TestReleaseCompletionFailurePublishesNoPartialFiles(t *testing.T) {
 	}
 }
 
+// TestReleaseCompletionRefusesExistingOutput proves an existing output directory is never replaced.
 func TestReleaseCompletionRefusesExistingOutput(t *testing.T) {
 	t.Parallel()
 
@@ -202,6 +228,7 @@ func TestReleaseCompletionRefusesExistingOutput(t *testing.T) {
 	require.Equal(t, "retain", strings.TrimSpace(string(data)))
 }
 
+// TestReleaseCompletionForeignTargetNeverExecutes proves a non-host target binary is never run.
 func TestReleaseCompletionForeignTargetNeverExecutes(t *testing.T) {
 	t.Parallel()
 
@@ -217,6 +244,7 @@ func TestReleaseCompletionForeignTargetNeverExecutes(t *testing.T) {
 	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
+// TestReleaseCompletionCommandTree proves the fake binary serves the real KSail command tree.
 func TestReleaseCompletionCommandTree(t *testing.T) {
 	t.Parallel()
 
@@ -230,6 +258,7 @@ func TestReleaseCompletionCommandTree(t *testing.T) {
 	require.Contains(t, string(output), "workload\t")
 }
 
+// TestReleaseCompletionUnsupportedHostFails proves a host outside the release matrix is refused.
 func TestReleaseCompletionUnsupportedHostFails(t *testing.T) {
 	t.Parallel()
 
