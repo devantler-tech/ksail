@@ -387,6 +387,15 @@ distribution × provider table in `docs/src/content/docs/support-matrix.mdx`
 `pkg/svc/chat/docs_generated.go` (`go generate ./pkg/svc/chat/...`, after docs), `mocks.go` files
 (`mockery`), and `web/ui/src/generated/ksail-config.ts` (`npm --prefix web/ui run gen:types`,
 after schemas). See also `.github/instructions/`.
+**Source-audited release data — separate heavy generator:** `make generate-go-notices`
+regenerates `notices/go/<target>/THIRD_PARTY_NOTICES.txt`, `manifest.json`, and the
+eight-target hash receipt `.github/go-notice-receipts.json` from the existing
+eight-target admission audit. Never hand-edit these files. This explicit
+local command is separate from `make generate` so ordinary generation does not
+add another graph/scanner pass. Hosted CI refuses update mode and independently
+compares the checked-in notice set in the existing audit; stale or missing data
+must fail, not be repaired silently. Reviewed recipient-only applicability facts
+live in `.github/go-notice-materials.json`; they never change package admission.
 **Shared machine / autonomous worktrees:** only create/inspect/delete
 clusters you created; build throwaway binaries to `/tmp` (not `./ksail`) to avoid polluting the
 worktree. Maintainers building locally should still use the standard `make build` (`go build -o

@@ -10,7 +10,8 @@ Usage:
                                    [--extra-assets-glob GLOB]...
 
 Decide what the publish job must do for TAG and print `state=draft` or
-`state=published` (also appended to $GITHUB_OUTPUT when set).
+`state=published`. After all completeness checks, append that state and the
+selected release's numeric `release_id` to $GITHUB_OUTPUT when set.
 
   draft      exactly one unpublished release exists and it carries everything
              GoReleaser uploads: attach assets, then publish.
@@ -108,6 +109,16 @@ if [[ "${count}" -gt 1 ]]; then
 	blocked "found ${count} releases for tag ${tag} ($(jq -r 'map("\(.id) (draft=\(.draft))") | join(", ")' <<<"${matching}")); expected exactly one — manual cleanup required"
 fi
 
+# Keep the selected identity in the same verified snapshot as the state. A closed,
+# exactly represented integer cannot add a second output field or change an API path.
+if ! release_id="$(jq -er '
+	.[0].id
+	| select(type == "number" and . >= 1 and . <= 9007199254740991 and floor == .)
+	| tostring | select(test("^[1-9][0-9]*$"))
+' <<<"${matching}")"; then
+	blocked "selected release has no valid numeric ID"
+fi
+
 # missing_assets prints the names from its arguments that the release lacks or carries empty.
 missing_assets() {
 	local name
@@ -200,5 +211,5 @@ done
 
 printf 'state=%s\n' "${state}"
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-	printf 'state=%s\n' "${state}" >>"${GITHUB_OUTPUT}"
+	printf 'state=%s\nrelease_id=%s\n' "${state}" "${release_id}" >>"${GITHUB_OUTPUT}"
 fi

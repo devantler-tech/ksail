@@ -24,6 +24,7 @@ before:
   hooks:
     # Build and stage the web UI so it is embedded in the desktop binary (see pkg/webui/embed.go).
     - bash scripts/stage-webui.sh
+    - go run .github/scripts/go-notices.go stage desktop-darwin-arm64 "{{ .Tag }}" "{{ .FullCommit }}"
 
 builds:
   - id: ksail-desktop
@@ -59,6 +60,14 @@ archives:
         dst: KSail.app/Contents/Info.plist
       - src: desktop/build/AppIcon.icns
         dst: KSail.app/Contents/Resources/AppIcon.icns
+      - src: LICENSE
+        dst: KSail.app/Contents/Resources/LICENSE
+      - src: .cache/go-notices/desktop-darwin-arm64/GoNotices/THIRD_PARTY_NOTICES.txt
+        dst: KSail.app/Contents/Resources/GoNotices/THIRD_PARTY_NOTICES.txt
+      - src: .cache/go-notices/desktop-darwin-arm64/GoNotices/manifest.json
+        dst: KSail.app/Contents/Resources/GoNotices/manifest.json
+      - src: .cache/go-notices/desktop-darwin-arm64/GoNotices/release.txt
+        dst: KSail.app/Contents/Resources/GoNotices/release.txt
 
 homebrew_casks:
   - name: ksail-desktop
