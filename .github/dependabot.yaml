@@ -163,7 +163,8 @@ updates:
       # or `vsce package` refuses to build. Both move together, on purpose, when
       # the extension raises the oldest VS Code it supports.
       - dependency-name: "@types/vscode"
-        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+        update-types:
+          ["version-update:semver-minor", "version-update:semver-major"]
 
   - package-ecosystem: docker
     registries: [dockerhub, ghcr]
