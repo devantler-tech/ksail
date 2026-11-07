@@ -153,7 +153,10 @@ func (fixture releaseCompletionFixture) run(
 
 const completionProcessScript = `#!/usr/bin/env bash
 set -euo pipefail
-if [[ -n "${KSAIL_RELEASE_CREDENTIAL_CANARY-}" ]]; then echo "runner environment leaked into completion" >&2; exit 24; fi
+if [[ -n "${KSAIL_RELEASE_CREDENTIAL_CANARY-}" ]]; then
+  echo "runner environment leaked into completion" >&2
+  exit 24
+fi
 if [[ -n "${KSAIL_TEST_COMPLETION_FAIL-}" && "$KSAIL_TEST_COMPLETION_FAIL" == "$2" ]]; then exit 23; fi
 if [[ -n "${KSAIL_TEST_COMPLETION_EMPTY-}" && "$KSAIL_TEST_COMPLETION_EMPTY" == "$2" ]]; then exit 0; fi
 exec "$KSAIL_TEST_COMPLETION_EXECUTABLE" -test.run='^TestReleaseCompletionProcess$' -- "$@"
