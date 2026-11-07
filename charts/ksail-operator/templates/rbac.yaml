@@ -68,6 +68,11 @@ rules:
     resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
     verbs:
       ["get", "list", "watch", "create", "update", "patch", "delete", "deletecollection", "bind", "escalate"]
+  # Kubernetes-provider Vanilla (Kind) creation lists the hub's nodes to choose a nested Docker
+  # address pool disjoint from host node and pod networks; it aborts without this read.
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["list"]
 {{- if .Values.hostCluster.enabled }}
   # Host cluster browsing (hostCluster.enabled): the dashboard reads the hub itself through the
   # operator's ServiceAccount. The workload kinds above already carry read/write verbs; these add

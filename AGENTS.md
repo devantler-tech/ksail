@@ -438,5 +438,5 @@ where genuinely per-user/remote evaluation is needed. Rules:
 - **Weekly/heavy:** E2E coverage audit (open ≤3 `E2E: Add coverage for <command>` issues, label
   `testing`, only for genuine gaps where E2E beats unit/integration); live reliability/UX testing on
   throwaway Docker clusters (Kind/K3d/Vind/KWOK) — **always clean up every cluster, even on failure**.
-- **Monthly:** KSail Strategy — a Now/Next/Later roadmap Discussion (category `agentic-workflows`)
-  that extends KSail's strengths; **never** propose radical pivots.
+- **Monthly:** KSail strategy review — refine the roadmap issues (Now/Next/Later) so they extend
+  KSail's strengths; **never** propose radical pivots, and never open a Discussion for it.

@@ -128,9 +128,43 @@ func genValidateCases() []genValidateCase {
 			"poddisruptionbudget", gen.NewPodDisruptionBudgetCmd,
 			[]string{"test-pdb", "--min-available=1", "--selector=app=test"},
 		},
+	}
+}
+
+// fluxGenValidateCases are the generated Flux custom resources, validated against the
+// CRDs-catalog schemas.
+func fluxGenValidateCases() []genValidateCase {
+	return []genValidateCase{
 		{
 			"helmrelease", gen.NewHelmReleaseCmd,
 			[]string{"test-hr", "--source=HelmRepository/test", "--chart=test", "--export"},
+		},
+		{
+			"helmrelease-health-check-exprs",
+			gen.NewHelmReleaseCmd,
+			[]string{
+				"test-hr",
+				"--chart-ref=OCIRepository/test",
+				"--health-check-expr=bitnami.com/v1alpha1/SealedSecret=status.conditions.all(e, e.status == 'True')",
+				"--health-check-expr=bitnami.com/v1alpha1/SealedSecret:failed=status.conditions.all(e, e.status == 'False')",
+				"--export",
+			},
+		},
+		{
+			"receiver-generic-oidc", gen.NewReceiverCmd,
+			[]string{
+				"test-receiver", "--type=generic-oidc",
+				"--oidc-issuer=https://token.actions.githubusercontent.com",
+				"--oidc-validation=claims.repository_owner == 'my-org'",
+				"--resource=GitRepository/webapp=res.metadata.name == 'webapp'",
+			},
+		},
+		{
+			"receiver-github", gen.NewReceiverCmd,
+			[]string{
+				"test-receiver", "--type=github", "--events=push", "--secret-ref=token",
+				"--resource=Kustomization/apps.flux-system",
+			},
 		},
 	}
 }
@@ -141,7 +175,7 @@ func TestGenAndValidate(t *testing.T) {
 	client := kubeconform.NewClient()
 	ctx := context.Background()
 
-	for _, testCase := range genValidateCases() {
+	for _, testCase := range append(genValidateCases(), fluxGenValidateCases()...) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -205,6 +239,7 @@ func TestNewGenCmd_HasSubcommands(t *testing.T) {
 		"poddisruptionbudget",
 		"priorityclass",
 		"helmrelease",
+		"receiver",
 	}
 
 	for _, expected := range expectedSubcommands {

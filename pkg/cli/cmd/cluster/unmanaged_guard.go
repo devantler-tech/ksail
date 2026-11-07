@@ -721,7 +721,7 @@ func unmanagedClusterGuard(ctx context.Context, resolved *lifecycle.ResolvedClus
 
 		return fmt.Errorf(
 			"%w; to retire only a local connection, use "+
-				"ksail cluster forget --kubeconfig <file> --context <exact-context> --experimental; "+
+				"ksail cluster forget --kubeconfig <file> --context <exact-context>; "+
 				"this does not check or delete host resources",
 			unmanagedClusterError(resolved.ClusterName),
 		)

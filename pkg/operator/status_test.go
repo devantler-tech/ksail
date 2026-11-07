@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	kubefake "k8s.io/client-go/kubernetes/fake"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -134,4 +135,36 @@ func TestIsNodeReady(t *testing.T) {
 	assert.True(t, operator.IsNodeReady(ready))
 	assert.False(t, operator.IsNodeReady(notReady))
 	assert.False(t, operator.IsNodeReady(noCondition))
+}
+
+func TestObserveHostNodesReportsCountsAndIdentity(t *testing.T) {
+	t.Parallel()
+
+	ready := identityNode{osImage: "Talos (v1.13.12)", providerID: "hcloud://101", ready: true}
+	notReady := identityNode{osImage: "Talos (v1.13.12)", providerID: "hcloud://102"}
+	nodes := buildNodes(ready, notReady)
+	clientset := kubefake.NewClientset(&nodes[0], &nodes[1])
+
+	observed, err := operator.ObserveHostNodes(context.Background(), clientset)
+	require.NoError(t, err)
+	assert.True(t, observed.NodesObserved)
+	assert.Equal(t, int32(1), observed.NodesReady)
+	assert.Equal(t, int32(2), observed.NodesTotal)
+	assert.Equal(t, v1alpha1.DistributionTalos, observed.Distribution)
+	assert.Equal(t, v1alpha1.ProviderHetzner, observed.Provider)
+}
+
+func TestObserveHostNodesWithoutMarkersReportsNoIdentity(t *testing.T) {
+	t.Parallel()
+
+	nodes := buildNodes(
+		identityNode{osImage: "Ubuntu 24.04", kubeletVersion: "v1.36.4", ready: true},
+	)
+	clientset := kubefake.NewClientset(&nodes[0])
+
+	observed, err := operator.ObserveHostNodes(context.Background(), clientset)
+	require.NoError(t, err)
+	assert.True(t, observed.NodesObserved)
+	assert.Empty(t, observed.Distribution)
+	assert.Empty(t, observed.Provider)
 }

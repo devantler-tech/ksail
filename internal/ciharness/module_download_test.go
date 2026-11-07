@@ -25,10 +25,11 @@ func TestDesktopReleaseUsesModuleDownloadSetup(t *testing.T) {
 
 	steps := readReleaseJobs(t)["desktop"].Steps
 	setupIndex, buildIndex := -1, -1
+	publishedSetup := ksailActionPin(t, "setup-desktop-build")
 
 	for index, step := range steps {
 		if step.Uses == "./.github/actions/setup-desktop-build" ||
-			step.Uses == "devantler-tech/ksail/.github/actions/setup-desktop-build@ccc4de63c6f1259ecbdd604c2260559d810c7cfc" {
+			step.Uses == publishedSetup {
 			setupIndex = index
 
 			assert.Equal(t, "needs.validate-release-ref.outputs.release-mode == 'build'", step.If)
