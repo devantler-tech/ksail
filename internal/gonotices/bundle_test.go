@@ -286,6 +286,19 @@ func TestBuildUsesExactReviewedDeclarationWhenScannerHasNoLicensePath(t *testing
 	require.ErrorIs(t, err, gonotices.ErrIncomplete)
 }
 
+func TestBuildCountsANestedLicenseSelectedAsEvidenceOnce(t *testing.T) {
+	t.Parallel()
+	input, directory := noticeInputFixture(t)
+	writeNoticeFixture(t, directory, "licenses/LICENSE", "MIT\nCopyright 2025 Nested Authors\n")
+	// The scanner path is native and the reviewed evidence path is slash-form.
+	// On Windows they differ as strings but name one file.
+	input.Packages[0].LicenseFile = filepath.Join(directory, "licenses", "LICENSE")
+	input.Packages[0].EvidenceFiles = []string{"licenses/LICENSE"}
+	payload, err := gonotices.Build(input)
+	require.NoError(t, err)
+	require.Equal(t, 1, strings.Count(string(payload.Text), "Copyright 2025 Nested Authors"))
+}
+
 func TestBuildCollectsSupplementalSelectedAncestorCopyingTerms(t *testing.T) {
 	t.Parallel()
 	input, directory := noticeInputFixture(t)

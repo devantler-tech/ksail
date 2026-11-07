@@ -288,9 +288,12 @@ func TestArchiveRefusesCoherentReplacementOfItsOwnEvidence(t *testing.T) {
 	forged.Text = append(
 		bytes.Clone(expected.Text),
 		[]byte("replacement not derived from source\n")...)
+	forgedDigest := []byte(fmt.Sprintf(`"textSha256":"%x"`, sha256.Sum256(forged.Text)))
 	forged.Manifest = bytes.Replace(expected.Manifest,
-		[]byte(fmt.Sprintf(`"textSha256": "%x"`, sha256.Sum256(expected.Text))),
-		[]byte(fmt.Sprintf(`"textSha256": "%x"`, sha256.Sum256(forged.Text))), 1)
+		[]byte(fmt.Sprintf(`"textSha256":"%x"`, sha256.Sum256(expected.Text))),
+		forgedDigest, 1)
+	require.True(t, bytes.Contains(forged.Manifest, forgedDigest),
+		"the forged manifest must name the forged text digest")
 	release := recipientRelease(fixture.target)
 	archive := writeRecipientArchive(t, fixture, recipientEntries(fixture, release, forged))
 

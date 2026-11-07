@@ -703,8 +703,11 @@ func componentDeclarations(directory string, pkg Package) (map[string]string, er
 			return nil, ErrIncomplete
 		}
 
-		if _, exists := files[evidence]; !exists {
-			files[evidence] = reviewedDeclarationKind
+		// Key by native separators, as the license path above is, so one file
+		// selected both ways yields one material.
+		native := filepath.FromSlash(evidence)
+		if _, exists := files[native]; !exists {
+			files[native] = reviewedDeclarationKind
 		}
 	}
 
