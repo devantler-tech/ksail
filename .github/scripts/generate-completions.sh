@@ -37,11 +37,24 @@ parent="$(cd "$parent" && pwd -P)"
 work="$(mktemp -d "$parent/.ksail-completions.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 mkdir "$work/files" "$work/home"
+# Completion must not see the runner's release credentials, kubeconfig or user
+# configuration, so the binary starts from an empty environment holding only
+# what it needs. KSAIL_TEST_COMPLETION_* lets the release test drive a fake binary.
+minimal_env=(
+	"PATH=$PATH"
+	"HOME=$work/home"
+	"XDG_CONFIG_HOME=$work/home"
+	"XDG_CACHE_HOME=$work/home"
+	"KUBECONFIG=$work/kubeconfig"
+	"TMPDIR=$work"
+)
+if [[ -n "${SYSTEMROOT-}" ]]; then minimal_env+=("SYSTEMROOT=$SYSTEMROOT"); fi
+while IFS= read -r name; do
+	minimal_env+=("$name=${!name}")
+done < <(compgen -e | grep '^KSAIL_TEST_COMPLETION_' || true)
 started=$SECONDS
 for shell in bash zsh fish; do
-	# Completion must not inspect the runner's kubeconfig, tokens or user configuration.
-	HOME="$work/home" XDG_CONFIG_HOME="$work/home" XDG_CACHE_HOME="$work/home" \
-		KUBECONFIG="$work/kubeconfig" "$binary" completion "$shell" >"$work/files/ksail.$shell"
+	env -i "${minimal_env[@]}" "$binary" completion "$shell" >"$work/files/ksail.$shell"
 	if [[ ! -s "$work/files/ksail.$shell" ]]; then
 		printf 'empty %s completion output\n' "$shell" >&2
 		exit 1
