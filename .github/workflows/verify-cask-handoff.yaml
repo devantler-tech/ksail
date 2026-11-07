@@ -19,6 +19,11 @@ on:
         description: Merged Homebrew tap PR for the desktop cask
         required: true
         type: string
+      native_cli_trial:
+        description: Install the verified CLI cask and observe real zsh Tab on a disposable macOS runner
+        required: false
+        type: boolean
+        default: false
 
 # Only read public release and tap evidence; this workflow cannot deliver a cask.
 permissions:
@@ -29,6 +34,8 @@ jobs:
     name: 🔎 Verify Both Published Casks
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      receipt-artifact-id: ${{ steps.receipt-evidence.outputs.artifact-id }}
     steps:
       - name: ✅ Validate read-only cask verification
         shell: bash
@@ -145,9 +152,72 @@ jobs:
             "$RELEASE_TAG" "$tap_main" >> "$GITHUB_STEP_SUMMARY"
 
       - name: 📤 Preserve immutable verification evidence
+        id: receipt-evidence
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cask-handoff-verification
           path: ${{ runner.temp }}/cask-handoff-verification
           if-no-files-found: error
+          retention-days: 7
+
+  native-cli:
+    name: 🍺 Verify Fresh Native CLI Install and zsh Tab
+    needs: [verify]
+    if: ${{ inputs.native_cli_trial && needs.verify.result == 'success' }}
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - name: ✅ Require native Apple Silicon runner
+        shell: bash
+        run: test "$(uname -s)/$(uname -m)" = Darwin/arm64
+
+      - name: 📄 Checkout reviewed observer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 📥 Download exact verification receipt
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.verify.outputs.receipt-artifact-id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/cask-handoff-verification
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: ⚙️ Update Homebrew
+        timeout-minutes: 3
+        run: brew update --quiet
+
+      - name: 🧪 Build and check the terminal observer
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          go test ./internal/caskcompletion -count=1
+          go build -o "$RUNNER_TEMP/ksail-zsh-tab" .github/scripts/verify-zsh-tab.go
+
+      - name: 🍺 Verify fresh cask install and real zsh Tab
+        timeout-minutes: 5
+        shell: bash
+        env:
+          RECEIPT_DIR: ${{ runner.temp }}/cask-handoff-verification
+          NATIVE_EVIDENCE_DIR: ${{ runner.temp }}/cask-native-verification
+          EXPECTED_TAG: ${{ inputs.release_tag }}
+          EXPECTED_CLI_PR: ${{ inputs.cli_pr }}
+          TAB_PROBE: ${{ runner.temp }}/ksail-zsh-tab
+        run: bash .github/scripts/verify-cask-native-install.sh
+
+      - name: 📤 Preserve native CLI trial evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cask-native-verification
+          path: ${{ runner.temp }}/cask-native-verification
+          if-no-files-found: warn
           retention-days: 7

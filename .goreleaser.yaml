@@ -29,6 +29,9 @@ builds:
     hooks:
       pre:
         - go tool bundler --platform {{ .Os }}/{{ .Arch }} --cli-version 1.0.87
+      post:
+        - cmd: bash .github/scripts/generate-completions.sh "{{ .Path }}" dist/completions "{{ .Os }}/{{ .Arch }}" "{{ .Runtime.Goos }}/{{ .Runtime.Goarch }}"
+          output: true
 
 archives:
   - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
@@ -36,6 +39,16 @@ archives:
     format_overrides:
       - goos: windows
         formats: ["zip"]
+    files:
+      - LICENSE*
+      - license*
+      - README*
+      - readme*
+      - CHANGELOG*
+      - changelog*
+      - src: dist/completions/*
+        dst: completions
+        strip_parent: true
 
 homebrew_casks:
   - name: ksail
@@ -53,6 +66,10 @@ homebrew_casks:
     description: "CLI tool to manage Kubernetes clusters and workloads"
     # Trailing slash required by `brew style` (Cask/HomepageUrlStyling).
     homepage: "https://ksail.devantler.tech/"
+    completions:
+      bash: completions/ksail.bash
+      zsh: completions/ksail.zsh
+      fish: completions/ksail.fish
     repository:
       owner: devantler-tech
       name: homebrew-tap

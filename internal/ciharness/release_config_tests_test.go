@@ -27,6 +27,7 @@ func releaseConfigFiles() []string {
 		".github/actions/setup-desktop-build/action.yml",
 		".github/actions/free-disk-space/free-disk-space.sh",
 		"scripts/stage-webui.sh",
+		".github/scripts/generate-completions.sh",
 	}
 }
 

@@ -250,10 +250,15 @@ jobs:
             # the same reason todos-contract does. TestReleaseConfigFilterCoversTheReleaseFiles
             # fails if a release file is dropped from it.
             release-config:
+              - '.github/workflows/verify-cask-handoff.yaml'
+              - '.github/scripts/verify-cask-native-install.sh'
+              - '.github/scripts/verify-cask-native-install.test.sh'
+              - '.github/scripts/verify-zsh-tab.go'
               - '.github/scripts/resolve-release-replay.sh'
               - '.github/actions/release-admission/**'
               - '.github/scripts/download-go-modules.sh'
               - '.github/scripts/cask-rendering.test.sh'
+              - '.github/scripts/generate-completions.sh'
               - '.goreleaser.yaml'
               - '.goreleaser.desktop.yaml'
               - '.github/workflows/cd.yaml'
@@ -295,6 +300,7 @@ jobs:
               - '.github/scripts/resolve-release-replay.sh'
               - '.github/actions/release-admission/**'
               - '.github/scripts/download-go-modules.sh'
+              - '.github/scripts/generate-completions.sh'
               - '.goreleaser.yaml'
               - '.goreleaser.desktop.yaml'
               - '.github/workflows/cd.yaml'
@@ -421,6 +427,10 @@ jobs:
               - 'pkg/svc/installer/cni/calico/Dockerfile'
               - '.github/workflows/ci.yaml'
             cask-pr-handoff:
+              - '.github/workflows/verify-cask-handoff.yaml'
+              - '.github/scripts/verify-cask-native-install.sh'
+              - '.github/scripts/verify-cask-native-install.test.sh'
+              - '.github/scripts/verify-zsh-tab.go'
               - '.github/scripts/cask-read-api.sh'
               - '.github/scripts/cask-read-api.test.sh'
               - 'server.json'
@@ -2519,6 +2529,11 @@ jobs:
           persist-credentials: false
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: 🧹 Free disk space
+        env:
+          DOCKER_PRUNE: "false"
+        run: bash .github/actions/free-disk-space/free-disk-space.sh
 
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0

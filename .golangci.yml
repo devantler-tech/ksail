@@ -134,10 +134,19 @@ linters:
       branch-max-lines: 2
     depguard:
       rules:
+        native-cask-session:
+          files:
+            - "**/internal/caskcompletion/process_darwin.go"
+          list-mode: strict
+          allow:
+            - $gostd
+            # Kernel session ownership in the disposable native trial; already declared in go.mod.
+            - golang.org/x/sys/unix
         main:
           files:
             - "$all"
             - "!$test"
+            - "!**/internal/caskcompletion/process_darwin.go"
           list-mode: strict
           allow:
             - $gostd
