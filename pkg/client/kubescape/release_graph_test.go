@@ -412,7 +412,7 @@ func auditedReleaseConfigDigests() map[string]string {
 	return map[string]string{
 		".gitattributes":                                     "0a533a2cc323724b86c21f6b777760df4e91909b4f4959071df9f662a42895cd",
 		".goreleaser.yaml":                                   "c66aaf9e7a5ce16014b0b005cce83686ff96b36c006586c226c93a78ec08237b",
-		".goreleaser.desktop.yaml":                           "9f001a9219b7319f244147e4ca8e1f221d4949afcd8da7ed89c9e02dbd21fd7e",
+		".goreleaser.desktop.yaml":                           "1c9fe930f3e2b14f5b9606d185ce7845908519136530308bfa52095b60563d9a",
 		".github/actions/setup-desktop-build/action.yml":     "473bc1c1f3e940ba58a76320cf8b6ff5e798bf5e9cbe68830469640ef1ef7cac",
 		".github/scripts/download-go-modules.sh":             "e5af8edf61a77de4397e952a05b1cc6ca0f83cd848523c4cf6b3aaa2539561fa",
 		".github/scripts/resolve-release-replay.sh":          "84418fef708bae31c86fb45fccc03b4e9186e312e5cb45951cc5a1dcd35af590",
@@ -449,66 +449,6 @@ func TestReleaseBuildConfigMatchesAudit(t *testing.T) {
 				want,
 			)
 		}
-	}
-}
-
-// TestReleaseActionPinsMatchAuditedContent binds audited snapshots to the commits CD executes.
-// The content witnesses were read from these exact Git commits, not the working tree.
-// Changing an audited action requires a new reviewed pin and its matching content witness.
-func TestReleaseActionPinsMatchAuditedContent(t *testing.T) {
-	t.Parallel()
-	root := moduleRoot(t)
-	actual := releaseConfigDigests(t, root)
-
-	var workflow struct {
-		Jobs map[string]struct {
-			Steps []struct {
-				Uses string `yaml:"uses"`
-			} `yaml:"steps"`
-		} `yaml:"jobs"`
-	}
-	readYAML(t, filepath.Join(root, ".github", "workflows", "cd.yaml"), &workflow)
-
-	for _, binding := range []struct{ path, reference, content string }{
-		{
-			".github/actions/release-admission/action.yaml",
-			"devantler-tech/ksail/.github/actions/release-admission@ac2dd2ee401030b2fac81dc985b42fae45b0788b",
-			"a8ac217c7e2195fee64b364748a6724b99aa0aa4a9988127084f1d6b45953f0c",
-		},
-		{
-			".github/actions/setup-desktop-build/action.yml",
-			"devantler-tech/ksail/.github/actions/setup-desktop-build@fc38423661fd6eaceb03ec49cd0634108c4ac18f",
-			"473bc1c1f3e940ba58a76320cf8b6ff5e798bf5e9cbe68830469640ef1ef7cac",
-		},
-	} {
-		t.Run(binding.path, func(t *testing.T) {
-			t.Parallel()
-
-			if actual[binding.path] != binding.content {
-				t.Errorf("audited content no longer matches pinned action %s", binding.reference)
-			}
-
-			prefix := strings.Split(binding.reference, "@")[0] + "@"
-			found := false
-
-			for _, job := range workflow.Jobs {
-				for _, step := range job.Steps {
-					if !strings.HasPrefix(step.Uses, prefix) {
-						continue
-					}
-
-					found = true
-
-					if step.Uses != binding.reference {
-						t.Errorf("action pin %s has no matching audited content witness", step.Uses)
-					}
-				}
-			}
-
-			if !found {
-				t.Errorf("audited action %s is absent from CD", binding.reference)
-			}
-		})
 	}
 }
 

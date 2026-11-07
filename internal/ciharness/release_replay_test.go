@@ -459,11 +459,7 @@ func TestReleaseReplayJobsRequireFreshAdmission(t *testing.T) {
 
 			job := jobs[name]
 			step := findHarnessStep(t, job.Steps, "🔒 Verify release admission")
-			require.Equal(
-				t,
-				"devantler-tech/ksail/.github/actions/release-admission@ac2dd2ee401030b2fac81dc985b42fae45b0788b",
-				step.Uses,
-			)
+			require.Equal(t, ksailActionPin(t, "release-admission"), step.Uses)
 			require.Empty(t, step.If)
 			require.False(t, step.ContinueOnError)
 
@@ -528,6 +524,7 @@ func TestReleaseReplayReusesPublishedArtifacts(t *testing.T) {
 	t.Parallel()
 	jobs := readReleaseJobs(t)
 	dependencies := releaseReplayDependencies()
+	admission := ksailActionPin(t, "release-admission")
 
 	for _, name := range []string{
 		"goreleaser", "vscode-extension", "desktop-macos", "desktop", "operator-chart",
@@ -535,7 +532,7 @@ func TestReleaseReplayReusesPublishedArtifacts(t *testing.T) {
 		job := jobs[name]
 		for _, step := range job.Steps {
 			if strings.HasPrefix(step.Uses, "actions/checkout@") ||
-				step.Uses == "devantler-tech/ksail/.github/actions/release-admission@ac2dd2ee401030b2fac81dc985b42fae45b0788b" {
+				step.Uses == admission {
 				continue
 			}
 

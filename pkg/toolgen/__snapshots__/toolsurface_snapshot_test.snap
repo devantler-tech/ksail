@@ -356,7 +356,7 @@ workload_write
         "type": "array"
       },
       "args": {
-        "description": "Positional arguments for the command",
+        "description": "Positional arguments for the command (applies to: backup, create, delete, restore, start, stop, update)",
         "items": {
           "type": "string"
         },
@@ -375,11 +375,12 @@ workload_write
         "type": "string"
       },
       "command": {
-        "description": "The subcommand to execute. Options:\nbackup: Backup cluster resources\ncreate: Create a cluster\ndelete: Destroy a cluster\nrestore: Restore cluster resources from backup\nstart: Start a stopped cluster\nstop: Stop a running cluster\nupdate: Update a cluster configuration",
+        "description": "The subcommand to execute. Options:\nbackup: Backup cluster resources\ncreate: Create a cluster\ndelete: Destroy a cluster\nforget: Forget one local kubeconfig context without contacting a...\nrestore: Restore cluster resources from backup\nstart: Start a stopped cluster\nstop: Stop a running cluster\nupdate: Update a cluster configuration",
         "enum": [
           "backup",
           "create",
           "delete",
+          "forget",
           "restore",
           "start",
           "stop",
@@ -393,7 +394,7 @@ workload_write
         "type": "integer"
       },
       "context": {
-        "description": "Kubernetes context of cluster (applies to: create, update)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create, forget, update)",
         "type": "string"
       },
       "control-planes": {
@@ -463,8 +464,7 @@ workload_write
         "type": "string"
       },
       "kubeconfig": {
-        "default": "~/.kube/config",
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create, delete, update)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
         "type": "string"
       },
       "kubernetes-version": {
@@ -789,7 +789,6 @@ workload_write
         "type": "string"
       },
       "dry-run": {
-        "default": "none",
         "description": "Behavior depends on the selected subcommand...",
         "type": "string"
       },
@@ -834,7 +833,6 @@ workload_write
         "type": "string"
       },
       "field-manager": {
-        "default": "kubectl-client-side-apply",
         "description": "Name of the manager used to track field ownership...",
         "type": "string"
       },
@@ -983,7 +981,6 @@ workload_write
         "type": "string"
       },
       "kubeconfig": {
-        "default": "~/.kube/config",
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, create, debug, delete, exec, export, expose, import, rollout, scale)",
         "type": "string"
       },
@@ -1068,7 +1065,6 @@ workload_write
         "type": "boolean"
       },
       "path": {
-        "default": "./",
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_kustomization, push, watch)",
         "type": "string"
       },
@@ -1078,7 +1074,6 @@ workload_write
         "type": "string"
       },
       "port": {
-        "default": -1,
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_deployment, expose, mirror)",
         "type": "integer"
       },
@@ -1137,7 +1132,6 @@ workload_write
         "type": "boolean"
       },
       "replicas": {
-        "default": 1,
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_deployment, scale)",
         "type": "integer"
       },
@@ -1252,7 +1246,6 @@ workload_write
         "type": "string"
       },
       "source-kind": {
-        "default": "HelmRepository",
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_helmrelease, create_kustomization)",
         "type": "string"
       },
@@ -1318,7 +1311,6 @@ workload_write
         "type": "string"
       },
       "timeout": {
-        "default": "0s",
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, delete, install, reconcile, rollout_status, scale)",
         "type": "string"
       },
@@ -1344,7 +1336,6 @@ workload_write
         "type": "string"
       },
       "validate": {
-        "default": "strict",
         "description": "Behavior depends on the selected subcommand...",
         "type": "string"
       },
@@ -1915,7 +1906,6 @@ workload_write
         "type": "array"
       },
       "output": {
-        "default": "plaintext",
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
         "type": "string"
       },
@@ -1928,7 +1918,6 @@ workload_write
         "type": "string"
       },
       "pod-running-timeout": {
-        "default": "1m0s",
         "description": "The length of time (like 5s, 2m, or 3h, higher than zero) to wait until at least one pod is running (applies to: forward, logs)",
         "type": "string"
       },
@@ -2155,7 +2144,6 @@ workload_write
         "type": "string"
       },
       "timeout": {
-        "default": "5m0s",
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: gen_helmrelease, wait)",
         "type": "string"
       },

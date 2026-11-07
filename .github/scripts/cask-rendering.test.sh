@@ -113,7 +113,24 @@ for name in ksail ksail-desktop; do
 		printf 'expected one generated %s cask\n' "$name" >&2
 		exit 1
 	}
+	# Judge the cask as GoReleaser renders it, before any autocorrect (#8196). Homebrew refuses a
+	# cask that combines `depends_on :macos` with a versioned macOS dependency, and `brew style
+	# --fix` hid that by deleting one of the two. So allow at most one macOS dependency, and fail
+	# when the style pass adds, drops or rewrites any dependency.
+	macos_dependencies="$(grep -cE '^[[:space:]]*depends_on[[:space:]]+(:macos|macos:)' "${casks[0]}" || true)"
+	[[ "$macos_dependencies" -le 1 ]] || {
+		printf '%s cask declares %s macOS dependencies; Homebrew accepts only one\n' \
+			"$name" "$macos_dependencies" >&2
+		exit 1
+	}
+	dependencies_before="$(sed -nE 's/^[[:space:]]*(depends_on[[:space:]].*)$/\1/p' "${casks[0]}" | LC_ALL=C sort)"
 	brew style --fix "${casks[0]}"
+	dependencies_after="$(sed -nE 's/^[[:space:]]*(depends_on[[:space:]].*)$/\1/p' "${casks[0]}" | LC_ALL=C sort)"
+	[[ "$dependencies_before" == "$dependencies_after" ]] || {
+		printf 'brew style --fix changed the %s cask dependencies:\nbefore:\n%s\nafter:\n%s\n' \
+			"$name" "$dependencies_before" "$dependencies_after" >&2
+		exit 1
+	}
 	cp "${casks[0]}" "$work/tap/Casks/$name.rb"
 done
 
@@ -133,6 +150,10 @@ for name in ksail ksail-desktop; do
 	jq -e '.casks | length == 1' "$work/$name.json" >/dev/null
 	jq -e '.casks[0].sha256 | test("^[0-9a-f]{64}$")' "$work/$name.json" >/dev/null
 	jq -e '.casks[0].depends_on.arch | any(.type == "arm" and .bits == 64)' "$work/$name.json" >/dev/null
+	# The desktop cask is macOS-only, so it must still declare its macOS dependency once loaded.
+	if [[ "$name" == ksail-desktop ]]; then
+		jq -e '.casks[0].depends_on | has("macos")' "$work/$name.json" >/dev/null
+	fi
 done
-printf 'PASS: both rendered casks load on every platform and preserve checksum/architecture guards\n'
+printf 'PASS: both rendered casks load on every platform and preserve checksum, architecture and macOS guards\n'
 completed=true

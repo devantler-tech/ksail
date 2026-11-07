@@ -263,9 +263,15 @@ func TestKubernetesCleanup_PartialDeletionRequiresExplicitLocalRecovery(t *testi
 	err = cluster.ExportUnmanagedClusterGuard(t.Context(), resolved)
 	require.ErrorIs(t, err, cluster.ErrUnmanagedCluster)
 	require.ErrorContains(t, err, "cluster forget")
+	assert.NotContains(
+		t,
+		err.Error(),
+		"--experimental",
+		"the recovery hint names the stable command",
+	)
 	assert.EqualValues(t, 1, deletes.Load(), "retry must not delete the unowned namespace")
 	beforeRecovery := requests.Load()
-	_, err = executeForget(t, "--experimental", "--kubeconfig", path, "--context", "kind-nested")
+	_, err = executeForget(t, "--kubeconfig", path, "--context", "kind-nested")
 	require.NoError(t, err)
 	assert.Equal(t, beforeRecovery, requests.Load(), "recovery must make no API requests")
 
