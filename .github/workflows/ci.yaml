@@ -2065,8 +2065,6 @@ jobs:
             provider: Docker
             init: true
             args: ""
-            effective-args: "--name image-export-union --workers 1"
-            image-export-cluster-name: "image-export-union"
             test-kubernetes-provider: "true"
             test-workload-mirror: "true"
           - distribution: K3s
@@ -2117,10 +2115,13 @@ jobs:
           # outer node. The collision does not depend on it, because replies to any
           # outer kind-network address are captured by an overlapping inner bridge.
           # Other nested distributions retain their complete default-host legs.
+          # This two-node host also runs the cross-node image export round trip, which
+          # overloads the default Vanilla host when added beside its four nested trials.
           - distribution: Vanilla
             provider: Docker
             init: true
             args: "--name nested-kind-routing --workers 1"
+            image-export-cluster-name: "nested-kind-routing"
             test-kubernetes-provider: "true"
             kubernetes-provider-distributions: "Vanilla"
           # Keep the fresh 3.33 installations above, and also create these with
