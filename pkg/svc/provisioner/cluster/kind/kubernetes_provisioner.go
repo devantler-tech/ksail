@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
-	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/nested"
@@ -15,6 +15,10 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
+
+// Match the existing caller-side readiness budget; a broken exposure must not
+// spend the much longer cluster provisioning deadline before refusing publication.
+const kindExposureReadinessTimeout = time.Minute
 
 // KubernetesProvisioner wraps a Kind provisioner with DinD lifecycle management.
 // It port-forwards the DinD pod's Docker API to localhost, sets DOCKER_HOST so
@@ -66,6 +70,8 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 		return nil, fmt.Errorf("create inner Kind provisioner: %w", err)
 	}
 
+	innerProvisioner.retainOnFailure = nested.DebugEnabled()
+
 	return &KubernetesProvisioner{
 		Provisioner:      innerProvisioner,
 		hostClientset:    cfg.HostClientset,
@@ -101,9 +107,28 @@ func (p *KubernetesProvisioner) Create(
 
 	defer restoreContext()
 
-	exposure, plan, err := p.prepareDinD(ctx, target)
+	// Step 1: Ensure namespace + DinD pod
+	err = p.setupDinD(ctx, target)
 	if err != nil {
 		return err
+	}
+
+	// Step 2: Resolve a stable, server-side exposure (Gateway → NodePort) for the nested API
+	// server. The LoadBalancer tier is skipped to avoid the host LB controller (e.g. K3s
+	// klipper-lb) binding the API server port on the node. This address survives the CLI process
+	// exit and is written to the kubeconfig, so no long-lived port-forward is needed.
+	exposure, err := p.k8sProvider.ResolveExposure(
+		ctx, p.dynamicClient,
+		kubernetesprovider.APIExposureSpec{
+			ClusterName:      target,
+			APIPort:          p.apiServerPort,
+			GatewayClassName: p.gatewayClassName,
+			HostAddress:      p.restConfig.Host,
+			SkipLoadBalancer: true,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("expose API server: %w", err)
 	}
 
 	// Step 3: Add the exposure address to the API server cert SANs so kubectl verifies TLS when
@@ -129,13 +154,14 @@ func (p *KubernetesProvisioner) Create(
 	_, _ = fmt.Fprintln(os.Stdout, msg)
 
 	err = kubernetesprovider.WithRemoteDockerHost(dockerPF, func() error {
-		return p.createInDinD(ctx, target, plan)
+		return p.Provisioner.Create(ctx, target)
 	})
 	if err != nil {
 		return fmt.Errorf("kind create via SDK: %w", err)
 	}
 
-	// Verify the advertised endpoint before publishing the Connector kubeconfig.
+	// Step 6: Point the kubeconfig at the stable exposure address and publish it as a host-cluster
+	// Secret so the operator's Connector can install components into the child cluster.
 	err = p.finalizeKubeconfig(ctx, target, exposure.ServerURL())
 	if err != nil {
 		return err
@@ -170,85 +196,10 @@ func (p *KubernetesProvisioner) List(ctx context.Context) ([]string, error) {
 	return p.dindLifecycle().List(ctx)
 }
 
-func (p *KubernetesProvisioner) prepareDinD(
-	ctx context.Context,
-	target string,
-) (*kubernetesprovider.ExposureResult, dindNetworkPlan, error) {
-	// Resolve the actual exposure before starting a fresh daemon, so its address
-	// pools cannot claim the endpoint that will be written to the kubeconfig.
-	err := p.k8sProvider.EnsureNamespace(ctx, target)
-	if err != nil {
-		return nil, dindNetworkPlan{}, fmt.Errorf("ensure namespace: %w", err)
-	}
-
-	// Step 2: Resolve a stable, server-side exposure (Gateway → NodePort) for the nested API
-	// server. The LoadBalancer tier is skipped to avoid the host LB controller (e.g. K3s
-	// klipper-lb) binding the API server port on the node. This address survives the CLI process
-	// exit and is written to the kubeconfig, so no long-lived port-forward is needed.
-	exposure, err := p.k8sProvider.ResolveExposure(
-		ctx, p.dynamicClient,
-		kubernetesprovider.APIExposureSpec{
-			ClusterName:      target,
-			APIPort:          p.apiServerPort,
-			GatewayClassName: p.gatewayClassName,
-			HostAddress:      p.restConfig.Host,
-			SkipLoadBalancer: true,
-		},
-	)
-	if err != nil {
-		return nil, dindNetworkPlan{}, fmt.Errorf("expose API server: %w", err)
-	}
-
-	plan, err := planDinDNetwork(ctx, p.kindConfig, exposure.KnownNetworks,
-		p.restConfig.Host, exposure.Address)
-	if err != nil {
-		return nil, dindNetworkPlan{}, fmt.Errorf("plan nested Docker network: %w", err)
-	}
-
-	err = p.k8sProvider.SetupDinDWithAddressPools(
-		ctx,
-		target,
-		p.distribution,
-		p.persistence,
-		[]string{plan.pool},
-	)
-	if err != nil {
-		return nil, dindNetworkPlan{}, fmt.Errorf("prepare isolated DinD: %w", err)
-	}
-
-	return exposure, plan, nil
-}
-
-func (p *KubernetesProvisioner) createInDinD(
-	ctx context.Context,
-	target string,
-	plan dindNetworkPlan,
-) error {
-	client, err := dockerclient.GetDockerClient()
-	if err != nil {
-		return fmt.Errorf("create nested Docker client: %w", err)
-	}
-	defer func() { _ = client.Close() }()
-
-	err = validateDinDNetworks(ctx, client, plan, false)
-	if err != nil {
-		return err
-	}
-
-	err = p.Provisioner.Create(ctx, target)
-	if err != nil {
-		return err
-	}
-
-	err = validateDinDNetworks(ctx, client, plan, true)
-	if err != nil {
-		return err
-	}
-
-	_, _ = fmt.Fprintln(os.Stdout,
-		"✔ nested Docker IPv4 allocations exclude known required endpoints and networks")
-
-	return nil
+// setupDinD creates the namespace and DinD pod, then waits for readiness.
+func (p *KubernetesProvisioner) setupDinD(ctx context.Context, clusterName string) error {
+	//nolint:wrapcheck // DinDLifecycle.SetupDinD already wraps with "setup DinD" context
+	return p.dindLifecycle().SetupDinD(ctx, clusterName, p.distribution, p.persistence)
 }
 
 // dindLifecycle bundles the shared DinD delete/exists/list/setup flow for this
@@ -263,9 +214,9 @@ func (p *KubernetesProvisioner) dindLifecycle() nested.DinDLifecycle {
 	}
 }
 
-// finalizeKubeconfig points the on-disk kubeconfig at the stable exposure address and then publishes
-// the nested cluster's kubeconfig as a host-cluster Secret for the operator Connector (see
-// connector.go). It groups the two kubeconfig-finalization steps that close out Create.
+// finalizeKubeconfig verifies the rewritten exposure with the nested credentials before publishing
+// it as a host-cluster Secret. Kind's successful bootstrap only proves its internal API path;
+// it does not establish that the stable, externally advertised route works.
 func (p *KubernetesProvisioner) finalizeKubeconfig(
 	ctx context.Context,
 	target, serverURL string,
@@ -275,9 +226,12 @@ func (p *KubernetesProvisioner) finalizeKubeconfig(
 		return fmt.Errorf("rewrite kubeconfig: %w", err)
 	}
 
-	err = p.waitForReady(ctx, p.kubeconfigPath, ConnectionFor(target).ContextName)
+	readyCtx, cancel := context.WithTimeout(ctx, kindExposureReadinessTimeout)
+	defer cancel()
+
+	err = p.waitForReady(readyCtx, p.kubeconfigPath, ConnectionFor(target).ContextName)
 	if err != nil {
-		return fmt.Errorf("wait for advertised Kind API: %w", err)
+		return fmt.Errorf("verify exposed Kind API before publishing connector: %w", err)
 	}
 
 	err = p.publishConnectorKubeconfig(ctx, target)

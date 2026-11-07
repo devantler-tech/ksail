@@ -856,6 +856,19 @@ runs:
         K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
       run: bash "$GITHUB_WORKSPACE/.github/actions/ksail-system-test/chart-values-drift.sh"
 
+    - name: 🧪 ksail cluster update — leaves a release an Argo CD Application adopted
+      # Argo CD writes no Helm record, so KSail must find the adopting Application through its
+      # tracked resources (#8089, #8220). Seed drift on the KSail-installed Gatekeeper release,
+      # adopt it with a manual-sync Application, and require the update to leave it untouched.
+      # One Docker leg is enough: the ownership lookup is distribution-independent.
+      if: >-
+        inputs.provider == 'Docker' && inputs.distribution == 'Vanilla' && inputs.init == 'true' &&
+        contains(inputs.args, '--policy-engine Gatekeeper') && contains(inputs.args, '--gitops-engine ArgoCD')
+      shell: bash
+      env:
+        K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
+      run: bash "$GITHUB_WORKSPACE/.github/actions/ksail-system-test/argocd-adoption.sh"
+
     - name: 🧪 Talos Kubernetes upgrade — known version path
       if: inputs.kubernetes-upgrade-from != '' && inputs.kubernetes-upgrade-to != ''
       shell: bash

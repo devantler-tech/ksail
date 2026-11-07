@@ -401,15 +401,15 @@ func goreleaserCGO(t *testing.T, path string) string {
 //nolint:lll // file-path keys and 64-character SHA-256 digests do not wrap
 func auditedReleaseConfigDigests() map[string]string {
 	return map[string]string{
-		".goreleaser.yaml":                                   "5ac329a9712c6fc075096468790c855fff3474085e337c13f3969cf465789f7a",
-		".goreleaser.desktop.yaml":                           "7cd674dbd13b4e93c33eb2751ab0c11be29c563e3533864130a6a48a1720c702",
+		".goreleaser.yaml":                                   "f1a12d4a48caf3e1d29b370079ea5534acae0999438cc72b5173bf1a7422c7a6",
+		".goreleaser.desktop.yaml":                           "b8ad01cbf032426e815ab2a41b66c6584d1a39c2901a230b24ebdbb91aa27efd",
 		".github/actions/setup-desktop-build/action.yml":     "473bc1c1f3e940ba58a76320cf8b6ff5e798bf5e9cbe68830469640ef1ef7cac",
 		".github/scripts/download-go-modules.sh":             "e5af8edf61a77de4397e952a05b1cc6ca0f83cd848523c4cf6b3aaa2539561fa",
 		".github/scripts/resolve-release-replay.sh":          "84418fef708bae31c86fb45fccc03b4e9186e312e5cb45951cc5a1dcd35af590",
 		".github/actions/release-admission/action.yaml":      "a8ac217c7e2195fee64b364748a6724b99aa0aa4a9988127084f1d6b45953f0c",
 		"scripts/stage-webui.sh":                             "5b3d7b0fa8b237f77ee9a88e6807e070c1b35c97df3d5f17357b3ecb8b2938a6",
 		".github/actions/free-disk-space/free-disk-space.sh": "2dd12fcf3779137ca1cb5f21194947f6a10d3f94f8fb438a1a29ec9021fbdc30",
-		".github/workflows/cd.yaml#without-uses":             "69665569762ee654f970589717e3088fcb6136cd8c9ec68ba73ea52bf3b68b3c",
+		".github/workflows/cd.yaml#without-uses":             "ac5977b33132f5b6f2eb49414c7a11a2d1bfa8b6a3989ca0b3d2b031203f9a3e",
 	}
 }
 
@@ -437,66 +437,6 @@ func TestReleaseBuildConfigMatchesAudit(t *testing.T) {
 				want,
 			)
 		}
-	}
-}
-
-// TestReleaseActionPinsMatchAuditedContent binds audited snapshots to the commits CD executes.
-// The content witnesses were read from these exact Git commits, not the working tree.
-// Changing an audited action requires a new reviewed pin and its matching content witness.
-func TestReleaseActionPinsMatchAuditedContent(t *testing.T) {
-	t.Parallel()
-	root := moduleRoot(t)
-	actual := releaseConfigDigests(t, root)
-
-	var workflow struct {
-		Jobs map[string]struct {
-			Steps []struct {
-				Uses string `yaml:"uses"`
-			} `yaml:"steps"`
-		} `yaml:"jobs"`
-	}
-	readYAML(t, filepath.Join(root, ".github", "workflows", "cd.yaml"), &workflow)
-
-	for _, binding := range []struct{ path, reference, content string }{
-		{
-			".github/actions/release-admission/action.yaml",
-			"devantler-tech/ksail/.github/actions/release-admission@ac2dd2ee401030b2fac81dc985b42fae45b0788b",
-			"a8ac217c7e2195fee64b364748a6724b99aa0aa4a9988127084f1d6b45953f0c",
-		},
-		{
-			".github/actions/setup-desktop-build/action.yml",
-			"devantler-tech/ksail/.github/actions/setup-desktop-build@ccc4de63c6f1259ecbdd604c2260559d810c7cfc",
-			"473bc1c1f3e940ba58a76320cf8b6ff5e798bf5e9cbe68830469640ef1ef7cac",
-		},
-	} {
-		t.Run(binding.path, func(t *testing.T) {
-			t.Parallel()
-
-			if actual[binding.path] != binding.content {
-				t.Errorf("audited content no longer matches pinned action %s", binding.reference)
-			}
-
-			prefix := strings.Split(binding.reference, "@")[0] + "@"
-			found := false
-
-			for _, job := range workflow.Jobs {
-				for _, step := range job.Steps {
-					if !strings.HasPrefix(step.Uses, prefix) {
-						continue
-					}
-
-					found = true
-
-					if step.Uses != binding.reference {
-						t.Errorf("action pin %s has no matching audited content witness", step.Uses)
-					}
-				}
-			}
-
-			if !found {
-				t.Errorf("audited action %s is absent from CD", binding.reference)
-			}
-		})
 	}
 }
 

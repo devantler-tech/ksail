@@ -43,11 +43,11 @@ read. KSail keeps the local connection and reports the failure. A retry refuses 
 when ownership can no longer be proven, even if a familiar context name remains.
 
 Investigate the reported API error and any remaining host resources separately. If you only want
-to retire the stale **local connection**, the experimental recovery command accepts one exact
-context in one explicit file:
+to retire the stale **local connection**, the recovery command accepts one exact context in one
+explicit file:
 
 ```bash
-ksail cluster forget --kubeconfig ./nested.config --context kind-nested --experimental
+ksail cluster forget --kubeconfig ./nested.config --context kind-nested
 ```
 
 This command makes no API requests, runs no credential plugins, and never deletes cluster or host

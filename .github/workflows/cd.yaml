@@ -228,7 +228,7 @@ jobs:
 
       - name: 🔐 Login to GHCR
         if: needs.cask-checkpoint.outputs.release-mode == 'build'
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -236,7 +236,7 @@ jobs:
 
       - name: 🔐 Login to Docker Hub
         if: (vars.DOCKERHUB_USERNAME != '') && needs.cask-checkpoint.outputs.release-mode == 'build'
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -458,7 +458,7 @@ jobs:
 
       - name: 🛠️ Setup desktop build (Go, Node.js, webview deps, staged web UI)
         if: needs.validate-release-ref.outputs.release-mode == 'build'
-        uses: devantler-tech/ksail/.github/actions/setup-desktop-build@ccc4de63c6f1259ecbdd604c2260559d810c7cfc
+        uses: devantler-tech/ksail/.github/actions/setup-desktop-build@83b97383459731f3aa4aab572ba9a0769f2796b0
 
       - name: 🏷️ Extract version from tag
         if: needs.validate-release-ref.outputs.release-mode == 'build'
@@ -541,7 +541,7 @@ jobs:
 
       - name: 🔐 Login to GHCR
         if: needs.goreleaser.outputs.release-mode == 'build'
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -712,8 +712,8 @@ jobs:
     # guaranteed before it. This is the maintainer's required invariant: a published release is always
     # complete (#5061). The inverse failure — an asset job failing and leaving an unpublished draft —
     # is prevented up front by the `Release` workflow, which validates every artifact BEFORE the tag is
-    # created, and backstopped by `cleanup-failed-release` below, which deletes the orphaned draft and
-    # tag if a publish is ever blocked so no empty/incomplete tag flows downstream (#5060).
+    # created, and backstopped by `cleanup-failed-release` below, which deletes an orphaned draft
+    # while retaining the protected tag and reporting the failed version (#7694).
     # Runs in parallel with `pages-deploy` and `mcp-publish`.
     needs:
       [
@@ -1248,12 +1248,10 @@ jobs:
           fi
 
   # Backstop for the immutable-release model: if the release did NOT publish — any asset job failed,
-  # or the publish step bailed (so `publish-release` is skipped or failed) — delete the orphaned draft
-  # AND the tag so an incomplete/empty release never lingers or flows downstream to tag-tracking
-  # consumers (see #5060, #5061). The `Release` workflow validates every artifact BEFORE the tag is
-  # cut, so this should rarely fire — only on a post-tag transient (a GitHub/registry blip during the
-  # real build). On the happy path `publish-release` succeeds and this is skipped. Recovery is to
-  # re-run the `Release` workflow: it recomputes the same version and re-tags after validation.
+  # or the publish step bailed (so `publish-release` is skipped or failed) — delete only its eligible
+  # orphaned draft. Release tags remain undeletable, including failed attempts; a newer published
+  # version supersedes a failed version (#7694). This cleanup never changes the failed publisher's
+  # outcome and never removes a published release or an ambiguous draft set.
   cleanup-failed-release:
     name: 🧹 Clean up incomplete release
     runs-on: ubuntu-latest
@@ -1270,7 +1268,7 @@ jobs:
           mode: ${{ needs.validate-release-ref.outputs.release-mode }}
           proof: ${{ needs.validate-release-ref.outputs.replay-proof }}
 
-      - name: 🧹 Delete orphaned draft release and tag
+      - name: 🧹 Delete orphaned draft release and retain its tag
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           RELEASE_TAG: ${{ github.ref_name }}
@@ -1278,12 +1276,22 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const tag = process.env.RELEASE_TAG;
+            const source = process.env.GITHUB_SHA;
             const { owner, repo } = context.repo;
+            if (!/^v\d+\.\d+\.\d+(-.+)?$/.test(tag || '') || !/^[0-9a-f]{40}$/.test(source || '')) {
+              throw new Error('Cleanup requires the admitted release tag and source commit.');
+            }
 
             // listReleases returns drafts (getReleaseByTag does not), so use it to find everything
             // attached to this tag, reading every page so a release beyond the first 100 is not missed.
             const releases = await github.paginate(github.rest.repos.listReleases, { owner, repo, per_page: 100 });
+            if (!Array.isArray(releases) || releases.some(r => !r || typeof r.tag_name !== 'string')) {
+              throw new Error('Release listing is unreadable; leaving releases and tags untouched.');
+            }
             const forTag = releases.filter(r => r.tag_name === tag);
+            if (forTag.some(r => typeof r.draft !== 'boolean' || !Number.isSafeInteger(r.id) || r.id <= 0)) {
+              throw new Error('Release identity is incomplete; leaving releases and tags untouched.');
+            }
             const drafts = forTag.filter(r => r.draft);
             const published = forTag.filter(r => !r.draft);
 
@@ -1297,50 +1305,48 @@ jobs:
               return;
             }
 
-            // No published release for this tag — the draft(s), if any, are orphans from a blocked
-            // publish. Remove them and the tag so no empty/incomplete release flows downstream.
+            if (drafts.length > 1) {
+              throw new Error(`Multiple draft releases exist for ${tag}; leaving the ambiguous drafts untouched.`);
+            }
+
+            // Match the preflight's bounded annotated-tag resolution. Only fixed same-repository
+            // API operands are used; a missing, unreadable or moved source tag refuses cleanup.
+            async function verifyRetainedTag() {
+              const ref = await github.rest.git.getRef({ owner, repo, ref: `tags/${tag}` });
+              if (ref.data.ref !== `refs/tags/${tag}`) throw new Error('Source tag identity differs.');
+              let object = ref.data.object;
+              for (let depth = 0; depth < 4; depth++) {
+                if (!object || !/^[0-9a-f]{40}$/.test(object.sha || '')) break;
+                if (object.type === 'commit') {
+                  if (object.sha === source) return;
+                  break;
+                }
+                if (object.type !== 'tag') break;
+                const annotated = await github.rest.git.getTag({ owner, repo, tag_sha: object.sha });
+                object = annotated.data.object;
+              }
+              throw new Error('Retained tag does not identify the admitted source commit.');
+            }
+
+            await verifyRetainedTag();
             for (const d of drafts) {
+              const current = await github.rest.repos.getRelease({ owner, repo, release_id: d.id });
+              if (current.data.id !== d.id || current.data.tag_name !== tag || current.data.draft !== true) {
+                throw new Error('Draft identity changed before cleanup; leaving it untouched.');
+              }
               await github.rest.repos.deleteRelease({ owner, repo, release_id: d.id });
+              try {
+                await github.rest.repos.getRelease({ owner, repo, release_id: d.id });
+                throw new Error('Draft release still exists after cleanup.');
+              } catch (error) {
+                if (error.status !== 404) throw error;
+              }
               console.log(`Deleted orphaned draft release ${tag} (id=${d.id}).`);
             }
-
-            // The delete is verified by READING THE TAG BACK, never by the delete call's own status.
-            // The repository's "Protect release tags" ruleset carries a deletion rule with no bypass
-            // actors, so the workflow token's delete is refused with a 422 — the same status the API
-            // uses for "reference does not exist". Treating that status as "already absent" reported
-            // every refused delete as a success and left the orphaned tag behind (v7.178.26 logged
-            // exactly that while the tag survived; #6136). Only a 404 on the read-back proves the tag
-            // is gone; anything else fails the job and names the manual cleanup.
-            let deleteError = null;
-            try {
-              await github.rest.git.deleteRef({ owner, repo, ref: `tags/${tag}` });
-            } catch (error) {
-              deleteError = error;
-            }
-
-            let stillPresent = true;
-            try {
-              await github.rest.git.getRef({ owner, repo, ref: `tags/${tag}` });
-            } catch (error) {
-              if (error.status !== 404) {
-                throw error;
-              }
-              stillPresent = false;
-            }
-
-            if (!stillPresent) {
-              console.log(deleteError
-                ? `Tag ${tag} already absent; nothing to delete.`
-                : `Deleted orphaned tag ${tag}; downstream tag-tracking consumers will not see an empty release.`);
-              return;
-            }
-
-            const detail = deleteError ? ` (delete refused: ${deleteError.status} ${deleteError.message})` : '';
-            core.setFailed(
-              `Orphaned tag ${tag} still exists after the cleanup${detail}. ` +
-              `It has no release, so tag-tracking consumers would see an empty release. ` +
-              `A repository ruleset protecting tag deletion blocks this workflow token; ` +
-              `delete it with a bypass-capable identity ` +
-              `(gh api -X DELETE repos/${owner}/${repo}/git/refs/tags/${tag}) ` +
-              `or grant this workflow a bypass on that ruleset.`
-            );
+            await verifyRetainedTag();
+            await core.summary.addHeading('Incomplete release cleanup').addRaw(
+              `Retained tag ${tag} at source ${source}. ` +
+              `Removed ${drafts.length} orphaned draft release(s); tag protection is unchanged.\n\n` +
+              `Recovery requires a newer published version; this job does not verify a successor. ` +
+              `Cleanup does not change the original failed publication outcome.\n`
+            ).write();

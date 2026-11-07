@@ -4,9 +4,6 @@ import "errors"
 
 // Provider-specific errors.
 var (
-	// ErrDinDNetworkPolicyMismatch refuses reuse without changing an existing daemon.
-	ErrDinDNetworkPolicyMismatch = errors.New("existing DinD pod uses a different network policy")
-
 	// ErrHostClientRequired is returned when a nil Kubernetes client is provided.
 	ErrHostClientRequired = errors.New("host cluster Kubernetes client is required")
 
@@ -42,6 +39,9 @@ var (
 
 	// ErrDinDNoIP is returned when the DinD pod has no IP assigned.
 	ErrDinDNoIP = errors.New("DinD pod has no IP assigned")
+
+	// ErrDinDAddressPool means the host inventory cannot establish a disjoint private pool.
+	ErrDinDAddressPool = errors.New("cannot select a disjoint nested Docker address pool")
 
 	// ErrUnexpectedAddressFormat is returned when a listener address has an unexpected format.
 	ErrUnexpectedAddressFormat = errors.New("unexpected listener address format")

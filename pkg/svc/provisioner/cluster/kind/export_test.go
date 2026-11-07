@@ -2,10 +2,7 @@ package kindprovisioner
 
 import (
 	"context"
-	"net/netip"
 
-	"github.com/devantler-tech/ksail/v7/pkg/k8s"
-	"github.com/docker/docker/api/types/network"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 	"sigs.k8s.io/kind/pkg/log"
@@ -19,54 +16,10 @@ func NewKubernetesProvisionerForConnectorTest(
 	clientset kubernetes.Interface, clusterName, kubeconfigPath string,
 ) *KubernetesProvisioner {
 	return &KubernetesProvisioner{
-		Provisioner: &Provisioner{
-			kindConfig: &v1alpha4.Cluster{Name: clusterName}, waitForReady: k8s.WaitForClusterReady,
-		},
+		Provisioner:    &Provisioner{kindConfig: &v1alpha4.Cluster{Name: clusterName}},
 		hostClientset:  clientset,
 		kubeconfigPath: kubeconfigPath,
 	}
-}
-
-// PlanDinDNetworkForTest exposes the allocation result, without exposing internal state.
-func PlanDinDNetworkForTest(
-	ctx context.Context,
-	cfg *v1alpha4.Cluster,
-	endpoints ...string,
-) (string, error) {
-	plan, err := planDinDNetwork(ctx, cfg, nil, endpoints...)
-
-	return plan.pool, err
-}
-
-// SelectDinDNetworkForTest exercises bounded pool exhaustion with supplied known prefixes.
-func SelectDinDNetworkForTest(protected []netip.Prefix) (string, error) {
-	plan, err := selectDinDNetwork(protected)
-
-	return plan.pool, err
-}
-
-// EndpointPrefixesForTest permits deterministic DNS results without external lookups.
-var EndpointPrefixesForTest = endpointPrefixes //nolint:gochecknoglobals
-
-// ValidateDinDNetworksForTest exposes real network validation at the Docker API boundary.
-func ValidateDinDNetworksForTest(
-	ctx context.Context,
-	client interface {
-		NetworkList(ctx context.Context, options network.ListOptions) ([]network.Summary, error)
-	},
-	requireKind bool,
-) error {
-	return validateDinDNetworks(ctx, client, dindNetworkPlan{
-		base:      netip.MustParsePrefix("10.16.0.0/12"),
-		protected: []netip.Prefix{netip.MustParsePrefix("10.0.1.2/32")},
-	}, requireKind)
-}
-
-// FinalizeKubeconfigForTest exercises endpoint rewrite, readiness and publication together.
-func (k *KubernetesProvisioner) FinalizeKubeconfigForTest(
-	ctx context.Context, target, serverURL string,
-) error {
-	return k.finalizeKubeconfig(ctx, target, serverURL)
 }
 
 // PublishConnectorKubeconfigForTest exposes publishConnectorKubeconfig for unit testing.
@@ -74,6 +27,13 @@ func (k *KubernetesProvisioner) PublishConnectorKubeconfigForTest(
 	ctx context.Context, target string,
 ) error {
 	return k.publishConnectorKubeconfig(ctx, target)
+}
+
+// FinalizeKubeconfigForTest exposes the create-time exposure verification and publication path.
+func (k *KubernetesProvisioner) FinalizeKubeconfigForTest(
+	ctx context.Context, target, serverURL string,
+) error {
+	return k.finalizeKubeconfig(ctx, target, serverURL)
 }
 
 // KubeConfigForTest returns the kubeConfig field for testing purposes.
@@ -102,4 +62,9 @@ func NewStreamLoggerForTest(w interface {
 // SetNameForTest exposes setName for unit testing.
 func SetNameForTest(name, kindConfigName string) string {
 	return setName(name, kindConfigName)
+}
+
+// WithRetainOnFailureForTest selects the nested diagnostic create path.
+func (k *Provisioner) WithRetainOnFailureForTest(retain bool) {
+	k.retainOnFailure = retain
 }

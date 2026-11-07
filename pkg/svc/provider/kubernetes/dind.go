@@ -3,7 +3,6 @@ package kubernetes
 import (
 	"context"
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -75,7 +74,38 @@ func (p *Provider) CreateDinDPod(
 	clusterName, distribution string,
 	persistence v1alpha1.KubernetesPersistence,
 ) error {
-	return p.createDinDPod(ctx, clusterName, distribution, persistence, nil)
+	namespace := NamespaceName(clusterName)
+	pod := buildDinDPod(clusterName, distribution, persistence)
+
+	poolArg, err := p.plannedDinDPoolArg(ctx, distribution)
+	if err != nil {
+		return err
+	}
+
+	if poolArg != "" {
+		pod.Spec.Containers[0].Args = append(pod.Spec.Containers[0].Args, poolArg)
+	}
+
+	if persistence.Enabled {
+		err := p.ensurePVC(ctx, namespace, clusterName, persistence)
+		if err != nil {
+			return fmt.Errorf("ensure PVC: %w", err)
+		}
+	}
+
+	svc := buildDinDService(clusterName)
+
+	err = p.createOrReuseDinDPod(ctx, namespace, pod, poolArg)
+	if err != nil {
+		return err
+	}
+
+	_, err = p.client.CoreV1().Services(namespace).Create(ctx, svc, metav1.CreateOptions{})
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return fmt.Errorf("create DinD service: %w", err)
+	}
+
+	return nil
 }
 
 // WaitForDefaultServiceAccount waits until the namespace's default ServiceAccount exists.
@@ -194,78 +224,6 @@ func (p *Provider) DeleteDinD(ctx context.Context, clusterName string) error {
 	}
 
 	return nil
-}
-
-func (p *Provider) createDinDPod(
-	ctx context.Context, clusterName, distribution string,
-	persistence v1alpha1.KubernetesPersistence, addressPools []string,
-) error {
-	namespace := NamespaceName(clusterName)
-
-	if persistence.Enabled {
-		err := p.ensurePVC(ctx, namespace, clusterName, persistence)
-		if err != nil {
-			return fmt.Errorf("ensure PVC: %w", err)
-		}
-	}
-
-	pod := buildDinDPod(clusterName, distribution, persistence)
-	for _, pool := range addressPools {
-		pod.Spec.Containers[0].Args = append(pod.Spec.Containers[0].Args,
-			"--default-address-pool="+pool)
-	}
-
-	svc := buildDinDService(clusterName)
-
-	err := p.ensureDinDPod(ctx, namespace, pod, len(addressPools) != 0)
-	if err != nil {
-		return err
-	}
-
-	_, err = p.client.CoreV1().Services(namespace).Create(ctx, svc, metav1.CreateOptions{})
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("create DinD service: %w", err)
-	}
-
-	return nil
-}
-
-func (p *Provider) ensureDinDPod(
-	ctx context.Context,
-	namespace string,
-	pod *corev1.Pod,
-	requirePolicy bool,
-) error {
-	_, err := p.client.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{})
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("create DinD pod: %w", err)
-	}
-
-	if errors.IsAlreadyExists(err) && requirePolicy {
-		existing, getErr := p.client.CoreV1().
-			Pods(namespace).
-			Get(ctx, DinDPodName, metav1.GetOptions{})
-		if getErr != nil {
-			return fmt.Errorf("inspect existing DinD pod: %w", getErr)
-		}
-
-		if !compatibleDinDPod(existing, pod) {
-			return ErrDinDNetworkPolicyMismatch
-		}
-	}
-
-	return nil
-}
-
-func compatibleDinDPod(existing, desired *corev1.Pod) bool {
-	if len(existing.Spec.Containers) != 1 {
-		return false
-	}
-
-	container := existing.Spec.Containers[0]
-
-	return container.Name == DinDContainerName && container.Image == DinDImage &&
-		len(container.Command) == 0 && slices.Equal(container.Args, desired.Spec.Containers[0].Args)
 }
 
 func buildDinDPod(

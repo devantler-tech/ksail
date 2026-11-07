@@ -90,9 +90,6 @@ type ExposureResult struct {
 	Port int32
 	// Kind is one of ExposureGateway, ExposureLoadBalancer, or ExposureNodePort.
 	Kind string
-	// KnownNetworks carries only already-read PodCIDRs and literal Service IPs
-	// for nested Docker allocation. It does not infer enclosing network prefixes.
-	KnownNetworks []string
 }
 
 // ServerURL returns the kubeconfig server URL for the resolved exposure.
@@ -245,9 +242,7 @@ func (p *Provider) exposeViaNodePort(
 		return nil, ErrNodePortNotAssigned
 	}
 
-	nodes, listErr := p.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-
-	addr, err := nodePortAddress(nodes, listErr, spec.HostAddress)
+	addr, err := p.pickNodeAddress(ctx, spec.HostAddress)
 	if err != nil {
 		return nil, err
 	}
@@ -257,32 +252,10 @@ func (p *Provider) exposeViaNodePort(
 		Port:    svc.Spec.Ports[0].NodePort,
 		Kind:    ExposureNodePort,
 	}
-	result.KnownNetworks = knownNodePortNetworks(svc, nodes, listErr)
+
 	warnNodePortReachability(result)
 
 	return result, nil
-}
-
-func knownNodePortNetworks(svc *corev1.Service, nodes *corev1.NodeList, listErr error) []string {
-	known := make([]string, 0)
-
-	for _, address := range append([]string{svc.Spec.ClusterIP}, svc.Spec.ClusterIPs...) {
-		if address != "" && address != corev1.ClusterIPNone {
-			known = append(known, address)
-		}
-	}
-
-	if listErr == nil {
-		for _, node := range nodes.Items {
-			if node.Spec.PodCIDR != "" {
-				known = append(known, node.Spec.PodCIDR)
-			}
-
-			known = append(known, node.Spec.PodCIDRs...)
-		}
-	}
-
-	return known
 }
 
 // warnNodePortReachability surfaces a reachability caveat when the nested API
@@ -554,11 +527,6 @@ func (p *Provider) waitForLoadBalancer(ctx context.Context, namespace string) (s
 // the host API does not imply that NodePorts are published on that same address.
 func (p *Provider) pickNodeAddress(ctx context.Context, hostAddress string) (string, error) {
 	nodes, listErr := p.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-
-	return nodePortAddress(nodes, listErr, hostAddress)
-}
-
-func nodePortAddress(nodes *corev1.NodeList, listErr error, hostAddress string) (string, error) {
 	if listErr == nil {
 		if addr := firstNodeAddress(nodes.Items, corev1.NodeExternalIP); addr != "" {
 			return addr, nil

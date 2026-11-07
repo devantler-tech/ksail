@@ -1,20 +1,6 @@
 package kubernetes
 
-import (
-	"context"
-
-	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
-)
-
-// CreateDinDPodWithPoolsForTest exposes the shared creation path without daemon readiness waits.
-func (p *Provider) CreateDinDPodWithPoolsForTest(
-	ctx context.Context,
-	clusterName, distribution string,
-	persistence v1alpha1.KubernetesPersistence,
-	pools ...string,
-) error {
-	return p.createDinDPod(ctx, clusterName, distribution, persistence, pools)
-}
+import "context"
 
 // ExtractGatewayPortForTest exposes extractGatewayPort for unit testing.
 var ExtractGatewayPortForTest = extractGatewayPort //nolint:gochecknoglobals

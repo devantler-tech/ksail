@@ -37,6 +37,7 @@ Manage cluster lifecycle — write subcommands of `ksail cluster`. Select the op
 | `backup` | Backup cluster resources | Yes |
 | `create` | Create a cluster | Yes |
 | `delete` | Destroy a cluster | Yes |
+| `forget` | Forget one local kubeconfig context without contacting a cluster | No |
 | `restore` | Restore cluster resources from backup | Yes |
 | `start` | Start a stopped cluster | Yes |
 | `stop` | Stop a running cluster | Yes |
@@ -90,6 +91,7 @@ Manage workload operations — read-only subcommands of `ksail workload`. Select
 | `gen_poddisruptionbudget` | Create a pod disruption budget with the specified name | Yes |
 | `gen_priorityclass` | Create a priority class with the specified name | Yes |
 | `gen_quota` | Create a quota with the specified name | Yes |
+| `gen_receiver` | Generate a Flux Receiver resource | Yes |
 | `gen_role` | Create a role with single rule | Yes |
 | `gen_rolebinding` | Create a role binding for a particular role or cluster role | Yes |
 | `gen_secret_docker-registry` | Create a secret for use with a Docker registry | Yes |
