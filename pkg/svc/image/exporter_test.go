@@ -949,7 +949,7 @@ func TestExportPrefersControlPlaneOverWorker(t *testing.T) {
 		},
 	}
 	runNodeSelectionTest(
-		t, v1alpha1.DistributionVanilla, nodes, "my-cluster-control-plane", "my-cluster-worker",
+		t, v1alpha1.DistributionVanilla, nodes, "my-cluster-control-plane",
 	)
 }
 
@@ -967,7 +967,7 @@ func TestExportK3dPrefersServerOverAgent(t *testing.T) {
 		},
 	}
 	runNodeSelectionTest(
-		t, v1alpha1.DistributionK3s, nodes, "k3d-my-cluster-server-0", "k3d-my-cluster-agent-0",
+		t, v1alpha1.DistributionK3s, nodes, "k3d-my-cluster-server-0",
 	)
 }
 
@@ -1103,7 +1103,6 @@ func runNodeSelectionTest(
 	distribution v1alpha1.Distribution,
 	nodes []container.Summary,
 	expectedNodeName string,
-	otherProbedNodes ...string,
 ) {
 	t.Helper()
 
@@ -1113,12 +1112,22 @@ func runNodeSelectionTest(
 
 	mockClient.EXPECT().ContainerList(ctx, mock.Anything).Return(nodes, nil)
 
-	setupEmptyImageListMockForExporter(ctx, t, mockClient, expectedNodeName)
+	setupExecMockWithStdoutForExporter(
+		ctx,
+		t,
+		mockClient,
+		expectedNodeName,
+		[]string{
+			ctrCommand,
+			"--namespace=k8s.io",
+			"images",
+			"list",
+			"-q",
+		},
+		"docker.io/library/nginx:latest\n",
+	)
 
-	// On a multi-node cluster every other node is asked which images it holds.
-	for _, nodeName := range otherProbedNodes {
-		setupEmptyImageListMockForExporter(ctx, t, mockClient, nodeName)
-	}
+	// The preferred node covers the entire selection, so no other probe is needed.
 
 	// Mock platform detection (uname -m)
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, expectedNodeName)
@@ -1126,7 +1135,7 @@ func runNodeSelectionTest(
 	// Mock export command
 	setupExecMockForExporter(ctx, t, mockClient, expectedNodeName)
 
-	tarContent := createExportTar(t, []byte("fake image data"))
+	tarContent := createExportTar(t, namedNodeArchive(t, "docker.io/library/nginx:latest"))
 	mockClient.EXPECT().
 		CopyFromContainer(ctx, expectedNodeName, mock.AnythingOfType("string")).
 		Return(io.NopCloser(bytes.NewReader(tarContent)), container.PathStat{}, nil)

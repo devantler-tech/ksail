@@ -2065,6 +2065,8 @@ jobs:
             provider: Docker
             init: true
             args: ""
+            effective-args: "--name image-export-union --workers 1"
+            image-export-cluster-name: "image-export-union"
             test-kubernetes-provider: "true"
             test-workload-mirror: "true"
           - distribution: K3s
@@ -2236,6 +2238,7 @@ jobs:
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
           test-kubernetes-provider: ${{ matrix.test-kubernetes-provider || 'false' }}
           test-workload-mirror: ${{ matrix.test-workload-mirror || 'false' }}
+          image-export-cluster-name: ${{ matrix.image-export-cluster-name || '' }}
           kubernetes-provider-distributions: ${{ matrix.kubernetes-provider-distributions || 'Vanilla,K3s,VCluster,Talos' }}
           kubernetes-provider-cni: ${{ matrix.kubernetes-provider-cni || '' }}
 

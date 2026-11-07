@@ -84,6 +84,7 @@ func TestDockerMatrixPreservesEveryEffectiveScenario(t *testing.T) {
 	require.NoError(t, yaml.Unmarshal(readRepoFile(t,
 		"internal/ciharness/testdata/docker-matrix-baseline.yaml"), &baseline))
 	want := expandDockerMatrix(t, baseline)
+	expectSplitImageFixture(t, want)
 	got := expandDockerMatrix(t, job.Strategy.Matrix)
 	require.Len(t, want, 30, "the frozen baseline contains all thirty scenarios")
 	want = append(want, nestedKindRoutingScenario())
@@ -113,6 +114,26 @@ func TestDockerMatrixPreservesEveryEffectiveScenario(t *testing.T) {
 	assert.Equal(t, "v1.37.1", got[0]["kubernetes-upgrade-to"])
 	assertDockerLongCasesInFirstWave(t, got[:15])
 	assertDockerJobNamesRemainDistinct(t, job.Name, got)
+}
+
+// Preserve the frozen historical catalogue and declare the one intentional
+// extension: the default Vanilla host also proves a two-node image round trip.
+func expectSplitImageFixture(t *testing.T, scenarios []map[string]string) {
+	t.Helper()
+
+	changed := 0
+
+	for _, scenario := range scenarios {
+		if scenario["distribution"] != "Vanilla" || scenario["args"] != "" {
+			continue
+		}
+
+		scenario["args"] = "--name image-export-union --workers 1"
+		scenario["image-export-cluster-name"] = "image-export-union"
+		changed++
+	}
+
+	require.Equal(t, 1, changed, "extend exactly one existing scenario without adding runners")
 }
 
 func nestedKindRoutingScenario() map[string]string {

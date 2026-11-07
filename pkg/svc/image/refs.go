@@ -109,8 +109,12 @@ func (l localImageLookup) add(imageRef string) {
 	}
 
 	repoDigestRef := imageRepository(imageRef) + "@" + digest
-	if _, exists := l.byRepoDigestRef[repoDigestRef]; !exists {
-		l.byRepoDigestRef[repoDigestRef] = imageRef
+	// Containerd also inventories short import-date@digest names. Match the
+	// canonical request while retaining the real inventory name as ctr's operand.
+	for _, key := range []string{repoDigestRef, NormalizeImageRef(repoDigestRef)} {
+		if _, exists := l.byRepoDigestRef[key]; !exists {
+			l.byRepoDigestRef[key] = imageRef
+		}
 	}
 }
 
