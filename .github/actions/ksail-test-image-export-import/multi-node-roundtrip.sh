@@ -67,6 +67,11 @@ if [[ "$base" != */* ]]; then
 elif [[ "$first" != *.* && "$first" != *:* && "$first" != localhost ]]; then
 	base="docker.io/$base"
 fi
+# A tagless reference is stored under :latest, as the CLI exports it.
+last="${base##*/}"
+if [[ "$base" != *@* && "$last" != *:* ]]; then
+	base="$base:latest"
+fi
 for index in 0 1; do
 	node="${nodes[$index]}"
 	inventory=$(docker exec "$node" ctr --namespace=k8s.io images list -q)

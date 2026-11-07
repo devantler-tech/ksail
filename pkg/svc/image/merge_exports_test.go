@@ -13,6 +13,7 @@ import (
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/image"
+	"github.com/docker/docker/api/types/container"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/layout"
 	"github.com/stretchr/testify/mock"
@@ -39,6 +40,33 @@ func TestExportAllDeduplicatesReferencesAcrossNodes(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, refs, archiveNamedReferences(t, output))
 	assertImageArchiveReadable(t, output, len(refs))
+
+	// The shared reference is assigned once, so each node exports only its own operands.
+	require.Equal(t, map[string][]string{
+		kindExporterNodeName: {refs[0], refs[1]},
+		"my-cluster-worker":  {refs[2]},
+	}, exportOperandsByNode(client))
+}
+
+// exportOperandsByNode reads the image operands of every ctr export call the exporter made.
+func exportOperandsByNode(client *docker.MockAPIClient) map[string][]string {
+	const prefix = 9 // ctr --namespace=k8s.io images export --platform <p> --local --skip-manifest-json <path>
+
+	operands := map[string][]string{}
+
+	for _, call := range client.Calls {
+		if call.Method != "ContainerExecCreate" {
+			continue
+		}
+
+		options, _ := call.Arguments.Get(2).(container.ExecOptions)
+		if len(options.Cmd) > prefix && options.Cmd[3] == "export" {
+			node, _ := call.Arguments.Get(1).(string)
+			operands[node] = append(operands[node], options.Cmd[prefix:]...)
+		}
+	}
+
+	return operands
 }
 
 func TestExportRefusesIncompleteArchivesWithoutReplacingDestination(t *testing.T) {
