@@ -85,17 +85,33 @@ for index in 0 1; do
 	docker exec "$node" ctr --namespace=k8s.io images tag "$source" "$ref"
 done
 
-has_ref() {
+ref_state() {
+	# Prints present or absent; any inventory failure aborts instead of reading as absent.
 	local node="$1" ref="$2" inventory
-	inventory=$(docker exec "$node" ctr --namespace=k8s.io images list -q) || return 1
-	grep -Fxq -- "$ref" <<<"$inventory"
+	if ! inventory=$(docker exec "$node" ctr --namespace=k8s.io images list -q); then
+		echo "Cannot read the image inventory of $node." >&2
+		exit 1
+	fi
+	if awk -v ref="$ref" '$0 == ref {found = 1} END {exit !found}' <<<"$inventory"; then
+		echo present
+	else
+		echo absent
+	fi
+}
+has_ref() {
+	local state
+	state=$(ref_state "$1" "$2")
+	[[ "$state" == present ]]
 }
 has_ref "${nodes[0]}" "$ref_a"
 has_ref "${nodes[1]}" "$ref_b"
-if has_ref "${nodes[0]}" "$ref_b" || has_ref "${nodes[1]}" "$ref_a"; then
-	echo 'The fixture is not split across the two nodes.' >&2
-	exit 1
-fi
+for pair in "${nodes[0]} $ref_b" "${nodes[1]} $ref_a"; do
+	state=$(ref_state "${pair% *}" "${pair#* }")
+	if [[ "$state" != absent ]]; then
+		echo 'The fixture is not split across the two nodes.' >&2
+		exit 1
+	fi
+done
 
 ksail workload export "$staging/selected.tar" --image="$ref_a" --image="$ref_b"
 ksail workload export "$staging/all.tar"

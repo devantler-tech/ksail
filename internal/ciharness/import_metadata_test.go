@@ -15,6 +15,7 @@ import (
 
 func TestImportMetadataRejectsIncompleteOrRootImageReferences(t *testing.T) {
 	t.Parallel()
+	requireImportMetadataTools(t)
 
 	for _, mode := range []string{
 		"valid", "root-image", "missing-name", "missing-digest", "wrong-target",
@@ -33,6 +34,26 @@ func TestImportMetadataRejectsIncompleteOrRootImageReferences(t *testing.T) {
 				assert.NotContains(t, string(output), "Validated archive-root absence")
 			}
 		})
+	}
+}
+
+// requireImportMetadataTools checks the host utilities the script needs before
+// any case runs. A missing tool would make every rejection case pass for the
+// wrong reason, so the suite skips locally and fails on CI, where both exist.
+func requireImportMetadataTools(t *testing.T) {
+	t.Helper()
+
+	for _, tool := range []string{"jq", "sha256sum"} {
+		_, err := exec.LookPath(tool)
+		if err == nil {
+			continue
+		}
+
+		if os.Getenv("GITHUB_ACTIONS") == "true" {
+			t.Fatalf("%s is required by assert-import-metadata.sh: %v", tool, err)
+		}
+
+		t.Skipf("%s is not installed; assert-import-metadata.sh needs it", tool)
 	}
 }
 
