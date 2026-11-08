@@ -124,3 +124,38 @@ case "$2" in
 esac
 `)
 }
+
+// TestImportMetadataClusterInputReachesTheScripts pins the mapping the metadata test above
+// bypasses by setting IMAGE_EXPORT_CLUSTER directly: if either action stopped forwarding the
+// cluster name, CI would skip the metadata assertion without that test failing.
+func TestImportMetadataClusterInputReachesTheScripts(t *testing.T) {
+	t.Parallel()
+
+	stepByID := func(action compositeAction, stepID string) harnessStep {
+		t.Helper()
+
+		for _, step := range action.Runs.Steps {
+			if step.ID == stepID {
+				return step
+			}
+		}
+
+		require.Failf(t, "step not found", "no step with id %q", stepID)
+
+		return harnessStep{}
+	}
+
+	systemTest := readCompositeAction(t, ".github/actions/ksail-system-test/action.yaml")
+	require.Contains(t, systemTest.Inputs, "image-export-cluster-name")
+	assert.Equal(t, "${{ inputs.image-export-cluster-name }}",
+		stepByID(systemTest, "image-export-import-tests").With["multi-node-cluster-name"])
+
+	exportImport := readCompositeAction(t,
+		".github/actions/ksail-test-image-export-import/action.yaml")
+	require.Contains(t, exportImport.Inputs, "multi-node-cluster-name")
+
+	for _, id := range []string{"import", "multi-node"} {
+		assert.Equal(t, "${{ inputs.multi-node-cluster-name }}",
+			stepByID(exportImport, id).Env["IMAGE_EXPORT_CLUSTER"], "step %s", id)
+	}
+}
