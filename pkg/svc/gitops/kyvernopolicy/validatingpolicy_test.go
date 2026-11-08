@@ -550,11 +550,13 @@ func configMapWithData(namespace string, data map[string]any) map[string]any {
 }
 
 // evaluatedCase is a ConfigMap validation that reads data[key] and rejects the
-// value blocked ("blocked" when empty).
+// value blocked ("blocked" when empty). message, when set, is the static message
+// the blocking violation must carry.
 type evaluatedCase struct {
 	validation string
 	key        string
 	blocked    string
+	message    string
 }
 
 // httpWordCases mention the word http only as a field, map key, string
@@ -591,12 +593,14 @@ func httpWordCases() map[string]evaluatedCase {
 		"static message naming a URL": {
 			validation: `expression: "object.?data.?mode.orValue('') != 'blocked'"` +
 				"\n    message: \"see http://docs.example/policy before setting mode\"",
-			key: "mode",
+			key:     "mode",
+			message: "see http://docs.example/policy before setting mode",
 		},
 		"static message shaped like a library call": {
 			validation: `expression: "object.?data.?mode.orValue('') != 'blocked'"` +
 				"\n    message: \"http.Get('https://docs.example/policy')\"",
-			key: "mode",
+			key:     "mode",
+			message: "http.Get('https://docs.example/policy')",
 		},
 	}
 }
@@ -638,6 +642,10 @@ func TestCELEvaluate_HTTPWordOutsideTheLibraryIsEvaluated(t *testing.T) {
 			assert.False(t, blocked[0].Unsupported, blocked[0].Message)
 			assert.False(t, blocked[0].Error, blocked[0].Message)
 			assert.True(t, blocked[0].Blocking)
+
+			if testCase.message != "" {
+				assert.Contains(t, blocked[0].Message, testCase.message)
+			}
 		})
 	}
 }
@@ -669,6 +677,8 @@ func TestCELEvaluate_HTTPLibraryAnywhereIsNeverEvaluated(t *testing.T) {
 			`"['a'].all(v, http.Get('http://127.0.0.1:1/verdict').allowed == true)"`,
 		"library in a map value": `expression: ` +
 			`"{'verdict': http.Get('http://127.0.0.1:1/verdict')}.verdict.allowed == true"`,
+		"library in a map key": `expression: ` +
+			`"size({string(http.Get('http://127.0.0.1:1/verdict')): true}) == 1"`,
 		// A local http shadows only the plain name, never the root-scoped one.
 		"root-scoped library under a local http": `expression: ` +
 			`"['a'].all(http, .http.Get('http://127.0.0.1:1/verdict').allowed == true)"`,
