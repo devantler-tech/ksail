@@ -52,24 +52,9 @@ esac
 
 log_dir="${SYSTEM_TEST_LOG_DIR:-/tmp/ksail-system-test-logs}/$component-values-drift"
 mkdir -p "$log_dir"
-command -v helm >/dev/null || fail 'Helm CLI is required to seed the live release'
-helm version --short >"$log_dir/helm-version.txt"
-case "$(cat "$log_dir/helm-version.txt")" in
-v3.*)
-	helm_list_args=(--all --namespace "$namespace")
-	helm_rollback_flag=--atomic
-	helm_conflict_args=()
-	;;
-v4.*)
-	# Helm 4 lists all states by default and renamed the rollback option.
-	helm_list_args=(--namespace "$namespace")
-	helm_rollback_flag=--rollback-on-failure
-	# KSail installs through the Helm 4 SDK with server-side apply under its own field
-	# manager, so an out-of-band CLI edit must take ownership of the fields it seeds.
-	helm_conflict_args=(--server-side=true --force-conflicts)
-	;;
-*) fail 'unsupported Helm major version' ;;
-esac
+# shellcheck source=.github/actions/ksail-system-test/helm-cli.sh
+source "$(dirname "${BASH_SOURCE[0]}")/helm-cli.sh"
+select_helm_cli_args "$namespace" "$log_dir"
 config_file="$PWD/ksail.yaml"
 cp "$config_file" "$log_dir/ksail-before.yaml"
 

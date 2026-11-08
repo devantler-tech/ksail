@@ -158,6 +158,13 @@ updates:
     cooldown:
       default-days: 7
       semver-major-days: 14
+    ignore:
+      # @types/vscode must not be newer than engines.vscode in vsce/package.json,
+      # or `vsce package` refuses to build. Both move together, on purpose, when
+      # the extension raises the oldest VS Code it supports.
+      - dependency-name: "@types/vscode"
+        update-types:
+          ["version-update:semver-minor", "version-update:semver-major"]
 
   - package-ecosystem: docker
     registries: [dockerhub, ghcr]
