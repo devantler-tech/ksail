@@ -209,7 +209,7 @@ func releaseLayoutFixture() map[string]gonotices.Layout {
 		"desktop-windows-amd64": {
 			Archive: "ksail-desktop_7.206.99_windows_amd64.zip",
 			Format:  "zip",
-			Binary:  "desktop/ksail-desktop.exe",
+			Binary:  "ksail-desktop.exe",
 			Prefix:  "GoNotices/",
 		},
 	}

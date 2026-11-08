@@ -33,8 +33,10 @@ func ReleaseLayout(release Release) (Layout, error) {
 	project := "ksail"
 	if parts[0] == "desktop" {
 		project, layout.Binary = "ksail-desktop", "ksail-desktop"
+		// 7-Zip stores a file named on its command line under its base name, so
+		// the shipped Windows archive holds the binary at its root.
 		if parts[1] == "windows" {
-			layout.Binary = "desktop/ksail-desktop.exe"
+			layout.Binary = "ksail-desktop.exe"
 		}
 
 		if parts[1] == "darwin" {
