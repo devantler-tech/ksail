@@ -98,3 +98,32 @@ func TestAvailabilityCheckResultStops(t *testing.T) {
 		require.ErrorIs(t, err, errAvailabilityLookup)
 	})
 }
+
+// Rolling replacement deletes each old server before creating its replacement, so
+// an unavailable report must stop it rather than leave the cluster a node short.
+func TestReplacementAvailabilityCheckResultStopsWhenUnavailable(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+
+	unavailable := fmt.Errorf(
+		"%w: %q is not available in fsn1, nbg1, hel1",
+		hetzner.ErrServerTypeUnavailable,
+		"cx23",
+	)
+
+	err := talosprovisioner.ReplacementAvailabilityCheckResultForTest(
+		&out,
+		"worker server type \"cx23\"",
+		unavailable,
+	)
+
+	require.ErrorIs(t, err, hetzner.ErrServerTypeUnavailable)
+	assert.Contains(t, err.Error(), "server availability check failed for worker server type")
+	assert.Empty(t, out.String())
+
+	require.NoError(
+		t,
+		talosprovisioner.ReplacementAvailabilityCheckResultForTest(&out, "worker", nil),
+	)
+}

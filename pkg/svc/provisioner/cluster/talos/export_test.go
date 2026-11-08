@@ -1392,5 +1392,15 @@ func AutoscalerConvergenceFailuresForTest(result *clusterupdate.UpdateResult) in
 
 // AvailabilityCheckResultForTest exposes availabilityCheckResult for testing.
 func AvailabilityCheckResultForTest(logWriter io.Writer, subject string, err error) error {
-	return availabilityCheckResult(logWriter, subject, err)
+	return availabilityCheckResult(logWriter, subject, err, warnWhenUnavailable)
+}
+
+// ReplacementAvailabilityCheckResultForTest exposes availabilityCheckResult under
+// the stop policy rolling replacement uses.
+func ReplacementAvailabilityCheckResultForTest(
+	logWriter io.Writer,
+	subject string,
+	err error,
+) error {
+	return availabilityCheckResult(logWriter, subject, err, stopWhenUnavailable)
 }

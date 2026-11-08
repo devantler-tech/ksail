@@ -1432,6 +1432,7 @@ func (p *Provisioner) checkHetznerAvailability(
 			p.logWriter,
 			"server type(s) "+strings.Join(serverTypes, ", "),
 			err,
+			warnWhenUnavailable,
 		)
 	}
 

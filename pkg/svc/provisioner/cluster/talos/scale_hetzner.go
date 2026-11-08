@@ -83,7 +83,7 @@ func (p *Provisioner) provisionHetznerScaleServers(
 	result *clusterupdate.UpdateResult,
 ) ([]*hcloud.Server, error) {
 	// Verify server type availability before creating infrastructure.
-	err := p.checkHetznerAvailabilityForRole(ctx, hzProvider, role)
+	err := p.checkHetznerAvailabilityForRole(ctx, hzProvider, role, warnWhenUnavailable)
 	if err != nil {
 		return nil, err
 	}
@@ -496,12 +496,13 @@ func (p *Provisioner) hetznerRetryOpts() hetzner.ServerRetryOpts {
 }
 
 // checkHetznerAvailabilityForRole verifies that the server type for the given
-// role is available in the configured locations. Used during scale-up to fail
-// fast before creating infrastructure resources.
+// role is available in the configured locations, before infrastructure resources
+// are created or replaced. policy decides whether an unavailable report stops it.
 func (p *Provisioner) checkHetznerAvailabilityForRole(
 	ctx context.Context,
 	hzProvider *hetzner.Provider,
 	role string,
+	policy unavailablePolicy,
 ) error {
 	if p.hetznerOpts == nil {
 		return nil
@@ -527,6 +528,7 @@ func (p *Provisioner) checkHetznerAvailabilityForRole(
 			p.logWriter,
 			fmt.Sprintf("%s server type %q", role, serverType),
 			err,
+			policy,
 		)
 	}
 
