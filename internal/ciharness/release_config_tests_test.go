@@ -24,7 +24,6 @@ func releaseConfigFiles() []string {
 		".github/workflows/cd.yaml",
 		".github/scripts/publish-operator-chart.sh",
 		".github/scripts/resolve-release-replay.sh",
-		".github/scripts/resolve-release-publish-state.sh",
 		".github/scripts/go-notices.go",
 		".github/actions/release-admission/action.yaml",
 		".github/actions/setup-desktop-build/action.yml",

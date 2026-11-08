@@ -55,7 +55,7 @@ func TestVerifyRequiresActualSourceDerivedRecipientFiles(t *testing.T) {
 			case "linked-directory":
 				outside := filepath.Join(t.TempDir(), "copied")
 				require.NoError(t, os.Rename(output, outside))
-				require.NoError(t, os.Symlink(outside, output))
+				symlinkNoticeFixture(t, outside, output)
 			}
 
 			err = gonotices.Verify(input.Root, input.Target, payload)

@@ -84,6 +84,12 @@ func receiptBytes(payloads map[string]Payload) ([]byte, error) {
 		}
 	}
 
+	// Apply the reader's entry rules before writing, so a receipt that staging
+	// would refuse can be neither written nor accepted by VerifyReceipt.
+	if !receipt.validEntries() {
+		return nil, ErrIncomplete
+	}
+
 	data, err := json.MarshalIndent(receipt, "", "  ")
 	if err != nil {
 		return nil, ErrIncomplete

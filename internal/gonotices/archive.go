@@ -281,8 +281,18 @@ func validArchiveMemberName(name string, mode fs.FileMode) bool {
 	canonical := strings.TrimSuffix(name, "/")
 
 	return canonical != "." && fs.ValidPath(canonical) && len(name) <= maxArchivePathBytes &&
-		!strings.ContainsAny(name, "\\:\r\n\x00") && portableArchiveComponents(canonical) &&
+		!strings.ContainsFunc(
+			name,
+			windowsInvalidNameRune,
+		) && portableArchiveComponents(canonical) &&
 		(mode.IsRegular() || mode.IsDir())
+}
+
+// windowsInvalidNameRune reports characters Windows refuses in a path component.
+// PowerShell Expand-Archive stops at such a member, which can leave later
+// required material unextracted, so every recipient archive refuses them.
+func windowsInvalidNameRune(char rune) bool {
+	return char < ' ' || strings.ContainsRune(`\:<>"|?*`, char)
 }
 
 // Windows shell extraction does not preserve trailing dots or spaces. Refuse

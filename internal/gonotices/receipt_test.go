@@ -2,8 +2,11 @@ package gonotices_test
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -65,11 +68,43 @@ func TestReceiptBindsEveryTargetAndActualPayloadBytes(t *testing.T) {
 		require.Contains(t, string(data), target)
 	}
 
+	// A self-consistent alternate payload passes payload validation, so only the
+	// receipt's recorded text digest can refuse it.
 	payload := payloads["cli-linux-amd64"]
-	payload.Text = append(payload.Text, []byte("changed output")...)
+	original := fmt.Sprintf("%x", sha256.Sum256(payload.Text))
+	payload.Text = append(bytes.Clone(payload.Text), []byte("changed output\n")...)
+	changed := fmt.Sprintf("%x", sha256.Sum256(payload.Text))
+	require.Equal(t, 1, bytes.Count(payload.Manifest, []byte(original)))
+	payload.Manifest = bytes.Replace(payload.Manifest, []byte(original), []byte(changed), 1)
 	payloads["cli-linux-amd64"] = payload
+	_, err = gonotices.Binding(
+		gonotices.Release{
+			Version: "v7.206.99",
+			Source:  strings.Repeat("b", 40),
+			Target:  "cli-linux-amd64",
+		},
+		payload,
+	)
+	require.NoError(t, err, "the alternate payload must be self-consistent")
 	require.ErrorIs(t, gonotices.VerifyReceipt(input.Root, payloads), gonotices.ErrIncomplete)
 }
+
+func TestWriteReceiptRefusesEntriesTheReaderRejects(t *testing.T) {
+	t.Parallel()
+	input, _ := noticeInputFixture(t)
+	payloads := receiptPayloadFixtures(t)
+
+	payload := payloads["cli-linux-amd64"]
+	emptied := filesPattern.ReplaceAll(payload.Manifest, []byte(`"files":[]`))
+	require.NotEqual(t, string(payload.Manifest), string(emptied))
+	payload.Manifest = emptied
+	payloads["cli-linux-amd64"] = payload
+
+	require.ErrorIs(t, gonotices.WriteReceipt(input.Root, payloads), gonotices.ErrIncomplete)
+	require.NoFileExists(t, filepath.Join(input.Root, ".github/go-notice-receipts.json"))
+}
+
+var filesPattern = regexp.MustCompile(`"files":\[[^\]]*\]`)
 
 func TestReceiptRefusesMissingExtraAndMismatchedTargetCoverage(t *testing.T) {
 	t.Parallel()

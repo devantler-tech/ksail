@@ -93,7 +93,7 @@ func alterStageInputs(
 	case "missing-material":
 		removeStageNoticeFixture(t, input)
 	case "linked-stage":
-		require.NoError(t, os.Symlink(t.TempDir(), filepath.Join(input.Root, ".cache")))
+		symlinkNoticeFixture(t, t.TempDir(), filepath.Join(input.Root, ".cache"))
 	case "unexpected-stage-member":
 		writeNoticeFixture(
 			t,

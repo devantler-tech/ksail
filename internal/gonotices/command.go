@@ -8,18 +8,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 )
 
 const (
-	operationAssets        = "assets"
 	operationStage         = "stage"
 	operationStageCLI      = "stage-cli"
 	operationVerify        = "verify"
 	operationVerifyCLI     = "verify-cli"
-	operationVerifyAll     = "verify-all"
 	releaseGroupArguments  = 3
 	releaseTargetArguments = 4
 	sourceCheckTimeout     = 10 * time.Second
@@ -45,10 +42,6 @@ func Run(root string, arguments []string, output io.Writer) error {
 		return err
 	}
 
-	if plan.operation == operationAssets {
-		return printReleaseAssets(plan, output)
-	}
-
 	actual, err := runningToolchain(root)
 	if err != nil {
 		return err
@@ -71,22 +64,6 @@ func Run(root string, arguments []string, output io.Writer) error {
 	return nil
 }
 
-func printReleaseAssets(plan releaseCommand, output io.Writer) error {
-	for _, target := range plan.targets {
-		layout, err := ReleaseLayout(Release{plan.version, plan.source, target})
-		if err != nil {
-			return err
-		}
-
-		_, err = fmt.Fprintln(output, layout.Archive)
-		if err != nil {
-			return ErrIncomplete
-		}
-	}
-
-	return nil
-}
-
 func planReleaseCommand(arguments []string) (releaseCommand, error) {
 	if len(arguments) == 0 {
 		return releaseCommand{}, ErrIncomplete
@@ -98,12 +75,10 @@ func planReleaseCommand(arguments []string) (releaseCommand, error) {
 	)
 
 	switch arguments[0] {
-	case operationStageCLI, operationVerifyCLI, operationAssets:
+	case operationStageCLI, operationVerifyCLI:
 		plan, err = planGroupCommand(arguments)
 	case operationStage, operationVerify:
 		plan, err = planTargetCommand(arguments)
-	case operationVerifyAll:
-		plan, err = planReadbackCommand(arguments)
 	default:
 		return plan, ErrIncomplete
 	}
@@ -129,10 +104,7 @@ func planGroupCommand(arguments []string) (releaseCommand, error) {
 
 	plan.version, plan.source = arguments[1], arguments[2]
 
-	plan.targets = recipientTargets()
-	if plan.operation != operationAssets {
-		plan.targets = plan.targets[:5]
-	}
+	plan.targets = recipientTargets()[:5]
 
 	return plan, nil
 }
@@ -154,23 +126,6 @@ func planTargetCommand(arguments []string) (releaseCommand, error) {
 	if target == "desktop-darwin-arm64" {
 		plan.directory = "dist-desktop"
 	}
-
-	return plan, nil
-}
-
-func planReadbackCommand(arguments []string) (releaseCommand, error) {
-	plan := releaseCommand{operation: operationVerifyAll}
-	if len(arguments) != releaseTargetArguments {
-		return plan, ErrIncomplete
-	}
-
-	if !slices.Contains([]string{"draft", "published"}, arguments[1]) {
-		return plan, ErrIncomplete
-	}
-
-	plan.version, plan.source = arguments[2], arguments[3]
-	plan.targets = recipientTargets()
-	plan.directory = ".cache/go-notices/" + arguments[1] + "-readback"
 
 	return plan, nil
 }

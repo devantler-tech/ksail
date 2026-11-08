@@ -19,3 +19,5 @@ third_party/ansi-runtime/** -filter -text
 third_party/redisotel/** -filter -text
 third_party/rediscmd/** -filter -text
 third_party/dynamiclistener/** -filter -text
+third_party/otelzap/** -filter -text
+third_party/go-archive/** -filter -text

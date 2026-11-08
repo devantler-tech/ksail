@@ -158,7 +158,7 @@ STUB
 }
 
 run_installer() {
-	env PATH="${fake_bin}:${PATH}" TMPDIR="${work}/temporary" \
+	env PATH="${installer_path:-${fake_bin}:${PATH}}" TMPDIR="${work}/temporary" \
 		KSAIL_INSTALL_DIR="${install_dir}" KSAIL_VERSION="${requested_version}" \
 		KSAIL_RELEASE_BASE_URL='https://example.invalid/releases' \
 		KSAIL_TEST_FIXTURES="${fixtures}" KSAIL_TEST_FAULT="${fault}" \
@@ -172,7 +172,7 @@ run_installer() {
 run_case() {
 	local test_case="$1" fixtures fake_bin install_dir payload version requested_version
 	local asset checksums notice_dir old_notice real_cp real_install real_mv test_arch duplicate_member
-	local real_sha real_sha_kind real_mkdir
+	local real_sha real_sha_kind real_mkdir installer_path='' tool tool_path
 	local fault="${test_case}" retained_identity binary_identity retained_bytes
 	work="$(mktemp -d "${TMPDIR:-/tmp}/ksail-installer-test.XXXXXX")"
 	work="$(cd "${work}" && pwd -P)"
@@ -301,6 +301,9 @@ run_case() {
 		;;
 	unsupported-architecture) test_arch=s390x ;;
 	malformed-version) requested_version='v7.180.5/../../malicious' ;;
+	# Archive the binary without execute bits so only the installer's own mode
+	# setting can make it executable.
+	no-install) chmod 0644 "${payload}/ksail" ;;
 	esac
 	make_archive
 	if [[ "${test_case}" == archive-checksum ]]; then
@@ -308,6 +311,30 @@ run_case() {
 	fi
 	make_stubs
 	case "${test_case}" in
+	no-install)
+		# Isolated PATH: the stubs plus only the host tools the installer needs,
+		# never `install` and no inherited host directory.
+		rm "${fake_bin}/install"
+		mkdir "${work}/tools"
+		for tool in sh awk cat chmod cmp grep gzip ls mktemp rm sed sha256sum shasum tar; do
+			if tool_path="$(command -v "${tool}")"; then ln -s "${tool_path}" "${work}/tools/${tool}"; fi
+		done
+		installer_path="${fake_bin}:${work}/tools"
+		if env PATH="${installer_path}" sh -c 'command -v install' >/dev/null 2>&1; then
+			fail 'no-install: isolated PATH still provides install'
+		fi
+		# A restrictive umask must not leave the binary or retained notices unreadable.
+		(umask 077 && run_installer) >"${work}/output" 2>&1 || {
+			cat "${work}/output"
+			fail 'no-install: valid release refused without install'
+		}
+		[[ -x "${install_dir}/ksail" && "$("${install_dir}/ksail")" == 'ksail test binary' ]] ||
+			fail 'no-install: installed binary is not executable'
+		[[ -n "$(find "${install_dir}/ksail" -maxdepth 0 -type f -perm 0755)" ]] ||
+			fail 'no-install: installed binary mode is not 0755'
+		[[ -n "$(find "${notice_dir}" -maxdepth 0 -type d -perm 0755)" ]] ||
+			fail 'no-install: retained notices are not traversable by other users'
+		;;
 	race-empty | race-conflict | race-symlink | race-early-directory)
 		if run_installer >"${work}/output" 2>&1; then fail 'concurrent notice destination was accepted'; fi
 		! grep -Fq 'Installed KSail' "${work}/output" || fail 'concurrent conflict emitted success'
@@ -445,7 +472,7 @@ if [[ "${1:-}" == --case ]]; then
 fi
 
 failures=0
-for test_case in valid latest identical-reinstall empty-notices empty-manifest empty-binary \
+for test_case in valid latest no-install identical-reinstall empty-notices empty-manifest empty-binary \
 	signal-after-reservation-HUP signal-after-reservation-INT signal-after-reservation-TERM \
 	signal-after-rename-HUP signal-after-rename-INT \
 	signal-after-rename-TERM missing-notices missing-manifest missing-binding stale-version wrong-target \

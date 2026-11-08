@@ -2,9 +2,13 @@ package gonotices_test
 
 import (
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/internal/gonotices"
@@ -387,7 +391,7 @@ func TestBuildRefusesUnsafeOrIncompleteSourceMaterial(t *testing.T) {
 				writeNoticeFixture(t, outside, "source.go", "package component\n")
 
 				linked := filepath.Join(input.Root, "third_party", "linked")
-				require.NoError(t, os.Symlink(outside, linked))
+				symlinkNoticeFixture(t, outside, linked)
 				input.Packages[0].Module.Replace.Directory = linked
 				input.Packages[0].Directory = linked
 				input.Packages[0].LicenseFile = filepath.Join(linked, "LICENSE")
@@ -401,7 +405,7 @@ func TestBuildRefusesUnsafeOrIncompleteSourceMaterial(t *testing.T) {
 					"MIT\nCopyright Private Outside Author\n",
 				)
 				require.NoError(t, os.Remove(filepath.Join(directory, "LICENSE")))
-				require.NoError(t, os.Symlink(outside, filepath.Join(directory, "LICENSE")))
+				symlinkNoticeFixture(t, outside, filepath.Join(directory, "LICENSE"))
 			case "embedded-traversal":
 				input.Packages[0].EmbedFiles = []string{"../outside-font.ttf"}
 			case "private-marker":
@@ -467,6 +471,25 @@ func writeNoticeFixture(t *testing.T, root, name, contents string) {
 
 	require.NoError(t, owned.MkdirAll(filepath.Dir(name), 0o700))
 	require.NoError(t, owned.WriteFile(name, []byte(contents), 0o600))
+}
+
+// errPrivilegeNotHeld is Windows' ERROR_PRIVILEGE_NOT_HELD, returned when
+// symlink creation needs Developer Mode or the symlink privilege.
+const errPrivilegeNotHeld syscall.Errno = 1314
+
+// symlinkNoticeFixture creates a symlink fixture, skipping only the calling
+// (sub)test when the platform does not permit symlink creation. Every other
+// setup error still fails the test.
+func symlinkNoticeFixture(t *testing.T, target, link string) {
+	t.Helper()
+
+	err := os.Symlink(target, link)
+	if err != nil && runtime.GOOS == "windows" &&
+		(errors.Is(err, errPrivilegeNotHeld) || errors.Is(err, fs.ErrPermission)) {
+		t.Skipf("symlink creation is not permitted: %v", err)
+	}
+
+	require.NoError(t, err)
 }
 
 func readNoticeFixture(t *testing.T, root, name string) []byte {

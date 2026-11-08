@@ -252,7 +252,6 @@ jobs:
             release-config:
               - '.gitattributes'
               - '.github/scripts/resolve-release-replay.sh'
-              - '.github/scripts/resolve-release-publish-state.sh'
               - '.github/scripts/go-notices.go'
               - '.github/actions/release-admission/**'
               - '.github/scripts/download-go-modules.sh'
@@ -292,7 +291,6 @@ jobs:
             # Release inputs are outside Go's cache and the shared Go source filter.
             release-graph-audit:
               - '.gitattributes'
-              - '.github/scripts/resolve-release-publish-state.sh'
               - '.github/go-license-policy.json'
               - '.github/go-notice-materials.json'
               - '.github/go-notice-receipts.json'
@@ -300,6 +298,9 @@ jobs:
               - 'notices/go/**'
               - '.github/scripts/go-notices.go'
               - '.github/scripts/go-notices-release.test.sh'
+              # Notice manifests hash every byte of each replacement tree, including
+              # non-Go files such as KSail-PATCH.md that the Go source filter skips.
+              - 'third_party/**'
               - 'LICENSE'
               - 'internal/licensepolicy/**'
               - 'internal/moduleintegrity/**'

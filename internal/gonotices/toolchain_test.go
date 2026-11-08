@@ -129,6 +129,57 @@ func TestBuildUsesTheSameToolchainEvidenceAcrossEquivalentInstallations(t *testi
 	)
 	require.Equal(t, string(first.Text), string(second.Text))
 	require.Equal(t, string(first.Manifest), string(second.Manifest))
+
+	// Homebrew installs a formula revision into a suffixed keg directory.
+	revised := filepath.Join(input.Root, "revised-go", "1.27.3_1", "libexec")
+	writeNoticeFixture(t, filepath.Dir(revised), "LICENSE", license)
+	third := toolchainInstallationPayloadFixture(
+		t,
+		input,
+		revised,
+		filepath.Join(filepath.Dir(revised), "LICENSE"),
+	)
+	require.Equal(t, string(first.Text), string(third.Text))
+	require.Equal(t, string(first.Manifest), string(third.Manifest))
+}
+
+func TestBuildRefusesAnotherVersionsHomebrewKeg(t *testing.T) {
+	t.Parallel()
+
+	for _, keg := range []string{"1.27.4", "1.27.3_", "1.27.3_a", "1.27.3-1", "1.27.31"} {
+		t.Run(keg, func(t *testing.T) {
+			t.Parallel()
+
+			input, _ := noticeInputFixture(t)
+			goRoot := filepath.Join(input.Root, "other-go", keg, "libexec")
+			writeNoticeFixture(
+				t,
+				filepath.Dir(goRoot),
+				"LICENSE",
+				"Copyright 2009 The Go Authors.\n",
+			)
+			writeNoticeFixture(t, goRoot, "VERSION", "go1.27.3\n")
+			writeNoticeFixture(
+				t,
+				goRoot,
+				"src/runtime/runtime.go",
+				"// Copyright 2025 Runtime Authors\npackage runtime\n",
+			)
+			input.Toolchain = &gonotices.Toolchain{
+				Version:     "go1.27.3",
+				Directory:   goRoot,
+				LicenseFile: filepath.Join(filepath.Dir(goRoot), "LICENSE"),
+				Licenses:    []string{"BSD-3-Clause"},
+				Packages: []gonotices.ToolchainPackage{{
+					ImportPath: "runtime",
+					Directory:  filepath.Join(goRoot, "src/runtime"),
+					GoFiles:    []string{"runtime.go"},
+				}},
+			}
+			_, err := gonotices.Build(input)
+			require.ErrorIs(t, err, gonotices.ErrIncomplete)
+		})
+	}
 }
 
 func toolchainInstallationPayloadFixture(

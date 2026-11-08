@@ -4,9 +4,11 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"bytes"
+	"compress/flate"
 	"compress/gzip"
 	"crypto/sha256"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"io/fs"
 	"os"
@@ -164,7 +166,20 @@ func recipientPathMutations() []recipientMutation {
 }
 
 func recipientWindowsAliases() []recipientMutation {
-	return []recipientMutation{
+	invalid := []recipientMutation{}
+	for _, char := range []string{"?", "*", "<", ">", `"`, "|", "\t"} {
+		invalid = append(invalid, recipientMutation{
+			"windows-invalid " + fmt.Sprintf("%q", char) + " before required files",
+			func(v []recipientEntry) []recipientEntry {
+				return append(
+					[]recipientEntry{{"extra" + char + ".txt", []byte("extra"), 0o644}},
+					v...,
+				)
+			},
+		})
+	}
+
+	return append(invalid, []recipientMutation{
 		{"trailing dot in leaf", func(v []recipientEntry) []recipientEntry {
 			return append(v, recipientEntry{v[3].name + ".", []byte("replacement"), 0o644})
 		}},
@@ -183,7 +198,7 @@ func recipientWindowsAliases() []recipientMutation {
 				recipientEntry{"GoNotices /manifest.json", []byte("replacement"), 0o644},
 			)
 		}},
-	}
+	}...)
 }
 
 func requireRecipientArchiveRefusal(
@@ -224,6 +239,66 @@ func TestArchiveBoundsExpandedMembers(t *testing.T) {
 			)
 		})
 	}
+}
+
+// TestArchiveBoundsCumulativeZIPExpansion admits each member individually but
+// rejects the archive once the members together expand beyond 2 GiB.
+func TestArchiveBoundsCumulativeZIPExpansion(t *testing.T) {
+	t.Parallel()
+
+	const (
+		memberBytes = 512 << 20
+		members     = 5
+	)
+
+	fixture := recipientArchiveFixtures()[3]
+	payload := releasePayloadForTargetFixture(t, fixture.target)
+	release := recipientRelease(fixture.target)
+
+	// Compress one permitted member once and reuse the raw stream, so the
+	// fixture stays small without writing 2.5 GiB through the compressor.
+	var compressed bytes.Buffer
+
+	deflater, err := flate.NewWriter(&compressed, flate.BestSpeed)
+	require.NoError(t, err)
+
+	checksum := crc32.NewIEEE()
+	_, err = io.CopyN(io.MultiWriter(deflater, checksum), zeroRecipientBytes{}, memberBytes)
+	require.NoError(t, err)
+	require.NoError(t, deflater.Close())
+
+	directory := t.TempDir()
+	file, err := recipientFixtureRoot(t, directory).Create(fixture.name)
+	require.NoError(t, err)
+
+	writer := zip.NewWriter(file)
+	writeRecipientZIPEntries(t, writer, recipientEntries(fixture, release, payload))
+
+	compressedSize := uint64(compressed.Len()) //nolint:gosec // G115: lengths are non-negative.
+
+	for index := range members {
+		header := &zip.FileHeader{
+			Name:               fmt.Sprintf("expanded-%d", index),
+			Method:             zip.Deflate,
+			CRC32:              checksum.Sum32(),
+			CompressedSize64:   compressedSize,
+			UncompressedSize64: memberBytes,
+		}
+		header.SetMode(0o644)
+		member, createErr := writer.CreateRaw(header)
+		require.NoError(t, createErr)
+
+		_, writeErr := member.Write(compressed.Bytes())
+		require.NoError(t, writeErr)
+	}
+
+	require.NoError(t, writer.Close())
+	require.NoError(t, file.Close())
+	require.ErrorIs(
+		t,
+		gonotices.VerifyArchive(filepath.Join(directory, fixture.name), release, payload),
+		gonotices.ErrIncomplete,
+	)
 }
 
 func TestArchiveBoundsIndexSizeAndMemberCount(t *testing.T) {
@@ -429,16 +504,7 @@ func writeRecipientZIPFixture(
 	t.Helper()
 
 	writer := zip.NewWriter(file)
-
-	for _, entry := range entries {
-		header := &zip.FileHeader{Name: entry.name, Method: zip.Deflate}
-		header.SetMode(entry.mode)
-		member, createErr := writer.CreateHeader(header)
-		require.NoError(t, createErr)
-
-		_, writeErr := member.Write(entry.data)
-		require.NoError(t, writeErr)
-	}
+	writeRecipientZIPEntries(t, writer, entries)
 
 	for _, entry := range extra {
 		header := &zip.FileHeader{Name: entry.name, Comment: entry.comment, Method: zip.Deflate}
@@ -451,6 +517,20 @@ func writeRecipientZIPFixture(
 	}
 
 	require.NoError(t, writer.Close())
+}
+
+func writeRecipientZIPEntries(t *testing.T, writer *zip.Writer, entries []recipientEntry) {
+	t.Helper()
+
+	for _, entry := range entries {
+		header := &zip.FileHeader{Name: entry.name, Method: zip.Deflate}
+		header.SetMode(entry.mode)
+		member, createErr := writer.CreateHeader(header)
+		require.NoError(t, createErr)
+
+		_, writeErr := member.Write(entry.data)
+		require.NoError(t, writeErr)
+	}
 }
 
 func writeRecipientTarFixture(

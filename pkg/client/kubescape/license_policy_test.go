@@ -283,6 +283,16 @@ func (audit *licenseNoticeAudit) targetPackages(
 			)
 		}
 
+		// The notice collector reads only C-style comment headers. Fail closed on
+		// selected inputs whose notices it cannot parse instead of omitting them.
+		if unparsed := unparsedNoticeInputs(pkg); len(unparsed) != 0 {
+			t.Fatalf(
+				"selected input with unparsed comment syntax requires a recipient-material disposition: %s %v",
+				pkg.ImportPath,
+				unparsed,
+			)
+		}
+
 		if len(pkg.SFiles)+len(compiledNoticeFiles(pkg)) != 0 {
 			t.Logf("selected non-Go source: package=%s standard=%t assembly=%v other=%v",
 				pkg.ImportPath, pkg.Standard, pkg.SFiles, compiledNoticeFiles(pkg))
@@ -532,6 +542,12 @@ func selectedNoticePackage(
 	}
 
 	return result
+}
+
+// unparsedNoticeInputs lists selected Fortran and SWIG inputs: the collector has
+// no header parser for their comment syntax, so their notices would be dropped.
+func unparsedNoticeInputs(pkg goListPackage) []string {
+	return slices.Concat(pkg.FFiles, pkg.SwigFiles, pkg.SwigCXXFiles)
 }
 
 func compiledNoticeFiles(pkg goListPackage) []string {

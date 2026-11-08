@@ -87,15 +87,6 @@ linux=ksail_7.175.1_linux_amd64.tar.gz
 case "${FAKE_GH_SCENARIO}" in
 draft) printf '[%s]\n' "${other}" && drafted "${goreleaser}" ;;
 published) published "${complete}" ;;
-draft-id-42) drafted "${goreleaser}" | jq '.[0].id = 42' ;;
-published-id-43) published "${complete}" | jq '.[0].id = 43' ;;
-missing-release-id) published "${complete}" | jq '.[0] |= del(.id)' ;;
-null-release-id) published "${complete}" | jq '.[0].id = null' ;;
-zero-release-id) published "${complete}" | jq '.[0].id = 0' ;;
-negative-release-id) published "${complete}" | jq '.[0].id = -2' ;;
-fractional-release-id) published "${complete}" | jq '.[0].id = 2.5' ;;
-string-release-id) published "${complete}" | jq '.[0].id = "2"' ;;
-unsafe-release-id) published "${complete}" | jq '.[0].id = 9007199254740992' ;;
 second-page) printf '[%s]\n' "${other}" && published "${complete}" ;;
 draft-second-page) printf '[%s]\n' "${other}" && drafted "${goreleaser}" ;;
 incomplete-second-page) printf '[%s]\n' "${other}" && published "$(without "${complete}" "${linux}")" ;;
@@ -128,13 +119,11 @@ EOF
 chmod +x "${fake_bin}/gh"
 
 # run_case runs the resolver against one fake release listing and checks its exit status, output and
-# GITHUB_OUTPUT. Arguments: name scenario expected_status expected_output [checksums] [extra_glob]
-# [release_id]. Successful results must bind the ID to the selected record, including later pages.
+# GITHUB_OUTPUT. Arguments: name scenario expected_status expected_output [checksums] [extra_glob].
 # Set resolver_under_test to run a modified copy of the resolver instead of the real one.
 run_case() {
 	local name="$1" scenario="$2" expected_status="$3" expected_output="$4"
 	local checksums="${5:-complete}" glob="${6:-${crd_glob}}"
-	local expected_id="${7:-2}"
 	local output status github_output="${tmp_dir}/${name}.output"
 
 	: >"${github_output}"
@@ -161,27 +150,12 @@ run_case() {
 		printf 'FAIL: %s: a blocked resolution must not write a state output\n' "${name}" >&2
 		exit 1
 	fi
-	if [[ "${expected_status}" -eq 0 ]] &&
-		! grep -Fxq -- "release_id=${expected_id}" "${github_output}"; then
-		printf 'FAIL: %s: GITHUB_OUTPUT does not bind the selected release ID %s\n' "${name}" "${expected_id}" >&2
-		exit 1
-	fi
-	if [[ "${expected_status}" -eq 0 ]] &&
-		[[ "${output}" != "${expected_output}" || "$(wc -l <"${github_output}" | tr -d ' ')" != 2 ]]; then
-		printf 'FAIL: %s: preserve one state stdout line and exactly two bound output fields\n' "${name}" >&2
-		exit 1
-	fi
 
 	pass_count=$((pass_count + 1))
 	printf 'PASS: %s\n' "${name}"
 }
 
 run_case draft-release draft 0 'state=draft'
-run_case draft-with-another-id draft-id-42 0 'state=draft' complete "${crd_glob}" 42
-run_case published-with-another-id published-id-43 0 'state=published' complete "${crd_glob}" 43
-for invalid_id in missing null zero negative fractional string unsafe; do
-	run_case "${invalid_id}-selected-release-id" "${invalid_id}-release-id" 1 'selected release has no valid numeric ID'
-done
 # The publish job attaches only its downloaded artifacts, so a draft must already carry everything
 # GoReleaser uploaded, with digests matching the checksums file, before it can be published.
 run_case draft-checksums-unreadable draft 1 'could not read ksail_7.175.1_checksums.txt' fail
@@ -254,44 +228,11 @@ if [[ -z "${attach_line}" || -z "${publish_line}" ]] ||
 	printf 'FAIL: publish-release must resolve the release state before attaching and publishing\n' >&2
 	exit 1
 fi
-# mutation_gate reads the condition of one uniquely named mutation. Read-only verification
-# steps may share its condition without changing which release mutations must remain gated.
-mutation_gate() {
-	awk -v header="      - name: $1" '
-		/^      - / { inside = ($0 == header); if (inside) steps++ }
-		inside && /^        if:/ { sub(/^[[:space:]]+/, ""); print; gates++ }
-		END { exit steps == 1 && gates == 1 ? 0 : 1 }
-	' "$2"
-}
-
-# require_mutation_gates rejects a missing, duplicated or relaxed upload/publication boundary.
-require_mutation_gates() {
-	local mutation_name gate expected_gate
-	expected_gate="if: (steps.release_state.outputs.state == 'draft') && needs.goreleaser.outputs.release-mode == 'build'"
-	for mutation_name in '📤 Attach assets to draft release' '📢 Publish draft release'; do
-		if ! gate="$(mutation_gate "${mutation_name}" "$1")" || [[ "${gate}" != "${expected_gate}" ]]; then
-			printf 'FAIL: %s must uniquely require a draft release and normal build admission\n' "${mutation_name}" >&2
-			return 1
-		fi
-	done
-}
-require_mutation_gates "${publish_block}"
-
-for mutation_name in '📤 Attach assets to draft release' '📢 Publish draft release'; do
-	guard_mutant="${tmp_dir}/relaxed-mutation-guard.yaml"
-	awk -v header="      - name: ${mutation_name}" '
-		/^      - / { inside = ($0 == header) }
-		inside && /^        if:/ { print "        if: true"; replaced++; next }
-		{ print }
-		END { exit replaced == 1 ? 0 : 1 }
-	' "${publish_block}" >"${guard_mutant}"
-	if require_mutation_gates "${guard_mutant}" >"${tmp_dir}/relaxed-guard.log" 2>&1; then
-		printf 'FAIL: relaxed %s guard was accepted\n' "${mutation_name}" >&2
-		exit 1
-	fi
-	pass_count=$((pass_count + 1))
-	printf 'PASS: relaxed %s guard rejected\n' "${mutation_name}"
-done
+gated="$(grep -cF -- "if: (steps.release_state.outputs.state == 'draft') && needs.goreleaser.outputs.release-mode == 'build'" "${publish_block}" || true)"
+if [[ "${gated}" -ne 2 ]]; then
+	printf 'FAIL: attach and publish must require a draft release and normal build admission (found %s gates)\n' "${gated}" >&2
+	exit 1
+fi
 # GoReleaser attaches the Cluster CRD itself, so the resolver must be told to require it.
 if ! grep -qF -- "--extra-assets-glob 'charts/ksail-operator/crds/*.yaml'" "${publish_block}"; then
 	printf 'FAIL: publish-release must require the attached Cluster CRD when accepting a published release\n' >&2

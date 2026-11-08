@@ -37,23 +37,22 @@ func TestCommandStagesOnlyCommitBoundRecipientMaterial(t *testing.T) {
 	require.NotContains(t, output.String(), root)
 }
 
-func TestCommandListsAndStagesTheClosedCLICohort(t *testing.T) {
+func TestCommandStagesTheClosedCLICohort(t *testing.T) {
 	t.Parallel()
 	root, release := commandInputFixture(t)
 	fixtures := recipientArchiveFixtures()
 
-	names := make([]string, 0, len(fixtures))
-	for _, fixture := range fixtures {
-		names = append(names, fixture.name)
+	var output bytes.Buffer
+
+	for _, operation := range []string{"assets", "verify-all"} {
+		require.ErrorIs(
+			t,
+			gonotices.Run(root, []string{operation, release.Version, release.Source}, &output),
+			gonotices.ErrIncomplete,
+		)
 	}
 
-	var output bytes.Buffer
-	require.NoError(
-		t,
-		gonotices.Run(root, []string{"assets", release.Version, release.Source}, &output),
-	)
-	require.Equal(t, strings.Join(names, "\n")+"\n", output.String())
-	output.Reset()
+	require.Empty(t, output.String())
 	require.NoError(
 		t,
 		gonotices.Run(root, []string{"stage-cli", release.Version, release.Source}, &output),
@@ -82,78 +81,6 @@ func TestCommandListsAndStagesTheClosedCLICohort(t *testing.T) {
 	)
 	require.Equal(t, 5, strings.Count(output.String(), "Verified Go recipient material for "))
 	require.NotContains(t, output.String(), root)
-}
-
-func TestCommandVerifiesEverySourceBoundReadbackArchive(t *testing.T) {
-	t.Parallel()
-
-	for _, phase := range []string{"draft", "published"} {
-		t.Run(phase, func(t *testing.T) {
-			t.Parallel()
-			root, release := commandInputFixture(t)
-			fixtures := recipientArchiveFixtures()
-			writeCommandArchiveFixtures(
-				t,
-				root,
-				release,
-				".cache/go-notices/"+phase+"-readback",
-				fixtures,
-			)
-
-			var output bytes.Buffer
-			require.NoError(
-				t,
-				gonotices.Run(
-					root,
-					[]string{"verify-all", phase, release.Version, release.Source},
-					&output,
-				),
-			)
-
-			for _, fixture := range fixtures {
-				require.Contains(
-					t,
-					output.String(),
-					"Verified Go recipient material for "+fixture.target+"\n",
-				)
-			}
-
-			require.Equal(
-				t,
-				8,
-				strings.Count(output.String(), "Verified Go recipient material for "),
-			)
-			require.NotContains(t, output.String(), root)
-		})
-	}
-}
-
-func TestCommandRefusesAMissingLastReadbackTarget(t *testing.T) {
-	t.Parallel()
-	root, release := commandInputFixture(t)
-	fixtures := recipientArchiveFixtures()
-	writeCommandArchiveFixtures(
-		t,
-		root,
-		release,
-		".cache/go-notices/draft-readback",
-		fixtures[:len(fixtures)-1],
-	)
-
-	var output bytes.Buffer
-
-	err := gonotices.Run(
-		root,
-		[]string{"verify-all", "draft", release.Version, release.Source},
-		&output,
-	)
-	require.ErrorIs(t, err, gonotices.ErrIncomplete)
-	require.Equal(t, 7, strings.Count(output.String(), "Verified Go recipient material for "))
-	require.NotContains(
-		t,
-		output.String(),
-		"Verified Go recipient material for desktop-windows-amd64\n",
-	)
 }
 
 func TestWindowsCheckoutPreservesExactNoticeAndInputBytes(t *testing.T) {

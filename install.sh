@@ -164,7 +164,7 @@ notice_root="${install_dir}/.ksail-notices"
 if [ -L "${notice_root}" ] || { [ -e "${notice_root}" ] && [ ! -d "${notice_root}" ]; }; then
 	fail 'existing KSail notices root is not a directory'
 fi
-if [ ! -d "${notice_root}" ]; then mkdir "${notice_root}"; fi
+if [ ! -d "${notice_root}" ]; then mkdir -m 0755 "${notice_root}"; fi
 notice_dir="${notice_root}/${version}-${target}"
 if [ -L "${notice_dir}" ] || { [ -e "${notice_dir}" ] && [ ! -d "${notice_dir}" ]; }; then
 	fail 'existing KSail version notices are not an ordinary directory'
@@ -206,7 +206,7 @@ if [ "${reuse_notices}" = false ]; then
 	# leave an empty public version reservation that blocks a later retry.
 	notice_stage="$(mktemp -d "${notice_root}/.ksail-notices-stage.XXXXXX")"
 	bundle="${notice_stage}/${version}-${target}"
-	mkdir "${bundle}"
+	mkdir -m 0755 "${bundle}"
 	for member in THIRD_PARTY_NOTICES.txt manifest.json release.txt; do
 		cp "${tmp_dir}/GoNotices/${member}" "${bundle}/${member}"
 		chmod 0644 "${bundle}/${member}"

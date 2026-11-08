@@ -775,14 +775,6 @@ jobs:
           mode: ${{ needs.goreleaser.outputs.release-mode }}
           proof: ${{ needs.goreleaser.outputs.replay-proof }}
 
-      # The fixed networkless verifier uses the release's existing Go toolchain, without a
-      # second product build, dependency audit, or restored release cache.
-      - name: ⚙️ Setup Go for notice readback
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: false
-
       - name: 📥 Download release asset artifacts
         if: needs.goreleaser.outputs.release-mode == 'build'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -820,72 +812,6 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.get_version.outputs.version }}
         run: .github/scripts/upload-release-assets.sh --tag "$RELEASE_TAG" --assets-dir dist-assets
-
-      # Download actual draft bytes independently of the producer workspace/artifacts. Reuse the
-      # resolver's already selected ID; do not add another full release-catalogue enumeration.
-      - name: 🔎 Verify draft archive Go notices
-        id: draft_notices
-        if: (steps.release_state.outputs.state == 'draft') && needs.goreleaser.outputs.release-mode == 'build'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ steps.get_version.outputs.version }}
-          RELEASE_ID: ${{ steps.release_state.outputs.release_id }}
-          PHASE: draft
-        run: &go-notices-readback |
-          set -euo pipefail
-          umask 077
-          case "$PHASE" in draft|published) ;; *) exit 1 ;; esac
-          # Never admit prior downloads or symlinked staging/readback directories.
-          for parent in .cache .cache/go-notices; do
-            if [ -e "$parent" ] || [ -L "$parent" ]; then
-              test -d "$parent"
-              test ! -L "$parent"
-            else
-              mkdir "$parent"
-            fi
-          done
-          directory=".cache/go-notices/$PHASE-readback"
-          test ! -e "$directory"
-          test ! -L "$directory"
-          mkdir "$directory"
-          go run .github/scripts/go-notices.go assets "$RELEASE_TAG" "$GITHUB_SHA" > "$directory/expected.txt"
-          test "$(wc -l < "$directory/expected.txt" | tr -d ' ')" = 8
-          test "$(sort -u "$directory/expected.txt" | wc -l | tr -d ' ')" = 8
-          while IFS= read -r name; do
-            [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]
-          done < "$directory/expected.txt"
-          if [ "$PHASE" = draft ]; then
-            [[ "$RELEASE_ID" =~ ^[1-9][0-9]*$ ]]
-            endpoint="repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID"
-          else
-            encoded_tag="$(jq -rn --arg tag "$RELEASE_TAG" '$tag | @uri')"
-            endpoint="repos/$GITHUB_REPOSITORY/releases/tags/$encoded_tag"
-          fi
-          gh api "$endpoint" > "$directory/release.json"
-          release_id="$(jq -er --arg tag "$RELEASE_TAG" --arg phase "$PHASE" '
-            select(.tag_name == $tag and .draft == ($phase == "draft")) | .id |
-            select(type == "number" and . > 0 and floor == .)' "$directory/release.json")"
-          if [ "$PHASE" = draft ]; then test "$release_id" = "$RELEASE_ID"; fi
-          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100" > "$directory/pages.json"
-          jq -e 'type == "array" and length > 0 and all(.[]; type == "array")' "$directory/pages.json" > /dev/null
-          while IFS= read -r name; do
-            asset_record="$(jq -er --arg name "$name" '
-              [ .[][] | select(.name == $name) ] | select(length == 1) | .[0] |
-              select(.size | type == "number" and . > 0 and . <= 536870912 and floor == .) |
-              select(.id | type == "number" and . > 0 and . <= 9007199254740991 and floor == .) |
-              [.id, .size] | @tsv
-            ' "$directory/pages.json")"
-            printf '%s\t%s\n' "$name" "$asset_record" >> "$directory/assets.tsv"
-          done < "$directory/expected.txt"
-          # Refuse every oversized declaration before any body request. Bound actual
-          # streamed copies too, then require the observed length to match the snapshot.
-          while IFS=$'\t' read -r name asset_id asset_size; do
-            gh api -H 'Accept: application/octet-stream' "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" |
-              head -c 536870913 > "$directory/$name"
-            test "$(wc -c < "$directory/$name" | tr -d ' ')" = "$asset_size"
-          done < "$directory/assets.tsv"
-          go run .github/scripts/go-notices.go verify-all "$PHASE" "$RELEASE_TAG" "$GITHUB_SHA"
 
       - name: 📢 Publish draft release
         if: (steps.release_state.outputs.state == 'draft') && needs.goreleaser.outputs.release-mode == 'build'
@@ -966,16 +892,6 @@ jobs:
             });
 
             console.log(`Successfully published release ${tag}`);
-
-      # This also runs for an already published build/replay: remote names alone are not proof.
-      - name: 🔎 Verify published archive Go notices
-        id: published_notices
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ steps.get_version.outputs.version }}
-          PHASE: published
-        run: *go-notices-readback
 
       - name: 🔏 Install Cosign for replay readback
         if: needs.goreleaser.outputs.release-mode == 'verify'

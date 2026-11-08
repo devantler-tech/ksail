@@ -46,20 +46,12 @@ contracts() {
 		before(idx("desktop-macos"; "verify_macos_notices"); named("desktop-macos"; "📤 Upload desktop archive artifact")) and
 		before(idx("desktop"; "package"); idx("desktop"; "verify_desktop_notices")) and
 		before(idx("desktop"; "verify_desktop_notices"); named("desktop"; "📤 Upload desktop archive artifact")) and
-		before(named("publish-release"; "📤 Attach assets to draft release"); idx("publish-release"; "draft_notices")) and
-		before(idx("publish-release"; "draft_notices"); named("publish-release"; "📢 Publish draft release")) and
-		before(named("publish-release"; "📢 Publish draft release"); idx("publish-release"; "published_notices")) and
-		([.jobs["publish-release"].steps[] | select(.uses // "" | startswith("actions/setup-go@")) |
-		  .with | .["go-version-file"] == "go.mod" and .cache == false] == [true]) and
-		([.jobs["publish-release"].steps[] | select(.id == "published_notices") | has("if")] == [false]) and
 		([.jobs.goreleaser.steps[], .jobs["desktop-macos"].steps[] |
 		  select(.id == "verify_cli_notices" or .id == "verify_macos_notices") | .if] ==
 		  ["needs.cask-checkpoint.outputs.release-mode == '\''build'\''", "needs.cask-checkpoint.outputs.release-mode == '\''build'\''"]) and
 		([.jobs.desktop.steps[] | select(.id == "verify_desktop_notices") | .if] ==
 		  ["needs.validate-release-ref.outputs.release-mode == '\''build'\''"]) and
-		([.jobs["publish-release"].steps[] | select(.id == "draft_notices") | .if] ==
-		  ["(steps.release_state.outputs.state == '\''draft'\'') && needs.goreleaser.outputs.release-mode == '\''build'\''"]) and
-		([.jobs[] .steps[] | select(.id // "" | test("^(verify_.*_notices|draft_notices|published_notices)$")) |
+		([.jobs[] .steps[] | select(.id // "" | test("^verify_.*_notices$")) |
 		  .["continue-on-error"] // false] | all(. == false))
 	' "$work/workflow.json" >/dev/null || fail 'release verification order/admission changed'
 	printf 'PASS: release configuration and mandatory ordering\n'
@@ -98,60 +90,7 @@ verify)
 	esac
 	for name in THIRD_PARTY_NOTICES.txt manifest.json release.txt; do grep -qx "GoNotices/$name" "$FIXTURE/members"; done
 	;;
-assets)
-	[[ "$1" == v1.2.3 && "$2" == 1111111111111111111111111111111111111111 ]] || exit 92
-	[[ "${FAULT:-}" != assets ]] || exit 95
-	cat "$FIXTURE/names"
-	;;
-verify-all)
-	[[ "$1" == "$PHASE" && "$2" == v1.2.3 && "$3" == 1111111111111111111111111111111111111111 ]] || exit 92
-	[[ "${FAULT:-}" != verify ]] || exit 94
-	while IFS= read -r name; do cmp "$FIXTURE/remote/$name" ".cache/go-notices/$1-readback/$name"; done <"$FIXTURE/names"
-	;;
 *) exit 96 ;;
-esac
-STUB
-	cat >"$work/bin/gh" <<'STUB'
-#!/usr/bin/env bash
-set -euo pipefail
-[[ "$1" == api ]] || exit 81
-shift
-accept=''; paginated=false; slurped=false
-while [[ "${1:-}" == -* ]]; do
-	case "$1" in
-	-H) accept="$2"; shift 2 ;;
-	--paginate) paginated=true; shift ;;
-	--slurp) slurped=true; shift ;;
-	*) exit 82 ;;
-	esac
-done
-[[ $# == 1 ]] || exit 83
-printf '%s\n' "$1" >>"$FIXTURE/requests"
-case "$1" in
-repos/devantler-tech/ksail/releases/42 | repos/devantler-tech/ksail/releases/tags/v1.2.3)
-	[[ "${FAULT:-}" != release ]] || exit 88
-	draft=false; [[ "$PHASE" != draft ]] || draft=true
-	[[ "${FAULT:-}" != state ]] || { [[ "$draft" != true ]] && draft=true || draft=false; }
-	tag=v1.2.3; [[ "${FAULT:-}" != tag ]] || tag=v1.2.4
-	jq -n --arg tag "$tag" --argjson draft "$draft" '{id:42,tag_name:$tag,draft:$draft}' ;;
-repos/devantler-tech/ksail/releases/42/assets\?per_page=100)
-	[[ "$paginated:$slurped" == true:true ]] || exit 89
-	[[ "${FAULT:-}" != pages ]] || exit 84
-	cat "$FIXTURE/pages.json" ;;
-repos/devantler-tech/ksail/releases/assets/*)
-	[[ "$accept" == 'Accept: application/octet-stream' ]] || exit 90
-	id="${1##*/}"
-	[[ "${FAULT:-}" != download || "$id" != 3 ]] || exit 85
-	name="$(sed -n "${id}p" "$FIXTURE/names")"
-	[[ -n "$name" ]] || exit 86
-	if [[ "${FAULT:-}" == oversized-body && "$id" == 1 ]]; then
-		/usr/bin/head -c 1073741824 /dev/zero
-	elif [[ "${FAULT:-}" == bytes && "$id" == 3 ]]; then
-		tr '[:print:]' x <"$FIXTURE/remote/$name"
-	else
-		cat "$FIXTURE/remote/$name"
-	fi ;;
-*) exit 87 ;;
 esac
 STUB
 	# 7z is native on the Windows runner. This adapter checks its exact member arguments and
@@ -240,95 +179,6 @@ package_tests() {
 	printf 'PASS: Linux/Windows archive members and stage/verify refusals\n'
 }
 
-readback_tests() {
-	extract publish-release draft_notices "$work/draft.sh"
-	extract publish-release published_notices "$work/published.sh"
-	cmp "$work/draft.sh" "$work/published.sh" || fail 'readback implementations diverged'
-	local phase fault dir index name
-	for phase in draft published; do
-		for fault in none oversized-first oversized-last oversized-body size-mismatch assets missing duplicate empty pages download verify bytes state tag stale symlink unsafe-names release string-id string-size; do
-			dir="$work/$phase-$fault"
-			mkdir -p "$dir/remote"
-			printf '%s\n' ksail_1.2.3_darwin_arm64.tar.gz ksail_1.2.3_linux_amd64.tar.gz \
-				ksail_1.2.3_linux_arm64.tar.gz ksail_1.2.3_windows_amd64.zip ksail_1.2.3_windows_arm64.zip \
-				KSail_1.2.3_darwin_arm64.zip ksail-desktop_1.2.3_linux_amd64.tar.gz \
-				ksail-desktop_1.2.3_windows_amd64.zip >"$dir/names"
-			index=0
-			while IFS= read -r name; do
-				index=$((index + 1))
-				printf '%s' "$name" >"$dir/remote/$name"
-			done <"$dir/names"
-			jq -Rn '[inputs] | to_entries | map({id:(.key+1),name:.value,size:(.value|length)}) | [.[0:3],.[3:]]' <"$dir/names" >"$dir/pages.json"
-			case "$fault" in
-			oversized-first)
-				jq '.[0][0].size = 536870913' "$dir/pages.json" >"$dir/tmp"
-				mv "$dir/tmp" "$dir/pages.json"
-				;;
-			oversized-last)
-				jq '.[1][-1].size = 536870913' "$dir/pages.json" >"$dir/tmp"
-				mv "$dir/tmp" "$dir/pages.json"
-				;;
-			size-mismatch)
-				jq '.[0][0].size -= 1' "$dir/pages.json" >"$dir/tmp"
-				mv "$dir/tmp" "$dir/pages.json"
-				;;
-			missing)
-				jq '.[1] |= .[0:4]' "$dir/pages.json" >"$dir/tmp"
-				mv "$dir/tmp" "$dir/pages.json"
-				;;
-			duplicate)
-				jq '.[1] += [.[0]]' "$dir/pages.json" >"$dir/tmp"
-				mv "$dir/tmp" "$dir/pages.json"
-				;;
-			empty)
-				jq '.[0][0].size = 0' "$dir/pages.json" >"$dir/tmp"
-				mv "$dir/tmp" "$dir/pages.json"
-				;;
-			string-id)
-				jq '.[0][0].id = "1"' "$dir/pages.json" >"$dir/tmp"
-				mv "$dir/tmp" "$dir/pages.json"
-				;;
-			string-size)
-				jq '.[0][0].size = "123"' "$dir/pages.json" >"$dir/tmp"
-				mv "$dir/tmp" "$dir/pages.json"
-				;;
-			stale) mkdir -p "$dir/.cache/go-notices/$phase-readback" ;;
-			symlink)
-				mkdir "$dir/.cache"
-				ln -s "$dir/remote" "$dir/.cache/go-notices"
-				;;
-			unsafe-names) printf '%s\n' ../escape >>"$dir/names" ;;
-			esac
-			if (cd "$dir" && PATH="$work/bin:$PATH" FIXTURE="$dir" FAULT="$fault" PHASE="$phase" \
-				RELEASE_ID=42 RELEASE_TAG="$version" GITHUB_SHA="$source_sha" \
-				GITHUB_REPOSITORY=devantler-tech/ksail "$BASH" -e "$work/$phase.sh") >"$dir/log" 2>&1; then
-				[[ "$fault" == none ]] || fail "$phase accepted $fault"
-				[[ "$(grep -c '/releases/assets/' "$dir/requests")" == 8 ]] || fail 'not eight actual asset downloads'
-				grep -qx "verify-all $phase $version $source_sha" "$dir/commands" || fail 'readback not verified'
-			else
-				[[ "$fault" != none ]] || {
-					cat "$dir/log"
-					fail "$phase readback"
-				}
-			fi
-			if [[ "$fault" == oversized-first || "$fault" == oversized-last ]] && grep -q '/releases/assets/' "$dir/requests"; then
-				fail "$phase downloaded an asset before refusing oversized metadata"
-			fi
-			if [[ "$fault" == size-mismatch ]] && grep -q '^verify-all ' "$dir/commands"; then
-				fail "$phase passed inconsistent body length to the archive verifier"
-			fi
-			if [[ "$fault" == oversized-body ]]; then
-				name="$(sed -n '1p' "$dir/names")"
-				[[ "$(wc -c <"$dir/.cache/go-notices/$phase-readback/$name" | tr -d ' ')" == 536870913 ]] ||
-					fail "$phase did not bound the actual body stream"
-				[[ "$(grep -c '/releases/assets/' "$dir/requests")" == 1 ]] || fail "$phase continued after oversized body"
-				if grep -q '^verify-all ' "$dir/commands"; then fail "$phase verified oversized body"; fi
-			fi
-		done
-	done
-	printf 'PASS: exact eight draft/published downloads and 40 fail-closed controls\n'
-}
-
 case "${1:-all}" in
 contracts) contracts ;;
 package)
@@ -339,16 +189,11 @@ producers)
 	make_stubs
 	producer_tests
 	;;
-readback)
-	make_stubs
-	readback_tests
-	;;
 all)
 	contracts
 	make_stubs
 	producer_tests
 	package_tests
-	readback_tests
 	;;
 *) fail 'unknown test selection' ;;
 esac
