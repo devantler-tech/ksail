@@ -374,7 +374,7 @@ func TestKubeconfig_NotReadyWhileSecretKeyEmpty(t *testing.T) {
 
 	conn := k3dprovisioner.ConnectionFor("nested-k3s")
 	clientset := k8sfake.NewClientset(&corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: conn.SecretName, Namespace: conn.Namespace},
+		Name: conn.SecretName, Namespace: conn.Namespace,
 	})
 	provisioner := newK3kProvisionerWithClientset(t, clientset)
 
@@ -388,8 +388,8 @@ func TestKubeconfig_RewritesServerToInClusterServiceEndpoint(t *testing.T) {
 
 	conn := k3dprovisioner.ConnectionFor("nested-k3s")
 	clientset := k8sfake.NewClientset(&corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: conn.SecretName, Namespace: conn.Namespace},
-		Data:       map[string][]byte{"kubeconfig.yaml": []byte(k3kPublishedKubeconfig)},
+		Name: conn.SecretName, Namespace: conn.Namespace,
+		Data: map[string][]byte{"kubeconfig.yaml": []byte(k3kPublishedKubeconfig)},
 	})
 	provisioner := newK3kProvisionerWithClientset(t, clientset)
 
@@ -424,15 +424,13 @@ func TestKubeconfig_PrefersCallerSuppliedName(t *testing.T) {
 	)
 	clientset := k8sfake.NewClientset(
 		&corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: safeConn.SecretName, Namespace: safeConn.Namespace},
-			Data:       map[string][]byte{"kubeconfig.yaml": []byte(safeKubeconfig)},
+			Name: safeConn.SecretName, Namespace: safeConn.Namespace,
+			Data: map[string][]byte{"kubeconfig.yaml": []byte(safeKubeconfig)},
 		},
 		&corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      configuredConn.SecretName,
-				Namespace: configuredConn.Namespace,
-			},
-			Data: map[string][]byte{"kubeconfig.yaml": []byte(configuredKubeconfig)},
+			Name:      configuredConn.SecretName,
+			Namespace: configuredConn.Namespace,
+			Data:      map[string][]byte{"kubeconfig.yaml": []byte(configuredKubeconfig)},
 		},
 	)
 	provisioner, err := k3dprovisioner.NewK3kProvisioner(k3dprovisioner.K3kProvisionerConfig{
@@ -460,7 +458,7 @@ func TestExists_PrefersCallerSuppliedName(t *testing.T) {
 
 	callerConn := k3dprovisioner.ConnectionFor("team-a-nested-k3s")
 	clientset := k8sfake.NewClientset(&corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{Name: callerConn.Namespace},
+		Name: callerConn.Namespace,
 	})
 	provisioner, err := k3dprovisioner.NewK3kProvisioner(k3dprovisioner.K3kProvisionerConfig{
 		HostClientset: clientset,
@@ -478,8 +476,8 @@ func TestKubeconfig_FallsBackToNameArgument(t *testing.T) {
 
 	conn := k3dprovisioner.ConnectionFor("from-arg")
 	clientset := k8sfake.NewClientset(&corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: conn.SecretName, Namespace: conn.Namespace},
-		Data:       map[string][]byte{"kubeconfig.yaml": []byte(k3kPublishedKubeconfig)},
+		Name: conn.SecretName, Namespace: conn.Namespace,
+		Data: map[string][]byte{"kubeconfig.yaml": []byte(k3kPublishedKubeconfig)},
 	})
 
 	provisioner, err := k3dprovisioner.NewK3kProvisioner(k3dprovisioner.K3kProvisionerConfig{
@@ -541,8 +539,8 @@ func TestFirstRunningPodName(t *testing.T) {
 			name: "no running pods",
 			pods: []corev1.Pod{
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "p1"},
-					Status:     corev1.PodStatus{Phase: corev1.PodPending},
+					Name:   "p1",
+					Status: corev1.PodStatus{Phase: corev1.PodPending},
 				},
 			},
 			expected: "",
@@ -551,16 +549,16 @@ func TestFirstRunningPodName(t *testing.T) {
 			name: "returns first running pod",
 			pods: []corev1.Pod{
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "pending"},
-					Status:     corev1.PodStatus{Phase: corev1.PodPending},
+					Name:   "pending",
+					Status: corev1.PodStatus{Phase: corev1.PodPending},
 				},
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "running-a"},
-					Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+					Name:   "running-a",
+					Status: corev1.PodStatus{Phase: corev1.PodRunning},
 				},
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "running-b"},
-					Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+					Name:   "running-b",
+					Status: corev1.PodStatus{Phase: corev1.PodRunning},
 				},
 			},
 			expected: "running-a",

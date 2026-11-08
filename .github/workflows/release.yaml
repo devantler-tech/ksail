@@ -23,6 +23,6 @@ permissions:
 jobs:
   release:
     name: 🎉 Create Release
-    uses: devantler-tech/actions/.github/workflows/create-release.yaml@ea4df9004d4ab43b6c9af5b0c5f55712f7211328 # v13.10.12
+    uses: devantler-tech/.github/.github/workflows/create-release.yaml@15372ea4ee3a0bd5b0a41a18105859691737df01 # v20.1.10
     secrets:
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}

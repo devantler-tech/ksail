@@ -27,6 +27,7 @@ import (
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"k8s.io/client-go/kubernetes"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
@@ -235,6 +236,17 @@ func ExportEnsureConfiguredContextResolvable(clusterCfg *v1alpha1.Cluster) error
 // ExportResolveKubeContext exports resolveKubeContext for testing.
 func ExportResolveKubeContext(ctx *localregistry.Context) string {
 	return resolveKubeContext(ctx)
+}
+
+// ExportQueryLiveDrift exports queryLiveDrift for testing the warn-and-skip
+// policy the update drift checks share.
+func ExportQueryLiveDrift[T any](
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	check, queryAction string,
+	query func(goCtx context.Context, kubeconfigPath, kubeContext string) (T, error),
+) (T, bool) {
+	return queryLiveDrift(cmd, ctx, check, queryAction, query)
 }
 
 // ExportEnsureClusterManaged exports ensureClusterManaged for testing, driving it from a fixed
@@ -726,7 +738,14 @@ func ExportApplyDistributionSpecOverrides(spec *v1alpha1.ClusterSpec) {
 
 // ExportPickCluster exposes pickCluster for unit testing.
 func ExportPickCluster(cmd *cobra.Command, deps SwitchDeps) (string, error) {
-	return pickCluster(cmd, deps)
+	target, err := pickCluster(cmd, deps)
+
+	return target.name, err
+}
+
+// ExportListClusterNames exposes the switch command's shell-completion candidates.
+func ExportListClusterNames(cmd *cobra.Command) []string {
+	return listClusterNames(cmd)
 }
 
 // ExportPrintRestoreHeader exposes printRestoreHeader for testing.
@@ -1039,4 +1058,25 @@ func ExportChartValuesDriftFields() []string {
 	}
 
 	return fields
+}
+
+// ExportWriteClusterIdentityMarker runs the best-effort marker write with an injected client
+// factory, so tests can prove it records the provisioned identity and never fails the caller.
+func ExportWriteClusterIdentityMarker(
+	cmd *cobra.Command,
+	clusterName string,
+	clusterCfg *v1alpha1.Cluster,
+	newClient func(kubeconfigPath, kubeContext string) (kubernetes.Interface, error),
+) {
+	reportIdentityMarker(cmd, clusterName, clusterCfg, newClient)
+}
+
+// ExportRecordIdentityAfterUpdate exposes the update path's marker refresh.
+func ExportRecordIdentityAfterUpdate(
+	cmd *cobra.Command,
+	clusterName string,
+	clusterCfg *v1alpha1.Cluster,
+	update func() (bool, error),
+) error {
+	return recordIdentityAfterUpdate(cmd, clusterName, clusterCfg, update)
 }

@@ -380,7 +380,11 @@ func TestSystemTestHarnessBoundsReservedSandboxRecovery(t *testing.T) {
 	assert.Contains(t, workflowCleanup.If, "always()")
 	assert.Equal(t, "${{ matrix.distribution }}", stringValue(workflowCleanup.With["distribution"]))
 	assert.Equal(t, "${{ matrix.provider }}", stringValue(workflowCleanup.With["provider"]))
-	assert.Equal(t, "${{ matrix.args }}", stringValue(workflowCleanup.With["args"]))
+	assert.Equal(
+		t,
+		"${{ matrix.effective-args || matrix.args }}",
+		stringValue(workflowCleanup.With["args"]),
+	)
 
 	diagnosticUploadIndex := harnessStepIndex(
 		t,
@@ -848,7 +852,7 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 		"🔐 Configure AWS credentials (OIDC)",
 		"🔐 Resolve EKS permissions boundary",
 		"⚙️ Setup Go",
-		"📦 Cache KSail Binary",
+		"📥 Restore KSail binary",
 		"📥 Install eksctl",
 		"🔧 Initialize EKS project",
 		"🔎 Check EKS capacity before create",

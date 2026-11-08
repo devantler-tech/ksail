@@ -9,7 +9,6 @@ import (
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -32,7 +31,7 @@ func targetServer(id int64, name string) *hcloud.Server {
 
 func targetNode(name string, uid types.UID, address string) corev1.Node {
 	return corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: name, UID: uid},
+		Name: name, UID: uid,
 		Status: corev1.NodeStatus{
 			Addresses: []corev1.NodeAddress{{Type: corev1.NodeExternalIP, Address: address}},
 		},

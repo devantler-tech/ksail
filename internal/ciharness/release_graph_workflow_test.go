@@ -40,6 +40,8 @@ func TestReleaseGraphAuditRunsForReleaseOnlyChanges(t *testing.T) {
 	inputs := auditedReleaseInputPaths(t)
 
 	inputs = append(inputs, ".github/workflows/ci.yaml", "go.mod", "go.sum",
+		".github/go-license-policy.json", "LICENSE", "internal/licensepolicy/policy.go",
+		"internal/moduleintegrity/verify.go",
 		".govulncheck-allow.txt", "pkg/client/kubescape/cilium_linkage_test.go",
 		"desktop/main.go", "internal/ciharness/release_graph_workflow_test.go")
 	for _, input := range inputs {

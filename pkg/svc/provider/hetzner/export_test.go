@@ -12,6 +12,15 @@ import (
 // FirewallRulesMatchForTest exports firewallRulesMatch for testing.
 var FirewallRulesMatchForTest = firewallRulesMatch
 
+// WaitForServersStatusForTest exposes the real server-status poll for regression tests.
+func (p *Provider) WaitForServersStatusForTest(
+	ctx context.Context,
+	clusterName string,
+	status hcloud.ServerStatus,
+) error {
+	return p.waitForServersStatus(ctx, clusterName, status)
+}
+
 // SourceIPsEqualForTest exports sourceIPsEqual for testing.
 var SourceIPsEqualForTest = sourceIPsEqual
 

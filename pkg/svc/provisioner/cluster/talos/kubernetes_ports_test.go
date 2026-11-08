@@ -39,11 +39,9 @@ func TestNestedTalosBootstrapSelectsLoopbackBinding(t *testing.T) {
 			client.EXPECT().ContainerInspect(mock.Anything, "control-plane").
 				Return(container.InspectResponse{
 					NetworkSettings: &container.NetworkSettings{
-						NetworkSettingsBase: container.NetworkSettingsBase{ //nolint:staticcheck
-							Ports: nat.PortMap{
-								"50000/tcp": {{HostIP: "127.0.0.1", HostPort: "33333"}},
-								"6443/tcp":  bindings,
-							},
+						Ports: nat.PortMap{
+							"50000/tcp": {{HostIP: "127.0.0.1", HostPort: "33333"}},
+							"6443/tcp":  bindings,
 						},
 					},
 				}, nil)
@@ -105,9 +103,7 @@ func TestNestedTalosServiceRejectsUnusableBindings(t *testing.T) {
 			client.EXPECT().ContainerInspect(mock.Anything, "control-plane").
 				Return(container.InspectResponse{
 					NetworkSettings: &container.NetworkSettings{
-						NetworkSettingsBase: container.NetworkSettingsBase{ //nolint:staticcheck
-							Ports: nat.PortMap{"6443/tcp": testCase.bindings},
-						},
+						Ports: nat.PortMap{"6443/tcp": testCase.bindings},
 					},
 				}, nil)
 			inner := talosprovisioner.NewProvisioner(createTestTalosConfigs(t, "demo"), nil).

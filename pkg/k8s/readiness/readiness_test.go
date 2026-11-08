@@ -9,7 +9,6 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
 	appsv1 "k8s.io/api/apps/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
@@ -59,7 +58,7 @@ func testWaitForDaemonSetReady(t *testing.T) {
 	)
 
 	client := fake.NewClientset(&appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Name: name, Namespace: namespace,
 		Status: appsv1.DaemonSetStatus{
 			DesiredNumberScheduled: 1,
 			NumberUnavailable:      0,
@@ -145,7 +144,7 @@ func testNamespaceDSReadyAllReady(t *testing.T) {
 
 	client := fake.NewClientset(
 		&appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{Name: "cilium", Namespace: namespace},
+			Name: "cilium", Namespace: namespace,
 			Status: appsv1.DaemonSetStatus{
 				DesiredNumberScheduled: 2,
 				NumberUnavailable:      0,
@@ -153,7 +152,7 @@ func testNamespaceDSReadyAllReady(t *testing.T) {
 			},
 		},
 		&appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{Name: "kube-proxy", Namespace: namespace},
+			Name: "kube-proxy", Namespace: namespace,
 			Status: appsv1.DaemonSetStatus{
 				DesiredNumberScheduled: 2,
 				NumberUnavailable:      0,
@@ -194,7 +193,7 @@ func testNamespaceDSSkipsZeroDesired(t *testing.T) {
 
 	client := fake.NewClientset(
 		&appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{Name: "cilium", Namespace: namespace},
+			Name: "cilium", Namespace: namespace,
 			Status: appsv1.DaemonSetStatus{
 				DesiredNumberScheduled: 2,
 				NumberUnavailable:      0,
@@ -203,7 +202,7 @@ func testNamespaceDSSkipsZeroDesired(t *testing.T) {
 		},
 		// DaemonSet with node selector that matches no nodes
 		&appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{Name: "special-agent", Namespace: namespace},
+			Name: "special-agent", Namespace: namespace,
 			Status: appsv1.DaemonSetStatus{
 				DesiredNumberScheduled: 0,
 				NumberUnavailable:      0,
@@ -228,7 +227,7 @@ func testNamespaceDSReadyTimeout(t *testing.T) {
 
 	client := fake.NewClientset(
 		&appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{Name: "cilium", Namespace: namespace},
+			Name: "cilium", Namespace: namespace,
 			Status: appsv1.DaemonSetStatus{
 				DesiredNumberScheduled: 3,
 				NumberUnavailable:      1,
@@ -293,7 +292,7 @@ func testWaitForDeploymentReadyReady(t *testing.T) {
 	)
 
 	client := fake.NewClientset(&appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Name: name, Namespace: namespace,
 		Status: appsv1.DeploymentStatus{
 			Replicas:          1,
 			UpdatedReplicas:   1,
@@ -350,7 +349,7 @@ func testWaitForDeploymentReadyTimeout(t *testing.T) {
 	)
 
 	client := fake.NewClientset(&appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Name: name, Namespace: namespace,
 		Status: appsv1.DeploymentStatus{
 			Replicas:        2,
 			UpdatedReplicas: 1,
@@ -444,7 +443,7 @@ func testIfExistsDeploymentReady(t *testing.T) {
 	)
 
 	client := fake.NewClientset(&appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Name: name, Namespace: namespace,
 		Status: appsv1.DeploymentStatus{
 			Replicas:          1,
 			UpdatedReplicas:   1,
@@ -472,7 +471,7 @@ func testIfExistsDeploymentNotReady(t *testing.T) {
 	)
 
 	client := fake.NewClientset(&appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Name: name, Namespace: namespace,
 		Status: appsv1.DeploymentStatus{
 			Replicas:          1,
 			UpdatedReplicas:   0,

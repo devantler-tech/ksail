@@ -223,7 +223,7 @@ func handleUpdateRunE(
 		cmd, cfgManager, ctx, deps, clusterName, consent, forceDrain,
 	)
 
-	return orchestrator.run(outputTimer)
+	return orchestrator.runAndRecordIdentity(outputTimer)
 }
 
 // resolveConsent reports whether the user consented to skip KSail's interactive

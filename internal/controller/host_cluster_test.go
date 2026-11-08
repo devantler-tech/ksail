@@ -12,7 +12,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -26,12 +25,10 @@ const (
 // cluster it runs on (empty spec, host-cluster label).
 func newHostCluster(withFinalizer bool) *v1alpha1.Cluster {
 	cluster := &v1alpha1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       hostName,
-			Namespace:  hostNamespace,
-			Generation: 1,
-			Labels:     map[string]string{v1alpha1.HostClusterLabel: "true"},
-		},
+		Name:       hostName,
+		Namespace:  hostNamespace,
+		Generation: 1,
+		Labels:     map[string]string{v1alpha1.HostClusterLabel: "true"},
 	}
 	if withFinalizer {
 		cluster.Finalizers = []string{controller.FinalizerName}
@@ -42,7 +39,7 @@ func newHostCluster(withFinalizer bool) *v1alpha1.Cluster {
 
 func hostRequest() ctrl.Request {
 	return ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: hostName, Namespace: hostNamespace},
+		Name: hostName, Namespace: hostNamespace,
 	}
 }
 
@@ -140,7 +137,7 @@ func TestReconcile_ForgedHostLabelUsesNormalDelete(t *testing.T) {
 	require.NoError(t, fakeClient.Delete(context.Background(), cluster))
 
 	_, err := reconciler.Reconcile(context.Background(), ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace},
+		Name: cluster.Name, Namespace: cluster.Namespace,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 1, prov.deleteCalls, "forged host labels must not bypass normal teardown")
@@ -177,4 +174,122 @@ func TestReconcile_HostClusterDeleteSkipsProvisioner(t *testing.T) {
 		apierrors.IsNotFound(getErr),
 		"the registration should be gone after finalizer removal",
 	)
+}
+
+func TestReconcile_HostClusterReportsObservedIdentityInStatusOnly(t *testing.T) {
+	t.Parallel()
+
+	fakeClient := newFakeClient(newScheme(t), newHostCluster(false))
+	reconciler := newHostReconciler(t, fakeClient)
+	reconciler.ObserveHostStatus = func(
+		_ context.Context,
+		_ client.Reader,
+		_ *v1alpha1.Cluster,
+	) (controller.ObservedStatus, error) {
+		return controller.ObservedStatus{
+			NodesReady:    3,
+			NodesTotal:    3,
+			NodesObserved: true,
+			Distribution:  v1alpha1.DistributionTalos,
+			Provider:      v1alpha1.ProviderHetzner,
+		}, nil
+	}
+
+	_, err := reconciler.Reconcile(context.Background(), hostRequest())
+	require.NoError(t, err)
+
+	var got v1alpha1.Cluster
+
+	require.NoError(t, fakeClient.Get(context.Background(), hostRequest().NamespacedName, &got))
+	assert.Equal(t, v1alpha1.DistributionTalos, got.Status.ObservedDistribution)
+	assert.Equal(t, v1alpha1.ProviderHetzner, got.Status.ObservedProvider)
+	// Identity is observed state only: the spec stays empty, so the operator still does not own (or
+	// provision) the host cluster.
+	assert.Empty(t, got.Spec.Cluster.Distribution)
+	assert.Empty(t, got.Spec.Cluster.Provider)
+}
+
+func TestReconcile_HostClusterClearsIdentityTheNodesNoLongerProve(t *testing.T) {
+	t.Parallel()
+
+	cluster := newHostCluster(false)
+	cluster.Status.ObservedDistribution = v1alpha1.DistributionTalos
+	cluster.Status.ObservedProvider = v1alpha1.ProviderHetzner
+	fakeClient := newFakeClient(newScheme(t), cluster)
+	reconciler := newHostReconciler(t, fakeClient)
+
+	_, err := reconciler.Reconcile(context.Background(), hostRequest())
+	require.NoError(t, err)
+
+	var got v1alpha1.Cluster
+
+	require.NoError(t, fakeClient.Get(context.Background(), hostRequest().NamespacedName, &got))
+	assert.Empty(
+		t,
+		got.Status.ObservedDistribution,
+		"a node read that proves nothing clears the identity",
+	)
+	assert.Empty(
+		t,
+		got.Status.ObservedProvider,
+		"a node read that proves nothing clears the identity",
+	)
+}
+
+func TestReconcile_HostClusterKeepsIdentityWhenNodesAreNotObserved(t *testing.T) {
+	t.Parallel()
+
+	cluster := newHostCluster(false)
+	cluster.Status.ObservedDistribution = v1alpha1.DistributionTalos
+	cluster.Status.ObservedProvider = v1alpha1.ProviderHetzner
+	fakeClient := newFakeClient(newScheme(t), cluster)
+	reconciler := newHostReconciler(t, fakeClient)
+	reconciler.ObserveHostStatus = func(
+		_ context.Context,
+		_ client.Reader,
+		_ *v1alpha1.Cluster,
+	) (controller.ObservedStatus, error) {
+		return controller.ObservedStatus{Endpoint: "https://10.96.0.1:443"}, errBoom
+	}
+
+	_, err := reconciler.Reconcile(context.Background(), hostRequest())
+	require.NoError(t, err)
+
+	var got v1alpha1.Cluster
+
+	require.NoError(t, fakeClient.Get(context.Background(), hostRequest().NamespacedName, &got))
+	assert.Equal(t, v1alpha1.DistributionTalos, got.Status.ObservedDistribution,
+		"a failed node read must not erase previously observed identity")
+	assert.Equal(t, v1alpha1.ProviderHetzner, got.Status.ObservedProvider)
+}
+
+// A kind hub proves Vanilla on Docker, which are also the spec defaults; the status write must keep
+// them rather than pruning them as defaults.
+func TestReconcile_HostClusterKeepsIdentityThatEqualsSpecDefaults(t *testing.T) {
+	t.Parallel()
+
+	fakeClient := newFakeClient(newScheme(t), newHostCluster(false))
+	reconciler := newHostReconciler(t, fakeClient)
+	reconciler.ObserveHostStatus = func(
+		_ context.Context,
+		_ client.Reader,
+		_ *v1alpha1.Cluster,
+	) (controller.ObservedStatus, error) {
+		return controller.ObservedStatus{
+			NodesReady:    1,
+			NodesTotal:    1,
+			NodesObserved: true,
+			Distribution:  v1alpha1.DistributionVanilla,
+			Provider:      v1alpha1.ProviderDocker,
+		}, nil
+	}
+
+	_, err := reconciler.Reconcile(context.Background(), hostRequest())
+	require.NoError(t, err)
+
+	var got v1alpha1.Cluster
+
+	require.NoError(t, fakeClient.Get(context.Background(), hostRequest().NamespacedName, &got))
+	assert.Equal(t, v1alpha1.DistributionVanilla, got.Status.ObservedDistribution)
+	assert.Equal(t, v1alpha1.ProviderDocker, got.Status.ObservedProvider)
 }

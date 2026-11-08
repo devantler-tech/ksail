@@ -27,13 +27,23 @@ env:
 
 jobs:
   verify:
-    name: Verify restricted analysis toolchain
-    runs-on: ubuntu-24.04
+    name: Verify restricted analysis toolchain (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux/amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+    env:
+      BUILD_PLATFORM: ${{ matrix.platform }}
     permissions:
       contents: read
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: audit
 
@@ -53,11 +63,11 @@ jobs:
 
       - name: Build pinned analysis image
         run: |
-          docker build --platform linux/amd64 --tag ksail-analysis:verify images/ksail-analysis-runner
+          docker build --platform "${BUILD_PLATFORM}" --tag ksail-analysis:verify images/ksail-analysis-runner
 
       - name: Exercise runner bootstrap and desktop compiler
         run: |
-          docker run --rm --platform linux/amd64 --user 1001:1001 \
+          docker run --rm --platform "${BUILD_PLATFORM}" --user 1001:1001 \
             --read-only --cap-drop ALL --security-opt no-new-privileges \
             --memory 4g --cpus 2 --env HOME=/runner-data \
             --tmpfs /runner-data:rw,exec,nosuid,nodev,uid=1001,gid=1001,size=2g \
@@ -75,7 +85,7 @@ jobs:
       id-token: write
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: audit
 
@@ -90,7 +100,7 @@ jobs:
           driver: docker-container
 
       - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}

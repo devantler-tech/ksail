@@ -1,0 +1,73 @@
+# Expanded by TestDockerMatrixPreservesEveryEffectiveScenario. Frozen from
+# main 83938d8a149a2cf1c4805007f9932b2aa2e07891 before scheduling changes.
+distribution: [KWOK, Vanilla, K3s, VCluster, Talos]
+provider: [Docker]
+init: [true]
+args:
+  - ""
+  - "--name system-test-cluster --cni Cilium --csi Enabled --load-balancer Enabled --metrics-server Enabled --policy-engine Kyverno --cert-manager Enabled --gitops-engine Flux"
+  - "--cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine Gatekeeper --gitops-engine ArgoCD"
+  - "--gitops-engine Flux --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
+  - "--gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
+exclude:
+  - distribution: Talos
+    provider: Docker
+    init: true
+    args: ""
+include:
+  - distribution: Talos
+    provider: Docker
+    init: true
+    args: "--name system-test-cluster-with-image-verification --image-verification Enabled"
+  - distribution: Vanilla
+    provider: Docker
+    init: true
+    args: ""
+    test-kubernetes-provider: "true"
+    test-workload-mirror: "true"
+  - distribution: K3s
+    provider: Docker
+    init: true
+    args: ""
+    test-kubernetes-provider: "true"
+    test-workload-mirror: "true"
+  - distribution: Talos
+    provider: Docker
+    init: true
+    args: "--name system-test-cluster"
+    kubernetes-upgrade-from: "v1.36.2"
+    kubernetes-upgrade-to: "v1.37.1"
+    test-kubernetes-provider: "true"
+  - distribution: VCluster
+    provider: Docker
+    init: true
+    args: ""
+    test-kubernetes-provider: "true"
+    test-workload-mirror: "true"
+  - distribution: VCluster
+    provider: Docker
+    init: true
+    args: "--gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
+    ecr-public-offline: "true"
+  - distribution: Vanilla
+    provider: Docker
+    init: true
+    args: "--name k3k-calico-host"
+    test-kubernetes-provider: "true"
+    kubernetes-provider-distributions: "K3s"
+    kubernetes-provider-cni: "Calico"
+  - distribution: Vanilla
+    provider: Docker
+    init: true
+    args: "--name calico-migration --cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine None --gitops-engine None"
+    calico-migration: "true"
+  - distribution: K3s
+    provider: Docker
+    init: true
+    args: "--name calico-migration --cni Calico --csi Disabled --load-balancer Enabled --metrics-server Disabled --policy-engine None --gitops-engine None"
+    calico-migration: "true"
+  - distribution: VCluster
+    provider: Docker
+    init: true
+    args: "--name calico-migration --cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine None --gitops-engine None"
+    calico-migration: "true"

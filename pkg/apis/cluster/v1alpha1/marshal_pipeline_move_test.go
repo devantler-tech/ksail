@@ -7,7 +7,6 @@ import (
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 )
 
@@ -40,8 +39,8 @@ type plainClusterAlias v1alpha1.Cluster
 
 func pipelineMoveSampleCluster() v1alpha1.Cluster {
 	return v1alpha1.Cluster{
-		TypeMeta:   metav1.TypeMeta{Kind: v1alpha1.Kind, APIVersion: v1alpha1.APIVersion},
-		ObjectMeta: metav1.ObjectMeta{Name: "my-cluster", Namespace: "default"},
+		Kind: v1alpha1.Kind, APIVersion: v1alpha1.APIVersion,
+		Name: "my-cluster", Namespace: "default",
 		Spec: v1alpha1.Spec{
 			Editor: "vim",
 			Cluster: v1alpha1.ClusterSpec{

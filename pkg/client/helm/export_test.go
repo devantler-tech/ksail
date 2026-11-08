@@ -31,6 +31,7 @@ var (
 	ExecuteAndExtractRelease = executeAndExtractRelease
 	ApplyCommonActionConfig  = applyCommonActionConfig
 	LocateChartWithRetry     = locateChartWithRetry
+	NewConfiguredUpgrade     = newUpgradeAction
 )
 
 // Expose unexported error sentinels and repository helpers for test assertions.
@@ -185,4 +186,9 @@ func OptionalAPIVersionPostRendererForTest(enabled bool) helmpostrenderer.PostRe
 	}
 
 	return optionalAPIVersionPostRenderer(renderer)
+}
+
+// LastReleaseApplyMethod exposes the apply-method lookup the upgrade path uses.
+func (c *Client) LastReleaseApplyMethod(releaseName string) (string, error) {
+	return c.lastReleaseApplyMethod(releaseName)
 }

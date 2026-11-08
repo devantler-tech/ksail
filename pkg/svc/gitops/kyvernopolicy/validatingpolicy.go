@@ -212,8 +212,8 @@ func renderedNamespaces(docs []map[string]any) map[string]*corev1.Namespace {
 
 		labels, _, _ := unstructured.NestedStringMap(doc, "metadata", "labels")
 		known[name] = &corev1.Namespace{
-			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: kindNamespace},
-			ObjectMeta: metav1.ObjectMeta{Name: name, Labels: labels},
+			APIVersion: "v1", Kind: kindNamespace,
+			Name: name, Labels: labels,
 		}
 	}
 

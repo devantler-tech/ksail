@@ -27,7 +27,9 @@ func TestGoModuleRestoreConsumerBindings(t *testing.T) {
 	for path, jobs := range map[string][]string{
 		"ci.yaml": {
 			"build-artifact", "generate", "home-isolation", "operator-chart-e2e",
-			"warm-helm-cache", "warm-mirror-cache", "test-release-config",
+			// Mirror warming is now a binary-only consumer, guarded by
+			// TestKSailBinaryArtifactMirrorWarmerConsumer instead.
+			"warm-helm-cache", "test-release-config",
 			"release-graph-audit", "local-recovery-trial",
 		},
 		"copilot-setup-steps.yml":       {"copilot-setup-steps"},
@@ -43,9 +45,7 @@ func TestGoModuleRestoreConsumerBindings(t *testing.T) {
 			for _, job := range jobs {
 				steps := workflow.Jobs[job].Steps
 				restore := findHarnessStep(t, steps, "♻️ Restore Go modules")
-				assert.Equal(t,
-					"devantler-tech/ksail/.github/actions/restore-go-modules@"+
-						"46fdd72dff3ccc24a494508fde43426c7e65a0e3", restore.Uses)
+				assert.Equal(t, ksailActionPin(t, "restore-go-modules"), restore.Uses)
 				assert.Less(t,
 					harnessStepIndex(t, steps, "⚙️ Setup Go"),
 					harnessStepIndex(t, steps, restore.Name),

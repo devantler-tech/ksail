@@ -172,3 +172,25 @@ func TestSkipIfGitOpsManaged(t *testing.T) {
 		assert.Contains(t, err.Error(), "check release ownership for comp")
 	})
 }
+
+func TestSkipIfGitOpsManagedBoundsTheLookup(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(
+			mock.MatchedBy(func(ctx context.Context) bool {
+				_, hasDeadline := ctx.Deadline()
+
+				return hasDeadline
+			}),
+			"rel",
+			"ns",
+		).
+		Return(nil, helm.ErrNoReleaseStorage)
+
+	skip, err := helmutil.SkipIfGitOpsManaged(context.Background(), client, "comp", "rel", "ns")
+
+	require.NoError(t, err)
+	assert.False(t, skip)
+}

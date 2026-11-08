@@ -14,6 +14,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/spf13/cobra"
+	"k8s.io/client-go/kubernetes"
 )
 
 // overrideInstallerFactory is a helper that applies a factory override and returns a restore function.
@@ -257,4 +258,26 @@ func SetClusterStabilityCheckForTests(
 	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
 		f.ClusterStabilityCheck = fn
 	})
+}
+
+// SetIdentityMarkerClientForTests replaces the client the cluster identity marker is written
+// with (ksail#7191), so command tests with a fake provisioner can serve a fake cluster API.
+// It returns a function that restores the previous client.
+func SetIdentityMarkerClientForTests(
+	factory func(kubeconfigPath, kubeContext string) (kubernetes.Interface, error),
+) func() {
+	identityMarkerClientMu.Lock()
+
+	previous := identityMarkerClientOverride
+	identityMarkerClientOverride = factory
+
+	identityMarkerClientMu.Unlock()
+
+	return func() {
+		identityMarkerClientMu.Lock()
+
+		identityMarkerClientOverride = previous
+
+		identityMarkerClientMu.Unlock()
+	}
 }

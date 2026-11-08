@@ -52,10 +52,10 @@ func authenticatedDynamicListenerSource() analysisSource {
 func authenticatedRuntimeANSISource() analysisSource {
 	return analysisSource{
 		module:           "github.com/charmbracelet/x/ansi",
-		version:          "v0.11.7",
+		version:          "v0.11.8",
 		directory:        "ansi-runtime",
-		checksum:         "h1:kzv1kJvjg2S3r9KHo8hDdHFQLEqn4RBCb39dAYC84jI=",
-		checkoutChecksum: "h1:iPNezCZy0sBOmu2IBDjEwzq44xcFUsrqoESVJDQdl9o=",
+		checksum:         "h1:JMFwp0CgDC2+jcOB162HH5k7I3FVbgFSMMYg7dSPBQQ=",
+		checkoutChecksum: "h1:vTTkYhqoeAuJFspT7a2RCQj779elkHmWR+xrf/pskno=",
 		sourcePatches:    []string{"util.go", "kitty/options.go"},
 	}
 }

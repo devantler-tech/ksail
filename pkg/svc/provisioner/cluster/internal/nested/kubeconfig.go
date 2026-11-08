@@ -6,7 +6,6 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -117,12 +116,10 @@ func PublishKubeconfigSecret(
 	}
 
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName,
-			Namespace: namespace,
-			Labels:    labels,
-		},
-		Data: map[string][]byte{key: data},
+		Name:      secretName,
+		Namespace: namespace,
+		Labels:    labels,
+		Data:      map[string][]byte{key: data},
 	}
 
 	return UpsertSecret(ctx, clientset, secret)

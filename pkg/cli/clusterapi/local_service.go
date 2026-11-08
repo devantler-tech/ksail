@@ -1333,9 +1333,10 @@ func newCluster(
 		provider = v1alpha1.ProviderDocker
 	}
 
-	cluster := v1alpha1.Cluster{}
-	cluster.Name = name
-	cluster.Namespace = localNamespace
+	cluster := v1alpha1.Cluster{
+		Name:      name,
+		Namespace: localNamespace,
+	}
 	cluster.Spec.Cluster.Distribution = distribution
 	cluster.Spec.Cluster.Provider = provider
 	cluster.Status.Phase = phase

@@ -516,11 +516,9 @@ func newProvisionerWithKubeconfigForTest(
 	runner := &mockCommandRunner{}
 
 	cfg := &v1alpha4.Cluster{
-		Name: "cfg-name",
-		TypeMeta: v1alpha4.TypeMeta{
-			Kind:       "Cluster",
-			APIVersion: "kind.x-k8s.io/v1alpha4",
-		},
+		Name:       "cfg-name",
+		Kind:       "Cluster",
+		APIVersion: "kind.x-k8s.io/v1alpha4",
 	}
 	provisioner := kindprovisioner.NewProvisionerWithRunner(
 		cfg,

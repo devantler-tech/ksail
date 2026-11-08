@@ -1,0 +1,23 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="256" y1="24" x2="256" y2="488" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#143150"/>
+      <stop offset="1" stop-color="#0b1d2e"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Badge -->
+  <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#bg)"/>
+
+  <!-- Sloop rig: mainsail (aft, white) + jib (fore, cyan) flanking a negative-space mast -->
+  <g transform="translate(256 258) scale(1.12) translate(-256 -258)">
+    <!-- mainsail -->
+    <path d="M266 340 L266 142 Q360 224 364 340 Z" fill="#f3f9fd"/>
+    <!-- jib -->
+    <path d="M246 340 L246 172 Q178 244 150 340 Z" fill="#2ec4e6"/>
+    <!-- wave -->
+    <path d="M124 352 C170 338 202 366 256 352 C310 338 342 366 388 352 L388 374 C342 388 310 360 256 374 C202 388 170 360 124 374 Z" fill="#2ec4e6"/>
+  </g>
+
+  <rect x="24.5" y="24.5" width="463" height="463" rx="107.5" fill="none" stroke="#ffffff" stroke-opacity="0.10"/>
+</svg>

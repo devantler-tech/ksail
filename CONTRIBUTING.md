@@ -64,7 +64,8 @@ For detailed package and API documentation, refer to the Go documentation at [pk
 Before you begin developing, ensure you have the following installed:
 
 - [Go](https://go.dev/doc/install) — the version in the `go` line of [`go.mod`](go.mod) or newer (CI installs exactly that version)
-- [mockery (v3.5+)](https://vektra.github.io/mockery/v3.5/installation/)
+- [mockery v3.8.1](https://vektra.github.io/mockery/v3.8/installation/) — install with
+  `go install github.com/vektra/mockery/v3@v3.8.1`; earlier releases cannot read Go 1.27 export data
 - [golangci-lint](https://golangci-lint.run/docs/welcome/install/)
 - [mega-linter](https://github.com/oxsecurity/megalinter/tree/main/mega-linter-runner#installation)
 - [Node.js (v24+)](https://nodejs.org/en/download/) — Required for the documentation site, the web UI (and therefore `make build`) and the VSCode extension; CI uses Node.js 24. A plain `go build` does not need it.
@@ -305,6 +306,19 @@ The `Kubernetes` provider runs cluster nodes as pods inside an existing cluster.
 KSail's code is publicly available and reusable. All core functionality is implemented in the `pkg/` directory so external projects can import and use any package under `pkg/`. The `internal/` directory holds packages not useful to external consumers, such as `internal/buildmeta` (build-time version metadata injected via ldflags), `internal/controller` (the controller-runtime reconcilers behind the KSail operator), `internal/testutil` (shared test utilities) and the checks CI runs on the repository itself (for example `internal/ciharness` and `internal/releasecontract`).
 
 For detailed package and API documentation, refer to [pkg.go.dev/github.com/devantler-tech/ksail/v7](https://pkg.go.dev/github.com/devantler-tech/ksail/v7).
+
+### Adding an operator API kind or controller
+
+The KSail operator does not use Kubebuilder's project layout: it starts through the CLI rather than a `cmd/main.go` manager, its API types live in `pkg/apis`, and its CRDs and RBAC ship in the Helm chart rather than a Kustomize `config/` tree. `kubebuilder create api` therefore does not fit (#6777). Add a kind or a controller by hand, touching these places in order:
+
+1. **Types and markers.** Define the kind and its list type in `pkg/apis/<group>/<version>/`. Kinds in the `ksail.io/v1alpha1` group belong in `pkg/apis/cluster/v1alpha1`, not in a second package for the same group. Give both types the `+kubebuilder:object:root=true` marker (see `Cluster` in `types.go`) and register them in the package's `addKnownTypes` (`groupversion_info.go`). A new API package also needs its own `doc.go` with the two `controller-gen` `go:generate` directives copied from `pkg/apis/cluster/v1alpha1/doc.go`.
+2. **Generate.** Run `make generate`. It writes the DeepCopy methods (`zz_generated.deepcopy.go`) and the CRD into `charts/ksail-operator/crds/`. The package does not compile until the DeepCopy methods exist. Its DeepCopy and CRD generators run only on packages under `pkg/apis`, so API types placed anywhere else are never generated.
+3. **Scheme.** A kind added to an existing API package is registered through that package's `AddToScheme`. A new API package must also be added to `newScheme` in `pkg/operator/manager.go`.
+4. **Controller.** Put the reconciler in `internal/controller/` with a `SetupWithManager` method, and call it from `setupManager` in `pkg/operator/manager.go`.
+5. **RBAC.** Update `charts/ksail-operator/templates/rbac.yaml` by hand. The `+kubebuilder:rbac` markers in `internal/controller` record the permissions a controller needs, but nothing generates RBAC from them, so change the chart's rules in the same pull request as any marker.
+6. **Tests.** Test the controller with testify (`assert` and `require`) and controller-runtime's fake client, following `internal/controller/cluster_controller_test.go`. KSail's own tests, the operator's included, do not use Ginkgo or Gomega; only vendored code under `third_party/` does.
+
+Revisit this checklist in favour of a KSail-owned scaffold once a second operator API is actually planned.
 
 ## CI
 

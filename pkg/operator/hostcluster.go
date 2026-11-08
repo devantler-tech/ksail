@@ -10,7 +10,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
@@ -81,11 +80,9 @@ func EnsureHostCluster(ctx context.Context, hub client.Client, namespace string)
 	}
 
 	cluster := &v1alpha1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      HostClusterName,
-			Namespace: namespace,
-			Labels:    map[string]string{v1alpha1.HostClusterLabel: "true"},
-		},
+		Name:      HostClusterName,
+		Namespace: namespace,
+		Labels:    map[string]string{v1alpha1.HostClusterLabel: "true"},
 	}
 
 	createErr := hub.Create(ctx, cluster)
@@ -145,9 +142,11 @@ func AddHostClusterRegistration(mgr ctrl.Manager, namespace string) error {
 }
 
 // NewHostStatusObserver returns a StatusObserver for the self-registered host cluster, reporting
-// the API endpoint and node readiness through the operator's own credentials (the manager's REST
-// config). The hub reader argument is unused: the host cluster is observed directly, not through a
-// published kubeconfig Secret.
+// the API endpoint, node readiness, and the distribution and provider the nodes prove, through the
+// operator's own credentials (the manager's REST config). The identity goes to status only: the
+// spec stays empty, so the operator still does not own the host cluster's lifecycle. The hub reader
+// argument is unused: the host cluster is observed directly, not through a published kubeconfig
+// Secret.
 func NewHostStatusObserver(restConfig *rest.Config) controller.StatusObserver {
 	return func(
 		ctx context.Context,
@@ -159,17 +158,13 @@ func NewHostStatusObserver(restConfig *rest.Config) controller.StatusObserver {
 			return controller.ObservedStatus{}, fmt.Errorf("build host clientset: %w", err)
 		}
 
-		observed := controller.ObservedStatus{Endpoint: restConfig.Host}
+		observed, err := observeHostNodes(ctx, clientset)
+		observed.Endpoint = restConfig.Host
 
-		ready, total, err := countReadyNodes(ctx, clientset)
 		if err != nil {
-			// The endpoint is still useful; surface the node-count failure for logging.
-			return observed, fmt.Errorf("count host nodes: %w", err)
+			// The endpoint is still useful; surface the node-read failure for logging.
+			return observed, fmt.Errorf("observe host nodes: %w", err)
 		}
-
-		observed.NodesReady = ready
-		observed.NodesTotal = total
-		observed.NodesObserved = true
 
 		return observed, nil
 	}

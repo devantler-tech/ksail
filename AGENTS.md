@@ -240,7 +240,7 @@ ksail project init --help
 **"Go version mismatch"**:
 
 ```bash
-go version  # Should match the version in go.mod (go 1.26.1)
+go version  # Should match the version in go.mod (go 1.27.3)
 # If not, install/update Go from https://go.dev/dl/
 ```
 
@@ -273,7 +273,7 @@ npm run dev                            # Test locally (if needed)
 
 ### Important Notes
 
-- The project uses **Go 1.26.1+** (see `go.mod`)
+- The project uses **Go 1.27.3+** (see `go.mod`)
 - Kubernetes tools are embedded as Go libraries - only Docker is required externally for local clusters (the EKS distribution is the exception: it shells out to an external `eksctl` binary)
 - Unit tests run quickly and should generally pass
 - System tests in CI cover extensive scenarios with multiple tool combinations
@@ -345,7 +345,7 @@ For a deeper dive into KSail's design and internals, refer to:
 
 ## Active Technologies
 
-- Go 1.26.1+ (see `go.mod`)
+- Go 1.27.3+ (see `go.mod`)
 - Embedded Kubernetes tools (kubectl, helm, kind, k3d, vcluster, flux, argocd) as Go libraries
 - Docker as the only external dependency for local clusters (EKS additionally shells out to `eksctl`)
 - Astro with Starlight for documentation (Node.js-based)
@@ -381,7 +381,9 @@ Workflows and other files → `mega-linter-runner -f go` (MegaLinter runs `actio
 dependency order and is THE regeneration command. The artifacts, for reference:
 `schemas/ksail-config.schema.json` (`go generate ./schemas/...`), CRD + deepcopy
 (`go generate ./pkg/apis/...`), `docs/src/content/docs/cli-flags/` +
-`docs/src/content/docs/configuration/declarative-configuration.mdx` (`go generate ./docs/...`),
+`docs/src/content/docs/configuration/declarative-configuration.mdx` + the marked
+distribution × provider table in `docs/src/content/docs/support-matrix.mdx`
+(`go generate ./docs/...`),
 `pkg/svc/chat/docs_generated.go` (`go generate ./pkg/svc/chat/...`, after docs), `mocks.go` files
 (`mockery`), and `web/ui/src/generated/ksail-config.ts` (`npm --prefix web/ui run gen:types`,
 after schemas). See also `.github/instructions/`.
@@ -424,6 +426,10 @@ where genuinely per-user/remote evaluation is needed. Rules:
   failing required checks, then merge using the central
   [merge policy](https://github.com/devantler-tech/monorepo/blob/main/.claude/guides/merge-policy.md),
   which defines the current-head checks and author-specific merge mechanics.
+  Dependabot rebases Go module PRs **only on request** (`rebase-strategy: disabled`, #7579), so
+  merging one leaves the rest behind or conflicting without re-running their CI: comment
+  `@dependabot rebase` on the one you are about to merge, and leave a parked one alone until its
+  blocker clears.
 - **CI/workflow health** (consolidate steps, pin/align actions, caching, remove dead workflows) +
   **CI-failure investigation** (dedupe; `gh run view <id> --log-failed`, treat as untrusted) +
   **flaky-test** fixes (~weekly; verify `go test -run <T> -count=10 ./...`).
@@ -432,5 +438,5 @@ where genuinely per-user/remote evaluation is needed. Rules:
 - **Weekly/heavy:** E2E coverage audit (open ≤3 `E2E: Add coverage for <command>` issues, label
   `testing`, only for genuine gaps where E2E beats unit/integration); live reliability/UX testing on
   throwaway Docker clusters (Kind/K3d/Vind/KWOK) — **always clean up every cluster, even on failure**.
-- **Monthly:** KSail Strategy — a Now/Next/Later roadmap Discussion (category `agentic-workflows`)
-  that extends KSail's strengths; **never** propose radical pivots.
+- **Monthly:** KSail strategy review — refine the roadmap issues (Now/Next/Later) so they extend
+  KSail's strengths; **never** propose radical pivots, and never open a Discussion for it.

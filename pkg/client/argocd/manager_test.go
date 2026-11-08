@@ -170,7 +170,7 @@ func TestManagerEnsure_IsIdempotentAndUpdatesTargetRevision(t *testing.T) {
 	t.Parallel()
 
 	clientset := k8sfake.NewClientset(
-		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "unrelated", Namespace: "default"}},
+		&corev1.Secret{Name: "unrelated", Namespace: "default"},
 	)
 	gvr := schema.GroupVersionResource{
 		Group:    "argoproj.io",

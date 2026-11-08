@@ -21,6 +21,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
+	vclusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/vcluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/tools/clientcmd"
@@ -1041,6 +1042,12 @@ func resolveCreatedContextName(
 		provider == v1alpha1.ProviderKubernetes &&
 		distribution == v1alpha1.DistributionK3s {
 		return "k3k-" + clusterName
+	}
+
+	if clusterName != "" &&
+		provider == v1alpha1.ProviderKubernetes &&
+		distribution == v1alpha1.DistributionVCluster {
+		return vclusterprovisioner.KubernetesContextName(clusterName)
 	}
 
 	return distribution.ContextName(clusterName)

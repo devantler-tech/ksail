@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	kubefake "k8s.io/client-go/kubernetes/fake"
@@ -70,7 +69,7 @@ func TestEnsureHostClusterNeverAdoptsUnlabelledCluster(t *testing.T) {
 	t.Parallel()
 
 	existing := &v1alpha1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{Name: operator.HostClusterName, Namespace: hostNamespace},
+		Name: operator.HostClusterName, Namespace: hostNamespace,
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{Distribution: v1alpha1.DistributionVCluster},
 		},
@@ -119,13 +118,13 @@ func TestCountReadyNodes(t *testing.T) {
 
 	clientset := kubefake.NewClientset(
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "ready"},
+			Name: "ready",
 			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
 				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
 			}},
 		},
 		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "not-ready"},
+			Name: "not-ready",
 			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
 				{Type: corev1.NodeReady, Status: corev1.ConditionFalse},
 			}},

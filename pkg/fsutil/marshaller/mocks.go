@@ -14,10 +14,19 @@ func NewMockMarshaller[T any](t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockMarshaller[T] {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockMarshaller[T]{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -68,7 +77,7 @@ type MockMarshaller_Marshal_Call[T any] struct {
 
 // Marshal is a helper method to define mock.On call
 //   - model T
-func (_e *MockMarshaller_Expecter[T]) Marshal(model interface{}) *MockMarshaller_Marshal_Call[T] {
+func (_e *MockMarshaller_Expecter[T]) Marshal(model any) *MockMarshaller_Marshal_Call[T] {
 	return &MockMarshaller_Marshal_Call[T]{Call: _e.mock.On("Marshal", model)}
 }
 
@@ -120,7 +129,7 @@ type MockMarshaller_Unmarshal_Call[T any] struct {
 // Unmarshal is a helper method to define mock.On call
 //   - data []byte
 //   - model *T
-func (_e *MockMarshaller_Expecter[T]) Unmarshal(data interface{}, model interface{}) *MockMarshaller_Unmarshal_Call[T] {
+func (_e *MockMarshaller_Expecter[T]) Unmarshal(data any, model any) *MockMarshaller_Unmarshal_Call[T] {
 	return &MockMarshaller_Unmarshal_Call[T]{Call: _e.mock.On("Unmarshal", data, model)}
 }
 
@@ -177,7 +186,7 @@ type MockMarshaller_UnmarshalString_Call[T any] struct {
 // UnmarshalString is a helper method to define mock.On call
 //   - data string
 //   - model *T
-func (_e *MockMarshaller_Expecter[T]) UnmarshalString(data interface{}, model interface{}) *MockMarshaller_UnmarshalString_Call[T] {
+func (_e *MockMarshaller_Expecter[T]) UnmarshalString(data any, model any) *MockMarshaller_UnmarshalString_Call[T] {
 	return &MockMarshaller_UnmarshalString_Call[T]{Call: _e.mock.On("UnmarshalString", data, model)}
 }
 
