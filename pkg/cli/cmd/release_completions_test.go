@@ -33,6 +33,10 @@ func TestReleaseCompletionGeneration(t *testing.T) {
 		require.Contains(t, string(data), "ksail")
 		require.Contains(t, string(data), "__complete")
 	}
+
+	// Positive control for the foreign-target test: a run that executes the binary leaves the marker.
+	_, err = fixture.root.Stat("completion-invoked")
+	require.NoError(t, err)
 }
 
 // releaseCompletionFixture is an isolated copy of the release hook, its script and a fake
@@ -153,6 +157,7 @@ func (fixture releaseCompletionFixture) run(
 
 const completionProcessScript = `#!/usr/bin/env bash
 set -euo pipefail
+: >"$(dirname "$0")/completion-invoked"
 if [[ -n "${KSAIL_RELEASE_CREDENTIAL_CANARY-}" ]]; then
   echo "runner environment leaked into completion" >&2
   exit 24
@@ -248,6 +253,8 @@ func TestReleaseCompletionForeignTargetNeverExecutes(t *testing.T) {
 	require.NoError(t, err, output)
 	_, err = fixture.root.Stat("dist/completions")
 	require.ErrorIs(t, err, os.ErrNotExist)
+	_, err = fixture.root.Stat("completion-invoked")
+	require.ErrorIs(t, err, os.ErrNotExist, "the foreign target binary was executed")
 }
 
 // TestReleaseCompletionCommandTree proves the fake binary serves the real KSail command tree.
