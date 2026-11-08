@@ -15,8 +15,12 @@ environment <name> with its own ksail.<name>.yaml, repointing the
 structured identity along the way: the cluster-meta cluster_name, the
 clusters/<env> path segment and content references, the root config's metadata
 name, the connection context (distribution-aware), and — when --provider is given
-— the provider. Every other byte is preserved, so the kustomize replacements block,
-base wiring, version pins and comments survive intact.
+— the provider. Unrelated configuration is preserved, including the kustomize
+replacements block, base wiring, version pins and comments.
+
+A full eksctl context selecting the source cluster is refused before writing.
+Remove spec.cluster.connection.context from the source config before cloning so
+the destination discovers its own context after cluster creation.
 
 SOPS-encrypted files (*.enc.yaml) are copied verbatim with only their path
 repointed; re-encrypt them to the new environment's recipients afterwards with

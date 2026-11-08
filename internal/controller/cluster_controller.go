@@ -91,6 +91,12 @@ type ObservedStatus struct {
 	NodesReady    int32
 	NodesTotal    int32
 	NodesObserved bool
+	// Distribution and Provider are what the observed nodes prove about the cluster's identity
+	// (empty when they prove nothing). They are applied only when NodesObserved is true, because they
+	// come from the same node read: a successful read that proves nothing clears a stale identity,
+	// while a failed read leaves the previous one untouched.
+	Distribution v1alpha1.Distribution
+	Provider     v1alpha1.Provider
 }
 
 // StatusObserver gathers runtime status (endpoint, kubeconfig, node readiness) for a provisioned
@@ -455,6 +461,8 @@ func (r *ClusterReconciler) observeStatusWith(
 	if observed.NodesObserved {
 		cluster.Status.NodesReady = observed.NodesReady
 		cluster.Status.NodesTotal = observed.NodesTotal
+		cluster.Status.ObservedDistribution = observed.Distribution
+		cluster.Status.ObservedProvider = observed.Provider
 	}
 }
 

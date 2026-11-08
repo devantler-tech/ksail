@@ -86,7 +86,8 @@ func TestDockerMatrixPreservesEveryEffectiveScenario(t *testing.T) {
 	want := expandDockerMatrix(t, baseline)
 	got := expandDockerMatrix(t, job.Strategy.Matrix)
 	require.Len(t, want, 30, "the frozen baseline contains all thirty scenarios")
-	require.Len(t, got, 30)
+	want = append(want, nestedKindRoutingScenario())
+	require.Len(t, got, len(want))
 
 	run := findHarnessStep(t, job.Steps, "🧪 Run KSail System Test")
 	cleanup := findHarnessStep(t, job.Steps, "🧪 Cleanup KSail System Test")
@@ -112,6 +113,14 @@ func TestDockerMatrixPreservesEveryEffectiveScenario(t *testing.T) {
 	assert.Equal(t, "v1.37.1", got[0]["kubernetes-upgrade-to"])
 	assertDockerLongCasesInFirstWave(t, got[:15])
 	assertDockerJobNamesRemainDistinct(t, job.Name, got)
+}
+
+func nestedKindRoutingScenario() map[string]string {
+	return map[string]string{
+		"distribution": "Vanilla", "provider": "Docker", "init": "true",
+		"args":                     "--name nested-kind-routing --workers 1",
+		"test-kubernetes-provider": "true", "kubernetes-provider-distributions": "Vanilla",
+	}
 }
 
 func assertDockerJobNamesRemainDistinct(

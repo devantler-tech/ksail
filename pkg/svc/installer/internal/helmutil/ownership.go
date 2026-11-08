@@ -15,10 +15,11 @@ const (
 	// FluxNameLabel is the label key set by the Flux helm-controller on
 	// Helm release Secrets it manages.
 	FluxNameLabel = "helm.toolkit.fluxcd.io/name"
-	// ArgoCDManagedByLabel is the label key set by ArgoCD on resources it
-	// manages. Present on Helm release Secrets when ArgoCD manages charts
-	// through its Helm integration.
-	ArgoCDManagedByLabel = "argocd.argoproj.io/managed-by"
+	// ArgoCDManagedByLabel marks a release Argo CD owns: present on Helm release
+	// Secrets when Argo CD manages charts through its Helm integration, and
+	// reported by [helm.Client.GetReleaseStorageLabels] when an Argo CD
+	// Application tracks the release's objects.
+	ArgoCDManagedByLabel = helm.ArgoCDManagedByLabel
 )
 
 // ownershipLookupTimeout bounds the release ownership read. It runs before the Helm operation

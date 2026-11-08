@@ -27,6 +27,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"k8s.io/cli-runtime/pkg/genericiooptions"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -737,4 +738,10 @@ func ExportResolveKubeconfigFlag(
 	resolvedPath string,
 ) error {
 	return resolveKubeconfigFlag(child, kubeconfigFlag, resolvedPath)
+}
+
+// NewCreateCmdWithStreams exposes newCreateCmd so tests can capture what the merged
+// kubectl + Flux create tree writes.
+func NewCreateCmdWithStreams(ioStreams genericiooptions.IOStreams) *cobra.Command {
+	return newCreateCmd(ioStreams)
 }

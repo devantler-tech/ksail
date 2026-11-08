@@ -165,6 +165,7 @@ jobs:
       gitops-assert-scripts: ${{ steps.filter.outputs.gitops-assert-scripts }}
       kubeconform-cancellation: ${{ steps.filter.outputs.kubeconform-cancellation }}
       native-home-paths: ${{ steps.filter.outputs.native-home-paths }}
+      windows-notice-staging: ${{ steps.filter.outputs.windows-notice-staging }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -176,6 +177,23 @@ jobs:
         id: filter
         with:
           filters: |
+            windows-notice-staging:
+              - 'internal/gonotices/**'
+              - '.github/scripts/go-notices.go'
+              - '.github/actions/setup-desktop-build/**'
+              - 'notices/go/**'
+              - 'go.mod'
+              - 'go.sum'
+              - '.github/go-license-policy.json'
+              - '.github/go-notice-materials.json'
+              - '.github/go-notice-receipts.json'
+              - '.goreleaser.yaml'
+              - '.goreleaser.desktop.yaml'
+              - '.github/workflows/cd.yaml'
+              - 'third_party/**'
+              - 'pkg/fsutil/pathutil/**'
+              - '.gitattributes'
+              - '.github/workflows/ci.yaml'
             native-home-paths:
               - 'pkg/fsutil/**'
               - 'go.mod'
@@ -250,7 +268,9 @@ jobs:
             # the same reason todos-contract does. TestReleaseConfigFilterCoversTheReleaseFiles
             # fails if a release file is dropped from it.
             release-config:
+              - '.gitattributes'
               - '.github/scripts/resolve-release-replay.sh'
+              - '.github/scripts/go-notices.go'
               - '.github/actions/release-admission/**'
               - '.github/scripts/download-go-modules.sh'
               - '.github/scripts/cask-rendering.test.sh'
@@ -288,6 +308,20 @@ jobs:
               - '.govulncheck-allow.txt'
             # Release inputs are outside Go's cache and the shared Go source filter.
             release-graph-audit:
+              - '.gitattributes'
+              - '.github/go-license-policy.json'
+              - '.github/go-notice-materials.json'
+              - '.github/go-notice-receipts.json'
+              - 'internal/gonotices/**'
+              - 'notices/go/**'
+              - '.github/scripts/go-notices.go'
+              - '.github/scripts/go-notices-release.test.sh'
+              # Notice manifests hash every byte of each replacement tree, including
+              # non-Go files such as KSail-PATCH.md that the Go source filter skips.
+              - 'third_party/**'
+              - 'LICENSE'
+              - 'internal/licensepolicy/**'
+              - 'internal/moduleintegrity/**'
               - '.github/scripts/resolve-release-replay.sh'
               - '.github/actions/release-admission/**'
               - '.github/scripts/download-go-modules.sh'
@@ -358,6 +392,7 @@ jobs:
               - '.github/fixtures/**'
               - '.github/scripts/assert-gitops-deployed.sh'
               - '.github/scripts/build-calico-migration-baseline.sh'
+              - '.github/scripts/prepare-nested-kind-host.sh'
               - '.github/workflows/ci.yaml'
             schema:
               - 'pkg/apis/**/*.go'
@@ -505,6 +540,34 @@ jobs:
       # loading unrelated test fixtures into the native Windows check.
       - name: 🔎 Verify native home prefixes and literal paths
         run: go test ./pkg/fsutil/path_test.go -count=1
+
+  windows-notice-staging:
+    name: 🪟 Stage Go Notices on Windows
+    runs-on: windows-latest
+    timeout-minutes: 10
+    needs: [changes]
+    if: needs.changes.outputs.windows-notice-staging == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Same setup-go pin as setup-desktop-build: on Windows it links GOROOT
+      # into the D: drive, which is the layout the release job stages under.
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # The desktop release stages its Windows notices on this runner, so run
+      # the same command here instead of finding out at release time.
+      - name: 🔎 Stage the Windows desktop notices
+        shell: bash
+        run: go run .github/scripts/go-notices.go stage desktop-windows-amd64 v0.0.0 "$(git rev-parse HEAD)"
 
   eks-smoke-scripts:
     name: 🧹 Validate EKS Smoke Teardown
@@ -734,7 +797,7 @@ jobs:
       || (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
       && needs.changes.outputs.govuln-allowlist == 'true')
-    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@0966f4b015e85ef14be37411d424a7028a858550 # v19.0.8
+    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@15372ea4ee3a0bd5b0a41a18105859691737df01 # v20.1.10
     # The canonical defaults make a default-branch run answer "did the check run" rather than
     # "did the diff touch a Go file". On main the branch's green IS the protection
     # signal, so a path filter that skips the suite or the scan leaves main green
@@ -749,11 +812,10 @@ jobs:
     #
     # Both default true at this immutable canonical revision, so the caller
     # inherits the corrected coverage without redundant arguments. Scan input
-    # retirement remains tracked in devantler-tech/.github#285; the separate
-    # default-branch maintenance pilot is tracked in #276.
+    # retirement remains tracked in devantler-tech/.github#285.
     with:
-      # This released default also runs read-only module hygiene and dead-code
-      # checks on main. Final maintenance input retirement remains in #276.
+      # The callee always runs read-only module hygiene and dead-code checks on
+      # main pushes; it takes no input to turn them off.
       # The org-required direct run is the sole signed-fix writer for a PR.
       # Keep this additional invocation read-only while retaining its checks.
       apply-signed-fixes: false
@@ -878,6 +940,9 @@ jobs:
 
       - name: 📦 Verify release installer
         run: .github/scripts/install-release.test.sh
+
+      - name: 📦 Verify Go notice release wiring
+        run: bash .github/scripts/go-notices-release.test.sh
 
       - name: 🧪 Verify parity guard behavior
         run: .github/scripts/verify-go-archive-parity.test.sh
@@ -1087,7 +1152,7 @@ jobs:
       - name: 🧹 Free disk space
         if: steps.calico-cache.outputs.cache-hit != 'true'
         # Only cold compilation needs the large working-space reclamation.
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@ccc4de63c6f1259ecbdd604c2260559d810c7cfc
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@41a8ea06da57a4b53744cad7a617d6294e7ad588
 
       - name: ♻️ Restore Go modules
         if: steps.calico-cache.outputs.cache-hit != 'true'
@@ -1986,7 +2051,7 @@ jobs:
       # This job already waits for the producer. Reuse its exact sealed bytes
       # instead of restoring Go modules or compiling again after cache eviction.
       - name: 📥 Restore KSail binary
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@ccc4de63c6f1259ecbdd604c2260559d810c7cfc
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@41a8ea06da57a4b53744cad7a617d6294e7ad588
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -1995,7 +2060,7 @@ jobs:
       # Images when ECR Public rate-limits the runner; skopeo reads this login.
       - name: 🔐 Login to Docker Hub
         if: ${{ vars.DOCKERHUB_USERNAME != '' }}
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] - third-party action input, no environment scoping available
@@ -2129,6 +2194,17 @@ jobs:
             test-kubernetes-provider: "true"
             kubernetes-provider-distributions: "K3s"
             kubernetes-provider-cni: "Calico"
+          # Reproduce the nested Kind return-route collision on a two-node host.
+          # Placement is not pinned: DinD and the advertised NodePort may share an
+          # outer node. The collision does not depend on it, because replies to any
+          # outer kind-network address are captured by an overlapping inner bridge.
+          # Other nested distributions retain their complete default-host legs.
+          - distribution: Vanilla
+            provider: Docker
+            init: true
+            args: "--name nested-kind-routing --workers 1"
+            test-kubernetes-provider: "true"
+            kubernetes-provider-distributions: "Vanilla"
           # Keep the fresh 3.33 installations above, and also create these with
           # the immutable 3.32.2 CLI before the candidate's unchanged-config update.
           - distribution: Vanilla
@@ -2155,6 +2231,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Prepare nested Kind watcher capacity
+        # Only the explicit two-node nested Vanilla reproducer. The worker
+        # journal reported descriptor exhaustion; outer and nested kubelets
+        # share the disposable runner's inotify budget (Kind known issues).
+        if: ${{ matrix.test-kubernetes-provider == 'true' && matrix.kubernetes-provider-distributions == 'Vanilla' }}
+        run: |
+          bash .github/scripts/prepare-nested-kind-host.sh
+
       - name: 🧹 Free disk space
         # Reclaim ~30 GB before pulling system-test images and spinning up
         # clusters in Docker; docker-prune also clears the Docker daemon.
@@ -2164,7 +2248,7 @@ jobs:
 
       - name: 🔐 Login to Docker Hub
         if: ${{ vars.DOCKERHUB_USERNAME != '' }}
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] - third-party action input, no environment scoping available
@@ -2178,7 +2262,7 @@ jobs:
 
       - name: 📥 Restore KSail binary
         # Pin the identical published action until actionlint supports $/ references.
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@ccc4de63c6f1259ecbdd604c2260559d810c7cfc
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@41a8ea06da57a4b53744cad7a617d6294e7ad588
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2520,6 +2604,11 @@ jobs:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.sha }}
 
+      - name: 🧹 Free disk space
+        env:
+          DOCKER_PRUNE: "false"
+        run: bash .github/actions/free-disk-space/free-disk-space.sh
+
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -2563,6 +2652,10 @@ jobs:
           distribution: goreleaser
           version: "~> v2"
           install-only: true
+      # Judge the cask with the current Homebrew style rules, as the tap does. Runner images ship
+      # different Homebrew snapshots, and an older one crashes inside its own cask style rule (#8244).
+      - name: 🍺 Update Homebrew
+        run: brew update --quiet
       - name: ⚙️ Install YAML tooling
         run: brew list yq >/dev/null 2>&1 || brew install yq
       - name: 🍺 Render, style and load every cask platform
@@ -2602,9 +2695,36 @@ jobs:
         # Retry transport failures here; the audit verdict itself remains a single run.
         run: bash .github/scripts/download-go-modules.sh
 
+      - name: 📥 Fetch the pinned KSail action commits
+        # The audit reads each KSail action at the commit CI and CD pin, from the local object store
+        # only, because tests never use the network. The checkout holds one commit, so fetch them here.
+        run: |
+          set -euo pipefail
+          mapfile -t pins < <(grep -rhoE 'devantler-tech/ksail/\.github/actions/[a-z0-9-]+@[0-9a-f]{40}' \
+            .github/workflows | sed 's/.*@//' | sort -u)
+          if [[ ${#pins[@]} -eq 0 ]]; then
+            echo "no pinned KSail action commits found in .github/workflows" >&2
+            exit 1
+          fi
+          git fetch --quiet --no-tags --depth=1 https://github.com/devantler-tech/ksail.git "${pins[@]}"
+
       - name: 🔐 Audit Shipped Dependency Graphs
+        id: audit
         # Release files are outside Go's test-cache inputs; always execute the audit.
+        # Go source admission and redistribution scope: .github/go-license-policy.md.
+        env:
+          KSAIL_GO_LICENSE_REPORT_DIR: ${{ runner.temp }}/ksail-go-licenses
+          KSAIL_REQUIRE_PINNED_ACTION_COMMITS: "true"
         run: go test ./pkg/client/kubescape/... -count=1
+
+      - name: 📤 Preserve Go license admission evidence
+        if: ${{ always() && steps.audit.outcome != 'skipped' && steps.audit.outcome != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: go-license-admission-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ksail-go-licenses/*.json
+          if-no-files-found: error
+          retention-days: 14
 
   local-recovery-trial:
     name: 🧪 Local Connection Recovery Acceptance
@@ -2623,7 +2743,7 @@ jobs:
         with:
           persist-credentials: false
       - name: 🧹 Free runner disk
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@ccc4de63c6f1259ecbdd604c2260559d810c7cfc
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@41a8ea06da57a4b53744cad7a617d6294e7ad588
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -2723,7 +2843,7 @@ jobs:
           persist-credentials: false
       - name: Check active documentation
         id: links
-        uses: devantler-tech/.github/actions/validate-retired-repo-links@39ad5ddb1b89c404d9054fb0a6e5430a67120fe7 # v19.0.11
+        uses: devantler-tech/.github/actions/validate-retired-repo-links@15372ea4ee3a0bd5b0a41a18105859691737df01 # v20.1.10
         with:
           enabled: "true"
       - name: Require a completed scan
@@ -2765,6 +2885,8 @@ jobs:
   require-checks-in-pr:
     name: ${{ github.event_name == 'workflow_dispatch' && inputs.run_local_recovery_trial && 'Local Recovery Trial - Checks' || 'CI - Required Checks' }}
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
     timeout-minutes: 5
     needs:
       [
@@ -2800,6 +2922,7 @@ jobs:
         release-graph-audit,
         cask-pr-handoff,
         native-home-paths,
+        windows-notice-staging,
         eks-smoke-scripts,
         k3k-sentinel-scripts,
         rate-limit-gate-script,
@@ -2809,8 +2932,9 @@ jobs:
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/.github/actions/aggregate-job-checks@39ad5ddb1b89c404d9054fb0a6e5430a67120fe7 # v19.0.11
+      - uses: devantler-tech/.github/actions/aggregate-job-checks@15372ea4ee3a0bd5b0a41a18105859691737df01 # v20.1.10
         with:
+          check-workflow-startup: ${{ contains(fromJSON('["pull_request","push","merge_group"]'), github.event_name) }}
           job-results: >-
             ${{ needs.retired-repo-links.result }}
             ${{ needs.rate-limit-gate.result }}
@@ -2844,6 +2968,7 @@ jobs:
             ${{ needs.release-graph-audit.result }}
             ${{ needs.cask-pr-handoff.result }}
             ${{ needs.native-home-paths.result }}
+            ${{ needs.windows-notice-staging.result }}
             ${{ needs.eks-smoke-scripts.result }}
             ${{ needs.k3k-sentinel-scripts.result }}
             ${{ needs.rate-limit-gate-script.result }}

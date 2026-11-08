@@ -7,16 +7,22 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"time"
 
 	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 var (
 	errNodegroupStateVersion = errors.New("unsupported EKS nodegroup state version")
 	errNodegroupStateTarget  = errors.New("EKS nodegroup state target mismatch")
 	errNodegroupStateDrift   = errors.New("EKS nodegroup capacity state drift")
+	// errNodegroupRestorePending marks a nodegroup that is still stopped after a restore request.
+	// EKS applies a scaling update asynchronously, so this one state is re-read until the deadline;
+	// every other drift fails at once.
+	errNodegroupRestorePending = errors.New("EKS nodegroup restore not yet applied")
 )
 
 func newNodegroupState(
@@ -221,10 +227,18 @@ func verifyNodegroupsRestored(
 	}
 
 	for _, capacity := range snapshot.Nodegroups {
-		if !nodegroupMatchesCapacity(liveByName[capacity.Name], capacity) {
+		live := liveByName[capacity.Name]
+		if !nodegroupMatchesCapacity(live, capacity) {
 			return fmt.Errorf(
-				"nodegroup %q is not restored: %w",
+				"nodegroup %q is not restored (saved desired/min/max %d/%d/%d, live %d/%d/%d): %w: %w",
 				capacity.Name,
+				capacity.DesiredCapacity,
+				capacity.MinSize,
+				capacity.MaxSize,
+				live.DesiredCap,
+				live.MinSize,
+				live.MaxSize,
+				errNodegroupRestorePending,
 				errNodegroupStateDrift,
 			)
 		}
@@ -408,17 +422,80 @@ func (p *Provider) restoreSavedNodegroups(
 	return nil
 }
 
+// restoreReadbackWindow returns the readback poll interval and deadline, falling back to the
+// defaults for a Provider built without NewProvider.
+func (p *Provider) restoreReadbackWindow() (time.Duration, time.Duration) {
+	interval, timeout := p.restoreReadbackInterval, p.restoreReadbackTimeout
+	if interval <= 0 {
+		interval = defaultRestoreReadbackInterval
+	}
+
+	if timeout <= 0 {
+		timeout = defaultRestoreReadbackTimeout
+	}
+
+	return interval, timeout
+}
+
+// awaitNodegroupsRestored re-reads the nodegroups until every one reports its saved capacity.
+// `eksctl scale nodegroup` only starts an asynchronous EKS update, so a group may still read as
+// stopped for a while after the request; that state is retried until the deadline. Any other drift,
+// and any read failure, fails at once. On timeout the last observed drift is returned, naming the
+// saved and live values.
+func (p *Provider) awaitNodegroupsRestored(
+	ctx context.Context,
+	clusterName string,
+	snapshot *state.EKSNodegroupState,
+) error {
+	interval, timeout := p.restoreReadbackWindow()
+
+	var lastErr error
+
+	pollErr := wait.PollUntilContextTimeout(
+		ctx,
+		interval,
+		timeout,
+		true,
+		func(ctx context.Context) (bool, error) {
+			restored, err := p.listNodegroupsForScale(ctx, clusterName)
+			if err != nil {
+				return false, fmt.Errorf("verify restored nodegroups: %w", err)
+			}
+
+			lastErr = verifyNodegroupsRestored(clusterName, p.region, snapshot, restored)
+			if lastErr == nil {
+				return true, nil
+			}
+
+			if errors.Is(lastErr, errNodegroupRestorePending) {
+				return false, nil
+			}
+
+			return false, lastErr
+		},
+	)
+	if pollErr == nil {
+		return nil
+	}
+
+	if lastErr != nil && errors.Is(lastErr, errNodegroupRestorePending) &&
+		wait.Interrupted(pollErr) && ctx.Err() == nil {
+		return fmt.Errorf(
+			"nodegroups not restored within %s: %w",
+			timeout,
+			lastErr,
+		)
+	}
+
+	return pollErr //nolint:wrapcheck // condition errors are already wrapped; context errors stay matchable
+}
+
 func (p *Provider) verifyAndClearNodegroupState(
 	ctx context.Context,
 	clusterName string,
 	snapshot *state.EKSNodegroupState,
 ) error {
-	restored, err := p.listNodegroupsForScale(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("verify restored nodegroups: %w", err)
-	}
-
-	err = verifyNodegroupsRestored(clusterName, p.region, snapshot, restored)
+	err := p.awaitNodegroupsRestored(ctx, clusterName, snapshot)
 	if err != nil {
 		return err
 	}
