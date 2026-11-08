@@ -225,6 +225,28 @@ func (guard *terminalGuard) terminate() error {
 		return nil
 	}
 
+	err := guard.terminateOwned()
+	if err == nil {
+		return nil
+	}
+
+	// Ownership was not proven within the budget, so no group was signaled. The direct parent
+	// is still this process's own unreaped child: its PID cannot be reused before Wait, so
+	// killing it cannot reach an unrelated process, and it no longer outlives its profile.
+	killErr := guard.command.Process.Kill()
+	if errors.Is(killErr, os.ErrProcessDone) || errors.Is(killErr, syscall.ESRCH) {
+		killErr = nil
+	}
+
+	if killErr != nil {
+		killErr = fmt.Errorf("stop native terminal parent after unproven ownership: %w", killErr)
+	}
+
+	return errors.Join(err, killErr)
+}
+
+// terminateOwned signals only groups a complete kernel observation proves this guard owns.
+func (guard *terminalGuard) terminateOwned() error {
 	// Capture, signaling and liveness share the former grace-plus-wait allowance.
 	// A transient observation failure cannot bypass termination or extend its budget.
 	deadline := time.Now().Add(terminationGrace + terminationBound)

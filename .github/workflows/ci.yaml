@@ -254,6 +254,7 @@ jobs:
               - '.github/scripts/verify-cask-native-install.sh'
               - '.github/scripts/verify-cask-native-install.test.sh'
               - '.github/scripts/verify-zsh-tab.go'
+              - 'internal/caskcompletion/**'
               - '.github/scripts/resolve-release-replay.sh'
               - '.github/actions/release-admission/**'
               - '.github/scripts/download-go-modules.sh'
@@ -2586,6 +2587,10 @@ jobs:
         run: brew list yq >/dev/null 2>&1 || brew install yq
       - name: 🍺 Render, style and load every cask platform
         run: bash .github/scripts/cask-rendering.test.sh
+      # The terminal observer's process control is darwin-only, so the Linux test jobs never
+      # compile it. Run it here, on both macOS architectures, for every PR that changes it.
+      - name: 🧪 Test the macOS terminal observer
+        run: go test ./internal/caskcompletion -count=1
 
   release-graph-audit:
     name: 🔐 Audit Shipped Dependency Graphs

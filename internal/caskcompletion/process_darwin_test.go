@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -297,11 +298,12 @@ func TestNativeTerminationRefusesPersistentProcessQueryFailure(t *testing.T) {
 				"retry within the existing shared budget",
 			)
 			assert.Less(t, time.Since(started), 1500*time.Millisecond)
-			assert.NoError(
+			require.NoError(
 				t,
 				unix.Kill(sentinel, 0),
 				"unknown ownership cannot authorize unrelated kills",
 			)
+			assertParentKilled(t, guard)
 		})
 	}
 }
@@ -352,4 +354,36 @@ func ownedTerminal(t *testing.T) (*caskcompletion.TerminalGuardForTest, int, int
 	)
 
 	return guard, pid, sentinel.Process.Pid
+}
+
+// assertParentKilled requires the guarded parent, this process's own unreaped child, to have
+// been stopped by a signal even when no owned group could be proven. A phase that failed after
+// signaling may already have stopped it with TERM; one that never signaled must kill it.
+func assertParentKilled(t *testing.T, guard *caskcompletion.TerminalGuardForTest) {
+	t.Helper()
+
+	waited := make(chan error, 1)
+
+	go func() { waited <- guard.WaitParentForTest() }()
+
+	select {
+	case err := <-waited:
+		var exit *exec.ExitError
+
+		require.ErrorAs(t, err, &exit)
+		status, ok := exit.Sys().(syscall.WaitStatus)
+		require.True(t, ok)
+		assert.True(
+			t,
+			status.Signaled() &&
+				(status.Signal() == syscall.SIGKILL || status.Signal() == syscall.SIGTERM),
+			"unproven ownership must still stop the guarded parent",
+		)
+	case <-time.After(3 * time.Second):
+		// Stop and reap it here, so the failure is reported instead of a Wait deadlock in cleanup.
+		_ = guard.KillParentForTest()
+
+		<-waited
+		t.Fatal("unproven ownership left the guarded parent running")
+	}
 }

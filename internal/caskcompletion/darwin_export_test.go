@@ -3,6 +3,7 @@
 package caskcompletion
 
 import (
+	"fmt"
 	"os/exec"
 
 	"golang.org/x/sys/unix"
@@ -62,4 +63,24 @@ func (guard *TerminalGuardForTest) StopWithQueryFaultForTest(
 	}
 
 	return guard.guard.stop()
+}
+
+// WaitParentForTest reaps the guarded parent so a test can read how it ended.
+func (guard *TerminalGuardForTest) WaitParentForTest() error {
+	err := guard.guard.command.Wait()
+	if err != nil {
+		return fmt.Errorf("wait for guarded parent: %w", err)
+	}
+
+	return nil
+}
+
+// KillParentForTest stops the guarded parent directly when a test must reap it itself.
+func (guard *TerminalGuardForTest) KillParentForTest() error {
+	err := guard.guard.command.Process.Kill()
+	if err != nil {
+		return fmt.Errorf("kill guarded parent: %w", err)
+	}
+
+	return nil
 }
