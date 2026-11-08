@@ -37,6 +37,28 @@ func TestCommandStagesOnlyCommitBoundRecipientMaterial(t *testing.T) {
 	require.NotContains(t, output.String(), root)
 }
 
+// TestCommandStagesThroughALinkedToolchainRoot covers actions/setup-go on
+// Windows, which reports GOROOT through a junction to the D: drive. A symlink
+// to the real GOROOT stands in for that junction on every platform.
+func TestCommandStagesThroughALinkedToolchainRoot(t *testing.T) {
+	root, release := commandInputFixture(t)
+	goRoot, _ := fixtureGoEnvironment(t, root)
+	linked := filepath.Join(t.TempDir(), "go-link")
+	symlinkNoticeFixture(t, goRoot, linked)
+	t.Setenv("GOROOT", linked)
+
+	var output bytes.Buffer
+	require.NoError(
+		t,
+		gonotices.Run(
+			root,
+			[]string{"stage", release.Target, release.Version, release.Source},
+			&output,
+		),
+	)
+	require.Contains(t, output.String(), "Verified Go recipient material for "+release.Target)
+}
+
 func TestCommandStagesTheClosedCLICohort(t *testing.T) {
 	t.Parallel()
 	root, release := commandInputFixture(t)

@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/pathutil"
 )
 
 const (
@@ -170,10 +172,15 @@ func runningToolchain(root string) (Toolchain, error) {
 		return Toolchain{}, ErrIncomplete
 	}
 
+	directory, err := linkFreeToolchainDirectory(values[0])
+	if err != nil {
+		return Toolchain{}, err
+	}
+
 	selected := Toolchain{
-		Directory:   values[0],
+		Directory:   directory,
 		Version:     values[1],
-		LicenseFile: filepath.Join(values[0], primaryLicenseFilename),
+		LicenseFile: filepath.Join(directory, primaryLicenseFilename),
 	}
 
 	info, inspectErr := os.Lstat(selected.LicenseFile)
@@ -185,6 +192,47 @@ func runningToolchain(root string) (Toolchain, error) {
 	}
 
 	return selected, nil
+}
+
+// maxToolchainLinks bounds how many links GOROOT itself may pass through.
+const maxToolchainLinks = 8
+
+// linkFreeToolchainDirectory resolves a GOROOT that is itself a link to the
+// directory it names. actions/setup-go on Windows installs Go on D: and links
+// C:\hostedtoolcache\...\x64 to it with a junction, and `go env GOROOT` reports
+// the linked path. Symlinks anywhere in the path are canonicalized first;
+// EvalSymlinks leaves Windows mount points (junctions) in place, so a root
+// that is still a link is then read with Readlink. Only the root is resolved:
+// every read beneath it still refuses links.
+func linkFreeToolchainDirectory(goroot string) (string, error) {
+	directory, err := pathutil.EvalCanonicalPath(goroot)
+	if err != nil {
+		return "", ErrIncomplete
+	}
+
+	for range maxToolchainLinks {
+		info, err := os.Lstat(directory)
+		if err != nil {
+			return "", ErrIncomplete
+		}
+
+		if info.IsDir() {
+			return directory, nil
+		}
+
+		target, err := os.Readlink(directory)
+		if err != nil {
+			return "", ErrIncomplete
+		}
+
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(filepath.Dir(directory), target)
+		}
+
+		directory = filepath.Clean(target)
+	}
+
+	return "", ErrIncomplete
 }
 
 func verifySourceCheckout(root, source string) error {
