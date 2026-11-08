@@ -297,6 +297,7 @@ func TestBuildCountsANestedLicenseSelectedAsEvidenceOnce(t *testing.T) {
 	payload, err := gonotices.Build(input)
 	require.NoError(t, err)
 	require.Equal(t, 1, strings.Count(string(payload.Text), "Copyright 2025 Nested Authors"))
+	require.NoError(t, gonotices.Write(input.Root, input.Target, payload))
 }
 
 func TestBuildCollectsSupplementalSelectedAncestorCopyingTerms(t *testing.T) {
