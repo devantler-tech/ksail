@@ -160,18 +160,29 @@ install_dir="$(cd -P "${install_dir}" && pwd -P)"
 if [ -L "${install_dir}/ksail" ] || { [ -e "${install_dir}/ksail" ] && [ ! -f "${install_dir}/ksail" ]; }; then
 	fail 'existing KSail destination is not a regular file'
 fi
+# Everyone who can run the installed binary must be able to read its notices.
+# Every retained notice path must grant at least the mode the installer creates
+# it with (0755 directories, 0644 files) to group and others; anything less is
+# refused with the repair, never silently reused.
+require_public_notice() {
+	ls -ld "$1" >"${tmp_dir}/notice-mode"
+	case "$2" in
+	0755) public_mode='^d...r.[xs]r.[xt]' ;;
+	*) public_mode='^-...r..r' ;;
+	esac
+	if ! awk -v want="${public_mode}" '{ exit $1 !~ want }' "${tmp_dir}/notice-mode"; then
+		fail "existing KSail notices must be readable by everyone; run: chmod $2 '$1'"
+	fi
+}
 notice_root="${install_dir}/.ksail-notices"
 if [ -L "${notice_root}" ] || { [ -e "${notice_root}" ] && [ ! -d "${notice_root}" ]; }; then
 	fail 'existing KSail notices root is not a directory'
 fi
 if [ ! -d "${notice_root}" ]; then mkdir -m 0755 "${notice_root}"; fi
-# Everyone who can run the installed binary must be able to read its notices,
-# so an existing root that hides them is refused rather than silently reused.
-ls -ld "${notice_root}" >"${tmp_dir}/notice-root-mode"
-if [ ! -w "${notice_root}" ] || [ ! -x "${notice_root}" ] ||
-	! awk '{ exit $1 !~ /^d...r.[xs]r.[xt]/ }' "${tmp_dir}/notice-root-mode"; then
-	fail "existing KSail notices root must be readable and searchable by everyone; run: chmod 0755 '${notice_root}'"
+if [ ! -w "${notice_root}" ] || [ ! -x "${notice_root}" ]; then
+	fail 'existing KSail notices root is not writable by this installer'
 fi
+require_public_notice "${notice_root}" 0755
 notice_dir="${notice_root}/${version}-${target}"
 if [ -L "${notice_dir}" ] || { [ -e "${notice_dir}" ] && [ ! -d "${notice_dir}" ]; }; then
 	fail 'existing KSail version notices are not an ordinary directory'
@@ -182,6 +193,7 @@ if [ -d "${notice_dir}" ]; then
 	if [ ! -r "${notice_dir}" ] || [ ! -x "${notice_dir}" ]; then
 		fail 'existing KSail version notices cannot be inspected completely'
 	fi
+	require_public_notice "${notice_dir}" 0755
 	for member in THIRD_PARTY_NOTICES.txt manifest.json release.txt; do
 		if [ -L "${notice_dir}/${member}" ] || [ ! -f "${notice_dir}/${member}" ]; then
 			fail 'existing KSail version notices are not regular files'
@@ -191,6 +203,7 @@ if [ -d "${notice_dir}" ]; then
 			! cmp -s "${tmp_dir}/GoNotices/${member}" "${notice_dir}/${member}"; then
 			fail 'existing KSail version notices conflict with the release'
 		fi
+		require_public_notice "${notice_dir}/${member}" 0644
 	done
 	for retained in "${notice_dir}"/* "${notice_dir}"/.[!.]* "${notice_dir}"/..?*; do
 		if [ ! -e "${retained}" ] && [ ! -L "${retained}" ]; then continue; fi

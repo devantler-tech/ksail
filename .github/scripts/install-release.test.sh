@@ -367,7 +367,8 @@ run_case() {
 		done
 		;;
 	identical-reinstall | retained-conflict | retained-symlink | retained-hardlink | \
-		retained-extra | retained-directory-link | retained-unreadable | reuse-copy-binary)
+		retained-extra | retained-directory-link | retained-unreadable | retained-private-dir | \
+		retained-private-file | reuse-copy-binary)
 		fault=''
 		run_installer >"${work}/first-output" 2>&1 || fail 'first install refused'
 		case "${test_case}" in
@@ -382,6 +383,8 @@ run_case() {
 			;;
 		retained-hardlink) ln "${notice_dir}/manifest.json" "${work}/retained-manifest" ;;
 		retained-extra) printf 'unexpected\n' >"${notice_dir}/.unexpected" ;;
+		retained-private-dir) chmod 0700 "${notice_dir}" ;;
+		retained-private-file) chmod 0600 "${notice_dir}/manifest.json" ;;
 		retained-unreadable)
 			chmod 0111 "${notice_dir}"
 			[[ ! -r "${notice_dir}" ]] || fail 'unreadable directory control requires a non-root test user'
@@ -404,6 +407,9 @@ run_case() {
 			if run_installer >"${work}/output" 2>&1; then fail 'unsafe retained bundle accepted'; fi
 			! grep -Fq 'Installed KSail' "${work}/output" || fail 'failed reuse emitted success'
 			[[ "$(ls -din "${install_dir}/ksail")" == "${binary_identity}" ]] || fail 'failed reuse replaced binary'
+			if [[ "${test_case}" == retained-private-* ]]; then
+				grep -Fq 'chmod ' "${work}/output" || fail "${test_case}: refusal does not name the repair"
+			fi
 		fi
 		[[ "$(ls -din "${notice_dir}" "${notice_dir}/THIRD_PARTY_NOTICES.txt" \
 			"${notice_dir}/manifest.json" "${notice_dir}/release.txt")" == "${retained_identity}" ]] ||
@@ -481,7 +487,7 @@ for test_case in valid latest no-install identical-reinstall empty-notices empty
 	signal-after-rename-HUP signal-after-rename-INT \
 	signal-after-rename-TERM missing-notices missing-manifest missing-binding stale-version wrong-target \
 	retained-conflict retained-symlink retained-hardlink retained-extra retained-directory-link reuse-copy-binary \
-	retained-unreadable \
+	retained-unreadable retained-private-dir retained-private-file \
 	race-empty race-conflict race-symlink race-early-directory \
 	zero-source malformed-source notices-hash manifest-hash hash-read-failure extra-line missing-line duplicate-line \
 	swapped-lines \

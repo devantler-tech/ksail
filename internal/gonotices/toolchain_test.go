@@ -229,5 +229,6 @@ func TestHomebrewKegVersionAcceptsOnlyNumericFormulaRevisions(t *testing.T) {
 		"1.27.31":   false,
 	} {
 		require.Equal(t, want, gonotices.HomebrewKegVersion(keg, "go1.27.3"), keg)
+		require.Equal(t, want, gonotices.HomebrewKegVersion(keg, "1.27.3"), "unprefixed "+keg)
 	}
 }
