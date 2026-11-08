@@ -569,6 +569,20 @@ jobs:
         shell: bash
         run: go run .github/scripts/go-notices.go stage desktop-windows-amd64 v0.0.0 "$(git rev-parse HEAD)"
 
+      # Package a placeholder binary with the runner's own 7-Zip, using the
+      # release job's archive commands, then verify the archive the same way.
+      - name: 📦 Package and verify a Windows desktop archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p desktop
+          printf 'placeholder binary\n' >desktop/ksail-desktop.exe
+          artifact=ksail-desktop_0.0.0_windows_amd64.zip
+          7z a "$artifact" "./desktop/ksail-desktop.exe" LICENSE
+          archive_path="$PWD/$artifact"
+          (cd .cache/go-notices/desktop-windows-amd64 && 7z a "$archive_path" GoNotices)
+          go run .github/scripts/go-notices.go verify desktop-windows-amd64 v0.0.0 "$(git rev-parse HEAD)"
+
   eks-smoke-scripts:
     name: 🧹 Validate EKS Smoke Teardown
     runs-on: ubuntu-latest

@@ -95,12 +95,17 @@ esac
 STUB
 	# 7z is native on the Windows runner. This adapter checks its exact member arguments and
 	# uses the host zip only to inspect this workflow's member selection without installing 7z.
+	# Like 7-Zip, it stores a file named on the command line under its base name (zip -j) and
+	# keeps the relative paths beneath a named directory (zip -r).
 	cat >"$work/bin/7z" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
 [[ "$1" == a ]] || exit 71
 archive="$2"; shift 2
-[[ ( $# == 2 && "$1" == ./desktop/ksail-desktop.exe && "$2" == LICENSE ) || ( $# == 1 && "$1" == GoNotices ) ]] || exit 72
+if [[ $# == 2 && "$1" == ./desktop/ksail-desktop.exe && "$2" == LICENSE ]]; then
+	exec /usr/bin/zip -qj "$archive" "$@"
+fi
+[[ $# == 1 && "$1" == GoNotices ]] || exit 72
 exec /usr/bin/zip -qr "$archive" "$@"
 STUB
 	chmod +x "$work/bin/"*
@@ -173,7 +178,7 @@ package_tests() {
 				unzip -p "$dir/$archive" LICENSE >"$dir/license-actual"
 			fi
 			cmp "$dir/LICENSE" "$dir/license-actual" || fail "$os changed project LICENSE bytes"
-			if [[ "$os" == linux ]]; then grep -qx ksail-desktop "$dir/members"; else grep -qx desktop/ksail-desktop.exe "$dir/members"; fi
+			if [[ "$os" == linux ]]; then grep -qx ksail-desktop "$dir/members"; else grep -qx ksail-desktop.exe "$dir/members"; fi
 		done
 	done
 	printf 'PASS: Linux/Windows archive members and stage/verify refusals\n'

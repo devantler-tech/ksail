@@ -447,7 +447,7 @@ func recipientArchiveFixtures() []recipientArchive {
 		},
 		{
 			"desktop-windows-amd64", "ksail-desktop_7.206.99_windows_amd64.zip", "zip",
-			"desktop/ksail-desktop.exe", "GoNotices/",
+			"ksail-desktop.exe", "GoNotices/",
 		},
 	}
 }
