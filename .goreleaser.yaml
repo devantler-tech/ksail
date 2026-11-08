@@ -3,6 +3,7 @@ version: 2
 before:
   hooks:
     - go mod tidy
+    - go run .github/scripts/go-notices.go stage-cli {{ .Tag }} {{ .FullCommit }}
     # Build the web UI and stage it into pkg/webui/dist so it is embedded in the release binary
     # (see pkg/webui/embed.go) and served by both the operator and `ksail open web`/`ksail open desktop` — same origin
     # as /api, no reverse proxy. Built assets are gitignored, so this keeps the working tree clean.
@@ -36,6 +37,16 @@ archives:
     format_overrides:
       - goos: windows
         formats: ["zip"]
+    files:
+      - license*
+      - LICENSE*
+      - readme*
+      - README*
+      - changelog*
+      - CHANGELOG*
+      - src: ".cache/go-notices/cli-{{ .Os }}-{{ .Arch }}/GoNotices/*"
+        dst: GoNotices
+        strip_parent: true
 
 homebrew_casks:
   - name: ksail
