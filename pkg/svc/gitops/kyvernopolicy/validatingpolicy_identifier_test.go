@@ -34,17 +34,27 @@ func configMapWithData(namespace string, data map[string]any) map[string]any {
 	return document
 }
 
-// A field, map key or message that merely contains the word http is not the CEL
-// http library. The policy reading it must be evaluated offline like any other:
-// a compliant document passes and a violating one is blocked, not reported as
-// unsupported. An Ingress reads its paths through exactly such a field.
-func TestCELEvaluate_HTTPWordOutsideTheLibraryIsEvaluated(t *testing.T) {
-	t.Parallel()
+// evaluatedCase is a ConfigMap validation that reads data[key] and rejects the
+// value blocked ("blocked" when empty).
+type evaluatedCase struct {
+	validation string
+	key        string
+	blocked    string
+}
 
-	cases := map[string]struct {
-		validation string
-		key        string
-	}{
+// httpWordCases mention the word http only as a field, map key, string
+// literal, local variable or static message.
+func httpWordCases() map[string]evaluatedCase {
+	return map[string]evaluatedCase{
+		"comprehension variable named http": {
+			validation: `expression: "[object.?data.?mode.orValue('')].all(http, http != 'blocked')"`,
+			key:        "mode",
+		},
+		"string literal naming a library call": {
+			validation: `expression: "object.?data.?mode.orValue('') != 'http.Get'"`,
+			key:        "mode",
+			blocked:    "http.Get",
+		},
 		"optional field selection": {
 			validation: `expression: "object.?data.?http.orValue('') != 'blocked'"`,
 			key:        "http",
@@ -69,8 +79,17 @@ func TestCELEvaluate_HTTPWordOutsideTheLibraryIsEvaluated(t *testing.T) {
 			key: "mode",
 		},
 	}
+}
 
-	for name, testCase := range cases {
+// A field, map key, string literal, local variable or message that merely
+// contains the word http is not the CEL http library. The policy reading it must
+// be evaluated offline like any other: a compliant document passes and a
+// violating one is blocked, not reported as unsupported. An Ingress reads its
+// paths through exactly such a field.
+func TestCELEvaluate_HTTPWordOutsideTheLibraryIsEvaluated(t *testing.T) {
+	t.Parallel()
+
+	for name, testCase := range httpWordCases() {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
@@ -85,9 +104,14 @@ func TestCELEvaluate_HTTPWordOutsideTheLibraryIsEvaluated(t *testing.T) {
 			require.NoError(t, err)
 			assert.Empty(t, allowed)
 
+			blockedValue := testCase.blocked
+			if blockedValue == "" {
+				blockedValue = "blocked"
+			}
+
 			blocked, err := engine.Evaluate(
 				t.Context(),
-				configMapWithData("default", map[string]any{testCase.key: "blocked"}),
+				configMapWithData("default", map[string]any{testCase.key: blockedValue}),
 			)
 			require.NoError(t, err)
 			require.Len(t, blocked, 1)
@@ -118,6 +142,14 @@ func TestCELEvaluate_HTTPLibraryAnywhereIsNeverEvaluated(t *testing.T) {
 		"absolute identifier": `expression: ".http.Get('http://127.0.0.1:1/verdict').allowed == true"`,
 		"absolute identifier the check cannot parse": `expression: ` +
 			`".http.Get('https://127.0.0.1:1/verdict') =="`,
+		// A comprehension's range is evaluated outside the scope it opens.
+		"library in a comprehension range": `expression: ` +
+			`"[http.Get('http://127.0.0.1:1/verdict')].all(v, v.allowed == true)"`,
+		"library in a comprehension body": `expression: ` +
+			`"['a'].all(v, http.Get('http://127.0.0.1:1/verdict').allowed == true)"`,
+		// A local http shadows only the plain name, never the root-scoped one.
+		"root-scoped library under a local http": `expression: ` +
+			`"['a'].all(http, .http.Get('http://127.0.0.1:1/verdict').allowed == true)"`,
 	}
 
 	for name, validation := range cases {
@@ -189,4 +221,37 @@ func TestCELEvaluate_AbsoluteNamespaceObjectReadsTheNamespace(t *testing.T) {
 		violations[0].Message,
 		`namespace "prod" is not among the rendered documents`,
 	)
+}
+
+// With the namespace rendered, a policy reading the root-scoped namespaceObject
+// is evaluated against it: a matching team passes, a mismatched one is blocked.
+func TestCELEvaluate_AbsoluteNamespaceObjectWithRenderedNamespaceIsEvaluated(t *testing.T) {
+	t.Parallel()
+
+	engine := celEngine(
+		t,
+		[]map[string]any{namespace("prod", map[string]any{"team": "platform"})},
+		validatingPolicy(t, sprintf(
+			configMapRule,
+			"team-matches-namespace",
+			`expression: ".namespaceObject.metadata.labels.team == object.metadata.labels.team"`,
+		)),
+	)
+
+	matching, err := engine.Evaluate(
+		t.Context(),
+		configMap("prod", map[string]any{"team": "platform"}),
+	)
+	require.NoError(t, err)
+	assert.Empty(t, matching)
+
+	mismatched, err := engine.Evaluate(
+		t.Context(),
+		configMap("prod", map[string]any{"team": "other"}),
+	)
+	require.NoError(t, err)
+	require.Len(t, mismatched, 1)
+	assert.False(t, mismatched[0].Unsupported, mismatched[0].Message)
+	assert.False(t, mismatched[0].Error, mismatched[0].Message)
+	assert.True(t, mismatched[0].Blocking)
 }

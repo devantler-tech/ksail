@@ -116,19 +116,134 @@ func referencesIdentifier(
 			continue
 		}
 
-		references := celast.MatchDescendants(
-			celast.NavigateAST(parsed.NativeRep()),
-			func(expr celast.NavigableExpr) bool {
-				return expr.Kind() == celast.IdentKind &&
-					strings.TrimPrefix(expr.AsIdent(), ".") == name
-			},
-		)
-		if len(references) > 0 {
+		if usesIdentifier(parsed.NativeRep().Expr(), name, false) {
 			return true
 		}
 	}
 
 	return false
+}
+
+// usesIdentifier reports whether expr refers to the root-scope identifier name.
+// shadowed is set inside a comprehension that binds a local variable of that
+// name (`list.all(http, http != 'x')`): there the plain name is the local
+// variable, while `.http` still names the root one. A comprehension's range and
+// initial accumulator are evaluated outside the scope it opens. An expression
+// kind this function does not know counts as a reference.
+func usesIdentifier(expr celast.Expr, name string, shadowed bool) bool {
+	switch expr.Kind() {
+	case celast.IdentKind:
+		return identRefersTo(expr.AsIdent(), name, shadowed)
+	case celast.SelectKind:
+		return usesIdentifier(expr.AsSelect().Operand(), name, shadowed)
+	case celast.CallKind:
+		return callUsesIdentifier(expr.AsCall(), name, shadowed)
+	case celast.ListKind, celast.MapKind, celast.StructKind:
+		return literalUsesIdentifier(expr, name, shadowed)
+	case celast.ComprehensionKind:
+		return comprehensionUsesIdentifier(expr.AsComprehension(), name, shadowed)
+	case celast.LiteralKind, celast.UnspecifiedExprKind:
+		return false
+	default:
+		return true
+	}
+}
+
+// identRefersTo reports whether the identifier ident is the root-scope name: a
+// leading dot always names the root scope, a plain name only where no local
+// variable shadows it.
+func identRefersTo(ident, name string, shadowed bool) bool {
+	if root, found := strings.CutPrefix(ident, "."); found {
+		return root == name
+	}
+
+	return ident == name && !shadowed
+}
+
+// literalUsesIdentifier checks the elements of a list, map or struct literal.
+func literalUsesIdentifier(expr celast.Expr, name string, shadowed bool) bool {
+	if expr.Kind() == celast.ListKind {
+		return anyUsesIdentifier(expr.AsList().Elements(), name, shadowed)
+	}
+
+	if expr.Kind() == celast.MapKind {
+		return entriesUseIdentifier(expr.AsMap().Entries(), name, shadowed)
+	}
+
+	return entriesUseIdentifier(expr.AsStruct().Fields(), name, shadowed)
+}
+
+func callUsesIdentifier(call celast.CallExpr, name string, shadowed bool) bool {
+	if call.IsMemberFunction() && usesIdentifier(call.Target(), name, shadowed) {
+		return true
+	}
+
+	return anyUsesIdentifier(call.Args(), name, shadowed)
+}
+
+func anyUsesIdentifier(exprs []celast.Expr, name string, shadowed bool) bool {
+	for _, expr := range exprs {
+		if usesIdentifier(expr, name, shadowed) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// entriesUseIdentifier checks the keys and values of map entries and the
+// values of struct fields. Any other entry kind counts as a reference.
+func entriesUseIdentifier(entries []celast.EntryExpr, name string, shadowed bool) bool {
+	for _, entry := range entries {
+		if entry.Kind() == celast.MapEntryKind {
+			mapEntry := entry.AsMapEntry()
+			if usesIdentifier(mapEntry.Key(), name, shadowed) ||
+				usesIdentifier(mapEntry.Value(), name, shadowed) {
+				return true
+			}
+
+			continue
+		}
+
+		if entry.Kind() == celast.StructFieldKind {
+			if usesIdentifier(entry.AsStructField().Value(), name, shadowed) {
+				return true
+			}
+
+			continue
+		}
+
+		return true
+	}
+
+	return false
+}
+
+// comprehensionUsesIdentifier checks a comprehension, every CEL macro such as
+// all, exists, map and filter included. Its iteration and accumulator
+// variables are in scope in the loop condition and step; only the accumulator
+// is in scope in the result.
+func comprehensionUsesIdentifier(
+	comprehension celast.ComprehensionExpr,
+	name string,
+	shadowed bool,
+) bool {
+	if usesIdentifier(comprehension.IterRange(), name, shadowed) ||
+		usesIdentifier(comprehension.AccuInit(), name, shadowed) {
+		return true
+	}
+
+	loopShadowed := shadowed || comprehension.IterVar() == name ||
+		(comprehension.HasIterVar2() && comprehension.IterVar2() == name) ||
+		comprehension.AccuVar() == name
+	if usesIdentifier(comprehension.LoopCondition(), name, loopShadowed) ||
+		usesIdentifier(comprehension.LoopStep(), name, loopShadowed) {
+		return true
+	}
+
+	return usesIdentifier(
+		comprehension.Result(), name, shadowed || comprehension.AccuVar() == name,
+	)
 }
 
 // installOffline makes Kyverno's process-wide CEL library context the offline
