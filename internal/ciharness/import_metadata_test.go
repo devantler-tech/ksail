@@ -65,8 +65,10 @@ func importMetadataCommand(t *testing.T, mode string) *exec.Cmd {
 	// Take the identity from the CI matrix so the script guard and the system-test
 	// host it runs on cannot drift apart.
 	cluster := nestedKindRoutingScenario()["image-export-cluster-name"]
-	require.NotEmpty(t, cluster)
+	require.Regexp(t, `^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`, cluster,
+		"the matrix cluster name must be a plain DNS label before it reaches the script")
 
+	//nolint:gosec // Repository-owned script; its only variable inputs are the label checked above.
 	command := exec.CommandContext(t.Context(), "bash",
 		"../../.github/actions/ksail-test-image-export-import/assert-import-metadata.sh",
 		cluster+"-control-plane", cluster+"-worker")
