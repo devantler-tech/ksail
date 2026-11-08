@@ -2742,9 +2742,9 @@ Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756
 Files: LICENSE
 Material: m69ec84c626c7c3bc (copyright-header), SHA-256 f140526398d825cf9461e449e4d96369bd7ec8df7f2bb34493e7a45d198e93ea
 
-Component: github.com/cilium/cilium@v1.20.3
-Source: https://proxy.golang.org/github.com/cilium/cilium/@v/v1.20.3.zip
-Selected Go source checksum: h1:Lw1jEDHuuc7cxxa3H+79bIJ12xW16rjNCtfcVpYDbxg=
+Component: github.com/cilium/cilium@v1.20.4
+Source: https://proxy.golang.org/github.com/cilium/cilium/@v/v1.20.4.zip
+Selected Go source checksum: h1:v2RVMtf62H8KkJS/Ju0zQkItebWADjtOczF9tKDkWQo=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
