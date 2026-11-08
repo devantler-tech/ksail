@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/pathutil"
 )
 
 const (
@@ -198,9 +200,16 @@ const maxToolchainLinks = 8
 // linkFreeToolchainDirectory resolves a GOROOT that is itself a link to the
 // directory it names. actions/setup-go on Windows installs Go on D: and links
 // C:\hostedtoolcache\...\x64 to it with a junction, and `go env GOROOT` reports
-// the linked path. Only the root is resolved: every read beneath it still
-// refuses links.
-func linkFreeToolchainDirectory(directory string) (string, error) {
+// the linked path. Symlinks anywhere in the path are canonicalized first;
+// EvalSymlinks leaves Windows mount points (junctions) in place, so a root
+// that is still a link is then read with Readlink. Only the root is resolved:
+// every read beneath it still refuses links.
+func linkFreeToolchainDirectory(goroot string) (string, error) {
+	directory, err := pathutil.EvalCanonicalPath(goroot)
+	if err != nil {
+		return "", ErrIncomplete
+	}
+
 	for range maxToolchainLinks {
 		info, err := os.Lstat(directory)
 		if err != nil {
