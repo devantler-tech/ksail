@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 
+	"cel.dev/cel-go/cel"
+	celast "cel.dev/cel-go/common/ast"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	policieskyvernoio "github.com/kyverno/api/api/policies.kyverno.io"
 	policiesv1beta1 "github.com/kyverno/api/api/policies.kyverno.io/v1beta1"
@@ -55,19 +57,76 @@ var errOffline = errors.New(
 	"ksail evaluates Kyverno policies offline and cannot perform this lookup",
 )
 
-// httpReference matches the CEL http library identifier. A policy whose
-// expressions mention it is never evaluated: the library makes real requests
-// for any URL without an exact mock, and validation must not reach the
-// network. The match is deliberately broad; a false positive only turns a
-// policy into a warning.
-var httpReference = regexp.MustCompile(`(^|[^A-Za-z0-9_.])http([^A-Za-z0-9_]|$)`)
+// httpLibrary is the CEL variable through which Kyverno's http library is
+// called (`http.Get(…)`, `http.Post(…)`, `http.Client(…)`). A policy whose
+// expressions refer to it is never evaluated: the library makes real requests
+// for any URL without an exact mock, and validation must not reach the network.
+const httpLibrary = "http"
 
-// namespaceObjectReference matches the CEL namespaceObject variable. Offline it
-// is only known for namespaces among the rendered documents. The match is broad
-// for the same reason as httpReference.
-var namespaceObjectReference = regexp.MustCompile(
-	`(^|[^A-Za-z0-9_.])namespaceObject([^A-Za-z0-9_]|$)`,
+// namespaceObjectVariable is the CEL variable holding the document's
+// Namespace. Offline it is only known for namespaces among the rendered
+// documents.
+const namespaceObjectVariable = "namespaceObject"
+
+// httpReference and namespaceObjectReference match those identifiers as words
+// in a string that does not parse as CEL here. Kyverno may parse it with
+// options this package does not share, so the match is deliberately broad: a
+// false positive only turns a policy into a warning, while a miss would let an
+// http call run.
+var (
+	httpReference            = regexp.MustCompile(`(^|[^A-Za-z0-9_.])http([^A-Za-z0-9_]|$)`)
+	namespaceObjectReference = regexp.MustCompile(
+		`(^|[^A-Za-z0-9_.])namespaceObject([^A-Za-z0-9_]|$)`,
+	)
 )
+
+// newIdentifierParser returns a CEL environment that parses expressions as
+// Kyverno policies write them, optional syntax and escaped identifiers
+// included. It is only used to parse, never to type-check or evaluate.
+func newIdentifierParser() (*cel.Env, error) {
+	env, err := cel.NewEnv(cel.OptionalTypes(), cel.EnableIdentifierEscapeSyntax())
+	if err != nil {
+		return nil, fmt.Errorf("build CEL parser: %w", err)
+	}
+
+	return env, nil
+}
+
+// referencesIdentifier reports whether any string in strs refers to the CEL
+// identifier name. A string that parses as CEL refers to it only when its
+// syntax tree holds that identifier, so a field of the same name selected from
+// another value (`object.?spec.?http`), a map key or a string literal does not
+// count. A string that does not parse is matched against fallback instead, so
+// an expression that may use the identifier is never taken not to.
+func referencesIdentifier(
+	parser *cel.Env,
+	strs []string,
+	name string,
+	fallback *regexp.Regexp,
+) bool {
+	for _, str := range strs {
+		parsed, issues := parser.Parse(str)
+		if issues != nil && issues.Err() != nil {
+			if fallback.MatchString(str) {
+				return true
+			}
+
+			continue
+		}
+
+		references := celast.MatchDescendants(
+			celast.NavigateAST(parsed.NativeRep()),
+			func(expr celast.NavigableExpr) bool {
+				return expr.Kind() == celast.IdentKind && expr.AsIdent() == name
+			},
+		)
+		if len(references) > 0 {
+			return true
+		}
+	}
+
+	return false
+}
 
 // installOffline makes Kyverno's process-wide CEL library context the offline
 // one. The vpol compiler binds its resource, image-data and global-context
@@ -155,8 +214,18 @@ func NewCELEngine(
 		return namespaceForMatching(name)
 	}
 
-	compiler := vpolcompiler.NewCompiler()
+	parser, err := newIdentifierParser()
+	if err != nil {
+		return nil, err
+	}
+
 	matcher := matching.NewMatcher()
+	policyCompiler := celPolicyCompiler{
+		parser:   parser,
+		compiler: vpolcompiler.NewCompiler(),
+		resolve:  resolve,
+		matcher:  matcher,
+	}
 	compiled := make([]compiledCELPolicy, 0, len(policies))
 
 	for _, policy := range policies {
@@ -166,38 +235,59 @@ func NewCELEngine(
 			continue
 		}
 
-		strs, err := specStrings(spec)
+		entry, err := policyCompiler.compile(policy)
 		if err != nil {
-			return nil, fmt.Errorf("inspect %s: %w", celPolicyName(policy), err)
+			return nil, err
 		}
 
-		if slices.ContainsFunc(strs, httpReference.MatchString) {
-			compiled = append(compiled, compiledCELPolicy{
-				policy: policy,
-				unsupported: "the policy uses the CEL http library, which makes network " +
-					"requests, so it is not evaluated offline",
-			})
-
-			continue
-		}
-
-		provider, err := vpolengine.NewProvider(
-			compiler,
-			[]policiesv1beta1.ValidatingPolicyLike{policy},
-			nil,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("compile %s: %w", celPolicyName(policy), err)
-		}
-
-		compiled = append(compiled, compiledCELPolicy{
-			policy:         policy,
-			engine:         vpolengine.NewEngine(provider, resolve, matcher),
-			readsNamespace: slices.ContainsFunc(strs, namespaceObjectReference.MatchString),
-		})
+		compiled = append(compiled, entry)
 	}
 
 	return &CELEngine{policies: compiled, namespaces: known, matcher: matcher}, nil
+}
+
+// celPolicyCompiler prepares one policy at a time for a CELEngine.
+type celPolicyCompiler struct {
+	parser   *cel.Env
+	compiler vpolcompiler.Compiler
+	resolve  celengine.NamespaceResolver
+	matcher  matching.Matcher
+}
+
+// compile returns policy ready to evaluate, or with the reason it cannot be
+// evaluated offline. A policy that uses the http library is never compiled.
+func (c celPolicyCompiler) compile(
+	policy policiesv1beta1.ValidatingPolicyLike,
+) (compiledCELPolicy, error) {
+	strs, err := specStrings(policy.GetValidatingPolicySpec())
+	if err != nil {
+		return compiledCELPolicy{}, fmt.Errorf("inspect %s: %w", celPolicyName(policy), err)
+	}
+
+	if referencesIdentifier(c.parser, strs, httpLibrary, httpReference) {
+		return compiledCELPolicy{
+			policy: policy,
+			unsupported: "the policy uses the CEL http library, which makes network " +
+				"requests, so it is not evaluated offline",
+		}, nil
+	}
+
+	provider, err := vpolengine.NewProvider(
+		c.compiler,
+		[]policiesv1beta1.ValidatingPolicyLike{policy},
+		nil,
+	)
+	if err != nil {
+		return compiledCELPolicy{}, fmt.Errorf("compile %s: %w", celPolicyName(policy), err)
+	}
+
+	return compiledCELPolicy{
+		policy: policy,
+		engine: vpolengine.NewEngine(provider, c.resolve, c.matcher),
+		readsNamespace: referencesIdentifier(
+			c.parser, strs, namespaceObjectVariable, namespaceObjectReference,
+		),
+	}, nil
 }
 
 // renderedNamespaces indexes the Namespace documents among docs.
@@ -485,8 +575,9 @@ func (e *CELEngine) appliesIgnoringNamespace(
 	return matches
 }
 
-// specStrings returns every string in spec, which is where its CEL
-// expressions live.
+// specStrings returns every string in spec that may hold a CEL expression: all
+// of them except a validation's static message, which is shown as written and
+// never evaluated.
 func specStrings(spec *policiesv1beta1.ValidatingPolicySpec) ([]string, error) {
 	encoded, err := json.Marshal(spec)
 	if err != nil {
@@ -512,7 +603,11 @@ func collectStrings(value any, out *[]string) {
 	case string:
 		*out = append(*out, typed)
 	case map[string]any:
-		for _, v := range typed {
+		for key, v := range typed {
+			if _, static := v.(string); static && key == "message" {
+				continue
+			}
+
 			collectStrings(v, out)
 		}
 	case []any:
