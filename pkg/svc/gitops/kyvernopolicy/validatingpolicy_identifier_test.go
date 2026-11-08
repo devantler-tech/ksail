@@ -92,6 +92,7 @@ func TestCELEvaluate_HTTPWordOutsideTheLibraryIsEvaluated(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, blocked, 1)
 			assert.False(t, blocked[0].Unsupported, blocked[0].Message)
+			assert.False(t, blocked[0].Error, blocked[0].Message)
 			assert.True(t, blocked[0].Blocking)
 		})
 	}
@@ -112,6 +113,11 @@ func TestCELEvaluate_HTTPLibraryAnywhereIsNeverEvaluated(t *testing.T) {
 		"message expression": `expression: "false"` +
 			"\n    messageExpression: \"http.Get('http://127.0.0.1:1/reason').reason\"",
 		"expression the check cannot parse": `expression: "http.Get('http://127.0.0.1:1/verdict') =="`,
+		// A leading dot names the identifier in the root scope; it is the same
+		// variable.
+		"absolute identifier": `expression: ".http.Get('http://127.0.0.1:1/verdict').allowed == true"`,
+		"absolute identifier the check cannot parse": `expression: ` +
+			`".http.Get('https://127.0.0.1:1/verdict') =="`,
 	}
 
 	for name, validation := range cases {
@@ -154,5 +160,33 @@ func TestCELEvaluate_NamespaceObjectFieldIsNotTheNamespace(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, blocked, 1)
 	assert.False(t, blocked[0].Unsupported, blocked[0].Message)
+	assert.False(t, blocked[0].Error, blocked[0].Message)
 	assert.True(t, blocked[0].Blocking)
+}
+
+// A leading dot names namespaceObject in the root scope, so the policy still
+// reads the namespace: with that namespace missing from the rendered documents,
+// it is reported as not evaluable offline instead of guessed.
+func TestCELEvaluate_AbsoluteNamespaceObjectReadsTheNamespace(t *testing.T) {
+	t.Parallel()
+
+	engine := celEngine(t, nil, validatingPolicy(t, sprintf(
+		configMapRule,
+		"team-matches-namespace",
+		`expression: ".namespaceObject.metadata.labels.team == object.metadata.labels.team"`,
+	)))
+
+	violations, err := engine.Evaluate(
+		t.Context(),
+		configMap("prod", map[string]any{"team": "platform"}),
+	)
+	require.NoError(t, err)
+	require.Len(t, violations, 1)
+	assert.True(t, violations[0].Unsupported, violations[0].Message)
+	assert.False(t, violations[0].Blocking)
+	assert.Contains(
+		t,
+		violations[0].Message,
+		`namespace "prod" is not among the rendered documents`,
+	)
 }

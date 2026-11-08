@@ -69,14 +69,15 @@ const httpLibrary = "http"
 const namespaceObjectVariable = "namespaceObject"
 
 // httpReference and namespaceObjectReference match those identifiers as words
-// in a string that does not parse as CEL here. Kyverno may parse it with
-// options this package does not share, so the match is deliberately broad: a
-// false positive only turns a policy into a warning, while a miss would let an
-// http call run.
+// in a string that does not parse as CEL here, preceded by a dot or not: a
+// leading dot (`.http`) names the same root-scope variable. Kyverno may parse
+// the string with options this package does not share, so the match is
+// deliberately broad and also takes a field of that name: a false positive only
+// turns a policy into a warning, while a miss would let an http call run.
 var (
-	httpReference            = regexp.MustCompile(`(^|[^A-Za-z0-9_.])http([^A-Za-z0-9_]|$)`)
+	httpReference            = regexp.MustCompile(`(^|[^A-Za-z0-9_])http([^A-Za-z0-9_]|$)`)
 	namespaceObjectReference = regexp.MustCompile(
-		`(^|[^A-Za-z0-9_.])namespaceObject([^A-Za-z0-9_]|$)`,
+		`(^|[^A-Za-z0-9_])namespaceObject([^A-Za-z0-9_]|$)`,
 	)
 )
 
@@ -94,10 +95,11 @@ func newIdentifierParser() (*cel.Env, error) {
 
 // referencesIdentifier reports whether any string in strs refers to the CEL
 // identifier name. A string that parses as CEL refers to it only when its
-// syntax tree holds that identifier, so a field of the same name selected from
-// another value (`object.?spec.?http`), a map key or a string literal does not
-// count. A string that does not parse is matched against fallback instead, so
-// an expression that may use the identifier is never taken not to.
+// syntax tree holds that identifier, written plainly or with the leading dot
+// that names the root scope (`.http`), so a field of the same name selected
+// from another value (`object.?spec.?http`), a map key or a string literal does
+// not count. A string that does not parse is matched against fallback instead,
+// so an expression that may use the identifier is never taken not to.
 func referencesIdentifier(
 	parser *cel.Env,
 	strs []string,
@@ -117,7 +119,8 @@ func referencesIdentifier(
 		references := celast.MatchDescendants(
 			celast.NavigateAST(parsed.NativeRep()),
 			func(expr celast.NavigableExpr) bool {
-				return expr.Kind() == celast.IdentKind && expr.AsIdent() == name
+				return expr.Kind() == celast.IdentKind &&
+					strings.TrimPrefix(expr.AsIdent(), ".") == name
 			},
 		)
 		if len(references) > 0 {
