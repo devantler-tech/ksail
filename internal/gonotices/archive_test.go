@@ -198,6 +198,18 @@ func recipientWindowsAliases() []recipientMutation {
 				recipientEntry{"GoNotices /manifest.json", []byte("replacement"), 0o644},
 			)
 		}},
+		{"reserved device leaf before required files", func(v []recipientEntry) []recipientEntry {
+			return append([]recipientEntry{{"CON.txt", []byte("extra"), 0o644}}, v...)
+		}},
+		{"reserved device parent before required files", func(v []recipientEntry) []recipientEntry {
+			return append([]recipientEntry{{"lpt1/extra.txt", []byte("extra"), 0o644}}, v...)
+		}},
+		{
+			"reserved superscript device before required files",
+			func(v []recipientEntry) []recipientEntry {
+				return append([]recipientEntry{{"Com\u00b9.tar.gz", []byte("extra"), 0o644}}, v...)
+			},
+		},
 	}...)
 }
 

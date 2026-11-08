@@ -199,7 +199,7 @@ func toolchainLicense(selected Toolchain) ([]byte, string, error) {
 	// package while keeping VERSION and source under libexec.
 	parent := filepath.Dir(selected.Directory)
 	if filepath.Base(selected.Directory) != "libexec" ||
-		!homebrewKegVersion(filepath.Base(parent), selected.Version) ||
+		!HomebrewKegVersion(filepath.Base(parent), selected.Version) ||
 		filepath.Clean(selected.LicenseFile) != filepath.Join(parent, primaryLicenseFilename) {
 		return nil, "", ErrIncomplete
 	}
@@ -209,10 +209,10 @@ func toolchainLicense(selected Toolchain) ([]byte, string, error) {
 	return data, primaryLicenseFilename, readErr
 }
 
-// homebrewKegVersion accepts the keg directory Homebrew installs a Go version
+// HomebrewKegVersion accepts the keg directory Homebrew installs a Go version
 // into: the exact version, or that version with a formula revision such as
 // "1.27.3_1". Any other spelling is a different installation.
-func homebrewKegVersion(keg, version string) bool {
+func HomebrewKegVersion(keg, version string) bool {
 	want := strings.TrimPrefix(version, "go")
 	if keg == want {
 		return true

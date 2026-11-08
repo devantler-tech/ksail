@@ -295,6 +295,7 @@ run_case() {
 		mv "${install_dir}/.ksail-notices" "${work}/notice-outside"
 		ln -s "${work}/notice-outside" "${install_dir}/.ksail-notices"
 		;;
+	notices-root-private) chmod 0700 "${install_dir}/.ksail-notices" ;;
 	binary-directory)
 		rm "${install_dir}/ksail"
 		mkdir "${install_dir}/ksail"
@@ -438,6 +439,9 @@ run_case() {
 	*)
 		if run_installer >"${work}/output" 2>&1; then fail "${test_case}: unsafe or incomplete installation accepted"; fi
 		! grep -Fq 'Installed KSail' "${work}/output" || fail "${test_case}: false success"
+		if [[ "${test_case}" == notices-root-private ]]; then
+			grep -Fq "chmod 0755" "${work}/output" || fail 'private notices root refusal does not name the repair'
+		fi
 		if [[ "${test_case}" == missing-notices ]]; then
 			grep -Fq 'GoNotices/THIRD_PARTY_NOTICES.txt' "${work}/output" ||
 				fail 'old release refusal does not identify required GoNotices member'
@@ -483,7 +487,7 @@ for test_case in valid latest no-install identical-reinstall empty-notices empty
 	swapped-lines \
 	missing-final-lf duplicate-binary duplicate-notices duplicate-manifest duplicate-binding traversal absolute \
 	symlink-binary symlink-notices symlink-manifest symlink-binding hardlink-manifest directory-manifest \
-	copy-binary copy-notices final-rename reused-directory unwritable-prefix notices-root-symlink binary-directory \
+	copy-binary copy-notices final-rename reused-directory unwritable-prefix notices-root-symlink notices-root-private binary-directory \
 	archive-checksum unsupported-architecture malformed-version; do
 	if "${BASH}" "$0" --case "${test_case}"; then
 		printf 'PASS: %s\n' "${test_case}"

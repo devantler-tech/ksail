@@ -13,6 +13,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/pathutil"
 )
@@ -295,16 +296,41 @@ func windowsInvalidNameRune(char rune) bool {
 	return char < ' ' || strings.ContainsRune(`\:<>"|?*`, char)
 }
 
-// Windows shell extraction does not preserve trailing dots or spaces. Refuse
-// those components instead of permitting a second spelling of required material.
+// Windows shell extraction does not preserve trailing dots or spaces, and it
+// cannot create a file or directory named after a reserved device. Refuse those
+// components instead of permitting a second spelling, or an unextractable
+// member, ahead of required material.
 func portableArchiveComponents(name string) bool {
 	for component := range strings.SplitSeq(name, "/") {
-		if strings.TrimRight(component, " .") != component {
+		if strings.TrimRight(component, " .") != component || windowsReservedName(component) {
 			return false
 		}
 	}
 
 	return true
+}
+
+// windowsReservedName reports a component Windows maps to a device, such as
+// "CON", "nul.txt" or "COM1.tar.gz": the part before the first dot, without
+// trailing spaces, matched case-insensitively.
+func windowsReservedName(component string) bool {
+	base, _, _ := strings.Cut(component, ".")
+	base = strings.ToUpper(strings.TrimRight(base, " "))
+
+	switch base {
+	case "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$":
+		return true
+	}
+
+	for _, prefix := range []string{"COM", "LPT"} {
+		suffix, found := strings.CutPrefix(base, prefix)
+		if found && utf8.RuneCountInString(suffix) == 1 &&
+			strings.ContainsAny(suffix, "0123456789\u00b9\u00b2\u00b3") {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (state *archiveRecipientState) registerName(name string, mode fs.FileMode) error {

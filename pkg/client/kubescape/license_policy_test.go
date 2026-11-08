@@ -961,7 +961,7 @@ func selectedToolchainLicense(t *testing.T, goRoot, version string) string {
 
 	parent := filepath.Dir(goRoot)
 	if filepath.Base(goRoot) == "libexec" &&
-		filepath.Base(parent) == strings.TrimPrefix(version, "go") {
+		gonotices.HomebrewKegVersion(filepath.Base(parent), version) {
 		path = filepath.Join(parent, "LICENSE")
 
 		info, err = os.Lstat(path)

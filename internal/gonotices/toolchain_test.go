@@ -214,3 +214,20 @@ func toolchainInstallationPayloadFixture(
 
 	return payload
 }
+
+func TestHomebrewKegVersionAcceptsOnlyNumericFormulaRevisions(t *testing.T) {
+	t.Parallel()
+
+	for keg, want := range map[string]bool{
+		"1.27.3":    true,
+		"1.27.3_1":  true,
+		"1.27.3_12": true,
+		"1.27.3_":   false,
+		"1.27.3_a":  false,
+		"1.27.3-1":  false,
+		"1.27.4_1":  false,
+		"1.27.31":   false,
+	} {
+		require.Equal(t, want, gonotices.HomebrewKegVersion(keg, "go1.27.3"), keg)
+	}
+}

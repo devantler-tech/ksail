@@ -165,6 +165,13 @@ if [ -L "${notice_root}" ] || { [ -e "${notice_root}" ] && [ ! -d "${notice_root
 	fail 'existing KSail notices root is not a directory'
 fi
 if [ ! -d "${notice_root}" ]; then mkdir -m 0755 "${notice_root}"; fi
+# Everyone who can run the installed binary must be able to read its notices,
+# so an existing root that hides them is refused rather than silently reused.
+ls -ld "${notice_root}" >"${tmp_dir}/notice-root-mode"
+if [ ! -w "${notice_root}" ] || [ ! -x "${notice_root}" ] ||
+	! awk '{ exit $1 !~ /^d...r.[xs]r.[xt]/ }' "${tmp_dir}/notice-root-mode"; then
+	fail "existing KSail notices root must be readable and searchable by everyone; run: chmod 0755 '${notice_root}'"
+fi
 notice_dir="${notice_root}/${version}-${target}"
 if [ -L "${notice_dir}" ] || { [ -e "${notice_dir}" ] && [ ! -d "${notice_dir}" ]; }; then
 	fail 'existing KSail version notices are not an ordinary directory'
