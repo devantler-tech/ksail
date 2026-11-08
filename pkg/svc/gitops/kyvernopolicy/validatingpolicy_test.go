@@ -593,6 +593,11 @@ func httpWordCases() map[string]evaluatedCase {
 				"\n    message: \"see http://docs.example/policy before setting mode\"",
 			key: "mode",
 		},
+		"static message shaped like a library call": {
+			validation: `expression: "object.?data.?mode.orValue('') != 'blocked'"` +
+				"\n    message: \"http.Get('https://docs.example/policy')\"",
+			key: "mode",
+		},
 	}
 }
 
@@ -662,6 +667,8 @@ func TestCELEvaluate_HTTPLibraryAnywhereIsNeverEvaluated(t *testing.T) {
 			`"[http.Get('http://127.0.0.1:1/verdict')].all(v, v.allowed == true)"`,
 		"library in a comprehension body": `expression: ` +
 			`"['a'].all(v, http.Get('http://127.0.0.1:1/verdict').allowed == true)"`,
+		"library in a map value": `expression: ` +
+			`"{'verdict': http.Get('http://127.0.0.1:1/verdict')}.verdict.allowed == true"`,
 		// A local http shadows only the plain name, never the root-scoped one.
 		"root-scoped library under a local http": `expression: ` +
 			`"['a'].all(http, .http.Get('http://127.0.0.1:1/verdict').allowed == true)"`,
