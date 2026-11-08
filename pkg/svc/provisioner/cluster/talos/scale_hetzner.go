@@ -523,7 +523,11 @@ func (p *Provisioner) checkHetznerAvailabilityForRole(
 		p.logWriter,
 	)
 	if err != nil {
-		return fmt.Errorf("server availability check failed for %s: %w", role, err)
+		return availabilityCheckResult(
+			p.logWriter,
+			fmt.Sprintf("%s server type %q", role, serverType),
+			err,
+		)
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Server type %q available\n", serverType)
