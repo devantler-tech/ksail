@@ -3,8 +3,8 @@
 # Inspect archive/reference joins without changing any stored image reference.
 set -euo pipefail
 [[ "${GITHUB_ACTIONS:-}" == true && "${RUNNER_ENVIRONMENT:-}" == github-hosted &&
-	"${IMAGE_EXPORT_CLUSTER:-}" == image-export-union && "$#" == 2 &&
-	"$1" == image-export-union-control-plane && "$2" == image-export-union-worker ]] || {
+	"${IMAGE_EXPORT_CLUSTER:-}" == nested-kind-routing && "$#" == 2 &&
+	"$1" == nested-kind-routing-control-plane && "$2" == nested-kind-routing-worker ]] || {
 	echo 'Expected both validated fixture nodes on the GitHub-hosted runner.' >&2
 	exit 1
 }

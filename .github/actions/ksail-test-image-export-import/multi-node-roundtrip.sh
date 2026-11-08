@@ -8,7 +8,7 @@ set -euo pipefail
 	exit 1
 }
 cluster="${IMAGE_EXPORT_CLUSTER:?explicit fixture cluster required}"
-[[ "$cluster" == image-export-union ]] || {
+[[ "$cluster" == nested-kind-routing ]] || {
 	echo 'Refusing an unexpected cluster identity.' >&2
 	exit 1
 }
@@ -39,7 +39,7 @@ esac
 
 ref_a="localhost/ksail-export-a:fixture"
 ref_b="localhost/ksail-export-b:fixture"
-staging=$(mktemp -d "${RUNNER_TEMP:?}/image-export-union.XXXXXX")
+staging=$(mktemp -d "${RUNNER_TEMP:?}/nested-kind-routing.XXXXXX")
 remove_fixture_refs() {
 	local result=0
 	for node in "${nodes[@]}"; do

@@ -64,12 +64,12 @@ func importMetadataCommand(t *testing.T, mode string) *exec.Cmd {
 
 	command := exec.CommandContext(t.Context(), "bash",
 		"../../.github/actions/ksail-test-image-export-import/assert-import-metadata.sh",
-		"image-export-union-control-plane", "image-export-union-worker")
+		"nested-kind-routing-control-plane", "nested-kind-routing-worker")
 
 	command.Env = append(os.Environ(),
 		"PATH="+bin+":"+os.Getenv("PATH"), "RUNNER_TEMP="+directory,
 		"GITHUB_ACTIONS=true", "RUNNER_ENVIRONMENT=github-hosted",
-		"IMAGE_EXPORT_CLUSTER=image-export-union", "IMPORT_METADATA_MODE="+mode,
+		"IMAGE_EXPORT_CLUSTER=nested-kind-routing", "IMPORT_METADATA_MODE="+mode,
 		"IMPORT_METADATA_FIXTURE="+directory, "IMPORT_METADATA_ROOT="+root)
 	if mode == "non-ci" {
 		command.Env = append(command.Env, "GITHUB_ACTIONS=false")
@@ -99,8 +99,8 @@ esac
 set -euo pipefail
 [[ "$#" == 6 && "$1" == exec && "$3 $4 $5 $6" == 'ctr --namespace=k8s.io images list' ]] || exit 91
 case "$2" in
-  image-export-union-control-plane) cat "$IMPORT_METADATA_FIXTURE/inventory" ;;
-  image-export-union-worker)
+  nested-kind-routing-control-plane) cat "$IMPORT_METADATA_FIXTURE/inventory" ;;
+  nested-kind-routing-worker)
     case "$IMPORT_METADATA_MODE" in
       root-image)
         cat "$IMPORT_METADATA_FIXTURE/inventory"
