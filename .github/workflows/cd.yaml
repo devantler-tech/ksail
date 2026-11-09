@@ -470,7 +470,7 @@ jobs:
 
       - name: 🛠️ Setup desktop build (Go, Node.js, webview deps, staged web UI)
         if: needs.validate-release-ref.outputs.release-mode == 'build'
-        uses: devantler-tech/ksail/.github/actions/setup-desktop-build@78ca354307492ad2f3449c3f039124e43343e10b
+        uses: devantler-tech/ksail/.github/actions/setup-desktop-build@21249b8c739608f37690676e927df2202326c525
 
       - name: 🏷️ Extract version from tag
         if: needs.validate-release-ref.outputs.release-mode == 'build'
@@ -481,7 +481,16 @@ jobs:
       - name: 🏗️ Build desktop app
         if: needs.validate-release-ref.outputs.release-mode == 'build'
         shell: bash
-        run: cd desktop && go build -tags desktop -ldflags "-s -w" -o "ksail-desktop${{ matrix.ext }}" .
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git diff --quiet HEAD -- web/ui
+          if [[ ! -s pkg/webui/dist/index.html ]]; then
+            printf 'The release checkout has no staged desktop web UI.\n' >&2
+            exit 1
+          fi
+          cd desktop
+          go build -tags desktop -ldflags "-s -w" -o "ksail-desktop${{ matrix.ext }}" .
 
       # Package so the artifact extracts to the name the `ksail open desktop` launcher looks for: a
       # ksail-desktop binary the user puts on their PATH. Naming mirrors the main GoReleaser archives.
