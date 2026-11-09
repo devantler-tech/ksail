@@ -260,3 +260,38 @@ func TestExecInContainerMultipleArguments(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "nginx:latest\nredis:alpine\n", got)
 }
+
+// A stream that stalls after attaching is interrupted when the context ends,
+// so a deadline bounds the whole exec rather than only its setup.
+func TestExecInContainerStopsReadingWhenContextEnds(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	client, server := net.Pipe()
+	defer func() { _ = server.Close() }()
+
+	mockClient := docker.NewMockAPIClient(t)
+	mockClient.EXPECT().ContainerExecCreate(ctx, "test-container", mock.Anything).
+		Return(container.ExecCreateResponse{ID: "exec-stalled"}, nil)
+	mockClient.EXPECT().ContainerExecAttach(ctx, "exec-stalled", container.ExecStartOptions{}).
+		Return(dockertypes.HijackedResponse{Conn: client, Reader: bufio.NewReader(client)}, nil)
+	mockClient.EXPECT().ContainerExecInspect(ctx, "exec-stalled").
+		Return(container.ExecInspect{}, context.DeadlineExceeded)
+
+	done := make(chan error, 1)
+
+	go func() {
+		_, err := image.NewContainerExecutor(mockClient).
+			ExecInContainer(ctx, "test-container", []string{"rm", "-f", "/tmp/archive.tar"})
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+	case <-time.After(5 * time.Second):
+		t.Fatal("ExecInContainer kept reading a stalled stream after its context ended")
+	}
+}

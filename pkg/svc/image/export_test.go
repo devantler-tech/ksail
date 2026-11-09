@@ -18,3 +18,9 @@ var DefaultExportArchiveNameForTest = defaultExportArchiveName
 
 // RemoveNodeArchiveForTest exposes removeNodeArchive for white-box testing.
 var RemoveNodeArchiveForTest = (*Exporter).removeNodeArchive
+
+// ExportedDescriptorForTest exposes exportedDescriptor for white-box testing.
+var ExportedDescriptorForTest = exportedDescriptor
+
+// RequireSamePlatformForTest exposes requireSamePlatform for white-box testing.
+var RequireSamePlatformForTest = requireSamePlatform

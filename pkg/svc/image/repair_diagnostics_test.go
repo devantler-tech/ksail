@@ -37,7 +37,7 @@ func TestExportRepairFailureIsReported(t *testing.T) {
 	expectRepairPullFailure(ctx, t, mockClient, diagnosticsNginxRef, diagnosticsPullFailure)
 	setupExecMockForExporter(ctx, t, mockClient, kindExporterNodeName)
 
-	expectNodeArchiveCleanup(ctx, t, mockClient)
+	expectNodeArchiveCleanup(t, mockClient)
 
 	err := image.NewExporter(mockClient).Export(
 		ctx,
@@ -80,7 +80,7 @@ func TestExportSkippedRepairIsReported(t *testing.T) {
 	expectRepairPullFailure(ctx, t, mockClient, diagnosticsNginxRef, diagnosticsPullFailure)
 	setupExecMockForExporter(ctx, t, mockClient, kindExporterNodeName)
 
-	expectNodeArchiveCleanup(ctx, t, mockClient)
+	expectNodeArchiveCleanup(t, mockClient)
 
 	err := image.NewExporter(mockClient).Export(
 		ctx,
@@ -120,7 +120,7 @@ func TestExportRepairedReExportFailureIsReported(t *testing.T) {
 	setupKindExecFailWithCmdForExporter(ctx, t, mockClient, exportCmd, diagnosticsMissingContent)
 	setupExecMockForExporter(ctx, t, mockClient, kindExporterNodeName)
 
-	expectNodeArchiveCleanup(ctx, t, mockClient)
+	expectNodeArchiveCleanup(t, mockClient)
 
 	err := image.NewExporter(mockClient).Export(
 		ctx,

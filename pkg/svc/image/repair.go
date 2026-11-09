@@ -349,7 +349,9 @@ func (e *Exporter) tryExportImages(
 	}
 
 	cmd = append(cmd, tmpPath)
-	cmd = append(cmd, images...)
+	// Two requested aliases can resolve to one local name; naming it twice would
+	// publish duplicate descriptors, so pass each operand once on every attempt.
+	cmd = append(cmd, uniqueImageRefs(images)...)
 
 	_, err := e.executor.ExecInContainer(ctx, nodeName, cmd)
 

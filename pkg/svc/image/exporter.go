@@ -396,19 +396,13 @@ func (e *Exporter) writeFileFromTar(dstPath string, tarReader *tar.Reader) error
 	return nil
 }
 
-// removeNodeArchive deletes an export archive from a node. Once the caller's
-// context is done it switches to a detached context bounded by
-// nodeCleanupTimeout, so the archive is still removed after a cancelled or
-// timed-out export.
+// removeNodeArchive deletes an export archive from a node. It always runs on a
+// context detached from the caller and bounded by nodeCleanupTimeout, so a
+// cancellation that lands while removal is starting cannot abort it and leave
+// the archive behind.
 func (e *Exporter) removeNodeArchive(ctx context.Context, nodeName, tmpPath string) {
-	cleanupCtx := ctx
-
-	if ctx.Err() != nil {
-		detached, cancel := context.WithTimeout(context.WithoutCancel(ctx), nodeCleanupTimeout)
-		defer cancel()
-
-		cleanupCtx = detached
-	}
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), nodeCleanupTimeout)
+	defer cancel()
 
 	_, _ = e.executor.ExecInContainer(cleanupCtx, nodeName, []string{"rm", "-f", tmpPath})
 }

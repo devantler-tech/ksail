@@ -59,21 +59,62 @@ func (m *imageArchiveMerger) add(
 		return err
 	}
 
+	err = requireSamePlatform(m.platforms, platform)
+	if err != nil {
+		return err
+	}
+
 	for _, ref := range refs {
-		descriptor, found := byName[NormalizeImageRef(ref)]
+		name, descriptor, found := exportedDescriptor(byName, ref)
 		if !found {
 			return fmt.Errorf("%w: source archive omits %s", ErrIncompleteExport, ref)
 		}
 
-		err = m.addTarget(ctx, ref, descriptor, platform)
+		err = m.addTarget(ctx, name, descriptor, platform)
 		if err != nil {
 			return err
 		}
 	}
 
-	m.platforms = append(m.platforms, platform)
+	if len(m.platforms) == 0 {
+		m.platforms = append(m.platforms, platform)
+	}
 
 	return nil
+}
+
+// requireSamePlatform refuses a node whose platform differs from the nodes
+// already merged. Each node exports only its own variant, so a combined archive
+// is complete for exactly one platform; Docker nodes share their host's
+// architecture, and a mixed set would advertise a platform it cannot serve.
+func requireSamePlatform(merged []ocispec.Platform, platform ocispec.Platform) error {
+	if len(merged) == 0 || platforms.Only(merged[0]).Match(platform) {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"%w: nodes run different platforms (%s and %s)",
+		ErrIncompleteExport,
+		platforms.Format(merged[0]),
+		platforms.Format(platform),
+	)
+}
+
+// exportedDescriptor finds the archive entry for ref. A content repair may
+// re-pull a digest-qualified name by its tag, so the archive can hold one of
+// the ref's repair candidates instead; the entry is published under the name
+// the archive actually holds.
+func exportedDescriptor(
+	byName map[string]ocispec.Descriptor, ref string,
+) (string, ocispec.Descriptor, bool) {
+	for _, candidate := range repairPullCandidates(NormalizeImageRef(ref)) {
+		name := NormalizeImageRef(candidate)
+		if descriptor, found := byName[name]; found {
+			return name, descriptor, true
+		}
+	}
+
+	return "", ocispec.Descriptor{}, false
 }
 
 func archiveDescriptorsByName(data []byte) (map[string]ocispec.Descriptor, error) {

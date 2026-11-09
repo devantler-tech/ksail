@@ -246,7 +246,7 @@ func TestExportPartialNodeFailureRetainsOriginalDiagnostics(t *testing.T) {
 			return io.NopCloser(bytes.NewReader(contents)), container.PathStat{}, nil
 		}).
 		Maybe()
-	optionalNodeExec(ctx, client, kindExporterNodeName, "cleanup",
+	optionalNodeExec(callerOrDetachedContext(ctx), client, kindExporterNodeName, "cleanup",
 		[]string{"rm", "-f", kindExporterTarPath}, "")
 	setupNodeArchive(ctx, t, client, "my-cluster-worker", "docker.io/library/fixture-b:v1")
 	output := filepath.Join(t.TempDir(), "images.tar")
@@ -329,7 +329,14 @@ func setupNodeArchiveContents(
 			return io.NopCloser(bytes.NewReader(contents)), container.PathStat{}, nil
 		}).
 		Maybe()
-	optionalNodeExec(ctx, client, node, "cleanup", []string{"rm", "-f", kindExporterTarPath}, "")
+	optionalNodeExec(
+		detachedCleanupContext(),
+		client,
+		node,
+		"cleanup",
+		[]string{"rm", "-f", kindExporterTarPath},
+		"",
+	)
 }
 
 func optionalNodeExport(
@@ -369,7 +376,7 @@ func optionalNodeExport(
 // Each protocol operation has a separate stream. Optional calls let the old
 // one-node exporter reach the real archive assertion without mock-count noise.
 func optionalNodeExec(
-	ctx context.Context,
+	ctx any, // a context, or a matcher for one
 	client *docker.MockAPIClient,
 	node, operation string,
 	command []string,

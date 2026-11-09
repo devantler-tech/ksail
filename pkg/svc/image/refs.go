@@ -212,6 +212,23 @@ func normalizeImageRefs(imageRefs []string) []string {
 	return normalized
 }
 
+// uniqueImageRefs returns imageRefs without repeats, keeping first-seen order.
+func uniqueImageRefs(imageRefs []string) []string {
+	seen := make(map[string]struct{}, len(imageRefs))
+	unique := make([]string, 0, len(imageRefs))
+
+	for _, imageRef := range imageRefs {
+		if _, exists := seen[imageRef]; exists {
+			continue
+		}
+
+		seen[imageRef] = struct{}{}
+		unique = append(unique, imageRef)
+	}
+
+	return unique
+}
+
 func mergeRepairImages(primary []string, secondary []string) []string {
 	covered := make(map[string]struct{}, len(primary)+len(secondary))
 	merged := make([]string, 0, len(primary)+len(secondary))
