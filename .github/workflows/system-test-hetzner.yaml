@@ -333,6 +333,40 @@ jobs:
       - name: 📥 Restore Helm Cache
         uses: $/.github/actions/restore-helm-cache
 
+      - name: ✅ Validate direct-provider smoke selection
+        # K3s and Vanilla dispatches take the smoke path, which creates a bare cluster and ignores
+        # every stack input. Refuse a dispatch that picks one, so a run never passes while
+        # silently testing less than was asked for.
+        if: ${{ github.event_name == 'workflow_dispatch' && matrix.smoke == true }}
+        shell: bash
+        env:
+          DISTRIBUTION: ${{ matrix.distribution }}
+          CNI: ${{ inputs.cni }}
+          CSI: ${{ inputs.csi }}
+          LOAD_BALANCER: ${{ inputs.load_balancer }}
+          METRICS_SERVER: ${{ inputs.metrics_server }}
+          POLICY_ENGINE: ${{ inputs.policy_engine }}
+          CERT_MANAGER: ${{ inputs.cert_manager }}
+          GITOPS_ENGINE: ${{ inputs.gitops_engine }}
+          CONTROL_PLANES: ${{ inputs.control_planes }}
+          WORKERS: ${{ inputs.workers }}
+        run: |
+          ignored=()
+          [[ "${CNI:-Default}" == "Default" ]] || ignored+=("cni=$CNI")
+          [[ "${CSI:-Default}" == "Default" ]] || ignored+=("csi=$CSI")
+          [[ "${LOAD_BALANCER:-Default}" == "Default" ]] || ignored+=("load_balancer=$LOAD_BALANCER")
+          [[ "${METRICS_SERVER:-Default}" == "Default" ]] || ignored+=("metrics_server=$METRICS_SERVER")
+          [[ "${POLICY_ENGINE:-None}" == "None" ]] || ignored+=("policy_engine=$POLICY_ENGINE")
+          [[ "${CERT_MANAGER:-Disabled}" == "Disabled" ]] || ignored+=("cert_manager=$CERT_MANAGER")
+          [[ "${GITOPS_ENGINE:-None}" == "None" ]] || ignored+=("gitops_engine=$GITOPS_ENGINE")
+          [[ "${CONTROL_PLANES:-1}" == "1" ]] || ignored+=("control_planes=$CONTROL_PLANES")
+          [[ "${WORKERS:-0}" == "0" ]] || ignored+=("workers=$WORKERS")
+          if (( ${#ignored[@]} > 0 )); then
+            echo "::error::$DISTRIBUTION dispatches run the bare-cluster smoke test, which ignores: ${ignored[*]}. Reset them to their defaults, or pick Talos to test a full stack." >&2
+            exit 1
+          fi
+          echo "PASS: no stack input is set that the $DISTRIBUTION smoke test would ignore"
+
       - name: 🔧 Build args string
         id: args
         shell: bash
