@@ -54,6 +54,13 @@ func (e *ContainerExecutor) ExecInContainer(
 
 	_, _ = stdcopy.StdCopy(&stdout, &stderr, resp.Reader)
 
+	// A read cut short by cancellation holds partial output; never report it
+	// as a completed command.
+	err = ctx.Err()
+	if err != nil {
+		return "", fmt.Errorf("exec interrupted: %w", err)
+	}
+
 	// Check exit code
 	inspectResp, err := e.dockerClient.ContainerExecInspect(ctx, execID.ID)
 	if err != nil {

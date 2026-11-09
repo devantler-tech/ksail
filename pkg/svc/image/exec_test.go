@@ -277,8 +277,6 @@ func TestExecInContainerStopsReadingWhenContextEnds(t *testing.T) {
 		Return(container.ExecCreateResponse{ID: "exec-stalled"}, nil)
 	mockClient.EXPECT().ContainerExecAttach(ctx, "exec-stalled", container.ExecStartOptions{}).
 		Return(dockertypes.HijackedResponse{Conn: client, Reader: bufio.NewReader(client)}, nil)
-	mockClient.EXPECT().ContainerExecInspect(ctx, "exec-stalled").
-		Return(container.ExecInspect{}, context.DeadlineExceeded)
 
 	done := make(chan error, 1)
 

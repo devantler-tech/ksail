@@ -88,7 +88,7 @@ func (m *imageArchiveMerger) add(
 // is complete for exactly one platform; Docker nodes share their host's
 // architecture, and a mixed set would advertise a platform it cannot serve.
 func requireSamePlatform(merged []ocispec.Platform, platform ocispec.Platform) error {
-	if len(merged) == 0 || platforms.Only(merged[0]).Match(platform) {
+	if len(merged) == 0 || platforms.OnlyStrict(merged[0]).Match(platform) {
 		return nil
 	}
 

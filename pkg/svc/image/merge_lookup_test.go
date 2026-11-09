@@ -60,4 +60,10 @@ func TestRequireSamePlatformRefusesMixedNodes(t *testing.T) {
 	require.ErrorIs(t,
 		image.RequireSamePlatformForTest([]ocispec.Platform{amd64}, arm64),
 		image.ErrIncompleteExport)
+
+	armV6 := ocispec.Platform{OS: "linux", Architecture: "arm", Variant: "v6"}
+	armV7 := ocispec.Platform{OS: "linux", Architecture: "arm", Variant: "v7"}
+	require.ErrorIs(t,
+		image.RequireSamePlatformForTest([]ocispec.Platform{armV7}, armV6),
+		image.ErrIncompleteExport)
 }
