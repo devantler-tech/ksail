@@ -35,6 +35,26 @@ func refuseRenameOnto(target string, errno syscall.Errno) func(string, string) e
 	}
 }
 
+// readFixture reads a test file.
+func readFixture(t *testing.T, path string) string {
+	t.Helper()
+
+	data, err := os.ReadFile(path) //nolint:gosec // Test fixture path.
+	require.NoError(t, err)
+
+	return string(data)
+}
+
+// keptArchives lists the archives kept beside output.
+func keptArchives(t *testing.T, output string) []string {
+	t.Helper()
+
+	matches, err := filepath.Glob(output + ".*.ksail-export")
+	require.NoError(t, err)
+
+	return matches
+}
+
 // TestPublishArchiveRenamesWhenPossible checks the atomic path.
 func TestPublishArchiveRenamesWhenPossible(t *testing.T) {
 	t.Parallel()
@@ -42,73 +62,53 @@ func TestPublishArchiveRenamesWhenPossible(t *testing.T) {
 	staged, output := writePublishFixture(t)
 
 	require.NoError(t, image.PublishArchiveForTest(staged, output, os.Rename))
-
-	data, err := os.ReadFile(output) //nolint:gosec // Test fixture path.
-	require.NoError(t, err)
-	require.Equal(t, "new archive", string(data))
+	require.Equal(t, "new archive", readFixture(t, output))
 	require.NoFileExists(t, staged)
+	require.Empty(t, keptArchives(t, output))
 }
 
-// TestPublishArchiveCopiesIntoUnrenameableDestination covers a bind-mounted
-// output file (EBUSY) and a destination on another filesystem (EXDEV).
-func TestPublishArchiveCopiesIntoUnrenameableDestination(t *testing.T) {
+// TestPublishArchiveKeepsArchiveWhenDestinationRefusesRename covers a
+// bind-mounted output (EBUSY), another filesystem (EXDEV) and a protected
+// directory (EPERM, EACCES): the previous archive is never touched, and the
+// completed one is kept beside it and named in the error.
+func TestPublishArchiveKeepsArchiveWhenDestinationRefusesRename(t *testing.T) {
 	t.Parallel()
 
-	for _, errno := range []syscall.Errno{syscall.EBUSY, syscall.EXDEV} {
+	for _, errno := range []syscall.Errno{syscall.EBUSY, syscall.EXDEV, syscall.EPERM, syscall.EACCES} {
 		t.Run(errno.Error(), func(t *testing.T) {
 			t.Parallel()
 
 			staged, output := writePublishFixture(t)
 
-			require.NoError(
-				t,
-				image.PublishArchiveForTest(staged, output, refuseRenameOnto(output, errno)),
-			)
+			err := image.PublishArchiveForTest(staged, output, refuseRenameOnto(output, errno))
+			require.ErrorIs(t, err, errno)
 
-			data, err := os.ReadFile(output) //nolint:gosec // Test fixture path.
-			require.NoError(t, err)
-			require.Equal(t, "new archive", string(data))
+			kept := keptArchives(t, output)
+			require.Len(t, kept, 1)
+			require.ErrorContains(t, err, kept[0])
+			require.Equal(t, "new archive", readFixture(t, kept[0]))
+			require.Equal(t, "old archive contents", readFixture(t, output))
+			require.NoFileExists(t, staged)
 		})
 	}
 }
 
-// TestPublishArchiveKeepsArchiveWhenCopyFails checks that a completed export is
-// moved next to the destination, and named, when it cannot be copied in.
-func TestPublishArchiveKeepsArchiveWhenCopyFails(t *testing.T) {
-	t.Parallel()
-
-	// A directory cannot be opened for writing, even by root, so the copy fails.
-	dir := t.TempDir()
-	staged := filepath.Join(dir, "staged.tar")
-	output := filepath.Join(dir, "images.tar")
-
-	require.NoError(t, os.WriteFile(staged, []byte("new archive"), 0o600))
-	require.NoError(t, os.Mkdir(output, 0o700))
-
-	err := image.PublishArchiveForTest(staged, output, refuseRenameOnto(output, syscall.EBUSY))
-	require.Error(t, err)
-	require.ErrorContains(t, err, output+".ksail-export")
-
-	kept, readErr := os.ReadFile(output + ".ksail-export") //nolint:gosec // Test fixture path.
-	require.NoError(t, readErr)
-	require.Equal(t, "new archive", string(kept))
-
-	require.DirExists(t, output)
-}
-
-// TestPublishArchiveReturnsOtherRenameErrors checks that only EBUSY and EXDEV
-// fall back to copying.
-func TestPublishArchiveReturnsOtherRenameErrors(t *testing.T) {
+// TestPublishArchiveNeverReplacesAnEarlierKeptArchive checks that two failed
+// publications to the same destination keep both completed archives.
+func TestPublishArchiveNeverReplacesAnEarlierKeptArchive(t *testing.T) {
 	t.Parallel()
 
 	staged, output := writePublishFixture(t)
+	refuse := refuseRenameOnto(output, syscall.EBUSY)
 
-	err := image.PublishArchiveForTest(staged, output, refuseRenameOnto(output, syscall.EACCES))
-	require.ErrorIs(t, err, syscall.EACCES)
-	require.NotErrorIs(t, err, syscall.EBUSY)
+	require.Error(t, image.PublishArchiveForTest(staged, output, refuse))
 
-	previous, readErr := os.ReadFile(output) //nolint:gosec // Test fixture path.
-	require.NoError(t, readErr)
-	require.Equal(t, "old archive contents", string(previous))
-	require.FileExists(t, staged)
+	require.NoError(t, os.WriteFile(staged, []byte("second archive"), 0o600))
+	require.Error(t, image.PublishArchiveForTest(staged, output, refuse))
+
+	kept := keptArchives(t, output)
+	require.Len(t, kept, 2)
+
+	contents := []string{readFixture(t, kept[0]), readFixture(t, kept[1])}
+	require.ElementsMatch(t, []string{"new archive", "second archive"}, contents)
 }

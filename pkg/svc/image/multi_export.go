@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 )
@@ -116,64 +114,54 @@ func publishExportSources(
 	return publishArchive(filepath.Join(root.Name(), "combined.tar"), output, os.Rename)
 }
 
-// publishArchive moves the validated archive at staged onto output. A rename is
-// atomic, so a failed export never touches the previous archive. When output
-// cannot be renamed over (a bind-mounted file, or another filesystem), the
-// archive is copied into it instead. If that copy fails, the archive is moved
-// next to output and the error names it, so a completed export is not lost.
+// publishArchive moves the validated archive at staged onto output. The rename
+// is atomic, so a failed export never changes the previous archive. When output
+// cannot be renamed over (a bind-mounted file, another filesystem, a protected
+// directory), the previous archive is left untouched and the completed archive
+// is kept beside it under a name of its own, which the error reports.
 func publishArchive(staged, output string, rename func(string, string) error) error {
 	err := rename(staged, output)
 	if err == nil {
 		return nil
 	}
 
-	if !errors.Is(err, syscall.EBUSY) && !errors.Is(err, syscall.EXDEV) {
-		return fmt.Errorf("publish complete image archive: %w", err)
-	}
-
-	copyErr := copyArchiveInto(staged, output)
-	if copyErr == nil {
-		return nil
-	}
-
-	kept := output + ".ksail-export"
-
-	keepErr := rename(staged, kept)
+	kept, keepErr := keepArchiveBeside(staged, output, rename)
 	if keepErr != nil {
-		return fmt.Errorf(
-			"publish complete image archive: copy into %s: %w",
-			output,
-			errors.Join(copyErr, keepErr),
-		)
+		return fmt.Errorf("publish complete image archive: %w", errors.Join(err, keepErr))
 	}
 
 	return fmt.Errorf(
-		"publish complete image archive: copy into %s failed, archive kept at %s: %w",
-		output, kept, copyErr,
+		"publish complete image archive: %s was not replaced, archive kept at %s: %w",
+		output, kept, err,
 	)
 }
 
-// copyArchiveInto overwrites the existing file at output with the archive at
-// staged and syncs it to disk.
-func copyArchiveInto(staged, output string) error {
-	source, err := os.Open(staged) //nolint:gosec // staged is the export's own staging file.
+// keepArchiveBeside moves the staged archive to a new, unique name in output's
+// directory, so a later failed export cannot replace an earlier kept archive.
+func keepArchiveBeside(
+	staged, output string, rename func(string, string) error,
+) (string, error) {
+	placeholder, err := os.CreateTemp(
+		filepath.Dir(output), filepath.Base(output)+".*.ksail-export",
+	)
 	if err != nil {
-		return fmt.Errorf("open staged archive: %w", err)
+		return "", fmt.Errorf("reserve a name for the kept archive: %w", err)
 	}
 
-	defer func() { _ = source.Close() }()
+	kept := placeholder.Name()
 
-	//nolint:gosec // output is the caller's canonicalized export path.
-	target, err := os.OpenFile(output, os.O_WRONLY|os.O_TRUNC, exportFileMode)
-	if err != nil {
-		return fmt.Errorf("open export destination: %w", err)
+	err = placeholder.Close()
+	if err == nil {
+		err = rename(staged, kept)
 	}
 
-	_, copyErr := io.Copy(target, source)
-	syncErr := target.Sync()
-	closeErr := target.Close()
+	if err != nil {
+		_ = os.Remove(kept)
 
-	return errors.Join(copyErr, syncErr, closeErr)
+		return "", fmt.Errorf("keep the completed archive: %w", err)
+	}
+
+	return kept, nil
 }
 
 func ingestExportPart(
