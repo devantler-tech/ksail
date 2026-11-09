@@ -140,8 +140,9 @@ func (e *Exporter) Export(
 	return e.exportSources(ctx, sources, distribution, opts)
 }
 
-// exportSource exports one node's share of the images to a host-side archive and
-// returns its path, repairing missing content on that node when needed.
+// exportSource exports one node's share of the images to the archive at
+// opts.OutputPath, repairing missing content on that node when needed, and
+// returns the platform it exported.
 func (e *Exporter) exportSource(
 	ctx context.Context,
 	source nodeExportSource,

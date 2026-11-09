@@ -59,15 +59,13 @@ func (e *Exporter) exportSources(
 			return err
 		}
 
-		if len(sources) > 1 {
-			err = root.Remove("part.tar")
-			if err != nil {
-				return fmt.Errorf("remove staged node archive: %w", err)
-			}
+		err = root.Remove("part.tar")
+		if err != nil {
+			return fmt.Errorf("remove staged node archive: %w", err)
 		}
 	}
 
-	return publishExportSources(ctx, root, merger, len(sources), opts.OutputPath)
+	return publishExportSources(ctx, root, merger, opts.OutputPath)
 }
 
 func cleanupExportSources(
@@ -98,24 +96,22 @@ func cleanupExportSources(
 }
 
 func publishExportSources(
-	ctx context.Context, root *os.Root, merger *imageArchiveMerger, count int, output string,
+	ctx context.Context, root *os.Root, merger *imageArchiveMerger, output string,
 ) error {
-	staged := "part.tar"
-	if count > 1 {
-		staged = "combined.tar"
-
-		err := writeCombinedExport(ctx, root, merger)
-		if err != nil {
-			return err
-		}
+	// Publish the merged archive even when one node covers the whole plan, so a
+	// multi-node export always names its images by their normalized references
+	// rather than by whatever short names that node happens to hold.
+	err := writeCombinedExport(ctx, root, merger)
+	if err != nil {
+		return err
 	}
 
-	err := ctx.Err()
+	err = ctx.Err()
 	if err != nil {
 		return fmt.Errorf("image export cancelled: %w", err)
 	}
 
-	err = os.Rename(filepath.Join(root.Name(), staged), output)
+	err = os.Rename(filepath.Join(root.Name(), "combined.tar"), output)
 	if err != nil {
 		return fmt.Errorf("publish complete image archive: %w", err)
 	}

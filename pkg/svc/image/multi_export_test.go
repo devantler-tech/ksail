@@ -720,3 +720,34 @@ func archiveNamedReferences(t *testing.T, path string) []string {
 		return refs
 	}
 }
+
+// TestExportNormalizesNamesWhenOneNodeCoversThePlan checks that a multi-node
+// export publishes the normalized reference even when a single node holds every
+// requested image under a short name, as it does when several nodes are needed.
+func TestExportNormalizesNamesWhenOneNodeCoversThePlan(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client := docker.NewMockAPIClient(t)
+	client.EXPECT().
+		ContainerList(ctx, mock.Anything).
+		Return(kindMultiNodeSummaries()[:2], nil)
+
+	setupNodeArchive(ctx, t, client, kindExporterNodeName, "fixture-a:v1")
+	setupNodeArchive(ctx, t, client, "my-cluster-worker", "docker.io/library/fixture-b:v1")
+
+	client.EXPECT().ContainerExecCreate(ctx, mock.Anything, mock.Anything).
+		Return(container.ExecCreateResponse{}, fmt.Errorf("fixture image unavailable on this node: %w", os.ErrNotExist)).
+		Maybe()
+
+	output := filepath.Join(t.TempDir(), "images.tar")
+
+	err := image.NewExporter(client).Export(ctx, "my-cluster", v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker, image.ExportOptions{
+			OutputPath: output,
+			Images:     []string{"docker.io/library/fixture-a:v1"},
+		})
+	require.NoError(t, err)
+	require.Equal(t, []string{"docker.io/library/fixture-a:v1"}, archiveNamedReferences(t, output))
+	assertImageArchiveReadable(t, output, 1)
+}
