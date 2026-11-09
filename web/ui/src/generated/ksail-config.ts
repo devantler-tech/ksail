@@ -908,6 +908,10 @@ export interface KSailClusterConfiguration {
          * Path to a YAML CEL rules file for 'ksail workload validate'. Each rule's CEL expression is evaluated against every rendered document (bound to the 'object' variable); an error-severity violation fails validation, a warning-severity violation is reported without failing. Lets rule validation be declared once as a turnkey CI gate instead of passing --rules each run. Overridden by --rules.
          */
         rules?: string;
+        /**
+         * Path, relative to the working directory, to a ksail.dev/v1alpha1 KyvernoAPICallResponses fixture for offline Kyverno apiCall context. Exact method and URL-path matches only; missing responses fail closed and no live cluster or service access is enabled. Overridden by --kyverno-api-call-responses.
+         */
+        kyvernoApiCallResponses?: string;
       };
       /**
        * Configuration for the workload scan command (Kubescape exceptions, frameworks, compliance threshold) so 'ksail workload scan' (no args) can act as a turnkey CI gate.

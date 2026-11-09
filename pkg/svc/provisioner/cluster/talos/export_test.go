@@ -1389,3 +1389,18 @@ func (p *Provisioner) EnsureAutoscalerSecretIfNeededWithResultForTest(
 func AutoscalerConvergenceFailuresForTest(result *clusterupdate.UpdateResult) int {
 	return autoscalerConvergenceFailures(result)
 }
+
+// AvailabilityCheckResultForTest exposes availabilityCheckResult for testing.
+func AvailabilityCheckResultForTest(logWriter io.Writer, subject string, err error) error {
+	return availabilityCheckResult(logWriter, subject, err, warnWhenUnavailable)
+}
+
+// ReplacementAvailabilityCheckResultForTest exposes availabilityCheckResult under
+// the stop policy rolling replacement uses.
+func ReplacementAvailabilityCheckResultForTest(
+	logWriter io.Writer,
+	subject string,
+	err error,
+) error {
+	return availabilityCheckResult(logWriter, subject, err, stopWhenUnavailable)
+}

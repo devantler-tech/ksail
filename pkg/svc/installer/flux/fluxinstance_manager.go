@@ -354,14 +354,10 @@ func buildInstance(
 	}
 
 	return &FluxInstance{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: fluxInstanceGroupVersion.String(),
-			Kind:       fluxInstanceKind,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fluxInstanceDefaultName,
-			Namespace: fluxclient.DefaultNamespace,
-		},
+		APIVersion: fluxInstanceGroupVersion.String(),
+		Kind:       fluxInstanceKind,
+		Name:       fluxInstanceDefaultName,
+		Namespace:  fluxclient.DefaultNamespace,
 		Spec: InstanceSpec{
 			Distribution: Distribution{
 				Version:  fluxDistributionVersion,

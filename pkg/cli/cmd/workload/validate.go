@@ -23,6 +23,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/crdschema"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/fluxsubst"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/celrules"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/kyvernopolicy"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/render"
 	"github.com/spf13/cobra"
 	kustomizeTypes "sigs.k8s.io/kustomize/api/types"
@@ -66,8 +67,22 @@ The validation process:
     when no schema type is available, the default is parsed using YAML-native type inference
   - Mixed text (e.g., "prefix.${VAR}"): substitutes "placeholder" in string context
 
-Schema lookups use a local disk cache and require no network access. When no cached
-JSON schema is available, placeholders fall back to strings with YAML-native parsing.
+Typed substitution reads remote schemas from the local cache and supplied local schemas
+from disk, using the same schema locations and strictness as validation. Without a schema,
+placeholders fall back to strings with YAML-native parsing.
+
+Use --refresh-schemas to fetch selected schemas into a temporary cache before typing
+placeholders. The persistent cache is updated only after the complete validation succeeds.
+This requires access to remote schema locations; unavailable selected schemas fail even
+when --ignore-missing-schemas is enabled. Kind exclusions still apply. Normal runs reuse
+the persistent cache without automatic expiry. Registry locations are tried in order: an
+unreachable earlier location can stop validation before a later cached schema is used.
+
+Use --schema-location-mode only to select exactly the supplied/configured locations,
+including derived CRD schemas, without implicit built-in or catalogue registries.
+Offline use requires all selected schemas and remote references in the native cache,
+or a complete local schema graph. This option does not prohibit network requests;
+cache misses may still download and fail. Missing required schemas remain errors.
 
 By default, Kubernetes Secrets are skipped to avoid validation failures due to SOPS fields.`
 
@@ -112,12 +127,29 @@ type validateFlags struct {
 	children                  ephemeralChildOptions
 	skipKinds                 []string
 	schemaLocations           []string
+	schemaLocationMode        string
+	refreshSchemas            bool
+	schemaRefresh             *kubeconform.SchemaRefresh
 	rules                     string
+	kyvernoAPICallResponses   string
 }
 
 // addValidateFlags registers the flags for the validate command, binding each to a
 // field of flags.
 func addValidateFlags(cmd *cobra.Command, flags *validateFlags) {
+	addKubeconformValidateFlags(cmd, flags)
+	addPolicyValidateFlags(cmd, flags)
+	addKyvernoAPICallResponsesFlag(cmd, flags)
+	cmd.Flags().BoolVar(
+		&flags.ephemeral,
+		"ephemeral",
+		false,
+		ephemeralClusterDescription+"Add --ephemeral-children to also validate observed descendants.",
+	)
+}
+
+// addKubeconformValidateFlags registers schema locations, rendering and resource-selection options.
+func addKubeconformValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 	cmd.Flags().
 		BoolVar(&flags.skipSecrets, "skip-secrets", true, "Skip validation of Kubernetes Secrets")
 	cmd.Flags().BoolVar(&flags.strict, "strict", false, "Enable strict validation mode")
@@ -145,9 +177,23 @@ func addValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 		&flags.schemaLocations,
 		"schema-location",
 		nil,
-		"Additional kubeconform schema locations (local directory or URL/path template) for CRDs "+
-			"with missing or stale CRDs-catalog entries, so they are validated against a supplied schema instead "+
-			"of skipped (merged with spec.workload.validation.schemaLocations from ksail.yaml)",
+		"Supplied kubeconform schema locations (local directory or URL/path template), "+
+			"after built-ins by default or exclusively with --schema-location-mode only "+
+			"(merged with spec.workload.validation.schemaLocations from ksail.yaml)",
+	)
+	cmd.Flags().StringVar(
+		&flags.schemaLocationMode,
+		"schema-location-mode",
+		"additional",
+		"Schema search mode: additional keeps built-in and catalogue defaults; "+
+			"only uses the supplied schema locations without implicit registries",
+	)
+	cmd.Flags().BoolVar(
+		&flags.refreshSchemas,
+		"refresh-schemas",
+		false,
+		"Download selected schemas anew and update the cache only after validation succeeds; "+
+			"unavailable selected schemas fail even when missing schemas are normally ignored",
 	)
 	cmd.Flags().BoolVar(
 		&flags.includeCRDSchemas,
@@ -157,6 +203,10 @@ func addValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 			"custom resources whose CRD ships in the repo are validated instead of skipped "+
 			"(off by default; a CRD that cannot be converted is warned and skipped)",
 	)
+}
+
+// addPolicyValidateFlags registers offline CEL rules and policy-evaluation controls.
+func addPolicyValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 	cmd.Flags().BoolVar(
 		&flags.kyvernoPolicies,
 		kyvernoPoliciesFlagName,
@@ -172,22 +222,34 @@ func addValidateFlags(cmd *cobra.Command, flags *validateFlags) {
 			"validation, a warning-severity violation is reported without failing. "+
 			"Overrides spec.workload.validation.rules from ksail.yaml.",
 	)
-	cmd.Flags().BoolVar(
-		&flags.ephemeral,
-		"ephemeral",
-		false,
-		ephemeralClusterDescription+"Add --ephemeral-children to also validate observed descendants.",
+}
+
+// addKyvernoAPICallResponsesFlag exposes the one-run override for reviewed offline responses.
+func addKyvernoAPICallResponsesFlag(cmd *cobra.Command, flags *validateFlags) {
+	cmd.Flags().StringVar(
+		&flags.kyvernoAPICallResponses,
+		"kyverno-api-call-responses",
+		"",
+		"Path, relative to the working directory, to a reviewed offline response fixture for "+
+			"Kyverno Kubernetes apiCall context entries. Exact method and URL-path matches only; "+
+			"missing responses fail closed and no live cluster or service access is enabled. "+
+			"Overrides spec.workload.validation.kyvernoApiCallResponses from ksail.yaml.",
 	)
 }
 
-// runValidateCmd runs the offline schema gate and, when explicitly requested,
+// runValidateCmdWithSchemaCache runs the offline schema gate and, when explicitly requested,
 // checks admission in an isolated cluster with guaranteed teardown.
-func runValidateCmd(
+func runValidateCmdWithSchemaCache(
 	ctx context.Context,
 	cmd *cobra.Command,
 	args []string,
 	flags validateFlags,
 ) error {
+	if flags.schemaLocationMode != "additional" && flags.schemaLocationMode != "only" &&
+		(flags.schemaLocationMode != "" || cmd.Flags().Changed("schema-location-mode")) {
+		return fmt.Errorf("%w: --schema-location-mode must be additional or only", os.ErrInvalid)
+	}
+
 	err := flags.children.validate(cmd, flags.ephemeral)
 	if err != nil {
 		return err
@@ -281,8 +343,16 @@ func runValidateCmdInner(
 
 	kyvernoPolicies := resolveKyvernoPolicies(cfg, configFound, loadErr, flags)
 
+	apiCallFixture, err := loadAPICallFixture(
+		cmd, cfg, configFound, loadErr, flags.kyvernoAPICallResponses, kyvernoPolicies, path,
+	)
+	if err != nil {
+		return err
+	}
+
 	return validatePath(
 		ctx, cmd, path, kubeconformClient, validationOpts, renderer, engine, kyvernoPolicies,
+		apiCallFixture,
 	)
 }
 
@@ -309,6 +379,79 @@ func resolveKyvernoPolicies(
 	return cfg.Spec.Cluster.PolicyEngine == v1alpha1.PolicyEngineKyverno
 }
 
+// configuredKyvernoAPICallResponses reads the repository setting and warns on configuration errors.
+func configuredKyvernoAPICallResponses(
+	cmd *cobra.Command,
+	cfg *v1alpha1.Cluster,
+	configFound bool,
+	loadErr error,
+) string {
+	if loadErr != nil {
+		notify.WriteMessage(notify.Message{
+			Type: notify.WarningType,
+			Content: "could not read spec.workload.validation.kyvernoApiCallResponses " +
+				"from ksail.yaml: %v",
+			Args:   []any{loadErr},
+			Writer: cmd.ErrOrStderr(),
+		})
+
+		return ""
+	}
+
+	if !configFound {
+		return ""
+	}
+
+	return cfg.Spec.Workload.Validation.KyvernoAPICallResponses
+}
+
+// resolveKyvernoAPICallResponsesPath prefers the explicit override to the repository fixture path.
+func resolveKyvernoAPICallResponsesPath(
+	cmd *cobra.Command,
+	cfg *v1alpha1.Cluster,
+	configFound bool,
+	loadErr error,
+	flag string,
+) string {
+	if flag != "" {
+		return flag
+	}
+
+	return configuredKyvernoAPICallResponses(cmd, cfg, configFound, loadErr)
+}
+
+// loadAPICallFixture loads the offline Kyverno API-call fixture
+// when this run consumes one. The fixture path resolves against the working
+// directory, like --rules and spec.workload.sourceDirectory, so a configured path
+// names the same file whichever directory is validated, and the fixture must stay
+// inside that directory.
+func loadAPICallFixture(
+	cmd *cobra.Command,
+	cfg *v1alpha1.Cluster,
+	configFound bool,
+	loadErr error,
+	flagPath string,
+	kyvernoPolicies bool,
+	target string,
+) (kyvernoAPICallFixture, error) {
+	fixturePath := resolveKyvernoAPICallResponsesPath(cmd, cfg, configFound, loadErr, flagPath)
+	if fixturePath == "" {
+		return kyvernoAPICallFixture{}, nil
+	}
+
+	applies, err := kyvernoAPICallFixtureApplies(kyvernoPolicies, target)
+	if err != nil || !applies {
+		return kyvernoAPICallFixture{}, err
+	}
+
+	workingDir, err := os.Getwd()
+	if err != nil {
+		return kyvernoAPICallFixture{}, fmt.Errorf("resolve working directory: %w", err)
+	}
+
+	return loadKyvernoAPICallFixture(workingDir, fixturePath)
+}
+
 // buildValidationOptions assembles the kubeconform validation options from the
 // flags and ksail.yaml config: skip-kinds (--skip-kinds + spec.workload.validation
 // .skipKinds), schema locations (--schema-location + the configured locations), and
@@ -331,6 +474,11 @@ func buildValidationOptions(
 	validationOpts := &kubeconform.ValidationOptions{
 		Strict:               flags.strict,
 		IgnoreMissingSchemas: flags.ignoreMissingSchemas,
+		SchemaLocationsOnly:  flags.schemaLocationMode == "only",
+	}
+
+	if flags.schemaRefresh != nil {
+		validationOpts = flags.schemaRefresh.ValidationOptions(validationOpts)
 	}
 
 	if flags.skipSecrets {
@@ -356,6 +504,10 @@ func buildValidationOptions(
 	)
 
 	cleanup := func() {}
+
+	if renderer != nil {
+		renderer.validationOptions = validationOpts
+	}
 
 	if flags.includeCRDSchemas {
 		crdCleanup, err := addCRDSchemas(ctx, cmd, path, renderer, validationOpts)
@@ -391,6 +543,9 @@ func addCRDSchemas(
 	}
 
 	cleanup := func() { _ = os.RemoveAll(tempDir) }
+	// Discovery and final validation share this directory as schemas are added.
+	// Register it before rendering so refresh can already use raw-tree CRDs.
+	opts.SchemaLocations = append(opts.SchemaLocations, crdschema.SchemaLocation(tempDir))
 
 	result, err := crdschema.Materialize(path, tempDir)
 	if err != nil {
@@ -420,10 +575,6 @@ func addCRDSchemas(
 		})
 	}
 
-	if result.Written > 0 {
-		opts.SchemaLocations = append(opts.SchemaLocations, crdschema.SchemaLocation(tempDir))
-	}
-
 	return cleanup, nil
 }
 
@@ -442,6 +593,9 @@ func addRenderedCRDSchemas(
 	destDir string,
 ) (crdschema.Result, error) {
 	var result crdschema.Result
+
+	renderer.discoveringCRDs = true
+	defer func() { renderer.discoveringCRDs = false }()
 
 	kustomizations, err := findKustomizations(path)
 	if err != nil {
@@ -727,6 +881,7 @@ func validatePath(
 	renderer *gitopsRenderer,
 	engine *celrules.Engine,
 	kyvernoPolicies bool,
+	apiCallFixture kyvernoAPICallFixture,
 ) error {
 	// Check if path exists
 	info, err := os.Stat(path)
@@ -744,6 +899,7 @@ func validatePath(
 	// If it's a directory, walk it to find YAML files and kustomizations
 	return validateDirectory(
 		ctx, cmd, path, kubeconformClient, opts, renderer, engine, kyvernoPolicies,
+		apiCallFixture,
 	)
 }
 
@@ -795,13 +951,15 @@ func validateDirectory(
 	renderer *gitopsRenderer,
 	engine *celrules.Engine,
 	kyvernoPolicies bool,
+	apiCallFixture kyvernoAPICallFixture,
 ) error {
 	targets, err := discoverValidationTargets(dirPath)
 	if err != nil {
 		return err
 	}
 
-	kustomizations, yamlFiles := targets.kustomizations, targets.yamlFiles
+	kustomizations := targets.kustomizations
+	yamlFiles := excludeFixtureFile(targets.yamlFiles, apiCallFixture.path)
 
 	progressOpts := []notify.ProgressOption{
 		notify.WithAppendOnly(),
@@ -821,16 +979,17 @@ func validateDirectory(
 
 	if len(kustomizations) > 0 {
 		validator := &kustomizationValidator{
-			dirPath:     dirPath,
-			kubeconform: kubeconformClient,
-			kustomize:   kustomize.NewClient(),
-			renderer:    renderer,
-			sink:        &degradationSink{},
-			opts:        opts,
-			engine:      engine,
-			celSink:     celSink,
-			kyverno:     kyvernoPolicies,
-			kyvernoSink: kyvernoSink,
+			dirPath:          dirPath,
+			kubeconform:      kubeconformClient,
+			kustomize:        kustomize.NewClient(),
+			renderer:         renderer,
+			sink:             &degradationSink{},
+			opts:             opts,
+			engine:           engine,
+			celSink:          celSink,
+			kyverno:          kyvernoPolicies,
+			kyvernoSink:      kyvernoSink,
+			apiCallResponses: apiCallFixture.responses,
 		}
 
 		err := validator.run(ctx, cmd, kustomizations, progressOpts)
@@ -931,16 +1090,17 @@ func runParallelValidation(
 // Helm-rendering it first. Its validate method is the task function passed to
 // the parallel progress group.
 type kustomizationValidator struct {
-	dirPath     string
-	kubeconform *kubeconform.Client
-	kustomize   *kustomize.Client
-	renderer    *gitopsRenderer // nil → Helm rendering disabled
-	sink        *degradationSink
-	opts        *kubeconform.ValidationOptions
-	engine      *celrules.Engine  // nil → CEL rule validation disabled
-	celSink     *celViolationSink // collects warning-severity CEL violations
-	kyverno     bool              // evaluate each output's own Kyverno policies
-	kyvernoSink *celViolationSink // collects non-blocking Kyverno results
+	dirPath          string
+	kubeconform      *kubeconform.Client
+	kustomize        *kustomize.Client
+	renderer         *gitopsRenderer // nil → Helm rendering disabled
+	sink             *degradationSink
+	opts             *kubeconform.ValidationOptions
+	engine           *celrules.Engine               // nil → CEL rule validation disabled
+	celSink          *celViolationSink              // collects warning-severity CEL violations
+	kyverno          bool                           // evaluate each output's own Kyverno policies
+	kyvernoSink      *celViolationSink              // collects non-blocking Kyverno results
+	apiCallResponses kyvernopolicy.APICallResponses // reviewed offline Kubernetes API context
 
 	// kyvernoInputs holds each validated kustomization's output for the Kyverno
 	// pass, which runs after every output is rendered so Namespaces rendered by one
@@ -1018,7 +1178,7 @@ func (v *kustomizationValidator) runKyverno(
 
 			return evaluateKyvernoDocuments(
 				taskCtx, true, input.data, dir, input.skipKinds, v.kyvernoSink,
-				input.attribution, shared,
+				input.attribution, shared, v.apiCallResponses,
 			)
 		},
 		append(progressOpts, notify.WithCountLabel("kustomizations"))...,
@@ -1127,7 +1287,9 @@ func (v *kustomizationValidator) manifests(
 
 		v.sink.add(result.Degradations)
 
-		return result.Bytes(), attributionFromDocuments(result.Documents), nil
+		data, err := finishRenderedValidationSubstitutions(ctx, result, v.opts)
+
+		return data, attributionFromDocuments(result.Documents), err
 	}
 
 	output, err := v.kustomize.Build(ctx, kustDir)
@@ -1135,7 +1297,9 @@ func (v *kustomizationValidator) manifests(
 		return nil, nil, err //nolint:wrapcheck // unwrapped so simplifyBuildError strips the kustomize prefix
 	}
 
-	return fluxsubst.ExpandFluxSubstitutions(output.Bytes()), nil, nil
+	expanded, err := expandValidationSubstitutions(ctx, output.Bytes(), v.opts)
+
+	return expanded, nil, err
 }
 
 // attributionFromDocuments maps each rendered document's identity to a source
@@ -1219,7 +1383,10 @@ func validateFileSilent(
 		return fmt.Errorf("read file %s: %w", filePath, err)
 	}
 
-	expanded := fluxsubst.ExpandFluxSubstitutions(data)
+	expanded, err := expandValidationSubstitutions(ctx, data, opts)
+	if err != nil {
+		return fmt.Errorf("prepare validation schemas: %w", err)
+	}
 
 	err = kubeconformClient.ValidateBytes(ctx, filePath, expanded, opts)
 	if err != nil {
@@ -1238,6 +1405,56 @@ func validateFileSilent(
 	}
 
 	return nil
+}
+
+// expandValidationSubstitutions supplies the same schema choices as the validator.
+// A nil options value retains the standalone renderer's existing cache behavior.
+func expandValidationSubstitutions(
+	ctx context.Context,
+	data []byte,
+	opts *kubeconform.ValidationOptions,
+) ([]byte, error) {
+	return expandValidationSubstitutionsForStage(ctx, data, opts, false)
+}
+
+func expandValidationSubstitutionsForStage(
+	ctx context.Context,
+	data []byte,
+	opts *kubeconform.ValidationOptions,
+	discoveringCRDs bool,
+) ([]byte, error) {
+	if opts == nil {
+		return fluxsubst.ExpandFluxSubstitutions(data), nil
+	}
+
+	schemaOpts := fluxsubst.SchemaOptions{
+		SchemaLocations:     opts.SchemaLocations,
+		SchemaLocationsOnly: opts.SchemaLocationsOnly,
+		Strict:              opts.Strict,
+		CacheDirectory:      opts.CacheDirectory,
+	}
+	if discoveringCRDs {
+		_, schemaOpts.DeferredKinds = discoverySchemaInput(data)
+	}
+
+	expanded := fluxsubst.ExpandFluxSubstitutionsWithOptions(data, schemaOpts)
+	// Explicit refresh resolves metadata defaults, fetches schemas, then types
+	// the original input afresh. Cache isolation alone must not enable refresh.
+	if opts.Refreshing() {
+		input := expanded
+		if discoveringCRDs {
+			input, _ = discoverySchemaInput(expanded)
+		}
+
+		err := kubeconform.NewClient().PrecacheSchemas(ctx, input, opts)
+		if err != nil {
+			return nil, fmt.Errorf("refresh validation schemas: %w", err)
+		}
+
+		expanded = fluxsubst.ExpandFluxSubstitutionsWithOptions(data, schemaOpts)
+	}
+
+	return expanded, nil
 }
 
 // simplifyBuildError extracts an actionable error message from a kustomize build error.

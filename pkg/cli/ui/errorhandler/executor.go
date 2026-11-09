@@ -1,18 +1,20 @@
 package errorhandler
 
 import (
-	"bytes"
-	"errors"
-	"io"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/addressmask"
 	"github.com/spf13/cobra"
 )
 
+// unknownCommandPrefix starts the error Cobra returns for an unknown command.
+// Cobra adds its usage hint to the error line it prints, not to the error, so the hint
+// has to be restored here now that the line is silenced.
+const unknownCommandPrefix = "unknown command "
+
 // Executor type.
 
-// Executor coordinates Cobra execution, capturing stderr output and surfacing aggregated errors.
+// Executor coordinates Cobra execution, streaming stderr live and returning the failure as a CommandError.
 type Executor struct{}
 
 // NewExecutor constructs an Executor.
@@ -20,120 +22,73 @@ func NewExecutor() *Executor {
 	return &Executor{}
 }
 
-// Execute runs the provided command while intercepting Cobra's error stream.
-// It returns nil on success, or a *CommandError containing both the normalized message
-// and the original error to preserve error-chain semantics.
+// Execute runs the provided command. It returns nil on success, or a *CommandError
+// carrying the original error to preserve error-chain semantics.
 //
-// The function captures stderr output during command execution and applies
-// normalization to produce user-friendly error messages.
+// Anything the command writes to stderr reaches the real stderr while the command
+// runs, on every exit path, so a long-running command's notices are seen in time.
+// Publicly routable addresses are masked on the way, because stderr reaches the same
+// public logs as a failed command's error; the operator opts back in through
+// addressmask.ShowAddressesEnvVar.
+//
+// Cobra's own "Error: <err>" line is silenced, because the returned error carries the
+// same text and the entrypoint prints it once. A custom exit-code result (e.g.
+// DriftExitError from `cluster diff --exit-code`) prints no error at all.
 func (e *Executor) Execute(cmd *cobra.Command) error {
 	if cmd == nil {
 		return nil
 	}
 
-	var errBuf bytes.Buffer
-
 	originalErrWriter := cmd.ErrOrStderr()
+	liveErrWriter := addressmask.New().Writer(originalErrWriter)
 
-	cmd.SetErr(&errBuf)
+	cmd.SetErr(liveErrWriter)
 	defer cmd.SetErr(originalErrWriter)
 
-	err := cmd.Execute()
-	if err == nil {
-		flushWarnings(originalErrWriter, &errBuf)
+	root := cmd.Root()
+	silenceErrors := root.SilenceErrors
+	root.SilenceErrors = true
 
+	defer func() { root.SilenceErrors = silenceErrors }()
+
+	executed, err := cmd.ExecuteC()
+
+	// The end of a last partial line must be out before the caller prints the error.
+	addressmask.Flush(liveErrWriter)
+
+	if err == nil {
 		return nil
 	}
 
-	// A custom exit-code result (e.g. DriftExitError from `cluster diff --exit-code`)
-	// is a valid, non-failing outcome: main.go surfaces it as a process exit code and
-	// prints no error, so any warnings the run captured would otherwise be lost. Flush
-	// them like the success path. Genuine failures instead surface their stderr via the
-	// normalized message that main.go prints, so they are not flushed here.
-	if isExitCodeResult(err) {
-		flushExitCodeWarnings(originalErrWriter, &errBuf, err)
+	if !silenceErrors && strings.HasPrefix(err.Error(), unknownCommandPrefix) {
+		return &CommandError{
+			cause: err,
+			hint:  "Run '" + executed.CommandPath() + " --help' for usage.",
+		}
 	}
 
-	message := normalize(errBuf.String())
-
-	return &CommandError{
-		message: message,
-		cause:   err,
-	}
-}
-
-// flushWarnings forwards any stderr a non-failing run captured to the real writer, so
-// warnings and notices reach the user. The capture exists only to normalize a failing
-// command's stderr into the returned error; an empty buffer is a no-op, so commands
-// that write nothing are unaffected.
-func flushWarnings(w io.Writer, buf *bytes.Buffer) {
-	if buf.Len() > 0 {
-		_, _ = w.Write(maskAddresses(buf.Bytes()))
-	}
-}
-
-// maskAddresses hides publicly routable server addresses in replayed warning
-// text, which reaches the same public logs as a failed command's error. The
-// operator opts back in through addressmask.ShowAddressesEnvVar.
-func maskAddresses(text []byte) []byte {
-	return []byte(addressmask.New().Mask(string(text)))
-}
-
-// flushExitCodeWarnings forwards the stderr an exit-code result captured, minus the
-// automatic "Error: <err>" line Cobra appends when a command leaves SilenceErrors unset
-// (e.g. `cluster diff`, which sets only SilenceUsage). main.go surfaces an exit-code
-// result as a process exit code and prints no error of its own, so replaying Cobra's
-// error line here would be spurious noise; the command's real warnings still reach the
-// user. Cobra writes the error last (SilenceUsage suppresses the trailing usage) as
-// `fmt.Fprintln(w, "Error:", err.Error())`, i.e. exactly "Error: <msg>\n".
-func flushExitCodeWarnings(writer io.Writer, buf *bytes.Buffer, err error) {
-	out := buf.Bytes()
-
-	if err != nil {
-		cobraError := "Error: " + err.Error()
-		out = bytes.TrimSuffix(out, []byte(cobraError+"\n"))
-		out = bytes.TrimSuffix(out, []byte(cobraError))
-	}
-
-	if len(out) > 0 {
-		_, _ = writer.Write(maskAddresses(out))
-	}
-}
-
-// isExitCodeResult reports whether err carries a custom KSail exit code — a valid,
-// non-failing outcome (e.g. drift detected) rather than a command failure. It mirrors
-// the structural interface main.go uses to translate such errors into process exit
-// codes, without coupling this package to specific command types.
-func isExitCodeResult(err error) bool {
-	var exitCoder interface{ KSailExitCode() int }
-
-	return errors.As(err, &exitCoder)
+	return &CommandError{cause: err}
 }
 
 // CommandError type.
 
-// CommandError represents a Cobra execution failure augmented with normalized stderr output.
+// CommandError represents a Cobra execution failure.
 type CommandError struct {
-	message string
-	cause   error
+	cause error
+	hint  string
 }
 
 // Error implements the error interface.
 func (e *CommandError) Error() string {
-	switch {
-	case e == nil:
+	if e == nil || e.cause == nil {
 		return ""
-	case e.cause == nil:
-		return e.message
-	case e.message != "":
-		if strings.Contains(e.message, e.cause.Error()) {
-			return e.message
-		}
-
-		return e.message + ": " + e.cause.Error()
-	default:
-		return e.cause.Error()
 	}
+
+	if e.hint != "" {
+		return e.cause.Error() + "\n" + e.hint
+	}
+
+	return e.cause.Error()
 }
 
 // Unwrap exposes the underlying cause for errors.Is/errors.As consumers.
@@ -143,23 +98,4 @@ func (e *CommandError) Unwrap() error {
 	}
 
 	return e.cause
-}
-
-// normalize trims whitespace, removes redundant "Error:" prefixes, and preserves multi-line usage hints.
-func normalize(raw string) string {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return ""
-	}
-
-	lines := strings.Split(trimmed, "\n")
-	if len(lines) == 0 {
-		return ""
-	}
-
-	first := strings.TrimSpace(lines[0])
-	first = strings.TrimPrefix(first, "Error: ")
-	lines[0] = first
-
-	return strings.Join(lines, "\n")
 }

@@ -14,8 +14,7 @@ fail() {
 yq -o=json '.' "$root/.github/workflows/todos.yaml" >"$work/caller.json"
 jq -e '
   (.jobs | keys) == ["todos"] and
-  (.jobs.todos | keys) == ["secrets", "uses", "with"] and
-  .jobs.todos.with == {"exclude-vendored":true} and
+  (.jobs.todos | keys) == ["secrets", "uses"] and
   .jobs.todos.secrets == {"APP_PRIVATE_KEY":"${{ secrets.APP_PRIVATE_KEY }}"} and
   .permissions == {"contents":"read", "issues":"write"}
 ' "$work/caller.json" >/dev/null || fail 'Consumer declaration changed outside the reviewed adoption'
@@ -38,20 +37,16 @@ jq -e '
     "repository":"${{ job.workflow_repository }}", "ref":"${{ job.workflow_sha }}",
     "path":".devantler-tech-actions", "persist-credentials":false
   } and
-  .jobs.todos.steps[3].uses == "./.devantler-tech-actions/actions/create-issues-from-todos" and
+  .jobs.todos.steps[3].uses == "$/actions/create-issues-from-todos" and
   .jobs.todos.steps[3].with.ignore == "${{ inputs.ignore }}" and
-  .jobs.todos.steps[3].with["exclude-vendored"] == "${{ inputs.exclude-vendored }}" and
+  (.jobs.todos.steps[3].with | has("exclude-vendored") | not) and
   (.jobs.todos.steps[3] | has("if") | not) and
   .on.workflow_call.inputs.ignore.default == "" and
-  .on.workflow_call.inputs["exclude-vendored"].default == false
+  (.on.workflow_call.inputs | has("exclude-vendored") | not)
 ' "$work/shared.json" >/dev/null || fail 'Shared production delegation no longer matches reviewed forwarding'
-jq --slurpfile caller "$work/caller.json" --slurpfile shared "$work/shared.json" '
+jq --slurpfile shared "$work/shared.json" '
   [ .[] | select(.Name == "opted-in vendor filter excludes root directories only") |
-    .Ignore = (if $caller[0].jobs.todos.with | has("ignore")
-      then $caller[0].jobs.todos.with.ignore else $shared[0].on.workflow_call.inputs.ignore.default end) |
-    .ExcludeVendored = ((if $caller[0].jobs.todos.with | has("exclude-vendored")
-      then $caller[0].jobs.todos.with["exclude-vendored"]
-      else $shared[0].on.workflow_call.inputs["exclude-vendored"].default end) | tostring)
+    .Ignore = $shared[0].on.workflow_call.inputs.ignore.default
   ] | if length == 1 then . else error("exact released vendor scenario required") end
 ' "$catalogue/.github/tests/todo-scanner/cases.json" >"$work/healthy.json"
 runner="$catalogue/.github/tests/test-todo-scanner.sh"
@@ -73,7 +68,7 @@ reject() {
 	}
 	echo "PASS: native control rejected $name"
 }
-jq '.[0].ExcludeVendored = "false"' "$work/healthy.json" >"$work/disabled.json"
+jq '.[0].Ignore = "^$"' "$work/healthy.json" >"$work/disabled.json"
 reject disabled 'wrong method or path' "$work/disabled.json"
 jq '.[0].Ignore = "^"' "$work/healthy.json" >"$work/overbroad.json"
 reject overbroad 'missing requests:' "$work/overbroad.json"

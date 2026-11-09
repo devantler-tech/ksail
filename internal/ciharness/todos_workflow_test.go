@@ -22,7 +22,7 @@ type todosWorkflow struct {
 	} `yaml:"jobs"`
 }
 
-// Pins the shared scanner's delegation and the reviewed vendor-filter option.
+// Pins the shared scanner's delegation and its permanent vendor-filter defaults.
 //
 // This comment deliberately does not open with the function's own name, the way a doc comment
 // normally would: that name embeds the uppercase marker, and the scanner keys on the marker
@@ -55,9 +55,8 @@ func TestTODOScannerExcludesOnlyVendoredSources(t *testing.T) {
 	assert.Empty(t, job.Steps, "KSail must not copy the shared scanner implementation")
 	assert.Equal(t, "${{ secrets.APP_PRIVATE_KEY }}", job.Secrets["APP_PRIVATE_KEY"])
 
-	assert.Equal(
+	assert.Empty(
 		t,
-		map[string]any{"exclude-vendored": true},
 		job.With,
 		"the consumer must use the shared filter without changing project or authentication defaults",
 	)

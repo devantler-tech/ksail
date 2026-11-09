@@ -90,10 +90,8 @@ func (p *Provider) StrayFloatingIPs(
 	}
 
 	floatingIPs, err := p.client.FloatingIP.AllWithOpts(ctx, hcloud.FloatingIPListOpts{
-		ListOpts: hcloud.ListOpts{
-			LabelSelector: LabelOwned + "=" + LabelOwnedValue + "," +
-				LabelClusterName + "=" + clusterName,
-		},
+		LabelSelector: LabelOwned + "=" + LabelOwnedValue + "," +
+			LabelClusterName + "=" + clusterName,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list floating IPs for cluster %s: %w", clusterName, err)

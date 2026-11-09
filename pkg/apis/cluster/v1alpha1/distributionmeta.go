@@ -46,6 +46,10 @@ type distributionMeta struct {
 	contextSuffix string
 	// supportedProviders lists the providers the distribution can run on.
 	supportedProviders []Provider
+	// pendingLiveValidation lists supported providers whose combination with this distribution
+	// is implemented but not yet validated on a live cluster. Validation still accepts them; the
+	// generated support matrix marks them.
+	pendingLiveValidation []Provider
 	// providesCDI reports whether CDI is enabled by default.
 	providesCDI bool
 	// providesMetricsServer reports whether metrics-server is bundled by default.

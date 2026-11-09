@@ -35,7 +35,7 @@ jobs:
         with:
           install-only: true
       - name: 🔧 Install mockery
-        run: go install github.com/vektra/mockery/v3@v3.5.4
+        run: go install github.com/vektra/mockery/v3@v3.8.1
       - name: 🟢 Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:

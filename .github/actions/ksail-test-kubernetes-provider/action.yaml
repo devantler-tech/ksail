@@ -222,25 +222,52 @@ runs:
             else
               echo "  ❌ $DIST nested API readiness FAILED"
               record_failure
-              if [ "${DIST,,}" = talos ]; then
-                # Capture only this failed cluster's endpoint/port evidence before
-                # deletion. Never dump kubeconfig, Secret data, or container env.
-                {
-                  timeout --kill-after=1s 10s kubectl --context "$HOST_CONTEXT" -n "ksail-$NESTED_NAME" \
-                    get service apiserver --request-timeout=5s \
-                    -o 'custom-columns=NAME:.metadata.name,PORT:.spec.ports[*].port,TARGET:.spec.ports[*].targetPort,NODEPORT:.spec.ports[*].nodePort' \
-                    || echo 'Nested Service evidence unavailable'
-                  timeout --kill-after=1s 10s kubectl --context "$HOST_CONTEXT" -n "ksail-$NESTED_NAME" \
-                    get endpointslices -l kubernetes.io/service-name=apiserver --request-timeout=5s \
-                    -o 'custom-columns=NAME:.metadata.name,ADDRESS:.endpoints[*].addresses[*],READY:.endpoints[*].conditions.ready,PORT:.ports[*].port' \
-                    || echo 'Nested EndpointSlice evidence unavailable'
-                  timeout --kill-after=1s 10s kubectl --context "$HOST_CONTEXT" -n "ksail-$NESTED_NAME" \
-                    exec dind -c dind -- docker inspect --type container \
-                    --format '{{json .NetworkSettings.Ports}}' "$NESTED_NAME-control-plane-1" \
-                    || echo 'Nested port-binding evidence unavailable'
-                } 2>&1 | tee "$LOG_DIR/${DIST,,}-endpoint.log" || echo 'Endpoint evidence could not be recorded'
-              fi
             fi
+          fi
+
+          # Capture only this failed DinD fixture before deletion, including when
+          # create itself refuses an unverified advertised endpoint. Successful
+          # bootstrap is distinct from the caller's authenticated network path.
+          DIAG_NODE=""
+          case "${DIST,,}" in
+            vanilla) DIAG_NODE="$NESTED_NAME-control-plane" ;;
+            talos) DIAG_NODE="$NESTED_NAME-control-plane-1" ;;
+          esac
+          if [ "$dist_failed" = true ] && [ -n "$DIAG_NODE" ]; then
+            # Never dump kubeconfig, Secret data, container env or bootstrap logs.
+            {
+              timeout --kill-after=1s 10s kubectl --context "$HOST_CONTEXT" -n "ksail-$NESTED_NAME" \
+                get service apiserver --request-timeout=5s \
+                -o 'custom-columns=NAME:.metadata.name,PORT:.spec.ports[*].port,TARGET:.spec.ports[*].targetPort,NODEPORT:.spec.ports[*].nodePort' 2>/dev/null \
+                || echo 'Nested Service evidence unavailable'
+              timeout --kill-after=1s 10s kubectl --context "$HOST_CONTEXT" -n "ksail-$NESTED_NAME" \
+                get endpointslices -l kubernetes.io/service-name=apiserver --request-timeout=5s \
+                -o 'custom-columns=NAME:.metadata.name,READY:.endpoints[*].conditions.ready,PORT:.ports[*].port' 2>/dev/null \
+                || echo 'Nested EndpointSlice evidence unavailable'
+              timeout --kill-after=1s 10s kubectl --context "$HOST_CONTEXT" -n "ksail-$NESTED_NAME" \
+                exec dind -c dind -- docker inspect --type container \
+                --format '{{range .NetworkSettings.Ports}}{{range .}}{{.HostPort}}{{println}}{{end}}{{end}}' "$DIAG_NODE" 2>/dev/null \
+                || echo 'Nested port-binding evidence unavailable'
+              if [ "${DIST,,}" = vanilla ]; then
+                echo 'Outer fixture Docker subnet configuration count:'
+                timeout --kill-after=1s 10s docker network inspect kind --format '{{len .IPAM.Config}}' 2>/dev/null \
+                  || echo 'Outer fixture Docker subnet evidence unavailable'
+                echo 'Nested fixture Docker subnet configuration count:'
+                timeout --kill-after=1s 10s kubectl --context "$HOST_CONTEXT" -n "ksail-$NESTED_NAME" \
+                  exec dind -c dind -- docker network inspect kind \
+                  --format '{{len .IPAM.Config}}' 2>/dev/null \
+                  || echo 'Nested Docker subnet evidence unavailable'
+                internal_ready=""
+                if internal_ready=$(timeout --kill-after=1s 10s kubectl --context "$HOST_CONTEXT" -n "ksail-$NESTED_NAME" \
+                  exec dind -c dind -- docker exec "$DIAG_NODE" \
+                  kubectl --kubeconfig=/etc/kubernetes/admin.conf get --raw=/readyz --request-timeout=5s 2>/dev/null) \
+                  && [ "$internal_ready" = ok ]; then
+                  echo 'Nested internal API readiness: ready'
+                else
+                  echo 'Nested internal API readiness unavailable'
+                fi
+              fi
+            } 2>&1 | tee "$LOG_DIR/${DIST,,}-endpoint.log" || echo 'Endpoint evidence could not be recorded'
           fi
 
           # Pin the premise the k3k privileged-pod guard depends on: the server pod is

@@ -3,6 +3,8 @@ title: ArgoCD ApplicationSet
 description: Use ArgoCD ApplicationSet with KSail to manage multiple Applications declaratively — multi-environment deployments, directory-based generators, and tenant cluster patterns.
 ---
 
+import { FileTree } from "@astrojs/starlight/components";
+
 KSail's ArgoCD bootstrap creates a single [Application](https://argo-cd.readthedocs.io/en/stable/user-guide/application-specification/) CR that syncs manifests from a local OCI registry. [ApplicationSet](https://argo-cd.readthedocs.io/en/stable/user-guide/application-set/) extends this by generating multiple Applications from a single template — useful for multi-environment deployments, multi-tenant clusters, and directory-based project structures.
 
 > [!NOTE]
@@ -58,23 +60,25 @@ The [directory generator](https://argo-cd.readthedocs.io/en/stable/operator-manu
 
 ### Project Layout
 
-```text
-my-app/
-├── ksail.yaml                      # gitOpsEngine: ArgoCD
-├── k8s/
-│   ├── kustomization.yaml
-│   ├── applicationset.yaml         # ApplicationSet manifest
-│   └── apps/
-│       ├── frontend/
-│       │   ├── deployment.yaml
-│       │   └── service.yaml
-│       ├── backend/
-│       │   ├── deployment.yaml
-│       │   └── service.yaml
-│       └── monitoring/
-│           ├── deployment.yaml
-│           └── service.yaml
-```
+<FileTree>
+
+- my-app/
+  - ksail.yaml gitOpsEngine: ArgoCD
+  - k8s/
+    - kustomization.yaml
+    - applicationset.yaml ApplicationSet manifest
+    - apps/
+      - frontend/
+        - deployment.yaml
+        - service.yaml
+      - backend/
+        - deployment.yaml
+        - service.yaml
+      - monitoring/
+        - deployment.yaml
+        - service.yaml
+
+</FileTree>
 
 ### ApplicationSet Manifest
 
@@ -139,20 +143,22 @@ The [git generator](https://argo-cd.readthedocs.io/en/stable/operator-manual/app
 
 ### Project Layout
 
-```text
-my-app/
-├── ksail.yaml
-├── k8s/
-│   ├── kustomization.yaml
-│   ├── applicationset.yaml
-│   └── envs/
-│       ├── dev/
-│       │   └── config.json
-│       ├── staging/
-│       │   └── config.json
-│       └── production/
-│           └── config.json
-```
+<FileTree>
+
+- my-app/
+  - ksail.yaml
+  - k8s/
+    - kustomization.yaml
+    - applicationset.yaml
+    - envs/
+      - dev/
+        - config.json
+      - staging/
+        - config.json
+      - production/
+        - config.json
+
+</FileTree>
 
 Each `config.json` contains environment-specific parameters:
 

@@ -240,6 +240,14 @@ func (c *Client) exec(
 
 	result := RunResult{Stdout: stdout.Bytes(), Stderr: stderr.Bytes(), ExitCode: 0}
 
+	// A remote exit can arrive alongside cancellation. Keep cancellation ahead
+	// of every exit status so a canceled probe cannot report a present or
+	// missing file and let bootstrap continue without its cancellation cleanup.
+	contextErr := ctx.Err()
+	if contextErr != nil {
+		return result, fmt.Errorf("run %q: %w", command, contextErr)
+	}
+
 	if exitErr, ok := errors.AsType[*ssh.ExitError](err); ok {
 		result.ExitCode = exitErr.ExitStatus()
 
@@ -251,10 +259,6 @@ func (c *Client) exec(
 	}
 
 	if err != nil {
-		if ctx.Err() != nil {
-			return result, fmt.Errorf("run %q: %w", command, ctx.Err())
-		}
-
 		return result, fmt.Errorf("run %q: %w", command, err)
 	}
 
@@ -267,6 +271,11 @@ func (c *Client) exec(
 // deadline. A session that opens after ctx ended is closed when it arrives; the
 // open itself ends at the latest when the connection closes.
 func (c *Client) openSession(ctx context.Context) (*ssh.Session, error) {
+	contextErr := ctx.Err()
+	if contextErr != nil {
+		return nil, fmt.Errorf("open session: %w", contextErr)
+	}
+
 	type opened struct {
 		session *ssh.Session
 		err     error
@@ -281,6 +290,19 @@ func (c *Client) openSession(ctx context.Context) (*ssh.Session, error) {
 
 	select {
 	case got := <-result:
+		// Both cases may be ready. Preserve the caller's cancellation even if
+		// NewSession completed concurrently, and close any session it opened.
+		contextErr = ctx.Err()
+		if contextErr != nil {
+			if got.session != nil {
+				// A channel close can itself wait for the SSH transport. Let
+				// the caller regain control and close that connection.
+				go func() { _ = got.session.Close() }()
+			}
+
+			return nil, fmt.Errorf("open session: %w", contextErr)
+		}
+
 		if got.err != nil {
 			return nil, fmt.Errorf("open session: %w", got.err)
 		}
@@ -307,7 +329,14 @@ func closeOnDone(ctx context.Context, closer interface{ Close() error }) func() 
 	go func() {
 		select {
 		case <-ctx.Done():
-			_ = closer.Close()
+			// A goroutine that first runs after both signals fired can land
+			// here at random. A stop that came first still wins, because a
+			// dial's caller cancels the dial's context once it has the client.
+			select {
+			case <-done:
+			default:
+				_ = closer.Close()
+			}
 		case <-done:
 		}
 	}()

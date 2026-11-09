@@ -110,15 +110,13 @@ func executeAuditUpdateCommand(t *testing.T, args ...string) (string, error) {
 //nolint:paralleltest // changes HOME, working directory and process output.
 func TestUpdateCommandReportsLeftoverServerAfterConfigConverges(t *testing.T) {
 	provisioner := &auditedUpdateFake{
-		updatableUpgraderFake: updatableUpgraderFake{
-			diff: &clusterupdate.UpdateResult{
-				InPlaceChanges: []clusterupdate.Change{{
-					Field:    "talos.workers",
-					OldValue: "1",
-					NewValue: "2",
-					Category: clusterupdate.ChangeCategoryInPlace,
-				}},
-			},
+		diff: &clusterupdate.UpdateResult{
+			InPlaceChanges: []clusterupdate.Change{{
+				Field:    "talos.workers",
+				OldValue: "1",
+				NewValue: "2",
+				Category: clusterupdate.ChangeCategoryInPlace,
+			}},
 		},
 		failedChanges: []clusterupdate.Change{{
 			Field:  "worker.as-removed-1",

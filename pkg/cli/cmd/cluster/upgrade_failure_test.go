@@ -116,9 +116,9 @@ func TestFailedRollingUpgradeReportsObservedVersions(t *testing.T) {
 					observed: &clusterupdate.VersionInfo{
 						KubernetesVersion: "v1.37.0", DistributionVersion: "v1.13.0",
 					},
-					versionUpgraderFake: versionUpgraderFake{current: clusterupdate.VersionInfo{
+					current: clusterupdate.VersionInfo{
 						KubernetesVersion: "v1.34.0", DistributionVersion: "v1.12.0",
-					}},
+					},
 				}
 				cmd := &cobra.Command{Use: "update"}
 				cmd.SetContext(t.Context())
@@ -183,7 +183,7 @@ func TestFailedRollingUpgradeReportsUnknownVersions(t *testing.T) {
 
 			upgrader := &failingRollingUpgrader{
 				failStep: 3, readErr: testCase.readErr, nilVersions: testCase.nilVersions,
-				versionUpgraderFake: versionUpgraderFake{current: testCase.current},
+				current: testCase.current,
 			}
 			cmd := &cobra.Command{Use: "update"}
 			cmd.SetContext(t.Context())

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/kubescape/kubescape/v3/core/cautils"
 	"github.com/kubescape/kubescape/v3/core/core"
@@ -76,15 +77,39 @@ func buildScanInfo(path string, opts *ScanOptions) *cautils.ScanInfo {
 	return scanInfo
 }
 
+// ScanResult is the outcome of a scan that produced results.
+type ScanResult struct {
+	// ComplianceScore is the measured compliance score (0-100) across the
+	// scanned frameworks.
+	ComplianceScore float32
+}
+
 // ScanDirectory scans Kubernetes manifests in the given directory path
-// against the configured security frameworks.
+// against the configured security frameworks. It is ScanDirectoryWithResult
+// for callers that need only the verdict.
 func (c *Client) ScanDirectory(ctx context.Context, path string, opts *ScanOptions) error {
+	_, err := c.ScanDirectoryWithResult(ctx, path, opts)
+
+	return err
+}
+
+// ScanDirectoryWithResult scans Kubernetes manifests in the given directory
+// path against the configured security frameworks and returns the measured
+// compliance score. A score below a positive ComplianceThreshold fails the
+// scan with an error that states both values; the result is returned with
+// that error so the caller can still report the score. Any other error
+// returns no result.
+func (c *Client) ScanDirectoryWithResult(
+	ctx context.Context,
+	path string,
+	opts *ScanOptions,
+) (*ScanResult, error) {
 	if opts == nil {
 		opts = &ScanOptions{}
 	}
 
 	if ctx.Err() != nil {
-		return fmt.Errorf("%w", ctx.Err())
+		return nil, fmt.Errorf("%w", ctx.Err())
 	}
 
 	kubescapeRunner := core.NewKubescape(ctx)
@@ -92,19 +117,27 @@ func (c *Client) ScanDirectory(ctx context.Context, path string, opts *ScanOptio
 
 	results, err := kubescapeRunner.Scan(scanInfo)
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrScanFailed, err)
+		return nil, fmt.Errorf("%w: %w", ErrScanFailed, err)
 	}
 
 	err = results.HandleResults(ctx, scanInfo)
 	if err != nil {
-		return fmt.Errorf("handle scan results: %w", err)
+		return nil, fmt.Errorf("handle scan results: %w", err)
 	}
 
-	if opts.ComplianceThreshold > 0 &&
-		results.GetComplianceScore() < float32(opts.ComplianceThreshold) {
+	result := &ScanResult{ComplianceScore: results.GetComplianceScore()}
+
+	return result, checkComplianceThreshold(result.ComplianceScore, opts.ComplianceThreshold)
+}
+
+// checkComplianceThreshold fails when a positive threshold is set and the
+// score is below it, or is not a number, so a scan that measured nothing never
+// passes the gate. A zero threshold disables the gate.
+func checkComplianceThreshold(score, threshold float32) error {
+	if threshold > 0 && (math.IsNaN(float64(score)) || score < threshold) {
 		return fmt.Errorf(
 			"%w: compliance score %.2f%% is below threshold %.2f%%",
-			ErrScanFailed, results.GetComplianceScore(), opts.ComplianceThreshold,
+			ErrScanFailed, score, threshold,
 		)
 	}
 

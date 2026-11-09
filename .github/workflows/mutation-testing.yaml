@@ -1,0 +1,92 @@
+name: Mutation Testing
+
+# A scheduled drift sensor for test quality, not a pull-request gate (ksail#7849). Agents write
+# most of KSail's code and the tests that check it, so line coverage cannot tell a test that pins
+# behaviour from one that only executes it. Gremlins mutates packages where a silent regression
+# is costly (cluster create/delete orchestration and the EKS cleanup verifier) and reports how many
+# mutants their tests kill. Surviving mutants that point at a missing assertion are triaged into
+# issues. A PR-time gate is reconsidered only once the scores and run times are known.
+on:
+  schedule:
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
+  # Self-test: a change to the sensor runs it once on the pull request that makes it.
+  pull_request:
+    paths:
+      - .github/workflows/mutation-testing.yaml
+      - .github/scripts/summarize-mutation-report*
+
+permissions: {}
+
+concurrency:
+  group: mutation-testing-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  # Exact pin: go-gremlins/gremlins, Apache-2.0. Bump deliberately and compare the first scores.
+  GREMLINS_VERSION: v0.6.0
+
+jobs:
+  mutate:
+    name: 🧬 Mutate ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - pkg/cli/lifecycle
+          - internal/maintenance/eksinventory
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
+
+      - name: 🧪 Test the report summarizer
+        run: bash .github/scripts/summarize-mutation-report.test.sh
+
+      - name: 📥 Install gremlins
+        run: go install "github.com/go-gremlins/gremlins/cmd/gremlins@${GREMLINS_VERSION}"
+
+      - name: 🧬 Run mutation testing
+        id: mutate
+        timeout-minutes: 75
+        env:
+          PACKAGE: ${{ matrix.package }}
+        run: |
+          set -euo pipefail
+          started=$(date +%s)
+          # Two workers leave headroom on a standard runner; each mutant runs the package's tests.
+          gremlins unleash --workers 2 --output "$RUNNER_TEMP/mutation-report.json" "./$PACKAGE"
+          echo "elapsed-seconds=$(( $(date +%s) - started ))" >> "$GITHUB_OUTPUT"
+
+      - name: 📊 Publish the mutation score
+        env:
+          PACKAGE: ${{ matrix.package }}
+          ELAPSED_SECONDS: ${{ steps.mutate.outputs.elapsed-seconds }}
+        run: |
+          set -euo pipefail
+          bash .github/scripts/summarize-mutation-report.sh "$PACKAGE" \
+            "$RUNNER_TEMP/mutation-report.json" >> "$GITHUB_STEP_SUMMARY"
+          printf '\nWall-clock time of the mutation step: %ss.\n' "$ELAPSED_SECONDS" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 📤 Keep the mutation report
+        if: always() && steps.mutate.outcome != 'skipped'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-report-${{ strategy.job-index }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/mutation-report.json
+          if-no-files-found: warn
+          retention-days: 30

@@ -40,13 +40,26 @@ const (
 	// copilotExecRetryBackoff is the pause between ETXTBSY re-attempts; the
 	// write fd is closed almost immediately, so a short wait clears the race.
 	copilotExecRetryBackoff = 10 * time.Millisecond
+	// nonInteractiveFix closes every Copilot fix list. The Copilot CLI's stored sign-in is the
+	// default way to authenticate, so a token is offered last: it is the override for environments
+	// that cannot sign in interactively, and it still wins whenever it is set.
+	nonInteractiveFix = "  - In a non-interactive environment, set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN instead"
+	// copilotStartupFixes is the fix list for a Copilot client that failed to start: get the
+	// Copilot CLI working and signed in, and only then fall back to a token.
+	copilotStartupFixes = "  - Install the Copilot CLI if it is missing: npm install -g @github/copilot\n" +
+		"  - Verify the CLI works: copilot --version\n" +
+		"  - Sign in once with the Copilot CLI: copilot auth login\n" +
+		nonInteractiveFix
+	// copilotTokenStartupFixes is the fix list when a Copilot token was set: a set token replaces the
+	// stored sign-in, so signing in cannot help until the token is fixed or removed.
+	copilotTokenStartupFixes = "  - Check the token in KSAIL_COPILOT_TOKEN or COPILOT_TOKEN: replace it, or unset it " +
+		"to sign in with the Copilot CLI instead (copilot auth login)\n" +
+		"  - Install the Copilot CLI if it is missing: npm install -g @github/copilot\n" +
+		"  - Verify the CLI works: copilot --version"
 	// startupErrFmt is the static format string for Copilot client startup errors.
 	// %w is the underlying error; %s is an optional diagnostic block (empty or
 	// "CLI diagnostic output:\n  ...\n\n").
-	startupErrFmt = "failed to start Copilot client: %w\n\n%sTo fix:\n" +
-		"  - Set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication\n" +
-		"  - Install the Copilot CLI: npm install -g @github/copilot\n" +
-		"  - Verify the CLI works: copilot --version"
+	startupErrFmt = "failed to start Copilot client: %w\n\n%sTo fix:\n" + copilotStartupFixes
 )
 
 // Sentinel errors for the Copilot client bootstrap.
@@ -99,9 +112,10 @@ func authenticateClient(
 }
 
 // startCopilotClient creates and starts a Copilot client.
-// Authentication precedence:
-//  1. KSAIL_COPILOT_TOKEN / COPILOT_TOKEN — explicit Copilot token
-//  2. Copilot CLI's own OAuth credentials (device flow via `copilot auth login`)
+// Authentication:
+//   - By default, the Copilot CLI's stored sign-in (`copilot auth login`), with no token.
+//   - KSAIL_COPILOT_TOKEN / COPILOT_TOKEN, when set, override the stored sign-in. They are
+//     for environments that cannot sign in interactively.
 //
 // GITHUB_TOKEN is intentionally NOT used: it is a general-purpose PAT that
 // may lack Copilot-specific scopes, causing API endpoints like models.list
@@ -222,11 +236,17 @@ func buildClientStartupError(opts *copilot.ClientOptions, cause error, diagnosti
 		)
 	}
 
+	if opts.GitHubToken != "" {
+		return fmt.Errorf(
+			"%w: %w\n\n%sTo fix:\n"+copilotTokenStartupFixes,
+			errStartCopilotClient,
+			cause,
+			diagnostic,
+		)
+	}
+
 	return fmt.Errorf(
-		"%w: %w\n\n%sTo fix:\n"+
-			"  - Set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication\n"+
-			"  - Install the Copilot CLI: npm install -g @github/copilot\n"+
-			"  - Verify the CLI works: copilot --version",
+		"%w: %w\n\n%sTo fix:\n"+copilotStartupFixes,
 		errStartCopilotClient,
 		cause,
 		diagnostic,
@@ -463,8 +483,9 @@ func attemptInlineLogin(
 			"%w\n\n"+
 				"could not find the Copilot CLI to start login flow: %v\n\n"+
 				"To fix:\n"+
-				"  - Set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication\n"+
-				"  - Ensure you have an active GitHub Copilot subscription",
+				"  - Install the Copilot CLI (npm install -g @github/copilot), then sign in: copilot auth login\n"+
+				"  - Ensure you have an active GitHub Copilot subscription\n"+
+				nonInteractiveFix,
 			errNotAuthenticated, pathErr,
 		)
 	}

@@ -28,6 +28,8 @@ const (
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Endpoint",type=string,JSONPath=`.status.endpoint`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+// +kubebuilder:printcolumn:name="Observed Distribution",type=string,JSONPath=`.status.observedDistribution`,priority=1
+// +kubebuilder:printcolumn:name="Observed Provider",type=string,JSONPath=`.status.observedProvider`,priority=1
 type Cluster struct {
 	metav1.TypeMeta   `json:",inline"            mapstructure:",squash"`
 	metav1.ObjectMeta `json:"metadata,omitempty" mapstructure:"metadata,omitempty"`
@@ -234,6 +236,11 @@ type ValidationConfig struct {
 	// rule validation can be a turnkey CI gate declared once in ksail.yaml rather
 	// than requiring --rules on every invocation. The --rules flag overrides it.
 	Rules string `json:"rules,omitzero" jsonschema_description:"Path to a YAML CEL rules file for 'ksail workload validate'. Each rule's CEL expression is evaluated against every rendered document (bound to the 'object' variable); an error-severity violation fails validation, a warning-severity violation is reported without failing. Lets rule validation be declared once as a turnkey CI gate instead of passing --rules each run. Overridden by --rules."` //nolint:lll
+
+	// KyvernoAPICallResponses is a path, relative to the working directory, to
+	// reviewed Kubernetes API responses used by Kyverno apiCall context entries.
+	// It never enables live cluster or service access.
+	KyvernoAPICallResponses string `json:"kyvernoApiCallResponses,omitzero" jsonschema_description:"Path, relative to the working directory, to a ksail.dev/v1alpha1 KyvernoAPICallResponses fixture for offline Kyverno apiCall context. Exact method and URL-path matches only; missing responses fail closed and no live cluster or service access is enabled. Overridden by --kyverno-api-call-responses."` //nolint:lll
 }
 
 // ScanConfig defines configuration for the workload scan command, letting

@@ -80,8 +80,8 @@ func TestKubeconfig_NotReadyWhileSecretKeyEmpty(t *testing.T) {
 
 	conn := kindprovisioner.ConnectionFor(kindConnectorTestCluster)
 	clientset := k8sfake.NewClientset(&corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: conn.SecretName, Namespace: conn.Namespace},
-		Data:       map[string][]byte{"kubeconfig.yaml": {}},
+		Name: conn.SecretName, Namespace: conn.Namespace,
+		Data: map[string][]byte{"kubeconfig.yaml": {}},
 	})
 	provisioner := kindprovisioner.NewKubernetesProvisionerForConnectorTest(
 		clientset, kindConnectorTestCluster, "",
@@ -97,8 +97,8 @@ func TestKubeconfig_ReturnsPublishedSecret(t *testing.T) {
 
 	conn := kindprovisioner.ConnectionFor(kindConnectorTestCluster)
 	clientset := k8sfake.NewClientset(&corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: conn.SecretName, Namespace: conn.Namespace},
-		Data:       map[string][]byte{"kubeconfig.yaml": []byte(kindHostKubeconfig)},
+		Name: conn.SecretName, Namespace: conn.Namespace,
+		Data: map[string][]byte{"kubeconfig.yaml": []byte(kindHostKubeconfig)},
 	})
 	provisioner := kindprovisioner.NewKubernetesProvisionerForConnectorTest(
 		clientset, kindConnectorTestCluster, "",
@@ -115,8 +115,8 @@ func TestKubeconfig_ResolvesNameFromArgument(t *testing.T) {
 
 	conn := kindprovisioner.ConnectionFor(kindConnectorTestCluster)
 	clientset := k8sfake.NewClientset(&corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: conn.SecretName, Namespace: conn.Namespace},
-		Data:       map[string][]byte{"kubeconfig.yaml": []byte("kubeconfig-bytes")},
+		Name: conn.SecretName, Namespace: conn.Namespace,
+		Data: map[string][]byte{"kubeconfig.yaml": []byte("kubeconfig-bytes")},
 	})
 	// Empty kindConfig name — the Kubeconfig(name) argument must resolve the cluster.
 	provisioner := kindprovisioner.NewKubernetesProvisionerForConnectorTest(clientset, "", "")

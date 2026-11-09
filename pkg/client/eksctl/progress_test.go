@@ -120,9 +120,6 @@ func TestMutatingCommands_Stream(t *testing.T) {
 		"scale nodegroup": func(c *eksctl.Client) error {
 			return c.ScaleNodegroup(t.Context(), "demo", "ng-1", "eu-west-1", 2, -1, -1)
 		},
-		"upgrade cluster": func(c *eksctl.Client) error {
-			return c.UpgradeCluster(t.Context(), "eks.yaml", true)
-		},
 	}
 
 	for name, run := range commands {

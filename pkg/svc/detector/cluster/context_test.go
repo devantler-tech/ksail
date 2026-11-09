@@ -128,6 +128,16 @@ func TestMatchContexts(t *testing.T) {
 		assert.Equal(t, []string{testCtxK3kNested}, matches)
 	})
 
+	t.Run("exact context beats contexts that contain it", func(t *testing.T) {
+		t.Parallel()
+
+		exact := &clientcmdapi.Config{Contexts: map[string]*clientcmdapi.Context{
+			"corp": {}, "corp-eu": {},
+		}}
+
+		assert.Equal(t, []string{"corp"}, cluster.MatchContexts(exact, "corp"))
+	})
+
 	t.Run("substring fallback for omni", func(t *testing.T) {
 		t.Parallel()
 

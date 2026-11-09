@@ -39,15 +39,33 @@ for argument in "$@"; do
 done
 printf '%s\037' "$@" >> "$FIXTURE_CALLS"
 printf '\n' >> "$FIXTURE_CALLS"
+json=false
 if [[ " $* " == *" --output json "* ]]; then
-  printf '{"totalChanges":0}\n'
-  echo 'No changes detected' >&2
-  if [[ "${FIXTURE_REPEAT_UPGRADE:-false}" == true ]]; then
-    echo 'Kubernetes upgrade path: v1.36.2 → v1.37.1 (1 step(s))' >&2
-  fi
-else
+  json=true
+fi
+# The cluster's own state decides whether this request upgrades: the first request
+# finds the source version and upgrades, a repeated one finds the target already.
+if [[ "$(cat "$FIXTURE_VERSION")" != v1.37.1 ]]; then
   printf '%s' "${FIXTURE_OBSERVED:-v1.37.1}" > "$FIXTURE_VERSION"
-  echo 'Kubernetes upgraded to pinned version v1.37.1'
+  if [[ "$json" == false || "${FIXTURE_FIRST_STDOUT:-}" == progress ]]; then
+    echo 'Kubernetes upgraded to pinned version v1.37.1'
+  else
+    echo 'Kubernetes upgraded to pinned version v1.37.1' >&2
+  fi
+  if [[ "$json" == true ]]; then
+    printf '{"totalChanges":1}\n'
+  fi
+  if [[ "$json" == true && "${FIXTURE_FIRST_STDOUT:-}" == two-documents ]]; then
+    printf '{"totalChanges":1}\n'
+  fi
+  exit 0
+fi
+if [[ "$json" == true ]]; then
+  printf '{"totalChanges":0}\n'
+fi
+echo 'No changes detected' >&2
+if [[ "${FIXTURE_REPEAT_UPGRADE:-false}" == true ]]; then
+  echo 'Kubernetes upgrade path: v1.36.2 → v1.37.1 (1 step(s))' >&2
 fi
 `
 
@@ -165,10 +183,21 @@ func TestSystemTestTalosUpgradeObservesTargetAndRepeatsNoop(t *testing.T) {
 
 	for line := range strings.SplitSeq(strings.TrimSpace(calls), "\n") {
 		assert.Contains(t, line, "--kubernetes-version\x1fv1.37.1\x1f")
+		assert.Contains(
+			t,
+			line,
+			"--output\x1fjson\x1f",
+			"the first upgrade and the repeat both run in JSON mode",
+		)
 	}
 
-	assert.Contains(t, calls, "--output\x1fjson\x1f")
 	assert.Contains(t, output, "v1.36.2 → v1.37.1")
+	assert.Contains(
+		t,
+		output,
+		"Kubernetes upgraded to pinned version v1.37.1",
+		"the upgrade's progress is shown",
+	)
 }
 
 func TestSystemTestTalosUpgradePreservesUpdateArguments(t *testing.T) {
@@ -215,6 +244,14 @@ func TestSystemTestTalosUpgradeRejectsWrongLiveState(t *testing.T) {
 			name: "repeat_upgrades", env: map[string]string{"FIXTURE_REPEAT_UPGRADE": "true"},
 			want: "repeated update performed a Kubernetes upgrade",
 		},
+		{
+			name: "first_upgrade_progress_on_stdout", env: map[string]string{"FIXTURE_FIRST_STDOUT": "progress"},
+			want: "did not write exactly one JSON document to stdout",
+		},
+		{
+			name: "first_upgrade_two_documents", env: map[string]string{"FIXTURE_FIRST_STDOUT": "two-documents"},
+			want: "did not write exactly one JSON document to stdout",
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
@@ -257,7 +294,6 @@ func TestSystemTestTalosUpgradeMatrixWiresKnownVersions(t *testing.T) {
 			Strategy struct {
 				Matrix struct {
 					Include []map[string]any `yaml:"include"`
-					Exclude []map[string]any `yaml:"exclude"`
 				} `yaml:"matrix"`
 			} `yaml:"strategy"`
 			Steps []harnessStep `yaml:"steps"`
@@ -276,7 +312,7 @@ func TestSystemTestTalosUpgradeMatrixWiresKnownVersions(t *testing.T) {
 
 			trialEntries++
 
-			assertNamedTalosUpgradeEntry(t, entry, job.Strategy.Matrix.Exclude)
+			assertNamedTalosUpgradeEntry(t, entry)
 
 			var wired bool
 
@@ -307,7 +343,7 @@ func TestSystemTestTalosUpgradeMatrixWiresKnownVersions(t *testing.T) {
 func assertNestedTalosTrialInputs(t *testing.T, step harnessStep) {
 	t.Helper()
 
-	assert.Equal(t, "${{ matrix.args }}", step.With["args"])
+	assert.Equal(t, "${{ matrix.effective-args || matrix.args }}", step.With["args"])
 	assert.Equal(t, "${{ matrix.test-kubernetes-provider || 'false' }}",
 		step.With["test-kubernetes-provider"])
 	assert.Equal(
@@ -323,17 +359,14 @@ func assertNestedTalosTrialInputs(t *testing.T, step harnessStep) {
 
 // assertNamedTalosUpgradeEntry keeps the real nested trial on a named host,
 // whose inherited name patch reproduces a kubeconfig overwrite missed by unnamed hosts.
-func assertNamedTalosUpgradeEntry(t *testing.T, entry map[string]any, excluded []map[string]any) {
+func assertNamedTalosUpgradeEntry(t *testing.T, entry map[string]any) {
 	t.Helper()
 
 	assert.Equal(t, "Talos", entry["distribution"])
 	assert.Equal(t, "Docker", entry["provider"])
 	assert.Equal(t, true, entry["init"])
-	assert.Regexp(t, `(?:^|\s)--name(?:=|\s+)\S+`, entry["args"])
+	assert.Regexp(t, `(?:^|\s)--name(?:=|\s+)\S+`, entry["effective-args"])
 	assert.Equal(t, "true", entry["test-kubernetes-provider"])
 	assert.Equal(t, "v1.36.2", entry["kubernetes-upgrade-from"])
 	assert.Equal(t, "v1.37.1", entry["kubernetes-upgrade-to"])
-	assert.Contains(t, excluded, map[string]any{
-		"distribution": "Talos", "provider": "Docker", "init": true, "args": "",
-	}, "the named trial replaces the unnamed default without adding another job")
 }

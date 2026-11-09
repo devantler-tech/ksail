@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
@@ -39,9 +38,7 @@ func statefulSetFixtureWithDesired(
 	update string,
 ) *appsv1.StatefulSet {
 	return &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: statefulSetName, Namespace: statefulSetNamespace, Generation: 1,
-		},
+		Name: statefulSetName, Namespace: statefulSetNamespace, Generation: 1,
 		Spec: appsv1.StatefulSetSpec{Replicas: &desired},
 		Status: appsv1.StatefulSetStatus{
 			ObservedGeneration: 1,

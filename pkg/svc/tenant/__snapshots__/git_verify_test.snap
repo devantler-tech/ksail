@@ -1,0 +1,37 @@
+
+[TestGenerateFluxSyncManifests_VerifiesSignedCommits - 1]
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: team-delta
+  namespace: team-delta-ns
+spec:
+  interval: 1m
+  ref:
+    branch: main
+  url: https://github.com/acme-org/team-delta-config
+  verify:
+    mode: HEAD
+    secretRef:
+      name: team-delta-signing-keys
+/-/-/-/
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: team-delta
+  namespace: team-delta-ns
+spec:
+  interval: 1m
+  path: ./k8s
+  prune: true
+  serviceAccountName: team-delta
+  sourceRef:
+    kind: GitRepository
+    name: team-delta
+  targetNamespace: team-delta-ns
+
+---

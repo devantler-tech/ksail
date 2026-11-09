@@ -24,10 +24,19 @@ func NewMockAPIClient(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockAPIClient {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockAPIClient{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -127,7 +136,7 @@ type MockAPIClient_ContainerCreate_Call struct {
 //   - networkingConfig *network.NetworkingConfig
 //   - platform *v1.Platform
 //   - containerName string
-func (_e *MockAPIClient_Expecter) ContainerCreate(ctx interface{}, config interface{}, hostConfig interface{}, networkingConfig interface{}, platform interface{}, containerName interface{}) *MockAPIClient_ContainerCreate_Call {
+func (_e *MockAPIClient_Expecter) ContainerCreate(ctx any, config any, hostConfig any, networkingConfig any, platform any, containerName any) *MockAPIClient_ContainerCreate_Call {
 	return &MockAPIClient_ContainerCreate_Call{Call: _e.mock.On("ContainerCreate", ctx, config, hostConfig, networkingConfig, platform, containerName)}
 }
 
@@ -214,7 +223,7 @@ type MockAPIClient_ContainerExecAttach_Call struct {
 //   - ctx context.Context
 //   - execID string
 //   - options container.ExecAttachOptions
-func (_e *MockAPIClient_Expecter) ContainerExecAttach(ctx interface{}, execID interface{}, options interface{}) *MockAPIClient_ContainerExecAttach_Call {
+func (_e *MockAPIClient_Expecter) ContainerExecAttach(ctx any, execID any, options any) *MockAPIClient_ContainerExecAttach_Call {
 	return &MockAPIClient_ContainerExecAttach_Call{Call: _e.mock.On("ContainerExecAttach", ctx, execID, options)}
 }
 
@@ -286,7 +295,7 @@ type MockAPIClient_ContainerExecCreate_Call struct {
 //   - ctx context.Context
 //   - container1 string
 //   - options container.ExecOptions
-func (_e *MockAPIClient_Expecter) ContainerExecCreate(ctx interface{}, container1 interface{}, options interface{}) *MockAPIClient_ContainerExecCreate_Call {
+func (_e *MockAPIClient_Expecter) ContainerExecCreate(ctx any, container1 any, options any) *MockAPIClient_ContainerExecCreate_Call {
 	return &MockAPIClient_ContainerExecCreate_Call{Call: _e.mock.On("ContainerExecCreate", ctx, container1, options)}
 }
 
@@ -313,8 +322,8 @@ func (_c *MockAPIClient_ContainerExecCreate_Call) Run(run func(ctx context.Conte
 	return _c
 }
 
-func (_c *MockAPIClient_ContainerExecCreate_Call) Return(v container.ExecCreateResponse, err error) *MockAPIClient_ContainerExecCreate_Call {
-	_c.Call.Return(v, err)
+func (_c *MockAPIClient_ContainerExecCreate_Call) Return(execCreateResponse container.ExecCreateResponse, err error) *MockAPIClient_ContainerExecCreate_Call {
+	_c.Call.Return(execCreateResponse, err)
 	return _c
 }
 
@@ -357,7 +366,7 @@ type MockAPIClient_ContainerExecInspect_Call struct {
 // ContainerExecInspect is a helper method to define mock.On call
 //   - ctx context.Context
 //   - execID string
-func (_e *MockAPIClient_Expecter) ContainerExecInspect(ctx interface{}, execID interface{}) *MockAPIClient_ContainerExecInspect_Call {
+func (_e *MockAPIClient_Expecter) ContainerExecInspect(ctx any, execID any) *MockAPIClient_ContainerExecInspect_Call {
 	return &MockAPIClient_ContainerExecInspect_Call{Call: _e.mock.On("ContainerExecInspect", ctx, execID)}
 }
 
@@ -423,7 +432,7 @@ type MockAPIClient_ContainerInspect_Call struct {
 // ContainerInspect is a helper method to define mock.On call
 //   - ctx context.Context
 //   - container1 string
-func (_e *MockAPIClient_Expecter) ContainerInspect(ctx interface{}, container1 interface{}) *MockAPIClient_ContainerInspect_Call {
+func (_e *MockAPIClient_Expecter) ContainerInspect(ctx any, container1 any) *MockAPIClient_ContainerInspect_Call {
 	return &MockAPIClient_ContainerInspect_Call{Call: _e.mock.On("ContainerInspect", ctx, container1)}
 }
 
@@ -491,7 +500,7 @@ type MockAPIClient_ContainerList_Call struct {
 // ContainerList is a helper method to define mock.On call
 //   - ctx context.Context
 //   - options container.ListOptions
-func (_e *MockAPIClient_Expecter) ContainerList(ctx interface{}, options interface{}) *MockAPIClient_ContainerList_Call {
+func (_e *MockAPIClient_Expecter) ContainerList(ctx any, options any) *MockAPIClient_ContainerList_Call {
 	return &MockAPIClient_ContainerList_Call{Call: _e.mock.On("ContainerList", ctx, options)}
 }
 
@@ -560,7 +569,7 @@ type MockAPIClient_ContainerLogs_Call struct {
 //   - ctx context.Context
 //   - container1 string
 //   - options container.LogsOptions
-func (_e *MockAPIClient_Expecter) ContainerLogs(ctx interface{}, container1 interface{}, options interface{}) *MockAPIClient_ContainerLogs_Call {
+func (_e *MockAPIClient_Expecter) ContainerLogs(ctx any, container1 any, options any) *MockAPIClient_ContainerLogs_Call {
 	return &MockAPIClient_ContainerLogs_Call{Call: _e.mock.On("ContainerLogs", ctx, container1, options)}
 }
 
@@ -623,7 +632,7 @@ type MockAPIClient_ContainerRemove_Call struct {
 //   - ctx context.Context
 //   - container1 string
 //   - options container.RemoveOptions
-func (_e *MockAPIClient_Expecter) ContainerRemove(ctx interface{}, container1 interface{}, options interface{}) *MockAPIClient_ContainerRemove_Call {
+func (_e *MockAPIClient_Expecter) ContainerRemove(ctx any, container1 any, options any) *MockAPIClient_ContainerRemove_Call {
 	return &MockAPIClient_ContainerRemove_Call{Call: _e.mock.On("ContainerRemove", ctx, container1, options)}
 }
 
@@ -686,7 +695,7 @@ type MockAPIClient_ContainerStart_Call struct {
 //   - ctx context.Context
 //   - container1 string
 //   - options container.StartOptions
-func (_e *MockAPIClient_Expecter) ContainerStart(ctx interface{}, container1 interface{}, options interface{}) *MockAPIClient_ContainerStart_Call {
+func (_e *MockAPIClient_Expecter) ContainerStart(ctx any, container1 any, options any) *MockAPIClient_ContainerStart_Call {
 	return &MockAPIClient_ContainerStart_Call{Call: _e.mock.On("ContainerStart", ctx, container1, options)}
 }
 
@@ -749,7 +758,7 @@ type MockAPIClient_ContainerStop_Call struct {
 //   - ctx context.Context
 //   - container1 string
 //   - options container.StopOptions
-func (_e *MockAPIClient_Expecter) ContainerStop(ctx interface{}, container1 interface{}, options interface{}) *MockAPIClient_ContainerStop_Call {
+func (_e *MockAPIClient_Expecter) ContainerStop(ctx any, container1 any, options any) *MockAPIClient_ContainerStop_Call {
 	return &MockAPIClient_ContainerStop_Call{Call: _e.mock.On("ContainerStop", ctx, container1, options)}
 }
 
@@ -829,7 +838,7 @@ type MockAPIClient_CopyFromContainer_Call struct {
 //   - ctx context.Context
 //   - container1 string
 //   - srcPath string
-func (_e *MockAPIClient_Expecter) CopyFromContainer(ctx interface{}, container1 interface{}, srcPath interface{}) *MockAPIClient_CopyFromContainer_Call {
+func (_e *MockAPIClient_Expecter) CopyFromContainer(ctx any, container1 any, srcPath any) *MockAPIClient_CopyFromContainer_Call {
 	return &MockAPIClient_CopyFromContainer_Call{Call: _e.mock.On("CopyFromContainer", ctx, container1, srcPath)}
 }
 
@@ -894,7 +903,7 @@ type MockAPIClient_CopyToContainer_Call struct {
 //   - path string
 //   - content io.Reader
 //   - options container.CopyToContainerOptions
-func (_e *MockAPIClient_Expecter) CopyToContainer(ctx interface{}, container1 interface{}, path interface{}, content interface{}, options interface{}) *MockAPIClient_CopyToContainer_Call {
+func (_e *MockAPIClient_Expecter) CopyToContainer(ctx any, container1 any, path any, content any, options any) *MockAPIClient_CopyToContainer_Call {
 	return &MockAPIClient_CopyToContainer_Call{Call: _e.mock.On("CopyToContainer", ctx, container1, path, content, options)}
 }
 
@@ -982,9 +991,9 @@ type MockAPIClient_ImageInspect_Call struct {
 //   - ctx context.Context
 //   - image1 string
 //   - inspectOpts ...client.ImageInspectOption
-func (_e *MockAPIClient_Expecter) ImageInspect(ctx interface{}, image1 interface{}, inspectOpts ...interface{}) *MockAPIClient_ImageInspect_Call {
+func (_e *MockAPIClient_Expecter) ImageInspect(ctx any, image1 any, inspectOpts ...any) *MockAPIClient_ImageInspect_Call {
 	return &MockAPIClient_ImageInspect_Call{Call: _e.mock.On("ImageInspect",
-		append([]interface{}{ctx, image1}, inspectOpts...)...)}
+		append([]any{ctx, image1}, inspectOpts...)...)}
 }
 
 func (_c *MockAPIClient_ImageInspect_Call) Run(run func(ctx context.Context, image1 string, inspectOpts ...client.ImageInspectOption)) *MockAPIClient_ImageInspect_Call {
@@ -1059,7 +1068,7 @@ type MockAPIClient_ImagePull_Call struct {
 //   - ctx context.Context
 //   - ref string
 //   - options image.PullOptions
-func (_e *MockAPIClient_Expecter) ImagePull(ctx interface{}, ref interface{}, options interface{}) *MockAPIClient_ImagePull_Call {
+func (_e *MockAPIClient_Expecter) ImagePull(ctx any, ref any, options any) *MockAPIClient_ImagePull_Call {
 	return &MockAPIClient_ImagePull_Call{Call: _e.mock.On("ImagePull", ctx, ref, options)}
 }
 
@@ -1123,7 +1132,7 @@ type MockAPIClient_NetworkConnect_Call struct {
 //   - network1 string
 //   - container1 string
 //   - config *network.EndpointSettings
-func (_e *MockAPIClient_Expecter) NetworkConnect(ctx interface{}, network1 interface{}, container1 interface{}, config interface{}) *MockAPIClient_NetworkConnect_Call {
+func (_e *MockAPIClient_Expecter) NetworkConnect(ctx any, network1 any, container1 any, config any) *MockAPIClient_NetworkConnect_Call {
 	return &MockAPIClient_NetworkConnect_Call{Call: _e.mock.On("NetworkConnect", ctx, network1, container1, config)}
 }
 
@@ -1200,7 +1209,7 @@ type MockAPIClient_NetworkCreate_Call struct {
 //   - ctx context.Context
 //   - name string
 //   - options network.CreateOptions
-func (_e *MockAPIClient_Expecter) NetworkCreate(ctx interface{}, name interface{}, options interface{}) *MockAPIClient_NetworkCreate_Call {
+func (_e *MockAPIClient_Expecter) NetworkCreate(ctx any, name any, options any) *MockAPIClient_NetworkCreate_Call {
 	return &MockAPIClient_NetworkCreate_Call{Call: _e.mock.On("NetworkCreate", ctx, name, options)}
 }
 
@@ -1264,7 +1273,7 @@ type MockAPIClient_NetworkDisconnect_Call struct {
 //   - network1 string
 //   - container1 string
 //   - force bool
-func (_e *MockAPIClient_Expecter) NetworkDisconnect(ctx interface{}, network1 interface{}, container1 interface{}, force interface{}) *MockAPIClient_NetworkDisconnect_Call {
+func (_e *MockAPIClient_Expecter) NetworkDisconnect(ctx any, network1 any, container1 any, force any) *MockAPIClient_NetworkDisconnect_Call {
 	return &MockAPIClient_NetworkDisconnect_Call{Call: _e.mock.On("NetworkDisconnect", ctx, network1, container1, force)}
 }
 
@@ -1341,7 +1350,7 @@ type MockAPIClient_NetworkInspect_Call struct {
 //   - ctx context.Context
 //   - network1 string
 //   - options network.InspectOptions
-func (_e *MockAPIClient_Expecter) NetworkInspect(ctx interface{}, network1 interface{}, options interface{}) *MockAPIClient_NetworkInspect_Call {
+func (_e *MockAPIClient_Expecter) NetworkInspect(ctx any, network1 any, options any) *MockAPIClient_NetworkInspect_Call {
 	return &MockAPIClient_NetworkInspect_Call{Call: _e.mock.On("NetworkInspect", ctx, network1, options)}
 }
 
@@ -1414,7 +1423,7 @@ type MockAPIClient_NetworkList_Call struct {
 // NetworkList is a helper method to define mock.On call
 //   - ctx context.Context
 //   - options network.ListOptions
-func (_e *MockAPIClient_Expecter) NetworkList(ctx interface{}, options interface{}) *MockAPIClient_NetworkList_Call {
+func (_e *MockAPIClient_Expecter) NetworkList(ctx any, options any) *MockAPIClient_NetworkList_Call {
 	return &MockAPIClient_NetworkList_Call{Call: _e.mock.On("NetworkList", ctx, options)}
 }
 
@@ -1436,8 +1445,8 @@ func (_c *MockAPIClient_NetworkList_Call) Run(run func(ctx context.Context, opti
 	return _c
 }
 
-func (_c *MockAPIClient_NetworkList_Call) Return(vs []network.Summary, err error) *MockAPIClient_NetworkList_Call {
-	_c.Call.Return(vs, err)
+func (_c *MockAPIClient_NetworkList_Call) Return(summarys []network.Summary, err error) *MockAPIClient_NetworkList_Call {
+	_c.Call.Return(summarys, err)
 	return _c
 }
 
@@ -1471,7 +1480,7 @@ type MockAPIClient_NetworkRemove_Call struct {
 // NetworkRemove is a helper method to define mock.On call
 //   - ctx context.Context
 //   - network1 string
-func (_e *MockAPIClient_Expecter) NetworkRemove(ctx interface{}, network1 interface{}) *MockAPIClient_NetworkRemove_Call {
+func (_e *MockAPIClient_Expecter) NetworkRemove(ctx any, network1 any) *MockAPIClient_NetworkRemove_Call {
 	return &MockAPIClient_NetworkRemove_Call{Call: _e.mock.On("NetworkRemove", ctx, network1)}
 }
 
@@ -1536,7 +1545,7 @@ type MockAPIClient_Ping_Call struct {
 
 // Ping is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockAPIClient_Expecter) Ping(ctx interface{}) *MockAPIClient_Ping_Call {
+func (_e *MockAPIClient_Expecter) Ping(ctx any) *MockAPIClient_Ping_Call {
 	return &MockAPIClient_Ping_Call{Call: _e.mock.On("Ping", ctx)}
 }
 
@@ -1597,7 +1606,7 @@ type MockAPIClient_VolumeCreate_Call struct {
 // VolumeCreate is a helper method to define mock.On call
 //   - ctx context.Context
 //   - options volume.CreateOptions
-func (_e *MockAPIClient_Expecter) VolumeCreate(ctx interface{}, options interface{}) *MockAPIClient_VolumeCreate_Call {
+func (_e *MockAPIClient_Expecter) VolumeCreate(ctx any, options any) *MockAPIClient_VolumeCreate_Call {
 	return &MockAPIClient_VolumeCreate_Call{Call: _e.mock.On("VolumeCreate", ctx, options)}
 }
 
@@ -1663,7 +1672,7 @@ type MockAPIClient_VolumeInspect_Call struct {
 // VolumeInspect is a helper method to define mock.On call
 //   - ctx context.Context
 //   - volumeID string
-func (_e *MockAPIClient_Expecter) VolumeInspect(ctx interface{}, volumeID interface{}) *MockAPIClient_VolumeInspect_Call {
+func (_e *MockAPIClient_Expecter) VolumeInspect(ctx any, volumeID any) *MockAPIClient_VolumeInspect_Call {
 	return &MockAPIClient_VolumeInspect_Call{Call: _e.mock.On("VolumeInspect", ctx, volumeID)}
 }
 
@@ -1721,7 +1730,7 @@ type MockAPIClient_VolumeRemove_Call struct {
 //   - ctx context.Context
 //   - volumeID string
 //   - force bool
-func (_e *MockAPIClient_Expecter) VolumeRemove(ctx interface{}, volumeID interface{}, force interface{}) *MockAPIClient_VolumeRemove_Call {
+func (_e *MockAPIClient_Expecter) VolumeRemove(ctx any, volumeID any, force any) *MockAPIClient_VolumeRemove_Call {
 	return &MockAPIClient_VolumeRemove_Call{Call: _e.mock.On("VolumeRemove", ctx, volumeID, force)}
 }
 

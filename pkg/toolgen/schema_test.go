@@ -542,11 +542,9 @@ func TestBuildParameterSchema_EnumWithDefault(t *testing.T) {
 	cmd := newTestCmd()
 
 	enumFlag := &mockDefaultEnumValue{
-		mockEnumValue: mockEnumValue{
-			value:       "json",
-			validValues: []string{"json", "yaml", "xml"},
-		},
-		defaultVal: "json",
+		value:       "json",
+		validValues: []string{"json", "yaml", "xml"},
+		defaultVal:  "json",
 	}
 	cmd.Flags().Var(enumFlag, "output", "Output format")
 
