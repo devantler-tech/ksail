@@ -289,7 +289,7 @@ func TestExecInContainerStopsReadingWhenContextEnds(t *testing.T) {
 	select {
 	case err := <-done:
 		require.ErrorIs(t, err, context.DeadlineExceeded)
-	case <-time.After(5 * time.Second):
+	case <-time.After(time.Second): // the 50ms deadline plus scheduling tolerance
 		t.Fatal("ExecInContainer kept reading a stalled stream after its context ended")
 	}
 }
