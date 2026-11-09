@@ -10,13 +10,19 @@
 #   - .goreleaser.yaml + .goreleaser.desktop.yaml (before hooks)
 #   - .github/actions/operator-chart-e2e/action.yml
 #
-# Usage: stage-webui.sh (no args; works from any CWD — it cds to the repo root itself)
+# Usage: stage-webui.sh [repository-root]
+# With no argument, use the repository containing this script.
 set -euo pipefail
 
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
+cd -- "${1:-$(dirname "${BASH_SOURCE[0]}")/..}"
 
 npm --prefix web/ui ci
 npm --prefix web/ui run build
+if [[ ! -f web/ui/dist/index.html || ! -s web/ui/dist/index.html ]]; then
+  printf '%s\n' 'Web UI build did not produce a nonempty web/ui/dist/index.html.' >&2
+  exit 1
+fi
+
 rm -rf pkg/webui/dist
 mkdir -p pkg/webui/dist
 touch pkg/webui/dist/.gitkeep
