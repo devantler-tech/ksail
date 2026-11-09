@@ -558,7 +558,7 @@ jobs:
       # Same setup-go pin as setup-desktop-build: on Windows it links GOROOT
       # into the D: drive, which is the layout the release job stages under.
       - name: ⚙️ Setup Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: false
@@ -1166,7 +1166,7 @@ jobs:
       - name: 🧹 Free disk space
         if: steps.calico-cache.outputs.cache-hit != 'true'
         # Only cold compilation needs the large working-space reclamation.
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@41a8ea06da57a4b53744cad7a617d6294e7ad588
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@78ca354307492ad2f3449c3f039124e43343e10b
 
       - name: ♻️ Restore Go modules
         if: steps.calico-cache.outputs.cache-hit != 'true'
@@ -2065,7 +2065,7 @@ jobs:
       # This job already waits for the producer. Reuse its exact sealed bytes
       # instead of restoring Go modules or compiling again after cache eviction.
       - name: 📥 Restore KSail binary
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@41a8ea06da57a4b53744cad7a617d6294e7ad588
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@78ca354307492ad2f3449c3f039124e43343e10b
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2276,7 +2276,7 @@ jobs:
 
       - name: 📥 Restore KSail binary
         # Pin the identical published action until actionlint supports $/ references.
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@41a8ea06da57a4b53744cad7a617d6294e7ad588
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@78ca354307492ad2f3449c3f039124e43343e10b
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2757,7 +2757,7 @@ jobs:
         with:
           persist-credentials: false
       - name: 🧹 Free runner disk
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@41a8ea06da57a4b53744cad7a617d6294e7ad588
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@78ca354307492ad2f3449c3f039124e43343e10b
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
