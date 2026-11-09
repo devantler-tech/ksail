@@ -474,10 +474,22 @@ func TestReleaseActionPinnedTreesMatchAuditedTrees(t *testing.T) {
 
 			//nolint:gosec // G204: fixed Git command and audited directory.
 			output, checkoutErr := exec.CommandContext(
-				t.Context(), "git", "-C", root, "rev-parse", "--verify", "--quiet", "HEAD:"+binding.dir,
+				t.Context(),
+				"git",
+				"-C",
+				root,
+				"rev-parse",
+				"--verify",
+				"--quiet",
+				"HEAD:"+binding.dir,
 			).Output()
 			if checkoutErr != nil || strings.TrimSpace(string(output)) != binding.tree {
-				t.Fatalf("release checkout's %s must match audited tree %s: %v", binding.dir, binding.tree, checkoutErr)
+				t.Fatalf(
+					"release checkout's %s must match audited tree %s: %v",
+					binding.dir,
+					binding.tree,
+					checkoutErr,
+				)
 			}
 
 			err := auditPinnedTree(
