@@ -67,6 +67,12 @@ run_case merged-list-failure 1 'could not enumerate merged cask PRs'
 run_case merged-main-file-failure 1 'no valid merged cask PR'
 run_case merged-moving-main 1 'no valid merged cask PR'
 
+# When main still serves the previous version, no historical merge can validate.
+run_case merged-stale-current 1 'tap main still pins 7.166.0; expected 7.166.1'
+[[ ! -e "${tmp_dir}/merged-stale-current-$((pass_count - 1))/state/list-read" ]]
+run_case merged-stale-current 1 'tap main still pins 7.166.0; expected 7.166.1' --pr 42
+[[ ! -e "${tmp_dir}/merged-stale-current-$((pass_count - 1))/state/list-read" ]]
+
 # Discovery can omit the selected PR, or finish after that PR merges. The named
 # read must exercise the same collector/validator and retain its immutable proof.
 run_case merged-known-not-listed 0 '42' --pr 42
