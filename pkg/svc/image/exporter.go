@@ -43,6 +43,8 @@ const (
 //nolint:gochecknoglobals // Test seam: tests pin the name so node-side commands stay exact.
 var newExportArchiveName = defaultExportArchiveName
 
+// defaultExportArchiveName returns a random node-side archive name, so concurrent
+// exports on the same node never write to the same file.
 func defaultExportArchiveName() string {
 	suffix := make([]byte, exportArchiveSuffixBytes)
 	_, _ = rand.Read(suffix)
@@ -138,6 +140,8 @@ func (e *Exporter) Export(
 	return e.exportSources(ctx, sources, distribution, opts)
 }
 
+// exportSource exports one node's share of the images to a host-side archive and
+// returns its path, repairing missing content on that node when needed.
 func (e *Exporter) exportSource(
 	ctx context.Context,
 	source nodeExportSource,
@@ -254,6 +258,8 @@ func (e *Exporter) exportImagesFromNode(
 	return platform, nil
 }
 
+// withLocalExport returns a copy of the exporter that uses the export mode the
+// node's containerd supports, probed once for this operation.
 func (e *Exporter) withLocalExport(ctx context.Context, nodeName string) (*Exporter, error) {
 	// Probe once for this operation. Containerd 1.6 exports synchronously but
 	// lacks --local; newer versions expose it and 2.x otherwise defaults to an

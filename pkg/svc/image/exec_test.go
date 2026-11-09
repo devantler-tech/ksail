@@ -261,8 +261,9 @@ func TestExecInContainerMultipleArguments(t *testing.T) {
 	assert.Equal(t, "nginx:latest\nredis:alpine\n", got)
 }
 
-// A stream that stalls after attaching is interrupted when the context ends,
-// so a deadline bounds the whole exec rather than only its setup.
+// TestExecInContainerStopsReadingWhenContextEnds checks that a stream that stalls
+// after attaching is interrupted when the context ends, so a deadline bounds the
+// whole exec rather than only its setup.
 func TestExecInContainerStopsReadingWhenContextEnds(t *testing.T) {
 	t.Parallel()
 

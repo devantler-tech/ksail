@@ -72,6 +72,9 @@ func (e *Exporter) findExportSources(
 	return sources, nil
 }
 
+// readExportInventories lists the images held by each candidate node. With an
+// explicit request it skips a node it cannot read and reports the failure;
+// without one, or once the context ends, it stops at the first failure.
 func (e *Exporter) readExportInventories(
 	ctx context.Context, candidates, requested []string,
 ) ([]nodeImageInventory, error) {
@@ -103,6 +106,8 @@ func (e *Exporter) readExportInventories(
 	return inventories, errors.Join(failures...)
 }
 
+// exportReferences returns the normalized, de-duplicated references to export:
+// the requested ones, or every image the inventories hold when none is requested.
 func exportReferences(inventories []nodeImageInventory, requested []string) []string {
 	refs := slices.Clone(requested)
 	if len(refs) == 0 {
@@ -161,6 +166,8 @@ func planExportSources(
 	return sources, nil
 }
 
+// sourceForReferences reports which wanted references the node can serve and the
+// distinct local image names it would export for them.
 func sourceForReferences(inventory nodeImageInventory, wanted []string) nodeExportSource {
 	source := nodeExportSource{node: inventory.node}
 	seen := make(map[string]bool)
