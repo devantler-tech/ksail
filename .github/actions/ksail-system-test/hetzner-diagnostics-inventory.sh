@@ -5,6 +5,7 @@ set -euo pipefail
 
 verify_absent() {
 	local run="$1" kind selector ids
+	local -a type_filter
 	[[ "$run" =~ ^[0-9]+$ ]] || return 1
 	for kind in server floating-ip placement-group firewall network load-balancer volume; do
 		selector="ksail.cluster.name=st-hetzner-dispatch-$run"
@@ -13,7 +14,11 @@ verify_absent() {
 	done
 	for kind in server image ssh-key; do
 		selector="ksail.io/cluster=st-hetzner-dispatch-$run"
-		ids=$(timeout --kill-after=5s 12s hcloud "$kind" list -o noheader -o columns=id -l "$selector")
+		type_filter=()
+		if [[ "$kind" == image ]]; then
+			type_filter=(--type snapshot)
+		fi
+		ids=$(timeout --kill-after=5s 12s hcloud "$kind" list -o noheader -o columns=id -l "$selector" "${type_filter[@]}")
 		[[ -z "$ids" ]] || { echo "Run $run still owns snapshot-build $kind resources" >&2; return 1; }
 	done
 	echo "Verified run $run cluster and snapshot-build resource absence"
