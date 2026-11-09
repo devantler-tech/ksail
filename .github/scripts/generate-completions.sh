@@ -39,7 +39,7 @@ trap 'rm -rf "$work"' EXIT
 mkdir "$work/files" "$work/home"
 # Completion must not see the runner's release credentials, kubeconfig or user
 # configuration, so the binary starts from an empty environment holding only
-# what it needs. KSAIL_TEST_COMPLETION_* lets the release test drive a fake binary.
+# what it needs.
 minimal_env=(
 	"PATH=$PATH"
 	"HOME=$work/home"
@@ -49,9 +49,6 @@ minimal_env=(
 	"TMPDIR=$work"
 )
 if [[ -n "${SYSTEMROOT-}" ]]; then minimal_env+=("SYSTEMROOT=$SYSTEMROOT"); fi
-while IFS= read -r name; do
-	minimal_env+=("$name=${!name}")
-done < <(compgen -e | grep '^KSAIL_TEST_COMPLETION_' || true)
 started=$SECONDS
 for shell in bash zsh fish; do
 	env -i "${minimal_env[@]}" "$binary" completion "$shell" >"$work/files/ksail.$shell"

@@ -44,10 +44,9 @@ Each Kubernetes distribution runs on one or more infrastructure providers (Docke
   <TabItem label="Homebrew">
     ### Homebrew (macOS/Linux)
 
-    Homebrew installs include Bash, zsh and fish completion scripts. With Homebrew's
-    standard completion setup enabled for your shell, type `ksail` followed by a
-    space and press Tab to complete subcommands. No KSail-specific profile changes
-    are needed.
+    Homebrew installs include Bash, zsh and fish completions. With Homebrew's
+    standard completion setup enabled, type `ksail` followed by a space and
+    press Tab to complete subcommands.
 
     The easiest way to install KSail on macOS or Linux:
 
@@ -68,7 +67,9 @@ Each Kubernetes distribution runs on one or more infrastructure providers (Docke
     curl -fsSL https://github.com/devantler-tech/ksail/releases/latest/download/install.sh | sh
     ```
 
-    If Go is installed, the script uses `$GOPATH/bin`; otherwise it uses `~/.local/bin`. Set `KSAIL_INSTALL_DIR` to choose another destination. To install a specific release, set `KSAIL_VERSION` to its `v`-prefixed tag (for example, `v7.180.5`).
+    If Go is installed, the script uses `$GOPATH/bin`; otherwise it uses `~/.local/bin`. Set `KSAIL_INSTALL_DIR` to choose another destination. To install a specific release, set `KSAIL_VERSION` to its `v`-prefixed tag.
+
+    The current installer supports releases that contain the required `GoNotices` materials. This also applies to `KSAIL_VERSION`: older archives without those materials are refused before the installed binary is replaced. There is no fallback that waives missing notices. The installer prints the versioned notice directory it retains under `<install directory>/.ksail-notices/`.
 
     > [!NOTE]
     > Versioned installation through `go install` is not supported. Go ignores the main-module dependency overrides that KSail currently needs for upstream compatibility and security fixes. To compile from source, use the **From Source** method below so those reviewed overrides remain active.
@@ -85,6 +86,8 @@ Each Kubernetes distribution runs on one or more infrastructure providers (Docke
     3. Extract the archive
     4. Move the `ksail` binary to a directory in your PATH (e.g., `/usr/local/bin`)
     5. Make it executable (Linux/macOS): `chmod +x ksail`
+
+    Retain the accompanying `GoNotices` directory with the binary or its accompanying distribution materials.
 
   </TabItem>
 
@@ -103,6 +106,16 @@ Each Kubernetes distribution runs on one or more infrastructure providers (Docke
 
   </TabItem>
 </Tabs>
+
+## Third-party Go notices
+
+Notice-bearing CLI archives and Linux/Windows desktop archives include `GoNotices/THIRD_PARTY_NOTICES.txt`, `GoNotices/manifest.json`, and `GoNotices/release.txt`. The macOS desktop archive keeps these files inside `KSail.app/Contents/Resources/GoNotices/`.
+
+The text preserves selected third-party license and attribution material, including distinct nested terms, MPL source-access information, and Chroma's embedded font notices. The manifest records the selected Go source identities and evidence hashes. The release record binds that target's material to its release tag and source commit. A manifest alone does not establish that an archive contains the material; release packaging verifies the actual archive contents.
+
+For a `release-source:<path>` locator, use the `source=` commit in `release.txt` to visit `https://github.com/devantler-tech/ksail/tree/<source-commit>/<path>`. Published module sources use the recorded public Go proxy URL and Go module `h1:` checksum, which identifies canonical module contents rather than the ZIP file's raw SHA-256. These source locators do not grant additional rights.
+
+This material preserves notices found in the audited Go graph's selected Go, assembly, auxiliary source and embedded files, together with the actual Go toolchain notices. It does not establish licensing completeness for native C/C++/Objective-C code or separate system libraries, JavaScript/assets, bundled executables, VSIX contents, containers, or earlier releases without these materials.
 
 ## Embedded Tools
 

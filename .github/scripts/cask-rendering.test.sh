@@ -4,7 +4,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-for tool in go goreleaser yq brew jq git; do
+for tool in go goreleaser yq brew jq git tar unzip cmp; do
 	command -v "$tool" >/dev/null || {
 		printf 'missing required tool: %s\n' "$tool" >&2
 		exit 1
@@ -31,6 +31,60 @@ cleanup() {
 }
 trap cleanup EXIT
 
+stage_notice_fixtures() {
+	local fixture="$1" target member
+	for target in cli-darwin-arm64 cli-linux-amd64 cli-linux-arm64 cli-windows-amd64 cli-windows-arm64 desktop-darwin-arm64; do
+		mkdir -p "$fixture/.cache/go-notices/$target/GoNotices"
+		for member in THIRD_PARTY_NOTICES.txt manifest.json release.txt; do
+			printf 'cask notice placement fixture: %s %s\n' "$target" "$member" >"$fixture/.cache/go-notices/$target/GoNotices/$member"
+		done
+	done
+}
+
+verify_notice_fixture_archives() {
+	local fixture="$1" product="$2" archive base target prefix member count=0 expected=5
+	if [[ "$product" == ksail-desktop ]]; then expected=1; fi
+	while IFS= read -r archive; do
+		base="${archive##*/}"
+		case "$product:$base" in
+		ksail:*_darwin_arm64.tar.gz) target=cli-darwin-arm64 ;;
+		ksail:*_linux_amd64.tar.gz) target=cli-linux-amd64 ;;
+		ksail:*_linux_arm64.tar.gz) target=cli-linux-arm64 ;;
+		ksail:*_windows_amd64.zip) target=cli-windows-amd64 ;;
+		ksail:*_windows_arm64.zip) target=cli-windows-arm64 ;;
+		ksail-desktop:*_darwin_arm64.zip) target=desktop-darwin-arm64 ;;
+		*)
+			printf 'unexpected cask fixture archive\n' >&2
+			return 1
+			;;
+		esac
+		prefix=GoNotices
+		if [[ "$product" == ksail-desktop ]]; then prefix=KSail.app/Contents/Resources/GoNotices; fi
+		for member in THIRD_PARTY_NOTICES.txt manifest.json release.txt; do
+			case "$archive" in
+			*.tar.gz) tar -xOzf "$archive" "$prefix/$member" >"$fixture/member.actual" ;;
+			*.zip) unzip -p "$archive" "$prefix/$member" >"$fixture/member.actual" ;;
+			esac
+			cmp "$fixture/.cache/go-notices/$target/GoNotices/$member" "$fixture/member.actual"
+		done
+		if [[ "$product" == ksail ]]; then
+			for member in bash zsh fish; do
+				case "$archive" in
+				*.tar.gz) tar -xOzf "$archive" "completions/ksail.$member" >"$fixture/member.actual" ;;
+				*.zip) unzip -p "$archive" "completions/ksail.$member" >"$fixture/member.actual" ;;
+				esac
+				printf '# completion archive fixture: %s\n' "$member" | cmp - "$fixture/member.actual"
+			done
+		fi
+		if [[ "$product" == ksail-desktop ]]; then
+			unzip -p "$archive" KSail.app/Contents/Resources/LICENSE >"$fixture/member.actual"
+			cmp "$fixture/LICENSE" "$fixture/member.actual"
+		fi
+		count=$((count + 1))
+	done < <(find "$fixture/dist" -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' \))
+	[[ "$count" -eq "$expected" ]]
+}
+
 mkdir -p "$work/tap/Casks"
 for name in ksail ksail-desktop; do
 	config=.goreleaser.yaml
@@ -39,32 +93,63 @@ for name in ksail ksail-desktop; do
 	mkdir -p "$fixture"
 	printf 'module cask-render-fixture\n\ngo 1.27.3\n' >"$fixture/go.mod"
 	printf 'package main\nfunc main() {}\n' >"$fixture/main.go"
-	# Packaging uses literal payloads here; the command-package tests exercise the real generator.
 	if [[ "$name" == ksail ]]; then
-		cat >"$fixture/fixture-completions.sh" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-if [[ "$1" != linux/amd64 ]]; then exit 0; fi
-mkdir -p dist/completions
-for shell in bash zsh fish; do
-	printf '# completion archive fixture: %s\n' "$shell" >"dist/completions/ksail.$shell"
-done
+		cat >"$fixture/main.go" <<'EOF'
+package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func main() {
+	if len(os.Args) != 3 || os.Args[1] != "completion" {
+		os.Exit(2)
+	}
+	fmt.Printf("# completion archive fixture: %s\n", os.Args[2])
+}
 EOF
+		mkdir -p "$fixture/.github/scripts"
+		cp "$root/.github/scripts/generate-completions.sh" "$fixture/.github/scripts/"
+		for mode in failed empty; do
+			cat >"$fixture/completion-$mode" <<'EOF'
+#!/usr/bin/env bash
+case "${0##*/}:$2" in
+completion-failed:fish) exit 9 ;;
+completion-empty:fish) exit 0 ;;
+esac
+printf 'completion fixture\n'
+EOF
+			chmod +x "$fixture/completion-$mode"
+			if bash "$fixture/.github/scripts/generate-completions.sh" "$fixture/completion-$mode" \
+				"$fixture/incomplete-$mode" darwin/arm64 darwin/arm64; then
+				printf 'the %s completion generation was accepted\n' "$mode" >&2
+				exit 1
+			fi
+			[[ ! -e "$fixture/incomplete-$mode" ]]
+		done
 	fi
+	cp "$root/LICENSE" "$fixture/LICENSE"
+	stage_notice_fixtures "$fixture"
 	# Keep the real archive/target/cask shapes. Remove application-only build hooks and publication
 	# credentials, and force upload off; this fixture must never publish or use a credential.
 	yq '.project_name = "'"$name"'" | .dist = "dist" |
 		.before.hooks = [] | .builds[].main = "." | .builds[].tags = [] |
-		.builds[].env = ["CGO_ENABLED=0"] | .builds[].hooks = {} | .builds[].ldflags = [] |
+		.builds[].env = ["CGO_ENABLED=0"] | del(.builds[].hooks.pre) | .builds[].ldflags = [] |
+		.archives[].files = ((.archives[].files // []) | map(select((.src // "") == "LICENSE" or ((.src // "") | test("^\\.cache/go-notices/|^dist/completions/"))))) |
 		.homebrew_casks[].skip_upload = "true" |
 		.homebrew_casks[].repository.token = "" |
 		del(.homebrew_casks[].commit_author.signing, .dockers_v2, .docker_signs, .release.extra_files)' \
 		"$root/$config" >"$fixture/.goreleaser.yaml"
-	if [[ "$name" == ksail ]]; then
-		yq -i '.builds[].hooks.post = [{"cmd": "bash fixture-completions.sh {{ .Os }}/{{ .Arch }}"}]' \
-			"$fixture/.goreleaser.yaml"
-	else
-		yq -i '.archives[].files = []' "$fixture/.goreleaser.yaml"
+	if [[ "$name" == ksail-desktop ]]; then
+		yq -i '.builds[].hooks = {}' "$fixture/.goreleaser.yaml"
+	fi
+	if [[ "$name" == ksail && "$(go env GOARCH)" == amd64 ]]; then
+		# Intel still exercises the real script and cask. Its native fixture is
+		# built separately because the release matrix excludes Darwin amd64.
+		go build -o "$fixture/native-fixture" "$fixture/main.go"
+		yq -i '.builds[].hooks.post[0].cmd |= sub("\\{\\{ \\.Path \\}\\}", "{{ .Env.KSAIL_CASK_NATIVE_FIXTURE }}") |
+			.builds[].hooks.post[0].cmd |= sub("\\{\\{ \\.Runtime.Goos \\}\\}/\\{\\{ \\.Runtime.Goarch \\}\\}", "darwin/arm64")' "$fixture/.goreleaser.yaml"
 	fi
 	git -C "$fixture" init --quiet
 	git -C "$fixture" remote add origin https://github.com/devantler-tech/ksail.git
@@ -74,25 +159,10 @@ EOF
 	git -C "$fixture" tag v7.204.0
 	(
 		cd "$fixture"
+		export KSAIL_CASK_NATIVE_FIXTURE="$fixture/native-fixture"
 		goreleaser release --snapshot --clean --skip=validate,publish,announce,sign
 	)
-	if [[ "$name" == ksail ]]; then
-		shopt -s nullglob
-		archives=("$fixture"/dist/*.tar.gz "$fixture"/dist/*.zip)
-		[[ ${#archives[@]} -eq 5 ]] || {
-			printf 'expected all five CLI archives\n' >&2
-			exit 1
-		}
-		for archive in "${archives[@]}"; do
-			for shell in bash zsh fish; do
-				actual="$(tar -xOf "$archive" "completions/ksail.$shell")"
-				[[ "$actual" == "# completion archive fixture: $shell" ]] || {
-					printf 'missing or changed %s completion in %s\n' "$shell" "$archive" >&2
-					exit 1
-				}
-			done
-		done
-	fi
+	verify_notice_fixture_archives "$fixture" "$name"
 	casks=()
 	while IFS= read -r file; do casks+=("$file"); done < <(find "$fixture/dist" -name "$name.rb" -type f)
 	[[ ${#casks[@]} -eq 1 ]] || {

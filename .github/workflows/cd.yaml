@@ -259,6 +259,12 @@ jobs:
           # .goreleaser.yaml uploads the cask only when this is exactly "true".
           KSAIL_CASK_PUBLISH: ${{ needs.cask-checkpoint.outputs.cask-publish }}
 
+      - name: 🔎 Verify CLI archive Go notices
+        id: verify_cli_notices
+        if: needs.cask-checkpoint.outputs.release-mode == 'build'
+        shell: bash
+        run: go run .github/scripts/go-notices.go verify-cli "$GITHUB_REF_NAME" "$GITHUB_SHA"
+
       - name: ♻️ Reuse verified publication
         if: needs.cask-checkpoint.outputs.release-mode == 'verify'
         shell: bash
@@ -411,6 +417,12 @@ jobs:
       # GoReleaser's release pipe is disabled (.goreleaser.desktop.yaml). Emit the macOS archive as a
       # workflow artifact; `publish-release` attaches it to the draft before publishing, so every asset
       # is present before the release is locked by immutable releases (see #4874).
+      - name: 🔎 Verify macOS desktop archive Go notices
+        id: verify_macos_notices
+        if: needs.cask-checkpoint.outputs.release-mode == 'build'
+        shell: bash
+        run: go run .github/scripts/go-notices.go verify desktop-darwin-arm64 "$GITHUB_REF_NAME" "$GITHUB_SHA"
+
       - name: 📤 Upload desktop archive artifact
         if: needs.cask-checkpoint.outputs.release-mode == 'build'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -458,7 +470,7 @@ jobs:
 
       - name: 🛠️ Setup desktop build (Go, Node.js, webview deps, staged web UI)
         if: needs.validate-release-ref.outputs.release-mode == 'build'
-        uses: devantler-tech/ksail/.github/actions/setup-desktop-build@41a8ea06da57a4b53744cad7a617d6294e7ad588
+        uses: devantler-tech/ksail/.github/actions/setup-desktop-build@78ca354307492ad2f3449c3f039124e43343e10b
 
       - name: 🏷️ Extract version from tag
         if: needs.validate-release-ref.outputs.release-mode == 'build'
@@ -482,17 +494,34 @@ jobs:
           GOOS: ${{ matrix.goos }}
           ARCH: ${{ matrix.arch }}
         run: |
+          set -euo pipefail
+          target="desktop-$GOOS-$ARCH"
+          go run .github/scripts/go-notices.go stage "$target" "$GITHUB_REF_NAME" "$GITHUB_SHA"
           case "$GOOS" in
             linux)
               artifact="ksail-desktop_${VERSION}_linux_${ARCH}.tar.gz"
-              tar -C desktop -czf "$artifact" ksail-desktop
+              if [ -e "$artifact" ] || [ -L "$artifact" ]; then exit 1; fi
+              tar -czf "$artifact" -C desktop ksail-desktop -C "$PWD" LICENSE -C "$PWD/.cache/go-notices/$target" GoNotices
               ;;
             windows)
               artifact="ksail-desktop_${VERSION}_windows_${ARCH}.zip"
-              7z a "$artifact" "./desktop/ksail-desktop.exe"
+              if [ -e "$artifact" ] || [ -L "$artifact" ]; then exit 1; fi
+              7z a "$artifact" "./desktop/ksail-desktop.exe" LICENSE
+              archive_path="$PWD/$artifact"
+              (cd ".cache/go-notices/$target" && 7z a "$archive_path" GoNotices)
               ;;
+            *) exit 1 ;;
           esac
           echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
+
+      - name: 🔎 Verify desktop archive Go notices
+        id: verify_desktop_notices
+        if: needs.validate-release-ref.outputs.release-mode == 'build'
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          ARCH: ${{ matrix.arch }}
+        run: go run .github/scripts/go-notices.go verify "desktop-$GOOS-$ARCH" "$GITHUB_REF_NAME" "$GITHUB_SHA"
 
       - name: 📤 Upload desktop archive artifact
         if: needs.validate-release-ref.outputs.release-mode == 'build'

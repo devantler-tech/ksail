@@ -96,7 +96,7 @@ func TestCaskHandoffProbeHasNoAutomaticOrWriteAuthority(t *testing.T) {
 	assert.Equal(t, map[string]string{"contents": "read"}, definition.Permissions)
 
 	workflow := readCIWorkflow(t, ".github/workflows/verify-cask-handoff.yaml")
-	require.Len(t, workflow.Jobs, 2)
+	require.Len(t, workflow.Jobs, 1)
 
 	for _, job := range workflow.Jobs {
 		assert.Empty(t, job.Permissions, "jobs must inherit the read-only ceiling")
