@@ -7355,9 +7355,9 @@ github.com/loft-sh/utils/pkg/extract
 Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
 Files: LICENSE
 
-Component: github.com/loft-sh/vcluster@v0.37.4
-Source: https://proxy.golang.org/github.com/loft-sh/vcluster/@v/v0.37.4.zip
-Selected Go source checksum: h1:7St1+mvr7OPhGS8OmHoHlYiko9Ra7TLtVShzIMSoLyY=
+Component: github.com/loft-sh/vcluster@v0.37.6
+Source: https://proxy.golang.org/github.com/loft-sh/vcluster/@v/v0.37.6.zip
+Selected Go source checksum: h1:RC2kw7byY7qmMhCmRY4eiJPOSwXnvqJKEwRDcOTI+Dk=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
