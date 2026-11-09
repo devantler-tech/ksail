@@ -55,6 +55,8 @@ finish() {
 	if [[ "$status" -eq 0 && "$accepted" == true ]]; then
 		printf '%s\n' '{"foreignNetworkExcluded":true,"unchangedFailures":2,"serverPreserved":true,"configPreserved":true,"probeAbsent":true}' >"$evidence/acceptance.json"
 		echo 'PASS: foreign network excluded; both unchanged updates failed; server preserved; probe absent'
+		echo 'KSAIL controlled failure after verified inventory audit and probe cleanup'
+		exit 91
 	fi
 	exit "$status"
 }
