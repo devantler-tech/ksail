@@ -24,3 +24,6 @@ var ExportedDescriptorForTest = exportedDescriptor
 
 // RequireSamePlatformForTest exposes requireSamePlatform for white-box testing.
 var RequireSamePlatformForTest = requireSamePlatform
+
+// PublishArchiveForTest exposes publishArchive with an injectable rename.
+var PublishArchiveForTest = publishArchive

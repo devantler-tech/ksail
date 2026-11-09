@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 )
@@ -111,12 +113,67 @@ func publishExportSources(
 		return fmt.Errorf("image export cancelled: %w", err)
 	}
 
-	err = os.Rename(filepath.Join(root.Name(), "combined.tar"), output)
-	if err != nil {
+	return publishArchive(filepath.Join(root.Name(), "combined.tar"), output, os.Rename)
+}
+
+// publishArchive moves the validated archive at staged onto output. A rename is
+// atomic, so a failed export never touches the previous archive. When output
+// cannot be renamed over (a bind-mounted file, or another filesystem), the
+// archive is copied into it instead. If that copy fails, the archive is moved
+// next to output and the error names it, so a completed export is not lost.
+func publishArchive(staged, output string, rename func(string, string) error) error {
+	err := rename(staged, output)
+	if err == nil {
+		return nil
+	}
+
+	if !errors.Is(err, syscall.EBUSY) && !errors.Is(err, syscall.EXDEV) {
 		return fmt.Errorf("publish complete image archive: %w", err)
 	}
 
-	return nil
+	copyErr := copyArchiveInto(staged, output)
+	if copyErr == nil {
+		return nil
+	}
+
+	kept := output + ".ksail-export"
+
+	keepErr := rename(staged, kept)
+	if keepErr != nil {
+		return fmt.Errorf(
+			"publish complete image archive: copy into %s: %w",
+			output,
+			errors.Join(copyErr, keepErr),
+		)
+	}
+
+	return fmt.Errorf(
+		"publish complete image archive: copy into %s failed, archive kept at %s: %w",
+		output, kept, copyErr,
+	)
+}
+
+// copyArchiveInto overwrites the existing file at output with the archive at
+// staged and syncs it to disk.
+func copyArchiveInto(staged, output string) error {
+	source, err := os.Open(staged) //nolint:gosec // staged is the export's own staging file.
+	if err != nil {
+		return fmt.Errorf("open staged archive: %w", err)
+	}
+
+	defer func() { _ = source.Close() }()
+
+	//nolint:gosec // output is the caller's canonicalized export path.
+	target, err := os.OpenFile(output, os.O_WRONLY|os.O_TRUNC, exportFileMode)
+	if err != nil {
+		return fmt.Errorf("open export destination: %w", err)
+	}
+
+	_, copyErr := io.Copy(target, source)
+	syncErr := target.Sync()
+	closeErr := target.Close()
+
+	return errors.Join(copyErr, syncErr, closeErr)
 }
 
 func ingestExportPart(
