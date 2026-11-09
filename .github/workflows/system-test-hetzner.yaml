@@ -347,7 +347,9 @@ jobs:
             [[ "${{ inputs.metrics_server }}" != "Default" && -n "${{ inputs.metrics_server }}" ]] && ARGS+=" --metrics-server ${{ inputs.metrics_server }}"
             [[ "${{ inputs.policy_engine }}" != "None" && -n "${{ inputs.policy_engine }}" ]] && ARGS+=" --policy-engine ${{ inputs.policy_engine }}"
             [[ "${{ inputs.cert_manager }}" != "Disabled" && -n "${{ inputs.cert_manager }}" ]] && ARGS+=" --cert-manager ${{ inputs.cert_manager }}"
-            [[ "${{ inputs.gitops_engine }}" != "None" && -n "${{ inputs.gitops_engine }}" ]] && ARGS+=" --gitops-engine ${{ inputs.gitops_engine }}"
+            # A GitOps engine on a cloud provider needs an internet-reachable registry for its
+            # manifests, so give it the same external registry the scheduled fullstack/altstack jobs use.
+            [[ "${{ inputs.gitops_engine }}" != "None" && -n "${{ inputs.gitops_engine }}" ]] && ARGS+=" --gitops-engine ${{ inputs.gitops_engine }} --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
             [[ "${{ inputs.control_planes }}" != "1" && -n "${{ inputs.control_planes }}" ]] && ARGS+=" --control-planes ${{ inputs.control_planes }}"
             [[ "${{ inputs.workers }}" != "0" && -n "${{ inputs.workers }}" ]] && ARGS+=" --workers ${{ inputs.workers }}"
           else
