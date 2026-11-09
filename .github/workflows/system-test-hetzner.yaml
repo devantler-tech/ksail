@@ -286,6 +286,16 @@ jobs:
         if: inputs.autoscaler_inventory_trial
         uses: hetznercloud/setup-hcloud@28cdd3fc4a4a8013e86d57c7254be72df92fcc02 # v2.0.1
 
+      - name: Verify diagnostic control capacity and prior cleanup
+        if: inputs.autoscaler_inventory_trial
+        shell: bash
+        timeout-minutes: 4
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+          TRIAL_SERVER_TYPE: ${{ inputs.inventory_trial_server_type }}
+          TRIAL_LOCATION: ${{ inputs.inventory_trial_location }}
+        run: bash .github/actions/ksail-system-test/hetzner-diagnostics-inventory.sh pre 42643310267 42647460740
+
       - name: ✅ Verify inventory trial starts without run-owned resources
         if: inputs.autoscaler_inventory_trial
         shell: bash
@@ -592,3 +602,11 @@ jobs:
           label-selector: "ksail.cluster.name=st-hetzner-dispatch-${{ github.run_id }}"
         env:
           HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+
+      - name: Independently verify diagnostic control teardown
+        if: always() && inputs.autoscaler_inventory_trial
+        shell: bash
+        timeout-minutes: 4
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+        run: bash .github/actions/ksail-system-test/hetzner-diagnostics-inventory.sh post
