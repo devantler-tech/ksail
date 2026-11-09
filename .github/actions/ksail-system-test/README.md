@@ -40,6 +40,13 @@ There is no offline phase any more: manifest generation, the `open mcp --help` s
 
 - **Nested clusters** (`ksail-test-kubernetes-provider`, `test-kubernetes-provider: "true"`) — Create nested clusters on top of the running host cluster
 
+The explicit two-node nested Vanilla CI case prepares the disposable Linux runner's shared
+inotify budget before creating its host cluster. It raises only values below Kind's documented
+minimums (512 instances and 524288 watches), preserves higher values and requires successful
+readback. This follows descriptor exhaustion observed in the retained worker kubelet journal;
+native creation and authenticated API acceptance must still pass. See
+[Kind's host-capacity guidance](https://kind.sigs.k8s.io/docs/user/known-issues/#pod-errors-due-to-too-many-open-files).
+
 ### Phase 5 — Debug
 
 - Automatic Kubernetes diagnostic output on failure

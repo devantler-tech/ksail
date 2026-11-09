@@ -163,6 +163,14 @@ func TestNormalizeHomePath(t *testing.T) {
 // newConsolidatedRootWithSharedFlag builds a consolidated command tree where
 // two subcommands share a flag name, with configurable usage strings.
 func newConsolidatedRootWithSharedFlag(aUsage, bUsage string) *cobra.Command {
+	return newConsolidatedRootWithSharedFlagDefaults(aUsage, bUsage, "", "")
+}
+
+// newConsolidatedRootWithSharedFlagDefaults is newConsolidatedRootWithSharedFlag
+// with configurable per-subcommand defaults for the shared flag.
+func newConsolidatedRootWithSharedFlagDefaults(
+	aUsage, bUsage, aDefault, bDefault string,
+) *cobra.Command {
 	root := &cobra.Command{Use: safetyRootUse}
 	parent := &cobra.Command{
 		Use:   "thing",
@@ -174,10 +182,10 @@ func newConsolidatedRootWithSharedFlag(aUsage, bUsage string) *cobra.Command {
 	}
 
 	alpha := &cobra.Command{Use: "alpha", Short: "A", Run: func(_ *cobra.Command, _ []string) {}}
-	alpha.Flags().String("timeout", "", aUsage)
+	alpha.Flags().String("timeout", aDefault, aUsage)
 
 	beta := &cobra.Command{Use: "beta", Short: "B", Run: func(_ *cobra.Command, _ []string) {}}
-	beta.Flags().String("timeout", "", bUsage)
+	beta.Flags().String("timeout", bDefault, bUsage)
 
 	parent.AddCommand(alpha, beta)
 	root.AddCommand(parent)
@@ -189,13 +197,7 @@ func newConsolidatedRootWithSharedFlag(aUsage, bUsage string) *cobra.Command {
 func flagDescription(t *testing.T, tool toolgen.ToolDefinition, flagName string) string {
 	t.Helper()
 
-	properties, propsOK := tool.Parameters["properties"].(map[string]any)
-	require.True(t, propsOK, "expected properties map")
-
-	property, propOK := properties[flagName].(map[string]any)
-	require.True(t, propOK, "expected property %q", flagName)
-
-	description, descOK := property["description"].(string)
+	description, descOK := flagProperty(t, tool, flagName)["description"].(string)
 	require.True(t, descOK, "expected description string")
 
 	return description
@@ -229,6 +231,45 @@ func TestMergedFlagDescriptions_PreservedWhenIdentical(t *testing.T) {
 	require.Len(t, tools, 1)
 
 	assert.Equal(t, "How long to wait", flagDescription(t, tools[0], "timeout"))
+}
+
+// flagProperty extracts a flag's property from a generated tool schema.
+func flagProperty(t *testing.T, tool toolgen.ToolDefinition, flagName string) map[string]any {
+	t.Helper()
+
+	properties, propsOK := tool.Parameters["properties"].(map[string]any)
+	require.True(t, propsOK, "expected properties map")
+
+	property, propOK := properties[flagName].(map[string]any)
+	require.True(t, propOK, "expected property %q", flagName)
+
+	return property
+}
+
+// TestMergedFlagDefaults_DroppedOnConflict verifies that a merged flag whose
+// default differs across subcommands advertises no default: one subcommand's
+// default would misdocument the others (e.g. a required explicit path such as
+// `cluster forget --kubeconfig` next to subcommands that default it).
+func TestMergedFlagDefaults_DroppedOnConflict(t *testing.T) {
+	t.Parallel()
+
+	root := newConsolidatedRootWithSharedFlagDefaults("How long", "How long", "5m", "")
+	tools := toolgen.GenerateTools(root, toolgen.ToolOptions{})
+	require.Len(t, tools, 1)
+
+	assert.NotContains(t, flagProperty(t, tools[0], "timeout"), "default")
+}
+
+// TestMergedFlagDefaults_PreservedWhenIdentical verifies that a default shared
+// by every subcommand survives the merge unchanged.
+func TestMergedFlagDefaults_PreservedWhenIdentical(t *testing.T) {
+	t.Parallel()
+
+	root := newConsolidatedRootWithSharedFlagDefaults("How long", "How long", "5m", "5m")
+	tools := toolgen.GenerateTools(root, toolgen.ToolOptions{})
+	require.Len(t, tools, 1)
+
+	assert.Equal(t, "5m", flagProperty(t, tools[0], "timeout")["default"])
 }
 
 // TestDefaultExecutablePath verifies the production default resolves the

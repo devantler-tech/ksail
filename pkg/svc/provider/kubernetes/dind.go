@@ -75,6 +75,16 @@ func (p *Provider) CreateDinDPod(
 	persistence v1alpha1.KubernetesPersistence,
 ) error {
 	namespace := NamespaceName(clusterName)
+	pod := buildDinDPod(clusterName, distribution, persistence)
+
+	poolArg, err := p.plannedDinDPoolArg(ctx, distribution)
+	if err != nil {
+		return err
+	}
+
+	if poolArg != "" {
+		pod.Spec.Containers[0].Args = append(pod.Spec.Containers[0].Args, poolArg)
+	}
 
 	if persistence.Enabled {
 		err := p.ensurePVC(ctx, namespace, clusterName, persistence)
@@ -83,12 +93,11 @@ func (p *Provider) CreateDinDPod(
 		}
 	}
 
-	pod := buildDinDPod(clusterName, distribution, persistence)
 	svc := buildDinDService(clusterName)
 
-	_, err := p.client.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{})
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("create DinD pod: %w", err)
+	err = p.createOrReuseDinDPod(ctx, namespace, pod, poolArg)
+	if err != nil {
+		return err
 	}
 
 	_, err = p.client.CoreV1().Services(namespace).Create(ctx, svc, metav1.CreateOptions{})

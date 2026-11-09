@@ -90,6 +90,14 @@ const helmReleaseExamples = `  # Generate a HelmRelease with a chart from a Helm
   ksail workload gen helmrelease podinfo \
     --namespace=default \
     --chart-ref=HelmChart/podinfo.flux-system \
+    --export
+
+  # Generate a HelmRelease that waits for its custom resources with CEL health
+  # checks (evaluated by Flux when wait is on and the poller strategy is used)
+  ksail workload gen helmrelease sealed-secrets \
+    --chart-ref=OCIRepository/sealed-secrets-chart \
+    --health-check-expr="bitnami.com/v1alpha1/SealedSecret=status.conditions.all(c, c.status == 'True')" \
+    --health-check-expr="bitnami.com/v1alpha1/SealedSecret:failed=status.conditions.all(c, c.status == 'False')" \
     --export`
 
 var (
@@ -301,6 +309,7 @@ func readHelmReleaseFlags(cmd *cobra.Command, args []string) helmReleaseConfig {
 	cfg.kubeConfigSecretRef, _ = cmd.Flags().GetString("kubeconfig-secret-ref")
 	cfg.releaseName, _ = cmd.Flags().GetString("release-name")
 	cfg.postRenderStrategy, _ = cmd.Flags().GetString("post-render-strategy")
+	cfg.healthCheckExprs, _ = cmd.Flags().GetStringArray("health-check-expr")
 
 	return cfg
 }
@@ -347,6 +356,13 @@ func configureHelmReleaseFlags(cmd *cobra.Command) {
 		"",
 		"post-render strategy for sending hooks to post-renderers "+
 			"(nohooks, combined, separate); leave unset to use the controller default",
+	)
+	// StringArray, not StringSlice: CEL expressions contain commas.
+	flags.StringArray(
+		"health-check-expr",
+		nil,
+		"CEL health check for custom resources the release creates, repeatable "+
+			"(<apiVersion>[/<Kind>][:current|inProgress|failed]=<CEL>; field defaults to current)",
 	)
 	flags.Bool("export", false, "export in YAML format to stdout")
 }
@@ -492,6 +508,11 @@ func configureDependenciesAndValues(helmRelease *helmv2.HelmRelease, cfg helmRel
 		return err
 	}
 
+	err = setHealthCheckExprs(helmRelease, cfg.healthCheckExprs)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -540,6 +561,7 @@ type helmReleaseConfig struct {
 	kubeConfigSecretRef string
 	releaseName         string
 	postRenderStrategy  string
+	healthCheckExprs    []string
 }
 
 // setChartSpec sets the chart specification for the HelmRelease.

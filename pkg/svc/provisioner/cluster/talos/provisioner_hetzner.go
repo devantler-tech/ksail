@@ -1399,10 +1399,11 @@ func (p *Provisioner) ensureSnapshotImage(ctx context.Context, clusterName strin
 	return snapshotImageID, nil
 }
 
-// checkHetznerAvailability verifies that the configured server types are available
-// in the primary location or any fallback locations. This check runs before
-// infrastructure resource creation to avoid creating networks, firewalls, and
-// placement groups that would need cleanup if servers cannot be provisioned.
+// checkHetznerAvailability verifies that the configured server types exist and
+// reports whether Hetzner lists them as available in the primary location or any
+// fallback location. It runs before infrastructure resource creation. A type that
+// does not exist stops provisioning; a type reported unavailable everywhere is a
+// warning only (see availabilityCheckResult).
 func (p *Provisioner) checkHetznerAvailability(
 	ctx context.Context,
 	hzProvider *hetzner.Provider,
@@ -1427,7 +1428,12 @@ func (p *Provisioner) checkHetznerAvailability(
 		p.logWriter,
 	)
 	if err != nil {
-		return fmt.Errorf("server availability check failed: %w", err)
+		return availabilityCheckResult(
+			p.logWriter,
+			"server type(s) "+strings.Join(serverTypes, ", "),
+			err,
+			warnWhenUnavailable,
+		)
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Server types available\n")
