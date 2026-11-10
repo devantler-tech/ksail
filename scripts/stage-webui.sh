@@ -19,8 +19,8 @@ cd -- "${1:-$(dirname "${BASH_SOURCE[0]}")/..}"
 npm --prefix web/ui ci
 npm --prefix web/ui run build
 if [[ ! -f web/ui/dist/index.html || ! -s web/ui/dist/index.html ]]; then
-  printf '%s\n' 'Web UI build did not produce a nonempty web/ui/dist/index.html.' >&2
-  exit 1
+	printf '%s\n' 'Web UI build did not produce a nonempty web/ui/dist/index.html.' >&2
+	exit 1
 fi
 
 rm -rf pkg/webui/dist
