@@ -31,19 +31,19 @@ const (
 var ErrArchiveMissingPlatform = errors.New("image archive has no content for the node platform")
 
 // imagePlatformCoverage is what an archive holds for one named multi-platform image: the
-// platforms its index advertises, and the subset whose manifests the archive carries.
+// platforms its index advertises, and the subset whose manifest and content the archive carries.
 type imagePlatformCoverage struct {
 	name       string
 	advertised []ocispec.Platform
 	carried    []ocispec.Platform
 }
 
-// servable reports whether the archive carries a manifest a node of platform can run.
+// servable reports whether the archive carries the content a node of platform can run.
 func (c imagePlatformCoverage) servable(platform ocispec.Platform) bool {
 	return slices.ContainsFunc(c.carried, platforms.Only(platform).Match)
 }
 
-// partial reports whether the index advertises a platform the archive carries no manifest for.
+// partial reports whether the index advertises a platform the archive cannot serve.
 func (c imagePlatformCoverage) partial() bool {
 	return len(c.carried) < len(c.advertised)
 }
@@ -58,24 +58,19 @@ func readArchivePlatformCoverage(path string) ([]imagePlatformCoverage, error) {
 		return nil, err
 	}
 
-	named := namedIndexDescriptors(index, blobs)
-
-	wanted := make(map[string]bool, len(named))
-	for _, descriptor := range named {
-		wanted[descriptor.Digest.Encoded()] = true
-	}
-
-	documents, err := readArchiveBlobs(path, wanted)
+	indexes, err := readArchiveImageIndexes(path, namedIndexDescriptors(index, blobs))
 	if err != nil {
 		return nil, err
 	}
 
-	coverage := make([]imagePlatformCoverage, 0, len(named))
+	manifests, err := readArchivePlatformManifests(path, indexes, blobs)
+	if err != nil {
+		return nil, err
+	}
 
-	for _, descriptor := range named {
-		entry, err := indexPlatformCoverage(
-			archiveImageName(descriptor), documents[descriptor.Digest.Encoded()], blobs,
-		)
+	coverage := make([]imagePlatformCoverage, 0, len(indexes))
+	for _, image := range indexes {
+		entry, err := indexPlatformCoverage(image, manifests, blobs)
 		if err != nil {
 			return nil, err
 		}
@@ -86,6 +81,56 @@ func readArchivePlatformCoverage(path string) ([]imagePlatformCoverage, error) {
 	}
 
 	return coverage, nil
+}
+
+type namedArchiveIndex struct {
+	name  string
+	index ocispec.Index
+}
+
+func readArchiveImageIndexes(path string, named []ocispec.Descriptor) ([]namedArchiveIndex, error) {
+	wanted := make(map[string]bool, len(named))
+	for _, descriptor := range named {
+		wanted[descriptor.Digest.Encoded()] = true
+	}
+
+	documents, err := readArchiveBlobs(path, wanted)
+	if err != nil {
+		return nil, err
+	}
+
+	indexes := make([]namedArchiveIndex, 0, len(named))
+	for _, descriptor := range named {
+		image := namedArchiveIndex{name: archiveImageName(descriptor)}
+
+		err := json.Unmarshal(documents[descriptor.Digest.Encoded()], &image.index)
+		if err != nil {
+			return nil, fmt.Errorf("parse image index of %s: %w", image.name, err)
+		}
+
+		indexes = append(indexes, image)
+	}
+
+	return indexes, nil
+}
+
+func readArchivePlatformManifests(
+	path string,
+	indexes []namedArchiveIndex,
+	blobs map[string]bool,
+) (map[string][]byte, error) {
+	wanted := make(map[string]bool)
+
+	for _, image := range indexes {
+		for _, manifest := range image.index.Manifests {
+			digest := manifest.Digest.Encoded()
+			if isPlatformManifest(manifest) && blobs[digest] {
+				wanted[digest] = true
+			}
+		}
+	}
+
+	return readArchiveBlobs(path, wanted)
 }
 
 // namedIndexDescriptors returns the archive's named image indexes whose blob it holds.
@@ -102,35 +147,49 @@ func namedIndexDescriptors(index *ocispec.Index, blobs map[string]bool) []ocispe
 	return named
 }
 
-// indexPlatformCoverage lists the platform manifests one image index advertises, and the ones
-// whose manifest blob the archive holds.
+// indexPlatformCoverage lists the advertised platforms and those whose image blobs are present.
 func indexPlatformCoverage(
-	name string,
-	document []byte,
+	image namedArchiveIndex,
+	manifests map[string][]byte,
 	blobs map[string]bool,
 ) (imagePlatformCoverage, error) {
-	var child ocispec.Index
+	entry := imagePlatformCoverage{name: image.name}
 
-	err := json.Unmarshal(document, &child)
-	if err != nil {
-		return imagePlatformCoverage{}, fmt.Errorf("parse image index of %s: %w", name, err)
-	}
-
-	entry := imagePlatformCoverage{name: name}
-
-	for _, manifest := range child.Manifests {
-		if manifest.Platform == nil || !ctrdimages.IsManifestType(manifest.MediaType) ||
-			isAttestationPlatform(*manifest.Platform) {
+	for _, descriptor := range image.index.Manifests {
+		if !isPlatformManifest(descriptor) {
 			continue
 		}
 
-		entry.advertised = append(entry.advertised, *manifest.Platform)
-		if blobs[manifest.Digest.Encoded()] {
-			entry.carried = append(entry.carried, *manifest.Platform)
+		entry.advertised = append(entry.advertised, *descriptor.Platform)
+
+		document, found := manifests[descriptor.Digest.Encoded()]
+		if !found {
+			continue
+		}
+
+		var manifest ocispec.Manifest
+
+		err := json.Unmarshal(document, &manifest)
+		if err != nil {
+			return imagePlatformCoverage{}, fmt.Errorf(
+				"parse image manifest of %s: %w", image.name, err,
+			)
+		}
+
+		missingLayer := slices.ContainsFunc(manifest.Layers, func(layer ocispec.Descriptor) bool {
+			return !blobs[layer.Digest.Encoded()]
+		})
+		if blobs[manifest.Config.Digest.Encoded()] && !missingLayer {
+			entry.carried = append(entry.carried, *descriptor.Platform)
 		}
 	}
 
 	return entry, nil
+}
+
+func isPlatformManifest(descriptor ocispec.Descriptor) bool {
+	return descriptor.Platform != nil && ctrdimages.IsManifestType(descriptor.MediaType) &&
+		!isAttestationPlatform(*descriptor.Platform)
 }
 
 // unservedImages names the images an archive cannot serve on platform.

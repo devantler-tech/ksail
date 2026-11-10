@@ -22,9 +22,9 @@ import (
 const multiPlatformImageName = "docker.io/library/multi:v1"
 
 // multiPlatformArchive writes an image archive whose index advertises linux/amd64 and
-// linux/arm64 for one named image, but carries only the manifests for the carried
-// architectures, as an export from nodes of one platform does.
-func multiPlatformArchive(t *testing.T, carried ...string) string {
+// linux/arm64 for one named image. It omits the manifests of uncarried architectures
+// and can leave a manifest present with a missing layer for one architecture.
+func multiPlatformArchive(t *testing.T, missingLayerFor string, carried ...string) string {
 	t.Helper()
 
 	root := t.TempDir()
@@ -32,15 +32,25 @@ func multiPlatformArchive(t *testing.T, carried ...string) string {
 	require.NoError(t, err)
 
 	index := v1.ImageIndex(empty.Index)
-	manifests := make(map[string]v1.Hash)
+
+	var omittedBlobs []v1.Hash
 
 	for _, architecture := range []string{"amd64", "arm64"} {
 		img := fixtureImage(t, "multi-"+architecture)
 
-		digest, err := img.Digest()
-		require.NoError(t, err)
+		if !slices.Contains(carried, architecture) {
+			digest, err := img.Digest()
+			require.NoError(t, err)
 
-		manifests[architecture] = digest
+			omittedBlobs = append(omittedBlobs, digest)
+		} else if architecture == missingLayerFor {
+			manifest, err := img.Manifest()
+			require.NoError(t, err)
+			require.NotEmpty(t, manifest.Layers)
+
+			omittedBlobs = append(omittedBlobs, manifest.Layers[0].Digest)
+		}
+
 		index = mutate.AppendManifests(index, mutate.IndexAddendum{
 			Add:      img,
 			Platform: &v1.Platform{OS: "linux", Architecture: architecture},
@@ -51,13 +61,8 @@ func multiPlatformArchive(t *testing.T, carried ...string) string {
 		"io.containerd.image.name": multiPlatformImageName,
 	})))
 
-	for architecture, digest := range manifests {
-		if !slices.Contains(carried, architecture) {
-			require.NoError(
-				t,
-				os.Remove(filepath.Join(root, "blobs", digest.Algorithm, digest.Hex)),
-			)
-		}
+	for _, digest := range omittedBlobs {
+		require.NoError(t, os.Remove(filepath.Join(root, "blobs", digest.Algorithm, digest.Hex)))
 	}
 
 	path := filepath.Join(t.TempDir(), "images.tar")
@@ -72,17 +77,24 @@ func TestArchivePartialPlatformImages(t *testing.T) {
 	t.Parallel()
 
 	names, carried, err := image.ArchivePartialPlatformImagesForTest(
-		multiPlatformArchive(t, "amd64"),
+		multiPlatformArchive(t, "", "amd64"),
 	)
 	require.NoError(t, err)
 	require.Equal(t, []string{multiPlatformImageName}, names)
 	require.Equal(t, []string{"linux/amd64"}, carried)
 
 	names, _, err = image.ArchivePartialPlatformImagesForTest(
-		multiPlatformArchive(t, "amd64", "arm64"),
+		multiPlatformArchive(t, "", "amd64", "arm64"),
 	)
 	require.NoError(t, err)
 	require.Empty(t, names)
+
+	names, carried, err = image.ArchivePartialPlatformImagesForTest(
+		multiPlatformArchive(t, "arm64", "amd64", "arm64"),
+	)
+	require.NoError(t, err)
+	require.Equal(t, []string{multiPlatformImageName}, names)
+	require.Equal(t, []string{"linux/amd64"}, carried)
 
 	// A file that is not an OCI image layout archive has no multi-platform images to report.
 	plain := filepath.Join(t.TempDir(), "plain.tar")
@@ -113,7 +125,7 @@ func TestImportRefusesANodePlatformTheArchiveDoesNotCarry(t *testing.T) {
 		[]string{"uname", "-m"}, "aarch64\n")
 
 	err := image.NewImporter(client).Import(ctx, "my-cluster", v1alpha1.DistributionVanilla,
-		v1alpha1.ProviderDocker, image.ImportOptions{InputPath: multiPlatformArchive(t, "amd64")})
+		v1alpha1.ProviderDocker, image.ImportOptions{InputPath: multiPlatformArchive(t, "", "amd64")})
 	require.ErrorIs(t, err, image.ErrArchiveMissingPlatform)
 	require.ErrorContains(t, err, multiPlatformImageName)
 	require.ErrorContains(t, err, "linux/arm64")
@@ -148,6 +160,6 @@ func TestImportAcceptsTheCarriedNodePlatform(t *testing.T) {
 		[]string{"rm", "-f", "/root/ksail-images-import.tar"}, "")
 
 	err := image.NewImporter(client).Import(ctx, "my-cluster", v1alpha1.DistributionVanilla,
-		v1alpha1.ProviderDocker, image.ImportOptions{InputPath: multiPlatformArchive(t, "amd64")})
+		v1alpha1.ProviderDocker, image.ImportOptions{InputPath: multiPlatformArchive(t, "", "amd64")})
 	require.NoError(t, err)
 }
