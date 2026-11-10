@@ -119,6 +119,38 @@ func TestNestedKubeletJournalPublishesOnlyFixedSignals(t *testing.T) {
 	}
 }
 
+func TestNestedKubeletCgroupDriverSignal(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name, input, want string
+	}{
+		{
+			"unknown cgroup driver",
+			"runtime returned an unknown cgroup driver 2" + privateTail,
+			"cgroup-driver",
+		},
+		{
+			"successful cgroup driver discovery",
+			"Using cgroup driver setting received from the CRI runtime" + privateTail,
+			"unclassified",
+		},
+		{
+			"successful cgroup driver discovery beside an unrelated failure",
+			"Using cgroup driver setting received from the CRI runtime\nvalidate service connection",
+			"runtime-connection",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, []string{nestedKubeletSignalPrefix + test.want},
+				summarizeNestedKubelet(t, test.input))
+		})
+	}
+}
+
 func summarizeNestedKubelet(t *testing.T, input string) []string {
 	t.Helper()
 

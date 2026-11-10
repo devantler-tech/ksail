@@ -39,7 +39,7 @@ BEGIN {
 		"swap-enabled\trunning with swap on is not supported\n" \
 		"container-runtime\tcontainer runtime is down\n" \
 		"runtime-connection\tvalidate service connection\n" \
-		"cgroup-driver\tcgroup driver\n" \
+		"cgroup-driver\truntime returned an unknown cgroup driver\n" \
 		"memory-cgroup\tfailed to find memory cgroup\n" \
 		"cgroup-mount\tcgroup mountpoint\n" \
 		"read-only-filesystem\tread-only file system\n" \
