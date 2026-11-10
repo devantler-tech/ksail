@@ -13,8 +13,21 @@ fi
 name="system-test-diagnostics-fixture-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$FIXTURE_MODE"
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
-gh api --method GET "repos/${GITHUB_REPOSITORY:?}/actions/runs/$GITHUB_RUN_ID/artifacts" \
-	-f name="$name" -f per_page=100 >"$tmp"
+# After a successful upload the filtered listing may briefly be empty. Only a
+# complete empty candidate response may wait; errors and wrong evidence fail.
+for delay in 1 2 4 0; do
+	gh api --method GET "repos/${GITHUB_REPOSITORY:?}/actions/runs/$GITHUB_RUN_ID/artifacts" \
+		-f name="$name" -f per_page=100 >"$tmp"
+	if [[ "$FIXTURE_MODE" == baseline ]] ||
+		! jq -es 'length == 1 and .[0].total_count == 0 and .[0].artifacts == []' "$tmp" >/dev/null; then
+		break
+	fi
+	if ((delay == 0)); then
+		echo 'Native diagnostics artifact candidate: uploaded artifact did not become visible after 4 reads' >&2
+		exit 1
+	fi
+	sleep "$delay"
+done
 jq -es --arg name "$name" --arg mode "$FIXTURE_MODE" --arg head "$EXPECTED_HEAD" \
 	--argjson run "$GITHUB_RUN_ID" '
   length == 1 and (.[0] |
