@@ -224,6 +224,14 @@ spec:
                                         type: string
                                     type: object
                                   type: array
+                                talosPatches:
+                                  description: |-
+                                    TalosPatches are ordered, inline machine config patches for this pool.
+                                    KSail applies them after shared worker configuration and before setting
+                                    the autoscaler's own node labels and taints.
+                                  items:
+                                    type: string
+                                  type: array
                               type: object
                             type: array
                           scaleDownUnneededTime:

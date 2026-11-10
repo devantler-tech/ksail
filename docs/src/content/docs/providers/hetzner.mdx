@@ -254,8 +254,25 @@ spec:
       serverLimit: 20              # project quota; must be ≥ the reachable total (controlPlanes + workers + sum(pool.max), capped by maxNodesTotal)
 ```
 
-The full autoscaler field reference (`spec.cluster.autoscaler`, including node pools and per-pool
-labels/taints) is generated from the API types: see
+Set `talosPatches` on a pool to give its workers their own Talos machine configuration.
+KSail applies the inline patches in order after the shared worker patches, both when creating
+the pool's boot template and when reconciling an existing worker. KSail applies the pool's node
+labels and taints afterward and preserves settings it manages for each node, such as its hostname.
+The patches are literal Talos documents. KSail keeps environment placeholders in them as written.
+
+```yaml
+talosPatches:
+  - |
+    apiVersion: v1alpha1
+    kind: RawVolumeConfig
+    name: local-data
+    provisioning:
+      diskSelector:
+        match: system_disk
+      maxSize: 16GiB
+```
+
+The full autoscaler field reference is generated from the API types. See
 [spec.cluster.autoscaler (AutoscalerConfig)](/configuration/declarative-configuration/#specclusterautoscaler-autoscalerconfig)
 in the Declarative Configuration reference. Note that the `Price` expander is rejected by KSail
 with a validation error for the Hetzner provider, because the Hetzner cloud provider does not

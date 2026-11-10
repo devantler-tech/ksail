@@ -530,6 +530,13 @@
                             },
                             "type": "array",
                             "description": "Kubernetes node taints applied to every node in this pool (via Talos machine.nodeTaints and the autoscaler scale-from-zero template)."
+                          },
+                          "talosPatches": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array",
+                            "description": "Ordered inline Talos patches."
                           }
                         },
                         "additionalProperties": false,
