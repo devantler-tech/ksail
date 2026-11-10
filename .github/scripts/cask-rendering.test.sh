@@ -128,6 +128,41 @@ EOF
 			fi
 			[[ ! -e "$fixture/incomplete-$mode" ]]
 		done
+		# Completion generation must start from isolated configuration paths and no runner
+		# credential (#8255). The fake binary records what it receives in a file whose path is
+		# fixed here, because the script hands it an empty environment.
+		cat >"$fixture/completion-recorder" <<EOF
+#!/usr/bin/env bash
+printf 'HOME=%s\nXDG_CONFIG_HOME=%s\nXDG_CACHE_HOME=%s\nKUBECONFIG=%s\nTMPDIR=%s\nGITHUB_TOKEN=%s\n' \
+	"\${HOME-}" "\${XDG_CONFIG_HOME-}" "\${XDG_CACHE_HOME-}" "\${KUBECONFIG-}" "\${TMPDIR-}" \
+	"\${GITHUB_TOKEN-}" >>"$fixture/completion-environment"
+printf 'completion fixture\n'
+EOF
+		chmod +x "$fixture/completion-recorder"
+		mkdir -p "$fixture/runner"
+		HOME="$fixture/runner/home" XDG_CONFIG_HOME="$fixture/runner/config" \
+			XDG_CACHE_HOME="$fixture/runner/cache" KUBECONFIG="$fixture/runner/kubeconfig" \
+			TMPDIR="$fixture/runner/tmp" GITHUB_TOKEN=runner-credential-canary \
+			bash "$fixture/.github/scripts/generate-completions.sh" "$fixture/completion-recorder" \
+			"$fixture/recorded-completions" darwin/arm64 darwin/arm64
+		isolated="$(cd "$fixture" && pwd -P)/.ksail-completions."
+		[[ "$(grep -c '^HOME=' "$fixture/completion-environment")" -eq 3 ]] || {
+			printf 'completion generation did not run once per shell\n' >&2
+			exit 1
+		}
+		if grep -qF -e "$fixture/runner" -e runner-credential-canary "$fixture/completion-environment"; then
+			printf 'completion generation received a runner configuration path or credential\n' >&2
+			exit 1
+		fi
+		while IFS='=' read -r variable value; do
+			case "$variable" in
+			GITHUB_TOKEN) [[ -z "$value" ]] ;;
+			*) [[ "$value" == "$isolated"* ]] ;;
+			esac || {
+				printf 'completion generation received %s outside its isolated directory\n' "$variable" >&2
+				exit 1
+			}
+		done <"$fixture/completion-environment"
 	fi
 	cp "$root/LICENSE" "$fixture/LICENSE"
 	stage_notice_fixtures "$fixture"
