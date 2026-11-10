@@ -2595,7 +2595,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devantler-tech/ksail
-          ref: 59b99284251a3bd70baaeb742cd44328971b7d09
+          ref: 01353b2281b4ea4dffc7f8d7374f44a95a6026b9
           path: .diagnostics-artifact-source
           persist-credentials: false
 
