@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"testing"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -23,6 +25,10 @@ var (
 	errImportListFailed = errors.New("list nodes failed")
 	errImportCopyFailed = errors.New("copy to container failed")
 )
+
+// kindImportPath is the node-side import archive on a Kind node under the fixed
+// test archive name.
+const kindImportPath = "/root/ksail-images-import.tar"
 
 func TestNewImporter(t *testing.T) {
 	t.Parallel()
@@ -256,11 +262,11 @@ func TestImportSuccessVanilla(t *testing.T) {
 			Return(nil).Once()
 
 		// Mock exec for import command - Kind uses /root path
-		importPath := "/root/ksail-images-import.tar"
+		importPath := kindImportPath
 		setupImportExecMockForImporter(ctx, t, mockClient, nodeName, importPath)
 
 		// Mock exec for cleanup
-		setupExecMockForImporter(ctx, t, mockClient, nodeName)
+		setupCleanupMockForImporter(t, mockClient, nodeName, importPath)
 	}
 
 	importer := image.NewImporter(mockClient)
@@ -322,7 +328,7 @@ func TestImportSuccessK3s(t *testing.T) {
 		setupImportExecMockForImporter(ctx, t, mockClient, nodeName, "/tmp/ksail-images-import.tar")
 
 		// Mock exec for cleanup
-		setupExecMockForImporter(ctx, t, mockClient, nodeName)
+		setupCleanupMockForImporter(t, mockClient, nodeName, "/tmp/ksail-images-import.tar")
 	}
 
 	importer := image.NewImporter(mockClient)
@@ -364,6 +370,7 @@ func TestImportCopyToContainerFails(t *testing.T) {
 	mockClient.EXPECT().
 		CopyToContainer(ctx, "my-cluster-control-plane", "/root", mock.Anything, container.CopyToContainerOptions{}).
 		Return(errImportCopyFailed)
+	setupCleanupMockForImporter(t, mockClient, "my-cluster-control-plane", kindImportPath)
 
 	importer := image.NewImporter(mockClient)
 	err = importer.Import(
@@ -419,6 +426,7 @@ func TestImportExecFails(t *testing.T) {
 	mockClient.EXPECT().
 		ContainerExecInspect(ctx, execID).
 		Return(container.ExecInspect{ExitCode: 1}, nil)
+	setupCleanupMockForImporter(t, mockClient, "my-cluster-control-plane", kindImportPath)
 
 	importer := image.NewImporter(mockClient)
 	err = importer.Import(
@@ -472,7 +480,7 @@ func TestImportEmptyProvider(t *testing.T) {
 	)
 
 	// Mock exec for cleanup
-	setupExecMockForImporter(ctx, t, mockClient, "my-cluster-control-plane")
+	setupCleanupMockForImporter(t, mockClient, "my-cluster-control-plane", kindImportPath)
 
 	importer := image.NewImporter(mockClient)
 	err = importer.Import(ctx, "my-cluster", v1alpha1.DistributionVanilla, "", image.ImportOptions{
@@ -520,12 +528,13 @@ func TestImportMultipleNodesPartialFailure(t *testing.T) {
 		"my-cluster-control-plane",
 		"/root/ksail-images-import.tar",
 	)
-	setupExecMockForImporter(ctx, t, mockClient, "my-cluster-control-plane")
+	setupCleanupMockForImporter(t, mockClient, "my-cluster-control-plane", kindImportPath)
 
 	// Second node fails during copy
 	mockClient.EXPECT().
 		CopyToContainer(ctx, "my-cluster-worker", "/root", mock.Anything, container.CopyToContainerOptions{}).
 		Return(errImportCopyFailed).Once()
+	setupCleanupMockForImporter(t, mockClient, "my-cluster-worker", kindImportPath)
 
 	importer := image.NewImporter(mockClient)
 	err = importer.Import(
@@ -579,7 +588,7 @@ func TestImportLargeFile(t *testing.T) {
 		"my-cluster-control-plane",
 		"/root/ksail-images-import.tar",
 	)
-	setupExecMockForImporter(ctx, t, mockClient, "my-cluster-control-plane")
+	setupCleanupMockForImporter(t, mockClient, "my-cluster-control-plane", kindImportPath)
 
 	importer := image.NewImporter(mockClient)
 	err = importer.Import(
@@ -595,27 +604,32 @@ func TestImportLargeFile(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// setupExecMockForImporter is a helper to set up ContainerExec* mocks for simple cases.
-func setupExecMockForImporter(
-	ctx context.Context,
+// setupCleanupMockForImporter expects the import archive at archivePath to be
+// removed from containerName exactly once, on a live context detached from the
+// caller, so cleanup also runs after a failed or cancelled import.
+func setupCleanupMockForImporter(
 	t *testing.T,
 	mockClient *docker.MockAPIClient,
 	containerName string,
+	archivePath string,
 ) {
 	t.Helper()
 
-	execID := "exec-" + containerName
+	execID := "exec-cleanup-" + containerName
 
 	mockClient.EXPECT().
-		ContainerExecCreate(ctx, containerName, mock.Anything).
+		ContainerExecCreate(detachedCleanupContext(), containerName,
+			mock.MatchedBy(func(opts container.ExecOptions) bool {
+				return slices.Equal(opts.Cmd, []string{"rm", "-f", archivePath})
+			})).
 		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
 
 	mockClient.EXPECT().
-		ContainerExecAttach(ctx, execID, container.ExecStartOptions{}).
+		ContainerExecAttach(detachedCleanupContext(), execID, container.ExecStartOptions{}).
 		Return(mockDockerStreamResponse("", ""), nil).Once()
 
 	mockClient.EXPECT().
-		ContainerExecInspect(ctx, execID).
+		ContainerExecInspect(detachedCleanupContext(), execID).
 		Return(container.ExecInspect{ExitCode: 0}, nil).Once()
 }
 
@@ -651,4 +665,66 @@ func setupImportExecMockForImporter(
 	mockClient.EXPECT().
 		ContainerExecInspect(ctx, execID).
 		Return(container.ExecInspect{ExitCode: 0}, nil).Once()
+}
+
+// Two imports on the same node must never share an archive, so every generated
+// name is distinct.
+func TestDefaultImportArchiveNamesAreDistinct(t *testing.T) {
+	t.Parallel()
+
+	pattern := regexp.MustCompile(`^ksail-images-import-[0-9a-f]{16}\.tar$`)
+	seen := make(map[string]struct{})
+
+	for range 64 {
+		name := image.DefaultImportArchiveNameForTest()
+		if !pattern.MatchString(name) {
+			t.Fatalf("archive name %q does not match %s", name, pattern)
+		}
+
+		if _, duplicate := seen[name]; duplicate {
+			t.Fatalf("archive name %q was generated twice", name)
+		}
+
+		seen[name] = struct{}{}
+	}
+}
+
+// A cancelled import must still remove its archive from the node, so cleanup
+// runs on a live context after the caller's context is done.
+func TestImportCancelledStillRemovesArchive(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	mockClient := docker.NewMockAPIClient(t)
+
+	inputPath := filepath.Join(t.TempDir(), "images.tar")
+	require.NoError(t, os.WriteFile(inputPath, []byte("fake tar content"), 0o600))
+
+	mockClient.EXPECT().
+		ContainerList(ctx, mock.Anything).
+		Return([]container.Summary{
+			{
+				Names:  []string{"/my-cluster-control-plane"},
+				Labels: map[string]string{"io.x-k8s.kind.role": "control-plane"},
+			},
+		}, nil)
+
+	mockClient.EXPECT().
+		CopyToContainer(ctx, "my-cluster-control-plane", "/root", mock.Anything, container.CopyToContainerOptions{}).
+		RunAndReturn(func(context.Context, string, string, io.Reader, container.CopyToContainerOptions) error {
+			cancel()
+
+			return context.Canceled
+		})
+	setupCleanupMockForImporter(t, mockClient, "my-cluster-control-plane", kindImportPath)
+
+	err := image.NewImporter(mockClient).Import(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		image.ImportOptions{InputPath: inputPath},
+	)
+
+	require.ErrorIs(t, err, context.Canceled)
 }
