@@ -150,6 +150,18 @@ ksail workload reconcile --timeout=5m
 
 ## Image Export Issues
 
+### Images Spread Across Nodes
+
+For Docker-backed Vanilla and K3s clusters with multiple nodes, `ksail workload export`
+collects the named image references found across the node inventories into one archive,
+including references held only by a worker. Repeated references are exported once.
+Use repeatable `--image` flags to select images held on different nodes.
+
+If a requested reference is unavailable, a required node inventory cannot be read, or an
+exported image is incomplete, the command fails and preserves any existing destination
+archive. Restore access to the affected node or import the missing image, then retry.
+Allow disk space for private staging content and the completed archive during a multi-node export.
+
 ### Blob Integrity Check Failed
 
 After `ksail workload export`, KSail validates the SHA256 digest of every blob in the exported OCI tar archive. If a blob is truncated or corrupt — which `ctr export` can produce silently when containerd's content store has incomplete data (e.g., from an interrupted image pull or runner resource pressure) — you will see an error like:

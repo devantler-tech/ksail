@@ -45,9 +45,21 @@ func (e *ContainerExecutor) ExecInContainer(
 	}
 	defer resp.Close()
 
+	// Closing the hijacked connection when ctx ends unblocks a stalled stream
+	// read, so a deadline on ctx bounds the whole exec rather than only its setup.
+	stopClose := context.AfterFunc(ctx, resp.Close)
+	defer stopClose()
+
 	var stdout, stderr bytes.Buffer
 
 	_, _ = stdcopy.StdCopy(&stdout, &stderr, resp.Reader)
+
+	// A read cut short by cancellation holds partial output; never report it
+	// as a completed command.
+	err = ctx.Err()
+	if err != nil {
+		return "", fmt.Errorf("exec interrupted: %w", err)
+	}
 
 	// Check exit code
 	inspectResp, err := e.dockerClient.ContainerExecInspect(ctx, execID.ID)
