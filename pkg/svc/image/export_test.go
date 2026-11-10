@@ -27,3 +27,6 @@ var RequireSamePlatformForTest = requireSamePlatform
 
 // PublishArchiveForTest exposes publishArchive with an injectable rename.
 var PublishArchiveForTest = publishArchive
+
+// CleanupExportSourcesForTest exposes cleanup of a real export staging directory.
+var CleanupExportSourcesForTest = cleanupExportSources

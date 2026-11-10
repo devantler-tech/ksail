@@ -12,6 +12,9 @@ import (
 )
 
 const exportFileMode = 0o600
+const exportContentDirectory = "content"
+
+var errExportArchiveKept = errors.New("complete image archive kept in staging")
 
 // Stage all sources privately and publish only after complete archive coverage
 // is verified. A failed later node cannot replace an existing destination.
@@ -40,7 +43,7 @@ func (e *Exporter) exportSources(
 		return fmt.Errorf("open export staging directory: %w", err)
 	}
 
-	merger, err := newImageArchiveMerger(filepath.Join(directory, "content"))
+	merger, err := newImageArchiveMerger(filepath.Join(directory, exportContentDirectory))
 	if err != nil {
 		return err
 	}
@@ -74,12 +77,21 @@ func cleanupExportSources(
 	directory string,
 	resultErr error,
 ) error {
-	var closeErr error
+	keepArchive := errors.Is(resultErr, errExportArchiveKept)
+
+	var cleanupErr error
 	if root != nil {
-		closeErr = root.Close()
+		if keepArchive {
+			cleanupErr = root.RemoveAll(exportContentDirectory)
+		}
+
+		cleanupErr = errors.Join(cleanupErr, root.Close())
 	}
 
-	cleanupErr := errors.Join(closeErr, os.RemoveAll(directory))
+	if !keepArchive {
+		cleanupErr = errors.Join(cleanupErr, os.RemoveAll(directory))
+	}
+
 	if cleanupErr == nil {
 		return resultErr
 	}
@@ -118,7 +130,8 @@ func publishExportSources(
 // is atomic, so a failed export never changes the previous archive. When output
 // cannot be renamed over (a bind-mounted file, another filesystem, a protected
 // directory), the previous archive is left untouched and the completed archive
-// is kept beside it under a name of its own, which the error reports.
+// is kept beside it under a name of its own. If that also fails, the archive
+// stays in staging. In either case, the error reports the recoverable path.
 func publishArchive(staged, output string, rename func(string, string) error) error {
 	err := rename(staged, output)
 	if err == nil {
@@ -127,7 +140,7 @@ func publishArchive(staged, output string, rename func(string, string) error) er
 
 	kept, keepErr := keepArchiveBeside(staged, output, rename)
 	if keepErr != nil {
-		return fmt.Errorf("publish complete image archive: %w", errors.Join(err, keepErr))
+		return fmt.Errorf("%w at %s: %w", errExportArchiveKept, staged, errors.Join(err, keepErr))
 	}
 
 	return fmt.Errorf(

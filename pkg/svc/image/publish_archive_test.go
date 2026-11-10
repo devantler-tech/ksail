@@ -112,3 +112,54 @@ func TestPublishArchiveNeverReplacesAnEarlierKeptArchive(t *testing.T) {
 	contents := []string{readFixture(t, kept[0]), readFixture(t, kept[1])}
 	require.ElementsMatch(t, []string{"new archive", "second archive"}, contents)
 }
+
+func TestPublishArchiveRetainsStagingWhenReservationFails(t *testing.T) {
+	t.Parallel()
+
+	output := filepath.Join(t.TempDir(), "missing", "images.tar")
+	rename := func(_, _ string) error { return syscall.EACCES }
+
+	assertRetainedAfterCleanup(t, output, rename, syscall.EACCES, os.ErrNotExist)
+}
+
+func TestPublishArchiveRetainsStagingWhenBothRenamesFail(t *testing.T) {
+	t.Parallel()
+
+	_, output := writePublishFixture(t)
+	rename := func(_, to string) error {
+		if to == output {
+			return syscall.EBUSY
+		}
+
+		return syscall.EPERM
+	}
+
+	assertRetainedAfterCleanup(t, output, rename, syscall.EBUSY, syscall.EPERM)
+	require.Equal(t, "old archive contents", readFixture(t, output))
+	require.Empty(t, keptArchives(t, output))
+}
+
+func assertRetainedAfterCleanup(
+	t *testing.T, output string, rename func(string, string) error, causes ...error,
+) {
+	t.Helper()
+
+	directory := t.TempDir()
+	staged := filepath.Join(directory, "combined.tar")
+	content := filepath.Join(directory, "content")
+	require.NoError(t, os.WriteFile(staged, []byte("new archive"), 0o600))
+	require.NoError(t, os.Mkdir(content, 0o700))
+
+	root, err := os.OpenRoot(directory)
+	require.NoError(t, err)
+
+	publishErr := image.PublishArchiveForTest(staged, output, rename)
+	err = image.CleanupExportSourcesForTest(t.Context(), root, directory, publishErr)
+	require.Equal(t, "new archive", readFixture(t, staged))
+	require.ErrorContains(t, err, staged)
+	require.NoDirExists(t, content)
+
+	for _, cause := range causes {
+		require.ErrorIs(t, err, cause)
+	}
+}
