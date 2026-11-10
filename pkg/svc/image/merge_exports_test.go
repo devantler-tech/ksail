@@ -20,6 +20,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestExportAllDeduplicatesReferencesAcrossNodes verifies that overlapping
+// node inventories neither duplicate references nor omit node-local images.
 func TestExportAllDeduplicatesReferencesAcrossNodes(t *testing.T) {
 	t.Parallel()
 
@@ -69,6 +71,8 @@ func exportOperandsByNode(client *docker.MockAPIClient) map[string][]string {
 	return operands
 }
 
+// TestExportRefusesIncompleteArchivesWithoutReplacingDestination checks that
+// invalid tarballs, absent references, and missing blobs preserve the old export.
 func TestExportRefusesIncompleteArchivesWithoutReplacingDestination(t *testing.T) {
 	t.Parallel()
 
@@ -108,6 +112,7 @@ func TestExportRefusesIncompleteArchivesWithoutReplacingDestination(t *testing.T
 	}
 }
 
+// failedNodeArchive builds the negative control for a node export failure.
 func failedNodeArchive(t *testing.T, failure, ref string) []byte {
 	t.Helper()
 
@@ -125,6 +130,8 @@ func failedNodeArchive(t *testing.T, failure, ref string) []byte {
 	}
 }
 
+// withoutFixtureLayer removes the payload blob while leaving its OCI reference
+// intact so the fixture exercises missing content rather than invalid metadata.
 func withoutFixtureLayer(t *testing.T, data []byte) []byte {
 	t.Helper()
 
@@ -184,6 +191,8 @@ func assertImageArchiveReadable(t *testing.T, path string, count int) {
 	assertFixtureIndexContent(t, index)
 }
 
+// assertFixtureIndexContent descends through nested OCI indexes and checks
+// that each image's configuration and payload layer can actually be read.
 func assertFixtureIndexContent(t *testing.T, index v1.ImageIndex) {
 	t.Helper()
 
@@ -219,6 +228,8 @@ func assertFixtureIndexContent(t *testing.T, index v1.ImageIndex) {
 	}
 }
 
+// unpackFixtureArchive materializes regular files from a fixture under a
+// test-owned root, rejecting links and paths that could escape it.
 func unpackFixtureArchive(t *testing.T, reader *tar.Reader, directory string) {
 	t.Helper()
 

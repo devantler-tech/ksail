@@ -73,6 +73,8 @@ func (e *Exporter) exportSources(
 	return publishExportSources(ctx, root, merger, opts.OutputPath)
 }
 
+// cleanupExportSources removes staging files after the export. If neither
+// publication nor fallback rename worked, it preserves the completed tarball.
 func cleanupExportSources(
 	ctx context.Context,
 	root *os.Root,
@@ -110,6 +112,8 @@ func cleanupExportSources(
 	return nil
 }
 
+// publishExportSources writes and validates the combined archive before
+// checking for cancellation and attempting the atomic rename.
 func publishExportSources(
 	ctx context.Context, root *os.Root, merger *imageArchiveMerger, output string,
 ) error {
@@ -180,6 +184,8 @@ func keepArchiveBeside(
 	return kept, nil
 }
 
+// ingestExportPart validates the node archive against the selected references
+// and preserves any read, permission, or close failure.
 func ingestExportPart(
 	ctx context.Context, root *os.Root, merger *imageArchiveMerger, refs []string, platform string,
 ) error {
@@ -201,6 +207,8 @@ func ingestExportPart(
 	return nil
 }
 
+// writeCombinedExport writes the merged archive into a new staging file and
+// validates the tarball before it can replace the destination.
 func writeCombinedExport(ctx context.Context, root *os.Root, merger *imageArchiveMerger) error {
 	file, err := root.OpenFile("combined.tar", os.O_CREATE|os.O_EXCL|os.O_WRONLY, exportFileMode)
 	if err != nil {

@@ -113,6 +113,8 @@ func TestPublishArchiveNeverReplacesAnEarlierKeptArchive(t *testing.T) {
 	require.ElementsMatch(t, []string{"new archive", "second archive"}, contents)
 }
 
+// TestPublishArchiveRetainsStagingWhenReservationFails covers a destination
+// where a unique fallback file cannot be reserved.
 func TestPublishArchiveRetainsStagingWhenReservationFails(t *testing.T) {
 	t.Parallel()
 
@@ -122,6 +124,8 @@ func TestPublishArchiveRetainsStagingWhenReservationFails(t *testing.T) {
 	assertRetainedAfterCleanup(t, output, rename, syscall.EACCES, os.ErrNotExist)
 }
 
+// TestPublishArchiveRetainsStagingWhenBothRenamesFail checks that the original
+// destination and the new staged archive both survive.
 func TestPublishArchiveRetainsStagingWhenBothRenamesFail(t *testing.T) {
 	t.Parallel()
 
@@ -139,6 +143,8 @@ func TestPublishArchiveRetainsStagingWhenBothRenamesFail(t *testing.T) {
 	require.Empty(t, keptArchives(t, output))
 }
 
+// assertRetainedAfterCleanup checks that an unsuccessful publish names the
+// recoverable archive and that cleanup removes only the content store.
 func assertRetainedAfterCleanup(
 	t *testing.T, output string, rename func(string, string) error, causes ...error,
 ) {

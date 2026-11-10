@@ -21,6 +21,7 @@ type imageArchiveMerger struct {
 	platforms []ocispec.Platform
 }
 
+// newImageArchiveMerger opens the staging content store shared by the node archives.
 func newImageArchiveMerger(directory string) (*imageArchiveMerger, error) {
 	store, err := local.NewStore(directory)
 	if err != nil {
@@ -117,6 +118,8 @@ func exportedDescriptor(
 	return "", ocispec.Descriptor{}, false
 }
 
+// archiveDescriptorsByName indexes named OCI entries by normalized reference.
+// It refuses an index that assigns the same name to different digests.
 func archiveDescriptorsByName(data []byte) (map[string]ocispec.Descriptor, error) {
 	var manifest ocispec.Index
 
@@ -151,6 +154,8 @@ func archiveDescriptorsByName(data []byte) (map[string]ocispec.Descriptor, error
 	return byName, nil
 }
 
+// addTarget checks that the selected platform's content is complete before
+// registering a reference. A repeated name must resolve to the same digest.
 func (m *imageArchiveMerger) addTarget(
 	ctx context.Context, ref string, descriptor ocispec.Descriptor, platform ocispec.Platform,
 ) error {
@@ -182,6 +187,7 @@ func (m *imageArchiveMerger) addTarget(
 	return nil
 }
 
+// write emits a single OCI archive with one named entry per validated reference.
 func (m *imageArchiveMerger) write(ctx context.Context, writer io.Writer) error {
 	defaults := []ctrdarchive.ExportOpt{
 		ctrdarchive.WithSkipDockerManifest(),

@@ -96,6 +96,8 @@ func TestExportStagingCleanupDoesNotUndoPublishedResult(t *testing.T) {
 	}
 }
 
+// runExportStagingCleanupCase injects a real cleanup failure before checking
+// both successful publication and a failed copy that leaves the old export.
 func runExportStagingCleanupCase(t *testing.T, failCopy bool) {
 	t.Helper()
 
@@ -154,6 +156,8 @@ func runExportStagingCleanupCase(t *testing.T, failCopy bool) {
 	)
 }
 
+// blockExportStagingCleanup leaves a file in a non-writable staging directory
+// and proves the filesystem will reject its removal.
 func blockExportStagingCleanup(t *testing.T, directory string) string {
 	t.Helper()
 
@@ -209,6 +213,8 @@ var (
 	errFixtureStagingCopy = errors.New("fixture staging copy refused")
 )
 
+// TestExportPartialNodeFailureRetainsOriginalDiagnostics checks that a failed
+// node export reports the bulk and retry failures that led to refusal.
 func TestExportPartialNodeFailureRetainsOriginalDiagnostics(t *testing.T) {
 	t.Parallel()
 
@@ -267,6 +273,8 @@ func TestExportPartialNodeFailureRetainsOriginalDiagnostics(t *testing.T) {
 	require.Equal(t, "existing export", string(preserved))
 }
 
+// expectPartialExportFailures injects independent errors for the bulk export
+// and the per-image alias retry.
 func expectPartialExportFailures(ctx context.Context, client *docker.MockAPIClient, bad string) {
 	for _, failure := range []struct {
 		count int
@@ -293,6 +301,8 @@ func setupNodeArchive(
 	setupNodeArchiveContents(ctx, t, client, node, refs, namedNodeArchive(t, refs...))
 }
 
+// setupNodeArchiveContents lets a test provide archive bytes independently
+// from the references Docker reports in the node inventory.
 func setupNodeArchiveContents(
 	ctx context.Context,
 	t *testing.T,
@@ -536,6 +546,8 @@ func nestedImportAliasFixture(t *testing.T, payload string) (string, []byte) {
 	return ref, tarFixtureDirectory(t, string(store))
 }
 
+// assertNodeRawExports verifies that each node exports its original containerd
+// reference before the archive names are normalized.
 func assertNodeRawExports(
 	ctx context.Context,
 	t *testing.T,
@@ -564,6 +576,8 @@ func assertNodeRawExports(
 	}
 }
 
+// importAliasFixture creates an OCI image layout named by its import alias
+// and digest, as containerd can report after transfer import.
 func importAliasFixture(t *testing.T, payload string) (string, []byte) {
 	t.Helper()
 	img := fixtureImage(t, payload)
@@ -635,6 +649,7 @@ func TestExportImportAliasRefusesWrongRepositoryAndDigest(t *testing.T) {
 	}
 }
 
+// tarFixtureDirectory packs a fixture OCI layout for the mocked Docker copy.
 func tarFixtureDirectory(t *testing.T, root string) []byte {
 	t.Helper()
 
