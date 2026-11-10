@@ -18,7 +18,8 @@ func TestAutoscalerPoolPatchesFollowWorkersFromBootstrapToReconcile(t *testing.T
 	t.Parallel()
 
 	sharedPatch := poolRawVolumePatch("scratch", "8GiB") + "---\n" +
-		poolRawVolumePatch("retained", "4GiB")
+		poolRawVolumePatch("retained", "4GiB") + "---\n" +
+		poolEphemeralMaxPatch("-104GiB")
 	configs, err := talosconfigmanager.NewDefaultConfigsWithPatches([]talosconfigmanager.Patch{{
 		Path:    "workers/storage.yaml",
 		Scope:   talosconfigmanager.PatchScopeWorker,
@@ -27,7 +28,8 @@ func TestAutoscalerPoolPatchesFollowWorkersFromBootstrapToReconcile(t *testing.T
 	require.NoError(t, err)
 
 	lastPatch := poolRawVolumePatch("scratch", "16GiB") + "---\n" +
-		poolRawVolumePatch("additional", "32GiB")
+		poolRawVolumePatch("additional", "32GiB") + "---\n" +
+		poolEphemeralMaxPatch("44GiB")
 	pool := ksailv1alpha1.NodePool{
 		Name:         autoscalerTestPool,
 		TalosPatches: []string{poolRawVolumePatch("scratch", "12GiB"), lastPatch},
@@ -62,9 +64,9 @@ func TestAutoscalerPoolPatchesFollowWorkersFromBootstrapToReconcile(t *testing.T
 		"retained":   block.MustSize("4GiB"),
 		"additional": block.MustSize("32GiB"),
 	}
-	assert.Equal(t, poolLayout, rawVolumeSizes(bootstrap))
-	assert.Equal(t, sharedLayout, rawVolumeSizes(otherPool))
-	assert.Equal(t, sharedLayout, rawVolumeSizes(configs.Worker()))
+	assertPoolLayout(t, bootstrap, poolLayout, "44GiB")
+	assertPoolLayout(t, otherPool, sharedLayout, "-104GiB")
+	assertPoolLayout(t, configs.Worker(), sharedLayout, "-104GiB")
 
 	node, err := prov.AutoscalerNodeForTest(autoscalerServer(pool.Name), autoscalerTestNodeIP)
 	require.NoError(t, err)
@@ -72,7 +74,37 @@ func TestAutoscalerPoolPatchesFollowWorkersFromBootstrapToReconcile(t *testing.T
 		t.Context(), node, configs.ControlPlane(),
 	)
 	require.NoError(t, err)
-	assert.Equal(t, poolLayout, rawVolumeSizes(reconciled))
+	assertPoolLayout(t, reconciled, poolLayout, "44GiB")
+}
+
+func poolEphemeralMaxPatch(size string) string {
+	return "apiVersion: v1alpha1\nkind: VolumeConfig\nname: EPHEMERAL\n" +
+		"provisioning:\n  diskSelector:\n    match: system_disk\n  minSize: 40GiB\n  maxSize: " + size + "\n"
+}
+
+func assertPoolLayout(
+	t *testing.T,
+	cfg talosconfig.Provider,
+	rawLayout map[string]block.Size,
+	maxEphemeral string,
+) {
+	t.Helper()
+	assert.Equal(t, rawLayout, rawVolumeSizes(cfg))
+
+	for _, document := range cfg.Documents() {
+		volume, ok := document.(*block.VolumeConfigV1Alpha1)
+		if ok && volume.Name() == "EPHEMERAL" {
+			assert.Equal(
+				t,
+				block.MustSize(maxEphemeral),
+				volume.ProvisioningSpec.ProvisioningMaxSize,
+			)
+
+			return
+		}
+	}
+
+	t.Fatal("EPHEMERAL configuration missing")
 }
 
 func TestInvalidAutoscalerPoolPatchStopsBeforeProvisioning(t *testing.T) {

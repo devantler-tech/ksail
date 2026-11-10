@@ -115,6 +115,17 @@ func applyAutoscalerPoolPatches(
 		)
 	}
 
+	// Reload the merged documents before validation and drift analysis. The
+	// Talos SDK can retain the previous size sign in memory when a patch
+	// replaces a negative reserve with an absolute cap.
+	_, err = patched.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf(
+			"encoding patched pool machine config: %w",
+			errInvalidAutoscalerPoolPatch,
+		)
+	}
+
 	config, err := patched.Config()
 	if err != nil {
 		return nil, fmt.Errorf(
