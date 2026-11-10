@@ -67,6 +67,15 @@ verify_notice_fixture_archives() {
 			esac
 			cmp "$fixture/.cache/go-notices/$target/GoNotices/$member" "$fixture/member.actual"
 		done
+		if [[ "$product" == ksail ]]; then
+			for member in bash zsh fish; do
+				case "$archive" in
+				*.tar.gz) tar -xOzf "$archive" "completions/ksail.$member" >"$fixture/member.actual" ;;
+				*.zip) unzip -p "$archive" "completions/ksail.$member" >"$fixture/member.actual" ;;
+				esac
+				printf '# completion archive fixture: %s\n' "$member" | cmp - "$fixture/member.actual"
+			done
+		fi
 		if [[ "$product" == ksail-desktop ]]; then
 			unzip -p "$archive" KSail.app/Contents/Resources/LICENSE >"$fixture/member.actual"
 			cmp "$fixture/LICENSE" "$fixture/member.actual"
@@ -84,18 +93,64 @@ for name in ksail ksail-desktop; do
 	mkdir -p "$fixture"
 	printf 'module cask-render-fixture\n\ngo 1.27.3\n' >"$fixture/go.mod"
 	printf 'package main\nfunc main() {}\n' >"$fixture/main.go"
+	if [[ "$name" == ksail ]]; then
+		cat >"$fixture/main.go" <<'EOF'
+package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func main() {
+	if len(os.Args) != 3 || os.Args[1] != "completion" {
+		os.Exit(2)
+	}
+	fmt.Printf("# completion archive fixture: %s\n", os.Args[2])
+}
+EOF
+		mkdir -p "$fixture/.github/scripts"
+		cp "$root/.github/scripts/generate-completions.sh" "$fixture/.github/scripts/"
+		for mode in failed empty; do
+			cat >"$fixture/completion-$mode" <<'EOF'
+#!/usr/bin/env bash
+case "${0##*/}:$2" in
+completion-failed:fish) exit 9 ;;
+completion-empty:fish) exit 0 ;;
+esac
+printf 'completion fixture\n'
+EOF
+			chmod +x "$fixture/completion-$mode"
+			if bash "$fixture/.github/scripts/generate-completions.sh" "$fixture/completion-$mode" \
+				"$fixture/incomplete-$mode" darwin/arm64 darwin/arm64; then
+				printf 'the %s completion generation was accepted\n' "$mode" >&2
+				exit 1
+			fi
+			[[ ! -e "$fixture/incomplete-$mode" ]]
+		done
+	fi
 	cp "$root/LICENSE" "$fixture/LICENSE"
 	stage_notice_fixtures "$fixture"
 	# Keep the real archive/target/cask shapes. Remove application-only build hooks and publication
 	# credentials, and force upload off; this fixture must never publish or use a credential.
 	yq '.project_name = "'"$name"'" | .dist = "dist" |
 		.before.hooks = [] | .builds[].main = "." | .builds[].tags = [] |
-		.builds[].env = ["CGO_ENABLED=0"] | .builds[].hooks = {} | .builds[].ldflags = [] |
-		.archives[].files = ((.archives[].files // []) | map(select((.src // "") == "LICENSE" or ((.src // "") | test("^\\.cache/go-notices/"))))) |
+		.builds[].env = ["CGO_ENABLED=0"] | del(.builds[].hooks.pre) | .builds[].ldflags = [] |
+		.archives[].files = ((.archives[].files // []) | map(select((.src // "") == "LICENSE" or ((.src // "") | test("^\\.cache/go-notices/|^dist/completions/"))))) |
 		.homebrew_casks[].skip_upload = "true" |
 		.homebrew_casks[].repository.token = "" |
 		del(.homebrew_casks[].commit_author.signing, .dockers_v2, .docker_signs, .release.extra_files)' \
 		"$root/$config" >"$fixture/.goreleaser.yaml"
+	if [[ "$name" == ksail-desktop ]]; then
+		yq -i '.builds[].hooks = {}' "$fixture/.goreleaser.yaml"
+	fi
+	if [[ "$name" == ksail && "$(go env GOARCH)" == amd64 ]]; then
+		# Intel still exercises the real script and cask. Its native fixture is
+		# built separately because the release matrix excludes Darwin amd64.
+		go build -o "$fixture/native-fixture" "$fixture/main.go"
+		yq -i '.builds[].hooks.post[0].cmd |= sub("\\{\\{ \\.Path \\}\\}", "{{ .Env.KSAIL_CASK_NATIVE_FIXTURE }}") |
+			.builds[].hooks.post[0].cmd |= sub("\\{\\{ \\.Runtime.Goos \\}\\}/\\{\\{ \\.Runtime.Goarch \\}\\}", "darwin/arm64")' "$fixture/.goreleaser.yaml"
+	fi
 	git -C "$fixture" init --quiet
 	git -C "$fixture" remote add origin https://github.com/devantler-tech/ksail.git
 	git -C "$fixture" add go.mod main.go .goreleaser.yaml
@@ -104,6 +159,7 @@ for name in ksail ksail-desktop; do
 	git -C "$fixture" tag v7.204.0
 	(
 		cd "$fixture"
+		export KSAIL_CASK_NATIVE_FIXTURE="$fixture/native-fixture"
 		goreleaser release --snapshot --clean --skip=validate,publish,announce,sign
 	)
 	verify_notice_fixture_archives "$fixture" "$name"
@@ -155,5 +211,10 @@ for name in ksail ksail-desktop; do
 		jq -e '.casks[0].depends_on | has("macos")' "$work/$name.json" >/dev/null
 	fi
 done
+jq -e '.casks[0].artifacts as $a |
+	($a | any(.bash_completion?[0] == "completions/ksail.bash")) and
+	($a | any(.zsh_completion?[0] == "completions/ksail.zsh")) and
+	($a | any(.fish_completion?[0] == "completions/ksail.fish")) and
+	($a | all(has("generate_completions_from_executable") | not))' "$work/ksail.json" >/dev/null
 printf 'PASS: both rendered casks load on every platform and preserve checksum, architecture and macOS guards\n'
 completed=true
