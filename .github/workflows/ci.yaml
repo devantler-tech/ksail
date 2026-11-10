@@ -3100,3 +3100,27 @@ jobs:
             echo "The selected Calico baseline must succeed, got: $BASELINE_RESULT" >&2
             exit 1
           fi
+
+  evaluate-split-image-export:
+    name: Evaluate split image export on two Docker nodes
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/codex/image-export-eval-8268-r73'
+    needs: [build-artifact]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the evaluation source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Restore the verified producer binary
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@78ca354307492ad2f3449c3f039124e43343e10b
+        with:
+          artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
+          binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
+
+      - name: Export and reimport different images from two nodes
+        run: bash .github/scripts/eval-split-image-export.sh
