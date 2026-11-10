@@ -3,6 +3,7 @@ package talosprovisioner_test
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"math/rand/v2"
 	"testing"
 
@@ -125,13 +126,50 @@ func TestInvalidAutoscalerPoolPatchStopsBeforeProvisioning(t *testing.T) {
 		})
 
 	_, err = prov.BuildAutoscalerPoolConfigsForTest(configs.Bundle())
-	require.ErrorContains(t, err, "pool machine config patch 1")
+	require.ErrorContains(t, err, "parsing pool machine config patch 1")
+
+	var wrapped interface{ Unwrap() []error }
+	require.ErrorAs(t, err, &wrapped)
+	require.Len(t, wrapped.Unwrap(), 2)
+	require.ErrorContains(t, wrapped.Unwrap()[1], "go-yaml load error")
 	require.ErrorContains(t, prov.Create(t.Context(), ""), "pool machine config patch 1")
 
 	_, err = prov.DiffConfig(t.Context(), "", nil, nil)
 	require.ErrorContains(t, err, "pool machine config patch 1")
 	require.ErrorContains(t, prov.UpgradeDistribution(t.Context(), "", "v1.13.12", "v1.13.12"),
 		"pool machine config patch 1")
+}
+
+func TestInvalidAutoscalerPoolPatchReportsJSONOffset(t *testing.T) {
+	t.Parallel()
+
+	prov := provisionerWithPoolPatch(t, `[{"op":`)
+	_, err := prov.DiffConfig(t.Context(), "", nil, nil)
+	require.ErrorContains(
+		t, err, "pool machine config patch 1: invalid Talos machine configuration at byte",
+	)
+
+	var syntax *json.SyntaxError
+	require.ErrorAs(t, err, &syntax)
+}
+
+func TestInvalidAutoscalerPoolPatchRedactsValidationDetails(t *testing.T) {
+	t.Parallel()
+
+	const suppliedValue = "fixture private volume"
+
+	prov := provisionerWithPoolPatch(t, poolRawVolumePatch(suppliedValue, "16GiB"))
+
+	_, err := prov.DiffConfig(t.Context(), "", nil, nil)
+	require.ErrorContains(t, err, "validating patched pool machine config")
+	require.NotContains(t, err.Error(), suppliedValue)
+
+	var wrapped interface{ Unwrap() []error }
+	require.ErrorAs(t, err, &wrapped)
+	causes := wrapped.Unwrap()
+	require.Len(t, causes, 2)
+	require.EqualError(t, causes[0], "invalid Talos machine configuration")
+	require.ErrorContains(t, causes[1], suppliedValue)
 }
 
 func TestDisruptiveAutoscalerPoolPatchStopsBeforeProvisioning(t *testing.T) {

@@ -1,6 +1,7 @@
 package talosprovisioner
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -22,6 +23,25 @@ var errUnknownAutoscalerPool = errors.New(
 )
 
 var errInvalidAutoscalerPoolPatch = errors.New("invalid Talos machine configuration")
+
+// autoscalerPoolPatchError exposes structured causes without printing Talos
+// diagnostics, which can contain values from the machine configuration.
+type autoscalerPoolPatchError struct {
+	cause error
+}
+
+func (err autoscalerPoolPatchError) Error() string {
+	syntax, ok := errors.AsType[*json.SyntaxError](err.cause)
+	if ok && syntax.Offset > 0 {
+		return fmt.Sprintf("%v at byte %d", errInvalidAutoscalerPoolPatch, syntax.Offset)
+	}
+
+	return errInvalidAutoscalerPoolPatch.Error()
+}
+
+func (err autoscalerPoolPatchError) Unwrap() []error {
+	return []error{errInvalidAutoscalerPoolPatch, err.cause}
+}
 
 // autoscalerNode returns the worker node for a server the cluster autoscaler
 // provisioned, carrying the pool whose autoscaler worker config the server booted
@@ -101,9 +121,9 @@ func applyAutoscalerPoolPatches(
 		loaded, err := configpatcher.LoadPatch([]byte(patch))
 		if err != nil {
 			return nil, fmt.Errorf(
-				"pool machine config patch %d: %w",
+				"parsing pool machine config patch %d: %w",
 				index+1,
-				errInvalidAutoscalerPoolPatch,
+				autoscalerPoolPatchError{cause: err},
 			)
 		}
 
@@ -173,7 +193,10 @@ func validateAutoscalerPoolPatch(worker talosconfig.Provider, pool v1alpha1.Node
 
 	_, err = config.ValidateAsClient(hetznerPoolValidationMode{})
 	if err != nil {
-		return errInvalidAutoscalerPoolPatch
+		return fmt.Errorf(
+			"validating patched pool machine config: %w",
+			autoscalerPoolPatchError{cause: err},
+		)
 	}
 
 	// The update planner classifies reboot and wipe operations at cluster scope.
