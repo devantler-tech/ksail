@@ -273,6 +273,87 @@ func TestExportPartialNodeFailureRetainsOriginalDiagnostics(t *testing.T) {
 	require.Equal(t, "existing export", string(preserved))
 }
 
+// A node whose copy of an image is damaged must not end the export while
+// another node holds a complete copy: the image is exported from that node.
+// The selected case also covers a holder the first plan never inventoried,
+// because the damaged node alone appeared to cover the request.
+func TestExportFallsBackToAnotherNodeHoldingACompleteCopy(t *testing.T) {
+	t.Parallel()
+
+	const shared = "docker.io/library/fixture-a:v1"
+
+	for name, testCase := range map[string]struct {
+		selected bool
+		damage   string
+	}{
+		"all images with a missing layer":          {damage: "missing layer"},
+		"selected image missing from node archive": {selected: true, damage: "missing reference"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			client := docker.NewMockAPIClient(t)
+			client.EXPECT().
+				ContainerList(ctx, mock.Anything).
+				Return(kindMultiNodeSummaries()[:2], nil)
+
+			setupNodeArchiveContents(ctx, t, client, kindExporterNodeName, []string{shared},
+				failedNodeArchive(t, testCase.damage, shared))
+			setupNodeArchive(ctx, t, client, "my-cluster-worker", shared)
+
+			output := filepath.Join(t.TempDir(), "images.tar")
+
+			options := image.ExportOptions{OutputPath: output}
+			if testCase.selected {
+				options.Images = []string{shared}
+			}
+
+			err := image.NewExporter(client).Export(ctx, "my-cluster", v1alpha1.DistributionVanilla,
+				v1alpha1.ProviderDocker, options)
+			require.NoError(t, err)
+			require.Equal(t, []string{shared}, archiveNamedReferences(t, output))
+			assertImageArchiveReadable(t, output, 1)
+		})
+	}
+}
+
+// An image no node can supply still fails with the damaged node's own
+// diagnostics, and the existing archive stays in place.
+func TestExportFallbackRefusesAnImageNoNodeCanSupply(t *testing.T) {
+	t.Parallel()
+
+	const (
+		shared = "docker.io/library/fixture-a:v1"
+		other  = "docker.io/library/fixture-b:v1"
+	)
+
+	ctx := context.Background()
+	client := docker.NewMockAPIClient(t)
+	client.EXPECT().ContainerList(ctx, mock.Anything).Return(kindMultiNodeSummaries()[:2], nil)
+
+	setupNodeArchiveContents(ctx, t, client, kindExporterNodeName, []string{shared},
+		failedNodeArchive(t, "missing reference", shared))
+	setupNodeArchive(ctx, t, client, "my-cluster-worker", other)
+
+	output := filepath.Join(t.TempDir(), "images.tar")
+	require.NoError(t, os.WriteFile(output, []byte("existing export"), 0o600))
+
+	err := image.NewExporter(client).Export(ctx, "my-cluster", v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker, image.ExportOptions{OutputPath: output, Images: []string{shared}})
+	require.ErrorIs(t, err, image.ErrIncompleteExport)
+	require.ErrorContains(t, err, "source archive omits "+shared)
+	require.ErrorContains(t, err, "no other node holds: "+shared)
+
+	root, rootErr := os.OpenRoot(filepath.Dir(output))
+	require.NoError(t, rootErr)
+	t.Cleanup(func() { require.NoError(t, root.Close()) })
+
+	preserved, readErr := root.ReadFile("images.tar")
+	require.NoError(t, readErr)
+	require.Equal(t, "existing export", string(preserved))
+}
+
 // expectPartialExportFailures injects independent errors for the bulk export
 // and the per-image alias retry.
 func expectPartialExportFailures(ctx context.Context, client *docker.MockAPIClient, bad string) {

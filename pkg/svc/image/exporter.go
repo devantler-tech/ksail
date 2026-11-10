@@ -124,20 +124,20 @@ func (e *Exporter) Export(
 		return fmt.Errorf("failed to resolve export output path: %w", err)
 	}
 
-	sources, err := e.findExportSources(ctx, clusterName, distribution, opts.Images)
+	plan, err := e.findExportSources(ctx, clusterName, distribution, opts.Images)
 	if err != nil {
 		return err
 	}
 
 	// A single-node cluster keeps its original export and repair path. A
 	// captured inventory marks a multi-node plan, even if one node covers it.
-	if len(sources) == 1 && sources[0].images == nil {
-		_, err = e.exportSource(ctx, sources[0], distribution, opts)
+	if len(plan.sources) == 1 && plan.sources[0].images == nil {
+		_, err = e.exportSource(ctx, plan.sources[0], distribution, opts)
 
 		return err
 	}
 
-	return e.exportSources(ctx, sources, distribution, opts)
+	return e.exportSources(ctx, &plan, distribution, opts)
 }
 
 // exportSource exports one node's share of the images to the archive at
