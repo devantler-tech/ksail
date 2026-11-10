@@ -157,7 +157,10 @@ EOF
 		while IFS='=' read -r variable value; do
 			case "$variable" in
 			GITHUB_TOKEN) [[ -z "$value" ]] ;;
-			*) [[ "$value" == "$isolated"* ]] ;;
+			# Contained means: inside the hook's own mktemp directory (its six-character
+			# suffix, then a separator or the end) with no `.` or `..` component that could
+			# walk back out of it.
+			*) [[ "$value" =~ ^"$isolated"[[:alnum:]]{6}(/|$) && "/$value/" != */../* && "/$value/" != */./* ]] ;;
 			esac || {
 				printf 'completion generation received %s outside its isolated directory\n' "$variable" >&2
 				exit 1
