@@ -153,22 +153,46 @@ func (p *Provisioner) validateAutoscalerPoolPatches() error {
 			return ErrNilWorkerConfig
 		}
 
-		config, err := applyAutoscalerPoolPatches(p.talosConfigs.Worker(), pool.TalosPatches)
+		err := validateAutoscalerPoolPatch(p.talosConfigs.Worker(), pool)
 		if err != nil {
 			return fmt.Errorf("validating autoscaler pool %q: %w", pool.Name, err)
-		}
-
-		_, err = config.ValidateAsClient(hetznerPoolValidationMode{})
-		if err != nil {
-			return fmt.Errorf(
-				"validating autoscaler pool %q: %w",
-				pool.Name,
-				errInvalidAutoscalerPoolPatch,
-			)
 		}
 	}
 
 	return nil
+}
+
+func validateAutoscalerPoolPatch(worker talosconfig.Provider, pool v1alpha1.NodePool) error {
+	config, err := applyAutoscalerPoolPatches(worker, pool.TalosPatches)
+	if err != nil {
+		return err
+	}
+
+	_, err = config.ValidateAsClient(hetznerPoolValidationMode{})
+	if err != nil {
+		return errInvalidAutoscalerPoolPatch
+	}
+
+	// The update planner classifies reboot and wipe operations at cluster scope.
+	// A pool override must never enter the ordinary NO_REBOOT convergence path.
+	if changes := classifyMachineConfigChanges(worker, config); len(changes) > 0 {
+		return fmt.Errorf(
+			"%w: %s requires cluster-wide update orchestration; configure it in the shared Talos patches",
+			errInvalidAutoscalerPoolPatch,
+			changes[0].Field,
+		)
+	}
+
+	bootConfig, err := GenerateAutoscalerWorkerConfig(
+		config, pool.Labels, poolTaintsToCoreV1(pool.Taints),
+	)
+	if err != nil {
+		return err
+	}
+
+	_, err = compressWorkerConfigToUserData(bootConfig)
+
+	return err
 }
 
 // Hetzner nodes boot a Talos cloud image and do not use the metal installer.

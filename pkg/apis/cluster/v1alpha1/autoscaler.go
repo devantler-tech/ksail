@@ -106,6 +106,8 @@ type NodePool struct {
 	// TalosPatches are ordered, inline machine config patches for this pool.
 	// KSail applies them after shared worker configuration and before setting
 	// the autoscaler's own node labels and taints.
+	// Changes that need KSail's cluster-wide reboot or wipe orchestration
+	// belong in shared patches.
 	TalosPatches []string `json:"talosPatches,omitzero" jsonschema_description:"Ordered inline Talos patches."`
 }
 

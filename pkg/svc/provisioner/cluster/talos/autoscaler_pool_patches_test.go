@@ -2,6 +2,8 @@ package talosprovisioner_test
 
 import (
 	"context"
+	"encoding/hex"
+	"math/rand/v2"
 	"testing"
 
 	ksailv1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -130,6 +132,49 @@ func TestInvalidAutoscalerPoolPatchStopsBeforeProvisioning(t *testing.T) {
 	require.ErrorContains(t, err, "pool machine config patch 1")
 	require.ErrorContains(t, prov.UpgradeDistribution(t.Context(), "", "v1.13.12", "v1.13.12"),
 		"pool machine config patch 1")
+}
+
+func TestDisruptiveAutoscalerPoolPatchStopsBeforeProvisioning(t *testing.T) {
+	t.Parallel()
+
+	prov := provisionerWithPoolPatch(t, "machine:\n  features:\n    diskQuotaSupport: false\n")
+
+	require.ErrorContains(t, prov.Create(t.Context(), ""), "machine.features.diskQuotaSupport")
+
+	_, err := prov.DiffConfig(t.Context(), "", nil, nil)
+	require.ErrorContains(t, err, "machine.features.diskQuotaSupport")
+}
+
+func TestOversizedAutoscalerPoolPatchStopsBeforeProvisioning(t *testing.T) {
+	t.Parallel()
+
+	payload := make([]byte, 48_000)
+	_, err := rand.NewChaCha8([32]byte{}).Read(payload)
+	require.NoError(t, err)
+
+	prov := provisionerWithPoolPatch(t, "machine:\n  files:\n    - path: /etc/ksail-test\n"+
+		"      op: create\n      permissions: 0o644\n      content: "+hex.EncodeToString(payload)+"\n")
+
+	require.ErrorIs(t, prov.Create(t.Context(), ""), talosprovisioner.ErrAutoscalerUserDataTooLarge)
+
+	_, err = prov.DiffConfig(t.Context(), "", nil, nil)
+	require.ErrorIs(t, err, talosprovisioner.ErrAutoscalerUserDataTooLarge)
+}
+
+func provisionerWithPoolPatch(t *testing.T, patch string) *talosprovisioner.Provisioner {
+	t.Helper()
+
+	configs, err := talosconfigmanager.NewDefaultConfigs()
+	require.NoError(t, err)
+
+	return talosprovisioner.NewProvisioner(configs, nil).
+		WithHetznerOptions(ksailv1alpha1.OptionsHetzner{
+			NodeAutoscalerEnabled: true,
+			AutoscalerNodePools: []ksailv1alpha1.NodePool{{
+				Name:         autoscalerTestPool,
+				TalosPatches: []string{patch},
+			}},
+		})
 }
 
 func poolRawVolumePatch(name, size string) string {

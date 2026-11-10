@@ -259,6 +259,9 @@ KSail applies the inline patches in order after the shared worker patches, both 
 the pool's boot template and when reconciling an existing worker. KSail applies the pool's node
 labels and taints afterward and preserves settings it manages for each node, such as its hostname.
 The patches are literal Talos documents. KSail keeps environment placeholders in them as written.
+Use shared Talos patches for settings KSail must coordinate across the cluster, including changes
+to the CNI, disk quotas, or system disk encryption. KSail checks each patched boot template against
+Hetzner's 32 KiB user-data limit before provisioning.
 
 ```yaml
 talosPatches:
