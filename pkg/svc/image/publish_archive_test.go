@@ -147,6 +147,7 @@ func assertRetainedAfterCleanup(
 	directory := t.TempDir()
 	staged := filepath.Join(directory, "combined.tar")
 	content := filepath.Join(directory, "content")
+
 	require.NoError(t, os.WriteFile(staged, []byte("new archive"), 0o600))
 	require.NoError(t, os.Mkdir(content, 0o700))
 

@@ -11,8 +11,10 @@ import (
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 )
 
-const exportFileMode = 0o600
-const exportContentDirectory = "content"
+const (
+	exportFileMode         = 0o600
+	exportContentDirectory = "content"
+)
 
 var errExportArchiveKept = errors.New("complete image archive kept in staging")
 
@@ -80,6 +82,7 @@ func cleanupExportSources(
 	keepArchive := errors.Is(resultErr, errExportArchiveKept)
 
 	var cleanupErr error
+
 	if root != nil {
 		if keepArchive {
 			cleanupErr = root.RemoveAll(exportContentDirectory)
