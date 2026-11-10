@@ -413,7 +413,7 @@ func goreleaserCGO(t *testing.T, path string) string {
 func auditedReleaseConfigDigests() map[string]string {
 	return map[string]string{
 		".gitattributes":                                     "8f4a3c1a7f77200945aa239d943a26a6950bd2fc51b1a8704e0211bf8b90bc48",
-		".goreleaser.yaml":                                   "2e22cbf27462e76c441341991d97fa479e1552934e62a01223dd007c3ff64866",
+		".goreleaser.yaml":                                   "ea95f53728ff9000bbee279ca38a8c408899d732e82f3e0d07579eed5e922c6c",
 		".goreleaser.desktop.yaml":                           "1c9fe930f3e2b14f5b9606d185ce7845908519136530308bfa52095b60563d9a",
 		".github/actions/setup-desktop-build/action.yml":     "148ab46c474e23a9bef1107ef18002c9b69c3c8a2ba0a7762f2693784d1bc8e0",
 		".github/scripts/download-go-modules.sh":             "e5af8edf61a77de4397e952a05b1cc6ca0f83cd848523c4cf6b3aaa2539561fa",
