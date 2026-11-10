@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -133,11 +132,17 @@ func (e *Exporter) Export(
 	// captured inventory marks a multi-node plan, even if one node covers it.
 	if len(sources) == 1 && sources[0].images == nil {
 		_, err = e.exportSource(ctx, sources[0], distribution, opts)
+	} else {
+		err = e.exportSources(ctx, sources, distribution, opts)
+	}
 
+	if err != nil {
 		return err
 	}
 
-	return e.exportSources(ctx, sources, distribution, opts)
+	reportPartialPlatforms(ctx, opts.OutputPath)
+
+	return nil
 }
 
 // exportSource exports one node's share of the images to the archive at
@@ -319,26 +324,7 @@ func (e *Exporter) collectExportedArchive(
 // detectNodePlatform detects the OS/architecture of the node container.
 // Returns a platform string in the format "os/arch" (e.g., "linux/amd64", "linux/arm64").
 func (e *Exporter) detectNodePlatform(ctx context.Context, nodeName string) (string, error) {
-	// Use uname to detect architecture
-	output, err := e.executor.ExecInContainer(ctx, nodeName, []string{"uname", "-m"})
-	if err != nil {
-		return "", fmt.Errorf("failed to detect architecture: %w", err)
-	}
-
-	arch := strings.TrimSpace(output)
-
-	// Convert uname output to Go/OCI architecture names
-	switch arch {
-	case "x86_64":
-		arch = "amd64"
-	case "aarch64":
-		arch = "arm64"
-	case "armv7l":
-		arch = "arm"
-	}
-
-	// Always linux for Kubernetes nodes
-	return "linux/" + arch, nil
+	return e.executor.detectPlatform(ctx, nodeName)
 }
 
 // copyFromContainer copies a file from a container to the host.
