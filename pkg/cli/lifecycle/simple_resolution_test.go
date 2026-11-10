@@ -1,9 +1,10 @@
-package lifecycle
+package lifecycle_test
 
 import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/stretchr/testify/assert"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
@@ -62,7 +63,7 @@ func TestResolveAWSRegionReportsConfigSource(t *testing.T) {
 		distCfg := eksDistribution("eks-name", "eks.yaml", true)
 		distCfg.EKS.Region = "eu-west-1"
 
-		region, fromConfig := resolveAWSRegion(opts, distCfg)
+		region, fromConfig := lifecycle.ResolveAWSRegionWithSourceForTest(opts, distCfg)
 		assert.Equal(t, "eu-west-1", region)
 		assert.True(t, fromConfig)
 	})
@@ -70,7 +71,10 @@ func TestResolveAWSRegionReportsConfigSource(t *testing.T) {
 	t.Run("named file without region is not config-bound", func(t *testing.T) {
 		t.Parallel()
 
-		region, fromConfig := resolveAWSRegion(opts, eksDistribution("eks-name", "eks.yaml", true))
+		region, fromConfig := lifecycle.ResolveAWSRegionWithSourceForTest(
+			opts,
+			eksDistribution("eks-name", "eks.yaml", true),
+		)
 		assert.Empty(t, region)
 		assert.False(t, fromConfig)
 	})
@@ -88,24 +92,24 @@ func TestResolveClusterIdentityKubeconfigPrecedence(t *testing.T) {
 	t.Run("resolved path survives config path", func(t *testing.T) {
 		t.Parallel()
 
-		resolved := &ResolvedClusterInfo{KubeconfigPath: "from-flag"}
-		resolveClusterIdentityFromConfig(resolved, cfg, nil)
+		resolved := &lifecycle.ResolvedClusterInfo{KubeconfigPath: "from-flag"}
+		lifecycle.ResolveClusterIdentityFromConfigForTest(resolved, cfg, nil)
 		assert.Equal(t, "from-flag", resolved.KubeconfigPath)
 	})
 
 	t.Run("empty path fills from config", func(t *testing.T) {
 		t.Parallel()
 
-		resolved := &ResolvedClusterInfo{}
-		resolveClusterIdentityFromConfig(resolved, cfg, nil)
+		resolved := &lifecycle.ResolvedClusterInfo{}
+		lifecycle.ResolveClusterIdentityFromConfigForTest(resolved, cfg, nil)
 		assert.Equal(t, "from-config", resolved.KubeconfigPath)
 	})
 
 	t.Run("empty path stays empty without config path", func(t *testing.T) {
 		t.Parallel()
 
-		resolved := &ResolvedClusterInfo{}
-		resolveClusterIdentityFromConfig(resolved, &v1alpha1.Cluster{}, nil)
+		resolved := &lifecycle.ResolvedClusterInfo{}
+		lifecycle.ResolveClusterIdentityFromConfigForTest(resolved, &v1alpha1.Cluster{}, nil)
 		assert.Empty(t, resolved.KubeconfigPath)
 	})
 }
@@ -164,7 +168,11 @@ func TestHasLoadedEKSConfigSource(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := hasLoadedEKSConfigSource(testCase.cfg, testCase.distCfg, testCase.configName)
+			got := lifecycle.HasLoadedEKSConfigSourceForTest(
+				testCase.cfg,
+				testCase.distCfg,
+				testCase.configName,
+			)
 			assert.Equal(t, testCase.want, got)
 		})
 	}
@@ -219,7 +227,7 @@ func TestResolveClusterNameFromConfigPrecedence(t *testing.T) {
 			cfg := &v1alpha1.Cluster{}
 			cfg.Name = testCase.cfgName
 
-			got := resolveClusterNameFromConfig(
+			got := lifecycle.ResolveClusterNameFromConfigForTest(
 				testCase.currentName,
 				"eks-name",
 				testCase.eksConfigSource,
@@ -287,7 +295,11 @@ func TestResolveConfigClusterName(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, testCase.want, resolveConfigClusterName(testCase.cfg, testCase.distCfg))
+			assert.Equal(
+				t,
+				testCase.want,
+				lifecycle.ResolveConfigClusterNameForTest(testCase.cfg, testCase.distCfg),
+			)
 		})
 	}
 }
