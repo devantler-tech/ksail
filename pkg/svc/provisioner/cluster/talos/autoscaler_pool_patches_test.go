@@ -145,6 +145,30 @@ func TestDisruptiveAutoscalerPoolPatchStopsBeforeProvisioning(t *testing.T) {
 	require.ErrorContains(t, err, "machine.features.diskQuotaSupport")
 }
 
+func TestAutoscalerPoolPatchCannotChangeSystemVolumeEncryption(t *testing.T) {
+	t.Parallel()
+
+	for _, volume := range []string{"EPHEMERAL", "STATE"} {
+		t.Run(volume, func(t *testing.T) {
+			t.Parallel()
+
+			patch := "apiVersion: v1alpha1\nkind: VolumeConfig\nname: " + volume + "\n" +
+				"encryption:\n  provider: luks2\n  keys:\n    - slot: 0\n      nodeID: {}\n"
+			prov := provisionerWithPoolPatch(t, patch)
+			want := "VolumeConfig/" + volume + " encryption"
+
+			_, err := prov.DiffConfig(t.Context(), "", nil, nil)
+			require.ErrorContains(t, err, want)
+			require.ErrorContains(t, prov.Create(t.Context(), ""), want)
+			require.ErrorContains(
+				t,
+				prov.UpgradeDistribution(t.Context(), "", "v1.13.12", "v1.13.12"),
+				want,
+			)
+		})
+	}
+}
+
 func TestOversizedAutoscalerPoolPatchStopsBeforeProvisioning(t *testing.T) {
 	t.Parallel()
 

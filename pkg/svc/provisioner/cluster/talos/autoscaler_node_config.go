@@ -3,13 +3,16 @@ package talosprovisioner
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+	talosconfigtypes "github.com/siderolabs/talos/pkg/machinery/config/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/configpatcher"
+	"github.com/siderolabs/talos/pkg/machinery/constants"
 )
 
 // errUnknownAutoscalerPool reports an autoscaler server whose pool is not configured,
@@ -183,6 +186,27 @@ func validateAutoscalerPoolPatch(worker talosconfig.Provider, pool v1alpha1.Node
 		)
 	}
 
+	// Talos also stores system-volume encryption in separate VolumeConfig
+	// documents. Neither a provider change nor a change to an existing
+	// system-volume encryption policy belongs in a pool's NO_REBOOT update.
+	systemVolumes := []string{
+		constants.StatePartitionLabel,
+		constants.EphemeralPartitionLabel,
+		constants.ImageCachePartitionLabel,
+	}
+	for _, volume := range systemVolumes {
+		sharedEncryption := systemVolumeEncryption(worker, volume)
+		poolEncryption := systemVolumeEncryption(config, volume)
+
+		if !reflect.DeepEqual(sharedEncryption, poolEncryption) {
+			return fmt.Errorf(
+				"%w: VolumeConfig/%s encryption cannot change in pool patches",
+				errInvalidAutoscalerPoolPatch,
+				volume,
+			)
+		}
+	}
+
 	bootConfig, err := GenerateAutoscalerWorkerConfig(
 		config, pool.Labels, poolTaintsToCoreV1(pool.Taints),
 	)
@@ -193,6 +217,22 @@ func validateAutoscalerPoolPatch(worker talosconfig.Provider, pool v1alpha1.Node
 	_, err = compressWorkerConfigToUserData(bootConfig)
 
 	return err
+}
+
+func systemVolumeEncryption(
+	provider talosconfig.Provider,
+	name string,
+) talosconfigtypes.EncryptionConfig {
+	volume, _ := provider.Volumes().ByName(name)
+	if encryption := volume.Encryption(); encryption != nil {
+		return encryption
+	}
+
+	if encryption := provider.Machine().SystemDiskEncryption(); encryption != nil {
+		return encryption.Get(name)
+	}
+
+	return nil
 }
 
 // Hetzner nodes boot a Talos cloud image and do not use the metal installer.
