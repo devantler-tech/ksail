@@ -75,7 +75,7 @@ while (($# > 0)); do
 	esac
 done
 
-if [[ ! "${tap}" =~ ^[^/]+/[^/]+$ || -z "${cask_name}" ||
+if [[ ! "${tap}" =~ ^[^/]+/[^/]+$ || ! "${cask_name}" =~ ^[a-z0-9][a-z0-9-]*$ ||
 	! "${source_repo}" =~ ^[^/]+/[^/]+$ || -z "${tag}" ||
 	! -d "${output_dir}" ]]; then
 	printf 'ERROR: --tap OWNER/REPO, --cask-name NAME, --source-repo OWNER/REPO, --tag TAG, and an existing --output-dir DIR are required\n' >&2
@@ -109,6 +109,19 @@ validate_candidate() {
 				--merged
 	} >"${candidate_log}" 2>&1
 }
+
+# A historical merge cannot prove delivery while main still serves another
+# version. This snapshot only rules out candidate collection. Success still requires the
+# collector to pin main and validate the exact merged cask and asset digests.
+if [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] &&
+	current_cask="$(read_api "repos/${tap}/contents/Casks/${cask_name}.rb?ref=main" 2>/dev/null |
+		jq -er '.content | gsub("[[:space:]]"; "") | @base64d' 2>/dev/null)"; then
+	current_version="$(sed -nE 's/^[[:space:]]*version[[:space:]]+"([^"]*)"[[:space:]]*(#.*)?$/\1/p' <<<"${current_cask}")"
+	if [[ "${current_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "${current_version}" != "${tag#v}" ]]; then
+		printf 'BLOCKED: tap main still pins %s; expected %s\n' "${current_version}" "${tag#v}" >&2
+		exit 1
+	fi
+fi
 
 if [[ -n "${known_pr}" ]]; then
 	if validate_candidate "${known_pr}"; then
