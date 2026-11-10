@@ -3,8 +3,8 @@
 set -euo pipefail
 
 if [[ $# != 1 || ! -f "$1" ]]; then
-  echo "Expected one Apple Silicon desktop ZIP" >&2
-  exit 1
+	echo "Expected one Apple Silicon desktop ZIP" >&2
+	exit 1
 fi
 
 extracted="$(mktemp -d)"

@@ -26,9 +26,9 @@ bash "$script_dir/make-info-plist.sh" "$version" "$app/Contents/Info.plist"
 bash "$script_dir/make-icns.sh" "$script_dir/../resources/icon.png" "$app/Contents/Resources/AppIcon.icns"
 
 if [[ -n "$release_notices" ]]; then
-  cp "$script_dir/../../LICENSE" "$app/Contents/Resources/LICENSE"
-  cp -R "$release_notices" "$app/Contents/Resources/GoNotices"
-  codesign --force --sign - "$app"
+	cp "$script_dir/../../LICENSE" "$app/Contents/Resources/LICENSE"
+	cp -R "$release_notices" "$app/Contents/Resources/GoNotices"
+	codesign --force --sign - "$app"
 fi
 
 echo "built $app (version $version)"
