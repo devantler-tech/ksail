@@ -354,6 +354,38 @@ func TestExportFallbackRefusesAnImageNoNodeCanSupply(t *testing.T) {
 	require.Equal(t, "existing export", string(preserved))
 }
 
+// A content repair can re-pull a tag@digest image by its tag. The node archive
+// then names the tag instead of the planned name, and the export must still
+// publish it rather than refuse a complete archive.
+func TestExportPublishesAnImageHeldUnderItsRepairedTag(t *testing.T) {
+	t.Parallel()
+
+	const (
+		tagged  = "docker.io/library/fixture-a:v1"
+		planned = tagged + "@" + fixtureDigest
+		other   = "docker.io/library/fixture-b:v1"
+	)
+
+	ctx := context.Background()
+	client := docker.NewMockAPIClient(t)
+	client.EXPECT().ContainerList(ctx, mock.Anything).Return(kindMultiNodeSummaries()[:2], nil)
+
+	setupNodeArchiveContents(ctx, t, client, kindExporterNodeName, []string{planned},
+		namedNodeArchive(t, tagged))
+	setupNodeArchive(ctx, t, client, "my-cluster-worker", other)
+
+	output := filepath.Join(t.TempDir(), "images.tar")
+
+	err := image.NewExporter(client).Export(ctx, "my-cluster", v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker, image.ExportOptions{
+			OutputPath: output,
+			Images:     []string{planned, other},
+		})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{tagged, other}, archiveNamedReferences(t, output))
+	assertImageArchiveReadable(t, output, 2)
+}
+
 // expectPartialExportFailures injects independent errors for the bulk export
 // and the per-image alias retry.
 func expectPartialExportFailures(ctx context.Context, client *docker.MockAPIClient, bad string) {
