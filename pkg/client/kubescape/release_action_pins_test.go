@@ -457,7 +457,7 @@ func TestAuditPinnedActionRejectsSiblingManifest(t *testing.T) {
 // Both trees must match the witness for the npm lifecycle scripts, lockfile and build configuration.
 func auditedActionTrees() []struct{ dir, action, tree string } {
 	return []struct{ dir, action, tree string }{
-		{"web/ui", "setup-desktop-build", "b390d8ffcb7b778a7cdfe7da9c86d186cc0eca70"},
+		{"web/ui", "setup-desktop-build", "83a3ba3645ecf2cfd5c9cb1bfc1117f95ae3f11b"},
 	}
 }
 
