@@ -422,7 +422,7 @@ func auditedReleaseConfigDigests() map[string]string {
 		".github/actions/release-admission/action.yaml":      "a8ac217c7e2195fee64b364748a6724b99aa0aa4a9988127084f1d6b45953f0c",
 		"scripts/stage-webui.sh":                             "56f99977b9e5026eedd693e59da4e0cd82d0167e94d0ce4b9c7bb5ce2cd8ed3c",
 		".github/actions/free-disk-space/free-disk-space.sh": "2dd12fcf3779137ca1cb5f21194947f6a10d3f94f8fb438a1a29ec9021fbdc30",
-		".github/workflows/cd.yaml#without-uses":             "628332c7996b699922dc5ca588b2f0ebc951900a761f50fa02770a0ffe3965a8",
+		".github/workflows/cd.yaml#without-uses":             "8ab71e0ac573fb35db47d8b12d3f8ffaec228844c1adfbde70b0a3c814174617",
 	}
 }
 
