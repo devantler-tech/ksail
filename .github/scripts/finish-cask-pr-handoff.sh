@@ -5,13 +5,15 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 tap="" pr="" name="" tag="" source_repo="devantler-tech/ksail"
 attempts=30 interval=10
+checks_wait=1800
+checks_deadline="${KSAIL_CASK_CHECK_DEADLINE:-}"
 # Describe the fixed release identity and bounded wait arguments accepted by this command.
 usage() {
-	printf 'Usage: finish-cask-pr-handoff.sh --tap OWNER/REPO --pr NUMBER --cask-name NAME --tag TAG [--source-repo OWNER/REPO] [--attempts 1..30] [--interval 0..10]\n' >&2
+	printf 'Usage: finish-cask-pr-handoff.sh --tap OWNER/REPO --pr NUMBER --cask-name NAME --tag TAG [--source-repo OWNER/REPO] [--attempts 1..30] [--interval 0..10] [--checks-wait 1..1800]\n' >&2
 }
 while (($#)); do
 	case "$1" in
-	--tap | --pr | --cask-name | --tag | --source-repo | --attempts | --interval)
+	--tap | --pr | --cask-name | --tag | --source-repo | --attempts | --interval | --checks-wait)
 		[[ $# -ge 2 ]] || {
 			usage
 			exit 2
@@ -19,6 +21,7 @@ while (($#)); do
 		case "$1" in
 		--tap) tap="$2" ;; --pr) pr="$2" ;; --cask-name) name="$2" ;; --tag) tag="$2" ;;
 		--source-repo) source_repo="$2" ;; --attempts) attempts="$2" ;; --interval) interval="$2" ;;
+		--checks-wait) checks_wait="$2" ;;
 		esac
 		shift 2
 		;;
@@ -31,7 +34,9 @@ done
 if [[ "${tap}" != devantler-tech/homebrew-tap || "${source_repo}" != devantler-tech/ksail ||
 	! "${pr}" =~ ^[1-9][0-9]*$ || ! "${name}" =~ ^ksail(-desktop)?$ ||
 	! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ||
-	! "${attempts}" =~ ^([1-9]|[12][0-9]|30)$ || ! "${interval}" =~ ^([0-9]|10)$ ]]; then
+	! "${attempts}" =~ ^([1-9]|[12][0-9]|30)$ || ! "${interval}" =~ ^([0-9]|10)$ ||
+	! "${checks_wait}" =~ ^[1-9][0-9]{0,3}$ || "${checks_wait}" -gt 1800 ||
+	(-n "${checks_deadline}" && ! "${checks_deadline}" =~ ^[1-9][0-9]{0,9}$) ]]; then
 	usage
 	exit 2
 fi
@@ -70,9 +75,7 @@ wait_write_budget() {
 		esac
 		"${script_dir}/wait-for-github-api-budget.sh" || return 1
 	fi
-	# Reuse this phase's existing retry budget after quota recovery. A rerun
-	# becoming pending must not fail immediately or add a second wait phase.
-	wait_screen
+	wait_screen "$1"
 }
 
 # Require the requested source tag to identify a published, non-draft release.
@@ -400,10 +403,31 @@ screen() {
 	return 0
 }
 
-# Give each readiness phase its own wait budget; terminal refusals never consume retry loops.
+# Read the clock without granting more time when the release deadline is unknown.
+check_clock() {
+	local now
+	if ! now="$(date +%s)" || [[ ! "${now}" =~ ^[1-9][0-9]{0,9}$ ]]; then
+		blocked 'could not read the check readiness clock'
+		return 1
+	fi
+	printf '%s\n' "${now}"
+}
+
+# Runner queue time can exceed a five-minute merge-result poll. Use a separate
+# wall-clock bound for checks, capped across both casks by the release job.
 wait_screen() {
-	local code remaining="${attempts}"
-	while ((remaining > 0)); do
+	local phase="$1" started now deadline code poll=30 waiting=false
+	started="$(check_clock)" || return 1
+	now="${started}"
+	deadline=$((started + checks_wait))
+	if [[ -n "${checks_deadline}" ]] && ((checks_deadline < deadline)); then
+		deadline="${checks_deadline}"
+	fi
+	# Reads and write-budget rechecks during polling share this phase's deadline.
+	if [[ -n "${KSAIL_GITHUB_WRITE_BUDGET_DEADLINE:-}" ]] && ((KSAIL_GITHUB_WRITE_BUDGET_DEADLINE > deadline)); then
+		local -x KSAIL_GITHUB_WRITE_BUDGET_DEADLINE="${deadline}"
+	fi
+	while ((now < deadline)); do
 		code=0
 		screen || code=$?
 		if [[ "${code}" -eq 0 && -n "${KSAIL_GITHUB_WRITE_BUDGET_DEADLINE:-}" ]]; then
@@ -411,18 +435,32 @@ wait_screen() {
 			# capacity when they settle, then refresh readiness after any quota
 			# wait without granting this phase another retry budget.
 			"${script_dir}/wait-for-github-api-budget.sh" || return 1
+			now="$(check_clock)" || return 1
+			if ((now >= deadline)); then break; fi
 			screen || code=$?
 		fi
+		now="$(check_clock)" || return 1
 		case "${code}" in
-		0) return 0 ;;
+		0)
+			if ((now >= deadline)); then break; fi
+			if [[ "${waiting}" == true ]]; then
+				printf '%s checks settled after %s seconds for %s#%s\n' "${phase}" "$((now - started))" "${tap}" "${pr}"
+			fi
+			return 0
+			;;
 		3)
-			remaining=$((remaining - 1))
-			if ((remaining > 0)); then sleep "${interval}"; fi
+			if ((now + poll >= deadline)); then break; fi
+			if [[ "${waiting}" == false ]]; then
+				printf 'Waiting for %s checks for %s#%s, up to %s seconds\n' "${phase}" "${tap}" "${pr}" "$((deadline - now))"
+				waiting=true
+			fi
+			sleep "${poll}" || return 1
+			now="$(check_clock)" || return 1
 			;;
 		*) return 1 ;;
 		esac
 	done
-	blocked 'required checks or the actual online audit did not settle within the wait bound'
+	blocked "required checks or the actual online audit did not settle within the wait bound (${phase}, $((now - started))s elapsed)"
 	return 1
 }
 
@@ -445,7 +483,7 @@ complete_readiness() {
 stable_mutation_gate() {
 	local phase="$1" before after
 	before="$(wc -c <"$KSAIL_CASK_READ_RECOVERY_MARKER")" || return 1
-	wait_write_budget || return 1
+	wait_write_budget "${phase}" || return 1
 	if [[ "$phase" == promotion ]]; then
 		capture && read_state || return 1
 	else
