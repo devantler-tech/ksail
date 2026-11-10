@@ -108,7 +108,7 @@ type NodePool struct {
 	// the autoscaler's own node labels and taints.
 	// Changes that need KSail's cluster-wide reboot or wipe orchestration
 	// belong in shared patches.
-	TalosPatches []string `json:"talosPatches,omitzero" jsonschema_description:"Ordered inline Talos patches."`
+	TalosPatches []string `json:"talosPatches,omitzero" jsonschema_description:"Ordered pool patches applied after shared Talos worker patches. Environment placeholders stay literal. Changes that require a reboot or wipe belong in shared worker patches."` //nolint:lll
 }
 
 // NodePoolTaint defines a Kubernetes node taint applied to every node in an

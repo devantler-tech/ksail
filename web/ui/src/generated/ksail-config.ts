@@ -272,7 +272,7 @@ export interface KSailClusterConfiguration {
               effect?: "NoSchedule" | "PreferNoSchedule" | "NoExecute";
             }[];
             /**
-             * Ordered inline Talos patches.
+             * Ordered pool patches applied after shared Talos worker patches. Environment placeholders stay literal. Changes that require a reboot or wipe belong in shared worker patches.
              */
             talosPatches?: string[];
           }[];

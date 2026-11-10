@@ -536,7 +536,7 @@
                               "type": "string"
                             },
                             "type": "array",
-                            "description": "Ordered inline Talos patches."
+                            "description": "Ordered pool patches applied after shared Talos worker patches. Environment placeholders stay literal. Changes that require a reboot or wipe belong in shared worker patches."
                           }
                         },
                         "additionalProperties": false,

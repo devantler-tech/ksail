@@ -264,15 +264,26 @@ to the CNI, disk quotas, or system disk encryption. KSail checks each patched bo
 Hetzner's 32 KiB user-data limit before provisioning.
 
 ```yaml
-talosPatches:
-  - |
-    apiVersion: v1alpha1
-    kind: RawVolumeConfig
-    name: local-data
-    provisioning:
-      diskSelector:
-        match: system_disk
-      maxSize: 16GiB
+spec:
+  cluster:
+    autoscaler:
+      node:
+        enabled: true
+        pools:
+          - name: storage-fsn1
+            serverType: cx33
+            location: fsn1
+            min: 0
+            max: 2
+            talosPatches:
+              - |
+                apiVersion: v1alpha1
+                kind: RawVolumeConfig
+                name: local-data
+                provisioning:
+                  diskSelector:
+                    match: system_disk
+                  maxSize: 16GiB
 ```
 
 The full autoscaler field reference is generated from the API types. See

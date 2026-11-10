@@ -478,7 +478,7 @@ NodePool defines a Hetzner node pool managed by the cluster autoscaler.
 | `max` | int32 | – | Max is the maximum number of nodes in this pool. |
 | `labels` | map[string]string | – | Kubernetes node labels applied to every node in this pool (via Talos machine.nodeLabels and the autoscaler scale-from-zero template). |
 | `taints` | []NodePoolTaint | – | Kubernetes node taints applied to every node in this pool (via Talos machine.nodeTaints and the autoscaler scale-from-zero template). |
-| `talosPatches` | []string | – | Ordered inline Talos patches. |
+| `talosPatches` | []string | – | Ordered pool patches applied after shared Talos worker patches. Environment placeholders stay literal. Changes that require a reboot or wipe belong in shared worker patches. |
 
 ### spec.cluster.autoscaler.node.pools[].taints[] (NodePoolTaint)
 
