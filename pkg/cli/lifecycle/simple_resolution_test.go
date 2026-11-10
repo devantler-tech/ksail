@@ -78,6 +78,17 @@ func TestResolveAWSRegionReportsConfigSource(t *testing.T) {
 		assert.Empty(t, region)
 		assert.False(t, fromConfig)
 	})
+
+	t.Run("synthesized name ignores the file region", func(t *testing.T) {
+		t.Parallel()
+
+		distCfg := eksDistribution("eks-default", "eks.yaml", false)
+		distCfg.EKS.Region = "eu-west-1"
+
+		region, fromConfig := lifecycle.ResolveAWSRegionWithSourceForTest(opts, distCfg)
+		assert.Empty(t, region)
+		assert.False(t, fromConfig)
+	})
 }
 
 // TestResolveClusterIdentityKubeconfigPrecedence pins that a kubeconfig path resolved from a flag
@@ -309,4 +320,51 @@ func metaCluster(name string) *v1alpha1.Cluster {
 	cfg.Name = name
 
 	return cfg
+}
+
+// TestResolveClusterIdentityEKSNamePrecedence pins the handoff from the loaded eks.yaml guard to
+// the cluster name: the eks.yaml name wins only when the actual file named the cluster, and a
+// flag name always wins.
+func TestResolveClusterIdentityEKSNamePrecedence(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name, currentName, configPath   string
+		nameFromConfig, wantEKSSource   bool
+		wantConfigName, wantClusterName string
+	}{
+		{
+			name: "loaded eks file names the cluster", configPath: "eks.yaml", nameFromConfig: true,
+			wantEKSSource: true, wantConfigName: "eks-name", wantClusterName: "eks-name",
+		},
+		{
+			name: "without config path metadata wins", configPath: " ", nameFromConfig: true,
+			wantClusterName: "meta-name",
+		},
+		{
+			name: "synthesized name metadata wins", configPath: "eks.yaml",
+			wantClusterName: "meta-name",
+		},
+		{
+			name: "flag name wins over loaded eks file", currentName: "flag-name",
+			configPath: "eks.yaml", nameFromConfig: true,
+			wantEKSSource: true, wantConfigName: "eks-name", wantClusterName: "flag-name",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			resolved := &lifecycle.ResolvedClusterInfo{ClusterName: testCase.currentName}
+			lifecycle.ResolveClusterIdentityFromConfigForTest(
+				resolved,
+				eksCluster(),
+				eksDistribution("eks-name", testCase.configPath, testCase.nameFromConfig),
+			)
+			assert.Equal(t, testCase.wantConfigName, resolved.ConfigClusterName)
+			assert.Equal(t, testCase.wantEKSSource, resolved.EKSConfigSource)
+			assert.Equal(t, testCase.wantClusterName, resolved.ClusterName)
+		})
+	}
 }
