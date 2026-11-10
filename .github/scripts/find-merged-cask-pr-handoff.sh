@@ -110,16 +110,8 @@ validate_candidate() {
 	} >"${candidate_log}" 2>&1
 }
 
-if [[ -n "${known_pr}" ]]; then
-	if validate_candidate "${known_pr}"; then
-		printf '%s\n' "${known_pr}"
-		exit 0
-	fi
-	printf '%s\n' "${known_pr}" >>"${work}/rejected"
-fi
-
 # A historical merge cannot prove delivery while main still serves another
-# version. This snapshot only rules out discovery. Success still requires the
+# version. This snapshot only rules out candidate collection. Success still requires the
 # collector to pin main and validate the exact merged cask and asset digests.
 if [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] &&
 	current_cask="$(read_api "repos/${tap}/contents/Casks/${cask_name}.rb?ref=main" 2>/dev/null |
@@ -129,6 +121,14 @@ if [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] &&
 		printf 'BLOCKED: tap main still pins %s; expected %s\n' "${current_version}" "${tag#v}" >&2
 		exit 1
 	fi
+fi
+
+if [[ -n "${known_pr}" ]]; then
+	if validate_candidate "${known_pr}"; then
+		printf '%s\n' "${known_pr}"
+		exit 0
+	fi
+	printf '%s\n' "${known_pr}" >>"${work}/rejected"
 fi
 
 if ! read_api --paginate --slurp \

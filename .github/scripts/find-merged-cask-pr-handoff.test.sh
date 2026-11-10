@@ -72,6 +72,10 @@ run_case merged-stale-current 1 'tap main still pins 7.166.0; expected 7.166.1'
 [[ ! -e "${tmp_dir}/merged-stale-current-$((pass_count - 1))/state/list-read" ]]
 run_case merged-stale-current 1 'tap main still pins 7.166.0; expected 7.166.1' --pr 42
 [[ ! -e "${tmp_dir}/merged-stale-current-$((pass_count - 1))/state/list-read" ]]
+if [[ -e "${tmp_dir}/merged-stale-current-$((pass_count - 1))/state/candidate-read" ]]; then
+	printf 'FAIL: a stale main must not read the known candidate\n' >&2
+	exit 1
+fi
 
 # Discovery can omit the selected PR, or finish after that PR merges. The named
 # read must exercise the same collector/validator and retain its immutable proof.

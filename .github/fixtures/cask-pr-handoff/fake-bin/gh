@@ -20,6 +20,9 @@ if [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/pulls/43" ]]; 
 	exit 2
 elif [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/pulls/42" ]]; then
 	[[ "${scenario}" == pr-failure || "${scenario}" == merged-known-pr-failure ]] && exit 1
+	if [[ "${scenario}" == merged-stale-current ]]; then
+		touch "${state_dir}/candidate-read"
+	fi
 	if [[ "${merged_scenario}" == true ]]; then
 		pr='{
     "state":"closed",
