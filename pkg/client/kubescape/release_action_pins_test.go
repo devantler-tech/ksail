@@ -46,7 +46,7 @@ func auditedActionBindings() []struct{ path, action, content string } {
 		{
 			".github/actions/setup-desktop-build/action.yml",
 			"setup-desktop-build",
-			"473bc1c1f3e940ba58a76320cf8b6ff5e798bf5e9cbe68830469640ef1ef7cac",
+			"148ab46c474e23a9bef1107ef18002c9b69c3c8a2ba0a7762f2693784d1bc8e0",
 		},
 		{
 			".github/actions/free-disk-space/action.yaml",
@@ -82,7 +82,7 @@ func auditedActionBindings() []struct{ path, action, content string } {
 		{
 			"scripts/stage-webui.sh",
 			"setup-desktop-build",
-			"5b3d7b0fa8b237f77ee9a88e6807e070c1b35c97df3d5f17357b3ecb8b2938a6",
+			"56f99977b9e5026eedd693e59da4e0cd82d0167e94d0ce4b9c7bb5ce2cd8ed3c",
 		},
 	}
 }
@@ -452,20 +452,17 @@ func TestAuditPinnedActionRejectsSiblingManifest(t *testing.T) {
 	}
 }
 
-// auditedActionTrees pairs each directory that a pinned KSail action executes wholesale with the
-// Git tree ID it has at the reviewed pin. setup-desktop-build runs stage-webui.sh from its own pinned
-// checkout, and that script runs `npm ci` and `npm run build` in web/ui. So package.json lifecycle
-// scripts, the lockfile and the build configuration all execute from the pin. The working tree is
-// not compared, because web/ui changes on main independently of the pin. A pin bump that changes
-// the tree needs a reviewed tree witness.
+// auditedActionTrees records the reviewed build inputs for each directory consumed by a pinned
+// KSail action. setup-desktop-build runs the pinned staging script against the release checkout.
+// Both trees must match the witness for the npm lifecycle scripts, lockfile and build configuration.
 func auditedActionTrees() []struct{ dir, action, tree string } {
 	return []struct{ dir, action, tree string }{
 		{"web/ui", "setup-desktop-build", "b390d8ffcb7b778a7cdfe7da9c86d186cc0eca70"},
 	}
 }
 
-// TestReleaseActionPinnedTreesMatchAuditedTrees binds the directories pinned actions execute
-// wholesale to their reviewed tree IDs at the pinned commit.
+// TestReleaseActionPinnedTreesMatchAuditedTrees binds the pinned action and the release checkout
+// to the same reviewed build inputs.
 func TestReleaseActionPinnedTreesMatchAuditedTrees(t *testing.T) {
 	t.Parallel()
 	root := moduleRoot(t)
@@ -474,6 +471,26 @@ func TestReleaseActionPinnedTreesMatchAuditedTrees(t *testing.T) {
 	for _, binding := range auditedActionTrees() {
 		t.Run(binding.action+":"+binding.dir, func(t *testing.T) {
 			t.Parallel()
+
+			//nolint:gosec // G204: fixed Git command and audited directory.
+			output, checkoutErr := exec.CommandContext(
+				t.Context(),
+				"git",
+				"-C",
+				root,
+				"rev-parse",
+				"--verify",
+				"--quiet",
+				"HEAD:"+binding.dir,
+			).Output()
+			if checkoutErr != nil || strings.TrimSpace(string(output)) != binding.tree {
+				t.Fatalf(
+					"release checkout's %s must match audited tree %s: %v",
+					binding.dir,
+					binding.tree,
+					checkoutErr,
+				)
+			}
 
 			err := auditPinnedTree(
 				t.Context(),
