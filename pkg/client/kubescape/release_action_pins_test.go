@@ -82,7 +82,7 @@ func auditedActionBindings() []struct{ path, action, content string } {
 		{
 			"scripts/stage-webui.sh",
 			"setup-desktop-build",
-			"05e761896def4ac857f2e92a96d955686fa75c8f370263f9854d196815689d19",
+			"56f99977b9e5026eedd693e59da4e0cd82d0167e94d0ce4b9c7bb5ce2cd8ed3c",
 		},
 	}
 }

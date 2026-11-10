@@ -412,7 +412,7 @@ func goreleaserCGO(t *testing.T, path string) string {
 //nolint:lll // file-path keys and 64-character SHA-256 digests do not wrap
 func auditedReleaseConfigDigests() map[string]string {
 	return map[string]string{
-		".gitattributes":                                     "4f94e4b2adeb731edd1bac71f4abe87633e1a73fef1b18776c77bb5394918c8b",
+		".gitattributes":                                     "8f4a3c1a7f77200945aa239d943a26a6950bd2fc51b1a8704e0211bf8b90bc48",
 		".goreleaser.yaml":                                   "2e22cbf27462e76c441341991d97fa479e1552934e62a01223dd007c3ff64866",
 		".goreleaser.desktop.yaml":                           "1c9fe930f3e2b14f5b9606d185ce7845908519136530308bfa52095b60563d9a",
 		".github/actions/setup-desktop-build/action.yml":     "148ab46c474e23a9bef1107ef18002c9b69c3c8a2ba0a7762f2693784d1bc8e0",
@@ -420,7 +420,7 @@ func auditedReleaseConfigDigests() map[string]string {
 		".github/scripts/resolve-release-replay.sh":          "84418fef708bae31c86fb45fccc03b4e9186e312e5cb45951cc5a1dcd35af590",
 		".github/scripts/go-notices.go":                      "628033333065d1171688a60b4c5fbfcd556c5bab22d75bf2d79bee54cf8c97b2",
 		".github/actions/release-admission/action.yaml":      "a8ac217c7e2195fee64b364748a6724b99aa0aa4a9988127084f1d6b45953f0c",
-		"scripts/stage-webui.sh":                             "05e761896def4ac857f2e92a96d955686fa75c8f370263f9854d196815689d19",
+		"scripts/stage-webui.sh":                             "56f99977b9e5026eedd693e59da4e0cd82d0167e94d0ce4b9c7bb5ce2cd8ed3c",
 		".github/actions/free-disk-space/free-disk-space.sh": "2dd12fcf3779137ca1cb5f21194947f6a10d3f94f8fb438a1a29ec9021fbdc30",
 		".github/workflows/cd.yaml#without-uses":             "628332c7996b699922dc5ca588b2f0ebc951900a761f50fa02770a0ffe3965a8",
 	}
