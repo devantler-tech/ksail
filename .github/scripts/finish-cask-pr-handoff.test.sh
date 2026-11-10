@@ -241,7 +241,10 @@ case "${line}" in
 	 ]}}}}]}}}}}' |
 	 jq --arg scenario "${scenario}" --arg cursor "${cursor}" --argjson n "${n}" --argjson now "${now:-1000}" --argjson ready "${promoted}" '
 	 .data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts |=
-	 (if ($scenario == "queued-cask-checks" or $scenario == "queued-cask-deadline") and $ready and $now < 1900 then
+	 (if $ready and (
+	   (($scenario == "queued-cask-checks" or $scenario == "queued-cask-deadline") and $now < 1900) or
+	   ($scenario == "queued-cask-short-window" and $now < 1002)
+	 ) then
 	   .nodes[0].status="QUEUED" | .nodes[0].conclusion=null
 	 elif $scenario == "write-budget-checks-terminal" or ($scenario == "write-budget-checks-failed" and $now >= 1105) then .nodes[0].conclusion="FAILURE"
 	 elif ($scenario | startswith("write-budget-checks-postpromotion-depleted")) and $ready and $n == 2 then
@@ -406,6 +409,7 @@ run_case() {
 	local checks_deadline="" wait_args=(--attempts 2 --interval 0 --checks-wait 31)
 	case "${scenario}" in
 	queued-cask-checks) wait_args=(--attempts 30 --interval 10) ;;
+	queued-cask-short-window) wait_args=(--attempts 2 --interval 0 --checks-wait 10) ;;
 	queued-cask-deadline)
 		checks_deadline=1090
 		wait_args=(--attempts 30 --interval 10)
@@ -439,8 +443,10 @@ run_case() {
 	fi
 	if [[ "${scenario}" == queued-cask-checks ]]; then
 		[[ "$(<"${state}/clock")" -eq 1900 ]] || fail "${scenario}: did not wait for the 15-minute queue"
+	elif [[ "${scenario}" == queued-cask-short-window ]]; then
+		[[ "$(<"${state}/clock")" -lt 1010 ]] || fail "${scenario}: polled after the phase deadline"
 	elif [[ "${scenario}" == queued-cask-deadline ]]; then
-		[[ "$(<"${state}/clock")" -eq 1060 && "$(<"${state}/checks-true")" -eq 3 ]] ||
+		[[ "$(<"${state}/clock")" -eq 1089 && "$(<"${state}/checks-true")" -eq 4 ]] ||
 			fail "${scenario}: check polling exceeded the shared deadline"
 	elif [[ "${scenario}" == write-budget-checks-postpromotion-depleted-short ]]; then
 		[[ -f "${state}/depleted" && "$(<"${state}/clock")" -eq 1135 ]] ||
@@ -530,6 +536,7 @@ run_case() {
 
 # Removing the direct merge, SHA pin, post-promotion audit, or immutable readback breaks these.
 run_case queued-cask-checks true 1 1
+run_case queued-cask-short-window true 1 1
 run_case queued-cask-deadline false 1 0
 run_case promotion-readback-delayed true 1 1
 run_case promotion-readback-stuck false 1 0

@@ -416,7 +416,7 @@ check_clock() {
 # Runner queue time can exceed a five-minute merge-result poll. Use a separate
 # wall-clock bound for checks, capped across both casks by the release job.
 wait_screen() {
-	local phase="$1" started now deadline code poll=30 waiting=false
+	local phase="$1" started now deadline code poll waiting=false
 	started="$(check_clock)" || return 1
 	now="${started}"
 	deadline=$((started + checks_wait))
@@ -449,7 +449,10 @@ wait_screen() {
 			return 0
 			;;
 		3)
-			if ((now + poll >= deadline)); then break; fi
+			# Leave one second for a final poll without crossing the deadline.
+			poll=$((deadline - now - 1))
+			if ((poll <= 0)); then break; fi
+			if ((poll > 30)); then poll=30; fi
 			if [[ "${waiting}" == false ]]; then
 				printf 'Waiting for %s checks for %s#%s, up to %s seconds\n' "${phase}" "${tap}" "${pr}" "$((deadline - now))"
 				waiting=true
