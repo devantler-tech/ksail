@@ -4,17 +4,21 @@ package image
 // IsHelperContainerForTest exposes isHelperContainer for white-box testing.
 var IsHelperContainerForTest = isHelperContainer
 
-// Every test in this package's binary sees a fixed export archive name, so
+// Every test in this package's binary sees fixed export and import archive names, so
 // node-side command expectations stay exact. The default generator is exposed
 // below and tested on its own.
 //
 //nolint:gochecknoinits // The seam must be in place before parallel tests start.
 func init() {
 	newExportArchiveName = func() string { return "ksail-images-export.tar" }
+	newImportArchiveName = func() string { return "ksail-images-import.tar" }
 }
 
 // DefaultExportArchiveNameForTest exposes the production archive name generator.
 var DefaultExportArchiveNameForTest = defaultExportArchiveName
+
+// DefaultImportArchiveNameForTest exposes the production import archive name generator.
+var DefaultImportArchiveNameForTest = defaultImportArchiveName
 
 // RemoveNodeArchiveForTest exposes removeNodeArchive for white-box testing.
 var RemoveNodeArchiveForTest = (*Exporter).removeNodeArchive
