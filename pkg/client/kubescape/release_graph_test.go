@@ -414,7 +414,7 @@ func auditedReleaseConfigDigests() map[string]string {
 	return map[string]string{
 		".gitattributes":                                     "8f4a3c1a7f77200945aa239d943a26a6950bd2fc51b1a8704e0211bf8b90bc48",
 		".goreleaser.yaml":                                   "ea95f53728ff9000bbee279ca38a8c408899d732e82f3e0d07579eed5e922c6c",
-		".goreleaser.desktop.yaml":                           "1c9fe930f3e2b14f5b9606d185ce7845908519136530308bfa52095b60563d9a",
+		".goreleaser.desktop.yaml":                           "e40864a1d4465aa020ce68879b4f9d11d8d0e6abaf13e98ffb20e35e1c0d8201",
 		".github/actions/setup-desktop-build/action.yml":     "148ab46c474e23a9bef1107ef18002c9b69c3c8a2ba0a7762f2693784d1bc8e0",
 		".github/scripts/download-go-modules.sh":             "e5af8edf61a77de4397e952a05b1cc6ca0f83cd848523c4cf6b3aaa2539561fa",
 		".github/scripts/resolve-release-replay.sh":          "84418fef708bae31c86fb45fccc03b4e9186e312e5cb45951cc5a1dcd35af590",
@@ -422,7 +422,7 @@ func auditedReleaseConfigDigests() map[string]string {
 		".github/actions/release-admission/action.yaml":      "a8ac217c7e2195fee64b364748a6724b99aa0aa4a9988127084f1d6b45953f0c",
 		"scripts/stage-webui.sh":                             "56f99977b9e5026eedd693e59da4e0cd82d0167e94d0ce4b9c7bb5ce2cd8ed3c",
 		".github/actions/free-disk-space/free-disk-space.sh": "2dd12fcf3779137ca1cb5f21194947f6a10d3f94f8fb438a1a29ec9021fbdc30",
-		".github/workflows/cd.yaml#without-uses":             "628332c7996b699922dc5ca588b2f0ebc951900a761f50fa02770a0ffe3965a8",
+		".github/workflows/cd.yaml#without-uses":             "75954e1844688d2374448ab2ff9f21692a9abcb29b3398fc499eb782a1d7c81e",
 	}
 }
 
