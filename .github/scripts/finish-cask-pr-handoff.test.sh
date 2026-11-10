@@ -323,6 +323,16 @@ case "${line}" in
 		 jq --arg scenario "${scenario}" 'if $scenario == "readback-wrong-head" then .head.sha="2222222222222222222222222222222222222222" else . end'
 	else
 		n="$(count rest-reads)"
+		if [[ "${promoted}" == true && "${scenario}" == promotion-readback-* ]]; then
+			readback="$(count promotion-rest-reads)"
+			case "${scenario}" in
+			promotion-readback-delayed)
+				if ((readback <= 2)); then promoted=false; fi
+				;;
+			promotion-readback-stuck) promoted=false ;;
+			promotion-readback-moved-base) base=2222222222222222222222222222222222222222 ;;
+			esac
+		fi
 		jq --arg base "${base}" --argjson ready "${promoted}" --argjson n "${n}" --arg scenario "${scenario}" '.pr | .node_id="PR_42" | .draft=($ready|not) | .base.sha=$base |
 		 if $scenario == "head-moved-during-collection" and $n > 1 then .head.sha="2222222222222222222222222222222222222222" else . end' "${fixture}"
 	fi ;;
@@ -402,6 +412,11 @@ run_case() {
 	if [[ "$(grep -c '^merge ' "${state}/mutations" || true)" -ne "${merges}" ]]; then
 		cat "${state}/output" >&2
 		fail "${scenario}: wrong direct merge count"
+	fi
+	if [[ "${scenario}" == promotion-readback-stuck ]]; then
+		[[ "$(<"${state}/promotion-rest-reads")" -eq 3 ]] || fail "${scenario}: readback wait exceeded its bound"
+	elif [[ "${scenario}" == promotion-readback-moved-base ]]; then
+		[[ "$(<"${state}/promotion-rest-reads")" -eq 1 ]] || fail "${scenario}: base movement was retried"
 	fi
 	if [[ "${success}" == true ]]; then
 		grep -q '1111111111111111111111111111111111111111' "${state}/output" || fail "${scenario}: verified head missing from delivery result"
@@ -490,6 +505,9 @@ run_case() {
 }
 
 # Removing the direct merge, SHA pin, post-promotion audit, or immutable readback breaks these.
+run_case promotion-readback-delayed true 1 1
+run_case promotion-readback-stuck false 1 0
+run_case promotion-readback-moved-base false 1 0
 run_case read-budget-final-release-stable true 0 1
 run_case final-screen-pending false 0 0
 run_case read-budget-final-release-pending false 0 0
