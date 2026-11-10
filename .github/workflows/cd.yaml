@@ -423,6 +423,10 @@ jobs:
         shell: bash
         run: go run .github/scripts/go-notices.go verify desktop-darwin-arm64 "$GITHUB_REF_NAME" "$GITHUB_SHA"
 
+      - name: 🔎 Verify macOS desktop archive signature
+        if: needs.cask-checkpoint.outputs.release-mode == 'build'
+        run: bash desktop/scripts/verify-macos-archive.sh dist-desktop/KSail_*_darwin_*.zip
+
       - name: 📤 Upload desktop archive artifact
         if: needs.cask-checkpoint.outputs.release-mode == 'build'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
