@@ -36,17 +36,17 @@ type releaseCommand struct {
 func Run(root string, arguments []string, output io.Writer) error {
 	plan, err := planReleaseCommand(arguments)
 	if err != nil {
-		return err
+		return fmt.Errorf("read command arguments: %w", err)
 	}
 
 	err = verifySourceCheckout(root, plan.source)
 	if err != nil {
-		return err
+		return fmt.Errorf("check source checkout: %w", err)
 	}
 
 	actual, err := runningToolchain(root)
 	if err != nil {
-		return err
+		return fmt.Errorf("read running Go toolchain: %w", err)
 	}
 
 	for _, target := range plan.targets {
@@ -54,7 +54,7 @@ func Run(root string, arguments []string, output io.Writer) error {
 
 		err = runReleaseTarget(root, plan, release, actual)
 		if err != nil {
-			return err
+			return fmt.Errorf("%s %s: %w", plan.operation, target, err)
 		}
 
 		_, err = fmt.Fprintf(output, "Verified Go recipient material for %s\n", target)
