@@ -3,8 +3,11 @@ package hetznerbase_test
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 
@@ -313,7 +316,7 @@ func TestDeriveServerSpecsBoundsForwardedUserData(t *testing.T) {
 		"runcmd:\n  - echo hello\n" + strings.Repeat("# padding\n", 6000),
 	)
 
-	t.Run("gzip expanding past the provider ceiling is refused", func(t *testing.T) {
+	t.Run("gzip expanding past the provider ceiling is sent compressed", func(t *testing.T) {
 		t.Parallel()
 
 		compressed := gzipUserData(t, oversized)
@@ -330,8 +333,17 @@ func TestDeriveServerSpecsBoundsForwardedUserData(t *testing.T) {
 			specTestClusterName, nodes, specTestOptions(), specTestInfra(),
 		)
 
-		require.ErrorIs(t, err, hetznerbase.ErrUserDataTooLargeForProvider)
-		assert.Nil(t, specs)
+		require.NoError(t, err)
+		require.Len(t, specs, 2)
+
+		sent := specs[1].UserData
+		assert.LessOrEqual(t, len(sent), providerCeilingBytes,
+			"the ceiling applies to the bytes actually sent")
+
+		decoded, err := base64.StdEncoding.DecodeString(sent)
+		require.NoError(t, err, "compressed user-data must be sent as base64 text")
+		assert.Equal(t, oversized, gunzipForTest(t, decoded),
+			"the node must expand exactly the text the guards inspected")
 	})
 
 	// The bound governs the forwarded value whatever produced it, so uncompressed
@@ -414,4 +426,58 @@ func userDataAtExactly(t *testing.T, total int) string {
 	require.LessOrEqual(t, len(base), total, "base fixture already exceeds the target length")
 
 	return base + strings.Repeat("#", total-len(base))
+}
+
+// TestDeriveServerSpecsRefusesCompressedUserDataStillOverTheCeiling pins the
+// limit of compression: input whose compressed, encoded form is still over the
+// ceiling is refused, not handed to the provider.
+func TestDeriveServerSpecsRefusesCompressedUserDataStillOverTheCeiling(t *testing.T) {
+	t.Parallel()
+
+	incompressible := userDataCarrying(incompressibleComments(t, 3*providerCeilingBytes))
+	compressed := gzipUserData(t, incompressible)
+	require.Greater(t, base64.StdEncoding.EncodedLen(len(compressed)), providerCeilingBytes,
+		"fixture must stay over the ceiling after compression and encoding")
+
+	nodes := twoNodeSpecs()
+	nodes[1].UserData = compressed
+
+	specs, err := hetznerbase.DeriveServerSpecs(
+		specTestClusterName, nodes, specTestOptions(), specTestInfra(),
+	)
+
+	require.ErrorIs(t, err, hetznerbase.ErrUserDataTooLargeForProvider)
+	assert.Nil(t, specs)
+}
+
+// gunzipForTest expands a gzip payload the way a node's first boot would.
+func gunzipForTest(t *testing.T, compressed []byte) string {
+	t.Helper()
+
+	reader, err := gzip.NewReader(bytes.NewReader(compressed))
+	require.NoError(t, err)
+
+	expanded, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	require.NoError(t, reader.Close())
+
+	return string(expanded)
+}
+
+// incompressibleComments returns roughly size bytes of YAML comment lines
+// holding random hex, which gzip cannot shrink below about half its length.
+func incompressibleComments(t *testing.T, size int) string {
+	t.Helper()
+
+	var lines strings.Builder
+
+	random := make([]byte, 32)
+	for lines.Len() < size {
+		_, err := rand.Read(random)
+		require.NoError(t, err)
+
+		lines.WriteString("# " + hex.EncodeToString(random) + "\n")
+	}
+
+	return "runcmd:\n  - echo hello\n" + lines.String()
 }
