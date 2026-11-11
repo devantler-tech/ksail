@@ -146,6 +146,9 @@ func validateGoMaintenanceIdentity(workflow ciWorkflow, caller todosWorkflow) er
 	// signed-fix callee pins to v20.1.12, whose apply-signed-fixes workflow is byte-identical
 	// to v20.1.6. Inputs, admission, permissions, secrets and the signed-fix opt-out are
 	// unchanged, and it still declares no maintenance-default-branch input.
+	// v20.1.18 only moves the disabled signed-fix callee pins to v20.1.17, whose
+	// apply-signed-fixes workflow is byte-identical to v20.1.12. Inputs, admission,
+	// permissions, secrets and the signed-fix opt-out are unchanged.
 	// Keep explicit reviewed identities: a syntactically valid SHA alone is insufficient.
 	reviewed := slices.Contains([]string{
 		prefix + "0600006235510307a04efebcac1ac1f363f5f862",
@@ -165,6 +168,7 @@ func validateGoMaintenanceIdentity(workflow ciWorkflow, caller todosWorkflow) er
 		prefix + "522038c41420f0c9508a586cb944eda995ad0068",
 		prefix + "15372ea4ee3a0bd5b0a41a18105859691737df01",
 		prefix + "1a0eb6f18b88a7816b91cbf692b8ad8ea9a08123",
+		prefix + "9ba573406426900207a3b5afeebe16f2d89ca751",
 	}, job.Uses)
 	if !found || !reviewed || len(job.Steps) != 0 ||
 		caller.Jobs["ci-go"].RunsOn != "" || !reflect.DeepEqual(job.Needs, []string{"changes"}) {
@@ -291,10 +295,10 @@ const (
 		"522038c41420f0c9508a586cb944eda995ad0068"
 	// The previous reviewed revision; it also declares no maintenance-default-branch.
 	goMaintenanceInputPreviousRevision = "devantler-tech/.github/.github/workflows/validate-go-project.yaml@" +
-		"15372ea4ee3a0bd5b0a41a18105859691737df01"
+		"1a0eb6f18b88a7816b91cbf692b8ad8ea9a08123"
 	// The latest reviewed revision; it also declares no maintenance-default-branch.
 	goMaintenanceInputLatestRevision = "devantler-tech/.github/.github/workflows/validate-go-project.yaml@" +
-		"1a0eb6f18b88a7816b91cbf692b8ad8ea9a08123"
+		"9ba573406426900207a3b5afeebe16f2d89ca751"
 )
 
 type goMaintenanceMutation struct {
