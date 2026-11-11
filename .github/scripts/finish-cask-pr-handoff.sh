@@ -5,11 +5,11 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 tap="" pr="" name="" tag="" source_repo="devantler-tech/ksail"
 attempts=30 interval=10
-checks_wait=1800
+checks_wait=3600
 checks_deadline="${KSAIL_CASK_CHECK_DEADLINE:-}"
 # Describe the fixed release identity and bounded wait arguments accepted by this command.
 usage() {
-	printf 'Usage: finish-cask-pr-handoff.sh --tap OWNER/REPO --pr NUMBER --cask-name NAME --tag TAG [--source-repo OWNER/REPO] [--attempts 1..30] [--interval 0..10] [--checks-wait 1..1800]\n' >&2
+	printf 'Usage: finish-cask-pr-handoff.sh --tap OWNER/REPO --pr NUMBER --cask-name NAME --tag TAG [--source-repo OWNER/REPO] [--attempts 1..30] [--interval 0..10] [--checks-wait 1..3600]\n' >&2
 }
 while (($#)); do
 	case "$1" in
@@ -35,7 +35,7 @@ if [[ "${tap}" != devantler-tech/homebrew-tap || "${source_repo}" != devantler-t
 	! "${pr}" =~ ^[1-9][0-9]*$ || ! "${name}" =~ ^ksail(-desktop)?$ ||
 	! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ||
 	! "${attempts}" =~ ^([1-9]|[12][0-9]|30)$ || ! "${interval}" =~ ^([0-9]|10)$ ||
-	! "${checks_wait}" =~ ^[1-9][0-9]{0,3}$ || "${checks_wait}" -gt 1800 ||
+	! "${checks_wait}" =~ ^[1-9][0-9]{0,3}$ || "${checks_wait}" -gt 3600 ||
 	(-n "${checks_deadline}" && ! "${checks_deadline}" =~ ^[1-9][0-9]{0,9}$) ]]; then
 	usage
 	exit 2

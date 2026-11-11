@@ -242,7 +242,7 @@ case "${line}" in
 	 jq --arg scenario "${scenario}" --arg cursor "${cursor}" --argjson n "${n}" --argjson now "${now:-1000}" --argjson ready "${promoted}" '
 	 .data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts |=
 	 (if $ready and (
-	   (($scenario == "queued-cask-checks" or $scenario == "queued-cask-deadline") and $now < 1900) or
+	   (($scenario == "queued-cask-checks" or $scenario == "queued-cask-deadline") and $now < 3400) or
 	   ($scenario == "queued-cask-short-window" and $now < 1002)
 	 ) then
 	   .nodes[0].status="QUEUED" | .nodes[0].conclusion=null
@@ -442,7 +442,7 @@ run_case() {
 		[[ -f "${state}/merged" ]] || fail "${scenario}: readiness incorrectly counted as delivered"
 	fi
 	if [[ "${scenario}" == queued-cask-checks ]]; then
-		[[ "$(<"${state}/clock")" -eq 1900 ]] || fail "${scenario}: did not wait for the 15-minute queue"
+		[[ "$(<"${state}/clock")" -eq 3400 ]] || fail "${scenario}: did not wait for the 40-minute queue"
 	elif [[ "${scenario}" == queued-cask-short-window ]]; then
 		[[ "$(<"${state}/clock")" -lt 1010 ]] || fail "${scenario}: polled after the phase deadline"
 	elif [[ "${scenario}" == queued-cask-deadline ]]; then
