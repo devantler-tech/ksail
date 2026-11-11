@@ -16,44 +16,20 @@ import (
 	eksclient "github.com/devantler-tech/ksail/v7/pkg/client/eks"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
+	eksprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/eks"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
+const testEKSCreationID = "attempt-7591"
+
 var errNodegroupCreateQuota = errors.New("nodegroup creation exceeded the account quota")
 
-// describeResponse is one scripted DescribeCluster answer.
-type describeResponse struct {
-	cluster *ekstypes.Cluster
-	err     error
-}
-
-// scriptedEKSIdentityClient answers DescribeCluster from a per-call script so a test can model the
-// cluster's existence before eksctl runs and after it fails. The last answer repeats.
-type scriptedEKSIdentityClient struct {
-	accountID string
-	responses []describeResponse
-	calls     int
-}
-
-func (c *scriptedEKSIdentityClient) CallerAccountID(context.Context) (string, error) {
-	return c.accountID, nil
-}
-
-func (c *scriptedEKSIdentityClient) DescribeCluster(
-	_ context.Context,
-	_ string,
-) (*ekstypes.Cluster, error) {
-	response := c.responses[min(c.calls, len(c.responses)-1)]
-	c.calls++
-
-	return response.cluster, response.err
-}
-
 // failingCreateProvisioner models eksctl failing after the call was made, for example when the
-// control plane exists but the worker nodegroup cannot be created.
+// control plane exists but the worker nodegroup cannot be created. It records every cluster later
+// deleted through it.
 type failingCreateProvisioner struct {
 	fakeProvisioner
 
@@ -84,18 +60,15 @@ func (f failingCreateFactory) Create(
 	return provisioner, &v1alpha4.Cluster{Name: "test"}, nil
 }
 
-func notFoundResponse() describeResponse {
-	return describeResponse{
-		cluster: nil,
-		err:     fmt.Errorf("%w: st-eks", eksclient.ErrClusterNotFound),
+// taggedEKSCluster is the st-eks cluster as AWS reports it, carrying creationID as its KSail
+// creation tag (none when empty).
+func taggedEKSCluster(creationID string) *ekstypes.Cluster {
+	cluster := immutableEKSClusterInRegion("st-eks", "eu-west-1", immutableIdentityTime())
+	if creationID != "" {
+		cluster.Tags = map[string]string{eksprovisioner.ClusterCreationTag: creationID}
 	}
-}
 
-func createdResponse() describeResponse {
-	return describeResponse{
-		cluster: immutableEKSClusterInRegion("st-eks", "eu-west-1", immutableIdentityTime()),
-		err:     nil,
-	}
+	return cluster
 }
 
 // runFailingEKSCreate runs `ksail cluster create` for the st-eks fixture with a provisioner whose
@@ -112,6 +85,7 @@ func runFailingEKSCreate(t *testing.T, client eksidentity.Client) (string, *[]st
 
 	deleted := &[]string{}
 	t.Cleanup(cluster.SetProvisionerFactoryForTests(failingCreateFactory{deleted: deleted}))
+	t.Cleanup(cluster.ExportSetEKSCreationIDGenerator(func() string { return testEKSCreationID }))
 	setEKSIdentityClient(t, client)
 
 	clearFailedCreateOwnership(t)
@@ -162,15 +136,15 @@ func clearFailedCreateOwnership(t *testing.T) {
 }
 
 // TestCreate_EKSFailedAfterControlPlaneRecordsOwnership pins ksail#7591: a create that fails once
-// AWS holds a control plane, which did not exist before eksctl started, records the immutable
-// ownership identity so `ksail cluster delete` can verify and remove that exact cluster. The
-// original create failure stays visible.
+// AWS holds a control plane carrying this attempt's creation tag records the immutable ownership
+// identity, so `ksail cluster delete` can verify and remove that exact cluster. The original create
+// failure stays visible.
 //
 //nolint:paralleltest // uses t.Chdir and mutates shared test hooks
 func TestCreate_EKSFailedAfterControlPlaneRecordsOwnership(t *testing.T) {
-	client := &scriptedEKSIdentityClient{
+	client := &fakeEKSIdentityClient{
 		accountID: "123456789012",
-		responses: []describeResponse{notFoundResponse(), createdResponse()},
+		cluster:   taggedEKSCluster(testEKSCreationID),
 	}
 
 	output, deleted, err := runFailingEKSCreate(t, client)
@@ -202,43 +176,43 @@ func TestCreate_EKSFailedAfterControlPlaneRecordsOwnership(t *testing.T) {
 }
 
 // TestCreate_EKSFailedCreateRetainsNothingWithoutAttributableCluster covers the cases in which a
-// failed create must not record ownership: nothing was created, the cluster already existed before
-// this attempt (it may belong to someone else), or the pre-create answer was not a definite "not
-// found".
+// failed create must not record ownership, and the following delete must still refuse: nothing was
+// created, or the same-named cluster AWS reports does not carry this attempt's creation tag (it
+// existed before, or another actor created it).
 //
 //nolint:paralleltest // uses t.Chdir and mutates shared test hooks
 func TestCreate_EKSFailedCreateRetainsNothingWithoutAttributableCluster(t *testing.T) {
 	testCases := []struct {
-		name      string
-		responses []describeResponse
+		name        string
+		cluster     *ekstypes.Cluster
+		describeErr error
 	}{
 		{
-			name:      "failure before any control plane exists",
-			responses: []describeResponse{notFoundResponse(), notFoundResponse()},
+			name:        "failure before any control plane exists",
+			describeErr: fmt.Errorf("%w: st-eks", eksclient.ErrClusterNotFound),
 		},
 		{
-			name:      "same-named cluster existed before the attempt",
-			responses: []describeResponse{createdResponse(), createdResponse()},
+			name:    "same-named cluster without a creation tag",
+			cluster: taggedEKSCluster(""),
 		},
 		{
-			name: "pre-create existence unknown",
-			responses: []describeResponse{
-				{cluster: nil, err: errEKSIdentityQuery},
-				createdResponse(),
-			},
+			name:    "same-named cluster created by another attempt",
+			cluster: taggedEKSCluster("another-attempt"),
 		},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			client := &scriptedEKSIdentityClient{
-				accountID: "123456789012",
-				responses: testCase.responses,
+			client := &fakeEKSIdentityClient{
+				accountID:   "123456789012",
+				cluster:     testCase.cluster,
+				describeErr: testCase.describeErr,
 			}
 
 			output, deleted, err := runFailingEKSCreate(t, client)
 
 			require.ErrorIs(t, err, errNodegroupCreateQuota)
+			require.NotErrorIs(t, err, eksidentity.ErrCreationUnattributed)
 			assert.NotContains(t, output, "recorded ownership")
 
 			_, loadErr := state.LoadEKSOwnershipState("st-eks", "eu-west-1")
@@ -256,9 +230,9 @@ func TestCreate_EKSFailedCreateRetainsNothingWithoutAttributableCluster(t *testi
 //
 //nolint:paralleltest // uses t.Chdir and mutates shared test hooks
 func TestCreate_EKSFailedCreateReportsOwnershipRecordFailure(t *testing.T) {
-	client := &scriptedEKSIdentityClient{
+	client := &fakeEKSIdentityClient{
 		accountID: "210987654321",
-		responses: []describeResponse{notFoundResponse(), createdResponse()},
+		cluster:   taggedEKSCluster(testEKSCreationID),
 	}
 
 	_, _, err := runFailingEKSCreate(t, client)
