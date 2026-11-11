@@ -47,7 +47,7 @@ jobs:
         run: .github/scripts/validate-release-ref.sh
       - name: 🔏 Install Cosign for replay verification
         if: github.run_attempt > 1
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
       # A previous release's cask polling reads with this token, so the next queued tag can start
       # with its budget at zero and stop before anything is built (devantler-tech/ksail#7907).
       - name: ⏳ Wait for the repository token's request budget
@@ -243,7 +243,7 @@ jobs:
 
       - name: 🔏 Install Cosign
         if: needs.cask-checkpoint.outputs.release-mode == 'build'
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
 
       - name: 🏗️ Run GoReleaser
         if: needs.cask-checkpoint.outputs.release-mode == 'build'
@@ -595,7 +595,7 @@ jobs:
       # automatically. The chart lands at ghcr.io/devantler-tech/charts/ksail-operator:<version>.
       - name: 🔏 Install Cosign
         if: needs.goreleaser.outputs.release-mode == 'build'
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
 
       - name: 📦 Publish signed operator chart
         if: needs.goreleaser.outputs.release-mode == 'build'
@@ -908,7 +908,7 @@ jobs:
 
       - name: 🔏 Install Cosign for replay readback
         if: needs.goreleaser.outputs.release-mode == 'verify'
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
       - name: 🔎 Recheck immutable release proof
         if: needs.goreleaser.outputs.release-mode == 'verify'
         env:
