@@ -573,8 +573,43 @@ jobs:
             echo "::error::EKS ownership recovery failed."
             exit 1
           fi
+
+          read_capacity() {
+            timeout 20s eksctl get nodegroup --cluster "$KSAIL_EKS_CLUSTER_NAME" \
+              --region "$AWS_REGION" --output json |
+              jq -ce '
+                select(type == "array" and length > 0 and all(.[];
+                  .Status == "ACTIVE" and
+                  (.Name | type == "string" and length > 0) and
+                  ([(.DesiredCapacity), (.MinSize), (.MaxSize)] |
+                    all(.[]; type == "number" and . >= 0 and . == floor)) and
+                  .MaxSize > 0 and .MinSize <= .DesiredCapacity and .DesiredCapacity <= .MaxSize)) |
+                map({Name, DesiredCapacity, MinSize, MaxSize}) |
+                sort_by(.Name) |
+                select((map(.Name) | unique | length) == length)'
+          }
+
+          wait_for_recovery_capacity() {
+            local expected="$1" phase="$2" actual
+            local deadline=$((SECONDS + 600))
+            while ((SECONDS < deadline)); do
+              if actual="$(read_capacity)" && [[ "$actual" == "$expected" ]]; then
+                echo "EKS managed nodegroup capacities verified after $phase."
+                return 0
+              fi
+              sleep 20
+            done
+            echo "::error::EKS managed nodegroup capacities did not match after $phase."
+            return 1
+          }
+
+          saved_capacity="$(read_capacity)"
+          jq -e 'any(.[]; .DesiredCapacity > 0)' <<< "$saved_capacity" >/dev/null
+          stopped_capacity="$(jq -c 'map(.DesiredCapacity = 0 | .MinSize = 0)' <<< "$saved_capacity")"
           ksail cluster stop --name "$KSAIL_EKS_CLUSTER_NAME" --provider AWS
+          wait_for_recovery_capacity "$stopped_capacity" stop
           ksail cluster start --name "$KSAIL_EKS_CLUSTER_NAME" --provider AWS
+          wait_for_recovery_capacity "$saved_capacity" start
           actual_identity="$(aws eks describe-cluster \
             --name "$KSAIL_EKS_CLUSTER_NAME" --region "$AWS_REGION" \
             --query 'cluster.[arn,createdAt]' --output text)"

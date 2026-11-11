@@ -43,6 +43,9 @@ type EKSNodegroupState struct {
 	ClusterName string                 `json:"clusterName"`
 	Region      string                 `json:"region"`
 	Nodegroups  []EKSNodegroupCapacity `json:"nodegroups"`
+	// StopObserved records a complete zero-capacity readback before restoration.
+	// Older snapshots omit it and must first observe the stopped groups.
+	StopObserved bool `json:"stopObserved,omitempty"`
 }
 
 // SaveEKSNodegroupState atomically persists the capacity snapshot before stop mutates AWS.
