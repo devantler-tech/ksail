@@ -29,6 +29,9 @@ case "$*" in
 	printf '43\n' >"${FAKE_GH_STATE_DIR}/active-candidate"
 	delegate api repos/devantler-tech/homebrew-tap/pulls/42 | jq '.number = 43'
 	;;
+'api --paginate --slurp repos/devantler-tech/homebrew-tap/pulls/43/files?per_page=100')
+	delegate api --paginate --slurp 'repos/devantler-tech/homebrew-tap/pulls/42/files?per_page=100'
+	;;
 'api repos/devantler-tech/homebrew-tap/pulls/42')
 	printf '42\n' >"${FAKE_GH_STATE_DIR}/active-candidate"
 	delegate "$@"
