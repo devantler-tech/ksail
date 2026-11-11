@@ -10,14 +10,62 @@ tmp_dir="$(mktemp -d)"
 trap 'rm -rf "${tmp_dir}"' EXIT
 pass_count=0
 
+# Keep these API variants local to this suite. The fallback changes the release
+# observation between complete candidate collections; both use the real collector/validator.
+write_classification_fixture() {
+	local bin="$1"
+	mkdir -p "${bin}"
+	cat >"${bin}/gh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+delegate() { FAKE_GH_SCENARIO=merged "${FAKE_GH_DELEGATE}" "$@"; }
+if [[ "${FAKE_GH_SCENARIO}" == merged-collector-status-three ]]; then
+	[[ "$*" != 'api repos/devantler-tech/homebrew-tap/pulls/42' ]] || exit 3
+	delegate "$@"
+	exit
+fi
+case "$*" in
+'api repos/devantler-tech/homebrew-tap/pulls/43')
+	printf '43\n' >"${FAKE_GH_STATE_DIR}/active-candidate"
+	delegate api repos/devantler-tech/homebrew-tap/pulls/42 | jq '.number = 43'
+	;;
+'api --paginate --slurp repos/devantler-tech/homebrew-tap/pulls/43/files?per_page=100')
+	delegate api --paginate --slurp 'repos/devantler-tech/homebrew-tap/pulls/42/files?per_page=100'
+	;;
+'api repos/devantler-tech/homebrew-tap/pulls/42')
+	printf '42\n' >"${FAKE_GH_STATE_DIR}/active-candidate"
+	delegate "$@"
+	;;
+'api --paginate --slurp repos/devantler-tech/homebrew-tap/pulls?state=closed&head=devantler-tech:goreleaser/ksail&per_page=100')
+	FAKE_GH_SCENARIO=merged-newest-invalid "${FAKE_GH_DELEGATE}" "$@"
+	;;
+'api repos/devantler-tech/ksail/releases/tags/v7.166.1')
+	if [[ "$(<"${FAKE_GH_STATE_DIR}/active-candidate")" == 43 ]]; then
+		: >"${FAKE_GH_STATE_DIR}/invalid-digest-served"
+		delegate "$@" | jq '.assets[0].digest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"'
+	else
+		delegate "$@"
+	fi
+	;;
+*) delegate "$@" ;;
+esac
+EOF
+	chmod +x "${bin}/gh"
+}
+
 # Exercise the real finder against one isolated API fixture and assert its output and evidence.
 run_case() {
 	local scenario="$1" expected_status="$2" expected_output="$3"
 	shift 3
-	local case_dir="${tmp_dir}/${scenario}-${pass_count}" output status
+	local case_dir="${tmp_dir}/${scenario}-${pass_count}" output status case_bin="${fake_bin}"
 	mkdir -p "${case_dir}/evidence" "${case_dir}/state"
+	if [[ "${scenario}" == merged-classified-fallback || "${scenario}" == merged-collector-status-three ]]; then
+		case_bin="${case_dir}/bin"
+		write_classification_fixture "${case_bin}"
+	fi
 	set +e
-	output="$(PATH="${fake_bin}:${PATH}" \
+	output="$(PATH="${case_bin}:${PATH}" \
+		FAKE_GH_DELEGATE="${fake_bin}/gh" \
 		FAKE_GH_SCENARIO="${scenario}" \
 		FAKE_GH_STATE_DIR="${case_dir}/state" \
 		"${finder}" \
@@ -46,6 +94,11 @@ run_case() {
 	fi
 	if [[ "${expected_status}" -eq 0 && ! -s "${case_dir}/evidence/merged-42.json" ]]; then
 		printf 'FAIL: %s: successful lookup did not preserve validated evidence\n' "${scenario}" >&2
+		return 1
+	fi
+
+	if [[ "${scenario}" == merged-classified-fallback && ! -e "${case_dir}/state/invalid-digest-served" ]]; then
+		printf 'FAIL: classified fallback never examined the invalid current-release digest\n' >&2
 		return 1
 	fi
 
@@ -86,7 +139,7 @@ run_case merged-known-late 0 '42' --pr 42
 run_case merged-known-late-list-failure 0 '42' --pr 42
 run_case merged-known-late-list-malformed 0 '42' --pr 42
 run_case merged-known-open-list-failure 1 'could not enumerate merged cask PRs' --pr 42
-run_case merged-known-late-list-failure-wrong-digest 1 'could not enumerate merged cask PRs' --pr 42
+run_case merged-known-late-list-failure-wrong-digest 3 'could not enumerate merged cask PRs' --pr 42
 run_case merged-list-failure 0 '42' --pr 42
 for scenario in merged-main-file-failure merged-moving-main merged-merge-file-failure \
 	merged-main-ref-failure merged-malformed-main-file merged-comparison-failure; do
@@ -95,11 +148,17 @@ done
 run_case merged-known-untrusted 1 'no valid merged cask PR' --pr 42
 run_case merged-known-open 1 'no valid merged cask PR' --pr 42
 run_case merged-known-extra-file 1 'no valid merged cask PR' --pr 42
-run_case merged-known-wrong-digest 1 'no valid merged cask PR' --pr 42
+run_case merged-known-wrong-digest 3 'no valid merged cask PR' --pr 42
 run_case merged-known-pr-failure 1 'no valid merged cask PR' --pr 42
 
 # An invalid named candidate must not contaminate the number when an independently
 # validated historical candidate still proves this release on current main.
 run_case merged-newest-invalid 0 '42' --pr 43
+
+# Definitive corruption must survive discovery/retries, while collector statuses
+# cannot impersonate a typed validator result. A later valid candidate still wins.
+run_case merged-known-wrong-digest 3 'no valid merged cask PR'
+run_case merged-collector-status-three 1 'no valid merged cask PR' --pr 42
+run_case merged-classified-fallback 0 '42'
 
 printf 'All %d merged cask handoff finder cases passed.\n' "${pass_count}"

@@ -452,6 +452,9 @@ jobs:
               - 'pkg/svc/installer/cni/calico/Dockerfile'
               - '.github/workflows/ci.yaml'
             cask-pr-handoff:
+              - '.github/scripts/reconcile-cask-handoff.sh'
+              - '.github/scripts/reconcile-cask-handoff.test.sh'
+              - '.github/workflows/reconcile-cask-handoff.yaml'
               - '.github/scripts/verify-published-desktop-archive.sh'
               - '.github/scripts/verify-published-desktop-archive.test.sh'
               - 'desktop/scripts/verify-macos-archive.sh'
@@ -760,7 +763,10 @@ jobs:
 
       - name: 🔐 Verify fail-closed cask PR handoff
         run: |
+          suite_failed=0
           shellcheck \
+            .github/scripts/reconcile-cask-handoff.sh \
+            .github/scripts/reconcile-cask-handoff.test.sh \
             .github/fixtures/cask-pr-handoff/fake-bin/gh \
             .github/scripts/cask-read-api.sh \
             .github/scripts/cask-read-api.test.sh \
@@ -786,19 +792,37 @@ jobs:
             .github/scripts/verify-published-desktop-archive.test.sh \
             .github/scripts/wait-for-github-api-budget.sh \
             .github/scripts/wait-for-github-api-budget.test.sh \
-            .github/scripts/cask-pr-handoff-workflow.test.sh
+            .github/scripts/cask-pr-handoff-workflow.test.sh || suite_failed=$?
+          # Keep independent behavioral results visible even when lint fails.
+          # The final aggregate still fails for every nonzero check or suite.
+          set +e
+          .github/scripts/reconcile-cask-handoff.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/cask-read-api.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/collect-cask-pr-handoff.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/finish-cask-pr-handoff.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/find-merged-cask-pr-handoff.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/redraft-evergreen-cask-prs.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/resolve-cask-publication.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/resolve-release-publish-state.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/style-clean-cask-branch.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/upload-release-assets.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/validate-cask-pr-handoff.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/wait-for-github-api-budget.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/cask-pr-handoff-workflow.test.sh
+          suite_failed=$((suite_failed | $?))
+          exit "$suite_failed"
 
       - name: 🔐 Verify exact MCP publication replay and failure boundaries
         run: |
