@@ -16,14 +16,14 @@ RUN printf '%s\n' 'APT::Snapshot "20261005T000000Z";' \
 
 RUN set -eu; \
     case "${TARGETARCH}" in \
-      amd64) go_arch=amd64; go_sha=65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40; \
+      amd64) go_arch=amd64; go_sha=7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840; \
              node_arch=x64; node_sha=df450af89261115ef9f9e3830c3eeb2cc9213b63c720b1af623cb5dcbe2e02de ;; \
-      arm64) go_arch=arm64; go_sha=a06e99309dbcbdca1a8ccd2282c3ee146e55930886e26b4f1193269587165f49; \
+      arm64) go_arch=arm64; go_sha=3392582988a273a87ab5043ee1b2c9c17a2c3c00580bf9326c47a2e0aaaeac92; \
              node_arch=arm64; node_sha=a44aeb94849a299b22df10b9e622ec2f605c2183501bc40590705131de7c740f ;; \
       *) echo "Unsupported architecture: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
     curl --fail --silent --show-error --location --max-time 120 \
-      "https://go.dev/dl/go1.27.3.linux-${go_arch}.tar.gz" --output /tmp/go.tar.gz; \
+      "https://go.dev/dl/go1.27.4.linux-${go_arch}.tar.gz" --output /tmp/go.tar.gz; \
     printf '%s  /tmp/go.tar.gz\n' "${go_sha}" | sha256sum --check --strict; \
     tar -xzf /tmp/go.tar.gz -C /usr/local; \
     curl --fail --silent --show-error --location --max-time 120 \
