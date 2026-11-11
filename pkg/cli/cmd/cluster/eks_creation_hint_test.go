@@ -227,8 +227,6 @@ func TestCreate_EKSRetryRecordsEarlierAttemptsLateCluster(t *testing.T) {
 // ksail#8335: when the hint is the only local record of the cluster, a delete by name from another
 // directory still reaches the eksctl, account and creation-tag checks, and removes the cluster that
 // carries the kept tag.
-//
-//nolint:paralleltest // uses t.Chdir and mutates shared test hooks
 func TestCreate_EKSHintAloneLetsDeleteReachVerificationOutsideTheProject(t *testing.T) {
 	client, deleted := runInterruptedEKSCreate(t)
 

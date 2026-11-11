@@ -64,15 +64,7 @@ func retainFailedEKSCreateOwnership(
 	)
 	defer cancel()
 
-	client, err := newFailedCreateIdentityClient(ctx, clusterCtx, region)
-
-	var accountID string
-	if err == nil {
-		// The account is read once and reused, so a later failing account lookup can never cost
-		// the attempt its hint.
-		accountID, err = client.CallerAccountID(ctx)
-	}
-
+	client, accountID, err := failedCreateCaller(ctx, clusterCtx, region)
 	if err != nil {
 		return errors.Join(
 			createErr,
@@ -80,7 +72,6 @@ func retainFailedEKSCreateOwnership(
 		)
 	}
 
-	accountID = strings.TrimSpace(accountID)
 	creationID := clusterCtx.EKSConfig.CreationID
 
 	ownership, err := observeFailedEKSCreate(
@@ -137,14 +128,12 @@ func hasEKSCreationAttempt(clusterCtx *localregistry.Context) bool {
 // appeared in the meantime can then still record that cluster, but only when its live creation tag
 // matches one of these identifiers (ksail#8324).
 func failedCreateCandidateIDs(clusterName, region, accountID, creationID string) []string {
-	candidates := []string{creationID}
-
 	hint, err := state.LoadEKSCreationHint(clusterName, region)
 	if err != nil || hint.AccountID != accountID {
-		return candidates
+		return []string{creationID}
 	}
 
-	return append(candidates, hint.CreationIDs...)
+	return append([]string{creationID}, hint.CreationIDs...)
 }
 
 // keepFailedEKSCreateHint adds this attempt's creation identifier to the hint for a cluster AWS did
@@ -214,4 +203,25 @@ func observeFailedEKSCreate(
 	}
 
 	return ownership, nil
+}
+
+// failedCreateCaller builds the read-only AWS client for the create's frozen credentials and reads
+// the caller's account once. The account is reused for the observation and the hint, so a later
+// failing account lookup can never cost the attempt its hint.
+func failedCreateCaller(
+	ctx context.Context,
+	clusterCtx *localregistry.Context,
+	region string,
+) (eksidentity.Client, string, error) {
+	client, err := newFailedCreateIdentityClient(ctx, clusterCtx, region)
+	if err != nil {
+		return nil, "", err
+	}
+
+	accountID, err := client.CallerAccountID(ctx)
+	if err != nil {
+		return nil, "", fmt.Errorf("resolve current AWS account: %w", err)
+	}
+
+	return client, strings.TrimSpace(accountID), nil
 }
