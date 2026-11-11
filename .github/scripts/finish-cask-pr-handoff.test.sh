@@ -17,7 +17,7 @@ else printf '2030-01-01T00:00:00Z\n'; fi
 EOF
 cat >"${work}/bin/sleep" <<'EOF'
 #!/usr/bin/env bash
-if [[ "${FINISH_SCENARIO:-}" == write-budget-* || "${FINISH_SCENARIO:-}" == read-budget-* ]]; then
+if [[ "${FINISH_SCENARIO:-}" == write-budget-* || "${FINISH_SCENARIO:-}" == read-budget-* ]] || (($1 > 0)); then
   now=1000
   [[ ! -f "${FINISH_STATE}/clock" ]] || now="$(<"${FINISH_STATE}/clock")"
   printf '%s\n' "$((now + $1))" > "${FINISH_STATE}/clock"
@@ -31,6 +31,10 @@ scenario="${FINISH_SCENARIO}"
 state="${FINISH_STATE}"
 fixture="${FINISH_FIXTURE}"
 line="$*"
+if [[ "$scenario" == queued-cask-* ]]; then
+  now=1000
+  [[ ! -f "$state/clock" ]] || now="$(<"$state/clock")"
+fi
 # The personal write token is deliberately exhausted for reads. The real
 # finisher must still complete through the independent read credential, while
 # promotion and the pinned merge must retain the write credential.
@@ -110,14 +114,14 @@ if [[ "$scenario" == write-budget-* ]]; then
     remaining=4900
     reset=1100
     [[ "$resource" != core || "$now" -ge 1105 ]] || remaining=0
-    if [[ "$scenario" == write-budget-checks-postpromotion-depleted && -f "$state/depleted" && "$resource" == core && "$now" -lt 1205 ]]; then remaining=0; reset=1200; fi
+    if [[ "$scenario" == write-budget-checks-postpromotion-depleted* && -f "$state/depleted" && "$resource" == core && "$now" -lt 1205 ]]; then remaining=0; reset=1200; fi
     printf 'HTTP/2.0 200 OK\r\nX-Ratelimit-Resource: %s\r\nX-Ratelimit-Remaining: %s\r\nX-Ratelimit-Reset: %s\r\n\r\n' "$resource" "$remaining" "$reset"
     if [[ "$resource" == core ]]; then
       printf '{"resources":{"core":{"remaining":%s,"reset":%s}}}\n' "$remaining" "$reset"
     else printf '{"data":{"rateLimit":{"remaining":4900,"resetAt":"2030-01-01T00:00:00Z"}}}\n'; fi
     exit 0
   fi
-  if [[ ("$line" == *'mutation CaskPromote'* || "$line" == *'api -X PUT '*) && ("$now" -lt 1105 || ("$scenario" == write-budget-checks-postpromotion-depleted && -f "$state/depleted" && "$now" -lt 1205)) ]]; then
+  if [[ ("$line" == *'mutation CaskPromote'* || "$line" == *'api -X PUT '*) && ("$now" -lt 1105 || ("$scenario" == write-budget-checks-postpromotion-depleted* && -f "$state/depleted" && "$now" -lt 1205)) ]]; then
     echo 'gh: API rate limit exceeded for personal write identity' >&2
     exit 1
   fi
@@ -222,7 +226,7 @@ case "${line}" in
 *'query CaskChecks'*)
 	[[ "${scenario}" != checks-read-error ]] || exit 1
 	n="$(count "checks-${promoted}")"
-	if [[ "$scenario" == write-budget-checks-postpromotion-depleted && "$promoted" == true && "$n" -eq 2 ]]; then
+	if [[ "$scenario" == write-budget-checks-postpromotion-depleted* && "$promoted" == true && "$n" -eq 2 ]]; then
 		touch "$state/depleted"
 	fi
 	jq -n --arg head "${head}" --arg base "${base}" --argjson ready "${promoted}" '
@@ -237,8 +241,13 @@ case "${line}" in
 	 ]}}}}]}}}}}' |
 	 jq --arg scenario "${scenario}" --arg cursor "${cursor}" --argjson n "${n}" --argjson now "${now:-1000}" --argjson ready "${promoted}" '
 	 .data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts |=
-	 (if $scenario == "write-budget-checks-terminal" or ($scenario == "write-budget-checks-failed" and $now >= 1105) then .nodes[0].conclusion="FAILURE"
-	 elif $scenario == "write-budget-checks-postpromotion-depleted" and $ready and $n == 2 then
+	 (if $ready and (
+	   (($scenario == "queued-cask-checks" or $scenario == "queued-cask-deadline") and $now < 3400) or
+	   ($scenario == "queued-cask-short-window" and $now < 1002)
+	 ) then
+	   .nodes[0].status="QUEUED" | .nodes[0].conclusion=null
+	 elif $scenario == "write-budget-checks-terminal" or ($scenario == "write-budget-checks-failed" and $now >= 1105) then .nodes[0].conclusion="FAILURE"
+	 elif ($scenario | startswith("write-budget-checks-postpromotion-depleted")) and $ready and $n == 2 then
 	   .nodes[1].status="IN_PROGRESS" | .nodes[1].conclusion=null
 	 elif ($scenario == "write-budget-checks-pending" or $scenario == "write-budget-checks-stuck") and $now >= 1105 and ($ready|not) and ($scenario == "write-budget-checks-stuck" or $n == 2) then
 	   .nodes[0].status="IN_PROGRESS" | .nodes[0].conclusion=null
@@ -397,10 +406,20 @@ run_case() {
 	[[ "$scenario" != read-budget-* ]] || write_deadline=1250
 	[[ "$scenario" != read-budget-expired ]] || write_deadline=1050
 	[[ "$scenario" != read-budget-no-deadline ]] || write_deadline=""
-	GH_TOKEN="${write_token}" KSAIL_CASK_READ_TOKEN="${read_token}" KSAIL_GITHUB_WRITE_BUDGET_DEADLINE="${write_deadline}" PATH="${work}/bin:${PATH}" FINISH_FIXTURE="${fixture}" FINISH_STATE="${state}" FINISH_SCENARIO="${scenario}" \
+	local checks_deadline="" wait_args=(--attempts 2 --interval 0 --checks-wait 31)
+	case "${scenario}" in
+	queued-cask-checks) wait_args=(--attempts 30 --interval 10) ;;
+	queued-cask-short-window) wait_args=(--attempts 2 --interval 0 --checks-wait 10) ;;
+	queued-cask-deadline)
+		checks_deadline=1090
+		wait_args=(--attempts 30 --interval 10)
+		;;
+	write-budget-checks-postpromotion-depleted) wait_args=(--attempts 2 --interval 0 --checks-wait 150) ;;
+	esac
+	GH_TOKEN="${write_token}" KSAIL_CASK_READ_TOKEN="${read_token}" KSAIL_GITHUB_WRITE_BUDGET_DEADLINE="${write_deadline}" KSAIL_CASK_CHECK_DEADLINE="${checks_deadline}" PATH="${work}/bin:${PATH}" FINISH_FIXTURE="${fixture}" FINISH_STATE="${state}" FINISH_SCENARIO="${scenario}" \
 		bash "${script_dir}/finish-cask-pr-handoff.sh" \
 		--tap devantler-tech/homebrew-tap --pr 42 --cask-name ksail --source-repo devantler-tech/ksail \
-		--tag v7.166.1 --attempts 2 --interval 0 >"${state}/output" 2>&1 || code=$?
+		--tag v7.166.1 "${wait_args[@]}" >"${state}/output" 2>&1 || code=$?
 	if [[ "${success}" == true && "${code}" -ne 0 ]] || [[ "${success}" == false && "${code}" -eq 0 ]]; then
 		cat "${state}/output" >&2
 		fail "${scenario}: expected success=${success}, exit=${code}"
@@ -421,6 +440,17 @@ run_case() {
 	if [[ "${success}" == true ]]; then
 		grep -q '1111111111111111111111111111111111111111' "${state}/output" || fail "${scenario}: verified head missing from delivery result"
 		[[ -f "${state}/merged" ]] || fail "${scenario}: readiness incorrectly counted as delivered"
+	fi
+	if [[ "${scenario}" == queued-cask-checks ]]; then
+		[[ "$(<"${state}/clock")" -eq 3400 ]] || fail "${scenario}: did not wait for the 40-minute queue"
+	elif [[ "${scenario}" == queued-cask-short-window ]]; then
+		[[ "$(<"${state}/clock")" -lt 1010 ]] || fail "${scenario}: polled after the phase deadline"
+	elif [[ "${scenario}" == queued-cask-deadline ]]; then
+		[[ "$(<"${state}/clock")" -eq 1089 && "$(<"${state}/checks-true")" -eq 4 ]] ||
+			fail "${scenario}: check polling exceeded the shared deadline"
+	elif [[ "${scenario}" == write-budget-checks-postpromotion-depleted-short ]]; then
+		[[ -f "${state}/depleted" && "$(<"${state}/clock")" -eq 1135 ]] ||
+			fail "${scenario}: quota recovery waited past the check phase"
 	fi
 	if [[ "$scenario" == read-budget-* ]]; then
 		! grep -q 'PARTIAL_EVIDENCE_MUST_NOT_ESCAPE' "${state}/output" ||
@@ -505,6 +535,9 @@ run_case() {
 }
 
 # Removing the direct merge, SHA pin, post-promotion audit, or immutable readback breaks these.
+run_case queued-cask-checks true 1 1
+run_case queued-cask-short-window true 1 1
+run_case queued-cask-deadline false 1 0
 run_case promotion-readback-delayed true 1 1
 run_case promotion-readback-stuck false 1 0
 run_case promotion-readback-moved-base false 1 0
@@ -530,6 +563,7 @@ run_case write-budget-checks-failed false 0 0
 run_case write-budget-checks-terminal false 0 0
 run_case write-budget-checks-pending true 1 1
 run_case write-budget-checks-postpromotion-depleted true 1 1
+run_case write-budget-checks-postpromotion-depleted-short false 1 0
 run_case write-budget-checks-stuck false 0 0
 run_case both-phases-then-pass true 1 1
 run_case first-required-then-pass true 1 1
