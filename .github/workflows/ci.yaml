@@ -452,6 +452,9 @@ jobs:
               - 'pkg/svc/installer/cni/calico/Dockerfile'
               - '.github/workflows/ci.yaml'
             cask-pr-handoff:
+              - '.github/scripts/verify-published-desktop-archive.sh'
+              - '.github/scripts/verify-published-desktop-archive.test.sh'
+              - 'desktop/scripts/verify-macos-archive.sh'
               - '.github/scripts/cask-read-api.sh'
               - '.github/scripts/cask-read-api.test.sh'
               - 'server.json'
@@ -725,6 +728,22 @@ jobs:
           .github/actions/ksail-test-workload/remote-resource-guard.test.sh
           .github/actions/ksail-test-workload/install-with-recovery.test.sh
 
+  desktop-recovery-signature:
+    name: 🔐 Verify Published Desktop Signature
+    runs-on: macos-latest
+    timeout-minutes: 5
+    needs: [changes]
+    if: needs.changes.outputs.cask-pr-handoff == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify real resource seals in publication recovery
+        run: bash .github/scripts/verify-published-desktop-archive.test.sh
+
   cask-pr-handoff:
     name: 🔐 Validate Cask PR Handoff
     runs-on: ubuntu-latest
@@ -763,6 +782,8 @@ jobs:
             .github/scripts/upload-release-assets.test.sh \
             .github/scripts/validate-cask-pr-handoff.sh \
             .github/scripts/validate-cask-pr-handoff.test.sh \
+            .github/scripts/verify-published-desktop-archive.sh \
+            .github/scripts/verify-published-desktop-archive.test.sh \
             .github/scripts/wait-for-github-api-budget.sh \
             .github/scripts/wait-for-github-api-budget.test.sh \
             .github/scripts/cask-pr-handoff-workflow.test.sh
@@ -3032,6 +3053,7 @@ jobs:
         test-cask-rendering,
         release-graph-audit,
         cask-pr-handoff,
+        desktop-recovery-signature,
         native-home-paths,
         windows-notice-staging,
         eks-smoke-scripts,
@@ -3079,6 +3101,7 @@ jobs:
             ${{ needs.test-cask-rendering.result }}
             ${{ needs.release-graph-audit.result }}
             ${{ needs.cask-pr-handoff.result }}
+            ${{ needs.desktop-recovery-signature.result }}
             ${{ needs.native-home-paths.result }}
             ${{ needs.windows-notice-staging.result }}
             ${{ needs.eks-smoke-scripts.result }}
