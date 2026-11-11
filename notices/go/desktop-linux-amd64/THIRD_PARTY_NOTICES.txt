@@ -5,7 +5,7 @@ Admitted third-party Go source packages; other artifact contents require separat
 
 For a release-source:<path> locator, read the exact source= commit from GoNotices/release.txt and obtain that public source at https://github.com/devantler-tech/ksail/tree/<source-commit>/<path>. This locates repository modifications; it does not grant additional rights.
 
-Go runtime and standard library toolchain: go1.27.3
+Go runtime and standard library toolchain: go1.27.4
 License SHA-256: 911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad
 Exact package/file/material associations and recipient-only exclusions are recorded in manifest.json. Material identifiers below refer to that manifest; complete included text is pooled by SHA-256.
 
