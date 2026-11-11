@@ -1065,6 +1065,13 @@ jobs:
 
           for name in ksail ksail-desktop; do
             branch="goreleaser/${name}"
+            # Check the actual immutable download before either open-PR delivery or
+            # merged-PR recovery. A checksum match alone cannot prove a valid seal.
+            if [[ "$name" == ksail-desktop ]] && ! .github/scripts/verify-published-desktop-archive.sh "$TAG"; then
+              echo "::error::Published Desktop archive failed signature verification; leaving its cask untouched"
+              handoff_failed=1
+              continue
+            fi
             # `|| true` keeps the job fail-soft: a transient API failure (5xx, rate limit,
             # network blip) must not abort the step under `set -e` after the release is already public —
             # invalid evidence below then warns and skips, same as the no-PR-found case.

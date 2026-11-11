@@ -70,6 +70,40 @@ assert_not_contains() {
 	fi
 }
 
+# Run the real loop up to PR discovery. An invalid published Desktop archive must
+# never reach either the open-PR handoff or the already-merged recovery path, while
+# the independently verified CLI cask remains deliverable.
+archive_gate="${tmp_dir}/archive-gate.sh"
+awk '
+  /^          for name in ksail ksail-desktop; do/ { in_loop = 1 }
+  in_loop && /^            matches=/ { exit }
+  in_loop { line = $0; sub(/^          /, "", line); print line }
+  END { print "  printf '\''delivered:%s\\n'\'' \"$name\""; print "done" }
+' "${homebrew_block}" >"${archive_gate}"
+gate_root="${tmp_dir}/archive-gate"
+mkdir -p "${gate_root}/.github/scripts"
+cat >"${gate_root}/.github/scripts/verify-published-desktop-archive.sh" <<'EOF'
+#!/usr/bin/env bash
+printf 'BLOCKED: published Desktop bundle has an invalid resource seal\n' >&2
+exit 1
+EOF
+chmod +x "${gate_root}/.github/scripts/verify-published-desktop-archive.sh"
+(
+	cd "${gate_root}"
+	TAG=v7.212.40 TAP=devantler-tech/homebrew-tap handoff_failed=0
+	GITHUB_STEP_SUMMARY="${tmp_dir}/archive-gate-summary"
+	# shellcheck source=/dev/null
+	source "${archive_gate}"
+	[[ "${handoff_failed}" -eq 1 ]] || fail 'invalid Desktop archive must make the handoff fail'
+) >"${tmp_dir}/archive-gate.log" 2>&1 || {
+	cat "${tmp_dir}/archive-gate.log" >&2
+	fail 'invalid published Desktop archive reached cask handoff'
+}
+grep -Fxq 'delivered:ksail' "${tmp_dir}/archive-gate.log" || fail 'Desktop rejection blocked the CLI cask'
+if grep -Fxq 'delivered:ksail-desktop' "${tmp_dir}/archive-gate.log"; then
+	fail 'invalid published Desktop archive reached open or merged PR recovery'
+fi
+
 race_root="${tmp_dir}/merged-race"
 mkdir -p "${race_root}/.github/scripts" "${race_root}/evidence"
 cat >"${race_root}/.github/scripts/find-merged-cask-pr-handoff.sh" <<'EOF'
