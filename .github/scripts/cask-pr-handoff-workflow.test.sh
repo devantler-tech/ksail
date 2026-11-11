@@ -211,18 +211,21 @@ done
 
 assert_contains 'name: 🍺 Deliver Homebrew cask PRs' "${homebrew_block}" \
 	'release job must complete cask delivery'
-# Both casks can consume the full pre-promotion, online-audit, and async-merge wait
-# bounds. Leave ten minutes for checkout, evidence collection, and cold brew style.
+# Both casks share one wall-clock window for readiness and request quota. Keep
+# independent room for both async merges and ten minutes for setup and proof.
 finisher="${repo_root}/.github/scripts/finish-cask-pr-handoff.sh"
 poll_attempts="$(sed -nE 's/^attempts=([0-9]+) interval=[0-9]+$/\1/p' "${finisher}")"
 poll_interval="$(sed -nE 's/^attempts=[0-9]+ interval=([0-9]+)$/\1/p' "${finisher}")"
 job_minutes="$(awk '/timeout-minutes:/ { print $2 }' "${homebrew_block}")"
-for budget in "${poll_attempts}" "${poll_interval}" "${job_minutes}"; do
+check_window="$(sed -nE '/KSAIL_CASK_CHECK_DEADLINE/s/.*now \+ ([0-9]+).*/\1/p' "${homebrew_block}")"
+write_window="$(sed -nE '/KSAIL_GITHUB_WRITE_BUDGET_DEADLINE/s/.*now \+ ([0-9]+).*/\1/p' "${homebrew_block}")"
+for budget in "${poll_attempts}" "${poll_interval}" "${job_minutes}" "${check_window}" "${write_window}"; do
 	[[ "${budget}" =~ ^[1-9][0-9]*$ ]] || fail 'cask delivery wait budget is not completely observed'
 done
-required_seconds=$((2 * 3 * poll_attempts * poll_interval + 10 * 60))
+((write_window <= check_window)) || fail 'request quota must recover within the shared check window'
+required_seconds=$((check_window + 2 * poll_attempts * poll_interval + 10 * 60))
 if ((job_minutes * 60 < required_seconds)); then
-	fail 'release job timeout cannot accommodate both casks full independent wait bounds and setup'
+	fail 'release job timeout cannot accommodate the shared check window, both async merges and setup'
 fi
 assert_contains 'validate-cask-pr-handoff.sh' "${homebrew_block}" \
 	'release job must validate generated PR identity and file scope'

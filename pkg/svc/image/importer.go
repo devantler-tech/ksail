@@ -24,6 +24,19 @@ type ImportOptions struct {
 	InputPath string
 }
 
+// newImportArchiveName returns the file name of one import's archive on a node.
+// Each import gets its own name, so two imports on the same node never write to
+// or remove each other's archive. Tests replace it to keep the node-side path
+// predictable.
+//
+//nolint:gochecknoglobals // Test seam: tests pin the name so node-side commands stay exact.
+var newImportArchiveName = defaultImportArchiveName
+
+// defaultImportArchiveName returns a random node-side import archive name.
+func defaultImportArchiveName() string {
+	return randomNodeArchiveName("ksail-images-import-")
+}
+
 // Importer handles importing container images to cluster containerd.
 type Importer struct {
 	dockerClient dockerclient.Client
@@ -78,6 +91,12 @@ func (i *Importer) Import(
 
 	// Get K8s nodes for the cluster
 	k8sNodes, err := i.getK8sNodes(ctx, clusterName, distribution)
+	if err != nil {
+		return err
+	}
+
+	// Refuse before copying anything when the archive cannot serve a node's platform.
+	err = i.requireNodePlatforms(ctx, k8sNodes, inputPath)
 	if err != nil {
 		return err
 	}
@@ -154,6 +173,39 @@ func filterK8sNodes(nodes []provider.NodeInfo) []provider.NodeInfo {
 	return result
 }
 
+// requireNodePlatforms refuses the import before any copy when the archive carries no content
+// for a node's platform for one of its multi-platform images. ctr would otherwise fail later, on
+// that node only, with a missing-content error. Nodes are checked only when the archive holds a
+// multi-platform image.
+func (i *Importer) requireNodePlatforms(
+	ctx context.Context,
+	nodes []provider.NodeInfo,
+	inputPath string,
+) error {
+	coverage, err := readArchivePlatformCoverage(inputPath)
+	if err != nil {
+		return fmt.Errorf("check image archive platforms: %w", err)
+	}
+
+	if len(coverage) == 0 {
+		return nil
+	}
+
+	for _, node := range nodes {
+		platform, err := i.executor.detectPlatform(ctx, node.Name)
+		if err != nil {
+			return fmt.Errorf("detect platform of node %s: %w", node.Name, err)
+		}
+
+		err = requireArchivePlatform(coverage, node.Name, platform)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // importImagesToNode imports images from a tar archive to a node's containerd.
 func (i *Importer) importImagesToNode(
 	ctx context.Context,
@@ -161,8 +213,12 @@ func (i *Importer) importImagesToNode(
 	inputPath string,
 	tmpBasePath string,
 ) error {
-	// Copy the tar file from host to container
-	tmpPath := tmpBasePath + "/ksail-images-import.tar"
+	// Copy the tar file from host to container. Each import gets its own archive
+	// name, and the archive is removed however the import ends, even after a
+	// partial copy or a cancellation.
+	tmpPath := tmpBasePath + "/" + newImportArchiveName()
+
+	defer i.executor.removeNodeArchive(ctx, nodeName, tmpPath)
 
 	err := i.copyToContainer(ctx, nodeName, inputPath, tmpPath)
 	if err != nil {
@@ -183,9 +239,6 @@ func (i *Importer) importImagesToNode(
 	if err != nil {
 		return fmt.Errorf("ctr import failed: %w", err)
 	}
-
-	// Clean up temporary file in container
-	_, _ = i.executor.ExecInContainer(ctx, nodeName, []string{"rm", "-f", tmpPath})
 
 	return nil
 }

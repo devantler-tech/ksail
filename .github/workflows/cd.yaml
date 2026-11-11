@@ -423,6 +423,10 @@ jobs:
         shell: bash
         run: go run .github/scripts/go-notices.go verify desktop-darwin-arm64 "$GITHUB_REF_NAME" "$GITHUB_SHA"
 
+      - name: 🔎 Verify macOS desktop archive signature
+        if: needs.cask-checkpoint.outputs.release-mode == 'build'
+        run: bash desktop/scripts/verify-macos-archive.sh dist-desktop/KSail_*_darwin_*.zip
+
       - name: 📤 Upload desktop archive artifact
         if: needs.cask-checkpoint.outputs.release-mode == 'build'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -470,7 +474,7 @@ jobs:
 
       - name: 🛠️ Setup desktop build (Go, Node.js, webview deps, staged web UI)
         if: needs.validate-release-ref.outputs.release-mode == 'build'
-        uses: devantler-tech/ksail/.github/actions/setup-desktop-build@0492d1afa192676dbcb622c6283c2b56fd315465
+        uses: devantler-tech/ksail/.github/actions/setup-desktop-build@e63f0babb7424228315e45ebe5ce43e2c2c0fa11
 
       - name: 🏷️ Extract version from tag
         if: needs.validate-release-ref.outputs.release-mode == 'build'
@@ -926,11 +930,9 @@ jobs:
     # here failed with `brew: command not found`, so the casks were never style-cleaned. The tap audits
     # casks on macOS for the same reason (devantler-tech/homebrew-tap `ci.yaml`).
     runs-on: macos-latest
-    # `brew style` can bootstrap rubocop on a cold runner. Keep enough room for two clones and style
-    # passes plus both casks' three independent five-minute wait bounds (checks, online audit,
-    # and async merge). Reserve ten more minutes for preparation. An incomplete cask delivery
-    # fails this job without deleting the already-published release.
-    # A further 65 minutes cover the wait for the tap token's request budget below.
+    # Both casks share an 85-minute check window that includes time spent on
+    # request-quota recovery and style preparation. Leave another 20 minutes
+    # for setup, exact-head merge result polling, and final evidence reads.
     timeout-minutes: 105
     needs: [cask-checkpoint, publish-release]
     # An older or prerelease tag left both casks untouched, so there is nothing to deliver.
@@ -953,9 +955,12 @@ jobs:
       - name: Provide the request timeout utility
         run: brew install coreutils
 
-      - name: Bind the shared write-budget wait window
+      - name: Bind the shared check and write-budget wait windows
         shell: bash
-        run: printf 'KSAIL_GITHUB_WRITE_BUDGET_DEADLINE=%s\n' "$(( $(date +%s) + 3700 ))" >> "$GITHUB_ENV"
+        run: |
+          now=$(date +%s)
+          printf 'KSAIL_GITHUB_WRITE_BUDGET_DEADLINE=%s\n' "$((now + 3700))" >> "$GITHUB_ENV"
+          printf 'KSAIL_CASK_CHECK_DEADLINE=%s\n' "$((now + 5100))" >> "$GITHUB_ENV"
 
       # This job polls the tap for several minutes; starting it on an exhausted budget fails the
       # delivery after the release is already published (devantler-tech/monorepo#4055).
