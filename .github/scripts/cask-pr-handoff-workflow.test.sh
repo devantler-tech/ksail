@@ -220,7 +220,8 @@ for budget_case in 1 2; do
 		[[ "$budget_case" -ne 1 ]] || expected_status=75
 		# shellcheck disable=SC2317,SC2329 # Called by the sourced workflow branch.
 		reconcile_merged_handoff() { seen_status="${4:-1}"; }
-		for name in ksail; do
+		budget_names=(ksail)
+		for name in "${budget_names[@]}"; do
 			# shellcheck source=/dev/null
 			source "${budget_branch}"
 		done
@@ -676,7 +677,7 @@ reconciler_workflow="${repo_root}/.github/workflows/reconcile-cask-handoff.yaml"
 assert_contains 'group: CD' "${reconciler_workflow}" 'reconciliation must serialize with native CD'
 assert_contains 'cancel-in-progress: false' "${reconciler_workflow}" 'reconciliation must not cancel a release'
 assert_contains 'queue: max' "${reconciler_workflow}" 'reconciliation must retain queued releases'
-assert_contains "cron: '23 * * * *'" "${reconciler_workflow}" 'pending casks must have an hourly resume path'
+assert_contains 'cron: "23 * * * *"' "${reconciler_workflow}" 'pending casks must have an hourly resume path'
 assert_contains 'contents: read' "${reconciler_workflow}" 'reconciliation must use a read-only repository token'
 assert_not_contains 'contents: write' "${reconciler_workflow}" 'reconciliation must not widen repository-token permissions'
 assert_contains '"$GITHUB_REF" != refs/heads/main' "${reconciler_workflow}" 'reconciliation must refuse non-main runs'

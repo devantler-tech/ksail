@@ -35,9 +35,10 @@ Every native run retains `cask-handoff-result.json` for thirty days
 with the release, source, run attempt, outcome and resume link.
 
 **Reconcile Homebrew Cask Delivery** runs hourly at minute 23 or by manual dispatch
-from `main`. Its read-only Ubuntu inspection skips the macOS worker when both
-casks are already delivered. An open Desktop handoff verifies the downloaded
-app resource seal on macOS before proceeding. The workflow shares CD concurrency so it cannot race a new tag rewriting the
+from `main`. One bounded macOS job verifies the downloaded Desktop app's resource
+seal before accepting either an open or an already-merged cask. This keeps
+temporary download unavailability pending and rejects a damaged app even when
+its cask has merged. The workflow shares CD concurrency so it cannot race a new tag rewriting the
 evergreen branches. It derives the target from the latest published stable
 immutable release and reuses the guarded exact-head finisher. It does not repair
 invalid metadata or cask contents. An already-merged cask must independently pass

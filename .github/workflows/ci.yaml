@@ -452,8 +452,6 @@ jobs:
               - 'pkg/svc/installer/cni/calico/Dockerfile'
               - '.github/workflows/ci.yaml'
             cask-pr-handoff:
-              - '.github/scripts/has-desktop-seal-proof.sh'
-              - '.github/scripts/has-desktop-seal-proof.test.sh'
               - '.github/scripts/reconcile-cask-handoff.sh'
               - '.github/scripts/reconcile-cask-handoff.test.sh'
               - '.github/workflows/reconcile-cask-handoff.yaml'
@@ -765,8 +763,8 @@ jobs:
 
       - name: 🔐 Verify fail-closed cask PR handoff
         run: |
+          suite_failed=0
           shellcheck \
-            .github/scripts/has-desktop-seal-proof.test.sh \
             .github/scripts/reconcile-cask-handoff.sh \
             .github/scripts/reconcile-cask-handoff.test.sh \
             .github/fixtures/cask-pr-handoff/fake-bin/gh \
@@ -794,11 +792,10 @@ jobs:
             .github/scripts/verify-published-desktop-archive.test.sh \
             .github/scripts/wait-for-github-api-budget.sh \
             .github/scripts/wait-for-github-api-budget.test.sh \
-            .github/scripts/cask-pr-handoff-workflow.test.sh
-          suite_failed=0
+            .github/scripts/cask-pr-handoff-workflow.test.sh || suite_failed=$?
+          # Keep independent behavioral results visible even when lint fails.
+          # The final aggregate still fails for every nonzero check or suite.
           set +e
-          .github/scripts/has-desktop-seal-proof.test.sh
-          suite_failed=$((suite_failed | $?))
           .github/scripts/reconcile-cask-handoff.test.sh
           suite_failed=$((suite_failed | $?))
           .github/scripts/cask-read-api.test.sh

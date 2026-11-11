@@ -32,19 +32,37 @@ EOF
 cat >"$work/bin/curl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-output="" url=""
+output="" url="" max_time=""
 while (($#)); do
 	case "$1" in
 	--output) output="$2"; shift 2 ;;
+	--max-time) max_time="$2"; shift 2 ;;
 	https://*) url="$1"; shift ;;
 	*) shift ;;
 	esac
 done
 [[ "$url" == https://github.com/devantler-tech/ksail/releases/download/v7.212.40/KSail_7.212.40_darwin_arm64.zip && -n "$output" ]] || exit 2
+[[ -z "${DOWNLOAD_BOUND:-}" ]] || printf '%s\n' "$max_time" >"$DOWNLOAD_BOUND"
 cp "$ARCHIVE_FIXTURE" "$output"
 exit "${DOWNLOAD_STATUS:-0}"
 EOF
-chmod +x "$work/bin/gh" "$work/bin/curl"
+cat >"$work/bin/timeout" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1" != -k ]] || shift 2
+shift
+exec "$@"
+EOF
+cat >"$work/bin/date" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$*" == +%s && -n "${TEST_NOW:-}" ]]; then
+	printf '%s\n' "$TEST_NOW"
+else
+	/usr/bin/date "$@"
+fi
+EOF
+chmod +x "$work/bin/gh" "$work/bin/curl" "$work/bin/timeout" "$work/bin/date"
 export PATH="$work/bin:$PATH"
 export RELEASE_FIXTURE="$work/release.json" ARCHIVE_FIXTURE="$work/valid.zip"
 
@@ -73,6 +91,27 @@ if grep -q '^PASS:' "$work/timeout.log"; then
 	exit 1
 fi
 printf 'PASS: bounded archive download timeout remains pending\n'
+
+export DOWNLOAD_BOUND="$work/download-bound"
+TEST_NOW=1000 KSAIL_GITHUB_WRITE_BUDGET_DEADLINE=1030 \
+	bash "${script_dir}/verify-published-desktop-archive.sh" v7.212.40 >"$work/bounded.log" 2>&1
+bound="$(<"$DOWNLOAD_BOUND")"
+[[ "$bound" == 30 ]] || {
+	printf 'FAIL: archive download exceeded the remaining shared deadline\n' >&2
+	exit 1
+}
+grep -q '^PASS: published Desktop archive' "$work/bounded.log"
+printf 'PASS: actual archive verification uses the remaining shared deadline\n'
+
+rm -f "$DOWNLOAD_BOUND"
+status=0
+TEST_NOW=1000 KSAIL_GITHUB_WRITE_BUDGET_DEADLINE=999 \
+	bash "${script_dir}/verify-published-desktop-archive.sh" v7.212.40 >"$work/expired.log" 2>&1 || status=$?
+[[ "$status" -eq 75 && ! -e "$DOWNLOAD_BOUND" ]] || {
+	printf 'FAIL: an exhausted shared deadline reached the archive download\n' >&2
+	exit 1
+}
+printf 'PASS: an expired deadline cannot start an archive download\n'
 
 ARCHIVE_FIXTURE="$work/invalid.zip"
 if bash "${script_dir}/verify-published-desktop-archive.sh" v7.212.40 >"$work/digest.log" 2>&1; then

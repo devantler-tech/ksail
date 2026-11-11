@@ -1237,9 +1237,14 @@ jobs:
             # or extra changed file stops all further mutation and leaves the PR to the maintainer.
             # A later write must not inherit the budget observation from job start.
             # This wait shares the original finite window; re-collect proof afterwards.
-            if ! .github/scripts/wait-for-github-api-budget.sh; then
+            budget_status=0
+            .github/scripts/wait-for-github-api-budget.sh || budget_status=$?
+            if [[ "$budget_status" -ne 0 ]]; then
+              # Only bounded quota unavailability is pending; configuration and
+              # usage failures retain their hard refusal.
+              if [[ "$budget_status" -eq 1 ]]; then budget_status=75; fi
               reconcile_merged_handoff "$name" \
-                "Write budget cannot recover within the shared window" "$pr"
+                "Write budget cannot recover within the shared window" "$pr" "$budget_status"
               continue
             fi
             validation_status=0

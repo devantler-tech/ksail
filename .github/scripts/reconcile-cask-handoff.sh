@@ -2,11 +2,6 @@
 # Reconcile the latest published release through the same guarded cask finisher.
 # Run only from reviewed main, serialized with native CD by the caller workflow.
 set -euo pipefail
-observe=false
-if [[ "$#" -eq 1 && "$1" == --observe ]]; then
-	observe=true
-	shift
-fi
 if [[ "$#" -ne 0 || "${GITHUB_REPOSITORY:-}" != devantler-tech/ksail ||
 	"${GITHUB_REF:-}" != refs/heads/main ||
 	("${GITHUB_EVENT_NAME:-}" != schedule && "${GITHUB_EVENT_NAME:-}" != workflow_dispatch) ]]; then
@@ -71,10 +66,6 @@ for name in ksail ksail-desktop; do
 		esac
 		fallback_status=75
 		[[ "$finder_status" -ne 3 ]] || fallback_status=1
-		if [[ "$observe" == true ]]; then
-			record_result "$name" "$fallback_status"
-			continue
-		fi
 		status=0
 		read_api "repos/devantler-tech/homebrew-tap/pulls?state=open&head=devantler-tech:goreleaser/${name}&per_page=100" \
 			>"$work/open.json" || status=$?
@@ -108,10 +99,9 @@ for name in ksail ksail-desktop; do
 		continue
 	fi
 	status=0
-	# A deferred native job may not have reached the archive guard. Preserve it
-	# before every open Desktop handoff, on the caller's macOS runner.
-	if [[ "$name" == ksail-desktop && "$observe" == false &&
-		" ${mode_args[*]} " != *' --verify-merged '* ]]; then
+	# A pending native job or a separately merged cask cannot prove the app seal.
+	# Verify the immutable download on macOS before accepting either path.
+	if [[ "$name" == ksail-desktop ]]; then
 		"$script_dir/verify-published-desktop-archive.sh" "$tag" || status=$?
 		if [[ "$status" -ne 0 ]]; then
 			record_result "$name" "$status"

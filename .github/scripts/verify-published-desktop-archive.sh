@@ -30,10 +30,25 @@ fi
 
 # The destination is fixed by the product and validated tag, never by response text.
 archive="${work}/desktop.zip"
-curl --fail --location --silent --show-error --max-time 180 \
+download_wait=180
+if [[ -n "${KSAIL_GITHUB_WRITE_BUDGET_DEADLINE:-}" ]]; then
+	if ! now="$(date +%s)" || [[ ! "$now" =~ ^[1-9][0-9]{0,9}$ ]]; then exit 75; fi
+	remaining=$((KSAIL_GITHUB_WRITE_BUDGET_DEADLINE - now))
+	if ((remaining <= 0)); then exit 75; fi
+	if ((remaining < download_wait)); then download_wait="$remaining"; fi
+fi
+download_status=0
+curl --fail --location --silent --show-error --max-time "$download_wait" \
 	--proto '=https' --proto-redir '=https' \
 	--output "$archive" \
-	"https://github.com/devantler-tech/ksail/releases/download/${tag}/${asset}"
+	"https://github.com/devantler-tech/ksail/releases/download/${tag}/${asset}" || download_status=$?
+if [[ "$download_status" -eq 28 ]]; then
+	printf 'PENDING: the bounded Desktop download timed out; no archive was accepted\n' >&2
+	exit 75
+elif [[ "$download_status" -ne 0 ]]; then
+	printf 'BLOCKED: Desktop download failed (exit %s); no archive was accepted\n' "$download_status" >&2
+	exit "$download_status"
+fi
 actual="$(shasum -a 256 "$archive" | awk '{print $1}')"
 if [[ "sha256:${actual}" != "$digest" ]]; then
 	printf 'BLOCKED: downloaded Desktop archive does not match its published digest\n' >&2
