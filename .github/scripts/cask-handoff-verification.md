@@ -26,7 +26,12 @@ Native CD gives both casks a shared twelve-minute readiness window. Exhausted
 quota, temporarily unavailable evidence and unsettled checks are recorded as
 **pending**, never delivered. The published immutable release is retained. Failed
 checks, conflicting identity, invalid provenance or invalid signatures still fail
-the handoff. Every native run retains `cask-handoff-result.json` for thirty days
+the handoff. Every evidence request shares the original absolute deadline,
+including initial, retried and quota-recovered requests. Multiple matching open
+PRs and a fully bound current-release cask with invalid download integrity are
+failures; historical candidates or unavailable digest evidence cannot establish
+that verdict. A later valid candidate still has to pass every existing guard.
+Every native run retains `cask-handoff-result.json` for thirty days
 with the release, source, run attempt, outcome and resume link.
 
 **Reconcile Homebrew Cask Delivery** runs hourly at minute 23 or by manual dispatch

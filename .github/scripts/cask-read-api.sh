@@ -31,11 +31,37 @@ for arg in "$@"; do
 done
 [[ "$1" != graphql || "$query_found" == true ]] || exit 2
 
+deadline="${KSAIL_GITHUB_WRITE_BUDGET_DEADLINE:-}"
+if [[ -n "$deadline" && ! "$deadline" =~ ^[1-9][0-9]{0,9}$ ]]; then
+	printf 'ERROR: invalid bounded evidence-read deadline\n' >&2
+	exit 2
+fi
+
+# The request itself, including pagination, shares the absolute wait deadline.
+# Keep GNU timeout's forced-stop grace consistent with the quota probe helper.
+read_attempt() {
+	local now remaining api_timeout=timeout attempt_status=0
+	if [[ -z "$deadline" ]]; then
+		gh api "$@"
+		return "$?"
+	fi
+	if ! now="$(date +%s)" || [[ ! "$now" =~ ^[1-9][0-9]{0,9}$ ]]; then return 75; fi
+	remaining=$((deadline - now))
+	if ((remaining <= 0)); then return 75; fi
+	if ! command -v "$api_timeout" >/dev/null 2>&1; then api_timeout=gtimeout; fi
+	if ! command -v "$api_timeout" >/dev/null 2>&1; then return 2; fi
+	"$api_timeout" -k 2s "${remaining}s" gh api "$@" || attempt_status=$?
+	case "$attempt_status" in
+	124 | 137) return 75 ;;
+	*) return "$attempt_status" ;;
+	esac
+}
+
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 status=0
-gh api "$@" >"$work/output" 2>"$work/error" || status=$?
-if [[ "$status" -ne 0 ]] &&
+read_attempt "$@" >"$work/output" 2>"$work/error" || status=$?
+if [[ "$status" -ne 0 && "$status" -ne 75 ]] &&
 	LC_ALL=C grep -Eq '^gh: API rate limit (already )?exceeded([[:space:]]|$)' "$work/error"; then
 	# No new wait window: interactive callers without the production deadline
 	# retain their immediate refusal. This also excludes secondary-limit retries.
@@ -63,12 +89,12 @@ if [[ "$status" -ne 0 ]] &&
 		printf '1\n' >>"$KSAIL_CASK_READ_RECOVERY_MARKER" || exit 1
 	fi
 	status=0
-	gh api "$@" >"$work/output" 2>"$work/error" || status=$?
+	read_attempt "$@" >"$work/output" 2>"$work/error" || status=$?
 fi
 # Retry only known transient read failures. Every retry discards the previous
 # response and shares the caller's original deadline, including paginated reads.
 for pause in 1 2; do
-	if [[ "$status" -eq 0 || ! "${KSAIL_GITHUB_WRITE_BUDGET_DEADLINE:-}" =~ ^[1-9][0-9]{0,9}$ ]] ||
+	if [[ "$status" -eq 0 || "$status" -eq 75 || ! "${KSAIL_GITHUB_WRITE_BUDGET_DEADLINE:-}" =~ ^[1-9][0-9]{0,9}$ ]] ||
 		! LC_ALL=C grep -Eq '\(HTTP (500|502|503|504)\)|i/o timeout|TLS handshake timeout|connection reset by peer|unexpected EOF|Client.Timeout exceeded' "$work/error"; then
 		break
 	fi
@@ -81,9 +107,13 @@ for pause in 1 2; do
 		printf '1\n' >>"$KSAIL_CASK_READ_RECOVERY_MARKER" || exit 1
 	fi
 	status=0
-	gh api "$@" >"$work/output" 2>"$work/error" || status=$?
+	read_attempt "$@" >"$work/output" 2>"$work/error" || status=$?
 done
 if [[ "$status" -ne 0 ]]; then
+	if [[ "$status" -eq 75 ]]; then
+		printf 'PENDING: bounded evidence read is unavailable or exhausted; no partial response accepted\n' >&2
+		exit 75
+	fi
 	if [[ "$status" -eq 1 && "${KSAIL_GITHUB_WRITE_BUDGET_DEADLINE:-}" =~ ^[1-9][0-9]{0,9}$ ]] &&
 		! LC_ALL=C grep -Eq '\(HTTP (400|401|403|404|405|410|422)\)' "$work/error"; then
 		printf 'PENDING: GitHub evidence remains unavailable; no partial response accepted\n' >&2

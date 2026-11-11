@@ -53,21 +53,30 @@ record_result() {
 for name in ksail ksail-desktop; do
   mkdir -p "$work/$name"
   mode_args=(--checks-wait 120)
-  if pr="$("$script_dir/find-merged-cask-pr-handoff.sh" \
+  finder_status=0
+  pr="$("$script_dir/find-merged-cask-pr-handoff.sh" \
     --tap devantler-tech/homebrew-tap --cask-name "$name" \
-    --source-repo devantler-tech/ksail --tag "$tag" --output-dir "$work/$name")"; then
+    --source-repo devantler-tech/ksail --tag "$tag" --output-dir "$work/$name")" || finder_status=$?
+  if [[ "$finder_status" -eq 0 ]]; then
     # The finder supplies a candidate. Independently verify its programmed
     # provenance and publication before accepting it as a delivered cask.
     mode_args+=(--verify-merged)
   else
+    case "$finder_status" in
+      1 | 3 | 75) ;;
+      *) record_result "$name" 1; continue ;;
+    esac
+    fallback_status=75
+    [[ "$finder_status" -ne 3 ]] || fallback_status=1
     if [[ "$observe" == true ]]; then
-      record_result "$name" 75
+      record_result "$name" "$fallback_status"
       continue
     fi
     status=0
     read_api "repos/devantler-tech/homebrew-tap/pulls?state=open&head=devantler-tech:goreleaser/${name}&per_page=100" \
       >"$work/open.json" || status=$?
     if [[ "$status" -ne 0 ]]; then
+      [[ "$finder_status" -ne 3 ]] || status=1
       record_result "$name" "$status"
       continue
     fi
@@ -75,12 +84,24 @@ for name in ksail ksail-desktop; do
       record_result "$name" 1
       continue
     fi
-    pr="$(jq -r '[.[] | select(.head.repo.full_name == "devantler-tech/homebrew-tap"
-      and .user.login == "devantler")] |
-      if length == 1 then .[0].number else empty end' "$work/open.json")"
+    jq '[.[] | select(.head.repo.full_name == "devantler-tech/homebrew-tap"
+      and .user.login == "devantler")]' "$work/open.json" >"$work/matches.json"
+    count="$(jq -r length "$work/matches.json")"
+    if [[ "$count" -eq 0 ]]; then
+      record_result "$name" "$fallback_status"
+      continue
+    fi
+    if [[ "$count" -ne 1 ]]; then
+      record_result "$name" 1
+      continue
+    fi
+    if ! pr="$(jq -er '.[0].number | select(type == "number" and . > 0 and . == floor)' "$work/matches.json")"; then
+      record_result "$name" 1
+      continue
+    fi
   fi
   if [[ ! "$pr" =~ ^[1-9][0-9]*$ ]]; then
-    record_result "$name" 75
+    record_result "$name" 1
     continue
   fi
   status=0

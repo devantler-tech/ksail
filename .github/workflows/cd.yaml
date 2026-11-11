@@ -1037,7 +1037,7 @@ jobs:
 
           reconcile_merged_handoff() {
             local name="$1" context="$2" branch="goreleaser/$1"
-            local attempt merged_pr merged_reason
+            local attempt merged_pr merged_reason candidate_status integrity_failed=0
             local known_pr="${3:-}" failure_status="${4:-1}"
             local known_args=()
             if [[ -n "$known_pr" ]]; then
@@ -1059,6 +1059,9 @@ jobs:
                 printf -- '- %s#%s cask %s already merged for %s (immutable current-main proof)\n' \
                   "$TAP" "$merged_pr" "$name" "$TAG" >>"$GITHUB_STEP_SUMMARY"
                 return 0
+              else
+                candidate_status=$?
+                if [[ "$candidate_status" -eq 3 ]]; then integrity_failed=1; fi
               fi
               if [[ "$attempt" -eq 1 ]]; then
                 sleep 1
@@ -1067,7 +1070,9 @@ jobs:
 
             merged_reason="${merged_pr//$'\n'/; }"
             echo "::warning::${context}; no fully validated merged handoff for ${branch}: ${merged_reason:-no merged evidence}"
-            if [[ "$failure_status" -eq 75 ]]; then
+            if [[ "$integrity_failed" -eq 1 ]]; then
+              handoff_failed=1
+            elif [[ "$failure_status" -eq 75 ]]; then
               handoff_pending=1
               printf -- '- Pending %s for %s. Guarded reconciliation resumes hourly through Reconcile Homebrew Cask Delivery in Actions: %s\n' \
                 "$name" "$TAG" 'https://github.com/devantler-tech/ksail/actions' >> "$GITHUB_STEP_SUMMARY"
@@ -1080,10 +1085,19 @@ jobs:
             branch="goreleaser/${name}"
             # Check the actual immutable download before either open-PR delivery or
             # merged-PR recovery. A checksum match alone cannot prove a valid seal.
-            if [[ "$name" == ksail-desktop ]] && ! .github/scripts/verify-published-desktop-archive.sh "$TAG"; then
-              echo "::error::Published Desktop archive failed signature verification; leaving its cask untouched"
-              handoff_failed=1
-              continue
+            if [[ "$name" == ksail-desktop ]]; then
+              archive_status=0
+              .github/scripts/verify-published-desktop-archive.sh "$TAG" || archive_status=$?
+              if [[ "$archive_status" -eq 75 ]]; then
+                echo '::notice::Published Desktop archive evidence is unavailable within the shared window; leaving its cask pending'
+                printf -- '- Pending Desktop archive verification for %s; guarded reconciliation must verify the download before delivery.\n' "$TAG" >> "$GITHUB_STEP_SUMMARY"
+                handoff_pending=1
+                continue
+              elif [[ "$archive_status" -ne 0 ]]; then
+                echo "::error::Published Desktop archive failed signature verification; leaving its cask untouched"
+                handoff_failed=1
+                continue
+              fi
             fi
             # REST `head=<owner>:<branch>` filters SERVER-side (a bare branch-name filter would let
             # same-name fork branches fill a client-side page before any jq filter runs); the owner

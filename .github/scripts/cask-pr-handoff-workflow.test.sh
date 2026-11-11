@@ -85,7 +85,7 @@ mkdir -p "${gate_root}/.github/scripts"
 cat >"${gate_root}/.github/scripts/verify-published-desktop-archive.sh" <<'EOF'
 #!/usr/bin/env bash
 printf 'BLOCKED: published Desktop bundle has an invalid resource seal\n' >&2
-exit 1
+exit "${ARCHIVE_STATUS:-1}"
 EOF
 chmod +x "${gate_root}/.github/scripts/verify-published-desktop-archive.sh"
 (
@@ -104,6 +104,24 @@ if grep -Fxq 'delivered:ksail-desktop' "${tmp_dir}/archive-gate.log"; then
 	fail 'invalid published Desktop archive reached open or merged PR recovery'
 fi
 
+(
+	cd "${gate_root}"
+	TAG=v7.212.40 TAP=devantler-tech/homebrew-tap handoff_failed=0 handoff_pending=0
+	GITHUB_STEP_SUMMARY="${tmp_dir}/archive-pending-summary"
+	export ARCHIVE_STATUS=75
+	# shellcheck source=/dev/null
+	source "${archive_gate}"
+	[[ "${handoff_failed}" -eq 0 && "${handoff_pending}" -eq 1 ]] ||
+		fail 'unavailable archive evidence must remain pending without claiming delivery'
+) >"${tmp_dir}/archive-pending.log" 2>&1 || {
+	cat "${tmp_dir}/archive-pending.log" >&2
+	fail 'unavailable published Desktop archive evidence became a signature failure'
+}
+grep -Fxq 'delivered:ksail' "${tmp_dir}/archive-pending.log" || fail 'Desktop unavailability blocked the CLI cask'
+if grep -Fxq 'delivered:ksail-desktop' "${tmp_dir}/archive-pending.log"; then
+	fail 'unverified Desktop archive reached open or merged PR recovery'
+fi
+
 race_root="${tmp_dir}/merged-race"
 mkdir -p "${race_root}/.github/scripts" "${race_root}/evidence"
 cat >"${race_root}/.github/scripts/find-merged-cask-pr-handoff.sh" <<'EOF'
@@ -119,7 +137,7 @@ if [[ -f "${RECONCILE_RACE_STATE}" ]]; then
 fi
 calls=$((calls + 1))
 printf '%s\n' "${calls}" >"${RECONCILE_RACE_STATE}"
-[[ "${RECONCILE_INTEGRITY:-}" != true ]] || exit 3
+if [[ "${RECONCILE_INTEGRITY:-}" == true && "${calls}" -eq 1 ]]; then exit 3; fi
 [[ "${RECONCILE_NEVER:-}" != true ]] || exit 1
 if [[ "${calls}" -eq 1 ]]; then
 	printf 'simulated just-merged list lag\n' >&2

@@ -23,6 +23,8 @@ validation fails.
 With --pr, validate the already-selected PR directly before discovery and once
 more after unsuccessful discovery. The number is only a lead; all merged
 evidence gates still apply.
+Exit 3 preserves a validator-confirmed current-release integrity failure when
+no valid candidate is found. Missing or unavailable evidence alone returns 1.
 EOF
 }
 
@@ -86,27 +88,42 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 branch="goreleaser/${cask_name}"
 work="$(mktemp -d)"
 trap 'rm -rf "${work}"' EXIT
+integrity_rejected=0
+
+exit_unmatched() {
+	if [[ "${integrity_rejected}" -eq 1 ]]; then
+		exit 3
+	fi
+	exit 1
+}
 
 # Recollect a candidate and require immutable merge, current-main and release-digest proof.
 # Preserve successful evidence while keeping candidate diagnostics off the PR-number output.
 validate_candidate() {
 	local pr="$1" evidence="${output_dir}/merged-$1.json"
-	local candidate_log="${work}/candidate-$1.log"
+	local candidate_log="${work}/candidate-$1.log" validation_status=0
 	{
-		"${script_dir}/collect-cask-pr-handoff.sh" \
+		if ! "${script_dir}/collect-cask-pr-handoff.sh" \
 			--tap "${tap}" \
 			--pr "${pr}" \
 			--source-repo "${source_repo}" \
 			--tag "${tag}" \
 			--output "${evidence}" \
-			--include-main &&
-			"${script_dir}/validate-cask-pr-handoff.sh" \
+			--include-main; then
+			# A collector's transport status is never an integrity verdict.
+			return 1
+		fi
+		"${script_dir}/validate-cask-pr-handoff.sh" \
 				--evidence "${evidence}" \
 				--tap "${tap}" \
 				--cask-name "${cask_name}" \
 				--source-repo "${source_repo}" \
 				--tag "${tag}" \
-				--merged
+				--merged || validation_status=$?
+		if [[ "${validation_status}" -eq 3 ]]; then
+			integrity_rejected=1
+		fi
+		return "${validation_status}"
 	} >"${candidate_log}" 2>&1
 }
 
@@ -139,7 +156,7 @@ if ! read_api --paginate --slurp \
 		exit 0
 	fi
 	printf 'BLOCKED: could not enumerate merged cask PRs for %s\n' "${branch}" >&2
-	exit 1
+	exit_unmatched
 fi
 if ! jq -e 'type == "array" and all(.[]; type == "array")' \
 	"${work}/pages.json" >/dev/null 2>&1; then
@@ -149,7 +166,7 @@ if ! jq -e 'type == "array" and all(.[]; type == "array")' \
 	fi
 	printf 'BLOCKED: could not enumerate merged cask PRs for %s: malformed response\n' \
 		"${branch}" >&2
-	exit 1
+	exit_unmatched
 fi
 
 # The list response is discovery only. Filter obvious mismatches, deduplicate across pages, then
@@ -177,7 +194,7 @@ jq -r \
 
 if [[ ! -s "${work}/candidates" && -z "${known_pr}" ]]; then
 	printf 'BLOCKED: no trusted merged cask PR found for %s\n' "${branch}" >&2
-	exit 1
+	exit_unmatched
 fi
 
 while IFS= read -r pr; do
@@ -206,4 +223,4 @@ if [[ -s "${work}/rejected" ]]; then
 		printf -- '- PR #%s: %s\n' "${pr}" "${reason:-validation failed without diagnostics}" >&2
 	done <"${work}/rejected"
 fi
-exit 1
+exit_unmatched
