@@ -199,6 +199,35 @@ for failure_status in 1 75 integrity; do
 	) || fail 'unsettled handoff lost its pending/failure distinction'
 done
 
+# Exercise the actual post-style budget branch. Availability is pending; a
+# configuration or usage failure keeps its original hard status.
+budget_branch="${tmp_dir}/post-style-budget.sh"
+awk '
+  /^            # This wait shares the original finite window/ { in_block = 1; next }
+  in_block && /^            validation_status=0/ { exit }
+  in_block { line = $0; sub(/^            /, "", line); print line }
+' "${homebrew_block}" >"${budget_branch}"
+cat >"${race_root}/.github/scripts/wait-for-github-api-budget.sh" <<'EOF'
+#!/usr/bin/env bash
+exit "$BUDGET_STATUS"
+EOF
+chmod +x "${race_root}/.github/scripts/wait-for-github-api-budget.sh"
+for budget_case in 1 2; do
+	(
+		cd "${race_root}"
+		export BUDGET_STATUS="$budget_case"
+		pr=42 seen_status=0 expected_status="$budget_case"
+		[[ "$budget_case" -ne 1 ]] || expected_status=75
+		# shellcheck disable=SC2317,SC2329 # Called by the sourced workflow branch.
+		reconcile_merged_handoff() { seen_status="${4:-1}"; }
+		for name in ksail; do
+			# shellcheck source=/dev/null
+			source "${budget_branch}"
+		done
+		[[ "$seen_status" -eq "$expected_status" ]]
+	) || fail 'post-style budget failure lost its availability classification'
+done
+
 # Run the workflow's actual ready-retry block. A completed validation and a failed
 # merge are different outcomes: the operator must receive the delivery failure.
 ready_retry_block="${tmp_dir}/ready-retry.sh"

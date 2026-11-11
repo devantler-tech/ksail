@@ -42,6 +42,7 @@ while (($#)); do
 done
 [[ "$url" == https://github.com/devantler-tech/ksail/releases/download/v7.212.40/KSail_7.212.40_darwin_arm64.zip && -n "$output" ]] || exit 2
 cp "$ARCHIVE_FIXTURE" "$output"
+exit "${DOWNLOAD_STATUS:-0}"
 EOF
 chmod +x "$work/bin/gh" "$work/bin/curl"
 export PATH="$work/bin:$PATH"
@@ -60,6 +61,18 @@ publication "$ARCHIVE_FIXTURE"
 bash "${script_dir}/verify-published-desktop-archive.sh" v7.212.40 >"$work/valid.log" 2>&1
 grep -q '^PASS: published Desktop archive' "$work/valid.log"
 printf 'PASS: valid immutable publication\n'
+
+status=0
+DOWNLOAD_STATUS=28 bash "${script_dir}/verify-published-desktop-archive.sh" v7.212.40 >"$work/timeout.log" 2>&1 || status=$?
+[[ "$status" -eq 75 ]] || {
+	printf 'FAIL: a bounded archive download timeout must remain pending, got %s\n' "$status" >&2
+	exit 1
+}
+if grep -q '^PASS:' "$work/timeout.log"; then
+	printf 'FAIL: a timed-out archive was reported verified\n' >&2
+	exit 1
+fi
+printf 'PASS: bounded archive download timeout remains pending\n'
 
 ARCHIVE_FIXTURE="$work/invalid.zip"
 if bash "${script_dir}/verify-published-desktop-archive.sh" v7.212.40 >"$work/digest.log" 2>&1; then

@@ -2,7 +2,7 @@ name: Reconcile Homebrew Cask Delivery
 
 on:
   schedule:
-    - cron: '23 * * * *'
+    - cron: "23 * * * *"
   workflow_dispatch:
 
 # Serialize with CD so a later tag cannot rewrite an evergreen branch mid-handoff.

@@ -114,12 +114,12 @@ validate_candidate() {
 			return 1
 		fi
 		"${script_dir}/validate-cask-pr-handoff.sh" \
-				--evidence "${evidence}" \
-				--tap "${tap}" \
-				--cask-name "${cask_name}" \
-				--source-repo "${source_repo}" \
-				--tag "${tag}" \
-				--merged || validation_status=$?
+			--evidence "${evidence}" \
+			--tap "${tap}" \
+			--cask-name "${cask_name}" \
+			--source-repo "${source_repo}" \
+			--tag "${tag}" \
+			--merged || validation_status=$?
 		if [[ "${validation_status}" -eq 3 ]]; then
 			integrity_rejected=1
 		fi

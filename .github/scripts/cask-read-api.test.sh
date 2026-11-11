@@ -102,8 +102,8 @@ KSAIL_GITHUB_WRITE_BUDGET_DEADLINE=1250 KSAIL_CASK_READ_RECOVERY_MARKER="$work/t
 jq -e '.complete == true' "$work/output" >/dev/null
 [[ "$(cat "$work/transient-attempts")" -eq 3 && -s "$work/transient-marker" ]]
 if [[ ! -f "$work/bounds" || "$(cat "$work/bounds")" != $'250s\n249s\n247s' ]]; then
-  printf 'FAIL: initial and retry reads do not share the remaining deadline\n' >&2
-  exit 1
+	printf 'FAIL: initial and retry reads do not share the remaining deadline\n' >&2
+	exit 1
 fi
 if grep -q PRIVATE_SENTINEL "$work/output" "$work/error"; then
 	printf 'FAIL: transient response data escaped into diagnostics\n' >&2
@@ -235,31 +235,31 @@ reject_expired_recovery 1251
 printf 'PASS: quota probes reaching or exceeding the deadline cannot start a retry\n'
 
 for phase in initial retry recovery; do
-  rm -f "$work/calls" "$work/bounds" "$work/attempted" "$work/transient-attempts"
-  printf '1000\n' >"$work/now"
-  endpoint=repos/devantler-tech/homebrew-tap/pulls/43
-  timeout_at=2
-  [[ "$phase" != initial ]] || timeout_at=1
-  [[ "$phase" != recovery ]] || endpoint=repos/devantler-tech/homebrew-tap/pulls/42/files
-  args=()
-  [[ "$phase" != recovery ]] || args=(--paginate --slurp)
-  status=0
-  KSAIL_GITHUB_WRITE_BUDGET_DEADLINE=1250 CASK_READ_TIMEOUT_AT="$timeout_at" \
-    "$script_dir/cask-read-api.sh" ${args[@]+"${args[@]}"} "$endpoint" >"$work/output" 2>"$work/error" || status=$?
-  [[ "$status" -eq 75 && ! -s "$work/output" ]] || {
-    printf 'FAIL: %s request timeout did not become pending\n' "$phase" >&2
-    exit 1
-  }
-  if grep -q PRIVATE_SENTINEL "$work/output" "$work/error"; then
-    printf 'FAIL: timed-out response escaped into diagnostics\n' >&2
-    exit 1
-  fi
-  printf 'PASS: %s request timeout is pending without partial data\n' "$phase"
+	rm -f "$work/calls" "$work/bounds" "$work/attempted" "$work/transient-attempts"
+	printf '1000\n' >"$work/now"
+	endpoint=repos/devantler-tech/homebrew-tap/pulls/43
+	timeout_at=2
+	[[ "$phase" != initial ]] || timeout_at=1
+	[[ "$phase" != recovery ]] || endpoint=repos/devantler-tech/homebrew-tap/pulls/42/files
+	args=()
+	[[ "$phase" != recovery ]] || args=(--paginate --slurp)
+	status=0
+	KSAIL_GITHUB_WRITE_BUDGET_DEADLINE=1250 CASK_READ_TIMEOUT_AT="$timeout_at" \
+		"$script_dir/cask-read-api.sh" ${args[@]+"${args[@]}"} "$endpoint" >"$work/output" 2>"$work/error" || status=$?
+	[[ "$status" -eq 75 && ! -s "$work/output" ]] || {
+		printf 'FAIL: %s request timeout did not become pending\n' "$phase" >&2
+		exit 1
+	}
+	if grep -q PRIVATE_SENTINEL "$work/output" "$work/error"; then
+		printf 'FAIL: timed-out response escaped into diagnostics\n' >&2
+		exit 1
+	fi
+	printf 'PASS: %s request timeout is pending without partial data\n' "$phase"
 done
 rm -f "$work/calls" "$work/bounds"
 printf '1000\n' >"$work/now"
 status=0
 KSAIL_GITHUB_WRITE_BUDGET_DEADLINE=1000 \
-  "$script_dir/cask-read-api.sh" repos/devantler-tech/homebrew-tap/pulls/43 >"$work/output" 2>"$work/error" || status=$?
+	"$script_dir/cask-read-api.sh" repos/devantler-tech/homebrew-tap/pulls/43 >"$work/output" 2>"$work/error" || status=$?
 [[ "$status" -eq 75 && ! -s "$work/output" && ! -f "$work/calls" && ! -f "$work/bounds" ]]
 printf 'PASS: an expired deadline cannot start an initial request\n'
