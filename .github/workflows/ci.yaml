@@ -452,6 +452,9 @@ jobs:
               - 'pkg/svc/installer/cni/calico/Dockerfile'
               - '.github/workflows/ci.yaml'
             cask-pr-handoff:
+              - '.github/scripts/reconcile-cask-handoff.sh'
+              - '.github/scripts/reconcile-cask-handoff.test.sh'
+              - '.github/workflows/reconcile-cask-handoff.yaml'
               - '.github/scripts/verify-published-desktop-archive.sh'
               - '.github/scripts/verify-published-desktop-archive.test.sh'
               - 'desktop/scripts/verify-macos-archive.sh'
@@ -761,6 +764,8 @@ jobs:
       - name: 🔐 Verify fail-closed cask PR handoff
         run: |
           shellcheck \
+            .github/scripts/reconcile-cask-handoff.sh \
+            .github/scripts/reconcile-cask-handoff.test.sh \
             .github/fixtures/cask-pr-handoff/fake-bin/gh \
             .github/scripts/cask-read-api.sh \
             .github/scripts/cask-read-api.test.sh \
@@ -787,6 +792,7 @@ jobs:
             .github/scripts/wait-for-github-api-budget.sh \
             .github/scripts/wait-for-github-api-budget.test.sh \
             .github/scripts/cask-pr-handoff-workflow.test.sh
+          .github/scripts/reconcile-cask-handoff.test.sh
           .github/scripts/cask-read-api.test.sh
           .github/scripts/collect-cask-pr-handoff.test.sh
           .github/scripts/finish-cask-pr-handoff.test.sh

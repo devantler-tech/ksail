@@ -76,7 +76,7 @@ assert_not_contains() {
 archive_gate="${tmp_dir}/archive-gate.sh"
 awk '
   /^          for name in ksail ksail-desktop; do/ { in_loop = 1 }
-  in_loop && /^            matches=/ { exit }
+  in_loop && /^            read_status=0/ { exit }
   in_loop { line = $0; sub(/^          /, "", line); print line }
   END { print "  printf '\''delivered:%s\\n'\'' \"$name\""; print "done" }
 ' "${homebrew_block}" >"${archive_gate}"
@@ -163,6 +163,10 @@ cat >"${retry_root}/.github/scripts/finish-cask-pr-handoff.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'called\n' >>"${READY_RETRY_CALLS}"
+if [[ "${READY_RETRY_SCENARIO}" == delivery-pending ]]; then
+	printf 'PENDING: required tap checks remain queued\n' >&2
+	exit 75
+fi
 if [[ "${READY_RETRY_SCENARIO}" == delivery-failed ]]; then
 	printf 'BLOCKED: asynchronous result read unavailable\n' >&2
 	exit 1
@@ -170,7 +174,7 @@ fi
 printf 'PASS: verified exact-head merge completed\n'
 EOF
 chmod +x "${retry_root}/.github/scripts/finish-cask-pr-handoff.sh"
-for retry_case in validation-failed delivery-failed delivered; do
+for retry_case in validation-failed delivery-failed delivery-pending delivered; do
 	retry_log="${tmp_dir}/${retry_case}.log"
 	retry_summary="${tmp_dir}/${retry_case}.summary"
 	(
@@ -181,7 +185,7 @@ for retry_case in validation-failed delivery-failed delivered; do
 		TAP="devantler-tech/homebrew-tap" TAG="v7.175.1" pr=42
 		GITHUB_REPOSITORY="devantler-tech/ksail" GITHUB_STEP_SUMMARY="${retry_summary}"
 		pr_is_draft=false
-		evidence="${tmp_dir}/unused-evidence.json" handoff_failed=0
+		evidence="${tmp_dir}/unused-evidence.json" handoff_failed=0 handoff_pending=0
 		export TAP TAG pr GITHUB_REPOSITORY GITHUB_STEP_SUMMARY pr_is_draft evidence
 		: >"${READY_RETRY_CALLS}"
 		: >"${GITHUB_STEP_SUMMARY}"
@@ -196,7 +200,7 @@ for retry_case in validation-failed delivery-failed delivered; do
 		# shellcheck disable=SC2317,SC2329 # Invoked by the actual sourced workflow block.
 		reconcile_merged_handoff() {
 			printf 'reconciled: %s\n' "$2"
-			handoff_failed=1
+			if [[ "${4:-1}" -eq 75 ]]; then handoff_pending=1; else handoff_failed=1; fi
 		}
 		for name in ksail ksail-desktop; do
 			pr_title="chore(cask): update ${name} to ${TAG}"
@@ -205,7 +209,9 @@ for retry_case in validation-failed delivery-failed delivered; do
 			source "${ready_retry_block}"
 		done
 		if [[ "${READY_RETRY_SCENARIO}" == delivered ]]; then
-			[[ "${handoff_failed}" -eq 0 ]] || exit 1
+			[[ "${handoff_failed}" -eq 0 && "${handoff_pending}" -eq 0 ]] || exit 1
+		elif [[ "${READY_RETRY_SCENARIO}" == delivery-pending ]]; then
+			[[ "${handoff_failed}" -eq 0 && "${handoff_pending}" -eq 1 ]] || exit 1
 		else
 			[[ "${handoff_failed}" -eq 1 ]] || exit 1
 		fi
@@ -221,6 +227,12 @@ for retry_case in validation-failed delivery-failed delivered; do
 			'validation failure must retain its scope diagnostic'
 		assert_contains 'scope mismatch' "${retry_summary}" \
 			'validation failure must reach the step summary'
+		;;
+	delivery-pending)
+		assert_contains "required tap checks remain queued" "${retry_summary}" \
+			"pending delivery must retain its reason"
+		assert_not_contains "delivered for" "${retry_summary}" \
+			"pending delivery must never claim completed delivery"
 		;;
 	delivery-failed)
 		assert_contains 'asynchronous result read unavailable' "${retry_log}" \
@@ -386,12 +398,12 @@ fi
 # shares its hourly budget with other automation, and two releases stopped at the checkpoint on an
 # exhausted budget (devantler-tech/monorepo#4055). The wait must come before the step it protects,
 # and its job must outlast GitHub's one-hour window.
-if [ "$(grep -Fc -- 'run: .github/scripts/wait-for-github-api-budget.sh' "${cd_workflow}")" -lt 2 ]; then
+if [ "$(grep -Fc -- '.github/scripts/wait-for-github-api-budget.sh' "${cd_workflow}")" -lt 2 ]; then
 	fail 'the checkpoint and the cask delivery job must each wait for the tap token request budget'
 fi
 awk '
   /^  [a-z-]+:$/ { job = $1; waited = 0 }
-  /run: \.github\/scripts\/wait-for-github-api-budget\.sh/ { waited = 1 }
+  /\.github\/scripts\/wait-for-github-api-budget\.sh/ { waited = 1 }
   /redraft-evergreen-cask-prs\.sh --tap/ { if (job != "cask-checkpoint:" || !waited) bad = 1; checkpoint = 1 }
   /name: 🍺 Style-clean and deliver cask PRs/ { if (job != "homebrew:" || !waited) bad = 1; delivery = 1 }
   END { exit (bad || !checkpoint || !delivery) ? 1 : 0 }
@@ -399,7 +411,7 @@ awk '
 awk '
   /^  [a-z-]+:$/ { job = $1; timeout_ready = 0 }
   /run: brew install coreutils/ { timeout_ready = 1 }
-  /run: \.github\/scripts\/wait-for-github-api-budget\.sh/ {
+  /\.github\/scripts\/wait-for-github-api-budget\.sh/ {
     if (job == "homebrew:") { seen = 1; if (!timeout_ready) bad = 1 }
   }
   END { exit (bad || !seen) ? 1 : 0 }
@@ -407,7 +419,7 @@ awk '
 awk '
   /^  [a-z-]+:$/ { job = $1 }
   /timeout-minutes:/ { timeout[job] = $2 }
-  END { exit (timeout["cask-checkpoint:"] >= 65 && timeout["homebrew:"] >= 100 && timeout["validate-release-ref:"] >= 65) ? 0 : 1 }
+  END { exit (timeout["cask-checkpoint:"] >= 65 && timeout["homebrew:"] <= 35 && timeout["homebrew:"] >= 32 && timeout["validate-release-ref:"] >= 65) ? 0 : 1 }
 ' "${cd_workflow}" || fail 'jobs that wait for the request budget must outlast the one-hour window'
 # The first read of every release spends the repository token, and a previous release's cask polling
 # can leave that token at zero while the next queued tag starts (devantler-tech/ksail#7907). The wait
@@ -415,7 +427,7 @@ awk '
 awk '
   /^  [a-z-]+:$/ { job = $1; token = ""; waited = 0 }
   /GH_TOKEN:/ { token = $2 " " $3 " " $4 }
-  /run: \.github\/scripts\/wait-for-github-api-budget\.sh/ {
+  /\.github\/scripts\/wait-for-github-api-budget\.sh/ {
     if (job == "validate-release-ref:" && token == "${{ secrets.GITHUB_TOKEN }}") waited = 1
   }
   /run: bash \.github\/scripts\/resolve-release-replay\.sh/ {
@@ -561,5 +573,39 @@ for config_name in .goreleaser.yaml .goreleaser.desktop.yaml; do
 done
 assert_contains "- '.github/scripts/resolve-cask-publication.sh'" "${ci_workflow}" \
 	'CI paths filter must trigger the handoff job on cask order resolver changes'
+
+# Exercise the real durable receipt classification. Missing/failed handoff steps
+# cannot become a delivered receipt, and only explicitly deferred work is pending.
+receipt_block="${tmp_dir}/receipt.sh"
+awk '
+  /name: 🧾 Record cask delivery outcome/ { in_step = 1 }
+  in_step && /run: \|/ { in_run = 1; next }
+  in_run && /^      - name:/ { exit }
+  in_run { line = $0; sub(/^          /, "", line); print line }
+' "${homebrew_block}" >"${receipt_block}"
+for fixture in success:delivered:true:delivered success:pending:true:pending skipped::false:pending failure:pending:true:failed skipped:::failed success::true:failed; do
+	IFS=: read -r outcome status budget expected <<<"$fixture"
+	env HANDOFF_OUTCOME="$outcome" HANDOFF_STATUS="$status" BUDGET_READY="$budget" \
+		RELEASE_TAG=v7.213.2 GITHUB_SHA=1111111111111111111111111111111111111111 \
+		GITHUB_RUN_ID=42 GITHUB_RUN_ATTEMPT=1 RUNNER_TEMP="${tmp_dir}" GITHUB_STEP_SUMMARY="${tmp_dir}/receipt-summary" \
+		bash "${receipt_block}"
+	jq -e --arg expected "$expected" '.delivery_status == $expected' \
+		"${tmp_dir}/cask-handoff-result.json" >/dev/null || fail "wrong durable receipt for $fixture"
+done
+
+reconciler_workflow="${repo_root}/.github/workflows/reconcile-cask-handoff.yaml"
+assert_contains 'group: CD' "${reconciler_workflow}" 'reconciliation must serialize with native CD'
+assert_contains 'cancel-in-progress: false' "${reconciler_workflow}" 'reconciliation must not cancel a release'
+assert_contains 'queue: max' "${reconciler_workflow}" 'reconciliation must retain queued releases'
+assert_contains "cron: '23 * * * *'" "${reconciler_workflow}" 'pending casks must have an hourly resume path'
+assert_contains 'contents: read' "${reconciler_workflow}" 'reconciliation must use a read-only repository token'
+assert_not_contains 'contents: write' "${reconciler_workflow}" 'reconciliation must not widen repository-token permissions'
+assert_contains '"$GITHUB_REF" != refs/heads/main' "${reconciler_workflow}" 'reconciliation must refuse non-main runs'
+assert_contains '.github/scripts/reconcile-cask-handoff.sh' "${reconciler_workflow}" 'the scheduled workflow must execute the tested reconciler'
+assert_contains "- '.github/workflows/reconcile-cask-handoff.yaml'" "${ci_workflow}" 'workflow changes must run the handoff tests'
+for file in reconcile-cask-handoff.sh reconcile-cask-handoff.test.sh; do
+	[[ "$(grep -Fc -- ".github/scripts/$file" "${ci_workflow}")" -ge 2 ]] || fail "CI must path-filter and lint $file"
+done
+assert_contains '          .github/scripts/reconcile-cask-handoff.test.sh' "${ci_workflow}" 'CI must execute reconciler behavior tests'
 
 printf 'Cask PR handoff workflow contract passed.\n'

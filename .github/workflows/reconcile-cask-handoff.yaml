@@ -1,0 +1,47 @@
+name: Reconcile Homebrew Cask Delivery
+
+on:
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+
+# Serialize with CD so a later tag cannot rewrite an evergreen branch mid-handoff.
+concurrency:
+  group: CD
+  cancel-in-progress: false
+  queue: max
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile:
+    name: Reconcile Published Casks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Validate reviewed main context
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REPOSITORY" != devantler-tech/ksail || "$GITHUB_REF" != refs/heads/main ||
+                ("$GITHUB_EVENT_NAME" != schedule && "$GITHUB_EVENT_NAME" != workflow_dispatch) ]]; then
+            echo '::error::Cask reconciliation requires this repository on main.'
+            exit 1
+          fi
+
+      - name: Checkout reviewed reconciler
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Reconcile latest published casks
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
+          KSAIL_CASK_READ_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || {
+            echo '::error::Reconciler checkout differs from this workflow run.'
+            exit 1
+          }
+          .github/scripts/reconcile-cask-handoff.sh

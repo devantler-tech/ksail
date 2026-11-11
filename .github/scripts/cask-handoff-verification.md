@@ -19,3 +19,31 @@ head before completing the release-observer acceptance in #7753.
 An old release whose casks have since advanced should fail this check. Use the
 currently delivered tag and its corresponding PRs rather than retrying stale inputs.
 This workflow does not create or change a cask, release, tag or cloud resource.
+
+## Pending delivery and automatic reconciliation
+
+Native CD gives both casks a shared twelve-minute readiness window. Exhausted
+quota, temporarily unavailable evidence and unsettled checks are recorded as
+**pending**, never delivered. The published immutable release is retained. Failed
+checks, conflicting identity, invalid provenance or invalid signatures still fail
+the handoff. Every native run retains `cask-handoff-result.json` for thirty days
+with the release, source, run attempt, outcome and resume link.
+
+**Reconcile Homebrew Cask Delivery** runs hourly at minute 23 or by manual dispatch
+from `main`. It shares CD concurrency so it cannot race a new tag rewriting the
+evergreen branches. It derives the target from the latest published stable
+immutable release and reuses the guarded exact-head finisher. It does not repair
+invalid metadata or cask contents. An already-merged cask must independently pass
+programmed commit provenance, immutable merge/current-main content and published
+asset digest verification.
+
+A reconciliation run succeeds only when both casks are verified delivered. Work
+still pending or failing a guard makes that observer run fail with a summary, so
+an undelivered cask cannot disappear behind successful release publication.
+Inspect that run and the named tap PR before intervening. Do not replay a release
+or manually merge a generated PR merely to produce a green result. When a newer
+release supersedes a pending version, the reconciler verifies the current version.
+
+For #8290, inspect these native and reconciliation outcomes for one week after
+deployment. Record any failed/timed-out handoff followed by a later tap merge.
+The one-week acceptance remains open until that observation has actually elapsed.

@@ -10,6 +10,18 @@ cat >"$work/bin/gh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'call\n' >>"$CASK_READ_STATE/calls"
+if [[ "$*" == 'api repos/devantler-tech/homebrew-tap/pulls/43' ]]; then
+  attempts=0
+  [[ ! -f "$CASK_READ_STATE/transient-attempts" ]] || attempts="$(cat "$CASK_READ_STATE/transient-attempts")"
+  printf '%s\n' "$((attempts + 1))" > "$CASK_READ_STATE/transient-attempts"
+  if ((attempts < 2)) || [[ "${CASK_READ_TRANSIENT:-}" == stuck ]]; then
+    printf 'PARTIAL_TRANSIENT_PRIVATE_SENTINEL\n'
+    printf 'gh: TRANSIENT_PRIVATE_SENTINEL (HTTP 502)\n' >&2
+    exit 1
+  fi
+  printf '{"complete":true}\n'
+  exit 0
+fi
 if [[ "$*" == 'api repos/devantler-tech/homebrew-tap/pulls/42 --jq '* ]]; then
   [[ "$#" -eq 4 && "$4" == '[(.draft|tostring), .title] | @tsv' ]] || exit 2
   printf '%s\n' '{"draft":false,"title":"chore(cask): update ksail-desktop to v0.0.0"}' | jq -r "$4"
@@ -60,6 +72,44 @@ printf '%s\n' "$(( $(cat "$CASK_READ_STATE/now") + $1 ))" >"$CASK_READ_STATE/now
 EOF
 chmod +x "$work/bin/gh" "$work/bin/date" "$work/bin/sleep"
 export PATH="$work/bin:$PATH"
+printf '1000\n' >"$work/now"
+
+# A failed page must be discarded before a bounded transport retry. The recovery
+# marker forces the finisher to recollect its complete authorization snapshot.
+KSAIL_GITHUB_WRITE_BUDGET_DEADLINE=1250 KSAIL_CASK_READ_RECOVERY_MARKER="$work/transient-marker" \
+	"$script_dir/cask-read-api.sh" repos/devantler-tech/homebrew-tap/pulls/43 >"$work/output" 2>"$work/error" || {
+	cat "$work/error" >&2
+	printf 'FAIL: a transient evidence read did not recover\n' >&2
+	exit 1
+}
+jq -e '.complete == true' "$work/output" >/dev/null
+[[ "$(cat "$work/transient-attempts")" -eq 3 && -s "$work/transient-marker" ]]
+if grep -q PRIVATE_SENTINEL "$work/output" "$work/error"; then
+	printf 'FAIL: transient response data escaped into diagnostics\n' >&2
+	exit 1
+fi
+printf 'PASS: transient reads recover with complete output and a fresh-gate marker\n'
+
+rm -f "$work/calls" "$work/transient-attempts" "$work/transient-marker"
+printf '1000\n' >"$work/now"
+status=0
+KSAIL_GITHUB_WRITE_BUDGET_DEADLINE=1250 CASK_READ_TRANSIENT=stuck \
+	"$script_dir/cask-read-api.sh" repos/devantler-tech/homebrew-tap/pulls/43 >"$work/output" 2>"$work/error" || status=$?
+[[ "$status" -eq 75 && ! -s "$work/output" && "$(cat "$work/transient-attempts")" -eq 3 ]]
+if grep -q PRIVATE_SENTINEL "$work/output" "$work/error"; then
+	printf 'FAIL: pending response data escaped into diagnostics\n' >&2
+	exit 1
+fi
+printf 'PASS: unavailable evidence remains pending after three bounded reads\n'
+
+rm -f "$work/calls" "$work/transient-attempts"
+printf '1000\n' >"$work/now"
+status=0
+KSAIL_GITHUB_WRITE_BUDGET_DEADLINE=1002 CASK_READ_TRANSIENT=stuck \
+	"$script_dir/cask-read-api.sh" repos/devantler-tech/homebrew-tap/pulls/43 >"$work/output" 2>"$work/error" || status=$?
+[[ "$status" -eq 75 && ! -s "$work/output" && "$(cat "$work/transient-attempts")" -eq 2 && "$(cat "$work/now")" -lt 1002 ]]
+printf 'PASS: transient retries cannot cross the original deadline\n'
+rm -f "$work/calls" "$work/transient-attempts"
 printf '1000\n' >"$work/now"
 
 reject_write() {
