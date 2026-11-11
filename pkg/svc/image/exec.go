@@ -104,3 +104,14 @@ func (e *ContainerExecutor) detectPlatform(ctx context.Context, nodeName string)
 	// Always linux for Kubernetes nodes
 	return "linux/" + arch, nil
 }
+
+// removeNodeArchive deletes an export or import archive from a node. It always
+// runs on a context detached from the caller and bounded by nodeCleanupTimeout,
+// so a cancellation that lands while removal is starting cannot abort it and
+// leave the archive behind.
+func (e *ContainerExecutor) removeNodeArchive(ctx context.Context, nodeName, tmpPath string) {
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), nodeCleanupTimeout)
+	defer cancel()
+
+	_, _ = e.ExecInContainer(cleanupCtx, nodeName, []string{"rm", "-f", tmpPath})
+}

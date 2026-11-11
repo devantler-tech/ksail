@@ -156,7 +156,7 @@ func TestImportAcceptsTheCarriedNodePlatform(t *testing.T) {
 			ctrCommand, "--namespace=k8s.io", "images", "import", "--digests",
 			"/root/ksail-images-import.tar",
 		}, "")
-	optionalNodeExec(ctx, client, node, "cleanup",
+	optionalNodeExec(detachedCleanupContext(), client, node, "cleanup",
 		[]string{"rm", "-f", "/root/ksail-images-import.tar"}, "")
 
 	err := image.NewImporter(client).Import(ctx, "my-cluster", v1alpha1.DistributionVanilla,

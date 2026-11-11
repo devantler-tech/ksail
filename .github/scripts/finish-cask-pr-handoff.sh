@@ -466,6 +466,26 @@ stable_mutation_gate() {
 	fi
 }
 
+# The promotion mutation can confirm ready before REST exposes that state.
+# Allow a bounded read-only wait on the same open PR, head and base before
+# starting the existing full post-promotion validation.
+wait_promotion_readback() {
+	local remaining=3 observed
+	while ((remaining > 0)); do
+		if ! observed="$(read_api "repos/${tap}/pulls/${pr}" | jq -er --arg head "${head}" --arg base "${base}" '
+		  select(.state == "open" and .head.sha == $head and .base.sha == $base)
+		  | .draft | select(type == "boolean") | tostring')"; then
+			blocked 'promotion readback failed or PR identity changed'
+			return 1
+		fi
+		if [[ "${observed}" == false ]]; then return 0; fi
+		remaining=$((remaining - 1))
+		if ((remaining > 0)); then sleep "${interval}"; fi
+	done
+	blocked 'REST still shows draft after confirmed promotion; reevaluation is required'
+	return 1
+}
+
 capture
 stable_mutation_gate promotion
 if [[ "${draft}" == true ]]; then
@@ -482,6 +502,7 @@ if [[ "${draft}" == true ]]; then
 		exit 1
 	fi
 	draft=false
+	wait_promotion_readback
 fi
 stable_mutation_gate merge
 

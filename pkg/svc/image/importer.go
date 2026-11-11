@@ -24,6 +24,19 @@ type ImportOptions struct {
 	InputPath string
 }
 
+// newImportArchiveName returns the file name of one import's archive on a node.
+// Each import gets its own name, so two imports on the same node never write to
+// or remove each other's archive. Tests replace it to keep the node-side path
+// predictable.
+//
+//nolint:gochecknoglobals // Test seam: tests pin the name so node-side commands stay exact.
+var newImportArchiveName = defaultImportArchiveName
+
+// defaultImportArchiveName returns a random node-side import archive name.
+func defaultImportArchiveName() string {
+	return randomNodeArchiveName("ksail-images-import-")
+}
+
 // Importer handles importing container images to cluster containerd.
 type Importer struct {
 	dockerClient dockerclient.Client
@@ -200,8 +213,12 @@ func (i *Importer) importImagesToNode(
 	inputPath string,
 	tmpBasePath string,
 ) error {
-	// Copy the tar file from host to container
-	tmpPath := tmpBasePath + "/ksail-images-import.tar"
+	// Copy the tar file from host to container. Each import gets its own archive
+	// name, and the archive is removed however the import ends, even after a
+	// partial copy or a cancellation.
+	tmpPath := tmpBasePath + "/" + newImportArchiveName()
+
+	defer i.executor.removeNodeArchive(ctx, nodeName, tmpPath)
 
 	err := i.copyToContainer(ctx, nodeName, inputPath, tmpPath)
 	if err != nil {
@@ -222,9 +239,6 @@ func (i *Importer) importImagesToNode(
 	if err != nil {
 		return fmt.Errorf("ctr import failed: %w", err)
 	}
-
-	// Clean up temporary file in container
-	_, _ = i.executor.ExecInContainer(ctx, nodeName, []string{"rm", "-f", tmpPath})
 
 	return nil
 }

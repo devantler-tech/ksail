@@ -27,11 +27,11 @@ const (
 	ctrNamespaceArg = "--namespace=k8s.io"
 	// ctrImages is the ctr subcommand group for image operations.
 	ctrImages = "images"
-	// nodeCleanupTimeout bounds removing an export archive from a node after the
-	// command's context is done, so a cancelled export still cleans up.
+	// nodeCleanupTimeout bounds removing an export or import archive from a node
+	// after the command's context is done, so a cancelled operation still cleans up.
 	nodeCleanupTimeout = 30 * time.Second
-	// exportArchiveSuffixBytes is the random suffix length of an export archive name.
-	exportArchiveSuffixBytes = 8
+	// nodeArchiveSuffixBytes is the random suffix length of a node-side archive name.
+	nodeArchiveSuffixBytes = 8
 )
 
 // newExportArchiveName returns the file name of one export's archive on a node.
@@ -45,10 +45,15 @@ var newExportArchiveName = defaultExportArchiveName
 // defaultExportArchiveName returns a random node-side archive name, so concurrent
 // exports on the same node never write to the same file.
 func defaultExportArchiveName() string {
-	suffix := make([]byte, exportArchiveSuffixBytes)
+	return randomNodeArchiveName("ksail-images-export-")
+}
+
+// randomNodeArchiveName returns prefix followed by a random hex suffix and ".tar".
+func randomNodeArchiveName(prefix string) string {
+	suffix := make([]byte, nodeArchiveSuffixBytes)
 	_, _ = rand.Read(suffix)
 
-	return "ksail-images-export-" + hex.EncodeToString(suffix) + ".tar"
+	return prefix + hex.EncodeToString(suffix) + ".tar"
 }
 
 // Error definitions.
@@ -389,13 +394,7 @@ func (e *Exporter) writeFileFromTar(dstPath string, tarReader *tar.Reader) error
 	return nil
 }
 
-// removeNodeArchive deletes an export archive from a node. It always runs on a
-// context detached from the caller and bounded by nodeCleanupTimeout, so a
-// cancellation that lands while removal is starting cannot abort it and leave
-// the archive behind.
+// removeNodeArchive deletes an export archive from a node.
 func (e *Exporter) removeNodeArchive(ctx context.Context, nodeName, tmpPath string) {
-	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), nodeCleanupTimeout)
-	defer cancel()
-
-	_, _ = e.executor.ExecInContainer(cleanupCtx, nodeName, []string{"rm", "-f", tmpPath})
+	e.executor.removeNodeArchive(ctx, nodeName, tmpPath)
 }
