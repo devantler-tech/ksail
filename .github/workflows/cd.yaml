@@ -930,10 +930,9 @@ jobs:
     # here failed with `brew: command not found`, so the casks were never style-cleaned. The tap audits
     # casks on macOS for the same reason (devantler-tech/homebrew-tap `ci.yaml`).
     runs-on: macos-latest
-    # Both casks share an 85-minute check window that includes time spent on
-    # request-quota recovery and style preparation. Leave another 20 minutes
-    # for setup, exact-head merge result polling, and final evidence reads.
-    timeout-minutes: 105
+    # Readiness and quota share twelve minutes. Unsettled casks resume through
+    # scheduled guarded reconciliation, with room here for both async merges.
+    timeout-minutes: 35
     needs: [cask-checkpoint, publish-release]
     # An older or prerelease tag left both casks untouched, so there is nothing to deliver.
     if: needs.cask-checkpoint.outputs.cask-publish == 'true'
@@ -959,17 +958,30 @@ jobs:
         shell: bash
         run: |
           now=$(date +%s)
-          printf 'KSAIL_GITHUB_WRITE_BUDGET_DEADLINE=%s\n' "$((now + 3700))" >> "$GITHUB_ENV"
-          printf 'KSAIL_CASK_CHECK_DEADLINE=%s\n' "$((now + 5100))" >> "$GITHUB_ENV"
+          printf 'KSAIL_GITHUB_WRITE_BUDGET_DEADLINE=%s\n' "$((now + 720))" >> "$GITHUB_ENV"
+          printf 'KSAIL_CASK_CHECK_DEADLINE=%s\n' "$((now + 720))" >> "$GITHUB_ENV"
 
-      # This job polls the tap for several minutes; starting it on an exhausted budget fails the
-      # delivery after the release is already published (devantler-tech/monorepo#4055).
+      # Publication is already immutable. If quota cannot recover promptly, retain
+      # an explicit pending outcome for the hourly guarded reconciler.
       - name: ⏳ Wait for the tap token's request budget
+        id: tap-budget
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
-        run: .github/scripts/wait-for-github-api-budget.sh
+        run: |
+          status=0
+          .github/scripts/wait-for-github-api-budget.sh --max-wait 90 --require-readable || status=$?
+          if [[ "$status" -eq 0 ]]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          elif [[ "$status" -eq 1 ]]; then
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'Cask delivery pending because the tap request budget is unavailable.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            exit "$status"
+          fi
 
       - name: 🍺 Style-clean and deliver cask PRs
+        id: handoff
+        if: steps.tap-budget.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
           KSAIL_CASK_READ_TOKEN: ${{ github.token }}
@@ -1018,20 +1030,15 @@ jobs:
           fi
           trap 'rm -rf "$evidence_dir"' EXIT
 
-          # A cask PR left as a draft means the tap silently stops tracking releases — which is exactly
-          # how it drifted six versions behind while every CD run stayed green. So EVERY path that
-          # leaves a cask unpromoted sets this, not just the final mutation: an enumeration failure, a
-          # validation failure, a missing `brew`, a title/label failure — in all of them the tap does not
-          # pick up the published release, and a green run would preserve the silent drift this job now
-          # exists to surface. The release itself is already published and immutable, and
-          # `cleanup-failed-release` keys off `publish-release` rather than this job, so failing here
-          # never deletes a good release.
+          # Only bounded readiness and evidence unavailability are pending.
+          # Invalid identity, failed checks, provenance and signatures remain failures.
           handoff_failed=0
+          handoff_pending=0
 
           reconcile_merged_handoff() {
             local name="$1" context="$2" branch="goreleaser/$1"
-            local attempt merged_pr merged_reason
-            local known_pr="${3:-}"
+            local attempt merged_pr merged_reason candidate_status integrity_failed=0
+            local known_pr="${3:-}" failure_status="${4:-1}"
             local known_args=()
             if [[ -n "$known_pr" ]]; then
               known_args=(--pr "$known_pr")
@@ -1040,7 +1047,7 @@ jobs:
             # An initially-open evergreen PR can auto-merge at any point in this step. Every failure
             # after selecting that PR comes through here: only immutable merge evidence plus an
             # unchanged pinned-main cask can turn the race into success. If it is still open, or any
-            # proof is unavailable, preserve the original fail-closed outcome.
+            # proof is unavailable, preserve the original pending or failed outcome.
             for attempt in 1 2; do
               if merged_pr="$(.github/scripts/find-merged-cask-pr-handoff.sh \
                 --tap "$TAP" \
@@ -1052,6 +1059,9 @@ jobs:
                 printf -- '- %s#%s cask %s already merged for %s (immutable current-main proof)\n' \
                   "$TAP" "$merged_pr" "$name" "$TAG" >>"$GITHUB_STEP_SUMMARY"
                 return 0
+              else
+                candidate_status=$?
+                if [[ "$candidate_status" -eq 3 ]]; then integrity_failed=1; fi
               fi
               if [[ "$attempt" -eq 1 ]]; then
                 sleep 1
@@ -1060,32 +1070,50 @@ jobs:
 
             merged_reason="${merged_pr//$'\n'/; }"
             echo "::warning::${context}; no fully validated merged handoff for ${branch}: ${merged_reason:-no merged evidence}"
-            handoff_failed=1
+            if [[ "$integrity_failed" -eq 1 ]]; then
+              handoff_failed=1
+            elif [[ "$failure_status" -eq 75 ]]; then
+              handoff_pending=1
+              printf -- '- Pending %s for %s. Guarded reconciliation resumes hourly through Reconcile Homebrew Cask Delivery in Actions: %s\n' \
+                "$name" "$TAG" 'https://github.com/devantler-tech/ksail/actions' >> "$GITHUB_STEP_SUMMARY"
+            else
+              handoff_failed=1
+            fi
           }
 
           for name in ksail ksail-desktop; do
             branch="goreleaser/${name}"
             # Check the actual immutable download before either open-PR delivery or
             # merged-PR recovery. A checksum match alone cannot prove a valid seal.
-            if [[ "$name" == ksail-desktop ]] && ! .github/scripts/verify-published-desktop-archive.sh "$TAG"; then
-              echo "::error::Published Desktop archive failed signature verification; leaving its cask untouched"
-              handoff_failed=1
-              continue
+            if [[ "$name" == ksail-desktop ]]; then
+              archive_status=0
+              .github/scripts/verify-published-desktop-archive.sh "$TAG" || archive_status=$?
+              if [[ "$archive_status" -eq 75 ]]; then
+                echo '::notice::Published Desktop archive evidence is unavailable within the shared window; leaving its cask pending'
+                printf -- '- Pending Desktop archive verification for %s; guarded reconciliation must verify the download before delivery.\n' "$TAG" >> "$GITHUB_STEP_SUMMARY"
+                handoff_pending=1
+                continue
+              elif [[ "$archive_status" -ne 0 ]]; then
+                echo "::error::Published Desktop archive failed signature verification; leaving its cask untouched"
+                handoff_failed=1
+                continue
+              fi
             fi
-            # `|| true` keeps the job fail-soft: a transient API failure (5xx, rate limit,
-            # network blip) must not abort the step under `set -e` after the release is already public —
-            # invalid evidence below then warns and skips, same as the no-PR-found case.
             # REST `head=<owner>:<branch>` filters SERVER-side (a bare branch-name filter would let
             # same-name fork branches fill a client-side page before any jq filter runs); the owner
             # qualifier still admits a same-owner sibling repo's branch, so keep the full_name +
             # author checks.
-            matches="$(read_api \
-              "repos/$TAP/pulls?state=open&head=${TAP%%/*}:${branch}&per_page=100" 2>/dev/null \
-              | jq -ec --arg full "$TAP" \
-                  '[.[] | select(.head.repo.full_name == $full and .user.login == "devantler")]' \
-              2>/dev/null || true)"
-            if ! count="$(jq -er 'length' <<<"$matches" 2>/dev/null)"; then
-              echo "::warning::Could not enumerate cask PRs on $TAP for branch ${branch}; leaving it pending"
+            read_status=0
+            read_api "repos/$TAP/pulls?state=open&head=${TAP%%/*}:${branch}&per_page=100" \
+              > "$evidence_dir/open.json" || read_status=$?
+            if [[ "$read_status" -ne 0 ]]; then
+              reconcile_merged_handoff "$name" 'Cask PR enumeration unavailable' "" "$read_status"
+              continue
+            fi
+            if ! matches="$(jq -ec --arg full "$TAP" \
+                'select(type == "array") | [.[] | select(.head.repo.full_name == $full and .user.login == "devantler")]' \
+                "$evidence_dir/open.json")" || ! count="$(jq -er 'length' <<<"$matches")"; then
+              echo '::error::Invalid cask PR enumeration evidence'
               handoff_failed=1
               continue
             fi
@@ -1096,7 +1124,7 @@ jobs:
               # a trusted merged PR's immutable result and the pinned current-main cask are identical,
               # contain this release, match its asset digests, and remain on main after collection.
               reconcile_merged_handoff "$name" \
-                "No open tap-owned cask PR was found for ${branch}"
+                "No open tap-owned cask PR was found for ${branch}" "" 75
               continue
             fi
             if [ "$count" -ne 1 ]; then
@@ -1127,24 +1155,28 @@ jobs:
               # before skipping — it re-verifies identity, scope, base, current-version content, and
               # title. Only a validated ready PR is treated as done; otherwise it is left for the
               # maintainer and the rerun stays red.
-              if ! validation="$(validate_handoff "$pr" "$name" "$evidence" prepared-ready 2>&1)"; then
+              validation_status=0
+            validation="$(validate_handoff "$pr" "$name" "$evidence" prepared-ready 2>&1)" || validation_status=$?
+            if [[ "$validation_status" -ne 0 ]]; then
                 validation="${validation//$'\n'/; }"
                 echo "::warning::${TAP}#${pr} is ready and titled but failed prepared revalidation: ${validation}"
                 printf -- '- %s#%s ready but revalidation failed: %s\n' \
                   "$TAP" "$pr" "$validation" >>"$GITHUB_STEP_SUMMARY"
                 reconcile_merged_handoff "$name" \
-                  "${TAP}#${pr} failed ready-PR revalidation" "$pr"
+                  "${TAP}#${pr} failed ready-PR revalidation" "$pr" "$validation_status"
                 continue
               fi
-              if ! delivery="$(.github/scripts/finish-cask-pr-handoff.sh \
+              delivery_status=0
+              delivery="$(.github/scripts/finish-cask-pr-handoff.sh \
                   --tap "$TAP" --pr "$pr" --cask-name "$name" \
-                  --source-repo "$GITHUB_REPOSITORY" --tag "$TAG" 2>&1)"; then
+                  --source-repo "$GITHUB_REPOSITORY" --tag "$TAG" 2>&1)" || delivery_status=$?
+              if [[ "$delivery_status" -ne 0 ]]; then
                 delivery="${delivery//$'\n'/; }"
                 echo "::warning::${TAP}#${pr} revalidated but guarded direct delivery failed: ${delivery}"
                 printf -- '- %s#%s ready retry: guarded direct delivery failed: %s\n' \
                   "$TAP" "$pr" "$delivery" >>"$GITHUB_STEP_SUMMARY"
                 reconcile_merged_handoff "$name" \
-                  "${TAP}#${pr} could not be delivered after ready-PR revalidation" "$pr"
+                  "${TAP}#${pr} could not be delivered after ready-PR revalidation" "$pr" "$delivery_status"
                 continue
               fi
               echo "$delivery"
@@ -1157,12 +1189,14 @@ jobs:
             # The cask-checkpoint job re-drafted any reused promoted PR before GoReleaser rewrote
             # the branch, so a non-draft here means someone raced this run — validation below
             # requires draft state and fails soft, leaving the PR untouched. (`evidence` was set above.)
-            if ! validation="$(validate_handoff "$pr" "$name" "$evidence" 2>&1)"; then
+            validation_status=0
+            validation="$(validate_handoff "$pr" "$name" "$evidence" 2>&1)" || validation_status=$?
+            if [[ "$validation_status" -ne 0 ]]; then
               validation="${validation//$'\n'/; }"
               echo "::warning::Refusing to mutate ${TAP}#${pr}: ${validation}"
               printf -- '- %s#%s left untouched: %s\n' "$TAP" "$pr" "$validation" >>"$GITHUB_STEP_SUMMARY"
               reconcile_merged_handoff "$name" \
-                "${TAP}#${pr} failed draft validation after open enumeration" "$pr"
+                "${TAP}#${pr} failed draft validation after open enumeration" "$pr" "$validation_status"
               continue
             fi
             echo "Preparing ${TAP}#${pr} (${branch})"
@@ -1203,18 +1237,25 @@ jobs:
             # or extra changed file stops all further mutation and leaves the PR to the maintainer.
             # A later write must not inherit the budget observation from job start.
             # This wait shares the original finite window; re-collect proof afterwards.
-            if ! .github/scripts/wait-for-github-api-budget.sh; then
+            budget_status=0
+            .github/scripts/wait-for-github-api-budget.sh || budget_status=$?
+            if [[ "$budget_status" -ne 0 ]]; then
+              # Only bounded quota unavailability is pending; configuration and
+              # usage failures retain their hard refusal.
+              if [[ "$budget_status" -eq 1 ]]; then budget_status=75; fi
               reconcile_merged_handoff "$name" \
-                "Write budget cannot recover within the shared window" "$pr"
+                "Write budget cannot recover within the shared window" "$pr" "$budget_status"
               continue
             fi
-            if ! validation="$(validate_handoff "$pr" "$name" "$evidence" 2>&1)"; then
+            validation_status=0
+            validation="$(validate_handoff "$pr" "$name" "$evidence" 2>&1)" || validation_status=$?
+            if [[ "$validation_status" -ne 0 ]]; then
               validation="${validation//$'\n'/; }"
               echo "::warning::Post-style validation failed for ${TAP}#${pr}: ${validation}"
               printf -- '- %s#%s remains open after style validation failed: %s\n' \
                 "$TAP" "$pr" "$validation" >>"$GITHUB_STEP_SUMMARY"
               reconcile_merged_handoff "$name" \
-                "${TAP}#${pr} failed post-style validation" "$pr"
+                "${TAP}#${pr} failed post-style validation" "$pr" "$validation_status"
               continue
             fi
 
@@ -1261,13 +1302,15 @@ jobs:
               continue
             fi
 
-            if ! validation="$(validate_handoff "$pr" "$name" "$evidence" prepared 2>&1)"; then
+            validation_status=0
+            validation="$(validate_handoff "$pr" "$name" "$evidence" prepared 2>&1)" || validation_status=$?
+            if [[ "$validation_status" -ne 0 ]]; then
               validation="${validation//$'\n'/; }"
               echo "::warning::Prepared handoff validation failed for ${TAP}#${pr}: ${validation}"
               printf -- '- %s#%s remains open with incomplete handoff metadata: %s\n' \
                 "$TAP" "$pr" "$validation" >>"$GITHUB_STEP_SUMMARY"
               reconcile_merged_handoff "$name" \
-                "${TAP}#${pr} failed prepared validation" "$pr"
+                "${TAP}#${pr} failed prepared validation" "$pr" "$validation_status"
               continue
             fi
 
@@ -1275,9 +1318,11 @@ jobs:
             # release ripeness and actual required checks before promotion, then waits for a fresh
             # online audit and merges directly with the exact SHA. Evergreen branches must never
             # arm auto-merge: a later release can replace the head behind an earlier decision.
-            if .github/scripts/finish-cask-pr-handoff.sh \
+            delivery_status=0
+            .github/scripts/finish-cask-pr-handoff.sh \
                 --tap "$TAP" --pr "$pr" --cask-name "$name" \
-                --source-repo "$GITHUB_REPOSITORY" --tag "$TAG"; then
+                --source-repo "$GITHUB_REPOSITORY" --tag "$TAG" || delivery_status=$?
+            if [[ "$delivery_status" -eq 0 ]]; then
               echo "::notice::${TAP}#${pr} delivered through its validated exact-head merge"
               printf -- '- %s#%s delivered through an exact-head merge\n' \
                 "$TAP" "$pr" >>"$GITHUB_STEP_SUMMARY"
@@ -1288,14 +1333,54 @@ jobs:
               printf -- '- %s#%s remains pending: guarded direct delivery did not complete\n' \
                 "$TAP" "$pr" >>"$GITHUB_STEP_SUMMARY"
               reconcile_merged_handoff "$name" \
-                "${TAP}#${pr} could not be delivered" "$pr"
+                "${TAP}#${pr} could not be delivered" "$pr" "$delivery_status"
             fi
           done
 
           if [ "$handoff_failed" -ne 0 ]; then
+            echo 'delivery_status=failed' >> "$GITHUB_OUTPUT"
             echo "::error::One or more cask PRs could not be handed off; the Homebrew tap will not pick up ${TAG}"
             exit 1
           fi
+          if [[ "$handoff_pending" -ne 0 ]]; then
+            echo 'delivery_status=pending' >> "$GITHUB_OUTPUT"
+            echo '::notice::Published release retained with pending cask delivery; the hourly guarded reconciler will resume it.'
+          else
+            echo 'delivery_status=delivered' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 🧾 Record cask delivery outcome
+        if: always()
+        env:
+          HANDOFF_OUTCOME: ${{ steps.handoff.outcome }}
+          HANDOFF_STATUS: ${{ steps.handoff.outputs.delivery_status }}
+          BUDGET_READY: ${{ steps.tap-budget.outputs.ready }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          status=failed
+          if [[ "$HANDOFF_OUTCOME" == success && "$HANDOFF_STATUS" == delivered ]]; then
+            status=delivered
+          elif [[ ("$HANDOFF_OUTCOME" == success && "$HANDOFF_STATUS" == pending) ||
+                  ("$HANDOFF_OUTCOME" == skipped && "$BUDGET_READY" == false) ]]; then
+            status=pending
+          fi
+          jq -n --arg status "$status" --arg tag "$RELEASE_TAG" --arg source "$GITHUB_SHA" \
+            --arg run "$GITHUB_RUN_ID" --arg attempt "$GITHUB_RUN_ATTEMPT" \
+            '{delivery_status:$status,release_tag:$tag,source:$source,run_id:$run,attempt:$attempt,
+              resume:"https://github.com/devantler-tech/ksail/actions",
+              resume_workflow:"reconcile-cask-handoff.yaml"}' \
+            > "$RUNNER_TEMP/cask-handoff-result.json"
+          printf 'Cask delivery for %s is **%s**. Resume with Reconcile Homebrew Cask Delivery in [Actions](https://github.com/devantler-tech/ksail/actions).\n' \
+            "$RELEASE_TAG" "$status" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 📤 Preserve cask delivery outcome
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cask-handoff-result
+          path: ${{ runner.temp }}/cask-handoff-result.json
+          if-no-files-found: error
+          retention-days: 30
 
   # Backstop for the immutable-release model: if the release did NOT publish — any asset job failed,
   # or the publish step bailed (so `publish-release` is skipped or failed) — delete only its eligible

@@ -206,7 +206,7 @@ case "${line}" in
 *'query CaskState'*)
 	n="$(count state-reads)"
 	[[ "${scenario}" != state-read-error ]] || exit 1
-	if [[ ( "${scenario}" == head-moved-before-promotion || "${scenario}" == head-moved-waiting-for-required ) && "${n}" -ge 2 ]] ||
+	if [[ ( "${scenario}" == head-moved-before-promotion || "${scenario}" == head-moved-waiting-for-required || "${scenario}" == unknown-then-head-moved ) && "${n}" -ge 2 ]] ||
 		[[ "${scenario}" == head-moved-after-promotion && "${promoted}" == true ]]; then
 		head=2222222222222222222222222222222222222222
 	fi
@@ -216,10 +216,14 @@ case "${line}" in
 	 repository:{nameWithOwner:"devantler-tech/homebrew-tap"},headRepository:{nameWithOwner:"devantler-tech/homebrew-tap"},
 	 author:{login:"devantler"},mergeable:"MERGEABLE",mergeStateStatus:"CLEAN",reviewDecision:null,
 	 autoMergeRequest:null,commits:{nodes:[{commit:{oid:$head}}]}}}}}' |
-	 jq --arg scenario "${scenario}" '
+	 jq --arg scenario "${scenario}" --argjson n "${n}" --argjson ready "${promoted}" '
 	 if $scenario == "auto-armed" then .data.repository.pullRequest.autoMergeRequest = {enabledAt:"2030-01-01T00:00:00Z"}
 	 elif $scenario == "changes-requested" then .data.repository.pullRequest.reviewDecision = "CHANGES_REQUESTED"
 	 elif $scenario == "conflict" then .data.repository.pullRequest.mergeable = "CONFLICTING"
+	 elif $scenario == "unknown-stuck" or
+	     (($scenario == "unknown-then-pass" or $scenario == "unknown-then-head-moved") and $n == 1) or
+	     ($scenario == "postpromotion-unknown" and $ready and $n == 3) then
+	   .data.repository.pullRequest.mergeable = "UNKNOWN"
 	 elif $scenario == "postpromotion-blocked" and .data.repository.pullRequest.isDraft == false then .data.repository.pullRequest.mergeStateStatus = "BLOCKED"
 	 elif $scenario == "graphql-errors" then .errors = [{message:"partial query"}]
 	 else . end' ;;
@@ -327,8 +331,8 @@ case "${line}" in
 	 else . end' ;;
 'api repos/devantler-tech/homebrew-tap/pulls/42')
 	if [[ -f "${state}/merged" ]]; then
-		[[ "${scenario}" != readback-error ]] || exit 1
-		jq '.pr | .state="closed" | .draft=false | .merged=true | .merge_commit_sha="4444444444444444444444444444444444444444" | .merged_at="2030-01-01T00:00:02Z"' "${fixture}" |
+		[[ "${scenario}" != readback-error && "${scenario}" != readback-error-bounded ]] || exit 1
+		jq '.pr | .state="closed" | .draft=false | .merged=true | .base.sha="3333333333333333333333333333333333333333" | .base.repo.full_name="devantler-tech/homebrew-tap" | .merge_commit_sha="4444444444444444444444444444444444444444" | .merged_at="2030-01-01T00:00:02Z"' "${fixture}" |
 		 jq --arg scenario "${scenario}" 'if $scenario == "readback-wrong-head" then .head.sha="2222222222222222222222222222222222222222" else . end'
 	else
 		n="$(count rest-reads)"
@@ -346,7 +350,7 @@ case "${line}" in
 		 if $scenario == "head-moved-during-collection" and $n > 1 then .head.sha="2222222222222222222222222222222222222222" else . end' "${fixture}"
 	fi ;;
 'api --paginate --slurp repos/devantler-tech/homebrew-tap/pulls/42/files?per_page=100')
-	jq '[.files]' "${fixture}" ;;
+	jq --arg scenario "${scenario}" '[.files | if ($scenario | startswith("verify-")) then map(. + {sha:"7777777777777777777777777777777777777777"}) else . end]' "${fixture}" ;;
 'api --paginate --slurp repos/devantler-tech/homebrew-tap/labels?per_page=100')
 	jq '[.availableLabels]' "${fixture}" ;;
 'api repos/devantler-tech/ksail/releases/tags/v7.166.1')
@@ -373,12 +377,22 @@ case "${line}" in
 	 elif $scenario == "release-changed-after-promotion" and $ready then .draft=true
 	 else . end' ;;
 'api repos/devantler-tech/homebrew-tap/contents/Casks/ksail.rb?ref=1111111111111111111111111111111111111111')
-	jq '.headFile' "${fixture}" ;;
+	jq --arg scenario "${scenario}" '.headFile | if ($scenario | startswith("verify-")) then . + {sha:"7777777777777777777777777777777777777777"} else . end' "${fixture}" ;;
+'api repos/devantler-tech/homebrew-tap/git/ref/heads/main')
+	n="$(count main-reads)"
+	jq -n --argjson n "${n}" --arg scenario "${scenario}" '
+	 {object:{sha:(if $scenario == "verify-moving-main" and $n > 2
+	 then "6666666666666666666666666666666666666666" else "5555555555555555555555555555555555555555" end)}}' ;;
+'api repos/devantler-tech/homebrew-tap/contents/Casks/ksail.rb?ref=4444444444444444444444444444444444444444' | \
+'api repos/devantler-tech/homebrew-tap/contents/Casks/ksail.rb?ref=5555555555555555555555555555555555555555')
+	jq '.headFile + {sha:"7777777777777777777777777777777777777777"}' "${fixture}" ;;
+'api repos/devantler-tech/homebrew-tap/compare/4444444444444444444444444444444444444444...5555555555555555555555555555555555555555')
+	printf '%s\n' '{"status":"ahead","behind_by":0,"merge_base_commit":{"sha":"4444444444444444444444444444444444444444"}}' ;;
 'api --paginate --slurp repos/devantler-tech/homebrew-tap/pulls/42/commits?per_page=100')
 	jq -n --arg head "${head}" --arg scenario "${scenario}" '
 	 [[{sha:$head,author:{login:"goreleaserbot"},committer:{login:"goreleaserbot"},commit:{
 	 author:{name:"goreleaserbot",email:"bot@goreleaser.com"},committer:{name:"goreleaserbot",email:"bot@goreleaser.com"},
-	 message:(if $scenario == "adaptation-commit" then "fix: hand edit cask" else "chore(cask): update ksail to v7.166.1" end)}}]]' ;;
+	 message:(if $scenario == "adaptation-commit" or $scenario == "verify-adaptation" then "fix: hand edit cask" else "chore(cask): update ksail to v7.166.1" end)}}]]' ;;
 *) printf 'unexpected transport request: %s\n' "${line}" >&2; exit 2 ;;
 esac
 EOF
@@ -406,7 +420,12 @@ run_case() {
 	[[ "$scenario" != read-budget-* ]] || write_deadline=1250
 	[[ "$scenario" != read-budget-expired ]] || write_deadline=1050
 	[[ "$scenario" != read-budget-no-deadline ]] || write_deadline=""
+	[[ "$scenario" != readback-error-bounded ]] || write_deadline=1250
 	local checks_deadline="" wait_args=(--attempts 2 --interval 0 --checks-wait 31)
+	if [[ "${scenario}" == verify-* ]]; then
+		touch "${state}/merged"
+		wait_args+=(--verify-merged)
+	fi
 	case "${scenario}" in
 	queued-cask-checks) wait_args=(--attempts 30 --interval 10) ;;
 	queued-cask-short-window) wait_args=(--attempts 2 --interval 0 --checks-wait 10) ;;
@@ -423,6 +442,12 @@ run_case() {
 	if [[ "${success}" == true && "${code}" -ne 0 ]] || [[ "${success}" == false && "${code}" -eq 0 ]]; then
 		cat "${state}/output" >&2
 		fail "${scenario}: expected success=${success}, exit=${code}"
+	fi
+	if [[ "${scenario}" == unknown-stuck || "${scenario}" == queued-cask-deadline || "${scenario}" == promotion-readback-stuck ]]; then
+		[[ "${code}" -eq 75 ]] || fail "${scenario}: unsettled evidence must remain explicitly pending"
+	fi
+	if [[ "${scenario}" == async-timeout || "${scenario}" == async-lost-read || "${scenario}" == readback-error-bounded ]]; then
+		[[ "${code}" -eq 75 ]] || fail "${scenario}: unconfirmed delivery must remain pending"
 	fi
 	if [[ "$(grep -c '^promote$' "${state}/mutations" || true)" -ne "${promotes}" ]]; then
 		cat "${state}/output" >&2
@@ -535,6 +560,13 @@ run_case() {
 }
 
 # Removing the direct merge, SHA pin, post-promotion audit, or immutable readback breaks these.
+run_case verify-merged true 0 0
+run_case verify-adaptation false 0 0
+run_case verify-moving-main false 0 0
+run_case unknown-then-pass true 1 1
+run_case postpromotion-unknown true 1 1
+run_case unknown-stuck false 0 0
+run_case unknown-then-head-moved false 0 0
 run_case queued-cask-checks true 1 1
 run_case queued-cask-short-window true 1 1
 run_case queued-cask-deadline false 1 0
@@ -597,7 +629,7 @@ for scenario in missing-audit stale-aggregate stale-audit head-moved-after-promo
 done
 run_case missing-postpromotion-aggregate false 1 0
 run_case failed-current-audit-before-aggregate false 1 0
-for scenario in merge-rejected merge-false readback-error readback-wrong-head; do
+for scenario in merge-rejected merge-false readback-error readback-error-bounded readback-wrong-head; do
 	run_case "${scenario}" false 1 1
 done
 for scenario in async-conflict async-failed async-enqueued async-unknown async-missing-details async-malformed \
