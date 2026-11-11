@@ -969,13 +969,14 @@ jobs:
           GH_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
         run: |
           status=0
-          KSAIL_GITHUB_WRITE_BUDGET_DEADLINE="$(( $(date +%s) + 90 ))" \
-            .github/scripts/wait-for-github-api-budget.sh || status=$?
+          .github/scripts/wait-for-github-api-budget.sh --max-wait 90 --require-readable || status=$?
           if [[ "$status" -eq 0 ]]; then
             echo 'ready=true' >> "$GITHUB_OUTPUT"
-          else
+          elif [[ "$status" -eq 1 ]]; then
             echo 'ready=false' >> "$GITHUB_OUTPUT"
             echo 'Cask delivery pending because the tap request budget is unavailable.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            exit "$status"
           fi
 
       - name: 🍺 Style-clean and deliver cask PRs

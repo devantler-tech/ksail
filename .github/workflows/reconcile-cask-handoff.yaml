@@ -15,9 +15,47 @@ permissions:
   contents: read
 
 jobs:
+  inspect:
+    name: Inspect Published Casks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      resume: ${{ steps.inspection.outputs.resume }}
+    steps:
+      - name: Validate reviewed main context
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REPOSITORY" != devantler-tech/ksail || "$GITHUB_REF" != refs/heads/main ||
+                ("$GITHUB_EVENT_NAME" != schedule && "$GITHUB_EVENT_NAME" != workflow_dispatch) ]]; then
+            echo '::error::Cask reconciliation requires this repository on main.'
+            exit 1
+          fi
+
+      - name: Checkout reviewed inspector
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Inspect latest published casks
+        id: inspection
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || exit 1
+          status=0
+          .github/scripts/reconcile-cask-handoff.sh --observe || status=$?
+          case "$status" in
+            0) echo 'resume=false' >> "$GITHUB_OUTPUT" ;;
+            75) echo 'resume=true' >> "$GITHUB_OUTPUT" ;;
+            *) exit "$status" ;;
+          esac
+
   reconcile:
     name: Reconcile Published Casks
-    runs-on: ubuntu-latest
+    needs: [inspect]
+    if: needs.inspect.outputs.resume == 'true'
+    runs-on: macos-latest
     timeout-minutes: 20
     steps:
       - name: Validate reviewed main context
@@ -33,6 +71,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Provide the request timeout utility
+        run: brew install coreutils
 
       - name: Reconcile latest published casks
         shell: bash

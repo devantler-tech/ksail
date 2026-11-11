@@ -10,7 +10,7 @@ fail() {
   exit 1
 }
 [[ -f "$script_dir/reconcile-cask-handoff.sh" ]] || fail 'pending casks have no automatic reconciliation entrypoint'
-mkdir -p "$work/scripts" "$work/bin"
+mkdir -p "$work/scripts"
 cp "$script_dir/reconcile-cask-handoff.sh" "$work/scripts/"
 cat >"$work/scripts/cask-read-api.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -33,7 +33,7 @@ EOF
 cat >"$work/scripts/find-merged-cask-pr-handoff.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-[[ "$CASE_SCENARIO" == merged || "$CASE_SCENARIO" == invalid-merge ]] || exit 1
+[[ "$CASE_SCENARIO" == merged || "$CASE_SCENARIO" == invalid-merge || "$CASE_SCENARIO" == observe-merged ]] || exit 1
 printf '42\n'
 EOF
 cat >"$work/scripts/finish-cask-pr-handoff.sh" <<'EOF'
@@ -52,16 +52,24 @@ else
 fi
 printf 'PASS: full guarded evidence verified\n'
 EOF
+cat >"$work/scripts/verify-published-desktop-archive.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1" == v7.213.2 ]] || exit 2
+printf 'signature\n' >>"$CASE_STATE/signatures"
+[[ "$CASE_SCENARIO" != invalid-signature ]] || exit 1
+EOF
 chmod +x "$work/scripts/"*.sh
 
 run_case() {
   local scenario="$1" expected="$2" ref="${3:-refs/heads/main}" status=0
-  local state="$work/$scenario"
+  local state="$work/$scenario" args=()
+  [[ "$scenario" != observe-* ]] || args+=(--observe)
   mkdir -p "$state"
   : >"$state/summary"
   CASE_STATE="$state" CASE_SCENARIO="$scenario" GITHUB_REPOSITORY=devantler-tech/ksail \
     GITHUB_REF="$ref" GITHUB_EVENT_NAME=workflow_dispatch GITHUB_STEP_SUMMARY="$state/summary" \
-    bash "$work/scripts/reconcile-cask-handoff.sh" >"$state/output" 2>&1 || status=$?
+    bash "$work/scripts/reconcile-cask-handoff.sh" ${args[@]+"${args[@]}"} >"$state/output" 2>&1 || status=$?
   if [[ "$status" -ne "$expected" ]]; then
     cat "$state/output" >&2
     fail "$scenario expected exit $expected, received $status"
@@ -69,10 +77,17 @@ run_case() {
   case "$scenario" in
   delivered)
     [[ "$(grep -c '^deliver$' "$state/helper-calls")" -eq 2 ]] || fail 'both casks must use the guarded finisher'
+    [[ "$(grep -c '^signature$' "$state/signatures")" -eq 1 ]] || fail 'open Desktop handoff must verify the published signature'
     grep -q 'v7.213.2' "$state/summary" || fail 'delivery has no durable release identity'
     ;;
-  merged)
+  merged | observe-merged)
     [[ "$(grep -c '^verify$' "$state/helper-calls")" -eq 2 ]] || fail 'finder candidates lack independent provenance verification'
+    ;;
+  observe-pending)
+    [[ ! -e "$state/helper-calls" && ! -e "$state/signatures" ]] || fail 'read-only inspection reached the delivery path'
+    ;;
+  invalid-signature)
+    [[ "$(grep -c '^deliver$' "$state/helper-calls")" -eq 1 ]] || fail 'invalid Desktop archive reached its finisher or blocked CLI delivery'
     ;;
   invalid-merge)
     [[ "$(grep -c '^verify$' "$state/helper-calls")" -eq 2 ]] || fail 'both rejected merged candidates must be reported'
@@ -92,6 +107,9 @@ run_case() {
 run_case delivered 0
 run_case merged 0
 run_case invalid-merge 1
+run_case invalid-signature 1
+run_case observe-pending 75
+run_case observe-merged 0
 run_case pending 75
 run_case failed-check 1
 run_case invalid-tag 1

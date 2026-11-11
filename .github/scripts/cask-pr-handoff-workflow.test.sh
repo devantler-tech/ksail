@@ -119,6 +119,7 @@ if [[ -f "${RECONCILE_RACE_STATE}" ]]; then
 fi
 calls=$((calls + 1))
 printf '%s\n' "${calls}" >"${RECONCILE_RACE_STATE}"
+[[ "${RECONCILE_NEVER:-}" != true ]] || exit 1
 if [[ "${calls}" -eq 1 ]]; then
 	printf 'simulated just-merged list lag\n' >&2
 	exit 1
@@ -147,6 +148,29 @@ for known_pr in '' 42; do
 		[[ "${handoff_failed}" -eq 0 ]] || exit 1
 		[[ "$(<"${RECONCILE_RACE_STATE}")" -eq 2 ]] || exit 1
 	) || fail 'merged reconciliation must retry a just-merged PR before recording failure'
+done
+
+# A still-open PR retains pending only for the finisher's availability code.
+# A failed guard must remain failed after the same bounded merged-proof attempts.
+for failure_status in 1 75; do
+	rm -f "${race_root}/calls"
+	(
+		cd "${race_root}"
+		TAP=devantler-tech/homebrew-tap GITHUB_REPOSITORY=devantler-tech/ksail TAG=v7.175.1
+		evidence_dir="${race_root}/evidence" GITHUB_STEP_SUMMARY="${race_root}/pending-summary"
+		export RECONCILE_NEVER=true RECONCILE_RACE_STATE="${race_root}/calls"
+		handoff_failed=0 handoff_pending=0
+		# shellcheck disable=SC2317,SC2329 # Invoked by the sourced workflow function.
+		sleep() { :; }
+		# shellcheck source=/dev/null
+		source "${reconcile_function}"
+		reconcile_merged_handoff ksail 'unsettled cask' 42 "$failure_status"
+		if [[ "$failure_status" -eq 75 ]]; then
+			[[ "$handoff_failed" -eq 0 && "$handoff_pending" -eq 1 ]] || exit 1
+		else
+			[[ "$handoff_failed" -eq 1 && "$handoff_pending" -eq 0 ]] || exit 1
+		fi
+	) || fail 'unsettled handoff lost its pending/failure distinction'
 done
 
 # Run the workflow's actual ready-retry block. A completed validation and a failed

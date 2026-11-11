@@ -2,6 +2,8 @@
 # Reconcile the latest published release through the same guarded cask finisher.
 # Run only from reviewed main, serialized with native CD by the caller workflow.
 set -euo pipefail
+observe=false
+if [[ "$#" -eq 1 && "$1" == --observe ]]; then observe=true; shift; fi
 if [[ "$#" -ne 0 || "${GITHUB_REPOSITORY:-}" != devantler-tech/ksail ||
   "${GITHUB_REF:-}" != refs/heads/main ||
   ("${GITHUB_EVENT_NAME:-}" != schedule && "${GITHUB_EVENT_NAME:-}" != workflow_dispatch) ]]; then
@@ -55,6 +57,10 @@ for name in ksail ksail-desktop; do
     # provenance and publication before accepting it as a delivered cask.
     mode_args+=(--verify-merged)
   else
+    if [[ "$observe" == true ]]; then
+      record_result "$name" 75
+      continue
+    fi
     status=0
     read_api "repos/devantler-tech/homebrew-tap/pulls?state=open&head=devantler-tech:goreleaser/${name}&per_page=100" \
       >"$work/open.json" || status=$?
@@ -75,6 +81,16 @@ for name in ksail ksail-desktop; do
     continue
   fi
   status=0
+  # A deferred native job may not have reached the archive guard. Preserve it
+  # before every open Desktop handoff, on the caller's macOS runner.
+  if [[ "$name" == ksail-desktop && "$observe" == false &&
+    " ${mode_args[*]} " != *' --verify-merged '* ]]; then
+    "$script_dir/verify-published-desktop-archive.sh" "$tag" || status=$?
+    if [[ "$status" -ne 0 ]]; then
+      record_result "$name" "$status"
+      continue
+    fi
+  fi
   "$script_dir/finish-cask-pr-handoff.sh" \
     --tap devantler-tech/homebrew-tap --pr "$pr" --cask-name "$name" \
     --source-repo devantler-tech/ksail --tag "$tag" "${mode_args[@]}" || status=$?
