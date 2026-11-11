@@ -34,3 +34,16 @@ var PublishArchiveForTest = publishArchive
 
 // CleanupExportSourcesForTest exposes cleanup of a real export staging directory.
 var CleanupExportSourcesForTest = cleanupExportSources
+
+// ArchivePartialPlatformImagesForTest reads an archive and returns the images its export notice
+// names, with the platforms the archive carries for them.
+func ArchivePartialPlatformImagesForTest(path string) ([]string, []string, error) {
+	coverage, err := readArchivePlatformCoverage(path)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	names, carried := partialPlatformImages(coverage)
+
+	return names, carried, nil
+}

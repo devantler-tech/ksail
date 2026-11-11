@@ -95,6 +95,12 @@ func (i *Importer) Import(
 		return err
 	}
 
+	// Refuse before copying anything when the archive cannot serve a node's platform.
+	err = i.requireNodePlatforms(ctx, k8sNodes, inputPath)
+	if err != nil {
+		return err
+	}
+
 	// Get the appropriate temp path for this distribution
 	tmpBasePath := getTempPath(distribution)
 
@@ -165,6 +171,39 @@ func filterK8sNodes(nodes []provider.NodeInfo) []provider.NodeInfo {
 	}
 
 	return result
+}
+
+// requireNodePlatforms refuses the import before any copy when the archive carries no content
+// for a node's platform for one of its multi-platform images. ctr would otherwise fail later, on
+// that node only, with a missing-content error. Nodes are checked only when the archive holds a
+// multi-platform image.
+func (i *Importer) requireNodePlatforms(
+	ctx context.Context,
+	nodes []provider.NodeInfo,
+	inputPath string,
+) error {
+	coverage, err := readArchivePlatformCoverage(inputPath)
+	if err != nil {
+		return fmt.Errorf("check image archive platforms: %w", err)
+	}
+
+	if len(coverage) == 0 {
+		return nil
+	}
+
+	for _, node := range nodes {
+		platform, err := i.executor.detectPlatform(ctx, node.Name)
+		if err != nil {
+			return fmt.Errorf("detect platform of node %s: %w", node.Name, err)
+		}
+
+		err = requireArchivePlatform(coverage, node.Name, platform)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // importImagesToNode imports images from a tar archive to a node's containerd.
