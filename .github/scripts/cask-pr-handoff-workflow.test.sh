@@ -158,7 +158,9 @@ for failure_status in 1 75; do
 		cd "${race_root}"
 		TAP=devantler-tech/homebrew-tap GITHUB_REPOSITORY=devantler-tech/ksail TAG=v7.175.1
 		evidence_dir="${race_root}/evidence" GITHUB_STEP_SUMMARY="${race_root}/pending-summary"
-		export RECONCILE_NEVER=true RECONCILE_RACE_STATE="${race_root}/calls"
+		RECONCILE_NEVER=true
+		RECONCILE_RACE_STATE="${race_root}/calls"
+		export RECONCILE_NEVER RECONCILE_RACE_STATE
 		handoff_failed=0 handoff_pending=0
 		# shellcheck disable=SC2317,SC2329 # Invoked by the sourced workflow function.
 		sleep() { :; }
