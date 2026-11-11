@@ -37,10 +37,16 @@ type fakeEKSIdentityClient struct {
 	// that many fail with errEKSIdentityQuery.
 	accountCalls    int
 	accountErrAfter int
+	// afterAccount, when set, runs after every CallerAccountID call.
+	afterAccount func()
 }
 
 func (f *fakeEKSIdentityClient) CallerAccountID(_ context.Context) (string, error) {
 	f.accountCalls++
+
+	if f.afterAccount != nil {
+		defer f.afterAccount()
+	}
 
 	if f.accountErrAfter > 0 && f.accountCalls > f.accountErrAfter {
 		return "", errEKSIdentityQuery

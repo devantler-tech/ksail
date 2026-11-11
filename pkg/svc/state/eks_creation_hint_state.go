@@ -149,6 +149,13 @@ func SaveEKSCreationHint(clusterName, region string, hint *EKSCreationHint) erro
 		return fmt.Errorf("failed to create EKS creation hint directory: %w", err)
 	}
 
+	// The confinement check before MkdirAll passes trivially for a directory that did not exist yet,
+	// so the created directory is checked again before anything is written into it.
+	_, err = clusterStateDirExists(filepath.Dir(statePath))
+	if err != nil {
+		return err
+	}
+
 	data, err := json.MarshalIndent(hint, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal EKS creation hint: %w", err)

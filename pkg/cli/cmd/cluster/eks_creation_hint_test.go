@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 )
 
 const testEKSAccountID = "123456789012"
+
+var errLockBoundaryNotReached = errors.New("failed create never read the caller account")
 
 // runInterruptedEKSCreate runs a failing create while AWS does not report the cluster yet, the way an
 // interrupted create looks before the control plane is visible, and returns the shared identity
@@ -294,14 +297,23 @@ func TestCreate_EKSInconclusiveLookupKeepsAttempt(t *testing.T) {
 
 // TestCreate_EKSFailedCreateWaitsForLifecycleLock pins a review finding on ksail#8335: the failed
 // create updates its hint only while it holds the EKS lifecycle lock, so another KSail process acting
-// on the same cluster cannot interleave a read-modify-write and lose an attempt.
+// on the same cluster cannot interleave a read-modify-write and lose an attempt. The holder releases
+// the lock only after the failed create has read the caller account, the last step before it asks
+// for the lock, so the create is waiting at the lock boundary rather than still setting up.
 //
 //nolint:paralleltest // uses t.Chdir and mutates shared test hooks
 func TestCreate_EKSFailedCreateWaitsForLifecycleLock(t *testing.T) {
-	client := &fakeEKSIdentityClient{accountID: testEKSAccountID, describeErr: notFoundEKSCluster()}
+	reachedLock := make(chan struct{})
+
+	var signal sync.Once
+
+	client := &fakeEKSIdentityClient{
+		accountID:    testEKSAccountID,
+		describeErr:  notFoundEKSCluster(),
+		afterAccount: func() { signal.Do(func() { close(reachedLock) }) },
+	}
 
 	locked := make(chan struct{})
-	release := make(chan struct{})
 	holderDone := make(chan error, 1)
 
 	clearFailedCreateOwnership(t)
@@ -310,7 +322,15 @@ func TestCreate_EKSFailedCreateWaitsForLifecycleLock(t *testing.T) {
 	go func() {
 		holderDone <- state.WithEKSLifecycleLock(context.Background(), "st-eks", func() error {
 			close(locked)
-			<-release
+
+			select {
+			case <-reachedLock:
+			case <-time.After(30 * time.Second):
+				return errLockBoundaryNotReached
+			}
+
+			// Give an unguarded create ample time to write the hint while the lock is still held.
+			time.Sleep(250 * time.Millisecond)
 
 			_, err := state.LoadEKSCreationHint("st-eks", "eu-west-1")
 			if !errors.Is(err, state.ErrEKSCreationHintNotFound) {
@@ -322,11 +342,6 @@ func TestCreate_EKSFailedCreateWaitsForLifecycleLock(t *testing.T) {
 	}()
 
 	<-locked
-
-	go func() {
-		time.Sleep(500 * time.Millisecond)
-		close(release)
-	}()
 
 	_, _, err := runFailingEKSCreateAttempt(t, client, testEKSCreationID)
 	require.ErrorIs(t, err, errNodegroupCreateQuota)
