@@ -25,7 +25,8 @@ repos/devantler-tech/ksail/releases/latest)
 repos/devantler-tech/homebrew-tap/pulls\?state=open\&head=devantler-tech:goreleaser/*)
   jq -n --arg scenario "$CASE_SCENARIO" '
     [{number:42,user:{login:"devantler"},head:{repo:{full_name:"devantler-tech/homebrew-tap"}}}] |
-    if $scenario == "no-pr" then []
+    if $scenario == "no-pr" or $scenario == "rejected-current" then []
+    elif $scenario == "ambiguous" then . + [.[0] + {number:43}]
     elif $scenario == "fork-pr" then .[0].head.repo.full_name="untrusted/tap" else . end' ;;
 *) exit 2 ;;
 esac
@@ -33,6 +34,7 @@ EOF
 cat >"$work/scripts/find-merged-cask-pr-handoff.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+[[ "$CASE_SCENARIO" != rejected-current && "$CASE_SCENARIO" != repair-current && "$CASE_SCENARIO" != observe-rejected-current ]] || exit 3
 [[ "$CASE_SCENARIO" == merged || "$CASE_SCENARIO" == invalid-merge || "$CASE_SCENARIO" == observe-merged ]] || exit 1
 printf '42\n'
 EOF
@@ -98,12 +100,23 @@ run_case() {
   invalid-tag | draft-release | no-pr | fork-pr)
     [[ ! -e "$state/helper-calls" ]] || fail 'invalid publication or PR reached delivery'
     ;;
+  ambiguous | rejected-current | observe-rejected-current)
+    [[ ! -e "$state/helper-calls" ]] || fail 'ambiguous or rejected evidence reached delivery'
+    grep -q Failed "$state/summary" || fail 'definitive failure was recorded as pending'
+    ;;
+  repair-current)
+    [[ "$(grep -c '^deliver$' "$state/helper-calls")" -eq 2 ]] || fail 'a repair PR did not receive full guarded evaluation'
+    ;;
   wrong-ref)
     [[ ! -e "$state/reads" && ! -e "$state/helper-calls" ]] || fail 'a non-main invocation reached the API'
     ;;
   esac
   printf 'PASS: %s\n' "$scenario"
 }
+run_case ambiguous 1
+run_case rejected-current 1
+run_case observe-rejected-current 1
+run_case repair-current 0
 run_case delivered 0
 run_case merged 0
 run_case invalid-merge 1
