@@ -22,44 +22,61 @@ type nodeImageInventory struct {
 	lookup localImageLookup
 }
 
+// exportPlan is the node assignment for an export, together with what a later
+// re-plan needs: every candidate node and the inventories read so far. A
+// multi-node export uses it to move an image to another holder when the node it
+// was assigned to cannot export it.
+type exportPlan struct {
+	sources     []nodeExportSource
+	candidates  []string
+	inventories []nodeImageInventory
+	// inventoried names every candidate whose inventory was read or tried.
+	inventoried map[string]bool
+}
+
 // Preserve the direct single-node path; multi-node exports need a captured
 // inventory and an assignment that covers every observed or requested name.
 func (e *Exporter) findExportSources(
 	ctx context.Context, cluster string, distribution v1alpha1.Distribution, requested []string,
-) ([]nodeExportSource, error) {
+) (exportPlan, error) {
 	nodes, err := listClusterNodes(ctx, e.dockerClient, cluster, distribution)
 	if err != nil {
-		return nil, err
+		return exportPlan{}, err
 	}
 
 	candidates := orderExportCandidates(nodes)
 	if len(candidates) == 0 {
-		return nil, fmt.Errorf("%w: no suitable node found in cluster %s", ErrNoNodes, cluster)
+		return exportPlan{}, fmt.Errorf(
+			"%w: no suitable node found in cluster %s",
+			ErrNoNodes,
+			cluster,
+		)
 	}
 
 	if len(candidates) == 1 {
-		return []nodeExportSource{{node: candidates[0]}}, nil
+		return exportPlan{sources: []nodeExportSource{{node: candidates[0]}}}, nil
 	}
 
 	requested = exportReferences(nil, requested)
+	plan := exportPlan{candidates: candidates, inventoried: make(map[string]bool, len(candidates))}
 
-	inventories, inventoryErr := e.readExportInventories(ctx, candidates, requested)
+	inventoryErr := e.readExportInventories(ctx, &plan, requested)
 	if inventoryErr != nil && (len(requested) == 0 || ctx.Err() != nil) {
-		return nil, fmt.Errorf(
+		return exportPlan{}, fmt.Errorf(
 			"%w: incomplete node image inventory: %w",
 			ErrIncompleteExport,
 			inventoryErr,
 		)
 	}
 
-	wanted := exportReferences(inventories, requested)
+	wanted := exportReferences(plan.inventories, requested)
 	if len(wanted) == 0 {
-		return nil, ErrNoImagesFound
+		return exportPlan{}, ErrNoImagesFound
 	}
 
-	sources, missing := planExportSources(inventories, wanted)
+	sources, missing := planExportSources(plan.inventories, wanted)
 	if len(missing) != 0 {
-		return nil, errors.Join(
+		return exportPlan{}, errors.Join(
 			fmt.Errorf(
 				"%w: unavailable references: %s",
 				ErrIncompleteExport,
@@ -69,21 +86,28 @@ func (e *Exporter) findExportSources(
 		)
 	}
 
-	return sources, nil
+	plan.sources = sources
+
+	return plan, nil
 }
 
-// readExportInventories lists the images held by each candidate node. With an
-// explicit request it skips a node it cannot read and reports the failure;
-// without one, or once the context ends, it stops at the first failure.
+// readExportInventories lists the images held by each candidate node the plan
+// has not read yet, and adds them to the plan. With an explicit request it
+// skips a node it cannot read and reports the failure; without one, or once the
+// context ends, it stops at the first failure. It stops early once one node
+// holds every requested image; a re-plan reads the remaining nodes later.
 func (e *Exporter) readExportInventories(
-	ctx context.Context, candidates, requested []string,
-) ([]nodeImageInventory, error) {
-	var (
-		inventories []nodeImageInventory
-		failures    []error
-	)
+	ctx context.Context, plan *exportPlan, requested []string,
+) error {
+	var failures []error
 
-	for _, node := range candidates {
+	for _, node := range plan.candidates {
+		if plan.inventoried[node] {
+			continue
+		}
+
+		plan.inventoried[node] = true
+
 		refs, err := e.listImagesInNode(ctx, node)
 		if err != nil {
 			failures = append(failures, err)
@@ -97,13 +121,71 @@ func (e *Exporter) readExportInventories(
 
 		inventory := nodeImageInventory{node: node, images: refs, lookup: newLocalImageLookup(refs)}
 
-		inventories = append(inventories, inventory)
+		plan.inventories = append(plan.inventories, inventory)
 		if len(requested) > 0 && countHeldImages(inventory.lookup, requested) == len(requested) {
 			break
 		}
 	}
 
-	return inventories, errors.Join(failures...)
+	return errors.Join(failures...)
+}
+
+// replan assigns wanted references to nodes other than the excluded ones, after
+// the node a share was assigned to could not export it. It first reads any
+// candidate whose inventory the first plan skipped. It fails when some
+// reference has no other holder, naming the references and any inventory
+// failure.
+func (e *Exporter) replan(
+	ctx context.Context, plan *exportPlan, wanted []string, excluded map[string]bool,
+) ([]nodeExportSource, error) {
+	inventoryErr := e.readRemainingInventories(ctx, plan)
+
+	usable := slices.DeleteFunc(
+		slices.Clone(plan.inventories),
+		func(inventory nodeImageInventory) bool {
+			return excluded[inventory.node]
+		},
+	)
+
+	sources, missing := planExportSources(usable, wanted)
+	if len(missing) != 0 {
+		return nil, errors.Join(
+			fmt.Errorf(
+				"%w: no other node holds: %s",
+				ErrIncompleteExport,
+				strings.Join(missing, ", "),
+			),
+			inventoryErr,
+		)
+	}
+
+	return sources, nil
+}
+
+// readRemainingInventories reads every candidate whose inventory the plan has
+// not read or tried yet, collecting the failures.
+func (e *Exporter) readRemainingInventories(ctx context.Context, plan *exportPlan) error {
+	var failures []error
+
+	for _, node := range plan.candidates {
+		if plan.inventoried[node] || ctx.Err() != nil {
+			continue
+		}
+
+		plan.inventoried[node] = true
+
+		refs, err := e.listImagesInNode(ctx, node)
+		if err != nil {
+			failures = append(failures, err)
+
+			continue
+		}
+
+		plan.inventories = append(plan.inventories,
+			nodeImageInventory{node: node, images: refs, lookup: newLocalImageLookup(refs)})
+	}
+
+	return errors.Join(failures...)
 }
 
 // exportReferences returns the normalized, de-duplicated references to export:

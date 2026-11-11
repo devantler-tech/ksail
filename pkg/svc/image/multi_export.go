@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 )
@@ -14,6 +17,8 @@ import (
 const (
 	exportFileMode         = 0o600
 	exportContentDirectory = "content"
+	// stagedPartName is the staged archive of the node share being merged.
+	stagedPartName = "part.tar"
 )
 
 var errExportArchiveKept = errors.New("complete image archive kept in staging")
@@ -22,7 +27,7 @@ var errExportArchiveKept = errors.New("complete image archive kept in staging")
 // is verified. A failed later node cannot replace an existing destination.
 func (e *Exporter) exportSources(
 	ctx context.Context,
-	sources []nodeExportSource,
+	plan *exportPlan,
 	distribution v1alpha1.Distribution,
 	opts ExportOptions,
 ) (resultErr error) {
@@ -50,27 +55,112 @@ func (e *Exporter) exportSources(
 		return err
 	}
 
-	for _, source := range sources {
-		part := opts
-		part.OutputPath = filepath.Join(directory, "part.tar")
+	staging := exportStaging{root: root, merger: merger, directory: directory}
 
-		platform, exportErr := ociExporter.exportSource(ctx, source, distribution, part)
-		if exportErr != nil {
-			return exportErr
+	err = ociExporter.exportShares(ctx, staging, plan, distribution, opts)
+	if err != nil {
+		return err
+	}
+
+	return publishExportSources(ctx, root, merger, opts.OutputPath)
+}
+
+// exportStaging is the private staging area of one multi-node export.
+type exportStaging struct {
+	root      *os.Root
+	merger    *imageArchiveMerger
+	directory string
+}
+
+// exportShares exports every planned share into the staging area. A node whose
+// copy is damaged or unreadable does not end the export while another node
+// holds a complete copy: its share moves to those nodes.
+func (e *Exporter) exportShares(
+	ctx context.Context,
+	staging exportStaging,
+	plan *exportPlan,
+	distribution v1alpha1.Distribution,
+	opts ExportOptions,
+) error {
+	queue := slices.Clone(plan.sources)
+	failedNodes := make(map[string]bool)
+
+	for len(queue) > 0 {
+		source := queue[0]
+		queue = queue[1:]
+
+		shareErr := e.exportShare(ctx, staging, source, distribution, opts)
+
+		// Remove the staged node archive however the share ended, so a retry on
+		// another node starts clean. Failing to remove it ends the export.
+		removeErr := staging.root.Remove(stagedPartName)
+		if removeErr != nil && !errors.Is(removeErr, fs.ErrNotExist) {
+			return errors.Join(shareErr, fmt.Errorf("remove staged node archive: %w", removeErr))
 		}
 
-		err := ingestExportPart(ctx, root, merger, source.images, platform)
+		if shareErr == nil {
+			continue
+		}
+
+		failedNodes[source.node] = true
+
+		alternates, err := e.replanFailedShare(ctx, plan, source, failedNodes, shareErr)
 		if err != nil {
 			return err
 		}
 
-		err = root.Remove("part.tar")
-		if err != nil {
-			return fmt.Errorf("remove staged node archive: %w", err)
-		}
+		queue = append(queue, alternates...)
 	}
 
-	return publishExportSources(ctx, root, merger, opts.OutputPath)
+	return nil
+}
+
+// exportShare exports one node's share into the staging area and merges it
+// into the combined archive.
+func (e *Exporter) exportShare(
+	ctx context.Context,
+	staging exportStaging,
+	source nodeExportSource,
+	distribution v1alpha1.Distribution,
+	opts ExportOptions,
+) error {
+	part := opts
+	part.OutputPath = filepath.Join(staging.directory, stagedPartName)
+
+	platform, err := e.exportSource(ctx, source, distribution, part)
+	if err != nil {
+		return err
+	}
+
+	return ingestExportPart(ctx, staging.root, staging.merger, source.images, platform)
+}
+
+// replanFailedShare assigns a failed share to the other nodes that hold its
+// images. It keeps the original failure in the error when no other node can
+// serve the share, or when the export was cancelled.
+func (e *Exporter) replanFailedShare(
+	ctx context.Context,
+	plan *exportPlan,
+	source nodeExportSource,
+	failedNodes map[string]bool,
+	shareErr error,
+) ([]nodeExportSource, error) {
+	if ctx.Err() != nil {
+		return nil, shareErr
+	}
+
+	alternates, err := e.replan(ctx, plan, source.wanted, failedNodes)
+	if err != nil {
+		return nil, errors.Join(shareErr, err)
+	}
+
+	slog.WarnContext(ctx, "Exporting images from another node after a node export failed",
+		"node", source.node,
+		"images", strings.Join(source.wanted, ","),
+		"error", shareErr,
+	)
+
+	return alternates, nil
 }
 
 // cleanupExportSources removes staging files after the export. If neither
@@ -189,7 +279,7 @@ func keepArchiveBeside(
 func ingestExportPart(
 	ctx context.Context, root *os.Root, merger *imageArchiveMerger, refs []string, platform string,
 ) error {
-	file, err := root.Open("part.tar")
+	file, err := root.Open(stagedPartName)
 	if err != nil {
 		return fmt.Errorf("open staged node archive: %w", err)
 	}
