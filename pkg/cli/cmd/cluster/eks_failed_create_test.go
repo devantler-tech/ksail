@@ -36,18 +36,22 @@ type failingCreateProvisioner struct {
 	deleted *[]string
 }
 
+// Create fails the way eksctl does when the worker nodegroup cannot be created.
 func (*failingCreateProvisioner) Create(context.Context, string) error {
 	return fmt.Errorf("eksctl create cluster: %w", errNodegroupCreateQuota)
 }
 
+// Delete records the deleted cluster name.
 func (p *failingCreateProvisioner) Delete(_ context.Context, name string) error {
 	*p.deleted = append(*p.deleted, name)
 
 	return nil
 }
 
+// failingCreateFactory hands out failingCreateProvisioner instances sharing one delete log.
 type failingCreateFactory struct{ deleted *[]string }
 
+// Create returns a provisioner whose create fails.
 func (f failingCreateFactory) Create(
 	context.Context,
 	*v1alpha1.Cluster,
@@ -130,6 +134,7 @@ func runEKSDeleteAfterFailedCreate(t *testing.T) ([]string, error) {
 	return readStandaloneEKSCalls(t, markerPath), err
 }
 
+// clearFailedCreateOwnership removes any st-eks state another test left in the shared test home.
 func clearFailedCreateOwnership(t *testing.T) {
 	t.Helper()
 	require.NoError(t, state.DeleteClusterState("st-eks"))

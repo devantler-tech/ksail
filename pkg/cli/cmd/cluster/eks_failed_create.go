@@ -105,6 +105,8 @@ func hasEKSCreationAttempt(clusterCtx *localregistry.Context) bool {
 		strings.TrimSpace(clusterCtx.EKSConfig.CreationID) != ""
 }
 
+// observeFailedEKSCreate reads the cluster back under the create's frozen credentials and returns its
+// identity only when it carries this attempt's creation tag.
 func observeFailedEKSCreate(
 	ctx context.Context,
 	clusterCtx *localregistry.Context,

@@ -344,6 +344,8 @@ func (p *Provisioner) effectiveCreateConfig() (string, func(), error) {
 	return writeEffectiveCreateConfig(effectiveData)
 }
 
+// effectiveCreateConfigData returns the source config with metadata.region pinned (when region is
+// set) and the creation tag added (when creationID is set).
 func effectiveCreateConfigData(configPath, region, creationID string) ([]byte, error) {
 	canonical, err := fsutil.EvalCanonicalPath(configPath)
 	if err != nil {
