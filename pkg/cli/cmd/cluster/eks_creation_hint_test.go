@@ -32,7 +32,7 @@ func runInterruptedEKSCreate(t *testing.T) (*fakeEKSIdentityClient, *[]string) {
 
 	hint, hintErr := state.LoadEKSCreationHint("st-eks", "eu-west-1")
 	require.NoError(t, hintErr, "the failed create must keep its attempt identifier")
-	assert.Equal(t, testEKSCreationID, hint.CreationID)
+	assert.Equal(t, []string{testEKSCreationID}, hint.CreationIDs)
 	assert.Equal(t, testEKSAccountID, hint.AccountID)
 
 	_, loadErr := state.LoadEKSOwnershipState("st-eks", "eu-west-1")
@@ -148,4 +148,96 @@ func TestCreate_EKSStaleCreationHintIsRemoved(t *testing.T) {
 				"a hint for a cluster that does not exist must be removed")
 		})
 	}
+}
+
+// notFoundEKSCluster is the identity client's answer while AWS does not report st-eks.
+func notFoundEKSCluster() error {
+	return fmt.Errorf("%w: st-eks", eksclient.ErrClusterNotFound)
+}
+
+// TestCreate_EKSInterruptedCreateKeepsHintWhenLaterAccountLookupFails pins a review finding on
+// ksail#8335: the account read before the cluster lookup is reused for the hint, so a second account
+// lookup that would fail cannot cost the attempt its hint.
+//
+//nolint:paralleltest // uses t.Chdir and mutates shared test hooks
+func TestCreate_EKSInterruptedCreateKeepsHintWhenLaterAccountLookupFails(t *testing.T) {
+	client := &fakeEKSIdentityClient{
+		accountID:       testEKSAccountID,
+		describeErr:     notFoundEKSCluster(),
+		accountErrAfter: 1,
+	}
+
+	output, _, err := runFailingEKSCreate(t, client)
+
+	require.ErrorIs(t, err, errNodegroupCreateQuota)
+	require.NotErrorIs(t, err, errEKSIdentityQuery)
+	assert.Contains(t, output, "kept this create attempt's identifier")
+
+	hint, hintErr := state.LoadEKSCreationHint("st-eks", "eu-west-1")
+	require.NoError(t, hintErr)
+	assert.Equal(t, []string{testEKSCreationID}, hint.CreationIDs)
+}
+
+// TestCreate_EKSRetriedCreateKeepsEarlierAttempt pins a review finding on ksail#8335: a retry that
+// also fails before AWS reports the cluster keeps the earlier attempt, so the cluster the earlier
+// attempt started is still deletable when it appears.
+//
+//nolint:paralleltest // uses t.Chdir and mutates shared test hooks
+func TestCreate_EKSRetriedCreateKeepsEarlierAttempt(t *testing.T) {
+	client, _ := runInterruptedEKSCreate(t)
+
+	_, deleted, err := runFailingEKSCreateAttempt(t, client, "attempt-retry")
+	require.ErrorIs(t, err, errNodegroupCreateQuota)
+
+	hint, hintErr := state.LoadEKSCreationHint("st-eks", "eu-west-1")
+	require.NoError(t, hintErr)
+	assert.Equal(t, []string{testEKSCreationID, "attempt-retry"}, hint.CreationIDs)
+
+	client.appear(taggedEKSCluster(testEKSCreationID))
+
+	_, deleteErr := runEKSDeleteAfterFailedCreate(t)
+	require.NoError(t, deleteErr)
+	assert.Equal(t, []string{"st-eks"}, *deleted)
+}
+
+// TestCreate_EKSRetryRecordsEarlierAttemptsLateCluster pins a review finding on ksail#8335: when the
+// cluster an earlier interrupted attempt started has appeared, a retry fails because the name is
+// taken. That failure records ownership of the cluster, because its live creation tag matches the
+// kept earlier attempt, and spends the hint.
+//
+//nolint:paralleltest // uses t.Chdir and mutates shared test hooks
+func TestCreate_EKSRetryRecordsEarlierAttemptsLateCluster(t *testing.T) {
+	client, _ := runInterruptedEKSCreate(t)
+
+	client.appear(taggedEKSCluster(testEKSCreationID))
+
+	output, _, err := runFailingEKSCreateAttempt(t, client, "attempt-retry")
+	require.ErrorIs(t, err, errNodegroupCreateQuota)
+	assert.Contains(t, output, "recorded ownership of partially created EKS cluster")
+
+	ownership, loadErr := state.LoadEKSOwnershipState("st-eks", "eu-west-1")
+	require.NoError(t, loadErr)
+	assert.Equal(t, testEKSAccountID, ownership.AccountID)
+
+	_, hintErr := state.LoadEKSCreationHint("st-eks", "eu-west-1")
+	require.ErrorIs(t, hintErr, state.ErrEKSCreationHintNotFound, "the used hint is spent")
+}
+
+// TestCreate_EKSHintAloneLetsDeleteReachVerificationOutsideTheProject pins a review finding on
+// ksail#8335: when the hint is the only local record of the cluster, a delete by name from another
+// directory still reaches the eksctl, account and creation-tag checks, and removes the cluster that
+// carries the kept tag.
+//
+//nolint:paralleltest // uses t.Chdir and mutates shared test hooks
+func TestCreate_EKSHintAloneLetsDeleteReachVerificationOutsideTheProject(t *testing.T) {
+	client, deleted := runInterruptedEKSCreate(t)
+
+	client.appear(taggedEKSCluster(testEKSCreationID))
+	t.Chdir(t.TempDir())
+	t.Setenv("AWS_REGION", "eu-west-1")
+
+	calls, deleteErr := runEKSDeleteAfterFailedCreate(t, "--name", "st-eks", "--provider", "AWS")
+	require.NoError(t, deleteErr)
+	assert.Contains(t, calls, "get cluster --name st-eks --output json --region eu-west-1")
+	assert.Equal(t, []string{"st-eks"}, *deleted)
 }

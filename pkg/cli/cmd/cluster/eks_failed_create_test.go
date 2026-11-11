@@ -81,6 +81,21 @@ func taggedEKSCluster(creationID string) *ekstypes.Cluster {
 func runFailingEKSCreate(t *testing.T, client eksidentity.Client) (string, *[]string, error) {
 	t.Helper()
 
+	clearFailedCreateOwnership(t)
+	t.Cleanup(func() { clearFailedCreateOwnership(t) })
+
+	return runFailingEKSCreateAttempt(t, client, testEKSCreationID)
+}
+
+// runFailingEKSCreateAttempt is runFailingEKSCreate for one attempt identifier, keeping any st-eks state
+// an earlier attempt in the same test left behind.
+func runFailingEKSCreateAttempt(
+	t *testing.T,
+	client eksidentity.Client,
+	creationID string,
+) (string, *[]string, error) {
+	t.Helper()
+
 	workingDir := t.TempDir()
 	t.Chdir(workingDir)
 	setupMockRegistryBackend(t)
@@ -89,11 +104,8 @@ func runFailingEKSCreate(t *testing.T, client eksidentity.Client) (string, *[]st
 
 	deleted := &[]string{}
 	t.Cleanup(cluster.SetProvisionerFactoryForTests(failingCreateFactory{deleted: deleted}))
-	t.Cleanup(cluster.ExportSetEKSCreationIDGenerator(func() string { return testEKSCreationID }))
+	t.Cleanup(cluster.ExportSetEKSCreationIDGenerator(func() string { return creationID }))
 	setEKSIdentityClient(t, client)
-
-	clearFailedCreateOwnership(t)
-	t.Cleanup(func() { clearFailedCreateOwnership(t) })
 
 	cmd := cluster.NewCreateCmd()
 
@@ -112,7 +124,7 @@ func runFailingEKSCreate(t *testing.T, client eksidentity.Client) (string, *[]st
 // runEKSDeleteAfterFailedCreate runs `ksail cluster delete --force` in the failed create's working
 // directory, with an eksctl stand-in that reports the cluster as eksctl-created and records each
 // ownership query. It returns the recorded eksctl calls and the command error.
-func runEKSDeleteAfterFailedCreate(t *testing.T) ([]string, error) {
+func runEKSDeleteAfterFailedCreate(t *testing.T, extraArgs ...string) ([]string, error) {
 	t.Helper()
 
 	binDir := t.TempDir()
@@ -127,7 +139,7 @@ func runEKSDeleteAfterFailedCreate(t *testing.T) ([]string, error) {
 	cmd.SetContext(t.Context())
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
-	cmd.SetArgs([]string{"--force"})
+	cmd.SetArgs(append([]string{"--force"}, extraArgs...))
 
 	err := cmd.Execute()
 

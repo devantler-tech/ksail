@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -280,21 +281,49 @@ func ObserveCreation(
 		return nil, fmt.Errorf("%w: no creation identifier to match", ErrCreationUnattributed)
 	}
 
-	accountID, cluster, err := describeForCapture(ctx, client, clusterName)
+	accountID, err := client.CallerAccountID(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve current AWS account for EKS ownership capture: %w", err)
 	}
 
-	if cluster == nil || cluster.Tags[tagKey] != creationID {
+	return ObserveCreationInAccount(
+		ctx, client, accountID, clusterName, region, tagKey, []string{creationID},
+	)
+}
+
+// ObserveCreationInAccount is ObserveCreation for a caller whose account the caller already resolved,
+// matching any one of creationIDs. Every identifier is one a KSail create attempt wrote and kept, so a
+// cluster carrying one of them as its tagKey tag is a cluster one of those attempts began building. The
+// cluster must still sit in accountID. It performs no AWS mutation and persists nothing.
+func ObserveCreationInAccount(
+	ctx context.Context,
+	client Client,
+	accountID, clusterName, region, tagKey string,
+	creationIDs []string,
+) (*state.EKSOwnershipState, error) {
+	creationIDs = slices.DeleteFunc(slices.Clone(creationIDs), func(id string) bool {
+		return strings.TrimSpace(id) == ""
+	})
+
+	if strings.TrimSpace(tagKey) == "" || len(creationIDs) == 0 {
+		return nil, fmt.Errorf("%w: no creation identifier to match", ErrCreationUnattributed)
+	}
+
+	cluster, err := client.DescribeCluster(ctx, clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("describe EKS cluster for ownership capture: %w", err)
+	}
+
+	if cluster == nil || !slices.Contains(creationIDs, cluster.Tags[tagKey]) {
 		return nil, fmt.Errorf(
-			"%w: cluster %q does not carry this attempt's %s tag",
+			"%w: cluster %q does not carry a creation tag this attempt kept (%s)",
 			ErrCreationUnattributed,
 			clusterName,
 			tagKey,
 		)
 	}
 
-	return identityFromCluster(clusterName, region, accountID, cluster)
+	return identityFromCluster(clusterName, region, strings.TrimSpace(accountID), cluster)
 }
 
 func identityFromCluster( //nolint:cyclop // one validation boundary intentionally checks every AWS identity field.

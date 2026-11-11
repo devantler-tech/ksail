@@ -33,9 +33,19 @@ type fakeEKSIdentityClient struct {
 	describeErr    error
 	describeCalls  int
 	beforeDescribe func(int)
+	// accountCalls counts CallerAccountID calls; accountErrAfter, when positive, makes every call after
+	// that many fail with errEKSIdentityQuery.
+	accountCalls    int
+	accountErrAfter int
 }
 
 func (f *fakeEKSIdentityClient) CallerAccountID(_ context.Context) (string, error) {
+	f.accountCalls++
+
+	if f.accountErrAfter > 0 && f.accountCalls > f.accountErrAfter {
+		return "", errEKSIdentityQuery
+	}
+
 	return f.accountID, f.accountErr
 }
 

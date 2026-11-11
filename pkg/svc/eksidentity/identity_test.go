@@ -124,7 +124,7 @@ func TestCaptureSpendsFailedCreateHint(t *testing.T) {
 		ClusterName: clusterName,
 		Region:      "eu-north-1",
 		AccountID:   "123456789012",
-		CreationID:  "attempt-8324",
+		CreationIDs: []string{"attempt-8324"},
 	}))
 
 	client := &fakeClient{

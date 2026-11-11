@@ -65,6 +65,14 @@ func retainFailedEKSCreateOwnership(
 	defer cancel()
 
 	client, err := newFailedCreateIdentityClient(ctx, clusterCtx, region)
+
+	var accountID string
+	if err == nil {
+		// The account is read once and reused, so a later failing account lookup can never cost
+		// the attempt its hint.
+		accountID, err = client.CallerAccountID(ctx)
+	}
+
 	if err != nil {
 		return errors.Join(
 			createErr,
@@ -72,17 +80,23 @@ func retainFailedEKSCreateOwnership(
 		)
 	}
 
-	ownership, err := observeFailedEKSCreate(ctx, client, clusterCtx, clusterName, region)
+	accountID = strings.TrimSpace(accountID)
+	creationID := clusterCtx.EKSConfig.CreationID
+
+	ownership, err := observeFailedEKSCreate(
+		ctx, client, accountID, clusterName, region,
+		failedCreateCandidateIDs(clusterName, region, accountID, creationID),
+	)
 	if errors.Is(err, eksclient.ErrClusterNotFound) {
 		// AWS does not report the cluster yet. An interrupted create can still bring it into
 		// existence after KSail exits, so this attempt's identifier is kept as a local hint that a
 		// later lifecycle command checks against the live cluster's creation tag (ksail#8324).
-		return keepFailedEKSCreateHint(ctx, cmd, client, clusterCtx, clusterName, region, createErr)
+		return keepFailedEKSCreateHint(cmd, clusterName, region, accountID, creationID, createErr)
 	}
 
 	if errors.Is(err, eksidentity.ErrCreationUnattributed) {
-		// The cluster with this name is not the one this attempt began building (for example it
-		// already existed), so it is not this attempt's to record.
+		// The cluster with this name is not one this attempt or an earlier kept attempt began
+		// building (for example it already existed), so it is not this attempt's to record.
 		return createErr
 	}
 
@@ -118,29 +132,31 @@ func hasEKSCreationAttempt(clusterCtx *localregistry.Context) bool {
 		strings.TrimSpace(clusterCtx.EKSConfig.CreationID) != ""
 }
 
-// keepFailedEKSCreateHint stores this attempt's creation identifier for a cluster AWS did not report
-// yet, keyed to the caller's account and the cluster's name and region. The hint never authorizes
-// anything by itself. The original create error is always returned; a failure to keep the hint is
-// joined to it.
-func keepFailedEKSCreateHint(
-	ctx context.Context,
-	cmd *cobra.Command,
-	client eksidentity.Client,
-	clusterCtx *localregistry.Context,
-	clusterName, region string,
-	createErr error,
-) error {
-	accountID, err := client.CallerAccountID(ctx)
-	if err == nil {
-		err = state.SaveEKSCreationHint(clusterName, region, &state.EKSCreationHint{
-			Version:     state.EKSCreationHintVersion,
-			ClusterName: clusterName,
-			Region:      region,
-			AccountID:   strings.TrimSpace(accountID),
-			CreationID:  clusterCtx.EKSConfig.CreationID,
-		})
+// failedCreateCandidateIDs returns this attempt's identifier followed by every earlier unresolved
+// attempt kept for the same account. A retry whose create fails because an earlier attempt's cluster
+// appeared in the meantime can then still record that cluster, but only when its live creation tag
+// matches one of these identifiers (ksail#8324).
+func failedCreateCandidateIDs(clusterName, region, accountID, creationID string) []string {
+	candidates := []string{creationID}
+
+	hint, err := state.LoadEKSCreationHint(clusterName, region)
+	if err != nil || hint.AccountID != accountID {
+		return candidates
 	}
 
+	return append(candidates, hint.CreationIDs...)
+}
+
+// keepFailedEKSCreateHint adds this attempt's creation identifier to the hint for a cluster AWS did
+// not report yet, keyed to the caller's account and the cluster's name and region. Earlier unresolved
+// attempts stay in the hint. The hint never authorizes anything by itself. The original create error
+// is always returned; a failure to keep the hint is joined to it.
+func keepFailedEKSCreateHint(
+	cmd *cobra.Command,
+	clusterName, region, accountID, creationID string,
+	createErr error,
+) error {
+	err := state.RecordEKSCreationAttempt(clusterName, region, accountID, creationID)
 	if err != nil {
 		return errors.Join(
 			createErr,
@@ -176,21 +192,22 @@ func newFailedCreateIdentityClient(
 	return client, nil
 }
 
-// observeFailedEKSCreate reads the cluster back and returns its identity only when it carries this
-// attempt's creation tag.
+// observeFailedEKSCreate reads the cluster back in the caller's account and returns its identity only
+// when it carries one of the candidate creation tags.
 func observeFailedEKSCreate(
 	ctx context.Context,
 	client eksidentity.Client,
-	clusterCtx *localregistry.Context,
-	clusterName, region string,
+	accountID, clusterName, region string,
+	creationIDs []string,
 ) (*state.EKSOwnershipState, error) {
-	ownership, err := eksidentity.ObserveCreation(
+	ownership, err := eksidentity.ObserveCreationInAccount(
 		ctx,
 		client,
+		accountID,
 		clusterName,
 		region,
 		eksprovisioner.ClusterCreationTag,
-		clusterCtx.EKSConfig.CreationID,
+		creationIDs,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("observe partially created EKS cluster: %w", err)

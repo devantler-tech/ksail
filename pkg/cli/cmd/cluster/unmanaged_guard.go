@@ -600,13 +600,21 @@ func hasLocalKSailEKSTargetEvidence(resolved *lifecycle.ResolvedClusterInfo) boo
 			// A region-qualified command can validate its exact record even when an unrelated
 			// sibling is unreadable. A name-only command still needs a complete listing.
 			_, ownershipErr := state.LoadEKSOwnershipState(resolved.ClusterName, region)
+			if ownershipErr == nil {
+				return true
+			}
 
-			return ownershipErr == nil
+			// A failed create that kept its attempt identifier (ksail#8324) is candidate evidence
+			// only: the eksctl provenance query, the account check and the live creation-tag match
+			// still have to pass before anything is recorded or deleted.
+			_, hintErr := state.LoadEKSCreationHint(resolved.ClusterName, region)
+
+			return hintErr == nil
 		}
 
 		_, ownershipErr := state.ListEKSOwnershipStates(resolved.ClusterName)
 
-		return ownershipErr == nil
+		return ownershipErr == nil || state.HasEKSCreationHint(resolved.ClusterName)
 	}
 
 	return spec.Distribution == v1alpha1.DistributionEKS && spec.Provider == v1alpha1.ProviderAWS

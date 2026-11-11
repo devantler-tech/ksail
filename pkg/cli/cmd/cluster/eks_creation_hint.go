@@ -18,7 +18,7 @@ import (
 // building but that AWS reported only after KSail exited (ksail#8324). It runs only when no ownership
 // record exists for the target and a failed-create hint does. The hint is untrusted: ownership is
 // recorded only when the caller's account is the one the hint was kept for and the live cluster
-// carries exactly the hint's creation tag. Any other same-named cluster leaves the hint in place and
+// carries exactly one of the hint's creation tags. Any other same-named cluster leaves the hint in place and
 // the record missing, so the normal ownership check still refuses it. When AWS confirms that no such
 // cluster exists, the hint is removed. Persisting the record also removes the hint.
 func adoptEKSCreationHint(
@@ -40,13 +40,14 @@ func adoptEKSCreationHint(
 		return err
 	}
 
-	ownership, err := eksidentity.ObserveCreation(
+	ownership, err := eksidentity.ObserveCreationInAccount(
 		ctx,
 		client,
+		hint.AccountID,
 		clusterName,
 		region,
 		eksprovisioner.ClusterCreationTag,
-		hint.CreationID,
+		hint.CreationIDs,
 	)
 
 	switch {
