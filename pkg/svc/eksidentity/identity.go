@@ -22,6 +22,9 @@ var (
 	ErrIdentityMismatch = errors.New("EKS ownership identity mismatch")
 	// ErrInvalidLiveIdentity reports an incomplete or internally inconsistent AWS response.
 	ErrInvalidLiveIdentity = errors.New("invalid live EKS identity")
+	// ErrCreationUnattributed reports a live cluster that does not carry the creation tag of the
+	// attempt that is trying to claim it.
+	ErrCreationUnattributed = errors.New("EKS cluster was not created by this attempt")
 )
 
 // Client is the read-only AWS surface needed to bind and verify EKS ownership. *pkg/client/eks.Client
@@ -230,17 +233,61 @@ func Observe(
 	client Client,
 	clusterName, region string,
 ) (*state.EKSOwnershipState, error) {
+	accountID, cluster, err := describeForCapture(ctx, client, clusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	return identityFromCluster(clusterName, region, accountID, cluster)
+}
+
+// describeForCapture reads the caller account and the named cluster for an ownership capture.
+func describeForCapture(
+	ctx context.Context,
+	client Client,
+	clusterName string,
+) (string, *ekstypes.Cluster, error) {
 	accountID, err := client.CallerAccountID(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("resolve current AWS account for EKS ownership capture: %w", err)
+		return "", nil, fmt.Errorf("resolve current AWS account for EKS ownership capture: %w", err)
 	}
 
 	cluster, err := client.DescribeCluster(ctx, clusterName)
 	if err != nil {
-		return nil, fmt.Errorf("describe EKS cluster for ownership capture: %w", err)
+		return "", nil, fmt.Errorf("describe EKS cluster for ownership capture: %w", err)
 	}
 
-	return identityFromCluster(clusterName, region, strings.TrimSpace(accountID), cluster)
+	return strings.TrimSpace(accountID), cluster, nil
+}
+
+// ObserveCreation is Observe for a cluster a create attempt claims after failing part-way. From the same
+// DescribeCluster response it also requires the cluster tag tagKey to equal creationID, the identifier
+// only that attempt wrote, so a same-named cluster created by anyone else is never attributed to it.
+// It performs no AWS mutation and persists nothing.
+func ObserveCreation(
+	ctx context.Context,
+	client Client,
+	clusterName, region, tagKey, creationID string,
+) (*state.EKSOwnershipState, error) {
+	if strings.TrimSpace(tagKey) == "" || strings.TrimSpace(creationID) == "" {
+		return nil, fmt.Errorf("%w: no creation identifier to match", ErrCreationUnattributed)
+	}
+
+	accountID, cluster, err := describeForCapture(ctx, client, clusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	if cluster == nil || cluster.Tags[tagKey] != creationID {
+		return nil, fmt.Errorf(
+			"%w: cluster %q does not carry this attempt's %s tag",
+			ErrCreationUnattributed,
+			clusterName,
+			tagKey,
+		)
+	}
+
+	return identityFromCluster(clusterName, region, accountID, cluster)
 }
 
 func identityFromCluster( //nolint:cyclop // one validation boundary intentionally checks every AWS identity field.
