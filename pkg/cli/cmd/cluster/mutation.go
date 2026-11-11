@@ -531,9 +531,11 @@ func executeClusterCreationAndCapture(
 	clusterCtx *localregistry.Context,
 	deps lifecycle.Deps,
 ) error {
+	baseline := observeEKSCreateBaseline(cmd.Context(), clusterCtx)
+
 	err := executeClusterLifecycle(cmd, clusterCtx.ClusterCfg, deps)
 	if err != nil {
-		return err
+		return retainFailedEKSCreateOwnership(cmd, clusterCtx, baseline, err)
 	}
 
 	return captureCreatedEKSIdentity(cmd.Context(), clusterCtx)
