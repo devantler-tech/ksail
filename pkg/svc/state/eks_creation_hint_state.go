@@ -64,12 +64,18 @@ func (h *EKSCreationHint) CreationIDsFor(accountID string) []string {
 }
 
 // RecordEKSCreationAttempt adds one unresolved create attempt made in accountID to the target's hint.
-// Every attempt kept earlier, for this or any other account, is retained. A hint that cannot be read
-// is replaced, since nothing in it can be trusted to match.
+// Every attempt kept earlier, for this or any other account, is retained. Only a missing hint, or one
+// whose content is not a valid hint (nothing in it can be matched), is started afresh; any other read
+// failure is returned without touching the file. Callers serialize it with the EKS lifecycle lock.
 func RecordEKSCreationAttempt(clusterName, region, accountID, creationID string) error {
 	accountID = strings.TrimSpace(accountID)
 
 	hint, err := LoadEKSCreationHint(clusterName, region)
+	if err != nil && !errors.Is(err, ErrEKSCreationHintNotFound) &&
+		!errors.Is(err, ErrInvalidEKSCreationHint) {
+		return err
+	}
+
 	if err != nil {
 		hint = &EKSCreationHint{
 			Version:     EKSCreationHintVersion,
@@ -97,12 +103,17 @@ func RecordEKSCreationAttempt(clusterName, region, accountID, creationID string)
 
 // ForgetEKSCreationAttempts removes the attempts kept for accountID once a lifecycle command resolved
 // them in that account: their cluster was recorded, or AWS confirmed it does not exist. Attempts kept
-// for other accounts stay. The hint file is removed when no attempts remain. A missing hint is not an
-// error.
+// for other accounts stay. The hint file is removed when no attempts remain, and also when its content
+// is not a valid hint, since nothing in it can ever be matched. A missing hint is not an error.
+// Callers serialize it with the EKS lifecycle lock.
 func ForgetEKSCreationAttempts(clusterName, region, accountID string) error {
 	hint, err := LoadEKSCreationHint(clusterName, region)
 	if errors.Is(err, ErrEKSCreationHintNotFound) {
 		return nil
+	}
+
+	if errors.Is(err, ErrInvalidEKSCreationHint) {
+		return DeleteEKSCreationHint(clusterName, region)
 	}
 
 	if err != nil {
@@ -201,6 +212,11 @@ func HasEKSCreationHint(clusterName string) bool {
 		return false
 	}
 
+	exists, err := clusterStateDirExists(dir)
+	if err != nil || !exists {
+		return false
+	}
+
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return false
@@ -293,6 +309,19 @@ func validEKSCreationAttempts(attempts EKSCreationAttempts) bool {
 		})
 }
 
+// eksCreationHintPath returns the hint file for one cluster name and region, refusing a cluster state
+// directory that resolves anywhere other than its own entry under the clusters root. Reads, writes and
+// removals therefore never follow a relocated cluster directory out of the state store.
 func eksCreationHintPath(clusterName, region string) (string, error) {
-	return eksRegionScopedStatePath(clusterName, region, eksCreationHintFileNameFormat)
+	statePath, err := eksRegionScopedStatePath(clusterName, region, eksCreationHintFileNameFormat)
+	if err != nil {
+		return "", err
+	}
+
+	_, err = clusterStateDirExists(filepath.Dir(statePath))
+	if err != nil {
+		return "", err
+	}
+
+	return statePath, nil
 }

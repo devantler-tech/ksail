@@ -1,8 +1,11 @@
 package cluster_test
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 	eksclient "github.com/devantler-tech/ksail/v7/pkg/client/eks"
@@ -265,4 +268,70 @@ func TestCreate_EKSAttemptInAnotherAccountKeepsEarlierAttempt(t *testing.T) {
 	hint, hintErr := state.LoadEKSCreationHint("st-eks", "eu-west-1")
 	require.NoError(t, hintErr, "the other account's attempt is not spent")
 	assert.Equal(t, []string{"attempt-other-account"}, hint.CreationIDsFor("210987654321"))
+}
+
+// TestCreate_EKSInconclusiveLookupKeepsAttempt pins a review finding on ksail#8335: when the cluster
+// lookup after a failed create errors without saying whether the cluster exists, the attempt is kept
+// so a cluster that appears later stays recoverable, and the lookup failure is still reported.
+//
+//nolint:paralleltest // uses t.Chdir and mutates shared test hooks
+func TestCreate_EKSInconclusiveLookupKeepsAttempt(t *testing.T) {
+	client := &fakeEKSIdentityClient{
+		accountID:   testEKSAccountID,
+		describeErr: errEKSIdentityQuery,
+	}
+
+	output, _, err := runFailingEKSCreate(t, client)
+
+	require.ErrorIs(t, err, errNodegroupCreateQuota)
+	require.ErrorIs(t, err, errEKSIdentityQuery, "the inconclusive lookup is still reported")
+	assert.Contains(t, output, "kept this create attempt's identifier")
+
+	hint, hintErr := state.LoadEKSCreationHint("st-eks", "eu-west-1")
+	require.NoError(t, hintErr)
+	assert.Equal(t, []string{testEKSCreationID}, hint.CreationIDsFor(testEKSAccountID))
+}
+
+// TestCreate_EKSFailedCreateWaitsForLifecycleLock pins a review finding on ksail#8335: the failed
+// create updates its hint only while it holds the EKS lifecycle lock, so another KSail process acting
+// on the same cluster cannot interleave a read-modify-write and lose an attempt.
+//
+//nolint:paralleltest // uses t.Chdir and mutates shared test hooks
+func TestCreate_EKSFailedCreateWaitsForLifecycleLock(t *testing.T) {
+	client := &fakeEKSIdentityClient{accountID: testEKSAccountID, describeErr: notFoundEKSCluster()}
+
+	locked := make(chan struct{})
+	release := make(chan struct{})
+	holderDone := make(chan error, 1)
+
+	clearFailedCreateOwnership(t)
+	t.Cleanup(func() { clearFailedCreateOwnership(t) })
+
+	go func() {
+		holderDone <- state.WithEKSLifecycleLock(context.Background(), "st-eks", func() error {
+			close(locked)
+			<-release
+
+			_, err := state.LoadEKSCreationHint("st-eks", "eu-west-1")
+			if !errors.Is(err, state.ErrEKSCreationHintNotFound) {
+				return fmt.Errorf("hint written while another process held the lock: %w", err)
+			}
+
+			return nil
+		})
+	}()
+
+	<-locked
+
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		close(release)
+	}()
+
+	_, _, err := runFailingEKSCreateAttempt(t, client, testEKSCreationID)
+	require.ErrorIs(t, err, errNodegroupCreateQuota)
+	require.NoError(t, <-holderDone)
+
+	_, hintErr := state.LoadEKSCreationHint("st-eks", "eu-west-1")
+	require.NoError(t, hintErr, "the hint is written once the lock is free")
 }

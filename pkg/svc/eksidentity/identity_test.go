@@ -427,3 +427,42 @@ func eksCluster(name, arn string, createdAt time.Time) *ekstypes.Cluster {
 func identityTime() time.Time {
 	return time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
 }
+
+// TestCaptureRemovesUnusableFailedCreateHint pins a review finding on ksail#8335: a malformed hint can
+// never be matched, so ownership capture removes it instead of failing after the record was written.
+func TestCaptureRemovesUnusableFailedCreateHint(t *testing.T) {
+	t.Parallel()
+
+	const clusterName = "capture-removes-unusable-hint"
+
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+
+	hintDir := filepath.Join(home, ".ksail", "clusters", clusterName)
+	require.NoError(t, os.MkdirAll(hintDir, 0o700))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(hintDir, "eks-creation-hint-eu-north-1.json"), []byte("{"), 0o600,
+	))
+
+	client := &fakeClient{
+		accountID: "123456789012",
+		cluster: eksCluster(
+			clusterName,
+			"arn:aws:eks:eu-north-1:123456789012:cluster/"+clusterName,
+			identityTime(),
+		),
+	}
+
+	_, err = eksidentity.Capture(
+		t.Context(), client, clusterName, "eu-north-1", captureAWSOptions(),
+	)
+	require.NoError(t, err)
+
+	_, err = state.LoadEKSOwnershipState(clusterName, "eu-north-1")
+	require.NoError(t, err)
+
+	_, err = state.LoadEKSCreationHint(clusterName, "eu-north-1")
+	require.ErrorIs(t, err, state.ErrEKSCreationHintNotFound)
+}

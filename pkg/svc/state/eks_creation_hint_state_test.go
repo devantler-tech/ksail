@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -237,4 +238,79 @@ func TestHasEKSCreationHint(t *testing.T) {
 
 	require.NoError(t, state.DeleteEKSCreationHint(clusterName, "eu-north-1"))
 	assert.False(t, state.HasEKSCreationHint(clusterName))
+}
+
+// TestRecordEKSCreationAttemptKeepsHintItCannotRead pins a review finding on ksail#8335: a hint that
+// exists but cannot be read is never replaced, so its attempts are not lost. Only a missing hint or one
+// whose content is not a valid hint is started afresh.
+func TestRecordEKSCreationAttemptKeepsHintItCannotRead(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	const clusterName = "eks-hint-unreadable"
+
+	outside := filepath.Join(t.TempDir(), "hint.json")
+	require.NoError(t, os.WriteFile(outside, []byte("kept"), 0o600))
+
+	stateDir := filepath.Join(home, ".ksail", "clusters", clusterName)
+	require.NoError(t, os.MkdirAll(stateDir, 0o700))
+
+	hintPath := filepath.Join(stateDir, "eks-creation-hint-eu-north-1.json")
+	require.NoError(t, os.Symlink(outside, hintPath))
+
+	err := state.RecordEKSCreationAttempt(clusterName, "eu-north-1", hintAccount, "a")
+	require.Error(t, err)
+
+	target, err := os.Readlink(hintPath)
+	require.NoError(t, err, "the unreadable hint must not be replaced")
+	assert.Equal(t, outside, target)
+
+	require.NoError(t, os.Remove(hintPath))
+	require.NoError(t, os.WriteFile(hintPath, []byte("{"), 0o600))
+
+	require.NoError(t, state.RecordEKSCreationAttempt(clusterName, "eu-north-1", hintAccount, "a"),
+		"a hint whose content is not a valid hint is started afresh")
+
+	hint, err := state.LoadEKSCreationHint(clusterName, "eu-north-1")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a"}, hint.CreationIDsFor(hintAccount))
+}
+
+// TestEKSCreationHintRefusesRelocatedClusterDirectory pins a review finding on ksail#8335: when the
+// cluster's state directory resolves outside the clusters root, the hint is neither read, written,
+// nor removed there.
+func TestEKSCreationHintRefusesRelocatedClusterDirectory(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	const clusterName = "eks-hint-relocated"
+
+	outsideDir := t.TempDir()
+	outsideHint := filepath.Join(outsideDir, "eks-creation-hint-eu-north-1.json")
+	data := `{"version":1,"clusterName":"eks-hint-relocated","region":"eu-north-1",` +
+		`"accounts":[{"accountId":"123456789012","creationIds":["outside"]}]}`
+	require.NoError(t, os.WriteFile(outsideHint, []byte(data), 0o600))
+
+	clustersDir := filepath.Join(home, ".ksail", "clusters")
+	require.NoError(t, os.MkdirAll(clustersDir, 0o700))
+	require.NoError(t, os.Symlink(outsideDir, filepath.Join(clustersDir, clusterName)))
+
+	_, err := state.LoadEKSCreationHint(clusterName, "eu-north-1")
+	require.ErrorIs(t, err, fsutil.ErrPathOutsideBase)
+
+	require.ErrorIs(
+		t,
+		state.RecordEKSCreationAttempt(clusterName, "eu-north-1", hintAccount, "a"),
+		fsutil.ErrPathOutsideBase,
+	)
+	require.ErrorIs(
+		t,
+		state.DeleteEKSCreationHint(clusterName, "eu-north-1"),
+		fsutil.ErrPathOutsideBase,
+	)
+	assert.False(t, state.HasEKSCreationHint(clusterName))
+
+	got, err := os.ReadFile(outsideHint) //nolint:gosec // test-private path
+	require.NoError(t, err, "the file outside the state root must survive")
+	assert.JSONEq(t, data, string(got))
 }
