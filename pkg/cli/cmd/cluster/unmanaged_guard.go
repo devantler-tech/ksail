@@ -258,6 +258,11 @@ func ensureAWSClusterManaged(
 		return err
 	}
 
+	err = adoptEKSCreationHint(ctx, resolved, identityClient)
+	if err != nil {
+		return err
+	}
+
 	clusterName := resolved.ClusterName
 	region := resolved.AWSRegion
 
@@ -556,7 +561,7 @@ func queryFrozenAWSOwnership(
 	)
 	if err != nil {
 		if errors.Is(err, eksctlclient.ErrClusterNotFound) {
-			return credentials.AWSResolution{}, awsOwnershipMismatchError(resolved, err)
+			return credentials.AWSResolution{}, eksTargetAbsentError(ctx, resolved, auth, err)
 		}
 
 		return credentials.AWSResolution{}, awsOwnershipQueryError(resolved, err)
@@ -820,4 +825,23 @@ func resolveUpdateTarget(
 		effectiveAWSRegion == configuredAWSRegion
 
 	return resolved
+}
+
+// eksTargetAbsentError reports an exact eksctl query that found no cluster. A failed create may have
+// kept an attempt identifier for a cluster that never came to exist (ksail#8324): the lookup still
+// fails, and that stale hint is removed alongside.
+func eksTargetAbsentError(
+	ctx context.Context,
+	resolved *lifecycle.ResolvedClusterInfo,
+	auth credentials.AWSResolution,
+	cause error,
+) error {
+	mismatchErr := awsOwnershipMismatchError(resolved, cause)
+
+	discardErr := discardStaleEKSCreationHint(ctx, resolved, auth)
+	if discardErr != nil {
+		return errors.Join(mismatchErr, discardErr)
+	}
+
+	return mismatchErr
 }

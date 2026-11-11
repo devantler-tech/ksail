@@ -110,6 +110,41 @@ func TestCaptureClearsStaleNodegroupCapacityState(t *testing.T) {
 	require.ErrorIs(t, err, state.ErrEKSNodegroupStateNotFound)
 }
 
+// TestCaptureSpendsFailedCreateHint pins ksail#8324: once an ownership record exists, a failed
+// create's attempt identifier for the same name and region is spent and removed.
+func TestCaptureSpendsFailedCreateHint(t *testing.T) {
+	t.Parallel()
+
+	const clusterName = "capture-spends-creation-hint"
+
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+
+	require.NoError(t, state.SaveEKSCreationHint(clusterName, "eu-north-1", &state.EKSCreationHint{
+		Version:     state.EKSCreationHintVersion,
+		ClusterName: clusterName,
+		Region:      "eu-north-1",
+		AccountID:   "123456789012",
+		CreationID:  "attempt-8324",
+	}))
+
+	client := &fakeClient{
+		accountID: "123456789012",
+		cluster: eksCluster(
+			clusterName,
+			"arn:aws:eks:eu-north-1:123456789012:cluster/"+clusterName,
+			identityTime(),
+		),
+	}
+
+	_, err := eksidentity.Capture(
+		t.Context(), client, clusterName, "eu-north-1", captureAWSOptions(),
+	)
+	require.NoError(t, err)
+
+	_, err = state.LoadEKSCreationHint(clusterName, "eu-north-1")
+	require.ErrorIs(t, err, state.ErrEKSCreationHintNotFound)
+}
+
 func TestCaptureFailsClosedWhenNodegroupCapacityStateCannotBeCleared(t *testing.T) {
 	t.Parallel()
 
