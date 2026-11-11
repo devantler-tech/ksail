@@ -129,11 +129,11 @@ func hasEKSCreationAttempt(clusterCtx *localregistry.Context) bool {
 // matches one of these identifiers (ksail#8324).
 func failedCreateCandidateIDs(clusterName, region, accountID, creationID string) []string {
 	hint, err := state.LoadEKSCreationHint(clusterName, region)
-	if err != nil || hint.AccountID != accountID {
+	if err != nil {
 		return []string{creationID}
 	}
 
-	return append([]string{creationID}, hint.CreationIDs...)
+	return append([]string{creationID}, hint.CreationIDsFor(accountID)...)
 }
 
 // keepFailedEKSCreateHint adds this attempt's creation identifier to the hint for a cluster AWS did

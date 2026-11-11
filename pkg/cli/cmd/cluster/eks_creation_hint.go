@@ -17,10 +17,10 @@ import (
 // adoptEKSCreationHint records ownership of a cluster that a failed `ksail cluster create` began
 // building but that AWS reported only after KSail exited (ksail#8324). It runs only when no ownership
 // record exists for the target and a failed-create hint does. The hint is untrusted: ownership is
-// recorded only when the caller's account is the one the hint was kept for and the live cluster
-// carries exactly one of the hint's creation tags. Any other same-named cluster leaves the hint in place and
-// the record missing, so the normal ownership check still refuses it. When AWS confirms that no such
-// cluster exists, the hint is removed. Persisting the record also removes the hint.
+// recorded only when the live cluster, read in the caller's account, carries exactly one of the
+// creation tags kept for that account. Any other same-named cluster leaves the hint in place and the
+// record missing, so the normal ownership check still refuses it. When AWS confirms that no such
+// cluster exists, the caller account's attempts are forgotten. Persisting the record also forgets them.
 func adoptEKSCreationHint(
 	ctx context.Context,
 	resolved *lifecycle.ResolvedClusterInfo,
@@ -35,24 +35,24 @@ func adoptEKSCreationHint(
 		return nil
 	}
 
-	hint, matches, err := loadCallerEKSCreationHint(ctx, client, clusterName, region)
-	if err != nil || !matches {
+	accountID, creationIDs, err := loadCallerEKSCreationAttempts(ctx, client, clusterName, region)
+	if err != nil || len(creationIDs) == 0 {
 		return err
 	}
 
 	ownership, err := eksidentity.ObserveCreationInAccount(
 		ctx,
 		client,
-		hint.AccountID,
+		accountID,
 		clusterName,
 		region,
 		eksprovisioner.ClusterCreationTag,
-		hint.CreationIDs,
+		creationIDs,
 	)
 
 	switch {
 	case errors.Is(err, eksclient.ErrClusterNotFound):
-		return discardEKSCreationHint(clusterName, region)
+		return forgetEKSCreationAttempts(clusterName, region, accountID)
 	case errors.Is(err, eksidentity.ErrCreationUnattributed):
 		return nil
 	case err != nil:
@@ -69,8 +69,9 @@ func adoptEKSCreationHint(
 	return nil
 }
 
-// discardStaleEKSCreationHint removes the failed-create hint once the exact eksctl query has reported
-// that the cluster does not exist and the EKS API confirms it in the account the hint was kept for.
+// discardStaleEKSCreationHint forgets the caller account's kept attempts once the exact eksctl query
+// has reported that the cluster does not exist and the EKS API confirms it in that account. Attempts
+// kept for other accounts stay.
 func discardStaleEKSCreationHint(
 	ctx context.Context,
 	resolved *lifecycle.ResolvedClusterInfo,
@@ -97,14 +98,14 @@ func discardStaleEKSCreationHint(
 		)
 	}
 
-	_, matches, err := loadCallerEKSCreationHint(ctx, client, clusterName, region)
-	if err != nil || !matches {
+	accountID, creationIDs, err := loadCallerEKSCreationAttempts(ctx, client, clusterName, region)
+	if err != nil || len(creationIDs) == 0 {
 		return err
 	}
 
 	_, err = client.DescribeCluster(ctx, clusterName)
 	if errors.Is(err, eksclient.ErrClusterNotFound) {
-		return discardEKSCreationHint(clusterName, region)
+		return forgetEKSCreationAttempts(clusterName, region, accountID)
 	}
 
 	if err != nil {
@@ -114,37 +115,40 @@ func discardStaleEKSCreationHint(
 	return nil
 }
 
-// loadCallerEKSCreationHint loads the failed-create hint for the target and reports whether it was
-// kept for the caller's AWS account. A missing hint is not an error.
-func loadCallerEKSCreationHint(
+// loadCallerEKSCreationAttempts resolves the caller's AWS account and returns the attempt identifiers
+// the target's failed-create hint kept for that account. A missing hint, or one with no attempts for
+// the caller's account, returns no identifiers and no error.
+func loadCallerEKSCreationAttempts(
 	ctx context.Context,
 	client eksidentity.Client,
 	clusterName, region string,
-) (*state.EKSCreationHint, bool, error) {
+) (string, []string, error) {
 	hint, err := state.LoadEKSCreationHint(clusterName, region)
 	if errors.Is(err, state.ErrEKSCreationHintNotFound) {
-		return nil, false, nil
+		return "", nil, nil
 	}
 
 	if err != nil {
-		return nil, false, fmt.Errorf("load the failed create's attempt identifier: %w", err)
+		return "", nil, fmt.Errorf("load the failed create's attempt identifier: %w", err)
 	}
 
 	accountID, err := client.CallerAccountID(ctx)
 	if err != nil {
-		return nil, false, fmt.Errorf(
+		return "", nil, fmt.Errorf(
 			"resolve current AWS account for the failed create's attempt identifier: %w",
 			err,
 		)
 	}
 
-	return hint, strings.TrimSpace(accountID) == strings.TrimSpace(hint.AccountID), nil
+	accountID = strings.TrimSpace(accountID)
+
+	return accountID, hint.CreationIDsFor(accountID), nil
 }
 
-func discardEKSCreationHint(clusterName, region string) error {
-	err := state.DeleteEKSCreationHint(clusterName, region)
+func forgetEKSCreationAttempts(clusterName, region, accountID string) error {
+	err := state.ForgetEKSCreationAttempts(clusterName, region, accountID)
 	if err != nil {
-		return fmt.Errorf("remove the failed create's attempt identifier: %w", err)
+		return fmt.Errorf("forget the failed create's attempt identifiers: %w", err)
 	}
 
 	return nil

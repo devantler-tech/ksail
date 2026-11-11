@@ -362,17 +362,14 @@ func eksRegionStatePaths(clusterName, region string, accountIDs []string) ([]str
 		paths = append(paths, unboundPaths...)
 	}
 
-	for _, regionScopedPath := range []func(string, string) (string, error){
-		eksNodegroupStatePath,
-		eksOwnershipStatePath,
-		eksCreationHintPath,
-	} {
-		statePath, pathErr := regionScopedPath(clusterName, region)
-		if pathErr != nil {
-			return nil, pathErr
-		}
+	nodegroupPath, err := eksNodegroupStatePath(clusterName, region)
+	if err != nil {
+		return nil, err
+	}
 
-		paths = append(paths, statePath)
+	ownershipPath, err := eksOwnershipStatePath(clusterName, region)
+	if err != nil {
+		return nil, err
 	}
 
 	ttlPaths, err := eksRegionTTLPaths(clusterName, region)
@@ -385,6 +382,7 @@ func eksRegionStatePaths(clusterName, region string, accountIDs []string) ([]str
 		return nil, err
 	}
 
+	paths = append(paths, nodegroupPath, ownershipPath)
 	paths = append(paths, ttlPaths...)
 
 	return append(paths, specPath), nil

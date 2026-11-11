@@ -16,9 +16,6 @@ import (
 const (
 	// EKSCreationHintVersion is the on-disk schema version for failed-create hints.
 	EKSCreationHintVersion = 1
-	// MaxEKSCreationHintAttempts bounds how many unresolved create attempts one hint remembers. The
-	// oldest attempt is dropped first.
-	MaxEKSCreationHintAttempts = 16
 	// eksCreationHintFileNameFormat keeps the hint region-scoped like the ownership record. Its name
 	// deliberately does not match the ownership record pattern, so a hint is never listed or loaded
 	// as ownership.
@@ -34,40 +31,91 @@ var (
 
 // EKSCreationHint keeps the creation identifiers of failed `ksail cluster create` attempts on EKS whose
 // cluster AWS did not report yet, so the cluster can still be claimed if it appears after KSail exited
-// (ksail#8324). Every unresolved attempt is kept, because a retry that also fails must not hide an
-// earlier attempt whose cluster may still appear. It is local and untrusted: it never authorizes a
-// lifecycle operation on its own. A caller may only use it to look for a live cluster in the same
-// account and region that carries exactly one of these identifiers as its creation tag.
+// (ksail#8324). Attempts are grouped by the AWS account they ran in, and an attempt is kept until a
+// lifecycle command resolves it for that account: a retry, or an attempt in another account, never
+// hides an earlier attempt whose cluster may still appear. It is local and untrusted: it never
+// authorizes a lifecycle operation on its own. A caller may only use it to look for a live cluster in
+// its own account and this region that carries exactly one of that account's identifiers as its
+// creation tag.
 type EKSCreationHint struct {
-	Version     int      `json:"version"`
-	ClusterName string   `json:"clusterName"`
-	Region      string   `json:"region"`
+	Version     int                   `json:"version"`
+	ClusterName string                `json:"clusterName"`
+	Region      string                `json:"region"`
+	Accounts    []EKSCreationAttempts `json:"accounts"`
+}
+
+// EKSCreationAttempts lists the unresolved create attempts made in one AWS account, oldest first.
+type EKSCreationAttempts struct {
 	AccountID   string   `json:"accountId"`
 	CreationIDs []string `json:"creationIds"`
 }
 
-// RecordEKSCreationAttempt adds one unresolved create attempt to the target's hint. Attempts kept
-// earlier for the same account are retained, newest last, up to MaxEKSCreationHintAttempts. A hint kept
-// for another account, or one that cannot be read, is replaced: its attempts could never be matched
-// from this account.
+// CreationIDsFor returns the unresolved attempt identifiers kept for accountID, oldest first.
+func (h *EKSCreationHint) CreationIDsFor(accountID string) []string {
+	accountID = strings.TrimSpace(accountID)
+
+	for _, attempts := range h.Accounts {
+		if attempts.AccountID == accountID {
+			return slices.Clone(attempts.CreationIDs)
+		}
+	}
+
+	return nil
+}
+
+// RecordEKSCreationAttempt adds one unresolved create attempt made in accountID to the target's hint.
+// Every attempt kept earlier, for this or any other account, is retained. A hint that cannot be read
+// is replaced, since nothing in it can be trusted to match.
 func RecordEKSCreationAttempt(clusterName, region, accountID, creationID string) error {
-	hint := &EKSCreationHint{
-		Version:     EKSCreationHintVersion,
-		ClusterName: strings.TrimSpace(clusterName),
-		Region:      strings.TrimSpace(region),
-		AccountID:   strings.TrimSpace(accountID),
+	accountID = strings.TrimSpace(accountID)
+
+	hint, err := LoadEKSCreationHint(clusterName, region)
+	if err != nil {
+		hint = &EKSCreationHint{
+			Version:     EKSCreationHintVersion,
+			ClusterName: strings.TrimSpace(clusterName),
+			Region:      strings.TrimSpace(region),
+		}
 	}
 
-	existing, err := LoadEKSCreationHint(clusterName, region)
-	if err == nil && existing.AccountID == hint.AccountID {
-		hint.CreationIDs = slices.DeleteFunc(existing.CreationIDs, func(id string) bool {
-			return id == creationID
-		})
+	index := slices.IndexFunc(hint.Accounts, func(attempts EKSCreationAttempts) bool {
+		return attempts.AccountID == accountID
+	})
+	if index < 0 {
+		hint.Accounts = append(hint.Accounts, EKSCreationAttempts{AccountID: accountID})
+		index = len(hint.Accounts) - 1
 	}
 
-	hint.CreationIDs = append(hint.CreationIDs, creationID)
-	if overflow := len(hint.CreationIDs) - MaxEKSCreationHintAttempts; overflow > 0 {
-		hint.CreationIDs = hint.CreationIDs[overflow:]
+	kept := &hint.Accounts[index]
+	kept.CreationIDs = slices.DeleteFunc(kept.CreationIDs, func(id string) bool {
+		return id == creationID
+	})
+	kept.CreationIDs = append(kept.CreationIDs, creationID)
+
+	return SaveEKSCreationHint(clusterName, region, hint)
+}
+
+// ForgetEKSCreationAttempts removes the attempts kept for accountID once a lifecycle command resolved
+// them in that account: their cluster was recorded, or AWS confirmed it does not exist. Attempts kept
+// for other accounts stay. The hint file is removed when no attempts remain. A missing hint is not an
+// error.
+func ForgetEKSCreationAttempts(clusterName, region, accountID string) error {
+	hint, err := LoadEKSCreationHint(clusterName, region)
+	if errors.Is(err, ErrEKSCreationHintNotFound) {
+		return nil
+	}
+
+	if err != nil {
+		return err
+	}
+
+	accountID = strings.TrimSpace(accountID)
+	hint.Accounts = slices.DeleteFunc(hint.Accounts, func(attempts EKSCreationAttempts) bool {
+		return attempts.AccountID == accountID
+	})
+
+	if len(hint.Accounts) == 0 {
+		return DeleteEKSCreationHint(clusterName, region)
 	}
 
 	return SaveEKSCreationHint(clusterName, region, hint)
@@ -215,18 +263,34 @@ func validateEKSCreationHint(clusterName, region string, hint *EKSCreationHint) 
 
 	if strings.TrimSpace(hint.ClusterName) != strings.TrimSpace(clusterName) ||
 		strings.TrimSpace(hint.Region) != strings.TrimSpace(region) ||
-		!awsAccountIDPattern.MatchString(strings.TrimSpace(hint.AccountID)) ||
-		len(hint.CreationIDs) == 0 || len(hint.CreationIDs) > MaxEKSCreationHintAttempts ||
-		slices.ContainsFunc(hint.CreationIDs, func(id string) bool {
-			return strings.TrimSpace(id) == ""
-		}) {
+		len(hint.Accounts) == 0 {
 		return fmt.Errorf(
 			"%w: required fields are missing or do not match the state key",
 			ErrInvalidEKSCreationHint,
 		)
 	}
 
+	seen := make(map[string]bool, len(hint.Accounts))
+
+	for _, attempts := range hint.Accounts {
+		if !validEKSCreationAttempts(attempts) || seen[attempts.AccountID] {
+			return fmt.Errorf(
+				"%w: each account must be a distinct AWS account with at least one attempt",
+				ErrInvalidEKSCreationHint,
+			)
+		}
+
+		seen[attempts.AccountID] = true
+	}
+
 	return nil
+}
+
+func validEKSCreationAttempts(attempts EKSCreationAttempts) bool {
+	return awsAccountIDPattern.MatchString(attempts.AccountID) && len(attempts.CreationIDs) > 0 &&
+		!slices.ContainsFunc(attempts.CreationIDs, func(id string) bool {
+			return strings.TrimSpace(id) == ""
+		})
 }
 
 func eksCreationHintPath(clusterName, region string) (string, error) {

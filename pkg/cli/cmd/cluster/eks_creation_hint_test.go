@@ -32,8 +32,7 @@ func runInterruptedEKSCreate(t *testing.T) (*fakeEKSIdentityClient, *[]string) {
 
 	hint, hintErr := state.LoadEKSCreationHint("st-eks", "eu-west-1")
 	require.NoError(t, hintErr, "the failed create must keep its attempt identifier")
-	assert.Equal(t, []string{testEKSCreationID}, hint.CreationIDs)
-	assert.Equal(t, testEKSAccountID, hint.AccountID)
+	assert.Equal(t, []string{testEKSCreationID}, hint.CreationIDsFor(testEKSAccountID))
 
 	_, loadErr := state.LoadEKSOwnershipState("st-eks", "eu-west-1")
 	require.ErrorIs(t, loadErr, state.ErrEKSOwnershipStateNotFound,
@@ -175,7 +174,7 @@ func TestCreate_EKSInterruptedCreateKeepsHintWhenLaterAccountLookupFails(t *test
 
 	hint, hintErr := state.LoadEKSCreationHint("st-eks", "eu-west-1")
 	require.NoError(t, hintErr)
-	assert.Equal(t, []string{testEKSCreationID}, hint.CreationIDs)
+	assert.Equal(t, []string{testEKSCreationID}, hint.CreationIDsFor(testEKSAccountID))
 }
 
 // TestCreate_EKSRetriedCreateKeepsEarlierAttempt pins a review finding on ksail#8335: a retry that
@@ -191,7 +190,11 @@ func TestCreate_EKSRetriedCreateKeepsEarlierAttempt(t *testing.T) {
 
 	hint, hintErr := state.LoadEKSCreationHint("st-eks", "eu-west-1")
 	require.NoError(t, hintErr)
-	assert.Equal(t, []string{testEKSCreationID, "attempt-retry"}, hint.CreationIDs)
+	assert.Equal(
+		t,
+		[]string{testEKSCreationID, "attempt-retry"},
+		hint.CreationIDsFor(testEKSAccountID),
+	)
 
 	client.appear(taggedEKSCluster(testEKSCreationID))
 
@@ -238,4 +241,28 @@ func TestCreate_EKSHintAloneLetsDeleteReachVerificationOutsideTheProject(t *test
 	require.NoError(t, deleteErr)
 	assert.Contains(t, calls, "get cluster --name st-eks --output json --region eu-west-1")
 	assert.Equal(t, []string{"st-eks"}, *deleted)
+}
+
+// TestCreate_EKSAttemptInAnotherAccountKeepsEarlierAttempt pins a review finding on ksail#8335: a
+// failed attempt made after switching AWS accounts keeps the first account's attempt, so its cluster
+// is still deletable once the caller switches back and the cluster appears.
+//
+//nolint:paralleltest // uses t.Chdir and mutates shared test hooks
+func TestCreate_EKSAttemptInAnotherAccountKeepsEarlierAttempt(t *testing.T) {
+	client, _ := runInterruptedEKSCreate(t)
+
+	client.accountID = "210987654321"
+	_, deleted, err := runFailingEKSCreateAttempt(t, client, "attempt-other-account")
+	require.ErrorIs(t, err, errNodegroupCreateQuota)
+
+	client.accountID = testEKSAccountID
+	client.appear(taggedEKSCluster(testEKSCreationID))
+
+	_, deleteErr := runEKSDeleteAfterFailedCreate(t)
+	require.NoError(t, deleteErr)
+	assert.Equal(t, []string{"st-eks"}, *deleted)
+
+	hint, hintErr := state.LoadEKSCreationHint("st-eks", "eu-west-1")
+	require.NoError(t, hintErr, "the other account's attempt is not spent")
+	assert.Equal(t, []string{"attempt-other-account"}, hint.CreationIDsFor("210987654321"))
 }

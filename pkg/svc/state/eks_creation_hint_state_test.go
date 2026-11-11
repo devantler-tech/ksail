@@ -11,13 +11,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	hintAccount      = "123456789012"
+	hintOtherAccount = "210987654321"
+)
+
 func validEKSCreationHint(clusterName, region string) *state.EKSCreationHint {
 	return &state.EKSCreationHint{
 		Version:     state.EKSCreationHintVersion,
 		ClusterName: clusterName,
 		Region:      region,
-		AccountID:   "123456789012",
-		CreationIDs: []string{"attempt-8324"},
+		Accounts: []state.EKSCreationAttempts{
+			{AccountID: hintAccount, CreationIDs: []string{"attempt-8324"}},
+		},
 	}
 }
 
@@ -33,6 +39,8 @@ func TestSaveLoadAndDeleteEKSCreationHint(t *testing.T) {
 	got, err := state.LoadEKSCreationHint(clusterName, "eu-north-1")
 	require.NoError(t, err)
 	assert.Equal(t, want, got)
+	assert.Equal(t, []string{"attempt-8324"}, got.CreationIDsFor(hintAccount))
+	assert.Empty(t, got.CreationIDsFor(hintOtherAccount))
 
 	statePath := filepath.Join(
 		home, ".ksail", "clusters", clusterName, "eks-creation-hint-eu-north-1.json",
@@ -65,19 +73,23 @@ func TestEKSCreationHintRejectsIncompleteOrMismatchedFields(t *testing.T) {
 		{name: "unknown version", mutate: func(h *state.EKSCreationHint) { h.Version = 2 }},
 		{name: "other cluster", mutate: func(h *state.EKSCreationHint) { h.ClusterName = "other" }},
 		{name: "other region", mutate: func(h *state.EKSCreationHint) { h.Region = "eu-west-1" }},
-		{name: "malformed account", mutate: func(h *state.EKSCreationHint) { h.AccountID = "12" }},
+		{name: "no accounts", mutate: func(h *state.EKSCreationHint) { h.Accounts = nil }},
+		{
+			name:   "malformed account",
+			mutate: func(h *state.EKSCreationHint) { h.Accounts[0].AccountID = "12" },
+		},
 		{
 			name:   "blank creation id",
-			mutate: func(h *state.EKSCreationHint) { h.CreationIDs = []string{" "} },
+			mutate: func(h *state.EKSCreationHint) { h.Accounts[0].CreationIDs = []string{" "} },
 		},
-		{name: "no creation ids", mutate: func(h *state.EKSCreationHint) { h.CreationIDs = nil }},
 		{
-			name: "too many creation ids",
+			name:   "no creation ids",
+			mutate: func(h *state.EKSCreationHint) { h.Accounts[0].CreationIDs = nil },
+		},
+		{
+			name: "duplicate account",
 			mutate: func(h *state.EKSCreationHint) {
-				h.CreationIDs = make([]string, state.MaxEKSCreationHintAttempts+1)
-				for i := range h.CreationIDs {
-					h.CreationIDs[i] = fmt.Sprintf("attempt-%d", i)
-				}
+				h.Accounts = append(h.Accounts, h.Accounts[0])
 			},
 		},
 	}
@@ -114,83 +126,78 @@ func TestLoadEKSCreationHintRejectsInvalidJSON(t *testing.T) {
 	require.ErrorIs(t, err, state.ErrInvalidEKSCreationHint)
 }
 
-func TestDeleteEKSRegionStateRemovesCreationHint(t *testing.T) {
+// TestRecordEKSCreationAttemptKeepsEveryUnresolvedAttempt pins the review findings on ksail#8335: a
+// retry that also fails before AWS reports the cluster, many retries, or an attempt made in another
+// account must never drop an earlier attempt whose cluster can still appear.
+func TestRecordEKSCreationAttemptKeepsEveryUnresolvedAttempt(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
-	const clusterName = "eks-hint-region-delete"
-
-	require.NoError(t, state.SaveEKSCreationHint(
-		clusterName, "eu-north-1", validEKSCreationHint(clusterName, "eu-north-1"),
-	))
-	require.NoError(t, state.SaveEKSCreationHint(
-		clusterName, "eu-west-1", validEKSCreationHint(clusterName, "eu-west-1"),
-	))
-
-	require.NoError(t, state.DeleteEKSRegionState(clusterName, "eu-north-1"))
-
-	_, err := state.LoadEKSCreationHint(clusterName, "eu-north-1")
-	require.ErrorIs(t, err, state.ErrEKSCreationHintNotFound)
-
-	_, err = state.LoadEKSCreationHint(clusterName, "eu-west-1")
-	require.NoError(t, err, "another region's hint must survive")
-}
-
-// TestRecordEKSCreationAttemptKeepsEarlierUnresolvedAttempts pins the review finding on ksail#8335: a
-// retry that also fails before AWS reports the cluster must not drop an earlier attempt whose cluster
-// can still appear.
-func TestRecordEKSCreationAttemptKeepsEarlierUnresolvedAttempts(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-
-	const clusterName = "eks-hint-retries"
-
-	require.NoError(
-		t,
-		state.RecordEKSCreationAttempt(clusterName, "eu-north-1", "123456789012", "a"),
-	)
-	require.NoError(
-		t,
-		state.RecordEKSCreationAttempt(clusterName, "eu-north-1", "123456789012", "b"),
-	)
-	require.NoError(
-		t,
-		state.RecordEKSCreationAttempt(clusterName, "eu-north-1", "123456789012", "a"),
+	const (
+		clusterName = "eks-hint-retries"
+		attempts    = 40
 	)
 
-	hint, err := state.LoadEKSCreationHint(clusterName, "eu-north-1")
-	require.NoError(t, err)
-	assert.Equal(t, []string{"b", "a"}, hint.CreationIDs, "earlier attempts stay, newest last")
+	want := make([]string, 0, attempts)
 
-	require.NoError(
-		t,
-		state.RecordEKSCreationAttempt(clusterName, "eu-north-1", "210987654321", "c"),
-	)
+	for attempt := range attempts {
+		id := fmt.Sprintf("attempt-%d", attempt)
+		want = append(want, id)
 
-	hint, err = state.LoadEKSCreationHint(clusterName, "eu-north-1")
-	require.NoError(t, err)
-	assert.Equal(t, "210987654321", hint.AccountID)
-	assert.Equal(t, []string{"c"}, hint.CreationIDs, "another account's attempts cannot match here")
-}
+		require.NoError(
+			t,
+			state.RecordEKSCreationAttempt(clusterName, "eu-north-1", hintAccount, id),
+		)
 
-func TestRecordEKSCreationAttemptDropsOldestBeyondTheBound(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-
-	const clusterName = "eks-hint-bound"
-
-	for i := range state.MaxEKSCreationHintAttempts + 2 {
-		require.NoError(t, state.RecordEKSCreationAttempt(
-			clusterName, "eu-north-1", "123456789012", fmt.Sprintf("attempt-%d", i),
-		))
+		if attempt == attempts/2 {
+			require.NoError(t, state.RecordEKSCreationAttempt(
+				clusterName, "eu-north-1", hintOtherAccount, "other-account-attempt",
+			))
+		}
 	}
 
+	require.NoError(
+		t,
+		state.RecordEKSCreationAttempt(clusterName, "eu-north-1", hintAccount, "attempt-0"),
+	)
+
+	want = append(want[1:], "attempt-0")
+
 	hint, err := state.LoadEKSCreationHint(clusterName, "eu-north-1")
 	require.NoError(t, err)
-	require.Len(t, hint.CreationIDs, state.MaxEKSCreationHintAttempts)
-	assert.Equal(t, "attempt-2", hint.CreationIDs[0])
+	assert.Equal(t, want, hint.CreationIDsFor(hintAccount), "every attempt stays, newest last")
 	assert.Equal(
 		t,
-		fmt.Sprintf("attempt-%d", state.MaxEKSCreationHintAttempts+1),
-		hint.CreationIDs[len(hint.CreationIDs)-1],
+		[]string{"other-account-attempt"},
+		hint.CreationIDsFor(hintOtherAccount),
+		"another account's attempt stays beside them",
 	)
+}
+
+func TestForgetEKSCreationAttemptsRemovesOnlyThatAccount(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const clusterName = "eks-hint-forget"
+
+	require.NoError(t, state.ForgetEKSCreationAttempts(clusterName, "eu-north-1", hintAccount),
+		"a missing hint is fine")
+
+	require.NoError(t, state.RecordEKSCreationAttempt(clusterName, "eu-north-1", hintAccount, "a"))
+	require.NoError(
+		t,
+		state.RecordEKSCreationAttempt(clusterName, "eu-north-1", hintOtherAccount, "b"),
+	)
+
+	require.NoError(t, state.ForgetEKSCreationAttempts(clusterName, "eu-north-1", hintAccount))
+
+	hint, err := state.LoadEKSCreationHint(clusterName, "eu-north-1")
+	require.NoError(t, err)
+	assert.Empty(t, hint.CreationIDsFor(hintAccount))
+	assert.Equal(t, []string{"b"}, hint.CreationIDsFor(hintOtherAccount))
+
+	require.NoError(t, state.ForgetEKSCreationAttempts(clusterName, "eu-north-1", hintOtherAccount))
+
+	_, err = state.LoadEKSCreationHint(clusterName, "eu-north-1")
+	require.ErrorIs(t, err, state.ErrEKSCreationHintNotFound, "the last account removes the file")
 }
 
 // TestLoadEKSCreationHintRefusesFileOutsideItsDirectory keeps the hint read confined to the cluster's
@@ -203,7 +210,7 @@ func TestLoadEKSCreationHintRefusesFileOutsideItsDirectory(t *testing.T) {
 
 	outside := filepath.Join(t.TempDir(), "hint.json")
 	data := `{"version":1,"clusterName":"eks-hint-link","region":"eu-north-1",` +
-		`"accountId":"123456789012","creationIds":["attempt-8324"]}`
+		`"accounts":[{"accountId":"123456789012","creationIds":["attempt-8324"]}]}`
 	require.NoError(t, os.WriteFile(outside, []byte(data), 0o600))
 
 	stateDir := filepath.Join(home, ".ksail", "clusters", clusterName)
@@ -225,10 +232,7 @@ func TestHasEKSCreationHint(t *testing.T) {
 
 	assert.False(t, state.HasEKSCreationHint(clusterName))
 
-	require.NoError(
-		t,
-		state.RecordEKSCreationAttempt(clusterName, "eu-north-1", "123456789012", "a"),
-	)
+	require.NoError(t, state.RecordEKSCreationAttempt(clusterName, "eu-north-1", hintAccount, "a"))
 	assert.True(t, state.HasEKSCreationHint(clusterName))
 
 	require.NoError(t, state.DeleteEKSCreationHint(clusterName, "eu-north-1"))

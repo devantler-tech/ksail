@@ -101,8 +101,8 @@ func Persist(clusterName, region string, ownership *state.EKSOwnershipState) err
 	}
 
 	// A failed-create hint only ever stands in for a missing ownership record. Once the record
-	// exists, the hint is spent (ksail#8324).
-	err = state.DeleteEKSCreationHint(clusterName, region)
+	// exists, the attempts kept for its account are spent (ksail#8324).
+	err = state.ForgetEKSCreationAttempts(clusterName, region, ownership.AccountID)
 	if err != nil {
 		return fmt.Errorf("clear spent EKS creation hint after ownership capture: %w", err)
 	}

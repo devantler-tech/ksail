@@ -111,7 +111,7 @@ func TestCaptureClearsStaleNodegroupCapacityState(t *testing.T) {
 }
 
 // TestCaptureSpendsFailedCreateHint pins ksail#8324: once an ownership record exists, a failed
-// create's attempt identifier for the same name and region is spent and removed.
+// create's attempts kept for that account are spent; another account's attempts stay.
 func TestCaptureSpendsFailedCreateHint(t *testing.T) {
 	t.Parallel()
 
@@ -119,13 +119,12 @@ func TestCaptureSpendsFailedCreateHint(t *testing.T) {
 
 	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
 
-	require.NoError(t, state.SaveEKSCreationHint(clusterName, "eu-north-1", &state.EKSCreationHint{
-		Version:     state.EKSCreationHintVersion,
-		ClusterName: clusterName,
-		Region:      "eu-north-1",
-		AccountID:   "123456789012",
-		CreationIDs: []string{"attempt-8324"},
-	}))
+	require.NoError(t, state.RecordEKSCreationAttempt(
+		clusterName, "eu-north-1", "123456789012", "attempt-8324",
+	))
+	require.NoError(t, state.RecordEKSCreationAttempt(
+		clusterName, "eu-north-1", "210987654321", "attempt-other-account",
+	))
 
 	client := &fakeClient{
 		accountID: "123456789012",
@@ -141,8 +140,10 @@ func TestCaptureSpendsFailedCreateHint(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	_, err = state.LoadEKSCreationHint(clusterName, "eu-north-1")
-	require.ErrorIs(t, err, state.ErrEKSCreationHintNotFound)
+	hint, err := state.LoadEKSCreationHint(clusterName, "eu-north-1")
+	require.NoError(t, err, "another account's attempts are not spent")
+	assert.Empty(t, hint.CreationIDsFor("123456789012"))
+	assert.Equal(t, []string{"attempt-other-account"}, hint.CreationIDsFor("210987654321"))
 }
 
 func TestCaptureFailsClosedWhenNodegroupCapacityStateCannotBeCleared(t *testing.T) {
