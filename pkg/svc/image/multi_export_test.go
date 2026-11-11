@@ -319,6 +319,53 @@ func TestExportFallsBackToAnotherNodeHoldingACompleteCopy(t *testing.T) {
 	}
 }
 
+// A node archive that fails part-way must not leave its images registered: the
+// retry on another node may hold a newer copy under the same tag, and that
+// complete archive must be accepted rather than refused as conflicting.
+func TestExportFallbackDiscardsAPartlyMergedShare(t *testing.T) {
+	t.Parallel()
+
+	const (
+		first  = "docker.io/library/fixture-a:v1"
+		second = "docker.io/library/fixture-b:v1"
+	)
+
+	ctx := context.Background()
+	client := docker.NewMockAPIClient(t)
+	client.EXPECT().ContainerList(ctx, mock.Anything).Return(kindMultiNodeSummaries()[:2], nil)
+
+	setupNodeArchiveContents(ctx, t, client, kindExporterNodeName, []string{first, second},
+		olderNodeArchive(t, first))
+	setupNodeArchive(ctx, t, client, "my-cluster-worker", first, second)
+
+	output := filepath.Join(t.TempDir(), "images.tar")
+
+	err := image.NewExporter(client).Export(ctx, "my-cluster", v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker, image.ExportOptions{
+			OutputPath: output,
+			Images:     []string{first, second},
+		})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{first, second}, archiveNamedReferences(t, output))
+	assertImageArchiveReadable(t, output, 2)
+}
+
+// olderNodeArchive holds ref with different content than namedNodeArchive gives
+// it, as a node with an older copy of a mutable tag does.
+func olderNodeArchive(t *testing.T, ref string) []byte {
+	t.Helper()
+
+	root := t.TempDir()
+	store, err := layout.Write(root, empty.Index)
+	require.NoError(t, err)
+	require.NoError(t, store.AppendImage(fixtureImage(t, "older "+ref),
+		layout.WithAnnotations(map[string]string{
+			"io.containerd.image.name": ref, "org.opencontainers.image.ref.name": "v1",
+		})))
+
+	return tarFixtureDirectory(t, root)
+}
+
 // An image no node can supply still fails with the damaged node's own
 // diagnostics, and the existing archive stays in place.
 func TestExportFallbackRefusesAnImageNoNodeCanSupply(t *testing.T) {
