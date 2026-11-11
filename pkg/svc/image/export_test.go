@@ -47,3 +47,6 @@ func ArchivePartialPlatformImagesForTest(path string) ([]string, []string, error
 
 	return names, carried, nil
 }
+
+// ImportCommandForTest exposes importCommand for white-box testing.
+var ImportCommandForTest = importCommand

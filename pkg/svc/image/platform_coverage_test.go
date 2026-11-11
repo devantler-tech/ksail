@@ -10,6 +10,7 @@ import (
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/image"
+	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
@@ -131,7 +132,9 @@ func TestImportRefusesANodePlatformTheArchiveDoesNotCarry(t *testing.T) {
 	require.ErrorContains(t, err, "linux/arm64")
 }
 
-// The same archive still imports on a node of the platform it carries.
+// The same archive still imports on a node of the platform it carries. Its index is only partly
+// present, so a local import is pinned to exactly that platform: the default matcher would also
+// walk compatible platforms whose manifests the archive omits.
 func TestImportAcceptsTheCarriedNodePlatform(t *testing.T) {
 	t.Parallel()
 
@@ -147,14 +150,15 @@ func TestImportAcceptsTheCarriedNodePlatform(t *testing.T) {
 				Labels: map[string]string{"io.x-k8s.kind.role": "control-plane"},
 			},
 		}, nil)
-	optionalNodeExec(ctx, client, node, "platform", []string{"uname", "-m"}, "x86_64\n")
+	repeatedNodeExec(ctx, client, node, "platform", []string{"uname", "-m"}, "x86_64\n")
+	optionalNodeExec(ctx, client, node, "help", importHelpCommand(), localImportHelp)
 	client.EXPECT().
 		CopyToContainer(ctx, node, "/root", mock.Anything, container.CopyToContainerOptions{}).
 		Return(nil).Once()
 	optionalNodeExec(ctx, client, node, "import",
 		[]string{
 			ctrCommand, "--namespace=k8s.io", "images", "import", "--digests",
-			"/root/ksail-images-import.tar",
+			"--local", "--platform", "linux/amd64", "/root/ksail-images-import.tar",
 		}, "")
 	optionalNodeExec(detachedCleanupContext(), client, node, "cleanup",
 		[]string{"rm", "-f", "/root/ksail-images-import.tar"}, "")
@@ -162,4 +166,27 @@ func TestImportAcceptsTheCarriedNodePlatform(t *testing.T) {
 	err := image.NewImporter(client).Import(ctx, "my-cluster", v1alpha1.DistributionVanilla,
 		v1alpha1.ProviderDocker, image.ImportOptions{InputPath: multiPlatformArchive(t, "", "amd64")})
 	require.NoError(t, err)
+}
+
+// repeatedNodeExec answers command on node every time it runs, with a fresh output stream per
+// run, for probes such as platform detection that an import may repeat.
+func repeatedNodeExec(
+	ctx context.Context,
+	client *docker.MockAPIClient,
+	node, operation string,
+	command []string,
+	stdout string,
+) {
+	execID := node + "-" + operation
+	client.EXPECT().
+		ContainerExecCreate(ctx, node, mock.MatchedBy(func(options container.ExecOptions) bool {
+			return slices.Equal(options.Cmd, command)
+		})).
+		Return(container.ExecCreateResponse{ID: execID}, nil)
+	client.EXPECT().ContainerExecAttach(ctx, execID, container.ExecStartOptions{}).
+		RunAndReturn(func(context.Context, string, container.ExecStartOptions) (dockertypes.HijackedResponse, error) {
+			return mockDockerStreamResponse(stdout, ""), nil
+		})
+	client.EXPECT().ContainerExecInspect(ctx, execID).
+		Return(container.ExecInspect{ExitCode: 0}, nil)
 }
