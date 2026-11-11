@@ -331,7 +331,7 @@ case "${line}" in
 	 else . end' ;;
 'api repos/devantler-tech/homebrew-tap/pulls/42')
 	if [[ -f "${state}/merged" ]]; then
-		[[ "${scenario}" != readback-error ]] || exit 1
+		[[ "${scenario}" != readback-error && "${scenario}" != readback-error-bounded ]] || exit 1
 		jq '.pr | .state="closed" | .draft=false | .merged=true | .base.sha="3333333333333333333333333333333333333333" | .base.repo.full_name="devantler-tech/homebrew-tap" | .merge_commit_sha="4444444444444444444444444444444444444444" | .merged_at="2030-01-01T00:00:02Z"' "${fixture}" |
 		 jq --arg scenario "${scenario}" 'if $scenario == "readback-wrong-head" then .head.sha="2222222222222222222222222222222222222222" else . end'
 	else
@@ -420,6 +420,7 @@ run_case() {
 	[[ "$scenario" != read-budget-* ]] || write_deadline=1250
 	[[ "$scenario" != read-budget-expired ]] || write_deadline=1050
 	[[ "$scenario" != read-budget-no-deadline ]] || write_deadline=""
+	[[ "$scenario" != readback-error-bounded ]] || write_deadline=1250
 	local checks_deadline="" wait_args=(--attempts 2 --interval 0 --checks-wait 31)
 	if [[ "${scenario}" == verify-* ]]; then
 		touch "${state}/merged"
@@ -444,6 +445,9 @@ run_case() {
 	fi
 	if [[ "${scenario}" == unknown-stuck || "${scenario}" == queued-cask-deadline || "${scenario}" == promotion-readback-stuck ]]; then
 		[[ "${code}" -eq 75 ]] || fail "${scenario}: unsettled evidence must remain explicitly pending"
+	fi
+	if [[ "${scenario}" == async-timeout || "${scenario}" == async-lost-read || "${scenario}" == readback-error-bounded ]]; then
+		[[ "${code}" -eq 75 ]] || fail "${scenario}: unconfirmed delivery must remain pending"
 	fi
 	if [[ "$(grep -c '^promote$' "${state}/mutations" || true)" -ne "${promotes}" ]]; then
 		cat "${state}/output" >&2
@@ -625,7 +629,7 @@ for scenario in missing-audit stale-aggregate stale-audit head-moved-after-promo
 done
 run_case missing-postpromotion-aggregate false 1 0
 run_case failed-current-audit-before-aggregate false 1 0
-for scenario in merge-rejected merge-false readback-error readback-wrong-head; do
+for scenario in merge-rejected merge-false readback-error readback-error-bounded readback-wrong-head; do
 	run_case "${scenario}" false 1 1
 done
 for scenario in async-conflict async-failed async-enqueued async-unknown async-missing-details async-malformed \

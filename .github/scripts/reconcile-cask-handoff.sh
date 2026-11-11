@@ -3,7 +3,10 @@
 # Run only from reviewed main, serialized with native CD by the caller workflow.
 set -euo pipefail
 observe=false
-if [[ "$#" -eq 1 && "$1" == --observe ]]; then observe=true; shift; fi
+if [[ "$#" -eq 1 && "$1" == --observe ]]; then
+  observe=true
+  shift
+fi
 if [[ "$#" -ne 0 || "${GITHUB_REPOSITORY:-}" != devantler-tech/ksail ||
   "${GITHUB_REF:-}" != refs/heads/main ||
   ("${GITHUB_EVENT_NAME:-}" != schedule && "${GITHUB_EVENT_NAME:-}" != workflow_dispatch) ]]; then

@@ -627,7 +627,7 @@ merge_result() {
 			fi
 			if ((polls >= attempts)); then
 				blocked 'asynchronous merge result did not settle within its independent poll bound'
-				return 1
+				return 75
 			fi
 			if ((polls > 0)); then sleep "${interval}"; fi
 			# GitHub requires Contents:write for this result read as well as the request.
@@ -635,7 +635,7 @@ merge_result() {
 				-H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2026-03-10' \
 				>"${work}/merge.json"; then
 				blocked 'asynchronous merge result read failed; delivery is unknown'
-				return 1
+				return 75
 			fi
 			polls=$((polls + 1))
 			;;
@@ -647,8 +647,8 @@ merge_result() {
 	done
 }
 merge_result
-if ! read_api "repos/${tap}/pulls/${pr}" >"${work}/merged-pr.json" ||
-	! jq -e --arg head "${head}" --arg sha "${merge_sha}" '
+read_api "repos/${tap}/pulls/${pr}" >"${work}/merged-pr.json" || exit "$?"
+if ! jq -e --arg head "${head}" --arg sha "${merge_sha}" '
 	 .state == "closed" and .merged == true and .draft == false
 	 and .head.sha == $head and .merge_commit_sha == $sha
 	 and (.merged_at | type == "string" and length > 0)
