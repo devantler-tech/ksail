@@ -1069,8 +1069,8 @@ jobs:
             echo "::warning::${context}; no fully validated merged handoff for ${branch}: ${merged_reason:-no merged evidence}"
             if [[ "$failure_status" -eq 75 ]]; then
               handoff_pending=1
-              printf -- '- Pending %s for %s. Guarded reconciliation resumes hourly at https://github.com/devantler-tech/ksail/actions/workflows/reconcile-cask-handoff.yaml\n' \
-                "$name" "$TAG" >> "$GITHUB_STEP_SUMMARY"
+              printf -- '- Pending %s for %s. Guarded reconciliation resumes hourly through Reconcile Homebrew Cask Delivery in Actions: %s\n' \
+                "$name" "$TAG" 'https://github.com/devantler-tech/ksail/actions' >> "$GITHUB_STEP_SUMMARY"
             else
               handoff_failed=1
             fi
@@ -1348,9 +1348,10 @@ jobs:
           jq -n --arg status "$status" --arg tag "$RELEASE_TAG" --arg source "$GITHUB_SHA" \
             --arg run "$GITHUB_RUN_ID" --arg attempt "$GITHUB_RUN_ATTEMPT" \
             '{delivery_status:$status,release_tag:$tag,source:$source,run_id:$run,attempt:$attempt,
-              resume:"https://github.com/devantler-tech/ksail/actions/workflows/reconcile-cask-handoff.yaml"}' \
+              resume:"https://github.com/devantler-tech/ksail/actions",
+              resume_workflow:"reconcile-cask-handoff.yaml"}' \
             > "$RUNNER_TEMP/cask-handoff-result.json"
-          printf 'Cask delivery for %s is **%s**. [Guarded hourly reconciliation](https://github.com/devantler-tech/ksail/actions/workflows/reconcile-cask-handoff.yaml).\n' \
+          printf 'Cask delivery for %s is **%s**. Resume with Reconcile Homebrew Cask Delivery in [Actions](https://github.com/devantler-tech/ksail/actions).\n' \
             "$RELEASE_TAG" "$status" >> "$GITHUB_STEP_SUMMARY"
 
       - name: 📤 Preserve cask delivery outcome
