@@ -46,6 +46,7 @@ func TestSplitImageExportStepDetectsWrongExports(t *testing.T) {
 
 	for _, scenario := range []splitImageScenario{
 		{name: "correct export and import"},
+		{name: "archive stores its index under a dot path", mode: "dot-paths"},
 		{name: "selected export drops the worker image", mode: "drop-worker", wantError: "exactly the requested images"},
 		{name: "full export drops the worker image", mode: "drop-worker-full", wantError: "full export left out"},
 		{name: "selected export adds an image", mode: "extra", wantError: "exactly the requested images"},
@@ -276,12 +277,16 @@ export)
 		done <"$work/images"
 		printf ']}\n'
 	} >"$work/index.json"
-	tar -C "$work" -cf "$out" index.json images
+	if [[ "$SPLIT_MODE" == dot-paths ]]; then
+		tar -C "$work" -cf "$out" ./index.json ./images
+	else
+		tar -C "$work" -cf "$out" index.json images
+	fi
 	rm -rf "$work"
 	;;
 import)
 	[[ "$SPLIT_MODE" != import-noop ]] || exit 0
-	images=$(tar -xOf "$3" images)
+	images=$(tar -xOf "$3" images 2>/dev/null || tar -xOf "$3" ./images)
 	for file in "$nodes"/*; do
 		while read -r ref digest; do
 			[[ "$SPLIT_MODE" != wrong-content || "$digest" != "$DIGEST_B" ]] || digest="$DIGEST_BAD"

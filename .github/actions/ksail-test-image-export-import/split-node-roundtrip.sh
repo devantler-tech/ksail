@@ -161,7 +161,8 @@ echo "Split the fixture: ${refs[0]} only on ${nodes[0]}, ${refs[1]} only on ${no
 archive_names() {
 	local archive="$1" index
 
-	if ! index=$(tar -xOf "$archive" index.json); then
+	# An archive may store its index as index.json or ./index.json.
+	if ! index=$(tar -xOf "$archive" index.json 2>/dev/null || tar -xOf "$archive" ./index.json); then
 		echo "${archive##*/} has no readable index.json." >&2
 		return 1
 	fi
