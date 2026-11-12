@@ -136,3 +136,14 @@ GO-2026-5337  # Kyverno cross-namespace read via context (no client or resolver,
 # module is unmaintained, so no fix will ship; remove this entry if cosign or
 # Kyverno drops the helper.
 GO-2026-6225  # ACR credential helper unanchored host match (no registry client in ksail's path; no fix)
+
+# --- github.com/blakesmith/ar (transitive via kubescape -> grype -> syft) -----
+# Measured 2026-11-07. A crafted `ar` archive with a negative member size makes
+# Reader.Read panic. Syft's Debian cataloger is the only code that builds an
+# ar.Reader, and it runs only when cataloging .deb packages inside a scanned
+# image. govulncheck's only trace reaches it through io.ReadAll on an Azure SDK
+# HTTP error body, an interface-dispatch over-approximation rather than a real
+# call: `ksail workload scan` hands Kubescape a local manifest directory and
+# never catalogs an image filesystem. The module has no maintained release, so
+# no fix will ship; remove this entry if syft drops it or a fixed version appears.
+GO-2026-6905  # ar Reader.Read panic on negative member size (only syft's .deb cataloger builds a reader; not reached by local manifest scans; no fix)

@@ -24,12 +24,13 @@ before:
   hooks:
     # Build and stage the web UI so it is embedded in the desktop binary (see pkg/webui/embed.go).
     - bash scripts/stage-webui.sh
+    - go run .github/scripts/go-notices.go stage desktop-darwin-arm64 "{{ .Tag }}" "{{ .FullCommit }}"
 
 builds:
   - id: ksail-desktop
     main: ./desktop
     tags: [desktop]
-    # Build straight into the bundle layout so the archive contains a valid KSail.app.
+    # Keep the binary at its final path inside the release ZIP.
     binary: KSail.app/Contents/MacOS/ksail-desktop
     goos: [darwin]
     goarch: [arm64]
@@ -40,11 +41,12 @@ builds:
     ldflags:
       - -s -w
     hooks:
-      # Generate the bundle Info.plist (with the release version) and the Dock/Finder icon for
-      # inclusion in the archive.
+      # Seal the assembled bundle, then give the archive pipe the signed executable.
       post:
-        - cmd: bash desktop/scripts/make-info-plist.sh "{{ .Version }}" "desktop/build/Info.plist"
-        - cmd: bash desktop/scripts/make-icns.sh "desktop/resources/icon.png" "desktop/build/AppIcon.icns"
+        - cmd: >-
+            bash desktop/scripts/make-macos-app.sh "{{ .Path }}" desktop/build/KSail.app
+            "{{ .Version }}" .cache/go-notices/desktop-darwin-arm64/GoNotices
+        - cmd: cp desktop/build/KSail.app/Contents/MacOS/ksail-desktop "{{ .Path }}"
 
 archives:
   - id: ksail-desktop
@@ -52,13 +54,22 @@ archives:
     formats: [zip]
     wrap_in_directory: false
     name_template: "KSail_{{ .Version }}_darwin_{{ .Arch }}"
-    # The build emits KSail.app/Contents/MacOS/ksail-desktop; add the Info.plist and AppIcon.icns
-    # alongside it so the archive holds a complete, icon-bearing KSail.app bundle.
+    # Archive the same resource bytes and seal that were signed with the executable.
     files:
-      - src: desktop/build/Info.plist
+      - src: desktop/build/KSail.app/Contents/Info.plist
         dst: KSail.app/Contents/Info.plist
-      - src: desktop/build/AppIcon.icns
+      - src: desktop/build/KSail.app/Contents/Resources/AppIcon.icns
         dst: KSail.app/Contents/Resources/AppIcon.icns
+      - src: LICENSE
+        dst: KSail.app/Contents/Resources/LICENSE
+      - src: .cache/go-notices/desktop-darwin-arm64/GoNotices/THIRD_PARTY_NOTICES.txt
+        dst: KSail.app/Contents/Resources/GoNotices/THIRD_PARTY_NOTICES.txt
+      - src: .cache/go-notices/desktop-darwin-arm64/GoNotices/manifest.json
+        dst: KSail.app/Contents/Resources/GoNotices/manifest.json
+      - src: .cache/go-notices/desktop-darwin-arm64/GoNotices/release.txt
+        dst: KSail.app/Contents/Resources/GoNotices/release.txt
+      - src: desktop/build/KSail.app/Contents/_CodeSignature/CodeResources
+        dst: KSail.app/Contents/_CodeSignature/CodeResources
 
 homebrew_casks:
   - name: ksail-desktop

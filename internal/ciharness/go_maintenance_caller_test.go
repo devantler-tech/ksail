@@ -85,7 +85,8 @@ func validateGoMaintenanceInputs(uses string, with map[string]any) error {
 	_, explicit := with["maintenance-default-branch"]
 
 	switch {
-	case uses == goMaintenanceInputRetiredRevision:
+	case uses == goMaintenanceInputRetiredRevision || uses == goMaintenanceInputPreviousRevision ||
+		uses == goMaintenanceInputLatestRevision:
 		if explicit {
 			return errGoMaintenanceRetiredInput
 		}
@@ -136,6 +137,18 @@ func validateGoMaintenanceIdentity(workflow ciWorkflow, caller todosWorkflow) er
 	// module that declares it), updates runner hardening to v2.22.3 and moves the
 	// disabled signed-fix callee pins to v20.0.8. Admission, permissions, secrets and
 	// the signed-fix opt-out are unchanged.
+	// v20.1.10 adds an opt-in bounded test scheduler that stays off for this caller (it
+	// passes no parallelism input and the module declares no .go-test-execution.json),
+	// routes the go command's work directory to the runner disk, and moves the disabled
+	// signed-fix callee pins to v20.1.6. Admission, permissions, secrets and the signed-fix
+	// opt-out are unchanged, and it still declares no maintenance-default-branch input.
+	// v20.1.17 only moves the MegaLinter Go flavor from v10.1.0 to v10.2.0 and the disabled
+	// signed-fix callee pins to v20.1.12, whose apply-signed-fixes workflow is byte-identical
+	// to v20.1.6. Inputs, admission, permissions, secrets and the signed-fix opt-out are
+	// unchanged, and it still declares no maintenance-default-branch input.
+	// v20.1.18 only moves the disabled signed-fix callee pins to v20.1.17, whose
+	// apply-signed-fixes workflow is byte-identical to v20.1.12. Inputs, admission,
+	// permissions, secrets and the signed-fix opt-out are unchanged.
 	// Keep explicit reviewed identities: a syntactically valid SHA alone is insufficient.
 	reviewed := slices.Contains([]string{
 		prefix + "0600006235510307a04efebcac1ac1f363f5f862",
@@ -153,6 +166,9 @@ func validateGoMaintenanceIdentity(workflow ciWorkflow, caller todosWorkflow) er
 		prefix + "af042c540ce8db4d64add98c34b5c57691e0e812",
 		prefix + "0966f4b015e85ef14be37411d424a7028a858550",
 		prefix + "522038c41420f0c9508a586cb944eda995ad0068",
+		prefix + "15372ea4ee3a0bd5b0a41a18105859691737df01",
+		prefix + "1a0eb6f18b88a7816b91cbf692b8ad8ea9a08123",
+		prefix + "9ba573406426900207a3b5afeebe16f2d89ca751",
 	}, job.Uses)
 	if !found || !reviewed || len(job.Steps) != 0 ||
 		caller.Jobs["ci-go"].RunsOn != "" || !reflect.DeepEqual(job.Needs, []string{"changes"}) {
@@ -277,6 +293,12 @@ const (
 	// The reviewed revision that no longer declares maintenance-default-branch.
 	goMaintenanceInputRetiredRevision = "devantler-tech/.github/.github/workflows/validate-go-project.yaml@" +
 		"522038c41420f0c9508a586cb944eda995ad0068"
+	// The previous reviewed revision; it also declares no maintenance-default-branch.
+	goMaintenanceInputPreviousRevision = "devantler-tech/.github/.github/workflows/validate-go-project.yaml@" +
+		"1a0eb6f18b88a7816b91cbf692b8ad8ea9a08123"
+	// The latest reviewed revision; it also declares no maintenance-default-branch.
+	goMaintenanceInputLatestRevision = "devantler-tech/.github/.github/workflows/validate-go-project.yaml@" +
+		"9ba573406426900207a3b5afeebe16f2d89ca751"
 )
 
 type goMaintenanceMutation struct {
@@ -386,6 +408,12 @@ func goMaintenanceInputMutations() []goMaintenanceMutation {
 			t.Helper()
 
 			job["uses"] = goMaintenanceInputRetiredRevision
+			goMaintenanceMap(t, job, "with")["maintenance-default-branch"] = true
+		}, "maintenance-default-branch is retired"},
+		{"retired input passed at latest revision", func(t *testing.T, job map[string]any) {
+			t.Helper()
+
+			job["uses"] = goMaintenanceInputLatestRevision
 			goMaintenanceMap(t, job, "with")["maintenance-default-branch"] = true
 		}, "maintenance-default-branch is retired"},
 		{"signed fixes omitted", func(t *testing.T, job map[string]any) {

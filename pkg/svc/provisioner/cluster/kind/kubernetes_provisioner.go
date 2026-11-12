@@ -150,14 +150,9 @@ func (p *KubernetesProvisioner) Create(
 	defer dockerPF.Close()
 
 	// Step 5: Set DOCKER_HOST so the Kind SDK talks to DinD
-	msg := "► creating Kind cluster via SDK (DOCKER_HOST → exec tunnel → DinD)"
-	_, _ = fmt.Fprintln(os.Stdout, msg)
-
-	err = kubernetesprovider.WithRemoteDockerHost(dockerPF, func() error {
-		return p.Provisioner.Create(ctx, target)
-	})
+	err = p.createInDinD(ctx, dockerPF, target)
 	if err != nil {
-		return fmt.Errorf("kind create via SDK: %w", err)
+		return err
 	}
 
 	// Step 6: Point the kubeconfig at the stable exposure address and publish it as a host-cluster
@@ -194,6 +189,31 @@ func (p *KubernetesProvisioner) Exists(ctx context.Context, name string) (bool, 
 func (p *KubernetesProvisioner) List(ctx context.Context) ([]string, error) {
 	//nolint:wrapcheck // DinDLifecycle.List already wraps with "list clusters" context
 	return p.dindLifecycle().List(ctx)
+}
+
+// createInDinD points DOCKER_HOST at the DinD exec tunnel, replaces a persisted nested `kind`
+// network that predates the planned address pool, and then creates the cluster with the Kind SDK.
+func (p *KubernetesProvisioner) createInDinD(
+	ctx context.Context,
+	dockerPF *kubernetesprovider.PortForwardSession,
+	target string,
+) error {
+	msg := "► creating Kind cluster via SDK (DOCKER_HOST → exec tunnel → DinD)"
+	_, _ = fmt.Fprintln(os.Stdout, msg)
+
+	err := kubernetesprovider.WithRemoteDockerHost(dockerPF, func() error {
+		err := replaceStaleNestedKindNetwork(ctx)
+		if err != nil {
+			return err
+		}
+
+		return p.Provisioner.Create(ctx, target)
+	})
+	if err != nil {
+		return fmt.Errorf("kind create via SDK: %w", err)
+	}
+
+	return nil
 }
 
 // setupDinD creates the namespace and DinD pod, then waits for readiness.
