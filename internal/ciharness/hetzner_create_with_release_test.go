@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -216,4 +217,156 @@ func writeFakeKSail(t *testing.T, dir, version string) string {
 	require.NoError(t, err)
 
 	return path
+}
+
+// A K3s or Vanilla dispatch takes the bare-cluster smoke path, which would ignore the release.
+func TestSmokeDispatchRefusesCreateWithRelease(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/system-test-hetzner.yaml")
+	validate := findHarnessStep(
+		t,
+		workflow.Jobs["system-test"].Steps,
+		"✅ Validate direct-provider smoke selection",
+	)
+	assert.Equal(t, "${{ inputs.create_with_release }}", validate.Env["CREATE_WITH_RELEASE"])
+
+	log, err := runStepScript(t, validate.Run, "", []string{
+		"DISTRIBUTION=K3s", "CREATE_WITH_RELEASE=v7.212.22",
+	})
+	require.Error(t, err, log)
+	assert.Contains(t, log, "create_with_release=v7.212.22")
+
+	log, err = runStepScript(t, validate.Run, "", []string{"DISTRIBUTION=K3s"})
+	require.NoError(t, err, log)
+}
+
+type releaseUpdateCase struct {
+	name    string
+	step    string
+	outputs []string
+	fail    bool
+	wantErr string
+}
+
+// On a cluster an earlier release created, the first update may change it in place but never
+// recreate it, a failed command is never read as success, and a second update must find
+// nothing left to change.
+func TestReleaseCreatedClusterUpdateChecks(t *testing.T) {
+	t.Parallel()
+
+	steps := readCompositeAction(t, ".github/actions/ksail-system-test/action.yaml").Runs.Steps
+	dryRun := "🧪 ksail cluster update --dry-run"
+	update := "🧪 ksail cluster update"
+
+	for _, name := range []string{dryRun, update} {
+		assert.Equal(
+			t,
+			"${{ inputs.create-binary != '' }}",
+			findHarnessStep(t, steps, name).Env["CREATED_BY_RELEASE"],
+		)
+	}
+
+	for _, testCase := range []releaseUpdateCase{
+		{
+			name: "dry run with in-place changes", step: dryRun,
+			outputs: []string{"Would apply 2 in-place, 0 reboot-required, 0 recreate-required"},
+		},
+		{
+			name: "dry run that would recreate", step: dryRun, wantErr: "would recreate",
+			outputs: []string{"Would apply 1 in-place, 0 reboot-required, 1 recreate-required"},
+		},
+		{name: "failed dry run", step: dryRun, fail: true, wantErr: "dry run failed"},
+		{name: "update that converges", step: update, outputs: []string{"Applied 2 in-place changes", "No changes detected"}},
+		{
+			name: "update that does not converge", step: update, wantErr: "still found changes",
+			outputs: []string{"Applied 2 in-place changes", "Applied 1 in-place change"},
+		},
+		{name: "failed update", step: update, fail: true, wantErr: "update failed"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			fakeDir := writeSequencedKSail(t, testCase.outputs, testCase.fail)
+			log, err := runStepScript(
+				t,
+				findHarnessStep(t, steps, testCase.step).Run,
+				fakeDir,
+				[]string{
+					"CREATED_BY_RELEASE=true",
+					"DISTRIBUTION=Talos",
+					"PROVIDER=Hetzner",
+					"ARGS=--name demo",
+				},
+			)
+
+			if testCase.wantErr != "" {
+				require.Error(t, err, log)
+				assert.Contains(t, log, testCase.wantErr)
+
+				return
+			}
+
+			require.NoError(t, err, log)
+		})
+	}
+}
+
+// runStepScript runs a step's script with its log directory moved into a temporary one, a
+// fake ksail first on PATH when fakeDir is set, and the given environment.
+func runStepScript(t *testing.T, script, fakeDir string, env []string) (string, error) {
+	t.Helper()
+
+	logDir := filepath.Join(t.TempDir(), "logs")
+	require.NoError(t, os.MkdirAll(logDir, 0o750))
+
+	path := "/usr/bin:/bin"
+	if fakeDir != "" {
+		path = fakeDir + ":" + path
+	}
+
+	script = strings.ReplaceAll(script, "/tmp/ksail-system-test-logs", logDir)
+
+	//nolint:gosec // runs the reviewed workflow step under test
+	command := exec.CommandContext(t.Context(), "bash", "-c", script)
+
+	command.Env = append([]string{"PATH=" + path}, env...)
+	output, err := command.CombinedOutput()
+
+	return string(output), err
+}
+
+// writeSequencedKSail writes a fake ksail that prints the next of outputs on each call, or
+// fails every call when fail is set.
+func writeSequencedKSail(t *testing.T, outputs []string, fail bool) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	counter := filepath.Join(dir, "calls")
+	require.NoError(t, os.WriteFile(counter, []byte("0"), 0o600))
+
+	var script strings.Builder
+
+	script.WriteString("#!/bin/bash\n")
+
+	if fail {
+		script.WriteString("echo 'boom'; exit 3\n")
+	} else {
+		script.WriteString("n=$(cat '" + counter + "'); echo $((n + 1)) > '" + counter + "'\n")
+		script.WriteString("case $n in\n")
+
+		for index, output := range outputs {
+			script.WriteString("  " + strconv.Itoa(index) + ") echo '" + output + "' ;;\n")
+		}
+
+		script.WriteString("  *) echo 'unexpected call'; exit 4 ;;\nesac\n")
+	}
+
+	path := filepath.Join(dir, "ksail")
+	content := []byte(script.String())
+
+	err := os.WriteFile(path, content, 0o700) //nolint:gosec // an executable test binary
+	require.NoError(t, err)
+
+	return dir
 }

@@ -646,12 +646,25 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ steps.resolve-args.outputs.args }}
         K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
+        CREATED_BY_RELEASE: ${{ inputs.create-binary != '' }}
       run: |
         set -o pipefail
         # Strip init-only flags that cluster update does not accept
         UPDATE_ARGS=$(echo "$ARGS" | sed 's/--image-verification [^ ]*//')
         # shellcheck disable=SC2086
         ksail cluster update --dry-run --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG 2>&1 | tee /tmp/ksail-system-test-logs/cluster-update-dry-run.log
+        update_status=$?
+        if [[ "$CREATED_BY_RELEASE" == true ]]; then
+          [[ "$update_status" -eq 0 ]] || { echo "❌ ERROR: the dry run failed on the cluster an earlier release created"; exit "$update_status"; }
+          # ksail#8347: an earlier release created this cluster, so this build may change it in
+          # place, but it must never need to recreate it.
+          if grep -qE "[1-9][0-9]* recreate-required" /tmp/ksail-system-test-logs/cluster-update-dry-run.log; then
+            echo "❌ ERROR: this build would recreate a cluster an earlier release created"
+            exit 1
+          fi
+          echo "✅ No recreation needed for the cluster the earlier release created (dry run)"
+          exit 0
+        fi
         # Fail early if the dry run detects unexpected changes.
         # The cluster was just created with the same config, so zero changes are expected.
         if ! grep -qE "No changes detected|Would apply 0 in-place, 0 reboot-required, 0 recreate-required" /tmp/ksail-system-test-logs/cluster-update-dry-run.log; then
@@ -669,12 +682,29 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ steps.resolve-args.outputs.args }}
         K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
+        CREATED_BY_RELEASE: ${{ inputs.create-binary != '' }}
       run: |
         set -o pipefail
         # Strip init-only flags that cluster update does not accept
         UPDATE_ARGS=$(echo "$ARGS" | sed 's/--image-verification [^ ]*//')
         # shellcheck disable=SC2086
         ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG 2>&1 | tee /tmp/ksail-system-test-logs/cluster-update.log
+        update_status=$?
+        if [[ "$CREATED_BY_RELEASE" == true ]]; then
+          [[ "$update_status" -eq 0 ]] || { echo "❌ ERROR: the update failed on the cluster an earlier release created"; exit "$update_status"; }
+          # ksail#8347: the first update may bring a cluster an earlier release created up to
+          # this build. A second update must then find nothing left to change.
+          # shellcheck disable=SC2086
+          ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG 2>&1 | tee /tmp/ksail-system-test-logs/cluster-update-converged.log
+          converged_status=$?
+          [[ "$converged_status" -eq 0 ]] || { echo "❌ ERROR: the second update failed"; exit "$converged_status"; }
+          if ! grep -q "No changes detected" /tmp/ksail-system-test-logs/cluster-update-converged.log; then
+            echo "❌ ERROR: a second update still found changes on the cluster the earlier release created"
+            exit 1
+          fi
+          echo "✅ The cluster the earlier release created converged after one update"
+          exit 0
+        fi
         # Fail early if the update detects unexpected changes.
         # The cluster was just created with the same config, so zero changes are expected.
         if ! grep -q "No changes detected" /tmp/ksail-system-test-logs/cluster-update.log; then

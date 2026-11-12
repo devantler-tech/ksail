@@ -355,6 +355,7 @@ jobs:
           GITOPS_ENGINE: ${{ inputs.gitops_engine }}
           CONTROL_PLANES: ${{ inputs.control_planes }}
           WORKERS: ${{ inputs.workers }}
+          CREATE_WITH_RELEASE: ${{ inputs.create_with_release }}
         run: |
           ignored=()
           [[ "${CNI:-Default}" == "Default" ]] || ignored+=("cni=$CNI")
@@ -366,6 +367,7 @@ jobs:
           [[ "${GITOPS_ENGINE:-None}" == "None" ]] || ignored+=("gitops_engine=$GITOPS_ENGINE")
           [[ "${CONTROL_PLANES:-1}" == "1" ]] || ignored+=("control_planes=$CONTROL_PLANES")
           [[ "${WORKERS:-0}" == "0" ]] || ignored+=("workers=$WORKERS")
+          [[ -z "${CREATE_WITH_RELEASE:-}" ]] || ignored+=("create_with_release=$CREATE_WITH_RELEASE")
           if (( ${#ignored[@]} > 0 )); then
             echo "::error::$DISTRIBUTION dispatches run the bare-cluster smoke test, which ignores: ${ignored[*]}. Reset them to their defaults, or pick Talos to test a full stack." >&2
             exit 1
