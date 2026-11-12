@@ -31,6 +31,7 @@ func TestGoModuleRestoreConsumerBindings(t *testing.T) {
 			// TestKSailBinaryArtifactMirrorWarmerConsumer instead.
 			"warm-helm-cache", "test-release-config",
 			"release-graph-audit", "local-recovery-trial",
+			"verify-todos-workflow-contract",
 		},
 		"copilot-setup-steps.yml":       {"copilot-setup-steps"},
 		"system-test-eks.yaml":          {"build-artifact"},
