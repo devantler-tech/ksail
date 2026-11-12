@@ -13,6 +13,7 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/docker/docker/api/types/container"
 )
@@ -78,15 +79,9 @@ func (i *Importer) Import(
 		return err
 	}
 
-	// Set default input path and validate file exists
-	inputPath := opts.InputPath
-	if inputPath == "" {
-		inputPath = "images.tar"
-	}
-
-	_, err = os.Stat(inputPath)
-	if os.IsNotExist(err) {
-		return fmt.Errorf("%w: %s", ErrInputFileNotFound, inputPath)
+	inputPath, err := resolveImportInput(opts.InputPath)
+	if err != nil {
+		return err
 	}
 
 	// Get K8s nodes for the cluster
@@ -95,8 +90,7 @@ func (i *Importer) Import(
 		return err
 	}
 
-	// Refuse before copying anything when the archive cannot serve a node's platform.
-	err = i.requireNodePlatforms(ctx, k8sNodes, inputPath)
+	digests, err := i.inspectArchive(ctx, k8sNodes, inputPath)
 	if err != nil {
 		return err
 	}
@@ -111,7 +105,7 @@ func (i *Importer) Import(
 
 	for _, node := range k8sNodes {
 		waitGroup.Go(func() {
-			importErr := i.importImagesToNode(ctx, node.Name, inputPath, tmpBasePath)
+			importErr := i.importImagesToNode(ctx, node.Name, inputPath, tmpBasePath, digests)
 			if importErr != nil {
 				errChan <- fmt.Errorf("failed to import images to node %s: %w", node.Name, importErr)
 			}
@@ -132,6 +126,26 @@ func (i *Importer) Import(
 	}
 
 	return nil
+}
+
+// resolveImportInput applies the default archive name, checks that the archive exists and
+// resolves its path once, so the archive that is inspected is the archive that is copied.
+func resolveImportInput(inputPath string) (string, error) {
+	if inputPath == "" {
+		inputPath = "images.tar"
+	}
+
+	_, err := os.Stat(inputPath)
+	if os.IsNotExist(err) {
+		return "", fmt.Errorf("%w: %s", ErrInputFileNotFound, inputPath)
+	}
+
+	resolved, err := fsutil.EvalCanonicalPath(inputPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve image archive path: %w", err)
+	}
+
+	return resolved, nil
 }
 
 // getK8sNodes gets the list of Kubernetes nodes for the cluster, filtering out
@@ -173,6 +187,27 @@ func filterK8sNodes(nodes []provider.NodeInfo) []provider.NodeInfo {
 	return result
 }
 
+// inspectArchive reads what the import needs from the archive before anything is copied. It
+// refuses when the archive cannot serve a node's platform, and returns the images the archive
+// lists so each node's import can be checked for references that name none of them.
+func (i *Importer) inspectArchive(
+	ctx context.Context,
+	nodes []provider.NodeInfo,
+	inputPath string,
+) (*archiveImageDigests, error) {
+	err := i.requireNodePlatforms(ctx, nodes, inputPath)
+	if err != nil {
+		return nil, err
+	}
+
+	digests, err := readArchiveImageDigests(inputPath)
+	if err != nil {
+		return nil, fmt.Errorf("read image archive index: %w", err)
+	}
+
+	return digests, nil
+}
+
 // requireNodePlatforms refuses the import before any copy when the archive carries no content
 // for a node's platform for one of its multi-platform images. ctr would otherwise fail later, on
 // that node only, with a missing-content error. Nodes are checked only when the archive holds a
@@ -206,12 +241,15 @@ func (i *Importer) requireNodePlatforms(
 	return nil
 }
 
-// importImagesToNode imports images from a tar archive to a node's containerd.
+// importImagesToNode imports images from a tar archive to a node's containerd. When the archive is
+// an OCI image layout, digests lists its images, and the import fails if it leaves a new digest
+// reference that names none of them, such as the archive's own index.
 func (i *Importer) importImagesToNode(
 	ctx context.Context,
 	nodeName string,
 	inputPath string,
 	tmpBasePath string,
+	digests *archiveImageDigests,
 ) error {
 	// Choose the import mode before copying anything, so a node whose
 	// capabilities cannot be read refuses the import instead of guessing.
@@ -225,6 +263,16 @@ func (i *Importer) importImagesToNode(
 		platform, err = i.executor.detectPlatform(ctx, nodeName)
 		if err != nil {
 			return fmt.Errorf("detect platform of node %s: %w", nodeName, err)
+		}
+	}
+
+	// Record the node's references first, so the check after the import judges only what this
+	// import added.
+	var before []string
+	if digests != nil {
+		before, err = i.executor.listNodeImageReferences(ctx, nodeName)
+		if err != nil {
+			return fmt.Errorf("check image references before import: %w", err)
 		}
 	}
 
@@ -246,7 +294,11 @@ func (i *Importer) importImagesToNode(
 		return fmt.Errorf("ctr import failed: %w", err)
 	}
 
-	return nil
+	if digests == nil {
+		return nil
+	}
+
+	return i.executor.requireKnownReferences(ctx, nodeName, digests, before)
 }
 
 // importCommand builds the ctr import command for one node.

@@ -152,6 +152,9 @@ func TestImportAcceptsTheCarriedNodePlatform(t *testing.T) {
 		}, nil)
 	repeatedNodeExec(ctx, client, node, "platform", []string{"uname", "-m"}, "x86_64\n")
 	optionalNodeExec(ctx, client, node, "help", importHelpCommand(), localImportHelp)
+	repeatedNodeExec(ctx, client, node, "list",
+		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
+		multiPlatformImageName+"\n")
 	client.EXPECT().
 		CopyToContainer(ctx, node, "/root", mock.Anything, container.CopyToContainerOptions{}).
 		Return(nil).Once()
