@@ -10,8 +10,14 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
-var errCNINotReconciledBeforeUpgrade = errors.New(
-	"the CNI could not be updated before the distribution upgrade, so no node was upgraded",
+var (
+	errCNINotReconciledBeforeUpgrade = errors.New(
+		"the CNI could not be updated before the distribution upgrade, so no node was upgraded",
+	)
+	errCNIUnverifiedBeforeUpgrade = errors.New(
+		"the installed CNI could not be compared with this KSail version before the distribution " +
+			"upgrade, so no node was upgraded; resolve the warning above and run update again",
+	)
 )
 
 // cniRolloutWaiter is implemented by CNI installers whose Helm upgrade returns
@@ -59,6 +65,12 @@ func (o *updateOrchestrator) reconcileCNIBeforeDistributionUpgrade(
 
 	for _, probe := range cniDriftProbes() {
 		checkComponentValuesDrift(o.cmd, o.ctx, diffEngine, diff, probe)
+	}
+
+	// An unverified CNI may be one the new release cannot start, so stop
+	// before any node reboots rather than upgrade on an unknown baseline.
+	if diff.HasUnknownBaseline() {
+		return errCNIUnverifiedBeforeUpgrade
 	}
 
 	if len(diff.InPlaceChanges) == 0 {

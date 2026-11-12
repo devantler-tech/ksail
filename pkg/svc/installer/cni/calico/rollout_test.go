@@ -1,9 +1,10 @@
-package calicoinstaller
+package calicoinstaller_test
 
 import (
 	"testing"
 	"time"
 
+	calicoinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/cni/calico"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -23,7 +24,7 @@ func rolloutInstallation(generation int64) *unstructured.Unstructured {
 	installation := &unstructured.Unstructured{}
 	installation.SetAPIVersion("operator.tigera.io/v1")
 	installation.SetKind("Installation")
-	installation.SetName(operatorInstallationName)
+	installation.SetName("default")
 	installation.SetGeneration(generation)
 
 	return installation
@@ -33,7 +34,7 @@ func rolloutStatus(conditions ...rolloutCondition) *unstructured.Unstructured {
 	status := &unstructured.Unstructured{}
 	status.SetAPIVersion("operator.tigera.io/v1")
 	status.SetKind("TigeraStatus")
-	status.SetName(calicoStatusName)
+	status.SetName("calico")
 
 	items := make([]any, 0, len(conditions))
 	for _, condition := range conditions {
@@ -64,7 +65,7 @@ const calicoNodeDesired = 3
 
 func calicoNodeDaemonSet(generation, observed int64, updated, available int32) *appsv1.DaemonSet {
 	return &appsv1.DaemonSet{
-		Name: calicoNodeName, Namespace: calicoNodeNamespace, Generation: generation,
+		Name: "calico-node", Namespace: "calico-system", Generation: generation,
 		Status: appsv1.DaemonSetStatus{
 			ObservedGeneration:     observed,
 			DesiredNumberScheduled: calicoNodeDesired,
@@ -168,7 +169,7 @@ func TestRolloutPending(t *testing.T) {
 				core = kubefake.NewClientset(testCase.daemonSet)
 			}
 
-			pending, err := rolloutPending(t.Context(), resources, core)
+			pending, err := calicoinstaller.RolloutPendingForTest(t.Context(), resources, core)
 
 			require.NoError(t, err)
 			assert.Equal(t, testCase.wantPending, pending)
@@ -184,9 +185,9 @@ func TestWaitForRolloutReportsWhatIsStillPending(t *testing.T) {
 	)
 	core := kubefake.NewClientset(calicoNodeDaemonSet(7, 7, 3, 3))
 
-	err := waitForRollout(t.Context(), resources, core, 50*time.Millisecond)
+	err := calicoinstaller.WaitForRolloutForTest(t.Context(), resources, core, 50*time.Millisecond)
 
-	require.ErrorIs(t, err, errCalicoRolloutIncomplete)
+	require.ErrorIs(t, err, calicoinstaller.ErrRolloutIncomplete)
 	assert.Contains(t, err.Error(), "operator has not applied Installation generation 4 yet")
 }
 
@@ -198,5 +199,8 @@ func TestWaitForRolloutReturnsOnceRolledOut(t *testing.T) {
 	)
 	core := kubefake.NewClientset(calicoNodeDaemonSet(9, 9, 3, 3))
 
-	require.NoError(t, waitForRollout(t.Context(), resources, core, time.Second))
+	require.NoError(
+		t,
+		calicoinstaller.WaitForRolloutForTest(t.Context(), resources, core, time.Second),
+	)
 }

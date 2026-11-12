@@ -28,7 +28,8 @@ const (
 	calicoNodeName      = "calico-node"
 )
 
-var errCalicoRolloutIncomplete = errors.New("calico rollout incomplete")
+// ErrRolloutIncomplete reports that Calico did not finish rolling out in time.
+var ErrRolloutIncomplete = errors.New("calico rollout incomplete")
 
 //nolint:gochecknoglobals // immutable resource identities
 var (
@@ -79,7 +80,7 @@ func waitForRollout(
 		return reason == "", nil
 	})
 	if err != nil {
-		return fmt.Errorf("%w: %s: %w", errCalicoRolloutIncomplete, pending, err)
+		return fmt.Errorf("%w: %s: %w", ErrRolloutIncomplete, pending, err)
 	}
 
 	return nil

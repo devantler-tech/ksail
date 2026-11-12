@@ -15,7 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var errCalicoRolloutStalled = errors.New("calico-node rollout stalled")
+var (
+	errCalicoRolloutStalled = errors.New("calico-node rollout stalled")
+	errCalicoProbeFailed    = errors.New("calico release unreadable")
+)
 
 // cniUpgradeEvents records the order in which the CNI and the distribution
 // upgrade touch the cluster.
@@ -28,6 +31,7 @@ type cniUpgradeEvents struct {
 type recordingCalicoInstaller struct {
 	log        *cniUpgradeEvents
 	drifted    bool
+	probeErr   error
 	rolloutErr error
 }
 
@@ -44,7 +48,7 @@ func (*recordingCalicoInstaller) Images(context.Context) ([]string, error) { ret
 func (r *recordingCalicoInstaller) ValuesDrifted(context.Context) (bool, error) {
 	r.log.events = append(r.log.events, "calico probe")
 
-	return r.drifted, nil
+	return r.drifted, r.probeErr
 }
 
 func (r *recordingCalicoInstaller) WaitForRollout(context.Context) error {
@@ -100,9 +104,11 @@ type cniBeforeUpgradeCase struct {
 	inPlace    bool
 	drifted    bool
 	dryRun     bool
+	probeErr   error
 	rolloutErr error
 	wantEvents []string
-	wantErr    bool
+	wantErrIs  error
+	wantErr    string
 }
 
 func cniBeforeUpgradeCases() []cniBeforeUpgradeCase {
@@ -132,7 +138,14 @@ func cniBeforeUpgradeCases() []cniBeforeUpgradeCase {
 			name:    "a stalled rollout stops the update before any node is upgraded",
 			inPlace: true, drifted: true, rolloutErr: errCalicoRolloutStalled,
 			wantEvents: []string{"calico probe", "calico install", "calico rollout"},
-			wantErr:    true,
+			wantErrIs:  errCalicoRolloutStalled,
+			wantErr:    "no node was upgraded",
+		},
+		{
+			name:    "Calico that cannot be compared stops the update before any node is upgraded",
+			inPlace: true, probeErr: errCalicoProbeFailed,
+			wantEvents: []string{"calico probe"},
+			wantErr:    "could not be compared with this KSail version",
 		},
 	}
 }
@@ -142,7 +155,10 @@ func runPinnedCNIUpgrade(t *testing.T, testCase cniBeforeUpgradeCase) ([]string,
 
 	log := &cniUpgradeEvents{}
 	calico := &recordingCalicoInstaller{
-		log: log, drifted: testCase.drifted, rolloutErr: testCase.rolloutErr,
+		log:        log,
+		drifted:    testCase.drifted,
+		probeErr:   testCase.probeErr,
+		rolloutErr: testCase.rolloutErr,
 	}
 
 	t.Cleanup(cluster.SetCalicoInstallerFactoryForTests(
@@ -180,9 +196,12 @@ func TestReconcileClusterVersionsUpdatesCNIBeforeDistributionUpgrade(t *testing.
 
 			assert.Equal(t, testCase.wantEvents, events)
 
-			if testCase.wantErr {
-				require.ErrorIs(t, err, errCalicoRolloutStalled)
-				assert.Contains(t, err.Error(), "no node was upgraded")
+			if testCase.wantErr != "" {
+				require.ErrorContains(t, err, testCase.wantErr)
+
+				if testCase.wantErrIs != nil {
+					require.ErrorIs(t, err, testCase.wantErrIs)
+				}
 
 				return
 			}
