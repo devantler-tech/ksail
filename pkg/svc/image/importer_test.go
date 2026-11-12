@@ -748,6 +748,18 @@ const localImportHelp = "OPTIONS:\n   --digests  Create digest refs\n" +
 	"   --local  Run import locally rather than through transfer API (default: false)\n" +
 	"   --help, -h  Show help\n"
 
+// namedDigestImportHelp is ctr import help from a version that advertises both --local and
+// --skip-digest-for-named, as containerd 1.7 and 2.x do.
+const namedDigestImportHelp = "OPTIONS:\n   --digests  Create digest refs\n" +
+	"   --skip-digest-for-named  Skip applying --digests option to images named in the importing tar\n" +
+	"   --local  Run import locally rather than through transfer API (default: false)\n" +
+	"   --help, -h  Show help\n"
+
+// legacyNamedDigestImportHelp is ctr import help that advertises --skip-digest-for-named but
+// not --local.
+const legacyNamedDigestImportHelp = "OPTIONS:\n   --digests  Create digest refs\n" +
+	"   --skip-digest-for-named  Skip digest refs for named images\n   --help, -h  Show help\n"
+
 func importHelpCommand() []string {
 	return []string{ctrCommand, "--namespace=k8s.io", "images", "import", "--help"}
 }
@@ -865,7 +877,7 @@ func importModeCases() []importModeCase {
 func TestImportSelectsModeFromNodeCapabilities(t *testing.T) {
 	t.Parallel()
 
-	for _, testCase := range importModeCases() {
+	for _, testCase := range append(importModeCases(), namedDigestImportModeCases()...) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -937,8 +949,8 @@ func TestImportCommandKeepsArchiveRootOutOfImageStore(t *testing.T) {
 	t.Parallel()
 
 	for _, command := range [][]string{
-		image.ImportCommandForTest(kindImportPath, true, "linux/amd64"),
-		image.ImportCommandForTest(kindImportPath, false, ""),
+		image.ImportCommandForTest(kindImportPath, true, "linux/amd64", false),
+		image.ImportCommandForTest(kindImportPath, false, "", false),
 	} {
 		assert.Contains(t, command, "--digests", command)
 		assert.Equal(t, kindImportPath, command[len(command)-1], command)
@@ -950,8 +962,29 @@ func TestImportCommandKeepsArchiveRootOutOfImageStore(t *testing.T) {
 		}
 	}
 
-	assert.NotContains(t, image.ImportCommandForTest(kindImportPath, false, ""), "--local")
-	assert.NotContains(t, image.ImportCommandForTest(kindImportPath, false, ""), "--platform")
+	assert.NotContains(t, image.ImportCommandForTest(kindImportPath, false, "", false), "--local")
+	assert.NotContains(
+		t,
+		image.ImportCommandForTest(kindImportPath, false, "", false),
+		"--platform",
+	)
+	assert.NotContains(t, image.ImportCommandForTest(kindImportPath, true, "linux/amd64", false),
+		"--skip-digest-for-named")
+}
+
+// A named image never gains a generated import-<date>@<digest> alias when the node's ctr can skip
+// it, whichever import mode runs. The digest references themselves are kept.
+func TestImportCommandSkipsGeneratedAliasesForNamedImages(t *testing.T) {
+	t.Parallel()
+
+	for _, command := range [][]string{
+		image.ImportCommandForTest(kindImportPath, true, "linux/amd64", true),
+		image.ImportCommandForTest(kindImportPath, false, "", true),
+	} {
+		assert.Contains(t, command, "--digests", command)
+		assert.Contains(t, command, "--skip-digest-for-named", command)
+		assert.Equal(t, kindImportPath, command[len(command)-1], command)
+	}
 }
 
 func expectedImportCommands(testCase importModeCase) [][]string {
@@ -1043,4 +1076,33 @@ func observeImportNode(
 	}
 
 	return commands
+}
+
+// namedDigestImportModeCases cover a ctr that can skip the generated import-<date>@<digest> alias
+// for the images an archive names.
+func namedDigestImportModeCases() []importModeCase {
+	return []importModeCase{
+		{
+			name:  "local import skips generated digest aliases for named images when advertised",
+			help:  namedDigestImportHelp,
+			uname: "x86_64\n",
+			wantImport: []string{
+				ctrCommand, "--namespace=k8s.io", "images", "import", "--digests",
+				"--skip-digest-for-named", "--local", "--platform", "linux/amd64", kindImportPath,
+			},
+		},
+		{
+			name: "legacy import skips generated digest aliases for named images when advertised",
+			help: legacyNamedDigestImportHelp,
+			wantImport: []string{
+				ctrCommand, "--namespace=k8s.io", "images", "import", "--digests",
+				"--skip-digest-for-named", kindImportPath,
+			},
+		},
+		{
+			name:       "a look-alike option is not --skip-digest-for-named",
+			help:       "OPTIONS:\n   --skip-digest-for-named-x  Other\n   --help, -h  Show help\n",
+			wantImport: legacyImportCommand(),
+		},
+	}
 }
