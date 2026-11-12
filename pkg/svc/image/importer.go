@@ -213,6 +213,21 @@ func (i *Importer) importImagesToNode(
 	inputPath string,
 	tmpBasePath string,
 ) error {
+	// Choose the import mode before copying anything, so a node whose
+	// capabilities cannot be read refuses the import instead of guessing.
+	local, err := i.executor.localImageMode(ctx, nodeName, "import")
+	if err != nil {
+		return err
+	}
+
+	platform := ""
+	if local {
+		platform, err = i.executor.detectPlatform(ctx, nodeName)
+		if err != nil {
+			return fmt.Errorf("detect platform of node %s: %w", nodeName, err)
+		}
+	}
+
 	// Copy the tar file from host to container. Each import gets its own archive
 	// name, and the archive is removed however the import ends, even after a
 	// partial copy or a cancellation.
@@ -220,27 +235,48 @@ func (i *Importer) importImagesToNode(
 
 	defer i.executor.removeNodeArchive(ctx, nodeName, tmpPath)
 
-	err := i.copyToContainer(ctx, nodeName, inputPath, tmpPath)
+	err = i.copyToContainer(ctx, nodeName, inputPath, tmpPath)
 	if err != nil {
 		return fmt.Errorf("failed to copy import file to container: %w", err)
 	}
 
-	// Build ctr import command
-	// Note: We don't use --all-platforms because multi-platform images may have
-	// manifests for platforms whose layers aren't present, causing import to fail.
-	cmd := []string{
-		ctrCommand, ctrNamespaceArg, ctrImages, "import",
-		"--digests",
-		tmpPath,
-	}
-
 	// Execute import command
-	_, err = i.executor.ExecInContainer(ctx, nodeName, cmd)
+	_, err = i.executor.ExecInContainer(ctx, nodeName, importCommand(tmpPath, local, platform))
 	if err != nil {
 		return fmt.Errorf("ctr import failed: %w", err)
 	}
 
 	return nil
+}
+
+// importCommand builds the ctr import command for one node.
+//
+// --digests keeps a digest reference for every image the archive names, so
+// named images and their child digest references survive the import.
+//
+// When the node's ctr advertises --local, the import runs client-side. The
+// default transfer importer of containerd 2.x also stores the archive's own
+// top-level index as a digest reference; that reference names no real image,
+// so a later export cannot find or pull it. The local importer registers that
+// index only when --index-name asks for it, which ksail never does.
+//
+// The local importer otherwise matches every platform the node can run (an
+// amd64 node also matches 386), and fails on any listed manifest the archive
+// does not carry. An export holds content only for its node's platform, so
+// --platform pins the import to exactly the node's platform. That keeps a
+// partly present image index importable on the platform the archive serves.
+//
+// Older ctr versions lack --local and already import client-side; they keep
+// the plain command, without flags they do not support. --all-platforms is
+// never used: archives omit content for platforms other than the exporting
+// node's.
+func importCommand(archivePath string, local bool, platform string) []string {
+	cmd := []string{ctrCommand, ctrNamespaceArg, ctrImages, "import", "--digests"}
+	if local {
+		cmd = append(cmd, "--local", "--platform", platform)
+	}
+
+	return append(cmd, archivePath)
 }
 
 // copyToContainer copies a file from the host to a container.

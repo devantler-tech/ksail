@@ -6,6 +6,8 @@ description: |
     3. Verify the archive was created and is non-empty
     4. Import the archive back into the cluster
     5. Verify the workload still runs (round-trip integrity)
+    6. Export every image on the nodes, so an import that stored a
+       reference to nothing fails here
 
   Only supported for Vanilla (Kind) and K3s (K3d) distributions.
   Talos and VCluster are unsupported (immutable OS / nested containerd).
@@ -94,8 +96,20 @@ runs:
         ksail workload wait --for=condition=Available deployment/"$WORKLOAD_NAME" --timeout="$TIMEOUT"
         echo "✅ Import round-trip validated (pods restarted and healthy)"
 
+    - name: 🧪 ksail workload export after import
+      id: export-after-import
+      shell: bash
+      run: |
+        # Export every image on the nodes, the import included. An import must
+        # store only the images the archive names: an entry for the archive's
+        # own top-level index names no real image, so this export would fail
+        # on it (#8158).
+        ksail workload export /tmp/test-images-after-import.tar
+        test -s /tmp/test-images-after-import.tar
+        echo "✅ Full export after import succeeded ($(du -h /tmp/test-images-after-import.tar | cut -f1))"
+
     - name: 🐞 Debug failure
-      if: failure() && (steps.deploy.outcome == 'failure' || steps.export.outcome == 'failure' || steps.import.outcome == 'failure')
+      if: failure() && (steps.deploy.outcome == 'failure' || steps.export.outcome == 'failure' || steps.import.outcome == 'failure' || steps.export-after-import.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
@@ -112,4 +126,4 @@ runs:
       if: always()
       shell: bash
       run: |
-        rm -f /tmp/test-images.tar
+        rm -f /tmp/test-images.tar /tmp/test-images-after-import.tar
