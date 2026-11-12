@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/docker/docker/api/types/container"
@@ -77,4 +78,40 @@ func (e *ContainerExecutor) ExecInContainer(
 	}
 
 	return stdout.String(), nil
+}
+
+// detectPlatform detects the OS/architecture of a node container.
+// Returns a platform string in the format "os/arch" (e.g., "linux/amd64", "linux/arm64").
+func (e *ContainerExecutor) detectPlatform(ctx context.Context, nodeName string) (string, error) {
+	// Use uname to detect architecture
+	output, err := e.ExecInContainer(ctx, nodeName, []string{"uname", "-m"})
+	if err != nil {
+		return "", fmt.Errorf("failed to detect architecture: %w", err)
+	}
+
+	arch := strings.TrimSpace(output)
+
+	// Convert uname output to Go/OCI architecture names
+	switch arch {
+	case "x86_64":
+		arch = "amd64"
+	case "aarch64":
+		arch = "arm64"
+	case "armv7l":
+		arch = "arm"
+	}
+
+	// Always linux for Kubernetes nodes
+	return "linux/" + arch, nil
+}
+
+// removeNodeArchive deletes an export or import archive from a node. It always
+// runs on a context detached from the caller and bounded by nodeCleanupTimeout,
+// so a cancellation that lands while removal is starting cannot abort it and
+// leave the archive behind.
+func (e *ContainerExecutor) removeNodeArchive(ctx context.Context, nodeName, tmpPath string) {
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), nodeCleanupTimeout)
+	defer cancel()
+
+	_, _ = e.ExecInContainer(cleanupCtx, nodeName, []string{"rm", "-f", tmpPath})
 }

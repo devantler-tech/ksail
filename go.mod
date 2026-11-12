@@ -1,6 +1,6 @@
 module github.com/devantler-tech/ksail/v7
 
-go 1.27.3
+go 1.27.4
 
 // Exclude the standalone google.golang.org/grpc/stats/opentelemetry module to avoid
 // ambiguous import errors. The opentelemetry stats package is included in the main
@@ -95,7 +95,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.12.1
 	github.com/uptrace/opentelemetry-go-extra/otelzap v0.3.2
-	github.com/wailsapp/wails/v3 v3.0.0
+	github.com/wailsapp/wails/v3 v3.1.0
 	github.com/yannh/kubeconform v0.8.0
 	github.com/zalando/go-keyring v0.2.8
 	go.etcd.io/bbolt v1.5.0
@@ -402,7 +402,7 @@ require (
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/dylibso/observe-sdk/go v0.0.0-20240819160327-2d926c5d788a // indirect
-	github.com/ebitengine/purego v0.10.1 // indirect
+	github.com/ebitengine/purego v0.11.1 // indirect
 	github.com/elliotchance/orderedmap v1.5.0 // indirect
 	github.com/elliotchance/phpserialize v1.4.0 // indirect
 	github.com/emicklei/dot v1.11.0 // indirect

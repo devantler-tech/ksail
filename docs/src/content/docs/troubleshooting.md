@@ -162,6 +162,18 @@ exported image is incomplete, the command fails and preserves any existing desti
 archive. Restore access to the affected node or import the missing image, then retry.
 Allow disk space for private staging content and the completed archive during a multi-node export.
 
+### Importing on a Different CPU Architecture
+
+An export carries image content only for the CPU architecture of the nodes it ran on, such as
+`linux/amd64`. A multi-platform image still keeps its full image index in the archive, so the
+archive lists architectures it has no content for. After such an export, KSail warns which
+images other architectures cannot use.
+
+`ksail workload import` checks each node's architecture before it copies anything. If the archive
+has no content for a node's architecture for one of its multi-platform images, the import stops
+and names those images. To move images to a cluster with a different architecture, export them
+from a cluster of that architecture, or pull them there from their registry.
+
 ### Blob Integrity Check Failed
 
 After `ksail workload export`, KSail validates the SHA256 digest of every blob in the exported OCI tar archive. If a blob is truncated or corrupt — which `ctr export` can produce silently when containerd's content store has incomplete data (e.g., from an interrupted image pull or runner resource pressure) — you will see an error like:

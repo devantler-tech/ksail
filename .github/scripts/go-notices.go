@@ -10,11 +10,10 @@ import (
 
 func main() {
 	root, err := os.Getwd()
-	if err == nil {
-		err = gonotices.Run(root, os.Args[1:], os.Stdout)
-	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Go recipient notice verification failed")
+		fmt.Fprintf(os.Stderr, "%s: %v\n", gonotices.FailureMessage, err)
 		os.Exit(1)
 	}
+
+	os.Exit(gonotices.Main(root, os.Args[1:], os.Stdout, os.Stderr))
 }

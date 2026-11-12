@@ -70,6 +70,11 @@ func (p *Provisioner) UpgradeDistribution(
 	clusterName string,
 	fromVersion, toVersion string,
 ) error {
+	validationErr := p.validateAutoscalerPoolPatches()
+	if validationErr != nil {
+		return validationErr
+	}
+
 	if p.omniOpts != nil {
 		return fmt.Errorf(
 			"talos upgrades are managed externally by Omni: %w",
@@ -141,9 +146,7 @@ func (p *Provisioner) UpgradeDistribution(
 		return fmt.Errorf("rolling upgrade from %s to %s: %w", fromVersion, toVersion, err)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter,
-		"  ✓ Talos upgraded to %s\n", toVersion,
-	)
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Talos upgraded to %s\n", toVersion)
 
 	return nil
 }

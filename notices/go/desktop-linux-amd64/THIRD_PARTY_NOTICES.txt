@@ -5,7 +5,7 @@ Admitted third-party Go source packages; other artifact contents require separat
 
 For a release-source:<path> locator, read the exact source= commit from GoNotices/release.txt and obtain that public source at https://github.com/devantler-tech/ksail/tree/<source-commit>/<path>. This locates repository modifications; it does not grant additional rights.
 
-Go runtime and standard library toolchain: go1.27.3
+Go runtime and standard library toolchain: go1.27.4
 License SHA-256: 911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad
 Exact package/file/material associations and recipient-only exclusions are recorded in manifest.json. Material identifiers below refer to that manifest; complete included text is pooled by SHA-256.
 
@@ -11089,9 +11089,9 @@ github.com/wagoodman/go-progress
 Material: m07df6d71878137bf (license), SHA-256 834337f919cdd410951883fb3a926427c3f5614d140a83fadc54d07a2ffde9cc
 Files: LICENSE
 
-Component: github.com/wailsapp/wails/v3@v3.0.0
-Source: https://proxy.golang.org/github.com/wailsapp/wails/v3/@v/v3.0.0.zip
-Selected Go source checksum: h1:lBe89kFu23bVz1dc1H9v0srkHQgWsy7BAKpH4sLQuDw=
+Component: github.com/wailsapp/wails/v3@v3.1.0
+Source: https://proxy.golang.org/github.com/wailsapp/wails/v3/@v/v3.1.0.zip
+Selected Go source checksum: h1:ld0AXSicXiTTsIvmTq3qNn9FzCP8vIHRSJdkRLgaAo8=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -11099,11 +11099,13 @@ github.com/wailsapp/wails/v3/internal/assetserver
 github.com/wailsapp/wails/v3/internal/assetserver/bundledassets
 github.com/wailsapp/wails/v3/internal/assetserver/webview
 github.com/wailsapp/wails/v3/internal/browser
+github.com/wailsapp/wails/v3/internal/buildguard
 github.com/wailsapp/wails/v3/internal/capabilities
 github.com/wailsapp/wails/v3/internal/dbus/menu
 github.com/wailsapp/wails/v3/internal/dbus/notifier
 github.com/wailsapp/wails/v3/internal/debounce
 github.com/wailsapp/wails/v3/internal/debug
+github.com/wailsapp/wails/v3/internal/devruntime
 github.com/wailsapp/wails/v3/internal/fileexplorer
 github.com/wailsapp/wails/v3/internal/git
 github.com/wailsapp/wails/v3/internal/hash
@@ -11115,6 +11117,7 @@ github.com/wailsapp/wails/v3/internal/runtime
 github.com/wailsapp/wails/v3/internal/signal
 github.com/wailsapp/wails/v3/internal/sliceutil
 github.com/wailsapp/wails/v3/internal/tint
+github.com/wailsapp/wails/v3/internal/userpaths
 github.com/wailsapp/wails/v3/internal/version
 github.com/wailsapp/wails/v3/pkg/application
 github.com/wailsapp/wails/v3/pkg/errs

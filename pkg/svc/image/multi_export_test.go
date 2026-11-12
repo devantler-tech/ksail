@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -271,6 +272,166 @@ func TestExportPartialNodeFailureRetainsOriginalDiagnostics(t *testing.T) {
 	preserved, readErr := root.ReadFile("images.tar")
 	require.NoError(t, readErr)
 	require.Equal(t, "existing export", string(preserved))
+}
+
+// A node whose copy of an image is damaged must not end the export while
+// another node holds a complete copy: the image is exported from that node.
+// The selected case also covers a holder the first plan never inventoried,
+// because the damaged node alone appeared to cover the request.
+func TestExportFallsBackToAnotherNodeHoldingACompleteCopy(t *testing.T) {
+	t.Parallel()
+
+	const shared = "docker.io/library/fixture-a:v1"
+
+	for name, testCase := range map[string]struct {
+		selected bool
+		damage   string
+	}{
+		"all images with a missing layer":          {damage: "missing layer"},
+		"selected image missing from node archive": {selected: true, damage: "missing reference"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			client := docker.NewMockAPIClient(t)
+			client.EXPECT().
+				ContainerList(ctx, mock.Anything).
+				Return(kindMultiNodeSummaries()[:2], nil)
+
+			setupNodeArchiveContents(ctx, t, client, kindExporterNodeName, []string{shared},
+				failedNodeArchive(t, testCase.damage, shared))
+			setupNodeArchive(ctx, t, client, "my-cluster-worker", shared)
+
+			output := filepath.Join(t.TempDir(), "images.tar")
+
+			options := image.ExportOptions{OutputPath: output}
+			if testCase.selected {
+				options.Images = []string{shared}
+			}
+
+			err := image.NewExporter(client).Export(ctx, "my-cluster", v1alpha1.DistributionVanilla,
+				v1alpha1.ProviderDocker, options)
+			require.NoError(t, err)
+			require.Equal(t, []string{shared}, archiveNamedReferences(t, output))
+			assertImageArchiveReadable(t, output, 1)
+		})
+	}
+}
+
+// A node archive that fails part-way must not leave its images registered: the
+// retry on another node may hold a newer copy under the same tag, and that
+// complete archive must be accepted rather than refused as conflicting.
+func TestExportFallbackDiscardsAPartlyMergedShare(t *testing.T) {
+	t.Parallel()
+
+	const (
+		first  = "docker.io/library/fixture-a:v1"
+		second = "docker.io/library/fixture-b:v1"
+	)
+
+	ctx := context.Background()
+	client := docker.NewMockAPIClient(t)
+	client.EXPECT().ContainerList(ctx, mock.Anything).Return(kindMultiNodeSummaries()[:2], nil)
+
+	setupNodeArchiveContents(ctx, t, client, kindExporterNodeName, []string{first, second},
+		olderNodeArchive(t, first))
+	setupNodeArchive(ctx, t, client, "my-cluster-worker", first, second)
+
+	output := filepath.Join(t.TempDir(), "images.tar")
+
+	err := image.NewExporter(client).Export(ctx, "my-cluster", v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker, image.ExportOptions{
+			OutputPath: output,
+			Images:     []string{first, second},
+		})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{first, second}, archiveNamedReferences(t, output))
+	assertImageArchiveReadable(t, output, 2)
+}
+
+// olderNodeArchive holds ref with different content than namedNodeArchive gives
+// it, as a node with an older copy of a mutable tag does.
+func olderNodeArchive(t *testing.T, ref string) []byte {
+	t.Helper()
+
+	root := t.TempDir()
+	store, err := layout.Write(root, empty.Index)
+	require.NoError(t, err)
+	require.NoError(t, store.AppendImage(fixtureImage(t, "older "+ref),
+		layout.WithAnnotations(map[string]string{
+			"io.containerd.image.name": ref, "org.opencontainers.image.ref.name": "v1",
+		})))
+
+	return tarFixtureDirectory(t, root)
+}
+
+// An image no node can supply still fails with the damaged node's own
+// diagnostics, and the existing archive stays in place.
+func TestExportFallbackRefusesAnImageNoNodeCanSupply(t *testing.T) {
+	t.Parallel()
+
+	const (
+		shared = "docker.io/library/fixture-a:v1"
+		other  = "docker.io/library/fixture-b:v1"
+	)
+
+	ctx := context.Background()
+	client := docker.NewMockAPIClient(t)
+	client.EXPECT().ContainerList(ctx, mock.Anything).Return(kindMultiNodeSummaries()[:2], nil)
+
+	setupNodeArchiveContents(ctx, t, client, kindExporterNodeName, []string{shared},
+		failedNodeArchive(t, "missing reference", shared))
+	setupNodeArchive(ctx, t, client, "my-cluster-worker", other)
+
+	output := filepath.Join(t.TempDir(), "images.tar")
+	require.NoError(t, os.WriteFile(output, []byte("existing export"), 0o600))
+
+	err := image.NewExporter(client).Export(ctx, "my-cluster", v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker, image.ExportOptions{OutputPath: output, Images: []string{shared}})
+	require.ErrorIs(t, err, image.ErrIncompleteExport)
+	require.ErrorContains(t, err, "source archive omits "+shared)
+	require.ErrorContains(t, err, "no other node holds: "+shared)
+
+	root, rootErr := os.OpenRoot(filepath.Dir(output))
+	require.NoError(t, rootErr)
+	t.Cleanup(func() { require.NoError(t, root.Close()) })
+
+	preserved, readErr := root.ReadFile("images.tar")
+	require.NoError(t, readErr)
+	require.Equal(t, "existing export", string(preserved))
+}
+
+// A content repair can re-pull a tag@digest image by its tag. The node archive
+// then names the tag instead of the planned name, and the export must still
+// publish it rather than refuse a complete archive.
+func TestExportPublishesAnImageHeldUnderItsRepairedTag(t *testing.T) {
+	t.Parallel()
+
+	const (
+		tagged  = "docker.io/library/fixture-a:v1"
+		planned = tagged + "@" + fixtureDigest
+		other   = "docker.io/library/fixture-b:v1"
+	)
+
+	ctx := context.Background()
+	client := docker.NewMockAPIClient(t)
+	client.EXPECT().ContainerList(ctx, mock.Anything).Return(kindMultiNodeSummaries()[:2], nil)
+
+	setupNodeArchiveContents(ctx, t, client, kindExporterNodeName, []string{planned},
+		namedNodeArchive(t, tagged))
+	setupNodeArchive(ctx, t, client, "my-cluster-worker", other)
+
+	output := filepath.Join(t.TempDir(), "images.tar")
+
+	err := image.NewExporter(client).Export(ctx, "my-cluster", v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker, image.ExportOptions{
+			OutputPath: output,
+			Images:     []string{planned, other},
+		})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{tagged, other}, archiveNamedReferences(t, output))
+	assertImageArchiveReadable(t, output, 2)
 }
 
 // expectPartialExportFailures injects independent errors for the bulk export
@@ -765,4 +926,121 @@ func TestExportNormalizesNamesWhenOneNodeCoversThePlan(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"docker.io/library/fixture-a:v1"}, archiveNamedReferences(t, output))
 	assertImageArchiveReadable(t, output, 1)
+}
+
+// exportOperands records the image operands each node's export command named.
+type exportOperands struct {
+	mu     sync.Mutex
+	byNode map[string][]string
+}
+
+func (operands *exportOperands) record(node string, refs []string) {
+	operands.mu.Lock()
+	defer operands.mu.Unlock()
+
+	operands.byNode[node] = append(operands.byNode[node], refs...)
+}
+
+func (operands *exportOperands) of(node string) []string {
+	operands.mu.Lock()
+	defer operands.mu.Unlock()
+
+	return slices.Clone(operands.byNode[node])
+}
+
+// setupOperandNodeArchive makes node hold held, and answers its export with an
+// archive of exactly the references the export command named, so an export that
+// asks a node for more than it should is visible in the archive.
+func setupOperandNodeArchive(
+	ctx context.Context,
+	t *testing.T,
+	client *docker.MockAPIClient,
+	node string,
+	held []string,
+	operands *exportOperands,
+) {
+	t.Helper()
+
+	optionalNodeExec(ctx, client, node, "list",
+		[]string{ctrCommand, "--namespace=k8s.io", "images", "list", "-q"},
+		strings.Join(held, "\n")+"\n")
+	optionalNodeExec(ctx, client, node, "platform", []string{"uname", "-m"}, "x86_64\n")
+	optionalNodeExec(ctx, client, node, "help",
+		[]string{ctrCommand, "--namespace=k8s.io", "images", "export", "--help"},
+		"OPTIONS:\n   --local  Use client-side export\n   --help, -h  Show help\n")
+
+	exportPrefix := []string{
+		ctrCommand, "--namespace=k8s.io", "images", "export", "--platform", "linux/amd64",
+		"--local", "--skip-manifest-json", kindExporterTarPath,
+	}
+
+	client.EXPECT().
+		ContainerExecCreate(ctx, node, mock.MatchedBy(func(options container.ExecOptions) bool {
+			return len(options.Cmd) > len(exportPrefix) &&
+				slices.Equal(options.Cmd[:len(exportPrefix)], exportPrefix)
+		})).
+		RunAndReturn(func(
+			_ context.Context, _ string, options container.ExecOptions,
+		) (container.ExecCreateResponse, error) {
+			operands.record(node, options.Cmd[len(exportPrefix):])
+
+			return container.ExecCreateResponse{ID: node + "-export"}, nil
+		}).
+		Maybe()
+	client.EXPECT().ContainerExecAttach(ctx, node+"-export", container.ExecStartOptions{}).
+		Return(mockDockerStreamResponse("", ""), nil).Maybe()
+	client.EXPECT().ContainerExecInspect(ctx, node+"-export").
+		Return(container.ExecInspect{ExitCode: 0}, nil).Maybe()
+
+	client.EXPECT().CopyFromContainer(ctx, node, kindExporterTarPath).
+		RunAndReturn(func(context.Context, string, string) (io.ReadCloser, container.PathStat, error) {
+			archive := createExportTar(t, namedNodeArchive(t, operands.of(node)...))
+
+			return io.NopCloser(bytes.NewReader(archive)), container.PathStat{}, nil
+		}).
+		Maybe()
+	optionalNodeExec(detachedCleanupContext(), client, node, "cleanup",
+		[]string{"rm", "-f", kindExporterTarPath}, "")
+}
+
+// A selected export that asks each node for a proper subset of what it holds
+// must name only the requested images, both in the archive and in the
+// operands sent to each node, so exporting every image a node holds cannot pass.
+func TestExportSelectsAProperSubsetOfEachNodesImages(t *testing.T) {
+	t.Parallel()
+
+	const (
+		wantedOnControlPlane = "docker.io/library/fixture-a:v1"
+		unwantedOnControl    = "docker.io/library/fixture-c:v1"
+		wantedOnWorker       = "docker.io/library/fixture-b:v1"
+		unwantedOnWorker     = "docker.io/library/fixture-d:v1"
+		workerNodeName       = "my-cluster-worker"
+	)
+
+	ctx := context.Background()
+	client := docker.NewMockAPIClient(t)
+	operands := &exportOperands{byNode: make(map[string][]string)}
+
+	client.EXPECT().
+		ContainerList(ctx, mock.Anything).
+		Return(kindMultiNodeSummaries()[:2], nil)
+
+	setupOperandNodeArchive(ctx, t, client, kindExporterNodeName,
+		[]string{wantedOnControlPlane, unwantedOnControl}, operands)
+	setupOperandNodeArchive(ctx, t, client, workerNodeName,
+		[]string{wantedOnWorker, unwantedOnWorker}, operands)
+
+	output := filepath.Join(t.TempDir(), "images.tar")
+
+	err := image.NewExporter(client).Export(ctx, "my-cluster", v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker, image.ExportOptions{
+			OutputPath: output,
+			Images:     []string{wantedOnControlPlane, wantedOnWorker},
+		})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{wantedOnControlPlane, wantedOnWorker},
+		archiveNamedReferences(t, output))
+	assertImageArchiveReadable(t, output, 2)
+	require.Equal(t, []string{wantedOnControlPlane}, operands.of(kindExporterNodeName))
+	require.Equal(t, []string{wantedOnWorker}, operands.of(workerNodeName))
 }

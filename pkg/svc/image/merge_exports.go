@@ -65,15 +65,17 @@ func (m *imageArchiveMerger) add(
 		return err
 	}
 
-	for _, ref := range refs {
-		name, descriptor, found := exportedDescriptor(byName, ref)
-		if !found {
-			return fmt.Errorf("%w: source archive omits %s", ErrIncompleteExport, ref)
-		}
+	// Validate every reference before registering any, so a node archive that
+	// fails part-way leaves the merger unchanged for a retry on another node.
+	targets, err := m.validTargets(ctx, byName, refs, platform)
+	if err != nil {
+		return err
+	}
 
-		err = m.addTarget(ctx, name, descriptor, platform)
-		if err != nil {
-			return err
+	for _, target := range targets {
+		if _, found := m.targets[target.name]; !found {
+			m.targets[target.name] = target.descriptor
+			m.names = append(m.names, target.name)
 		}
 	}
 
@@ -82,6 +84,39 @@ func (m *imageArchiveMerger) add(
 	}
 
 	return nil
+}
+
+// namedTarget is one archive entry an export will publish.
+type namedTarget struct {
+	name       string
+	descriptor ocispec.Descriptor
+}
+
+// validTargets resolves each reference to the archive entry that serves it and
+// checks its content, without changing the merger.
+func (m *imageArchiveMerger) validTargets(
+	ctx context.Context,
+	byName map[string]ocispec.Descriptor,
+	refs []string,
+	platform ocispec.Platform,
+) ([]namedTarget, error) {
+	targets := make([]namedTarget, 0, len(refs))
+
+	for _, ref := range refs {
+		name, descriptor, found := exportedDescriptor(byName, ref)
+		if !found {
+			return nil, fmt.Errorf("%w: source archive omits %s", ErrIncompleteExport, ref)
+		}
+
+		err := m.checkTarget(ctx, name, descriptor, platform)
+		if err != nil {
+			return nil, err
+		}
+
+		targets = append(targets, namedTarget{name: name, descriptor: descriptor})
+	}
+
+	return targets, nil
 }
 
 // requireSamePlatform refuses a node whose platform differs from the nodes
@@ -154,9 +189,9 @@ func archiveDescriptorsByName(data []byte) (map[string]ocispec.Descriptor, error
 	return byName, nil
 }
 
-// addTarget checks that the selected platform's content is complete before
-// registering a reference. A repeated name must resolve to the same digest.
-func (m *imageArchiveMerger) addTarget(
+// checkTarget checks that the selected platform's content is complete for a
+// reference. A name already registered must resolve to the same digest.
+func (m *imageArchiveMerger) checkTarget(
 	ctx context.Context, ref string, descriptor ocispec.Descriptor, platform ocispec.Platform,
 ) error {
 	available, _, _, missing, err := ctrdimages.Check(
@@ -173,16 +208,9 @@ func (m *imageArchiveMerger) addTarget(
 		return fmt.Errorf("%w: missing content for %s", ErrIncompleteExport, ref)
 	}
 
-	if existing, found := m.targets[ref]; found {
-		if existing.Digest != descriptor.Digest {
-			return fmt.Errorf("%w: conflicting content for %s", ErrIncompleteExport, ref)
-		}
-
-		return nil
+	if existing, found := m.targets[ref]; found && existing.Digest != descriptor.Digest {
+		return fmt.Errorf("%w: conflicting content for %s", ErrIncompleteExport, ref)
 	}
-
-	m.targets[ref] = descriptor
-	m.names = append(m.names, ref)
 
 	return nil
 }
