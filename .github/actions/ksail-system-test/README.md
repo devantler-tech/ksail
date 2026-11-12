@@ -211,6 +211,7 @@ Each of these adds a phase and is off unless set. The action's `action.yaml` des
 | Input                               | Description                                                                                   | Default                      |
 |-------------------------------------|-----------------------------------------------------------------------------------------------|------------------------------|
 | `test-workload-mirror`              | Docker provider only: smoke-test `workload mirror` against a live HTTP deployment             | `false`                      |
+| `split-image-cluster-name`          | Two-node Kind fixture: export and import images held on different nodes                       | `""`                         |
 | `test-kubernetes-provider`          | Create nested clusters on the running host cluster                                            | `false`                      |
 | `kubernetes-provider-distributions` | Comma-separated distributions for the nested clusters                                         | `Vanilla,K3s,VCluster,Talos` |
 | `kubernetes-provider-cni`           | CNI to install in each nested cluster (e.g. `Calico`)                                         | `""`                         |
