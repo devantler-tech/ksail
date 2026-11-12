@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 )
 
@@ -36,8 +35,8 @@ func (c *captureClient) TemplateChart(_ context.Context, spec *helm.ChartSpec) (
 
 func helmReleaseObj(name string, spec helmv2.HelmReleaseSpec) *helmv2.HelmRelease {
 	return &helmv2.HelmRelease{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "flux-system"},
-		Spec:       spec,
+		Name: name, Namespace: "flux-system",
+		Spec: spec,
 	}
 }
 

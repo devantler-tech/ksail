@@ -75,6 +75,16 @@ func (p *Provider) CreateDinDPod(
 	persistence v1alpha1.KubernetesPersistence,
 ) error {
 	namespace := NamespaceName(clusterName)
+	pod := buildDinDPod(clusterName, distribution, persistence)
+
+	poolArg, err := p.plannedDinDPoolArg(ctx, distribution)
+	if err != nil {
+		return err
+	}
+
+	if poolArg != "" {
+		pod.Spec.Containers[0].Args = append(pod.Spec.Containers[0].Args, poolArg)
+	}
 
 	if persistence.Enabled {
 		err := p.ensurePVC(ctx, namespace, clusterName, persistence)
@@ -83,12 +93,11 @@ func (p *Provider) CreateDinDPod(
 		}
 	}
 
-	pod := buildDinDPod(clusterName, distribution, persistence)
 	svc := buildDinDService(clusterName)
 
-	_, err := p.client.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{})
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("create DinD pod: %w", err)
+	err = p.createOrReuseDinDPod(ctx, namespace, pod, poolArg)
+	if err != nil {
+		return err
 	}
 
 	_, err = p.client.CoreV1().Services(namespace).Create(ctx, svc, metav1.CreateOptions{})
@@ -225,10 +234,8 @@ func buildDinDPod(
 	labels[LabelApp] = DinDPodName
 
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   DinDPodName,
-			Labels: labels,
-		},
+		Name:   DinDPodName,
+		Labels: labels,
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{buildDinDContainer()},
 			Volumes:    buildDinDVolumes(persistence),
@@ -256,10 +263,8 @@ func buildDinDContainer() corev1.Container {
 			},
 		},
 		ReadinessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				TCPSocket: &corev1.TCPSocketAction{
-					Port: intstr.FromInt32(DinDDockerPort),
-				},
+			TCPSocket: &corev1.TCPSocketAction{
+				Port: intstr.FromInt32(DinDDockerPort),
 			},
 			InitialDelaySeconds: probeInitialDelaySeconds,
 			PeriodSeconds:       probePeriodSeconds,
@@ -320,10 +325,8 @@ func buildDinDVolumes(persistence v1alpha1.KubernetesPersistence) []corev1.Volum
 		},
 		{
 			Name: "modules",
-			VolumeSource: corev1.VolumeSource{
-				HostPath: &corev1.HostPathVolumeSource{
-					Path: "/lib/modules",
-				},
+			HostPath: &corev1.HostPathVolumeSource{
+				Path: "/lib/modules",
 			},
 		},
 	}
@@ -349,10 +352,8 @@ func (p *Provider) ensurePVC(
 	storageClassName := persistence.StorageClassName
 
 	pvc := &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   DinDPVCName,
-			Labels: labels,
-		},
+		Name:   DinDPVCName,
+		Labels: labels,
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 			Resources: corev1.VolumeResourceRequirements{
@@ -381,10 +382,8 @@ func buildDinDService(clusterName string) *corev1.Service {
 	labels := CommonLabels(clusterName)
 
 	return &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   DinDServiceName,
-			Labels: labels,
-		},
+		Name:   DinDServiceName,
+		Labels: labels,
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{
 				LabelApp: DinDPodName,

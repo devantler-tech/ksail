@@ -2,6 +2,7 @@ package flux
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -14,6 +15,10 @@ import (
 
 // Kustomization constants.
 const rootKustomizationName = "flux-system"
+
+var errReconcileRequestTokenRequired = errors.New(
+	"kustomization reconcile request token is required",
+)
 
 // ReconcileExcludeAnnotation is the KSail annotation key that, when set to
 // "true" on a Flux Kustomization CR, excludes that kustomization from
@@ -43,14 +48,23 @@ func (r *Reconciler) TriggerNamedKustomizationReconciliation(
 	ctx context.Context,
 	name string,
 ) error {
-	_, err := triggerReconciliationWithRetry(
+	_, err := r.RequestNamedKustomizationReconciliation(ctx, name)
+
+	return err
+}
+
+// RequestNamedKustomizationReconciliation returns the exact request token to bind
+// subsequent readiness checks to this attempt, including retries of the same revision.
+func (r *Reconciler) RequestNamedKustomizationReconciliation(
+	ctx context.Context,
+	name string,
+) (string, error) {
+	return triggerReconciliationWithRetry(
 		ctx,
 		r.kustomizationClient(),
 		name,
 		"flux kustomization "+name,
 	)
-
-	return err
 }
 
 // KustomizationInfo holds the name, spec.path, and dependency information
@@ -105,11 +119,48 @@ func (r *Reconciler) CheckNamedKustomizationReady(
 	ctx context.Context,
 	name string,
 ) (bool, string, error) {
+	return r.checkNamedKustomizationReady(ctx, name, "")
+}
+
+// CheckNamedKustomizationReadyForRequest performs a single poll bound to a
+// request's acknowledgement and completion. A suspended resource is skipped.
+// Existing callers that did not request reconciliation retain the unbound method.
+func (r *Reconciler) CheckNamedKustomizationReadyForRequest(
+	ctx context.Context,
+	name, requestToken string,
+) (bool, string, error) {
+	if requestToken == "" {
+		return false, "", errReconcileRequestTokenRequired
+	}
+
+	return r.checkNamedKustomizationReady(ctx, name, requestToken)
+}
+
+// checkNamedKustomizationReady reads current state with an optional request binding.
+func (r *Reconciler) checkNamedKustomizationReady(
+	ctx context.Context,
+	name, requestToken string,
+) (bool, string, error) {
 	client := r.kustomizationClient()
 
 	kustomization, err := client.Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return false, "", fmt.Errorf("get flux kustomization %q: %w", name, err)
+	}
+
+	if requestToken != "" {
+		suspended, _, _ := unstructured.NestedBool(kustomization.Object, "spec", "suspend")
+		if suspended {
+			return true, "suspended (waiting skipped)", nil
+		}
+
+		if !reconcileRequestHandled(kustomization, requestToken) {
+			return false, "waiting for controller to handle this reconcile request", nil
+		}
+
+		if kustomizationReconcileInProgress(reconciler.ParseConditions(kustomization)) {
+			return false, "this reconcile request is still in progress", nil
+		}
 	}
 
 	// Resolve the revision the source has just made available so readiness is
@@ -119,6 +170,30 @@ func (r *Reconciler) CheckNamedKustomizationReady(
 	sourceRevision := r.resolveSourceRevision(ctx, kustomization)
 
 	return checkKustomizationStatus(kustomization, sourceRevision)
+}
+
+// kustomizationReconcileInProgress distinguishes active work from a completed
+// failure awaiting retry. Unlike source-controller, kustomize-controller stamps
+// the request acknowledgement in finalizeStatus and retains Reconciling=True
+// with ProgressingWithRetry on failure. That fresh failure must still be reported.
+func kustomizationReconcileInProgress(conditions []reconciler.Condition) bool {
+	if !reconcileInProgress(conditions) {
+		return false
+	}
+
+	var retrying, failed bool
+
+	for _, condition := range conditions {
+		if condition.Type == conditionTypeReconciling && condition.Status == conditionStatusTrue {
+			retrying = condition.Reason == "ProgressingWithRetry"
+		}
+
+		if condition.Type == conditionTypeReady {
+			failed = condition.Status == conditionStatusFalse
+		}
+	}
+
+	return !retrying || !failed
 }
 
 // kustomizationClient returns a dynamic client for Flux Kustomizations.

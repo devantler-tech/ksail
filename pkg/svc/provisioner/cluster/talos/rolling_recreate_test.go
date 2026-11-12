@@ -51,7 +51,7 @@ func TestRollingReplaceSingleNode_CleanupFailurePreservesServer(t *testing.T) {
 			server := &hcloud.Server{ID: 1, Name: "scale-cluster-control-plane-1"}
 			server.PublicNet.IPv4.IP = net.ParseIP(transport.address)
 			clientset := fake.NewClientset(&corev1.Node{
-				ObjectMeta: metav1.ObjectMeta{Name: server.Name, UID: "original-node"},
+				Name: server.Name, UID: "original-node",
 				Status: corev1.NodeStatus{Addresses: []corev1.NodeAddress{
 					{Type: corev1.NodeInternalIP, Address: transport.address},
 				}},

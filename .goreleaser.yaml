@@ -3,6 +3,7 @@ version: 2
 before:
   hooks:
     - go mod tidy
+    - go run .github/scripts/go-notices.go stage-cli {{ .Tag }} {{ .FullCommit }}
     # Build the web UI and stage it into pkg/webui/dist so it is embedded in the release binary
     # (see pkg/webui/embed.go) and served by both the operator and `ksail open web`/`ksail open desktop` — same origin
     # as /api, no reverse proxy. Built assets are gitignored, so this keeps the working tree clean.
@@ -29,6 +30,9 @@ builds:
     hooks:
       pre:
         - go tool bundler --platform {{ .Os }}/{{ .Arch }} --cli-version 1.0.87
+      post:
+        - cmd: bash .github/scripts/generate-completions.sh "{{ .Path }}" dist/completions "{{ .Os }}/{{ .Arch }}" "{{ .Runtime.Goos }}/{{ .Runtime.Goarch }}"
+          output: true
 
 archives:
   - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
@@ -36,9 +40,26 @@ archives:
     format_overrides:
       - goos: windows
         formats: ["zip"]
+    files:
+      - license*
+      - LICENSE*
+      - readme*
+      - README*
+      - changelog*
+      - CHANGELOG*
+      - src: ".cache/go-notices/cli-{{ .Os }}-{{ .Arch }}/GoNotices/*"
+        dst: GoNotices
+        strip_parent: true
+      - src: dist/completions/*
+        dst: completions
+        strip_parent: true
 
 homebrew_casks:
   - name: ksail
+    # Upload only when the CD cask-checkpoint job found this tag at least as new as every current
+    # cask and the latest release (#7898). Anything else, including an unset value, keeps the cask
+    # in dist/ so an older or prerelease tag can never move the shared cask pointer.
+    skip_upload: '{{ if eq (envOrDefault "KSAIL_CASK_PUBLISH" "false") "true" }}false{{ else }}true{{ end }}'
     # The download URL host (github.com) differs from the homepage host
     # (ksail.devantler.tech), so `brew audit --strict` requires the URL to be
     # marked `verified:` with a trusted prefix. Applied to the default url_template.
@@ -49,6 +70,10 @@ homebrew_casks:
     description: "CLI tool to manage Kubernetes clusters and workloads"
     # Trailing slash required by `brew style` (Cask/HomepageUrlStyling).
     homepage: "https://ksail.devantler.tech/"
+    completions:
+      bash: completions/ksail.bash
+      zsh: completions/ksail.zsh
+      fish: completions/ksail.fish
     repository:
       owner: devantler-tech
       name: homebrew-tap
@@ -70,21 +95,11 @@ homebrew_casks:
     # Conventional commit-message ruleset that rejects GoReleaser's default ("Brew cask update for
     # ..."). Match the title the cd.yaml handoff normalizes to (#6975).
     commit_msg_template: "chore(cask): update {{ .ProjectName }} to {{ .Tag }}"
-    # macOS builds are Apple Silicon only, so the template emits no macOS-Intel `url`. Homebrew 6 loads
-    # every OS and architecture when adding a tap and refuses the whole tap if any variant lacks a
-    # `url` (#7034). The `on_intel` branch gives Intel Macs the Apple Silicon download and refuses the
-    # install by architecture, so the tap loads everywhere and Intel users get a clear message.
-    # `.github/scripts/validate-cask-pr-handoff.sh` accepts its `sha256 :no_check` only because the
-    # same url is pinned to a verified digest in the Apple Silicon branch.
+    # GoReleaser 2.19 emits the macOS URL/checksum for both architectures and an arm64 dependency.
+    # An extra Intel fallback would override that checksum twice (#7943). Keep the generated
+    # checksum and architecture refusal; cask-rendering.test.sh loads every host variant.
     # Escape Homebrew's install-time token through GoReleaser's template pass.
     custom_block: |
-      on_macos do
-        on_intel do
-          sha256 :no_check
-          url "https://github.com/devantler-tech/ksail/releases/download/v#{version}/ksail_#{version}_darwin_arm64.tar.gz"
-          depends_on arch: :arm64
-        end
-      end
       postflight_steps do
         on_macos do
           run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/ksail"]
@@ -185,6 +200,15 @@ release:
     # Stable one-line installer for Linux and macOS release archives.
     - glob: ./install.sh
   footer: |
+    ## Versions without a release
+
+    Some version tags have no release, because the release run for that version
+    failed. Release tags are never deleted, so those versions stay in the tag list
+    with nothing to download. Install a version listed on the
+    [Releases page](https://github.com/devantler-tech/ksail/releases); each newer
+    release also contains the changes from any failed attempt before it.
+    See [why failed release tags are kept](https://github.com/devantler-tech/ksail/issues/7694).
+
     ## Quick Start
 
     **Homebrew Cask** (macOS):

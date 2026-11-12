@@ -23,8 +23,8 @@ var errNodeListUnavailable = errors.New("node list unavailable")
 
 func upgradedNode(unschedulable bool, ready corev1.ConditionStatus) *corev1.Node {
 	return &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod-worker-1"},
-		Spec:       corev1.NodeSpec{Unschedulable: unschedulable},
+		Name: "prod-worker-1",
+		Spec: corev1.NodeSpec{Unschedulable: unschedulable},
 		Status: corev1.NodeStatus{
 			Addresses:  []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: recoverNodeIP}},
 			Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: ready}},

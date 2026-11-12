@@ -16,13 +16,13 @@ import (
 // pinnedUpgraderFake is the update fake with its distribution pinned one
 // release ahead of the running version, as runUpdateCommand uses.
 func pinnedUpgraderFake() *updatableUpgraderFake {
-	return &updatableUpgraderFake{versionUpgraderFake: versionUpgraderFake{
+	return &updatableUpgraderFake{
 		current: clusterupdate.VersionInfo{
 			KubernetesVersion:   "v1.34.0",
 			DistributionVersion: "v1.12.0",
 		},
 		distributionPin: "v1.13.0",
-	}}
+	}
 }
 
 // inPlaceUpgraderFake reports one provisioner-level in-place change, so a real

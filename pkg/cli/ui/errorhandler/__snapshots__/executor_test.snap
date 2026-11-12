@@ -1,14 +1,6 @@
 
-[TestCommandErrorErrorCauseOnlyWhenMessageEmpty - 1]
+[TestCommandErrorErrorIsTheCause - 1]
 boom
----
-
-[TestCommandErrorErrorMessageAndCauseConcatenatedWhenDistinct - 1]
-normalized: original failure
----
-
-[TestCommandErrorErrorMessageRetainedWhenAlreadyIncludesCause - 1]
-boom: original failure
 ---
 
 [TestExecutorExecuteInvalidSubcommand - 1]

@@ -96,7 +96,7 @@ func TestWithDrainTimeout_IgnoresNonPositive(t *testing.T) {
 func TestCordonAndDrain_Success_LeavesNodeCordoned(t *testing.T) {
 	t.Parallel()
 
-	node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-ok"}}
+	node := &corev1.Node{Name: "node-ok"}
 	clientset := fake.NewClientset(node)
 
 	prov := talosprovisioner.NewProvisioner(nil, talosprovisioner.NewOptions()).
@@ -116,7 +116,7 @@ func TestCordonAndDrain_Success_LeavesNodeCordoned(t *testing.T) {
 func TestCordonAndDrain_UncordonsOnDrainFailure(t *testing.T) {
 	t.Parallel()
 
-	node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-fail"}}
+	node := &corev1.Node{Name: "node-fail"}
 	clientset := fake.NewClientset(node)
 
 	// Force the drain's pod enumeration to fail so the drain aborts deterministically.

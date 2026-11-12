@@ -28,6 +28,10 @@ runs:
         go-version-file: go.mod
         cache: false
 
+    - name: 📦 Download Go modules
+      shell: bash
+      run: bash "$GITHUB_ACTION_PATH/../../scripts/download-go-modules.sh"
+
     - name: ⚙️ Setup Node.js
       uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0 # zizmor: ignore[cache-poisoning]
       with:
@@ -42,7 +46,5 @@ runs:
 
     - name: 🏗️ Build and stage web UI
       shell: bash
-      # $GITHUB_ACTION_PATH (not a workspace-relative path) so the script also
-      # resolves if this action is ever consumed via a remote `@ref` — the full
-      # repo tarball is checked out at the same ref alongside the action.
-      run: bash "$GITHUB_ACTION_PATH/../../../scripts/stage-webui.sh"
+      # Run the pinned script and stage into the checkout that builds the desktop binary.
+      run: bash "$GITHUB_ACTION_PATH/../../../scripts/stage-webui.sh" "${GITHUB_WORKSPACE:?Missing release checkout}"

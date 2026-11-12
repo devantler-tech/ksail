@@ -44,8 +44,15 @@ target_context=$(jq -er '
 cli_target=(--kubeconfig "$KUBECONFIG" --context "$target_context")
 helm_target=(--kubeconfig "$KUBECONFIG" --kube-context "$target_context")
 
+case "$(helm version --short)" in
+v3.*) helm_list_args=(--all --namespace tigera-operator) ;;
+# Helm 4 lists releases in every status by default and rejects --all.
+v4.*) helm_list_args=(--namespace tigera-operator) ;;
+*) fail 'unsupported Helm major version' ;;
+esac
+
 # Record exact Helm metadata and prerequisite UIDs before any candidate mutation.
-helm list --all --namespace tigera-operator --output json "${helm_target[@]}" >"$log_dir/before-releases.json"
+helm list "${helm_list_args[@]}" --output json "${helm_target[@]}" >"$log_dir/before-releases.json"
 jq -e '
   map(select(.name == "calico" or .name == "calico-crds")) |
   (map(.name) | sort) == ["calico", "calico-crds"] and
@@ -142,7 +149,7 @@ ksail cluster update --config "$config_file" --yes --output json "${version_args
 	>"$log_dir/update.json" 2>"$log_dir/update.stderr" || status=$?
 [[ "$status" == 0 ]] || fail "candidate update exited $status; see update.json, update.stderr and prerequisite-ownership.json"
 cmp "$config_file" "$log_dir/before-config.yaml" || fail 'update changed the desired configuration'
-helm list --all --namespace tigera-operator --output json "${helm_target[@]}" >"$log_dir/after-releases.json"
+helm list "${helm_list_args[@]}" --output json "${helm_target[@]}" >"$log_dir/after-releases.json"
 expected=$(sed -nE 's/^FROM docker.io\/calico\/node:(v[0-9]+\.[0-9]+\.[0-9]+)@sha256:.*/\1/p' "$GITHUB_WORKSPACE/pkg/svc/installer/cni/calico/Dockerfile")
 [[ "$expected" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail 'candidate Calico version is missing'
 jq -e --arg expected "${expected#v}" 'map(select(.name == "calico")) |

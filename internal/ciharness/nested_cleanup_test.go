@@ -27,6 +27,7 @@ if [[ "${1:-}" == --context ]]; then
       ready-ok-error) echo ok; exit 1 ;;
       ready-hang) echo ok; trap '' TERM; exec sleep 60 ;;
       ready-invalid) echo 'not ready' ;;
+      ready-delayed) /bin/sleep 4; echo ok ;;
       ready-flaky)
         if [[ -e "$FIXTURE_CALLS.ready-seen" ]]; then
           echo ok
@@ -45,7 +46,8 @@ case "$1 $2" in
   'config current-context') echo fixture-host ;;
   'config use-context') [[ "$FIXTURE_MODE" != host-error ]] ;;
   'get --raw=/readyz') echo ok ;;
-  '-n ksail-nested-talos')
+  '-n ksail-nested-talos'|'-n ksail-nested-vanilla')
+    [[ "$FIXTURE_MODE" != create-diag-error ]] || exit 1
     case "${3:-}" in
       get|exec) echo 'fixture endpoint diagnostics' ;;
       *) exit 99 ;;
@@ -74,9 +76,15 @@ if [[ "$FIXTURE_MODE" == info-delete-error && "$2" == info ]]; then
   echo 'fixture info failed' >&2
   exit 1
 fi
-if [[ "$FIXTURE_MODE" == create-error && "$2" == create && "$*" == *nested-vanilla* ]]; then
+if [[ "$FIXTURE_MODE" == create-error || "$FIXTURE_MODE" == create-diag-error ]] &&
+  [[ "$2" == create && "$*" == *nested-vanilla* ]]; then
   echo 'fixture create failed' >&2
   exit 1
+fi
+if [[ "$FIXTURE_MODE" == create-hang && "$2" == create ]]; then
+  echo 'fixture create stuck' >&2
+  trap '' TERM
+  exec sleep 60
 fi
 if [[ "$2" == info && "$FIXTURE_MODE" == ready-error ]]; then
   echo 'Status: UNKNOWN'
@@ -96,7 +104,11 @@ printf 'timeout %s\n' "$*" >> "$FIXTURE_CALLS"
 if [[ "${1:-}" == --kill-after=* ]]; then
   shift
 fi
+duration="${1:-}"
 shift
+if [[ "$FIXTURE_MODE" == ready-delayed && "$*" == *--raw=/readyz* ]]; then
+  exec "$FIXTURE_TIMEOUT" --kill-after=0.1s "$duration" "$@"
+fi
 if [[ "$FIXTURE_MODE" == ready-timeout && "$*" == *--raw=/readyz* ]]; then
   echo ok
   exit 124
@@ -113,7 +125,28 @@ fi
 exec "$@"
 `
 
+const nestedCleanupDockerStub = `#!/usr/bin/env bash
+set -euo pipefail
+printf 'docker %s\n' "$*" >> "$FIXTURE_CALLS"
+[[ "$*" == "network inspect kind --format {{len .IPAM.Config}}" ]] || exit 99
+[[ "$FIXTURE_MODE" != create-diag-error ]] || exit 1
+echo 1
+`
+
 func runNestedCleanup(t *testing.T, mode string, distributions ...string) (string, string, error) {
+	t.Helper()
+
+	// This bounds the whole fixture, not a product operation. Each real readiness
+	// and cleanup deadline is independently exercised by the timeout stub below.
+	return runNestedCleanupWithWatchdog(t, false, mode, distributions...)
+}
+
+func runNestedCleanupWithWatchdog(
+	t *testing.T,
+	shortWatchdog bool,
+	mode string,
+	distributions ...string,
+) (string, string, error) {
 	t.Helper()
 	version, err := exec.CommandContext(t.Context(), "bash", "-c", `printf '%s' "${BASH_VERSINFO[0]}"`).
 		Output()
@@ -132,19 +165,29 @@ func runNestedCleanup(t *testing.T, mode string, distributions ...string) (strin
 	// Advance the actual Bash loop's clock without a two-minute test or changed production deadline.
 	script = "trap '' TERM\nsleep() { SECONDS=$((SECONDS + 121)); }\n" + script
 
-	writeExecutableStub(t, filepath.Join(dir, "kubectl"), nestedCleanupKubectlStub)
-	writeExecutableStub(t, filepath.Join(dir, "ksail"), nestedCleanupKSailStub)
-	writeExecutableStub(t, filepath.Join(dir, "timeout"), nestedCleanupTimeoutStub)
+	writeNestedCleanupStubs(t, dir)
 	timeoutPath := nestedFixtureTimeoutPath(t)
 
-	command := exec.CommandContext(t.Context(), "timeout", "--kill-after=0.1s", "3s", "bash")
+	command := exec.CommandContext(t.Context(), "timeout", "--kill-after=0.1s", "30s", "bash")
 	if filepath.Base(timeoutPath) == "gtimeout" {
-		command = exec.CommandContext(t.Context(), "gtimeout", "--kill-after=0.1s", "3s", "bash")
+		command = exec.CommandContext(t.Context(), "gtimeout", "--kill-after=0.1s", "30s", "bash")
+	}
+
+	if shortWatchdog {
+		command = exec.CommandContext(t.Context(), "timeout", "--kill-after=0.1s", "5s", "bash")
+		if filepath.Base(timeoutPath) == "gtimeout" {
+			command = exec.CommandContext(
+				t.Context(), "gtimeout", "--kill-after=0.1s", "5s", "bash",
+			)
+		}
+
+		require.Equal(t, "5s", command.Args[2],
+			"the deliberate hang must use the short watchdog, not the normal fixture bound")
 	}
 
 	command.Stdin = strings.NewReader(script)
 	command.Dir = filepath.Join("..", "..")
-	command.Env = nestedCleanupEnvironment(dir, mode)
+	command.Env = nestedCleanupEnvironment(t, dir, mode)
 	command.Env = append(command.Env, "FIXTURE_TIMEOUT="+timeoutPath)
 
 	if len(distributions) > 0 {
@@ -158,6 +201,14 @@ func runNestedCleanup(t *testing.T, mode string, distributions ...string) (strin
 	calls := readOptionalVersionFixture(t, root, "calls")
 
 	return string(output), string(calls), err
+}
+
+func writeNestedCleanupStubs(t *testing.T, dir string) {
+	t.Helper()
+	writeExecutableStub(t, filepath.Join(dir, "kubectl"), nestedCleanupKubectlStub)
+	writeExecutableStub(t, filepath.Join(dir, "ksail"), nestedCleanupKSailStub)
+	writeExecutableStub(t, filepath.Join(dir, "timeout"), nestedCleanupTimeoutStub)
+	writeExecutableStub(t, filepath.Join(dir, "docker"), nestedCleanupDockerStub)
 }
 
 func nestedFixtureTimeoutPath(t *testing.T) string {
@@ -225,6 +276,49 @@ func TestNestedReadinessBindsEachDistributionContext(t *testing.T) {
 	assert.NotContains(t, calls, "kubectl --context fixture-host get --raw=/readyz")
 }
 
+func TestNestedReadinessAllowsSlowSuccessfulFixture(t *testing.T) {
+	t.Parallel()
+
+	output, calls, err := runNestedCleanup(t, "ready-delayed", "Vanilla")
+	require.NoError(t, err,
+		"a successful readiness response within its own deadline must finish: %s", output)
+	assert.Contains(t, calls, "kubectl --context kind-nested-vanilla get --raw=/readyz")
+	assert.Contains(t, output, "Vanilla resources drained")
+	assert.Contains(t, output, "All Kubernetes provider tests passed")
+}
+
+func TestNestedDelayedReadHonorsItsOperationDeadline(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeExecutableStub(t, filepath.Join(dir, "kubectl"), nestedCleanupKubectlStub)
+	command := exec.CommandContext(t.Context(), "bash", "-s", "--",
+		"--kill-after=0.1s", "0.2s", "kubectl", "--context", "kind-nested-vanilla",
+		"get", "--raw=/readyz", "--request-timeout=15s")
+	command.Stdin = strings.NewReader(nestedCleanupTimeoutStub)
+
+	command.Env = append(nestedCleanupEnvironment(t, dir, "ready-delayed"),
+		"FIXTURE_TIMEOUT="+nestedFixtureTimeoutPath(t))
+	output, err := command.CombinedOutput()
+
+	var exitError *exec.ExitError
+
+	require.ErrorAs(t, err, &exitError,
+		"the four-second response must exceed the supplied operation deadline: %s", output)
+	assert.Equal(t, 124, exitError.ExitCode())
+	assert.NotContains(t, string(output), "ok")
+}
+
+func TestNestedFixtureWatchdogRejectsAHungCommand(t *testing.T) {
+	t.Parallel()
+
+	output, _, err := runNestedCleanupWithWatchdog(t, true, "create-hang", "Vanilla")
+	require.Error(t, err, output)
+	assert.Contains(t, output, "fixture create stuck",
+		"the fixture must reach the deliberately hung command")
+	assert.NotContains(t, output, "All Kubernetes provider tests passed")
+}
+
 func TestNestedReadinessReportsAPIErrorBeforeInfo(t *testing.T) {
 	t.Parallel()
 	output, calls, err := runNestedCleanup(t, "ready-error", "Talos")
@@ -248,7 +342,9 @@ func TestNestedReadinessCapturesOnlyEndpointEvidenceBeforeDeletion(t *testing.T)
 	require.Error(t, err, output)
 
 	diagnosticCall := "kubectl --context fixture-host -n ksail-nested-talos exec dind -c dind -- " +
-		"docker inspect --type container --format {{json .NetworkSettings.Ports}} nested-talos-control-plane-1"
+		"docker inspect --type container --format " +
+		"{{range .NetworkSettings.Ports}}{{range .}}{{.HostPort}}{{println}}{{end}}{{end}} " +
+		"nested-talos-control-plane-1"
 	assert.Contains(t, calls, diagnosticCall)
 	assert.Contains(t, calls, "get service apiserver")
 	assert.Contains(t, calls, "get endpointslices -l kubernetes.io/service-name=apiserver")
@@ -279,8 +375,14 @@ func TestNestedReadinessBoundsInfoAndStillCleansUp(t *testing.T) {
 	assert.NotContains(t, output, "All Kubernetes provider tests passed")
 }
 
-func nestedCleanupEnvironment(dir, mode string) []string {
+func nestedCleanupEnvironment(t *testing.T, dir, mode string) []string {
+	t.Helper()
+
+	workspace, err := filepath.Abs(filepath.Join("..", ".."))
+	require.NoError(t, err)
+
 	return append(os.Environ(),
+		"GITHUB_WORKSPACE="+workspace,
 		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"DISTRIBUTIONS=Vanilla,K3s", "TIMEOUT=1200", "CNI=", "ASSERT_K3K_SERVER_CREATOR=false",
 		"DOCKERHUB_USERNAME=", "DOCKERHUB_TOKEN=", "GHCR_USERNAME=", "GHCR_TOKEN=",
@@ -352,6 +454,47 @@ func TestNestedCleanupPreservesCreateFailureAndStillDeletes(t *testing.T) {
 	)
 	assert.NotContains(t, calls, "ksail cluster info --name nested-vanilla")
 	assert.NotContains(t, output, "All Kubernetes provider tests passed")
+}
+
+func TestNestedKindDiagnosticsPrecedeDeletion(t *testing.T) {
+	t.Parallel()
+
+	for _, mode := range []string{"create-error", "ready-error", "create-diag-error"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			output, calls, err := runNestedCleanup(t, mode, "Vanilla")
+			require.Error(t, err, output)
+
+			diagnostics := strings.Index(calls, "-n ksail-nested-vanilla get service apiserver")
+			deletion := strings.Index(
+				calls,
+				"ksail cluster delete --provider Kubernetes --name nested-vanilla",
+			)
+
+			require.NotEqual(
+				t,
+				-1,
+				diagnostics,
+				"failed create/readiness must preserve endpoint evidence",
+			)
+			require.Greater(
+				t,
+				deletion,
+				diagnostics,
+				"collect evidence before deleting the owned fixture",
+			)
+			assert.Contains(t, calls, "-n ksail-nested-vanilla get endpointslices")
+			assert.Contains(t, calls, "exec dind -c dind -- docker inspect --type container")
+			assert.Contains(t, calls, "nested-vanilla-control-plane")
+			assert.Contains(t, calls, "exec dind -c dind -- docker network inspect kind")
+			assert.Contains(t, calls, "\ndocker network inspect kind --format")
+			assert.NotContains(t, calls, "get secret")
+			assert.NotContains(t, calls, "config view")
+			assert.NotContains(t, calls, "{{json .IPAM.Config}}")
+			assert.NotContains(t, calls, ".endpoints[*].addresses")
+			assert.NotContains(t, output, "All Kubernetes provider tests passed")
+		})
+	}
 }
 
 // nestedSummary returns the lifecycle counts the action prints for a trial of

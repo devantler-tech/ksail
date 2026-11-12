@@ -3,7 +3,7 @@ title: Multi-Environment Workflows with --config
 description: How to manage dev, staging, and production environments from the same project using KSail's --config flag and environment variable expansion.
 ---
 
-import { Steps } from "@astrojs/starlight/components";
+import { FileTree, Steps } from "@astrojs/starlight/components";
 
 KSail's recommended pattern for running many environments is simple: **one config file per
 environment, selected with `--config`**. You keep `ksail.yaml` (e.g. local on Docker) and
@@ -33,13 +33,15 @@ There is no separate "prod CLI" and no per-environment workflow to learn — `cr
    Start from your `ksail.yaml` and add a sibling for each additional environment. Name them after
    the environment so the intent is obvious and context names stay predictable across machines:
 
-   ```text
-   my-platform/
-   ├── ksail.yaml          # local — Talos on Docker
-   ├── ksail.prod.yaml     # production — Talos on Hetzner
-   ├── k8s/                # one shared manifest tree (see step 3)
-   └── talos/              # shared Talos patches
-   ```
+   <FileTree>
+
+   - my-platform/
+     - ksail.yaml local — Talos on Docker
+     - ksail.prod.yaml production — Talos on Hetzner
+     - k8s/ one shared manifest tree (see step 3)
+     - talos/ shared Talos patches
+
+   </FileTree>
 
    `--config` overrides KSail's default discovery (which walks up the directory tree looking for
    `ksail.yaml`), so a single repository root can drive many clusters.

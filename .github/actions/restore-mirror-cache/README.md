@@ -24,5 +24,7 @@ supplies no artifact ID and retains its cache restore and live-pull fallback.
 
 Importing and exporting a mirror volume runs a small helper container. Both
 actions pull that helper image first through `pull-helper-image.sh`, with three
-attempts. If it still cannot be pulled, the step fails and names the helper
-image; no mirror volume or archive has been changed at that point.
+attempts. If those are refused, it tries three more times to pull a copy pinned
+by digest from Amazon's public registry, and gives it the same image name. If
+neither source serves it, the step fails and names the helper image; no mirror
+volume or archive has been changed at that point.

@@ -923,6 +923,11 @@ func (p *Provisioner) diffConfig(
 	name string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 ) (*clusterupdate.UpdateResult, error) {
+	validationErr := p.validateAutoscalerPoolPatches()
+	if validationErr != nil {
+		return nil, validationErr
+	}
+
 	// Talos clusters support in-place changes for most config paths.
 	result, ok := clusterupdate.NewDiffResult(oldSpec, newSpec)
 	if !ok {

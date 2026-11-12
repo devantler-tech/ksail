@@ -45,6 +45,16 @@ func (c *Client) AddRepository(
 		return requestErr
 	}
 
+	// Registration and acquisition share repository config/cache files. Keep
+	// the complete read-modify-write transaction under the acquisition gate;
+	// a separate writer lock would still race Helm's config readers.
+	acquireErr := acquireChartState(ctx)
+	if acquireErr != nil {
+		return acquireErr
+	}
+
+	defer chartAcquireMu.Release(1)
+
 	settings := c.settings
 
 	repoFile, err := ensureRepositoryConfig(settings)

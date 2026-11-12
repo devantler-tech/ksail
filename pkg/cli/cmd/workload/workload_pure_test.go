@@ -39,7 +39,10 @@ func TestParseInteger(t *testing.T) {
 		{"valid negative integer", "-7", "default", int64(-7)},
 		{"zero", "0", "default", int64(0)},
 		{"non-numeric falls back", "abc", "fallback", "fallback"},
-		{"float string parses integer part", "3.14", "fallback", int64(3)},
+		// Only a whole integer converts: Flux would substitute "3.14" or "3oops" as written,
+		// so an integer field must still fail validation on them.
+		{"float string falls back", "3.14", "fallback", "fallback"},
+		{"numeric prefix falls back", "3oops", "fallback", "fallback"},
 		{"empty string falls back", "", "fallback", "fallback"},
 		{"large number", "999999999", "default", int64(999999999)},
 		{"whitespace falls back", " ", "fallback", "fallback"},
@@ -75,6 +78,7 @@ func TestParseNumber(t *testing.T) {
 		{"non-numeric falls back", "abc", "fallback", "fallback"},
 		{"empty string falls back", "", "fallback", "fallback"},
 		{"scientific notation", "1e3", "default", float64(1000)},
+		{"numeric prefix falls back", "2.5x", "fallback", "fallback"},
 	}
 
 	for _, tt := range tests {
@@ -569,53 +573,6 @@ func TestSchemaCacheDir(t *testing.T) {
 	assert.NotEmpty(t, dir)
 	assert.Contains(t, dir, "ksail")
 	assert.Contains(t, dir, "kubeconform")
-}
-
-// ===========================================================================
-// schemaCacheFileName — URL to safe filename
-// ===========================================================================
-
-func TestSchemaCacheFileName(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		url  string
-	}{
-		{"simple URL", "https://example.com/schema.json"},
-		{"URL with path", "https://raw.githubusercontent.com/org/repo/main/schema.json"},
-		{"short URL", "http://a.com/s"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := workload.ExportSchemaCacheFileName(tt.url)
-			assert.NotEmpty(t, got)
-			assert.True(t, strings.HasSuffix(got, ".json"), "expected .json suffix, got %q", got)
-			assert.NotContains(t, got, "://")
-			assert.NotContains(t, got, "/")
-		})
-	}
-}
-
-func TestSchemaCacheFileName_MaxLength(t *testing.T) {
-	t.Parallel()
-
-	longURL := "https://example.com/" + strings.Repeat("abcdefgh", 100) + "/schema.json"
-	got := workload.ExportSchemaCacheFileName(longURL)
-	assert.LessOrEqual(t, len(got), 200)
-	assert.True(t, strings.HasSuffix(got, ".json"))
-}
-
-func TestSchemaCacheFileName_Deterministic(t *testing.T) {
-	t.Parallel()
-
-	url := "https://example.com/schema.json"
-	a := workload.ExportSchemaCacheFileName(url)
-	b := workload.ExportSchemaCacheFileName(url)
-	assert.Equal(t, a, b, "same URL should produce same filename")
 }
 
 // ===========================================================================

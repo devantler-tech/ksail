@@ -189,6 +189,10 @@ workload_write
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
         "type": "string"
       },
+      "git-verify-secret-ref": {
+        "description": "Secret in the tenant namespace with trusted committers' public keys (SSH under *.sshpub keys, OpenPGP under *.asc)...",
+        "type": "string"
+      },
       "image-pull-secret": {
         "description": "imagePullSecret to add to the tenant ServiceAccount (repeatable)",
         "items": {
@@ -352,7 +356,7 @@ workload_write
         "type": "array"
       },
       "args": {
-        "description": "Positional arguments for the command",
+        "description": "Positional arguments for the command (applies to: backup, create, delete, restore, start, stop, update)",
         "items": {
           "type": "string"
         },
@@ -371,11 +375,12 @@ workload_write
         "type": "string"
       },
       "command": {
-        "description": "The subcommand to execute. Options:\nbackup: Backup cluster resources\ncreate: Create a cluster\ndelete: Destroy a cluster\nrestore: Restore cluster resources from backup\nstart: Start a stopped cluster\nstop: Stop a running cluster\nupdate: Update a cluster configuration",
+        "description": "The subcommand to execute. Options:\nbackup: Backup cluster resources\ncreate: Create a cluster\ndelete: Destroy a cluster\nforget: Forget one local kubeconfig context without contacting a...\nrestore: Restore cluster resources from backup\nstart: Start a stopped cluster\nstop: Stop a running cluster\nupdate: Update a cluster configuration",
         "enum": [
           "backup",
           "create",
           "delete",
+          "forget",
           "restore",
           "start",
           "stop",
@@ -389,7 +394,7 @@ workload_write
         "type": "integer"
       },
       "context": {
-        "description": "Kubernetes context of cluster (applies to: create, update)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create, forget, update)",
         "type": "string"
       },
       "control-planes": {
@@ -459,8 +464,7 @@ workload_write
         "type": "string"
       },
       "kubeconfig": {
-        "default": "~/.kube/config",
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create, delete, update)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
         "type": "string"
       },
       "kubernetes-version": {
@@ -785,7 +789,6 @@ workload_write
         "type": "string"
       },
       "dry-run": {
-        "default": "none",
         "description": "Behavior depends on the selected subcommand...",
         "type": "string"
       },
@@ -830,7 +833,6 @@ workload_write
         "type": "string"
       },
       "field-manager": {
-        "default": "kubectl-client-side-apply",
         "description": "Name of the manager used to track field ownership...",
         "type": "string"
       },
@@ -979,7 +981,6 @@ workload_write
         "type": "string"
       },
       "kubeconfig": {
-        "default": "~/.kube/config",
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, create, debug, delete, exec, export, expose, import, rollout, scale)",
         "type": "string"
       },
@@ -1013,7 +1014,7 @@ workload_write
         "type": "string"
       },
       "namespace": {
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, create, debug, delete, exec, expose, install, intercept, mirror, rollout, scale)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, create, create_helmrelease, create_kustomization, create_source_git, create_source_helm, create_source_oci, debug, delete, exec, expose, install, intercept, mirror, rollout, scale)",
         "type": "string"
       },
       "node-port": {
@@ -1064,7 +1065,6 @@ workload_write
         "type": "boolean"
       },
       "path": {
-        "default": "./",
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_kustomization, push, watch)",
         "type": "string"
       },
@@ -1074,7 +1074,6 @@ workload_write
         "type": "string"
       },
       "port": {
-        "default": -1,
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_deployment, expose, mirror)",
         "type": "integer"
       },
@@ -1133,7 +1132,6 @@ workload_write
         "type": "boolean"
       },
       "replicas": {
-        "default": 1,
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_deployment, scale)",
         "type": "integer"
       },
@@ -1248,7 +1246,6 @@ workload_write
         "type": "string"
       },
       "source-kind": {
-        "default": "HelmRepository",
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: create_helmrelease, create_kustomization)",
         "type": "string"
       },
@@ -1314,7 +1311,6 @@ workload_write
         "type": "string"
       },
       "timeout": {
-        "default": "0s",
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: apply, delete, install, reconcile, rollout_status, scale)",
         "type": "string"
       },
@@ -1340,7 +1336,6 @@ workload_write
         "type": "string"
       },
       "validate": {
-        "default": "strict",
         "description": "Behavior depends on the selected subcommand...",
         "type": "string"
       },
@@ -1355,6 +1350,14 @@ workload_write
           "type": "string"
         },
         "type": "array"
+      },
+      "verify-mode": {
+        "description": "Git object to verify: HEAD, Tag or TagAndHEAD (default HEAD; requires --verify-secret-ref) (applies to: create_source_git)",
+        "type": "string"
+      },
+      "verify-secret-ref": {
+        "description": "verify the signature of the checked-out commit (or tag) against the public keys in this existing secret (SSH keys under *.sshpub keys, OpenPGP keys under *.asc) (applies to: create_source_git)",
+        "type": "string"
       },
       "version": {
         "description": "chart version constraint (default: latest) (applies to: install)",
@@ -1520,7 +1523,7 @@ workload_write
         "type": "boolean"
       },
       "args": {
-        "description": "Positional arguments for the command (applies to: describe, explain, forward, gen_clusterrole, gen_clusterrolebinding, gen_configmap, gen_cronjob, gen_deployment, gen_helmrelease, gen_ingress, gen_job, gen_namespace, gen_poddisruptionbudget, gen_priorityclass, gen_quota, gen_role, gen_rolebinding, gen_secret_docker-registry, gen_secret_generic, gen_secret_tls, gen_service_clusterip, gen_service_externalname, gen_service_loadbalancer, gen_service_nodeport, gen_serviceaccount, get, logs, scan, validate, wait)",
+        "description": "Positional arguments for the command (applies to: describe, explain, forward, gen_clusterrole, gen_clusterrolebinding, gen_configmap, gen_cronjob, gen_deployment, gen_helmrelease, gen_ingress, gen_job, gen_namespace, gen_poddisruptionbudget, gen_priorityclass, gen_quota, gen_receiver, gen_role, gen_rolebinding, gen_secret_docker-registry, gen_secret_generic, gen_secret_tls, gen_service_clusterip, gen_service_externalname, gen_service_loadbalancer, gen_service_nodeport, gen_serviceaccount, get, logs, scan, validate, wait)",
         "items": {
           "type": "string"
         },
@@ -1650,6 +1653,13 @@ workload_write
         "description": "Wait after admission before collecting children (positive, at most 5m; requires --ephemeral-children) (applies to: validate)",
         "type": "string"
       },
+      "events": {
+        "description": "event types to handle, e.g. push for GitHub (applies to: gen_receiver)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
       "exceptions": {
         "description": "Path to a Kubescape exceptions file (a JSON array of PostureExceptionPolicy objects) forwarded to Kubescape's --exceptions (overrides spec.workload.scan.exceptions from ksail.yaml) (applies to: scan)",
         "type": "string"
@@ -1749,6 +1759,13 @@ workload_write
         "description": "A comma-delimited set of resource=quantity pairs that define a hard limit. (applies to: gen_quota)",
         "type": "string"
       },
+      "health-check-expr": {
+        "description": "CEL health check for custom resources the release creates, repeatable (\u003capiVersion\u003e[/\u003cKind\u003e][:current|inProgress|failed]=\u003cCEL\u003e; field defaults to current) (applies to: gen_helmrelease)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
       "ignore-errors": {
         "description": "If watching / following pod logs, allow for any errors that occur to be non-fatal (applies to: logs)",
         "type": "boolean"
@@ -1790,6 +1807,10 @@ workload_write
       },
       "kustomize": {
         "description": "Process the kustomization directory. This flag can't be used together with -f or -R. (applies to: describe, get)",
+        "type": "string"
+      },
+      "kyverno-api-call-responses": {
+        "description": "Path, relative to the working directory, to a reviewed offline response fixture for Kyverno Kubernetes apiCall context entries... (applies to: validate)",
         "type": "string"
       },
       "kyverno-policies": {
@@ -1839,7 +1860,7 @@ workload_write
         "type": "string"
       },
       "namespace": {
-        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: describe, explain, forward, gen_helmrelease, get, logs, network, wait)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: describe, explain, forward, gen_helmrelease, gen_receiver, get, logs, network, wait)",
         "type": "string"
       },
       "no-headers": {
@@ -1862,8 +1883,29 @@ workload_write
         },
         "type": "array"
       },
+      "oidc-audience": {
+        "description": "expected token audience (generic-oidc; Flux defaults to notification-controller) (applies to: gen_receiver)",
+        "type": "string"
+      },
+      "oidc-issuer": {
+        "description": "OIDC issuer URL whose ID tokens are accepted (generic-oidc) (applies to: gen_receiver)",
+        "type": "string"
+      },
+      "oidc-validation": {
+        "description": "CEL expression over the token claims that must be true, repeatable (generic-oidc) (applies to: gen_receiver)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "oidc-validation-message": {
+        "description": "message returned when the matching --oidc-validation is false, repeatable in the same order (default: a generic refusal that does not reveal the expression) (applies to: gen_receiver)",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
       "output": {
-        "default": "plaintext",
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details",
         "type": "string"
       },
@@ -1876,7 +1918,6 @@ workload_write
         "type": "string"
       },
       "pod-running-timeout": {
-        "default": "1m0s",
         "description": "The length of time (like 5s, 2m, or 3h, higher than zero) to wait until at least one pod is running (applies to: forward, logs)",
         "type": "string"
       },
@@ -1922,6 +1963,10 @@ workload_write
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: describe, explain, get, wait)",
         "type": "boolean"
       },
+      "refresh-schemas": {
+        "description": "Download selected schemas anew and update the cache only after validation succeeds; unavailable selected schemas fail even when missing schemas are normally ignored (applies to: validate)",
+        "type": "boolean"
+      },
       "release-name": {
         "description": "name used for the Helm release (applies to: gen_helmrelease)",
         "type": "string"
@@ -1932,11 +1977,15 @@ workload_write
         "type": "integer"
       },
       "resource": {
-        "description": "Resource that the rule applies to (applies to: gen_clusterrole, gen_role)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: gen_clusterrole, gen_receiver, gen_role)",
         "items": {
           "type": "string"
         },
         "type": "array"
+      },
+      "resource-filter": {
+        "description": "CEL expression every resource must pass before it is reconciled (applies to: gen_receiver)",
+        "type": "string"
       },
       "resource-name": {
         "description": "Resource in the white list that the rule applies to, repeat this flag for multiple items (applies to: gen_clusterrole, gen_role)",
@@ -1973,14 +2022,23 @@ workload_write
         "type": "string"
       },
       "schema-location": {
-        "description": "Additional kubeconform schema locations (local directory or URL/path template) for CRDs with missing or stale CRDs-catalog entries... (applies to: validate)",
+        "description": "Supplied kubeconform schema locations (local directory or URL/path template)... (applies to: validate)",
         "items": {
           "type": "string"
         },
         "type": "array"
       },
+      "schema-location-mode": {
+        "default": "additional",
+        "description": "Schema search mode: additional keeps built-in and catalogue defaults; only uses the supplied schema locations without implicit registries (applies to: validate)",
+        "type": "string"
+      },
       "scopes": {
         "description": "A comma-delimited set of quota scopes that must all match each object tracked by the quota. (applies to: gen_quota)",
+        "type": "string"
+      },
+      "secret-ref": {
+        "description": "Secret holding the webhook token (every type except generic-oidc) (applies to: gen_receiver)",
         "type": "string"
       },
       "selector": {
@@ -2086,7 +2144,6 @@ workload_write
         "type": "string"
       },
       "timeout": {
-        "default": "5m0s",
         "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: gen_helmrelease, wait)",
         "type": "string"
       },
@@ -2095,7 +2152,7 @@ workload_write
         "type": "boolean"
       },
       "type": {
-        "description": "The type of secret to create (applies to: gen_secret_generic)",
+        "description": "Behavior depends on the selected subcommand; see the matching CLI subcommand's --help for details (applies to: gen_receiver, gen_secret_generic)",
         "type": "string"
       },
       "validate": {
@@ -2149,7 +2206,7 @@ workload_write
         "type": "boolean"
       },
       "workload_command": {
-        "description": "The subcommand to execute. Options:\ndescribe: Describe resources\nexplain: Get documentation for a resource\nforward: Forward one or more local ports to a pod\ngen_clusterrole: Create a cluster role\ngen_clusterrolebinding: Create a cluster role binding for a particular cluster role\ngen_configmap: Create a config map from a local file...\ngen_cronjob: Create a cron job with the specified name\ngen_deployment: Create a deployment with the specified name\ngen_helmrelease: Generate a HelmRelease resource\ngen_ingress: Create an ingress with the specified name\ngen_job: Create a job with the specified name\ngen_namespace: Create a namespace with the specified name\ngen_poddisruptionbudget: Create a pod disruption budget with the specified name\ngen_priorityclass: Create a priority class with the specified name\ngen_quota: Create a quota with the specified name\ngen_role: Create a role with single rule\ngen_rolebinding: Create a role binding for a particular role or cluster role\ngen_secret_docker-registry: Create a secret for use with a Docker registry\ngen_secret_generic: Create a secret from a local file, directory...\ngen_secret_tls: Create a TLS secret\ngen_service_clusterip: Create a ClusterIP service\ngen_service_externalname: Create an ExternalName service\ngen_service_loadbalancer: Create a LoadBalancer service\ngen_service_nodeport: Create a NodePort service\ngen_serviceaccount: Create a service account with the specified name\nget: Get resources\nimages: List container images required by cluster components\nlogs: Print container logs\nnetwork: Inspect live network traffic flows via Cilium Hubble\nscan: Run security scans on Kubernetes manifests\nvalidate: Validate Kubernetes manifests and kustomizations\nwait: Wait for a specific condition on one or many resources",
+        "description": "The subcommand to execute. Options:\ndescribe: Describe resources\nexplain: Get documentation for a resource\nforward: Forward one or more local ports to a pod\ngen_clusterrole: Create a cluster role\ngen_clusterrolebinding: Create a cluster role binding for a particular cluster role\ngen_configmap: Create a config map from a local file...\ngen_cronjob: Create a cron job with the specified name\ngen_deployment: Create a deployment with the specified name\ngen_helmrelease: Generate a HelmRelease resource\ngen_ingress: Create an ingress with the specified name\ngen_job: Create a job with the specified name\ngen_namespace: Create a namespace with the specified name\ngen_poddisruptionbudget: Create a pod disruption budget with the specified name\ngen_priorityclass: Create a priority class with the specified name\ngen_quota: Create a quota with the specified name\ngen_receiver: Generate a Flux Receiver resource\ngen_role: Create a role with single rule\ngen_rolebinding: Create a role binding for a particular role or cluster role\ngen_secret_docker-registry: Create a secret for use with a Docker registry\ngen_secret_generic: Create a secret from a local file, directory...\ngen_secret_tls: Create a TLS secret\ngen_service_clusterip: Create a ClusterIP service\ngen_service_externalname: Create an ExternalName service\ngen_service_loadbalancer: Create a LoadBalancer service\ngen_service_nodeport: Create a NodePort service\ngen_serviceaccount: Create a service account with the specified name\nget: Get resources\nimages: List container images required by cluster components\nlogs: Print container logs\nnetwork: Inspect live network traffic flows via Cilium Hubble\nscan: Run security scans on Kubernetes manifests\nvalidate: Validate Kubernetes manifests and kustomizations\nwait: Wait for a specific condition on one or many resources",
         "enum": [
           "describe",
           "explain",
@@ -2166,6 +2223,7 @@ workload_write
           "gen_poddisruptionbudget",
           "gen_priorityclass",
           "gen_quota",
+          "gen_receiver",
           "gen_role",
           "gen_rolebinding",
           "gen_secret_docker-registry",

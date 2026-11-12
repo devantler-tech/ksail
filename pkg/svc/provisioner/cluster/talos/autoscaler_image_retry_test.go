@@ -272,7 +272,7 @@ func autoscalerImageRetryClient(t *testing.T) *fake.Clientset {
 	t.Helper()
 
 	client := fake.NewClientset(&corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "hcloud", Namespace: "kube-system"},
+		Name: "hcloud", Namespace: "kube-system",
 		Data: map[string][]byte{
 			"token":   []byte("test-token"),
 			"network": []byte("test-network"),

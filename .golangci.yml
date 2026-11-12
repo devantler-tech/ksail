@@ -2,7 +2,7 @@ version: "2"
 run:
   allow-parallel-runners: true
   modules-download-mode: readonly
-  go: "1.26.5"
+  go: "1.27.4"
 formatters:
   enable:
     - gci
@@ -122,7 +122,6 @@ linters:
         - github.com/docker/cli
         - github.com/opencontainers/runtime-spec
         - github.com/opencontainers/runc
-        - github.com/loft-sh/log
         - github.com/anchore/grype
         - github.com/kubescape/kubescape/v3
         - github.com/moby/go-archive

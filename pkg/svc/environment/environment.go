@@ -66,10 +66,11 @@ func (r Rewrite) validate() error {
 }
 
 // DeriveRewrites returns the structured substitutions that turn a clone
-// of the srcName environment overlay into the dstName environment. cluster_name is
-// always repointed and the clusters/<env>/ path segment always swapped; the
+// of the srcName environment overlay into the dstName environment. A cluster_name
+// equal to srcName is repointed and the clusters/<env>/ path segment is swapped; the
 // provider is repointed only when dstProvider is non-empty and differs from
 // srcProvider (an empty dstProvider inherits the source environment's provider).
+// Callers cloning a different declared cluster name add that value-exact rewrite.
 func DeriveRewrites(srcName, dstName, dstProvider, srcProvider string) []Rewrite {
 	rewrites := []Rewrite{
 		{Kind: MetaFieldValue, Field: "cluster_name", Old: srcName, New: dstName},
@@ -79,7 +80,7 @@ func DeriveRewrites(srcName, dstName, dstProvider, srcProvider string) []Rewrite
 	if dstProvider != "" && dstProvider != srcProvider {
 		rewrites = append(rewrites, Rewrite{
 			Kind:  MetaFieldValue,
-			Field: "provider",
+			Field: providerKey,
 			Old:   srcProvider,
 			New:   dstProvider,
 		})
@@ -106,7 +107,7 @@ func DeriveRewrites(srcName, dstName, dstProvider, srcProvider string) []Rewrite
 func DeriveConfigRewrites(srcName, dstName, dstProvider, srcProvider string) []Rewrite {
 	return append(
 		DeriveRewrites(srcName, dstName, dstProvider, srcProvider),
-		Rewrite{Kind: MetaFieldValue, Field: "name", Old: srcName, New: dstName},
+		Rewrite{Kind: MetaFieldValue, Field: nameKey, Old: srcName, New: dstName},
 	)
 }
 
@@ -123,10 +124,11 @@ func DeriveConfigRewrites(srcName, dstName, dstProvider, srcProvider string) []R
 // derivation never drifts from the rest of KSail. The rewrite is value-exact (like
 // the `name` rewrite in [DeriveConfigRewrites]): it only fires when the config's
 // `context:` scalar equals the source context exactly, so a config carrying a
-// hand-edited or post-creation context is left untouched. This also makes it safe
-// for EKS, whose `ContextName` yields only the `<name>.eksctl.io` suffix because the
+// hand-edited or post-creation context is left untouched. For EKS, `ContextName`
+// yields only the `<name>.eksctl.io` suffix because the
 // full `<iam>@<cluster>.<region>.eksctl.io` context is unknown until the cluster
-// exists — the value-exact match simply no-ops against the real eksctl context.
+// exists. The command preflight separately refuses recognized full source EKS
+// contexts; this generic helper leaves other custom contexts unchanged.
 //
 // ok is false when either context name is empty (an empty environment name or an
 // unknown distribution), in which case the returned Rewrite is the zero value and
@@ -142,7 +144,7 @@ func DeriveContextRewrite(
 		return Rewrite{}, false
 	}
 
-	return Rewrite{Kind: MetaFieldValue, Field: "context", Old: srcContext, New: dstContext}, true
+	return Rewrite{Kind: MetaFieldValue, Field: contextKey, Old: srcContext, New: dstContext}, true
 }
 
 // RewriteOverlayFile applies the rewrites to one cloned overlay file, returning the

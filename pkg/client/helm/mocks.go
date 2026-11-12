@@ -17,10 +17,19 @@ func NewMockInterface(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockInterface {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockInterface{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -64,7 +73,7 @@ type MockInterface_AddRepository_Call struct {
 //   - ctx context.Context
 //   - entry *RepositoryEntry
 //   - timeout time.Duration
-func (_e *MockInterface_Expecter) AddRepository(ctx interface{}, entry interface{}, timeout interface{}) *MockInterface_AddRepository_Call {
+func (_e *MockInterface_Expecter) AddRepository(ctx any, entry any, timeout any) *MockInterface_AddRepository_Call {
 	return &MockInterface_AddRepository_Call{Call: _e.mock.On("AddRepository", ctx, entry, timeout)}
 }
 
@@ -138,7 +147,7 @@ type MockInterface_GetReleaseStorageLabels_Call struct {
 //   - ctx context.Context
 //   - releaseName string
 //   - namespace string
-func (_e *MockInterface_Expecter) GetReleaseStorageLabels(ctx interface{}, releaseName interface{}, namespace interface{}) *MockInterface_GetReleaseStorageLabels_Call {
+func (_e *MockInterface_Expecter) GetReleaseStorageLabels(ctx any, releaseName any, namespace any) *MockInterface_GetReleaseStorageLabels_Call {
 	return &MockInterface_GetReleaseStorageLabels_Call{Call: _e.mock.On("GetReleaseStorageLabels", ctx, releaseName, namespace)}
 }
 
@@ -212,7 +221,7 @@ type MockInterface_GetReleaseStorageMetadata_Call struct {
 //   - ctx context.Context
 //   - releaseName string
 //   - namespace string
-func (_e *MockInterface_Expecter) GetReleaseStorageMetadata(ctx interface{}, releaseName interface{}, namespace interface{}) *MockInterface_GetReleaseStorageMetadata_Call {
+func (_e *MockInterface_Expecter) GetReleaseStorageMetadata(ctx any, releaseName any, namespace any) *MockInterface_GetReleaseStorageMetadata_Call {
 	return &MockInterface_GetReleaseStorageMetadata_Call{Call: _e.mock.On("GetReleaseStorageMetadata", ctx, releaseName, namespace)}
 }
 
@@ -286,7 +295,7 @@ type MockInterface_GetReleaseValues_Call struct {
 //   - ctx context.Context
 //   - releaseName string
 //   - namespace string
-func (_e *MockInterface_Expecter) GetReleaseValues(ctx interface{}, releaseName interface{}, namespace interface{}) *MockInterface_GetReleaseValues_Call {
+func (_e *MockInterface_Expecter) GetReleaseValues(ctx any, releaseName any, namespace any) *MockInterface_GetReleaseValues_Call {
 	return &MockInterface_GetReleaseValues_Call{Call: _e.mock.On("GetReleaseValues", ctx, releaseName, namespace)}
 }
 
@@ -313,8 +322,8 @@ func (_c *MockInterface_GetReleaseValues_Call) Run(run func(ctx context.Context,
 	return _c
 }
 
-func (_c *MockInterface_GetReleaseValues_Call) Return(stringToV map[string]any, err error) *MockInterface_GetReleaseValues_Call {
-	_c.Call.Return(stringToV, err)
+func (_c *MockInterface_GetReleaseValues_Call) Return(stringToAnyMoqParam map[string]any, err error) *MockInterface_GetReleaseValues_Call {
+	_c.Call.Return(stringToAnyMoqParam, err)
 	return _c
 }
 
@@ -359,7 +368,7 @@ type MockInterface_InstallChart_Call struct {
 // InstallChart is a helper method to define mock.On call
 //   - ctx context.Context
 //   - spec *ChartSpec
-func (_e *MockInterface_Expecter) InstallChart(ctx interface{}, spec interface{}) *MockInterface_InstallChart_Call {
+func (_e *MockInterface_Expecter) InstallChart(ctx any, spec any) *MockInterface_InstallChart_Call {
 	return &MockInterface_InstallChart_Call{Call: _e.mock.On("InstallChart", ctx, spec)}
 }
 
@@ -427,7 +436,7 @@ type MockInterface_InstallOrUpgradeChart_Call struct {
 // InstallOrUpgradeChart is a helper method to define mock.On call
 //   - ctx context.Context
 //   - spec *ChartSpec
-func (_e *MockInterface_Expecter) InstallOrUpgradeChart(ctx interface{}, spec interface{}) *MockInterface_InstallOrUpgradeChart_Call {
+func (_e *MockInterface_Expecter) InstallOrUpgradeChart(ctx any, spec any) *MockInterface_InstallOrUpgradeChart_Call {
 	return &MockInterface_InstallOrUpgradeChart_Call{Call: _e.mock.On("InstallOrUpgradeChart", ctx, spec)}
 }
 
@@ -494,7 +503,7 @@ type MockInterface_ListReleases_Call struct {
 
 // ListReleases is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockInterface_Expecter) ListReleases(ctx interface{}) *MockInterface_ListReleases_Call {
+func (_e *MockInterface_Expecter) ListReleases(ctx any) *MockInterface_ListReleases_Call {
 	return &MockInterface_ListReleases_Call{Call: _e.mock.On("ListReleases", ctx)}
 }
 
@@ -600,7 +609,7 @@ type MockInterface_ReleaseExists_Call struct {
 //   - ctx context.Context
 //   - releaseName string
 //   - namespace string
-func (_e *MockInterface_Expecter) ReleaseExists(ctx interface{}, releaseName interface{}, namespace interface{}) *MockInterface_ReleaseExists_Call {
+func (_e *MockInterface_Expecter) ReleaseExists(ctx any, releaseName any, namespace any) *MockInterface_ReleaseExists_Call {
 	return &MockInterface_ReleaseExists_Call{Call: _e.mock.On("ReleaseExists", ctx, releaseName, namespace)}
 }
 
@@ -671,7 +680,7 @@ type MockInterface_TemplateChart_Call struct {
 // TemplateChart is a helper method to define mock.On call
 //   - ctx context.Context
 //   - spec *ChartSpec
-func (_e *MockInterface_Expecter) TemplateChart(ctx interface{}, spec interface{}) *MockInterface_TemplateChart_Call {
+func (_e *MockInterface_Expecter) TemplateChart(ctx any, spec any) *MockInterface_TemplateChart_Call {
 	return &MockInterface_TemplateChart_Call{Call: _e.mock.On("TemplateChart", ctx, spec)}
 }
 
@@ -729,7 +738,7 @@ type MockInterface_UninstallRelease_Call struct {
 //   - ctx context.Context
 //   - releaseName string
 //   - namespace string
-func (_e *MockInterface_Expecter) UninstallRelease(ctx interface{}, releaseName interface{}, namespace interface{}) *MockInterface_UninstallRelease_Call {
+func (_e *MockInterface_Expecter) UninstallRelease(ctx any, releaseName any, namespace any) *MockInterface_UninstallRelease_Call {
 	return &MockInterface_UninstallRelease_Call{Call: _e.mock.On("UninstallRelease", ctx, releaseName, namespace)}
 }
 

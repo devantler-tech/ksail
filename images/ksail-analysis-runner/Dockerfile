@@ -3,7 +3,18 @@ FROM ghcr.io/actions/actions-runner@sha256:e5496277be5d09bc968b3d64911b74e219ac4
 ARG TARGETARCH
 USER 0:0
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-RUN printf 'APT::Snapshot "20261005T000000Z";\n' > /etc/apt/apt.conf.d/99ksail-analysis-snapshot \
+# The pinned packages all come from the Ubuntu archive. Launchpad PPAs (the base
+# image ships git-core's) keep snapshots for only a few weeks, so a PPA source
+# makes the snapshot update fail once its date ages out. Drop every PPA source
+# and refuse to continue if one is still configured.
+RUN { grep -rlZE 'launchpad(content)?\.net' /etc/apt/sources.list.d/ || [ "$?" -eq 1 ]; } \
+       | xargs -0 --no-run-if-empty rm -f -- \
+    && if grep -rqE 'launchpad(content)?\.net' /etc/apt/sources.list /etc/apt/sources.list.d/; then \
+         echo 'A Launchpad PPA source is still configured' >&2; exit 1; \
+       fi \
+    && printf '%s\n' 'APT::Snapshot "20261005T000000Z";' \
+       'Acquire::Snapshots::URI::Host::ports.ubuntu.com "https://snapshot.ubuntu.com/ubuntu/@SNAPSHOTID@/";' \
+       > /etc/apt/apt.conf.d/99ksail-analysis-snapshot \
     && apt-get update -o APT::Update::Error-Mode=any \
     && apt-get install --yes --no-install-recommends \
        build-essential=12.10ubuntu1 pkg-config=1.8.1-2build1 \
@@ -14,14 +25,14 @@ RUN printf 'APT::Snapshot "20261005T000000Z";\n' > /etc/apt/apt.conf.d/99ksail-a
 
 RUN set -eu; \
     case "${TARGETARCH}" in \
-      amd64) go_arch=amd64; go_sha=42d158b4d8f7b61ac0a830567c940a86098fb7aac52e467a5ebec03ef5cc2f8d; \
+      amd64) go_arch=amd64; go_sha=7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840; \
              node_arch=x64; node_sha=df450af89261115ef9f9e3830c3eeb2cc9213b63c720b1af623cb5dcbe2e02de ;; \
-      arm64) go_arch=arm64; go_sha=4a97373d49fcacdcf3694fea368a500b00ee3e963974f3e7514132717632f052; \
+      arm64) go_arch=arm64; go_sha=3392582988a273a87ab5043ee1b2c9c17a2c3c00580bf9326c47a2e0aaaeac92; \
              node_arch=arm64; node_sha=a44aeb94849a299b22df10b9e622ec2f605c2183501bc40590705131de7c740f ;; \
       *) echo "Unsupported architecture: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
     curl --fail --silent --show-error --location --max-time 120 \
-      "https://go.dev/dl/go1.26.9.linux-${go_arch}.tar.gz" --output /tmp/go.tar.gz; \
+      "https://go.dev/dl/go1.27.4.linux-${go_arch}.tar.gz" --output /tmp/go.tar.gz; \
     printf '%s  /tmp/go.tar.gz\n' "${go_sha}" | sha256sum --check --strict; \
     tar -xzf /tmp/go.tar.gz -C /usr/local; \
     curl --fail --silent --show-error --location --max-time 120 \

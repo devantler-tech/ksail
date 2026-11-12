@@ -103,10 +103,8 @@ func liveFluxInstance() map[string]any {
 
 func desiredFluxInstance() *FluxInstance {
 	return &FluxInstance{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fluxInstanceDefaultName,
-			Namespace: "flux-system",
-		},
+		Name:      fluxInstanceDefaultName,
+		Namespace: "flux-system",
 		Spec: InstanceSpec{
 			Distribution: Distribution{Version: "2.8.x", Registry: "ghcr.io/fluxcd"},
 			Sync: &Sync{

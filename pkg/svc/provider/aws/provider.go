@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
@@ -35,7 +36,19 @@ type Provider struct {
 	eksClientOptions        []eksclient.Option
 	requireCredentialValues bool
 	ownershipVerifier       eksidentity.Verifier
+	restoreReadbackInterval time.Duration
+	restoreReadbackTimeout  time.Duration
 }
+
+const (
+	// defaultRestoreReadbackInterval is how often StartNodes re-reads the nodegroups while EKS
+	// applies the restored scaling configuration.
+	defaultRestoreReadbackInterval = 10 * time.Second
+	// defaultRestoreReadbackTimeout bounds how long StartNodes waits for EKS to report the restored
+	// capacity. `eksctl scale nodegroup` only starts an asynchronous nodegroup update, so the first
+	// read after it can still show the previous values.
+	defaultRestoreReadbackTimeout = 10 * time.Minute
+)
 
 // Option customises a Provider.
 type Option func(*Provider)
@@ -84,6 +97,21 @@ func WithOwnershipVerifier(verifier eksidentity.Verifier) Option {
 	}
 }
 
+// WithNodegroupRestoreReadback sets how often, and for how long, StartNodes re-reads the
+// nodegroups while waiting for EKS to report the restored capacity. Non-positive values keep the
+// defaults.
+func WithNodegroupRestoreReadback(interval, timeout time.Duration) Option {
+	return func(prov *Provider) {
+		if interval > 0 {
+			prov.restoreReadbackInterval = interval
+		}
+
+		if timeout > 0 {
+			prov.restoreReadbackTimeout = timeout
+		}
+	}
+}
+
 // NewProvider returns a Provider using the given eksctl client and AWS region.
 // Pass region="" to defer to eksctl's own region resolution (AWS_REGION env,
 // active AWS profile, etc.). A nil client returns ErrClientRequired so callers
@@ -100,6 +128,8 @@ func NewProvider(client *eksctlclient.Client, region string, opts ...Option) (*P
 		eksClientOptions:        nil,
 		requireCredentialValues: false,
 		ownershipVerifier:       nil,
+		restoreReadbackInterval: defaultRestoreReadbackInterval,
+		restoreReadbackTimeout:  defaultRestoreReadbackTimeout,
 	}
 
 	for _, opt := range opts {
@@ -127,6 +157,11 @@ func (p *Provider) StartNodes(ctx context.Context, clusterName string) error {
 		return err
 	}
 
+	err = target.confirmNodegroupsStopped(clusterName, snapshot, liveByName)
+	if err != nil {
+		return err
+	}
+
 	err = target.restoreSavedNodegroups(ctx, clusterName, snapshot, liveByName)
 	if err != nil {
 		return err
@@ -148,21 +183,14 @@ func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
 		if err != nil {
 			return err
 		}
-
-		// Never persist an all-stopped snapshot. A cluster already at zero (stopped by an older
-		// release, or scaled down manually) would otherwise record 0/0 as its "restore to" state:
-		// the next start finds live already matching the snapshot, skips every scale, clears the
-		// file, and reports success while leaving the cluster at zero. Withholding the snapshot
-		// keeps the no-snapshot fallback — which restores max(MinSize, 1) — reachable instead.
-		if !snapshotIsAllStopped(snapshot) {
-			err = state.SaveEKSNodegroupState(clusterName, target.region, snapshot)
-			if err != nil {
-				return fmt.Errorf("save EKS nodegroup state before stop: %w", err)
-			}
-		}
 	}
 
 	liveByName, err := validateNodegroupTransition(clusterName, target.region, snapshot, nodegroups)
+	if err != nil {
+		return err
+	}
+
+	err = target.prepareNodegroupStop(clusterName, snapshot, found)
 	if err != nil {
 		return err
 	}

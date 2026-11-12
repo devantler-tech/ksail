@@ -29,6 +29,13 @@ func (k *KubernetesProvisioner) PublishConnectorKubeconfigForTest(
 	return k.publishConnectorKubeconfig(ctx, target)
 }
 
+// FinalizeKubeconfigForTest exposes the create-time exposure verification and publication path.
+func (k *KubernetesProvisioner) FinalizeKubeconfigForTest(
+	ctx context.Context, target, serverURL string,
+) error {
+	return k.finalizeKubeconfig(ctx, target, serverURL)
+}
+
 // KubeConfigForTest returns the kubeConfig field for testing purposes.
 func (k *Provisioner) KubeConfigForTest() string {
 	return k.kubeConfig
@@ -55,4 +62,14 @@ func NewStreamLoggerForTest(w interface {
 // SetNameForTest exposes setName for unit testing.
 func SetNameForTest(name, kindConfigName string) string {
 	return setName(name, kindConfigName)
+}
+
+// WithRetainOnFailureForTest selects the nested diagnostic create path.
+func (k *Provisioner) WithRetainOnFailureForTest(retain bool) {
+	k.retainOnFailure = retain
+}
+
+// ReconcileNestedKindNetworkForTest exposes reconcileNestedKindNetwork for unit testing.
+func ReconcileNestedKindNetworkForTest(ctx context.Context, client nestedNetworkClient) error {
+	return reconcileNestedKindNetwork(ctx, client)
 }

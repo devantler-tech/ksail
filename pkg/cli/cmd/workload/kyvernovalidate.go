@@ -38,7 +38,9 @@ const kyvernoPoliciesFlagDescription = "Evaluate the source's own Kyverno Cluste
 	"namespaced document that declares none is reported as a warning), and other " +
 	"policies.kyverno.io kinds are not " +
 	"supported. A ValidatingPolicy that calls the http library, or a CEL lookup of cluster, " +
-	"registry or global-context data, cannot be evaluated offline. Namespace labels come " +
+	"registry or global-context data, cannot be evaluated offline. A classic policy's Kubernetes " +
+	"apiCall context requires a reviewed --kyverno-api-call-responses fixture; the fixture never " +
+	"enables live cluster or service access, and a missing response fails closed. Namespace labels come " +
 	"from the kustomization's own Namespaces first, then from " +
 	"a Namespace another kustomization renders, unless two render it with different labels. " +
 	"For an unrendered Namespace, selectors are evaluated only when Kubernetes' immutable " +
@@ -80,6 +82,7 @@ func evaluateKyvernoDocuments(
 	sink *celViolationSink,
 	attribution map[string]string,
 	shared []map[string]any,
+	apiCallResponses kyvernopolicy.APICallResponses,
 ) error {
 	if !enabled {
 		return nil
@@ -97,7 +100,17 @@ func evaluateKyvernoDocuments(
 	}
 
 	namespaces := withSharedNamespaces(docs, shared)
-	engine := kyvernopolicy.NewEngine(split.policies, namespaces)
+
+	var engine *kyvernopolicy.Engine
+	if apiCallResponses == nil {
+		engine = kyvernopolicy.NewEngine(split.policies, namespaces)
+	} else {
+		engine = kyvernopolicy.NewEngine(
+			split.policies,
+			namespaces,
+			kyvernopolicy.WithAPICallResponses(apiCallResponses),
+		)
+	}
 
 	celEngine, err := kyvernopolicy.NewCELEngine(split.celPolicies, namespaces)
 	if err != nil {

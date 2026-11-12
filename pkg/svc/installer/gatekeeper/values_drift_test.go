@@ -106,3 +106,59 @@ func TestValuesDrifted_LeavesAGitOpsOwnedReleaseAlone(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, drifted)
 }
+
+// controllerManagerMinAvailable reads pdb.controllerManager.minAvailable from
+// the values an installer renders, as Helm stores them.
+func controllerManagerMinAvailable(t *testing.T, installer *gatekeeperinstaller.Installer) any {
+	t.Helper()
+
+	pdb, ok := storedRenderedValues(t, installer)["pdb"].(map[string]any)
+	require.True(t, ok, "rendered values must set pdb")
+
+	controllerManager, ok := pdb["controllerManager"].(map[string]any)
+	require.True(t, ok, "rendered values must set pdb.controllerManager")
+
+	return controllerManager["minAvailable"]
+}
+
+// TestRenderedValues_DisruptionBudgetLetsASmallClusterDrain replays ksail#7858:
+// the chart's own budget keeps one controller-manager pod available, so on a
+// one-node cluster draining that node can never finish and a Talos upgrade
+// times out. Below the HA threshold the budget must allow every pod to be
+// evicted; with HA it still keeps one available.
+func TestRenderedValues_DisruptionBudgetLetsASmallClusterDrain(t *testing.T) {
+	t.Parallel()
+
+	assert.InDelta(
+		t,
+		0,
+		controllerManagerMinAvailable(t, newDriftInstaller(helm.NewMockInterface(t), false)),
+		0,
+		"without HA the disruption budget must not block a drain",
+	)
+	assert.InDelta(
+		t,
+		1,
+		controllerManagerMinAvailable(t, newDriftInstaller(helm.NewMockInterface(t), true)),
+		0,
+		"with HA the disruption budget must keep one pod available",
+	)
+}
+
+// TestValuesDrifted_DetectsASmallClusterReleaseWithTheChartBudget makes an
+// existing one-node release pick up the fix: a release installed with the
+// chart's blocking budget reports drift, so `cluster update` upgrades it.
+func TestValuesDrifted_DetectsASmallClusterReleaseWithTheChartBudget(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := newDriftInstaller(client, false)
+
+	stored := storedRenderedValues(t, installer)
+	delete(stored, "pdb")
+	expectDeployedRelease(client, stored)
+
+	drifted, err := installer.ValuesDrifted(context.Background())
+	require.NoError(t, err)
+	assert.True(t, drifted, "a one-node release without the non-blocking budget must report drift")
+}
