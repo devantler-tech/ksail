@@ -27,6 +27,9 @@ const (
 	ctrNamespaceArg = "--namespace=k8s.io"
 	// ctrImages is the ctr subcommand group for image operations.
 	ctrImages = "images"
+	// ctrSkipDigestForNamed stops ctr import from adding an import-<date>@<digest> alias for an
+	// image the archive names.
+	ctrSkipDigestForNamed = "--skip-digest-for-named"
 	// nodeCleanupTimeout bounds removing an export or import archive from a node
 	// after the command's context is done, so a cancelled operation still cleans up.
 	nodeCleanupTimeout = 30 * time.Second
