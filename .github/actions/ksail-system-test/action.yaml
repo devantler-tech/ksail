@@ -36,6 +36,14 @@ inputs:
     description: SHA-256 from the immutable baseline binary producer
     required: false
     default: ""
+  create-binary:
+    description: Published KSail release binary that runs project init and cluster create only; every later step uses the build under test
+    required: false
+    default: ""
+  create-binary-sha256:
+    description: SHA-256 of create-binary, checked again before it runs
+    required: false
+    default: ""
   kubernetes-upgrade-from:
     description: Known starting Kubernetes version for the optional Docker/Talos upgrade trial
     required: false
@@ -340,11 +348,36 @@ runs:
         INIT: ${{ inputs.init }}
       run: bash "$GITHUB_WORKSPACE/.github/actions/ksail-system-test/calico-migration.sh" prepare
 
+    - name: 🔍 Prepare release creation binary
+      id: release-create-path
+      if: inputs.create-binary != ''
+      shell: bash
+      env:
+        CREATE_BINARY: ${{ inputs.create-binary }}
+        CREATE_SHA256: ${{ inputs.create-binary-sha256 }}
+        CALICO_BASELINE: ${{ inputs.calico-migration-binary }}
+        DISTRIBUTION: ${{ inputs.distribution }}
+      run: |
+        set -euo pipefail
+        # ksail#8347: an earlier release creates the cluster; the build under test runs
+        # every later step, so updates are tested against a cluster that release made.
+        fail() { echo "❌ ERROR: release creation binary: $*" >&2; exit 1; }
+        [[ -z "${CALICO_BASELINE:-}" ]] || fail 'cannot be combined with the Calico migration binary'
+        [[ "$DISTRIBUTION" == Talos ]] || fail 'needs the Talos distribution'
+        [[ "$CREATE_BINARY" == /*/ksail && -f "$CREATE_BINARY" && ! -L "$CREATE_BINARY" && -s "$CREATE_BINARY" ]] ||
+          fail 'missing or invalid binary'
+        [[ "$CREATE_SHA256" =~ ^[a-f0-9]{64}$ ]] || fail 'missing checksum'
+        actual=$(shasum -a 256 "$CREATE_BINARY" | cut -d ' ' -f 1)
+        [[ "$actual" == "$CREATE_SHA256" ]] || fail 'binary differs from the verified download'
+        echo "Creates the cluster: $("$CREATE_BINARY" --version 2>&1 | head -n 1)"
+        echo "Runs every later step: $(ksail --version 2>&1 | head -n 1)"
+        printf 'path=%s:%s\n' "$(dirname "$CREATE_BINARY")" "$PATH" >>"$GITHUB_OUTPUT"
+
     - name: 🧪 ksail cluster create
       id: cluster-create
       uses: $/.github/actions/ksail-cluster
       env:
-        PATH: ${{ steps.calico-create-path.outputs.path }}
+        PATH: ${{ steps.release-create-path.outputs.path || steps.calico-create-path.outputs.path }}
       with:
         inventory-trial-server-type: ${{ inputs.test-autoscaler-inventory == 'true' && inputs.inventory-trial-server-type || '' }}
         inventory-trial-location: ${{ inputs.test-autoscaler-inventory == 'true' && inputs.inventory-trial-location || '' }}
