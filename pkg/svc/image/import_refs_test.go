@@ -62,12 +62,25 @@ type referenceCheckCase struct {
 	before  string
 	after   string
 	listErr error
+	// rmErr fails the removal of refused references.
+	rmErr   error
 	wantErr []string
 	// wantCopied is whether the archive reaches the node.
 	wantCopied bool
+	// wantRemoved is the ctr images rm command the import must run, or nil when it removes nothing.
+	wantRemoved []string
+}
+
+func removeReferencesCommand(refs ...string) []string {
+	return append([]string{ctrCommand, "--namespace=k8s.io", "images", "rm"}, refs...)
 }
 
 func referenceCheckCases(rootDigest string) []referenceCheckCase {
+	return append(rootReferenceCases(rootDigest), otherReferenceCases(rootDigest)...)
+}
+
+// rootReferenceCases cover the accepted import and a reference to the archive's own index.
+func rootReferenceCases(rootDigest string) []referenceCheckCase {
 	return []referenceCheckCase{
 		{
 			name:   "named images and their digest references are accepted",
@@ -87,8 +100,28 @@ func referenceCheckCases(rootDigest string) []referenceCheckCase {
 				"the archive's own index " + rootDigest,
 				kindExporterNodeName,
 			},
-			wantCopied: true,
+			wantCopied:  true,
+			wantRemoved: removeReferencesCommand("import-2026-11-12@" + rootDigest),
 		},
+		{
+			name:   "a failed removal of a refused reference is reported too",
+			before: "",
+			after:  "import-2026-11-12@" + rootDigest + "\n",
+			rmErr:  errListReferences,
+			wantErr: []string{
+				image.ErrImportStoredUnknownReference.Error(),
+				"remove the refused references",
+			},
+			wantCopied:  true,
+			wantRemoved: removeReferencesCommand("import-2026-11-12@" + rootDigest),
+		},
+	}
+}
+
+// otherReferenceCases cover other content, runtime image IDs, earlier references and a failed
+// listing.
+func otherReferenceCases(rootDigest string) []referenceCheckCase {
+	return []referenceCheckCase{
 		{
 			name:   "a digest reference to other content fails",
 			before: "",
@@ -99,6 +132,9 @@ func referenceCheckCases(rootDigest string) []referenceCheckCase {
 				"content outside the archive index " + rootDigest,
 			},
 			wantCopied: true,
+			wantRemoved: removeReferencesCommand(
+				"import-2026-11-12@sha256:2222222222222222222222222222222222222222222222222222222222222222",
+			),
 		},
 		{
 			name:   "bare image IDs recorded by the runtime are not judged",
@@ -140,7 +176,7 @@ func TestImportRefusesReferencesOutsideTheArchive(t *testing.T) {
 
 			var copied atomic.Bool
 
-			observeReferenceCheckNode(t, mockClient, testCase, &copied)
+			removed := observeReferenceCheckNode(t, mockClient, testCase, &copied)
 
 			err := image.NewImporter(mockClient).Import(ctx, "my-cluster",
 				v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker,
@@ -157,6 +193,13 @@ func TestImportRefusesReferencesOutsideTheArchive(t *testing.T) {
 			}
 
 			assert.Equal(t, testCase.wantCopied, copied.Load())
+
+			var gotRemoved []string
+			if command := removed.Load(); command != nil {
+				gotRemoved = *command
+			}
+
+			assert.Equal(t, testCase.wantRemoved, gotRemoved)
 		})
 	}
 }
@@ -191,13 +234,14 @@ func listReferencesCommand() []string {
 }
 
 // observeReferenceCheckNode answers the commands of one legacy-mode import on the Kind node: the
-// capability probe, the reference listings before and after, the import and the cleanup.
+// capability probe, the reference listings before and after, the import, the removal of refused
+// references and the cleanup. It returns the removal command the import ran, if any.
 func observeReferenceCheckNode(
 	t *testing.T,
 	mockClient *docker.MockAPIClient,
 	testCase referenceCheckCase,
 	copied *atomic.Bool,
-) {
+) *atomic.Pointer[[]string] {
 	t.Helper()
 
 	node := kindExporterNodeName
@@ -206,6 +250,8 @@ func observeReferenceCheckNode(
 		"list-before": testCase.before,
 		"list-after":  testCase.after,
 	}
+
+	var removed atomic.Pointer[[]string]
 
 	mockClient.EXPECT().
 		CopyToContainer(mock.Anything, node, "/root", mock.Anything, container.CopyToContainerOptions{}).
@@ -218,7 +264,7 @@ func observeReferenceCheckNode(
 
 	mockClient.EXPECT().
 		ContainerExecCreate(mock.Anything, node, mock.Anything).
-		RunAndReturn(referenceCheckExecIDs(t, testCase))
+		RunAndReturn(referenceCheckExecIDs(t, testCase, &removed))
 
 	for _, execID := range []string{"help", "list-before", "list-after", "other"} {
 		mockClient.EXPECT().
@@ -228,13 +274,17 @@ func observeReferenceCheckNode(
 			ContainerExecInspect(mock.Anything, execID).
 			Return(container.ExecInspect{ExitCode: 0}, nil).Maybe()
 	}
+
+	return &removed
 }
 
 // referenceCheckExecIDs names each command's exec so its output can be answered: the first
-// reference listing is the one before the import, the second the one after.
+// reference listing is the one before the import, the second the one after. A removal command is
+// recorded in removed.
 func referenceCheckExecIDs(
 	t *testing.T,
 	testCase referenceCheckCase,
+	removed *atomic.Pointer[[]string],
 ) func(context.Context, string, container.ExecOptions) (container.ExecCreateResponse, error) {
 	t.Helper()
 
@@ -256,6 +306,15 @@ func referenceCheckExecIDs(
 			}
 
 			return container.ExecCreateResponse{ID: "list-before"}, nil
+		case slices.Equal(options.Cmd[:min(len(options.Cmd), 4)], removeReferencesCommand()):
+			command := slices.Clone(options.Cmd)
+			removed.Store(&command)
+
+			if testCase.rmErr != nil {
+				return container.ExecCreateResponse{}, testCase.rmErr
+			}
+
+			return container.ExecCreateResponse{ID: "other"}, nil
 		case slices.Equal(options.Cmd, legacyImportCommand()),
 			slices.Equal(options.Cmd, []string{"rm", "-f", kindImportPath}):
 			return container.ExecCreateResponse{ID: "other"}, nil

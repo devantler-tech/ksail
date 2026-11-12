@@ -13,6 +13,7 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/docker/docker/api/types/container"
 )
@@ -78,15 +79,9 @@ func (i *Importer) Import(
 		return err
 	}
 
-	// Set default input path and validate file exists
-	inputPath := opts.InputPath
-	if inputPath == "" {
-		inputPath = "images.tar"
-	}
-
-	_, err = os.Stat(inputPath)
-	if os.IsNotExist(err) {
-		return fmt.Errorf("%w: %s", ErrInputFileNotFound, inputPath)
+	inputPath, err := resolveImportInput(opts.InputPath)
+	if err != nil {
+		return err
 	}
 
 	// Get K8s nodes for the cluster
@@ -131,6 +126,26 @@ func (i *Importer) Import(
 	}
 
 	return nil
+}
+
+// resolveImportInput applies the default archive name, checks that the archive exists and
+// resolves its path once, so the archive that is inspected is the archive that is copied.
+func resolveImportInput(inputPath string) (string, error) {
+	if inputPath == "" {
+		inputPath = "images.tar"
+	}
+
+	_, err := os.Stat(inputPath)
+	if os.IsNotExist(err) {
+		return "", fmt.Errorf("%w: %s", ErrInputFileNotFound, inputPath)
+	}
+
+	resolved, err := fsutil.EvalCanonicalPath(inputPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve image archive path: %w", err)
+	}
+
+	return resolved, nil
 }
 
 // getK8sNodes gets the list of Kubernetes nodes for the cluster, filtering out

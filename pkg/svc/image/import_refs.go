@@ -132,7 +132,9 @@ func (e *ContainerExecutor) listNodeImageReferences(
 }
 
 // requireKnownReferences fails when the import added a digest reference that names no image in
-// the archive, naming the reference and the archive index it was imported from.
+// the archive, naming the reference and the archive index it was imported from. It removes those
+// references before failing, so a retry of the same import is judged again instead of finding
+// them already present. References that existed before the import are never removed.
 func (e *ContainerExecutor) requireKnownReferences(
 	ctx context.Context,
 	nodeName string,
@@ -149,11 +151,20 @@ func (e *ContainerExecutor) requireKnownReferences(
 		return nil
 	}
 
-	return fmt.Errorf(
-		"%w: node %s now holds %s, which points at %s",
+	refused := fmt.Errorf(
+		"%w: node %s stored %s, which points at %s",
 		ErrImportStoredUnknownReference,
 		nodeName,
 		strings.Join(unknown, ", "),
 		digests.describe(unknown),
 	)
+
+	_, err = e.ExecInContainer(
+		ctx, nodeName, append([]string{ctrCommand, ctrNamespaceArg, ctrImages, "rm"}, unknown...),
+	)
+	if err != nil {
+		return errors.Join(refused, fmt.Errorf("remove the refused references: %w", err))
+	}
+
+	return refused
 }
