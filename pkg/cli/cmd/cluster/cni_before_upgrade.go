@@ -64,6 +64,9 @@ func (o *updateOrchestrator) reconcileCNIBeforeDistributionUpgrade(
 	)
 
 	for _, probe := range cniDriftProbes() {
+		// Here every CNI probe must complete: a CNI that cannot be read is one
+		// the upgraded nodes may not be able to start.
+		probe.requireBaseline = true
 		checkComponentValuesDrift(o.cmd, o.ctx, diffEngine, diff, probe)
 	}
 

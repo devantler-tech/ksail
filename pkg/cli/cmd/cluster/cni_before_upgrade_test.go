@@ -241,3 +241,52 @@ func TestDiscoveredDistributionUpgradeUpdatesCNIOnceBeforeFirstStep(t *testing.T
 		"distribution v1.36.0", "distribution v1.37.0",
 	}, log.events)
 }
+
+// unreadableCiliumInstaller is a Cilium installer whose release cannot be read.
+type unreadableCiliumInstaller struct {
+	installs int
+}
+
+func (u *unreadableCiliumInstaller) Install(context.Context) error {
+	u.installs++
+
+	return nil
+}
+
+func (*unreadableCiliumInstaller) Uninstall(context.Context) error { return nil }
+
+func (*unreadableCiliumInstaller) Images(context.Context) ([]string, error) { return nil, nil }
+
+func (*unreadableCiliumInstaller) ValuesDrifted(context.Context) (bool, error) {
+	return false, errCalicoProbeFailed
+}
+
+// A Cilium release that cannot be compared stops the update before the first
+// node reboots, as an unreadable Calico release does.
+//
+//nolint:paralleltest // mutates global installerFactoriesOverride; cannot run in parallel
+func TestUnreadableCiliumStopsInPlaceDistributionUpgrade(t *testing.T) {
+	cilium := &unreadableCiliumInstaller{}
+
+	t.Cleanup(cluster.SetCiliumInstallerFactoryForTests(
+		func(*v1alpha1.Cluster) (installer.Installer, error) { return cilium, nil },
+	))
+
+	log := &cniUpgradeEvents{}
+	upgrader := &inPlaceDistributionUpgrader{log: log, inPlace: true}
+	upgrader.current = clusterupdate.VersionInfo{
+		KubernetesVersion: "v1.35.0", DistributionVersion: "v1.13.12",
+	}
+	upgrader.distributionPin = "v1.14.0"
+
+	cfg := newCalicoHetznerTalosConfig()
+	cfg.Spec.Cluster.CNI = v1alpha1.CNICilium
+
+	cmd, _ := newCNIUpgradeCmd()
+
+	_, err := cluster.ExportReconcileClusterVersions(cmd, cfg, upgrader, false)
+
+	require.ErrorContains(t, err, "could not be compared with this KSail version")
+	assert.Empty(t, log.events, "no node may be upgraded")
+	assert.Zero(t, cilium.installs)
+}
