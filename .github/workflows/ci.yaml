@@ -2259,12 +2259,15 @@ jobs:
           # outer node. The collision does not depend on it, because replies to any
           # outer kind-network address are captured by an overlapping inner bridge.
           # Other nested distributions retain their complete default-host legs.
+          # This two-node host also checks exporting images held on different nodes
+          # (#8251); it is the only Docker leg with a worker node to split them across.
           - distribution: Vanilla
             provider: Docker
             init: true
             args: "--name nested-kind-routing --workers 1"
             test-kubernetes-provider: "true"
             kubernetes-provider-distributions: "Vanilla"
+            split-image-cluster-name: "nested-kind-routing"
           # Keep the fresh 3.33 installations above, and also create these with
           # the immutable 3.32.2 CLI before the candidate's unchanged-config update.
           - distribution: Vanilla
@@ -2380,6 +2383,7 @@ jobs:
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
           test-kubernetes-provider: ${{ matrix.test-kubernetes-provider || 'false' }}
           test-workload-mirror: ${{ matrix.test-workload-mirror || 'false' }}
+          split-image-cluster-name: ${{ matrix.split-image-cluster-name || '' }}
           kubernetes-provider-distributions: ${{ matrix.kubernetes-provider-distributions || 'Vanilla,K3s,VCluster,Talos' }}
           kubernetes-provider-cni: ${{ matrix.kubernetes-provider-cni || '' }}
 
