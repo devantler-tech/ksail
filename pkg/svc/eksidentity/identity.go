@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -22,6 +23,9 @@ var (
 	ErrIdentityMismatch = errors.New("EKS ownership identity mismatch")
 	// ErrInvalidLiveIdentity reports an incomplete or internally inconsistent AWS response.
 	ErrInvalidLiveIdentity = errors.New("invalid live EKS identity")
+	// ErrCreationUnattributed reports a live cluster that does not carry the creation tag of the
+	// attempt that is trying to claim it.
+	ErrCreationUnattributed = errors.New("EKS cluster was not created by this attempt")
 )
 
 // Client is the read-only AWS surface needed to bind and verify EKS ownership. *pkg/client/eks.Client
@@ -94,6 +98,13 @@ func Persist(clusterName, region string, ownership *state.EKSOwnershipState) err
 	err = state.SaveEKSOwnershipState(clusterName, region, ownership)
 	if err != nil {
 		return fmt.Errorf("persist immutable EKS ownership identity: %w", err)
+	}
+
+	// A failed-create hint only ever stands in for a missing ownership record. Once the record
+	// exists, the attempts kept for its account are spent (ksail#8324).
+	err = state.ForgetEKSCreationAttempts(clusterName, region, ownership.AccountID)
+	if err != nil {
+		return fmt.Errorf("clear spent EKS creation hint after ownership capture: %w", err)
 	}
 
 	return nil
@@ -230,14 +241,86 @@ func Observe(
 	client Client,
 	clusterName, region string,
 ) (*state.EKSOwnershipState, error) {
+	accountID, cluster, err := describeForCapture(ctx, client, clusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	return identityFromCluster(clusterName, region, accountID, cluster)
+}
+
+// describeForCapture reads the caller account and the named cluster for an ownership capture.
+func describeForCapture(
+	ctx context.Context,
+	client Client,
+	clusterName string,
+) (string, *ekstypes.Cluster, error) {
+	accountID, err := client.CallerAccountID(ctx)
+	if err != nil {
+		return "", nil, fmt.Errorf("resolve current AWS account for EKS ownership capture: %w", err)
+	}
+
+	cluster, err := client.DescribeCluster(ctx, clusterName)
+	if err != nil {
+		return "", nil, fmt.Errorf("describe EKS cluster for ownership capture: %w", err)
+	}
+
+	return strings.TrimSpace(accountID), cluster, nil
+}
+
+// ObserveCreation is Observe for a cluster a create attempt claims after failing part-way. From the same
+// DescribeCluster response it also requires the cluster tag tagKey to equal creationID, the identifier
+// only that attempt wrote, so a same-named cluster created by anyone else is never attributed to it.
+// It performs no AWS mutation and persists nothing.
+func ObserveCreation(
+	ctx context.Context,
+	client Client,
+	clusterName, region, tagKey, creationID string,
+) (*state.EKSOwnershipState, error) {
+	if strings.TrimSpace(tagKey) == "" || strings.TrimSpace(creationID) == "" {
+		return nil, fmt.Errorf("%w: no creation identifier to match", ErrCreationUnattributed)
+	}
+
 	accountID, err := client.CallerAccountID(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolve current AWS account for EKS ownership capture: %w", err)
 	}
 
+	return ObserveCreationInAccount(
+		ctx, client, accountID, clusterName, region, tagKey, []string{creationID},
+	)
+}
+
+// ObserveCreationInAccount is ObserveCreation for a caller whose account the caller already resolved,
+// matching any one of creationIDs. Every identifier is one a KSail create attempt wrote and kept, so a
+// cluster carrying one of them as its tagKey tag is a cluster one of those attempts began building. The
+// cluster must still sit in accountID. It performs no AWS mutation and persists nothing.
+func ObserveCreationInAccount(
+	ctx context.Context,
+	client Client,
+	accountID, clusterName, region, tagKey string,
+	creationIDs []string,
+) (*state.EKSOwnershipState, error) {
+	creationIDs = slices.DeleteFunc(slices.Clone(creationIDs), func(id string) bool {
+		return strings.TrimSpace(id) == ""
+	})
+
+	if strings.TrimSpace(tagKey) == "" || len(creationIDs) == 0 {
+		return nil, fmt.Errorf("%w: no creation identifier to match", ErrCreationUnattributed)
+	}
+
 	cluster, err := client.DescribeCluster(ctx, clusterName)
 	if err != nil {
 		return nil, fmt.Errorf("describe EKS cluster for ownership capture: %w", err)
+	}
+
+	if cluster == nil || !slices.Contains(creationIDs, cluster.Tags[tagKey]) {
+		return nil, fmt.Errorf(
+			"%w: cluster %q does not carry a creation tag this attempt kept (%s)",
+			ErrCreationUnattributed,
+			clusterName,
+			tagKey,
+		)
 	}
 
 	return identityFromCluster(clusterName, region, strings.TrimSpace(accountID), cluster)

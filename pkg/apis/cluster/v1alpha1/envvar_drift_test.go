@@ -103,9 +103,8 @@ func skippedVersionPinFields() []string {
 	}
 }
 
-// skippedAutoscalerPoolFields are autoscaler node-pool definitions (names,
-// server types, locations, labels, taints) passed verbatim to the
-// cluster-autoscaler configuration.
+// skippedAutoscalerPoolFields are literal node-pool definitions. Talos patch
+// documents are kept intact, including any dollar-prefixed expressions.
 func skippedAutoscalerPoolFields() []string {
 	return []string{
 		"Cluster.Autoscaler.Node.Pools[].Labels[]",
@@ -114,6 +113,7 @@ func skippedAutoscalerPoolFields() []string {
 		"Cluster.Autoscaler.Node.Pools[].ServerType",
 		"Cluster.Autoscaler.Node.Pools[].Taints[].Key",
 		"Cluster.Autoscaler.Node.Pools[].Taints[].Value",
+		"Cluster.Autoscaler.Node.Pools[].TalosPatches[]",
 		"Cluster.Autoscaler.Node.ScaleDownUnneededTime",
 		"Cluster.Autoscaler.Node.ScaleDownUtilizationThreshold",
 		"Provider.Hetzner.AutoscalerNodePoolNames[]",
@@ -123,6 +123,7 @@ func skippedAutoscalerPoolFields() []string {
 		"Provider.Hetzner.AutoscalerNodePools[].ServerType",
 		"Provider.Hetzner.AutoscalerNodePools[].Taints[].Key",
 		"Provider.Hetzner.AutoscalerNodePools[].Taints[].Value",
+		"Provider.Hetzner.AutoscalerNodePools[].TalosPatches[]",
 	}
 }
 

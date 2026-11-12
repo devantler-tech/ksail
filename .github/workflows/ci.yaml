@@ -274,6 +274,7 @@ jobs:
               - '.github/actions/release-admission/**'
               - '.github/scripts/download-go-modules.sh'
               - '.github/scripts/cask-rendering.test.sh'
+              - '.github/scripts/generate-completions.sh'
               - '.goreleaser.yaml'
               - '.goreleaser.desktop.yaml'
               - '.github/workflows/cd.yaml'
@@ -451,6 +452,12 @@ jobs:
               - 'pkg/svc/installer/cni/calico/Dockerfile'
               - '.github/workflows/ci.yaml'
             cask-pr-handoff:
+              - '.github/scripts/reconcile-cask-handoff.sh'
+              - '.github/scripts/reconcile-cask-handoff.test.sh'
+              - '.github/workflows/reconcile-cask-handoff.yaml'
+              - '.github/scripts/verify-published-desktop-archive.sh'
+              - '.github/scripts/verify-published-desktop-archive.test.sh'
+              - 'desktop/scripts/verify-macos-archive.sh'
               - '.github/scripts/cask-read-api.sh'
               - '.github/scripts/cask-read-api.test.sh'
               - 'server.json'
@@ -558,7 +565,7 @@ jobs:
       # Same setup-go pin as setup-desktop-build: on Windows it links GOROOT
       # into the D: drive, which is the layout the release job stages under.
       - name: ⚙️ Setup Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: false
@@ -724,6 +731,22 @@ jobs:
           .github/actions/ksail-test-workload/remote-resource-guard.test.sh
           .github/actions/ksail-test-workload/install-with-recovery.test.sh
 
+  desktop-recovery-signature:
+    name: 🔐 Verify Published Desktop Signature
+    runs-on: macos-latest
+    timeout-minutes: 5
+    needs: [changes]
+    if: needs.changes.outputs.cask-pr-handoff == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify real resource seals in publication recovery
+        run: bash .github/scripts/verify-published-desktop-archive.test.sh
+
   cask-pr-handoff:
     name: 🔐 Validate Cask PR Handoff
     runs-on: ubuntu-latest
@@ -740,7 +763,10 @@ jobs:
 
       - name: 🔐 Verify fail-closed cask PR handoff
         run: |
+          suite_failed=0
           shellcheck \
+            .github/scripts/reconcile-cask-handoff.sh \
+            .github/scripts/reconcile-cask-handoff.test.sh \
             .github/fixtures/cask-pr-handoff/fake-bin/gh \
             .github/scripts/cask-read-api.sh \
             .github/scripts/cask-read-api.test.sh \
@@ -762,21 +788,41 @@ jobs:
             .github/scripts/upload-release-assets.test.sh \
             .github/scripts/validate-cask-pr-handoff.sh \
             .github/scripts/validate-cask-pr-handoff.test.sh \
+            .github/scripts/verify-published-desktop-archive.sh \
+            .github/scripts/verify-published-desktop-archive.test.sh \
             .github/scripts/wait-for-github-api-budget.sh \
             .github/scripts/wait-for-github-api-budget.test.sh \
-            .github/scripts/cask-pr-handoff-workflow.test.sh
+            .github/scripts/cask-pr-handoff-workflow.test.sh || suite_failed=$?
+          # Keep independent behavioral results visible even when lint fails.
+          # The final aggregate still fails for every nonzero check or suite.
+          set +e
+          .github/scripts/reconcile-cask-handoff.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/cask-read-api.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/collect-cask-pr-handoff.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/finish-cask-pr-handoff.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/find-merged-cask-pr-handoff.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/redraft-evergreen-cask-prs.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/resolve-cask-publication.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/resolve-release-publish-state.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/style-clean-cask-branch.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/upload-release-assets.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/validate-cask-pr-handoff.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/wait-for-github-api-budget.test.sh
+          suite_failed=$((suite_failed | $?))
           .github/scripts/cask-pr-handoff-workflow.test.sh
+          suite_failed=$((suite_failed | $?))
+          exit "$suite_failed"
 
       - name: 🔐 Verify exact MCP publication replay and failure boundaries
         run: |
@@ -811,7 +857,7 @@ jobs:
       || (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
       && needs.changes.outputs.govuln-allowlist == 'true')
-    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@15372ea4ee3a0bd5b0a41a18105859691737df01 # v20.1.10
+    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@9ba573406426900207a3b5afeebe16f2d89ca751 # v20.1.18
     # The canonical defaults make a default-branch run answer "did the check run" rather than
     # "did the diff touch a Go file". On main the branch's green IS the protection
     # signal, so a path filter that skips the suite or the scan leaves main green
@@ -1166,7 +1212,7 @@ jobs:
       - name: 🧹 Free disk space
         if: steps.calico-cache.outputs.cache-hit != 'true'
         # Only cold compilation needs the large working-space reclamation.
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@41a8ea06da57a4b53744cad7a617d6294e7ad588
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@2c9c263f532a6d440fad30aa0e690cd0c4515a4e
 
       - name: ♻️ Restore Go modules
         if: steps.calico-cache.outputs.cache-hit != 'true'
@@ -2065,7 +2111,7 @@ jobs:
       # This job already waits for the producer. Reuse its exact sealed bytes
       # instead of restoring Go modules or compiling again after cache eviction.
       - name: 📥 Restore KSail binary
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@41a8ea06da57a4b53744cad7a617d6294e7ad588
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@2c9c263f532a6d440fad30aa0e690cd0c4515a4e
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2074,7 +2120,7 @@ jobs:
       # Images when ECR Public rate-limits the runner; skopeo reads this login.
       - name: 🔐 Login to Docker Hub
         if: ${{ vars.DOCKERHUB_USERNAME != '' }}
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] - third-party action input, no environment scoping available
@@ -2262,7 +2308,7 @@ jobs:
 
       - name: 🔐 Login to Docker Hub
         if: ${{ vars.DOCKERHUB_USERNAME != '' }}
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] - third-party action input, no environment scoping available
@@ -2276,7 +2322,7 @@ jobs:
 
       - name: 📥 Restore KSail binary
         # Pin the identical published action until actionlint supports $/ references.
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@41a8ea06da57a4b53744cad7a617d6294e7ad588
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@2c9c263f532a6d440fad30aa0e690cd0c4515a4e
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2564,6 +2610,101 @@ jobs:
           shellcheck .github/scripts/collect-release-build-experiment.sh .github/scripts/release-build-samples.lib.sh .github/scripts/release-build-experiment.test.sh
           bash .github/scripts/release-build-experiment.test.sh
 
+  # Exercise the unchanged production failure/capture/upload programs in the native
+  # Actions engine, with a known-invalid distribution that refuses before cloud work.
+  # Baseline order must miss the artifact; the production order must upload it (#7700).
+  system-test-diagnostics-artifact:
+    name: Diagnostics artifact (${{ matrix.mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [changes]
+    if: github.event_name != 'merge_group' && needs.changes.outputs.todos-contract == 'true'
+    permissions:
+      contents: read # Fetch the exact candidate programs.
+      actions: read # Read back artifact metadata for this run only.
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [baseline, candidate]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      # actionlint 1.7.12 cannot parse $/ yet (rhysd/actionlint#732). Keep the
+      # action calls immutable and prove their exact programs against this head.
+      - name: Checkout immutable fixture source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: devantler-tech/ksail
+          ref: 01353b2281b4ea4dffc7f8d7374f44a95a6026b9
+          path: .diagnostics-artifact-source
+          persist-credentials: false
+
+      - name: Prepare isolated production-step probe
+        env:
+          FIXTURE_MODE: ${{ matrix.mode }}
+        run: |
+          shellcheck .github/scripts/diagnostics-artifact*.sh .github/scripts/verify-diagnostics-artifact.sh
+          bash .github/scripts/diagnostics-artifact-fixture.test.sh "$GITHUB_WORKSPACE/.diagnostics-artifact-source"
+          fixture_bin="$(mktemp -d)"
+          cp .github/scripts/diagnostics-artifact-ksail-fixture.sh "$fixture_bin/ksail"
+          chmod +x "$fixture_bin/ksail"
+          printf '%s\n' "$fixture_bin" >> "$GITHUB_PATH"
+
+      - name: Exercise baseline failure and artifact programs
+        id: probe-baseline
+        if: matrix.mode == 'baseline'
+        continue-on-error: true
+        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-baseline@01353b2281b4ea4dffc7f8d7374f44a95a6026b9
+        with:
+          distribution: Vanilla
+          provider: Hetzner
+          test-autoscaler-inventory: "true"
+          upload-artifacts: "true"
+
+      - name: Exercise candidate failure and artifact programs
+        id: probe-candidate
+        if: matrix.mode == 'candidate'
+        continue-on-error: true
+        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-candidate@01353b2281b4ea4dffc7f8d7374f44a95a6026b9
+        with:
+          distribution: Vanilla
+          provider: Hetzner
+          test-autoscaler-inventory: "true"
+          upload-artifacts: "true"
+
+      - name: Verify native outcomes and artifact identity
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FIXTURE_MODE: ${{ matrix.mode }}
+          PROBE_OUTCOME: ${{ matrix.mode == 'candidate' && steps.probe-candidate.outcome || steps.probe-baseline.outcome }}
+          TRIAL_OUTCOME: ${{ matrix.mode == 'candidate' && steps.probe-candidate.outputs.trial-outcome || steps.probe-baseline.outputs.trial-outcome }}
+          SAVE_OUTCOME: ${{ matrix.mode == 'candidate' && steps.probe-candidate.outputs.save-outcome || steps.probe-baseline.outputs.save-outcome }}
+          UPLOAD_OUTCOME: ${{ matrix.mode == 'candidate' && steps.probe-candidate.outputs.upload-outcome || steps.probe-baseline.outputs.upload-outcome }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          bash .github/scripts/verify-diagnostics-artifact.sh
+
+      - name: Download the observed candidate artifact
+        if: matrix.mode == 'candidate'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: system-test-diagnostics-fixture-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.mode }}
+          path: ${{ runner.temp }}/diagnostics-artifact-readback
+
+      - name: Verify downloaded diagnostics content
+        if: matrix.mode == 'candidate'
+        env:
+          DIAGNOSTICS_PATH: ${{ runner.temp }}/diagnostics-artifact-readback/diagnostics.log
+        run: |
+          test -s "$DIAGNOSTICS_PATH"
+          grep -Fq 'KSail diagnostics artifact fixture' "$DIAGNOSTICS_PATH"
+
   verify-bash-32-workflow-contract:
     name: 🧪 Verify Bash 3.2 Workflow Contract
     runs-on: macos-latest
@@ -2757,7 +2898,7 @@ jobs:
         with:
           persist-credentials: false
       - name: 🧹 Free runner disk
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@41a8ea06da57a4b53744cad7a617d6294e7ad588
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@2c9c263f532a6d440fad30aa0e690cd0c4515a4e
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -2857,7 +2998,7 @@ jobs:
           persist-credentials: false
       - name: Check active documentation
         id: links
-        uses: devantler-tech/.github/actions/validate-retired-repo-links@15372ea4ee3a0bd5b0a41a18105859691737df01 # v20.1.10
+        uses: devantler-tech/.github/actions/validate-retired-repo-links@d2eeb91d37fcc8a13423c1bdfaf5079b30426625 # v21.1.5
         with:
           enabled: "true"
       - name: Require a completed scan
@@ -2930,11 +3071,13 @@ jobs:
         verify-dependency-test-graph,
         verify-dependency-contracts,
         verify-todos-workflow-contract,
+        system-test-diagnostics-artifact,
         verify-bash-32-workflow-contract,
         test-release-config,
         test-cask-rendering,
         release-graph-audit,
         cask-pr-handoff,
+        desktop-recovery-signature,
         native-home-paths,
         windows-notice-staging,
         eks-smoke-scripts,
@@ -2946,7 +3089,7 @@ jobs:
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/.github/actions/aggregate-job-checks@15372ea4ee3a0bd5b0a41a18105859691737df01 # v20.1.10
+      - uses: devantler-tech/.github/actions/aggregate-job-checks@89d152cc9565a4bafd255ffdb8c77375067f5fcd # v21.1.0
         with:
           check-workflow-startup: ${{ contains(fromJSON('["pull_request","push","merge_group"]'), github.event_name) }}
           job-results: >-
@@ -2976,11 +3119,13 @@ jobs:
             ${{ needs.verify-dependency-test-graph.result }}
             ${{ needs.verify-dependency-contracts.result }}
             ${{ needs.verify-todos-workflow-contract.result }}
+            ${{ needs.system-test-diagnostics-artifact.result }}
             ${{ needs.verify-bash-32-workflow-contract.result }}
             ${{ needs.test-release-config.result }}
             ${{ needs.test-cask-rendering.result }}
             ${{ needs.release-graph-audit.result }}
             ${{ needs.cask-pr-handoff.result }}
+            ${{ needs.desktop-recovery-signature.result }}
             ${{ needs.native-home-paths.result }}
             ${{ needs.windows-notice-staging.result }}
             ${{ needs.eks-smoke-scripts.result }}

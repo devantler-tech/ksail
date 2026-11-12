@@ -345,6 +345,28 @@ func TestCluster_ExpandEnvVars_DefaultValueSyntax(t *testing.T) {
 	assert.Equal(t, "gpt-4o", cluster.Spec.Chat.Model)
 }
 
+func TestCluster_ExpandEnvVars_PreservesTalosPoolPatches(t *testing.T) {
+	t.Setenv("TEST_KSAIL_POOL_VALUE", "unexpected-expansion")
+
+	patch := "machine:\n  env:\n    EXAMPLE: ${TEST_KSAIL_POOL_VALUE}\n"
+	cluster := v1alpha1.NewCluster()
+	cluster.Spec.Cluster.Autoscaler.Node.Pools = []v1alpha1.NodePool{
+		{TalosPatches: []string{patch}},
+	}
+	cluster.Spec.Provider.Hetzner.AutoscalerNodePools = []v1alpha1.NodePool{
+		{TalosPatches: []string{patch}},
+	}
+
+	cluster.ExpandEnvVars()
+
+	assert.Equal(t, []string{patch}, cluster.Spec.Cluster.Autoscaler.Node.Pools[0].TalosPatches)
+	assert.Equal(
+		t,
+		[]string{patch},
+		cluster.Spec.Provider.Hetzner.AutoscalerNodePools[0].TalosPatches,
+	)
+}
+
 func TestCluster_ExpandEnvVars_MixedDefaultAndNoDefault(t *testing.T) {
 	// Note: Cannot use t.Parallel() when using t.Setenv()
 	t.Setenv("TEST_HOST", "custom.example.com")

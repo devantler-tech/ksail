@@ -30,6 +30,9 @@ builds:
     hooks:
       pre:
         - go tool bundler --platform {{ .Os }}/{{ .Arch }} --cli-version 1.0.87
+      post:
+        - cmd: bash .github/scripts/generate-completions.sh "{{ .Path }}" dist/completions "{{ .Os }}/{{ .Arch }}" "{{ .Runtime.Goos }}/{{ .Runtime.Goarch }}"
+          output: true
 
 archives:
   - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
@@ -46,6 +49,9 @@ archives:
       - CHANGELOG*
       - src: ".cache/go-notices/cli-{{ .Os }}-{{ .Arch }}/GoNotices/*"
         dst: GoNotices
+        strip_parent: true
+      - src: dist/completions/*
+        dst: completions
         strip_parent: true
 
 homebrew_casks:
@@ -64,6 +70,10 @@ homebrew_casks:
     description: "CLI tool to manage Kubernetes clusters and workloads"
     # Trailing slash required by `brew style` (Cask/HomepageUrlStyling).
     homepage: "https://ksail.devantler.tech/"
+    completions:
+      bash: completions/ksail.bash
+      zsh: completions/ksail.zsh
+      fish: completions/ksail.fish
     repository:
       owner: devantler-tech
       name: homebrew-tap
@@ -190,11 +200,14 @@ release:
     # Stable one-line installer for Linux and macOS release archives.
     - glob: ./install.sh
   footer: |
-    ## Historical failed release attempts
+    ## Versions without a release
 
-    The failed attempts v7.202.24, v7.202.29, v7.202.52, v7.202.60 and v7.202.88
-    left retained tags without published releases. Use a newer published version.
-    See [release cleanup history](https://github.com/devantler-tech/ksail/issues/7694).
+    Some version tags have no release, because the release run for that version
+    failed. Release tags are never deleted, so those versions stay in the tag list
+    with nothing to download. Install a version listed on the
+    [Releases page](https://github.com/devantler-tech/ksail/releases); each newer
+    release also contains the changes from any failed attempt before it.
+    See [why failed release tags are kept](https://github.com/devantler-tech/ksail/issues/7694).
 
     ## Quick Start
 

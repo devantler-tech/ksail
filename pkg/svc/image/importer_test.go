@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"testing"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -22,7 +24,12 @@ import (
 var (
 	errImportListFailed = errors.New("list nodes failed")
 	errImportCopyFailed = errors.New("copy to container failed")
+	errImportDiscovery  = errors.New("fixture import capability discovery failed")
 )
+
+// kindImportPath is the node-side import archive on a Kind node under the fixed
+// test archive name.
+const kindImportPath = "/root/ksail-images-import.tar"
 
 func TestNewImporter(t *testing.T) {
 	t.Parallel()
@@ -256,11 +263,11 @@ func TestImportSuccessVanilla(t *testing.T) {
 			Return(nil).Once()
 
 		// Mock exec for import command - Kind uses /root path
-		importPath := "/root/ksail-images-import.tar"
+		importPath := kindImportPath
 		setupImportExecMockForImporter(ctx, t, mockClient, nodeName, importPath)
 
 		// Mock exec for cleanup
-		setupExecMockForImporter(ctx, t, mockClient, nodeName)
+		setupCleanupMockForImporter(t, mockClient, nodeName, importPath)
 	}
 
 	importer := image.NewImporter(mockClient)
@@ -322,7 +329,7 @@ func TestImportSuccessK3s(t *testing.T) {
 		setupImportExecMockForImporter(ctx, t, mockClient, nodeName, "/tmp/ksail-images-import.tar")
 
 		// Mock exec for cleanup
-		setupExecMockForImporter(ctx, t, mockClient, nodeName)
+		setupCleanupMockForImporter(t, mockClient, nodeName, "/tmp/ksail-images-import.tar")
 	}
 
 	importer := image.NewImporter(mockClient)
@@ -360,10 +367,13 @@ func TestImportCopyToContainerFails(t *testing.T) {
 			},
 		}, nil)
 
+	expectImportHelp(ctx, t, mockClient, "my-cluster-control-plane")
+
 	// Mock CopyToContainer - fails
 	mockClient.EXPECT().
 		CopyToContainer(ctx, "my-cluster-control-plane", "/root", mock.Anything, container.CopyToContainerOptions{}).
 		Return(errImportCopyFailed)
+	setupCleanupMockForImporter(t, mockClient, "my-cluster-control-plane", kindImportPath)
 
 	importer := image.NewImporter(mockClient)
 	err = importer.Import(
@@ -401,6 +411,8 @@ func TestImportExecFails(t *testing.T) {
 			},
 		}, nil)
 
+	expectImportHelp(ctx, t, mockClient, "my-cluster-control-plane")
+
 	// Mock CopyToContainer - succeeds
 	mockClient.EXPECT().
 		CopyToContainer(ctx, "my-cluster-control-plane", "/root", mock.Anything, container.CopyToContainerOptions{}).
@@ -409,7 +421,11 @@ func TestImportExecFails(t *testing.T) {
 	// Mock exec for import - fails with non-zero exit code
 	execID := "exec-import-fail"
 	mockClient.EXPECT().
-		ContainerExecCreate(ctx, "my-cluster-control-plane", mock.Anything).
+		ContainerExecCreate(ctx, "my-cluster-control-plane", mock.MatchedBy(func(opts container.ExecOptions) bool {
+			return slices.Equal(opts.Cmd, []string{
+				ctrCommand, "--namespace=k8s.io", "images", "import", "--digests", kindImportPath,
+			})
+		})).
 		Return(container.ExecCreateResponse{ID: execID}, nil)
 
 	mockClient.EXPECT().
@@ -419,6 +435,7 @@ func TestImportExecFails(t *testing.T) {
 	mockClient.EXPECT().
 		ContainerExecInspect(ctx, execID).
 		Return(container.ExecInspect{ExitCode: 1}, nil)
+	setupCleanupMockForImporter(t, mockClient, "my-cluster-control-plane", kindImportPath)
 
 	importer := image.NewImporter(mockClient)
 	err = importer.Import(
@@ -472,7 +489,7 @@ func TestImportEmptyProvider(t *testing.T) {
 	)
 
 	// Mock exec for cleanup
-	setupExecMockForImporter(ctx, t, mockClient, "my-cluster-control-plane")
+	setupCleanupMockForImporter(t, mockClient, "my-cluster-control-plane", kindImportPath)
 
 	importer := image.NewImporter(mockClient)
 	err = importer.Import(ctx, "my-cluster", v1alpha1.DistributionVanilla, "", image.ImportOptions{
@@ -520,12 +537,15 @@ func TestImportMultipleNodesPartialFailure(t *testing.T) {
 		"my-cluster-control-plane",
 		"/root/ksail-images-import.tar",
 	)
-	setupExecMockForImporter(ctx, t, mockClient, "my-cluster-control-plane")
+	setupCleanupMockForImporter(t, mockClient, "my-cluster-control-plane", kindImportPath)
 
 	// Second node fails during copy
+	expectImportHelp(ctx, t, mockClient, "my-cluster-worker")
+
 	mockClient.EXPECT().
 		CopyToContainer(ctx, "my-cluster-worker", "/root", mock.Anything, container.CopyToContainerOptions{}).
 		Return(errImportCopyFailed).Once()
+	setupCleanupMockForImporter(t, mockClient, "my-cluster-worker", kindImportPath)
 
 	importer := image.NewImporter(mockClient)
 	err = importer.Import(
@@ -579,7 +599,7 @@ func TestImportLargeFile(t *testing.T) {
 		"my-cluster-control-plane",
 		"/root/ksail-images-import.tar",
 	)
-	setupExecMockForImporter(ctx, t, mockClient, "my-cluster-control-plane")
+	setupCleanupMockForImporter(t, mockClient, "my-cluster-control-plane", kindImportPath)
 
 	importer := image.NewImporter(mockClient)
 	err = importer.Import(
@@ -595,27 +615,32 @@ func TestImportLargeFile(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// setupExecMockForImporter is a helper to set up ContainerExec* mocks for simple cases.
-func setupExecMockForImporter(
-	ctx context.Context,
+// setupCleanupMockForImporter expects the import archive at archivePath to be
+// removed from containerName exactly once, on a live context detached from the
+// caller, so cleanup also runs after a failed or cancelled import.
+func setupCleanupMockForImporter(
 	t *testing.T,
 	mockClient *docker.MockAPIClient,
 	containerName string,
+	archivePath string,
 ) {
 	t.Helper()
 
-	execID := "exec-" + containerName
+	execID := "exec-cleanup-" + containerName
 
 	mockClient.EXPECT().
-		ContainerExecCreate(ctx, containerName, mock.Anything).
+		ContainerExecCreate(detachedCleanupContext(), containerName,
+			mock.MatchedBy(func(opts container.ExecOptions) bool {
+				return slices.Equal(opts.Cmd, []string{"rm", "-f", archivePath})
+			})).
 		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
 
 	mockClient.EXPECT().
-		ContainerExecAttach(ctx, execID, container.ExecStartOptions{}).
+		ContainerExecAttach(detachedCleanupContext(), execID, container.ExecStartOptions{}).
 		Return(mockDockerStreamResponse("", ""), nil).Once()
 
 	mockClient.EXPECT().
-		ContainerExecInspect(ctx, execID).
+		ContainerExecInspect(detachedCleanupContext(), execID).
 		Return(container.ExecInspect{ExitCode: 0}, nil).Once()
 }
 
@@ -629,18 +654,16 @@ func setupImportExecMockForImporter(
 ) {
 	t.Helper()
 
+	expectImportHelp(ctx, t, mockClient, containerName)
+
 	execID := "exec-import-" + containerName
 
 	mockClient.EXPECT().
 		ContainerExecCreate(ctx, containerName, mock.MatchedBy(func(opts container.ExecOptions) bool {
-			// Verify the import command structure
-			return len(opts.Cmd) >= 5 &&
-				opts.Cmd[0] == ctrCommand &&
-				opts.Cmd[1] == "--namespace=k8s.io" &&
-				opts.Cmd[2] == "images" &&
-				opts.Cmd[3] == "import" &&
-				opts.Cmd[4] == "--digests" &&
-				opts.Cmd[5] == importPath
+			// A node without --local keeps the plain legacy command.
+			return slices.Equal(opts.Cmd, []string{
+				ctrCommand, "--namespace=k8s.io", "images", "import", "--digests", importPath,
+			})
 		})).
 		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
 
@@ -651,4 +674,373 @@ func setupImportExecMockForImporter(
 	mockClient.EXPECT().
 		ContainerExecInspect(ctx, execID).
 		Return(container.ExecInspect{ExitCode: 0}, nil).Once()
+}
+
+// Two imports on the same node must never share an archive, so every generated
+// name is distinct.
+func TestDefaultImportArchiveNamesAreDistinct(t *testing.T) {
+	t.Parallel()
+
+	pattern := regexp.MustCompile(`^ksail-images-import-[0-9a-f]{16}\.tar$`)
+	seen := make(map[string]struct{})
+
+	for range 64 {
+		name := image.DefaultImportArchiveNameForTest()
+		if !pattern.MatchString(name) {
+			t.Fatalf("archive name %q does not match %s", name, pattern)
+		}
+
+		if _, duplicate := seen[name]; duplicate {
+			t.Fatalf("archive name %q was generated twice", name)
+		}
+
+		seen[name] = struct{}{}
+	}
+}
+
+// A cancelled import must still remove its archive from the node, so cleanup
+// runs on a live context after the caller's context is done.
+func TestImportCancelledStillRemovesArchive(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	mockClient := docker.NewMockAPIClient(t)
+
+	inputPath := filepath.Join(t.TempDir(), "images.tar")
+	require.NoError(t, os.WriteFile(inputPath, []byte("fake tar content"), 0o600))
+
+	mockClient.EXPECT().
+		ContainerList(ctx, mock.Anything).
+		Return([]container.Summary{
+			{
+				Names:  []string{"/my-cluster-control-plane"},
+				Labels: map[string]string{"io.x-k8s.kind.role": "control-plane"},
+			},
+		}, nil)
+
+	expectImportHelp(ctx, t, mockClient, "my-cluster-control-plane")
+
+	mockClient.EXPECT().
+		CopyToContainer(ctx, "my-cluster-control-plane", "/root", mock.Anything, container.CopyToContainerOptions{}).
+		RunAndReturn(func(context.Context, string, string, io.Reader, container.CopyToContainerOptions) error {
+			cancel()
+
+			return context.Canceled
+		})
+	setupCleanupMockForImporter(t, mockClient, "my-cluster-control-plane", kindImportPath)
+
+	err := image.NewImporter(mockClient).Import(
+		ctx,
+		"my-cluster",
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+		image.ImportOptions{InputPath: inputPath},
+	)
+
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+// legacyImportHelp is ctr import help from a version without --local.
+const legacyImportHelp = "OPTIONS:\n   --digests  Create digest refs\n   --help, -h  Show help\n"
+
+// localImportHelp is ctr import help from a version that advertises --local.
+const localImportHelp = "OPTIONS:\n   --digests  Create digest refs\n" +
+	"   --local  Run import locally rather than through transfer API (default: false)\n" +
+	"   --help, -h  Show help\n"
+
+func importHelpCommand() []string {
+	return []string{ctrCommand, "--namespace=k8s.io", "images", "import", "--help"}
+}
+
+// expectImportHelp expects one ctr import capability probe on containerName that
+// reports a ctr without --local.
+func expectImportHelp(
+	ctx context.Context,
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+	containerName string,
+) {
+	t.Helper()
+
+	execID := "exec-import-help-" + containerName
+
+	mockClient.EXPECT().
+		ContainerExecCreate(ctx, containerName, mock.MatchedBy(func(opts container.ExecOptions) bool {
+			return slices.Equal(opts.Cmd, importHelpCommand())
+		})).
+		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecAttach(ctx, execID, container.ExecStartOptions{}).
+		Return(mockDockerStreamResponse(legacyImportHelp, ""), nil).Once()
+
+	mockClient.EXPECT().
+		ContainerExecInspect(ctx, execID).
+		Return(container.ExecInspect{ExitCode: 0}, nil).Once()
+}
+
+type importModeCase struct {
+	name string
+	// help is what ctr import --help prints; probeErr fails the probe instead.
+	help     string
+	probeErr error
+	// uname is what uname -m prints; unameErr fails it instead.
+	uname    string
+	unameErr error
+	// wantImport is the expected ctr import command, or nil when the import
+	// must refuse before copying anything.
+	wantImport []string
+	wantErr    string
+}
+
+func legacyImportCommand() []string {
+	return []string{
+		ctrCommand, "--namespace=k8s.io", "images", "import", "--digests", kindImportPath,
+	}
+}
+
+func localImportCommand(platform string) []string {
+	return []string{
+		ctrCommand, "--namespace=k8s.io", "images", "import", "--digests",
+		"--local", "--platform", platform, kindImportPath,
+	}
+}
+
+func importModeCases() []importModeCase {
+	return []importModeCase{
+		{
+			name:       "local import on an amd64 node pins the node platform",
+			help:       localImportHelp,
+			uname:      "x86_64\n",
+			wantImport: localImportCommand("linux/amd64"),
+		},
+		{
+			name:       "local import on an arm64 node pins the node platform",
+			help:       localImportHelp,
+			uname:      "aarch64\n",
+			wantImport: localImportCommand("linux/arm64"),
+		},
+		{
+			name:       "local import with bare --help",
+			help:       "OPTIONS:\n   --local  Import locally\n   --help  Show help\n",
+			uname:      "x86_64\n",
+			wantImport: localImportCommand("linux/amd64"),
+		},
+		{
+			name:       "legacy ctr without --local keeps the plain command",
+			help:       legacyImportHelp,
+			wantImport: legacyImportCommand(),
+		},
+		{
+			name:       "a look-alike option is not --local",
+			help:       "OPTIONS:\n   --localization value  Language\n   --help, -h  Show help\n",
+			wantImport: legacyImportCommand(),
+		},
+		{
+			name:     "failed capability discovery refuses the import",
+			probeErr: errImportDiscovery,
+			wantErr:  "failed to discover image import options",
+		},
+		{
+			name:    "empty capability discovery refuses the import",
+			help:    "",
+			wantErr: "incomplete help output",
+		},
+		{
+			name:    "truncated capability discovery refuses the import",
+			help:    "OPTIONS:\n   --local  Import locally\n",
+			wantErr: "incomplete help output",
+		},
+		{
+			name:     "an unknown node platform refuses the local import",
+			help:     localImportHelp,
+			unameErr: errImportDiscovery,
+			wantErr:  "detect platform of node my-cluster-control-plane",
+		},
+	}
+}
+
+// The import mode follows what each node's ctr advertises, and import never
+// guesses after failed or incomplete discovery.
+func TestImportSelectsModeFromNodeCapabilities(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range importModeCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			mockClient := docker.NewMockAPIClient(t)
+			setupKindNodeListMock(ctx, mockClient)
+
+			copied := false
+			commands := observeImportNode(t, mockClient, kindExporterNodeName, testCase, &copied)
+
+			inputPath := filepath.Join(t.TempDir(), "images.tar")
+			require.NoError(t, os.WriteFile(inputPath, []byte("fake tar content"), 0o600))
+
+			err := image.NewImporter(mockClient).Import(ctx, "my-cluster",
+				v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker,
+				image.ImportOptions{InputPath: inputPath})
+
+			if testCase.wantErr != "" {
+				require.ErrorContains(t, err, testCase.wantErr)
+				assert.False(t, copied, "a refused import must not copy the archive")
+			} else {
+				require.NoError(t, err)
+				assert.True(t, copied, "the archive must be copied before importing")
+			}
+
+			assert.Equal(t, expectedImportCommands(testCase), drain(commands))
+		})
+	}
+}
+
+// Each node selects its own mode, so a cluster with mixed ctr versions imports
+// on every node with the command that node supports.
+func TestImportSelectsModePerNode(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mockClient := docker.NewMockAPIClient(t)
+	mockClient.EXPECT().ContainerList(ctx, mock.Anything).Return(kindMultiNodeSummaries()[:2], nil)
+
+	nodes := []string{kindExporterNodeName, "my-cluster-worker"}
+	cases := []importModeCase{
+		{help: legacyImportHelp, wantImport: legacyImportCommand()},
+		{help: localImportHelp, uname: "aarch64\n", wantImport: localImportCommand("linux/arm64")},
+	}
+
+	observed := make([]chan []string, len(nodes))
+	for index, node := range nodes {
+		copied := false
+		observed[index] = observeImportNode(t, mockClient, node, cases[index], &copied)
+	}
+
+	inputPath := filepath.Join(t.TempDir(), "images.tar")
+	require.NoError(t, os.WriteFile(inputPath, []byte("fake tar content"), 0o600))
+
+	err := image.NewImporter(mockClient).Import(ctx, "my-cluster",
+		v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker,
+		image.ImportOptions{InputPath: inputPath})
+	require.NoError(t, err)
+
+	for index, commands := range observed {
+		assert.Equal(t, expectedImportCommands(cases[index]), drain(commands), nodes[index])
+	}
+}
+
+// The import command keeps digest references for named images and their
+// children, and never asks ctr to store the archive's own index as an image or
+// to import platforms the archive does not carry.
+func TestImportCommandKeepsArchiveRootOutOfImageStore(t *testing.T) {
+	t.Parallel()
+
+	for _, command := range [][]string{
+		image.ImportCommandForTest(kindImportPath, true, "linux/amd64"),
+		image.ImportCommandForTest(kindImportPath, false, ""),
+	} {
+		assert.Contains(t, command, "--digests", command)
+		assert.Equal(t, kindImportPath, command[len(command)-1], command)
+
+		for _, forbidden := range []string{"--index-name", "--all-platforms", "--base-name"} {
+			for _, argument := range command {
+				assert.NotContains(t, argument, forbidden, command)
+			}
+		}
+	}
+
+	assert.NotContains(t, image.ImportCommandForTest(kindImportPath, false, ""), "--local")
+	assert.NotContains(t, image.ImportCommandForTest(kindImportPath, false, ""), "--platform")
+}
+
+func expectedImportCommands(testCase importModeCase) [][]string {
+	want := [][]string{importHelpCommand()}
+	if testCase.probeErr != nil || testCase.wantErr == "incomplete help output" {
+		return want
+	}
+
+	if testCase.uname != "" || testCase.unameErr != nil {
+		want = append(want, []string{"uname", "-m"})
+	}
+
+	if testCase.wantImport == nil {
+		return want
+	}
+
+	return append(want, testCase.wantImport, []string{"rm", "-f", kindImportPath})
+}
+
+func drain(commands chan []string) [][]string {
+	close(commands)
+
+	var observed [][]string
+	for command := range commands {
+		observed = append(observed, command)
+	}
+
+	return observed
+}
+
+// observeImportNode records every command run on node, in order, and answers
+// the capability probe and platform detection from testCase.
+func observeImportNode(
+	t *testing.T,
+	mockClient *docker.MockAPIClient,
+	node string,
+	testCase importModeCase,
+	copied *bool,
+) chan []string {
+	t.Helper()
+
+	commands := make(chan []string, 8)
+	outputs := map[string]string{
+		"help-" + node:  testCase.help,
+		"uname-" + node: testCase.uname,
+	}
+
+	mockClient.EXPECT().
+		CopyToContainer(mock.Anything, node, "/root", mock.Anything, container.CopyToContainerOptions{}).
+		RunAndReturn(func(context.Context, string, string, io.Reader, container.CopyToContainerOptions) error {
+			*copied = true
+
+			return nil
+		}).
+		Maybe()
+
+	mockClient.EXPECT().
+		ContainerExecCreate(mock.Anything, node, mock.Anything).
+		RunAndReturn(func(
+			_ context.Context, _ string, options container.ExecOptions,
+		) (container.ExecCreateResponse, error) {
+			commands <- slices.Clone(options.Cmd)
+
+			switch {
+			case slices.Equal(options.Cmd, importHelpCommand()):
+				if testCase.probeErr != nil {
+					return container.ExecCreateResponse{}, testCase.probeErr
+				}
+
+				return container.ExecCreateResponse{ID: "help-" + node}, nil
+			case slices.Equal(options.Cmd, []string{"uname", "-m"}):
+				if testCase.unameErr != nil {
+					return container.ExecCreateResponse{}, testCase.unameErr
+				}
+
+				return container.ExecCreateResponse{ID: "uname-" + node}, nil
+			default:
+				return container.ExecCreateResponse{ID: "other-" + node}, nil
+			}
+		})
+
+	for _, execID := range []string{"help-" + node, "uname-" + node, "other-" + node} {
+		mockClient.EXPECT().
+			ContainerExecAttach(mock.Anything, execID, container.ExecStartOptions{}).
+			Return(mockDockerStreamResponse(outputs[execID], ""), nil).Maybe()
+		mockClient.EXPECT().
+			ContainerExecInspect(mock.Anything, execID).
+			Return(container.ExecInspect{ExitCode: 0}, nil).Maybe()
+	}
+
+	return commands
 }

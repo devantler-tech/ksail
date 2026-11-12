@@ -523,6 +523,8 @@ func prepareEKSCreateIdentity(
 		return err
 	}
 
+	assignEKSCreationID(clusterCtx)
+
 	return freezeEKSCreateCredentials(ctx, clusterCtx)
 }
 
@@ -533,7 +535,7 @@ func executeClusterCreationAndCapture(
 ) error {
 	err := executeClusterLifecycle(cmd, clusterCtx.ClusterCfg, deps)
 	if err != nil {
-		return err
+		return retainFailedEKSCreateOwnership(cmd, clusterCtx, err)
 	}
 
 	return captureCreatedEKSIdentity(cmd.Context(), clusterCtx)

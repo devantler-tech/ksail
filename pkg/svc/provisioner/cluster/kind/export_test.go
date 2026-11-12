@@ -68,3 +68,8 @@ func SetNameForTest(name, kindConfigName string) string {
 func (k *Provisioner) WithRetainOnFailureForTest(retain bool) {
 	k.retainOnFailure = retain
 }
+
+// ReconcileNestedKindNetworkForTest exposes reconcileNestedKindNetwork for unit testing.
+func ReconcileNestedKindNetworkForTest(ctx context.Context, client nestedNetworkClient) error {
+	return reconcileNestedKindNetwork(ctx, client)
+}
