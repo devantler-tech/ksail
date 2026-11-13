@@ -1210,7 +1210,11 @@ func TestUpdateApplyStep_WaitsForAPIServerBeforeKubeconfigRefresh(t *testing.T) 
 	calls := &fipUpdateCalls{}
 	server := fipUpdateTestServer(t, true, calls)
 	provisioner, _, capture := newFloatingIPKubeconfigTestProvisioner(t, server.URL)
-	wantCA := provisioner.TalosConfigsForTest().ControlPlane().K8sAPIServerCAConfig().IssuingCA().Crt
+	wantCA := provisioner.TalosConfigsForTest().
+		ControlPlane().
+		K8sAPIServerCAConfig().
+		IssuingCA().
+		Crt
 
 	var waited []string
 
@@ -1459,7 +1463,11 @@ func TestBuildDesiredNodeConfig_PreservesReconciledFloatingIPEndpoint(t *testing
 	runningControlPlane := provisioner.TalosConfigsForTest().ControlPlane()
 	runningWorker := provisioner.TalosConfigsForTest().Worker()
 
-	require.NotEqual(t, "192.0.2.10", runningControlPlane.K8sClusterConfig().ClusterEndpoint().Hostname())
+	require.NotEqual(
+		t,
+		"192.0.2.10",
+		runningControlPlane.K8sClusterConfig().ClusterEndpoint().Hostname(),
+	)
 
 	require.NoError(t, provisioner.UpdateConfigsWithEndpointForTest(
 		t.Context(), hzProvider, "fip-cluster",

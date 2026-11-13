@@ -104,6 +104,8 @@ func GenerateAutoscalerWorkerConfig(
 // shapeAutoscalerWorker gives a worker config the autoscaler worker shape described on
 // GenerateAutoscalerWorkerConfig. A pool's boot config and the rebuild of a running
 // autoscaler node both use it, so the two cannot drift apart (#7013).
+//
+//nolint:staticcheck // legacy v1alpha1 worker fields; the 1.14 document move is separate
 func shapeAutoscalerWorker(
 	workerConfig talosconfig.Provider,
 	poolLabels map[string]string,
@@ -147,6 +149,8 @@ func shapeAutoscalerWorker(
 // Kubelet registration labels are independent of machine.nodeLabels. Static workers
 // may set the Longhorn label here so storage can schedule immediately on first boot.
 // Remove it from every argument value when shaping compute-only autoscaler workers.
+//
+//nolint:staticcheck // legacy v1alpha1 worker fields; the 1.14 document move is separate
 func stripKubeletStorageLabel(kubelet *v1alpha1.KubeletConfig) {
 	if kubelet == nil {
 		return
@@ -194,6 +198,8 @@ func stripKubeletStorageLabel(kubelet *v1alpha1.KubeletConfig) {
 // "<value>:<effect>" (or "<value>" when the effect is empty). Talos reconciles
 // these onto the real Node via its node-labels controller, so they apply even
 // under the kubelet NodeRestriction admission plugin.
+//
+//nolint:staticcheck // legacy v1alpha1 worker fields; the 1.14 document move is separate
 func applyPoolTaints(cfg *v1alpha1.Config, poolTaints []corev1.Taint) {
 	if len(poolTaints) == 0 {
 		return
@@ -845,6 +851,8 @@ func normalizeForFingerprint(
 
 // normalizeEndpoint substitutes the cluster control-plane endpoint with a fixed
 // placeholder. It is a no-op when the config carries no endpoint.
+//
+//nolint:staticcheck // legacy v1alpha1 worker fields; the 1.14 document move is separate
 func normalizeEndpoint(cfg *v1alpha1.Config, placeholder *url.URL) {
 	if cfg.ClusterConfig == nil ||
 		cfg.ClusterConfig.ControlPlane == nil ||
@@ -864,6 +872,8 @@ func normalizeEndpoint(cfg *v1alpha1.Config, placeholder *url.URL) {
 // synced Secret. Only the CA fields a worker config actually carries (machine CA,
 // cluster CA, cluster ID) are handled; the aggregator/etcd/service-account material
 // is control-plane-only and never present in the worker configs fingerprinted here.
+//
+//nolint:staticcheck // legacy v1alpha1 worker fields; the 1.14 document move is separate
 func normalizeClusterIdentity(cfg *v1alpha1.Config) {
 	if cfg.MachineConfig != nil {
 		neutralizeCertificate(cfg.MachineConfig.MachineCA)

@@ -403,14 +403,29 @@ func (p *Provisioner) detectStaleHCloudVIP(
 	return "", nil
 }
 
-// ksailHCloudVIP returns the HCloud VIP address config carries when it is also
-// the config's cluster endpoint, the shape KSail's floating-IP patch produces.
-func ksailHCloudVIP(config talosconfig.Provider) string {
-	if config == nil || config.K8sClusterConfig() == nil || config.K8sClusterConfig().ClusterEndpoint() == nil {
+// clusterEndpointHostname returns the host of config's cluster endpoint, or ""
+// when config has no Kubernetes cluster config or endpoint. Under the 1.14
+// contract either accessor can be nil, so callers fall back on "".
+func clusterEndpointHostname(config talosconfig.Provider) string {
+	if config == nil {
 		return ""
 	}
 
-	endpoint := config.K8sClusterConfig().ClusterEndpoint().Hostname()
+	clusterConfig := config.K8sClusterConfig()
+	if clusterConfig == nil || clusterConfig.ClusterEndpoint() == nil {
+		return ""
+	}
+
+	return clusterConfig.ClusterEndpoint().Hostname()
+}
+
+// ksailHCloudVIP returns the HCloud VIP address config carries when it is also
+// the config's cluster endpoint, the shape KSail's floating-IP patch produces.
+func ksailHCloudVIP(config talosconfig.Provider) string {
+	endpoint := clusterEndpointHostname(config)
+	if endpoint == "" {
+		return ""
+	}
 
 	for _, device := range config.Machine().Network().Devices() {
 		vip := device.VIPConfig()
@@ -1414,7 +1429,7 @@ func (p *Provisioner) fetchClusterSecretsAndEndpoint(
 	// it from node IPs. This avoids non-deterministic ordering in HA clusters
 	// where getNodesByRole may return a different first CP node between updates.
 	// Falls back to cpIP if the running config has no endpoint set.
-	endpointIP := runningConfig.K8sClusterConfig().ClusterEndpoint().Hostname()
+	endpointIP := clusterEndpointHostname(runningConfig)
 	if endpointIP == "" {
 		endpointIP = cpIP
 	}

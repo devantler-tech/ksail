@@ -1404,3 +1404,8 @@ func ReplacementAvailabilityCheckResultForTest(
 ) error {
 	return availabilityCheckResult(logWriter, subject, err, stopWhenUnavailable)
 }
+
+// ClusterEndpointHostnameForTest exposes clusterEndpointHostname for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var ClusterEndpointHostnameForTest = clusterEndpointHostname
