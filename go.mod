@@ -49,7 +49,7 @@ require (
 	github.com/fluxcd/source-controller/api v1.10.1
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/getsops/sops/v3 v3.13.3
-	github.com/github/copilot-sdk/go v1.0.27
+	github.com/github/copilot-sdk/go v1.0.28
 	github.com/gkampitakis/go-snaps v0.5.25
 	github.com/go-jose/go-jose/v4 v4.1.6
 	github.com/go-logr/logr v1.4.4
