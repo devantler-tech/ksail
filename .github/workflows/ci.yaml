@@ -1044,7 +1044,21 @@ jobs:
       - name: 📦 Install pinned vulnerability scanner
         env:
           GOBIN: ${{ runner.temp }}/vulnerability-scanner
-        run: go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+        # The scanner resolves outside this module, so the module restore above does not
+        # cover it; retry the same three times a dropped proxy stream gets elsewhere (#8053).
+        # A persistent failure still fails the job after the last attempt.
+        run: |
+          for attempt in 1 2 3; do
+            if go install golang.org/x/vuln/cmd/govulncheck@v1.8.0; then
+              exit 0
+            fi
+            if [[ "$attempt" -eq 3 ]]; then
+              echo "::error::Installing govulncheck failed after 3 attempts."
+              exit 1
+            fi
+            echo "::warning::govulncheck install attempt $attempt/3 failed; retrying in $((attempt * 5))s."
+            sleep "$((attempt * 5))"
+          done
 
       - name: 🧪 Verify actual scanner positive and negative controls
         env:
