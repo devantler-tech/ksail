@@ -12883,9 +12883,9 @@ Material: ma6f958c5e7e8f01b (copyright-header), SHA-256 da4cd8ef4b9a411df8b61678
 Material: mcf7ad2c4be3234b0 (copyright-header), SHA-256 3c4ff5ea3ab3905c7a5890dd95cebcfd1ce6be5c581795794c23db8045508627
 Material: mdf9fb7958e0ff40d (copyright-header), SHA-256 15250ab94a55191b3e9df9fe00126f8e106b1356278c84128553224fcd7266f6
 
-Component: helm.sh/helm/v4@v4.2.4
-Source: https://proxy.golang.org/helm.sh/helm/v4/@v/v4.2.4.zip
-Selected Go source checksum: h1:qIysMI0JpTC4WXf3AQ99V6rZGT0+gO0Ww8IOnnUnaZk=
+Component: helm.sh/helm/v4@v4.3.1
+Source: https://proxy.golang.org/helm.sh/helm/v4/@v/v4.3.1.zip
+Selected Go source checksum: h1:UndCoLe9UPmNoL7IvWzaUXveL7T5t/ijoorEmgJdI9g=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -13339,8 +13339,9 @@ Material: mb65e4d0566ca884c (copyright-header), SHA-256 e4414a7a62454953ce9048bb
 Material: mc93a7549b781fd12 (copyright-header), SHA-256 663e76d9545b8b2fd572c56941b9dc99e20fa9c1aa604caa0c08b8b2476b8a06
 Material: mff89ce360703bbfd (copyright-header), SHA-256 31c0f69dabebb2c43c5f51ed042037b22049cbab5278bb1210ec0b95b5d0a83d
 
-Component: k8s.io/cli-runtime@v0.36.6
+Component: k8s.io/cli-runtime@v0.37.1
 Source: https://proxy.golang.org/k8s.io/cli-runtime/@v/v0.36.6.zip
+Selected replacement: k8s.io/cli-runtime@v0.36.6
 Selected Go source checksum: h1:6prmmxvGHeSM0x6pdvD9TIwKiBt1EVrI59dytwU+wzw=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
@@ -13814,8 +13815,9 @@ Material: ma6f958c5e7e8f01b (copyright-header), SHA-256 da4cd8ef4b9a411df8b61678
 Material: mb65e4d0566ca884c (copyright-header), SHA-256 e4414a7a62454953ce9048bb4945811c9a10a97692aa2c131da2f25a14434a0c
 Material: mc93a7549b781fd12 (copyright-header), SHA-256 663e76d9545b8b2fd572c56941b9dc99e20fa9c1aa604caa0c08b8b2476b8a06
 
-Component: k8s.io/component-helpers@v0.36.6
+Component: k8s.io/component-helpers@v0.37.1
 Source: https://proxy.golang.org/k8s.io/component-helpers/@v/v0.36.6.zip
+Selected replacement: k8s.io/component-helpers@v0.36.6
 Selected Go source checksum: h1:/9puIftBWGam1BPYsDbXP4hUwhjYcrs0ign6e7a/8Ts=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
@@ -13980,8 +13982,9 @@ Files: LICENSE
 Material: m969246257ce9c732 (copyright-header), SHA-256 ff345f5babf52ae9caaac55971a3f44ec6a8f8e2245cec4ece03182134748d29
 Material: mc93a7549b781fd12 (copyright-header), SHA-256 663e76d9545b8b2fd572c56941b9dc99e20fa9c1aa604caa0c08b8b2476b8a06
 
-Component: k8s.io/kubectl@v0.36.6
+Component: k8s.io/kubectl@v0.37.1
 Source: https://proxy.golang.org/k8s.io/kubectl/@v/v0.36.6.zip
+Selected replacement: k8s.io/kubectl@v0.36.6
 Selected Go source checksum: h1:1rk5Thi09ISl7O8heVwP3eQKhQRmLNrLvXEfY8HNqAI=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
@@ -14112,8 +14115,9 @@ Material: ma6f958c5e7e8f01b (copyright-header), SHA-256 da4cd8ef4b9a411df8b61678
 Material: mb65e4d0566ca884c (copyright-header), SHA-256 e4414a7a62454953ce9048bb4945811c9a10a97692aa2c131da2f25a14434a0c
 Material: mc93a7549b781fd12 (copyright-header), SHA-256 663e76d9545b8b2fd572c56941b9dc99e20fa9c1aa604caa0c08b8b2476b8a06
 
-Component: k8s.io/metrics@v0.36.6
+Component: k8s.io/metrics@v0.37.1
 Source: https://proxy.golang.org/k8s.io/metrics/@v/v0.36.6.zip
+Selected replacement: k8s.io/metrics@v0.36.6
 Selected Go source checksum: h1:TChXaCsyn/VxKl5hZqWK+S7ywu9mba9H5NvOMn+N1yI=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
@@ -14396,8 +14400,9 @@ Material: m8a207f6926f08b51 (copyright-header), SHA-256 7aa464ef0229992ddaa4d1c4
 Material: ma9ab07e957c261a7 (copyright-header), SHA-256 c9b65f634775604afb33bc5c1cafd72e09a39843fdb9f4b7a16309b7da21fabe
 Material: mdbc78e386a135a31 (copyright-header), SHA-256 6bef5f52ffb52290344ea3ec502d5acc8c5e419528805e2f8b1bb308d3278d76
 
-Component: sigs.k8s.io/controller-runtime@v0.24.1
+Component: sigs.k8s.io/controller-runtime@v0.25.2
 Source: https://proxy.golang.org/sigs.k8s.io/controller-runtime/@v/v0.24.1.zip
+Selected replacement: sigs.k8s.io/controller-runtime@v0.24.1
 Selected Go source checksum: h1:miPEwrmirImAvgME1L9qebGHrOnGJoVmVdtOU9fRfo4=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0

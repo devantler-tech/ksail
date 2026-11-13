@@ -68,6 +68,10 @@ inputs:
     description: Name for the test workload deployment
     required: false
     default: "whoami"
+  split-image-cluster-name:
+    description: Two-node Kind fixture cluster that also checks exporting images held on different nodes
+    required: false
+    default: ""
   apply-overlay-path:
     description: Path to kustomize overlay for workload apply test
     required: false
@@ -519,6 +523,7 @@ runs:
       if: inputs.distribution == 'Vanilla' || inputs.distribution == 'K3s'
       uses: $/.github/actions/ksail-test-image-export-import
       with:
+        split-image-cluster-name: ${{ inputs.split-image-cluster-name }}
         test-workload-name: ${{ inputs.test-workload-name }}
         test-workload-image: ${{ inputs.test-workload-image }}
         workload-timeout: ${{ inputs.workload-timeout }}
