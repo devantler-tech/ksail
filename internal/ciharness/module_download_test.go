@@ -75,7 +75,9 @@ func TestReleaseModuleDownloadRetries(t *testing.T) {
 			} {
 				t.Run(scenario.name, func(t *testing.T) {
 					t.Parallel()
-					runModuleDownloadScenario(t, prefetch, downstreamRun, scenario)
+					runModuleDownloadScenario(
+						t, prefetch, downstreamRun, ".github/actions/setup-desktop-build", scenario,
+					)
 				})
 			}
 		})
@@ -155,10 +157,11 @@ func releaseModuleDownloadStep(t *testing.T, steps []harnessStep) harnessStep {
 }
 
 // Execute the checked-in downloader with recorded transport, backoff and downstream results.
+// actionPath is the composite action directory a GITHUB_ACTION_PATH-relative step resolves from.
 func runModuleDownloadScenario(
 	t *testing.T,
 	prefetch harnessStep,
-	downstreamRun string,
+	downstreamRun, actionPath string,
 	scenario moduleDownloadScenario,
 ) {
 	t.Helper()
@@ -178,7 +181,7 @@ func runModuleDownloadScenario(
 	command.Dir = root
 	command.Env = append(os.Environ(),
 		"PATH="+directory+string(os.PathListSeparator)+os.Getenv("PATH"),
-		"GITHUB_ACTION_PATH="+filepath.Join(root, ".github/actions/setup-desktop-build"),
+		"GITHUB_ACTION_PATH="+filepath.Join(root, actionPath),
 		"DOWNLOAD_CALLS="+filepath.Join(directory, "calls"),
 		"DOWNLOAD_DELAYS="+filepath.Join(directory, "delays"),
 		"DOWNLOAD_FAILURES="+strconv.Itoa(scenario.failures),

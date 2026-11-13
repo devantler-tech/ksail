@@ -23,6 +23,8 @@ func TestTalosCalicoValues(t *testing.T) {
 	require.NotEmpty(t, values)
 	assert.Contains(t, values, "installation.kubeletVolumePluginPath")
 	assert.Equal(t, `"None"`, values["installation.kubeletVolumePluginPath"])
+	assert.Equal(t, `"None"`, values["installation.flexVolumePath"],
+		"Talos has no writable FlexVolume host path")
 	assert.Contains(t, values, "installation.calicoNetwork.linuxDataplane")
 	assert.Equal(t, `"Nftables"`, values["installation.calicoNetwork.linuxDataplane"])
 	assert.Contains(t, values, "installation.calicoNetwork.bgp")

@@ -51,6 +51,8 @@ An explicit `--name` or a loaded project configuration takes precedence over con
 
 Context detection identifies the target. Start and stop still require KSail's persisted ownership record and a matching live AWS cluster identity before changing node-group capacity.
 
+EKS applies stop asynchronously. If start reports that stop is still in progress, wait for the managed node groups to reach zero and retry start. If scale-down failed, repeat stop first. KSail retains the saved sizes until the managed node groups report their restored capacity.
+
 ## Characteristics
 
 | Property                     | Value                                       |

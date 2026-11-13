@@ -255,6 +255,7 @@ func (p *Provisioner) buildDesiredNodeConfig(
 	running talosconfig.Provider,
 	secretsSource talosconfig.Provider,
 	role string,
+	poolPatches ...string,
 ) (talosconfig.Provider, error) {
 	aligned, err := p.alignSecretsFromSource(running, secretsSource)
 	if err != nil {
@@ -297,6 +298,20 @@ func (p *Provisioner) buildDesiredNodeConfig(
 
 	if desired == nil {
 		return nil, fmt.Errorf("%w: %s", errNoRoleConfig, role)
+	}
+
+	return p.finishDesiredNodeConfig(desired, running, poolPatches)
+}
+
+// finishDesiredNodeConfig applies pool patches before restoring the values
+// managed by the node and provider.
+func (p *Provisioner) finishDesiredNodeConfig(
+	desired, running talosconfig.Provider,
+	poolPatches []string,
+) (talosconfig.Provider, error) {
+	desired, err := applyAutoscalerPoolPatches(desired, poolPatches)
+	if err != nil {
+		return nil, err
 	}
 
 	grafted, err := graftNodeManagedSectionsFor(desired, running, !p.revertFloatingIPEndpoint)

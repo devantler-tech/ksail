@@ -13,7 +13,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/devantler-tech/ksail/v7/internal/gonotices"
 	"github.com/devantler-tech/ksail/v7/internal/licensepolicy"
 	"github.com/google/go-licenses/v2/licenses"
 )
@@ -85,55 +87,282 @@ type licenseReportSource struct {
 func TestReleasedGoDependencyLicenses(t *testing.T) {
 	root := moduleRoot(t)
 	t.Chdir(root)
+	goRoot, goVersion := activeLicenseToolchain(t, root)
+	t.Setenv("GOROOT", goRoot)
 
 	for key, value := range map[string]string{
-		"GOROOT": activeLicenseGoRoot(t, root), "GOFLAGS": "-mod=readonly", "GOWORK": "off",
+		"GOFLAGS": "-mod=readonly", "GOWORK": "off",
 		"GOENV": "off", "GOEXPERIMENT": "", "GOPACKAGESDRIVER": "off",
 	} {
 		t.Setenv(key, value)
 	}
+
+	audit := newLicenseNoticeAudit(t, root, goRoot, goVersion)
+	generated := map[string]gonotices.Payload{}
+
+	for _, target := range noticeAuditTargets(t, root) {
+		t.Run(target.name, func(t *testing.T) {
+			t.Setenv("GOOS", target.platform.goos)
+			t.Setenv("GOARCH", target.platform.goarch)
+			t.Setenv("CGO_ENABLED", target.cgo)
+			generated[target.name] = audit.targetPayload(t, target)
+		})
+	}
+
+	if t.Failed() {
+		return
+	}
+
+	audit.verifyReceipt(t, generated)
+}
+
+type licenseNoticeAudit struct {
+	root           string
+	classifier     *strictLicenseClassifier
+	notices        *gonotices.Collector
+	policy         licensepolicy.Policy
+	materialPolicy gonotices.MaterialPolicy
+	toolchain      gonotices.Toolchain
+	update         bool
+}
+
+func newLicenseNoticeAudit(t *testing.T, root, goRoot, goVersion string) *licenseNoticeAudit {
+	t.Helper()
 
 	base, err := licenses.NewClassifier()
 	if err != nil {
 		t.Fatal("cannot construct pinned license classifier")
 	}
 
-	classifier := &strictLicenseClassifier{delegate: base}
+	audit := &licenseNoticeAudit{
+		root:       root,
+		classifier: &strictLicenseClassifier{delegate: base},
+		notices:    new(gonotices.Collector),
+		policy: reviewedGoLicensePolicy(
+			t,
+			root,
+		),
+		update: os.Getenv("KSAIL_UPDATE_GO_NOTICES") == "1",
+	}
 
-	policy := reviewedGoLicensePolicy(t, root)
-	for _, target := range licenseTargets(t, root) {
-		t.Run(target.name, func(t *testing.T) {
-			t.Setenv("GOOS", target.platform.goos)
-			t.Setenv("GOARCH", target.platform.goarch)
-			t.Setenv("CGO_ENABLED", target.cgo)
+	if audit.update && os.Getenv("GITHUB_ACTIONS") == "true" {
+		t.Fatal("hosted CI must compare committed recipient material, not regenerate it")
+	}
 
-			flags := "-mod=readonly"
-			if target.tags != "" {
-				flags += " -tags=" + target.tags
-			}
+	audit.materialPolicy, err = gonotices.LoadMaterialPolicy(root)
+	if err != nil {
+		t.Fatal("recipient material decisions are malformed or missing")
+	}
 
-			t.Setenv("GOFLAGS", flags)
-			packages := listDependencyEntry(
-				t,
-				root,
-				target.platform,
-				target.cgo,
-				target.tags,
-				target.entry,
+	audit.toolchain = audit.selectedToolchain(t, goRoot, goVersion)
+
+	return audit
+}
+
+func (audit *licenseNoticeAudit) selectedToolchain(
+	t *testing.T,
+	goRoot, goVersion string,
+) gonotices.Toolchain {
+	t.Helper()
+
+	license := selectedToolchainLicense(t, goRoot, goVersion)
+
+	terms, err := audit.classifier.Identify(license)
+	if err != nil || len(terms) == 0 {
+		t.Fatal("actual Go toolchain license classification failed")
+	}
+
+	names := make([]string, 0, len(terms))
+	for _, term := range terms {
+		if !slices.Contains(audit.policy.Allowed, term.Name) || term.Name == "Unknown" {
+			t.Fatal("actual Go toolchain license is unapproved")
+		}
+
+		names = append(names, term.Name)
+	}
+
+	return gonotices.Toolchain{
+		Directory:   goRoot,
+		Version:     goVersion,
+		LicenseFile: license,
+		Licenses:    names,
+	}
+}
+
+func noticeAuditTargets(t *testing.T, root string) []licenseTarget {
+	t.Helper()
+
+	targets := licenseTargets(t, root)
+
+	names := make([]string, 0, len(targets))
+	for _, target := range targets {
+		names = append(names, target.name)
+	}
+
+	err := gonotices.ValidateTargets(names)
+	if err != nil {
+		t.Fatal("recipient Go target coverage changed")
+	}
+
+	return targets
+}
+
+func (audit *licenseNoticeAudit) targetPayload(
+	t *testing.T,
+	target licenseTarget,
+) gonotices.Payload {
+	t.Helper()
+
+	started := time.Now()
+	packages := audit.targetPackages(t, target)
+
+	libraries, err := licenses.Libraries(t.Context(), audit.classifier, false, nil, target.entry)
+	if err != nil || audit.classifier.hadFailure() {
+		t.Fatal("license inventory or source-file classification failed")
+	}
+
+	if len(libraries) == 0 {
+		t.Fatal("license inventory examined no libraries")
+	}
+
+	rows, noticePackages := evaluateLicenseInventory(
+		t, audit.root, audit.policy, packages, libraries, audit.classifier, audit.materialPolicy,
+	)
+	writeLicenseReport(t, target.name, rows)
+
+	loaded := time.Now()
+	t.Logf("source inventory phase: %s", loaded.Sub(started))
+
+	if t.Failed() {
+		t.Fatal("unapproved source cannot produce recipient material")
+	}
+
+	toolchain := noticeTargetToolchain(audit.toolchain, packages)
+
+	payload, err := audit.notices.Build(gonotices.Input{
+		Root: audit.root, Target: target.name, Packages: noticePackages, Toolchain: &toolchain,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	audit.storePayload(t, target.name, payload)
+	t.Logf("source inventory %s; recipient material %s; text=%d manifest=%d bytes",
+		loaded.Sub(started), time.Since(loaded), len(payload.Text), len(payload.Manifest))
+
+	return payload
+}
+
+func (audit *licenseNoticeAudit) targetPackages(
+	t *testing.T,
+	target licenseTarget,
+) []goListPackage {
+	t.Helper()
+
+	flags := "-mod=readonly"
+	if target.tags != "" {
+		flags += " -tags=" + target.tags
+	}
+
+	t.Setenv("GOFLAGS", flags)
+
+	packages := listDependencyEntry(
+		t,
+		audit.root,
+		target.platform,
+		target.cgo,
+		target.tags,
+		target.entry,
+	)
+	for _, pkg := range packages {
+		if len(pkg.SysoFiles) != 0 {
+			t.Fatalf(
+				"opaque compiled input requires a recipient-material disposition: %s %v",
+				pkg.ImportPath,
+				pkg.SysoFiles,
 			)
+		}
 
-			libraries, err := licenses.Libraries(t.Context(), classifier, false, nil, target.entry)
-			if err != nil || classifier.hadFailure() {
-				t.Fatal("license inventory or source-file classification failed")
-			}
+		// The notice collector reads only C-style comment headers. Fail closed on
+		// selected inputs whose notices it cannot parse instead of omitting them.
+		if unparsed := unparsedNoticeInputs(pkg); len(unparsed) != 0 {
+			t.Fatalf(
+				"selected input with unparsed comment syntax requires a recipient-material disposition: %s %v",
+				pkg.ImportPath,
+				unparsed,
+			)
+		}
 
-			if len(libraries) == 0 {
-				t.Fatal("license inventory examined no libraries")
-			}
+		if len(pkg.SFiles)+len(compiledNoticeFiles(pkg)) != 0 {
+			t.Logf("selected non-Go source: package=%s standard=%t assembly=%v other=%v",
+				pkg.ImportPath, pkg.Standard, pkg.SFiles, compiledNoticeFiles(pkg))
+		}
+	}
 
-			rows := evaluateLicenseInventory(t, root, policy, packages, libraries)
-			writeLicenseReport(t, target.name, rows)
-		})
+	return packages
+}
+
+func noticeTargetToolchain(base gonotices.Toolchain, packages []goListPackage) gonotices.Toolchain {
+	selected := base
+	selected.Licenses = slices.Clone(base.Licenses)
+	selected.Packages = nil
+
+	for _, pkg := range packages {
+		if pkg.Standard {
+			selected.Packages = append(selected.Packages, gonotices.ToolchainPackage{
+				ImportPath: pkg.ImportPath,
+				Directory:  pkg.Dir,
+				GoFiles:    append(slices.Clone(pkg.GoFiles), pkg.CgoFiles...),
+				AssemblyFiles: slices.Clone(
+					pkg.SFiles,
+				),
+				OtherFiles: compiledNoticeFiles(pkg),
+				EmbedFiles: slices.Clone(pkg.EmbedFiles),
+			})
+		}
+	}
+
+	return selected
+}
+
+func (audit *licenseNoticeAudit) storePayload(
+	t *testing.T,
+	target string,
+	payload gonotices.Payload,
+) {
+	t.Helper()
+
+	var err error
+	if audit.update {
+		err = gonotices.Write(audit.root, target, payload)
+	} else {
+		err = gonotices.Verify(audit.root, target, payload)
+	}
+
+	if err != nil {
+		t.Fatal(
+			"recipient Go material is missing, stale or unsafe; regenerate through the audited owner",
+		)
+	}
+}
+
+func (audit *licenseNoticeAudit) verifyReceipt(
+	t *testing.T,
+	generated map[string]gonotices.Payload,
+) {
+	t.Helper()
+
+	var err error
+	if audit.update {
+		err = gonotices.WriteReceipt(audit.root, generated)
+	} else {
+		err = gonotices.VerifyReceipt(audit.root, generated)
+	}
+
+	if err != nil {
+		t.Fatal(
+			"eight-target recipient hash receipt is missing or stale; regenerate through the audited owner",
+		)
 	}
 }
 
@@ -193,7 +422,9 @@ func evaluateLicenseInventory(
 	policy licensepolicy.Policy,
 	packages []goListPackage,
 	libraries []*licenses.Library,
-) []licenseReportRow {
+	classifier *strictLicenseClassifier,
+	materialPolicy gonotices.MaterialPolicy,
+) ([]licenseReportRow, []gonotices.Package) {
 	t.Helper()
 
 	expected, err := completeLicenseMembership(packages, libraries)
@@ -202,6 +433,8 @@ func evaluateLicenseInventory(
 	}
 
 	var rows []licenseReportRow
+
+	var noticePackages []gonotices.Package
 
 	for _, library := range libraries {
 		raw := make([]string, 0, len(library.Licenses))
@@ -219,6 +452,20 @@ func evaluateLicenseInventory(
 			effective, err := licensepolicy.Evaluate(policy, root, finding)
 
 			rows = append(rows, packageLicenseReport(pkg, name, raw, effective))
+
+			noticePackage := inventoryNoticePackage(
+				t,
+				root,
+				policy,
+				pkg,
+				library.LicenseFile,
+				raw,
+				effective,
+				classifier,
+				materialPolicy,
+			)
+			noticePackages = append(noticePackages, noticePackage)
+
 			if err != nil {
 				t.Errorf("unapproved dependency license: %s (%v)", name, raw)
 			}
@@ -226,18 +473,193 @@ func evaluateLicenseInventory(
 	}
 
 	slices.SortFunc(rows, func(a, b licenseReportRow) int {
-		if a.Package < b.Package {
-			return -1
-		}
-
-		if a.Package > b.Package {
-			return 1
-		}
-
-		return 0
+		return strings.Compare(a.Package, b.Package)
 	})
 
-	return rows
+	return rows, noticePackages
+}
+
+func inventoryNoticePackage(
+	t *testing.T,
+	root string,
+	policy licensepolicy.Policy,
+	pkg goListPackage,
+	licenseFile string,
+	raw, effective []string,
+	classifier *strictLicenseClassifier,
+	materialPolicy gonotices.MaterialPolicy,
+) gonotices.Package {
+	t.Helper()
+
+	noticePackage := selectedNoticePackage(policy, pkg, licenseFile, raw, effective)
+	if classifier == nil || pkg.Module.Main {
+		return noticePackage
+	}
+
+	result, err := evaluateNoticeDeclarations(
+		root,
+		policy,
+		pkg,
+		noticePackage,
+		classifier,
+		materialPolicy,
+	)
+	if err != nil {
+		t.Errorf("unresolved recipient declaration: %s: %v", pkg.ImportPath, err)
+	}
+
+	return result
+}
+
+func selectedNoticePackage(
+	policy licensepolicy.Policy,
+	pkg goListPackage,
+	licenseFile string,
+	raw, effective []string,
+) gonotices.Package {
+	result := gonotices.Package{
+		ImportPath:  pkg.ImportPath,
+		Directory:   pkg.Dir,
+		LicenseFile: licenseFile,
+		GoFiles: append(
+			slices.Clone(pkg.GoFiles),
+			pkg.CgoFiles...),
+		EmbedFiles:    slices.Clone(pkg.EmbedFiles),
+		AssemblyFiles: slices.Clone(pkg.SFiles),
+		OtherFiles:    compiledNoticeFiles(pkg),
+		Raw: slices.Clone(
+			raw,
+		),
+		Effective: slices.Clone(effective),
+		Module:    noticeModule(pkg.Module),
+	}
+
+	for _, exception := range policy.Exceptions {
+		if slices.Contains(exception.Packages, pkg.ImportPath) {
+			result.EvidenceFiles = append(result.EvidenceFiles, exception.Evidence)
+			result.UpstreamTermsURL = exception.SourceURL
+		}
+	}
+
+	return result
+}
+
+// unparsedNoticeInputs lists selected Fortran and SWIG inputs: the collector has
+// no header parser for their comment syntax, so their notices would be dropped.
+func unparsedNoticeInputs(pkg goListPackage) []string {
+	return slices.Concat(pkg.FFiles, pkg.SwigFiles, pkg.SwigCXXFiles)
+}
+
+func compiledNoticeFiles(pkg goListPackage) []string {
+	var files []string
+
+	for _, group := range [][]string{pkg.CFiles, pkg.HFiles, pkg.CXXFiles, pkg.MFiles, pkg.FFiles} {
+		files = append(files, group...)
+	}
+
+	slices.Sort(files)
+
+	return slices.Compact(files)
+}
+
+func noticeModule(selected *goListModule) gonotices.Module {
+	result := gonotices.Module{
+		Path:      selected.Path,
+		Version:   selected.Version,
+		Sum:       selected.Sum,
+		Directory: selected.Dir,
+		Main:      selected.Main,
+	}
+	if selected.Replace != nil {
+		replaced := noticeModule(selected.Replace)
+		result.Replace = &replaced
+	}
+
+	return result
+}
+
+func evaluateNoticeDeclarations(
+	root string,
+	policy licensepolicy.Policy,
+	source goListPackage,
+	pkg gonotices.Package,
+	classifier *strictLicenseClassifier,
+	materialPolicy gonotices.MaterialPolicy,
+) (gonotices.Package, error) {
+	paths, err := gonotices.SupplementalPaths(pkg)
+	if err != nil {
+		return pkg, errLicenseInventory
+	}
+
+	directory := source.Module.Dir
+	if source.Module.Replace != nil {
+		directory = source.Module.Replace.Dir
+	}
+
+	for _, path := range paths {
+		raw, identifyErr := supplementalLicenseNames(classifier, directory, path)
+		if identifyErr != nil {
+			return pkg, identifyErr
+		}
+
+		if materialPolicy.Covers(pkg, path) {
+			declaration, resolveErr := materialPolicy.Resolve(pkg, path, raw, policy.Allowed)
+			if resolveErr != nil {
+				return pkg, fmt.Errorf(
+					"%w: recipient decision for supplemental %s (%v)",
+					errLicenseInventory,
+					path,
+					raw,
+				)
+			}
+
+			pkg.Declarations = append(pkg.Declarations, declaration)
+
+			continue
+		}
+
+		effective, evaluateErr := licensepolicy.Evaluate(
+			policy,
+			root,
+			selectedLicenseFinding(
+				source,
+				source.ImportPath,
+				filepath.Join(directory, filepath.FromSlash(path)),
+				raw,
+			),
+		)
+		if evaluateErr != nil {
+			return pkg, fmt.Errorf("%w: supplemental %s (%v)", evaluateErr, path, raw)
+		}
+
+		pkg.Declarations = append(
+			pkg.Declarations,
+			gonotices.Declaration{Path: path, Raw: raw, Effective: effective},
+		)
+	}
+
+	return pkg, nil
+}
+
+func supplementalLicenseNames(
+	classifier *strictLicenseClassifier,
+	directory, path string,
+) ([]string, error) {
+	identified, err := classifier.Identify(filepath.Join(directory, filepath.FromSlash(path)))
+	if err != nil {
+		return nil, fmt.Errorf("%w: supplemental %s", errLicenseInventory, path)
+	}
+
+	raw := make([]string, 0, len(identified))
+	for _, license := range identified {
+		raw = append(raw, license.Name)
+	}
+
+	if len(raw) == 0 {
+		raw = []string{"Unknown"}
+	}
+
+	return raw, nil
 }
 
 func packageLicenseReport(
@@ -507,9 +929,9 @@ func validLicenseLibrary(library *licenses.Library) bool {
 		(len(library.Licenses) == 0 || library.LicenseFile != "")
 }
 
-func activeLicenseGoRoot(t *testing.T, root string) string {
+func activeLicenseToolchain(t *testing.T, root string) (string, string) {
 	t.Helper()
-	command := exec.CommandContext(t.Context(), "go", "env", "GOROOT")
+	command := exec.CommandContext(t.Context(), "go", "env", "GOROOT", "GOVERSION")
 	command.Dir = root
 	command.Env = auditGoEnv("GOROOT=")
 
@@ -518,10 +940,37 @@ func activeLicenseGoRoot(t *testing.T, root string) string {
 		t.Fatal("cannot identify the active Go toolchain root")
 	}
 
-	path := strings.TrimSpace(string(output))
-	if !filepath.IsAbs(path) || strings.ContainsAny(path, "\r\n") {
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	if len(lines) != 2 || !filepath.IsAbs(lines[0]) || strings.ContainsAny(lines[0], "\r") ||
+		!strings.HasPrefix(lines[1], "go") {
 		t.Fatal("invalid Go toolchain root")
 	}
 
-	return path
+	return lines[0], lines[1]
+}
+
+func selectedToolchainLicense(t *testing.T, goRoot, version string) string {
+	t.Helper()
+
+	path := filepath.Join(goRoot, "LICENSE")
+
+	info, err := os.Lstat(path)
+	if err == nil && info.Mode().IsRegular() {
+		return path
+	}
+
+	parent := filepath.Dir(goRoot)
+	if filepath.Base(goRoot) == "libexec" &&
+		gonotices.HomebrewKegVersion(filepath.Base(parent), version) {
+		path = filepath.Join(parent, "LICENSE")
+
+		info, err = os.Lstat(path)
+		if err == nil && info.Mode().IsRegular() {
+			return path
+		}
+	}
+
+	t.Fatal("actual selected Go toolchain license material is missing")
+
+	return ""
 }

@@ -384,9 +384,10 @@ func TestStopNodes_NoNodegroups(t *testing.T) {
 func TestStartNodes_ScalesOnlyZeroDesired(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	require.NoError(t, state.SaveEKSNodegroupState("demo", "us-east-1", &state.EKSNodegroupState{
-		Version:     state.EKSNodegroupStateVersion,
-		ClusterName: "demo",
-		Region:      "us-east-1",
+		Version:      state.EKSNodegroupStateVersion,
+		ClusterName:  "demo",
+		Region:       "us-east-1",
+		StopObserved: true,
 		Nodegroups: []state.EKSNodegroupCapacity{
 			{Name: "ng-1", DesiredCapacity: 2, MinSize: 2, MaxSize: 5},
 			{Name: "ng-2", DesiredCapacity: 3, MinSize: 1, MaxSize: 5},
@@ -462,6 +463,42 @@ func TestStopThenStartRestoresNodegroupCapacities(t *testing.T) {
 	}, scales)
 
 	_, err := state.LoadEKSNodegroupState("demo", "us-east-1")
+	require.ErrorIs(t, err, state.ErrEKSNodegroupStateNotFound)
+}
+
+func TestStartNodesRejectsStaleCapacityUntilStopIsObserved(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	prov, runner := newProvider(t, map[string][]response{
+		"get nodegroup": {
+			{stdout: nodegroupJSON(3, 2)},
+			{stdout: nodegroupJSON(3, 2)},
+			{stdout: nodegroupJSON(3, 2)},
+			{stdout: nodegroupJSON(0, 0)},
+			{stdout: nodegroupJSON(3, 2)},
+		},
+		"scale nodegroup": {{}, {}},
+	})
+
+	require.NoError(t, prov.StopNodes(t.Context(), "demo"))
+	require.ErrorContains(t, prov.StartNodes(t.Context(), "demo"), "stop is still in progress")
+	require.ErrorContains(t, prov.StartNodes(t.Context(), "demo"), "stop is still in progress")
+	require.Len(
+		t,
+		scaleCalls(runner.calls),
+		1,
+		"stale readings must not start another scaling update",
+	)
+
+	saved, err := state.LoadEKSNodegroupState("demo", "us-east-1")
+	require.NoError(t, err)
+	assert.Equal(t, 3, saved.Nodegroups[0].DesiredCapacity)
+	assert.Equal(t, 2, saved.Nodegroups[0].MinSize)
+
+	require.NoError(t, prov.StartNodes(t.Context(), "demo"))
+	require.Len(t, scaleCalls(runner.calls), 2)
+
+	_, err = state.LoadEKSNodegroupState("demo", "us-east-1")
 	require.ErrorIs(t, err, state.ErrEKSNodegroupStateNotFound)
 }
 

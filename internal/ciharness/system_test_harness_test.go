@@ -85,6 +85,7 @@ type ciWorkflow struct {
 	Jobs map[string]struct {
 		TimeoutMinutes  int               `yaml:"timeout-minutes"`
 		Permissions     map[string]string `yaml:"permissions"`
+		Strategy        map[string]any    `yaml:"strategy"`
 		Outputs         map[string]string `yaml:"outputs"`
 		Steps           []harnessStep     `yaml:"steps"`
 		ContinueOnError bool              `yaml:"continue-on-error"`
@@ -994,6 +995,17 @@ set -euo pipefail
 printf '%s\n' "$*" >> "$AWS_RECOVERY_CALL_LOG"
 printf '%s\t%s\n' "$STUB_CLUSTER_ARN" '2026-09-27T00:00:00Z'
 `)
+	writeExecutableStub(t, filepath.Join(binDir, "eksctl"), `#!/usr/bin/env bash
+set -euo pipefail
+[[ "$*" == 'get nodegroup --cluster fixture --region us-east-1 --output json' ]]
+desired=3
+minimum=2
+if [[ "$(tail -n 1 "$KSAIL_RECOVERY_CALL_LOG")" == *'|cluster stop '* ]]; then
+  desired=0
+  minimum=0
+fi
+printf '[{"Name":"default","Status":"ACTIVE","DesiredCapacity":%d,"MinSize":%d,"MaxSize":5}]\n' "$desired" "$minimum"
+`)
 
 	command := exec.CommandContext(t.Context(), "bash", "-c", recovery.Run) //nolint:gosec
 	command.Dir = tempDir
@@ -1009,6 +1021,12 @@ printf '%s\t%s\n' "$STUB_CLUSTER_ARN" '2026-09-27T00:00:00Z'
 	)
 	diagnostics, err := command.CombinedOutput()
 	require.NoErrorf(t, err, "recovery step failed: %s", diagnostics)
+	assert.Contains(t, string(diagnostics), "EKS managed nodegroup capacities verified after stop.")
+	assert.Contains(
+		t,
+		string(diagnostics),
+		"EKS managed nodegroup capacities verified after start.",
+	)
 
 	calls, err := os.ReadFile(callLog) //nolint:gosec // Test-owned path.
 	require.NoError(t, err)

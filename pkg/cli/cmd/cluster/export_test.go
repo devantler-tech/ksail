@@ -1080,3 +1080,11 @@ func ExportRecordIdentityAfterUpdate(
 ) error {
 	return recordIdentityAfterUpdate(cmd, clusterName, clusterCfg, update)
 }
+
+// ExportSetEKSCreationIDGenerator replaces the EKS create-attempt identifier source for tests.
+func ExportSetEKSCreationIDGenerator(generate func() string) func() {
+	previous := newEKSCreationID
+	newEKSCreationID = generate
+
+	return func() { newEKSCreationID = previous }
+}

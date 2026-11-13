@@ -1,6 +1,13 @@
 name: Update Agent Skills
 on:
   workflow_dispatch:
+    inputs:
+      unpin:
+        description: >-
+          Release every pinned skill (gh skill update --unpin). Use once after removing a
+          hold from `pins`; the scheduled run never sets it.
+        type: boolean
+        default: false
   schedule:
     - cron: "0 6 * * *" # Daily at 06:00 UTC
 
@@ -17,18 +24,19 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: devantler-tech/update-agent-skills-action/.github/workflows/update-agent-skills.yaml@31a0f0bf3fd4c8bd58ead01f5d182ea31ce17296 # v1.0.3
+    uses: devantler-tech/update-agent-skills-action/.github/workflows/update-agent-skills.yaml@0a1221ae238c91bc6ca29af55d800553f906aabe # v1.1.1
     with:
       dir: .agents/skills
       # These are development skills our own agents use, not skills KSail publishes. Marking
       # them internal after every update keeps `npx skills add devantler-tech/ksail` offering
       # only the ksail skill (#6221).
       mark-internal: true
-      # Hold git-commit at the reviewed upstream version we already ship: the newer upstream text
-      # can drop a merge-conflict resolution and uses a Git option our hosts lack
-      # (devantler-tech/platform#5224). Remove the pin once upstream fixes both.
-      pins: |
-        .agents/skills/git-commit e24be77e6f203409cf99ab7d5a67e1540cb386d3
+      # No skill is held. To hold one at a reviewed upstream commit, add a `pins:` block naming
+      # its tracking issue. Removing that block leaves the skill's pinned metadata in place, so
+      # release it with one dispatch that sets `unpin`; the updater refuses both together.
+      # The git-commit hold (devantler-tech/platform#5224) ended once upstream fixed it in
+      # github/awesome-copilot#6261 (devantler-tech/agent-plugins#598).
+      unpin: ${{ inputs.unpin == true }}
       # Open the PR with a GitHub App token so the caller's `on: pull_request`
       # CI runs (a PR opened with GITHUB_TOKEN does not trigger workflows, so
       # the required `CI - Required Checks` never reports and the PR stays
