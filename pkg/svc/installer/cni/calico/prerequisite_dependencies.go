@@ -172,9 +172,8 @@ func (plan *prerequisitePlan) operatorDependencyProvenance(
 		return "", err
 	}
 
-	installation, err := plan.client.Resource(schema.GroupVersionResource{
-		Group: "operator.tigera.io", Version: "v1", Resource: "installations",
-	}).Get(ctx, "default", metav1.GetOptions{})
+	installation, err := plan.client.Resource(installationResource).
+		Get(ctx, operatorInstallationName, metav1.GetOptions{})
 	if err != nil {
 		return "", fmt.Errorf("inspect Calico dependency Installation: %w", err)
 	}
@@ -271,7 +270,7 @@ func validateDependencyInstallation(
 ) error {
 	if installation.GetName() != "default" || installation.GetNamespace() != "" ||
 		installation.GroupVersionKind() != (schema.GroupVersionKind{
-			Group: "operator.tigera.io", Version: "v1", Kind: "Installation",
+			Group: tigeraOperatorGroup, Version: "v1", Kind: "Installation",
 		}) || installation.GetUID() != ownerUID || installation.GetResourceVersion() == "" ||
 		installation.GetDeletionTimestamp() != nil || !ownsDependencyInstallation(installation) {
 		return prerequisiteError("Calico dependency Installation ownership is unverified")
