@@ -7,7 +7,8 @@ description: |
     4. Import the archive back into the cluster
     5. Verify the workload still runs (round-trip integrity)
     6. Export every image on the nodes, so an import that stored a
-       reference to nothing fails here
+       reference to nothing fails here, and check that the import added no
+       generated import-<date> alias for a named image
 
   Only supported for Vanilla (Kind) and K3s (K3d) distributions.
   Talos and VCluster are unsupported (immutable OS / nested containerd).
@@ -80,6 +81,24 @@ runs:
         test -s /tmp/test-images.tar
         echo "✅ Image export succeeded ($(du -h /tmp/test-images.tar | cut -f1)) from $export_image"
 
+    - name: 🧪 Record node image names before import
+      id: names-before-import
+      shell: bash
+      run: |
+        # Node images can already carry import-<date> aliases (a Kind node
+        # image is built by importing its bundled images), so the alias check
+        # after the import compares against this list and judges only the
+        # names the import added (#8158).
+        ksail workload export /tmp/test-images-before-import.tar
+        { tar -xOf /tmp/test-images-before-import.tar index.json 2>/dev/null ||
+          tar -xOf /tmp/test-images-before-import.tar ./index.json; } |
+          jq -r '.manifests[].annotations
+            | (.["io.containerd.image.name"] // .["org.opencontainers.image.ref.name"] // empty)' |
+          sort -u >/tmp/test-image-names-before-import.txt
+        test -s /tmp/test-image-names-before-import.txt
+        echo "✅ Recorded $(wc -l </tmp/test-image-names-before-import.txt) image names before the import"
+        rm -f /tmp/test-images-before-import.tar
+
     - name: 🧪 ksail workload import
       id: import
       shell: bash
@@ -106,10 +125,27 @@ runs:
         # on it (#8158).
         ksail workload export /tmp/test-images-after-import.tar
         test -s /tmp/test-images-after-import.tar
-        echo "✅ Full export after import succeeded ($(du -h /tmp/test-images-after-import.tar | cut -f1))"
+
+        # The import must not add a generated import-<date>@<digest> alias for
+        # an image the archive names: no registry serves that name, and the
+        # export would carry it into the next archive (#8158). Names the nodes
+        # carried before the import are not the import's doing.
+        names="$({ tar -xOf /tmp/test-images-after-import.tar index.json 2>/dev/null ||
+          tar -xOf /tmp/test-images-after-import.tar ./index.json; } |
+          jq -r '.manifests[].annotations
+            | (.["io.containerd.image.name"] // .["org.opencontainers.image.ref.name"] // empty)')"
+        test -n "$names"
+        added="$(comm -13 /tmp/test-image-names-before-import.txt <(sort -u <<<"$names"))"
+        aliases="$(grep -E '(^|/)import-[0-9]{4}-[0-9]{2}-[0-9]{2}(@|:)' <<<"$added" || true)"
+        if [ -n "$aliases" ]; then
+          echo "❌ The import added generated aliases that the export carried:" >&2
+          echo "$aliases" >&2
+          exit 1
+        fi
+        echo "✅ Full export after import succeeded ($(du -h /tmp/test-images-after-import.tar | cut -f1)) with no generated aliases"
 
     - name: 🐞 Debug failure
-      if: failure() && (steps.deploy.outcome == 'failure' || steps.export.outcome == 'failure' || steps.import.outcome == 'failure' || steps.export-after-import.outcome == 'failure')
+      if: failure() && (steps.deploy.outcome == 'failure' || steps.export.outcome == 'failure' || steps.names-before-import.outcome == 'failure' || steps.import.outcome == 'failure' || steps.export-after-import.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
@@ -126,4 +162,4 @@ runs:
       if: always()
       shell: bash
       run: |
-        rm -f /tmp/test-images.tar /tmp/test-images-after-import.tar
+        rm -f /tmp/test-images.tar /tmp/test-images-before-import.tar /tmp/test-image-names-before-import.txt /tmp/test-images-after-import.tar

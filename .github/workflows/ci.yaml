@@ -1081,7 +1081,7 @@ jobs:
           cache: false
 
       - name: ♻️ Restore Go modules
-        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@93412f612d35018a21eafd7cf28b523b92f5038a
 
       - name: 📦 Cache KSail Binary
         id: binary
@@ -1212,11 +1212,11 @@ jobs:
       - name: 🧹 Free disk space
         if: steps.calico-cache.outputs.cache-hit != 'true'
         # Only cold compilation needs the large working-space reclamation.
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@7aa0c9195068d8460ce9f0ba7d051524deea35c6
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@2c9c263f532a6d440fad30aa0e690cd0c4515a4e
 
       - name: ♻️ Restore Go modules
         if: steps.calico-cache.outputs.cache-hit != 'true'
-        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@93412f612d35018a21eafd7cf28b523b92f5038a
 
       - name: 🏗️ Build Calico migration baseline
         if: steps.calico-cache.outputs.cache-hit != 'true'
@@ -1318,7 +1318,7 @@ jobs:
           cache: false
 
       - name: ♻️ Restore Go modules
-        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@93412f612d35018a21eafd7cf28b523b92f5038a
 
       - name: 📝 Generate JSON schema
         if: needs.changes.outputs.schema == 'true'
@@ -1658,7 +1658,7 @@ jobs:
           cache: false
 
       - name: ♻️ Restore Go modules
-        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@93412f612d35018a21eafd7cf28b523b92f5038a
 
       - name: 🏠 Verify tests never touch the real home directory
         shell: bash
@@ -2008,7 +2008,7 @@ jobs:
           cache: false
 
       - name: ♻️ Restore Go modules
-        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@93412f612d35018a21eafd7cf28b523b92f5038a
 
       - name: 🧪 Run Operator Chart E2E
         uses: ./.github/actions/operator-chart-e2e
@@ -2050,7 +2050,7 @@ jobs:
           cache: false
 
       - name: ♻️ Restore Go modules
-        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@93412f612d35018a21eafd7cf28b523b92f5038a
 
       - name: 📦 Cache KSail Binary
         uses: ./.github/actions/cache-ksail-binary
@@ -2111,7 +2111,7 @@ jobs:
       # This job already waits for the producer. Reuse its exact sealed bytes
       # instead of restoring Go modules or compiling again after cache eviction.
       - name: 📥 Restore KSail binary
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@7aa0c9195068d8460ce9f0ba7d051524deea35c6
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@2c9c263f532a6d440fad30aa0e690cd0c4515a4e
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2120,7 +2120,7 @@ jobs:
       # Images when ECR Public rate-limits the runner; skopeo reads this login.
       - name: 🔐 Login to Docker Hub
         if: ${{ vars.DOCKERHUB_USERNAME != '' }}
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] - third-party action input, no environment scoping available
@@ -2308,7 +2308,7 @@ jobs:
 
       - name: 🔐 Login to Docker Hub
         if: ${{ vars.DOCKERHUB_USERNAME != '' }}
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] - third-party action input, no environment scoping available
@@ -2322,7 +2322,7 @@ jobs:
 
       - name: 📥 Restore KSail binary
         # Pin the identical published action until actionlint supports $/ references.
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@7aa0c9195068d8460ce9f0ba7d051524deea35c6
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@2c9c263f532a6d440fad30aa0e690cd0c4515a4e
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2587,6 +2587,11 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      # The contract tests resolve modules too; without this restore, one dropped Go proxy
+      # stream failed the job on a pull request that changed go.sum (#8053).
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@93412f612d35018a21eafd7cf28b523b92f5038a
+
       # -count=1 is load-bearing: this test's real subject is a YAML file the Go build graph
       # cannot see, so a cached PASS from an earlier run would be replayed over a changed
       # workflow and report success without executing anything.
@@ -2640,7 +2645,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devantler-tech/ksail
-          ref: 01353b2281b4ea4dffc7f8d7374f44a95a6026b9
+          ref: bf96924738c8880e23e25783d40fa361e4537109
           path: .diagnostics-artifact-source
           persist-credentials: false
 
@@ -2659,7 +2664,7 @@ jobs:
         id: probe-baseline
         if: matrix.mode == 'baseline'
         continue-on-error: true
-        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-baseline@01353b2281b4ea4dffc7f8d7374f44a95a6026b9
+        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-baseline@bf96924738c8880e23e25783d40fa361e4537109
         with:
           distribution: Vanilla
           provider: Hetzner
@@ -2670,7 +2675,7 @@ jobs:
         id: probe-candidate
         if: matrix.mode == 'candidate'
         continue-on-error: true
-        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-candidate@01353b2281b4ea4dffc7f8d7374f44a95a6026b9
+        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-candidate@bf96924738c8880e23e25783d40fa361e4537109
         with:
           distribution: Vanilla
           provider: Hetzner
@@ -2771,7 +2776,7 @@ jobs:
           cache: false
 
       - name: ♻️ Restore Go modules
-        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@93412f612d35018a21eafd7cf28b523b92f5038a
 
       # -count=1 is load-bearing: the files under test are invisible to the Go build graph,
       # so a cached PASS from an earlier run would be replayed over the changed configuration.
@@ -2844,7 +2849,7 @@ jobs:
           cache: false
 
       - name: ♻️ Restore Go modules
-        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@93412f612d35018a21eafd7cf28b523b92f5038a
 
       - name: 📥 Download Go modules before the audit
         # Retry transport failures here; the audit verdict itself remains a single run.
@@ -2898,7 +2903,7 @@ jobs:
         with:
           persist-credentials: false
       - name: 🧹 Free runner disk
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@7aa0c9195068d8460ce9f0ba7d051524deea35c6
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@2c9c263f532a6d440fad30aa0e690cd0c4515a4e
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -2906,7 +2911,7 @@ jobs:
           cache: false
 
       - name: ♻️ Restore Go modules
-        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@93412f612d35018a21eafd7cf28b523b92f5038a
 
       - name: 🧪 Reproduce local safety and partial-deletion cases
         id: local-safety
@@ -2998,7 +3003,7 @@ jobs:
           persist-credentials: false
       - name: Check active documentation
         id: links
-        uses: devantler-tech/.github/actions/validate-retired-repo-links@9ba573406426900207a3b5afeebe16f2d89ca751 # v20.1.18
+        uses: devantler-tech/.github/actions/validate-retired-repo-links@d2eeb91d37fcc8a13423c1bdfaf5079b30426625 # v21.1.5
         with:
           enabled: "true"
       - name: Require a completed scan

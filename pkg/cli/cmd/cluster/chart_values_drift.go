@@ -218,12 +218,16 @@ func calicoPrerequisitesProbe() chartValuesDriftProbe {
 		component:       "calico",
 		field:           specdiff.CalicoPrerequisitesField,
 		requireBaseline: true,
-		needed: func(cfg *v1alpha1.Cluster) bool {
-			return cfg.Spec.Cluster.CNI == v1alpha1.CNICalico &&
-				cfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK
-		},
-		factory: func(factories *setup.InstallerFactories) installerFactory { return factories.Calico },
+		needed:          ksailInstallsCalico,
+		factory:         func(factories *setup.InstallerFactories) installerFactory { return factories.Calico },
 	}
+}
+
+// ksailInstallsCalico reports whether the configuration has KSail install
+// Calico as the cluster's CNI. KWOK installs no CNI.
+func ksailInstallsCalico(clusterCfg *v1alpha1.Cluster) bool {
+	return clusterCfg.Spec.Cluster.CNI == v1alpha1.CNICalico &&
+		clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK
 }
 
 // isChartValuesDriftField reports whether a diff field is one a chart-values
