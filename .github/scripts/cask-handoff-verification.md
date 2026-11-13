@@ -40,8 +40,10 @@ seal before accepting either an open or an already-merged cask. This keeps
 temporary download unavailability pending and rejects a damaged app even when
 its cask has merged. The workflow shares CD concurrency so it cannot race a new tag rewriting the
 evergreen branches. It derives the target from the latest published stable
-immutable release and reuses the guarded exact-head finisher. It does not repair
-invalid metadata or cask contents. An already-merged cask must independently pass
+immutable release and reuses the guarded exact-head finisher. Before it resumes an
+open cask PR, it gives that PR the title CD would have set for the current
+release, because the reused branch keeps an earlier release's title whenever CD
+left the hand-off pending. It does not repair any other metadata or cask contents. An already-merged cask must independently pass
 programmed commit provenance, immutable merge/current-main content and published
 asset digest verification.
 

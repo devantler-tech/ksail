@@ -48,7 +48,7 @@ record_result() {
 for name in ksail ksail-desktop; do
 	mkdir -p "$work/$name"
 	mode_args=(--checks-wait 120)
-	finder_status=0
+	finder_status=0 pr_title=""
 	pr="$("$script_dir/find-merged-cask-pr-handoff.sh" \
 		--tap devantler-tech/homebrew-tap --cask-name "$name" \
 		--source-repo devantler-tech/ksail --tag "$tag" --output-dir "$work/$name")" || finder_status=$?
@@ -93,6 +93,10 @@ for name in ksail ksail-desktop; do
 			record_result "$name" 1
 			continue
 		fi
+		if ! pr_title="$(jq -er '.[0].title | select(type == "string")' "$work/matches.json")"; then
+			record_result "$name" 1
+			continue
+		fi
 	fi
 	if [[ ! "$pr" =~ ^[1-9][0-9]*$ ]]; then
 		record_result "$name" 1
@@ -107,6 +111,19 @@ for name in ksail ksail-desktop; do
 			record_result "$name" "$status"
 			continue
 		fi
+	fi
+	# The CD sets an open cask PR's title only after it has verified the release, and
+	# the reused goreleaser branch keeps an earlier release's title when the CD left
+	# the hand-off pending. The finisher requires the CD's title, so set it the same
+	# way here; the finisher still validates content, provenance and checks.
+	expected_title="chore(cask): update ${name} to ${tag}"
+	if [[ " ${mode_args[*]} " != *" --verify-merged "* && "$pr_title" != "$expected_title" ]]; then
+		if ! gh api -X PATCH "repos/devantler-tech/homebrew-tap/pulls/${pr}" -f title="$expected_title" >/dev/null; then
+			printf 'ERROR: could not set the title of devantler-tech/homebrew-tap#%s\n' "$pr" >&2
+			record_result "$name" 1
+			continue
+		fi
+		printf 'Set devantler-tech/homebrew-tap#%s title to %s\n' "$pr" "$expected_title"
 	fi
 	"$script_dir/finish-cask-pr-handoff.sh" \
 		--tap devantler-tech/homebrew-tap --pr "$pr" --cask-name "$name" \
