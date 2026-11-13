@@ -68,9 +68,41 @@ func legacyKubeletFields() map[string]string {
 // out of a patch set.
 type nodeKubeletMigration struct {
 	patches []Patch
-	// allowSchedulingOnControlPlanes is the last value a patch set, or nil when
-	// no patch sets it.
+	// allowSchedulingOnControlPlanes is the value a control-plane node sees, or
+	// nil when no cluster or control-plane patch sets it.
 	allowSchedulingOnControlPlanes *bool
+}
+
+// controlPlaneScheduling resolves allowSchedulingOnControlPlanes the way Talos
+// patches a control-plane node: every cluster patch first, then every
+// control-plane patch, each in input order. Worker patches never reach a
+// control plane, and the setting only taints control planes, so a worker
+// patch's value is dropped with the field.
+type controlPlaneScheduling struct {
+	cluster      *bool
+	controlPlane *bool
+}
+
+func (s *controlPlaneScheduling) record(scope PatchScope, value *bool) {
+	if value == nil {
+		return
+	}
+
+	switch scope {
+	case PatchScopeCluster:
+		s.cluster = value
+	case PatchScopeControlPlane:
+		s.controlPlane = value
+	case PatchScopeWorker:
+	}
+}
+
+func (s *controlPlaneScheduling) resolve() *bool {
+	if s.controlPlane != nil {
+		return s.controlPlane
+	}
+
+	return s.cluster
 }
 
 // migrateNodeAndKubeletPatchesForContract moves the v1alpha1 node, kubelet and
@@ -96,18 +128,20 @@ func migrateNodeAndKubeletPatchesForContract(
 
 	result := nodeKubeletMigration{patches: make([]Patch, 0, len(patches))}
 
+	var scheduling controlPlaneScheduling
+
 	for _, patch := range patches {
 		migrated, allowScheduling, err := migrateNodeAndKubeletPatch(patch)
 		if err != nil {
 			return nodeKubeletMigration{}, err
 		}
 
-		if allowScheduling != nil {
-			result.allowSchedulingOnControlPlanes = allowScheduling
-		}
+		scheduling.record(patch.Scope, allowScheduling)
 
 		result.patches = append(result.patches, migrated...)
 	}
+
+	result.allowSchedulingOnControlPlanes = scheduling.resolve()
 
 	return result, nil
 }
@@ -355,11 +389,12 @@ func migrateNodeAndKubeletDocument(
 		return nil, nil, false, err
 	}
 
-	moved := make([]map[string]any, 0, 3) //nolint:mnd // one per possible document kind
-
-	for _, candidate := range []map[string]any{
+	candidates := []map[string]any{
 		moveLegacyClusterName(document), nodeDocument, kubeletDocument,
-	} {
+	}
+	moved := make([]map[string]any, 0, len(candidates))
+
+	for _, candidate := range candidates {
 		if candidate != nil {
 			moved = append(moved, candidate)
 		}

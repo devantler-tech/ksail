@@ -139,3 +139,93 @@ func TestUnsupportedKubeletFieldNamesTheField(t *testing.T) {
 	assert.Contains(t, err.Error(), "machine.kubelet.extraMounts")
 	assert.Contains(t, err.Error(), "kubelet-mounts")
 }
+
+// TestAllowSchedulingHonoursPatchScope checks that the control-plane taint is
+// resolved the way Talos patches a control-plane node: cluster patches first,
+// then control-plane patches, whatever their input order, and never from a
+// worker patch.
+func TestAllowSchedulingHonoursPatchScope(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range allowSchedulingScopeCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			configs, err := talos.NewDefaultConfigsWithVersionContractAndPatches(
+				"", talosconfig.TalosVersion1_14, testCase.patches,
+			)
+			require.NoError(t, err)
+
+			_, err = configs.ControlPlane().ValidateAsClient(containerMode{})
+			require.NoError(t, err)
+
+			taints := configs.ControlPlane().K8sNodeConfig().Taints()
+			if testCase.tainted {
+				assert.Equal(t, "NoSchedule", taints[controlPlaneRoleLabel])
+			} else {
+				assert.NotContains(t, taints, controlPlaneRoleLabel)
+			}
+		})
+	}
+}
+
+type allowSchedulingScopeCase struct {
+	name    string
+	patches []talos.Patch
+	tainted bool
+}
+
+func allowSchedulingPatch(path string, scope talos.PatchScope, value string) talos.Patch {
+	return talos.Patch{
+		Path:    path,
+		Scope:   scope,
+		Content: []byte("cluster:\n  allowSchedulingOnControlPlanes: " + value + "\n"),
+	}
+}
+
+func allowSchedulingScopeCases() []allowSchedulingScopeCase {
+	allow := allowSchedulingPatch
+
+	return []allowSchedulingScopeCase{
+		{
+			name: "worker patch does not reach control planes",
+			patches: []talos.Patch{
+				allow("cluster-allow", talos.PatchScopeCluster, "true"),
+				allow("worker-deny", talos.PatchScopeWorker, "false"),
+			},
+			tainted: false,
+		},
+		{
+			name: "worker patch alone keeps the default",
+			patches: []talos.Patch{
+				allow("worker-deny", talos.PatchScopeWorker, "false"),
+			},
+			tainted: false,
+		},
+		{
+			name: "control-plane patch overrides an earlier cluster patch",
+			patches: []talos.Patch{
+				allow("cluster-allow", talos.PatchScopeCluster, "true"),
+				allow("control-plane-deny", talos.PatchScopeControlPlane, "false"),
+			},
+			tainted: true,
+		},
+		{
+			name: "control-plane patch overrides a later cluster patch",
+			patches: []talos.Patch{
+				allow("control-plane-deny", talos.PatchScopeControlPlane, "false"),
+				allow("cluster-allow", talos.PatchScopeCluster, "true"),
+			},
+			tainted: true,
+		},
+		{
+			name: "interleaved scopes resolve to the last control-plane value",
+			patches: []talos.Patch{
+				allow("control-plane-allow", talos.PatchScopeControlPlane, "true"),
+				allow("cluster-deny", talos.PatchScopeCluster, "false"),
+				allow("worker-deny", talos.PatchScopeWorker, "false"),
+			},
+			tainted: false,
+		},
+	}
+}
