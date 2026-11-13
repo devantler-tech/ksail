@@ -1,11 +1,13 @@
 package k3dprovisioner
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
-	"github.com/k3d-io/k3d/v5/pkg/runtimes"
+	k3ddocker "github.com/k3d-io/k3d/v5/pkg/runtimes/docker"
 	"github.com/sirupsen/logrus"
 )
 
@@ -44,11 +46,33 @@ func (k3dFatalHook) Fire(entry *logrus.Entry) error {
 	panic(k3dFatal{message: entry.Message})
 }
 
-// defaultRuntimeReachable asks the runtime k3d itself uses (the Docker daemon, as
-// resolved from the same environment) for its info, returning the error when it
-// cannot be reached.
+// runtimeProbeTimeout bounds the runtime check, so a daemon that accepts the
+// connection but never answers cannot hold up the error (or, during List, the
+// output redirection and listMutex that List releases only after it returns).
+const runtimeProbeTimeout = 10 * time.Second
+
+// defaultRuntimeReachable asks the Docker daemon k3d itself uses, through k3d's
+// own client so the same environment selects it, for its info within
+// runtimeProbeTimeout. It returns the error when the daemon cannot be reached or
+// does not answer in time.
 func defaultRuntimeReachable() error {
-	_, err := runtimes.SelectedRuntime.Info()
+	return runtimeReachableWithin(runtimeProbeTimeout)
+}
+
+// runtimeReachableWithin is defaultRuntimeReachable with a chosen time limit. The
+// limit is a context deadline, so it cancels the request itself.
+func runtimeReachableWithin(timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	dockerClient, err := k3ddocker.GetDockerClient()
+	if err != nil {
+		return fmt.Errorf("creating the k3d runtime client: %w", err)
+	}
+
+	defer func() { _ = dockerClient.Close() }()
+
+	_, err = dockerClient.Info(ctx)
 	if err != nil {
 		return fmt.Errorf("checking the k3d runtime: %w", err)
 	}
