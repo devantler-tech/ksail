@@ -1150,9 +1150,9 @@ tool (
 // Qualify this mapping so a later requirement cannot reuse it without validation.
 replace k8s.io/apimachinery v0.37.1 => k8s.io/apimachinery v0.36.6
 
-// fluxcd/helm-controller/api v1.7.1 requires Kubernetes v0.37.1 for these modules. Hold them
-// on the embedded v0.36 tools until #7259 lands; each mapping is qualified to v0.37.1 so a later
-// requirement cannot reuse it without validation.
+// fluxcd/pkg/apis/kustomize v1.23.0 and fluxcd/helm-controller/api v1.7.1 require Kubernetes
+// v0.37.1 for these modules. Hold them on the embedded v0.36 tools until #7259 lands; each
+// mapping is qualified to v0.37.1 so a later requirement cannot reuse it without validation.
 replace (
 	k8s.io/api v0.37.1 => k8s.io/api v0.36.6
 	k8s.io/apiextensions-apiserver v0.37.1 => k8s.io/apiextensions-apiserver v0.36.6

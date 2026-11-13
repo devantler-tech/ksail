@@ -105,6 +105,11 @@ on:
         required: false
         type: boolean
         default: false
+      create_with_release:
+        description: "Talos only: create the cluster with this published KSail release (for example v7.212.22), then run every later step with this build. Leave empty to create with this build."
+        required: false
+        type: string
+        default: ""
   schedule:
     # Weekly: Sunday 03:00 UTC, one hour before the Omni system test, so real clusters are
     # created at most once a day. The scheduled run starts with the two direct-provider smoke
@@ -350,6 +355,7 @@ jobs:
           GITOPS_ENGINE: ${{ inputs.gitops_engine }}
           CONTROL_PLANES: ${{ inputs.control_planes }}
           WORKERS: ${{ inputs.workers }}
+          CREATE_WITH_RELEASE: ${{ inputs.create_with_release }}
         run: |
           ignored=()
           [[ "${CNI:-Default}" == "Default" ]] || ignored+=("cni=$CNI")
@@ -361,6 +367,7 @@ jobs:
           [[ "${GITOPS_ENGINE:-None}" == "None" ]] || ignored+=("gitops_engine=$GITOPS_ENGINE")
           [[ "${CONTROL_PLANES:-1}" == "1" ]] || ignored+=("control_planes=$CONTROL_PLANES")
           [[ "${WORKERS:-0}" == "0" ]] || ignored+=("workers=$WORKERS")
+          [[ -z "${CREATE_WITH_RELEASE:-}" ]] || ignored+=("create_with_release=$CREATE_WITH_RELEASE")
           if (( ${#ignored[@]} > 0 )); then
             echo "::error::$DISTRIBUTION dispatches run the bare-cluster smoke test, which ignores: ${ignored[*]}. Reset them to their defaults, or pick Talos to test a full stack." >&2
             exit 1
@@ -498,6 +505,37 @@ jobs:
           provider: Hetzner
           args: ${{ steps.args.outputs.value }}
 
+      - name: 📥 Download the KSail release that creates the cluster
+        id: create-release
+        # ksail#8347: test how this build updates a cluster an earlier release created.
+        if: ${{ matrix.smoke != true && github.event_name == 'workflow_dispatch' && inputs.create_with_release != '' }}
+        timeout-minutes: 5
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.create_with_release }}
+          DISTRIBUTION: ${{ matrix.distribution }}
+        run: |
+          set -euo pipefail
+          [[ "$DISTRIBUTION" == Talos ]] || { echo "❌ ERROR: create_with_release needs the Talos distribution" >&2; exit 1; }
+          [[ "$RELEASE_TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]] ||
+            { echo "❌ ERROR: create_with_release must be a release tag such as v7.212.22" >&2; exit 1; }
+          version="${BASH_REMATCH[1]}"
+          case "$(uname -m)" in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; *) echo "❌ ERROR: unsupported runner architecture" >&2; exit 1 ;; esac
+          dir="$RUNNER_TEMP/ksail-create-release"
+          mkdir -p "$dir/extract" "$dir/bin"
+          base="https://github.com/devantler-tech/ksail/releases/download/${RELEASE_TAG}"
+          archive="ksail_${version}_linux_${arch}.tar.gz"
+          curl -fsSL --retry 3 -o "$dir/$archive" "$base/$archive"
+          curl -fsSL --retry 3 -o "$dir/checksums.txt" "$base/ksail_${version}_checksums.txt"
+          expected=$(awk -v name="$archive" '$2 == name { print $1 }' "$dir/checksums.txt")
+          [[ "$expected" =~ ^[a-f0-9]{64}$ ]] || { echo "❌ ERROR: the release lists no checksum for $archive" >&2; exit 1; }
+          (cd "$dir" && printf '%s  %s\n' "$expected" "$archive" | sha256sum --check --strict)
+          tar -xzf "$dir/$archive" -C "$dir/extract" ksail
+          install -m 0755 "$dir/extract/ksail" "$dir/bin/ksail"
+          echo "binary=$dir/bin/ksail" >>"$GITHUB_OUTPUT"
+          echo "sha256=$(sha256sum "$dir/bin/ksail" | cut -d ' ' -f 1)" >>"$GITHUB_OUTPUT"
+          echo "✅ Downloaded and verified KSail ${RELEASE_TAG} (${arch})"
+
       - name: 🧪 Run KSail System Test
         if: ${{ matrix.smoke != true }}
         uses: $/.github/actions/ksail-system-test
@@ -517,6 +555,8 @@ jobs:
           test-talos-schematic-rollout: ${{ github.event_name == 'workflow_dispatch' && inputs.test_schematic_rollout || false }}
           talos-schematic-server-type: ${{ github.event_name == 'workflow_dispatch' && inputs.schematic_server_type != 'Default' && inputs.schematic_server_type || '' }}
           floating-ip-toggle: ${{ github.event_name == 'workflow_dispatch' && inputs.floating_ip_toggle || false }}
+          create-binary: ${{ steps.create-release.outputs.binary }}
+          create-binary-sha256: ${{ steps.create-release.outputs.sha256 }}
 
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}
