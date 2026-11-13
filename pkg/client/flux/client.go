@@ -113,9 +113,26 @@ func (c *Client) getClient() (client.Client, error) {
 		return nil, fmt.Errorf("failed to get REST config: %w", err)
 	}
 
+	scheme, err := newFluxScheme()
+	if err != nil {
+		return nil, err
+	}
+
+	k8sClient, err := client.New(config, client.Options{Scheme: scheme})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create client: %w", err)
+	}
+
+	c.client = k8sClient
+
+	return k8sClient, nil
+}
+
+// newFluxScheme returns a scheme that knows the Flux kinds KSail creates.
+func newFluxScheme() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
 
-	err = sourcev1.AddToScheme(scheme)
+	err := sourcev1.AddToScheme(scheme)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add source-controller scheme: %w", err)
 	}
@@ -130,14 +147,7 @@ func (c *Client) getClient() (client.Client, error) {
 		return nil, fmt.Errorf("failed to add helm-controller scheme: %w", err)
 	}
 
-	k8sClient, err := client.New(config, client.Options{Scheme: scheme})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create client: %w", err)
-	}
-
-	c.client = k8sClient
-
-	return k8sClient, nil
+	return scheme, nil
 }
 
 // getRestConfig returns a REST config for the Kubernetes cluster.
@@ -168,8 +178,22 @@ func (c *Client) getRestConfig() (*rest.Config, error) {
 
 // Resource management helpers.
 
-// exportResource exports a resource as YAML to stdout.
+// exportResource exports a resource as YAML to stdout. The typed object carries no
+// apiVersion or kind of its own, so they are set from the Flux scheme first: without them
+// the manifest could not be applied or validated.
 func (c *Client) exportResource(obj runtime.Object) error {
+	scheme, err := newFluxScheme()
+	if err != nil {
+		return err
+	}
+
+	kinds, _, err := scheme.ObjectKinds(obj)
+	if err != nil {
+		return fmt.Errorf("failed to resolve the resource kind: %w", err)
+	}
+
+	obj.GetObjectKind().SetGroupVersionKind(kinds[0])
+
 	data, err := yaml.Marshal(obj)
 	if err != nil {
 		return fmt.Errorf("failed to marshal resource: %w", err)

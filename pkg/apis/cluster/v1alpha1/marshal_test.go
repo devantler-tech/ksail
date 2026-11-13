@@ -1276,3 +1276,29 @@ func TestCluster_MarshalJSON_AllEnumDefaultsPruned(t *testing.T) {
 	assert.NotContains(t, jsonStr, "loadBalancer")
 	assert.NotContains(t, jsonStr, "gitOpsEngine")
 }
+
+// TestCluster_MarshalJSONKeepsObservedStatusThatEqualsSpecDefaults guards the operator's status
+// writes: default pruning is for the desired-state config, so an observed status value that happens
+// to equal a spec default (Vanilla, Docker) must still be written.
+func TestCluster_MarshalJSONKeepsObservedStatusThatEqualsSpecDefaults(t *testing.T) {
+	t.Parallel()
+
+	cluster := v1alpha1.Cluster{
+		Name: "host",
+		Status: v1alpha1.ClusterStatus{
+			ObservedDistribution: v1alpha1.DistributionVanilla,
+			ObservedProvider:     v1alpha1.ProviderDocker,
+		},
+	}
+
+	data, err := json.Marshal(cluster)
+	require.NoError(t, err)
+
+	var decoded struct {
+		Status map[string]any `json:"status"`
+	}
+
+	require.NoError(t, json.Unmarshal(data, &decoded))
+	assert.Equal(t, "Vanilla", decoded.Status["observedDistribution"])
+	assert.Equal(t, "Docker", decoded.Status["observedProvider"])
+}

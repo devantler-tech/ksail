@@ -18,11 +18,13 @@ import (
 // every one of them (auditedReleaseConfigDigests), so editing any of them can turn a Go test red.
 func releaseConfigFiles() []string {
 	return []string{
+		".gitattributes",
 		".goreleaser.yaml",
 		".goreleaser.desktop.yaml",
 		".github/workflows/cd.yaml",
 		".github/scripts/publish-operator-chart.sh",
 		".github/scripts/resolve-release-replay.sh",
+		".github/scripts/go-notices.go",
 		".github/actions/release-admission/action.yaml",
 		".github/actions/setup-desktop-build/action.yml",
 		".github/actions/free-disk-space/free-disk-space.sh",

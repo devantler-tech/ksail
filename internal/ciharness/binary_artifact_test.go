@@ -15,7 +15,24 @@ import (
 
 func TestKSailBinaryArtifactProducerPublication(t *testing.T) {
 	t.Parallel()
-	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
+
+	// Every workflow whose later jobs install the build job's binary publishes it
+	// the same way, so a consumer never depends on a shared cache entry surviving.
+	for _, path := range []string{
+		".github/workflows/ci.yaml",
+		".github/workflows/system-test-eks.yaml",
+	} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			assertKSailBinaryArtifactProducer(t, path)
+		})
+	}
+}
+
+func assertKSailBinaryArtifactProducer(t *testing.T, path string) {
+	t.Helper()
+
+	workflow := readCIWorkflow(t, path)
 	producer := workflow.Jobs["build-artifact"]
 	assert.Equal(
 		t,
@@ -30,6 +47,7 @@ func TestKSailBinaryArtifactProducerPublication(t *testing.T) {
 	prepared := findHarnessStep(t, producer.Steps, "📦 Cache KSail Binary")
 	assert.Equal(t, "binary", prepared.ID)
 	checksum := findHarnessStep(t, producer.Steps, "🔍 Seal prepared KSail binary")
+	assert.Equal(t, "binary-checksum", checksum.ID)
 	assert.Equal(t, "${{ steps.binary.outputs.binary-path }}", checksum.Env["BINARY_PATH"])
 	upload := findHarnessStep(t, producer.Steps, "📤 Publish KSail binary")
 	assert.Equal(t, "binary-artifact", upload.ID)
@@ -55,9 +73,7 @@ func TestKSailBinaryArtifactDockerConsumer(t *testing.T) {
 	consumer := workflow.Jobs["system-test-docker"]
 	assert.Contains(t, consumer.Needs, "build-artifact")
 	restore := findHarnessStep(t, consumer.Steps, "📥 Restore KSail binary")
-	assert.Equal(t,
-		"devantler-tech/ksail/.github/actions/restore-ksail-binary@"+
-			"fc38423661fd6eaceb03ec49cd0634108c4ac18f", restore.Uses)
+	assert.Equal(t, ksailActionPin(t, "restore-ksail-binary"), restore.Uses)
 	assert.Equal(
 		t,
 		"${{ needs.build-artifact.outputs.artifact-id }}",
@@ -93,9 +109,7 @@ func TestKSailBinaryArtifactMirrorWarmerConsumer(t *testing.T) {
 	assert.Equal(t, map[string]string{"contents": "read"}, consumer.Permissions)
 	assert.False(t, consumer.ContinueOnError)
 	restore := findHarnessStep(t, consumer.Steps, "📥 Restore KSail binary")
-	assert.Equal(t,
-		"devantler-tech/ksail/.github/actions/restore-ksail-binary@"+
-			"fc38423661fd6eaceb03ec49cd0634108c4ac18f", restore.Uses)
+	assert.Equal(t, ksailActionPin(t, "restore-ksail-binary"), restore.Uses)
 	assert.Equal(
 		t,
 		"${{ needs.build-artifact.outputs.artifact-id }}",
@@ -148,7 +162,22 @@ func TestKSailBinaryRestorePinnedSourceMatchesCandidate(t *testing.T) {
 
 func TestKSailBinaryProducerChecksum(t *testing.T) {
 	t.Parallel()
-	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
+
+	for _, path := range []string{
+		".github/workflows/ci.yaml",
+		".github/workflows/system-test-eks.yaml",
+	} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			assertKSailBinaryProducerChecksum(t, path)
+		})
+	}
+}
+
+func assertKSailBinaryProducerChecksum(t *testing.T, path string) {
+	t.Helper()
+
+	workflow := readCIWorkflow(t, path)
 
 	step := findHarnessStep(
 		t,

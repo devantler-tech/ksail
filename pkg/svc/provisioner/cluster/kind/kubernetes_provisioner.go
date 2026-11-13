@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
@@ -14,6 +15,10 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
+
+// Match the existing caller-side readiness budget; a broken exposure must not
+// spend the much longer cluster provisioning deadline before refusing publication.
+const kindExposureReadinessTimeout = time.Minute
 
 // KubernetesProvisioner wraps a Kind provisioner with DinD lifecycle management.
 // It port-forwards the DinD pod's Docker API to localhost, sets DOCKER_HOST so
@@ -64,6 +69,8 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 	if err != nil {
 		return nil, fmt.Errorf("create inner Kind provisioner: %w", err)
 	}
+
+	innerProvisioner.retainOnFailure = nested.DebugEnabled()
 
 	return &KubernetesProvisioner{
 		Provisioner:      innerProvisioner,
@@ -143,14 +150,9 @@ func (p *KubernetesProvisioner) Create(
 	defer dockerPF.Close()
 
 	// Step 5: Set DOCKER_HOST so the Kind SDK talks to DinD
-	msg := "► creating Kind cluster via SDK (DOCKER_HOST → exec tunnel → DinD)"
-	_, _ = fmt.Fprintln(os.Stdout, msg)
-
-	err = kubernetesprovider.WithRemoteDockerHost(dockerPF, func() error {
-		return p.Provisioner.Create(ctx, target)
-	})
+	err = p.createInDinD(ctx, dockerPF, target)
 	if err != nil {
-		return fmt.Errorf("kind create via SDK: %w", err)
+		return err
 	}
 
 	// Step 6: Point the kubeconfig at the stable exposure address and publish it as a host-cluster
@@ -189,6 +191,31 @@ func (p *KubernetesProvisioner) List(ctx context.Context) ([]string, error) {
 	return p.dindLifecycle().List(ctx)
 }
 
+// createInDinD points DOCKER_HOST at the DinD exec tunnel, replaces a persisted nested `kind`
+// network that predates the planned address pool, and then creates the cluster with the Kind SDK.
+func (p *KubernetesProvisioner) createInDinD(
+	ctx context.Context,
+	dockerPF *kubernetesprovider.PortForwardSession,
+	target string,
+) error {
+	msg := "► creating Kind cluster via SDK (DOCKER_HOST → exec tunnel → DinD)"
+	_, _ = fmt.Fprintln(os.Stdout, msg)
+
+	err := kubernetesprovider.WithRemoteDockerHost(dockerPF, func() error {
+		err := replaceStaleNestedKindNetwork(ctx)
+		if err != nil {
+			return err
+		}
+
+		return p.Provisioner.Create(ctx, target)
+	})
+	if err != nil {
+		return fmt.Errorf("kind create via SDK: %w", err)
+	}
+
+	return nil
+}
+
 // setupDinD creates the namespace and DinD pod, then waits for readiness.
 func (p *KubernetesProvisioner) setupDinD(ctx context.Context, clusterName string) error {
 	//nolint:wrapcheck // DinDLifecycle.SetupDinD already wraps with "setup DinD" context
@@ -207,9 +234,9 @@ func (p *KubernetesProvisioner) dindLifecycle() nested.DinDLifecycle {
 	}
 }
 
-// finalizeKubeconfig points the on-disk kubeconfig at the stable exposure address and then publishes
-// the nested cluster's kubeconfig as a host-cluster Secret for the operator Connector (see
-// connector.go). It groups the two kubeconfig-finalization steps that close out Create.
+// finalizeKubeconfig verifies the rewritten exposure with the nested credentials before publishing
+// it as a host-cluster Secret. Kind's successful bootstrap only proves its internal API path;
+// it does not establish that the stable, externally advertised route works.
 func (p *KubernetesProvisioner) finalizeKubeconfig(
 	ctx context.Context,
 	target, serverURL string,
@@ -217,6 +244,14 @@ func (p *KubernetesProvisioner) finalizeKubeconfig(
 	err := p.rewriteKindKubeconfig(target, serverURL)
 	if err != nil {
 		return fmt.Errorf("rewrite kubeconfig: %w", err)
+	}
+
+	readyCtx, cancel := context.WithTimeout(ctx, kindExposureReadinessTimeout)
+	defer cancel()
+
+	err = p.waitForReady(readyCtx, p.kubeconfigPath, ConnectionFor(target).ContextName)
+	if err != nil {
+		return fmt.Errorf("verify exposed Kind API before publishing connector: %w", err)
 	}
 
 	err = p.publishConnectorKubeconfig(ctx, target)

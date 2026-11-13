@@ -27,6 +27,7 @@ import (
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"k8s.io/client-go/kubernetes"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
@@ -1057,4 +1058,33 @@ func ExportChartValuesDriftFields() []string {
 	}
 
 	return fields
+}
+
+// ExportWriteClusterIdentityMarker runs the best-effort marker write with an injected client
+// factory, so tests can prove it records the provisioned identity and never fails the caller.
+func ExportWriteClusterIdentityMarker(
+	cmd *cobra.Command,
+	clusterName string,
+	clusterCfg *v1alpha1.Cluster,
+	newClient func(kubeconfigPath, kubeContext string) (kubernetes.Interface, error),
+) {
+	reportIdentityMarker(cmd, clusterName, clusterCfg, newClient)
+}
+
+// ExportRecordIdentityAfterUpdate exposes the update path's marker refresh.
+func ExportRecordIdentityAfterUpdate(
+	cmd *cobra.Command,
+	clusterName string,
+	clusterCfg *v1alpha1.Cluster,
+	update func() (bool, error),
+) error {
+	return recordIdentityAfterUpdate(cmd, clusterName, clusterCfg, update)
+}
+
+// ExportSetEKSCreationIDGenerator replaces the EKS create-attempt identifier source for tests.
+func ExportSetEKSCreationIDGenerator(generate func() string) func() {
+	previous := newEKSCreationID
+	newEKSCreationID = generate
+
+	return func() { newEKSCreationID = previous }
 }

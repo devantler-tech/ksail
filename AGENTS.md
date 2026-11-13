@@ -240,7 +240,7 @@ ksail project init --help
 **"Go version mismatch"**:
 
 ```bash
-go version  # Should match the version in go.mod (go 1.27.3)
+go version  # Should match the version in go.mod (go 1.27.4)
 # If not, install/update Go from https://go.dev/dl/
 ```
 
@@ -273,7 +273,7 @@ npm run dev                            # Test locally (if needed)
 
 ### Important Notes
 
-- The project uses **Go 1.27.3+** (see `go.mod`)
+- The project uses **Go 1.27.4+** (see `go.mod`)
 - Kubernetes tools are embedded as Go libraries - only Docker is required externally for local clusters (the EKS distribution is the exception: it shells out to an external `eksctl` binary)
 - Unit tests run quickly and should generally pass
 - System tests in CI cover extensive scenarios with multiple tool combinations
@@ -345,7 +345,7 @@ For a deeper dive into KSail's design and internals, refer to:
 
 ## Active Technologies
 
-- Go 1.27.3+ (see `go.mod`)
+- Go 1.27.4+ (see `go.mod`)
 - Embedded Kubernetes tools (kubectl, helm, kind, k3d, vcluster, flux, argocd) as Go libraries
 - Docker as the only external dependency for local clusters (EKS additionally shells out to `eksctl`)
 - Astro with Starlight for documentation (Node.js-based)
@@ -387,6 +387,15 @@ distribution × provider table in `docs/src/content/docs/support-matrix.mdx`
 `pkg/svc/chat/docs_generated.go` (`go generate ./pkg/svc/chat/...`, after docs), `mocks.go` files
 (`mockery`), and `web/ui/src/generated/ksail-config.ts` (`npm --prefix web/ui run gen:types`,
 after schemas). See also `.github/instructions/`.
+**Source-audited release data — separate heavy generator:** `make generate-go-notices`
+regenerates `notices/go/<target>/THIRD_PARTY_NOTICES.txt`, `manifest.json`, and the
+eight-target hash receipt `.github/go-notice-receipts.json` from the existing
+eight-target admission audit. Never hand-edit these files. This explicit
+local command is separate from `make generate` so ordinary generation does not
+add another graph/scanner pass. Hosted CI refuses update mode and independently
+compares the checked-in notice set in the existing audit; stale or missing data
+must fail, not be repaired silently. Reviewed recipient-only applicability facts
+live in `.github/go-notice-materials.json`; they never change package admission.
 **Shared machine / autonomous worktrees:** only create/inspect/delete
 clusters you created; build throwaway binaries to `/tmp` (not `./ksail`) to avoid polluting the
 worktree. Maintainers building locally should still use the standard `make build` (`go build -o
@@ -438,5 +447,5 @@ where genuinely per-user/remote evaluation is needed. Rules:
 - **Weekly/heavy:** E2E coverage audit (open ≤3 `E2E: Add coverage for <command>` issues, label
   `testing`, only for genuine gaps where E2E beats unit/integration); live reliability/UX testing on
   throwaway Docker clusters (Kind/K3d/Vind/KWOK) — **always clean up every cluster, even on failure**.
-- **Monthly:** KSail Strategy — a Now/Next/Later roadmap Discussion (category `agentic-workflows`)
-  that extends KSail's strengths; **never** propose radical pivots.
+- **Monthly:** KSail strategy review — refine the roadmap issues (Now/Next/Later) so they extend
+  KSail's strengths; **never** propose radical pivots, and never open a Discussion for it.

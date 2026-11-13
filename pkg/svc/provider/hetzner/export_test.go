@@ -20,7 +20,7 @@ func (p *Provider) WaitForServersStatusForTest(
 	clusterName string,
 	status hcloud.ServerStatus,
 ) error {
-	return p.waitForServersStatus(ctx, clusterName, status)
+	return p.waitForServersStatus(ctx, clusterName, status, DefaultActionTimeout)
 }
 
 // SourceIPsEqualForTest exports sourceIPsEqual for testing.
@@ -158,3 +158,8 @@ var HeadImageURLForTest = headImageURL
 
 // ImageMissingForTest exposes imageMissing for testing.
 var ImageMissingForTest = imageMissing
+
+// SetGracefulShutdownTimeoutForTest shortens the graceful shutdown window StopNodes waits for.
+func (p *Provider) SetGracefulShutdownTimeoutForTest(timeout time.Duration) {
+	p.gracefulShutdownTimeout = timeout
+}

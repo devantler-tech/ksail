@@ -4,9 +4,10 @@ description: |
   kind cluster. Builds the operator image locally (no registry) with the web UI
   embedded (go:embed), loads it into kind, installs the chart in read-only mode,
   and asserts the CRD registers, the operator rolls out, the REST API serves
-  /readyz and /api/v1/config, mutations are rejected (403), and the operator
+  /readyz and /api/v1/config, mutations are rejected (403), the operator
   serves the embedded SPA at / (same origin as the API — no separate UI
-  container, no reverse proxy).
+  container, no reverse proxy), and the self-registered host Cluster reports
+  the distribution and provider its nodes prove while its spec stays empty.
 
   Full Cluster-CR reconciliation is intentionally out of scope: the reconciler
   provisions real clusters, which is not feasible inside a plain kind hub
@@ -164,6 +165,33 @@ runs:
           exit 1
         fi
         echo "  ✅ POST /api/v1/clusters -> 403"
+
+        echo "=== Host cluster observed identity ==="
+        # The operator self-registers the kind hub as the "host" Cluster with an empty spec and
+        # reports the identity its nodes prove in status: kind's kind:// provider IDs mean
+        # upstream Kubernetes (Vanilla) on Docker. Poll for ~2 minutes: when the first node read
+        # fails, the host reconcile only retries after its 60s ready requeue, so the window must
+        # cover at least one full retry interval after polling starts.
+        dist="" prov=""
+        for _ in $(seq 1 60); do
+          dist=$(kubectl -n "$NS" get clusters.ksail.io host -o jsonpath='{.status.observedDistribution}' 2>/dev/null || true)
+          prov=$(kubectl -n "$NS" get clusters.ksail.io host -o jsonpath='{.status.observedProvider}' 2>/dev/null || true)
+          [ "$dist" = "Vanilla" ] && [ "$prov" = "Docker" ] && break
+          sleep 2
+        done
+        kubectl -n "$NS" get clusters.ksail.io -o wide || true
+        if [ "$dist" != "Vanilla" ] || [ "$prov" != "Docker" ]; then
+          echo "❌ Expected the host cluster to report Vanilla/Docker, got '${dist}'/'${prov}'"
+          exit 1
+        fi
+        # The whole spec must be empty, not just its distribution: any populated leaf (a provider,
+        # a count, a flag) fails the check. Empty nested objects carry no desired state and pass.
+        host_spec=$(kubectl -n "$NS" get clusters.ksail.io host -o json | jq -c '.spec // {}')
+        if ! jq -e '[.. | scalars] | length == 0' <<<"$host_spec" >/dev/null; then
+          echo "❌ The host cluster's spec must stay empty, got ${host_spec}"
+          exit 1
+        fi
+        echo "  ✅ host cluster reports Vanilla on Docker in status, spec left empty"
 
         echo "✅ Operator chart E2E passed"
 

@@ -32,6 +32,14 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
+    - jsonPath: .status.observedDistribution
+      name: Observed Distribution
+      priority: 1
+      type: string
+    - jsonPath: .status.observedProvider
+      name: Observed Provider
+      priority: 1
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -215,6 +223,16 @@ spec:
                                         description: Value is the optional taint value.
                                         type: string
                                     type: object
+                                  type: array
+                                talosPatches:
+                                  description: |-
+                                    TalosPatches are ordered, inline machine config patches for this pool.
+                                    KSail applies them after shared worker configuration and before setting
+                                    the autoscaler's own node labels and taints.
+                                    Changes that need KSail's cluster-wide reboot or wipe orchestration
+                                    belong in shared patches.
+                                  items:
+                                    type: string
                                   type: array
                               type: object
                             type: array
@@ -1404,11 +1422,23 @@ spec:
                 description: NodesTotal is the total number of cluster nodes.
                 format: int32
                 type: integer
+              observedDistribution:
+                description: |-
+                  ObservedDistribution is the distribution the cluster's own nodes prove it runs, reported for
+                  the self-registered host cluster, whose spec is left empty because the operator does not own
+                  its lifecycle. Empty when the nodes prove no single distribution. Observed state only: it never
+                  makes the cluster provisionable.
+                type: string
               observedGeneration:
                 description: ObservedGeneration is the metadata.generation last processed
                   by the operator.
                 format: int64
                 type: integer
+              observedProvider:
+                description: |-
+                  ObservedProvider is the infrastructure provider the cluster's own nodes prove it runs on,
+                  reported alongside ObservedDistribution. Empty when the nodes prove no single provider.
+                type: string
               phase:
                 description: Phase is a high-level summary of the cluster lifecycle.
                 enum:

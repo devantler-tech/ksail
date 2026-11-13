@@ -25,10 +25,11 @@ func TestDesktopReleaseUsesModuleDownloadSetup(t *testing.T) {
 
 	steps := readReleaseJobs(t)["desktop"].Steps
 	setupIndex, buildIndex := -1, -1
+	publishedSetup := ksailActionPin(t, "setup-desktop-build")
 
 	for index, step := range steps {
 		if step.Uses == "./.github/actions/setup-desktop-build" ||
-			step.Uses == "devantler-tech/ksail/.github/actions/setup-desktop-build@fc38423661fd6eaceb03ec49cd0634108c4ac18f" {
+			step.Uses == publishedSetup {
 			setupIndex = index
 
 			assert.Equal(t, "needs.validate-release-ref.outputs.release-mode == 'build'", step.If)
@@ -74,7 +75,9 @@ func TestReleaseModuleDownloadRetries(t *testing.T) {
 			} {
 				t.Run(scenario.name, func(t *testing.T) {
 					t.Parallel()
-					runModuleDownloadScenario(t, prefetch, downstreamRun, scenario)
+					runModuleDownloadScenario(
+						t, prefetch, downstreamRun, ".github/actions/setup-desktop-build", scenario,
+					)
 				})
 			}
 		})
@@ -154,10 +157,11 @@ func releaseModuleDownloadStep(t *testing.T, steps []harnessStep) harnessStep {
 }
 
 // Execute the checked-in downloader with recorded transport, backoff and downstream results.
+// actionPath is the composite action directory a GITHUB_ACTION_PATH-relative step resolves from.
 func runModuleDownloadScenario(
 	t *testing.T,
 	prefetch harnessStep,
-	downstreamRun string,
+	downstreamRun, actionPath string,
 	scenario moduleDownloadScenario,
 ) {
 	t.Helper()
@@ -177,7 +181,7 @@ func runModuleDownloadScenario(
 	command.Dir = root
 	command.Env = append(os.Environ(),
 		"PATH="+directory+string(os.PathListSeparator)+os.Getenv("PATH"),
-		"GITHUB_ACTION_PATH="+filepath.Join(root, ".github/actions/setup-desktop-build"),
+		"GITHUB_ACTION_PATH="+filepath.Join(root, actionPath),
 		"DOWNLOAD_CALLS="+filepath.Join(directory, "calls"),
 		"DOWNLOAD_DELAYS="+filepath.Join(directory, "delays"),
 		"DOWNLOAD_FAILURES="+strconv.Itoa(scenario.failures),
