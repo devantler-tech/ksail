@@ -926,8 +926,8 @@ github.com/fluxcd/helm-controller/api v1.6.5 h1:ElqM5KIpdUwVK1VSi1fXcMwOlf0Lghuq
 github.com/fluxcd/helm-controller/api v1.6.5/go.mod h1:mYa4WKwgCCE59dMdYzOJI6B17/wofN6wtmtjWWEQesQ=
 github.com/fluxcd/kustomize-controller/api v1.10.1 h1:/7h464untM4nSwJCnoja1UkJC7G7NM3BWhAi1N3P8ME=
 github.com/fluxcd/kustomize-controller/api v1.10.1/go.mod h1:hSq1/80SS0106LhfGr2fe/+P8MgCfBQ82EocC6Su/Ms=
-github.com/fluxcd/pkg/apis/acl v0.10.0 h1:KPfAmELNvtvaz8wixnm/MYXqa+MJf7ntVVMUU93Aenk=
-github.com/fluxcd/pkg/apis/acl v0.10.0/go.mod h1:a87i2A7AlFO5N2J8CxtzaUCCDmuLLWOHwkKu3eJF5fY=
+github.com/fluxcd/pkg/apis/acl v0.12.0 h1:UWpZDqKxpKDW38wdXIMHV8Uv3POPu2vUrra0JH1frH0=
+github.com/fluxcd/pkg/apis/acl v0.12.0/go.mod h1:PJrGIu5Bw/6/siO95uhS+pi5oKSU+gVJqHqsPHb8Kok=
 github.com/fluxcd/pkg/apis/kustomize v1.23.0 h1:tT/sUURyh6ixQG4+Y/ZoUu+hh5/DQLRraWBgy42ubqQ=
 github.com/fluxcd/pkg/apis/kustomize v1.23.0/go.mod h1:Jm/LmEsqJIldhhTmhkORAq8JKVZK3ZV2Q88rntjGxEI=
 github.com/fluxcd/pkg/apis/meta v1.38.0 h1:7t6/DuGFAPx2LE4MsRh1jskjnVE6qELKfr/LrfG7KE8=
@@ -936,8 +936,8 @@ github.com/fluxcd/pkg/oci v0.45.0 h1:lPtxqqzDOF3TAYx+Y91nULFiLzgmE8XDHt/uZwBqx44
 github.com/fluxcd/pkg/oci v0.45.0/go.mod h1:i4kFlYDC84u6vtIE54eco/ArcLPXqTv+/Gt7ncSKmoE=
 github.com/fluxcd/pkg/ssa v0.77.0 h1:HaDg7XDQGfVTFY379GrnnhrON1CQLjrLmyGbbTw5Ohc=
 github.com/fluxcd/pkg/ssa v0.77.0/go.mod h1:bNImnO/GHtjjgp7BtGXVk181CoZbH9rEVEJfOwg1Xo8=
-github.com/fluxcd/source-controller/api v1.9.6 h1:h9+CsJVw4CNbMEsnEb11SGEhLfKzVTkWC0w7M8VX4Hk=
-github.com/fluxcd/source-controller/api v1.9.6/go.mod h1:Y5mcHYzML/mJYjvSJRcIo7eLLjd+cZjnKR6WeIGrouE=
+github.com/fluxcd/source-controller/api v1.10.1 h1:DqqIctqpgyZvPCjpJUFwWjUM063Y5xblsLqxmxQxcac=
+github.com/fluxcd/source-controller/api v1.10.1/go.mod h1:ar4cOwOZ9aMei+7eChKuJFJmnN1Mm5LOTZ9q46Yp4c0=
 github.com/flynn/go-shlex v0.0.0-20150515145356-3f9db97f8568/go.mod h1:xEzjJPgXI435gkrCt3MPfRiAkVrwSbHsst4LCFVfpJc=
 github.com/fogleman/gg v1.2.1-0.20190220221249-0403632d5b90/go.mod h1:R/bRT+9gY/C5z7JzPU0zXsXHKM4/ayA+zqcVNZzPa1k=
 github.com/fogleman/gg v1.3.0/go.mod h1:R/bRT+9gY/C5z7JzPU0zXsXHKM4/ayA+zqcVNZzPa1k=
