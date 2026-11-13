@@ -21,8 +21,19 @@ import (
 	talosmachineryversion "github.com/siderolabs/talos/pkg/machinery/version"
 )
 
-// Compile-time interface compliance check.
-var _ clusterupdate.Upgrader = (*Provisioner)(nil)
+// Compile-time interface compliance checks.
+var (
+	_ clusterupdate.Upgrader                    = (*Provisioner)(nil)
+	_ clusterupdate.InPlaceDistributionUpgrader = (*Provisioner)(nil)
+)
+
+// UpgradesDistributionInPlace reports whether UpgradeDistribution reboots the
+// running nodes into the new Talos release. Only Hetzner clusters do: Omni
+// manages its own upgrades, and the Docker provider recreates the cluster.
+// The routing matches UpgradeDistribution.
+func (p *Provisioner) UpgradesDistributionInPlace() bool {
+	return p.omniOpts == nil && p.hetznerOpts != nil
+}
 
 const (
 	// talosImageRepository is the OCI repository for the Talos node image.

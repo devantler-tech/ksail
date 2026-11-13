@@ -95,7 +95,11 @@ func TestCalicoMigrationUsesImmutableBaselineOnlyForCreate(t *testing.T) {
 		action.Runs.Steps,
 		"🧪 Migrate Calico with unchanged configuration",
 	)
-	assert.Equal(t, "${{ steps.calico-create-path.outputs.path }}", create.Env["PATH"])
+	assert.Equal(
+		t,
+		"${{ steps.release-create-path.outputs.path || steps.calico-create-path.outputs.path }}",
+		create.Env["PATH"],
+	)
 	assert.Contains(t, prepare.Env["BASELINE_SHA256"], "inputs.calico-migration-sha256")
 	assert.NotContains(
 		t,

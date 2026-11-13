@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -253,10 +254,13 @@ func (i *Importer) importImagesToNode(
 ) error {
 	// Choose the import mode before copying anything, so a node whose
 	// capabilities cannot be read refuses the import instead of guessing.
-	local, err := i.executor.localImageMode(ctx, nodeName, "import")
+	options, err := i.executor.imageOptions(ctx, nodeName, "import")
 	if err != nil {
 		return err
 	}
+
+	local := slices.Contains(options, "--local")
+	skipDigestForNamed := slices.Contains(options, ctrSkipDigestForNamed)
 
 	platform := ""
 	if local {
@@ -289,7 +293,11 @@ func (i *Importer) importImagesToNode(
 	}
 
 	// Execute import command
-	_, err = i.executor.ExecInContainer(ctx, nodeName, importCommand(tmpPath, local, platform))
+	_, err = i.executor.ExecInContainer(
+		ctx,
+		nodeName,
+		importCommand(tmpPath, local, platform, skipDigestForNamed),
+	)
 	if err != nil {
 		return fmt.Errorf("ctr import failed: %w", err)
 	}
@@ -305,6 +313,13 @@ func (i *Importer) importImagesToNode(
 //
 // --digests keeps a digest reference for every image the archive names, so
 // named images and their child digest references survive the import.
+//
+// ctr names those digest references after the import's base name, which is
+// import-<date> when none is given, so every named image would also gain an
+// import-<date>@<digest> alias. No registry serves that name, and a later
+// export carries it into the next archive. When the node's ctr advertises
+// --skip-digest-for-named, the import adds that alias only for an image the
+// archive does not name; the images KSail exports are always named.
 //
 // When the node's ctr advertises --local, the import runs client-side. The
 // default transfer importer of containerd 2.x also stores the archive's own
@@ -322,8 +337,17 @@ func (i *Importer) importImagesToNode(
 // the plain command, without flags they do not support. --all-platforms is
 // never used: archives omit content for platforms other than the exporting
 // node's.
-func importCommand(archivePath string, local bool, platform string) []string {
+func importCommand(
+	archivePath string,
+	local bool,
+	platform string,
+	skipDigestForNamed bool,
+) []string {
 	cmd := []string{ctrCommand, ctrNamespaceArg, ctrImages, "import", "--digests"}
+	if skipDigestForNamed {
+		cmd = append(cmd, ctrSkipDigestForNamed)
+	}
+
 	if local {
 		cmd = append(cmd, "--local", "--platform", platform)
 	}
