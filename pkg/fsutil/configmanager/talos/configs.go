@@ -884,7 +884,7 @@ func newConfigsWithEndpointAndSecrets(
 		return nil, err
 	}
 
-	clusterPatches, controlPlanePatches, workerPatches, err := categorizePatchesByScope(patches)
+	scoped, err := scopePatchesForContract(patches, versionContract)
 	if err != nil {
 		return nil, err
 	}
@@ -894,7 +894,7 @@ func newConfigsWithEndpointAndSecrets(
 		return nil, err
 	}
 
-	genOptions := buildBaseGenOptions(controlPlaneIP, versionContract)
+	genOptions := append(buildBaseGenOptions(controlPlaneIP, versionContract), scoped.genOptions...)
 	if existingSecrets != nil {
 		genOptions = append(genOptions, generate.WithSecretsBundle(existingSecrets))
 	}
@@ -904,9 +904,9 @@ func newConfigsWithEndpointAndSecrets(
 		"https://"+net.JoinHostPort(controlPlaneIP, "6443"),
 		kubernetesVersion,
 		genOptions,
-		clusterPatches,
-		controlPlanePatches,
-		workerPatches,
+		scoped.cluster,
+		scoped.controlPlane,
+		scoped.worker,
 	)
 
 	configBundle, err := bundle.NewBundle(bundleOpts...)
@@ -1261,6 +1261,8 @@ func schematicKernelArgs(configBundle *bundle.Bundle) []string {
 // grubUseUKICmdline=false (e.g. a pre-fold workaround that let the host-built cmdline include
 // the args), but once the args live in the UKI cmdline, false would make GRUB rebuild the
 // cmdline host-side and silently drop them — so it must become true.
+//
+//nolint:staticcheck // v1alpha1 machine.install is still what KSail generates
 func reconcileFoldedKernelArgs(configBundle *bundle.Bundle) error {
 	useUKICmdline := true
 
@@ -1348,6 +1350,8 @@ func controlPlaneInstallImage(configBundle *bundle.Bundle) string {
 }
 
 // applyInstallerImage patches machine.install.image on both control-plane and worker configs.
+//
+//nolint:staticcheck // v1alpha1 machine.install is still what KSail generates
 func applyInstallerImage(configBundle *bundle.Bundle, installerImage string) error {
 	patcher := func(cfg *v1alpha1.Config) error {
 		if cfg.MachineConfig == nil {
