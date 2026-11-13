@@ -110,6 +110,11 @@ on:
         required: false
         type: string
         default: ""
+      load_balancer_toggle:
+        description: "Talos only: switch load balancers off with cluster update and back on, and assert the cloud controller follows each time. Needs load balancers on at create."
+        required: false
+        type: boolean
+        default: false
   schedule:
     # Weekly: Sunday 03:00 UTC, one hour before the Omni system test, so real clusters are
     # created at most once a day. The scheduled run starts with the two direct-provider smoke
@@ -235,6 +240,7 @@ jobs:
           SCHEMATIC_SERVER_TYPE: ${{ inputs.schematic_server_type }}
           INVENTORY_TRIAL: ${{ inputs.autoscaler_inventory_trial }}
           FLOATING_IP_TOGGLE: ${{ inputs.floating_ip_toggle }}
+          LOAD_BALANCER_TOGGLE: ${{ inputs.load_balancer_toggle }}
           CNI: ${{ inputs.cni }}
           CSI: ${{ inputs.csi }}
           LOAD_BALANCER: ${{ inputs.load_balancer }}
@@ -253,7 +259,7 @@ jobs:
               case "$NESTED_TRIAL" in
                 ""|false) ;;
                 true)
-                  if [[ "$DISTRIBUTION" != Talos || "$INIT" != true || "$CONTROL_PLANES" != 1 || "$WORKERS" != 0 || -n "$ROLLING_RESIZE" || "$SCHEMATIC_TRIAL" != false || "$SCHEMATIC_SERVER_TYPE" != Default || "$INVENTORY_TRIAL" != false || "$FLOATING_IP_TOGGLE" != false ]]; then
+                  if [[ "$DISTRIBUTION" != Talos || "$INIT" != true || "$CONTROL_PLANES" != 1 || "$WORKERS" != 0 || -n "$ROLLING_RESIZE" || "$SCHEMATIC_TRIAL" != false || "$SCHEMATIC_SERVER_TYPE" != Default || "$INVENTORY_TRIAL" != false || "$FLOATING_IP_TOGGLE" != false || "${LOAD_BALANCER_TOGGLE:-false}" != false ]]; then
                     echo 'ERROR: nested trial requires initialized Talos, one control plane, no workers, and no other trial or resize' >&2
                     exit 1
                   fi
@@ -356,6 +362,7 @@ jobs:
           CONTROL_PLANES: ${{ inputs.control_planes }}
           WORKERS: ${{ inputs.workers }}
           CREATE_WITH_RELEASE: ${{ inputs.create_with_release }}
+          LOAD_BALANCER_TOGGLE: ${{ inputs.load_balancer_toggle }}
         run: |
           ignored=()
           [[ "${CNI:-Default}" == "Default" ]] || ignored+=("cni=$CNI")
@@ -368,6 +375,7 @@ jobs:
           [[ "${CONTROL_PLANES:-1}" == "1" ]] || ignored+=("control_planes=$CONTROL_PLANES")
           [[ "${WORKERS:-0}" == "0" ]] || ignored+=("workers=$WORKERS")
           [[ -z "${CREATE_WITH_RELEASE:-}" ]] || ignored+=("create_with_release=$CREATE_WITH_RELEASE")
+          [[ "${LOAD_BALANCER_TOGGLE:-false}" == false ]] || ignored+=("load_balancer_toggle=$LOAD_BALANCER_TOGGLE")
           if (( ${#ignored[@]} > 0 )); then
             echo "::error::$DISTRIBUTION dispatches run the bare-cluster smoke test, which ignores: ${ignored[*]}. Reset them to their defaults, or pick Talos to test a full stack." >&2
             exit 1
@@ -555,6 +563,7 @@ jobs:
           test-talos-schematic-rollout: ${{ github.event_name == 'workflow_dispatch' && inputs.test_schematic_rollout || false }}
           talos-schematic-server-type: ${{ github.event_name == 'workflow_dispatch' && inputs.schematic_server_type != 'Default' && inputs.schematic_server_type || '' }}
           floating-ip-toggle: ${{ github.event_name == 'workflow_dispatch' && inputs.floating_ip_toggle || false }}
+          load-balancer-toggle: ${{ github.event_name == 'workflow_dispatch' && inputs.load_balancer_toggle || false }}
           create-binary: ${{ steps.create-release.outputs.binary }}
           create-binary-sha256: ${{ steps.create-release.outputs.sha256 }}
 

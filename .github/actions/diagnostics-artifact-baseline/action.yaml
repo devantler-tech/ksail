@@ -152,6 +152,14 @@ inputs:
   inventory-trial-location:
     description: Location shared by the cluster and powered-off inventory probe.
     default: fsn1
+  load-balancer-toggle:
+    description: |
+      Hetzner + Talos only. When 'true', switches load balancers off with `ksail cluster
+      update`, asserts the cloud controller runs without its service controller, the nodes
+      stay Ready and a dry run finds nothing left to change, then restores the original
+      setting and asserts the reverse. Needs load balancers on at create (ksail#7678).
+    required: false
+    default: "false"
   floating-ip-toggle:
     description: |
       Hetzner + Talos only. When 'true', runs an additional step that enables

@@ -167,6 +167,14 @@ inputs:
   inventory-trial-location:
     description: Location shared by the cluster and powered-off inventory probe.
     default: "fsn1"
+  load-balancer-toggle:
+    description: |
+      Hetzner + Talos only. When 'true', switches load balancers off with `ksail cluster
+      update`, asserts the cloud controller runs without its service controller, the nodes
+      stay Ready and a dry run finds nothing left to change, then restores the original
+      setting and asserts the reverse. Needs load balancers on at create (ksail#7678).
+    required: false
+    default: "false"
   floating-ip-toggle:
     description: |
       Hetzner + Talos only. When 'true', runs an additional step that enables
@@ -1141,6 +1149,87 @@ runs:
         kubectl get nodes -o wide
         echo "✅ Floating IP released; API reachable at ${SERVER}"
 
+    - name: 🧪 ksail cluster update — load balancers off then on
+      id: cluster-update-load-balancer-toggle
+      if: inputs.provider == 'Hetzner' && inputs.distribution == 'Talos' && inputs.load-balancer-toggle == 'true'
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ steps.resolve-args.outputs.args }}
+        K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
+      run: |
+        set -euo pipefail
+        # ksail#7678: switching load balancers off on a running cluster must switch the
+        # cloud controller's service controller off, and switching them back on must
+        # restore it, each leaving nothing for a dry run to change.
+        LOG_DIR="/tmp/ksail-system-test-logs"
+        UPDATE_ARGS=$(echo "$ARGS" | sed 's/--image-verification [^ ]*//')
+        ccm_command() {
+          kubectl -n kube-system get deployments,daemonsets -o json |
+            jq -r '[.items[] | select(.metadata.name == "hcloud-cloud-controller-manager")
+              | .spec.template.spec.containers[] | ((.command // []) + (.args // []))[]] | join(" ")'
+        }
+        wait_ccm() {
+          kubectl -n kube-system rollout status deployment/hcloud-cloud-controller-manager --timeout=5m 2>/dev/null ||
+            kubectl -n kube-system rollout status daemonset/hcloud-cloud-controller-manager --timeout=5m
+        }
+        update() {
+          # shellcheck disable=SC2086
+          ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG \
+            2>&1 | tee "$LOG_DIR/$1.log"
+        }
+        dry_run_unchanged() {
+          # shellcheck disable=SC2086
+          ksail cluster update --dry-run --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG \
+            2>&1 | tee "$LOG_DIR/$1.log"
+          grep -qE "No changes detected|Would apply 0 in-place, 0 reboot-required, 0 recreate-required" "$LOG_DIR/$1.log"
+        }
+
+        ORIGINAL=$(yq -r '.spec.cluster.loadBalancer // ""' ksail.yaml)
+        if [[ "$ORIGINAL" == Disabled || "$(ccm_command)" == *-service* ]]; then
+          echo "❌ ERROR: the load-balancer toggle needs load balancers on at create"
+          exit 1
+        fi
+
+        echo "=== Switching load balancers off ==="
+        yq -i '.spec.cluster.loadBalancer = "Disabled"' ksail.yaml
+        update cluster-update-load-balancer-disable
+        if ! grep -q "load balancers are disabled" "$LOG_DIR/cluster-update-load-balancer-disable.log"; then
+          echo "❌ ERROR: the update did not report the load balancers it leaves in place"
+          exit 1
+        fi
+        wait_ccm
+        if [[ "$(ccm_command)" != *"--controllers=*,-service"* ]]; then
+          echo "❌ ERROR: the cloud controller still runs its service controller: $(ccm_command)"
+          exit 1
+        fi
+        kubectl wait --for=condition=Ready nodes --all --timeout=5m
+        if ! dry_run_unchanged cluster-update-load-balancer-disable-dry-run; then
+          echo "❌ ERROR: a dry run after switching load balancers off still finds changes"
+          exit 1
+        fi
+        echo "✅ Load balancers off: the service controller is off and the nodes are Ready"
+
+        echo "=== Restoring the original load-balancer setting ==="
+        if [[ -z "$ORIGINAL" ]]; then
+          yq -i 'del(.spec.cluster.loadBalancer)' ksail.yaml
+        else
+          ORIGINAL="$ORIGINAL" yq -i '.spec.cluster.loadBalancer = strenv(ORIGINAL)' ksail.yaml
+        fi
+        update cluster-update-load-balancer-enable
+        wait_ccm
+        if [[ "$(ccm_command)" == *-service* ]]; then
+          echo "❌ ERROR: the cloud controller still runs without its service controller: $(ccm_command)"
+          exit 1
+        fi
+        kubectl wait --for=condition=Ready nodes --all --timeout=5m
+        if ! dry_run_unchanged cluster-update-load-balancer-enable-dry-run; then
+          echo "❌ ERROR: a dry run after switching load balancers back on still finds changes"
+          exit 1
+        fi
+        echo "✅ Load balancers back on: the service controller runs and the nodes are Ready"
+
     # ── Phase 4b — Lifecycle tests (stop/start) ──────────────────────
     # Exercise stop/start on the freshly-created cluster BEFORE the heavy
     # nested-provider suite. Running it here keeps single-node etcd recovery
@@ -1254,6 +1343,7 @@ runs:
         || steps.cluster-update-schematic.outcome == 'failure'
         || steps.cluster-update-rolling-resize.outcome == 'failure'
         || steps.cluster-update-floating-ip-toggle.outcome == 'failure'
+        || steps.cluster-update-load-balancer-toggle.outcome == 'failure'
         || steps.kubernetes-provider-tests.outcome == 'failure')
       uses: $/.github/actions/debug-kubernetes-failure
       with:
