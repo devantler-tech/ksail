@@ -61,7 +61,7 @@ require (
 	github.com/google/go-github/v72 v72.0.0
 	github.com/google/go-licenses/v2 v2.0.1
 	github.com/googleapis/gax-go/v2 v2.27.0
-	github.com/gopacket/gopacket v1.7.4
+	github.com/gopacket/gopacket v1.7.7
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/hetznercloud/hcloud-go/v2 v2.53.0
 	github.com/invopop/jsonschema v0.14.0
