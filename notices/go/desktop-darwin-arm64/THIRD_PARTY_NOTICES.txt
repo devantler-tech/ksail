@@ -4210,15 +4210,15 @@ Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65
 Files: LICENSE
 Material: m81d1d3c75566d226 (copyright-header), SHA-256 cc0bb31e186a0e7eb32d7e00d96b28677bf29ab6dfb383c8e1e092d94fd8121e
 
-Component: github.com/fluxcd/pkg/apis/acl@v0.10.0
-Source: https://proxy.golang.org/github.com/fluxcd/pkg/apis/acl/@v/v0.10.0.zip
-Selected Go source checksum: h1:KPfAmELNvtvaz8wixnm/MYXqa+MJf7ntVVMUU93Aenk=
+Component: github.com/fluxcd/pkg/apis/acl@v0.12.0
+Source: https://proxy.golang.org/github.com/fluxcd/pkg/apis/acl/@v/v0.12.0.zip
+Selected Go source checksum: h1:UWpZDqKxpKDW38wdXIMHV8Uv3POPu2vUrra0JH1frH0=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
 github.com/fluxcd/pkg/apis/acl
-Material: m408ff53c0180a5cd (copyright-header), SHA-256 a61bfce359055ebea6f65fb9784a0392abaa4c2e2c8bdd8d03e09abee9cfa73e
 Material: m56cb95c11f58f6f8 (copyright-header), SHA-256 cad4eff957ff7d988f03e2e911f7b6a8674f58ee1c67c6a35d4ff95b992153ec
+Material: m5fe28487e9114bff (copyright-header), SHA-256 907d1fc6b0a8ba9362ee99637c601e33ff6d241ac141aa49f62b439961a6120c
 Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
 Files: LICENSE
 
@@ -4285,14 +4285,15 @@ Files: LICENSE
 Material: m81d1d3c75566d226 (copyright-header), SHA-256 cc0bb31e186a0e7eb32d7e00d96b28677bf29ab6dfb383c8e1e092d94fd8121e
 Material: meaf71fb3ad741f58 (copyright-header), SHA-256 7f615c2527779bf1c219dbe99678e472dc06b6ff5b16221d46d45c6d60d4409d
 
-Component: github.com/fluxcd/source-controller/api@v1.9.6
-Source: https://proxy.golang.org/github.com/fluxcd/source-controller/api/@v/v1.9.6.zip
-Selected Go source checksum: h1:h9+CsJVw4CNbMEsnEb11SGEhLfKzVTkWC0w7M8VX4Hk=
+Component: github.com/fluxcd/source-controller/api@v1.10.1
+Source: https://proxy.golang.org/github.com/fluxcd/source-controller/api/@v/v1.10.1.zip
+Selected Go source checksum: h1:DqqIctqpgyZvPCjpJUFwWjUM063Y5xblsLqxmxQxcac=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
 github.com/fluxcd/source-controller/api/v1
 Material: m408ff53c0180a5cd (copyright-header), SHA-256 a61bfce359055ebea6f65fb9784a0392abaa4c2e2c8bdd8d03e09abee9cfa73e
+Material: m5fe28487e9114bff (copyright-header), SHA-256 907d1fc6b0a8ba9362ee99637c601e33ff6d241ac141aa49f62b439961a6120c
 Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
 Files: LICENSE
 Material: m81d1d3c75566d226 (copyright-header), SHA-256 cc0bb31e186a0e7eb32d7e00d96b28677bf29ab6dfb383c8e1e092d94fd8121e
