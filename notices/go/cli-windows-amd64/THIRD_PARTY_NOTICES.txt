@@ -4260,9 +4260,9 @@ Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65
 Files: LICENSE
 Material: ma143d8dbe0d7c7f0 (copyright-header), SHA-256 ca7fc0da627e3be627b454f7ef70723997d5cde8dac88a31f7cc374d61d961c3
 
-Component: github.com/fluxcd/kustomize-controller/api@v1.9.6
-Source: https://proxy.golang.org/github.com/fluxcd/kustomize-controller/api/@v/v1.9.6.zip
-Selected Go source checksum: h1:7XiuW+l3YYXWeIwLJ8w34zHlJyMUEKosBIxLIki9J3I=
+Component: github.com/fluxcd/kustomize-controller/api@v1.10.1
+Source: https://proxy.golang.org/github.com/fluxcd/kustomize-controller/api/@v/v1.10.1.zip
+Selected Go source checksum: h1:/7h464untM4nSwJCnoja1UkJC7G7NM3BWhAi1N3P8ME=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
