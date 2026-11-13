@@ -134,6 +134,8 @@ func splitImageCommand(
 		"GITHUB_ACTIONS="+onCI,
 		"RUNNER_ENVIRONMENT=github-hosted",
 		"RUNNER_TEMP="+runnerTemp,
+		// Keep the stubs' own temporary files inside test-owned storage.
+		"TMPDIR="+t.TempDir(),
 		"IMAGE_EXPORT_CLUSTER="+cluster,
 		"SPLIT_STATE="+state,
 		"SPLIT_MODE="+scenario.mode,
