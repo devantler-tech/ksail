@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/docker/docker/api/types/system"
 	k3ddocker "github.com/k3d-io/k3d/v5/pkg/runtimes/docker"
 	"github.com/sirupsen/logrus"
 )
@@ -51,28 +52,48 @@ func (k3dFatalHook) Fire(entry *logrus.Entry) error {
 // output redirection and listMutex that List releases only after it returns).
 const runtimeProbeTimeout = 10 * time.Second
 
-// defaultRuntimeReachable asks the Docker daemon k3d itself uses, through k3d's
-// own client so the same environment selects it, for its info within
-// runtimeProbeTimeout. It returns the error when the daemon cannot be reached or
-// does not answer in time.
-func defaultRuntimeReachable() error {
-	return runtimeReachableWithin(runtimeProbeTimeout)
+// runtimeInfoClient is the part of a Docker client the runtime check uses.
+type runtimeInfoClient interface {
+	Info(ctx context.Context) (system.Info, error)
+	Close() error
 }
 
-// runtimeReachableWithin is defaultRuntimeReachable with a chosen time limit. The
-// limit is a context deadline, so it cancels the request itself.
-func runtimeReachableWithin(timeout time.Duration) error {
+// newK3dRuntimeClient creates k3d's own Docker client, so the check reaches the
+// daemon that the same environment selects for k3d.
+func newK3dRuntimeClient() (runtimeInfoClient, error) {
+	dockerClient, err := k3ddocker.GetDockerClient()
+	if err != nil {
+		return nil, fmt.Errorf("getting k3d's Docker client: %w", err)
+	}
+
+	return dockerClient, nil
+}
+
+// defaultRuntimeReachable asks the Docker daemon k3d itself uses for its info
+// within runtimeProbeTimeout. It returns the error when the daemon cannot be
+// reached or does not answer in time.
+func defaultRuntimeReachable() error {
+	return runtimeReachableWithin(newK3dRuntimeClient, runtimeProbeTimeout)
+}
+
+// runtimeReachableWithin asks the client newClient creates for the daemon's info
+// within timeout. The limit is a context deadline, so it cancels the request
+// itself.
+func runtimeReachableWithin(
+	newClient func() (runtimeInfoClient, error),
+	timeout time.Duration,
+) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	dockerClient, err := k3ddocker.GetDockerClient()
+	runtimeClient, err := newClient()
 	if err != nil {
 		return fmt.Errorf("creating the k3d runtime client: %w", err)
 	}
 
-	defer func() { _ = dockerClient.Close() }()
+	defer func() { _ = runtimeClient.Close() }()
 
-	_, err = dockerClient.Info(ctx)
+	_, err = runtimeClient.Info(ctx)
 	if err != nil {
 		return fmt.Errorf("checking the k3d runtime: %w", err)
 	}

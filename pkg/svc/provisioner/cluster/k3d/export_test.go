@@ -24,10 +24,17 @@ func (k *Provisioner) RunK3dSafelyForTest(action func() error) error {
 	return k.runK3dSafely(action)
 }
 
-// RuntimeReachableWithinForTest exposes the real runtime check with a chosen time
-// limit, so a test can prove a silent daemon cannot hold it up.
-func RuntimeReachableWithinForTest(timeout time.Duration) error {
-	return runtimeReachableWithin(timeout)
+// RuntimeInfoClientForTest is the client interface the runtime check uses, so a
+// test can stand in for the Docker daemon without a connection.
+type RuntimeInfoClientForTest = runtimeInfoClient
+
+// RuntimeReachableWithinForTest exposes the real runtime check with a chosen
+// client and time limit, so a test can prove a silent daemon cannot hold it up.
+func RuntimeReachableWithinForTest(
+	newClient func() (RuntimeInfoClientForTest, error),
+	timeout time.Duration,
+) error {
+	return runtimeReachableWithin(newClient, timeout)
 }
 
 // WithRuntimeProbeForTest replaces the check of whether k3d's runtime answers,

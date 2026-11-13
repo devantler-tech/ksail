@@ -3,13 +3,15 @@ package k3dprovisioner_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
-	"net"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	k3dprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/k3d"
+	"github.com/docker/docker/api/types/system"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	k3dlogger "github.com/k3d-io/k3d/v5/pkg/logger"
 	"github.com/stretchr/testify/assert"
@@ -201,59 +203,49 @@ func TestRunK3dSafely_OtherPanicIsReRaised(t *testing.T) {
 	})
 }
 
+// errNoDeadline is what silentDaemon returns when the check gave it no deadline,
+// so a check that would wait forever fails the test instead of hanging it.
+var errNoDeadline = errors.New("the runtime check set no deadline and would wait forever")
+
+// silentDaemon is a runtime client for a daemon that accepts the request and never
+// answers: Info returns only when its context ends.
+type silentDaemon struct {
+	closed atomic.Bool
+}
+
+func (d *silentDaemon) Info(ctx context.Context) (system.Info, error) {
+	select {
+	case <-ctx.Done():
+		return system.Info{}, fmt.Errorf("waiting for the daemon to answer: %w", ctx.Err())
+	case <-time.After(5 * time.Second):
+		return system.Info{}, errNoDeadline
+	}
+}
+
+func (d *silentDaemon) Close() error {
+	d.closed.Store(true)
+
+	return nil
+}
+
 // TestRuntimeReachableWithin_SilentDaemonTimesOut checks that the runtime check
-// gives up when the daemon accepts the connection but never answers, instead of
-// holding up the error (and, during List, the lock List holds) indefinitely.
-//
-
+// gives up when the daemon never answers, instead of holding up the error (and,
+// during List, the lock List holds) indefinitely.
 func TestRuntimeReachableWithin_SilentDaemonTimesOut(t *testing.T) {
-	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
-	require.NoError(t, err)
+	t.Parallel()
 
-	var (
-		connsMu sync.Mutex
-		conns   []net.Conn
+	daemon := &silentDaemon{}
+
+	err := k3dprovisioner.RuntimeReachableWithinForTest(
+		func() (k3dprovisioner.RuntimeInfoClientForTest, error) { return daemon, nil },
+		50*time.Millisecond,
 	)
 
-	t.Cleanup(func() {
-		_ = listener.Close()
-
-		connsMu.Lock()
-		defer connsMu.Unlock()
-
-		for _, conn := range conns {
-			_ = conn.Close()
-		}
-	})
-
-	// Accept every connection and never answer, like a hung daemon.
-	go func() {
-		for {
-			conn, acceptErr := listener.Accept()
-			if acceptErr != nil {
-				return
-			}
-
-			connsMu.Lock()
-
-			conns = append(conns, conn)
-			connsMu.Unlock()
-		}
-	}()
-
-	t.Setenv("DOCKER_HOST", "tcp://"+listener.Addr().String())
-
-	const limit = 200 * time.Millisecond
-
-	start := time.Now()
-	err = k3dprovisioner.RuntimeReachableWithinForTest(limit)
-	elapsed := time.Since(start)
-
-	require.Error(t, err, "a daemon that never answers must count as unreachable")
-	assert.Less(
+	require.ErrorIs(
 		t,
-		elapsed,
-		5*time.Second,
-		"the check must stop near its limit, not wait for the daemon",
+		err,
+		context.DeadlineExceeded,
+		"a daemon that never answers must count as unreachable once the limit passes",
 	)
+	assert.True(t, daemon.closed.Load(), "the check must close the client it created")
 }
