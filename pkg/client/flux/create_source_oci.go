@@ -86,7 +86,7 @@ func (c *Client) createOCIRepository(
 			URL:       flags.url,
 			Provider:  flags.provider,
 			Insecure:  flags.insecure,
-			Interval:  metav1.Duration{Duration: flags.interval},
+			Interval:  &metav1.Duration{Duration: flags.interval},
 			Reference: &sourcev1.OCIRepositoryRef{},
 		},
 	}

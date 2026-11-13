@@ -609,6 +609,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      # Resolving this job's packages downloads modules; restore them through the shared
+      # bounded retry so one dropped Go proxy stream does not fail the job (#8053).
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@93412f612d35018a21eafd7cf28b523b92f5038a
 
       - name: 🔎 Verify complete and private regional inventories
         run: go test ./internal/maintenance/eksinventory/...
@@ -1032,11 +1036,29 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      # Resolving this job's packages downloads modules; restore them through the shared
+      # bounded retry so one dropped Go proxy stream does not fail the job (#8053).
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@93412f612d35018a21eafd7cf28b523b92f5038a
 
       - name: 📦 Install pinned vulnerability scanner
         env:
           GOBIN: ${{ runner.temp }}/vulnerability-scanner
-        run: go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+        # The scanner resolves outside this module, so the module restore above does not
+        # cover it; retry the same three times a dropped proxy stream gets elsewhere (#8053).
+        # A persistent failure still fails the job after the last attempt.
+        run: |
+          for attempt in 1 2 3; do
+            if go install golang.org/x/vuln/cmd/govulncheck@v1.8.0; then
+              exit 0
+            fi
+            if [[ "$attempt" -eq 3 ]]; then
+              echo "::error::Installing govulncheck failed after 3 attempts."
+              exit 1
+            fi
+            echo "::warning::govulncheck install attempt $attempt/3 failed; retrying in $((attempt * 5))s."
+            sleep "$((attempt * 5))"
+          done
 
       - name: 🧪 Verify actual scanner positive and negative controls
         env:
@@ -2259,12 +2281,15 @@ jobs:
           # outer node. The collision does not depend on it, because replies to any
           # outer kind-network address are captured by an overlapping inner bridge.
           # Other nested distributions retain their complete default-host legs.
+          # This two-node host also checks exporting images held on different nodes
+          # (#8251); it is the only Docker leg with a worker node to split them across.
           - distribution: Vanilla
             provider: Docker
             init: true
             args: "--name nested-kind-routing --workers 1"
             test-kubernetes-provider: "true"
             kubernetes-provider-distributions: "Vanilla"
+            split-image-cluster-name: "nested-kind-routing"
           # Keep the fresh 3.33 installations above, and also create these with
           # the immutable 3.32.2 CLI before the candidate's unchanged-config update.
           - distribution: Vanilla
@@ -2380,6 +2405,7 @@ jobs:
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
           test-kubernetes-provider: ${{ matrix.test-kubernetes-provider || 'false' }}
           test-workload-mirror: ${{ matrix.test-workload-mirror || 'false' }}
+          split-image-cluster-name: ${{ matrix.split-image-cluster-name || '' }}
           kubernetes-provider-distributions: ${{ matrix.kubernetes-provider-distributions || 'Vanilla,K3s,VCluster,Talos' }}
           kubernetes-provider-cni: ${{ matrix.kubernetes-provider-cni || '' }}
 
@@ -2510,6 +2536,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      # Resolving this job's packages downloads modules; restore them through the shared
+      # bounded retry so one dropped Go proxy stream does not fail the job (#8053).
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@93412f612d35018a21eafd7cf28b523b92f5038a
 
       # `go build ./...` and `go test ./...` resolve only THIS module's packages and their own
       # tests. Neither resolves the tests of a DEPENDENCY, so a dependency whose test imports a
@@ -2554,6 +2584,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      # Resolving this job's packages downloads modules; restore them through the shared
+      # bounded retry so one dropped Go proxy stream does not fail the job (#8053).
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@93412f612d35018a21eafd7cf28b523b92f5038a
 
       # The contracts keep the Gateway API CRDs KSail installs on the line the pinned Cilium
       # release is built against, and keep the module carrying their version tracked by

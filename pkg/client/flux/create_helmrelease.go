@@ -93,7 +93,7 @@ func (c *Client) createHelmRelease(
 			Chart: &helmv2.HelmChartTemplate{
 				Spec: helmv2.HelmChartTemplateSpec{
 					Chart: flags.chart,
-					SourceRef: helmv2.CrossNamespaceObjectReference{
+					SourceRef: &helmv2.CrossNamespaceObjectReference{
 						Kind:      sourceKind,
 						Name:      sourceName,
 						Namespace: sourceNs,

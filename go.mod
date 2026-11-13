@@ -42,11 +42,11 @@ require (
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/docker/go-connections v0.8.2
 	github.com/fatih/color v1.19.0
-	github.com/fluxcd/helm-controller/api v1.6.5
-	github.com/fluxcd/kustomize-controller/api v1.9.6
-	github.com/fluxcd/pkg/apis/kustomize v1.19.2
+	github.com/fluxcd/helm-controller/api v1.7.1
+	github.com/fluxcd/kustomize-controller/api v1.10.1
+	github.com/fluxcd/pkg/apis/kustomize v1.23.0
 	github.com/fluxcd/pkg/apis/meta v1.38.0
-	github.com/fluxcd/source-controller/api v1.9.6
+	github.com/fluxcd/source-controller/api v1.10.1
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/getsops/sops/v3 v3.13.3
 	github.com/github/copilot-sdk/go v1.0.27
@@ -119,20 +119,20 @@ require (
 	google.golang.org/grpc v1.85.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
-	helm.sh/helm/v4 v4.2.4
-	k8s.io/api v0.36.6
-	k8s.io/apiextensions-apiserver v0.36.6
+	helm.sh/helm/v4 v4.3.1
+	k8s.io/api v0.37.1
+	k8s.io/apiextensions-apiserver v0.37.1
 	k8s.io/apimachinery v0.37.1
-	k8s.io/apiserver v0.36.6
-	k8s.io/cli-runtime v0.36.6
-	k8s.io/client-go v0.36.6
+	k8s.io/apiserver v0.37.1
+	k8s.io/cli-runtime v0.37.1
+	k8s.io/client-go v0.37.1
 	k8s.io/klog/v2 v2.140.0
-	k8s.io/kubectl v0.36.6
-	sigs.k8s.io/controller-runtime v0.24.1
+	k8s.io/kubectl v0.37.1
+	sigs.k8s.io/controller-runtime v0.25.2
 	sigs.k8s.io/gateway-api v1.6.3
 	sigs.k8s.io/kind v0.33.0
-	sigs.k8s.io/kustomize/api v0.21.2
-	sigs.k8s.io/kustomize/kyaml v0.21.2
+	sigs.k8s.io/kustomize/api v0.21.3
+	sigs.k8s.io/kustomize/kyaml v0.21.3
 	sigs.k8s.io/kwok v0.8.0
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -427,7 +427,7 @@ require (
 	github.com/firefart/nonamedreturns v1.0.6 // indirect
 	github.com/florianl/go-tc v0.4.8 // indirect
 	github.com/fluxcd/cli-utils v1.2.2 // indirect
-	github.com/fluxcd/pkg/apis/acl v0.10.0 // indirect
+	github.com/fluxcd/pkg/apis/acl v0.12.0 // indirect
 	github.com/fluxcd/pkg/oci v0.45.0 // indirect
 	github.com/fluxcd/pkg/ssa v0.77.0 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
@@ -948,9 +948,9 @@ require (
 	go.etcd.io/etcd/client/pkg/v3 v3.7.1 // indirect
 	go.etcd.io/etcd/client/v3 v3.7.1 // indirect
 	go.etcd.io/etcd/etcdutl/v3 v3.7.0-rc.0 // indirect
-	go.etcd.io/etcd/pkg/v3 v3.7.0-rc.0 // indirect
-	go.etcd.io/etcd/server/v3 v3.7.0-rc.0 // indirect
-	go.etcd.io/raft/v3 v3.7.0-rc.1 // indirect
+	go.etcd.io/etcd/pkg/v3 v3.7.0 // indirect
+	go.etcd.io/etcd/server/v3 v3.7.0 // indirect
+	go.etcd.io/raft/v3 v3.7.0 // indirect
 	go.mongodb.org/mongo-driver v1.17.9 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
@@ -1002,18 +1002,18 @@ require (
 	helm.sh/helm/v3 v3.20.2 // indirect
 	honnef.co/go/tools v0.8.2 // indirect
 	k8s.io/cluster-bootstrap v0.36.0 // indirect
-	k8s.io/component-base v0.36.6 // indirect
-	k8s.io/component-helpers v0.36.6 // indirect
+	k8s.io/component-base v0.37.1 // indirect
+	k8s.io/component-helpers v0.37.1 // indirect
 	k8s.io/cri-api v0.36.3 // indirect
 	k8s.io/cri-client v0.36.3 // indirect
 	k8s.io/kube-aggregator v0.36.3 // indirect
-	k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad // indirect
+	k8s.io/kube-openapi v0.0.0-20261001230523-97fa35140926 // indirect
 	k8s.io/kube-proxy v0.36.2 // indirect
 	k8s.io/kubelet v0.36.2 // indirect
 	k8s.io/kubernetes v1.36.0 // indirect
-	k8s.io/metrics v0.36.6 // indirect
+	k8s.io/metrics v0.37.1 // indirect
 	k8s.io/pod-security-admission v0.36.2 // indirect
-	k8s.io/streaming v0.36.6 // indirect
+	k8s.io/streaming v0.37.1 // indirect
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 // indirect
 	modernc.org/libc v1.73.4 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
@@ -1023,7 +1023,7 @@ require (
 	mvdan.cc/sh/v3 v3.12.0 // indirect
 	mvdan.cc/unparam v0.0.0-20251027182757-5beb8c8f8f15 // indirect
 	oras.land/oras-go/v2 v2.6.2 // indirect
-	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.34.0 // indirect
+	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.36.0 // indirect
 	sigs.k8s.io/cli-utils v0.37.2 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/knftables v0.0.21 // indirect
@@ -1149,3 +1149,34 @@ tool (
 // Keep its runtime compatible with the embedded v0.36 tools until #7259 lands.
 // Qualify this mapping so a later requirement cannot reuse it without validation.
 replace k8s.io/apimachinery v0.37.1 => k8s.io/apimachinery v0.36.6
+
+// fluxcd/pkg/apis/kustomize v1.23.0, fluxcd/helm-controller/api v1.7.1 and
+// fluxcd/source-controller/api v1.10.1 require Kubernetes
+// v0.37.1 for these modules. Hold them on the embedded v0.36 tools until #7259 lands; each
+// mapping is qualified to v0.37.1 so a later requirement cannot reuse it without validation.
+replace (
+	k8s.io/api v0.37.1 => k8s.io/api v0.36.6
+	k8s.io/apiextensions-apiserver v0.37.1 => k8s.io/apiextensions-apiserver v0.36.6
+	k8s.io/apiserver v0.37.1 => k8s.io/apiserver v0.36.6
+	k8s.io/client-go v0.37.1 => k8s.io/client-go v0.36.6
+	k8s.io/component-base v0.37.1 => k8s.io/component-base v0.36.6
+	k8s.io/streaming v0.37.1 => k8s.io/streaming v0.36.6
+)
+
+// kustomize v0.21.3 compiles unchanged against the kube-openapi that main already uses, but it
+// requires a newer one that moves to structured-merge-diff/v7, which the embedded v0.36
+// apimachinery cannot build against. Hold kube-openapi at main's version until #7259 lands; the
+// mapping is qualified to that exact requirement so a later one cannot reuse it without validation.
+replace k8s.io/kube-openapi v0.0.0-20261001230523-97fa35140926 => k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad
+
+// helm v4.3.1 requires Kubernetes v0.37.1 for these modules too, and controller-runtime v0.25.2,
+// which does not compile against v0.36 (it needs events.AnnotatedEventRecorder). Hold them on the
+// embedded v0.36 tools until #7259 lands; each mapping is qualified so a later requirement cannot
+// reuse it without validation.
+replace (
+	k8s.io/cli-runtime v0.37.1 => k8s.io/cli-runtime v0.36.6
+	k8s.io/component-helpers v0.37.1 => k8s.io/component-helpers v0.36.6
+	k8s.io/kubectl v0.37.1 => k8s.io/kubectl v0.36.6
+	k8s.io/metrics v0.37.1 => k8s.io/metrics v0.36.6
+	sigs.k8s.io/controller-runtime v0.25.2 => sigs.k8s.io/controller-runtime v0.24.1
+)

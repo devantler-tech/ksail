@@ -128,6 +128,22 @@ linters:
         - k8s.io/pod-security-admission
         # Flux meta's unchanged API retains the embedded Kubernetes minor (#7259).
         - k8s.io/apimachinery
+        # Flux API bumps hold their v0.37.1 Kubernetes requirements at the embedded
+        # v0.36 minor with qualified replaces until #7259 lands.
+        - k8s.io/api
+        - k8s.io/apiextensions-apiserver
+        - k8s.io/apiserver
+        - k8s.io/client-go
+        - k8s.io/component-base
+        - k8s.io/streaming
+        # kustomize v0.21.3 holds kube-openapi at main's version until #7259 lands.
+        - k8s.io/kube-openapi
+        # helm v4.3.1 holds the same way, plus controller-runtime at v0.24.1 (#7259).
+        - k8s.io/cli-runtime
+        - k8s.io/component-helpers
+        - k8s.io/kubectl
+        - k8s.io/metrics
+        - sigs.k8s.io/controller-runtime
     wsl_v5:
       allow-first-in-block: true
       allow-whole-block: false

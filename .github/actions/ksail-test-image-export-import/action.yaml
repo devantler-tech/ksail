@@ -9,6 +9,9 @@ description: |
     6. Export every image on the nodes, so an import that stored a
        reference to nothing fails here, and check that the import added no
        generated import-<date> alias for a named image
+    7. On an explicitly named two-node Kind cluster only, give each node an
+       image no other node holds, and prove a selected and a full export
+       each restore both on every node (#8251)
 
   Only supported for Vanilla (Kind) and K3s (K3d) distributions.
   Talos and VCluster are unsupported (immutable OS / nested containerd).
@@ -16,6 +19,12 @@ description: |
   Does NOT create or delete the cluster — the orchestrator handles that.
 
 inputs:
+  split-image-cluster-name:
+    description: |
+      Name of the two-node Kind cluster for the split-image export check.
+      Empty (the default) skips the check; only the CI fixture cluster is accepted.
+    required: false
+    default: ""
   test-workload-name:
     description: Name for the test workload deployment
     required: false
@@ -144,8 +153,16 @@ runs:
         fi
         echo "✅ Full export after import succeeded ($(du -h /tmp/test-images-after-import.tar | cut -f1)) with no generated aliases"
 
+    - name: 🧪 Export and import images held on different nodes
+      id: split-image
+      if: inputs.split-image-cluster-name != ''
+      shell: bash
+      env:
+        IMAGE_EXPORT_CLUSTER: ${{ inputs.split-image-cluster-name }}
+      run: timeout --kill-after=15s 420s bash "$GITHUB_WORKSPACE/.github/actions/ksail-test-image-export-import/split-node-roundtrip.sh"
+
     - name: 🐞 Debug failure
-      if: failure() && (steps.deploy.outcome == 'failure' || steps.export.outcome == 'failure' || steps.names-before-import.outcome == 'failure' || steps.import.outcome == 'failure' || steps.export-after-import.outcome == 'failure')
+      if: failure() && (steps.deploy.outcome == 'failure' || steps.export.outcome == 'failure' || steps.names-before-import.outcome == 'failure' || steps.import.outcome == 'failure' || steps.export-after-import.outcome == 'failure' || steps.split-image.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"

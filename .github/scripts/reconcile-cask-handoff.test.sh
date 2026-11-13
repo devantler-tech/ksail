@@ -24,8 +24,12 @@ repos/devantler-tech/ksail/releases/latest)
     if $scenario == "invalid-tag" then .tag_name="../untrusted"
     elif $scenario == "draft-release" then .draft=true else . end' ;;
 repos/devantler-tech/homebrew-tap/pulls\?state=open\&head=devantler-tech:goreleaser/*)
-  jq -n --arg scenario "$CASE_SCENARIO" '
-    [{number:42,user:{login:"devantler"},head:{repo:{full_name:"devantler-tech/homebrew-tap"}}}] |
+  name="${*##*goreleaser/}"
+  name="${name%%&*}"
+  release=v7.213.2
+  [[ "$CASE_SCENARIO" != stale-title && "$CASE_SCENARIO" != title-write-failed ]] || release=v7.213.1
+  jq -n --arg scenario "$CASE_SCENARIO" --arg title "chore(cask): update ${name} to ${release}" '
+    [{number:42,title:$title,user:{login:"devantler"},head:{repo:{full_name:"devantler-tech/homebrew-tap"}}}] |
     if $scenario == "no-pr" or $scenario == "rejected-current" then []
     elif $scenario == "ambiguous" then . + [.[0] + {number:43}]
     elif $scenario == "fork-pr" then .[0].head.repo.full_name="untrusted/tap" else . end' ;;
@@ -63,13 +67,21 @@ printf 'signature\n' >>"$CASE_STATE/signatures"
 [[ "$CASE_SCENARIO" != invalid-signature && "$CASE_SCENARIO" != merged-invalid-signature ]] || exit 1
 EOF
 chmod +x "$work/scripts/"*.sh
+mkdir -p "$work/bin"
+cat >"$work/bin/gh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"$CASE_STATE/gh-calls"
+[[ "$CASE_SCENARIO" != title-write-failed ]] || exit 1
+EOF
+chmod +x "$work/bin/gh"
 
 run_case() {
 	local scenario="$1" expected="$2" ref="${3:-refs/heads/main}" status=0
 	local state="$work/$scenario"
 	mkdir -p "$state"
 	: >"$state/summary"
-	CASE_STATE="$state" CASE_SCENARIO="$scenario" GITHUB_REPOSITORY=devantler-tech/ksail \
+	PATH="$work/bin:$PATH" CASE_STATE="$state" CASE_SCENARIO="$scenario" GITHUB_REPOSITORY=devantler-tech/ksail \
 		GITHUB_REF="$ref" GITHUB_EVENT_NAME=workflow_dispatch GITHUB_STEP_SUMMARY="$state/summary" \
 		bash "$work/scripts/reconcile-cask-handoff.sh" >"$state/output" 2>&1 || status=$?
 	if [[ "$status" -ne "$expected" ]]; then
@@ -81,9 +93,22 @@ run_case() {
 		[[ "$(grep -c '^deliver$' "$state/helper-calls")" -eq 2 ]] || fail 'both casks must use the guarded finisher'
 		[[ "$(grep -c '^signature$' "$state/signatures")" -eq 1 ]] || fail 'open Desktop handoff must verify the published signature'
 		grep -q 'v7.213.2' "$state/summary" || fail 'delivery has no durable release identity'
+		[[ ! -e "$state/gh-calls" ]] || fail 'a PR already titled for its release was retitled'
+		;;
+	stale-title)
+		[[ "$(grep -c '^deliver$' "$state/helper-calls")" -eq 2 ]] || fail 'a retitled PR skipped the guarded finisher'
+		grep -qxF 'api -X PATCH repos/devantler-tech/homebrew-tap/pulls/42 -f title=chore(cask): update ksail to v7.213.2' "$state/gh-calls" ||
+			fail 'the CLI cask PR kept an earlier release title'
+		grep -qxF 'api -X PATCH repos/devantler-tech/homebrew-tap/pulls/42 -f title=chore(cask): update ksail-desktop to v7.213.2' "$state/gh-calls" ||
+			fail 'the Desktop cask PR kept an earlier release title'
+		;;
+	title-write-failed)
+		[[ ! -e "$state/helper-calls" ]] || fail 'a PR whose title could not be set reached delivery'
+		[[ "$(grep -c Failed "$state/summary")" -eq 2 ]] || fail 'a failed title update was not recorded as a failure'
 		;;
 	merged)
 		[[ "$(grep -c '^verify$' "$state/helper-calls")" -eq 2 ]] || fail 'finder candidates lack independent provenance verification'
+		[[ ! -e "$state/gh-calls" ]] || fail 'a merged candidate was retitled'
 		[[ -s "$state/signatures" ]] || fail 'merged Desktop delivery bypassed archive seal verification'
 		;;
 	merged-invalid-signature)
@@ -119,6 +144,8 @@ run_case rejected-current 1
 run_case repair-current 0
 run_case merged-invalid-signature 1
 run_case delivered 0
+run_case stale-title 0
+run_case title-write-failed 1
 run_case merged 0
 run_case invalid-merge 1
 run_case invalid-signature 1
