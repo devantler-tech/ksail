@@ -43,7 +43,7 @@ require (
 	github.com/docker/go-connections v0.8.2
 	github.com/fatih/color v1.19.0
 	github.com/fluxcd/helm-controller/api v1.6.5
-	github.com/fluxcd/kustomize-controller/api v1.9.6
+	github.com/fluxcd/kustomize-controller/api v1.10.1
 	github.com/fluxcd/pkg/apis/kustomize v1.23.0
 	github.com/fluxcd/pkg/apis/meta v1.38.0
 	github.com/fluxcd/source-controller/api v1.9.6
@@ -119,7 +119,7 @@ require (
 	google.golang.org/grpc v1.85.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
-	helm.sh/helm/v4 v4.2.4
+	helm.sh/helm/v4 v4.3.1
 	k8s.io/api v0.37.1
 	k8s.io/apiextensions-apiserver v0.37.1
 	k8s.io/apimachinery v0.37.1
@@ -128,7 +128,7 @@ require (
 	k8s.io/client-go v0.37.1
 	k8s.io/klog/v2 v2.140.0
 	k8s.io/kubectl v0.37.1
-	sigs.k8s.io/controller-runtime v0.24.1
+	sigs.k8s.io/controller-runtime v0.25.2
 	sigs.k8s.io/gateway-api v1.6.3
 	sigs.k8s.io/kind v0.33.0
 	sigs.k8s.io/kustomize/api v0.21.2
@@ -1162,9 +1162,10 @@ replace (
 	k8s.io/streaming v0.37.1 => k8s.io/streaming v0.36.6
 )
 
-// siderolabs/talos v1.14.6 requires Kubernetes v0.37.1 for these modules as well. Hold each at the
-// version main already uses until #7259 lands; each mapping is qualified to v0.37.1 so a later
-// requirement cannot reuse it without validation.
+// helm v4.3.1 and siderolabs/talos v1.14.6 require Kubernetes v0.37.1 for these modules, and helm
+// also requires controller-runtime v0.25.2, which does not compile against v0.36 (it needs
+// events.AnnotatedEventRecorder). Hold them on the embedded v0.36 tools until #7259 lands; each
+// mapping is qualified so a later requirement cannot reuse it without validation.
 replace (
 	k8s.io/cli-runtime v0.37.1 => k8s.io/cli-runtime v0.36.6
 	k8s.io/component-helpers v0.37.1 => k8s.io/component-helpers v0.36.6
@@ -1173,4 +1174,5 @@ replace (
 	k8s.io/kubectl v0.37.1 => k8s.io/kubectl v0.36.6
 	k8s.io/kubelet v0.37.1 => k8s.io/kubelet v0.36.2
 	k8s.io/metrics v0.37.1 => k8s.io/metrics v0.36.6
+	sigs.k8s.io/controller-runtime v0.25.2 => sigs.k8s.io/controller-runtime v0.24.1
 )

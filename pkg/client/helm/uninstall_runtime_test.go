@@ -128,6 +128,12 @@ func (fixture *uninstallFixture) serveConfigMap(
 			Namespace:       "fixture",
 			UID:             "owned-uid",
 			ResourceVersion: "1",
+			// helm v4.3 deletes only resources that carry its ownership markers.
+			Labels: map[string]string{"app.kubernetes.io/managed-by": "Helm"},
+			Annotations: map[string]string{
+				"meta.helm.sh/release-name":      "fixture",
+				"meta.helm.sh/release-namespace": "fixture",
+			},
 		})
 	}
 }

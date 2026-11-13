@@ -31,6 +31,9 @@ func TestGoModuleRestoreConsumerBindings(t *testing.T) {
 			// TestKSailBinaryArtifactMirrorWarmerConsumer instead.
 			"warm-helm-cache", "test-release-config",
 			"release-graph-audit", "local-recovery-trial",
+			// Module-resolving checks that set up Go without a build cache (#8053).
+			"eks-smoke-scripts", "verify-vulnerability-identities",
+			"verify-dependency-test-graph", "verify-dependency-contracts",
 			"verify-todos-workflow-contract",
 		},
 		"copilot-setup-steps.yml":       {"copilot-setup-steps"},

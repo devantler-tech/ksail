@@ -53,6 +53,10 @@ inputs:
     description: Name for the test workload deployment
     required: false
     default: whoami
+  split-image-cluster-name:
+    description: Two-node Kind fixture cluster that also checks exporting images held on different nodes
+    required: false
+    default: ""
   apply-overlay-path:
     description: Path to kustomize overlay for workload apply test
     required: false
