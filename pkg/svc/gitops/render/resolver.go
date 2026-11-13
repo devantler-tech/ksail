@@ -219,8 +219,8 @@ func applySourceRef(
 
 	ref := chart.SourceRef
 	if ref == nil {
-		// helm-controller/api v1.7 made sourceRef optional; a chart template
-		// without one names no source this resolver can render.
+		// The resolver renders only charts reached through a sourceRef; a
+		// chart template without one (an inline OCI repository) is unsupported.
 		return fmt.Errorf("%w: chart template has no sourceRef", ErrUnsupportedSourceKind)
 	}
 

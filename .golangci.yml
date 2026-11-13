@@ -136,6 +136,8 @@ linters:
         - k8s.io/client-go
         - k8s.io/component-base
         - k8s.io/streaming
+        # kustomize v0.21.3 holds kube-openapi at main's version until #7259 lands.
+        - k8s.io/kube-openapi
         # helm v4.3.1 holds the same way, plus controller-runtime at v0.24.1 (#7259).
         - k8s.io/cli-runtime
         - k8s.io/component-helpers
