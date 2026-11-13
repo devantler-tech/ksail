@@ -999,9 +999,9 @@ github.com/Microsoft/go-winio/vhd
 Material: m4cee63c38d5dc9b7 (license), SHA-256 cf248820bf1178370bb4f1670a59f8748d46bc96d0f64080cd631511c6046409
 Files: LICENSE
 
-Component: github.com/Microsoft/hcsshim@v0.15.0-rc.1
-Source: https://proxy.golang.org/github.com/!microsoft/hcsshim/@v/v0.15.0-rc.1.zip
-Selected Go source checksum: h1:FbbwtQmiD+BVHynGkx5S65JkLyhkEiiTP8nrpmg2SZw=
+Component: github.com/Microsoft/hcsshim@v0.15.0-rc.3
+Source: https://proxy.golang.org/github.com/!microsoft/hcsshim/@v/v0.15.0-rc.3.zip
+Selected Go source checksum: h1:ZTNzOp0QwJ1EiL3zopSOawIG0j7zAvzJx0rBmcR6HJ0=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -2207,9 +2207,9 @@ github.com/aws/aws-sdk-go-v2/service/internal/s3shared/config
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE.txt
 
-Component: github.com/aws/aws-sdk-go-v2/service/kms@v1.54.1
-Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/kms/@v/v1.54.1.zip
-Selected Go source checksum: h1:aeJAJyvWS3gQ679pJbz8ZdOh3MViD1zvEdoZMVEawbg=
+Component: github.com/aws/aws-sdk-go-v2/service/kms@v1.55.4
+Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/kms/@v/v1.55.4.zip
+Selected Go source checksum: h1:8T9CDPlcIUpXTKXXfMMFtD1eujGXbVysGiidx79bTkc=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -3109,9 +3109,9 @@ Material: m3f03e2f3d737cf7b (copyright-header), SHA-256 938109aaa305884dcdf6d545
 Material: maaaae92d5bc916e5 (copyright-header), SHA-256 52365a56340adc4cfb38583b4a787a98c9cda3bd1e8fa3f302f01e2e89e9c021
 Material: mb665c39a066bf17f (copyright-header), SHA-256 62d7209795fd07f83cce8f0a00cce2d7bcf371047aaa5420a4cda607bcaa79eb
 
-Component: github.com/containerd/containerd/v2@v2.3.6
-Source: https://proxy.golang.org/github.com/containerd/containerd/v2/@v/v2.3.6.zip
-Selected Go source checksum: h1:huoqZXaDW1x1kgPvFC4rMwxv92vUJnqgq7I5b1rSddM=
+Component: github.com/containerd/containerd/v2@v2.3.7
+Source: https://proxy.golang.org/github.com/containerd/containerd/v2/@v/v2.3.7.zip
+Selected Go source checksum: h1:7PGbgAVKE4ieQjFPv7+kwAv7f9dCtRpExZwjExHD/Fk=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -3275,9 +3275,9 @@ Material: m2a714db5343032f8 (license), SHA-256 4bbe3b885e8cd1907ab4cf9a41e862e74
 Files: LICENSE
 Material: maaaae92d5bc916e5 (copyright-header), SHA-256 52365a56340adc4cfb38583b4a787a98c9cda3bd1e8fa3f302f01e2e89e9c021
 
-Component: github.com/containerd/ttrpc@v1.2.8
-Source: https://proxy.golang.org/github.com/containerd/ttrpc/@v/v1.2.8.zip
-Selected Go source checksum: h1:xbVu6D4qF2jihdh9rDVOKqUMiFBQk6YctTdo1zk087Y=
+Component: github.com/containerd/ttrpc@v1.2.9
+Source: https://proxy.golang.org/github.com/containerd/ttrpc/@v/v1.2.9.zip
+Selected Go source checksum: h1:ha0ak962T0s3CA/RoZ6S6xiWZQF24GrBaEpiGX1uihg=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -3667,6 +3667,16 @@ github.com/derailed/tview
 Material: m99fb64407fd4c81a (license), SHA-256 5d07c44385294d9a3c4c88a5708e64798d4af93b22d11b0d0b4950dfd5f500dc
 Files: LICENSE.txt
 
+Component: github.com/detailyang/go-fallocate@v0.0.0-20180908115635-432fa640bd2e
+Source: https://proxy.golang.org/github.com/detailyang/go-fallocate/@v/v0.0.0-20180908115635-432fa640bd2e.zip
+Selected Go source checksum: h1:lj77EKYUpYXTd8CD/+QMIf8b6OIOTsfEBSXiAzuEHTU=
+Raw classifier detections: MIT
+Effective package-admission terms: MIT
+Packages:
+github.com/detailyang/go-fallocate
+Material: mfd30002c1f6021bd (license), SHA-256 4286527a697b72e6d0ac98cd0698bbd585bf5db86bbbf029812bda33b648f68d
+Files: LICENSE
+
 Component: github.com/dgraph-io/ristretto/v2@v2.4.2
 Source: https://proxy.golang.org/github.com/dgraph-io/ristretto/v2/@v/v2.4.2.zip
 Selected Go source checksum: h1:x0cvjmUKxt764Yxdk2nr94we1AvPPAMh1rh5TQ+Jo80=
@@ -3690,9 +3700,9 @@ Files: z/LICENSE
 Material: mc6b88698e604504f (copyright-header), SHA-256 2f7bc78c3c201d14c4981f70ee520a943866d62617b7d74728875f972e66962a
 Material: me8aec0e197cad284 (copyright-header), SHA-256 f81260e86d0f6061081bb74a64a49d4cc411b3fbdc63c7b06a98e6ae876f06ce
 
-Component: github.com/digitorus/pkcs7@v0.0.0-20230818184609-3a137a874352
-Source: https://proxy.golang.org/github.com/digitorus/pkcs7/@v/v0.0.0-20230818184609-3a137a874352.zip
-Selected Go source checksum: h1:ge14PCmCvPjpMQMIAH7uKg0lrtNSOdpYsRXlwk3QbaE=
+Component: github.com/digitorus/pkcs7@v0.0.0-20250730155240-ffadbf3f398c
+Source: https://proxy.golang.org/github.com/digitorus/pkcs7/@v/v0.0.0-20250730155240-ffadbf3f398c.zip
+Selected Go source checksum: h1:g349iS+CtAvba7i0Ee9EP1TlTZ9w+UncBY6HSmsFZa0=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -3700,9 +3710,9 @@ github.com/digitorus/pkcs7
 Material: mc5b241e1c7b11e84 (license), SHA-256 d01c6d371866b3c7a1a7e20994d88d2ce83f22974ec6d3596a6125b44495813d
 Files: LICENSE
 
-Component: github.com/digitorus/timestamp@v0.0.0-20231217203849-220c5c2851b7
-Source: https://proxy.golang.org/github.com/digitorus/timestamp/@v/v0.0.0-20231217203849-220c5c2851b7.zip
-Selected Go source checksum: h1:lxmTCgmHE1GUYL7P0MlNa00M67axePTq+9nBSGddR8I=
+Component: github.com/digitorus/timestamp@v0.0.0-20250524132541-c45532741eea
+Source: https://proxy.golang.org/github.com/digitorus/timestamp/@v/v0.0.0-20250524132541-c45532741eea.zip
+Selected Go source checksum: h1:ALRwvjsSP53QmnN3Bcj0NpR8SsFLnskny/EIMebAk1c=
 Raw classifier detections: BSD-2-Clause
 Effective package-admission terms: BSD-2-Clause
 Packages:
@@ -6254,6 +6264,22 @@ github.com/inconshreveable/mousetrap
 Material: m4d53f1770919099c (license), SHA-256 4819582701f150b28a563a6cd8ed0bf5a754e3c67b90ad38d78ba4131bf77795
 Files: LICENSE
 
+Component: github.com/insomniacslk/dhcp@v0.0.0-20260728151720-c308df0fdcef
+Source: https://proxy.golang.org/github.com/insomniacslk/dhcp/@v/v0.0.0-20260728151720-c308df0fdcef.zip
+Selected Go source checksum: h1:8WUReFonpi4oCJIUDt1EMepAY5YLrNPdsv9qUxaI1BA=
+Raw classifier detections: BSD-3-Clause
+Effective package-admission terms: BSD-3-Clause
+Packages:
+github.com/insomniacslk/dhcp/dhcpv4
+github.com/insomniacslk/dhcp/dhcpv4/server4
+github.com/insomniacslk/dhcp/dhcpv6
+github.com/insomniacslk/dhcp/dhcpv6/server6
+github.com/insomniacslk/dhcp/iana
+github.com/insomniacslk/dhcp/interfaces
+github.com/insomniacslk/dhcp/rfc1035label
+Material: m197fb0288b9f8785 (license), SHA-256 d034f64d0e3a12eec92e6d98ee6a0b1ee36f2a751aa96e9485fdd3a1280a6af1
+Files: LICENSE
+
 Component: github.com/invopop/jsonschema@v0.14.0
 Source: https://proxy.golang.org/github.com/invopop/jsonschema/@v/v0.14.0.zip
 Selected Go source checksum: h1:MHQqLhvpNUZfw+hM3AZDYK7jxO8FZoQeQM77g8iyZjg=
@@ -6305,14 +6331,14 @@ github.com/jedib0t/go-pretty/v6/text
 Material: maeea01b3ce59c4cd (license), SHA-256 3bae97d2a030c19562fab307f791630ce40a90052a51df83d16ed9cfebd49a07
 Files: LICENSE
 
-Component: github.com/jedisct1/go-minisign@v0.0.0-20230811132847-661be99b8267
-Source: https://proxy.golang.org/github.com/jedisct1/go-minisign/@v/v0.0.0-20230811132847-661be99b8267.zip
-Selected Go source checksum: h1:TMtDYDHKYY15rFihtRfck/bfFqNfvcabqvXAFQfAUpY=
+Component: github.com/jedisct1/go-minisign@v0.0.0-20260527172527-a09352b57a22
+Source: https://proxy.golang.org/github.com/jedisct1/go-minisign/@v/v0.0.0-20260527172527-a09352b57a22.zip
+Selected Go source checksum: h1:C68TAi+k12EKJCAmsdaERzQ22ZxVE6n+CuB3kOkhQ7c=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
 github.com/jedisct1/go-minisign
-Material: m9c9770053a4c3e5b (license), SHA-256 880f689e6137e0189402167e78ddf21edb3ae56c03a094062778ce3fa52d681c
+Material: m34d33f1f174945bb (license), SHA-256 85e01c33e313c01820211b4e249eb56c1b765c4c3be7c48d5cd341cf6fea5266
 Files: LICENSE
 
 Component: github.com/jellydator/ttlcache/v3@v3.4.1
@@ -6452,9 +6478,9 @@ github.com/jonboulle/clockwork
 Material: mb7008a262b415e75 (license), SHA-256 a8ad31b1c3f40dca5a84119351b8fa8ddc868edd77fad8a8ebf6d8f2d16fa4ae
 Files: LICENSE
 
-Component: github.com/jsimonetti/rtnetlink/v2@v2.2.1-0.20260614152944-ab8601692836
-Source: https://proxy.golang.org/github.com/jsimonetti/rtnetlink/v2/@v/v2.2.1-0.20260614152944-ab8601692836.zip
-Selected Go source checksum: h1:h1uYsdsK0AzkpVK0RQkCFFDEeBd9LKVbK1jZMRIRqu8=
+Component: github.com/jsimonetti/rtnetlink/v2@v2.2.1-0.20260802200809-43bafec815b3
+Source: https://proxy.golang.org/github.com/jsimonetti/rtnetlink/v2/@v/v2.2.1-0.20260802200809-43bafec815b3.zip
+Selected Go source checksum: h1:J6v2VXhjrJoRebtENwDSEphEuVK37akK2xS5qFnGqyc=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -6670,13 +6696,14 @@ Material: mef33467a6c1edfa4 (copyright-header), SHA-256 585039c346170dd78cbf765d
 Material: mf42202d6d2889828 (copyright-header), SHA-256 c26acbf8d8722644de46bf68f1b9c53296b2db7c05c7837e0b209539f7bf156d
 Material: mfe297d29696d9d91 (copyright-header), SHA-256 9e89c77e3221d432545f7cd8d48126045ac773dbb89416fbcf34f600ed8613fc
 
-Component: github.com/klauspost/cpuid/v2@v2.3.0
-Source: https://proxy.golang.org/github.com/klauspost/cpuid/v2/@v/v2.3.0.zip
-Selected Go source checksum: h1:S4CRMLnYUhGeDFDqkGriYKdfoFlDnMtqTiI/sFzhA9Y=
+Component: github.com/klauspost/cpuid/v2@v2.4.0
+Source: https://proxy.golang.org/github.com/klauspost/cpuid/v2/@v/v2.4.0.zip
+Selected Go source checksum: h1:S6Hrbc7+ywsr0r+RLapfGBHfyefhCTwEh3A0tV913Dw=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
 github.com/klauspost/cpuid/v2
+Material: m073014426eac78fe (copyright-header), SHA-256 ded57fd69326b5224598d1a9e165d814ae6ee9a00c8e1b68e9fd070b84dfa10d
 Material: m2d0543adc023aa1b (copyright-header), SHA-256 e3e95fd1e6b67aea97b9081544642d0bdb904a21c7d1a6444423338600b765df
 Material: mc3ef99961d23f004 (license), SHA-256 5d966570d7a442d4e969892860a914e542c97f262c873baee8f0aa48e1f40212
 Files: LICENSE
@@ -7236,9 +7263,9 @@ github.com/lithammer/dedent
 Material: mf5f97b90ca373733 (license), SHA-256 5b957a313c4f1e5e20dea59ac595bacc1332f0f14eaa3bf41cbb712fee843363
 Files: LICENSE
 
-Component: github.com/lmittmann/tint@v1.1.3
-Source: https://proxy.golang.org/github.com/lmittmann/tint/@v/v1.1.3.zip
-Selected Go source checksum: h1:Hv4EaHWXQr+GTFnOU4VKf8UvAtZgn0VuKT+G0wFlO3I=
+Component: github.com/lmittmann/tint@v1.2.0
+Source: https://proxy.golang.org/github.com/lmittmann/tint/@v/v1.2.0.zip
+Selected Go source checksum: h1:AogHRHy8HUJUnNJBHJlYa+fR4YY8mko2cnCp67xn9JY=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -7577,9 +7604,9 @@ github.com/mattn/go-colorable
 Material: maa4842fb06076268 (license), SHA-256 88a2379b3ca34bf5c57127aff9dcb802bbb60ece0805cdbda65b3bd115f971d9
 Files: LICENSE
 
-Component: github.com/mattn/go-isatty@v0.0.23
-Source: https://proxy.golang.org/github.com/mattn/go-isatty/@v/v0.0.23.zip
-Selected Go source checksum: h1:cYwCQTQf3HB6xUC+BtyCLZNr7IzbOmoZbmssVNzSyiQ=
+Component: github.com/mattn/go-isatty@v0.0.24
+Source: https://proxy.golang.org/github.com/mattn/go-isatty/@v/v0.0.24.zip
+Selected Go source checksum: h1:tGZZoVgT/KiqK1c8ocVLeDS8BSWMRd47J3Lbz7vsReI=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -7660,6 +7687,18 @@ Material: m31a4d0f7120a98d2 (copyright-header), SHA-256 e28ca55454708c66d0e181f4
 Material: m424ca5c1a8cd8d57 (license), SHA-256 a8e8489f1168b5f3e0ebb43d7fe1c78a2fd7db9939c1a6cb555940a4b631f8d2
 Files: LICENSE.md
 Material: mda02b035fb93e491 (copyright-header), SHA-256 698a2ccf9fd1364c00969f1e779bcb1db90d6cd13612be65f7231c5f22e53a64
+
+Component: github.com/miekg/dns@v1.1.72
+Source: https://proxy.golang.org/github.com/miekg/dns/@v/v1.1.72.zip
+Selected Go source checksum: h1:vhmr+TF2A3tuoGNkLDFK9zi36F2LS+hKTRW0Uf8kbzI=
+Raw classifier detections: BSD-3-Clause
+Effective package-admission terms: BSD-3-Clause
+Packages:
+github.com/miekg/dns
+Material: m0e1a60df8fb5618f (license), SHA-256 f200ff9bad73385db2ed81e23ee2c1fe069eb5776e17fae4ee85ad0a9e1361a5
+Files: LICENSE
+Material: m4b39454409aab3a4 (notice), SHA-256 66550c0ad5ca7ec1e08683e5f872cc45c741f311eee3b8ee484206ecbf9c740d
+Files: COPYRIGHT
 
 Component: github.com/mikefarah/yq/v4@v4.29.1
 Source: https://proxy.golang.org/github.com/mikefarah/yq/v4/@v/v4.29.1.zip
@@ -8772,14 +8811,14 @@ Material: m2d36708629da520a (copyright-header), SHA-256 a7b3737faf45728b0895365c
 Material: md4bd69010b412c97 (license), SHA-256 87d700d1dfac26ddcecc73971b854b5d00c4734214fb8252961212f9e06d2388
 Files: LICENSE
 
-Component: github.com/pelletier/go-toml/v2@v2.3.1
-Source: https://proxy.golang.org/github.com/pelletier/go-toml/v2/@v/v2.3.1.zip
-Selected Go source checksum: h1:MYEvvGnQjeNkRF1qUuGolNtNExTDwct51yp7olPtrEc=
+Component: github.com/pelletier/go-toml/v2@v2.4.3
+Source: https://proxy.golang.org/github.com/pelletier/go-toml/v2/@v/v2.4.3.zip
+Selected Go source checksum: h1:GTRvJQutkOSftxIFD5xw9aepkYNuPWmVJpffdDPYVpY=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
 github.com/pelletier/go-toml/v2
-github.com/pelletier/go-toml/v2/internal/characters
+github.com/pelletier/go-toml/v2/internal/parserbridge
 github.com/pelletier/go-toml/v2/internal/tracker
 github.com/pelletier/go-toml/v2/unstable
 Material: m1fc6b90ff20c2b4a (license), SHA-256 26844e4b53c5adec04e557fd7dfef281cc0205a7d355626b1c68b778b99e9e7b
@@ -8795,9 +8834,9 @@ github.com/peterbourgon/diskv
 Material: m6f72c3b1c1011b55 (license), SHA-256 6c17dd7c73f04de74ede2ff155f26d8de642e30e14e33bf9ecdb1a7f1662acd9
 Files: LICENSE
 
-Component: github.com/petermattis/goid@v0.0.0-20260330135022-df67b199bc81
-Source: https://proxy.golang.org/github.com/petermattis/goid/@v/v0.0.0-20260330135022-df67b199bc81.zip
-Selected Go source checksum: h1:WDsQxOJDy0N1VRAjXLpi8sCEZRSGarLWQevDxpTBRrM=
+Component: github.com/petermattis/goid@v0.0.0-20260713124913-97594f28f5ca
+Source: https://proxy.golang.org/github.com/petermattis/goid/@v/v0.0.0-20260713124913-97594f28f5ca.zip
+Selected Go source checksum: h1:GHSUVE4yOgX4E7kTRzpxCPbCOYkd3Kj8Dgdod30OI1E=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -8807,9 +8846,9 @@ Material: m609de7c34f4e4c54 (license), SHA-256 cb5e8e7e5f4a3988e1063c142c60dc2df
 Files: LICENSE
 Material: m7e2a42d554342d13 (copyright-header), SHA-256 d133ed8522ccddc0e6fa92ec96381dc5fde97cc1d22c1992795507099e33011f
 
-Component: github.com/pierrec/lz4/v4@v4.1.22
-Source: https://proxy.golang.org/github.com/pierrec/lz4/v4/@v/v4.1.22.zip
-Selected Go source checksum: h1:cKFw6uJDK+/gfw5BcDL0JL5aBsAFdsIT18eRtLj7VIU=
+Component: github.com/pierrec/lz4/v4@v4.1.27
+Source: https://proxy.golang.org/github.com/pierrec/lz4/v4/@v/v4.1.27.zip
+Selected Go source checksum: h1:+PhzhWDrjRj89TH2sw43nE3+4+W8lSxIuQadEHZyjUk=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
@@ -8819,6 +8858,17 @@ github.com/pierrec/lz4/v4/internal/lz4errors
 github.com/pierrec/lz4/v4/internal/lz4stream
 github.com/pierrec/lz4/v4/internal/xxh32
 Material: mb7e1efbd83f9de6a (license), SHA-256 6a358d2540ca14048f02d366f23787c0a480157e58f058113f0e27168dd4e447
+Files: LICENSE
+
+Component: github.com/pin/tftp/v3@v3.2.0
+Source: https://proxy.golang.org/github.com/pin/tftp/v3/@v/v3.2.0.zip
+Selected Go source checksum: h1:q6K5G6T0TA7e3wDJsB/7VpD3iaWwVEJD/nEuh3q9Sk0=
+Raw classifier detections: MIT
+Effective package-admission terms: MIT
+Packages:
+github.com/pin/tftp/v3
+github.com/pin/tftp/v3/netascii
+Material: m9b248218502e243f (license), SHA-256 52231658a6b111a703323f5dbd840739e1a2121276553e90f6986362bd667eb7
 Files: LICENSE
 
 Component: github.com/pjbgf/sha1cd@v0.6.0
@@ -8874,9 +8924,9 @@ github.com/pkg/xattr
 Material: ma8621aade4b09ed4 (license), SHA-256 2c71fbccf236906a9961d375625a08dc696c112a7ebcfbfd32900e80f8ecaa51
 Files: LICENSE
 
-Component: github.com/planetscale/vtprotobuf@v0.6.1-0.20250313105119-ba97887b0a25
-Source: https://proxy.golang.org/github.com/planetscale/vtprotobuf/@v/v0.6.1-0.20250313105119-ba97887b0a25.zip
-Selected Go source checksum: h1:S1hI5JiKP7883xBzZAr1ydcxrKNSVNm7+3+JwjxZEsg=
+Component: github.com/planetscale/vtprotobuf@v0.6.1-0.20260702190614-8ae5a48058df
+Source: https://proxy.golang.org/github.com/planetscale/vtprotobuf/@v/v0.6.1-0.20260702190614-8ae5a48058df.zip
+Selected Go source checksum: h1:x2ymdov8jnZLDPfI+VVcf/ZvzuZ2u36ieXTuQASMkWI=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
@@ -9264,9 +9314,9 @@ github.com/saintfish/chardet
 Material: me000f0bf6eb5f13b (license), SHA-256 44699611628b82dec802229cd039c401b6df44808eeb5dc873698255a0642d04
 Files: LICENSE
 
-Component: github.com/samber/lo@v1.52.0
-Source: https://proxy.golang.org/github.com/samber/lo/@v/v1.52.0.zip
-Selected Go source checksum: h1:Rvi+3BFHES3A8meP33VPAxiBZX/Aws5RxrschYGjomw=
+Component: github.com/samber/lo@v1.53.0
+Source: https://proxy.golang.org/github.com/samber/lo/@v/v1.53.0.zip
+Selected Go source checksum: h1:t975lj2py4kJPQ6haz1QMgtId2gtmfktACxIXArw3HM=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -9314,14 +9364,15 @@ Files: LICENSE
 Material: m413e4af42d1d6232 (copyright-header), SHA-256 9b8ab26e9a0ddbfeb405f3b8454279d4fe627ae2a7884e8bfcafd46ade14e52b
 Material: ma439166213535d94 (copyright-header), SHA-256 de099ddb76f7644e66afb635aff1b118e330360ea332c67da4f13e5c9c67b1b3
 
-Component: github.com/sassoftware/relic@v7.2.1+incompatible
-Source: https://proxy.golang.org/github.com/sassoftware/relic/@v/v7.2.1+incompatible.zip
-Selected Go source checksum: h1:Pwyh1F3I0r4clFJXkSI8bOyJINGqpgjJU3DYAZeI05A=
+Component: github.com/sassoftware/relic/v8@v8.2.0
+Source: https://proxy.golang.org/github.com/sassoftware/relic/v8/@v/v8.2.0.zip
+Selected Go source checksum: h1:9/L4S4I6an/JsPNhmcTpqfiOIsLb/iJaePZD1xR+ulE=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
-github.com/sassoftware/relic/lib/pkcs7
-github.com/sassoftware/relic/lib/x509tools
+github.com/sassoftware/relic/v8/lib/pkcs7
+github.com/sassoftware/relic/v8/lib/x509tools
+github.com/sassoftware/relic/v8/signers/sigerrors
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE
 Material: mfdb3db2a07398390 (copyright-header), SHA-256 19540b18119bd199041e749e938dc2984386b3a8f5c2b96e1caaa4749deeec11
@@ -9528,9 +9579,9 @@ github.com/siderolabs/go-retry/retry
 Material: m5651bc505679cef6 (license), SHA-256 1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5
 Files: LICENSE
 
-Component: github.com/siderolabs/go-talos-support@v0.3.0
-Source: https://proxy.golang.org/github.com/siderolabs/go-talos-support/@v/v0.3.0.zip
-Selected Go source checksum: h1:8+JErCZAc2jRTtSJKkW1xFJxetX/b5m/YesMgVnz2v4=
+Component: github.com/siderolabs/go-talos-support@v0.3.1
+Source: https://proxy.golang.org/github.com/siderolabs/go-talos-support/@v/v0.3.1.zip
+Selected Go source checksum: h1:2cIct5nxGby8B7NNALO5WL3WbCe9S1se/3/nT0H/x7Q=
 Raw classifier detections: MPL-2.0
 Effective package-admission terms: MPL-2.0
 To obtain the exact MPL covered source, retrieve the source locator above and verify its recorded checksum. Repository-source modifications are identified by the release source binding.
@@ -9624,9 +9675,9 @@ github.com/siderolabs/protoenc
 Material: m5651bc505679cef6 (license), SHA-256 1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5
 Files: LICENSE
 
-Component: github.com/siderolabs/talos@v1.14.0-alpha.2
-Source: https://proxy.golang.org/github.com/siderolabs/talos/@v/v1.14.0-alpha.2.zip
-Selected Go source checksum: h1:7Tyvp3Wp8EJNS9IOWj7x3bQN3cGvhDmV8Pu80kbfJcs=
+Component: github.com/siderolabs/talos@v1.14.6
+Source: https://proxy.golang.org/github.com/siderolabs/talos/@v/v1.14.6.zip
+Selected Go source checksum: h1:69uFzRLP8/evd3NTCcVbx+OLsdyN1Gq35+DM3j/Ej3M=
 Raw classifier detections: MPL-2.0
 Effective package-admission terms: MPL-2.0
 To obtain the exact MPL covered source, retrieve the source locator above and verify its recorded checksum. Repository-source modifications are identified by the release source binding.
@@ -9636,23 +9687,29 @@ github.com/siderolabs/talos/pkg/cluster/check
 github.com/siderolabs/talos/pkg/cluster/kubernetes
 github.com/siderolabs/talos/pkg/conditions
 github.com/siderolabs/talos/pkg/flags
+github.com/siderolabs/talos/pkg/httpdefaults
 github.com/siderolabs/talos/pkg/imager/filemap
 github.com/siderolabs/talos/pkg/images
+github.com/siderolabs/talos/pkg/kubeconfig
 github.com/siderolabs/talos/pkg/kubernetes
 github.com/siderolabs/talos/pkg/minimal
 github.com/siderolabs/talos/pkg/provision
 github.com/siderolabs/talos/pkg/provision/access
 github.com/siderolabs/talos/pkg/provision/api
+github.com/siderolabs/talos/pkg/provision/internal/inmemhttp
 github.com/siderolabs/talos/pkg/provision/providers
 github.com/siderolabs/talos/pkg/provision/providers/docker
 github.com/siderolabs/talos/pkg/provision/providers/remote
+github.com/siderolabs/talos/pkg/provision/providers/vm
+github.com/siderolabs/talos/pkg/provision/providers/vm/internal/ethtool
+github.com/siderolabs/talos/pkg/provision/providers/vm/internal/ipxe
 github.com/siderolabs/talos/pkg/reporter
 Material: m5651bc505679cef6 (license), SHA-256 1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5
 Files: LICENSE
 
-Component: github.com/siderolabs/talos/pkg/machinery@v1.14.0-alpha.2
-Source: https://proxy.golang.org/github.com/siderolabs/talos/pkg/machinery/@v/v1.14.0-alpha.2.zip
-Selected Go source checksum: h1:fmE4MHro0vrcxm5265jxPXHH82PdtaqQpOPYAWi9nkY=
+Component: github.com/siderolabs/talos/pkg/machinery@v1.14.6
+Source: https://proxy.golang.org/github.com/siderolabs/talos/pkg/machinery/@v/v1.14.6.zip
+Selected Go source checksum: h1:gLXBpRIsxS+Pz2fw5v/+8ZjyD5AyEZuGl96X58Hl9C8=
 Raw classifier detections: MPL-2.0
 Effective package-admission terms: MPL-2.0
 To obtain the exact MPL covered source, retrieve the source locator above and verify its recorded checksum. Repository-source modifications are identified by the release source binding.
@@ -9711,6 +9768,7 @@ github.com/siderolabs/talos/pkg/machinery/config/types
 github.com/siderolabs/talos/pkg/machinery/config/types/block
 github.com/siderolabs/talos/pkg/machinery/config/types/block/blockhelpers
 github.com/siderolabs/talos/pkg/machinery/config/types/cluster
+github.com/siderolabs/talos/pkg/machinery/config/types/container
 github.com/siderolabs/talos/pkg/machinery/config/types/cri
 github.com/siderolabs/talos/pkg/machinery/config/types/hardware
 github.com/siderolabs/talos/pkg/machinery/config/types/k8s
@@ -9734,6 +9792,7 @@ github.com/siderolabs/talos/pkg/machinery/kubelet
 github.com/siderolabs/talos/pkg/machinery/labels
 github.com/siderolabs/talos/pkg/machinery/nethelpers
 github.com/siderolabs/talos/pkg/machinery/proto
+github.com/siderolabs/talos/pkg/machinery/resources
 github.com/siderolabs/talos/pkg/machinery/resources/block
 github.com/siderolabs/talos/pkg/machinery/resources/cluster
 github.com/siderolabs/talos/pkg/machinery/resources/config
@@ -9753,9 +9812,9 @@ github.com/siderolabs/talos/pkg/machinery/yamlutils
 Material: m5651bc505679cef6 (license), SHA-256 1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5
 Files: LICENSE
 
-Component: github.com/sigstore/cosign/v3@v3.1.2
-Source: https://proxy.golang.org/github.com/sigstore/cosign/v3/@v/v3.1.2.zip
-Selected Go source checksum: h1:AlWkztipzFHLGfLECkUwcC2a2EbpzKOsElge1vcRNcs=
+Component: github.com/sigstore/cosign/v3@v3.1.3
+Source: https://proxy.golang.org/github.com/sigstore/cosign/v3/@v/v3.1.3.zip
+Selected Go source checksum: h1:001JQRI/PJ/5T+g/kJ1KTvKFbb322+fomc+pHDZ/6sg=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -9886,9 +9945,9 @@ Files: LICENSE
 Material: m27c83f8b8ac76e90 (notice), SHA-256 193753bc913f7c55b3d762214e5cbb63eb7ec5de44f3987f84f3822f7bdea64e
 Files: COPYRIGHT.txt
 
-Component: github.com/sigstore/rekor@v1.5.3
-Source: https://proxy.golang.org/github.com/sigstore/rekor/@v/v1.5.3.zip
-Selected Go source checksum: h1:0Tyolw3zreRgm7PUW8dccFLXGBThi08278jI8EXNSr4=
+Component: github.com/sigstore/rekor@v1.5.4
+Source: https://proxy.golang.org/github.com/sigstore/rekor/@v/v1.5.4.zip
+Selected Go source checksum: h1:A9zITTrkRwO+8lfq7L/gBR7rDHHcBQJRI+a0JQo4xDM=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -10706,9 +10765,25 @@ Material: ma491f11533063653 (copyright-header), SHA-256 5a6fe0421f78eb845bde5839
 Material: mf33b375f9b584eeb (copyright-header), SHA-256 069592cb4a1d998d942171b239fda8f4cd17234fc7eca6694d683c33143e00b3
 Material: mf4ff42fefc39ff27 (copyright-header), SHA-256 6ee2c434ce464d8564bc281160a8c8fafc5fafb8022e0936f11ef8a9a494e93b
 
-Component: github.com/ulikunitz/xz@v0.5.15
-Source: https://proxy.golang.org/github.com/ulikunitz/xz/@v/v0.5.15.zip
-Selected Go source checksum: h1:9DNdB5s+SgV3bQ2ApL10xRc35ck0DuIX/isZvIk+ubY=
+Component: github.com/u-root/uio@v0.0.0-20240224005618-d2acac8f3701
+Source: https://proxy.golang.org/github.com/u-root/uio/@v/v0.0.0-20240224005618-d2acac8f3701.zip
+Selected Go source checksum: h1:pyC9PaHYZFgEKFdlp3G8RaCKgVpHZnecvArXvPXcFkM=
+Raw classifier detections: BSD-3-Clause
+Effective package-admission terms: BSD-3-Clause
+Packages:
+github.com/u-root/uio/rand
+github.com/u-root/uio/uio
+Material: m15f53bf5d225c791 (copyright-header), SHA-256 40b2481c634b464702a18d39c6c08e1454df6413e6a62a6ea99d52d8031cb8e5
+Material: m3506916095f22dc2 (license), SHA-256 babfb29ac285c50579ef027c197805f288be53a2fdea58adbf8f69a5e296d3ef
+Files: LICENSE
+Material: m8df157a9ff62fc46 (copyright-header), SHA-256 159dae8293b5edb4d14dc8067378d5f272252b6a3c83d0070f3ca99143270088
+Material: m8eeec89fa101d3a6 (copyright-header), SHA-256 a1de63d1a1051f38d5b893467ab5a02c00f7600688fe6a947f77f98dd1128256
+Material: mb8b761e7fb123106 (copyright-header), SHA-256 add18fa8d8745214404da7de7c0b2184ee6df049f95d14dde16553e923d77c87
+Material: mff7608d6df18cfe7 (copyright-header), SHA-256 825a5f9ce3803c06875e2b8a61ab6a504c969d1040f60f29179d599b1be6e3b5
+
+Component: github.com/ulikunitz/xz@v0.5.16
+Source: https://proxy.golang.org/github.com/ulikunitz/xz/@v/v0.5.16.zip
+Selected Go source checksum: h1:ld6NyySjx5lowVKwJvMRLnW5nxKX/xnpSiFYZ/Lxur0=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
@@ -11183,9 +11258,9 @@ go.etcd.io/bbolt/internal/freelist
 Material: m2198b551346f9629 (license), SHA-256 c15d721c37e277a11584547de6d618541501f7aa10c4e32a945a4f9ff36cb0f6
 Files: LICENSE
 
-Component: go.etcd.io/etcd/api/v3@v3.7.1
-Source: https://proxy.golang.org/go.etcd.io/etcd/api/v3/@v/v3.7.1.zip
-Selected Go source checksum: h1:KJG0/DcWGfe3Y1otDf/fsBf0TSSgpxZ5RO/L8SFt73E=
+Component: go.etcd.io/etcd/api/v3@v3.7.3
+Source: https://proxy.golang.org/go.etcd.io/etcd/api/v3/@v/v3.7.3.zip
+Selected Go source checksum: h1:2tumepXe+wi7Wab64uUO71K7ISQyUWLGC1DJbbc59sY=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -11203,9 +11278,9 @@ Material: m4a66420a9b76de62 (copyright-header), SHA-256 93aac5b274529b27aeba9efc
 Material: m7b22edacee8d7071 (license), SHA-256 7e85b38339bf9f7f43308b103c1186f49417f2d3da37ef8b02e2ad7b5f619402
 Files: LICENSE
 
-Component: go.etcd.io/etcd/client/pkg/v3@v3.7.1
-Source: https://proxy.golang.org/go.etcd.io/etcd/client/pkg/v3/@v/v3.7.1.zip
-Selected Go source checksum: h1:rKYsj3pRkR0eK3yjT3XOgrhqfmIfj9pzNgxjh7mfFv4=
+Component: go.etcd.io/etcd/client/pkg/v3@v3.7.3
+Source: https://proxy.golang.org/go.etcd.io/etcd/client/pkg/v3/@v/v3.7.3.zip
+Selected Go source checksum: h1:5zMwNu3ycrzCeA5NwOfQbxFRhqq974chq1DrYMua4QI=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -11227,9 +11302,9 @@ Material: ma05bca4195de8c6b (copyright-header), SHA-256 c196b496431533e7c7494587
 Material: mb4664fddcd1044ab (copyright-header), SHA-256 774ec26bf63ad1659687658d48794ecba24fc93f0e2ac1cf0efeb020014478ad
 Material: mc914de0adc25dca6 (copyright-header), SHA-256 631fb83df5b47b5e2886b4abedd8f9d946ebc9caa5f9b439fde4a66f82277c27
 
-Component: go.etcd.io/etcd/client/v3@v3.7.1
-Source: https://proxy.golang.org/go.etcd.io/etcd/client/v3/@v/v3.7.1.zip
-Selected Go source checksum: h1:0PEMMC0KuZmVIN+RAbdqfkZ45pYTgKVtmBEbRCvZFUg=
+Component: go.etcd.io/etcd/client/v3@v3.7.3
+Source: https://proxy.golang.org/go.etcd.io/etcd/client/v3/@v/v3.7.3.zip
+Selected Go source checksum: h1:UrXcetgkuSEocaBlQlulQRJlXLEnUAHuBRbHh0lue1Q=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -11252,9 +11327,9 @@ Material: ma5f8ed6631d6ea8e (copyright-header), SHA-256 f414111924aa3ad87bc650e8
 Material: mb4664fddcd1044ab (copyright-header), SHA-256 774ec26bf63ad1659687658d48794ecba24fc93f0e2ac1cf0efeb020014478ad
 Material: mc914de0adc25dca6 (copyright-header), SHA-256 631fb83df5b47b5e2886b4abedd8f9d946ebc9caa5f9b439fde4a66f82277c27
 
-Component: go.etcd.io/etcd/etcdutl/v3@v3.7.0-rc.0
-Source: https://proxy.golang.org/go.etcd.io/etcd/etcdutl/v3/@v/v3.7.0-rc.0.zip
-Selected Go source checksum: h1:kBVlT4BGA6sDAKW8ziUjAMGOxXWbaxSI5qOGbswUoM0=
+Component: go.etcd.io/etcd/etcdutl/v3@v3.7.3
+Source: https://proxy.golang.org/go.etcd.io/etcd/etcdutl/v3/@v/v3.7.3.zip
+Selected Go source checksum: h1:JwG6zadsUzBYihuZLn3IIfB2Mi+UX2d+aUybvcfunyk=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -11263,9 +11338,9 @@ Material: m0e9a49e7a721bbb7 (copyright-header), SHA-256 53ebea5cb0a39fed6f10a9fd
 Material: m7b22edacee8d7071 (license), SHA-256 7e85b38339bf9f7f43308b103c1186f49417f2d3da37ef8b02e2ad7b5f619402
 Files: LICENSE
 
-Component: go.etcd.io/etcd/pkg/v3@v3.7.0
-Source: https://proxy.golang.org/go.etcd.io/etcd/pkg/v3/@v/v3.7.0.zip
-Selected Go source checksum: h1:aUBHGzXnYL2m3AlZfKp0ZhHQLVZIKfu9QsIlYdr+mxc=
+Component: go.etcd.io/etcd/pkg/v3@v3.7.3
+Source: https://proxy.golang.org/go.etcd.io/etcd/pkg/v3/@v/v3.7.3.zip
+Selected Go source checksum: h1:FoxH2JLECo/PYEHilgBFqz7Zlyiv5Sd20OlOOYESUos=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -11294,9 +11369,9 @@ Material: m9b3179646e27805f (copyright-header), SHA-256 03fbc0a953b5b5e826e2041a
 Material: mb4664fddcd1044ab (copyright-header), SHA-256 774ec26bf63ad1659687658d48794ecba24fc93f0e2ac1cf0efeb020014478ad
 Material: me1152747a9fdcb63 (copyright-header), SHA-256 a8e28d2366179440f5f81fdc70304daacd927da267a941f309279951bcbb50f6
 
-Component: go.etcd.io/etcd/server/v3@v3.7.0
-Source: https://proxy.golang.org/go.etcd.io/etcd/server/v3/@v/v3.7.0.zip
-Selected Go source checksum: h1:ScdUdN8ljuimp0lZaNq0otLMrHcFSFT+dQyT1j7JSFo=
+Component: go.etcd.io/etcd/server/v3@v3.7.3
+Source: https://proxy.golang.org/go.etcd.io/etcd/server/v3/@v/v3.7.3.zip
+Selected Go source checksum: h1:KcTZ/aEZrOiQe0/kdr7iYYcvyfbEoOwDOacHkz8xwZc=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -11949,7 +12024,6 @@ golang.org/x/crypto/ssh
 golang.org/x/crypto/ssh/agent
 golang.org/x/crypto/ssh/internal/bcrypt_pbkdf
 golang.org/x/crypto/ssh/knownhosts
-golang.org/x/crypto/ssh/terminal
 Material: m14a87b6cd6042b7f (copyright-header), SHA-256 0c946c5be44e2f91508b30aca91895d095ac4e12e2128e4e9ef55f486471b02e
 Material: m1ec14cd27f683f7b (copyright-header), SHA-256 36a154529bac7536ee91b8def7831a60141cb3b7aa06b2ef74603a0833ac45c0
 Material: m246679f49517b14f (copyright-header), SHA-256 42c897ffd08653c5d67d2aac826069f47f79add9fc78a421f84f65dbb9ba5780
@@ -12020,9 +12094,9 @@ Material: m4a74781cd64ccb4b (license), SHA-256 911f8f5782931320f5b8d1160a76365b8
 Files: LICENSE
 Material: m69e735fcdc92f0dd (copyright-header), SHA-256 119068dd82212dba2aedcb667d6e3d7802b04606d52240b646c71ed89122a6f6
 
-Component: golang.org/x/net@v0.61.0
-Source: https://proxy.golang.org/golang.org/x/net/@v/v0.61.0.zip
-Selected Go source checksum: h1:RR+6j/BTBCrggOLugxa+66R8FvoN6MHlzDlZIbN9YFw=
+Component: golang.org/x/net@v0.62.0
+Source: https://proxy.golang.org/golang.org/x/net/@v/v0.62.0.zip
+Selected Go source checksum: h1:18ELalfM5+XNRwzM2nYqXsZQ9ByS1uhj2O/U7+5jqRY=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
@@ -12038,8 +12112,12 @@ golang.org/x/net/http2/hpack
 golang.org/x/net/idna
 golang.org/x/net/internal/httpcommon
 golang.org/x/net/internal/httpsfv
+golang.org/x/net/internal/iana
+golang.org/x/net/internal/socket
 golang.org/x/net/internal/socks
 golang.org/x/net/internal/timeseries
+golang.org/x/net/ipv4
+golang.org/x/net/ipv6
 golang.org/x/net/proxy
 golang.org/x/net/trace
 golang.org/x/net/websocket
@@ -13826,8 +13904,9 @@ Material: m72a423085b6faa73 (copyright-header), SHA-256 0f2c0852c64cb6cda92a90ca
 Material: m943840ca44adbb47 (copyright-header), SHA-256 4f5cc6c329d6767d5d45311affb8f18bc325218331efd54da9c18101a527ab80
 Material: mff89ce360703bbfd (copyright-header), SHA-256 31c0f69dabebb2c43c5f51ed042037b22049cbab5278bb1210ec0b95b5d0a83d
 
-Component: k8s.io/cri-api@v0.36.3
+Component: k8s.io/cri-api@v0.37.1
 Source: https://proxy.golang.org/k8s.io/cri-api/@v/v0.36.3.zip
+Selected replacement: k8s.io/cri-api@v0.36.3
 Selected Go source checksum: h1:QFEMKGim6DSdlaW3JwpjVCjUQgTnkKG7i3McAaBW6Fo=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
@@ -13903,8 +13982,9 @@ Material: m969246257ce9c732 (copyright-header), SHA-256 ff345f5babf52ae9caaac559
 Material: ma6f958c5e7e8f01b (copyright-header), SHA-256 da4cd8ef4b9a411df8b61678338cf5e409203b6960660d73e27e61b422b87c92
 Material: mb65e4d0566ca884c (copyright-header), SHA-256 e4414a7a62454953ce9048bb4945811c9a10a97692aa2c131da2f25a14434a0c
 
-Component: k8s.io/kube-openapi@v0.0.0-20260721132016-d427ff9ee9ad
+Component: k8s.io/kube-openapi@v0.0.0-20261001230523-97fa35140926
 Source: https://proxy.golang.org/k8s.io/kube-openapi/@v/v0.0.0-20260721132016-d427ff9ee9ad.zip
+Selected replacement: k8s.io/kube-openapi@v0.0.0-20260721132016-d427ff9ee9ad
 Selected Go source checksum: h1:oXImqH8mQNk7PmvzKhmN3ddJoY6OnyM225MXwGHPm0A=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
@@ -13964,8 +14044,9 @@ Material: ma7b6226f6a4229e8 (license), SHA-256 012d0f6caf604aedba723982c0d8a28f6
 Files: pkg/internal/third_party/govalidator/LICENSE
 Material: maf4433239ff44962 (copyright-header), SHA-256 069cb0283a00546dc616002c0cd96b407981cfdfcdc5c98c14d4fcfe77d5bdb5
 
-Component: k8s.io/kube-proxy@v0.36.2
+Component: k8s.io/kube-proxy@v0.37.1
 Source: https://proxy.golang.org/k8s.io/kube-proxy/@v/v0.36.2.zip
+Selected replacement: k8s.io/kube-proxy@v0.36.2
 Selected Go source checksum: h1:soYI83yb3Zg4CJU/7BzeE/sa2G4NF90eH/wmD4I6yXc=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
@@ -14053,8 +14134,9 @@ Material: mb65e4d0566ca884c (copyright-header), SHA-256 e4414a7a62454953ce9048bb
 Material: mc93a7549b781fd12 (copyright-header), SHA-256 663e76d9545b8b2fd572c56941b9dc99e20fa9c1aa604caa0c08b8b2476b8a06
 Material: mff89ce360703bbfd (copyright-header), SHA-256 31c0f69dabebb2c43c5f51ed042037b22049cbab5278bb1210ec0b95b5d0a83d
 
-Component: k8s.io/kubelet@v0.36.2
+Component: k8s.io/kubelet@v0.37.1
 Source: https://proxy.golang.org/k8s.io/kubelet/@v/v0.36.2.zip
+Selected replacement: k8s.io/kubelet@v0.36.2
 Selected Go source checksum: h1:9x+Tf8TEFYCcHdClzYL+IgDpfqbi+qqSdIIcXVKvr7k=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
@@ -14128,7 +14210,7 @@ Material: m1c1ab208f144c229 (license), SHA-256 b40930bbcf80744c86c46a12bc9da0566
 Files: LICENSE
 Material: m969246257ce9c732 (copyright-header), SHA-256 ff345f5babf52ae9caaac55971a3f44ec6a8f8e2245cec4ece03182134748d29
 
-Component: k8s.io/pod-security-admission@v0.36.2
+Component: k8s.io/pod-security-admission@v0.37.1
 Source: https://proxy.golang.org/github.com/kyverno/pod-security-admission/@v/v0.0.0-20251031094455-46f20778634f.zip
 Selected replacement: github.com/kyverno/pod-security-admission@v0.0.0-20251031094455-46f20778634f
 Selected Go source checksum: h1:9u+4QYMLdZPC8qeUB1TnfiUYRrFGYHxjYQsPiHKgJjI=
@@ -14538,9 +14620,9 @@ Material: ma6f958c5e7e8f01b (copyright-header), SHA-256 da4cd8ef4b9a411df8b61678
 Material: mb65e4d0566ca884c (copyright-header), SHA-256 e4414a7a62454953ce9048bb4945811c9a10a97692aa2c131da2f25a14434a0c
 Material: mc93a7549b781fd12 (copyright-header), SHA-256 663e76d9545b8b2fd572c56941b9dc99e20fa9c1aa604caa0c08b8b2476b8a06
 
-Component: sigs.k8s.io/kustomize/api@v0.21.2
-Source: https://proxy.golang.org/sigs.k8s.io/kustomize/api/@v/v0.21.2.zip
-Selected Go source checksum: h1:MRyw+zLnFBP+G40gZJoKZErAuRiOPEPao+ddS9L6xt4=
+Component: sigs.k8s.io/kustomize/api@v0.21.3
+Source: https://proxy.golang.org/sigs.k8s.io/kustomize/api/@v/v0.21.3.zip
+Selected Go source checksum: h1:DXGrbifGrAd+7AQ75Kx/tVhr+RLMCZFfAYl61HOR3T0=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -14596,9 +14678,9 @@ Material: m8a207f6926f08b51 (copyright-header), SHA-256 7aa464ef0229992ddaa4d1c4
 Material: ma9ab07e957c261a7 (copyright-header), SHA-256 c9b65f634775604afb33bc5c1cafd72e09a39843fdb9f4b7a16309b7da21fabe
 Material: mc1b6171050536a79 (copyright-header), SHA-256 8ecdde57fa9e0ac01588db2df43df32229c5672ec7fedad7244ca0691e8b3194
 
-Component: sigs.k8s.io/kustomize/kyaml@v0.21.2
-Source: https://proxy.golang.org/sigs.k8s.io/kustomize/kyaml/@v/v0.21.2.zip
-Selected Go source checksum: h1:1javwStFk7cgOeLU7yJtPmXcgMEhQgC2X0WjFT6U0p0=
+Component: sigs.k8s.io/kustomize/kyaml@v0.21.3
+Source: https://proxy.golang.org/sigs.k8s.io/kustomize/kyaml/@v/v0.21.3.zip
+Selected Go source checksum: h1:4ygzLsc8B1ep9dFuEivrJ2lFIAglL19dhPrWp1ioceY=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -18193,6 +18275,14 @@ limitations under the License.
 
 --- Recipient material SHA-256 1563f38155fe334ecbe11ed03cdab2544ac0dd9d4dc2f2d5612763bdc3415aab ---
 // Copyright 2017 Google Inc.  All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+
+
+
+--- Recipient material SHA-256 159dae8293b5edb4d14dc8067378d5f272252b6a3c83d0070f3ca99143270088 ---
+// Copyright 2019 the u-root Authors. All rights reserved
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -25108,6 +25198,14 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 
+--- Recipient material SHA-256 40b2481c634b464702a18d39c6c08e1454df6413e6a62a6ea99d52d8031cb8e5 ---
+// Copyright 2021 the u-root Authors. All rights reserved
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+
+
+
 --- Recipient material SHA-256 40c3bdda57728365213fd0ba66efed96537436d4329562a6adbbda585e3a2ec5 ---
 // Copyright 2023 The Sigstore Authors.
 //
@@ -25403,6 +25501,30 @@ SOFTWARE.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 
+
+
+--- Recipient material SHA-256 4286527a697b72e6d0ac98cd0698bbd585bf5db86bbbf029812bda33b648f68d ---
+MIT License
+
+Copyright (c) 2018 detailyang
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 
 --- Recipient material SHA-256 42c897ffd08653c5d67d2aac826069f47f79add9fc78a421f84f65dbb9ba5780 ---
@@ -28040,6 +28162,30 @@ THE SOFTWARE.
 // SPDX-License-Identifier: Apache-2.0
 
 
+
+
+--- Recipient material SHA-256 52231658a6b111a703323f5dbd840739e1a2121276553e90f6986362bd667eb7 ---
+The MIT License (MIT)
+Copyright (c) 2016 Dmitri Popov
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 --- Recipient material SHA-256 52323e7c7c14ed38010ab5879499eb2afd4abcce543750d0c3faf28d83c8d862 ---
@@ -31886,6 +32032,18 @@ limitations under the License.
 */
 
 
+
+
+--- Recipient material SHA-256 66550c0ad5ca7ec1e08683e5f872cc45c741f311eee3b8ee484206ecbf9c740d ---
+Copyright 2009 The Go Authors. All rights reserved. Use of this source code
+is governed by a BSD-style license that can be found in the LICENSE file.
+Extensions of the original work are copyright (c) 2011 Miek Gieben
+
+Copyright 2011 Miek Gieben. All rights reserved. Use of this source code is
+governed by a BSD-style license that can be found in the LICENSE file.
+
+Copyright 2014 CloudFlare. All rights reserved. Use of this source code is
+governed by a BSD-style license that can be found in the LICENSE file.
 
 
 --- Recipient material SHA-256 66701c52412d8e0126c527c78e45206e500759f69153ee9de25a93d3eceb9cec ---
@@ -37479,6 +37637,14 @@ THE SOFTWARE.
 
 
 
+--- Recipient material SHA-256 825a5f9ce3803c06875e2b8a61ab6a504c969d1040f60f29179d599b1be6e3b5 ---
+// Copyright 2020 the u-root Authors. All rights reserved
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+
+
+
 --- Recipient material SHA-256 82b38d12360285fc8480c1d3660fb0b04d681b457151b6231fc2a9284584a903 ---
 // Copyright 2013 The Go Authors. All rights reserved.
 //
@@ -38268,6 +38434,30 @@ See source code for license details.
 
 
 
+--- Recipient material SHA-256 85e01c33e313c01820211b4e249eb56c1b765c4c3be7c48d5cd341cf6fea5266 ---
+MIT License
+
+Copyright (c) 2018-2024 Frank Denis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
 --- Recipient material SHA-256 85e21addcf52041f16e8ba0f08a99dec14bdea2c115d3fd9aeb0089a4c7d6059 ---
 //
 // Copyright (c) 2011-2019 Canonical Ltd
@@ -38659,30 +38849,6 @@ License:
 // specific input nature in the EAX and OCB modes of operation.
 
 
-
-
---- Recipient material SHA-256 880f689e6137e0189402167e78ddf21edb3ae56c03a094062778ce3fa52d681c ---
-MIT License
-
-Copyright (c) 2018-2023 Frank Denis
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
 
 
 --- Recipient material SHA-256 881467e52efeb1807406134b0ec04b1c6f52dc9dc49382713ef9ac4e0cae42f8 ---
@@ -42596,6 +42762,14 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 
+--- Recipient material SHA-256 a1de63d1a1051f38d5b893467ab5a02c00f7600688fe6a947f77f98dd1128256 ---
+// Copyright 2018 the u-root Authors. All rights reserved
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+
+
+
 --- Recipient material SHA-256 a236f3733ccfed3b6d3d0e088e19b0e4f8b2935309c5f7370de61c7db936c006 ---
 /*
 Copyright 2024 The pdfcpu Authors.
@@ -45231,6 +45405,19 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+
+--- Recipient material SHA-256 add18fa8d8745214404da7de7c0b2184ee6df049f95d14dde16553e923d77c87 ---
+// Copyright 2012-2019 the u-root Authors. All rights reserved
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+
+// Discard implementation copied from the Go project:
+// https://golang.org/src/io/ioutil/ioutil.go.
+// Copyright 2009 The Go Authors. All rights reserved.
+
+
 
 
 --- Recipient material SHA-256 ae032828a823b28af2b6ade4f2ef453112642a3e4000643cd6623d32696b9fcb ---
@@ -48214,6 +48401,38 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 
+
+
+--- Recipient material SHA-256 babfb29ac285c50579ef027c197805f288be53a2fdea58adbf8f69a5e296d3ef ---
+BSD 3-Clause License
+
+Copyright (c) 2012-2021, u-root Authors
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+
+* Neither the name of the copyright holder nor the names of its
+  contributors may be used to endorse or promote products derived from
+  this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 --- Recipient material SHA-256 bb7de016493411b796e86a22e9a1dbb3334c158ca5d04051c59f172dc5b9029c ---
@@ -52412,6 +52631,38 @@ SOFTWARE.
 
 
 
+--- Recipient material SHA-256 d034f64d0e3a12eec92e6d98ee6a0b1ee36f2a751aa96e9485fdd3a1280a6af1 ---
+BSD 3-Clause License
+
+Copyright (c) 2018, Andrea Barberio
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+
+* Neither the name of the copyright holder nor the names of its
+  contributors may be used to endorse or promote products derived from
+  this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
 --- Recipient material SHA-256 d08a1922b5bb11a738c17903ddc6accfe326528d45f7f5d78f20e8bfafaaa558 ---
 /*
 	Copyright 2020 The pdfcpu Authors.
@@ -54434,6 +54685,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+
+
+
+--- Recipient material SHA-256 ded57fd69326b5224598d1a9e165d814ae6ee9a00c8e1b68e9fd070b84dfa10d ---
+// Copyright (c) 2026 Klaus Post, released under MIT License. See LICENSE file.
 
 
 
@@ -57459,6 +57716,38 @@ limitations under the License.
 // limitations under the License.
 
 
+
+
+--- Recipient material SHA-256 f200ff9bad73385db2ed81e23ee2c1fe069eb5776e17fae4ee85ad0a9e1361a5 ---
+BSD 3-Clause License
+
+Copyright (c) 2009, The Go Authors. Extensions copyright (c) 2011, Miek Gieben. 
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its
+   contributors may be used to endorse or promote products derived from
+   this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 --- Recipient material SHA-256 f20e5c0e55e9f49c198f1aee595bff49dce508d363f80bc14c70c415e7db23fa ---
