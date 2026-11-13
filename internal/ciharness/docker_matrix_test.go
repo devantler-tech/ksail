@@ -120,6 +120,8 @@ func nestedKindRoutingScenario() map[string]string {
 		"distribution": "Vanilla", "provider": "Docker", "init": "true",
 		"args":                     "--name nested-kind-routing --workers 1",
 		"test-kubernetes-provider": "true", "kubernetes-provider-distributions": "Vanilla",
+		// The only two-node host also checks exporting images held on different nodes (#8251).
+		"split-image-cluster-name": "nested-kind-routing",
 	}
 }
 
