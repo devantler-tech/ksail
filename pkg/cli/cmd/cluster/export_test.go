@@ -69,6 +69,26 @@ func ExportExecuteVersionUpgrade(
 	})
 }
 
+// ExportExecuteDistributionUpgrade exercises a discovered distribution upgrade path
+// for a cluster configuration with an injected registry.
+func ExportExecuteDistributionUpgrade(
+	cmd *cobra.Command,
+	cfg *v1alpha1.Cluster,
+	upgrader clusterupdate.Upgrader,
+	resolver versionresolver.Resolver,
+	currentVersion string,
+) (bool, error) {
+	orchestrator := &updateOrchestrator{
+		cmd: cmd, ctx: &localregistry.Context{ClusterCfg: cfg}, clusterName: "demo",
+	}
+
+	return orchestrator.executeVersionUpgrade(versionUpgradeParams{
+		upgrader: upgrader, resolver: resolver, upgradeType: distributionLabel,
+		imageRef: "registry.invalid/ksail/node", currentVersion: currentVersion,
+		applyFn: upgrader.UpgradeDistribution,
+	})
+}
+
 // ExportSetupMutationCmdFlags exposes the command's real configuration/flag bindings.
 func ExportSetupMutationCmdFlags(cmd *cobra.Command) *ksailconfigmanager.ConfigManager {
 	return setupMutationCmdFlags(cmd)
@@ -1079,4 +1099,12 @@ func ExportRecordIdentityAfterUpdate(
 	update func() (bool, error),
 ) error {
 	return recordIdentityAfterUpdate(cmd, clusterName, clusterCfg, update)
+}
+
+// ExportSetEKSCreationIDGenerator replaces the EKS create-attempt identifier source for tests.
+func ExportSetEKSCreationIDGenerator(generate func() string) func() {
+	previous := newEKSCreationID
+	newEKSCreationID = generate
+
+	return func() { newEKSCreationID = previous }
 }

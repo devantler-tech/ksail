@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/internal/gonotices"
 	"github.com/stretchr/testify/require"
@@ -35,6 +36,36 @@ func TestCommandStagesOnlyCommitBoundRecipientMaterial(t *testing.T) {
 	)
 	require.Contains(t, string(data), "source="+release.Source+"\n")
 	require.NotContains(t, output.String(), root)
+}
+
+func TestCommandStagesAfterCRLFCheckoutWithIsolatedGitConfig(t *testing.T) {
+	t.Parallel()
+	root, release := commandInputFixture(t)
+	files := []string{".goreleaser.yaml", ".goreleaser.desktop.yaml", ".github/workflows/cd.yaml"}
+
+	for _, name := range files {
+		require.NoError(t, os.Remove(filepath.Join(root, filepath.FromSlash(name))))
+	}
+
+	checkoutArgs := append(
+		[]string{"-c", "core.autocrlf=true", "restore", "--source=HEAD", "--"},
+		files...)
+	//nolint:gosec // G204: fixed Git arguments and fixture paths.
+	runFixtureCommand(t, root, exec.CommandContext(t.Context(), "git", checkoutArgs...))
+
+	// Force Git to compare bytes after checkout rather than reuse the index stat cache.
+	staleTime := time.Unix(1_700_000_000, 0)
+
+	for _, name := range files {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		require.NoError(t, os.Chtimes(path, staleTime, staleTime))
+	}
+
+	args := []string{"stage", release.Target, release.Version, release.Source}
+
+	var output bytes.Buffer
+	require.NoError(t, gonotices.Run(root, args, &output))
+	require.Contains(t, output.String(), "Verified Go recipient material for "+release.Target)
 }
 
 // TestCommandStagesThroughALinkedToolchainRoot covers actions/setup-go on

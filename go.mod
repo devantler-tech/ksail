@@ -1,6 +1,6 @@
 module github.com/devantler-tech/ksail/v7
 
-go 1.27.3
+go 1.27.4
 
 // Exclude the standalone google.golang.org/grpc/stats/opentelemetry module to avoid
 // ambiguous import errors. The opentelemetry stats package is included in the main
@@ -33,7 +33,9 @@ require (
 	github.com/cilium/cilium v1.20.4
 	github.com/cli/go-gh/v2 v2.17.0
 	github.com/coder/websocket v1.8.15
+	github.com/containerd/containerd/v2 v2.3.6
 	github.com/containerd/errdefs v1.0.0
+	github.com/containerd/platforms v1.0.0-rc.5
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/cosi-project/runtime v1.16.4
 	github.com/derailed/k9s v0.51.0
@@ -42,7 +44,7 @@ require (
 	github.com/fatih/color v1.19.0
 	github.com/fluxcd/helm-controller/api v1.6.5
 	github.com/fluxcd/kustomize-controller/api v1.9.6
-	github.com/fluxcd/pkg/apis/kustomize v1.19.2
+	github.com/fluxcd/pkg/apis/kustomize v1.23.0
 	github.com/fluxcd/pkg/apis/meta v1.38.0
 	github.com/fluxcd/source-controller/api v1.9.6
 	github.com/fsnotify/fsnotify v1.10.1
@@ -71,7 +73,7 @@ require (
 	github.com/kyverno/api v0.0.1-alpha.3.0.20260723090831-fb2785727f98
 	github.com/kyverno/kyverno v1.19.2
 	github.com/loft-sh/log v0.0.0-20261016082928-2e30e984f250
-	github.com/loft-sh/vcluster v0.37.4
+	github.com/loft-sh/vcluster v0.37.6
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/opencontainers/image-spec v1.1.1
@@ -93,7 +95,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.12.1
 	github.com/uptrace/opentelemetry-go-extra/otelzap v0.3.2
-	github.com/wailsapp/wails/v3 v3.0.0
+	github.com/wailsapp/wails/v3 v3.1.0
 	github.com/yannh/kubeconform v0.8.0
 	github.com/zalando/go-keyring v0.2.8
 	go.etcd.io/bbolt v1.5.0
@@ -351,13 +353,11 @@ require (
 	github.com/containerd/console v1.0.5 // indirect
 	github.com/containerd/containerd v1.7.36 // indirect
 	github.com/containerd/containerd/api v1.11.1 // indirect
-	github.com/containerd/containerd/v2 v2.3.6 // indirect
 	github.com/containerd/continuity v0.5.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/containerd/fifo v1.1.0 // indirect
 	github.com/containerd/go-cni v1.1.13 // indirect
 	github.com/containerd/log v0.1.0 // indirect
-	github.com/containerd/platforms v1.0.0-rc.5 // indirect
 	github.com/containerd/plugin v1.1.0 // indirect
 	github.com/containerd/ttrpc v1.2.8 // indirect
 	github.com/containerd/typeurl/v2 v2.3.0 // indirect
@@ -402,7 +402,7 @@ require (
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/dylibso/observe-sdk/go v0.0.0-20240819160327-2d926c5d788a // indirect
-	github.com/ebitengine/purego v0.10.1 // indirect
+	github.com/ebitengine/purego v0.11.1 // indirect
 	github.com/elliotchance/orderedmap v1.5.0 // indirect
 	github.com/elliotchance/phpserialize v1.4.0 // indirect
 	github.com/emicklei/dot v1.11.0 // indirect
@@ -1149,3 +1149,27 @@ tool (
 // Keep its runtime compatible with the embedded v0.36 tools until #7259 lands.
 // Qualify this mapping so a later requirement cannot reuse it without validation.
 replace k8s.io/apimachinery v0.37.1 => k8s.io/apimachinery v0.36.6
+
+// fluxcd/pkg/apis/kustomize v1.23.0 requires Kubernetes v0.37.1 for these modules. Hold them
+// on the embedded v0.36 tools until #7259 lands; each mapping is qualified to v0.37.1 so a later
+// requirement cannot reuse it without validation.
+replace (
+	k8s.io/api v0.37.1 => k8s.io/api v0.36.6
+	k8s.io/apiextensions-apiserver v0.37.1 => k8s.io/apiextensions-apiserver v0.36.6
+	k8s.io/apiserver v0.37.1 => k8s.io/apiserver v0.36.6
+	k8s.io/client-go v0.37.1 => k8s.io/client-go v0.36.6
+	k8s.io/component-base v0.37.1 => k8s.io/component-base v0.36.6
+	k8s.io/streaming v0.37.1 => k8s.io/streaming v0.36.6
+)
+
+// helm v4.3.1 requires Kubernetes v0.37.1 for these modules too, and controller-runtime v0.25.2,
+// which does not compile against v0.36 (it needs events.AnnotatedEventRecorder). Hold them on the
+// embedded v0.36 tools until #7259 lands; each mapping is qualified so a later requirement cannot
+// reuse it without validation.
+replace (
+	k8s.io/cli-runtime v0.37.1 => k8s.io/cli-runtime v0.36.6
+	k8s.io/component-helpers v0.37.1 => k8s.io/component-helpers v0.36.6
+	k8s.io/kubectl v0.37.1 => k8s.io/kubectl v0.36.6
+	k8s.io/metrics v0.37.1 => k8s.io/metrics v0.36.6
+	sigs.k8s.io/controller-runtime v0.25.2 => sigs.k8s.io/controller-runtime v0.24.1
+)

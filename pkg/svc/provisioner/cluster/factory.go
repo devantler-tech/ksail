@@ -74,6 +74,9 @@ type EKSConfig struct {
 	ConfigPath string
 	// KubeconfigPath is the path where eksctl writes the created cluster context.
 	KubeconfigPath string
+	// CreationID, when set, identifies one create attempt. The EKS provisioner tags the cluster with it
+	// so a cluster left by a failed create can be attributed to that attempt.
+	CreationID string
 }
 
 // GetClusterName returns the EKS cluster name.

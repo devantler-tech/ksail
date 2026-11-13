@@ -122,3 +122,25 @@ metadata:
 	assert.Equal(t, "KSAIL_SESSION", resolved.AWSOpts.SessionTokenEnvVar)
 	assert.Equal(t, "ap-southeast-1", resolved.AWSRegion)
 }
+
+// TestResolveAWSRegionEnvironmentOverridesConfigSource pins that a region from the environment
+// wins over the eks.yaml region and is never reported as config-bound.
+func TestResolveAWSRegionEnvironmentOverridesConfigSource(t *testing.T) {
+	t.Setenv("KSAIL_LIFECYCLE_TEST_ENV_REGION", "us-east-2")
+
+	distCfg := &clusterprovisioner.DistributionConfig{
+		EKS: &clusterprovisioner.EKSConfig{
+			Name:           "configured-eks",
+			NameFromConfig: true,
+			ConfigPath:     "eks.yaml",
+			Region:         "eu-west-1",
+		},
+	}
+
+	region, fromConfig := lifecycle.ResolveAWSRegionWithSourceForTest(
+		v1alpha1.OptionsAWS{RegionEnvVar: "KSAIL_LIFECYCLE_TEST_ENV_REGION"},
+		distCfg,
+	)
+	assert.Equal(t, "us-east-2", region)
+	assert.False(t, fromConfig)
+}

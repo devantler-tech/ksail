@@ -109,8 +109,12 @@ func (l localImageLookup) add(imageRef string) {
 	}
 
 	repoDigestRef := imageRepository(imageRef) + "@" + digest
-	if _, exists := l.byRepoDigestRef[repoDigestRef]; !exists {
-		l.byRepoDigestRef[repoDigestRef] = imageRef
+	// Containerd also inventories short import-date@digest names. Match the
+	// canonical request while retaining the real inventory name as ctr's operand.
+	for _, key := range []string{repoDigestRef, NormalizeImageRef(repoDigestRef)} {
+		if _, exists := l.byRepoDigestRef[key]; !exists {
+			l.byRepoDigestRef[key] = imageRef
+		}
 	}
 }
 
@@ -206,6 +210,23 @@ func normalizeImageRefs(imageRefs []string) []string {
 	}
 
 	return normalized
+}
+
+// uniqueImageRefs returns imageRefs without repeats, keeping first-seen order.
+func uniqueImageRefs(imageRefs []string) []string {
+	seen := make(map[string]struct{}, len(imageRefs))
+	unique := make([]string, 0, len(imageRefs))
+
+	for _, imageRef := range imageRefs {
+		if _, exists := seen[imageRef]; exists {
+			continue
+		}
+
+		seen[imageRef] = struct{}{}
+		unique = append(unique, imageRef)
+	}
+
+	return unique
 }
 
 func mergeRepairImages(primary []string, secondary []string) []string {

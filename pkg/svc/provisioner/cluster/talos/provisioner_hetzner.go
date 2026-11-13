@@ -1174,8 +1174,13 @@ func (p *Provisioner) buildAutoscalerPoolConfigs(
 	for _, pool := range pools {
 		taints := poolTaintsToCoreV1(pool.Taints)
 
+		worker, err := applyAutoscalerPoolPatches(configBundle.Worker(), pool.TalosPatches)
+		if err != nil {
+			return nil, fmt.Errorf("patching worker config for pool %q: %w", pool.Name, err)
+		}
+
 		workerConfigYAML, err := GenerateAutoscalerWorkerConfig(
-			configBundle.Worker(),
+			worker,
 			pool.Labels,
 			taints,
 		)
