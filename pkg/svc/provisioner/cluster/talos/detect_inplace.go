@@ -270,7 +270,7 @@ func (p *Provisioner) buildDesiredNodeConfig(
 	// The disable transition is the mirror case: the desired direct-node
 	// endpoint must replace the running floating IP (#6032).
 	if !p.hasDesiredHetznerFloatingIPEndpoint() && !p.revertFloatingIPEndpoint {
-		endpointIP := running.Cluster().Endpoint().Hostname()
+		endpointIP := running.K8sClusterConfig().ClusterEndpoint().Hostname()
 		if endpointIP != "" {
 			aligned, err = aligned.WithEndpoint(endpointIP)
 			if err != nil {
@@ -334,11 +334,12 @@ func (p *Provisioner) hasDesiredHetznerFloatingIPEndpoint() bool {
 	}
 
 	controlPlane := p.talosConfigs.ControlPlane()
-	if controlPlane == nil || controlPlane.Cluster().Endpoint() == nil {
+	if controlPlane == nil || controlPlane.K8sClusterConfig() == nil ||
+		controlPlane.K8sClusterConfig().ClusterEndpoint() == nil {
 		return false
 	}
 
-	endpointIP := controlPlane.Cluster().Endpoint().Hostname()
+	endpointIP := controlPlane.K8sClusterConfig().ClusterEndpoint().Hostname()
 
 	return hasHetznerFloatingIPConfig(controlPlane, endpointIP)
 }
@@ -427,7 +428,7 @@ func graftNodeHostname(
 // full Talos config bundle (which re-issues certificates) cannot proceed and Talos
 // fails with an opaque "failed to parse PEM block".
 func hasControlPlanePKI(provider talosconfig.Provider) bool {
-	ca := provider.Cluster().IssuingCA()
+	ca := provider.K8sAPIServerCAConfig().IssuingCA()
 
 	return ca != nil && len(ca.Key) > 0
 }

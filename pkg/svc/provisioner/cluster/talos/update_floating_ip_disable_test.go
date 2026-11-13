@@ -178,7 +178,7 @@ func TestUpdateApplySteps_FloatingIPDisableRevertsNodesThenReleases(t *testing.T
 		fixture.running, fixture.running, talosprovisioner.RoleControlPlane,
 	)
 	require.NoError(t, err)
-	assert.Equal(t, "203.0.113.5", desired.Cluster().Endpoint().Hostname(),
+	assert.Equal(t, "203.0.113.5", desired.K8sClusterConfig().ClusterEndpoint().Hostname(),
 		"the pushed config must use the direct control-plane endpoint")
 	assert.False(t, hasHCloudVIP(desired),
 		"the pushed config must not graft the running HCloud VIP back")
@@ -269,7 +269,7 @@ func TestUpdateApplySteps_FloatingIPDisableCleansUpAfterExternalRelease(t *testi
 		fixture.running, fixture.running, talosprovisioner.RoleControlPlane,
 	)
 	require.NoError(t, err)
-	assert.Equal(t, "203.0.113.5", desired.Cluster().Endpoint().Hostname())
+	assert.Equal(t, "203.0.113.5", desired.K8sClusterConfig().ClusterEndpoint().Hostname())
 	assert.False(t, hasHCloudVIP(desired), "the stale HCloud VIP must be dropped")
 
 	fixture.runStep(t, "refresh floating IP kubeconfig", result)

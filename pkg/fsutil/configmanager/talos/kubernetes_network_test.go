@@ -94,8 +94,8 @@ func TestConfigs_WithKubernetesNetworkPreservesIdentity(t *testing.T) {
 			)
 			assert.Equal(
 				t,
-				original.ControlPlane().Cluster().Endpoint(),
-				updated.ControlPlane().Cluster().Endpoint(),
+				original.ControlPlane().K8sClusterConfig().ClusterEndpoint(),
+				updated.ControlPlane().K8sClusterConfig().ClusterEndpoint(),
 			)
 			assert.Equal(t, original.GetClusterName(), updated.GetClusterName())
 			oldSecurity := original.ControlPlane().Machine().Security()
@@ -105,8 +105,8 @@ func TestConfigs_WithKubernetesNetworkPreservesIdentity(t *testing.T) {
 				bytes.Equal(oldSecurity.IssuingCA().Crt, newSecurity.IssuingCA().Crt),
 				"machine CA changed",
 			)
-			assert.True(t, bytes.Equal(original.ControlPlane().Cluster().IssuingCA().Crt,
-				updated.ControlPlane().Cluster().IssuingCA().Crt), "Kubernetes CA changed")
+			assert.True(t, bytes.Equal(original.ControlPlane().K8sAPIServerCAConfig().IssuingCA().Crt,
+				updated.ControlPlane().K8sAPIServerCAConfig().IssuingCA().Crt), "Kubernetes CA changed")
 			assert.True(
 				t,
 				bytes.Equal([]byte(oldSecurity.Token()), []byte(newSecurity.Token())),

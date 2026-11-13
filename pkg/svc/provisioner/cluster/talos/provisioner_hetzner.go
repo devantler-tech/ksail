@@ -606,11 +606,12 @@ func (p *Provisioner) refreshFloatingIPKubeconfig(ctx context.Context, clusterNa
 	}
 
 	if p.talosConfigs == nil || p.talosConfigs.ControlPlane() == nil ||
-		p.talosConfigs.ControlPlane().Cluster().Endpoint() == nil {
+		p.talosConfigs.ControlPlane().K8sClusterConfig() == nil ||
+		p.talosConfigs.ControlPlane().K8sClusterConfig().ClusterEndpoint() == nil {
 		return errFloatingIPConfigsUnavailable
 	}
 
-	endpointIP := p.talosConfigs.ControlPlane().Cluster().Endpoint().Hostname()
+	endpointIP := p.talosConfigs.ControlPlane().K8sClusterConfig().ClusterEndpoint().Hostname()
 	if endpointIP == "" {
 		return errFloatingIPConfigsUnavailable
 	}
@@ -731,11 +732,12 @@ func (p *Provisioner) disableTransitionSucceeded(diff, result *clusterupdate.Upd
 // endpoint, or "" when no control-plane config is loaded.
 func (p *Provisioner) desiredControlPlaneEndpoint() string {
 	if p.talosConfigs == nil || p.talosConfigs.ControlPlane() == nil ||
-		p.talosConfigs.ControlPlane().Cluster().Endpoint() == nil {
+		p.talosConfigs.ControlPlane().K8sClusterConfig() == nil ||
+		p.talosConfigs.ControlPlane().K8sClusterConfig().ClusterEndpoint() == nil {
 		return ""
 	}
 
-	return p.talosConfigs.ControlPlane().Cluster().Endpoint().Hostname()
+	return p.talosConfigs.ControlPlane().K8sClusterConfig().ClusterEndpoint().Hostname()
 }
 
 // floatingIPEnabled reports whether Hetzner floating-IP management is enabled.

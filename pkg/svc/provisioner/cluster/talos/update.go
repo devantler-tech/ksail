@@ -406,11 +406,11 @@ func (p *Provisioner) detectStaleHCloudVIP(
 // ksailHCloudVIP returns the HCloud VIP address config carries when it is also
 // the config's cluster endpoint, the shape KSail's floating-IP patch produces.
 func ksailHCloudVIP(config talosconfig.Provider) string {
-	if config == nil || config.Cluster().Endpoint() == nil {
+	if config == nil || config.K8sClusterConfig() == nil || config.K8sClusterConfig().ClusterEndpoint() == nil {
 		return ""
 	}
 
-	endpoint := config.Cluster().Endpoint().Hostname()
+	endpoint := config.K8sClusterConfig().ClusterEndpoint().Hostname()
 
 	for _, device := range config.Machine().Network().Devices() {
 		vip := device.VIPConfig()
@@ -613,11 +613,12 @@ func allWorkersHaveHetznerFloatingIPEndpoint(
 // hasHetznerFloatingIPEndpoint reports whether config uses the expected stable
 // floating IP as its cluster endpoint.
 func hasHetznerFloatingIPEndpoint(config talosconfig.Provider, expectedIP string) bool {
-	if config == nil || expectedIP == "" || config.Cluster().Endpoint() == nil {
+	if config == nil || expectedIP == "" || config.K8sClusterConfig() == nil ||
+		config.K8sClusterConfig().ClusterEndpoint() == nil {
 		return false
 	}
 
-	return config.Cluster().Endpoint().Hostname() == expectedIP
+	return config.K8sClusterConfig().ClusterEndpoint().Hostname() == expectedIP
 }
 
 // hasHetznerFloatingIPConfig reports whether config carries a Hetzner-managed
@@ -1413,7 +1414,7 @@ func (p *Provisioner) fetchClusterSecretsAndEndpoint(
 	// it from node IPs. This avoids non-deterministic ordering in HA clusters
 	// where getNodesByRole may return a different first CP node between updates.
 	// Falls back to cpIP if the running config has no endpoint set.
-	endpointIP := runningConfig.Cluster().Endpoint().Hostname()
+	endpointIP := runningConfig.K8sClusterConfig().ClusterEndpoint().Hostname()
 	if endpointIP == "" {
 		endpointIP = cpIP
 	}
