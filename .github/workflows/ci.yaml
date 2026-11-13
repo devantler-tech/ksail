@@ -2281,12 +2281,15 @@ jobs:
           # outer node. The collision does not depend on it, because replies to any
           # outer kind-network address are captured by an overlapping inner bridge.
           # Other nested distributions retain their complete default-host legs.
+          # This two-node host also checks exporting images held on different nodes
+          # (#8251); it is the only Docker leg with a worker node to split them across.
           - distribution: Vanilla
             provider: Docker
             init: true
             args: "--name nested-kind-routing --workers 1"
             test-kubernetes-provider: "true"
             kubernetes-provider-distributions: "Vanilla"
+            split-image-cluster-name: "nested-kind-routing"
           # Keep the fresh 3.33 installations above, and also create these with
           # the immutable 3.32.2 CLI before the candidate's unchanged-config update.
           - distribution: Vanilla
@@ -2402,6 +2405,7 @@ jobs:
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
           test-kubernetes-provider: ${{ matrix.test-kubernetes-provider || 'false' }}
           test-workload-mirror: ${{ matrix.test-workload-mirror || 'false' }}
+          split-image-cluster-name: ${{ matrix.split-image-cluster-name || '' }}
           kubernetes-provider-distributions: ${{ matrix.kubernetes-provider-distributions || 'Vanilla,K3s,VCluster,Talos' }}
           kubernetes-provider-cni: ${{ matrix.kubernetes-provider-cni || '' }}
 
@@ -2675,7 +2679,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devantler-tech/ksail
-          ref: bf96924738c8880e23e25783d40fa361e4537109
+          ref: be7d4483a4abf07a246f977d558ff10bb4a0bd36
           path: .diagnostics-artifact-source
           persist-credentials: false
 
@@ -2694,7 +2698,7 @@ jobs:
         id: probe-baseline
         if: matrix.mode == 'baseline'
         continue-on-error: true
-        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-baseline@bf96924738c8880e23e25783d40fa361e4537109
+        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-baseline@be7d4483a4abf07a246f977d558ff10bb4a0bd36
         with:
           distribution: Vanilla
           provider: Hetzner
@@ -2705,7 +2709,7 @@ jobs:
         id: probe-candidate
         if: matrix.mode == 'candidate'
         continue-on-error: true
-        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-candidate@bf96924738c8880e23e25783d40fa361e4537109
+        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-candidate@be7d4483a4abf07a246f977d558ff10bb4a0bd36
         with:
           distribution: Vanilla
           provider: Hetzner
