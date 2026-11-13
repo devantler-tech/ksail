@@ -936,8 +936,8 @@ github.com/fluxcd/pkg/oci v0.45.0 h1:lPtxqqzDOF3TAYx+Y91nULFiLzgmE8XDHt/uZwBqx44
 github.com/fluxcd/pkg/oci v0.45.0/go.mod h1:i4kFlYDC84u6vtIE54eco/ArcLPXqTv+/Gt7ncSKmoE=
 github.com/fluxcd/pkg/ssa v0.77.0 h1:HaDg7XDQGfVTFY379GrnnhrON1CQLjrLmyGbbTw5Ohc=
 github.com/fluxcd/pkg/ssa v0.77.0/go.mod h1:bNImnO/GHtjjgp7BtGXVk181CoZbH9rEVEJfOwg1Xo8=
-github.com/fluxcd/source-controller/api v1.10.0 h1:th1PYE0f27GWumb/7HoLB9g2zR6YpJue5+I66IuQCww=
-github.com/fluxcd/source-controller/api v1.10.0/go.mod h1:ar4cOwOZ9aMei+7eChKuJFJmnN1Mm5LOTZ9q46Yp4c0=
+github.com/fluxcd/source-controller/api v1.10.1 h1:DqqIctqpgyZvPCjpJUFwWjUM063Y5xblsLqxmxQxcac=
+github.com/fluxcd/source-controller/api v1.10.1/go.mod h1:ar4cOwOZ9aMei+7eChKuJFJmnN1Mm5LOTZ9q46Yp4c0=
 github.com/flynn/go-shlex v0.0.0-20150515145356-3f9db97f8568/go.mod h1:xEzjJPgXI435gkrCt3MPfRiAkVrwSbHsst4LCFVfpJc=
 github.com/fogleman/gg v1.2.1-0.20190220221249-0403632d5b90/go.mod h1:R/bRT+9gY/C5z7JzPU0zXsXHKM4/ayA+zqcVNZzPa1k=
 github.com/fogleman/gg v1.3.0/go.mod h1:R/bRT+9gY/C5z7JzPU0zXsXHKM4/ayA+zqcVNZzPa1k=

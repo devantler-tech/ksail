@@ -4352,9 +4352,9 @@ Files: LICENSE
 Material: m81d1d3c75566d226 (copyright-header), SHA-256 cc0bb31e186a0e7eb32d7e00d96b28677bf29ab6dfb383c8e1e092d94fd8121e
 Material: meaf71fb3ad741f58 (copyright-header), SHA-256 7f615c2527779bf1c219dbe99678e472dc06b6ff5b16221d46d45c6d60d4409d
 
-Component: github.com/fluxcd/source-controller/api@v1.10.0
-Source: https://proxy.golang.org/github.com/fluxcd/source-controller/api/@v/v1.10.0.zip
-Selected Go source checksum: h1:th1PYE0f27GWumb/7HoLB9g2zR6YpJue5+I66IuQCww=
+Component: github.com/fluxcd/source-controller/api@v1.10.1
+Source: https://proxy.golang.org/github.com/fluxcd/source-controller/api/@v/v1.10.1.zip
+Selected Go source checksum: h1:DqqIctqpgyZvPCjpJUFwWjUM063Y5xblsLqxmxQxcac=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
