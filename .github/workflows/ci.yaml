@@ -2645,7 +2645,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devantler-tech/ksail
-          ref: bf96924738c8880e23e25783d40fa361e4537109
+          ref: d7b8529e26b1bcda598c7537f30d53675a24e095
           path: .diagnostics-artifact-source
           persist-credentials: false
 
@@ -2664,7 +2664,7 @@ jobs:
         id: probe-baseline
         if: matrix.mode == 'baseline'
         continue-on-error: true
-        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-baseline@bf96924738c8880e23e25783d40fa361e4537109
+        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-baseline@d7b8529e26b1bcda598c7537f30d53675a24e095
         with:
           distribution: Vanilla
           provider: Hetzner
@@ -2675,7 +2675,7 @@ jobs:
         id: probe-candidate
         if: matrix.mode == 'candidate'
         continue-on-error: true
-        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-candidate@bf96924738c8880e23e25783d40fa361e4537109
+        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-candidate@d7b8529e26b1bcda598c7537f30d53675a24e095
         with:
           distribution: Vanilla
           provider: Hetzner
