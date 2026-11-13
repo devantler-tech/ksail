@@ -157,6 +157,11 @@ func (p *Provider) StartNodes(ctx context.Context, clusterName string) error {
 		return err
 	}
 
+	err = target.confirmNodegroupsStopped(clusterName, snapshot, liveByName)
+	if err != nil {
+		return err
+	}
+
 	err = target.restoreSavedNodegroups(ctx, clusterName, snapshot, liveByName)
 	if err != nil {
 		return err
@@ -178,21 +183,14 @@ func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
 		if err != nil {
 			return err
 		}
-
-		// Never persist an all-stopped snapshot. A cluster already at zero (stopped by an older
-		// release, or scaled down manually) would otherwise record 0/0 as its "restore to" state:
-		// the next start finds live already matching the snapshot, skips every scale, clears the
-		// file, and reports success while leaving the cluster at zero. Withholding the snapshot
-		// keeps the no-snapshot fallback — which restores max(MinSize, 1) — reachable instead.
-		if !snapshotIsAllStopped(snapshot) {
-			err = state.SaveEKSNodegroupState(clusterName, target.region, snapshot)
-			if err != nil {
-				return fmt.Errorf("save EKS nodegroup state before stop: %w", err)
-			}
-		}
 	}
 
 	liveByName, err := validateNodegroupTransition(clusterName, target.region, snapshot, nodegroups)
+	if err != nil {
+		return err
+	}
+
+	err = target.prepareNodegroupStop(clusterName, snapshot, found)
 	if err != nil {
 		return err
 	}
