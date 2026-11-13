@@ -13903,8 +13903,9 @@ Material: m969246257ce9c732 (copyright-header), SHA-256 ff345f5babf52ae9caaac559
 Material: ma6f958c5e7e8f01b (copyright-header), SHA-256 da4cd8ef4b9a411df8b61678338cf5e409203b6960660d73e27e61b422b87c92
 Material: mb65e4d0566ca884c (copyright-header), SHA-256 e4414a7a62454953ce9048bb4945811c9a10a97692aa2c131da2f25a14434a0c
 
-Component: k8s.io/kube-openapi@v0.0.0-20260721132016-d427ff9ee9ad
+Component: k8s.io/kube-openapi@v0.0.0-20261001230523-97fa35140926
 Source: https://proxy.golang.org/k8s.io/kube-openapi/@v/v0.0.0-20260721132016-d427ff9ee9ad.zip
+Selected replacement: k8s.io/kube-openapi@v0.0.0-20260721132016-d427ff9ee9ad
 Selected Go source checksum: h1:oXImqH8mQNk7PmvzKhmN3ddJoY6OnyM225MXwGHPm0A=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
@@ -14538,9 +14539,9 @@ Material: ma6f958c5e7e8f01b (copyright-header), SHA-256 da4cd8ef4b9a411df8b61678
 Material: mb65e4d0566ca884c (copyright-header), SHA-256 e4414a7a62454953ce9048bb4945811c9a10a97692aa2c131da2f25a14434a0c
 Material: mc93a7549b781fd12 (copyright-header), SHA-256 663e76d9545b8b2fd572c56941b9dc99e20fa9c1aa604caa0c08b8b2476b8a06
 
-Component: sigs.k8s.io/kustomize/api@v0.21.2
-Source: https://proxy.golang.org/sigs.k8s.io/kustomize/api/@v/v0.21.2.zip
-Selected Go source checksum: h1:MRyw+zLnFBP+G40gZJoKZErAuRiOPEPao+ddS9L6xt4=
+Component: sigs.k8s.io/kustomize/api@v0.21.3
+Source: https://proxy.golang.org/sigs.k8s.io/kustomize/api/@v/v0.21.3.zip
+Selected Go source checksum: h1:DXGrbifGrAd+7AQ75Kx/tVhr+RLMCZFfAYl61HOR3T0=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -14596,9 +14597,9 @@ Material: m8a207f6926f08b51 (copyright-header), SHA-256 7aa464ef0229992ddaa4d1c4
 Material: ma9ab07e957c261a7 (copyright-header), SHA-256 c9b65f634775604afb33bc5c1cafd72e09a39843fdb9f4b7a16309b7da21fabe
 Material: mc1b6171050536a79 (copyright-header), SHA-256 8ecdde57fa9e0ac01588db2df43df32229c5672ec7fedad7244ca0691e8b3194
 
-Component: sigs.k8s.io/kustomize/kyaml@v0.21.2
-Source: https://proxy.golang.org/sigs.k8s.io/kustomize/kyaml/@v/v0.21.2.zip
-Selected Go source checksum: h1:1javwStFk7cgOeLU7yJtPmXcgMEhQgC2X0WjFT6U0p0=
+Component: sigs.k8s.io/kustomize/kyaml@v0.21.3
+Source: https://proxy.golang.org/sigs.k8s.io/kustomize/kyaml/@v/v0.21.3.zip
+Selected Go source checksum: h1:4ygzLsc8B1ep9dFuEivrJ2lFIAglL19dhPrWp1ioceY=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:

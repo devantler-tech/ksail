@@ -131,8 +131,8 @@ require (
 	sigs.k8s.io/controller-runtime v0.25.2
 	sigs.k8s.io/gateway-api v1.6.3
 	sigs.k8s.io/kind v0.33.0
-	sigs.k8s.io/kustomize/api v0.21.2
-	sigs.k8s.io/kustomize/kyaml v0.21.2
+	sigs.k8s.io/kustomize/api v0.21.3
+	sigs.k8s.io/kustomize/kyaml v0.21.3
 	sigs.k8s.io/kwok v0.8.0
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -1007,7 +1007,7 @@ require (
 	k8s.io/cri-api v0.36.3 // indirect
 	k8s.io/cri-client v0.36.3 // indirect
 	k8s.io/kube-aggregator v0.36.3 // indirect
-	k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad // indirect
+	k8s.io/kube-openapi v0.0.0-20261001230523-97fa35140926 // indirect
 	k8s.io/kube-proxy v0.36.2 // indirect
 	k8s.io/kubelet v0.36.2 // indirect
 	k8s.io/kubernetes v1.36.0 // indirect
@@ -1161,6 +1161,12 @@ replace (
 	k8s.io/component-base v0.37.1 => k8s.io/component-base v0.36.6
 	k8s.io/streaming v0.37.1 => k8s.io/streaming v0.36.6
 )
+
+// kustomize v0.21.3 compiles unchanged against the kube-openapi that main already uses, but it
+// requires a newer one that moves to structured-merge-diff/v7, which the embedded v0.36
+// apimachinery cannot build against. Hold kube-openapi at main's version until #7259 lands; the
+// mapping is qualified to that exact requirement so a later one cannot reuse it without validation.
+replace k8s.io/kube-openapi v0.0.0-20261001230523-97fa35140926 => k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad
 
 // helm v4.3.1 requires Kubernetes v0.37.1 for these modules too, and controller-runtime v0.25.2,
 // which does not compile against v0.36 (it needs events.AnnotatedEventRecorder). Hold them on the
