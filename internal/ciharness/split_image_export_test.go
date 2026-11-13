@@ -52,6 +52,14 @@ func TestSplitImageExportStepDetectsWrongExports(t *testing.T) {
 		{name: "selected export adds an image", mode: "extra", wantError: "exactly the requested images"},
 		{name: "import restores different content", mode: "wrong-content", wantError: "original content"},
 		{name: "import restores nothing", mode: "import-noop", wantError: "original content"},
+		{
+			name: "full archive import restores different content", mode: "wrong-content-full",
+			wantError: "Importing all.tar did not restore",
+		},
+		{
+			name: "full archive import restores nothing", mode: "import-noop-full",
+			wantError: "Importing all.tar did not restore",
+		},
 		{name: "unreadable node inventory", mode: "inventory-error", wantError: "Cannot read the image inventory"},
 		{name: "fixture content on both nodes", mode: "not-split", wantError: "the fixture is not split"},
 		{name: "node labels of another role", mode: "wrong-role", wantError: "is not the control-plane"},
@@ -287,11 +295,16 @@ export)
 	rm -rf "$work"
 	;;
 import)
-	[[ "$SPLIT_MODE" != import-noop ]] || exit 0
+	# A "-full" mode misbehaves only on the full archive, after the selected one imported cleanly.
+	mode="$SPLIT_MODE"
+	case "$mode" in
+	*-full) if [[ "$3" == */all.tar ]]; then mode="${mode%-full}"; else mode=; fi ;;
+	esac
+	[[ "$mode" != import-noop ]] || exit 0
 	images=$(tar -xOf "$3" images 2>/dev/null || tar -xOf "$3" ./images)
 	for file in "$nodes"/*; do
 		while read -r ref digest; do
-			[[ "$SPLIT_MODE" != wrong-content || "$digest" != "$DIGEST_B" ]] || digest="$DIGEST_BAD"
+			[[ "$mode" != wrong-content || "$digest" != "$DIGEST_B" ]] || digest="$DIGEST_BAD"
 			awk -v ref="$ref" '$1 != ref' "$file" >"$file.tmp"
 			printf '%s %s\nimport-2026-11-12@%s %s\n' "$ref" "$digest" "$digest" "$digest" >>"$file.tmp"
 			mv "$file.tmp" "$file"
