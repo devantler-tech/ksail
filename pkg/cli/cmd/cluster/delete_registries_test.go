@@ -3,6 +3,7 @@ package cluster_test
 import (
 	"bytes"
 	"context"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -93,19 +94,21 @@ func newMirrorRegistryDocker(t *testing.T) *mirrorRegistryDocker {
 	return docker
 }
 
-// listContainers lists every registry that has not been removed.
+// listContainers lists every registry that has not been removed and that matches the request's
+// name filters, so a lookup by name finds only that registry, as it would in Docker.
 func (d *mirrorRegistryDocker) listContainers(
-	context.Context,
-	container.ListOptions,
+	_ context.Context,
+	options container.ListOptions,
 ) ([]container.Summary, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
+	nameFilters := options.Filters.Get("name")
 	summaries := make([]container.Summary, 0, len(d.order))
 
 	for _, containerID := range d.order {
 		registry := d.registries[containerID]
-		if registry.removed {
+		if registry.removed || !matchesNameFilters("/"+registry.name, nameFilters) {
 			continue
 		}
 
@@ -119,6 +122,23 @@ func (d *mirrorRegistryDocker) listContainers(
 	}
 
 	return summaries, nil
+}
+
+// matchesNameFilters reports whether a container name matches any of Docker's name filters, each
+// a regular expression matched against the name with its leading slash. No filter matches all.
+func matchesNameFilters(name string, patterns []string) bool {
+	if len(patterns) == 0 {
+		return true
+	}
+
+	for _, pattern := range patterns {
+		matched, err := regexp.MatchString(pattern, name)
+		if err == nil && matched {
+			return true
+		}
+	}
+
+	return false
 }
 
 // inspectRegistry shows the registry on the "kind" network while it is attached.
