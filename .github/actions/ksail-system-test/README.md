@@ -19,6 +19,7 @@ There is no offline phase any more: manifest generation, the `open mcp --help` s
 - **Cluster Create** — Create and start a Kubernetes cluster
 - **Cluster Info / List** — Verify cluster status and listing
 - **Calico Migration** (optional) — Create with an immutable Calico 3.32.2 baseline binary, then use the candidate CLI to update without editing configuration. Verify prerequisite UIDs, the complete inventory, the deployed operator and node image, and an empty final diff. `calico-migration-binary` requires its producer's `calico-migration-sha256`; both artifacts are addressed by immutable IDs in CI.
+- **Create With a Release** (optional) — `create-binary` runs `project init` and `cluster create` with a published KSail release; every later step uses the build under test, so updates run against a cluster an earlier release created. The Hetzner system test sets it from its `create_with_release` dispatch input after checking the archive against the release's checksums. It cannot be combined with the Calico migration binary.
 
 ### Phase 4 — Online Tests (cluster running)
 
@@ -218,6 +219,8 @@ Each of these adds a phase and is off unless set. The action's `action.yaml` des
 | `assert-k3k-server-creator`         | Assert and record which principal created the nested K3s server pod                           | `false`                      |
 | `calico-migration-binary`           | Verified baseline binary that creates a legacy Calico cluster before the candidate updates it | `""`                         |
 | `calico-migration-sha256`           | SHA-256 from the producer of that baseline binary                                             | `""`                         |
+| `create-binary`                     | Talos only: a published release binary that runs project init and cluster create only         | `""`                         |
+| `create-binary-sha256`              | SHA-256 of `create-binary`, checked again before it runs                                      | `""`                         |
 | `kubernetes-upgrade-from`           | Starting Kubernetes version for the Docker/Talos upgrade trial                                | `""`                         |
 | `kubernetes-upgrade-to`             | Target Kubernetes version for the Docker/Talos upgrade trial                                  | `""`                         |
 | `rolling-resize-server-type`        | Hetzner only: server type to resize to, exercising rolling node replacement                   | `""`                         |

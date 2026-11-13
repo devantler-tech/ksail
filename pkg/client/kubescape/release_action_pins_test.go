@@ -66,7 +66,13 @@ func auditedActionBindings() []struct{ path, action, content string } {
 		{
 			".github/actions/restore-go-modules/action.yaml",
 			"restore-go-modules",
-			"0cc2a584876350f4b355373c4a290e4a59b9cc0e0657acdb2a14e101e4d02f53",
+			"bfa9a94ba8de19ad4f8918a7220548b7af6ad2f751f7a9a131bffda3a06be329",
+		},
+		// restore-go-modules runs the bounded module download from its own pinned checkout.
+		{
+			".github/scripts/download-go-modules.sh",
+			"restore-go-modules",
+			"e5af8edf61a77de4397e952a05b1cc6ca0f83cd848523c4cf6b3aaa2539561fa",
 		},
 		// setup-desktop-build runs these scripts from its own pinned checkout ($GITHUB_ACTION_PATH).
 		{
