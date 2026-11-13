@@ -146,3 +146,6 @@ jobs:
           distribution: goreleaser
           version: "~> v2"
           args: release --snapshot --clean --config .goreleaser.desktop.yaml
+
+      - name: 🔎 Verify macOS desktop archive signature
+        run: bash desktop/scripts/verify-macos-archive.sh dist-desktop/KSail_*_darwin_*.zip

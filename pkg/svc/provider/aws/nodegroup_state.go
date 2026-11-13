@@ -19,6 +19,9 @@ var (
 	errNodegroupStateVersion = errors.New("unsupported EKS nodegroup state version")
 	errNodegroupStateTarget  = errors.New("EKS nodegroup state target mismatch")
 	errNodegroupStateDrift   = errors.New("EKS nodegroup capacity state drift")
+	errNodegroupStopPending  = errors.New(
+		"EKS nodegroup stop is still in progress or was incomplete",
+	)
 	// errNodegroupRestorePending marks a nodegroup that is still stopped after a restore request.
 	// EKS applies a scaling update asynchronously, so this one state is re-read until the deadline;
 	// every other drift fails at once.
@@ -380,6 +383,59 @@ func (p *Provider) startNodegroupWithoutSnapshot(
 	)
 	if err != nil {
 		return fmt.Errorf("start nodes: scale nodegroup %s: %w", nodegroup.Name, err)
+	}
+
+	return nil
+}
+
+func (p *Provider) prepareNodegroupStop(
+	clusterName string,
+	snapshot *state.EKSNodegroupState,
+	alreadySaved bool,
+) error {
+	// Retain an existing pending snapshot and keep the no-snapshot fallback for a
+	// cluster already at zero. A new stop invalidates any prior restoration readback.
+	if !snapshot.StopObserved && (alreadySaved || snapshotIsAllStopped(snapshot)) {
+		return nil
+	}
+
+	snapshot.StopObserved = false
+
+	err := state.SaveEKSNodegroupState(clusterName, p.region, snapshot)
+	if err != nil {
+		return fmt.Errorf("save EKS nodegroup state before stop: %w", err)
+	}
+
+	return nil
+}
+
+func (p *Provider) confirmNodegroupsStopped(
+	clusterName string,
+	snapshot *state.EKSNodegroupState,
+	liveByName map[string]eksctlclient.NodegroupSummary,
+) error {
+	if snapshot.StopObserved {
+		return nil
+	}
+
+	// A still-running group may be a stale read from before the asynchronous stop. Require
+	// every group to show zero before starting any restore, then persist that observation
+	// so a retry after partial restoration can recognize groups already back at capacity.
+	for _, capacity := range snapshot.Nodegroups {
+		if !nodegroupIsStopped(liveByName[capacity.Name], capacity) {
+			return fmt.Errorf(
+				"%w for %q; retry start after scale-down, or repeat stop if scale-down failed",
+				errNodegroupStopPending,
+				capacity.Name,
+			)
+		}
+	}
+
+	snapshot.StopObserved = true
+
+	err := state.SaveEKSNodegroupState(clusterName, p.region, snapshot)
+	if err != nil {
+		return fmt.Errorf("record stopped EKS nodegroups before start: %w", err)
 	}
 
 	return nil

@@ -143,6 +143,17 @@ func (e *Exporter) fallbackExportImages(
 		platform,
 		images,
 	)
+	if e.ociOnly && len(failures) > 0 {
+		return fmt.Errorf(
+			"%w: node %s could not export every required image "+
+				"(initial bulk export error: %w; individual export errors: %w)",
+			ErrIncompleteExport,
+			nodeName,
+			bulkErr,
+			errors.Join(failures...),
+		)
+	}
+
 	if len(successfulImages) == 0 {
 		return fmt.Errorf(
 			"ctr export failed for all images during individual export attempts "+
@@ -333,8 +344,14 @@ func (e *Exporter) tryExportImages(
 		cmd = append(cmd, "--local")
 	}
 
+	if e.ociOnly {
+		cmd = append(cmd, "--skip-manifest-json")
+	}
+
 	cmd = append(cmd, tmpPath)
-	cmd = append(cmd, images...)
+	// Two requested aliases can resolve to one local name; naming it twice would
+	// publish duplicate descriptors, so pass each operand once on every attempt.
+	cmd = append(cmd, uniqueImageRefs(images)...)
 
 	_, err := e.executor.ExecInContainer(ctx, nodeName, cmd)
 
