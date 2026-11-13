@@ -609,6 +609,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      # Resolving this job's packages downloads modules; restore them through the shared
+      # bounded retry so one dropped Go proxy stream does not fail the job (#8053).
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@93412f612d35018a21eafd7cf28b523b92f5038a
 
       - name: 🔎 Verify complete and private regional inventories
         run: go test ./internal/maintenance/eksinventory/...
@@ -1032,6 +1036,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      # Resolving this job's packages downloads modules; restore them through the shared
+      # bounded retry so one dropped Go proxy stream does not fail the job (#8053).
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@93412f612d35018a21eafd7cf28b523b92f5038a
 
       - name: 📦 Install pinned vulnerability scanner
         env:
@@ -2510,6 +2518,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      # Resolving this job's packages downloads modules; restore them through the shared
+      # bounded retry so one dropped Go proxy stream does not fail the job (#8053).
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@93412f612d35018a21eafd7cf28b523b92f5038a
 
       # `go build ./...` and `go test ./...` resolve only THIS module's packages and their own
       # tests. Neither resolves the tests of a DEPENDENCY, so a dependency whose test imports a
@@ -2554,6 +2566,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      # Resolving this job's packages downloads modules; restore them through the shared
+      # bounded retry so one dropped Go proxy stream does not fail the job (#8053).
+      - name: ♻️ Restore Go modules
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@93412f612d35018a21eafd7cf28b523b92f5038a
 
       # The contracts keep the Gateway API CRDs KSail installs on the line the pinned Cilium
       # release is built against, and keep the module carrying their version tracked by
