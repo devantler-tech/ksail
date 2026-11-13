@@ -589,7 +589,7 @@ func setChartSpec(
 	helmRelease.Spec.Chart = &helmv2.HelmChartTemplate{
 		Spec: helmv2.HelmChartTemplateSpec{
 			Chart: chart,
-			SourceRef: helmv2.CrossNamespaceObjectReference{
+			SourceRef: &helmv2.CrossNamespaceObjectReference{
 				Kind:      sourceRef.Kind,
 				Name:      sourceRef.Name,
 				Namespace: sourceRef.Namespace,

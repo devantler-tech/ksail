@@ -4281,9 +4281,9 @@ Material: m8a207f6926f08b51 (copyright-header), SHA-256 7aa464ef0229992ddaa4d1c4
 Material: ma9ab07e957c261a7 (copyright-header), SHA-256 c9b65f634775604afb33bc5c1cafd72e09a39843fdb9f4b7a16309b7da21fabe
 Material: mdbc78e386a135a31 (copyright-header), SHA-256 6bef5f52ffb52290344ea3ec502d5acc8c5e419528805e2f8b1bb308d3278d76
 
-Component: github.com/fluxcd/helm-controller/api@v1.6.5
-Source: https://proxy.golang.org/github.com/fluxcd/helm-controller/api/@v/v1.6.5.zip
-Selected Go source checksum: h1:ElqM5KIpdUwVK1VSi1fXcMwOlf0LghuqwM2SwqaTyNs=
+Component: github.com/fluxcd/helm-controller/api@v1.7.1
+Source: https://proxy.golang.org/github.com/fluxcd/helm-controller/api/@v/v1.7.1.zip
+Selected Go source checksum: h1:kARTcSBiS05mQsY7nVdL+XGaIGPZd/oC5owFTN6NIyk=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:

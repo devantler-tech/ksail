@@ -135,7 +135,7 @@ func TestBuildChartSpecHelmRepositoryHTTP(t *testing.T) {
 			Spec: helmv2.HelmChartTemplateSpec{
 				Chart:   "podinfo",
 				Version: "6.5.0",
-				SourceRef: helmv2.CrossNamespaceObjectReference{
+				SourceRef: &helmv2.CrossNamespaceObjectReference{
 					Kind: sourcev1.HelmRepositoryKind,
 					Name: "podinfo",
 				},
@@ -165,7 +165,7 @@ func TestBuildChartSpecHelmRepositoryOCIType(t *testing.T) {
 			Spec: helmv2.HelmChartTemplateSpec{
 				Chart:   "podinfo",
 				Version: "6.5.0",
-				SourceRef: helmv2.CrossNamespaceObjectReference{
+				SourceRef: &helmv2.CrossNamespaceObjectReference{
 					Kind: sourcev1.HelmRepositoryKind,
 					Name: "podinfo",
 				},
@@ -280,11 +280,26 @@ func TestRenderUnsupportedSourceKindDegrades(t *testing.T) {
 		Chart: &helmv2.HelmChartTemplate{
 			Spec: helmv2.HelmChartTemplateSpec{
 				Chart: "app",
-				SourceRef: helmv2.CrossNamespaceObjectReference{
+				SourceRef: &helmv2.CrossNamespaceObjectReference{
 					Kind: sourcev1.GitRepositoryKind,
 					Name: "repo",
 				},
 			},
+		},
+	})
+
+	resolver := render.NewHelmChartResolver(&captureClient{})
+
+	_, err := resolver.Render(context.Background(), helmRelease, render.SourceIndex{})
+	require.ErrorIs(t, err, render.ErrUnsupportedSourceKind)
+}
+
+func TestRenderMissingSourceRefDegrades(t *testing.T) {
+	t.Parallel()
+
+	helmRelease := helmReleaseObj("app", helmv2.HelmReleaseSpec{
+		Chart: &helmv2.HelmChartTemplate{
+			Spec: helmv2.HelmChartTemplateSpec{Chart: "app"},
 		},
 	})
 

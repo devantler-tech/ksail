@@ -42,7 +42,7 @@ require (
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/docker/go-connections v0.8.2
 	github.com/fatih/color v1.19.0
-	github.com/fluxcd/helm-controller/api v1.6.5
+	github.com/fluxcd/helm-controller/api v1.7.1
 	github.com/fluxcd/kustomize-controller/api v1.10.1
 	github.com/fluxcd/pkg/apis/kustomize v1.23.0
 	github.com/fluxcd/pkg/apis/meta v1.38.0
@@ -1150,7 +1150,8 @@ tool (
 // Qualify this mapping so a later requirement cannot reuse it without validation.
 replace k8s.io/apimachinery v0.37.1 => k8s.io/apimachinery v0.36.6
 
-// fluxcd/pkg/apis/kustomize v1.23.0 and fluxcd/source-controller/api v1.10.1 require Kubernetes
+// fluxcd/pkg/apis/kustomize v1.23.0, fluxcd/helm-controller/api v1.7.1 and
+// fluxcd/source-controller/api v1.10.1 require Kubernetes
 // v0.37.1 for these modules. Hold them on the embedded v0.36 tools until #7259 lands; each
 // mapping is qualified to v0.37.1 so a later requirement cannot reuse it without validation.
 replace (
