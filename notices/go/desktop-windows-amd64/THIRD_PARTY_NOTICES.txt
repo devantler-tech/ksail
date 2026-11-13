@@ -4309,15 +4309,15 @@ Material: m5fe28487e9114bff (copyright-header), SHA-256 907d1fc6b0a8ba9362ee9963
 Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
 Files: LICENSE
 
-Component: github.com/fluxcd/pkg/apis/kustomize@v1.19.2
-Source: https://proxy.golang.org/github.com/fluxcd/pkg/apis/kustomize/@v/v1.19.2.zip
-Selected Go source checksum: h1:/E8Nmn1XdAGUIqxI5vK60WemyBX3pIpfmP3mr/E3p9c=
+Component: github.com/fluxcd/pkg/apis/kustomize@v1.23.0
+Source: https://proxy.golang.org/github.com/fluxcd/pkg/apis/kustomize/@v/v1.23.0.zip
+Selected Go source checksum: h1:tT/sUURyh6ixQG4+Y/ZoUu+hh5/DQLRraWBgy42ubqQ=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
 github.com/fluxcd/pkg/apis/kustomize
-Material: m408ff53c0180a5cd (copyright-header), SHA-256 a61bfce359055ebea6f65fb9784a0392abaa4c2e2c8bdd8d03e09abee9cfa73e
 Material: m56cb95c11f58f6f8 (copyright-header), SHA-256 cad4eff957ff7d988f03e2e911f7b6a8674f58ee1c67c6a35d4ff95b992153ec
+Material: m5fe28487e9114bff (copyright-header), SHA-256 907d1fc6b0a8ba9362ee99637c601e33ff6d241ac141aa49f62b439961a6120c
 Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
 Files: LICENSE
 

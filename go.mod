@@ -44,7 +44,7 @@ require (
 	github.com/fatih/color v1.19.0
 	github.com/fluxcd/helm-controller/api v1.6.5
 	github.com/fluxcd/kustomize-controller/api v1.9.6
-	github.com/fluxcd/pkg/apis/kustomize v1.19.2
+	github.com/fluxcd/pkg/apis/kustomize v1.23.0
 	github.com/fluxcd/pkg/apis/meta v1.38.0
 	github.com/fluxcd/source-controller/api v1.10.1
 	github.com/fsnotify/fsnotify v1.10.1
@@ -1150,9 +1150,9 @@ tool (
 // Qualify this mapping so a later requirement cannot reuse it without validation.
 replace k8s.io/apimachinery v0.37.1 => k8s.io/apimachinery v0.36.6
 
-// fluxcd/source-controller/api v1.10.1 requires Kubernetes v0.37.1 for these modules. Hold them
-// on the embedded v0.36 tools until #7259 lands; each mapping is qualified to v0.37.1 so a later
-// requirement cannot reuse it without validation.
+// fluxcd/pkg/apis/kustomize v1.23.0 and fluxcd/source-controller/api v1.10.1 require Kubernetes
+// v0.37.1 for these modules. Hold them on the embedded v0.36 tools until #7259 lands; each
+// mapping is qualified to v0.37.1 so a later requirement cannot reuse it without validation.
 replace (
 	k8s.io/api v0.37.1 => k8s.io/api v0.36.6
 	k8s.io/apiextensions-apiserver v0.37.1 => k8s.io/apiextensions-apiserver v0.36.6

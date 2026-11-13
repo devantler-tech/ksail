@@ -21,6 +21,14 @@ inputs:
     description: SHA-256 from the immutable baseline binary producer
     required: false
     default: ""
+  create-binary:
+    description: Published KSail release binary that runs project init and cluster create only; every later step uses the build under test
+    required: false
+    default: ""
+  create-binary-sha256:
+    description: SHA-256 of create-binary, checked again before it runs
+    required: false
+    default: ""
   kubernetes-upgrade-from:
     description: Known starting Kubernetes version for the optional Docker/Talos upgrade trial
     required: false
