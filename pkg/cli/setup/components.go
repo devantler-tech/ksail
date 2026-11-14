@@ -76,6 +76,7 @@ type InstallerFactories struct {
 	KubeletCSRApprover        func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	ClusterAutoscaler         func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	HcloudCCM                 func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
+	MetalLB                   func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	AWSLoadBalancerController func(
 		clusterCfg *v1alpha1.Cluster,
 		ksailManaged bool,
@@ -362,6 +363,7 @@ func DefaultInstallerFactories() *InstallerFactories {
 	factories.MetricsServer = metricsServerFactory(factories)
 	factories.ClusterAutoscaler = clusterAutoscalerFactory(factories)
 	factories.HcloudCCM = hcloudCCMFactory(factories)
+	factories.MetalLB = metalLBFactory(factories)
 	factories.AWSLoadBalancerController = func(
 		clusterCfg *v1alpha1.Cluster,
 		ksailManaged bool,
