@@ -56,15 +56,16 @@ addons:
 
 //nolint:tagliatelle // GitHub Actions defines these external keys in kebab-case.
 type harnessStep struct {
-	Name            string            `yaml:"name"`
-	ID              string            `yaml:"id"`
-	If              string            `yaml:"if"`
-	Env             map[string]string `yaml:"env"`
-	Uses            string            `yaml:"uses"`
-	Run             string            `yaml:"run"`
-	TimeoutMinutes  int               `yaml:"timeout-minutes"`
-	ContinueOnError bool              `yaml:"continue-on-error"`
-	With            map[string]any    `yaml:"with"`
+	Name             string            `yaml:"name"`
+	ID               string            `yaml:"id"`
+	If               string            `yaml:"if"`
+	Env              map[string]string `yaml:"env"`
+	Uses             string            `yaml:"uses"`
+	Run              string            `yaml:"run"`
+	TimeoutMinutes   int               `yaml:"timeout-minutes"`
+	ContinueOnError  bool              `yaml:"continue-on-error"`
+	WorkingDirectory string            `yaml:"working-directory"`
+	With             map[string]any    `yaml:"with"`
 }
 
 type compositeAction struct {
