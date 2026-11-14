@@ -16,7 +16,6 @@ notices/go/** -filter -text
 # Source integrity hashes the published bytes on every checkout platform.
 third_party/cel-go/** text=auto eol=lf
 third_party/glamour/** text=auto eol=lf
-third_party/go-macholibre/** text=auto eol=lf
 third_party/kyverno-jmespath/** -filter -text
 third_party/jmespath/** -filter -text
 third_party/ansi/** -filter -text

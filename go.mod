@@ -1050,11 +1050,6 @@ require (
 // Dependency version pins: modules replaced here have upstream incompatibilities
 // that require pinning until the respective projects ship compatible releases.
 replace (
-	// Authenticate the complete release source instead of unavailable Git/LFS
-	// downloads (ksail#7131, ADR 0010). This qualified pin leaves future releases
-	// unaffected; remove it after an authenticated successor passes managed analysis.
-	github.com/anchore/go-macholibre v0.1.0 => ./third_party/go-macholibre
-
 	// image-factory v1.3.0 transitively pulls in grype v0.112.0 (via go-vex),
 	// which added a *DistroAlertData parameter to models.NewDocument. kubescape
 	// v3.0.48 still calls the 10-argument form and will not compile against
