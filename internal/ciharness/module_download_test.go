@@ -315,8 +315,17 @@ func TestNarrowChecksDownloadPackageModulesThroughBoundedRetry(t *testing.T) {
 				harnessStepIndex(t, steps, want.operation), "download before the check compiles")
 		})
 	}
+}
 
-	prefetch := harnessStep{Run: "bash " + script + " ./pkg/fsutil/path_test.go"}
+// The narrow download retries a dropped Go proxy stream, gives up after three attempts with its
+// own error, and leaves a later build failure as the job's real verdict (#8053).
+func TestPackageModuleDownloadRetries(t *testing.T) {
+	t.Parallel()
+	requireTestExecutable(t, "bash")
+
+	prefetch := harnessStep{
+		Run: "bash .github/scripts/download-go-package-modules.sh ./pkg/fsutil/path_test.go",
+	}
 	for _, scenario := range []moduleDownloadScenario{
 		{name: "cache_warm", downloads: 1, operations: 1},
 		{name: "two_proxy_blips", failures: 2, downloads: 3, operations: 1, backoff: "5\n10\n"},
