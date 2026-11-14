@@ -736,9 +736,9 @@ jobs:
 
       - name: ⏳ Wait for EKS update before cleanup
         if: always() && steps.create.outputs.attempted == 'true' && inputs.upgrade_from_version != ''
-        timeout-minutes: 21
+        timeout-minutes: 41
         shell: bash
-        run: timeout 20m bash .github/scripts/eks-upgrade-trial.sh --wait-before-cleanup
+        run: timeout 40m bash .github/scripts/eks-upgrade-trial.sh --wait-before-cleanup
       - name: 🔎 Preserve EKS ownership before cleanup
         if: always() && inputs.capture_resource_ownership && steps.create.outputs.attempted == 'true'
         timeout-minutes: 5

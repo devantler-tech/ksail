@@ -1,6 +1,7 @@
 package ciharness_test
 
 import (
+	"os"
 	"os/exec"
 	"testing"
 
@@ -22,6 +23,8 @@ func TestEKSUpgradeTrialRunsFailureControls(t *testing.T) {
 		"bash",
 		"../../.github/scripts/eks-upgrade-trial.test.sh",
 	)
+	// Keep the suite's scratch files and cleanup probes inside the test's directory.
+	cmd.Env = append(os.Environ(), "TMPDIR="+t.TempDir())
 	output, err := cmd.CombinedOutput()
 	require.NoErrorf(t, err, "EKS upgrade trial controls failed:\n%s", output)
 	assert.Contains(t, string(output), "PASS: successful upgrade and repeat")
@@ -55,9 +58,9 @@ func TestEKSUpgradeTrialReservesFreshCleanupSession(t *testing.T) {
 		"always() && steps.create.outputs.attempted == 'true' && inputs.upgrade_from_version != ''",
 		wait.If)
 	assert.Equal(t,
-		"timeout 20m bash .github/scripts/eks-upgrade-trial.sh --wait-before-cleanup",
+		"timeout 40m bash .github/scripts/eks-upgrade-trial.sh --wait-before-cleanup",
 		wait.Run)
-	assert.Equal(t, 21, wait.TimeoutMinutes)
+	assert.Equal(t, 41, wait.TimeoutMinutes)
 	assert.Less(t,
 		harnessStepIndex(t, job.Steps, wait.Name),
 		harnessStepIndex(t, job.Steps, "🧹 Delete EKS smoke cluster"))

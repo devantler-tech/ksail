@@ -12,7 +12,7 @@ fail() {
 # A CLI timeout does not cancel an accepted AWS update, and EKS rejects deletion
 # during that update. This mode uses the workflow's independently refreshed
 # cleanup session, never the trial's deleted credential_process files. The
-# workflow bounds this entire probe/wait to 20m and still reserves 45m to delete.
+# workflow bounds this entire probe/wait to 40m and still reserves 45m to delete.
 if [[ "${1:-}" == --wait-before-cleanup ]]; then
 	: "${KSAIL_EKS_CLUSTER_NAME:?}" "${AWS_REGION:?}"
 	export AWS_PAGER='' AWS_MAX_ATTEMPTS=3
@@ -39,8 +39,14 @@ if [[ "${1:-}" == --wait-before-cleanup ]]; then
 	ACTIVE | CREATING | DELETING | FAILED | PENDING) ;;
 	UPDATING)
 		echo 'Waiting for the accepted EKS update before deletion.'
-		aws eks wait cluster-active --name "$KSAIL_EKS_CLUSTER_NAME" --region "$AWS_REGION" \
-			--cli-connect-timeout 10 --cli-read-timeout 30 ||
+		# One AWS waiter call gives up after 20 minutes (40 polls, 30 seconds apart),
+		# and a control-plane version update can take longer. EKS rejects deletion
+		# until it ends, so a second call extends the wait to the step's 40 minutes.
+		wait_active() {
+			aws eks wait cluster-active --name "$KSAIL_EKS_CLUSTER_NAME" --region "$AWS_REGION" \
+				--cli-connect-timeout 10 --cli-read-timeout 30
+		}
+		wait_active || wait_active ||
 			fail 'EKS update did not settle; deletion must still run and any remaining resources need attention.'
 		;;
 	'' | None) fail 'AWS returned no EKS status before cleanup.' ;;

@@ -26,7 +26,7 @@ case "$1 $2" in
   ;;
 'eks describe-cluster')
   case "$TRIAL_SCENARIO" in
-  cleanup-updating | cleanup-wait-error) echo UPDATING; exit 0 ;;
+  cleanup-updating | cleanup-wait-error | cleanup-slow-update) echo UPDATING; exit 0 ;;
   cleanup-active) echo ACTIVE; exit 0 ;;
   cleanup-updating-warning) echo 'warning: fixture CLI notice' >&2; echo UPDATING; exit 0 ;;
   cleanup-unexpected-status) echo BOGUS; exit 0 ;;
@@ -63,8 +63,10 @@ case "$1 $2" in
   ;;
 'eks wait')
   [[ "$3" == cluster-active ]] || exit 86
-  touch "$TRIAL_STATE/waited"
+  echo call >>"$TRIAL_STATE/waited"
   [[ "$TRIAL_SCENARIO" != cleanup-wait-error ]] || exit 255
+  # The AWS waiter gives up after 20 minutes; a slow update outlasts one call.
+  [[ "$TRIAL_SCENARIO" != cleanup-slow-update || "$(wc -l <"$TRIAL_STATE/waited")" -gt 1 ]] || exit 255
   ;;
 *) exit 80 ;;
 esac
@@ -173,7 +175,7 @@ echo 'PASS: version inputs fail closed and default off'
 
 # Cleanup must remain usable after the trial fails, without its private session
 # files, version inputs, project directory, or OIDC request environment.
-for scenario in cleanup-updating cleanup-wait-error cleanup-active cleanup-missing \
+for scenario in cleanup-updating cleanup-slow-update cleanup-wait-error cleanup-active cleanup-missing \
 	cleanup-missing-leading-newline cleanup-missing-cli-prefix cleanup-partial-not-found \
 	cleanup-profile-not-found cleanup-missing-error-prefix cleanup-wrong-operation \
 	cleanup-query-error cleanup-empty cleanup-updating-warning cleanup-unexpected-status; do
@@ -196,7 +198,8 @@ for scenario in cleanup-updating cleanup-wait-error cleanup-active cleanup-missi
 		exit 1
 	fi
 	case "$scenario" in
-	cleanup-updating | cleanup-wait-error | cleanup-updating-warning) [[ -f "$state/waited" ]] ;;
+	cleanup-updating | cleanup-updating-warning) [[ "$(wc -l <"$state/waited")" -eq 1 ]] ;;
+	cleanup-slow-update | cleanup-wait-error) [[ "$(wc -l <"$state/waited")" -eq 2 ]] ;;
 	*) [[ ! -f "$state/waited" ]] ;;
 	esac
 	echo "PASS: $scenario"
