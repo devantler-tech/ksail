@@ -11,6 +11,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	specdiff "github.com/devantler-tech/ksail/v7/pkg/svc/diff"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
 	fluxinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/flux"
@@ -458,11 +459,39 @@ func (r *componentReconciler) doReconcileLoadBalancer(
 		return r.reconcileLoadBalancerInstall(ctx)
 	}
 
+	// Talos on Hetzner keeps its cloud controller, which also initialises nodes,
+	// when load balancers are switched off: it is upgraded with its service
+	// controller off rather than removed (ksail#7678).
+	if ksailInstallsHcloudCCM(r.clusterCfg) {
+		err := r.installHcloudCCMOnce(ctx)
+		if err == nil {
+			r.reportRetainedHetznerLoadBalancers()
+		}
+
+		return err
+	}
+
 	if r.clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionEKS {
 		return nil
 	}
 
 	return r.reconcileLoadBalancerUninstall(ctx)
+}
+
+// reportRetainedHetznerLoadBalancers tells the user, once the cloud controller
+// runs without its service controller, that nothing manages Hetzner load
+// balancers any more: existing ones keep running and billing, their targets no
+// longer follow node changes, and a LoadBalancer Service that still carries the
+// controller's cleanup finalizer cannot finish deleting.
+func (r *componentReconciler) reportRetainedHetznerLoadBalancers() {
+	notify.WriteMessage(notify.Message{
+		Type: notify.WarningType,
+		Content: "load balancers are disabled: existing Hetzner load balancers are left in place " +
+			"and no longer managed; delete them in the Hetzner Console, and remove the " +
+			"service.kubernetes.io/load-balancer-cleanup finalizer from any LoadBalancer Service " +
+			"you delete or change afterwards",
+		Writer: r.cmd.ErrOrStderr(),
+	})
 }
 
 func (r *componentReconciler) reconcileLoadBalancerInstall(ctx context.Context) error {
