@@ -309,21 +309,11 @@ func splitMigratedNodeKubeletPatch(
 	legacyDocuments []map[string]any,
 	newDocuments []map[string]any,
 ) ([]Patch, error) {
-	migrated := make([]Patch, 0, 1+len(newDocuments))
+	migrated := make([]Patch, 0, len(newDocuments))
 
-	remaining := make([][]byte, 0, len(legacyDocuments))
-
-	for _, document := range legacyDocuments {
-		if len(document) == 0 {
-			continue
-		}
-
-		encoded, err := yaml.Marshal(document)
-		if err != nil {
-			return nil, fmt.Errorf("marshal migrated patch %q: %w", patch.Path, err)
-		}
-
-		remaining = append(remaining, bytes.TrimSpace(encoded))
+	remaining, err := marshalNonEmptyDocuments(legacyDocuments)
+	if err != nil {
+		return nil, fmt.Errorf("marshal migrated patch %q: %w", patch.Path, err)
 	}
 
 	if len(remaining) > 0 {
