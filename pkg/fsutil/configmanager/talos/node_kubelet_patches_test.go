@@ -229,3 +229,44 @@ func allowSchedulingScopeCases() []allowSchedulingScopeCase {
 		},
 	}
 }
+
+// TestEmptyLegacyKubeletObjectIsRemoved checks that a patch carrying only an
+// empty machine.kubelet object is migrated rather than restored verbatim,
+// because Talos rejects any legacy kubelet object beside a KubeletConfig.
+func TestEmptyLegacyKubeletObjectIsRemoved(t *testing.T) {
+	t.Parallel()
+
+	configs, err := talos.NewDefaultConfigsWithVersionContractAndPatches(
+		"", talosconfig.TalosVersion1_14, []talos.Patch{{
+			Path:    "empty-kubelet",
+			Scope:   talos.PatchScopeCluster,
+			Content: []byte("machine:\n  kubelet: {}\n"),
+		}},
+	)
+	require.NoError(t, err)
+
+	_, err = configs.ControlPlane().ValidateAsClient(containerMode{})
+	require.NoError(t, err)
+	_, err = configs.Worker().ValidateAsClient(containerMode{})
+	require.NoError(t, err)
+}
+
+// TestMigratedPatchRejectsMultiKeyListDeletion checks that a node-field
+// migration refuses to re-encode a list deletion whose selector key order a
+// decoded map cannot keep, instead of risking deletion of the wrong entry.
+func TestMigratedPatchRejectsMultiKeyListDeletion(t *testing.T) {
+	t.Parallel()
+
+	_, err := talos.NewDefaultConfigsWithVersionContractAndPatches(
+		"", talosconfig.TalosVersion1_14, []talos.Patch{{
+			Path:  "labels-and-file-deletion",
+			Scope: talos.PatchScopeCluster,
+			Content: []byte("machine:\n  nodeLabels:\n    example.test/zone: a\n" +
+				"  files:\n    - path: /var/example\n      op: overwrite\n" +
+				"      $patch: delete\n"),
+		}},
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "multi-key list deletion")
+	assert.Contains(t, err.Error(), "labels-and-file-deletion")
+}

@@ -268,10 +268,10 @@ func popAllowScheduling(document map[string]any, patchPath string) (bool, bool, 
 func moveLegacyMachineFields(
 	document map[string]any,
 	patchPath string,
-) (map[string]any, map[string]any, error) {
+) (map[string]any, map[string]any, bool, error) {
 	machine, found := mapValue(document, "machine")
 	if !found {
-		return nil, nil, nil
+		return nil, nil, false, nil
 	}
 
 	nodeDocument := map[string]any{}
@@ -287,7 +287,7 @@ func moveLegacyMachineFields(
 		if len(kubelet) > 0 {
 			remaining := slices.Sorted(maps.Keys(kubelet))
 
-			return nil, nil, fmt.Errorf(
+			return nil, nil, false, fmt.Errorf(
 				"patch %q: machine.kubelet.%s: %w; move it into its own Talos 1.14 configuration document",
 				patchPath,
 				strings.Join(remaining, ", machine.kubelet."),
@@ -300,13 +300,15 @@ func moveLegacyMachineFields(
 
 	removeEmptyMap(document, "machine", machine)
 
+	// Removing a legacy kubelet object is a change even when it was empty:
+	// Talos rejects any machine.kubelet beside a KubeletConfig document.
 	return withKind(
 			nodeDocument,
 			kubeNodeConfigKind,
 		), withKind(
 			kubeletDocument,
 			kubeletConfigKind,
-		), nil
+		), hasKubelet, nil
 }
 
 func moveFields(source, target map[string]any, fields map[string]string) {
@@ -338,6 +340,14 @@ func splitMigratedNodeKubeletPatch(
 	legacyDocuments []map[string]any,
 	newDocuments []map[string]any,
 ) ([]Patch, error) {
+	// Re-encoding through a map sorts keys, and Talos selects a list entry by
+	// its first non-$patch key, so a multi-key deletion could change target.
+	for _, document := range legacyDocuments {
+		if ambiguousListDeletion(document) {
+			return nil, fmt.Errorf("migrate patch %q: %w", patch.Path, errMigrationDeletion)
+		}
+	}
+
 	migrated := make([]Patch, 0, len(newDocuments))
 
 	remaining, err := marshalNonEmptyDocuments(legacyDocuments)
@@ -403,7 +413,10 @@ func migrateNodeAndKubeletDocument(
 		allowScheduling = &allow
 	}
 
-	nodeDocument, kubeletDocument, err := moveLegacyMachineFields(document, patchPath)
+	nodeDocument, kubeletDocument, kubeletRemoved, err := moveLegacyMachineFields(
+		document,
+		patchPath,
+	)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -419,7 +432,7 @@ func migrateNodeAndKubeletDocument(
 		}
 	}
 
-	return allowScheduling, moved, found || len(moved) > 0, nil
+	return allowScheduling, moved, found || kubeletRemoved || len(moved) > 0, nil
 }
 
 // genOptions returns the generation options the migration lifted out of the
