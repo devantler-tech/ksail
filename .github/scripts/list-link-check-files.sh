@@ -12,6 +12,6 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
 git ls-files -z |
 	grep -zE '\.(md|mdx|markdown|html|htm|rst|txt|json|jsonc|json5|yaml|yml)$' |
-	grep -zvE '^(megalinter-reports/|report/|\.jscpd/|schemas/|\.agents/|web/ui/|third_party/(cel-go|glamour|go-macholibre|kyverno-jmespath|jmespath|ansi|ansi-runtime|redisotel|rediscmd|dynamiclistener)/)' |
+	grep -zvE '^(megalinter-reports/|report/|\.jscpd/|schemas/|\.agents/|web/ui/|third_party/(cel-go|glamour|kyverno-jmespath|jmespath|ansi|ansi-runtime|redisotel|rediscmd|dynamiclistener)/)' |
 	grep -zvE '(AGENTS\.md|.*\.mdx|docs/src/.*\.md|(^|/)notices/go/.*)' |
 	tr '\0' '\n'

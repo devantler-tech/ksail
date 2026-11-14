@@ -84,16 +84,6 @@ func authenticatedPrimaryAnalysisSources() []analysisSource {
 			relocatedGithub:     true,
 			patchedGoMod:        true,
 		},
-		{
-			module:           "github.com/anchore/go-macholibre",
-			version:          "v0.1.0",
-			directory:        "go-macholibre",
-			checksum:         "h1:qHbdusBZNcZM/uuKf1Psa9xxAFSoyRTps8GW9gpJgsg=",
-			checkoutChecksum: "h1:aDIIEE/XkJa/FhFH/4FrxwxxrpOSxk+NqmRssv68Cdw=",
-			relocatedGithub:  true,
-			upstreamAttributes: "**/test-fixtures/cache/**/* filter=lfs diff=lfs merge=lfs -text\n" +
-				"**/test-fixtures/assets/**/* filter=lfs diff=lfs merge=lfs -text",
-		},
 	}
 }
 

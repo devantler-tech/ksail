@@ -18,7 +18,6 @@ Use complete copies of the published modules as version-qualified local replacem
 |----------------------------------------------|--------------------------------------|---------------------------------------------------|
 | github.com/google/cel-go                     | v0.31.0                              | `h1:H0bhpFTqOvmHrBGrWKp7ZlhBm5Hh8PYUEXnwxT1LL7A=` |
 | github.com/charmbracelet/glamour             | v1.0.0                               | `h1:AWMLOVFHTsysl4WV8T8QgkQ0s/ZNZo7CiE4WKhk8l08=` |
-| github.com/anchore/go-macholibre             | v0.1.0                               | `h1:qHbdusBZNcZM/uuKf1Psa9xxAFSoyRTps8GW9gpJgsg=` |
 | github.com/kyverno/go-jmespath               | v0.4.1-0.20231124160150-95e59c162877 | `h1:XOLJNGX/q6MVpI8p8MKvk6jGBMvO4CrdwrizMMSsaRU=` |
 | github.com/jmespath/go-jmespath              | v0.4.1-0.20220621161143-b0104c826a24 | `h1:liMMTbpW34dhU4az1GN0pTPADwNmvoRSeoZ6PItiqnY=` |
 | github.com/charmbracelet/x/ansi              | v0.10.2                              | `h1:ith2ArZS0CJG30cIUfID1LXN7ZFXRCww6RUvAPA+Pzw=` |
@@ -27,7 +26,7 @@ Use complete copies of the published modules as version-qualified local replacem
 | github.com/redis/go-redis/extra/rediscmd/v9  | v9.5.3                               | `h1:1/BDligzCa40GTllkDnY3Y5DTHuKCONbB2JcRyIfl20=` |
 | github.com/rancher/dynamiclistener           | v1.27.5                              | `h1:FA/s9vbQzGz1Au3BuFvdbBfBBUmHGXGR3xoliwR4qfY=` |
 
-Glamour and go-macholibre use `* -filter -text` in their attribute files so a normal checkout preserves module archive bytes without contacting KSail's LFS endpoint. CEL's archive contains a vendor manifest without its vendor packages; preserve that manifest at `upstream-vendor/modules.txt` so Go resolves dependencies through the module graph.
+Glamour uses `* -filter -text` in its attribute files so a normal checkout preserves module archive bytes without contacting KSail's LFS endpoint. CEL's archive contains a vendor manifest without its vendor packages; preserve that manifest at `upstream-vendor/modules.txt` so Go resolves dependencies through the module graph.
 
 Preserve any upstream repository automation at `upstream-github/`, with Glamour's Dependabot configuration named `dependabot.yml.source`. These files describe the upstream repositories, and KSail does not execute them. Their archived paths prevent workflow scanners from mistaking them for KSail automation. The integrity tests restore all original names privately before requiring the published checksum; KSail's own automation remains scanned under the existing security policy.
 
