@@ -92,7 +92,7 @@ if ! gh api --paginate "repos/$repo/actions/runs/$run/attempts/1/jobs?per_page=1
 	blocked 'could not read original publisher jobs'
 fi
 jq -se '[.[] | .jobs[]] as $jobs | [
-  "🧩 Release CLI", "🧩 Release VSCode Extension", "🧩 Release Desktop App (macOS cask)",
+  "🧩 Release CLI", "🧩 Release VSCode Extension", "🧩 Release Desktop App (macOS)",
   "🧩 Release Desktop App (ubuntu-24.04, linux, amd64)",
   "🧩 Release Desktop App (windows-latest, windows, amd64, .exe)",
   "⛵ Release Operator Chart", "📄 Build Pages", "📢 Publish Release"
