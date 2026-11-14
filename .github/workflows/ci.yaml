@@ -180,6 +180,7 @@ jobs:
             windows-notice-staging:
               - 'internal/gonotices/**'
               - '.github/scripts/go-notices.go'
+              - '.github/scripts/download-go-package-modules.sh'
               - '.github/actions/setup-desktop-build/**'
               - 'notices/go/**'
               - 'go.mod'
@@ -196,6 +197,7 @@ jobs:
               - '.github/workflows/ci.yaml'
             native-home-paths:
               - 'pkg/fsutil/**'
+              - '.github/scripts/download-go-package-modules.sh'
               - 'go.mod'
               - 'go.sum'
               - '.github/workflows/ci.yaml'
@@ -543,6 +545,12 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      # Fetch only this file's modules, with a bounded retry, so one dropped Go proxy
+      # stream does not fail the check (#8053). Windows has no shared module archive.
+      - name: 📥 Download Go modules
+        shell: bash
+        run: bash .github/scripts/download-go-package-modules.sh ./pkg/fsutil/path_test.go
+
       # This black-box test file imports the actual filesystem API without
       # loading unrelated test fixtures into the native Windows check.
       - name: 🔎 Verify native home prefixes and literal paths
@@ -569,6 +577,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+
+      # Fetch only the notice tool's modules, with a bounded retry, so one dropped Go
+      # proxy stream does not fail the check (#8053).
+      - name: 📥 Download Go modules
+        shell: bash
+        run: bash .github/scripts/download-go-package-modules.sh .github/scripts/go-notices.go
 
       # The desktop release stages its Windows notices on this runner, so run
       # the same command here instead of finding out at release time.
@@ -2765,6 +2779,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+
+      # Fetch only the two harness files' modules, with a bounded retry, so one dropped
+      # Go proxy stream does not fail the check (#8053). macOS has no shared module archive.
+      - name: 📥 Download Go modules
+        working-directory: internal/ciharness
+        run: bash ../../.github/scripts/download-go-package-modules.sh kubernetes_update_test.go system_test_harness_test.go
 
       - name: 🧪 Verify empty arguments under Bash 3.2
         env:
