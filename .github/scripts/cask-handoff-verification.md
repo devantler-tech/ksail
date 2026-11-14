@@ -43,7 +43,9 @@ evergreen branches. It derives the target from the latest published stable
 immutable release and reuses the guarded exact-head finisher. Before it resumes an
 open cask PR, it gives that PR the title CD would have set for the current
 release, because the reused branch keeps an earlier release's title whenever CD
-left the hand-off pending. It does not repair any other metadata or cask contents. An already-merged cask must independently pass
+left the hand-off pending, and it adds any of the `automation` and `dependencies`
+labels the PR lacks, because CD adds those only when it promotes the PR. It does
+not repair any other metadata or cask contents. An already-merged cask must independently pass
 programmed commit provenance, immutable merge/current-main content and published
 asset digest verification.
 

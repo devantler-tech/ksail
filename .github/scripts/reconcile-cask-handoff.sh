@@ -125,6 +125,28 @@ for name in ksail ksail-desktop; do
 		fi
 		printf 'Set devantler-tech/homebrew-tap#%s title to %s\n' "$pr" "$expected_title"
 	fi
+	# The CD also adds the tap's automation and dependencies labels only when it
+	# promotes the PR, and the finisher requires every one the tap defines. Add any
+	# that are missing the same way the CD does.
+	labels_ok=true
+	if [[ " ${mode_args[*]} " != *" --verify-merged "* ]]; then
+		for label in automation dependencies; do
+			if jq -e --arg label "$label" '.[0].labels | type == "array" and any(.name == $label)' \
+				"$work/matches.json" >/dev/null 2>&1; then
+				continue
+			fi
+			if ! gh api -X POST "repos/devantler-tech/homebrew-tap/issues/${pr}/labels" -f "labels[]=$label" >/dev/null; then
+				printf 'ERROR: could not add the %s label to devantler-tech/homebrew-tap#%s\n' "$label" "$pr" >&2
+				labels_ok=false
+				break
+			fi
+			printf 'Added the %s label to devantler-tech/homebrew-tap#%s\n' "$label" "$pr"
+		done
+	fi
+	if [[ "$labels_ok" != true ]]; then
+		record_result "$name" 1
+		continue
+	fi
 	"$script_dir/finish-cask-pr-handoff.sh" \
 		--tap devantler-tech/homebrew-tap --pr "$pr" --cask-name "$name" \
 		--source-repo devantler-tech/ksail --tag "$tag" "${mode_args[@]}" || status=$?
