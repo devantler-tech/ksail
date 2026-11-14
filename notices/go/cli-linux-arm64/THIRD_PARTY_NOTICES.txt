@@ -102,9 +102,9 @@ Material: ma44b708971f69ad7 (copyright-header), SHA-256 a1911435ba59796c4cfed7b8
 Material: mdf23216ce931c3e5 (copyright-header), SHA-256 794426a67a2140d21cc750ab87de1fd3c3bdcabb5e94a5d9ff12ee12e08bcdb9
 Material: me98761ee9c275f20 (copyright-header), SHA-256 5cc6262e76c631fd83516d897e6b0f42eaae1dae5bbdf756324fd53c3357d417
 
-Component: cloud.google.com/go/auth@v0.24.1-0.20261001053825-dbc26066f70a
-Source: https://proxy.golang.org/cloud.google.com/go/auth/@v/v0.24.1-0.20261001053825-dbc26066f70a.zip
-Selected Go source checksum: h1:jW1ZLFy9oa5ai8LOI40z6s+DL1cO/L1KSm9hVGnibn8=
+Component: cloud.google.com/go/auth@v0.24.1
+Source: https://proxy.golang.org/cloud.google.com/go/auth/@v/v0.24.1.zip
+Selected Go source checksum: h1:NTmd2iJb4DsGIav0KiqFMYI88nMshA2wnFMBatRmoCs=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -234,9 +234,9 @@ Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756
 Files: LICENSE
 Material: m56f568f9bbceb9ae (copyright-header), SHA-256 5519716b98c21f0367dbb6a2f7c0b59369984fac6e7ef2df83f0da7dc147df3e
 
-Component: cloud.google.com/go/storage@v1.63.1
-Source: https://proxy.golang.org/cloud.google.com/go/storage/@v/v1.63.1.zip
-Selected Go source checksum: h1:CYXILV9G4CH0C18IQ9+V0h4XiqD2LhKnMLO0o7uJWNs=
+Component: cloud.google.com/go/storage@v1.68.0
+Source: https://proxy.golang.org/cloud.google.com/go/storage/@v/v1.68.0.zip
+Selected Go source checksum: h1:gqrAMJ51OZjYgU6AJ2U60um90YQhSjq8HEIQNtJ4C/8=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -841,9 +841,9 @@ github.com/BurntSushi/toml/internal
 Material: m1eb5a8b27ff5ee54 (license), SHA-256 d21cb1c60785d6d3a84a7059323ccafc45c645b1bbda281c76a62d66ad2d7dc3
 Files: COPYING
 
-Component: github.com/CycloneDX/cyclonedx-go@v0.10.0
-Source: https://proxy.golang.org/github.com/!cyclone!d!x/cyclonedx-go/@v/v0.10.0.zip
-Selected Go source checksum: h1:7xyklU7YD+CUyGzSFIARG18NYLsKVn4QFg04qSsu+7Y=
+Component: github.com/CycloneDX/cyclonedx-go@v0.12.0
+Source: https://proxy.golang.org/github.com/!cyclone!d!x/cyclonedx-go/@v/v0.12.0.zip
+Selected Go source checksum: h1:/7Jum36UA6V043tQZ/fE3jf+Nf9gn/qxUFfd7QReMy8=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -1306,9 +1306,9 @@ github.com/aliyun/credentials-go/credentials/utils
 Material: mbda19fa8291efc91 (license), SHA-256 aefc84881757b27b42ed6998db23e877b7d630956816f85bc11dd25452de5367
 Files: LICENSE
 
-Component: github.com/anchore/clio@v0.1.0
-Source: https://proxy.golang.org/github.com/anchore/clio/@v/v0.1.0.zip
-Selected Go source checksum: h1:lrlSgD38V0T6TLjOG5Kn3miEXCQyYr6ZlwTSnW1WIJg=
+Component: github.com/anchore/clio@v0.1.1
+Source: https://proxy.golang.org/github.com/anchore/clio/@v/v0.1.1.zip
+Selected Go source checksum: h1:9bkYnaFbpT0J3G0qSHyQqa/lpK5zV0C9Gtgh82H/jj0=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -1316,9 +1316,9 @@ github.com/anchore/clio
 Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
 Files: LICENSE
 
-Component: github.com/anchore/fangs@v0.1.0
-Source: https://proxy.golang.org/github.com/anchore/fangs/@v/v0.1.0.zip
-Selected Go source checksum: h1:EidxQN2XDRWn8q2n9pCVZXrOEnvpV1CuPLiWMyWG/vE=
+Component: github.com/anchore/fangs@v0.1.1
+Source: https://proxy.golang.org/github.com/anchore/fangs/@v/v0.1.1.zip
+Selected Go source checksum: h1:NBTHocmWM2/0gNhebpoE/wEB0Z0nxh2lESww2o/Uf5M=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -1326,9 +1326,9 @@ github.com/anchore/fangs
 Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
 Files: LICENSE
 
-Component: github.com/anchore/go-collections@v0.1.0
-Source: https://proxy.golang.org/github.com/anchore/go-collections/@v/v0.1.0.zip
-Selected Go source checksum: h1:vh2LE/j6HLKC27pENkas+J+h4BK4nOte9b7pDjlhY9w=
+Component: github.com/anchore/go-collections@v0.1.1
+Source: https://proxy.golang.org/github.com/anchore/go-collections/@v/v0.1.1.zip
+Selected Go source checksum: h1:kGlmSehs+ctTBZr+98F2+taHeolHy+XDx1Nczl8GZc8=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -1336,9 +1336,9 @@ github.com/anchore/go-collections
 Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
 Files: LICENSE
 
-Component: github.com/anchore/go-homedir@v0.1.0
-Source: https://proxy.golang.org/github.com/anchore/go-homedir/@v/v0.1.0.zip
-Selected Go source checksum: h1:WP+lNLOz2og8hzCkY7IccyFNInVKsrjogzV19G5G8p0=
+Component: github.com/anchore/go-homedir@v0.1.1
+Source: https://proxy.golang.org/github.com/anchore/go-homedir/@v/v0.1.1.zip
+Selected Go source checksum: h1:KpaO5BPrVT7cVMcEZ9KfFfEi0iuo3DtagPGl0C744X0=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -1346,9 +1346,9 @@ github.com/anchore/go-homedir
 Material: m6bbb0063ae6a051b (license), SHA-256 22adc4abdece712a737573672f082fd61ac2b21df878efb87ffcff4354a07f26
 Files: LICENSE
 
-Component: github.com/anchore/go-logger@v0.1.0
-Source: https://proxy.golang.org/github.com/anchore/go-logger/@v/v0.1.0.zip
-Selected Go source checksum: h1:3pE9Sli4SE1I/mtV+2pZXzim+aWj83BRaneVXeMgD3A=
+Component: github.com/anchore/go-logger@v0.2.0
+Source: https://proxy.golang.org/github.com/anchore/go-logger/@v/v0.2.0.zip
+Selected Go source checksum: h1:V8Gazz+F8xwWEWz+whqt8/5163IkO4XrAie+1qbK10k=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -1359,9 +1359,9 @@ github.com/anchore/go-logger/adapter/redact
 Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
 Files: LICENSE
 
-Component: github.com/anchore/go-lzo@v0.1.0
-Source: https://proxy.golang.org/github.com/anchore/go-lzo/@v/v0.1.0.zip
-Selected Go source checksum: h1:NgAacnzqPeGH49Ky19QKLBZEuFRqtTG9cdaucc3Vncs=
+Component: github.com/anchore/go-lzo@v0.1.1
+Source: https://proxy.golang.org/github.com/anchore/go-lzo/@v/v0.1.1.zip
+Selected Go source checksum: h1:IwL/fvkdtlIrYIXck6WxZ3nb8WjjHziYYmGxlooyOnM=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -1369,9 +1369,9 @@ github.com/anchore/go-lzo
 Material: m6eff6c53bb95993b (license), SHA-256 08fe5bad51f49efda971e7b602e5b3442fc31ee6c8f85b5248749ca916213d76
 Files: LICENSE
 
-Component: github.com/anchore/go-macholibre@v0.1.0
-Source: release-source:third_party/go-macholibre
-Repository source content identity: h1:aDIIEE/XkJa/FhFH/4FrxwxxrpOSxk+NqmRssv68Cdw=
+Component: github.com/anchore/go-macholibre@v0.1.1
+Source: https://proxy.golang.org/github.com/anchore/go-macholibre/@v/v0.1.1.zip
+Selected Go source checksum: h1:sTBHi3S1WVIOCamc6NyT8Sn9mBmD30DCTfjfVm4k6/M=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -1379,9 +1379,9 @@ github.com/anchore/go-macholibre
 Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
 Files: LICENSE
 
-Component: github.com/anchore/go-rpmdb@v0.1.0
-Source: https://proxy.golang.org/github.com/anchore/go-rpmdb/@v/v0.1.0.zip
-Selected Go source checksum: h1:Q8dc208/HYzCqhx0L1zurfm1UPil24hlo9NjkdFmLdE=
+Component: github.com/anchore/go-rpmdb@v0.2.2
+Source: https://proxy.golang.org/github.com/anchore/go-rpmdb/@v/v0.2.2.zip
+Selected Go source checksum: h1:44VC7mvFAxV9t5JUZYg3S9sqG+E94iZvyWACMDq9hSk=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -1394,9 +1394,9 @@ Material: m218019819c9dbb2e (copyright-header), SHA-256 343c68abd71ee079c8cbb46e
 Material: m65964320642eca16 (license), SHA-256 ed7d020329551a6ffe43df3a479e03e135b9d42e56af97bfe644f65df51360a2
 Files: LICENSE
 
-Component: github.com/anchore/go-struct-converter@v0.1.0
-Source: https://proxy.golang.org/github.com/anchore/go-struct-converter/@v/v0.1.0.zip
-Selected Go source checksum: h1:2rDRssAl6mgKBSLNiVCMADgZRhoqtw9dedlWa0OhD30=
+Component: github.com/anchore/go-struct-converter@v0.2.0-rc2
+Source: https://proxy.golang.org/github.com/anchore/go-struct-converter/@v/v0.2.0-rc2.zip
+Selected Go source checksum: h1:q+859fW2/jbHJHB2etbNfRlFwYpknyvbqqk1hUdamQ4=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -1404,9 +1404,9 @@ github.com/anchore/go-struct-converter
 Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
 Files: LICENSE
 
-Component: github.com/anchore/go-sync@v0.1.0
-Source: https://proxy.golang.org/github.com/anchore/go-sync/@v/v0.1.0.zip
-Selected Go source checksum: h1:1TEZM7jISrvtoBMOF79xP0caQKASAtgW1yKqc0EjyZg=
+Component: github.com/anchore/go-sync@v0.1.2
+Source: https://proxy.golang.org/github.com/anchore/go-sync/@v/v0.1.2.zip
+Selected Go source checksum: h1:RDD5RCanrWqhbtBulqPSZpERadUlgcYjpybYzYd3Uk8=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -1425,7 +1425,7 @@ github.com/anchore/go-version
 Material: m87258137e1038836 (license), SHA-256 bef1747eda88b9ed46e94830b0d978c3499dad5dfe38d364971760881901dadd
 Files: LICENSE
 
-Component: github.com/anchore/grype@v0.112.0
+Component: github.com/anchore/grype@v0.121.0
 Source: https://proxy.golang.org/github.com/anchore/grype/@v/v0.104.2.zip
 Selected replacement: github.com/anchore/grype@v0.104.2
 Selected Go source checksum: h1:88py5Macwmz9K8Epb+6Gc+OD/bPJW+UysR+xzzkgPkU=
@@ -1515,9 +1515,9 @@ Material: m3e52f186fa07d999 (copyright-header), SHA-256 5783c6159a7911d8bc1cde6c
 Material: m81983d98044daf01 (license), SHA-256 79911c70a86bb521691b67fd09ada068beada62b478b82c9cc69d0b0dc3083d6
 Files: LICENSE
 
-Component: github.com/anchore/stereoscope@v0.1.23
-Source: https://proxy.golang.org/github.com/anchore/stereoscope/@v/v0.1.23.zip
-Selected Go source checksum: h1:q9i3CtbicTuSlcCnA+5pfoT9WDCEoSqvXDfHMH1hyWo=
+Component: github.com/anchore/stereoscope@v0.3.4
+Source: https://proxy.golang.org/github.com/anchore/stereoscope/@v/v0.3.4.zip
+Selected Go source checksum: h1:dT5AfjCTXUJowMiRIc+VBQVwvwnIEwnxxwA1GwAkMxw=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -1533,6 +1533,7 @@ github.com/anchore/stereoscope/pkg/filetree
 github.com/anchore/stereoscope/pkg/filetree/filenode
 github.com/anchore/stereoscope/pkg/image
 github.com/anchore/stereoscope/pkg/image/containerd
+github.com/anchore/stereoscope/pkg/image/containerstorage
 github.com/anchore/stereoscope/pkg/image/docker
 github.com/anchore/stereoscope/pkg/image/oci
 github.com/anchore/stereoscope/pkg/image/podman
@@ -1542,9 +1543,9 @@ github.com/anchore/stereoscope/pkg/tree/node
 Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
 Files: LICENSE
 
-Component: github.com/anchore/syft@v1.44.0
-Source: https://proxy.golang.org/github.com/anchore/syft/@v/v1.44.0.zip
-Selected Go source checksum: h1:Wi1AFnz9R2jFgyFvRKZdONwEfh5dhPy8cAUINguFrrc=
+Component: github.com/anchore/syft@v1.55.0
+Source: https://proxy.golang.org/github.com/anchore/syft/@v/v1.55.0.zip
+Selected Go source checksum: h1:IeBZJrF/g75ba3k0ITQ8v4NCVGiGsWU3Wa1P/eSAFa0=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -1564,6 +1565,7 @@ github.com/anchore/syft/internal/relationship/binary
 github.com/anchore/syft/internal/sbomsync
 github.com/anchore/syft/internal/sourcemetadata
 github.com/anchore/syft/internal/spdxlicense
+github.com/anchore/syft/internal/spillbuf
 github.com/anchore/syft/internal/task
 github.com/anchore/syft/internal/tmpdir
 github.com/anchore/syft/internal/unknown
@@ -1603,6 +1605,7 @@ github.com/anchore/syft/syft/format/syftjson/model
 github.com/anchore/syft/syft/format/table
 github.com/anchore/syft/syft/format/template
 github.com/anchore/syft/syft/format/text
+github.com/anchore/syft/syft/internal/elfutil
 github.com/anchore/syft/syft/internal/fileresolver
 github.com/anchore/syft/syft/internal/parsing
 github.com/anchore/syft/syft/internal/unionreader
@@ -1612,12 +1615,14 @@ github.com/anchore/syft/syft/linux
 github.com/anchore/syft/syft/pkg
 github.com/anchore/syft/syft/pkg/cataloger/ai
 github.com/anchore/syft/syft/pkg/cataloger/alpine
+github.com/anchore/syft/syft/pkg/cataloger/apple
 github.com/anchore/syft/syft/pkg/cataloger/arch
 github.com/anchore/syft/syft/pkg/cataloger/binary
 github.com/anchore/syft/syft/pkg/cataloger/bitnami
 github.com/anchore/syft/syft/pkg/cataloger/common/cpe
 github.com/anchore/syft/syft/pkg/cataloger/conda
 github.com/anchore/syft/syft/pkg/cataloger/cpp
+github.com/anchore/syft/syft/pkg/cataloger/cpp/internal/vcpkg
 github.com/anchore/syft/syft/pkg/cataloger/dart
 github.com/anchore/syft/syft/pkg/cataloger/debian
 github.com/anchore/syft/syft/pkg/cataloger/dotnet
@@ -1627,15 +1632,15 @@ github.com/anchore/syft/syft/pkg/cataloger/generic
 github.com/anchore/syft/syft/pkg/cataloger/gentoo
 github.com/anchore/syft/syft/pkg/cataloger/githubactions
 github.com/anchore/syft/syft/pkg/cataloger/golang
-github.com/anchore/syft/syft/pkg/cataloger/golang/internal/xcoff
 github.com/anchore/syft/syft/pkg/cataloger/haskell
 github.com/anchore/syft/syft/pkg/cataloger/homebrew
 github.com/anchore/syft/syft/pkg/cataloger/internal/binutils
 github.com/anchore/syft/syft/pkg/cataloger/internal/cpegenerate
 github.com/anchore/syft/syft/pkg/cataloger/internal/cpegenerate/dictionary
 github.com/anchore/syft/syft/pkg/cataloger/internal/dependency
+github.com/anchore/syft/syft/pkg/cataloger/internal/dotnet/bundle
+github.com/anchore/syft/syft/pkg/cataloger/internal/dotnet/pe
 github.com/anchore/syft/syft/pkg/cataloger/internal/licenses
-github.com/anchore/syft/syft/pkg/cataloger/internal/pe
 github.com/anchore/syft/syft/pkg/cataloger/java
 github.com/anchore/syft/syft/pkg/cataloger/java/internal/maven
 github.com/anchore/syft/syft/pkg/cataloger/javascript
@@ -1643,6 +1648,7 @@ github.com/anchore/syft/syft/pkg/cataloger/kernel
 github.com/anchore/syft/syft/pkg/cataloger/lua
 github.com/anchore/syft/syft/pkg/cataloger/nix
 github.com/anchore/syft/syft/pkg/cataloger/ocaml
+github.com/anchore/syft/syft/pkg/cataloger/perl
 github.com/anchore/syft/syft/pkg/cataloger/php
 github.com/anchore/syft/syft/pkg/cataloger/python
 github.com/anchore/syft/syft/pkg/cataloger/r
@@ -1664,7 +1670,8 @@ github.com/anchore/syft/syft/source/ocimodelsource
 github.com/anchore/syft/syft/source/snapsource
 github.com/anchore/syft/syft/source/sourceproviders
 github.com/anchore/syft/syft/source/stereoscopesource
-Material: m3def2c2553da0501 (copyright-header), SHA-256 2bf46f45991c28815e12ff06dd299a8f7f6f49097919737d973de2a12e87fc61
+Material: m741650e2f76e0db5 (notice), SHA-256 a8f9764d4e148dc03186c130012a9affa7c92f3b0de1693b133121233a84b1bf
+Files: COPYRIGHT
 Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
 Files: LICENSE
 
@@ -1709,6 +1716,18 @@ Effective package-admission terms: MIT, Unicode-DFS-2016
 Packages:
 github.com/apparentlymart/go-textseg/v15/textseg
 Material: maaacdc90169596a8 (license), SHA-256 59e80949c14925f65181757d837ed93dea3783f62b031f642281d9e5b1936917
+Files: LICENSE
+
+Component: github.com/apparentlymart/go-textseg/v17@v17.0.1
+Source: https://proxy.golang.org/github.com/apparentlymart/go-textseg/v17/@v/v17.0.1.zip
+Selected Go source checksum: h1:bpMXRgQ5cEoRNuQke1a80/Nl6w3G5eoIbWo9f3gXkAs=
+Raw classifier detections: MIT
+Effective package-admission terms: MIT
+Packages:
+github.com/apparentlymart/go-textseg/v17/textseg
+github.com/apparentlymart/go-textseg/v17/textseg/internal/charprops
+github.com/apparentlymart/go-textseg/v17/textseg/internal/machine
+Material: m48bbb41fcd469124 (license), SHA-256 b033dbfc6b30f11eb1ff0fbe1ca624b6ebded5be2700ff62605469a187b6578e
 Files: LICENSE
 
 Component: github.com/apricote/hcloud-upload-image/hcloudimages@v1.4.0
@@ -1968,9 +1987,9 @@ Files: internal/sync/singleflight/LICENSE
 Material: mad5cadf65364d792 (notice), SHA-256 a6e830174d62dafad3a718384772ea1f4c0e27989f050932dc442a5e3ddad080
 Files: NOTICE.txt
 
-Component: github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream@v1.7.14
-Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream/@v/v1.7.14.zip
-Selected Go source checksum: h1:3IZY0XAJquT3aHzbkHfPzy4ACPcEjVG0x87KOwtpqGY=
+Component: github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream@v1.7.20
+Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream/@v/v1.7.20.zip
+Selected Go source checksum: h1:GPRlPwz40I2B2VrBEASOA3Bi77NyeqejNLkifosX0rs=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -2109,9 +2128,9 @@ github.com/aws/aws-sdk-go-v2/service/eks/types
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE.txt
 
-Component: github.com/aws/aws-sdk-go-v2/service/iam@v1.53.6
-Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/iam/@v/v1.53.6.zip
-Selected Go source checksum: h1:GPQvvxy8+FDnD9xKYzGKJMjIm5xkVM5pd3bFgRldNSo=
+Component: github.com/aws/aws-sdk-go-v2/service/iam@v1.56.1
+Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/iam/@v/v1.56.1.zip
+Selected Go source checksum: h1:SLGzTAo/8J81zHUisaiKY6gF804fPsHZBxAZr0uquHM=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -2131,9 +2150,9 @@ github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE.txt
 
-Component: github.com/aws/aws-sdk-go-v2/service/internal/checksum@v1.9.23
-Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/internal/checksum/@v/v1.9.23.zip
-Selected Go source checksum: h1:9Fjh6fi/U5JEStVZijmaMpUwE/gvBJj7x2B/PjbO9To=
+Component: github.com/aws/aws-sdk-go-v2/service/internal/checksum@v1.11.5
+Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/internal/checksum/@v/v1.11.5.zip
+Selected Go source checksum: h1:/TYsZXdA8UTa+WCtCYSAJIr1vwl0+eho6TUgJGwFFO8=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -2151,9 +2170,9 @@ github.com/aws/aws-sdk-go-v2/service/internal/presigned-url
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE.txt
 
-Component: github.com/aws/aws-sdk-go-v2/service/internal/s3shared@v1.19.31
-Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/internal/s3shared/@v/v1.19.31.zip
-Selected Go source checksum: h1:uao4A3QZ5UmB326V6KF+qRpv9Tjz7IlnlnTbbANntlU=
+Component: github.com/aws/aws-sdk-go-v2/service/internal/s3shared@v1.20.4
+Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/internal/s3shared/@v/v1.20.4.zip
+Selected Go source checksum: h1:pPiWfgeNxqluKEph7hvU88kuGKBPOWzO+Dk9t2zqqNs=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -2175,9 +2194,9 @@ github.com/aws/aws-sdk-go-v2/service/kms/types
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE.txt
 
-Component: github.com/aws/aws-sdk-go-v2/service/s3@v1.105.2
-Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/s3/@v/v1.105.2.zip
-Selected Go source checksum: h1:5C00eQYpTrgQXnp6V3P6P7zPElna3AXvlukbANE6nJI=
+Component: github.com/aws/aws-sdk-go-v2/service/s3@v1.114.0
+Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/s3/@v/v1.114.0.zip
+Selected Go source checksum: h1:VMAdYqr4Jn/8ATs9BHC5riwrs0d6m1Z2ohFriSwZwm0=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -2432,9 +2451,9 @@ github.com/bmatcuk/doublestar/v2
 Material: m7ea24ba818b3ed47 (license), SHA-256 2391eb152e1f700051c1618a7aaa7ad86186585190ca9a30e7579c9b9d459332
 Files: LICENSE
 
-Component: github.com/bmatcuk/doublestar/v4@v4.10.0
-Source: https://proxy.golang.org/github.com/bmatcuk/doublestar/v4/@v/v4.10.0.zip
-Selected Go source checksum: h1:zU9WiOla1YA122oLM6i4EXvGW62DvKZVxIe6TYWexEs=
+Component: github.com/bmatcuk/doublestar/v4@v4.10.2
+Source: https://proxy.golang.org/github.com/bmatcuk/doublestar/v4/@v/v4.10.2.zip
+Selected Go source checksum: h1:eF7W7HWKg3z9NrWV9pTLnNeoXaqq3Tq9DNKXVMfoCnw=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -3020,9 +3039,9 @@ Material: m97e540aa9904959a (notice), SHA-256 03f0b4bcaecfdb491ef5a7d320e2c2adf8
 Files: NOTICE
 Material: maaaae92d5bc916e5 (copyright-header), SHA-256 52365a56340adc4cfb38583b4a787a98c9cda3bd1e8fa3f302f01e2e89e9c021
 
-Component: github.com/containerd/containerd/api@v1.11.1
-Source: https://proxy.golang.org/github.com/containerd/containerd/api/@v/v1.11.1.zip
-Selected Go source checksum: h1:h8nfoDW9+fNsC/9TwiAHj8B1GzXKtR4eFtkhi/X5RLU=
+Component: github.com/containerd/containerd/api@v1.12.0
+Source: https://proxy.golang.org/github.com/containerd/containerd/api/@v/v1.12.0.zip
+Selected Go source checksum: h1:kuQm82SbDrCuO4n7hf2L8zsBtZLuympyq5X/VotfX2A=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -3052,9 +3071,9 @@ Material: m3f03e2f3d737cf7b (copyright-header), SHA-256 938109aaa305884dcdf6d545
 Material: maaaae92d5bc916e5 (copyright-header), SHA-256 52365a56340adc4cfb38583b4a787a98c9cda3bd1e8fa3f302f01e2e89e9c021
 Material: mb665c39a066bf17f (copyright-header), SHA-256 62d7209795fd07f83cce8f0a00cce2d7bcf371047aaa5420a4cda607bcaa79eb
 
-Component: github.com/containerd/containerd/v2@v2.3.7
-Source: https://proxy.golang.org/github.com/containerd/containerd/v2/@v/v2.3.7.zip
-Selected Go source checksum: h1:7PGbgAVKE4ieQjFPv7+kwAv7f9dCtRpExZwjExHD/Fk=
+Component: github.com/containerd/containerd/v2@v2.4.1
+Source: https://proxy.golang.org/github.com/containerd/containerd/v2/@v/v2.4.1.zip
+Selected Go source checksum: h1:DUx/ZJN7cEu0WuzHClDB+68H/bqMEH5pWoEjf0ae4hc=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -3126,6 +3145,7 @@ github.com/containerd/containerd/v2/version
 Material: m2a714db5343032f8 (license), SHA-256 4bbe3b885e8cd1907ab4cf9a41e862e74e24b5422297a4f2fe524e6a30ada2b4
 Files: LICENSE
 Material: m3a9aef39e8f3d96e (copyright-header), SHA-256 5a9d95945788aa16095bf385b221f160d562d3281ebf525204d11fafb101093f
+Material: m830c8f50e6e50dc3 (copyright-header), SHA-256 a30a24721ca2a77de73857fe54eee795c2aa9dc6085eeca3d71365f161726af5
 Material: m97e540aa9904959a (notice), SHA-256 03f0b4bcaecfdb491ef5a7d320e2c2adf886c732d34e3fff87d52dbaec64d8c3
 Files: NOTICE
 Material: maaaae92d5bc916e5 (copyright-header), SHA-256 52365a56340adc4cfb38583b4a787a98c9cda3bd1e8fa3f302f01e2e89e9c021
@@ -3182,9 +3202,9 @@ Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65
 Files: LICENSE
 Material: maaaae92d5bc916e5 (copyright-header), SHA-256 52365a56340adc4cfb38583b4a787a98c9cda3bd1e8fa3f302f01e2e89e9c021
 
-Component: github.com/containerd/go-cni@v1.1.13
-Source: https://proxy.golang.org/github.com/containerd/go-cni/@v/v1.1.13.zip
-Selected Go source checksum: h1:eFSGOKlhoYNxpJ51KRIMHZNlg5UgocXEIEBGkY7Hnis=
+Component: github.com/containerd/go-cni@v1.1.14
+Source: https://proxy.golang.org/github.com/containerd/go-cni/@v/v1.1.14.zip
+Selected Go source checksum: h1:jcFWauA5ED2wUHgCdvPB/IyvOtBcXzmgj8LprJ8nJH0=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -3193,13 +3213,24 @@ Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65
 Files: LICENSE
 Material: maaaae92d5bc916e5 (copyright-header), SHA-256 52365a56340adc4cfb38583b4a787a98c9cda3bd1e8fa3f302f01e2e89e9c021
 
-Component: github.com/containerd/log@v0.1.0
-Source: https://proxy.golang.org/github.com/containerd/log/@v/v0.1.0.zip
-Selected Go source checksum: h1:TCJt7ioM2cr/tfR8GPbGf9/VRAX8D2B4PjzCpfX540I=
+Component: github.com/containerd/log@v0.2.0
+Source: https://proxy.golang.org/github.com/containerd/log/@v/v0.2.0.zip
+Selected Go source checksum: h1:BewD/umNgVnoczglOpX8eRMyEy5t5iPlu5AIpnWDONc=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
 github.com/containerd/log
+Material: m2a714db5343032f8 (license), SHA-256 4bbe3b885e8cd1907ab4cf9a41e862e74e24b5422297a4f2fe524e6a30ada2b4
+Files: LICENSE
+Material: maaaae92d5bc916e5 (copyright-header), SHA-256 52365a56340adc4cfb38583b4a787a98c9cda3bd1e8fa3f302f01e2e89e9c021
+
+Component: github.com/containerd/log/otel@v0.1.0
+Source: https://proxy.golang.org/github.com/containerd/log/otel/@v/v0.1.0.zip
+Selected Go source checksum: h1:Az5rFFo0+c4v2yC8ROR63sWsZpKl/vhtUnUhqLSpE6U=
+Raw classifier detections: Apache-2.0
+Effective package-admission terms: Apache-2.0
+Packages:
+github.com/containerd/log/otel
 Material: m2a714db5343032f8 (license), SHA-256 4bbe3b885e8cd1907ab4cf9a41e862e74e24b5422297a4f2fe524e6a30ada2b4
 Files: LICENSE
 Material: maaaae92d5bc916e5 (copyright-header), SHA-256 52365a56340adc4cfb38583b4a787a98c9cda3bd1e8fa3f302f01e2e89e9c021
@@ -3248,9 +3279,9 @@ Material: m2a714db5343032f8 (license), SHA-256 4bbe3b885e8cd1907ab4cf9a41e862e74
 Files: LICENSE
 Material: maaaae92d5bc916e5 (copyright-header), SHA-256 52365a56340adc4cfb38583b4a787a98c9cda3bd1e8fa3f302f01e2e89e9c021
 
-Component: github.com/containernetworking/cni@v1.3.0
-Source: https://proxy.golang.org/github.com/containernetworking/cni/@v/v1.3.0.zip
-Selected Go source checksum: h1:v6EpN8RznAZj9765HhXQrtXgX+ECGebEYEmnuFjskwo=
+Component: github.com/containernetworking/cni@v1.3.1
+Source: https://proxy.golang.org/github.com/containernetworking/cni/@v/v1.3.1.zip
+Selected Go source checksum: h1:gnHlU/YC1bJcS+CSh+pYQKeuu4O4gsMGW1NMaLhkzW4=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -3304,9 +3335,9 @@ github.com/containers/libtrust
 Material: m71a76bf46f39329e (license), SHA-256 552a739c3b25792263f731542238b92f6f8d07e9a488eae27e6c4690038a8243
 Files: LICENSE
 
-Component: github.com/containers/ocicrypt@v1.2.1
-Source: https://proxy.golang.org/github.com/containers/ocicrypt/@v/v1.2.1.zip
-Selected Go source checksum: h1:0qIOTT9DoYwcKmxSt8QJt+VzMY18onl9jUXsxpVhSmM=
+Component: github.com/containers/ocicrypt@v1.3.2
+Source: https://proxy.golang.org/github.com/containers/ocicrypt/@v/v1.3.2.zip
+Selected Go source checksum: h1:MuqHSfiPpGzoAQdgDSX85FgixSgIm9mSDXTLTgugY5E=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -3314,6 +3345,7 @@ github.com/containers/ocicrypt
 github.com/containers/ocicrypt/blockcipher
 github.com/containers/ocicrypt/config
 github.com/containers/ocicrypt/config/keyprovider-config
+github.com/containers/ocicrypt/config/pkcs11config
 github.com/containers/ocicrypt/crypto/pkcs11
 github.com/containers/ocicrypt/keywrap
 github.com/containers/ocicrypt/keywrap/jwe
@@ -3326,6 +3358,7 @@ github.com/containers/ocicrypt/utils
 github.com/containers/ocicrypt/utils/keyprovider
 Material: m1a5fb502a1f13ebb (copyright-header), SHA-256 4ca1925006ff11e603fe57500f4ecc3daea7768d497ca3a6f2d2bedc84fb31bb
 Material: m1d05bebf8c42f477 (copyright-header), SHA-256 2616dc84b59540ef4ca03d4d4c06baccd465e86f0684eb7dd5e6572a8ac99ed0
+Material: maaaae92d5bc916e5 (copyright-header), SHA-256 52365a56340adc4cfb38583b4a787a98c9cda3bd1e8fa3f302f01e2e89e9c021
 Material: mab20fbc45414605f (license), SHA-256 716a8b80635c394681e652823e1e42e411ad2d254e1f202403422d74f4b0b106
 Files: LICENSE
 
@@ -3711,9 +3744,9 @@ github.com/dimchansky/utfbom
 Material: m3f806fe32e836cf0 (license), SHA-256 76d031db3924c26849d42a8c676b4faf2e2e294c2de4238e54964c9510e762a5
 Files: LICENSE
 
-Component: github.com/diskfs/go-diskfs@v1.7.1-0.20251223133332-fc569a00ea19
-Source: https://proxy.golang.org/github.com/diskfs/go-diskfs/@v/v1.7.1-0.20251223133332-fc569a00ea19.zip
-Selected Go source checksum: h1:G13iCs+sZM8s/0YQNdGwNTAnoUaTwgI2xD9PRahq508=
+Component: github.com/diskfs/go-diskfs@v1.9.4
+Source: https://proxy.golang.org/github.com/diskfs/go-diskfs/@v/v1.9.4.zip
+Selected Go source checksum: h1:0j2d7eG4IjyxL6+ChWbDPocdBCF6HQ4HBWU2WDYWVnc=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -3789,7 +3822,7 @@ github.com/docker/buildx/version
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE
 
-Component: github.com/docker/cli@v29.7.2+incompatible
+Component: github.com/docker/cli@v29.8.2+incompatible
 Source: https://proxy.golang.org/github.com/docker/cli/@v/v28.3.1+incompatible.zip
 Selected replacement: github.com/docker/cli@v28.3.1+incompatible
 Selected Go source checksum: h1:ZUdwOLDEBoE3TE5rdC9IXGY5HPHksJK3M+hJEWhh2mc=
@@ -3926,9 +3959,9 @@ Material: m18c2e60ec256d217 (copyright-header), SHA-256 62580f01ebae9508dfcafa4a
 Material: m2515b49635ae5e98 (copyright-header), SHA-256 be63b01810c99e2c02a8a837eea2a49822f6b0f0be12f9385e9de8c6a444e0a3
 Material: mc5027bdac031f7b6 (copyright-header), SHA-256 4f26f3099cb1c62e3f959bc74fc05eba2069d1961dee5c6e0d3404aa0bc3e035
 
-Component: github.com/dustin/go-humanize@v1.0.1
-Source: https://proxy.golang.org/github.com/dustin/go-humanize/@v/v1.0.1.zip
-Selected Go source checksum: h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
+Component: github.com/dustin/go-humanize@v1.1.0
+Source: https://proxy.golang.org/github.com/dustin/go-humanize/@v/v1.1.0.zip
+Selected Go source checksum: h1:dbKTrvD0klcbBV/h4AWJdMuZogJACoMlvWIWZ5b2xWg=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -4386,9 +4419,9 @@ github.com/fvbommel/sortorder
 Material: m6b0a5b7bf155172e (license), SHA-256 6818272dbe7bfdc4b8ff59aa6b52c191b42a40fca26340a722e1f207bd4c8355
 Files: LICENSE
 
-Component: github.com/fxamacker/cbor/v2@v2.9.2
-Source: https://proxy.golang.org/github.com/fxamacker/cbor/v2/@v/v2.9.2.zip
-Selected Go source checksum: h1:X4Ksno9+x3cz0TZv69ec1hxP/+tymuR8PXQJyDwfh78=
+Component: github.com/fxamacker/cbor/v2@v2.9.4
+Source: https://proxy.golang.org/github.com/fxamacker/cbor/v2/@v/v2.9.4.zip
+Selected Go source checksum: h1:xwjVlxEMR3S605oUlgBjKLTTeGFciYPGYCtF/35LKGo=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -4397,18 +4430,20 @@ Material: m387a19ad094d86e5 (copyright-header), SHA-256 4284ce74c074598215afed47
 Material: m9ce8ae1d4f2f9c7e (license), SHA-256 78cad457d5ea7318230f3d969d4cdf29cef45524a1fc8ca3a97646da1ad7a841
 Files: LICENSE
 
-Component: github.com/gabriel-vasile/mimetype@v1.4.13
-Source: https://proxy.golang.org/github.com/gabriel-vasile/mimetype/@v/v1.4.13.zip
-Selected Go source checksum: h1:46nXokslUBsAJE/wMsp5gtO500a4F3Nkz9Ufpk2AcUM=
+Component: github.com/gabriel-vasile/mimetype@v1.4.15
+Source: https://proxy.golang.org/github.com/gabriel-vasile/mimetype/@v/v1.4.15.zip
+Selected Go source checksum: h1:05iP/CYtZ/w455R/KZM6rZ5ieAdh99UPtd+d3YzLmaI=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
 github.com/gabriel-vasile/mimetype
+github.com/gabriel-vasile/mimetype/internal/cdf
 github.com/gabriel-vasile/mimetype/internal/charset
 github.com/gabriel-vasile/mimetype/internal/csv
 github.com/gabriel-vasile/mimetype/internal/json
 github.com/gabriel-vasile/mimetype/internal/magic
 github.com/gabriel-vasile/mimetype/internal/markup
+github.com/gabriel-vasile/mimetype/internal/mp3
 github.com/gabriel-vasile/mimetype/internal/scan
 Material: m45d190eed7714a67 (license), SHA-256 b5a867655833aca9e27c97e28e43dcfc62be0ba0e84f24157afedf8fdaaa2fc1
 Files: LICENSE
@@ -4516,9 +4551,9 @@ Material: m72ba046000fddee4 (copyright-header), SHA-256 f91cdfb02b35fba6cc830377
 Material: m999e4571ab5d0593 (license), SHA-256 2510b446bc1f0cf9702453075d20cd88631e20e5642658edb7325d9c1eb534f7
 Files: LICENSE
 
-Component: github.com/github/go-spdx/v2@v2.4.0
-Source: https://proxy.golang.org/github.com/github/go-spdx/v2/@v/v2.4.0.zip
-Selected Go source checksum: h1:+4IwVwJJbm3rzvrQ6P1nI9BDMcy3la4RchRy5uehV/M=
+Component: github.com/github/go-spdx/v2@v2.7.1
+Source: https://proxy.golang.org/github.com/github/go-spdx/v2/@v/v2.7.1.zip
+Selected Go source checksum: h1:+siV9wnsncI5pg4otH/sKvqGL8UkcLdPh16TSJYY1V4=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -4527,9 +4562,9 @@ github.com/github/go-spdx/v2/spdxexp/spdxlicenses
 Material: m8b296b37f96ec05d (license), SHA-256 ac0a6a47c086358dbc39505509694cc43202c4e5b097eb4c1ddedb8c40237ad4
 Files: LICENSE
 
-Component: github.com/glebarez/go-sqlite@v1.22.0
-Source: https://proxy.golang.org/github.com/glebarez/go-sqlite/@v/v1.22.0.zip
-Selected Go source checksum: h1:uAcMJhaA6r3LHMTFgP0SifzgXg46yJkgxqyuyec+ruQ=
+Component: github.com/glebarez/go-sqlite@v1.23.0
+Source: https://proxy.golang.org/github.com/glebarez/go-sqlite/@v/v1.23.0.zip
+Selected Go source checksum: h1:FyhIq4jqmgphQAUlY79zPldYGwISEZikaDfhiGWkkaI=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
@@ -4597,9 +4632,9 @@ Material: m9e4b7a0aaf0aa8ca (copyright-header), SHA-256 62fe87c24497fd9e5ec0e30d
 Material: meabc925dcab9d96a (license), SHA-256 050855d9ceedf916a9e9f30d20c6f61a484448d2c2ed5810934bc8aef43861b4
 Files: LICENSE
 
-Component: github.com/go-git/go-billy/v5@v5.9.0
-Source: https://proxy.golang.org/github.com/go-git/go-billy/v5/@v/v5.9.0.zip
-Selected Go source checksum: h1:jItGXszUDRtR/AlferWPTMN4j38BQ88XnXKbilmmBPA=
+Component: github.com/go-git/go-billy/v5@v5.9.2
+Source: https://proxy.golang.org/github.com/go-git/go-billy/v5/@v/v5.9.2.zip
+Selected Go source checksum: h1:OXFSRyz4g20upsGDJgQG9Bak1l/ZEv8GHVYB52O71sE=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -4613,9 +4648,9 @@ Material: mb6e472ed9e0e335b (license), SHA-256 4d324e3ccdba05b20e3ed1b9547f70f10
 Files: LICENSE
 Material: mbd50ca098fcafaa0 (copyright-header), SHA-256 2b6d34ca1972bb9334818f6b2448cf8b89b25024035ea7192f2fc699eb902b77
 
-Component: github.com/go-git/go-git/v5@v5.19.2
-Source: https://proxy.golang.org/github.com/go-git/go-git/v5/@v/v5.19.2.zip
-Selected Go source checksum: h1:wkfn7vOlUBu8ivAWKBWisTiwJK4jYHzTF8Ndv1LyGqY=
+Component: github.com/go-git/go-git/v5@v5.19.3
+Source: https://proxy.golang.org/github.com/go-git/go-git/v5/@v/v5.19.3.zip
+Selected Go source checksum: h1:qHttbZ+Am7wEjdTpR1XMQ4rl42FK9SIXzZ4o9x7s6M4=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -5577,9 +5612,9 @@ Material: maf4433239ff44962 (copyright-header), SHA-256 069cb0283a00546dc616002c
 Material: me900a1b6196a344e (license), SHA-256 84d554e7a5d139b7c7b5d6ef0670ae556c4cdcfa354eaad72a1c07c08012c96f
 Files: LICENSE
 
-Component: github.com/google/pprof@v0.0.0-20260402051712-545e8a4df936
-Source: https://proxy.golang.org/github.com/google/pprof/@v/v0.0.0-20260402051712-545e8a4df936.zip
-Selected Go source checksum: h1:EwtI+Al+DeppwYX2oXJCETMO23COyaKGP6fHVpkpWpg=
+Component: github.com/google/pprof@v0.0.0-20261016150608-1facf8f91b50
+Source: https://proxy.golang.org/github.com/google/pprof/@v/v0.0.0-20261016150608-1facf8f91b50.zip
+Selected Go source checksum: h1:PlNWJRxu5APSV0pWqfIsZ0qt9OOGHSWfZQ4zvx+WgWs=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -5691,9 +5726,9 @@ Material: mf5d4cc2b00fa77ee (copyright-header), SHA-256 961d392040c8f6b5e386c6d4
 Material: mf68322b5d8752201 (copyright-header), SHA-256 d85edb4f113ec195be56e5cac916f66041a7d5224a23f275fc3fd495f25521ff
 Material: mfffc030470734ec4 (copyright-header), SHA-256 acd43b18aff68565c439441565e2ea83a92b13abe689211f25dcac1a563a30cf
 
-Component: github.com/gookit/color@v1.6.0
-Source: https://proxy.golang.org/github.com/gookit/color/@v/v1.6.0.zip
-Selected Go source checksum: h1:JjJXBTk1ETNyqyilJhkTXJYYigHG24TM9Xa2M1xAhRA=
+Component: github.com/gookit/color@v1.6.3
+Source: https://proxy.golang.org/github.com/gookit/color/@v/v1.6.3.zip
+Selected Go source checksum: h1:m6E49x+KftGaspcLtPLMsyci2ARhWIUW0PUV1owMlhs=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -5804,9 +5839,9 @@ github.com/goware/prefixer
 Material: me3c2db2a6d99619c (license), SHA-256 6413626facc7d751e3e9668974338d6dd8be2b58845864645f9b29644cf96cb9
 Files: LICENSE
 
-Component: github.com/gpustack/gguf-parser-go@v0.24.0
-Source: https://proxy.golang.org/github.com/gpustack/gguf-parser-go/@v/v0.24.0.zip
-Selected Go source checksum: h1:tdJceXYp9e5RhE9RwVYIuUpir72Jz2D68NEtDXkKCKc=
+Component: github.com/gpustack/gguf-parser-go@v0.26.4
+Source: https://proxy.golang.org/github.com/gpustack/gguf-parser-go/@v/v0.26.4.zip
+Selected Go source checksum: h1:B9CRrQBcIB7I/MJFZvzPZ+e+cbc1xBzQJcmpi9l/mKU=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -5872,9 +5907,9 @@ github.com/hako/durafmt
 Material: mdfc3f99efa5b1447 (license), SHA-256 6f4f97e75351255bbb1162aaf4006ba130ba681435577c22491359b48cec8a0a
 Files: LICENSE
 
-Component: github.com/hashicorp/aws-sdk-go-base/v2@v2.0.0-beta.72
-Source: https://proxy.golang.org/github.com/hashicorp/aws-sdk-go-base/v2/@v/v2.0.0-beta.72.zip
-Selected Go source checksum: h1:vTCWu1wbdYo7PEZFem/rlr01+Un+wwVmI7wiegFdRLk=
+Component: github.com/hashicorp/aws-sdk-go-base/v2@v2.0.0-beta.74
+Source: https://proxy.golang.org/github.com/hashicorp/aws-sdk-go-base/v2/@v/v2.0.0-beta.74.zip
+Selected Go source checksum: h1:mymLUKThnV9wFvogOK8NnsMP9/vlhnjXY98gr2QIGW8=
 Raw classifier detections: MPL-2.0
 Effective package-admission terms: MPL-2.0
 To obtain the exact MPL covered source, retrieve the source locator above and verify its recorded checksum. Repository-source modifications are identified by the release source binding.
@@ -5882,8 +5917,8 @@ Packages:
 github.com/hashicorp/aws-sdk-go-base/v2/endpoints
 Material: m141d53ee0ef4dcb4 (license), SHA-256 2ba4d89aab98b9f2fb760a8fe7d05ed1c7d06be44c79f1ceb02cf9ce6e61c9a8
 Files: LICENSE
+Material: m5dca940cc183371c (copyright-header), SHA-256 fe6d712e86a0e90587b224d57fb29d774ee4f8af4b2a5f712e6ca4f0526d6b9b
 Material: m8cf4515cf4e01ee4 (copyright-header), SHA-256 832b45febc136beacad7ca5af8036052c0491845e3612163c375103eca59d85c
-Material: mbe10333878e7e3f8 (copyright-header), SHA-256 76efa78f8ae5d3082343ee13d80a78b8541a6b7b2c3f77f24af8754a5f012cdc
 
 Component: github.com/hashicorp/errwrap@v1.1.0
 Source: https://proxy.golang.org/github.com/hashicorp/errwrap/@v/v1.1.0.zip
@@ -5907,17 +5942,18 @@ github.com/hashicorp/go-cleanhttp
 Material: mc01230e41a351bfc (license), SHA-256 60222c28c1a7f6a92c7df98e5c5f4459e624e6e285e0b9b94467af5f6ab3343d
 Files: LICENSE
 
-Component: github.com/hashicorp/go-getter@v1.8.6
-Source: https://proxy.golang.org/github.com/hashicorp/go-getter/@v/v1.8.6.zip
-Selected Go source checksum: h1:9sQboWULaydVphxc4S64oAI4YqpuCk7nPmvbk131ebY=
+Component: github.com/hashicorp/go-getter@v1.8.10
+Source: https://proxy.golang.org/github.com/hashicorp/go-getter/@v/v1.8.10.zip
+Selected Go source checksum: h1:uufJp+uacA0fSDRxclsHkiE6yUQTKgwv5b25QexgVM8=
 Raw classifier detections: MPL-2.0
 Effective package-admission terms: MPL-2.0
 To obtain the exact MPL covered source, retrieve the source locator above and verify its recorded checksum. Repository-source modifications are identified by the release source binding.
 Packages:
 github.com/hashicorp/go-getter
 github.com/hashicorp/go-getter/helper/url
-Material: m0492bd66b3f01eb8 (license), SHA-256 91b6643919df970f0968799615888a2620300dc32bb515d7bd3764ad72c282ca
+Material: m236b12c8960b9369 (license), SHA-256 80ea2bd34a8ab890006aa6067aaccceae165d5d469a0ec9775eaf302f53896cc
 Files: LICENSE
+Material: m5dca940cc183371c (copyright-header), SHA-256 fe6d712e86a0e90587b224d57fb29d774ee4f8af4b2a5f712e6ca4f0526d6b9b
 Material: m8cf4515cf4e01ee4 (copyright-header), SHA-256 832b45febc136beacad7ca5af8036052c0491845e3612163c375103eca59d85c
 
 Component: github.com/hashicorp/go-getter/v2@v2.2.3
@@ -6064,9 +6100,9 @@ github.com/hashicorp/hcl/json/token
 Material: m87258137e1038836 (license), SHA-256 bef1747eda88b9ed46e94830b0d978c3499dad5dfe38d364971760881901dadd
 Files: LICENSE
 
-Component: github.com/hashicorp/hcl/v2@v2.24.0
-Source: https://proxy.golang.org/github.com/hashicorp/hcl/v2/@v/v2.24.0.zip
-Selected Go source checksum: h1:2QJdZ454DSsYGoaE6QheQZjtKZSUs9Nh2izTWiwQxvE=
+Component: github.com/hashicorp/hcl/v2@v2.25.0
+Source: https://proxy.golang.org/github.com/hashicorp/hcl/v2/@v/v2.25.0.zip
+Selected Go source checksum: h1:HmmQVYRny4MaBo4b20TjmL46wyuUxpnMWkPZ4+NTbWk=
 Raw classifier detections: MPL-2.0
 Effective package-admission terms: MPL-2.0
 To obtain the exact MPL covered source, retrieve the source locator above and verify its recorded checksum. Repository-source modifications are identified by the release source binding.
@@ -6077,12 +6113,14 @@ github.com/hashicorp/hcl/v2/gohcl
 github.com/hashicorp/hcl/v2/hclsimple
 github.com/hashicorp/hcl/v2/hclsyntax
 github.com/hashicorp/hcl/v2/hclwrite
+github.com/hashicorp/hcl/v2/internal/unicodeutil
 github.com/hashicorp/hcl/v2/json
-Material: m7f3b63e1dc701b18 (license), SHA-256 28ca54ff46a27183631aa262673d13e3c829d909059f5c861da835fe1783fbec
+Material: m28ac42ba71c366d4 (copyright-header), SHA-256 fa0ba0035bb6523ce12ea444a1085bae95d3537546e4914c2362f6a9254bd208
+Material: m31e630d196fb0778 (copyright-header), SHA-256 1ce7ea239af06f28d650fb3281fb896cf7b420d4749aded83cd2c365074085dd
+Material: m39ca4477d77938fd (copyright-header), SHA-256 0ca4c880a6f062844023a2ba86955af52eff0cedf741ece57eeb4ce722b0e6e9
+Material: m59998bb0f417ebef (copyright-header), SHA-256 5da69a43f4b602e270a7da3858c5f0456063e772236e52789f0af1e0f3f8d0c6
+Material: md0b9361a78c8c856 (license), SHA-256 86be27d5864873c2ffd121fbac5b54311691cc018480610e12cef6e4e660ebb3
 Files: LICENSE
-Material: mb983cda2c087f4b5 (copyright-header), SHA-256 c35089c2e1bfdfce295bf545cbda56c0594e6ca0867a7b2d4d9597b19f535de6
-Material: mbe10333878e7e3f8 (copyright-header), SHA-256 76efa78f8ae5d3082343ee13d80a78b8541a6b7b2c3f77f24af8754a5f012cdc
-Material: mf649b38f4adc8717 (copyright-header), SHA-256 4b6f33c93222905393fec3cb68a5d423f94af2b72a4d603dc941fe6a2d12964f
 
 Component: github.com/hashicorp/vault/api@v1.23.0
 Source: https://proxy.golang.org/github.com/hashicorp/vault/api/@v/v1.23.0.zip
@@ -6332,9 +6370,9 @@ github.com/jbenet/go-context/io
 Material: mad9af6eb27b8a70c (license), SHA-256 2537fe8521436047428c527abe7ecc9d5b5ec14af85bd8bd7ed29cfb8075146d
 Files: LICENSE
 
-Component: github.com/jedib0t/go-pretty/v6@v6.7.8
-Source: https://proxy.golang.org/github.com/jedib0t/go-pretty/v6/@v/v6.7.8.zip
-Selected Go source checksum: h1:BVYrDy5DPBA3Qn9ICT+PokP9cvCv1KaHv2i+Hc8sr5o=
+Component: github.com/jedib0t/go-pretty/v6@v6.8.3
+Source: https://proxy.golang.org/github.com/jedib0t/go-pretty/v6/@v/v6.8.3.zip
+Selected Go source checksum: h1:yVSk5aemoYHCvcrtqyXklwqcgHQIQzmy/oUzFlmffSQ=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -6716,21 +6754,6 @@ Material: mc66a780565fea284 (copyright-header), SHA-256 e78bc3af749a34b7c8e5291e
 Material: mef33467a6c1edfa4 (copyright-header), SHA-256 585039c346170dd78cbf765d3d5dbd1ffa11bf0e97bf3e6e091fab225eaec301
 Material: mf42202d6d2889828 (copyright-header), SHA-256 c26acbf8d8722644de46bf68f1b9c53296b2db7c05c7837e0b209539f7bf156d
 Material: mfe297d29696d9d91 (copyright-header), SHA-256 9e89c77e3221d432545f7cd8d48126045ac773dbb89416fbcf34f600ed8613fc
-
-Component: github.com/klauspost/cpuid/v2@v2.4.0
-Source: https://proxy.golang.org/github.com/klauspost/cpuid/v2/@v/v2.4.0.zip
-Selected Go source checksum: h1:S6Hrbc7+ywsr0r+RLapfGBHfyefhCTwEh3A0tV913Dw=
-Raw classifier detections: MIT
-Effective package-admission terms: MIT
-Packages:
-github.com/klauspost/cpuid/v2
-Material: m018bf49d1958618f (copyright-header), SHA-256 33ad5bed3f3336f114501fe9ca566536a68e8fc8f5774cc105a304f998262c16
-Material: m073014426eac78fe (copyright-header), SHA-256 ded57fd69326b5224598d1a9e165d814ae6ee9a00c8e1b68e9fd070b84dfa10d
-Material: m2d0543adc023aa1b (copyright-header), SHA-256 e3e95fd1e6b67aea97b9081544642d0bdb904a21c7d1a6444423338600b765df
-Material: m9655ec6bae2b1a55 (copyright-header), SHA-256 ccbfc1c1af605e859558e5d0eddcedf0694bbbcf1ada842a6305c79ba93d9dfe
-Material: mc3ef99961d23f004 (license), SHA-256 5d966570d7a442d4e969892860a914e542c97f262c873baee8f0aa48e1f40212
-Files: LICENSE
-Material: mf0a7babba7e39904 (assembly-copyright-header), SHA-256 e3e95fd1e6b67aea97b9081544642d0bdb904a21c7d1a6444423338600b765df
 
 Component: github.com/klauspost/pgzip@v1.2.6
 Source: https://proxy.golang.org/github.com/klauspost/pgzip/@v/v1.2.6.zip
@@ -7573,9 +7596,9 @@ github.com/mackerelio/go-osstat/memory
 Material: m0354c4374bd371eb (license), SHA-256 809fa1ed21450f59827d1e9aec720bbc4b687434fa22283c6cb5dd82a47ab9c0
 Files: LICENSE.txt
 
-Component: github.com/magiconair/properties@v1.8.10
-Source: https://proxy.golang.org/github.com/magiconair/properties/@v/v1.8.10.zip
-Selected Go source checksum: h1:s31yESBquKXCV9a/ScB3ESkOjUYYv+X0rg8SYxI99mE=
+Component: github.com/magiconair/properties@v1.18.12
+Source: https://proxy.golang.org/github.com/magiconair/properties/@v/v1.18.12.zip
+Selected Go source checksum: h1:sT9zQpvTB3B4gzrX0tmZNTEaGyg8Zw55MFYRE32Mr9I=
 Raw classifier detections: BSD-2-Clause
 Effective package-admission terms: BSD-2-Clause
 Packages:
@@ -7617,9 +7640,9 @@ github.com/matthyx/go-gitlog/gitcmd
 Material: m44d337f1c7683009 (license), SHA-256 9648e2fef7056bf270b185946a47c0284e1ccae640282fb4339b5822e47e8391
 Files: LICENSE
 
-Component: github.com/mattn/go-colorable@v0.1.15
-Source: https://proxy.golang.org/github.com/mattn/go-colorable/@v/v0.1.15.zip
-Selected Go source checksum: h1:+u9SLTRGnXv73cEsnsmoZBom+dMU88B2M0aDcWy0/jY=
+Component: github.com/mattn/go-colorable@v0.1.16
+Source: https://proxy.golang.org/github.com/mattn/go-colorable/@v/v0.1.16.zip
+Selected Go source checksum: h1:+2YjeAe7xP1OQbZW1jERPWWCDLlNqFNCvjiqGiAt84A=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -7637,9 +7660,9 @@ github.com/mattn/go-isatty
 Material: m3b9e5ccd37e7c47e (license), SHA-256 08eab1118c80885fa1fa6a6dd7303f65a379fcb3733e063d20d1bbc2c76e6fa1
 Files: LICENSE
 
-Component: github.com/mattn/go-runewidth@v0.0.24
-Source: https://proxy.golang.org/github.com/mattn/go-runewidth/@v/v0.0.24.zip
-Selected Go source checksum: h1:cpokDiIn0MGnhdHwuWnJBITySJ20QyNGnY2kR/ay2DU=
+Component: github.com/mattn/go-runewidth@v0.0.27
+Source: https://proxy.golang.org/github.com/mattn/go-runewidth/@v/v0.0.27.zip
+Selected Go source checksum: h1:Feg/Oou5zI/wnpgDF6omIU0OokC9GxLC/WRknhVlIR0=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -7968,9 +7991,9 @@ github.com/moby/locker
 Material: m725dce484a5a1458 (license), SHA-256 9b44ae21e39b0ec20e89984bfb437d20617236285c051c42d95672babe2dad62
 Files: LICENSE
 
-Component: github.com/moby/moby/api@v1.55.0
-Source: https://proxy.golang.org/github.com/moby/moby/api/@v/v1.55.0.zip
-Selected Go source checksum: h1:2/sexvQyqIWS8pRSCFddBfpW2qE7vR7FCL+vN8pxwMc=
+Component: github.com/moby/moby/api@v1.56.1
+Source: https://proxy.golang.org/github.com/moby/moby/api/@v/v1.56.1.zip
+Selected Go source checksum: h1:PpWkvVPB7Fr/No8w+TfyJ/I6rWZ2YPZhT3JorIg+06c=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -7994,9 +8017,9 @@ github.com/moby/moby/api/types/volume
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE
 
-Component: github.com/moby/moby/client@v0.5.1
-Source: https://proxy.golang.org/github.com/moby/moby/client/@v/v0.5.1.zip
-Selected Go source checksum: h1:tYNaJno4c0HXz12y5BiqEDy0rVTYkWzI26lGvnTMiJw=
+Component: github.com/moby/moby/client@v0.6.2
+Source: https://proxy.golang.org/github.com/moby/moby/client/@v/v0.6.2.zip
+Selected Go source checksum: h1:ekSPlMccrZGcw6Scb8T9D39qE0mB+XupU/yS0zNw9N4=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -8106,9 +8129,9 @@ github.com/moby/sys/user
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE
 
-Component: github.com/moby/sys/userns@v0.1.0
-Source: https://proxy.golang.org/github.com/moby/sys/userns/@v/v0.1.0.zip
-Selected Go source checksum: h1:tVLXkFOxVu9A64/yh59slHVv9ahO9UIev4JZusOLG/g=
+Component: github.com/moby/sys/userns@v0.2.1
+Source: https://proxy.golang.org/github.com/moby/sys/userns/@v/v0.2.1.zip
+Selected Go source checksum: h1:4OvdM7BcPkASbuouHsbW3aeMJSFlYDldBRnXVZhaRk8=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -8386,9 +8409,9 @@ github.com/nozzle/throttler
 Material: m609de7c34f4e4c54 (license), SHA-256 cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14
 Files: LICENSE
 
-Component: github.com/nwaples/rardecode/v2@v2.2.0
-Source: https://proxy.golang.org/github.com/nwaples/rardecode/v2/@v/v2.2.0.zip
-Selected Go source checksum: h1:4ufPGHiNe1rYJxYfehALLjup4Ls3ck42CWwjKiOqu0A=
+Component: github.com/nwaples/rardecode/v2@v2.4.1
+Source: https://proxy.golang.org/github.com/nwaples/rardecode/v2/@v/v2.4.1.zip
+Selected Go source checksum: h1:F7zNW2LdAuuBThHWXQaiFUGVD/sef299NfWSB1nHAl4=
 Raw classifier detections: BSD-2-Clause
 Effective package-admission terms: BSD-2-Clause
 Packages:
@@ -8470,9 +8493,9 @@ github.com/olekukonko/ll/lx
 Material: m855ef8f3ea908603 (license), SHA-256 6b2a3fd39696e823479c310d353d30ba32d3c3de7c975c6b5d0718b989082099
 Files: LICENSE
 
-Component: github.com/olekukonko/tablewriter@v1.1.4
-Source: https://proxy.golang.org/github.com/olekukonko/tablewriter/@v/v1.1.4.zip
-Selected Go source checksum: h1:ORUMI3dXbMnRlRggJX3+q7OzQFDdvgbN9nVWj1drm6I=
+Component: github.com/olekukonko/tablewriter@v1.1.5
+Source: https://proxy.golang.org/github.com/olekukonko/tablewriter/@v/v1.1.5.zip
+Selected Go source checksum: h1:4LoZSfMySpMQY3PT8RWJsJeuEuMIoo9xGRgvmqjg6IQ=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -8522,13 +8545,15 @@ Files: LICENSE
 Material: mf1574a895c17b6bc (notice), SHA-256 7d4302ff15270639b7f8d25e9dbfb988b6d4075a36d0e47fdb0d4a91661b18d7
 Files: NOTICE
 
-Component: github.com/open-policy-agent/opa@v1.17.1
-Source: https://proxy.golang.org/github.com/open-policy-agent/opa/@v/v1.17.1.zip
-Selected Go source checksum: h1:wO0MOux/VCqY41aVAD6Toe1p3A7O7DlRZ1RHmYSpoS8=
+Component: github.com/open-policy-agent/opa@v1.19.0
+Source: https://proxy.golang.org/github.com/open-policy-agent/opa/@v/v1.19.0.zip
+Selected Go source checksum: h1:+j2OCsjMezZEML2T1lI9giJdGJS/PL1XFKgkHPGIhpo=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
 github.com/open-policy-agent/opa/internal/edittree/bitvector
+github.com/open-policy-agent/opa/internal/methodlesstemplate
+github.com/open-policy-agent/opa/internal/methodlesstemplate/internal/fmtsort
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -8546,6 +8571,7 @@ github.com/open-policy-agent/opa/internal/file/url
 github.com/open-policy-agent/opa/internal/future
 github.com/open-policy-agent/opa/internal/gojsonschema
 github.com/open-policy-agent/opa/internal/json/patch
+github.com/open-policy-agent/opa/internal/jsonv2
 github.com/open-policy-agent/opa/internal/lcss
 github.com/open-policy-agent/opa/internal/leb128
 github.com/open-policy-agent/opa/internal/merge
@@ -8553,7 +8579,6 @@ github.com/open-policy-agent/opa/internal/planner
 github.com/open-policy-agent/opa/internal/providers/aws
 github.com/open-policy-agent/opa/internal/providers/aws/crypto
 github.com/open-policy-agent/opa/internal/providers/aws/v4
-github.com/open-policy-agent/opa/internal/ref
 github.com/open-policy-agent/opa/internal/rego/opa
 github.com/open-policy-agent/opa/internal/semver
 github.com/open-policy-agent/opa/internal/strings
@@ -8573,9 +8598,11 @@ github.com/open-policy-agent/opa/v1/ast/internal/tokens
 github.com/open-policy-agent/opa/v1/ast/json
 github.com/open-policy-agent/opa/v1/ast/location
 github.com/open-policy-agent/opa/v1/bundle
+github.com/open-policy-agent/opa/v1/bundle/v1pb
 github.com/open-policy-agent/opa/v1/capabilities
 github.com/open-policy-agent/opa/v1/format
 github.com/open-policy-agent/opa/v1/ir
+github.com/open-policy-agent/opa/v1/ir/v1pb
 github.com/open-policy-agent/opa/v1/keys
 github.com/open-policy-agent/opa/v1/loader
 github.com/open-policy-agent/opa/v1/loader/extension
@@ -8606,10 +8633,14 @@ Material: m1803b0eafd969c7b (license), SHA-256 745f8f53e61ad2f8463a27b77aac1636d
 Files: internal/gojsonschema/LICENSE-APACHE-2.0.txt
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: internal/semver/LICENSE
+Material: m246679f49517b14f (copyright-header), SHA-256 42c897ffd08653c5d67d2aac826069f47f79add9fc78a421f84f65dbb9ba5780
 Material: m29b7c378ca3574ad (copyright-header), SHA-256 4061f3996807c50f4310dd960513d82fc79691ce83471fa3fadef5b7a86f6ad1
 Material: m327071b710c5a831 (license), SHA-256 185effe24905321d45fe84c7087b05fbcee850caf42a72e037d318cdcb700f8d
 Files: internal/edittree/bitvector/license.txt
+Material: m3def2c2553da0501 (copyright-header), SHA-256 2bf46f45991c28815e12ff06dd299a8f7f6f49097919737d973de2a12e87fc61
 Material: m3f8d51fc7dac56a9 (copyright-header), SHA-256 4c076736a4bf7e6b78003a3ebb4e412c85e4e2b8e9b69ea1cd29092914b7d184
+Material: m4a74781cd64ccb4b (license), SHA-256 911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad
+Files: internal/methodlesstemplate/LICENSE
 Material: m610a91a52fbc795a (license), SHA-256 c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08
 Files: LICENSE
 Material: m62afbb2c23fdb7a5 (copyright-header), SHA-256 7949b65f667b36cf5190f648bc2279a49256e30643c6c1560320ac51595509cd
@@ -8687,9 +8718,9 @@ Files: LICENSE
 Material: mc645117123923ae9 (copyright-header), SHA-256 44833a5892b6b743b822acc6a6ecfed38d73072043789bde9bed45c5d28f21b0
 Material: mdf9a4621d20e0249 (copyright-header), SHA-256 6135c2dfff3140c379c93990345305805446580bdceedc0345e4e5d8818cf074
 
-Component: github.com/openvex/go-vex@v0.2.8
-Source: https://proxy.golang.org/github.com/openvex/go-vex/@v/v0.2.8.zip
-Selected Go source checksum: h1:m/iH6+0fc7QXwfx7vJ0UeT8Z1oN1zVcyHjcVK+UO11Y=
+Component: github.com/openvex/go-vex@v0.2.9
+Source: https://proxy.golang.org/github.com/openvex/go-vex/@v/v0.2.9.zip
+Selected Go source checksum: h1:InBYPjk5FQtDjnSQ12RUyQcnMlDO5QAg4QK848LIFm8=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -8730,9 +8761,9 @@ github.com/owenrumney/go-sarif/v2/sarif
 Material: m5963ca2994021330 (license), SHA-256 6b0382b16279f26ff69014300541967a356a666eb0b91b422f6862f6b7dad17e
 Files: LICENSE
 
-Component: github.com/package-url/packageurl-go@v0.1.6
-Source: https://proxy.golang.org/github.com/package-url/packageurl-go/@v/v0.1.6.zip
-Selected Go source checksum: h1:YO3p6u1XmCUliivUg/qWphaY8vI6hxSnnPv7Bfg3m5M=
+Component: github.com/package-url/packageurl-go@v0.1.7
+Source: https://proxy.golang.org/github.com/package-url/packageurl-go/@v/v0.1.7.zip
+Selected Go source checksum: h1:iFWg6tzAjLA6F/qX3M5nZaiMHJgc+p2zxVyr/fY+sZY=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -8741,9 +8772,9 @@ Material: m3e52f186fa07d999 (copyright-header), SHA-256 5783c6159a7911d8bc1cde6c
 Material: m81983d98044daf01 (license), SHA-256 79911c70a86bb521691b67fd09ada068beada62b478b82c9cc69d0b0dc3083d6
 Files: LICENSE
 
-Component: github.com/pandatix/go-cvss@v0.6.2
-Source: https://proxy.golang.org/github.com/pandatix/go-cvss/@v/v0.6.2.zip
-Selected Go source checksum: h1:TFiHlzUkT67s6UkelHmK6s1INKVUG7nlKYiWWDTITGI=
+Component: github.com/pandatix/go-cvss@v0.6.4
+Source: https://proxy.golang.org/github.com/pandatix/go-cvss/@v/v0.6.4.zip
+Selected Go source checksum: h1:9w2RCO/Q4UTiJyEgpCHRiVc6CfrsFEnkoX+OtATqKio=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -8754,9 +8785,28 @@ github.com/pandatix/go-cvss/40
 Material: mf0260e3aebacbb03 (license), SHA-256 d55cd95fdeb325687bd8e97a18d189c06032478215a9c5edc21b56d119c4b570
 Files: LICENSE
 
-Component: github.com/pb33f/ordered-map/v2@v2.3.1
-Source: https://proxy.golang.org/github.com/pb33f/ordered-map/v2/@v/v2.3.1.zip
-Selected Go source checksum: h1:5319HDO0aw4DA4gzi+zv4FXU9UlSs3xGZ40wcP1nBjY=
+Component: github.com/pb33f/go-yaml@v0.1.0
+Source: https://proxy.golang.org/github.com/pb33f/go-yaml/@v/v0.1.0.zip
+Selected Go source checksum: h1:zZ6Gg+ATbumXlXZNLMHIe7+zTkVqe20lx+TSYRrXEuY=
+Raw classifier detections: Apache-2.0
+Effective package-admission terms: Apache-2.0
+Packages:
+github.com/pb33f/go-yaml
+github.com/pb33f/go-yaml/internal/libyaml
+github.com/pb33f/go-yaml/internal/plugin
+github.com/pb33f/go-yaml/plugin/limit
+Material: m04138b77249c9b15 (copyright-header), SHA-256 55dbc654c3708fb5629d3ca45a06ec0db4e8b398d9c2bb008dc1100d054917f6
+Material: m1429c70ef80a7d74 (notice), SHA-256 257bb2d062ee0b9226e3b5f9c3c5d6aa3d38a450df27a9e060f061d4d4a4eb6f
+Files: NOTICE
+Material: m658ad25ef71538ce (copyright-header), SHA-256 82593431f9c94c5938f510452853f65148ad8a5e9be52c734206d8afccf393ef
+Material: m7bee93a3b3e3cf2f (copyright-header), SHA-256 96eb28f28588a29926dcec98e8228b0f690dabf0d593657fe6b174cdad60d297
+Material: m991a2dac4d27d006 (license), SHA-256 4a4e095045f46875715234a884741acd2b61b88959d6f47a243ae03ef95c4e76
+Files: LICENSE
+Material: mbb52744334f82c85 (copyright-header), SHA-256 ba34c2b90fe8d4a01f5ef6e3c5c767715de7bc306b99d811985e6959462c1bfb
+
+Component: github.com/pb33f/ordered-map/v2@v2.3.2
+Source: https://proxy.golang.org/github.com/pb33f/ordered-map/v2/@v/v2.3.2.zip
+Selected Go source checksum: h1:wDyaZ2Pv9QLh64X4utCeD5Zoi9nIv2aW3lwv172O5PQ=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -8877,9 +8927,9 @@ Material: m609de7c34f4e4c54 (license), SHA-256 cb5e8e7e5f4a3988e1063c142c60dc2df
 Files: LICENSE
 Material: m7e2a42d554342d13 (copyright-header), SHA-256 d133ed8522ccddc0e6fa92ec96381dc5fde97cc1d22c1992795507099e33011f
 
-Component: github.com/pierrec/lz4/v4@v4.1.27
-Source: https://proxy.golang.org/github.com/pierrec/lz4/v4/@v/v4.1.27.zip
-Selected Go source checksum: h1:+PhzhWDrjRj89TH2sw43nE3+4+W8lSxIuQadEHZyjUk=
+Component: github.com/pierrec/lz4/v4@v4.1.33
+Source: https://proxy.golang.org/github.com/pierrec/lz4/v4/@v/v4.1.33.zip
+Selected Go source checksum: h1:GjG1TJ1V4IzKP8L96muuuDNpTwd7D+l2ccXrjAbe014=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
@@ -8902,14 +8952,29 @@ github.com/pin/tftp/v3/netascii
 Material: m9b248218502e243f (license), SHA-256 52231658a6b111a703323f5dbd840739e1a2121276553e90f6986362bd667eb7
 Files: LICENSE
 
-Component: github.com/pjbgf/sha1cd@v0.6.0
-Source: https://proxy.golang.org/github.com/pjbgf/sha1cd/@v/v0.6.0.zip
-Selected Go source checksum: h1:3WJ8Wz8gvDz29quX1OcEmkAlUg9diU4GxJHqs0/XiwU=
+Component: github.com/piprate/json-gold@v0.7.0
+Source: https://proxy.golang.org/github.com/piprate/json-gold/@v/v0.7.0.zip
+Selected Go source checksum: h1:bEMirgA5y8Z2loTQfxyIFfY+EflxH1CTP6r/KIlcJNw=
+Raw classifier detections: Apache-2.0
+Effective package-admission terms: Apache-2.0
+Packages:
+github.com/piprate/json-gold/ld
+github.com/piprate/json-gold/ld/internal/jsoncanonicalizer
+Material: m6ad0bdaf23990945 (copyright-header), SHA-256 2ee98388fe22e2e987e5335704ffd8ad62fd1af12313859124a564fa761a77f7
+Material: m7d91d553ff51137c (copyright-header), SHA-256 27291dafc3daf63efe14acce1998ee45ef296124fde2fb6c6b8ec75a50e84017
+Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
+Files: LICENSE
+Material: m8ca26e23b5138f99 (copyright-header), SHA-256 65845d7bb11e054cd25592c13af066afb3f64b915a288674cefc7f74a5d12cc7
+
+Component: github.com/pjbgf/sha1cd@v0.7.0
+Source: https://proxy.golang.org/github.com/pjbgf/sha1cd/@v/v0.7.0.zip
+Selected Go source checksum: h1:ZRNPKHj+gfkLBf0KJv/p1Hmz+7bqCT5o311YX0nq+DA=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
 github.com/pjbgf/sha1cd
 github.com/pjbgf/sha1cd/internal
+github.com/pjbgf/sha1cd/internal/cpu
 github.com/pjbgf/sha1cd/ubc
 Material: m59ee945772e49071 (license), SHA-256 c75aacd1e1f49bc504e3f00e7cfa58cb55d3bc7ff3d3c23f38e485da1906e0ad
 Files: LICENSE
@@ -8978,6 +9043,19 @@ Packages:
 github.com/pmezard/go-difflib/difflib
 Material: m5fc211781a17f69d (license), SHA-256 2eb550be6801c1ea434feba53bf6d12e7c71c90253e0a9de4a4f46cf88b56477
 Files: LICENSE
+
+Component: github.com/pquerna/cachecontrol@v0.2.0
+Source: https://proxy.golang.org/github.com/pquerna/cachecontrol/@v/v0.2.0.zip
+Selected Go source checksum: h1:vBXSNuE5MYP9IJ5kjsdo8uq+w41jSPgvba2DEnkRx9k=
+Raw classifier detections: Apache-2.0
+Effective package-admission terms: Apache-2.0
+Packages:
+github.com/pquerna/cachecontrol
+github.com/pquerna/cachecontrol/cacheobject
+Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
+Files: LICENSE
+Material: m709a34dcb01e757b (copyright-header), SHA-256 aad37084e91ba1ef8d8ece7ce8a3caf66453bb77f11818b01fecc699df7f2703
+Material: m96d9982eca33326d (copyright-header), SHA-256 029c45070eec0da39500ed3947a2845c4b0e9571f4c0b02bb64c07d9355b26e9
 
 Component: github.com/project-copacetic/copacetic@v0.10.0
 Source: https://proxy.golang.org/github.com/project-copacetic/copacetic/@v/v0.10.0.zip
@@ -9570,9 +9648,9 @@ github.com/siderolabs/go-api-signature/pkg/serviceaccount
 Material: m5651bc505679cef6 (license), SHA-256 1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5
 Files: LICENSE
 
-Component: github.com/siderolabs/go-blockdevice/v2@v2.0.32
-Source: https://proxy.golang.org/github.com/siderolabs/go-blockdevice/v2/@v/v2.0.32.zip
-Selected Go source checksum: h1:H0CPAXUtpz2voGsovvXvXmXVtKnYpzvTrl99+78krug=
+Component: github.com/siderolabs/go-blockdevice/v2@v2.0.36
+Source: https://proxy.golang.org/github.com/siderolabs/go-blockdevice/v2/@v/v2.0.36.zip
+Selected Go source checksum: h1:KFE5eG4A8qNlcx7Rsyk9AzpKWsaYsMc9QFCJVfrgQ0M=
 Raw classifier detections: MPL-2.0
 Effective package-admission terms: MPL-2.0
 To obtain the exact MPL covered source, retrieve the source locator above and verify its recorded checksum. Repository-source modifications are identified by the release source binding.
@@ -9597,6 +9675,9 @@ github.com/siderolabs/go-blockdevice/v2/blkid/internal/partitions/gpt
 github.com/siderolabs/go-blockdevice/v2/blkid/internal/probe
 github.com/siderolabs/go-blockdevice/v2/blkid/internal/utils
 github.com/siderolabs/go-blockdevice/v2/block
+github.com/siderolabs/go-blockdevice/v2/block/internal/sysfs
+github.com/siderolabs/go-blockdevice/v2/devicemapper
+github.com/siderolabs/go-blockdevice/v2/internal/dmioctl
 github.com/siderolabs/go-blockdevice/v2/internal/gptstructs
 github.com/siderolabs/go-blockdevice/v2/internal/gptutil
 github.com/siderolabs/go-blockdevice/v2/internal/luks2
@@ -9680,9 +9761,9 @@ github.com/siderolabs/go-talos-support/support/collectors
 Material: m5651bc505679cef6 (license), SHA-256 1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5
 Files: LICENSE
 
-Component: github.com/siderolabs/image-factory@v1.3.3
-Source: https://proxy.golang.org/github.com/siderolabs/image-factory/@v/v1.3.3.zip
-Selected Go source checksum: h1:qyeUgi4zoJnw1ar1GqkSTVGB6rKygxCc5rtDP0XXm5o=
+Component: github.com/siderolabs/image-factory@v1.8.0
+Source: https://proxy.golang.org/github.com/siderolabs/image-factory/@v/v1.8.0.zip
+Selected Go source checksum: h1:/TG5AC91X1OUJwMDD1FhgRlNz78biNoio9bzVfmRlVw=
 Raw classifier detections: MPL-2.0
 Effective package-admission terms: MPL-2.0
 To obtain the exact MPL covered source, retrieve the source locator above and verify its recorded checksum. Repository-source modifications are identified by the release source binding.
@@ -10240,6 +10321,7 @@ Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
 github.com/sirupsen/logrus
+github.com/sirupsen/logrus/hooks/slog
 Material: mfcae0a8d6d2c3e6f (license), SHA-256 51a0c9ec7f8b7634181b8d4c03e5b5d204ac21d6e72f46c313973424664b2e6b
 Files: LICENSE
 
@@ -10276,9 +10358,9 @@ Material: m31b4f2ed3525ce35 (copyright-header), SHA-256 63d86ff5229cf79d8b0b454c
 Material: m8f1c4fc81b7a6778 (license), SHA-256 0fd7d4bc4033e84557704aa80e85c34938d092c566ecc9e6b329ef0f67473c8c
 Files: LICENSE
 
-Component: github.com/smallstep/pkcs7@v0.1.1
-Source: https://proxy.golang.org/github.com/smallstep/pkcs7/@v/v0.1.1.zip
-Selected Go source checksum: h1:x+rPdt2W088V9Vkjho4KtoggyktZJlMduZAtRHm68LU=
+Component: github.com/smallstep/pkcs7@v0.2.1
+Source: https://proxy.golang.org/github.com/smallstep/pkcs7/@v/v0.2.1.zip
+Selected Go source checksum: h1:6Kfzr/QizdIuB6LSv8y1LJdZ3aPSfTNhTLqAx9CTLfA=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -10314,9 +10396,9 @@ github.com/spdx/gordf/uri
 Material: mbc8129fb673517d7 (license), SHA-256 7fa62b6ad901af35baa16ae107b40caf3960a87aef6bbd96ab11ecfb15368f03
 Files: LICENSE
 
-Component: github.com/spdx/tools-golang@v0.5.7
-Source: https://proxy.golang.org/github.com/spdx/tools-golang/@v/v0.5.7.zip
-Selected Go source checksum: h1:+sWcKGnhwp3vLdMqPcLdA6QK679vd86cK9hQWH3AwCg=
+Component: github.com/spdx/tools-golang@v0.6.0-rc4
+Source: https://proxy.golang.org/github.com/spdx/tools-golang/@v/v0.6.0-rc4.zip
+Selected Go source checksum: h1:2GkvNr0DcnJHY9BDm3OYHo229jZS/h4qYDK+tHYXPOo=
 Raw classifier detections: Apache-2.0, GPL-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -10335,6 +10417,9 @@ github.com/spdx/tools-golang/spdx/v2/v2_2/tagvalue/writer
 github.com/spdx/tools-golang/spdx/v2/v2_3
 github.com/spdx/tools-golang/spdx/v2/v2_3/tagvalue/reader
 github.com/spdx/tools-golang/spdx/v2/v2_3/tagvalue/writer
+github.com/spdx/tools-golang/spdx/v3/internal
+github.com/spdx/tools-golang/spdx/v3/internal/ld
+github.com/spdx/tools-golang/spdx/v3/v3_0
 github.com/spdx/tools-golang/tagvalue
 github.com/spdx/tools-golang/tagvalue/reader
 Material: m0e6d234d497c97e8 (copyright-header), SHA-256 20310778d86f48448570cc525a5c2f37c62eabc27742a408fc6561c230859d67
@@ -10343,6 +10428,7 @@ Material: m1e34cfd60d0929d6 (copyright-header), SHA-256 1dc78ff7eb6ceae631f772ff
 Material: m2875f85a71764c3a (copyright-header), SHA-256 06cc66d1fb5ef02b81bc1c742e10eb8bca036ef9ad9ffa599b22eea1130ecf47
 Material: m3d6ad7d77b782196 (copyright-header), SHA-256 f28fac1ea7d8aba2d75209a1b9f35c9e5b61f8b526297e9a38a1b0344d979865
 Material: m3f03c75225834918 (copyright-header), SHA-256 3dfc6d08ea9f35752ba2021285c0f9e249b5fa8b04d8787bc4818614bcfce616
+Material: m71061195fbb95ec2 (copyright-header), SHA-256 fc37419fd5b68098ce31024cc304be7fd8e51095d610f9f1722519a59dc58d57
 Material: m75dd74236d896be1 (copyright-header), SHA-256 a14a5a75ddab8e79a8ea1dea309929117c7766bc96637be4b2e42e0483ff7d04
 Material: m787c96e190542631 (copyright-header), SHA-256 8a43b3a96c91999f0ed5761845e445f515a676626fc844a57fe71bb810104183
 Material: mbaa6927ea650070a (license), SHA-256 e914fb1f3927226e04b0438e0b541b3c6e3c65de4d64aa8f5cdaa803f05448fd
@@ -10520,9 +10606,9 @@ github.com/subosito/gotenv
 Material: m6badba4164c1c75e (license), SHA-256 1fd29c692f599736d92f7c02b7826836c0d2ccc838689b21822f4ce0253c39df
 Files: LICENSE
 
-Component: github.com/sylabs/sif/v2@v2.24.0
-Source: https://proxy.golang.org/github.com/sylabs/sif/v2/@v/v2.24.0.zip
-Selected Go source checksum: h1:1wB5uMDUQYjk8AckTySaDcP9YnpMb1LyDRr1Jt9A10w=
+Component: github.com/sylabs/sif/v2@v2.24.2
+Source: https://proxy.golang.org/github.com/sylabs/sif/v2/@v/v2.24.2.zip
+Selected Go source checksum: h1:rdkFf6z3xLC6yKweU7S9marlKfkS91Ht0ruIri6YWFY=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
@@ -10581,6 +10667,17 @@ Material: mae8437a2bca7aa3a (license), SHA-256 7df695202f82a52f8891a9913438c7fde
 Files: LICENSE
 Material: mbf1fffc3ca744dfa (copyright-header), SHA-256 fd317d4a387d6d878570e047a2788f0c54a2c8be25b2d7db4869e6cc885ddc62
 Material: mc1af124f84a8963f (copyright-header), SHA-256 9efab7090e83760844a5dbcba0d4c4ef8f02a9bf3c7ddb9b00037b1918490621
+
+Component: github.com/tailscale/hujson@v0.0.0-20260302212456-ecc657c15afd
+Source: https://proxy.golang.org/github.com/tailscale/hujson/@v/v0.0.0-20260302212456-ecc657c15afd.zip
+Selected Go source checksum: h1:Rf9uhF1+VJ7ZHqxrG8pJ6YacmHvVCmByDmGbAWCc/gA=
+Raw classifier detections: BSD-3-Clause
+Effective package-admission terms: BSD-3-Clause
+Packages:
+github.com/tailscale/hujson
+Material: m6e179f35c07a59fb (license), SHA-256 a125b6c2721809b6c2a8761771932611833008ed8697d752b3e35d36e4bbd83e
+Files: LICENSE
+Material: mb5a2dfb8cfe2303b (copyright-header), SHA-256 59286d319807002e0922353d88ebb7f7c326201fe65937e4d3861b11a23eeeaf
 
 Component: github.com/tchap/go-patricia/v2@v2.3.3
 Source: https://proxy.golang.org/github.com/tchap/go-patricia/v2/@v/v2.3.3.zip
@@ -10870,9 +10967,9 @@ Material: m8df157a9ff62fc46 (copyright-header), SHA-256 159dae8293b5edb4d14dc806
 Material: m8eeec89fa101d3a6 (copyright-header), SHA-256 a1de63d1a1051f38d5b893467ab5a02c00f7600688fe6a947f77f98dd1128256
 Material: mb8b761e7fb123106 (copyright-header), SHA-256 add18fa8d8745214404da7de7c0b2184ee6df049f95d14dde16553e923d77c87
 
-Component: github.com/ulikunitz/xz@v0.5.16
-Source: https://proxy.golang.org/github.com/ulikunitz/xz/@v/v0.5.16.zip
-Selected Go source checksum: h1:ld6NyySjx5lowVKwJvMRLnW5nxKX/xnpSiFYZ/Lxur0=
+Component: github.com/ulikunitz/xz@v0.5.17
+Source: https://proxy.golang.org/github.com/ulikunitz/xz/@v/v0.5.17.zip
+Selected Go source checksum: h1:flR0y/x1hgM8EGV1AW3Xll6T413G0glV8UfBwR617V4=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
@@ -10961,22 +11058,31 @@ Material: ma25c418356233227 (license), SHA-256 52c9c879a2dc71b328c537104910cac20
 Files: LICENSE
 Material: mf489d7731cb0a697 (copyright-header), SHA-256 e1771531ee4abf18410c9c0005b38eade9836b7e1261c475bf669d8ec4376061
 
-Component: github.com/vbauerster/mpb/v8@v8.10.2
-Source: https://proxy.golang.org/github.com/vbauerster/mpb/v8/@v/v8.10.2.zip
-Selected Go source checksum: h1:2uBykSHAYHekE11YvJhKxYmLATKHAGorZwFlyNw4hHM=
+Component: github.com/vbauerster/cupwriter@v0.0.4
+Source: https://proxy.golang.org/github.com/vbauerster/cupwriter/@v/v0.0.4.zip
+Selected Go source checksum: h1:9sBPe0uXWLZuWQU5lqVbhyFlxX6c09asST/YfatFAys=
+Raw classifier detections: Unlicense
+Effective package-admission terms: Unlicense
+Packages:
+github.com/vbauerster/cupwriter
+Material: m6cbaf826a05ade98 (license), SHA-256 7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c
+Files: UNLICENSE
+
+Component: github.com/vbauerster/mpb/v8@v8.14.0
+Source: https://proxy.golang.org/github.com/vbauerster/mpb/v8/@v/v8.14.0.zip
+Selected Go source checksum: h1:55SR80dptMfASxIG/oCEkBXgBhxeSu4GrVsjl16oKmA=
 Raw classifier detections: Unlicense
 Effective package-admission terms: Unlicense
 Packages:
 github.com/vbauerster/mpb/v8
-github.com/vbauerster/mpb/v8/cwriter
 github.com/vbauerster/mpb/v8/decor
 github.com/vbauerster/mpb/v8/internal
 Material: m6cbaf826a05ade98 (license), SHA-256 7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c
 Files: UNLICENSE
 
-Component: github.com/vektah/gqlparser/v2@v2.5.33
-Source: https://proxy.golang.org/github.com/vektah/gqlparser/v2/@v/v2.5.33.zip
-Selected Go source checksum: h1:lRp8aIeNUNbimf/axZd7ETg24q06hBtPaas+TcvI/7E=
+Component: github.com/vektah/gqlparser/v2@v2.5.36
+Source: https://proxy.golang.org/github.com/vektah/gqlparser/v2/@v/v2.5.36.zip
+Selected Go source checksum: h1:CN9mKVHgMkc+XftdOWIhb4HEL8wKSYkFAqhf8booa7s=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -11191,9 +11297,9 @@ github.com/xlab/treeprint
 Material: mafc96ec587e9cc2d (license), SHA-256 52323e7c7c14ed38010ab5879499eb2afd4abcce543750d0c3faf28d83c8d862
 Files: LICENSE
 
-Component: github.com/xo/terminfo@v0.0.0-20220910002029-abceb7e1c41e
-Source: https://proxy.golang.org/github.com/xo/terminfo/@v/v0.0.0-20220910002029-abceb7e1c41e.zip
-Selected Go source checksum: h1:JVG44RsyaB9T2KIHavMF/ppJZNG9ZpyihvCd0w101no=
+Component: github.com/xo/terminfo@v1.2.0
+Source: https://proxy.golang.org/github.com/xo/terminfo/@v/v1.2.0.zip
+Selected Go source checksum: h1:d0ZTOCpuGE0lwSAOs0zcJjwz3jWQyqcRt9XbGJpCOl4=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -11298,9 +11404,9 @@ github.com/zalando/go-keyring/secret_service
 Material: m3eb3d134c50b739e (license), SHA-256 14bc00f1a298eb6af250216b9e60027a4386c8a84fa2c7ddc2b5c10908e06d0d
 Files: LICENSE
 
-Component: github.com/zclconf/go-cty@v1.17.0
-Source: https://proxy.golang.org/github.com/zclconf/go-cty/@v/v1.17.0.zip
-Selected Go source checksum: h1:seZvECve6XX4tmnvRzWtJNHdscMtYEx5R7bnnVyd/d0=
+Component: github.com/zclconf/go-cty@v1.19.0
+Source: https://proxy.golang.org/github.com/zclconf/go-cty/@v/v1.19.0.zip
+Selected Go source checksum: h1:IV8WdqYZc2c5rLX9bEoLNXKojBAp0MZPBHMIrCoa/s4=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -11311,9 +11417,10 @@ github.com/zclconf/go-cty/cty/ctystrings
 github.com/zclconf/go-cty/cty/function
 github.com/zclconf/go-cty/cty/function/stdlib
 github.com/zclconf/go-cty/cty/gocty
+github.com/zclconf/go-cty/cty/internal/graphemes
 github.com/zclconf/go-cty/cty/json
 github.com/zclconf/go-cty/cty/set
-Material: mb6efb168db2248af (license), SHA-256 5b75e242a5bf5b40228d068037a7746e86bc1f9ea96b691e5f64b555579bfa52
+Material: mb2edfdeb1381fda4 (license), SHA-256 ddbb0c0aacf1a262c6724fa82cc24af9d5f5d9a99bf3d0d9a5efe36b5a638e07
 Files: LICENSE
 
 Component: gitlab.com/gitlab-org/api/client-go@v1.46.0
@@ -11741,9 +11848,9 @@ Material: m6fe495275e41dd29 (copyright-header), SHA-256 51aeb5be913089c38c43a56a
 Material: m80c9516fd01653d2 (license), SHA-256 1ae07514be1d7bb33f0698f8d91fb51b8b9fe1463157ec1c72081a49b9bc6f40
 Files: LICENSE
 
-Component: go.opentelemetry.io/otel/exporters/otlp/otlptrace@v1.45.0
-Source: https://proxy.golang.org/go.opentelemetry.io/otel/exporters/otlp/otlptrace/@v/v1.45.0.zip
-Selected Go source checksum: h1:QRefszxJmfPdjXUUm3j6iDzY03mTPXMjqErFqQ67vUg=
+Component: go.opentelemetry.io/otel/exporters/otlp/otlptrace@v1.46.0
+Source: https://proxy.golang.org/go.opentelemetry.io/otel/exporters/otlp/otlptrace/@v/v1.46.0.zip
+Selected Go source checksum: h1:OFnwLJr+pF3iHrlGSzbxyuo6/6HyBlnlN1CWEJmBVcw=
 Raw classifier detections: Apache-2.0, BSD-3-Clause
 Effective package-admission terms: Apache-2.0, BSD-3-Clause
 Packages:
@@ -11753,9 +11860,9 @@ Material: m6fe495275e41dd29 (copyright-header), SHA-256 51aeb5be913089c38c43a56a
 Material: m80c9516fd01653d2 (license), SHA-256 1ae07514be1d7bb33f0698f8d91fb51b8b9fe1463157ec1c72081a49b9bc6f40
 Files: LICENSE
 
-Component: go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc@v1.45.0
-Source: https://proxy.golang.org/go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc/@v/v1.45.0.zip
-Selected Go source checksum: h1:fG5MCxGz8+2VtrN/WgqSpJFctVz24gpxj8CxkKmc8Ww=
+Component: go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc@v1.46.0
+Source: https://proxy.golang.org/go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc/@v/v1.46.0.zip
+Selected Go source checksum: h1:w53CDeOA/Kurp7yRsegSr6pbbr759dOvJ+yNmWM6Hxs=
 Raw classifier detections: Apache-2.0, BSD-3-Clause
 Effective package-admission terms: Apache-2.0, BSD-3-Clause
 Packages:
@@ -11771,9 +11878,9 @@ Material: m6fe495275e41dd29 (copyright-header), SHA-256 51aeb5be913089c38c43a56a
 Material: m80c9516fd01653d2 (license), SHA-256 1ae07514be1d7bb33f0698f8d91fb51b8b9fe1463157ec1c72081a49b9bc6f40
 Files: LICENSE
 
-Component: go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp@v1.45.0
-Source: https://proxy.golang.org/go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp/@v/v1.45.0.zip
-Selected Go source checksum: h1:QBajQ2SrwQijzHyZbQlPsuIzpl/ll8DY6wPWsajeGcI=
+Component: go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp@v1.46.0
+Source: https://proxy.golang.org/go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp/@v/v1.46.0.zip
+Selected Go source checksum: h1:KrC1YrQeSt46ITMWAbgQx1M1eV1/1TKzttrBzymPmss=
 Raw classifier detections: Apache-2.0, BSD-3-Clause
 Effective package-admission terms: Apache-2.0, BSD-3-Clause
 Packages:
@@ -11783,6 +11890,7 @@ go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp/internal/counter
 go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp/internal/envconfig
 go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp/internal/observ
 go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp/internal/otlpconfig
+go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp/internal/otlpjson
 go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp/internal/retry
 go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp/internal/x
 Material: m6fe495275e41dd29 (copyright-header), SHA-256 51aeb5be913089c38c43a56aaac4619f09bd68d308a6c313db6a6891b7b52951
@@ -12034,9 +12142,9 @@ Material: m9c29bf4a5889ac9b (copyright-header), SHA-256 5fab688fb8a9069026d52d6f
 Material: mef336eb04fa224ff (notice), SHA-256 f6c2dd3a67b576eafb89b80200b8b1627230bf3821a0c14cb99a22ac19107d00
 Files: NOTICE
 
-Component: go.yaml.in/yaml/v4@v4.0.0-rc.6
-Source: https://proxy.golang.org/go.yaml.in/yaml/v4/@v/v4.0.0-rc.6.zip
-Selected Go source checksum: h1:1h7H1ohdUh93/FyE4YaDa1Zh64K6VVbjF4K6WUxMtH4=
+Component: go.yaml.in/yaml/v4@v4.0.0-rc.6.0.20260809190231-643e93b9c9be
+Source: https://proxy.golang.org/go.yaml.in/yaml/v4/@v/v4.0.0-rc.6.0.20260809190231-643e93b9c9be.zip
+Selected Go source checksum: h1:Z8OHneHWcT7EMR9qqMjtC2zZXUTwmS1MVUpnsWKFYsc=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -12981,9 +13089,9 @@ Material: m9c29bf4a5889ac9b (copyright-header), SHA-256 5fab688fb8a9069026d52d6f
 Material: mef336eb04fa224ff (notice), SHA-256 f6c2dd3a67b576eafb89b80200b8b1627230bf3821a0c14cb99a22ac19107d00
 Files: NOTICE
 
-Component: gorm.io/gorm@v1.31.1
-Source: https://proxy.golang.org/gorm.io/gorm/@v/v1.31.1.zip
-Selected Go source checksum: h1:7CA8FTFz/gRfgqgpeKIBcervUn3xSyPUmr6B2WXJ7kg=
+Component: gorm.io/gorm@v1.31.2
+Source: https://proxy.golang.org/gorm.io/gorm/@v/v1.31.2.zip
+Selected Go source checksum: h1:3o8FXNo9v9S858gil+3LlZA1LkCOzgb4g5BL64FgaCo=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -13123,6 +13231,16 @@ Material: ma6f958c5e7e8f01b (copyright-header), SHA-256 da4cd8ef4b9a411df8b61678
 Material: mc2fd47b8e13a38db (copyright-header), SHA-256 8041e47a34d2b3b738687a7275eb0ad0c7797497d5d07add63b96cc7980c9efc
 Material: mcf7ad2c4be3234b0 (copyright-header), SHA-256 3c4ff5ea3ab3905c7a5890dd95cebcfd1ce6be5c581795794c23db8045508627
 Material: mdf9fb7958e0ff40d (copyright-header), SHA-256 15250ab94a55191b3e9df9fe00126f8e106b1356278c84128553224fcd7266f6
+
+Component: howett.net/plist@v1.0.2-0.20250314012144-ee69052608d9
+Source: https://proxy.golang.org/howett.net/plist/@v/v1.0.2-0.20250314012144-ee69052608d9.zip
+Selected Go source checksum: h1:eeH1AIcPvSc0Z25ThsYF+Xoqbn0CI/YnXVYoTLFdGQw=
+Raw classifier detections: BSD-2-Clause, BSD-3-Clause
+Effective package-admission terms: BSD-2-Clause, BSD-3-Clause
+Packages:
+howett.net/plist
+Material: m065c8db878d76a58 (license), SHA-256 20d9b7d9372369484ecadae229d3e3efee8029b259e11c9a1b07d2e0a3c82e39
+Files: LICENSE
 
 Component: k8s.io/api@v0.37.1
 Source: https://proxy.golang.org/k8s.io/api/@v/v0.36.6.zip
@@ -14017,8 +14135,9 @@ Material: m969246257ce9c732 (copyright-header), SHA-256 ff345f5babf52ae9caaac559
 Material: ma6f958c5e7e8f01b (copyright-header), SHA-256 da4cd8ef4b9a411df8b61678338cf5e409203b6960660d73e27e61b422b87c92
 Material: mc19d0a77fd0b70cc (copyright-header), SHA-256 78b8fa11cb524ce39d2155508a16a5caf11dccf3dede33246ee5a0cf47d096c7
 
-Component: k8s.io/cri-client@v0.36.3
+Component: k8s.io/cri-client@v0.37.0
 Source: https://proxy.golang.org/k8s.io/cri-client/@v/v0.36.3.zip
+Selected replacement: k8s.io/cri-client@v0.36.3
 Selected Go source checksum: h1:WJDkJi43siWEUPyChC4ag9xUannsyW/TfL4OgLUsYOA=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
@@ -14386,9 +14505,9 @@ Material: mfb9df70b293dbffe (license), SHA-256 58d1e17ffe5109a7ae296caafcadfdbe6
 Files: third_party/forked/golang/btree/LICENSE
 Material: mff89ce360703bbfd (copyright-header), SHA-256 31c0f69dabebb2c43c5f51ed042037b22049cbab5278bb1210ec0b95b5d0a83d
 
-Component: modernc.org/libc@v1.73.4
-Source: https://proxy.golang.org/modernc.org/libc/@v/v1.73.4.zip
-Selected Go source checksum: h1:+ra4Ui8ngyt8HDcO1FTDPWlkAh6yOdaO2yAoh8MddQA=
+Component: modernc.org/libc@v1.77.1
+Source: https://proxy.golang.org/modernc.org/libc/@v/v1.77.1.zip
+Selected Go source checksum: h1:Ct8j47QtiZ1Enj2DtFXQtUqrPCAjdCmPjtCuvrYQ0Hs=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
@@ -14420,9 +14539,9 @@ Material: m9de9c3410478ad8c (copyright-header), SHA-256 9fc102500f14ab3e42df9a68
 Material: mcf4293261034aee4 (license), SHA-256 bfa9bf72a72ca009fd62a8f84fca3dca67e51d93af96352723646599898b6cf5
 Files: LICENSE
 
-Component: modernc.org/memory@v1.11.0
-Source: https://proxy.golang.org/modernc.org/memory/@v/v1.11.0.zip
-Selected Go source checksum: h1:o4QC8aMQzmcwCK3t3Ux/ZHmwFPzE6hf2Y5LbkRs+hbI=
+Component: modernc.org/memory@v1.12.1
+Source: https://proxy.golang.org/modernc.org/memory/@v/v1.12.1.zip
+Selected Go source checksum: h1:nFMiWrpStgZczNl6XI9GnIk/rWhYIyHGUaR04pGbp9g=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
@@ -14432,6 +14551,7 @@ Material: m66de45bce49de65a (supplemental-declaration), SHA-256 2d36597f7117c38b
 Files: LICENSE-GO
 Material: m7d3212da8f68da47 (supplemental-declaration), SHA-256 c2eba69f20d05414538c3a5df7694dde392e065ff70882e1625e90f5d6659fff; material terms: BSD-3-Clause
 Files: LICENSE-MMAP-GO
+Material: m874e068d6d4ef43f (copyright-header), SHA-256 0ec63cfe170075fbe5795e689c47a5e82b046c35778d69e46cb44fbc12645828
 Material: ma4b0b97ade356317 (copyright-header), SHA-256 de9111e29237ea048737b7b76335de881b2fb5cf9dcea27e8284ae75df2bfda5
 Material: ma5e7908157457005 (copyright-header), SHA-256 641edca72003372ce459996a3335a8d6517c6ff4457354d643e45f52219fcd0e
 Material: mde8d49a71f8a894a (license), SHA-256 59895e669f48f168b6b858358f6005779cdf40a265f7828813061b56af67b496
@@ -14439,17 +14559,24 @@ Files: LICENSE
 Material: me366b018107e069a (supplemental-declaration), SHA-256 5ae5bee3072a841376451b48d8cfcec7188e10543926d5870828d36c8a750dc5; recipient disposition: excluded
 Files: LICENSE-LOGO
 
-Component: modernc.org/sqlite@v1.53.0
-Source: https://proxy.golang.org/modernc.org/sqlite/@v/v1.53.0.zip
-Selected Go source checksum: h1:20WG8N9q4ji/dEqGk4uiI0c6OPjSeLTNYGFCc3+7c1M=
+Component: modernc.org/sqlite@v1.60.1
+Source: https://proxy.golang.org/modernc.org/sqlite/@v/v1.60.1.zip
+Selected Go source checksum: h1:/blz53O951KWFOso4QQvEs/Fq6cDBKLtMVrYNSeJVKw=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
 modernc.org/sqlite/lib
+Material: m011dbd7b886dc7fb (supplemental-declaration), SHA-256 6ce72bbe12d975bd5286e5ab0a064c069693300c47bccbc57bec18485f1621ea; recipient disposition: excluded
+Files: LICENSE-SQLITE_VEC
+Material: m2e82c8a53818fcc5 (copyright-header), SHA-256 7a2f3c75d570b5fa5ba2934dc008d6aa0d186106b41d3cadf1cfa2c4a561ef44
 Material: m319e66dac02de012 (copyright-header), SHA-256 28750407a426cd17ecc5fec5afe68e7e8c303baa868db3e31bd7af1a3f7a6c08
 Material: m705483010399c210 (copyright-header), SHA-256 27e8d1017cacb3b4b1bac489bffb731854a31fa4fb9b81e2efe278d500e4ea9d
+Material: m73fb7d93d8391fc7 (supplemental-declaration), SHA-256 b4366b9c27a9364633e015011a231913ed19bf1228f335bf617e50a6f7b168a6; recipient disposition: excluded
+Files: LICENSE-3RD-PARTY.md
 Material: m79471ff820087334 (license), SHA-256 c6fe05491a60ae13bcd223088d2705e36dede24e5587226231d2459ada5c4822
 Files: LICENSE
+Material: me3ca732f452d7129 (supplemental-declaration), SHA-256 8438c9c89b849131ead81d5435cb97fcf052df5b0b286dda8a2d4c29e6cb3fd0; recipient disposition: attribution
+Files: LICENSE-SQLITE
 
 Component: mvdan.cc/sh/v3@v3.12.0
 Source: https://proxy.golang.org/mvdan.cc/sh/v3/@v/v3.12.0.zip
@@ -15118,6 +15245,27 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+
+--- Recipient material SHA-256 029c45070eec0da39500ed3947a2845c4b0e9571f4c0b02bb64c07d9355b26e9 ---
+/**
+ *  Copyright 2015 Paul Querna
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ */
+
+
 
 
 --- Recipient material SHA-256 02be97cb9bdccaf0322c25609f3418c7cec0eb33ebe6dff357e00373f628561d ---
@@ -16723,6 +16871,14 @@ limitations under the License.
 
 
 
+--- Recipient material SHA-256 0ca4c880a6f062844023a2ba86955af52eff0cedf741ece57eeb4ce722b0e6e9 ---
+//line scan_tokens.rl:1
+// Copyright IBM Corp. 2014, 2026
+// SPDX-License-Identifier: MPL-2.0
+
+
+
+
 --- Recipient material SHA-256 0ca70311227fe097c662dece3f359e3317fa7f9d41f8d29eb45fc5135e216139 ---
 The MIT License (MIT)
 
@@ -17496,6 +17652,14 @@ limitations under the License.
 --- Recipient material SHA-256 0eb8a6f4ddfc14115392e7dec4f17a965a048c5d32aaf15da776cf1f86970e7f ---
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of Hubble
+
+
+
+
+--- Recipient material SHA-256 0ec63cfe170075fbe5795e689c47a5e82b046c35778d69e46cb44fbc12645828 ---
+// Copyright 2026 The Memory Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
 
 
@@ -19304,6 +19468,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 
+--- Recipient material SHA-256 1ce7ea239af06f28d650fb3281fb896cf7b420d4749aded83cd2c365074085dd ---
+// Copyright IBM Corp. 2014, 2026
+// SPDX-License-Identifier: MPL-2.0
+
+
+
+
 --- Recipient material SHA-256 1d24aca0d7fc6bcc493c4dd4ec3a7a9820f5d7a420132a663b6b8437da9c480f ---
 // Copyright ©2018 The Gonum Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
@@ -20258,6 +20429,67 @@ THE SOFTWARE.
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+
+--- Recipient material SHA-256 20d9b7d9372369484ecadae229d3e3efee8029b259e11c9a1b07d2e0a3c82e39 ---
+Copyright (c) 2013, Dustin L. Howett. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met: 
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer. 
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution. 
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+The views and conclusions contained in the software and documentation are those
+of the authors and should not be interpreted as representing official policies, 
+either expressed or implied, of the FreeBSD Project.
+
+--------------------------------------------------------------------------------
+Parts of this package were made available under the license covering
+the Go language and all attended core libraries. That license follows.
+--------------------------------------------------------------------------------
+
+Copyright (c) 2012 The Go Authors. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * Neither the name of Google Inc. nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 --- Recipient material SHA-256 20f6a55827c298a517899a11c0d06019f29e41208b283f2cb8ca20d1de8099b3 ---
@@ -21586,6 +21818,24 @@ limitations under the License.
 
 
 
+--- Recipient material SHA-256 27291dafc3daf63efe14acce1998ee45ef296124fde2fb6c6b8ec75a50e84017 ---
+// Copyright 2015-2017 Piprate Limited
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
+
+
 --- Recipient material SHA-256 272ec73e1ba7b9f90243ab2faacac898fe60a2e6297398d27055444d80eab77c ---
 // Copyright 2019 Google LLC. All Rights Reserved.
 //
@@ -21826,364 +22076,6 @@ limitations under the License.
 // license that can be found in the LICENSE file.
 
 
-
-
---- Recipient material SHA-256 28ca54ff46a27183631aa262673d13e3c829d909059f5c861da835fe1783fbec ---
-Copyright (c) 2014 HashiCorp, Inc.
-
-Mozilla Public License, version 2.0
-
-1. Definitions
-
-1.1. “Contributor”
-
-     means each individual or legal entity that creates, contributes to the
-     creation of, or owns Covered Software.
-
-1.2. “Contributor Version”
-
-     means the combination of the Contributions of others (if any) used by a
-     Contributor and that particular Contributor’s Contribution.
-
-1.3. “Contribution”
-
-     means Covered Software of a particular Contributor.
-
-1.4. “Covered Software”
-
-     means Source Code Form to which the initial Contributor has attached the
-     notice in Exhibit A, the Executable Form of such Source Code Form, and
-     Modifications of such Source Code Form, in each case including portions
-     thereof.
-
-1.5. “Incompatible With Secondary Licenses”
-     means
-
-     a. that the initial Contributor has attached the notice described in
-        Exhibit B to the Covered Software; or
-
-     b. that the Covered Software was made available under the terms of version
-        1.1 or earlier of the License, but not also under the terms of a
-        Secondary License.
-
-1.6. “Executable Form”
-
-     means any form of the work other than Source Code Form.
-
-1.7. “Larger Work”
-
-     means a work that combines Covered Software with other material, in a separate
-     file or files, that is not Covered Software.
-
-1.8. “License”
-
-     means this document.
-
-1.9. “Licensable”
-
-     means having the right to grant, to the maximum extent possible, whether at the
-     time of the initial grant or subsequently, any and all of the rights conveyed by
-     this License.
-
-1.10. “Modifications”
-
-     means any of the following:
-
-     a. any file in Source Code Form that results from an addition to, deletion
-        from, or modification of the contents of Covered Software; or
-
-     b. any new file in Source Code Form that contains any Covered Software.
-
-1.11. “Patent Claims” of a Contributor
-
-      means any patent claim(s), including without limitation, method, process,
-      and apparatus claims, in any patent Licensable by such Contributor that
-      would be infringed, but for the grant of the License, by the making,
-      using, selling, offering for sale, having made, import, or transfer of
-      either its Contributions or its Contributor Version.
-
-1.12. “Secondary License”
-
-      means either the GNU General Public License, Version 2.0, the GNU Lesser
-      General Public License, Version 2.1, the GNU Affero General Public
-      License, Version 3.0, or any later versions of those licenses.
-
-1.13. “Source Code Form”
-
-      means the form of the work preferred for making modifications.
-
-1.14. “You” (or “Your”)
-
-      means an individual or a legal entity exercising rights under this
-      License. For legal entities, “You” includes any entity that controls, is
-      controlled by, or is under common control with You. For purposes of this
-      definition, “control” means (a) the power, direct or indirect, to cause
-      the direction or management of such entity, whether by contract or
-      otherwise, or (b) ownership of more than fifty percent (50%) of the
-      outstanding shares or beneficial ownership of such entity.
-
-
-2. License Grants and Conditions
-
-2.1. Grants
-
-     Each Contributor hereby grants You a world-wide, royalty-free,
-     non-exclusive license:
-
-     a. under intellectual property rights (other than patent or trademark)
-        Licensable by such Contributor to use, reproduce, make available,
-        modify, display, perform, distribute, and otherwise exploit its
-        Contributions, either on an unmodified basis, with Modifications, or as
-        part of a Larger Work; and
-
-     b. under Patent Claims of such Contributor to make, use, sell, offer for
-        sale, have made, import, and otherwise transfer either its Contributions
-        or its Contributor Version.
-
-2.2. Effective Date
-
-     The licenses granted in Section 2.1 with respect to any Contribution become
-     effective for each Contribution on the date the Contributor first distributes
-     such Contribution.
-
-2.3. Limitations on Grant Scope
-
-     The licenses granted in this Section 2 are the only rights granted under this
-     License. No additional rights or licenses will be implied from the distribution
-     or licensing of Covered Software under this License. Notwithstanding Section
-     2.1(b) above, no patent license is granted by a Contributor:
-
-     a. for any code that a Contributor has removed from Covered Software; or
-
-     b. for infringements caused by: (i) Your and any other third party’s
-        modifications of Covered Software, or (ii) the combination of its
-        Contributions with other software (except as part of its Contributor
-        Version); or
-
-     c. under Patent Claims infringed by Covered Software in the absence of its
-        Contributions.
-
-     This License does not grant any rights in the trademarks, service marks, or
-     logos of any Contributor (except as may be necessary to comply with the
-     notice requirements in Section 3.4).
-
-2.4. Subsequent Licenses
-
-     No Contributor makes additional grants as a result of Your choice to
-     distribute the Covered Software under a subsequent version of this License
-     (see Section 10.2) or under the terms of a Secondary License (if permitted
-     under the terms of Section 3.3).
-
-2.5. Representation
-
-     Each Contributor represents that the Contributor believes its Contributions
-     are its original creation(s) or it has sufficient rights to grant the
-     rights to its Contributions conveyed by this License.
-
-2.6. Fair Use
-
-     This License is not intended to limit any rights You have under applicable
-     copyright doctrines of fair use, fair dealing, or other equivalents.
-
-2.7. Conditions
-
-     Sections 3.1, 3.2, 3.3, and 3.4 are conditions of the licenses granted in
-     Section 2.1.
-
-
-3. Responsibilities
-
-3.1. Distribution of Source Form
-
-     All distribution of Covered Software in Source Code Form, including any
-     Modifications that You create or to which You contribute, must be under the
-     terms of this License. You must inform recipients that the Source Code Form
-     of the Covered Software is governed by the terms of this License, and how
-     they can obtain a copy of this License. You may not attempt to alter or
-     restrict the recipients’ rights in the Source Code Form.
-
-3.2. Distribution of Executable Form
-
-     If You distribute Covered Software in Executable Form then:
-
-     a. such Covered Software must also be made available in Source Code Form,
-        as described in Section 3.1, and You must inform recipients of the
-        Executable Form how they can obtain a copy of such Source Code Form by
-        reasonable means in a timely manner, at a charge no more than the cost
-        of distribution to the recipient; and
-
-     b. You may distribute such Executable Form under the terms of this License,
-        or sublicense it under different terms, provided that the license for
-        the Executable Form does not attempt to limit or alter the recipients’
-        rights in the Source Code Form under this License.
-
-3.3. Distribution of a Larger Work
-
-     You may create and distribute a Larger Work under terms of Your choice,
-     provided that You also comply with the requirements of this License for the
-     Covered Software. If the Larger Work is a combination of Covered Software
-     with a work governed by one or more Secondary Licenses, and the Covered
-     Software is not Incompatible With Secondary Licenses, this License permits
-     You to additionally distribute such Covered Software under the terms of
-     such Secondary License(s), so that the recipient of the Larger Work may, at
-     their option, further distribute the Covered Software under the terms of
-     either this License or such Secondary License(s).
-
-3.4. Notices
-
-     You may not remove or alter the substance of any license notices (including
-     copyright notices, patent notices, disclaimers of warranty, or limitations
-     of liability) contained within the Source Code Form of the Covered
-     Software, except that You may alter any license notices to the extent
-     required to remedy known factual inaccuracies.
-
-3.5. Application of Additional Terms
-
-     You may choose to offer, and to charge a fee for, warranty, support,
-     indemnity or liability obligations to one or more recipients of Covered
-     Software. However, You may do so only on Your own behalf, and not on behalf
-     of any Contributor. You must make it absolutely clear that any such
-     warranty, support, indemnity, or liability obligation is offered by You
-     alone, and You hereby agree to indemnify every Contributor for any
-     liability incurred by such Contributor as a result of warranty, support,
-     indemnity or liability terms You offer. You may include additional
-     disclaimers of warranty and limitations of liability specific to any
-     jurisdiction.
-
-4. Inability to Comply Due to Statute or Regulation
-
-   If it is impossible for You to comply with any of the terms of this License
-   with respect to some or all of the Covered Software due to statute, judicial
-   order, or regulation then You must: (a) comply with the terms of this License
-   to the maximum extent possible; and (b) describe the limitations and the code
-   they affect. Such description must be placed in a text file included with all
-   distributions of the Covered Software under this License. Except to the
-   extent prohibited by statute or regulation, such description must be
-   sufficiently detailed for a recipient of ordinary skill to be able to
-   understand it.
-
-5. Termination
-
-5.1. The rights granted under this License will terminate automatically if You
-     fail to comply with any of its terms. However, if You become compliant,
-     then the rights granted under this License from a particular Contributor
-     are reinstated (a) provisionally, unless and until such Contributor
-     explicitly and finally terminates Your grants, and (b) on an ongoing basis,
-     if such Contributor fails to notify You of the non-compliance by some
-     reasonable means prior to 60 days after You have come back into compliance.
-     Moreover, Your grants from a particular Contributor are reinstated on an
-     ongoing basis if such Contributor notifies You of the non-compliance by
-     some reasonable means, this is the first time You have received notice of
-     non-compliance with this License from such Contributor, and You become
-     compliant prior to 30 days after Your receipt of the notice.
-
-5.2. If You initiate litigation against any entity by asserting a patent
-     infringement claim (excluding declaratory judgment actions, counter-claims,
-     and cross-claims) alleging that a Contributor Version directly or
-     indirectly infringes any patent, then the rights granted to You by any and
-     all Contributors for the Covered Software under Section 2.1 of this License
-     shall terminate.
-
-5.3. In the event of termination under Sections 5.1 or 5.2 above, all end user
-     license agreements (excluding distributors and resellers) which have been
-     validly granted by You or Your distributors under this License prior to
-     termination shall survive termination.
-
-6. Disclaimer of Warranty
-
-   Covered Software is provided under this License on an “as is” basis, without
-   warranty of any kind, either expressed, implied, or statutory, including,
-   without limitation, warranties that the Covered Software is free of defects,
-   merchantable, fit for a particular purpose or non-infringing. The entire
-   risk as to the quality and performance of the Covered Software is with You.
-   Should any Covered Software prove defective in any respect, You (not any
-   Contributor) assume the cost of any necessary servicing, repair, or
-   correction. This disclaimer of warranty constitutes an essential part of this
-   License. No use of  any Covered Software is authorized under this License
-   except under this disclaimer.
-
-7. Limitation of Liability
-
-   Under no circumstances and under no legal theory, whether tort (including
-   negligence), contract, or otherwise, shall any Contributor, or anyone who
-   distributes Covered Software as permitted above, be liable to You for any
-   direct, indirect, special, incidental, or consequential damages of any
-   character including, without limitation, damages for lost profits, loss of
-   goodwill, work stoppage, computer failure or malfunction, or any and all
-   other commercial damages or losses, even if such party shall have been
-   informed of the possibility of such damages. This limitation of liability
-   shall not apply to liability for death or personal injury resulting from such
-   party’s negligence to the extent applicable law prohibits such limitation.
-   Some jurisdictions do not allow the exclusion or limitation of incidental or
-   consequential damages, so this exclusion and limitation may not apply to You.
-
-8. Litigation
-
-   Any litigation relating to this License may be brought only in the courts of
-   a jurisdiction where the defendant maintains its principal place of business
-   and such litigation shall be governed by laws of that jurisdiction, without
-   reference to its conflict-of-law provisions. Nothing in this Section shall
-   prevent a party’s ability to bring cross-claims or counter-claims.
-
-9. Miscellaneous
-
-   This License represents the complete agreement concerning the subject matter
-   hereof. If any provision of this License is held to be unenforceable, such
-   provision shall be reformed only to the extent necessary to make it
-   enforceable. Any law or regulation which provides that the language of a
-   contract shall be construed against the drafter shall not be used to construe
-   this License against a Contributor.
-
-
-10. Versions of the License
-
-10.1. New Versions
-
-      Mozilla Foundation is the license steward. Except as provided in Section
-      10.3, no one other than the license steward has the right to modify or
-      publish new versions of this License. Each version will be given a
-      distinguishing version number.
-
-10.2. Effect of New Versions
-
-      You may distribute the Covered Software under the terms of the version of
-      the License under which You originally received the Covered Software, or
-      under the terms of any subsequent version published by the license
-      steward.
-
-10.3. Modified Versions
-
-      If you create software not governed by this License, and you want to
-      create a new license for such software, you may create and use a modified
-      version of this License if you rename the license and remove any
-      references to the name of the license steward (except to note that such
-      modified license differs from this License).
-
-10.4. Distributing Source Code Form that is Incompatible With Secondary Licenses
-      If You choose to distribute Source Code Form that is Incompatible With
-      Secondary Licenses under the terms of this version of the License, the
-      notice described in Exhibit B of this License must be attached.
-
-Exhibit A - Source Code Form License Notice
-
-      This Source Code Form is subject to the
-      terms of the Mozilla Public License, v.
-      2.0. If a copy of the MPL was not
-      distributed with this file, You can
-      obtain one at
-      http://mozilla.org/MPL/2.0/.
-
-If it is not possible or desirable to put the notice in a particular file, then
-You may include the notice in a location (such as a LICENSE file in a relevant
-directory) where a recipient would be likely to look for such a notice.
-
-You may add additional accurate notices of copyright ownership.
-
-Exhibit B - “Incompatible With Secondary Licenses” Notice
-
-      This Source Code Form is “Incompatible
-      With Secondary Licenses”, as defined by
-      the Mozilla Public License, v. 2.0.
 
 
 --- Recipient material SHA-256 291970ba74254be7acafff79ff25cf867157b72372166a0af02331979969752c ---
@@ -23348,6 +23240,25 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
+--- Recipient material SHA-256 2ee98388fe22e2e987e5335704ffd8ad62fd1af12313859124a564fa761a77f7 ---
+// Copyright 2015-2017 Piprate Limited
+// Copyright 2025 Siemens AG
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
+
+
 --- Recipient material SHA-256 2f7bc78c3c201d14c4981f70ee520a943866d62617b7d74728875f972e66962a ---
 /*
  * SPDX-FileCopyrightText: © 2017-2025 Istari Digital, Inc.
@@ -24090,12 +24001,6 @@ THE SOFTWARE.
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-
-
-
-
---- Recipient material SHA-256 33ad5bed3f3336f114501fe9ca566536a68e8fc8f5774cc105a304f998262c16 ---
-// Copyright (c) 2021 Klaus Post, released under MIT License. See LICENSE file.
 
 
 
@@ -26825,14 +26730,6 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
 
---- Recipient material SHA-256 4b6f33c93222905393fec3cb68a5d423f94af2b72a4d603dc941fe6a2d12964f ---
-//line scan_tokens.rl:1
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MPL-2.0
-
-
-
-
 --- Recipient material SHA-256 4bbe3b885e8cd1907ab4cf9a41e862e74e24b5422297a4f2fe524e6a30ada2b4 ---
 
                                  Apache License
@@ -29294,6 +29191,14 @@ SOFTWARE.
 
 
 
+--- Recipient material SHA-256 59286d319807002e0922353d88ebb7f7c326201fe65937e4d3861b11a23eeeaf ---
+// Copyright (c) 2021 Tailscale Inc & AUTHORS All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+
+
+
 --- Recipient material SHA-256 5929acb749cadff627dabfa4572330ae48721c3e02aee5a3b1448ab09050e73f ---
 /*
 	Copyright 2018 The pdfcpu Authors.
@@ -29811,30 +29716,6 @@ SOFTWARE.
 
 
 
---- Recipient material SHA-256 5b75e242a5bf5b40228d068037a7746e86bc1f9ea96b691e5f64b555579bfa52 ---
-MIT License
-
-Copyright (c) 2017-2018 Martin Atkins
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-
 --- Recipient material SHA-256 5b957a313c4f1e5e20dea59ac595bacc1332f0f14eaa3bf41cbb712fee843363 ---
 The MIT License (MIT)
 
@@ -30265,31 +30146,6 @@ SOFTWARE.
 
 
 
---- Recipient material SHA-256 5d966570d7a442d4e969892860a914e542c97f262c873baee8f0aa48e1f40212 ---
-The MIT License (MIT)
-
-Copyright (c) 2015 Klaus Post
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-
-
 --- Recipient material SHA-256 5da170e21ab8ae7d71357fcaac4888ed0d2375b2965b05bdce4bcc979498c844 ---
 /*
 	Copyright 2019 The pdfcpu Authors.
@@ -30306,6 +30162,14 @@ SOFTWARE.
 	See the License for the specific language governing permissions and
 	limitations under the License.
 */
+
+
+
+
+--- Recipient material SHA-256 5da69a43f4b602e270a7da3858c5f0456063e772236e52789f0af1e0f3f8d0c6 ---
+//line scan_string_lit.rl:1
+// Copyright IBM Corp. 2014, 2026
+// SPDX-License-Identifier: MPL-2.0
 
 
 
@@ -31901,6 +31765,26 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+
+--- Recipient material SHA-256 65845d7bb11e054cd25592c13af066afb3f64b915a288674cefc7f74a5d12cc7 ---
+//
+//  Copyright 2006-2019 WebPKI.org (http://webpki.org).
+//
+//  Licensed under the Apache License, Version 2.0 (the "License");
+//  you may not use this file except in compliance with the License.
+//  You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+//  Unless required by applicable law or agreed to in writing, software
+//  distributed under the License is distributed on an "AS IS" BASIS,
+//  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//  See the License for the specific language governing permissions and
+//  limitations under the License.
+//
+
+
 
 
 --- Recipient material SHA-256 65fda5ae77286eca842d3ed6ac3cf394d5244a5230f47a89ddcb593397ab0fd4 ---
@@ -36169,6 +36053,14 @@ limitations under the License.
 
 
 
+--- Recipient material SHA-256 7a2f3c75d570b5fa5ba2934dc008d6aa0d186106b41d3cadf1cfa2c4a561ef44 ---
+// Copyright 2026 The Sqlite Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+
+
+
 --- Recipient material SHA-256 7a3adb8e71d95e4536be8dab1aab2c21eedecf3ee45d2c968d034ee594d7b144 ---
 Docker
 Copyright 2012-2017 Docker, Inc.
@@ -37525,6 +37417,365 @@ Redistribution and use in source and binary forms, with or without modification,
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+--- Recipient material SHA-256 80ea2bd34a8ab890006aa6067aaccceae165d5d469a0ec9775eaf302f53896cc ---
+Copyright IBM Corp. 2015, 2026
+
+Mozilla Public License, version 2.0
+
+1. Definitions
+
+1.1. “Contributor”
+
+     means each individual or legal entity that creates, contributes to the
+     creation of, or owns Covered Software.
+
+1.2. “Contributor Version”
+
+     means the combination of the Contributions of others (if any) used by a
+     Contributor and that particular Contributor’s Contribution.
+
+1.3. “Contribution”
+
+     means Covered Software of a particular Contributor.
+
+1.4. “Covered Software”
+
+     means Source Code Form to which the initial Contributor has attached the
+     notice in Exhibit A, the Executable Form of such Source Code Form, and
+     Modifications of such Source Code Form, in each case including portions
+     thereof.
+
+1.5. “Incompatible With Secondary Licenses”
+     means
+
+     a. that the initial Contributor has attached the notice described in
+        Exhibit B to the Covered Software; or
+
+     b. that the Covered Software was made available under the terms of version
+        1.1 or earlier of the License, but not also under the terms of a
+        Secondary License.
+
+1.6. “Executable Form”
+
+     means any form of the work other than Source Code Form.
+
+1.7. “Larger Work”
+
+     means a work that combines Covered Software with other material, in a separate
+     file or files, that is not Covered Software.
+
+1.8. “License”
+
+     means this document.
+
+1.9. “Licensable”
+
+     means having the right to grant, to the maximum extent possible, whether at the
+     time of the initial grant or subsequently, any and all of the rights conveyed by
+     this License.
+
+1.10. “Modifications”
+
+     means any of the following:
+
+     a. any file in Source Code Form that results from an addition to, deletion
+        from, or modification of the contents of Covered Software; or
+
+     b. any new file in Source Code Form that contains any Covered Software.
+
+1.11. “Patent Claims” of a Contributor
+
+      means any patent claim(s), including without limitation, method, process,
+      and apparatus claims, in any patent Licensable by such Contributor that
+      would be infringed, but for the grant of the License, by the making,
+      using, selling, offering for sale, having made, import, or transfer of
+      either its Contributions or its Contributor Version.
+
+1.12. “Secondary License”
+
+      means either the GNU General Public License, Version 2.0, the GNU Lesser
+      General Public License, Version 2.1, the GNU Affero General Public
+      License, Version 3.0, or any later versions of those licenses.
+
+1.13. “Source Code Form”
+
+      means the form of the work preferred for making modifications.
+
+1.14. “You” (or “Your”)
+
+      means an individual or a legal entity exercising rights under this
+      License. For legal entities, “You” includes any entity that controls, is
+      controlled by, or is under common control with You. For purposes of this
+      definition, “control” means (a) the power, direct or indirect, to cause
+      the direction or management of such entity, whether by contract or
+      otherwise, or (b) ownership of more than fifty percent (50%) of the
+      outstanding shares or beneficial ownership of such entity.
+
+
+2. License Grants and Conditions
+
+2.1. Grants
+
+     Each Contributor hereby grants You a world-wide, royalty-free,
+     non-exclusive license:
+
+     a. under intellectual property rights (other than patent or trademark)
+        Licensable by such Contributor to use, reproduce, make available,
+        modify, display, perform, distribute, and otherwise exploit its
+        Contributions, either on an unmodified basis, with Modifications, or as
+        part of a Larger Work; and
+
+     b. under Patent Claims of such Contributor to make, use, sell, offer for
+        sale, have made, import, and otherwise transfer either its Contributions
+        or its Contributor Version.
+
+2.2. Effective Date
+
+     The licenses granted in Section 2.1 with respect to any Contribution become
+     effective for each Contribution on the date the Contributor first distributes
+     such Contribution.
+
+2.3. Limitations on Grant Scope
+
+     The licenses granted in this Section 2 are the only rights granted under this
+     License. No additional rights or licenses will be implied from the distribution
+     or licensing of Covered Software under this License. Notwithstanding Section
+     2.1(b) above, no patent license is granted by a Contributor:
+
+     a. for any code that a Contributor has removed from Covered Software; or
+
+     b. for infringements caused by: (i) Your and any other third party’s
+        modifications of Covered Software, or (ii) the combination of its
+        Contributions with other software (except as part of its Contributor
+        Version); or
+
+     c. under Patent Claims infringed by Covered Software in the absence of its
+        Contributions.
+
+     This License does not grant any rights in the trademarks, service marks, or
+     logos of any Contributor (except as may be necessary to comply with the
+     notice requirements in Section 3.4).
+
+2.4. Subsequent Licenses
+
+     No Contributor makes additional grants as a result of Your choice to
+     distribute the Covered Software under a subsequent version of this License
+     (see Section 10.2) or under the terms of a Secondary License (if permitted
+     under the terms of Section 3.3).
+
+2.5. Representation
+
+     Each Contributor represents that the Contributor believes its Contributions
+     are its original creation(s) or it has sufficient rights to grant the
+     rights to its Contributions conveyed by this License.
+
+2.6. Fair Use
+
+     This License is not intended to limit any rights You have under applicable
+     copyright doctrines of fair use, fair dealing, or other equivalents.
+
+2.7. Conditions
+
+     Sections 3.1, 3.2, 3.3, and 3.4 are conditions of the licenses granted in
+     Section 2.1.
+
+
+3. Responsibilities
+
+3.1. Distribution of Source Form
+
+     All distribution of Covered Software in Source Code Form, including any
+     Modifications that You create or to which You contribute, must be under the
+     terms of this License. You must inform recipients that the Source Code Form
+     of the Covered Software is governed by the terms of this License, and how
+     they can obtain a copy of this License. You may not attempt to alter or
+     restrict the recipients’ rights in the Source Code Form.
+
+3.2. Distribution of Executable Form
+
+     If You distribute Covered Software in Executable Form then:
+
+     a. such Covered Software must also be made available in Source Code Form,
+        as described in Section 3.1, and You must inform recipients of the
+        Executable Form how they can obtain a copy of such Source Code Form by
+        reasonable means in a timely manner, at a charge no more than the cost
+        of distribution to the recipient; and
+
+     b. You may distribute such Executable Form under the terms of this License,
+        or sublicense it under different terms, provided that the license for
+        the Executable Form does not attempt to limit or alter the recipients’
+        rights in the Source Code Form under this License.
+
+3.3. Distribution of a Larger Work
+
+     You may create and distribute a Larger Work under terms of Your choice,
+     provided that You also comply with the requirements of this License for the
+     Covered Software. If the Larger Work is a combination of Covered Software
+     with a work governed by one or more Secondary Licenses, and the Covered
+     Software is not Incompatible With Secondary Licenses, this License permits
+     You to additionally distribute such Covered Software under the terms of
+     such Secondary License(s), so that the recipient of the Larger Work may, at
+     their option, further distribute the Covered Software under the terms of
+     either this License or such Secondary License(s).
+
+3.4. Notices
+
+     You may not remove or alter the substance of any license notices (including
+     copyright notices, patent notices, disclaimers of warranty, or limitations
+     of liability) contained within the Source Code Form of the Covered
+     Software, except that You may alter any license notices to the extent
+     required to remedy known factual inaccuracies.
+
+3.5. Application of Additional Terms
+
+     You may choose to offer, and to charge a fee for, warranty, support,
+     indemnity or liability obligations to one or more recipients of Covered
+     Software. However, You may do so only on Your own behalf, and not on behalf
+     of any Contributor. You must make it absolutely clear that any such
+     warranty, support, indemnity, or liability obligation is offered by You
+     alone, and You hereby agree to indemnify every Contributor for any
+     liability incurred by such Contributor as a result of warranty, support,
+     indemnity or liability terms You offer. You may include additional
+     disclaimers of warranty and limitations of liability specific to any
+     jurisdiction.
+
+4. Inability to Comply Due to Statute or Regulation
+
+   If it is impossible for You to comply with any of the terms of this License
+   with respect to some or all of the Covered Software due to statute, judicial
+   order, or regulation then You must: (a) comply with the terms of this License
+   to the maximum extent possible; and (b) describe the limitations and the code
+   they affect. Such description must be placed in a text file included with all
+   distributions of the Covered Software under this License. Except to the
+   extent prohibited by statute or regulation, such description must be
+   sufficiently detailed for a recipient of ordinary skill to be able to
+   understand it.
+
+5. Termination
+
+5.1. The rights granted under this License will terminate automatically if You
+     fail to comply with any of its terms. However, if You become compliant,
+     then the rights granted under this License from a particular Contributor
+     are reinstated (a) provisionally, unless and until such Contributor
+     explicitly and finally terminates Your grants, and (b) on an ongoing basis,
+     if such Contributor fails to notify You of the non-compliance by some
+     reasonable means prior to 60 days after You have come back into compliance.
+     Moreover, Your grants from a particular Contributor are reinstated on an
+     ongoing basis if such Contributor notifies You of the non-compliance by
+     some reasonable means, this is the first time You have received notice of
+     non-compliance with this License from such Contributor, and You become
+     compliant prior to 30 days after Your receipt of the notice.
+
+5.2. If You initiate litigation against any entity by asserting a patent
+     infringement claim (excluding declaratory judgment actions, counter-claims,
+     and cross-claims) alleging that a Contributor Version directly or
+     indirectly infringes any patent, then the rights granted to You by any and
+     all Contributors for the Covered Software under Section 2.1 of this License
+     shall terminate.
+
+5.3. In the event of termination under Sections 5.1 or 5.2 above, all end user
+     license agreements (excluding distributors and resellers) which have been
+     validly granted by You or Your distributors under this License prior to
+     termination shall survive termination.
+
+6. Disclaimer of Warranty
+
+   Covered Software is provided under this License on an “as is” basis, without
+   warranty of any kind, either expressed, implied, or statutory, including,
+   without limitation, warranties that the Covered Software is free of defects,
+   merchantable, fit for a particular purpose or non-infringing. The entire
+   risk as to the quality and performance of the Covered Software is with You.
+   Should any Covered Software prove defective in any respect, You (not any
+   Contributor) assume the cost of any necessary servicing, repair, or
+   correction. This disclaimer of warranty constitutes an essential part of this
+   License. No use of  any Covered Software is authorized under this License
+   except under this disclaimer.
+
+7. Limitation of Liability
+
+   Under no circumstances and under no legal theory, whether tort (including
+   negligence), contract, or otherwise, shall any Contributor, or anyone who
+   distributes Covered Software as permitted above, be liable to You for any
+   direct, indirect, special, incidental, or consequential damages of any
+   character including, without limitation, damages for lost profits, loss of
+   goodwill, work stoppage, computer failure or malfunction, or any and all
+   other commercial damages or losses, even if such party shall have been
+   informed of the possibility of such damages. This limitation of liability
+   shall not apply to liability for death or personal injury resulting from such
+   party’s negligence to the extent applicable law prohibits such limitation.
+   Some jurisdictions do not allow the exclusion or limitation of incidental or
+   consequential damages, so this exclusion and limitation may not apply to You.
+
+8. Litigation
+
+   Any litigation relating to this License may be brought only in the courts of
+   a jurisdiction where the defendant maintains its principal place of business
+   and such litigation shall be governed by laws of that jurisdiction, without
+   reference to its conflict-of-law provisions. Nothing in this Section shall
+   prevent a party’s ability to bring cross-claims or counter-claims.
+
+9. Miscellaneous
+
+   This License represents the complete agreement concerning the subject matter
+   hereof. If any provision of this License is held to be unenforceable, such
+   provision shall be reformed only to the extent necessary to make it
+   enforceable. Any law or regulation which provides that the language of a
+   contract shall be construed against the drafter shall not be used to construe
+   this License against a Contributor.
+
+
+10. Versions of the License
+
+10.1. New Versions
+
+      Mozilla Foundation is the license steward. Except as provided in Section
+      10.3, no one other than the license steward has the right to modify or
+      publish new versions of this License. Each version will be given a
+      distinguishing version number.
+
+10.2. Effect of New Versions
+
+      You may distribute the Covered Software under the terms of the version of
+      the License under which You originally received the Covered Software, or
+      under the terms of any subsequent version published by the license
+      steward.
+
+10.3. Modified Versions
+
+      If you create software not governed by this License, and you want to
+      create a new license for such software, you may create and use a modified
+      version of this License if you rename the license and remove any
+      references to the name of the license steward (except to note that such
+      modified license differs from this License).
+
+10.4. Distributing Source Code Form that is Incompatible With Secondary Licenses
+      If You choose to distribute Source Code Form that is Incompatible With
+      Secondary Licenses under the terms of this version of the License, the
+      notice described in Exhibit B of this License must be attached.
+
+Exhibit A - Source Code Form License Notice
+
+      This Source Code Form is subject to the
+      terms of the Mozilla Public License, v.
+      2.0. If a copy of the MPL was not
+      distributed with this file, You can
+      obtain one at
+      http://mozilla.org/MPL/2.0/.
+
+If it is not possible or desirable to put the notice in a particular file, then
+You may include the notice in a location (such as a LICENSE file in a relevant
+directory) where a recipient would be likely to look for such a notice.
+
+You may add additional accurate notices of copyright ownership.
+
+Exhibit B - “Incompatible With Secondary Licenses” Notice
+
+      This Source Code Form is “Incompatible
+      With Secondary Licenses”, as defined by
+      the Mozilla Public License, v. 2.0.
+
+
+
 --- Recipient material SHA-256 8100cf5ae8fb030ce697dc263fc2ba30a4a57eca2a8f76b147152d2da0dca9d4 ---
 // Copyright 2021 Google LLC
 //
@@ -38188,6 +38439,34 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
+--- Recipient material SHA-256 8438c9c89b849131ead81d5435cb97fcf052df5b0b286dda8a2d4c29e6cb3fd0 ---
+SQLite Is Public Domain
+
+All of the code and documentation in SQLite has been dedicated to the public
+domain by the authors. All code authors, and representatives of the companies
+they work for, have signed affidavits dedicating their contributions to the
+public domain and originals of those signed affidavits are stored in a firesafe
+at the main offices of Hwaci. Anyone is free to copy, modify, publish, use,
+compile, sell, or distribute the original SQLite code, either in source code
+form or as a compiled binary, for any purpose, commercial or non-commercial,
+and by any means.
+
+The previous paragraph applies to the deliverable code and documentation in
+SQLite - those parts of the SQLite library that you actually bundle and ship
+with a larger application. Some scripts used as part of the build process (for
+example the "configure" scripts generated by autoconf) might fall under other
+open-source licenses. Nothing from these build scripts ever reaches the final
+deliverable SQLite library, however, and so the licenses associated with those
+scripts should not be a factor in assessing your rights to copy and use the
+SQLite library.
+
+All of the deliverable code in SQLite has been written from scratch. No code
+has been taken from other projects or from the open internet. Every line of
+code can be traced back to its original author, and all of those authors have
+public domain dedications on file. So the SQLite code base is clean and is
+uncontaminated with licensed code from other projects.
+
+
 --- Recipient material SHA-256 8444f00636d263befe4ea82fd5533df0f86347626b6ede2c07089534d96894a0 ---
 bbloom.go
 
@@ -38452,6 +38731,364 @@ SOFTWARE.
 // limitations under the License.
 
 
+
+
+--- Recipient material SHA-256 86be27d5864873c2ffd121fbac5b54311691cc018480610e12cef6e4e660ebb3 ---
+Copyright IBM Corp. 2014, 2026
+
+Mozilla Public License, version 2.0
+
+1. Definitions
+
+1.1. “Contributor”
+
+     means each individual or legal entity that creates, contributes to the
+     creation of, or owns Covered Software.
+
+1.2. “Contributor Version”
+
+     means the combination of the Contributions of others (if any) used by a
+     Contributor and that particular Contributor’s Contribution.
+
+1.3. “Contribution”
+
+     means Covered Software of a particular Contributor.
+
+1.4. “Covered Software”
+
+     means Source Code Form to which the initial Contributor has attached the
+     notice in Exhibit A, the Executable Form of such Source Code Form, and
+     Modifications of such Source Code Form, in each case including portions
+     thereof.
+
+1.5. “Incompatible With Secondary Licenses”
+     means
+
+     a. that the initial Contributor has attached the notice described in
+        Exhibit B to the Covered Software; or
+
+     b. that the Covered Software was made available under the terms of version
+        1.1 or earlier of the License, but not also under the terms of a
+        Secondary License.
+
+1.6. “Executable Form”
+
+     means any form of the work other than Source Code Form.
+
+1.7. “Larger Work”
+
+     means a work that combines Covered Software with other material, in a separate
+     file or files, that is not Covered Software.
+
+1.8. “License”
+
+     means this document.
+
+1.9. “Licensable”
+
+     means having the right to grant, to the maximum extent possible, whether at the
+     time of the initial grant or subsequently, any and all of the rights conveyed by
+     this License.
+
+1.10. “Modifications”
+
+     means any of the following:
+
+     a. any file in Source Code Form that results from an addition to, deletion
+        from, or modification of the contents of Covered Software; or
+
+     b. any new file in Source Code Form that contains any Covered Software.
+
+1.11. “Patent Claims” of a Contributor
+
+      means any patent claim(s), including without limitation, method, process,
+      and apparatus claims, in any patent Licensable by such Contributor that
+      would be infringed, but for the grant of the License, by the making,
+      using, selling, offering for sale, having made, import, or transfer of
+      either its Contributions or its Contributor Version.
+
+1.12. “Secondary License”
+
+      means either the GNU General Public License, Version 2.0, the GNU Lesser
+      General Public License, Version 2.1, the GNU Affero General Public
+      License, Version 3.0, or any later versions of those licenses.
+
+1.13. “Source Code Form”
+
+      means the form of the work preferred for making modifications.
+
+1.14. “You” (or “Your”)
+
+      means an individual or a legal entity exercising rights under this
+      License. For legal entities, “You” includes any entity that controls, is
+      controlled by, or is under common control with You. For purposes of this
+      definition, “control” means (a) the power, direct or indirect, to cause
+      the direction or management of such entity, whether by contract or
+      otherwise, or (b) ownership of more than fifty percent (50%) of the
+      outstanding shares or beneficial ownership of such entity.
+
+
+2. License Grants and Conditions
+
+2.1. Grants
+
+     Each Contributor hereby grants You a world-wide, royalty-free,
+     non-exclusive license:
+
+     a. under intellectual property rights (other than patent or trademark)
+        Licensable by such Contributor to use, reproduce, make available,
+        modify, display, perform, distribute, and otherwise exploit its
+        Contributions, either on an unmodified basis, with Modifications, or as
+        part of a Larger Work; and
+
+     b. under Patent Claims of such Contributor to make, use, sell, offer for
+        sale, have made, import, and otherwise transfer either its Contributions
+        or its Contributor Version.
+
+2.2. Effective Date
+
+     The licenses granted in Section 2.1 with respect to any Contribution become
+     effective for each Contribution on the date the Contributor first distributes
+     such Contribution.
+
+2.3. Limitations on Grant Scope
+
+     The licenses granted in this Section 2 are the only rights granted under this
+     License. No additional rights or licenses will be implied from the distribution
+     or licensing of Covered Software under this License. Notwithstanding Section
+     2.1(b) above, no patent license is granted by a Contributor:
+
+     a. for any code that a Contributor has removed from Covered Software; or
+
+     b. for infringements caused by: (i) Your and any other third party’s
+        modifications of Covered Software, or (ii) the combination of its
+        Contributions with other software (except as part of its Contributor
+        Version); or
+
+     c. under Patent Claims infringed by Covered Software in the absence of its
+        Contributions.
+
+     This License does not grant any rights in the trademarks, service marks, or
+     logos of any Contributor (except as may be necessary to comply with the
+     notice requirements in Section 3.4).
+
+2.4. Subsequent Licenses
+
+     No Contributor makes additional grants as a result of Your choice to
+     distribute the Covered Software under a subsequent version of this License
+     (see Section 10.2) or under the terms of a Secondary License (if permitted
+     under the terms of Section 3.3).
+
+2.5. Representation
+
+     Each Contributor represents that the Contributor believes its Contributions
+     are its original creation(s) or it has sufficient rights to grant the
+     rights to its Contributions conveyed by this License.
+
+2.6. Fair Use
+
+     This License is not intended to limit any rights You have under applicable
+     copyright doctrines of fair use, fair dealing, or other equivalents.
+
+2.7. Conditions
+
+     Sections 3.1, 3.2, 3.3, and 3.4 are conditions of the licenses granted in
+     Section 2.1.
+
+
+3. Responsibilities
+
+3.1. Distribution of Source Form
+
+     All distribution of Covered Software in Source Code Form, including any
+     Modifications that You create or to which You contribute, must be under the
+     terms of this License. You must inform recipients that the Source Code Form
+     of the Covered Software is governed by the terms of this License, and how
+     they can obtain a copy of this License. You may not attempt to alter or
+     restrict the recipients’ rights in the Source Code Form.
+
+3.2. Distribution of Executable Form
+
+     If You distribute Covered Software in Executable Form then:
+
+     a. such Covered Software must also be made available in Source Code Form,
+        as described in Section 3.1, and You must inform recipients of the
+        Executable Form how they can obtain a copy of such Source Code Form by
+        reasonable means in a timely manner, at a charge no more than the cost
+        of distribution to the recipient; and
+
+     b. You may distribute such Executable Form under the terms of this License,
+        or sublicense it under different terms, provided that the license for
+        the Executable Form does not attempt to limit or alter the recipients’
+        rights in the Source Code Form under this License.
+
+3.3. Distribution of a Larger Work
+
+     You may create and distribute a Larger Work under terms of Your choice,
+     provided that You also comply with the requirements of this License for the
+     Covered Software. If the Larger Work is a combination of Covered Software
+     with a work governed by one or more Secondary Licenses, and the Covered
+     Software is not Incompatible With Secondary Licenses, this License permits
+     You to additionally distribute such Covered Software under the terms of
+     such Secondary License(s), so that the recipient of the Larger Work may, at
+     their option, further distribute the Covered Software under the terms of
+     either this License or such Secondary License(s).
+
+3.4. Notices
+
+     You may not remove or alter the substance of any license notices (including
+     copyright notices, patent notices, disclaimers of warranty, or limitations
+     of liability) contained within the Source Code Form of the Covered
+     Software, except that You may alter any license notices to the extent
+     required to remedy known factual inaccuracies.
+
+3.5. Application of Additional Terms
+
+     You may choose to offer, and to charge a fee for, warranty, support,
+     indemnity or liability obligations to one or more recipients of Covered
+     Software. However, You may do so only on Your own behalf, and not on behalf
+     of any Contributor. You must make it absolutely clear that any such
+     warranty, support, indemnity, or liability obligation is offered by You
+     alone, and You hereby agree to indemnify every Contributor for any
+     liability incurred by such Contributor as a result of warranty, support,
+     indemnity or liability terms You offer. You may include additional
+     disclaimers of warranty and limitations of liability specific to any
+     jurisdiction.
+
+4. Inability to Comply Due to Statute or Regulation
+
+   If it is impossible for You to comply with any of the terms of this License
+   with respect to some or all of the Covered Software due to statute, judicial
+   order, or regulation then You must: (a) comply with the terms of this License
+   to the maximum extent possible; and (b) describe the limitations and the code
+   they affect. Such description must be placed in a text file included with all
+   distributions of the Covered Software under this License. Except to the
+   extent prohibited by statute or regulation, such description must be
+   sufficiently detailed for a recipient of ordinary skill to be able to
+   understand it.
+
+5. Termination
+
+5.1. The rights granted under this License will terminate automatically if You
+     fail to comply with any of its terms. However, if You become compliant,
+     then the rights granted under this License from a particular Contributor
+     are reinstated (a) provisionally, unless and until such Contributor
+     explicitly and finally terminates Your grants, and (b) on an ongoing basis,
+     if such Contributor fails to notify You of the non-compliance by some
+     reasonable means prior to 60 days after You have come back into compliance.
+     Moreover, Your grants from a particular Contributor are reinstated on an
+     ongoing basis if such Contributor notifies You of the non-compliance by
+     some reasonable means, this is the first time You have received notice of
+     non-compliance with this License from such Contributor, and You become
+     compliant prior to 30 days after Your receipt of the notice.
+
+5.2. If You initiate litigation against any entity by asserting a patent
+     infringement claim (excluding declaratory judgment actions, counter-claims,
+     and cross-claims) alleging that a Contributor Version directly or
+     indirectly infringes any patent, then the rights granted to You by any and
+     all Contributors for the Covered Software under Section 2.1 of this License
+     shall terminate.
+
+5.3. In the event of termination under Sections 5.1 or 5.2 above, all end user
+     license agreements (excluding distributors and resellers) which have been
+     validly granted by You or Your distributors under this License prior to
+     termination shall survive termination.
+
+6. Disclaimer of Warranty
+
+   Covered Software is provided under this License on an “as is” basis, without
+   warranty of any kind, either expressed, implied, or statutory, including,
+   without limitation, warranties that the Covered Software is free of defects,
+   merchantable, fit for a particular purpose or non-infringing. The entire
+   risk as to the quality and performance of the Covered Software is with You.
+   Should any Covered Software prove defective in any respect, You (not any
+   Contributor) assume the cost of any necessary servicing, repair, or
+   correction. This disclaimer of warranty constitutes an essential part of this
+   License. No use of  any Covered Software is authorized under this License
+   except under this disclaimer.
+
+7. Limitation of Liability
+
+   Under no circumstances and under no legal theory, whether tort (including
+   negligence), contract, or otherwise, shall any Contributor, or anyone who
+   distributes Covered Software as permitted above, be liable to You for any
+   direct, indirect, special, incidental, or consequential damages of any
+   character including, without limitation, damages for lost profits, loss of
+   goodwill, work stoppage, computer failure or malfunction, or any and all
+   other commercial damages or losses, even if such party shall have been
+   informed of the possibility of such damages. This limitation of liability
+   shall not apply to liability for death or personal injury resulting from such
+   party’s negligence to the extent applicable law prohibits such limitation.
+   Some jurisdictions do not allow the exclusion or limitation of incidental or
+   consequential damages, so this exclusion and limitation may not apply to You.
+
+8. Litigation
+
+   Any litigation relating to this License may be brought only in the courts of
+   a jurisdiction where the defendant maintains its principal place of business
+   and such litigation shall be governed by laws of that jurisdiction, without
+   reference to its conflict-of-law provisions. Nothing in this Section shall
+   prevent a party’s ability to bring cross-claims or counter-claims.
+
+9. Miscellaneous
+
+   This License represents the complete agreement concerning the subject matter
+   hereof. If any provision of this License is held to be unenforceable, such
+   provision shall be reformed only to the extent necessary to make it
+   enforceable. Any law or regulation which provides that the language of a
+   contract shall be construed against the drafter shall not be used to construe
+   this License against a Contributor.
+
+
+10. Versions of the License
+
+10.1. New Versions
+
+      Mozilla Foundation is the license steward. Except as provided in Section
+      10.3, no one other than the license steward has the right to modify or
+      publish new versions of this License. Each version will be given a
+      distinguishing version number.
+
+10.2. Effect of New Versions
+
+      You may distribute the Covered Software under the terms of the version of
+      the License under which You originally received the Covered Software, or
+      under the terms of any subsequent version published by the license
+      steward.
+
+10.3. Modified Versions
+
+      If you create software not governed by this License, and you want to
+      create a new license for such software, you may create and use a modified
+      version of this License if you rename the license and remove any
+      references to the name of the license steward (except to note that such
+      modified license differs from this License).
+
+10.4. Distributing Source Code Form that is Incompatible With Secondary Licenses
+      If You choose to distribute Source Code Form that is Incompatible With
+      Secondary Licenses under the terms of this version of the License, the
+      notice described in Exhibit B of this License must be attached.
+
+Exhibit A - Source Code Form License Notice
+
+      This Source Code Form is subject to the
+      terms of the Mozilla Public License, v.
+      2.0. If a copy of the MPL was not
+      distributed with this file, You can
+      obtain one at
+      http://mozilla.org/MPL/2.0/.
+
+If it is not possible or desirable to put the notice in a particular file, then
+You may include the notice in a location (such as a LICENSE file in a relevant
+directory) where a recipient would be likely to look for such a notice.
+
+You may add additional accurate notices of copyright ownership.
+
+Exhibit B - “Incompatible With Secondary Licenses” Notice
+
+      This Source Code Form is “Incompatible
+      With Secondary Licenses”, as defined by
+      the Mozilla Public License, v. 2.0.
 
 
 --- Recipient material SHA-256 86ce5e2bb72f603a8849e085524022bdac6668df4f0baca507033610237365f3 ---
@@ -40288,365 +40925,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-
-
---- Recipient material SHA-256 91b6643919df970f0968799615888a2620300dc32bb515d7bd3764ad72c282ca ---
-Copyright IBM Corp. 2015, 2025
-
-Mozilla Public License, version 2.0
-
-1. Definitions
-
-1.1. “Contributor”
-
-     means each individual or legal entity that creates, contributes to the
-     creation of, or owns Covered Software.
-
-1.2. “Contributor Version”
-
-     means the combination of the Contributions of others (if any) used by a
-     Contributor and that particular Contributor’s Contribution.
-
-1.3. “Contribution”
-
-     means Covered Software of a particular Contributor.
-
-1.4. “Covered Software”
-
-     means Source Code Form to which the initial Contributor has attached the
-     notice in Exhibit A, the Executable Form of such Source Code Form, and
-     Modifications of such Source Code Form, in each case including portions
-     thereof.
-
-1.5. “Incompatible With Secondary Licenses”
-     means
-
-     a. that the initial Contributor has attached the notice described in
-        Exhibit B to the Covered Software; or
-
-     b. that the Covered Software was made available under the terms of version
-        1.1 or earlier of the License, but not also under the terms of a
-        Secondary License.
-
-1.6. “Executable Form”
-
-     means any form of the work other than Source Code Form.
-
-1.7. “Larger Work”
-
-     means a work that combines Covered Software with other material, in a separate
-     file or files, that is not Covered Software.
-
-1.8. “License”
-
-     means this document.
-
-1.9. “Licensable”
-
-     means having the right to grant, to the maximum extent possible, whether at the
-     time of the initial grant or subsequently, any and all of the rights conveyed by
-     this License.
-
-1.10. “Modifications”
-
-     means any of the following:
-
-     a. any file in Source Code Form that results from an addition to, deletion
-        from, or modification of the contents of Covered Software; or
-
-     b. any new file in Source Code Form that contains any Covered Software.
-
-1.11. “Patent Claims” of a Contributor
-
-      means any patent claim(s), including without limitation, method, process,
-      and apparatus claims, in any patent Licensable by such Contributor that
-      would be infringed, but for the grant of the License, by the making,
-      using, selling, offering for sale, having made, import, or transfer of
-      either its Contributions or its Contributor Version.
-
-1.12. “Secondary License”
-
-      means either the GNU General Public License, Version 2.0, the GNU Lesser
-      General Public License, Version 2.1, the GNU Affero General Public
-      License, Version 3.0, or any later versions of those licenses.
-
-1.13. “Source Code Form”
-
-      means the form of the work preferred for making modifications.
-
-1.14. “You” (or “Your”)
-
-      means an individual or a legal entity exercising rights under this
-      License. For legal entities, “You” includes any entity that controls, is
-      controlled by, or is under common control with You. For purposes of this
-      definition, “control” means (a) the power, direct or indirect, to cause
-      the direction or management of such entity, whether by contract or
-      otherwise, or (b) ownership of more than fifty percent (50%) of the
-      outstanding shares or beneficial ownership of such entity.
-
-
-2. License Grants and Conditions
-
-2.1. Grants
-
-     Each Contributor hereby grants You a world-wide, royalty-free,
-     non-exclusive license:
-
-     a. under intellectual property rights (other than patent or trademark)
-        Licensable by such Contributor to use, reproduce, make available,
-        modify, display, perform, distribute, and otherwise exploit its
-        Contributions, either on an unmodified basis, with Modifications, or as
-        part of a Larger Work; and
-
-     b. under Patent Claims of such Contributor to make, use, sell, offer for
-        sale, have made, import, and otherwise transfer either its Contributions
-        or its Contributor Version.
-
-2.2. Effective Date
-
-     The licenses granted in Section 2.1 with respect to any Contribution become
-     effective for each Contribution on the date the Contributor first distributes
-     such Contribution.
-
-2.3. Limitations on Grant Scope
-
-     The licenses granted in this Section 2 are the only rights granted under this
-     License. No additional rights or licenses will be implied from the distribution
-     or licensing of Covered Software under this License. Notwithstanding Section
-     2.1(b) above, no patent license is granted by a Contributor:
-
-     a. for any code that a Contributor has removed from Covered Software; or
-
-     b. for infringements caused by: (i) Your and any other third party’s
-        modifications of Covered Software, or (ii) the combination of its
-        Contributions with other software (except as part of its Contributor
-        Version); or
-
-     c. under Patent Claims infringed by Covered Software in the absence of its
-        Contributions.
-
-     This License does not grant any rights in the trademarks, service marks, or
-     logos of any Contributor (except as may be necessary to comply with the
-     notice requirements in Section 3.4).
-
-2.4. Subsequent Licenses
-
-     No Contributor makes additional grants as a result of Your choice to
-     distribute the Covered Software under a subsequent version of this License
-     (see Section 10.2) or under the terms of a Secondary License (if permitted
-     under the terms of Section 3.3).
-
-2.5. Representation
-
-     Each Contributor represents that the Contributor believes its Contributions
-     are its original creation(s) or it has sufficient rights to grant the
-     rights to its Contributions conveyed by this License.
-
-2.6. Fair Use
-
-     This License is not intended to limit any rights You have under applicable
-     copyright doctrines of fair use, fair dealing, or other equivalents.
-
-2.7. Conditions
-
-     Sections 3.1, 3.2, 3.3, and 3.4 are conditions of the licenses granted in
-     Section 2.1.
-
-
-3. Responsibilities
-
-3.1. Distribution of Source Form
-
-     All distribution of Covered Software in Source Code Form, including any
-     Modifications that You create or to which You contribute, must be under the
-     terms of this License. You must inform recipients that the Source Code Form
-     of the Covered Software is governed by the terms of this License, and how
-     they can obtain a copy of this License. You may not attempt to alter or
-     restrict the recipients’ rights in the Source Code Form.
-
-3.2. Distribution of Executable Form
-
-     If You distribute Covered Software in Executable Form then:
-
-     a. such Covered Software must also be made available in Source Code Form,
-        as described in Section 3.1, and You must inform recipients of the
-        Executable Form how they can obtain a copy of such Source Code Form by
-        reasonable means in a timely manner, at a charge no more than the cost
-        of distribution to the recipient; and
-
-     b. You may distribute such Executable Form under the terms of this License,
-        or sublicense it under different terms, provided that the license for
-        the Executable Form does not attempt to limit or alter the recipients’
-        rights in the Source Code Form under this License.
-
-3.3. Distribution of a Larger Work
-
-     You may create and distribute a Larger Work under terms of Your choice,
-     provided that You also comply with the requirements of this License for the
-     Covered Software. If the Larger Work is a combination of Covered Software
-     with a work governed by one or more Secondary Licenses, and the Covered
-     Software is not Incompatible With Secondary Licenses, this License permits
-     You to additionally distribute such Covered Software under the terms of
-     such Secondary License(s), so that the recipient of the Larger Work may, at
-     their option, further distribute the Covered Software under the terms of
-     either this License or such Secondary License(s).
-
-3.4. Notices
-
-     You may not remove or alter the substance of any license notices (including
-     copyright notices, patent notices, disclaimers of warranty, or limitations
-     of liability) contained within the Source Code Form of the Covered
-     Software, except that You may alter any license notices to the extent
-     required to remedy known factual inaccuracies.
-
-3.5. Application of Additional Terms
-
-     You may choose to offer, and to charge a fee for, warranty, support,
-     indemnity or liability obligations to one or more recipients of Covered
-     Software. However, You may do so only on Your own behalf, and not on behalf
-     of any Contributor. You must make it absolutely clear that any such
-     warranty, support, indemnity, or liability obligation is offered by You
-     alone, and You hereby agree to indemnify every Contributor for any
-     liability incurred by such Contributor as a result of warranty, support,
-     indemnity or liability terms You offer. You may include additional
-     disclaimers of warranty and limitations of liability specific to any
-     jurisdiction.
-
-4. Inability to Comply Due to Statute or Regulation
-
-   If it is impossible for You to comply with any of the terms of this License
-   with respect to some or all of the Covered Software due to statute, judicial
-   order, or regulation then You must: (a) comply with the terms of this License
-   to the maximum extent possible; and (b) describe the limitations and the code
-   they affect. Such description must be placed in a text file included with all
-   distributions of the Covered Software under this License. Except to the
-   extent prohibited by statute or regulation, such description must be
-   sufficiently detailed for a recipient of ordinary skill to be able to
-   understand it.
-
-5. Termination
-
-5.1. The rights granted under this License will terminate automatically if You
-     fail to comply with any of its terms. However, if You become compliant,
-     then the rights granted under this License from a particular Contributor
-     are reinstated (a) provisionally, unless and until such Contributor
-     explicitly and finally terminates Your grants, and (b) on an ongoing basis,
-     if such Contributor fails to notify You of the non-compliance by some
-     reasonable means prior to 60 days after You have come back into compliance.
-     Moreover, Your grants from a particular Contributor are reinstated on an
-     ongoing basis if such Contributor notifies You of the non-compliance by
-     some reasonable means, this is the first time You have received notice of
-     non-compliance with this License from such Contributor, and You become
-     compliant prior to 30 days after Your receipt of the notice.
-
-5.2. If You initiate litigation against any entity by asserting a patent
-     infringement claim (excluding declaratory judgment actions, counter-claims,
-     and cross-claims) alleging that a Contributor Version directly or
-     indirectly infringes any patent, then the rights granted to You by any and
-     all Contributors for the Covered Software under Section 2.1 of this License
-     shall terminate.
-
-5.3. In the event of termination under Sections 5.1 or 5.2 above, all end user
-     license agreements (excluding distributors and resellers) which have been
-     validly granted by You or Your distributors under this License prior to
-     termination shall survive termination.
-
-6. Disclaimer of Warranty
-
-   Covered Software is provided under this License on an “as is” basis, without
-   warranty of any kind, either expressed, implied, or statutory, including,
-   without limitation, warranties that the Covered Software is free of defects,
-   merchantable, fit for a particular purpose or non-infringing. The entire
-   risk as to the quality and performance of the Covered Software is with You.
-   Should any Covered Software prove defective in any respect, You (not any
-   Contributor) assume the cost of any necessary servicing, repair, or
-   correction. This disclaimer of warranty constitutes an essential part of this
-   License. No use of  any Covered Software is authorized under this License
-   except under this disclaimer.
-
-7. Limitation of Liability
-
-   Under no circumstances and under no legal theory, whether tort (including
-   negligence), contract, or otherwise, shall any Contributor, or anyone who
-   distributes Covered Software as permitted above, be liable to You for any
-   direct, indirect, special, incidental, or consequential damages of any
-   character including, without limitation, damages for lost profits, loss of
-   goodwill, work stoppage, computer failure or malfunction, or any and all
-   other commercial damages or losses, even if such party shall have been
-   informed of the possibility of such damages. This limitation of liability
-   shall not apply to liability for death or personal injury resulting from such
-   party’s negligence to the extent applicable law prohibits such limitation.
-   Some jurisdictions do not allow the exclusion or limitation of incidental or
-   consequential damages, so this exclusion and limitation may not apply to You.
-
-8. Litigation
-
-   Any litigation relating to this License may be brought only in the courts of
-   a jurisdiction where the defendant maintains its principal place of business
-   and such litigation shall be governed by laws of that jurisdiction, without
-   reference to its conflict-of-law provisions. Nothing in this Section shall
-   prevent a party’s ability to bring cross-claims or counter-claims.
-
-9. Miscellaneous
-
-   This License represents the complete agreement concerning the subject matter
-   hereof. If any provision of this License is held to be unenforceable, such
-   provision shall be reformed only to the extent necessary to make it
-   enforceable. Any law or regulation which provides that the language of a
-   contract shall be construed against the drafter shall not be used to construe
-   this License against a Contributor.
-
-
-10. Versions of the License
-
-10.1. New Versions
-
-      Mozilla Foundation is the license steward. Except as provided in Section
-      10.3, no one other than the license steward has the right to modify or
-      publish new versions of this License. Each version will be given a
-      distinguishing version number.
-
-10.2. Effect of New Versions
-
-      You may distribute the Covered Software under the terms of the version of
-      the License under which You originally received the Covered Software, or
-      under the terms of any subsequent version published by the license
-      steward.
-
-10.3. Modified Versions
-
-      If you create software not governed by this License, and you want to
-      create a new license for such software, you may create and use a modified
-      version of this License if you rename the license and remove any
-      references to the name of the license steward (except to note that such
-      modified license differs from this License).
-
-10.4. Distributing Source Code Form that is Incompatible With Secondary Licenses
-      If You choose to distribute Source Code Form that is Incompatible With
-      Secondary Licenses under the terms of this version of the License, the
-      notice described in Exhibit B of this License must be attached.
-
-Exhibit A - Source Code Form License Notice
-
-      This Source Code Form is subject to the
-      terms of the Mozilla Public License, v.
-      2.0. If a copy of the MPL was not
-      distributed with this file, You can
-      obtain one at
-      http://mozilla.org/MPL/2.0/.
-
-If it is not possible or desirable to put the notice in a particular file, then
-You may include the notice in a location (such as a LICENSE file in a relevant
-directory) where a recipient would be likely to look for such a notice.
-
-You may add additional accurate notices of copyright ownership.
-
-Exhibit B - “Incompatible With Secondary Licenses” Notice
-
-      This Source Code Form is “Incompatible
-      With Secondary Licenses”, as defined by
-      the Mozilla Public License, v. 2.0.
 
 
 
@@ -42600,6 +42878,36 @@ limitations under the License.
 
 
 
+--- Recipient material SHA-256 a125b6c2721809b6c2a8761771932611833008ed8697d752b3e35d36e4bbd83e ---
+Copyright (c) 2019 Tailscale Inc. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * Neither the name of Google Inc. nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
 --- Recipient material SHA-256 a1283565c6d74e1b845a0a6347ab24de6e616c79e6bb4207f13862db3a6215ba ---
 // Copyright 2018 The GoPacket Authors. All rights reserved.
 //
@@ -42922,6 +43230,34 @@ SOFTWARE.
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+
+
+
+--- Recipient material SHA-256 a30a24721ca2a77de73857fe54eee795c2aa9dc6085eeca3d71365f161726af5 ---
+/*
+   Copyright The containerd Authors.
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+*/
+
+
+// SPDX-FileCopyrightText: Copyright The containerd Authors
+// SPDX-FileCopyrightText: Copyright The Moby Authors
+// SPDX-License-Identifier: Apache-2.0
+//
+// File copied and customized based on
+// https://github.com/moby/profiles/blob/seccomp/v0.2.3/seccomp/kernel_linux.go
 
 
 
@@ -44267,6 +44603,13 @@ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+--- Recipient material SHA-256 a8f9764d4e148dc03186c130012a9affa7c92f3b0de1693b133121233a84b1bf ---
+Copyright (c) Anchore, Inc.
+
+See LICENSE for the full license text.
+See CONTRIBUTORS.md and git log for a full list of contributors.
 
 
 --- Recipient material SHA-256 a8fdf6b2d6cdd8e74cfea1d1f4de8319c3fac522b7b15e86f2c4aa9feb1cb911 ---
@@ -46462,6 +46805,28 @@ the full license text.
 // license that can be found in the LICENSE file.
 
 
+
+
+--- Recipient material SHA-256 b033dbfc6b30f11eb1ff0fbe1ca624b6ebded5be2700ff62605469a187b6578e ---
+Copyright (c) 2017 Martin Atkins
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 
 --- Recipient material SHA-256 b0342475982f5441fc090610244eff19ea2c14d014acb64a3b38738cab3dd716 ---
@@ -49800,14 +50165,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 
---- Recipient material SHA-256 c35089c2e1bfdfce295bf545cbda56c0594e6ca0867a7b2d4d9597b19f535de6 ---
-//line scan_string_lit.rl:1
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MPL-2.0
-
-
-
-
 --- Recipient material SHA-256 c35605dfae4b583afeba431be29300051bc318364f908072b7ea86d9c2e51036 ---
 /*
  * Copyright 2026 gRPC authors.
@@ -52094,18 +52451,6 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-
-
-
---- Recipient material SHA-256 ccbfc1c1af605e859558e5d0eddcedf0694bbbcf1ada842a6305c79ba93d9dfe ---
-// Copyright (c) 2020 Klaus Post, released under MIT License. See LICENSE file.
-
-
-// Copyright 2018 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file located
-// here https://github.com/golang/sys/blob/master/LICENSE
 
 
 
@@ -54614,6 +54959,30 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 
+--- Recipient material SHA-256 ddbb0c0aacf1a262c6724fa82cc24af9d5f5d9a99bf3d0d9a5efe36b5a638e07 ---
+MIT License
+
+Copyright (c) 2017-2026 Martin Atkins and various other contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
 --- Recipient material SHA-256 de04576d98ff3908349d542ae6da2d8b14259eeb6e13647eb72801049d483fa2 ---
 /*
 Copyright © 2020-2023 The k3d Author(s)
@@ -54749,12 +55118,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-
-
-
---- Recipient material SHA-256 ded57fd69326b5224598d1a9e165d814ae6ee9a00c8e1b68e9fd070b84dfa10d ---
-// Copyright (c) 2026 Klaus Post, released under MIT License. See LICENSE file.
 
 
 
@@ -55555,12 +55918,6 @@ SOFTWARE.
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-
-
---- Recipient material SHA-256 e3e95fd1e6b67aea97b9081544642d0bdb904a21c7d1a6444423338600b765df ---
-// Copyright (c) 2015 Klaus Post, released under MIT License. See LICENSE file.
-
 
 
 
@@ -59606,6 +59963,14 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
+--- Recipient material SHA-256 fc37419fd5b68098ce31024cc304be7fd8e51095d610f9f1722519a59dc58d57 ---
+// Generated by github.com/spdx/tools-golang/spdx/v3/internal/generate
+//
+// SPDX-License-Identifier: MIT
+
+
+
+
 --- Recipient material SHA-256 fc4a40a9ec4627762c4f56b7f445c6b30df49193c6931b16763c4e491f82de08 ---
 // Copyright 2020, OpenTelemetry Authors
 //
@@ -59778,6 +60143,13 @@ Permission is hereby granted, free of charge, to any person obtaining a copy of 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+
+--- Recipient material SHA-256 fe6d712e86a0e90587b224d57fb29d774ee4f8af4b2a5f712e6ca4f0526d6b9b ---
+// Copyright IBM Corp. 2015, 2026
+// SPDX-License-Identifier: MPL-2.0
+
 
 
 

@@ -168,11 +168,14 @@
         "github.com/spdx/tools-golang/spdx/v2/v2_2/tagvalue/writer",
         "github.com/spdx/tools-golang/spdx/v2/v2_3/tagvalue/reader",
         "github.com/spdx/tools-golang/spdx/v2/v2_3/tagvalue/writer",
-        "github.com/spdx/tools-golang/tagvalue"
+        "github.com/spdx/tools-golang/tagvalue",
+        "github.com/spdx/tools-golang/spdx/v3/internal/ld",
+        "github.com/spdx/tools-golang/spdx/v3/internal",
+        "github.com/spdx/tools-golang/spdx/v3/v3_0"
       ],
       "module": "github.com/spdx/tools-golang",
-      "version": "v0.5.7",
-      "sum": "h1:+sWcKGnhwp3vLdMqPcLdA6QK679vd86cK9hQWH3AwCg=",
+      "version": "v0.6.0-rc4",
+      "sum": "h1:2GkvNr0DcnJHY9BDm3OYHo229jZS/h4qYDK+tHYXPOo=",
       "evidence": "LICENSE.code",
       "sha256": "e914fb1f3927226e04b0438e0b541b3c6e3c65de4d64aa8f5cdaa803f05448fd",
       "reportedFile": "LICENSE.code",
