@@ -180,7 +180,7 @@ func releaseReplayMetadata(t *testing.T, directory string) {
 
 	jobs := make([]map[string]any, 0, 8)
 	for _, name := range []string{
-		"🧩 Release CLI", "🧩 Release VSCode Extension", "🧩 Release Desktop App (macOS cask)",
+		"🧩 Release CLI", "🧩 Release VSCode Extension", "🧩 Release Desktop App (macOS)",
 		"🧩 Release Desktop App (ubuntu-24.04, linux, amd64)",
 		"🧩 Release Desktop App (windows-latest, windows, amd64, .exe)",
 		"⛵ Release Operator Chart", "📄 Build Pages", "📢 Publish Release",
@@ -428,12 +428,12 @@ func executeReleaseReplay(t *testing.T, step harnessStep, directory, scenario st
 // releaseReplayDependencies names each publisher’s direct admission source.
 func releaseReplayDependencies() map[string]string {
 	return map[string]string{
-		"cask-checkpoint": "validate-release-ref", "goreleaser": "cask-checkpoint",
-		"vscode-extension": "validate-release-ref", "desktop-macos": "cask-checkpoint",
+		"goreleaser":       "validate-release-ref",
+		"vscode-extension": "validate-release-ref", "desktop-macos": "validate-release-ref",
 		"desktop": "validate-release-ref", "operator-chart": "goreleaser",
 		"mcp-publish": "goreleaser", "pages-build": "validate-release-ref",
 		"pages-deploy": "goreleaser", "publish-release": "goreleaser",
-		"homebrew": "cask-checkpoint", "cleanup-failed-release": "validate-release-ref",
+		"cleanup-failed-release": "validate-release-ref",
 	}
 }
 
@@ -566,7 +566,13 @@ func TestReleaseReplayReusesPublishedArtifacts(t *testing.T) {
 	require.Contains(
 		t,
 		pages.If,
-		"cask-publish == 'true'",
+		"needs.goreleaser.outputs.replay-latest == 'true'",
 		"an older replay must not replace current documentation",
 	)
+
+	reuse := findHarnessStep(t, jobs["goreleaser"].Steps, "♻️ Reuse verified publication")
+	require.Equal(t, "reuse", reuse.ID)
+	require.Contains(t, reuse.Run, `gh api "repos/${GITHUB_REPOSITORY}/releases/latest"`)
+	require.Contains(t, reuse.Run, `"$latest" == "$GITHUB_REF_NAME"`)
+	require.Contains(t, reuse.Run, "latest=true")
 }

@@ -55,7 +55,7 @@ func (p platform) String() string { return p.goos + "/" + p.goarch }
 
 // shippedPlatforms is every GOOS/GOARCH pair either module ships on: the CLI release matrix
 // (.goreleaser.yaml: darwin, linux and windows on amd64 and arm64, less darwin/amd64), which also
-// covers every desktop build (darwin/arm64 cask, linux/amd64 and windows/amd64 downloads). The
+// covers every desktop build (darwin/arm64 app, linux/amd64 and windows/amd64 downloads). The
 // package graph differs per platform, so a caller present only in, say, the windows/arm64 graph is
 // invisible to any other listing. An unshipped pair is left out: its graph could fail the audit
 // for a binary nobody receives. TestShippedPlatformsCoverReleaseMatrices keeps this list equal to
@@ -413,16 +413,16 @@ func goreleaserCGO(t *testing.T, path string) string {
 func auditedReleaseConfigDigests() map[string]string {
 	return map[string]string{
 		".gitattributes":                                     "6d6df31015cd1fda78e02fb51fb5f31cbf030fd289f7680a6674c23a216ae058",
-		".goreleaser.yaml":                                   "ea95f53728ff9000bbee279ca38a8c408899d732e82f3e0d07579eed5e922c6c",
-		".goreleaser.desktop.yaml":                           "e40864a1d4465aa020ce68879b4f9d11d8d0e6abaf13e98ffb20e35e1c0d8201",
+		".goreleaser.yaml":                                   "9a8951a919f590bf0353a151a7d64bbc290422ebca03ef5415dff6746d0350ea",
+		".goreleaser.desktop.yaml":                           "85a8d69957d6882817112faf5c7b9935932747c6696e49050205aa636178e6ed",
 		".github/actions/setup-desktop-build/action.yml":     "148ab46c474e23a9bef1107ef18002c9b69c3c8a2ba0a7762f2693784d1bc8e0",
 		".github/scripts/download-go-modules.sh":             "e5af8edf61a77de4397e952a05b1cc6ca0f83cd848523c4cf6b3aaa2539561fa",
-		".github/scripts/resolve-release-replay.sh":          "84418fef708bae31c86fb45fccc03b4e9186e312e5cb45951cc5a1dcd35af590",
+		".github/scripts/resolve-release-replay.sh":          "613c18e89ee9ffe7bc545dac7caf4fef587cc3506df54c12f95fba6e8aa4c925",
 		".github/scripts/go-notices.go":                      "e7b4840dd9245a7576e578ed14d4e01efc6ed3aca664f20949bd133fbb8c61d9",
 		".github/actions/release-admission/action.yaml":      "a8ac217c7e2195fee64b364748a6724b99aa0aa4a9988127084f1d6b45953f0c",
 		"scripts/stage-webui.sh":                             "56f99977b9e5026eedd693e59da4e0cd82d0167e94d0ce4b9c7bb5ce2cd8ed3c",
 		".github/actions/free-disk-space/free-disk-space.sh": "2dd12fcf3779137ca1cb5f21194947f6a10d3f94f8fb438a1a29ec9021fbdc30",
-		".github/workflows/cd.yaml#without-uses":             "c769bc23d3b558d51a13c9de4558911414640c42ff651ed5079d073f6f68694e",
+		".github/workflows/cd.yaml#without-uses":             "612af40a9151bd2ed3fc6ed8a9c31be0377cabb829c1412321767d254e361199",
 	}
 }
 

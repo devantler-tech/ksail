@@ -157,7 +157,7 @@ jobs:
       copilot-plugin: ${{ steps.filter.outputs.copilot-plugin }}
       operator-chart: ${{ steps.filter.outputs.operator-chart }}
       calico-cni: ${{ steps.filter.outputs.calico-cni }}
-      cask-pr-handoff: ${{ steps.filter.outputs.cask-pr-handoff }}
+      release-publication-scripts: ${{ steps.filter.outputs.release-publication-scripts }}
       eks-smoke-scripts: ${{ steps.filter.outputs.eks-smoke-scripts }}
       k3k-sentinel-scripts: ${{ steps.filter.outputs.k3k-sentinel-scripts }}
       rate-limit-gate-script: ${{ steps.filter.outputs.rate-limit-gate-script }}
@@ -274,7 +274,6 @@ jobs:
               - '.github/scripts/go-notices.go'
               - '.github/actions/release-admission/**'
               - '.github/scripts/download-go-modules.sh'
-              - '.github/scripts/cask-rendering.test.sh'
               - '.github/scripts/generate-completions.sh'
               - '.goreleaser.yaml'
               - '.goreleaser.desktop.yaml'
@@ -452,42 +451,18 @@ jobs:
               # so guard a bump to this file with validate-calico-chart.
               - 'pkg/svc/installer/cni/calico/Dockerfile'
               - '.github/workflows/ci.yaml'
-            cask-pr-handoff:
-              - '.github/scripts/reconcile-cask-handoff.sh'
-              - '.github/scripts/reconcile-cask-handoff.test.sh'
-              - '.github/workflows/reconcile-cask-handoff.yaml'
-              - '.github/scripts/verify-published-desktop-archive.sh'
-              - '.github/scripts/verify-published-desktop-archive.test.sh'
-              - 'desktop/scripts/verify-macos-archive.sh'
-              - '.github/scripts/cask-read-api.sh'
-              - '.github/scripts/cask-read-api.test.sh'
+            release-publication-scripts:
               - 'server.json'
               - '.goreleaser.yaml'
               - '.goreleaser.desktop.yaml'
-              - '.github/fixtures/cask-pr-handoff/**'
-              - '.github/scripts/cask-pr-handoff-workflow.test.sh'
-              - '.github/scripts/collect-cask-pr-handoff.sh'
-              - '.github/scripts/collect-cask-pr-handoff.test.sh'
-              - '.github/scripts/finish-cask-pr-handoff.sh'
-              - '.github/scripts/finish-cask-pr-handoff.test.sh'
-              - '.github/scripts/find-merged-cask-pr-handoff.sh'
-              - '.github/scripts/find-merged-cask-pr-handoff.test.sh'
-              - '.github/scripts/redraft-evergreen-cask-prs.sh'
-              - '.github/scripts/redraft-evergreen-cask-prs.test.sh'
-              - '.github/scripts/resolve-cask-publication.sh'
-              - '.github/scripts/resolve-cask-publication.test.sh'
               - '.github/scripts/resolve-release-publish-state.sh'
               - '.github/scripts/resolve-release-publish-state.test.sh'
               - '.github/scripts/publish-mcp-registry.sh'
               - '.github/scripts/publish-mcp-registry.test.sh'
-              - '.github/scripts/style-clean-cask-branch.sh'
-              - '.github/scripts/style-clean-cask-branch.test.sh'
               - '.github/scripts/upload-release-assets.sh'
               - '.github/scripts/upload-release-assets.test.sh'
-              - '.github/scripts/validate-cask-pr-handoff.sh'
               - '.github/scripts/wait-for-github-api-budget.sh'
               - '.github/scripts/wait-for-github-api-budget.test.sh'
-              - '.github/scripts/validate-cask-pr-handoff.test.sh'
               - '.github/workflows/cd.yaml'
               - '.github/workflows/ci.yaml'
             eks-smoke-scripts:
@@ -748,28 +723,12 @@ jobs:
           .github/actions/ksail-test-workload/remote-resource-guard.test.sh
           .github/actions/ksail-test-workload/install-with-recovery.test.sh
 
-  desktop-recovery-signature:
-    name: 🔐 Verify Published Desktop Signature
-    runs-on: macos-latest
-    timeout-minutes: 5
-    needs: [changes]
-    if: needs.changes.outputs.cask-pr-handoff == 'true'
-    permissions:
-      contents: read
-    steps:
-      - name: 📄 Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Verify real resource seals in publication recovery
-        run: bash .github/scripts/verify-published-desktop-archive.test.sh
-
-  cask-pr-handoff:
-    name: 🔐 Validate Cask PR Handoff
+  release-publication-scripts:
+    name: 🔐 Validate Release Publication Scripts
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: [changes]
-    if: needs.changes.outputs.cask-pr-handoff == 'true'
+    if: needs.changes.outputs.release-publication-scripts == 'true'
     permissions:
       contents: read
     steps:
@@ -778,66 +737,24 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: 🔐 Verify fail-closed cask PR handoff
+      - name: 🔐 Verify fail-closed release publication scripts
         run: |
           suite_failed=0
           shellcheck \
-            .github/scripts/reconcile-cask-handoff.sh \
-            .github/scripts/reconcile-cask-handoff.test.sh \
-            .github/fixtures/cask-pr-handoff/fake-bin/gh \
-            .github/scripts/cask-read-api.sh \
-            .github/scripts/cask-read-api.test.sh \
-            .github/scripts/collect-cask-pr-handoff.sh \
-            .github/scripts/collect-cask-pr-handoff.test.sh \
-            .github/scripts/finish-cask-pr-handoff.sh \
-            .github/scripts/finish-cask-pr-handoff.test.sh \
-            .github/scripts/find-merged-cask-pr-handoff.sh \
-            .github/scripts/find-merged-cask-pr-handoff.test.sh \
-            .github/scripts/redraft-evergreen-cask-prs.sh \
-            .github/scripts/redraft-evergreen-cask-prs.test.sh \
-            .github/scripts/resolve-cask-publication.sh \
-            .github/scripts/resolve-cask-publication.test.sh \
             .github/scripts/resolve-release-publish-state.sh \
             .github/scripts/resolve-release-publish-state.test.sh \
-            .github/scripts/style-clean-cask-branch.sh \
-            .github/scripts/style-clean-cask-branch.test.sh \
             .github/scripts/upload-release-assets.sh \
             .github/scripts/upload-release-assets.test.sh \
-            .github/scripts/validate-cask-pr-handoff.sh \
-            .github/scripts/validate-cask-pr-handoff.test.sh \
-            .github/scripts/verify-published-desktop-archive.sh \
-            .github/scripts/verify-published-desktop-archive.test.sh \
             .github/scripts/wait-for-github-api-budget.sh \
-            .github/scripts/wait-for-github-api-budget.test.sh \
-            .github/scripts/cask-pr-handoff-workflow.test.sh || suite_failed=$?
+            .github/scripts/wait-for-github-api-budget.test.sh || suite_failed=$?
           # Keep independent behavioral results visible even when lint fails.
           # The final aggregate still fails for every nonzero check or suite.
           set +e
-          .github/scripts/reconcile-cask-handoff.test.sh
-          suite_failed=$((suite_failed | $?))
-          .github/scripts/cask-read-api.test.sh
-          suite_failed=$((suite_failed | $?))
-          .github/scripts/collect-cask-pr-handoff.test.sh
-          suite_failed=$((suite_failed | $?))
-          .github/scripts/finish-cask-pr-handoff.test.sh
-          suite_failed=$((suite_failed | $?))
-          .github/scripts/find-merged-cask-pr-handoff.test.sh
-          suite_failed=$((suite_failed | $?))
-          .github/scripts/redraft-evergreen-cask-prs.test.sh
-          suite_failed=$((suite_failed | $?))
-          .github/scripts/resolve-cask-publication.test.sh
-          suite_failed=$((suite_failed | $?))
           .github/scripts/resolve-release-publish-state.test.sh
-          suite_failed=$((suite_failed | $?))
-          .github/scripts/style-clean-cask-branch.test.sh
           suite_failed=$((suite_failed | $?))
           .github/scripts/upload-release-assets.test.sh
           suite_failed=$((suite_failed | $?))
-          .github/scripts/validate-cask-pr-handoff.test.sh
-          suite_failed=$((suite_failed | $?))
           .github/scripts/wait-for-github-api-budget.test.sh
-          suite_failed=$((suite_failed | $?))
-          .github/scripts/cask-pr-handoff-workflow.test.sh
           suite_failed=$((suite_failed | $?))
           exit "$suite_failed"
 
@@ -2835,44 +2752,6 @@ jobs:
       # so a cached PASS from an earlier run would be replayed over the changed configuration.
       - name: 🧪 Test
         run: go test ./... -count=1
-  test-cask-rendering:
-    name: 🍺 Test Generated Cask Loading (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, macos-15-intel]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
-    needs: [changes]
-    if: needs.changes.outputs.release-config == 'true'
-    permissions:
-      contents: read
-    steps:
-      - name: 📄 Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-      - name: ⚙️ Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: false
-      - name: ⚙️ Setup GoReleaser
-        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
-        with:
-          distribution: goreleaser
-          version: "~> v2"
-          install-only: true
-      # Judge the cask with the current Homebrew style rules, as the tap does. Runner images ship
-      # different Homebrew snapshots, and an older one crashes inside its own cask style rule (#8244).
-      - name: 🍺 Update Homebrew
-        run: brew update --quiet
-      - name: ⚙️ Install YAML tooling
-        run: brew list yq >/dev/null 2>&1 || brew install yq
-      - name: 🍺 Render, style and load every cask platform
-        run: bash .github/scripts/cask-rendering.test.sh
 
   release-graph-audit:
     name: 🔐 Audit Shipped Dependency Graphs
@@ -3132,10 +3011,8 @@ jobs:
         system-test-diagnostics-artifact,
         verify-bash-32-workflow-contract,
         test-release-config,
-        test-cask-rendering,
         release-graph-audit,
-        cask-pr-handoff,
-        desktop-recovery-signature,
+        release-publication-scripts,
         native-home-paths,
         windows-notice-staging,
         eks-smoke-scripts,
@@ -3180,10 +3057,8 @@ jobs:
             ${{ needs.system-test-diagnostics-artifact.result }}
             ${{ needs.verify-bash-32-workflow-contract.result }}
             ${{ needs.test-release-config.result }}
-            ${{ needs.test-cask-rendering.result }}
             ${{ needs.release-graph-audit.result }}
-            ${{ needs.cask-pr-handoff.result }}
-            ${{ needs.desktop-recovery-signature.result }}
+            ${{ needs.release-publication-scripts.result }}
             ${{ needs.native-home-paths.result }}
             ${{ needs.windows-notice-staging.result }}
             ${{ needs.eks-smoke-scripts.result }}
