@@ -17,8 +17,10 @@ import (
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/configdiff"
 	"github.com/siderolabs/talos/pkg/machinery/config/configloader"
+	taloscontainer "github.com/siderolabs/talos/pkg/machinery/config/container"
 	"github.com/siderolabs/talos/pkg/machinery/config/encoder"
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
+	"github.com/siderolabs/talos/pkg/machinery/config/types/k8s"
 	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
 	talosresconfig "github.com/siderolabs/talos/pkg/machinery/resources/config"
 )
@@ -255,6 +257,7 @@ func (p *Provisioner) buildDesiredNodeConfig(
 	running talosconfig.Provider,
 	secretsSource talosconfig.Provider,
 	role string,
+	poolPatches ...string,
 ) (talosconfig.Provider, error) {
 	aligned, err := p.alignSecretsFromSource(running, secretsSource)
 	if err != nil {
@@ -269,7 +272,7 @@ func (p *Provisioner) buildDesiredNodeConfig(
 	// The disable transition is the mirror case: the desired direct-node
 	// endpoint must replace the running floating IP (#6032).
 	if !p.hasDesiredHetznerFloatingIPEndpoint() && !p.revertFloatingIPEndpoint {
-		endpointIP := running.Cluster().Endpoint().Hostname()
+		endpointIP := clusterEndpointHostname(running)
 		if endpointIP != "" {
 			aligned, err = aligned.WithEndpoint(endpointIP)
 			if err != nil {
@@ -299,6 +302,20 @@ func (p *Provisioner) buildDesiredNodeConfig(
 		return nil, fmt.Errorf("%w: %s", errNoRoleConfig, role)
 	}
 
+	return p.finishDesiredNodeConfig(desired, running, poolPatches)
+}
+
+// finishDesiredNodeConfig applies pool patches before restoring the values
+// managed by the node and provider.
+func (p *Provisioner) finishDesiredNodeConfig(
+	desired, running talosconfig.Provider,
+	poolPatches []string,
+) (talosconfig.Provider, error) {
+	desired, err := applyAutoscalerPoolPatches(desired, poolPatches)
+	if err != nil {
+		return nil, err
+	}
+
 	grafted, err := graftNodeManagedSectionsFor(desired, running, !p.revertFloatingIPEndpoint)
 	if err != nil {
 		return nil, err
@@ -319,11 +336,12 @@ func (p *Provisioner) hasDesiredHetznerFloatingIPEndpoint() bool {
 	}
 
 	controlPlane := p.talosConfigs.ControlPlane()
-	if controlPlane == nil || controlPlane.Cluster().Endpoint() == nil {
+	if controlPlane == nil || controlPlane.K8sClusterConfig() == nil ||
+		controlPlane.K8sClusterConfig().ClusterEndpoint() == nil {
 		return false
 	}
 
-	endpointIP := controlPlane.Cluster().Endpoint().Hostname()
+	endpointIP := controlPlane.K8sClusterConfig().ClusterEndpoint().Hostname()
 
 	return hasHetznerFloatingIPConfig(controlPlane, endpointIP)
 }
@@ -412,7 +430,16 @@ func graftNodeHostname(
 // full Talos config bundle (which re-issues certificates) cannot proceed and Talos
 // fails with an opaque "failed to parse PEM block".
 func hasControlPlanePKI(provider talosconfig.Provider) bool {
-	ca := provider.Cluster().IssuingCA()
+	if provider == nil {
+		return false
+	}
+
+	caConfig := provider.K8sAPIServerCAConfig()
+	if caConfig == nil {
+		return false
+	}
+
+	ca := caConfig.IssuingCA()
 
 	return ca != nil && len(ca.Key) > 0
 }
@@ -472,8 +499,6 @@ func graftNodeManagedSections(
 // graftNodeManagedSectionsFor grafts the node-managed sections, including the
 // runtime HCloud VIP only when preserveHCloudVIP is set. The floating-IP disable
 // transition (#6032) passes false so the in-place push strips the VIP.
-//
-//nolint:staticcheck // MachineRegistries is deprecated but still functional in Talos v1.x
 func graftNodeManagedSectionsFor(
 	desired, running talosconfig.Provider,
 	preserveHCloudVIP bool,
@@ -483,49 +508,89 @@ func graftNodeManagedSectionsFor(
 		return desired, nil
 	}
 
+	// Under the Talos 1.14 contract the node annotations live in the
+	// KubeNodeConfig document, and Talos refuses a v1alpha1 machine.nodeAnnotations
+	// next to it, so the annotation graft follows the desired config's layout.
+	multiDocAnnotations := hasKubeNodeConfig(desired)
+
 	grafted, err := desired.PatchV1Alpha1(func(cfg *v1alpha1.Config) error {
 		if cfg.MachineConfig == nil {
 			return nil
 		}
 
-		// Registry mirrors + auth: injected by ApplyMirrorRegistries at create.
-		cfg.MachineConfig.MachineRegistries = runningRaw.MachineConfig.MachineRegistries
-		// Cert SANs: preserve create-time SANs only when the desired config has no
-		// authoritative refreshed set (for example after a topology change).
-		if len(cfg.MachineConfig.MachineCertSANs) == 0 {
-			cfg.MachineConfig.MachineCertSANs = runningRaw.MachineConfig.MachineCertSANs
-		}
-		// machine.nodeAnnotations is a shared extension map. KSail owns keys present
-		// in its rendered desired config; preserve live-only keys so another
-		// controller can annotate nodes without making every KSail update delete
-		// those entries and re-apply the whole machine config (#6549).
-		err := graftExternalNodeAnnotations(
+		return graftMachineSections(
 			cfg.MachineConfig,
 			runningRaw.MachineConfig,
+			preserveHCloudVIP,
+			!multiDocAnnotations,
 		)
-		if err != nil {
-			return err
-		}
-
-		if preserveHCloudVIP {
-			graftHCloudVIP(cfg.MachineConfig, runningRaw.MachineConfig)
-		}
-
-		return nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("graft node-managed config sections: %w", err)
 	}
 
+	if multiDocAnnotations {
+		grafted, err = graftKubeNodeAnnotations(grafted, running)
+		if err != nil {
+			return nil, fmt.Errorf("graft node-managed config sections: %w", err)
+		}
+	}
+
 	return grafted, nil
 }
 
-// graftExternalNodeAnnotations merges live-only node-annotation keys into the
-// desired config. Desired values win on collisions, while the managed-key
-// marker prevents a key removed from KSail's patch set from being reclassified
-// as external and copied back.
-func graftExternalNodeAnnotations(desired, running *v1alpha1.MachineConfig) error {
-	previousOwnedKeys, hasMarker, err := resolvePreviousNodeAnnotationKeys(
+// graftMachineSections grafts the v1alpha1 machine sections, including
+// machine.nodeAnnotations when legacyAnnotations is set.
+//
+//nolint:staticcheck // MachineRegistries is deprecated but still functional in Talos v1.x
+func graftMachineSections(
+	desired, running *v1alpha1.MachineConfig,
+	preserveHCloudVIP, legacyAnnotations bool,
+) error {
+	// Registry mirrors + auth: injected by ApplyMirrorRegistries at create.
+	desired.MachineRegistries = running.MachineRegistries
+	// Cert SANs: preserve create-time SANs only when the desired config has no
+	// authoritative refreshed set (for example after a topology change).
+	if len(desired.MachineCertSANs) == 0 {
+		desired.MachineCertSANs = running.MachineCertSANs
+	}
+
+	if legacyAnnotations {
+		err := graftLegacyNodeAnnotations(desired, running)
+		if err != nil {
+			return err
+		}
+	}
+
+	if preserveHCloudVIP {
+		graftHCloudVIP(desired, running)
+	}
+
+	return nil
+}
+
+// hasKubeNodeConfig reports whether a config carries a KubeNodeConfig document,
+// which owns the node labels, annotations and taints under the 1.14 contract.
+func hasKubeNodeConfig(provider talosconfig.Provider) bool {
+	return kubeNodeConfigDocument(provider) != nil
+}
+
+func kubeNodeConfigDocument(provider talosconfig.Provider) *k8s.KubeNodeConfigV1Alpha1 {
+	for _, document := range provider.Documents() {
+		if nodeConfig, ok := document.(*k8s.KubeNodeConfigV1Alpha1); ok {
+			return nodeConfig
+		}
+	}
+
+	return nil
+}
+
+// graftLegacyNodeAnnotations grafts machine.nodeAnnotations for configs
+// rendered under a contract that predates the KubeNodeConfig document.
+//
+//nolint:staticcheck // machine.nodeAnnotations is the annotation field of pre-1.14 contracts
+func graftLegacyNodeAnnotations(desired, running *v1alpha1.MachineConfig) error {
+	annotations, err := graftExternalNodeAnnotations(
 		desired.MachineNodeAnnotations,
 		running.MachineNodeAnnotations,
 	)
@@ -533,28 +598,87 @@ func graftExternalNodeAnnotations(desired, running *v1alpha1.MachineConfig) erro
 		return err
 	}
 
-	currentOwnedKeys := nodeAnnotationKeys(desired.MachineNodeAnnotations)
-	sort.Strings(currentOwnedKeys)
+	desired.MachineNodeAnnotations = annotations
 
-	if desired.MachineNodeAnnotations == nil &&
-		(len(running.MachineNodeAnnotations) > 0 || hasMarker) {
-		desired.MachineNodeAnnotations = make(
-			map[string]string,
-			len(running.MachineNodeAnnotations)+1,
-		)
+	return nil
+}
+
+// graftKubeNodeAnnotations grafts the KubeNodeConfig annotations. A running
+// config rendered before the 1.14 contract still carries them in
+// machine.nodeAnnotations, so that is the live source when it has no
+// KubeNodeConfig document.
+func graftKubeNodeAnnotations(
+	desired, running talosconfig.Provider,
+) (talosconfig.Provider, error) {
+	runningAnnotations := legacyNodeAnnotations(running)
+	if runningNode := kubeNodeConfigDocument(running); runningNode != nil {
+		runningAnnotations = runningNode.AnnotationsConfig
 	}
 
-	mergeExternalNodeAnnotations(
-		desired.MachineNodeAnnotations,
-		running.MachineNodeAnnotations,
-		previousOwnedKeys,
-	)
+	grafted, err := taloscontainer.PatchDocument(
+		desired,
+		func(node *k8s.KubeNodeConfigV1Alpha1) error {
+			annotations, err := graftExternalNodeAnnotations(
+				node.AnnotationsConfig,
+				runningAnnotations,
+			)
+			if err != nil {
+				return err
+			}
 
-	return persistNodeAnnotationOwnership(
-		desired.MachineNodeAnnotations,
-		currentOwnedKeys,
-		hasMarker,
+			node.AnnotationsConfig = annotations
+
+			return nil
+		},
 	)
+	if err != nil {
+		return nil, fmt.Errorf("graft KubeNodeConfig annotations: %w", err)
+	}
+
+	return grafted, nil
+}
+
+//nolint:staticcheck // reads the annotation field of configs rendered before the 1.14 contract
+func legacyNodeAnnotations(provider talosconfig.Provider) map[string]string {
+	raw := provider.RawV1Alpha1()
+	if raw == nil || raw.MachineConfig == nil {
+		return nil
+	}
+
+	return raw.MachineConfig.MachineNodeAnnotations
+}
+
+// graftExternalNodeAnnotations is the node-annotation graft shared by both
+// config layouts. Node annotations are a shared extension map: KSail owns keys
+// present in its rendered desired config, and live-only keys are preserved so
+// another controller can annotate nodes without making every KSail update
+// delete those entries and re-apply the whole machine config (#6549). Desired
+// values win on collisions, while the managed-key marker prevents a key removed
+// from KSail's patch set from being reclassified as external and copied back.
+// It returns the desired map, allocated when the graft adds the first entry.
+func graftExternalNodeAnnotations(
+	desired, running map[string]string,
+) (map[string]string, error) {
+	previousOwnedKeys, hasMarker, err := resolvePreviousNodeAnnotationKeys(desired, running)
+	if err != nil {
+		return nil, err
+	}
+
+	currentOwnedKeys := nodeAnnotationKeys(desired)
+	sort.Strings(currentOwnedKeys)
+
+	if desired == nil && (len(running) > 0 || hasMarker) {
+		desired = make(map[string]string, len(running)+1)
+	}
+
+	mergeExternalNodeAnnotations(desired, running, previousOwnedKeys)
+
+	err = persistNodeAnnotationOwnership(desired, currentOwnedKeys, hasMarker)
+	if err != nil {
+		return nil, err
+	}
+
+	return desired, nil
 }
 
 func resolvePreviousNodeAnnotationKeys(

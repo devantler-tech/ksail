@@ -21,7 +21,7 @@ func TestGoModuleRestoreConsumerBindings(t *testing.T) {
 	t.Parallel()
 
 	contents := readRepoFile(t, ".github/actions/restore-go-modules/action.yaml")
-	require.Equal(t, "0cc2a584876350f4b355373c4a290e4a59b9cc0e0657acdb2a14e101e4d02f53",
+	require.Equal(t, "bfa9a94ba8de19ad4f8918a7220548b7af6ad2f751f7a9a131bffda3a06be329",
 		fmt.Sprintf("%x", sha256.Sum256(contents)))
 
 	for path, jobs := range map[string][]string{
@@ -31,6 +31,10 @@ func TestGoModuleRestoreConsumerBindings(t *testing.T) {
 			// TestKSailBinaryArtifactMirrorWarmerConsumer instead.
 			"warm-helm-cache", "test-release-config",
 			"release-graph-audit", "local-recovery-trial",
+			// Module-resolving checks that set up Go without a build cache (#8053).
+			"eks-smoke-scripts", "verify-vulnerability-identities",
+			"verify-dependency-test-graph", "verify-dependency-contracts",
+			"verify-todos-workflow-contract",
 		},
 		"copilot-setup-steps.yml":       {"copilot-setup-steps"},
 		"system-test-eks.yaml":          {"build-artifact"},
@@ -145,6 +149,45 @@ func TestGoModuleRestoreOnly(t *testing.T) {
 			strings.HasPrefix(step.Uses, "actions/cache@"),
 			"the combined action adds a post-job save",
 		)
+	}
+}
+
+// A restore that misses the cache, such as on a pull request that changes go.sum, must not let one
+// dropped Go proxy stream fail the job (#8053). The action downloads whatever the restore did not
+// supply through the shared bounded retry, read from its own pinned checkout, so every consumer
+// recovers a transient download failure while a later build or test failure still stops the job.
+func TestGoModuleRestoreDownloadsThroughBoundedRetry(t *testing.T) {
+	t.Parallel()
+	requireTestExecutable(t, "bash")
+
+	const actionPath = ".github/actions/restore-go-modules"
+
+	steps := readCompositeAction(t, actionPath+"/action.yaml").Runs.Steps
+	download := findHarnessStep(t, steps, "Download Go modules")
+
+	assert.Equal(t,
+		`bash "$GITHUB_ACTION_PATH/../../scripts/download-go-modules.sh"`,
+		strings.TrimSpace(download.Run),
+		"consumers must run the audited retry from the action's own pinned checkout")
+	assert.Empty(t, download.If, "every consumer must download through the retry")
+	assert.False(t, download.ContinueOnError, "an exhausted download must fail the job")
+	assert.Less(t,
+		harnessStepIndex(t, steps, "Restore Go module cache"),
+		harnessStepIndex(t, steps, download.Name),
+		"download only what the restored archive did not supply")
+	assert.Equal(t, len(steps)-1, harnessStepIndex(t, steps, download.Name),
+		"the consumer's own steps must start with every module present")
+
+	for _, scenario := range []moduleDownloadScenario{
+		{name: "cache_warm", downloads: 1, operations: 1},
+		{name: "two_proxy_blips", failures: 2, downloads: 3, operations: 1, backoff: "5\n10\n"},
+		{name: "exhausted", failures: 3, downloads: 3, backoff: "5\n10\n"},
+		{name: "downstream_error", operationExit: 37, downloads: 1, operations: 1},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			runModuleDownloadScenario(t, download, "go build", actionPath, scenario)
+		})
 	}
 }
 

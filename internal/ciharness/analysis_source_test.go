@@ -164,7 +164,7 @@ func TestAnalysisStandaloneReplacementPreservesRootVersion(t *testing.T) {
 	t.Parallel()
 
 	for module, version := range map[string]string{
-		"github.com/redis/go-redis/v9": "v9.20.1",
+		"github.com/redis/go-redis/v9": "v9.22.0",
 	} {
 		t.Run(module, func(t *testing.T) {
 			t.Parallel()

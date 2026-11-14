@@ -103,6 +103,12 @@ type NodePool struct {
 	// scale-from-zero template so the autoscaler only scales the pool for pods that
 	// tolerate the taints.
 	Taints []NodePoolTaint `json:"taints,omitzero" jsonschema_description:"Kubernetes node taints applied to every node in this pool (via Talos machine.nodeTaints and the autoscaler scale-from-zero template)."` //nolint:lll
+	// TalosPatches are ordered, inline machine config patches for this pool.
+	// KSail applies them after shared worker configuration and before setting
+	// the autoscaler's own node labels and taints.
+	// Changes that need KSail's cluster-wide reboot or wipe orchestration
+	// belong in shared patches.
+	TalosPatches []string `json:"talosPatches,omitzero" jsonschema_description:"Ordered pool patches applied after shared Talos worker patches. Environment placeholders stay literal. Changes that require a reboot or wipe belong in shared worker patches."` //nolint:lll
 }
 
 // NodePoolTaint defines a Kubernetes node taint applied to every node in an

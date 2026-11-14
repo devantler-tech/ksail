@@ -51,6 +51,9 @@ type updateOrchestrator struct {
 	dryRun      bool
 	// cancelled records that the user declined the update at a confirmation prompt.
 	cancelled bool
+	// cniReconciledBeforeUpgrade records that the CNI was already brought up to
+	// date ahead of an in-place distribution upgrade in this run (ksail#8281).
+	cniReconciledBeforeUpgrade bool
 }
 
 // newUpdateOrchestrator builds the orchestrator from the resolved run state.
@@ -431,6 +434,13 @@ func (o *updateOrchestrator) executeVersionUpgrade(params versionUpgradeParams) 
 		return o.reportVersionUpgradeDryRun(params.upgradeType, path)
 	}
 
+	if params.upgradeType == distributionLabel {
+		err = o.reconcileCNIBeforeDistributionUpgrade(params.upgrader)
+		if err != nil {
+			return false, err
+		}
+	}
+
 	return o.applyVersionUpgradePath(params, path)
 }
 
@@ -668,6 +678,13 @@ func (o *updateOrchestrator) executePinnedUpgrade(
 	)
 	if err != nil || !proceed {
 		return false, err
+	}
+
+	if dimension == distributionLabel {
+		err = o.reconcileCNIBeforeDistributionUpgrade(upgrader)
+		if err != nil {
+			return false, err
+		}
 	}
 
 	upgradeErr := applyFn(o.cmd.Context(), o.clusterName, currentVersion, pinnedVersion)

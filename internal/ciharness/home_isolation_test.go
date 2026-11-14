@@ -81,6 +81,32 @@ func TestHomeIsolationGuardWorkflow(t *testing.T) {
 	}
 }
 
+func TestHomeIsolationGuardBuildResourceDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
+	step := findHarnessStep(t, workflow.Jobs["home-isolation"].Steps,
+		"🏠 Verify tests never touch the real home directory")
+
+	for _, test := range []struct{ class, category string }{
+		{"resource-disk", "disk-full"},
+		{"resource-disk-uppercase", "disk-full"},
+		{"resource-quota", "disk-full"},
+		{"resource-memory", "memory-exhausted"},
+		{"resource-killed", "tool-killed"},
+		{"resource-process", "process-limit"},
+	} {
+		t.Run(test.class, func(t *testing.T) {
+			t.Parallel()
+
+			exerciseHomeIsolationGuard(t, step.Run, homeGuardCase{
+				name: test.class, exitCode: 1, wantFailure: true, failureClass: test.class,
+				diagnostic: "Go build resource error: " + test.category,
+			})
+		})
+	}
+}
+
 // TestHomeIsolationGuardRepeatedFailures preserves distinct later failures within the annotation budget.
 func TestHomeIsolationGuardRepeatedFailures(t *testing.T) {
 	t.Parallel()
@@ -128,6 +154,13 @@ func exerciseHomeIsolationGuard(t *testing.T, script string, test homeGuardCase)
 	assert.LessOrEqual(t, strings.Count(string(output), "::error::Failed test "), 40)
 	assertHomeFailureClasses(t, string(output), test.failureClass)
 
+	if !strings.HasPrefix(test.failureClass, "resource-") {
+		assert.NotContains(t, string(output), "Go build resource error:")
+	} else {
+		assert.Equal(t, 1, strings.Count(string(output), "Go build resource error:"),
+			"a resource failure must emit exactly one deduplicated label")
+	}
+
 	// This boundary records only after checking redirected HOME and external
 	// cache paths. An early shell failure cannot satisfy a refusal case, and
 	// a cached test verdict cannot satisfy the isolation guard.
@@ -162,7 +195,8 @@ func assertHomeFailureClasses(t *testing.T, output, failureClass string) {
 		wantCounts[0] = 1
 	case "test":
 		wantCounts[1] = 1
-	case "build":
+	case "build", "resource-disk", "resource-disk-uppercase", "resource-quota",
+		"resource-memory", "resource-killed", "resource-process":
 		wantCounts[2] = 1
 	case "repeated":
 		wantCounts = []int{36, 3, 1}
@@ -287,6 +321,21 @@ case "$1" in
           printf '{"Action":"fail","Package":"%s","FailedBuild":"%s"}\n' \
             'github.com/devantler-tech/ksail/v7/internal/ciharness/build' 'PRIVATE_FIXTURE_DETAIL'
           ;;
+        resource-disk|resource-disk-uppercase|resource-quota|resource-memory|resource-killed|resource-process)
+          case "$HOME_GUARD_FAILURE_CLASS" in
+            resource-disk) message='write PRIVATE_FIXTURE_DETAIL: no space left on device' ;;
+            resource-disk-uppercase) message='write PRIVATE_FIXTURE_DETAIL: No space left on device' ;;
+            resource-quota) message='write PRIVATE_FIXTURE_DETAIL: disk quota exceeded' ;;
+            resource-memory) message='runtime: out of memory PRIVATE_FIXTURE_DETAIL' ;;
+            resource-killed) message='PRIVATE_FIXTURE_DETAIL: compile: signal: killed' ;;
+            resource-process) message='runtime: failed to create new OS thread PRIVATE_FIXTURE_DETAIL' ;;
+          esac
+          for ((i = 0; i < 3; i++)); do
+            printf '{"Action":"build-output","ImportPath":"PRIVATE_FIXTURE_DETAIL","Output":"%s"}\n' "$message"
+          done
+          printf '{"Action":"fail","Package":"%s","FailedBuild":"PRIVATE_FIXTURE_DETAIL"}\n' \
+            'github.com/devantler-tech/ksail/v7/internal/ciharness/build'
+          ;;
         repeated)
           for ((i = 0; i < 50; i++)); do
             printf '{"Action":"fail","Package":"%s","Test":"TestIsolationProbe/PRIVATE_FIXTURE_DETAIL_%s"}\n' \
@@ -310,6 +359,7 @@ case "$1" in
       esac
       printf 'FAIL\tgithub.com/devantler-tech/ksail/v7/PRIVATE_FIXTURE_DETAIL\t0.001s\n'
       printf '{"Action":"output","Output":"FAIL github.com/devantler-tech/ksail/v7/PRIVATE_FIXTURE_DETAIL"}\n'
+      printf '{"Action":"output","Output":"PRIVATE_FIXTURE_DETAIL: no space left on device"}\n'
       printf '{"Action":"fail","Package":"github.com/devantler-tech/ksail/v7/PRIVATE_FIXTURE_DETAIL","Test":"x"}\n'
       printf 'PRIVATE_FIXTURE_DETAIL\n'
       for ((i = 0; i < 100; i++)); do printf 'package summary\n'; done

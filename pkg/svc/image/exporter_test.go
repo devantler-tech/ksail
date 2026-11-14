@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -569,6 +570,8 @@ func TestExportCopyFromContainerFails(t *testing.T) {
 		CopyFromContainer(ctx, "my-cluster-control-plane", "/root/ksail-images-export.tar").
 		Return(nil, container.PathStat{}, errExportCopyFailed)
 
+	expectNodeArchiveCleanup(t, mockClient)
+
 	exporter := image.NewExporter(mockClient)
 	err := exporter.Export(
 		ctx,
@@ -597,6 +600,8 @@ func TestExportExecFails(t *testing.T) {
 	setupKindExecFailWithCmdForExporter(ctx, t, mockClient, exportCmd, "ctr: export failed")
 	setupKindExecFailWithCmdForExporter(ctx, t, mockClient, exportCmd, "ctr: export failed")
 	setupExecMockForExporter(ctx, t, mockClient, kindExporterNodeName)
+
+	expectNodeArchiveCleanup(t, mockClient)
 
 	exporter := image.NewExporter(mockClient)
 	err := exporter.Export(
@@ -949,7 +954,7 @@ func TestExportPrefersControlPlaneOverWorker(t *testing.T) {
 		},
 	}
 	runNodeSelectionTest(
-		t, v1alpha1.DistributionVanilla, nodes, "my-cluster-control-plane", "my-cluster-worker",
+		t, v1alpha1.DistributionVanilla, nodes, "my-cluster-control-plane",
 	)
 }
 
@@ -967,7 +972,7 @@ func TestExportK3dPrefersServerOverAgent(t *testing.T) {
 		},
 	}
 	runNodeSelectionTest(
-		t, v1alpha1.DistributionK3s, nodes, "k3d-my-cluster-server-0", "k3d-my-cluster-agent-0",
+		t, v1alpha1.DistributionK3s, nodes, "k3d-my-cluster-server-0",
 	)
 }
 
@@ -1103,7 +1108,6 @@ func runNodeSelectionTest(
 	distribution v1alpha1.Distribution,
 	nodes []container.Summary,
 	expectedNodeName string,
-	otherProbedNodes ...string,
 ) {
 	t.Helper()
 
@@ -1113,12 +1117,22 @@ func runNodeSelectionTest(
 
 	mockClient.EXPECT().ContainerList(ctx, mock.Anything).Return(nodes, nil)
 
-	setupEmptyImageListMockForExporter(ctx, t, mockClient, expectedNodeName)
+	setupExecMockWithStdoutForExporter(
+		ctx,
+		t,
+		mockClient,
+		expectedNodeName,
+		[]string{
+			ctrCommand,
+			"--namespace=k8s.io",
+			"images",
+			"list",
+			"-q",
+		},
+		"docker.io/library/nginx:latest\n",
+	)
 
-	// On a multi-node cluster every other node is asked which images it holds.
-	for _, nodeName := range otherProbedNodes {
-		setupEmptyImageListMockForExporter(ctx, t, mockClient, nodeName)
-	}
+	// The preferred node covers the entire selection, so no other probe is needed.
 
 	// Mock platform detection (uname -m)
 	setupPlatformDetectMockForExporter(ctx, t, mockClient, expectedNodeName)
@@ -1126,7 +1140,7 @@ func runNodeSelectionTest(
 	// Mock export command
 	setupExecMockForExporter(ctx, t, mockClient, expectedNodeName)
 
-	tarContent := createExportTar(t, []byte("fake image data"))
+	tarContent := createExportTar(t, namedNodeArchive(t, "docker.io/library/nginx:latest"))
 	mockClient.EXPECT().
 		CopyFromContainer(ctx, expectedNodeName, mock.AnythingOfType("string")).
 		Return(io.NopCloser(bytes.NewReader(tarContent)), container.PathStat{}, nil)
@@ -1177,18 +1191,20 @@ func setupExecMockForExporter(
 ) {
 	t.Helper()
 
+	// Most callers expect the archive cleanup, which runs on a detached context.
+	execCtx := callerOrDetachedContext(ctx)
 	execID := "exec-" + containerName
 
 	mockClient.EXPECT().
-		ContainerExecCreate(ctx, containerName, mock.Anything).
+		ContainerExecCreate(execCtx, containerName, mock.Anything).
 		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
 
 	mockClient.EXPECT().
-		ContainerExecAttach(ctx, execID, container.ExecStartOptions{}).
+		ContainerExecAttach(execCtx, execID, container.ExecStartOptions{}).
 		Return(mockDockerStreamResponse("", ""), nil).Once()
 
 	mockClient.EXPECT().
-		ContainerExecInspect(ctx, execID).
+		ContainerExecInspect(execCtx, execID).
 		Return(container.ExecInspect{ExitCode: 0}, nil).Once()
 }
 
@@ -1689,4 +1705,56 @@ func TestValidateExportedTarMidStreamCorruption(t *testing.T) {
 	err = image.ValidateExportedTar(tarPath)
 	require.Error(t, err)
 	require.ErrorIs(t, err, image.ErrBlobIntegrityFailed)
+}
+
+// expectNodeArchiveCleanup expects the export archive to be removed from the
+// Kind node, which happens on failure paths as well as on success.
+func expectNodeArchiveCleanup(t *testing.T, mockClient *docker.MockAPIClient) {
+	t.Helper()
+
+	expectNodeArchiveRemoval(t, mockClient, kindExporterNodeName)
+}
+
+// expectNodeArchiveRemoval expects one removal of the export archive from node,
+// run on the detached cleanup context.
+func expectNodeArchiveRemoval(t *testing.T, mockClient *docker.MockAPIClient, node string) {
+	t.Helper()
+
+	const execID = "exec-archive-removal"
+
+	cleanupCtx := detachedCleanupContext()
+	mockClient.EXPECT().
+		ContainerExecCreate(cleanupCtx, node, mock.MatchedBy(func(opts container.ExecOptions) bool {
+			return slices.Equal(opts.Cmd, []string{"rm", "-f", kindExporterTarPath})
+		})).
+		Return(container.ExecCreateResponse{ID: execID}, nil).Once()
+	mockClient.EXPECT().
+		ContainerExecAttach(cleanupCtx, execID, container.ExecStartOptions{}).
+		Return(mockDockerStreamResponse("", ""), nil).Once()
+	mockClient.EXPECT().
+		ContainerExecInspect(cleanupCtx, execID).
+		Return(container.ExecInspect{ExitCode: 0}, nil).Once()
+}
+
+// detachedCleanupContext matches the context node archives are removed with:
+// bounded by its own deadline and live even when the caller's context is not.
+func detachedCleanupContext() any {
+	return mock.MatchedBy(func(ctx context.Context) bool {
+		_, bounded := ctx.Deadline()
+
+		return bounded && ctx.Err() == nil
+	})
+}
+
+// callerOrDetachedContext matches ctx itself or a detached cleanup context.
+func callerOrDetachedContext(ctx context.Context) any {
+	return mock.MatchedBy(func(candidate context.Context) bool {
+		if candidate == ctx {
+			return true
+		}
+
+		_, bounded := candidate.Deadline()
+
+		return bounded && candidate.Err() == nil
+	})
 }

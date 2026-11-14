@@ -1,6 +1,8 @@
 package kubescape_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -12,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/internal/gonotices"
 	"github.com/devantler-tech/ksail/v7/internal/licensepolicy"
 	"github.com/google/go-licenses/v2/licenses"
 )
@@ -37,12 +40,14 @@ func TestLicenseReportsRetainReplacementIdentityWithoutLocalPaths(t *testing.T) 
 			pkg.Module.Sum = "h1:declared-source"
 			fixture.libraries[0].LicenseFile = file
 			want := replacementReportFixture(name, directory, pkg.Module)
-			rows := evaluateLicenseInventory(
+			rows, _ := evaluateLicenseInventory(
 				t,
 				directory,
 				licensepolicy.Policy{Allowed: []string{"MIT"}},
 				fixture.packages,
 				fixture.libraries,
+				nil,
+				gonotices.MaterialPolicy{},
 			)
 
 			encoded, err := json.Marshal(rows)
@@ -63,6 +68,157 @@ func TestLicenseReportsRetainReplacementIdentityWithoutLocalPaths(t *testing.T) 
 				t.Fatalf("declared/replacement source evidence changed or disappeared: %s", encoded)
 			}
 		})
+	}
+}
+
+func TestSupplementalDeclarationsUseUnchangedAdmissionAndRetainTheirOwnEvidence(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"MIT", "Unknown", "GPL-2.0"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			directory := t.TempDir()
+			writeSupplementalFixtureFiles(t, directory, []byte("source declaration"))
+
+			pkg := goListPackage{
+				ImportPath: "example.test/fixture",
+				Dir:        directory,
+				Module: &goListModule{
+					Path:    "example.test/fixture",
+					Version: "v1.0.0",
+					Dir:     directory,
+				},
+			}
+			input := gonotices.Package{
+				ImportPath:  pkg.ImportPath,
+				Directory:   directory,
+				LicenseFile: filepath.Join(directory, "LICENSE"),
+				Module:      noticeModule(pkg.Module),
+				Raw:         []string{"MIT"},
+				Effective:   []string{"MIT"},
+			}
+			classifier := &strictLicenseClassifier{
+				delegate: licenseClassifierFunc(func(path string) ([]licenses.License, error) {
+					if path != filepath.Join(directory, "COPYING") {
+						return nil, os.ErrInvalid
+					}
+
+					return []licenses.License{{Name: name}}, nil
+				}),
+			}
+
+			result, err := evaluateNoticeDeclarations(
+				directory,
+				licensepolicy.Policy{Allowed: []string{"MIT"}},
+				pkg,
+				input,
+				classifier,
+				gonotices.MaterialPolicy{},
+			)
+			checkSupplementalDeclaration(t, name, result, err)
+		})
+	}
+}
+
+func checkSupplementalDeclaration(t *testing.T, name string, result gonotices.Package, err error) {
+	t.Helper()
+
+	if name != "MIT" {
+		if err == nil {
+			t.Fatal("a selected package MIT verdict concealed unapproved supplemental terms")
+		}
+
+		return
+	}
+
+	if err != nil || len(result.Declarations) != 1 || result.Declarations[0].Path != "COPYING" ||
+		!reflect.DeepEqual(result.Declarations[0].Raw, []string{"MIT"}) ||
+		!reflect.DeepEqual(result.Declarations[0].Effective, []string{"MIT"}) {
+		t.Fatal("approved supplemental declaration lost its own file/raw/effective evidence", err)
+	}
+}
+
+func TestSupplementalRecipientDispositionFailureCannotFallBackToAllowedTerms(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+
+	data := []byte("selected declaration fixture\n")
+	writeSupplementalFixtureFiles(t, directory, data)
+
+	pkg := goListPackage{
+		ImportPath: "example.test/fixture",
+		Dir:        directory,
+		Module: &goListModule{
+			Path:    "example.test/fixture",
+			Version: "v1.0.0",
+			Dir:     directory,
+			Sum:     "h1:exact-source",
+		},
+	}
+	input := gonotices.Package{
+		ImportPath:  pkg.ImportPath,
+		Directory:   directory,
+		LicenseFile: filepath.Join(directory, "LICENSE"),
+		Module:      noticeModule(pkg.Module),
+		Raw:         []string{"MIT"},
+		Effective:   []string{"MIT"},
+		EmbedFiles:  []string{"COPYING"},
+	}
+	policy := supplementalExclusionFixture(pkg, data)
+	classifier := &strictLicenseClassifier{
+		delegate: licenseClassifierFunc(
+			func(string) ([]licenses.License, error) { return []licenses.License{{Name: "MIT"}}, nil },
+		),
+	}
+
+	_, err := evaluateNoticeDeclarations(
+		directory,
+		licensepolicy.Policy{Allowed: []string{"MIT"}},
+		pkg,
+		input,
+		classifier,
+		policy,
+	)
+	if err == nil {
+		t.Fatal(
+			"failed exact exclusion fell back to generic allowed terms and concealed selected embedded material",
+		)
+	}
+}
+
+func supplementalExclusionFixture(pkg goListPackage, data []byte) gonotices.MaterialPolicy {
+	hash := sha256.Sum256(data)
+
+	return gonotices.MaterialPolicy{
+		Schema: 1,
+		Files: []gonotices.MaterialRule{
+			{
+				Module:          pkg.Module.Path,
+				Version:         pkg.Module.Version,
+				Sum:             pkg.Module.Sum,
+				Path:            "COPYING",
+				SHA256:          hex.EncodeToString(hash[:]),
+				Packages:        []string{pkg.ImportPath},
+				Detected:        []string{"MIT"},
+				Role:            "excluded",
+				NoEmbeddedFiles: true,
+				Evidence: []gonotices.MaterialEvidence{
+					{Path: "COPYING", SHA256: hex.EncodeToString(hash[:])},
+				},
+			},
+		},
+	}
+}
+
+func writeSupplementalFixtureFiles(t *testing.T, directory string, data []byte) {
+	t.Helper()
+
+	for _, file := range []string{"LICENSE", "COPYING"} {
+		err := os.WriteFile(filepath.Join(directory, file), data, 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
