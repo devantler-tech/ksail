@@ -861,6 +861,7 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 		"🔎 Capture EKS regional baseline",
 		"🧪 ksail cluster create",
 		"🧪 ksail cluster info",
+		"🧪 ksail cluster diff reports no drift on the unchanged cluster",
 		"🔐 Refresh AWS credentials before EKS update and cleanup",
 		"🔎 Report why the EKS create failed",
 		"🧪 ksail cluster update scales EKS nodes",
@@ -1368,4 +1369,26 @@ func writeExecutableFile(ctx context.Context, path, content string) error {
 	}
 
 	return nil
+}
+
+// ksail#7837: the EKS smoke checks that diff, run with the project-init default
+// (no explicit kube context), finds no drift on the cluster it just created.
+func TestEKSSmokeAssertsNoDriftOnUnchangedCluster(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/system-test-eks.yaml")
+	smokeJob, ok := workflow.Jobs["smoke-test"]
+	require.True(t, ok, "smoke-test job is missing")
+
+	const diffStepName = "🧪 ksail cluster diff reports no drift on the unchanged cluster"
+
+	diffStep := findHarnessStep(t, smokeJob.Steps, diffStepName)
+	assert.Contains(t, diffStep.Run, "ksail cluster diff --exit-code")
+	assert.Empty(t, diffStep.If, "the diff must run only after a successful create")
+
+	infoIndex := harnessStepIndex(t, smokeJob.Steps, "🧪 ksail cluster info")
+	diffIndex := harnessStepIndex(t, smokeJob.Steps, diffStepName)
+	updateIndex := harnessStepIndex(t, smokeJob.Steps, "🧪 ksail cluster update scales EKS nodes")
+	assert.Less(t, infoIndex, diffIndex)
+	assert.Less(t, diffIndex, updateIndex)
 }
