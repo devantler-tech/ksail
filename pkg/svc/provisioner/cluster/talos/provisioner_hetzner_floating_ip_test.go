@@ -384,6 +384,13 @@ func strayFloatingIPEndpointTestServer(
 		},
 	)
 
+	// The unchanged-update audit also reports leftover autoscaler servers, which reads the
+	// cluster network first; this cluster has none.
+	mux.HandleFunc("/networks", func(responseWriter http.ResponseWriter, _ *http.Request) {
+		responseWriter.Header().Set("Content-Type", "application/json")
+		_, _ = responseWriter.Write([]byte(`{"networks":[]}`))
+	})
+
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 

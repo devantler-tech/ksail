@@ -20,14 +20,20 @@ import (
 )
 
 // AuditUpdate reports autoscaler servers that no longer have a configured pool,
-// or all leftover autoscaler servers when the autoscaler is disabled. This is
-// inventory-only: it does not refresh Secrets, converge nodes or change state.
+// or all leftover autoscaler servers when the autoscaler is disabled, and any
+// stray floating IP labelled for the cluster. This is inventory-only: it does
+// not refresh Secrets, converge nodes or change state.
 func (p *Provisioner) AuditUpdate(
 	ctx context.Context,
 	name string,
 	result *clusterupdate.UpdateResult,
 ) error {
 	clusterName := p.resolveClusterName(name)
+
+	// An update with no changes at all ends in this audit rather than in the
+	// floating-IP step, so the read-only stray check runs here as well and every
+	// update reports it (ksail#7695). Like that step, it never fails the update.
+	p.checkStrayFloatingIPs(ctx, clusterName)
 
 	if p.hetznerOpts != nil && p.hetznerOpts.NodeAutoscalerEnabled {
 		_, err := p.listAutoscalerServers(ctx, clusterName, result)
