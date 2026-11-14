@@ -105,6 +105,33 @@ func (s *controlPlaneScheduling) resolve() *bool {
 	return s.cluster
 }
 
+// MigratePatchesToMultiDocument moves the v1alpha1 fields that the Talos 1.14
+// documents own out of patches applied outside this manager, such as
+// autoscaler pool patches, with the same migrations the manager applies to its
+// own patches. Without it, a patch that sets machine.nodeLabels on a 1.14
+// config leaves both the legacy field and KubeNodeConfig in place, and Talos
+// rejects the result.
+//
+// A patch's cluster.allowSchedulingOnControlPlanes only decides the generated
+// control-plane taint, so it has no effect on a config that is already
+// generated and is dropped.
+func MigratePatchesToMultiDocument(patches []Patch) ([]Patch, error) {
+	migrated, err := migrateKubernetesPatchesForContract(patches, talosconfig.TalosVersion1_14)
+	if err != nil {
+		return nil, fmt.Errorf("migrate Kubernetes patches: %w", err)
+	}
+
+	migration, err := migrateNodeAndKubeletPatchesForContract(
+		migrated,
+		talosconfig.TalosVersion1_14,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("migrate node and kubelet patches: %w", err)
+	}
+
+	return migration.patches, nil
+}
+
 // migrateNodeAndKubeletPatchesForContract moves the v1alpha1 node, kubelet and
 // cluster-name fields that Talos 1.14 hands to the KubeNodeConfig,
 // KubeletConfig and KubeClusterConfig documents. Under that contract Talos

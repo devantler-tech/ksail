@@ -24,6 +24,7 @@ import (
 	talosconfigtypes "github.com/siderolabs/talos/pkg/machinery/config/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/configloader"
 	taloscontainer "github.com/siderolabs/talos/pkg/machinery/config/container"
+	taloscluster "github.com/siderolabs/talos/pkg/machinery/config/types/cluster"
 	"github.com/siderolabs/talos/pkg/machinery/config/types/k8s"
 	talosmeta "github.com/siderolabs/talos/pkg/machinery/config/types/meta"
 	talosruntime "github.com/siderolabs/talos/pkg/machinery/config/types/runtime"
@@ -951,6 +952,60 @@ func normalizeForFingerprint(
 	})
 	if err != nil {
 		return nil, fmt.Errorf("normalize worker config for fingerprint: %w", err)
+	}
+
+	return normalizeDocumentsForFingerprint(patched, placeholder)
+}
+
+// normalizeDocumentsForFingerprint applies the same placeholders to the Talos
+// 1.14 documents that hold the endpoint (KubeClusterConfig), the accepted
+// Kubernetes CA certificates (KubeAPIServerCAConfig) and the cluster ID
+// (DiscoveryIdentityConfig) instead of v1alpha1. Each patch leaves a config
+// without that document unchanged.
+func normalizeDocumentsForFingerprint(
+	config talosconfig.Provider,
+	placeholder *url.URL,
+) (talosconfig.Provider, error) {
+	patched, err := taloscontainer.PatchDocument(
+		config,
+		func(cluster *k8s.KubeClusterConfigV1Alpha1) error {
+			if cluster.ClusterEndpointConfig.URL != nil {
+				cluster.ClusterEndpointConfig = talosmeta.URL{URL: placeholder}
+			}
+
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("normalize KubeClusterConfig for fingerprint: %w", err)
+	}
+
+	patched, err = taloscontainer.PatchDocument(
+		patched,
+		func(ca *k8s.KubeAPIServerCAConfigV1Alpha1) error {
+			for index := range ca.APIAcceptedCAs {
+				ca.APIAcceptedCAs[index] = redactedSecretPlaceholder
+			}
+
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("normalize KubeAPIServerCAConfig for fingerprint: %w", err)
+	}
+
+	patched, err = taloscontainer.PatchDocument(
+		patched,
+		func(identity *taloscluster.DiscoveryIdentityConfigV1Alpha1) error {
+			if identity.MetaClusterID != "" {
+				identity.MetaClusterID = redactedSecretPlaceholder
+			}
+
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("normalize DiscoveryIdentityConfig for fingerprint: %w", err)
 	}
 
 	return patched, nil

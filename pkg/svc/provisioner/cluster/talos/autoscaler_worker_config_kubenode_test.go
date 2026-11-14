@@ -1,8 +1,10 @@
 package talosprovisioner_test
 
 import (
+	"strings"
 	"testing"
 
+	ksailv1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
@@ -162,4 +164,118 @@ func TestGenerateAutoscalerWorkerConfig_LegacyContractKeepsV1Alpha1Labels(t *tes
 
 	_, err := worker.ValidateAsClient(metalClientMode{})
 	require.NoError(t, err)
+}
+
+// TestAutoscalerPoolPatchesMigrateToKubeNodeConfig guards a pool patch that sets
+// the legacy machine.nodeLabels on a Talos 1.14 worker: it is migrated into the
+// KubeNodeConfig document like a shared patch, so the generated worker keeps
+// the label and carries no v1alpha1 field Talos would refuse next to that document.
+func TestAutoscalerPoolPatchesMigrateToKubeNodeConfig(t *testing.T) {
+	t.Parallel()
+
+	configs, err := talosconfigmanager.NewDefaultConfigsWithVersionContractAndPatches(
+		"", talosconfig.TalosVersion1_14, nil,
+	)
+	require.NoError(t, err)
+
+	pool := ksailv1alpha1.NodePool{
+		Name:         autoscalerTestPool,
+		TalosPatches: []string{"machine:\n  nodeLabels:\n    example.com/from-pool: \"yes\"\n"},
+	}
+	prov := talosprovisioner.NewProvisioner(configs, nil).
+		WithHetznerOptions(ksailv1alpha1.OptionsHetzner{
+			NodeAutoscalerEnabled: true,
+			AutoscalerNodePools:   []ksailv1alpha1.NodePool{pool},
+		})
+
+	templates, err := prov.BuildAutoscalerPoolConfigsForTest(configs.Bundle())
+	require.NoError(t, err)
+	require.Len(t, templates, 1)
+
+	worker, err := configloader.NewFromBytes(templates[0].WorkerConfigYAML)
+	require.NoError(t, err)
+
+	var nodeConfig *k8s.KubeNodeConfigV1Alpha1
+
+	for _, document := range worker.Documents() {
+		if node, ok := document.(*k8s.KubeNodeConfigV1Alpha1); ok {
+			nodeConfig = node
+		}
+	}
+
+	require.NotNil(t, nodeConfig)
+	assert.Equal(t, "yes", nodeConfig.Labels()["example.com/from-pool"])
+	assert.Equal(t, "true", nodeConfig.Labels()[talosprovisioner.LabelAutoscaled])
+
+	raw := worker.RawV1Alpha1()
+	require.NotNil(t, raw)
+	require.NotNil(t, raw.MachineConfig)
+	//nolint:staticcheck // asserting the legacy field stays unset under the 1.14 contract
+	assert.Nil(t, raw.MachineConfig.MachineNodeLabels)
+
+	_, err = worker.ValidateAsClient(metalClientMode{})
+	require.NoError(t, err, "Talos must accept the patched autoscaler worker configuration")
+}
+
+// TestAutoscalerTemplateDrift_IgnoresSplitDocumentIdentity guards the Talos 1.14
+// worker, whose endpoint, accepted Kubernetes CA certificates and cluster ID live
+// in the KubeClusterConfig, KubeAPIServerCAConfig and DiscoveryIdentityConfig
+// documents: a fresh local bundle and the cluster-synced Secret differ in all
+// three, and that must not read as template drift on every run.
+func TestAutoscalerTemplateDrift_IgnoresSplitDocumentIdentity(t *testing.T) {
+	t.Parallel()
+
+	storedConfigs, err := talosconfigmanager.NewDefaultConfigsWithVersionContractAndPatches(
+		"", talosconfig.TalosVersion1_14, nil,
+	)
+	require.NoError(t, err)
+
+	desiredConfigs, err := talosconfigmanager.NewDefaultConfigsWithVersionContractAndPatches(
+		"", talosconfig.TalosVersion1_14, nil,
+	)
+	require.NoError(t, err)
+
+	storedYAML, err := talosprovisioner.GenerateAutoscalerWorkerConfig(
+		storedConfigs.Worker(), nil, nil,
+	)
+	require.NoError(t, err)
+
+	desiredYAML, err := talosprovisioner.GenerateAutoscalerWorkerConfig(
+		desiredConfigs.Worker(), nil, nil,
+	)
+	require.NoError(t, err)
+
+	syncedYAML := strings.Replace(
+		string(storedYAML),
+		"endpoint: https://10.5.0.2:6443",
+		"endpoint: https://203.0.113.10:6443",
+		1,
+	)
+	require.NotEqual(t, string(storedYAML), syncedYAML, "the stored endpoint must differ")
+
+	stored, err := configloader.NewFromBytes([]byte(syncedYAML))
+	require.NoError(t, err)
+	require.True(t, hasKubeDocuments(stored), "the worker must use the 1.14 documents")
+
+	changes, err := talosprovisioner.AutoscalerTemplateDriftForTest(
+		autoscalerSecretFor(t, "1", singlePoolConfig([]byte(syncedYAML))),
+		singlePoolConfig(desiredYAML),
+	)
+	require.NoError(t, err)
+	assert.Empty(t, changes, "split-document endpoint and identity must not read as drift")
+}
+
+func hasKubeDocuments(provider talosconfig.Provider) bool {
+	var hasCluster, hasCA bool
+
+	for _, document := range provider.Documents() {
+		switch document.(type) {
+		case *k8s.KubeClusterConfigV1Alpha1:
+			hasCluster = true
+		case *k8s.KubeAPIServerCAConfigV1Alpha1:
+			hasCA = true
+		}
+	}
+
+	return hasCluster && hasCA
 }
