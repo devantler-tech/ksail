@@ -1015,6 +1015,13 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      # The provenance checks build the module verifier and load the module graph; fetch
+      # what they need through the bounded retry so one dropped Go proxy stream does not
+      # fail the job (#8053). The pinned upstream releases they compare against are
+      # fetched by the check scripts themselves, through the same retry.
+      - name: 📥 Download Go modules
+        run: bash .github/scripts/download-go-package-modules.sh ./internal/moduleintegrity/cmd/verify
+
       - name: 📦 Verify release installer
         run: .github/scripts/install-release.test.sh
 

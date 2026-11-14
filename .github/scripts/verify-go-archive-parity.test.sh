@@ -252,6 +252,8 @@ fi
 # metadata: ordinary parity must not authenticate this correlated mutation.
 repo_root="$(cd -- "${script_dir}/../.." && pwd -P)"
 real_go="$(command -v go)"
+# Fetch through the bounded retry first (#8053); the read below then uses the cache.
+bash "${script_dir}/download-go-modules.sh" github.com/moby/go-archive@v0.3.0
 resolved="$(go mod download -json github.com/moby/go-archive@v0.3.0)"
 cp -R "$(jq -er '.Dir' <<<"${resolved}")" "${tmp_dir}/cached"
 cp -R "${repo_root}/third_party/go-archive" "${tmp_dir}/archive"

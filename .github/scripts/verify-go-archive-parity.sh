@@ -85,6 +85,9 @@ done
 ((manifest_status == 0)) || exit 1
 
 if [[ -z "${upstream_dir}" ]]; then
+	# Fetch through the bounded retry first so a dropped Go proxy stream does not fail
+	# the check (#8053); the read below then comes from the module cache.
+	bash "${script_dir}/download-go-modules.sh" "${module}@${version}"
 	module_json="$(go mod download -json "${module}@${version}")"
 	upstream_dir="$({
 		jq -er --arg expected "${expected_sum}" \
