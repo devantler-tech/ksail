@@ -100,6 +100,7 @@ func NewClusterCmd() *cobra.Command {
 	cmd.AddCommand(NewInfoCmd())
 	cmd.AddCommand(NewDiagnoseCmd())
 	cmd.AddCommand(NewDiffCmd())
+	cmd.AddCommand(NewRenderCmd())
 	cmd.AddCommand(NewConnectCmd())
 	cmd.AddCommand(NewBackupCmd())
 	cmd.AddCommand(NewRestoreCmd())
