@@ -31,7 +31,6 @@ import (
 	engineutils "github.com/kyverno/kyverno/pkg/utils/engine"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	corev1listers "k8s.io/client-go/listers/core/v1"
@@ -143,8 +142,17 @@ type Engine struct {
 // namespaces are the source's rendered documents; the Namespace documents
 // among them supply the labels that namespaceSelector matches and
 // failure-action overrides are resolved against.
-func NewEngine(policies []kyvernov1.PolicyInterface, namespaces []map[string]any) *Engine {
+func NewEngine(
+	policies []kyvernov1.PolicyInterface,
+	namespaces []map[string]any,
+	opts ...EngineOption,
+) *Engine {
 	silenceControllerRuntimeLogger()
+
+	options := engineOptions{}
+	for _, option := range opts {
+		option(&options)
+	}
 
 	cfg := config.NewDefaultConfiguration(false)
 	jmesPath := jmespath.New(cfg)
@@ -158,6 +166,11 @@ func NewEngine(policies []kyvernov1.PolicyInterface, namespaces []map[string]any
 		}
 	}
 
+	contextLoader := factories.DefaultContextLoaderFactory(nil)
+	if options.apiCallResponses != nil {
+		contextLoader = apiCallFixtureLoaderFactory(options.apiCallResponses)
+	}
+
 	return &Engine{
 		policies:   validating,
 		namespaces: namespaceLister(namespaces),
@@ -169,7 +182,7 @@ func NewEngine(policies []kyvernov1.PolicyInterface, namespaces []map[string]any
 			nil,
 			nil,
 			imageverifycache.DisabledImageVerifyCache(),
-			factories.DefaultContextLoaderFactory(nil),
+			contextLoader,
 			nil,
 			&isCluster,
 		),
@@ -189,7 +202,7 @@ func namespaceLister(docs []map[string]any) corev1listers.NamespaceLister {
 		labels, _, _ := unstructured.NestedStringMap(doc, "metadata", "labels")
 
 		_ = indexer.Add(&corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Labels: labels},
+			Name: name, Labels: labels,
 		})
 	}
 

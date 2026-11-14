@@ -18,10 +18,15 @@ workflow KSail is built around, and the one that scales from your laptop to prod
 
 ## The GitOps loop
 
-```text
-edit k8s/  ──►  ksail workload push  ──►  ksail workload reconcile  ──►  Flux/ArgoCD applies
-   ▲                (compile +                   (tell the engine               │
-   └──────────────── push OCI artifact)          to pull & apply) ──────────────┘
+```mermaid
+flowchart TD
+    accTitle: The GitOps loop
+    accDescr: You edit manifests under k8s/. ksail workload push compiles them and pushes an OCI artifact. ksail workload reconcile tells the GitOps engine to pull and apply it. Flux or ArgoCD applies the change, and the loop starts again with your next edit.
+
+    Edit["edit k8s/"] --> Push["ksail workload push<br/>compile + push OCI artifact"]
+    Push --> Reconcile["ksail workload reconcile<br/>tell the engine<br/>to pull & apply"]
+    Reconcile --> Apply["Flux/ArgoCD applies"]
+    Apply --> Edit
 ```
 
 - **`ksail workload push`** compiles your source directory and pushes it as an OCI artifact to a registry.

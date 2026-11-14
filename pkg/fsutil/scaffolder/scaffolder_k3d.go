@@ -13,7 +13,6 @@ import (
 	yamlgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/yaml"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
-	"github.com/k3d-io/k3d/v5/pkg/config/types"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 )
 
@@ -59,13 +58,9 @@ func (s *Scaffolder) CreateK3dConfig(output string) (k3dv1alpha5.SimpleConfig, e
 	}
 
 	config := k3dv1alpha5.SimpleConfig{
-		TypeMeta: types.TypeMeta{
-			APIVersion: "k3d.io/v1alpha5",
-			Kind:       "Simple",
-		},
-		ObjectMeta: types.ObjectMeta{
-			Name: clusterName,
-		},
+		APIVersion: "k3d.io/v1alpha5",
+		Kind:       "Simple",
+		Name:       clusterName,
 	}
 
 	// Apply node counts from CLI flags (stored in Talos options)

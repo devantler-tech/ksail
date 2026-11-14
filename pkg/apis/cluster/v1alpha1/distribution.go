@@ -100,6 +100,15 @@ func (d *Distribution) ProvidesLoadBalancerByDefault(provider Provider) bool {
 	return meta.loadBalancerByDefault.has(provider)
 }
 
+// AwaitsLiveValidationOn reports whether KSail implements the distribution on the provider but
+// has not yet validated that combination on a live cluster. Validation still accepts such a
+// combination; the generated support matrix marks it.
+func (d *Distribution) AwaitsLiveValidationOn(provider Provider) bool {
+	meta, found := distributionMetaFor(*d)
+
+	return found && slices.Contains(meta.pendingLiveValidation, provider)
+}
+
 // Set for Distribution (pflag.Value interface).
 func (d *Distribution) Set(value string) error {
 	return setEnum(d, value, ValidDistributions(), ErrInvalidDistribution)

@@ -22,7 +22,7 @@ func TestImageUpgradeCordonMarksItsOwnNode(t *testing.T) {
 	t.Parallel()
 
 	clientset := fake.NewClientset(&corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod-worker-1"},
+		Name: "prod-worker-1",
 	})
 	prov := talosprovisioner.NewProvisioner(nil, talosprovisioner.NewOptions())
 
@@ -42,8 +42,8 @@ func TestImageUpgradeCordonRejectsExistingAdministrativeCordon(t *testing.T) {
 	t.Parallel()
 
 	clientset := fake.NewClientset(&corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod-worker-1"},
-		Spec:       corev1.NodeSpec{Unschedulable: true},
+		Name: "prod-worker-1",
+		Spec: corev1.NodeSpec{Unschedulable: true},
 	})
 	prov := talosprovisioner.NewProvisioner(nil, talosprovisioner.NewOptions())
 
@@ -65,8 +65,8 @@ func TestUncordonAfterUpgradeUncordonsReadyNode(t *testing.T) {
 	t.Parallel()
 
 	node := &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod-worker-1"},
-		Spec:       corev1.NodeSpec{Unschedulable: true},
+		Name: "prod-worker-1",
+		Spec: corev1.NodeSpec{Unschedulable: true},
 		Status: corev1.NodeStatus{
 			Conditions: []corev1.NodeCondition{
 				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
@@ -97,8 +97,8 @@ func TestUncordonAfterUpgradeGatesOnReadiness(t *testing.T) {
 	t.Parallel()
 
 	node := &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod-worker-1"},
-		Spec:       corev1.NodeSpec{Unschedulable: true},
+		Name: "prod-worker-1",
+		Spec: corev1.NodeSpec{Unschedulable: true},
 		Status: corev1.NodeStatus{
 			Conditions: []corev1.NodeCondition{
 				{Type: corev1.NodeReady, Status: corev1.ConditionFalse},
@@ -155,7 +155,7 @@ func TestImageUpgradeCordonRetriesAResourceVersionConflict(t *testing.T) {
 	t.Parallel()
 
 	clientset := fake.NewClientset(&corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod-worker-1"},
+		Name: "prod-worker-1",
 	})
 	conflicts := 0
 	conflictOnce := func(_ k8stesting.Action) (bool, runtime.Object, error) {

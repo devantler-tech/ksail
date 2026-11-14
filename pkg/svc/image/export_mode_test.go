@@ -63,8 +63,7 @@ func TestExportSelectsSynchronousRuntimeMode(t *testing.T) {
 			command = append(command, kindExporterTarPath, "docker.io/library/nginx:latest")
 			setupExecMockWithCmdForExporter(ctx, t, client, kindExporterNodeName, command)
 			expectCopiedExportTar(ctx, t, client)
-			setupExecMockWithCmdForExporter(ctx, t, client, kindExporterNodeName,
-				[]string{"rm", "-f", kindExporterTarPath})
+			expectNodeArchiveRemoval(t, client, kindExporterNodeName)
 
 			exportRequestedImages(ctx, t, client, filepath.Join(t.TempDir(), "images.tar"),
 				[]string{"nginx:latest"})
@@ -118,4 +117,29 @@ func TestExportRefusesIncompleteCapabilityOutput(t *testing.T) {
 			require.ErrorContains(t, err, "incomplete help output")
 		})
 	}
+}
+
+// Two requested aliases of one image are passed to ctr once, so the archive
+// cannot carry the same named descriptor twice.
+func TestExportPassesEachResolvedImageOnce(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client := docker.NewMockAPIClient(t)
+	setupKindNodeListMock(ctx, client)
+	setupEmptyImageListMockForExporter(ctx, t, client, kindExporterNodeName)
+	setupExecMockWithStdoutForExporter(ctx, t, client, kindExporterNodeName,
+		[]string{"uname", "-m"}, "x86_64\n")
+	setupExecMockWithStdoutForExporter(ctx, t, client, kindExporterNodeName,
+		[]string{ctrCommand, "--namespace=k8s.io", "images", "export", "--help"},
+		"OPTIONS:\n   --local  Use client-side export\n   --help, -h  Show help\n")
+	setupExecMockWithCmdForExporter(ctx, t, client, kindExporterNodeName, []string{
+		ctrCommand, "--namespace=k8s.io", "images", "export", "--platform", "linux/amd64",
+		"--local", kindExporterTarPath, "docker.io/library/nginx:latest",
+	})
+	expectCopiedExportTar(ctx, t, client)
+	expectNodeArchiveRemoval(t, client, kindExporterNodeName)
+
+	exportRequestedImages(ctx, t, client, filepath.Join(t.TempDir(), "images.tar"),
+		[]string{"nginx:latest", "docker.io/library/nginx:latest"})
 }

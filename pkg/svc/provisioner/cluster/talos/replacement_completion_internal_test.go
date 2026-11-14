@@ -43,24 +43,22 @@ func readyNode(node corev1.Node, providerID string) corev1.Node {
 // server under the same name and address, a new Node object and a new etcd member.
 func completedControlPlane() replacementCompletionObservation {
 	return replacementCompletionObservation{
-		replacementObservation: replacementObservation{
-			ClusterName: targetCluster,
-			NodeName:    targetName,
-			Servers: []*hcloud.Server{
-				targetServer(replacedServerID, targetName),
-				targetServer(102, "prod-control-plane-2"),
-			},
-			Nodes: []corev1.Node{
-				readyNode(targetNode(targetName, replacedNodeUID, targetIP), "hcloud://201"),
-				readyNode(
-					targetNode("prod-control-plane-2", "node-uid-2", "203.0.113.11"),
-					"hcloud://102",
-				),
-			},
-			EtcdMembers: []*machineapi.EtcdMember{
-				{Id: replacedMemberID, Hostname: targetName},
-				{Id: 7002, Hostname: "prod-control-plane-2"},
-			},
+		ClusterName: targetCluster,
+		NodeName:    targetName,
+		Servers: []*hcloud.Server{
+			targetServer(replacedServerID, targetName),
+			targetServer(102, "prod-control-plane-2"),
+		},
+		Nodes: []corev1.Node{
+			readyNode(targetNode(targetName, replacedNodeUID, targetIP), "hcloud://201"),
+			readyNode(
+				targetNode("prod-control-plane-2", "node-uid-2", "203.0.113.11"),
+				"hcloud://102",
+			),
+		},
+		EtcdMembers: []*machineapi.EtcdMember{
+			{Id: replacedMemberID, Hostname: targetName},
+			{Id: 7002, Hostname: "prod-control-plane-2"},
 		},
 	}
 }

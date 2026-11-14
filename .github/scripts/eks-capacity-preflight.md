@@ -90,3 +90,36 @@ The default two-node candidate fits Frankfurt's test ceiling; complete live quot
 headroom and the separate cleanup and trial-authorization requirements still
 determine whether a trial may proceed. There is no instance-size, purchase-option
 or quota fallback.
+
+## Private regional baseline
+
+The **EKS Account Capacity** workflow has a default-off `capture_resource_baseline`
+input. Enabling it replaces the ordinary regional report with one identity capture
+using the same fourteen read operations, pagination and deadline. It creates no AWS
+resources and requests no additional permissions or credential duration.
+
+The capture writes a new, owner-only JSON file in a private temporary directory.
+It records the supplied region, cluster label, workflow run, attempt and source
+commit, observation timestamps, sorted identities and completeness for each family.
+Only aggregate results reach logs. The workflow checks the file permissions, removes
+the local file on exit and uploads no manifest. This is local evidence, with no
+retention guarantee across runner loss.
+
+Complete reads retain every validated identity, including observations excluded
+from diagnostic counts. Quota identities are diagnostic observations, not cleanup
+obligations. A failed read retains no partial family and makes capture fail. The
+16-MiB evidence budget is enforced while retaining identities; excessive capture
+is unknown. Existing destinations, symlinks and directories not privately owned by
+the current Unix user are refused.
+
+For local use, `report-eks-account-capacity.sh --help` lists the required
+`--baseline-file`, `--cluster-name`, `--run-id`, `--run-attempt` and `--source-sha`
+arguments. Create the destination directory with `mktemp -d` and keep its contents
+private. Observation context is supplied metadata; AWS account binding remains
+unknown.
+
+A regional baseline is an exclusion snapshot. A later new identity does not prove
+ownership, and a standalone observation cannot replace another smoke run's
+pre-create baseline. Instant-fleet coverage, resource ownership and teardown remain
+unverified. Run-owned cumulative capture, secure retention, exact-resource readback
+and real cleanup acceptance remain tracked by #7720; capture does not admit a trial.

@@ -94,16 +94,17 @@ func NewServer(cfg ServerConfig) (*mcpsdk.Server, error) {
 // RunServer creates and runs an MCP server over stdio.
 // This is the main entry point for the MCP server.
 func RunServer(ctx context.Context, cfg ServerConfig) error {
-	// Create server
+	return runServer(ctx, cfg, &mcpsdk.StdioTransport{})
+}
+
+// runServer creates the server and runs it over the given transport. It blocks
+// until the client disconnects or the context is cancelled.
+func runServer(ctx context.Context, cfg ServerConfig, transport mcpsdk.Transport) error {
 	server, err := NewServer(cfg)
 	if err != nil {
 		return fmt.Errorf("creating server: %w", err)
 	}
 
-	// Create stdio transport
-	transport := &mcpsdk.StdioTransport{}
-
-	// Run server - blocks until client disconnects or context is cancelled
 	err = server.Run(ctx, transport)
 	if err != nil {
 		return fmt.Errorf("running server: %w", err)

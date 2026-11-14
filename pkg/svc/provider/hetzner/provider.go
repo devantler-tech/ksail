@@ -16,6 +16,9 @@ import (
 const (
 	// DefaultActionTimeout is the timeout for waiting on Hetzner actions.
 	DefaultActionTimeout = 5 * time.Minute
+	// DefaultGracefulShutdownTimeout is how long StopNodes waits for a graceful
+	// (ACPI) shutdown before it powers off the servers that are still on.
+	DefaultGracefulShutdownTimeout = 3 * time.Minute
 	// DefaultOperationTimeout is the timeout for individual operations.
 	DefaultOperationTimeout = 2 * time.Minute
 	// DefaultPollingInterval is the interval between status checks.
@@ -48,9 +51,14 @@ const (
 // ErrHetznerActionFailed indicates that a Hetzner action failed.
 var ErrHetznerActionFailed = errors.New("hetzner action failed")
 
+// ErrServerStatusTimeout indicates that servers did not reach a status in time.
+var ErrServerStatusTimeout = errors.New("timeout waiting for servers to reach status")
+
 // Provider implements provider.Provider for Hetzner Cloud servers.
 type Provider struct {
 	client *hcloud.Client
+	// gracefulShutdownTimeout overrides DefaultGracefulShutdownTimeout when positive.
+	gracefulShutdownTimeout time.Duration
 }
 
 // NewProvider creates a new Hetzner Cloud provider with the given client.
@@ -87,7 +95,12 @@ func (p *Provider) StartNodes(ctx context.Context, clusterName string) error {
 }
 
 // StopNodes stops all servers for the given cluster.
-// Uses graceful shutdown (ACPI signal) and waits for servers to be off.
+//
+// It sends a graceful shutdown (ACPI signal) and waits up to the graceful
+// shutdown timeout for every server to be off. Servers still on after that
+// window are powered off, the same as pulling the plug, so a node whose
+// operating system never finishes its shutdown cannot leave the cluster
+// half-stopped.
 func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
 	err := p.forEachServer(ctx, clusterName, func(server *hcloud.Server) (*hcloud.Action, error) {
 		// Skip if already off
@@ -106,8 +119,47 @@ func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
 		return err
 	}
 
-	// Wait for all servers to be off
-	return p.waitForServersStatus(ctx, clusterName, hcloud.ServerStatusOff)
+	gracefulErr := p.waitForServersStatus(
+		ctx,
+		clusterName,
+		hcloud.ServerStatusOff,
+		p.gracefulShutdownWindow(),
+	)
+	// Force servers off only when the graceful window itself ran out. An API
+	// failure, or a caller that cancelled the stop, is returned unchanged.
+	if gracefulErr == nil || !errors.Is(gracefulErr, ErrServerStatusTimeout) || ctx.Err() != nil {
+		return gracefulErr
+	}
+
+	err = p.forEachServer(ctx, clusterName, func(server *hcloud.Server) (*hcloud.Action, error) {
+		if server.Status == hcloud.ServerStatusOff {
+			return nil, provider.ErrSkipAction
+		}
+
+		action, _, poweroffErr := p.client.Server.Poweroff(ctx, server)
+		if poweroffErr != nil {
+			return nil, fmt.Errorf("failed to power off server %s: %w", server.Name, poweroffErr)
+		}
+
+		return action, nil
+	})
+	if err != nil {
+		return fmt.Errorf("graceful shutdown did not finish (%w), and forcing power off failed: %w",
+			gracefulErr, err)
+	}
+
+	return p.waitForServersStatus(ctx, clusterName, hcloud.ServerStatusOff, DefaultActionTimeout)
+}
+
+// gracefulShutdownWindow returns how long StopNodes waits for an ACPI shutdown.
+//
+//nolint:funcorder // Grouped with StopNodes for logical code organization
+func (p *Provider) gracefulShutdownWindow() time.Duration {
+	if p.gracefulShutdownTimeout > 0 {
+		return p.gracefulShutdownTimeout
+	}
+
+	return DefaultGracefulShutdownTimeout
 }
 
 // waitForServersStatus polls until all servers in the cluster reach the desired status.
@@ -117,17 +169,24 @@ func (p *Provider) waitForServersStatus(
 	ctx context.Context,
 	clusterName string,
 	desiredStatus hcloud.ServerStatus,
+	timeout time.Duration,
 ) error {
-	var condErr error
+	var (
+		condErr error
+		pollErr error
+	)
 
 	err := wait.PollUntilContextTimeout(
 		ctx,
 		DefaultPollingInterval,
-		DefaultActionTimeout,
+		timeout,
 		false, // match the legacy ticker: wait one interval before the first check.
 		func(ctx context.Context) (bool, error) {
 			ready, checkErr := p.allServersAtStatus(ctx, clusterName, desiredStatus)
+			// Keep both observations: matching context sentinels do not prove
+			// the poll caused the request failure, so never replace its error.
 			condErr = checkErr
+			pollErr = ctx.Err()
 
 			return ready, checkErr
 		},
@@ -136,15 +195,17 @@ func (p *Provider) waitForServersStatus(
 		return nil
 	}
 
-	// allServersAtStatus errors propagate unwrapped (even when they wrap a
-	// context error); only the poller's own deadline/cancellation maps to the
-	// legacy timeout message.
-	if condErr != nil && errors.Is(err, condErr) {
+	// API failures without a matching poll interruption remain unchanged.
+	// When the poll also stopped with a matching context error, add the
+	// timeout diagnostic around the complete request error so neither
+	// observation loses its cause.
+	if condErr != nil && (pollErr == nil || !errors.Is(condErr, pollErr)) {
 		return condErr
 	}
 
 	return fmt.Errorf(
-		"timeout waiting for servers to reach status %s: %w",
+		"%w %s: %w",
+		ErrServerStatusTimeout,
 		desiredStatus,
 		err,
 	)
@@ -770,9 +831,7 @@ func (p *Provider) listServersByLabelSelector(
 		p.calculateRetryDelay,
 		func() ([]*hcloud.Server, error) {
 			return p.client.Server.AllWithOpts(ctx, hcloud.ServerListOpts{
-				ListOpts: hcloud.ListOpts{
-					LabelSelector: labelSelector,
-				},
+				LabelSelector: labelSelector,
 			})
 		},
 	)

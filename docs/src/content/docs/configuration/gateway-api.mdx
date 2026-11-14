@@ -3,7 +3,7 @@ title: Gateway API with KSail + Cilium
 description: How to use Kubernetes Gateway API (HTTPRoute, GRPCRoute) with KSail clusters that use Cilium CNI — zero extra setup required.
 ---
 
-import { Steps } from "@astrojs/starlight/components";
+import { FileTree, Steps } from "@astrojs/starlight/components";
 
 KSail clusters using the **Cilium** CNI option come Gateway API–ready out of the box. When you select `cni: Cilium`, KSail automatically:
 
@@ -256,15 +256,17 @@ Replace each `Ingress` with a `Gateway` (one per entry point) and one or more `H
 
 When using KSail with Flux or ArgoCD, place Gateway and HTTPRoute manifests in your source directory alongside other workload manifests:
 
-```text
-k8s/
-├── kustomization.yaml
-├── gateway.yaml          # Gateway resource
-└── my-app/
-    ├── deployment.yaml
-    ├── service.yaml
-    └── httproute.yaml    # HTTPRoute resource
-```
+<FileTree>
+
+- k8s/
+  - kustomization.yaml
+  - gateway.yaml Gateway resource
+  - my-app/
+    - deployment.yaml
+    - service.yaml
+    - httproute.yaml HTTPRoute resource
+
+</FileTree>
 
 The Gateway API CRDs and the `cilium` GatewayClass are managed by KSail (installed during `cluster create`). Your manifests only need to declare `Gateway` and `HTTPRoute` resources — no CRD or GatewayClass manifest is needed in your source directory.
 

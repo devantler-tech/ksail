@@ -21,6 +21,23 @@ var (
 	errMockListAllClustersFailed = errors.New("list all clusters failed")
 )
 
+const (
+	standardControllers137 = "--controllers=*,-nodeipam,-nodelifecycle,-persistentvolume-binder," +
+		"-attachdetach,-persistentvolume-expander,-ttl"
+	schedulerControllers137 = "--controllers=*,-nodeipam,-persistentvolume-binder,-attachdetach," +
+		"-persistentvolume-expander,-ttl"
+)
+
+type controllerCompatibilityTestCase struct {
+	name             string
+	version          string
+	userValues       string
+	wantControllers  string
+	wantPreservedArg string
+	wantOverride     bool
+	defaultPrivate   bool
+}
+
 // runNodeOperationTest is a shared helper for testing Start/Stop node lifecycle operations.
 func runNodeOperationTest(
 	t *testing.T,
@@ -358,6 +375,163 @@ func TestBuildValuesFiles_ExtraSAN(t *testing.T) {
 	})
 }
 
+func TestBuildValuesFiles_ControllerManagerCompatibilityVersions(t *testing.T) {
+	t.Parallel()
+
+	tests := []controllerCompatibilityTestCase{
+		{
+			name:    "keeps Kubernetes 1.36 defaults",
+			version: "v1.36.5",
+		},
+		{
+			name:            "removes retired controller for Kubernetes 1.37",
+			version:         "v1.37.1",
+			wantControllers: standardControllers137,
+			wantOverride:    true,
+		},
+		{
+			name:            "uses the Kubernetes image tag selected by the user",
+			version:         "v1.36.5",
+			userValues:      "controlPlane:\n  distro:\n    k8s:\n      image:\n        tag: v1.37.1\n",
+			wantControllers: standardControllers137,
+			wantOverride:    true,
+		},
+		{
+			name:            "uses the standalone Kubernetes version selected by the user",
+			version:         "v1.36.5",
+			userValues:      "controlPlane:\n  distro:\n    k8s:\n      version: v1.37.1\n",
+			wantControllers: standardControllers137,
+			wantOverride:    true,
+		},
+		{
+			name:         "keeps a user-selected Kubernetes 1.36 version unchanged",
+			version:      "v1.37.1",
+			userValues:   "controlPlane:\n  distro:\n    k8s:\n      version: v1.36.5\n",
+			wantOverride: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			runControllerCompatibilityTest(t, test)
+		})
+	}
+}
+
+func TestBuildValuesFiles_ControllerManagerCompatibilityModes(t *testing.T) {
+	t.Parallel()
+
+	tests := []controllerCompatibilityTestCase{
+		{
+			name:            "preserves Docker private node behavior",
+			version:         "v1.37.1",
+			wantControllers: "--controllers=*,bootstrapsigner,tokencleaner",
+			wantOverride:    true,
+			defaultPrivate:  true,
+		},
+		{
+			name:            "honors explicit virtual node mode for Docker",
+			version:         "v1.37.1",
+			userValues:      "privateNodes:\n  enabled: false\n",
+			wantControllers: standardControllers137,
+			wantOverride:    true,
+			defaultPrivate:  true,
+		},
+		{
+			name:    "preserves virtual scheduler behavior and other arguments",
+			version: "v1.37.1",
+			userValues: "controlPlane:\n  distro:\n    k8s:\n      scheduler:\n        enabled: true\n" +
+				"      controllerManager:\n        extraArgs:\n        - --profiling=false\n",
+			wantControllers:  schedulerControllers137,
+			wantPreservedArg: "--profiling=false",
+			wantOverride:     true,
+		},
+		{
+			name:    "preserves private node and resource claim behavior",
+			version: "v1.37.1",
+			userValues: "privateNodes:\n  enabled: true\nsync:\n  toHost:\n" +
+				"    resourceClaimTemplates:\n      enabled: true\n",
+			wantControllers: "--controllers=*,bootstrapsigner,tokencleaner,-resourceclaim-controller",
+			wantOverride:    true,
+		},
+		{
+			name:    "leaves an explicit controller list unchanged",
+			version: "v1.37.1",
+			userValues: "controlPlane:\n  distro:\n    k8s:\n      controllerManager:\n" +
+				"        extraArgs:\n        - --controllers=*,bootstrapsigner\n",
+			wantOverride: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			runControllerCompatibilityTest(t, test)
+		})
+	}
+}
+
+func runControllerCompatibilityTest(t *testing.T, test controllerCompatibilityTestCase) {
+	t.Helper()
+
+	userValuesPath := ""
+	if test.userValues != "" {
+		userValuesPath = t.TempDir() + "/vcluster.yaml"
+		require.NoError(t, os.WriteFile(userValuesPath, []byte(test.userValues), 0o600))
+	}
+
+	files, cleanup, err := vclusterprovisioner.BuildValuesFilesForVersionForTest(
+		userValuesPath, false, "", false, test.version, test.defaultPrivate,
+	)
+	require.NoError(t, err)
+
+	defer cleanup()
+
+	baseFileCount := 1
+	if userValuesPath != "" {
+		baseFileCount++
+	}
+
+	if !test.wantOverride {
+		require.Len(t, files, baseFileCount)
+
+		return
+	}
+
+	require.Len(t, files, baseFileCount+1)
+	extraArgs := readControllerManagerArgs(t, files[len(files)-1])
+	assert.Contains(t, extraArgs, test.wantControllers)
+	assert.NotContains(t, test.wantControllers, "cloud-node-lifecycle")
+
+	if test.wantPreservedArg != "" {
+		assert.Contains(t, extraArgs, test.wantPreservedArg)
+	}
+}
+
+func readControllerManagerArgs(t *testing.T, valuesPath string) []string {
+	t.Helper()
+
+	//nolint:gosec // path is returned by the function under test
+	content, err := os.ReadFile(valuesPath)
+	require.NoError(t, err)
+
+	var parsed struct {
+		ControlPlane struct {
+			Distro struct {
+				K8S struct {
+					ControllerManager struct {
+						ExtraArgs []string `yaml:"extraArgs"`
+					} `yaml:"controllerManager"`
+				} `yaml:"k8s"`
+			} `yaml:"distro"`
+		} `yaml:"controlPlane"`
+	}
+	require.NoError(t, yaml.Unmarshal(content, &parsed))
+
+	return parsed.ControlPlane.Distro.K8S.ControllerManager.ExtraArgs
+}
+
 func TestBuildValuesFiles_Persistence(t *testing.T) {
 	t.Parallel()
 
@@ -369,11 +543,11 @@ func TestBuildValuesFiles_Persistence(t *testing.T) {
 
 		defer cleanup()
 
-		// With no user values, the files are [defaults, emptyDir-override]; the override must
-		// be LAST so it wins over defaults and user values.
-		require.Len(t, files, 2)
+		// The persistence override must be LAST so it wins over defaults, user values,
+		// and any Kubernetes-version compatibility values.
+		require.GreaterOrEqual(t, len(files), 2)
 
-		content, err := os.ReadFile(files[1])
+		content, err := os.ReadFile(files[len(files)-1])
 		require.NoError(t, err)
 
 		var parsed struct {
@@ -400,12 +574,83 @@ func TestBuildValuesFiles_Persistence(t *testing.T) {
 
 		defer cleanup()
 
-		// No user values and no override → only the defaults file, with no persistence block.
-		require.Len(t, files, 1)
-
-		content, err := os.ReadFile(files[0])
-		require.NoError(t, err)
-
-		assert.NotContains(t, string(content), "persistence:")
+		for _, valuesPath := range files {
+			//nolint:gosec // generated test paths
+			content, readErr := os.ReadFile(valuesPath)
+			require.NoError(t, readErr)
+			assert.NotContains(t, string(content), "persistence:")
+		}
 	})
+}
+
+func TestBuildValuesFiles_ControllerManagerCompatibilityRejectsInvalidVersions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		version    string
+		userValues string
+	}{
+		{name: "rejects an invalid default version", version: "not-a-version"},
+		{
+			name:       "rejects an invalid explicit version",
+			version:    "v1.37.1",
+			userValues: "controlPlane:\n  distro:\n    k8s:\n      version: not-a-version\n",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			userValuesPath := ""
+			if test.userValues != "" {
+				userValuesPath = t.TempDir() + "/vcluster.yaml"
+				require.NoError(t, os.WriteFile(userValuesPath, []byte(test.userValues), 0o600))
+			}
+
+			_, cleanup, err := vclusterprovisioner.BuildValuesFilesForVersionForTest(
+				userValuesPath, false, "", false, test.version, false,
+			)
+			defer cleanup()
+
+			require.ErrorContains(t, err, "parse vCluster Kubernetes version")
+		})
+	}
+}
+
+func TestBuildValuesFiles_ControllerManagerCompatibilityImageTags(t *testing.T) {
+	t.Parallel()
+
+	tests := []controllerCompatibilityTestCase{
+		{
+			name:    "reads the version from a digest-pinned Kubernetes image tag",
+			version: "v1.36.5",
+			userValues: "controlPlane:\n  distro:\n    k8s:\n      image:\n        tag: v1.37.1@sha256:" +
+				"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n",
+			wantControllers: standardControllers137,
+			wantOverride:    true,
+		},
+		{
+			name:         "leaves controllers unchanged for a Kubernetes image tag that is not a version",
+			version:      "v1.37.1",
+			userValues:   "controlPlane:\n  distro:\n    k8s:\n      image:\n        tag: custom-build\n",
+			wantOverride: false,
+		},
+		{
+			name:    "an explicit version overrides an image tag that is not a version",
+			version: "v1.36.5",
+			userValues: "controlPlane:\n  distro:\n    k8s:\n      version: v1.37.1\n" +
+				"      image:\n        tag: custom-build\n",
+			wantControllers: standardControllers137,
+			wantOverride:    true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			runControllerCompatibilityTest(t, test)
+		})
+	}
 }

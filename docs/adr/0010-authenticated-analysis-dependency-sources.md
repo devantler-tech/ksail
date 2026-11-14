@@ -22,7 +22,7 @@ Use complete copies of the published modules as version-qualified local replacem
 | github.com/kyverno/go-jmespath               | v0.4.1-0.20231124160150-95e59c162877 | `h1:XOLJNGX/q6MVpI8p8MKvk6jGBMvO4CrdwrizMMSsaRU=` |
 | github.com/jmespath/go-jmespath              | v0.4.1-0.20220621161143-b0104c826a24 | `h1:liMMTbpW34dhU4az1GN0pTPADwNmvoRSeoZ6PItiqnY=` |
 | github.com/charmbracelet/x/ansi              | v0.10.2                              | `h1:ith2ArZS0CJG30cIUfID1LXN7ZFXRCww6RUvAPA+Pzw=` |
-| github.com/charmbracelet/x/ansi              | v0.11.7                              | `h1:kzv1kJvjg2S3r9KHo8hDdHFQLEqn4RBCb39dAYC84jI=` |
+| github.com/charmbracelet/x/ansi              | v0.11.8                              | `h1:JMFwp0CgDC2+jcOB162HH5k7I3FVbgFSMMYg7dSPBQQ=` |
 | github.com/redis/go-redis/extra/redisotel/v9 | v9.5.3                               | `h1:kuvuJL/+MZIEdvtb/kTBRiRgYaOmx1l+lYJyVdrRUOs=` |
 | github.com/redis/go-redis/extra/rediscmd/v9  | v9.5.3                               | `h1:1/BDligzCa40GTllkDnY3Y5DTHuKCONbB2JcRyIfl20=` |
 | github.com/rancher/dynamiclistener           | v1.27.5                              | `h1:FA/s9vbQzGz1Au3BuFvdbBfBBUmHGXGR3xoliwR4qfY=` |
@@ -31,7 +31,7 @@ Glamour and go-macholibre use `* -filter -text` in their attribute files so a no
 
 Preserve any upstream repository automation at `upstream-github/`, with Glamour's Dependabot configuration named `dependabot.yml.source`. These files describe the upstream repositories, and KSail does not execute them. Their archived paths prevent workflow scanners from mistaking them for KSail automation. The integrity tests restore all original names privately before requiring the published checksum; KSail's own automation remains scanned under the existing security policy.
 
-Glamour's standalone module selects ANSI v0.10.2 independently of KSail's root graph, which retains v0.11.7 through the separate `ansi-runtime` copy. Glamour's version-qualified sibling replacement applies only to standalone analysis; the original module file is preserved as `upstream-go.mod` and restored privately for authentication. The source trees use root attributes that preserve every checkout byte without LFS filters.
+Glamour's standalone module selects ANSI v0.10.2 independently of KSail's root graph, which retains v0.11.8 through the separate `ansi-runtime` copy. Glamour's version-qualified sibling replacement applies only to standalone analysis; the original module file is preserved as `upstream-go.mod` and restored privately for authentication. The source trees use root attributes that preserve every checkout byte without LFS filters.
 
 Both ANSI versions accept color components only when they contain one through four hexadecimal digits and parse within 16 bits, and accept Kitty quiet modes only within their documented range of zero through two. Valid color normalization and other protocol options retain their behavior. CEL's unknown-value merge uses the larger input length for its optional map capacity hint, preserving union and deduplication without an unnecessary sum. This is a defensive simplification; no realizable allocation overflow is established. These repairs are limited to ANSI's `util.go` and `kitty/options.go`, and CEL's `common/types/unknown.go`. Each original file is retained at its relative path under `upstream-source/`, with an inert `.source` suffix. Owned regressions exercise both ANSI versions and CEL merge semantics.
 

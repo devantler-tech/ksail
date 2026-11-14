@@ -36,8 +36,8 @@ func TestApiserverTransportLeavesCustomConfigsOnClientGoCache(t *testing.T) {
 	t.Parallel()
 
 	config := &rest.Config{
-		Host:            "https://127.0.0.1:1",
-		TLSClientConfig: rest.TLSClientConfig{Insecure: true},
+		Host:     "https://127.0.0.1:1",
+		Insecure: true,
 	}
 
 	first, err := apiserverTransportFor(config)

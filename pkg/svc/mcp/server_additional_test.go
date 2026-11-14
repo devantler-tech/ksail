@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/mcp"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -214,18 +215,28 @@ func TestRunServer_ContextCancelled(t *testing.T) {
 		Short: "KSail CLI",
 	}
 
-	// RunServer uses StdioTransport which reads from os.Stdin.
-	// We can't easily test it without mocking stdio, but we can verify
-	// that a cancelled context returns an error.
+	// Serve over an in-memory transport whose client end stays open, so the
+	// cancelled context is the only way the server can stop. Serving over
+	// os.Stdin instead races the context against stdin reaching end of file.
+	serverTransport, _ := mcpsdk.NewInMemoryTransports()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	err := mcp.RunServer(ctx, mcp.ServerConfig{
-		Name:    "test-server",
-		Version: "0.1.0",
-		RootCmd: rootCmd,
-	})
+	done := make(chan error, 1)
 
-	// RunServer should return an error because the context is already cancelled
-	assert.Error(t, err)
+	go func() {
+		done <- mcp.RunServerWithTransport(ctx, mcp.ServerConfig{
+			Name:    "test-server",
+			Version: "0.1.0",
+			RootCmd: rootCmd,
+		}, serverTransport)
+	}()
+
+	select {
+	case err := <-done:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(10 * time.Second):
+		t.Fatal("RunServer did not return after its context was cancelled")
+	}
 }

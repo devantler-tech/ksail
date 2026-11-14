@@ -216,7 +216,7 @@ func TestUpdateConfigsWithEndpoint_FloatingIPDisabled(t *testing.T) {
 	require.NoError(t, err)
 
 	configs := provisioner.TalosConfigsForTest()
-	endpoint := configs.ControlPlane().Cluster().Endpoint()
+	endpoint := configs.ControlPlane().K8sClusterConfig().ClusterEndpoint()
 	require.NotNil(t, endpoint)
 	assert.Equal(t, "203.0.113.5", endpoint.Hostname())
 	assert.NotContains(t, configs.ControlPlane().K8sAPIServerConfig().CertSANs(), "192.0.2.10")
@@ -253,7 +253,7 @@ func TestKubeconfigEndpointURL_FallsBackToNodeIP(t *testing.T) {
 func assertFloatingIPRenderedConfigs(t *testing.T, configs *talos.Configs) {
 	t.Helper()
 
-	endpoint := configs.ControlPlane().Cluster().Endpoint()
+	endpoint := configs.ControlPlane().K8sClusterConfig().ClusterEndpoint()
 	require.NotNil(t, endpoint)
 	assert.Equal(t, "192.0.2.10", endpoint.Hostname(),
 		"endpoint must be the floating IP")
@@ -383,6 +383,13 @@ func strayFloatingIPEndpointTestServer(
 			fipUpdateAssignActionResponse(responseWriter)
 		},
 	)
+
+	// The unchanged-update audit also reports leftover autoscaler servers, which reads the
+	// cluster network first; this cluster has none.
+	mux.HandleFunc("/networks", func(responseWriter http.ResponseWriter, _ *http.Request) {
+		responseWriter.Header().Set("Content-Type", "application/json")
+		_, _ = responseWriter.Write([]byte(`{"networks":[]}`))
+	})
 
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)

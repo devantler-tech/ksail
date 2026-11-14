@@ -61,9 +61,9 @@ func TestDiffCommandDefaultsMatchUpdateDesiredCluster(t *testing.T) {
 			//nolint:gosec // G703: fixed fixture filename in the isolated t.Chdir directory.
 			require.NoError(t, os.WriteFile(configPath, config, 0o600))
 
-			factory := &diffDesiredSpecFactory{updatableUpgraderFactory: updatableUpgraderFactory{
+			factory := &diffDesiredSpecFactory{
 				provisioner: &updatableUpgraderFake{},
-			}}
+			}
 			t.Cleanup(cluster.SetProvisionerFactoryForTests(factory))
 
 			cmd := cluster.NewDiffCmd()

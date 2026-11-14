@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -119,10 +118,8 @@ func TestDetectCSI_VClusterWithCSI(t *testing.T) {
 	helmClient := helm.NewMockInterface(t)
 	k8sClientset := fake.NewClientset(
 		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      detector.DeploymentLocalPathProvisioner,
-				Namespace: detector.NamespaceLocalPathStorage,
-			},
+			Name:      detector.DeploymentLocalPathProvisioner,
+			Namespace: detector.NamespaceLocalPathStorage,
 		},
 	)
 
@@ -214,10 +211,8 @@ func TestDetectMetricsServer_K3sDefault(t *testing.T) {
 	helmClient := helm.NewMockInterface(t)
 	k8sClientset := fake.NewClientset(
 		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      detector.DeploymentMetricsServerK3s,
-				Namespace: detector.NamespaceKubeSystem,
-			},
+			Name:      detector.DeploymentMetricsServerK3s,
+			Namespace: detector.NamespaceKubeSystem,
 		},
 	)
 

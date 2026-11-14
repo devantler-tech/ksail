@@ -8,7 +8,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -23,7 +22,7 @@ func TestWaitForDeploymentReadyIfExists_StaleObservedGeneration(t *testing.T) {
 	const namespace, name = "argocd", "argocd-repo-server"
 
 	client := fake.NewClientset(&appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Generation: 2},
+		Name: name, Namespace: namespace, Generation: 2,
 		Status: appsv1.DeploymentStatus{
 			ObservedGeneration: 1, // controller has not observed generation 2 yet
 			Replicas:           1,
@@ -51,7 +50,7 @@ func TestWaitForDeploymentReadyIfExists_ObservedGenerationCaughtUp(t *testing.T)
 	const namespace, name = "argocd", "argocd-repo-server"
 
 	client := fake.NewClientset(&appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Generation: 2},
+		Name: name, Namespace: namespace, Generation: 2,
 		Status: appsv1.DeploymentStatus{
 			ObservedGeneration: 2,
 			Replicas:           1,
@@ -90,8 +89,8 @@ func TestWaitForDeploymentReadyIfExists_DesiredCapacity(t *testing.T) {
 			t.Parallel()
 
 			client := fake.NewClientset(&appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Generation: 2},
-				Spec:       appsv1.DeploymentSpec{Replicas: testCase.desired},
+				Name: name, Namespace: namespace, Generation: 2,
+				Spec: appsv1.DeploymentSpec{Replicas: testCase.desired},
 				Status: appsv1.DeploymentStatus{
 					ObservedGeneration: 2,
 					Replicas:           testCase.observed,

@@ -34,7 +34,7 @@ Invoke when the user asks to:
 - `ksail cluster …` — lifecycle: `init`, `create`, `update`, `diff`, `delete`, `start`, `stop`, `info`, `list`, `connect`, `switch`, `backup`, `restore`, `oidc` (OIDC authentication: `get-token`)
 - `ksail workload …` — `apply`, `create`, `edit`, `get`, `describe`, `explain`, `delete`, `logs`, `exec`, `expose`, `gen`, `validate`, `install`, `scale`, `rollout`, `scan`, `wait`, `images`, `export`, `import`, `watch`, `push`, `reconcile`, and `cipher` (SOPS-based secret management: `encrypt`, `decrypt`, `edit`, `import`, `rotate`)
 - `ksail tenant …` — multi-tenancy: `create`, `delete`
-- `ksail open …` — interfaces: `web` (browser UI), `desktop` (native app), `chat` (AI chat TUI powered by GitHub Copilot), `mcp` (MCP server — already auto-registered by this plugin)
+- `ksail open …` — interfaces: `web` (browser UI), `desktop` (native app), `chat` (AI chat TUI powered by GitHub Copilot), `mcp` (MCP server — see [MCP server](#mcp-server))
 
 Flag-level docs live under <https://ksail.devantler.tech/cli-flags/>. Reference that page for any non-trivial flag question instead of answering from memory.
 
@@ -52,7 +52,12 @@ Distribution is chosen via `--distribution` (`Vanilla`, `K3s`, `Talos`, `VCluste
 
 ## MCP server
 
-This plugin registers the `ksail` MCP server via `.mcp.json` (`command: ksail, args: [open, mcp]`). The `ksail cluster`, `ksail workload` (including the nested `ksail workload cipher` SOPS operations), project and tenant commands are exposed as consolidated MCP tools (`cluster_read`, `cluster_write`, `workload_read`, `workload_write`, `project_read`, `project_write`, `tenant_write`). Prefer these tools for cluster/workload operations when running inside Copilot CLI.
+`ksail open mcp` runs a stdio MCP server. It exposes the `ksail cluster`, `ksail workload` (including the nested `ksail workload cipher` SOPS operations), project and tenant commands as consolidated MCP tools: `cluster_read`, `cluster_write`, `workload_read`, `workload_write`, `project_read`, `project_write` and `tenant_write`. Some installs of this skill register the server for you; others, such as a skills-only plugin listing, do not.
+
+- **When the tools are available**, prefer them for cluster and workload operations.
+- **When they are not**, run the same operations with the `ksail` CLI. Never block on the MCP server.
+- **Never enable, approve, register or reconfigure an MCP server yourself**, whether or not the user asked for the tools. The commands below are for the user to run.
+- **If the user wants the tools and the client lacks them**, tell the user, and point them to the per-client setup steps at <https://ksail.devantler.tech/integrations/ai-mcp/>. The user makes the change in their client. If a ksail entry already exists but is disabled, they enable it (in Claude Code, from the `/mcp` panel) rather than adding another. Otherwise they register one, for example `claude mcp add ksail -- ksail open mcp` in Claude Code for the current project, or `claude mcp add --scope user ksail -- ksail open mcp` for every project (options go before `--`; anything after it is passed to ksail), or `codex mcp add ksail -- ksail open mcp` in Codex. Clients that read an `mcpServers` map take `{"mcpServers": {"ksail": {"command": "ksail", "args": ["open", "mcp"]}}}`. Remind them to enable or approve only an entry that runs `ksail open mcp` with the `ksail` on their `PATH`, never a binary inside the repository. If a registered server fails to connect, see <https://ksail.devantler.tech/integrations/mcp/#troubleshooting>.
 
 ## Safety
 

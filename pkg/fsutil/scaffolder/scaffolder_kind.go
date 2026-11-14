@@ -55,11 +55,9 @@ func (s *Scaffolder) buildKindConfig(output string) (*v1alpha4.Cluster, error) {
 	}
 
 	kindConfig := &v1alpha4.Cluster{
-		TypeMeta: v1alpha4.TypeMeta{
-			APIVersion: "kind.x-k8s.io/v1alpha4",
-			Kind:       "Cluster",
-		},
-		Name: clusterName,
+		APIVersion: "kind.x-k8s.io/v1alpha4",
+		Kind:       "Cluster",
+		Name:       clusterName,
 	}
 
 	// Disable default CNI if using a non-default CNI (Cilium or Calico)

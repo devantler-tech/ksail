@@ -19,10 +19,8 @@ func TestMain(m *testing.M) {
 }
 
 var (
-	errTestBoom        = errors.New("boom")
-	errOriginalFailure = errors.New("original failure")
-	errBoomOriginal    = errors.New("boom: original failure")
-	errWrapped         = errors.New("wrapped")
+	errTestBoom = errors.New("boom")
+	errWrapped  = errors.New("wrapped")
 )
 
 func TestExecutorExecuteSuccess(t *testing.T) {
@@ -43,12 +41,10 @@ func TestExecutorExecuteSuccess(t *testing.T) {
 	}
 }
 
-// TestExecutorExecuteFlushesWarningsOnSuccess guards against silently swallowing
-// warnings: the executor captures stderr to normalize a failing command's error,
-// but a command that SUCCEEDS while writing a warning to stderr must still have
-// that warning reach the real stderr — a regression guard for warnings being
-// discarded on the success path.
-func TestExecutorExecuteFlushesWarningsOnSuccess(t *testing.T) {
+// TestExecutorExecuteDeliversWarningsOnSuccess guards against silently swallowing
+// warnings: a command that SUCCEEDS while writing a warning to stderr must have
+// that warning reach the real stderr.
+func TestExecutorExecuteDeliversWarningsOnSuccess(t *testing.T) {
 	t.Parallel()
 
 	var stderr bytes.Buffer
@@ -83,13 +79,12 @@ func (e *exitCodeError) Error() string { return fmt.Sprintf("exit code %d", e.co
 
 func (e *exitCodeError) KSailExitCode() int { return e.code }
 
-// TestExecutorExecuteFlushesWarningsOnExitCodeResult guards the custom-exit-code path
+// TestExecutorExecuteDeliversWarningsOnExitCodeResult guards the custom-exit-code path
 // (e.g. `cluster diff --exit-code` detecting drift): main.go surfaces such results as a
 // process exit code and prints no error, so a warning the run wrote to stderr must still
-// reach the real stderr rather than being swallowed with the captured buffer. It also
-// asserts the custom exit code stays detectable via errors.As so main.go keeps propagating
-// it.
-func TestExecutorExecuteFlushesWarningsOnExitCodeResult(t *testing.T) {
+// reach the real stderr. It also asserts the custom exit code stays detectable via
+// errors.As so main.go keeps propagating it.
+func TestExecutorExecuteDeliversWarningsOnExitCodeResult(t *testing.T) {
 	t.Parallel()
 
 	var stderr bytes.Buffer
@@ -124,10 +119,10 @@ func TestExecutorExecuteFlushesWarningsOnExitCodeResult(t *testing.T) {
 }
 
 // TestExecutorExecuteDropsCobraErrorOnExitCodeResult guards that the exit-code path does
-// NOT replay Cobra's automatic "Error: <err>" line. A command that leaves SilenceErrors
-// unset (like `cluster diff`, which sets only SilenceUsage) has Cobra append that line to
-// the captured stderr; main.go prints no error for an exit-code result, so surfacing
-// Cobra's line would be spurious noise. The command's own warning must still reach stderr.
+// NOT print Cobra's automatic "Error: <err>" line for a command that leaves SilenceErrors
+// unset (like `cluster diff`, which sets only SilenceUsage). main.go prints no error for
+// an exit-code result, so that line would be spurious noise. The command's own warning
+// must still reach stderr.
 func TestExecutorExecuteDropsCobraErrorOnExitCodeResult(t *testing.T) {
 	t.Parallel()
 
@@ -135,8 +130,7 @@ func TestExecutorExecuteDropsCobraErrorOnExitCodeResult(t *testing.T) {
 
 	cmd := &cobra.Command{
 		Use: "test",
-		// Mirror `cluster diff`: SilenceUsage set, SilenceErrors UNSET, so Cobra
-		// appends its own "Error: <err>" line to the captured stderr.
+		// Mirror `cluster diff`: SilenceUsage set, SilenceErrors UNSET.
 		SilenceUsage: true,
 		RunE: func(c *cobra.Command, _ []string) error {
 			_, _ = fmt.Fprintln(c.ErrOrStderr(), "heads up: drift detected")
@@ -159,7 +153,7 @@ func TestExecutorExecuteDropsCobraErrorOnExitCodeResult(t *testing.T) {
 	}
 
 	if strings.Contains(got, "Error: exit code 2") {
-		t.Fatalf("Cobra's auto error line must not be replayed for exit-code results, got %q", got)
+		t.Fatalf("Cobra's auto error line must not be printed for exit-code results, got %q", got)
 	}
 }
 
@@ -209,49 +203,13 @@ func TestCommandErrorErrorEmptyStruct(t *testing.T) {
 	}
 }
 
-func TestCommandErrorErrorCauseOnlyWhenMessageEmpty(t *testing.T) {
+func TestCommandErrorErrorIsTheCause(t *testing.T) {
 	t.Parallel()
 
 	cmd := &cobra.Command{
 		Use: "test",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return errTestBoom
-		},
-	}
-
-	err := executeAndRequireCommandError(t, cmd)
-	snaps.MatchSnapshot(t, err.Error())
-}
-
-func TestCommandErrorErrorMessageAndCauseConcatenatedWhenDistinct(t *testing.T) {
-	t.Parallel()
-
-	cmd := &cobra.Command{
-		Use:           "test",
-		SilenceErrors: true,
-		SilenceUsage:  true,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			cmd.PrintErrln("normalized")
-
-			return errOriginalFailure
-		},
-	}
-
-	err := executeAndRequireCommandError(t, cmd)
-	snaps.MatchSnapshot(t, err.Error())
-}
-
-func TestCommandErrorErrorMessageRetainedWhenAlreadyIncludesCause(t *testing.T) {
-	t.Parallel()
-
-	cmd := &cobra.Command{
-		Use:           "test",
-		SilenceErrors: true,
-		SilenceUsage:  true,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			cmd.PrintErrln("boom: original failure")
-
-			return errBoomOriginal
 		},
 	}
 
@@ -282,38 +240,6 @@ func TestCommandErrorUnwrap(t *testing.T) {
 
 	if (*errorhandler.CommandError)(nil).Unwrap() != nil {
 		t.Fatalf("expected nil receiver unwrap to return nil")
-	}
-}
-
-func TestNormalize(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "empty input returns empty string",
-			input:    "   \n\t  ",
-			expected: "",
-		},
-		{
-			name:     "strips error prefix and trims",
-			input:    "  Error: something bad \nRun help\n",
-			expected: "something bad\nRun help",
-		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			actual := errorhandler.NormalizeForTest(testCase.input)
-			if actual != testCase.expected {
-				t.Fatalf("expected %q, got %q", testCase.expected, actual)
-			}
-		})
 	}
 }
 
@@ -362,11 +288,10 @@ func warningCommand(result error) *cobra.Command {
 	}
 }
 
-// requireWarningReplayedWithoutAddress runs a command that writes a warning and
-// ends with result, and requires the replayed warning to hide its address. A
-// warning is captured during the run and written out afterwards, to the same
+// requireWarningWithoutAddress runs a command that writes a warning and ends with
+// result, and requires the warning to hide its address. A warning reaches the same
 // public logs a failed command's error reaches.
-func requireWarningReplayedWithoutAddress(t *testing.T, result error) {
+func requireWarningWithoutAddress(t *testing.T, result error) {
 	t.Helper()
 
 	var stderr bytes.Buffer
@@ -382,23 +307,23 @@ func requireWarningReplayedWithoutAddress(t *testing.T, result error) {
 	}
 
 	if strings.Contains(got, "203.0.113.10") {
-		t.Fatalf("the replayed warning still names the address: %q", got)
+		t.Fatalf("the warning still names the address: %q", got)
 	}
 }
 
-func TestExecutorExecuteHidesAddressesInWarningsReplayedOnSuccess(t *testing.T) {
+func TestExecutorExecuteHidesAddressesInWarningsOnSuccess(t *testing.T) {
 	t.Setenv("KSAIL_SHOW_ADDRESSES", "")
 
-	requireWarningReplayedWithoutAddress(t, nil)
+	requireWarningWithoutAddress(t, nil)
 }
 
-func TestExecutorExecuteHidesAddressesInWarningsReplayedOnExitCode(t *testing.T) {
+func TestExecutorExecuteHidesAddressesInWarningsOnExitCode(t *testing.T) {
 	t.Setenv("KSAIL_SHOW_ADDRESSES", "")
 
-	requireWarningReplayedWithoutAddress(t, &exitCodeError{code: 2})
+	requireWarningWithoutAddress(t, &exitCodeError{code: 2})
 }
 
-func TestExecutorExecuteShowsAddressesInReplayedWarningsWhenOptedIn(t *testing.T) {
+func TestExecutorExecuteShowsAddressesInWarningsWhenOptedIn(t *testing.T) {
 	t.Setenv("KSAIL_SHOW_ADDRESSES", "true")
 
 	var stderr bytes.Buffer
@@ -410,5 +335,141 @@ func TestExecutorExecuteShowsAddressesInReplayedWarningsWhenOptedIn(t *testing.T
 
 	if got := stderr.String(); !strings.Contains(got, warningWithAddress) {
 		t.Fatalf("expected the warning unchanged, got %q", got)
+	}
+}
+
+// TestExecutorExecuteStreamsStderrWhileCommandRuns guards the reason stderr is not
+// buffered: a long-running command's notice must reach the real stderr while the
+// command is still running, not after it returns.
+func TestExecutorExecuteStreamsStderrWhileCommandRuns(t *testing.T) {
+	t.Setenv("KSAIL_SHOW_ADDRESSES", "")
+
+	var (
+		stderr     bytes.Buffer
+		seenInside string
+	)
+
+	cmd := &cobra.Command{
+		Use: "test",
+		RunE: func(c *cobra.Command, _ []string) error {
+			_, _ = fmt.Fprintln(c.ErrOrStderr(), warningWithAddress)
+			seenInside = stderr.String()
+
+			return nil
+		},
+	}
+	cmd.SetErr(&stderr)
+
+	err := errorhandler.NewExecutor().Execute(cmd)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if !strings.Contains(seenInside, "heads up: <address hidden>:6443 answered slowly") {
+		t.Fatalf("expected the notice on stderr while the command ran, got %q", seenInside)
+	}
+}
+
+// TestExecutorExecuteFailurePrintsNoErrorOfItsOwn guards against printing a failure
+// twice: the command's warning reaches stderr live, Cobra's error line does not, and
+// the returned error holds only the failure, which the entrypoint prints once.
+func TestExecutorExecuteFailurePrintsNoErrorOfItsOwn(t *testing.T) {
+	t.Parallel()
+
+	var stderr bytes.Buffer
+
+	cmd := &cobra.Command{
+		Use:          "test",
+		SilenceUsage: true,
+		RunE: func(c *cobra.Command, _ []string) error {
+			_, _ = fmt.Fprintln(c.ErrOrStderr(), "heads up: incomplete values")
+
+			return errTestBoom
+		},
+	}
+	cmd.SetErr(&stderr)
+
+	cmdErr := executeAndRequireCommandError(t, cmd)
+
+	if got := stderr.String(); got != "heads up: incomplete values\n" {
+		t.Fatalf("expected only the warning on stderr, got %q", got)
+	}
+
+	if got := cmdErr.Error(); got != errTestBoom.Error() {
+		t.Fatalf("expected the error to hold only the failure, got %q", got)
+	}
+}
+
+// TestExecutorExecuteFlushesPartialLineBeforeReturning guards the order of a failure's
+// output: the end of a partial line must be out before the caller prints the error,
+// not left to the masking writer's timer.
+func TestExecutorExecuteFlushesPartialLineBeforeReturning(t *testing.T) {
+	t.Setenv("KSAIL_SHOW_ADDRESSES", "")
+
+	var stderr bytes.Buffer
+
+	cmd := &cobra.Command{
+		Use:          "test",
+		SilenceUsage: true,
+		RunE: func(c *cobra.Command, _ []string) error {
+			_, _ = fmt.Fprint(c.ErrOrStderr(), "reached 203.0.113.10")
+
+			return errTestBoom
+		},
+	}
+	cmd.SetErr(&stderr)
+
+	_ = errorhandler.NewExecutor().Execute(cmd)
+
+	if got := stderr.String(); got != "reached <address hidden>" {
+		t.Fatalf("expected the partial line flushed and masked, got %q", got)
+	}
+}
+
+// TestExecutorExecuteRestoresCommand guards that the executor leaves the command as it
+// found it, because the entrypoint prints the failure through the command's writer.
+func TestExecutorExecuteRestoresCommand(t *testing.T) {
+	t.Parallel()
+
+	var stderr bytes.Buffer
+
+	cmd := &cobra.Command{
+		Use: "test",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return nil
+		},
+	}
+	cmd.SetErr(&stderr)
+
+	err := errorhandler.NewExecutor().Execute(cmd)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if cmd.SilenceErrors {
+		t.Fatal("expected SilenceErrors restored")
+	}
+
+	if cmd.ErrOrStderr() != &stderr {
+		t.Fatal("expected the original error writer restored")
+	}
+}
+
+// TestExecutorExecuteInvalidSubcommandHonoursSilenceErrors guards that a root command
+// which silences errors itself gets no usage hint, as Cobra gives it none either.
+func TestExecutorExecuteInvalidSubcommandHonoursSilenceErrors(t *testing.T) {
+	t.Parallel()
+
+	root := &cobra.Command{Use: "test", SilenceErrors: true}
+	root.AddCommand(&cobra.Command{Use: "valid"})
+	root.SetArgs([]string{"invalid"})
+
+	err := errorhandler.NewExecutor().Execute(root)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if got := err.Error(); got != `unknown command "invalid" for "test"` {
+		t.Fatalf("expected the error without a usage hint, got %q", got)
 	}
 }

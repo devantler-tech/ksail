@@ -23,7 +23,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 	ktypes "sigs.k8s.io/kustomize/api/types"
 	kwokconfig "sigs.k8s.io/kwok/pkg/config"
@@ -1028,10 +1027,8 @@ func createMinimalClusterForSnapshot(
 	distribution v1alpha1.Distribution,
 ) v1alpha1.Cluster {
 	minimalCluster := v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: v1alpha1.APIVersion,
-			Kind:       v1alpha1.Kind,
-		},
+		APIVersion: v1alpha1.APIVersion,
+		Kind:       v1alpha1.Kind,
 	}
 
 	// For Kind, the original hardcoded output had no spec.
@@ -1078,10 +1075,8 @@ func minimalDistributionConfigFile(distribution v1alpha1.Distribution) string {
 // Helper functions.
 func createTestCluster(_ string) v1alpha1.Cluster {
 	return v1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: v1alpha1.APIVersion,
-			Kind:       v1alpha1.Kind,
-		},
+		APIVersion: v1alpha1.APIVersion,
+		Kind:       v1alpha1.Kind,
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
 				Distribution:       v1alpha1.DistributionVanilla,

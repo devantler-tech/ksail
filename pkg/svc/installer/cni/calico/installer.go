@@ -484,6 +484,12 @@ func talosCalicoValues() map[string]string {
 		// Talos uses a read-only filesystem, so kubelet volume plugin path must be None
 		// This is under installation. in the Helm chart values.yaml
 		"installation.kubeletVolumePluginPath": `"None"`,
+		// Talos (v1.14 and later) does not provide the FlexVolume host path
+		// /usr/libexec/kubernetes, and the root filesystem around it is read-only.
+		// Without this, calico-node cannot create its nodeagent~uds hostPath and
+		// never starts, so the node stays NotReady.
+		// See: https://docs.siderolabs.com/talos/v1.14/getting-started/what's-new-in-talos#flexvolume-host-path-removed
+		"installation.flexVolumePath": `"None"`,
 		// Use NFTables dataplane which is recommended for Talos
 		"installation.calicoNetwork.linuxDataplane": `"Nftables"`,
 		// Disable BGP for Docker-based environments

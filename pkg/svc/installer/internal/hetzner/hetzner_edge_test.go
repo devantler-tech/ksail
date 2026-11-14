@@ -40,11 +40,9 @@ func TestEnsureSecret_UpdateError(t *testing.T) {
 	t.Parallel()
 
 	existing := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            hetzner.SecretName,
-			Namespace:       hetzner.Namespace,
-			ResourceVersion: "1",
-		},
+		Name:            hetzner.SecretName,
+		Namespace:       hetzner.Namespace,
+		ResourceVersion: "1",
 		Data: map[string][]byte{
 			"token": []byte("old-token"),
 		},
@@ -71,11 +69,9 @@ func TestEnsureSecret_DifferentToken_SuccessfulUpdate(t *testing.T) {
 	t.Parallel()
 
 	existing := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            hetzner.SecretName,
-			Namespace:       hetzner.Namespace,
-			ResourceVersion: "5",
-		},
+		Name:            hetzner.SecretName,
+		Namespace:       hetzner.Namespace,
+		ResourceVersion: "5",
 		Data: map[string][]byte{
 			"token": []byte("outdated-token"),
 		},

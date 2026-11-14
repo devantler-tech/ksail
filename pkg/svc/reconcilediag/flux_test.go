@@ -227,10 +227,8 @@ func TestFluxCollector_WarningEvents(t *testing.T) {
 	now := time.Now()
 
 	recentEvent := &corev1.Event{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pod-event-1",
-			Namespace: fluxSystemNS,
-		},
+		Name:      "pod-event-1",
+		Namespace: fluxSystemNS,
 		InvolvedObject: corev1.ObjectReference{
 			Kind:      podKind,
 			Name:      "kustomize-controller-abc",
@@ -245,10 +243,8 @@ func TestFluxCollector_WarningEvents(t *testing.T) {
 	}
 
 	oldEvent := &corev1.Event{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pod-event-old",
-			Namespace: fluxSystemNS,
-		},
+		Name:      "pod-event-old",
+		Namespace: fluxSystemNS,
 		InvolvedObject: corev1.ObjectReference{
 			Kind:      podKind,
 			Name:      "old-pod",

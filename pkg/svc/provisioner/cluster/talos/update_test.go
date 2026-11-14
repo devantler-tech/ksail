@@ -29,7 +29,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -814,8 +813,8 @@ func autoscalerBaselineHcloudSecret(t *testing.T) []byte {
 	t.Helper()
 
 	secret, err := json.Marshal(&corev1.Secret{
-		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
-		ObjectMeta: metav1.ObjectMeta{Name: "hcloud", Namespace: "kube-system"},
+		APIVersion: "v1", Kind: "Secret",
+		Name: "hcloud", Namespace: "kube-system",
 		Data: map[string][]byte{
 			"token":   []byte("test-token"),
 			"network": []byte("test-network"),
@@ -833,9 +832,9 @@ func TestEnsureAutoscalerSecretIfNeeded_RejectsUnreadableImageBaseline(t *testin
 
 	hcloudSecret := autoscalerBaselineHcloudSecret(t)
 	malformedSecret, err := json.Marshal(&corev1.Secret{
-		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
-		ObjectMeta: metav1.ObjectMeta{Name: "cluster-autoscaler-config", Namespace: "kube-system"},
-		Data:       map[string][]byte{"hcloud_cluster_config": []byte("not base64!!")},
+		APIVersion: "v1", Kind: "Secret",
+		Name: "cluster-autoscaler-config", Namespace: "kube-system",
+		Data: map[string][]byte{"hcloud_cluster_config": []byte("not base64!!")},
 	})
 	require.NoError(t, err)
 

@@ -23,6 +23,9 @@ With --merged, require a trusted closed-and-merged PR whose exact cask blob is
 still current on tap main. This mode intentionally does not trust the PR title:
 an evergreen branch can receive the next release before its previous-titled PR
 auto-merges, coalescing both releases into that older-titled PR.
+Exit 3 identifies invalid cask integrity only after a current-release merged
+candidate has passed its identity, immutable-blob and ancestry checks. Missing
+evidence and historical candidates remain ordinary validation failures (exit 1).
 EOF
 }
 
@@ -105,9 +108,16 @@ expected_head="goreleaser/${cask_name}"
 expected_path="Casks/${cask_name}.rb"
 expected_title="chore(cask): update ${cask_name} to ${tag}"
 failures=()
+integrity_failure=false
+merged_binding_valid=false
 
 block() {
 	failures+=("$1")
+}
+
+block_integrity() {
+	integrity_failure=true
+	block "$1"
 }
 
 json_string() {
@@ -268,6 +278,9 @@ if [[ "${merged}" == true ]]; then
 		fi
 	fi
 fi
+if [[ "${merged}" == true && "${#failures[@]}" -eq 0 ]]; then
+	merged_binding_valid=true
+fi
 # Read only active stanzas: a commented line is not what Homebrew installs, so it can neither
 # supply the version nor a digest. Each url is paired with the sha256 on the line next to it
 # (GoReleaser writes one sha256 + url pair per platform block), so a digest is only ever checked
@@ -286,10 +299,10 @@ if [[ -n "${cask_content}" ]]; then
 	pending_url=""
 	flush_pending() {
 		if [[ -n "${pending_sha}" ]]; then
-			block "cask sha256 ${pending_sha} is not paired with a url"
+			block_integrity "cask sha256 ${pending_sha} is not paired with a url"
 		fi
 		if [[ -n "${pending_url}" ]]; then
-			block "cask url ${pending_url} is not paired with a sha256"
+			block_integrity "cask url ${pending_url} is not paired with a sha256"
 		fi
 		pending_sha=""
 		pending_url=""
@@ -352,9 +365,9 @@ if [[ -n "${cask_content}" ]]; then
 		"${evidence_file}" >/dev/null 2>&1; then
 		block 'release-asset digest evidence is missing'
 	elif ((cask_sha_count == 0)); then
-		block "cask ${content_location} must pin at least one sha256"
+		block_integrity "cask ${content_location} must pin at least one sha256"
 	elif ((${#cask_pairs[@]} == 0)); then
-		block 'cask must pair each sha256 with a release asset url'
+		block_integrity 'cask must pair each sha256 with a release asset url'
 	else
 		download_prefix="https://github.com/${source_repo}/releases/download/${tag}/"
 		for pair in "${cask_pairs[@]}"; do
@@ -363,7 +376,7 @@ if [[ -n "${cask_content}" ]]; then
 			resolved_url="${cask_url//\#\{version\}/${expected_version}}"
 			asset_name="${resolved_url#"${download_prefix}"}"
 			if [[ "${asset_name}" == "${resolved_url}" || ! "${asset_name}" =~ ^[A-Za-z0-9._+-]+$ ]]; then
-				block "cask url ${cask_url} is not a ${source_repo} ${tag} release asset"
+				block_integrity "cask url ${cask_url} is not a ${source_repo} ${tag} release asset"
 				continue
 			fi
 			asset_digest="$(jq -r --arg name "${asset_name}" '
@@ -372,8 +385,10 @@ if [[ -n "${cask_content}" ]]; then
 			' "${evidence_file}" 2>/dev/null || true)"
 			if [[ -z "${asset_digest}" ]]; then
 				block "cask url ${cask_url} does not name exactly one published release asset"
+			elif [[ ! "${asset_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+				block "published digest evidence is malformed for ${asset_name}"
 			elif [[ "${asset_digest}" != "sha256:${cask_sha}" ]]; then
-				block "cask sha256 ${cask_sha} does not match the published digest of ${asset_name}"
+				block_integrity "cask sha256 ${cask_sha} does not match the published digest of ${asset_name}"
 			fi
 		done
 	fi
@@ -386,7 +401,7 @@ if [[ -n "${cask_content}" ]]; then
 			fi
 		done
 		if [[ "${pinned}" != true ]]; then
-			block "cask url ${unchecked_url} skips its checksum but no other stanza pins it to a digest"
+			block_integrity "cask url ${unchecked_url} skips its checksum but no other stanza pins it to a digest"
 		fi
 	done
 fi
@@ -422,6 +437,11 @@ if ((${#failures[@]} > 0)); then
 	for failure in "${failures[@]}"; do
 		printf -- '- %s\n' "${failure}" >&2
 	done
+	if [[ "${merged}" == true && "${merged_binding_valid}" == true &&
+		"${integrity_failure}" == true && "${active_versions[0]:-}" == "${expected_version}" ]] &&
+		((${#active_versions[@]} == 1)); then
+		exit 3
+	fi
 	exit 1
 fi
 

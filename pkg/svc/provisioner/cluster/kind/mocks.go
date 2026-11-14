@@ -15,10 +15,19 @@ func NewMockProvider(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockProvider {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockProvider{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -67,9 +76,9 @@ type MockProvider_Create_Call struct {
 // Create is a helper method to define mock.On call
 //   - name string
 //   - opts ...cluster.CreateOption
-func (_e *MockProvider_Expecter) Create(name interface{}, opts ...interface{}) *MockProvider_Create_Call {
+func (_e *MockProvider_Expecter) Create(name any, opts ...any) *MockProvider_Create_Call {
 	return &MockProvider_Create_Call{Call: _e.mock.On("Create",
-		append([]interface{}{name}, opts...)...)}
+		append([]any{name}, opts...)...)}
 }
 
 func (_c *MockProvider_Create_Call) Run(run func(name string, opts ...cluster.CreateOption)) *MockProvider_Create_Call {
@@ -127,7 +136,7 @@ type MockProvider_Delete_Call struct {
 // Delete is a helper method to define mock.On call
 //   - name string
 //   - kubeconfigPath string
-func (_e *MockProvider_Expecter) Delete(name interface{}, kubeconfigPath interface{}) *MockProvider_Delete_Call {
+func (_e *MockProvider_Expecter) Delete(name any, kubeconfigPath any) *MockProvider_Delete_Call {
 	return &MockProvider_Delete_Call{Call: _e.mock.On("Delete", name, kubeconfigPath)}
 }
 
@@ -249,7 +258,7 @@ type MockProvider_ListNodes_Call struct {
 
 // ListNodes is a helper method to define mock.On call
 //   - name string
-func (_e *MockProvider_Expecter) ListNodes(name interface{}) *MockProvider_ListNodes_Call {
+func (_e *MockProvider_Expecter) ListNodes(name any) *MockProvider_ListNodes_Call {
 	return &MockProvider_ListNodes_Call{Call: _e.mock.On("ListNodes", name)}
 }
 

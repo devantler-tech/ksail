@@ -9,7 +9,7 @@ ifneq ($(and $(GITHUB_ACTIONS),$(CODEQL_EXTRACTOR_GO_ROOT)),)
 .DEFAULT_GOAL := codeql-autobuild-prepare
 endif
 
-.PHONY: help ui build test desktop desktop-app generate codeql-autobuild-prepare
+.PHONY: help ui build test desktop desktop-app generate generate-go-notices codeql-autobuild-prepare
 
 help: ## Show available targets.
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -37,6 +37,9 @@ generate: ## Regenerate ALL generated artifacts (JSON schema, CRD/deepcopy, refe
 	go generate ./pkg/svc/chat/...
 	mockery
 	[ -d web/ui/node_modules ] || npm --prefix web/ui ci && npm --prefix web/ui run gen:types
+
+generate-go-notices: ## Regenerate source-audited Go recipient notices for every release target (local only).
+	KSAIL_UPDATE_GO_NOTICES=1 go test ./pkg/client/kubescape -run '^TestReleasedGoDependencyLicenses$$' -count=1
 
 codeql-autobuild-prepare:
 	@bash .github/scripts/codeql-autobuild-prepare.sh "$$PPID"

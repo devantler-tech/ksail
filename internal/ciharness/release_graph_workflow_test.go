@@ -39,9 +39,30 @@ func TestReleaseGraphAuditRunsForReleaseOnlyChanges(t *testing.T) {
 
 	inputs := auditedReleaseInputPaths(t)
 
-	inputs = append(inputs, ".github/workflows/ci.yaml", "go.mod", "go.sum",
-		".govulncheck-allow.txt", "pkg/client/kubescape/cilium_linkage_test.go",
-		"desktop/main.go", "internal/ciharness/release_graph_workflow_test.go")
+	inputs = append(
+		inputs,
+		".github/workflows/ci.yaml",
+		"go.mod",
+		"go.sum",
+		".github/go-license-policy.json",
+		"LICENSE",
+		"internal/licensepolicy/policy.go",
+		"internal/moduleintegrity/verify.go",
+		"internal/gonotices/bundle.go",
+		".github/go-notice-materials.json",
+		".github/go-notice-receipts.json",
+		"notices/go/cli-linux-amd64/manifest.json",
+		"notices/go/desktop-windows-amd64/THIRD_PARTY_NOTICES.txt",
+		".github/scripts/go-notices.go",
+		".github/scripts/go-notices-release.test.sh",
+		"third_party/otelzap/KSail-PATCH.md",
+		"third_party/go-archive/KSail-PATCH.md",
+		"third_party/cel-go/LICENSE",
+		".govulncheck-allow.txt",
+		"pkg/client/kubescape/cilium_linkage_test.go",
+		"desktop/main.go",
+		"internal/ciharness/release_graph_workflow_test.go",
+	)
 	for _, input := range inputs {
 		assert.Truef(t, contractFilterMatches(t, patterns, input),
 			"changing only %s must run the shipped dependency audit", input)
@@ -130,4 +151,17 @@ func TestReleaseGraphAuditPropagatesFailure(t *testing.T) {
 	assert.Contains(t, strings.Split(string(actual), "\n"), "./pkg/client/kubescape/...")
 	assert.Contains(t, strings.Split(string(actual), "\n"), "-count=1",
 		"release configuration changes must not replay a cached successful test")
+}
+
+func TestGoNoticeReleaseWiringUsesExistingRequiredGuard(t *testing.T) {
+	t.Parallel()
+	workflow := readCIWorkflow(t, ".github/workflows/ci.yaml")
+	job, found := workflow.Jobs["verify-go-archive"]
+	require.True(t, found)
+	assert.False(t, job.ContinueOnError)
+	step := findHarnessStep(t, job.Steps, "📦 Verify Go notice release wiring")
+	assert.Equal(t, "bash .github/scripts/go-notices-release.test.sh", strings.TrimSpace(step.Run))
+	assert.Empty(t, step.If)
+	assert.False(t, step.ContinueOnError)
+	assert.Contains(t, workflow.Jobs["require-checks-in-pr"].Needs, "verify-go-archive")
 }

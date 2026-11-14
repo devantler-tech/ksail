@@ -27,6 +27,9 @@ type claircoreModuleAudit struct {
 type goListModule struct {
 	Path    string        `json:"Path"`    //nolint:tagliatelle // Go command output contract.
 	Version string        `json:"Version"` //nolint:tagliatelle // Go command output contract.
+	Dir     string        `json:"Dir"`     //nolint:tagliatelle // Go command output contract.
+	Sum     string        `json:"Sum"`     //nolint:tagliatelle // Go command output contract.
+	Main    bool          `json:"Main"`    //nolint:tagliatelle // Go command output contract.
 	Replace *goListModule `json:"Replace"` //nolint:tagliatelle // Go command output contract.
 }
 

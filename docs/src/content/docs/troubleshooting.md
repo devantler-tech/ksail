@@ -43,11 +43,11 @@ read. KSail keeps the local connection and reports the failure. A retry refuses 
 when ownership can no longer be proven, even if a familiar context name remains.
 
 Investigate the reported API error and any remaining host resources separately. If you only want
-to retire the stale **local connection**, the experimental recovery command accepts one exact
-context in one explicit file:
+to retire the stale **local connection**, the recovery command accepts one exact context in one
+explicit file:
 
 ```bash
-ksail cluster forget --kubeconfig ./nested.config --context kind-nested --experimental
+ksail cluster forget --kubeconfig ./nested.config --context kind-nested
 ```
 
 This command makes no API requests, runs no credential plugins, and never deletes cluster or host
@@ -149,6 +149,30 @@ ksail workload reconcile --timeout=5m
 ```
 
 ## Image Export Issues
+
+### Images Spread Across Nodes
+
+For Docker-backed Vanilla and K3s clusters with multiple nodes, `ksail workload export`
+collects the named image references found across the node inventories into one archive,
+including references held only by a worker. Repeated references are exported once.
+Use repeatable `--image` flags to select images held on different nodes.
+
+If a requested reference is unavailable, a required node inventory cannot be read, or an
+exported image is incomplete, the command fails and preserves any existing destination
+archive. Restore access to the affected node or import the missing image, then retry.
+Allow disk space for private staging content and the completed archive during a multi-node export.
+
+### Importing on a Different CPU Architecture
+
+An export carries image content only for the CPU architecture of the nodes it ran on, such as
+`linux/amd64`. A multi-platform image still keeps its full image index in the archive, so the
+archive lists architectures it has no content for. After such an export, KSail warns which
+images other architectures cannot use.
+
+`ksail workload import` checks each node's architecture before it copies anything. If the archive
+has no content for a node's architecture for one of its multi-platform images, the import stops
+and names those images. To move images to a cluster with a different architecture, export them
+from a cluster of that architecture, or pull them there from their registry.
 
 ### Blob Integrity Check Failed
 

@@ -18,6 +18,9 @@ var WaitForNetworkRemovalForTest = waitForNetworkRemoval
 // BuildValuesFilesForTest exposes buildValuesFiles for unit testing.
 var BuildValuesFilesForTest = buildValuesFiles
 
+// BuildValuesFilesForVersionForTest exposes version-specific values rendering for unit testing.
+var BuildValuesFilesForVersionForTest = buildValuesFilesForVersion
+
 // ResolvePersistenceDisabledForTest exposes resolvePersistenceDisabled for unit testing.
 var ResolvePersistenceDisabledForTest = resolvePersistenceDisabled
 

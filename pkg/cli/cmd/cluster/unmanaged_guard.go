@@ -258,6 +258,11 @@ func ensureAWSClusterManaged(
 		return err
 	}
 
+	err = adoptEKSCreationHint(ctx, resolved, identityClient)
+	if err != nil {
+		return err
+	}
+
 	clusterName := resolved.ClusterName
 	region := resolved.AWSRegion
 
@@ -556,7 +561,7 @@ func queryFrozenAWSOwnership(
 	)
 	if err != nil {
 		if errors.Is(err, eksctlclient.ErrClusterNotFound) {
-			return credentials.AWSResolution{}, awsOwnershipMismatchError(resolved, err)
+			return credentials.AWSResolution{}, eksTargetAbsentError(ctx, resolved, auth, err)
 		}
 
 		return credentials.AWSResolution{}, awsOwnershipQueryError(resolved, err)
@@ -595,13 +600,21 @@ func hasLocalKSailEKSTargetEvidence(resolved *lifecycle.ResolvedClusterInfo) boo
 			// A region-qualified command can validate its exact record even when an unrelated
 			// sibling is unreadable. A name-only command still needs a complete listing.
 			_, ownershipErr := state.LoadEKSOwnershipState(resolved.ClusterName, region)
+			if ownershipErr == nil {
+				return true
+			}
 
-			return ownershipErr == nil
+			// A failed create that kept its attempt identifier (ksail#8324) is candidate evidence
+			// only: the eksctl provenance query, the account check and the live creation-tag match
+			// still have to pass before anything is recorded or deleted.
+			_, hintErr := state.LoadEKSCreationHint(resolved.ClusterName, region)
+
+			return hintErr == nil
 		}
 
 		_, ownershipErr := state.ListEKSOwnershipStates(resolved.ClusterName)
 
-		return ownershipErr == nil
+		return ownershipErr == nil || state.HasEKSCreationHint(resolved.ClusterName)
 	}
 
 	return spec.Distribution == v1alpha1.DistributionEKS && spec.Provider == v1alpha1.ProviderAWS
@@ -721,7 +734,7 @@ func unmanagedClusterGuard(ctx context.Context, resolved *lifecycle.ResolvedClus
 
 		return fmt.Errorf(
 			"%w; to retire only a local connection, use "+
-				"ksail cluster forget --kubeconfig <file> --context <exact-context> --experimental; "+
+				"ksail cluster forget --kubeconfig <file> --context <exact-context>; "+
 				"this does not check or delete host resources",
 			unmanagedClusterError(resolved.ClusterName),
 		)
@@ -820,4 +833,23 @@ func resolveUpdateTarget(
 		effectiveAWSRegion == configuredAWSRegion
 
 	return resolved
+}
+
+// eksTargetAbsentError reports an exact eksctl query that found no cluster. A failed create may have
+// kept an attempt identifier for a cluster that never came to exist (ksail#8324): the lookup still
+// fails, and that stale hint is removed alongside.
+func eksTargetAbsentError(
+	ctx context.Context,
+	resolved *lifecycle.ResolvedClusterInfo,
+	auth credentials.AWSResolution,
+	cause error,
+) error {
+	mismatchErr := awsOwnershipMismatchError(resolved, cause)
+
+	discardErr := discardStaleEKSCreationHint(ctx, resolved, auth)
+	if discardErr != nil {
+		return errors.Join(mismatchErr, discardErr)
+	}
+
+	return mismatchErr
 }

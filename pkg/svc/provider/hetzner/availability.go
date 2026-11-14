@@ -137,7 +137,8 @@ func isRetryableAvailabilityError(err error) bool {
 
 // CheckServerAvailability verifies that every requested server type is available
 // in at least one of the configured locations (primary + fallbacks).
-// It returns an error on the first server type that cannot be satisfied.
+// A missing type or failed lookup is returned at once; ErrServerTypeUnavailable
+// is returned only after every type has been checked, so it never hides one.
 // Call this before creating infrastructure resources to fail fast.
 func (p *Provider) CheckServerAvailability(
 	ctx context.Context,
@@ -152,14 +153,27 @@ func (p *Provider) CheckServerAvailability(
 	uniqueTypes := deduplicateServerTypes(serverTypes)
 	locations := buildLocationList(primaryLocation, fallbackLocations)
 
+	// An unavailable type is remembered rather than returned at once, so it
+	// cannot hide a later type that does not exist or whose lookup failed:
+	// callers may treat ErrServerTypeUnavailable as advisory only (ksail#8100).
+	var unavailableErr error
+
 	for _, serverTypeName := range uniqueTypes {
 		err := p.checkSingleServerType(ctx, serverTypeName, locations)
-		if err != nil {
+		if err == nil {
+			continue
+		}
+
+		if !errors.Is(err, ErrServerTypeUnavailable) {
 			return err
+		}
+
+		if unavailableErr == nil {
+			unavailableErr = err
 		}
 	}
 
-	return nil
+	return unavailableErr
 }
 
 // checkSingleServerType verifies that serverTypeName is available in at least one

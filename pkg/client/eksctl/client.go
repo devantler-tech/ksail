@@ -183,7 +183,7 @@ func WithEnvironment(environment []string) Option {
 }
 
 // WithProgressWriter streams the output of long-running eksctl commands (create,
-// delete, scale, upgrade) to w while they run, with credential values redacted.
+// delete, scale) to w while they run, with credential values redacted.
 // Read-only listings are never streamed, because their stdout is parsed. A nil
 // writer disables streaming.
 func WithProgressWriter(w io.Writer) Option {

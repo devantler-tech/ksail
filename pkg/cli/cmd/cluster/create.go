@@ -120,12 +120,7 @@ func handleCreateRunE(
 		return requiredStateErr
 	}
 
-	// Persist the ClusterSpec so that future updates have an accurate baseline
-	// for fields that cannot be detected from the live cluster (e.g., Talos ISO).
-	saveErr := state.SaveClusterSpec(clusterName, &ctx.ClusterCfg.Spec.Cluster)
-	if saveErr != nil {
-		notify.Warningf(cmd.OutOrStderr(), "failed to save cluster state: %v", saveErr)
-	}
+	recordCreatedCluster(cmd, clusterName, ctx.ClusterCfg)
 
 	return finishCreateWithTTL(
 		requiredStateErr,
@@ -141,6 +136,18 @@ func handleCreateRunE(
 			return maybeWaitForTTL(cmd, clusterName, ctx.ClusterCfg, ctx.EKSConfig)
 		},
 	)
+}
+
+// recordCreatedCluster keeps the best-effort records of a successful create: the saved
+// ClusterSpec, so future updates have an accurate baseline for fields that cannot be detected
+// from the live cluster (e.g., Talos ISO), and the in-cluster identity marker (ksail#7191).
+func recordCreatedCluster(cmd *cobra.Command, clusterName string, clusterCfg *v1alpha1.Cluster) {
+	saveErr := state.SaveClusterSpec(clusterName, &clusterCfg.Spec.Cluster)
+	if saveErr != nil {
+		notify.Warningf(cmd.OutOrStderr(), "failed to save cluster state: %v", saveErr)
+	}
+
+	writeClusterIdentityMarker(cmd, clusterName, clusterCfg)
 }
 
 func finishCreateWithTTL(

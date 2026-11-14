@@ -213,11 +213,11 @@ func ensureTag(ref string) string {
 	}
 
 	// Check if already has a tag (contains : after the last /)
-	lastSlash := strings.LastIndex(ref, "/")
+	_, after, ok := strings.CutLast(ref, "/")
 
 	afterSlash := ref
-	if lastSlash >= 0 {
-		afterSlash = ref[lastSlash+1:]
+	if ok {
+		afterSlash = after
 	}
 
 	if !strings.Contains(afterSlash, ":") {

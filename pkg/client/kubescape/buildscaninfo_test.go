@@ -3,6 +3,8 @@ package kubescape_test
 import (
 	"context"
 	"errors"
+	"math"
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubescape"
@@ -189,5 +191,78 @@ func TestScanDirectoryCancelledContext(t *testing.T) {
 
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("expected context.Canceled, got %v", err)
+	}
+}
+
+// TestScanDirectoryWithResultCancelledContext asserts the context guard fires
+// for the result-returning scan too, and that no result accompanies the error.
+func TestScanDirectoryWithResultCancelledContext(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	client := kubescape.NewClient()
+
+	result, err := client.ScanDirectoryWithResult(ctx, testPath, nil)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+
+	if result != nil {
+		t.Errorf("expected no result from a cancelled scan, got %+v", result)
+	}
+}
+
+// TestCheckComplianceThreshold pins the compliance gate: a score below a
+// positive threshold, or a score that is not a number, fails with both values
+// in the message; a score at or above it, or a zero (disabled) threshold,
+// passes.
+func TestCheckComplianceThreshold(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name      string
+		score     float32
+		threshold float32
+		wantErr   string
+	}{
+		{
+			name:      "below threshold fails",
+			score:     94.99,
+			threshold: 100,
+			wantErr:   "compliance score 94.99% is below threshold 100.00%",
+		},
+		{
+			name:      "unmeasured score fails",
+			score:     float32(math.NaN()),
+			threshold: 85,
+			wantErr:   "compliance score NaN% is below threshold 85.00%",
+		},
+		{name: "at threshold passes", score: 85, threshold: 85},
+		{name: "above threshold passes", score: 98.87, threshold: 85},
+		{name: "zero threshold disables the gate", score: 0, threshold: 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := kubescape.CheckComplianceThreshold(test.score, test.threshold)
+
+			if test.wantErr == "" {
+				if err != nil {
+					t.Fatalf("expected the gate to pass, got %v", err)
+				}
+
+				return
+			}
+
+			if !errors.Is(err, kubescape.ErrScanFailed) {
+				t.Fatalf("expected ErrScanFailed, got %v", err)
+			}
+
+			if !strings.Contains(err.Error(), test.wantErr) {
+				t.Errorf("expected error to contain %q, got %q", test.wantErr, err.Error())
+			}
+		})
 	}
 }

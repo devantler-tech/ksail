@@ -8,6 +8,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/flux"
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubectl"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 )
 
@@ -15,16 +16,17 @@ import (
 // The runtime parameter is kept for consistency with other workload command constructors,
 // though it's currently unused as this command wraps kubectl and flux directly.
 func NewCreateCmd() *cobra.Command {
-	// Resolve kubeconfig path from ksail.yaml (cheap — skips distribution config loading).
-	// This is re-resolved in PersistentPreRunE after flags are parsed.
-	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(nil)
-
-	// Create IO streams for kubectl and flux
-	ioStreams := genericiooptions.IOStreams{
+	return newCreateCmd(genericiooptions.IOStreams{
 		In:     os.Stdin,
 		Out:    os.Stdout,
 		ErrOut: os.Stderr,
-	}
+	})
+}
+
+func newCreateCmd(ioStreams genericiooptions.IOStreams) *cobra.Command {
+	// Resolve kubeconfig path from ksail.yaml (cheap — skips distribution config loading).
+	// This is re-resolved in PersistentPreRunE after flags are parsed.
+	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(nil)
 
 	// Create kubectl client and get the create command directly
 	kubectlClient := kubectl.NewClient(ioStreams)
@@ -34,8 +36,11 @@ func NewCreateCmd() *cobra.Command {
 	fluxClient := flux.NewClient(ioStreams, kubeconfigPath)
 	fluxCreateCmd := fluxClient.CreateCreateCommand(kubeconfigPath)
 
-	// Add all flux create sub-commands to the main create command
+	// Move the flux create sub-commands under the main create command. They read
+	// --namespace from the flux parent's persistent flags, which they would lose with that
+	// parent, so each runnable one carries them along (kubectl's own sub-commands are unaffected).
 	for _, subCmd := range fluxCreateCmd.Commands() {
+		addFlagsToRunnableCommands(subCmd, fluxCreateCmd.PersistentFlags())
 		createCmd.AddCommand(subCmd)
 	}
 
@@ -50,4 +55,19 @@ func NewCreateCmd() *cobra.Command {
 	wrapWithKubeconfigResolution(createCmd)
 
 	return createCmd
+}
+
+// addFlagsToRunnableCommands registers flags as local flags on every command under cmd that
+// has no sub-commands. Local, not persistent, so the MCP tool generator (which reads each
+// command's own flags) offers them as well as the CLI.
+func addFlagsToRunnableCommands(cmd *cobra.Command, flags *pflag.FlagSet) {
+	if !cmd.HasSubCommands() {
+		cmd.Flags().AddFlagSet(flags)
+
+		return
+	}
+
+	for _, sub := range cmd.Commands() {
+		addFlagsToRunnableCommands(sub, flags)
+	}
 }

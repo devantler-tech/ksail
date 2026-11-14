@@ -37,11 +37,9 @@ func newConnectorBase(hub kubernetes.Interface) *hetznerbase.Base {
 
 func publishedSecret(data []byte) *corev1.Secret {
 	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      connectorTestSecret,
-			Namespace: connectorTestNamespace,
-		},
-		Data: map[string][]byte{connectorTestKey: data},
+		Name:      connectorTestSecret,
+		Namespace: connectorTestNamespace,
+		Data:      map[string][]byte{connectorTestKey: data},
 	}
 }
 

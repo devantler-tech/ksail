@@ -9,7 +9,6 @@ import (
 	kubeprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -18,7 +17,7 @@ func TestWaitForDefaultServiceAccount_Present(t *testing.T) {
 
 	namespace := kubeprovider.NamespaceName("test-cluster")
 	client := fake.NewClientset(&corev1.ServiceAccount{
-		ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: namespace},
+		Name: "default", Namespace: namespace,
 	})
 
 	prov, err := kubeprovider.NewProvider(client, v1alpha1.OptionsKubernetes{})

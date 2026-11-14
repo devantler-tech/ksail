@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"strconv"
 	"strings"
@@ -31,12 +32,18 @@ const (
 // replacement from the release incarnation KSail actually mutated.
 func ValidateKubernetesReleaseStorageDriver(driver string) error {
 	driver = normalizeReleaseStorageDriver(driver)
-	switch driver {
-	case "", "secret", "secrets", "configmap", "configmaps":
+	switch {
+	case driver == "", driver == "secret", driver == "secrets", isConfigMapReleaseStorage(driver):
 		return nil
 	default:
 		return fmt.Errorf("%w: %q", ErrReleaseStorageDriverUnsupported, driver)
 	}
+}
+
+// isConfigMapReleaseStorage reports whether a normalized HELM_DRIVER value selects ConfigMap
+// release storage.
+func isConfigMapReleaseStorage(driver string) bool {
+	return driver == "configmap" || driver == "configmaps"
 }
 
 func normalizeReleaseStorageDriver(driver string) string {
@@ -388,7 +395,9 @@ func (c *Client) ListReleases(ctx context.Context) ([]ReleaseInfo, error) {
 // GetReleaseStorageLabels returns a matching Flux HelmRelease's ownership
 // labels, or the latest Helm storage object's labels when Flux does not own
 // the release. Flux need not label Helm storage, so inspect its declared owner
-// before assuming that ordinary Helm labels mean KSail ownership.
+// before assuming that ordinary Helm labels mean KSail ownership. Argo CD writes
+// no Helm records at all, so when an in-cluster Argo CD Application tracks any
+// object of the release, the storage labels also carry [ArgoCDManagedByLabel].
 // The storage backend is determined by the HELM_DRIVER
 // environment variable: "configmap"/"configmaps" queries ConfigMaps, "memory"
 // always returns ErrNoReleaseStorage (no Kubernetes objects), and the default
@@ -421,7 +430,26 @@ func (c *Client) GetReleaseStorageLabels(
 		return nil, err
 	}
 
-	return metadata.Labels, nil
+	if _, labelled := metadata.Labels[ArgoCDManagedByLabel]; labelled {
+		return metadata.Labels, nil
+	}
+
+	// Argo CD writes no Helm records, so an Application that adopted this release leaves its
+	// record unlabelled: ask Argo CD whether it tracks the release's objects.
+	argoLabels, err := c.argoCDReleaseOwnershipLabels(ctx, releaseName, namespace)
+	if errors.Is(err, errArgoCDReleaseNotOwned) {
+		return metadata.Labels, nil
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	owned := make(map[string]string, len(metadata.Labels)+len(argoLabels))
+	maps.Copy(owned, metadata.Labels)
+	maps.Copy(owned, argoLabels)
+
+	return owned, nil
 }
 
 // GetReleaseStorageMetadata returns labels and the Kubernetes UID from the
@@ -518,8 +546,8 @@ func (c *Client) fetchReleaseStorageMetadata(
 
 	var items []releaseStorageItem
 
-	switch driver {
-	case "configmap", "configmaps":
+	switch {
+	case isConfigMapReleaseStorage(driver):
 		cmList, err := clientset.CoreV1().ConfigMaps(namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: selector,
 		})
@@ -674,14 +702,13 @@ func (c *Client) upgradeRelease(
 	spec *ChartSpec,
 	postRenderer *apiVersionPostRenderer,
 ) (*v1.Release, error) {
-	client := helmv4action.NewUpgrade(c.actionConfig)
-	client.Namespace = spec.Namespace
+	lastApplyMethod, err := c.lastReleaseApplyMethod(spec.ReleaseName)
+	if err != nil {
+		return nil, fmt.Errorf("read apply method of release %q: %w", spec.ReleaseName, err)
+	}
+
+	client := newUpgradeAction(c.actionConfig, spec, lastApplyMethod)
 	client.PostRenderer = optionalAPIVersionPostRenderer(postRenderer)
-
-	applyCommonActionConfig(upgradeActionAdapter{client}, spec)
-
-	// Note: Atomic is not supported in Helm v4 Upgrade action
-	client.SkipCRDs = !spec.UpgradeCRDs // Inverted logic in v4
 
 	chart, vals, err := c.loadChartAndValues(ctx, spec, client)
 	if err != nil {
@@ -693,6 +720,59 @@ func (c *Client) upgradeRelease(
 	}
 
 	return executeAndExtractRelease(runFn)
+}
+
+// lastReleaseApplyMethod returns how the latest revision of a release was applied ("ssa" or
+// "csa"), or "" for a release with no recorded method. A missing release also returns "", as
+// the upgrade itself reports it. Any other read failure is an error: guessing "" would leave
+// ForceConflicts off for a release Helm may still upgrade with server-side apply.
+func (c *Client) lastReleaseApplyMethod(releaseName string) (string, error) {
+	if c.actionConfig == nil || c.actionConfig.Releases == nil {
+		return "", nil
+	}
+
+	last, err := c.actionConfig.Releases.Last(releaseName)
+	if errors.Is(err, helmv4driver.ErrReleaseNotFound) {
+		return "", nil
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("read latest revision: %w", err)
+	}
+
+	rel, ok := last.(*v1.Release)
+	if !ok || rel == nil {
+		return "", nil
+	}
+
+	return rel.ApplyMethod, nil
+}
+
+// newUpgradeAction configures the Helm upgrade KSail runs to bring a release back to its
+// declared state. The upgrade keeps Helm's default apply method: a release last applied with
+// server-side apply is upgraded with server-side apply, and one last applied client-side stays
+// client-side. Under server-side apply a field another manager has applied (for example the
+// Helm CLI) would otherwise reject KSail's apply, so for those releases the upgrade takes the
+// fields back, as the Helm CLI does with --force-conflicts. Client-side apply has no field
+// conflicts, and Helm refuses ForceConflicts without server-side apply, so it stays off there.
+// KSail installers skip releases a GitOps controller owns (helmutil.SkipIfGitOpsManaged) before
+// they upgrade: a record that names its owner, a matching Flux HelmRelease, or an Argo CD
+// Application that tracks the release's objects.
+func newUpgradeAction(
+	cfg *helmv4action.Configuration,
+	spec *ChartSpec,
+	lastApplyMethod string,
+) *helmv4action.Upgrade {
+	client := helmv4action.NewUpgrade(cfg)
+	client.Namespace = spec.Namespace
+	client.ForceConflicts = lastApplyMethod == string(v1.ApplyMethodServerSideApply)
+
+	applyCommonActionConfig(upgradeActionAdapter{client}, spec)
+
+	// Note: Atomic is not supported in Helm v4 Upgrade action
+	client.SkipCRDs = !spec.UpgradeCRDs // Inverted logic in v4
+
+	return client
 }
 
 func (c *Client) templateInstall(spec *ChartSpec) (*helmv4action.Install, error) {

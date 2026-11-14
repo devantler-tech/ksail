@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
 )
@@ -17,16 +16,16 @@ func TestFetchReleaseStorageMetadataSelectsLatestIncarnation(t *testing.T) {
 	t.Parallel()
 
 	clientset := fake.NewSimpleClientset(
-		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+		&corev1.Secret{
 			Name: "sh.helm.release.v1.controller.v1", Namespace: "kube-system",
 			UID:    types.UID("old-uid"),
 			Labels: map[string]string{"name": "controller", "owner": "helm", "version": "1"},
-		}},
-		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+		},
+		&corev1.Secret{
 			Name: "sh.helm.release.v1.controller.v2", Namespace: "kube-system",
 			UID:    types.UID("current-uid"),
 			Labels: map[string]string{"name": "controller", "owner": "helm", "version": "2"},
-		}},
+		},
 	)
 
 	metadata, err := helm.FetchReleaseStorageMetadata(
@@ -66,20 +65,20 @@ func TestFetchReleaseStorageMetadataNormalizesDriver(t *testing.T) {
 			t.Parallel()
 
 			clientset := fake.NewSimpleClientset(
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+				&corev1.Secret{
 					Name: "sh.helm.release.v1.controller.v1", Namespace: "kube-system",
 					UID: types.UID("secret-uid"),
 					Labels: map[string]string{
 						"name": "controller", "owner": "helm", "version": "1",
 					},
-				}},
-				&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+				},
+				&corev1.ConfigMap{
 					Name: "sh.helm.release.v1.controller.v1", Namespace: "kube-system",
 					UID: types.UID("configmap-uid"),
 					Labels: map[string]string{
 						"name": "controller", "owner": "helm", "version": "1",
 					},
-				}},
+				},
 			)
 
 			metadata, err := helm.FetchReleaseStorageMetadata(
@@ -100,27 +99,27 @@ func TestFetchReleaseStorageMetadataExcludesKeepHistoryReplacement(t *testing.T)
 	t.Parallel()
 
 	clientset := fake.NewSimpleClientset(
-		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+		&corev1.Secret{
 			Name: "sh.helm.release.v1.controller.v1", Namespace: "kube-system",
 			UID: types.UID("persisted-owned-uid"),
 			Labels: map[string]string{
 				"name": "controller", "owner": "helm", "version": "1", "status": "superseded",
 			},
-		}},
-		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+		},
+		&corev1.Secret{
 			Name: "sh.helm.release.v1.controller.v2", Namespace: "kube-system",
 			UID: types.UID("uninstalled-uid"),
 			Labels: map[string]string{
 				"name": "controller", "owner": "helm", "version": "2", "status": "superseded",
 			},
-		}},
-		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+		},
+		&corev1.Secret{
 			Name: "sh.helm.release.v1.controller.v3", Namespace: "kube-system",
 			UID: types.UID("replacement-uid"),
 			Labels: map[string]string{
 				"name": "controller", "owner": "helm", "version": "3", "status": "deployed",
 			},
-		}},
+		},
 	)
 
 	metadata, err := helm.FetchReleaseStorageMetadata(

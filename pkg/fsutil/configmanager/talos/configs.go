@@ -246,8 +246,8 @@ func (c *Configs) WithName(name string) (*Configs, error) {
 		return c, nil
 	}
 
-	if name == c.Name && c.ControlPlane() != nil && c.Worker() != nil &&
-		c.ControlPlane().Cluster().Name() == name && c.Worker().Cluster().Name() == name {
+	if name == c.Name && configClusterName(c.ControlPlane()) == name &&
+		configClusterName(c.Worker()) == name {
 		return c, nil
 	}
 
@@ -684,11 +684,11 @@ func (c *Configs) IsCNIDisabled() bool {
 // connect to kubelet to populate StaticPodStatus resources.
 func (c *Configs) IsKubeletCertRotationEnabled() bool {
 	cp := c.ControlPlane()
-	if cp == nil || cp.Machine() == nil || cp.Machine().Kubelet() == nil {
+	if cp == nil || cp.K8sKubeletConfig() == nil {
 		return false
 	}
 
-	extraArgs := cp.Machine().Kubelet().ExtraArgs()
+	extraArgs := cp.K8sKubeletConfig().ExtraArgs()
 	if extraArgs == nil {
 		return false
 	}
@@ -884,7 +884,7 @@ func newConfigsWithEndpointAndSecrets(
 		return nil, err
 	}
 
-	clusterPatches, controlPlanePatches, workerPatches, err := categorizePatchesByScope(patches)
+	scoped, err := scopePatchesForContract(patches, versionContract)
 	if err != nil {
 		return nil, err
 	}
@@ -894,7 +894,7 @@ func newConfigsWithEndpointAndSecrets(
 		return nil, err
 	}
 
-	genOptions := buildBaseGenOptions(controlPlaneIP, versionContract)
+	genOptions := append(buildBaseGenOptions(controlPlaneIP, versionContract), scoped.genOptions...)
 	if existingSecrets != nil {
 		genOptions = append(genOptions, generate.WithSecretsBundle(existingSecrets))
 	}
@@ -904,9 +904,9 @@ func newConfigsWithEndpointAndSecrets(
 		"https://"+net.JoinHostPort(controlPlaneIP, "6443"),
 		kubernetesVersion,
 		genOptions,
-		clusterPatches,
-		controlPlanePatches,
-		workerPatches,
+		scoped.cluster,
+		scoped.controlPlane,
+		scoped.worker,
 	)
 
 	configBundle, err := bundle.NewBundle(bundleOpts...)
@@ -1261,6 +1261,8 @@ func schematicKernelArgs(configBundle *bundle.Bundle) []string {
 // grubUseUKICmdline=false (e.g. a pre-fold workaround that let the host-built cmdline include
 // the args), but once the args live in the UKI cmdline, false would make GRUB rebuild the
 // cmdline host-side and silently drop them — so it must become true.
+//
+//nolint:staticcheck // v1alpha1 machine.install is still what KSail generates
 func reconcileFoldedKernelArgs(configBundle *bundle.Bundle) error {
 	useUKICmdline := true
 
@@ -1348,6 +1350,8 @@ func controlPlaneInstallImage(configBundle *bundle.Bundle) string {
 }
 
 // applyInstallerImage patches machine.install.image on both control-plane and worker configs.
+//
+//nolint:staticcheck // v1alpha1 machine.install is still what KSail generates
 func applyInstallerImage(configBundle *bundle.Bundle, installerImage string) error {
 	patcher := func(cfg *v1alpha1.Config) error {
 		if cfg.MachineConfig == nil {
@@ -1382,4 +1386,15 @@ func applyInstallerImage(configBundle *bundle.Bundle, installerImage string) err
 	}
 
 	return nil
+}
+
+// configClusterName returns the cluster name a Talos config carries, or "" when the config or its
+// Kubernetes cluster document is missing. Talos 1.14 moved the name from cluster.clusterName to the
+// K8sClusterConfig document.
+func configClusterName(cfg talosconfig.Provider) string {
+	if cfg == nil || cfg.K8sClusterConfig() == nil {
+		return ""
+	}
+
+	return cfg.K8sClusterConfig().ClusterName()
 }

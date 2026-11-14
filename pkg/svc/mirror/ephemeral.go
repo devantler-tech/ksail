@@ -82,12 +82,10 @@ func injectEphemeralContainer(
 		}
 
 		container := corev1.EphemeralContainer{
-			EphemeralContainerCommon: corev1.EphemeralContainerCommon{
-				Name:            kind.containerName,
-				Image:           cfg.image,
-				Command:         cfg.command,
-				SecurityContext: kind.securityContext,
-			},
+			Name:                kind.containerName,
+			Image:               cfg.image,
+			Command:             cfg.command,
+			SecurityContext:     kind.securityContext,
 			TargetContainerName: point.Container,
 		}
 		pod.Spec.EphemeralContainers = append(pod.Spec.EphemeralContainers, container)

@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 )
 
 var errFluxReleaseNotOwned = errors.New("no matching Flux HelmRelease")
@@ -25,14 +26,9 @@ const fluxOwnershipPageSize = 200
 func (c *Client) fluxReleaseOwnershipLabels(
 	ctx context.Context, releaseName, namespace string,
 ) (map[string]string, error) {
-	config, err := c.settings.RESTClientGetter().ToRESTConfig()
+	_, client, err := c.ownershipClient("Flux")
 	if err != nil {
-		return nil, fmt.Errorf("get REST config for Flux release ownership: %w", err)
-	}
-
-	client, err := dynamic.NewForConfig(config)
-	if err != nil {
-		return nil, fmt.Errorf("create client for Flux release ownership: %w", err)
+		return nil, err
 	}
 
 	resource := client.Resource(schema.GroupVersionResource{
@@ -60,6 +56,22 @@ func (c *Client) fluxReleaseOwnershipLabels(
 			return nil, errFluxReleaseNotOwned
 		}
 	}
+}
+
+// ownershipClient returns the REST config and dynamic client a GitOps ownership
+// lookup reads through; owner names the controller in its errors.
+func (c *Client) ownershipClient(owner string) (*rest.Config, dynamic.Interface, error) {
+	config, err := c.settings.RESTClientGetter().ToRESTConfig()
+	if err != nil {
+		return nil, nil, fmt.Errorf("get REST config for %s release ownership: %w", owner, err)
+	}
+
+	client, err := dynamic.NewForConfig(config)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create client for %s release ownership: %w", owner, err)
+	}
+
+	return config, client, nil
 }
 
 // fluxOwnershipLabels checks one page without treating malformed declarations

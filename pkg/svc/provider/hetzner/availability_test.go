@@ -124,6 +124,21 @@ func TestCheckServerAvailability(t *testing.T) {
 			wantErr:           hetzner.ErrServerTypeUnavailable,
 		},
 		{
+			// The Talos provisioner only warns on ErrServerTypeUnavailable
+			// (ksail#8100), so an unavailable first type must not hide a
+			// later type that does not exist.
+			name: "UnavailableTypeDoesNotMaskMissingType",
+			types: map[string]serverTypeSchema{
+				"cx22": {ID: 1, Name: "cx22", Locations: []serverTypeLocSchema{
+					{ID: 1, Name: "fsn1", Available: false},
+				}},
+			},
+			serverTypes:     []string{"cx22", "nonexistent"},
+			primaryLocation: "fsn1",
+			wantErr:         hetzner.ErrServerTypeNotFound,
+			wantErrContains: "nonexistent",
+		},
+		{
 			name: "UnavailableLocationNotListed",
 			types: map[string]serverTypeSchema{
 				"cx22": {ID: 1, Name: "cx22", Locations: []serverTypeLocSchema{

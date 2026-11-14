@@ -131,10 +131,8 @@ func (sm *SnapshotManager) EnsureTalosSnapshot(
 // DeleteTalosSnapshots deletes all ksail-managed Talos snapshot images for the given cluster.
 func (sm *SnapshotManager) DeleteTalosSnapshots(ctx context.Context, clusterName string) error {
 	images, err := sm.hcloudClient.Image.AllWithOpts(ctx, hcloud.ImageListOpts{
-		Type: []hcloud.ImageType{hcloud.ImageTypeSnapshot},
-		ListOpts: hcloud.ListOpts{
-			LabelSelector: fmt.Sprintf("%s=%s", LabelTalosCluster, clusterName),
-		},
+		Type:          []hcloud.ImageType{hcloud.ImageTypeSnapshot},
+		LabelSelector: fmt.Sprintf("%s=%s", LabelTalosCluster, clusterName),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to list Talos snapshots for cluster %q: %w", clusterName, err)
@@ -173,13 +171,11 @@ func (sm *SnapshotManager) findExistingSnapshot(
 ) (int64, error) {
 	images, err := sm.hcloudClient.Image.AllWithOpts(ctx, hcloud.ImageListOpts{
 		Type: []hcloud.ImageType{hcloud.ImageTypeSnapshot},
-		ListOpts: hcloud.ListOpts{
-			LabelSelector: fmt.Sprintf("%s=%s,%s=%s,%s=%s",
-				LabelTalosVersion, talosVersion,
-				LabelTalosSchematic, SchematicLabelValue(schematicID),
-				LabelTalosCluster, clusterName,
-			),
-		},
+		LabelSelector: fmt.Sprintf("%s=%s,%s=%s,%s=%s",
+			LabelTalosVersion, talosVersion,
+			LabelTalosSchematic, SchematicLabelValue(schematicID),
+			LabelTalosCluster, clusterName,
+		),
 	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to look up Talos snapshot: %w", err)
@@ -298,7 +294,7 @@ func (sm *SnapshotManager) deleteBuildResources(ctx context.Context, buildID str
 // still locked by the action the build was waiting on.
 func (sm *SnapshotManager) deleteBuildServers(ctx context.Context, selector string) error {
 	servers, err := sm.hcloudClient.Server.AllWithOpts(ctx, hcloud.ServerListOpts{
-		ListOpts: hcloud.ListOpts{LabelSelector: selector},
+		LabelSelector: selector,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to list temporary snapshot build servers: %w", err)
@@ -352,7 +348,7 @@ func (sm *SnapshotManager) deleteBuildServers(ctx context.Context, selector stri
 // deleteBuildSSHKeys deletes the SSH keys matching selector.
 func (sm *SnapshotManager) deleteBuildSSHKeys(ctx context.Context, selector string) error {
 	keys, err := sm.hcloudClient.SSHKey.AllWithOpts(ctx, hcloud.SSHKeyListOpts{
-		ListOpts: hcloud.ListOpts{LabelSelector: selector},
+		LabelSelector: selector,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to list temporary snapshot build SSH keys: %w", err)

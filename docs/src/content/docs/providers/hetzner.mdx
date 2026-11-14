@@ -254,8 +254,53 @@ spec:
       serverLimit: 20              # project quota; must be ≥ the reachable total (controlPlanes + workers + sum(pool.max), capped by maxNodesTotal)
 ```
 
-The full autoscaler field reference (`spec.cluster.autoscaler`, including node pools and per-pool
-labels/taints) is generated from the API types: see
+Set `talosPatches` on a pool to give its workers their own Talos machine configuration.
+KSail applies the inline patches in order after the shared worker patches, both when creating
+the pool's boot template and when reconciling an existing worker. KSail applies the pool's node
+labels and taints afterward and preserves settings it manages for each node, such as its hostname.
+The patches are literal Talos documents. KSail keeps environment placeholders in them as written.
+Use shared Talos patches for settings KSail must coordinate across the cluster, including changes
+to the CNI, disk quotas, or system disk encryption. KSail checks each patched boot template against
+Hetzner's 32 KiB user-data limit before provisioning.
+
+Talos normally expands `EPHEMERAL` to fill the system disk. For a new pool with a raw volume on
+that disk, cap `EPHEMERAL` before provisioning the raw volume. Check that the server disk can
+fit both volumes and the Talos system partitions. [Talos system volumes](https://docs.siderolabs.com/talos/v1.13/configure-your-talos-cluster/storage-and-disk-management/disk-management/system)
+
+```yaml
+spec:
+  cluster:
+    autoscaler:
+      node:
+        enabled: true
+        pools:
+          - name: storage-fsn1
+            serverType: cx33
+            location: fsn1
+            min: 0
+            max: 2
+            talosPatches:
+              - |
+                apiVersion: v1alpha1
+                kind: VolumeConfig
+                name: EPHEMERAL
+                provisioning:
+                  maxSize: 32GiB
+              - |
+                apiVersion: v1alpha1
+                kind: RawVolumeConfig
+                name: local-data
+                provisioning:
+                  diskSelector:
+                    match: system_disk
+                  minSize: 16GiB
+                  maxSize: 16GiB
+```
+
+Talos keeps the size of an existing partition. If a pool worker's `EPHEMERAL` already fills its
+disk, preserve its data and replace the worker with one provisioned using the new layout.
+
+The full autoscaler field reference is generated from the API types. See
 [spec.cluster.autoscaler (AutoscalerConfig)](/configuration/declarative-configuration/#specclusterautoscaler-autoscalerconfig)
 in the Declarative Configuration reference. Note that the `Price` expander is rejected by KSail
 with a validation error for the Hetzner provider, because the Hetzner cloud provider does not
@@ -463,7 +508,7 @@ The `type: LoadBalancer` service provisions a real Hetzner Cloud Load Balancer w
 
 **`server type not found`** — The server type name in `controlPlaneServerType`, `workerServerType`, or an autoscaler pool does not exist in the Hetzner Cloud API. Check available types in the [Hetzner Cloud Console](https://console.hetzner.cloud/) or with `hcloud server-type list`.
 
-**`server type unavailable in all configured locations`** — The requested server type exists but is not available in your primary location or any configured fallback locations. KSail runs this precheck before creating any infrastructure, so no partial resources are left behind. Add more fallback locations or choose a different server type:
+**`Hetzner reports … as unavailable`** — Before creating infrastructure, KSail asks Hetzner whether the server type is available in your primary location and fallback locations. That answer is not always accurate: Hetzner can report a type as unavailable while creating it still succeeds. So KSail prints this as a warning and carries on, and the server create step tries each configured location in turn. If Hetzner then refuses to create the server, the create error is the real answer. When `ksail cluster update` replaces existing nodes with a new server type, the report still stops the update with `server type unavailable in all configured locations`, because each old node is removed before its replacement is created. Add more fallback locations or choose a different server type:
 
 ```yaml
 spec:

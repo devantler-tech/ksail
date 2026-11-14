@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 )
 
 // DependencyMigrationForTest exercises the prerequisite lifecycle against a local API fixture.
@@ -200,4 +203,24 @@ func (c *Installer) SetAPIServerCheckerForTest(fn func(ctx context.Context) erro
 // SetRetryBackoffForTest overrides the retry backoff function for unit testing.
 func (c *Installer) SetRetryBackoffForTest(fn func(ctx context.Context) error) {
 	c.retryBackoff = fn
+}
+
+// RolloutPendingForTest reports why Calico has not finished rolling out, or ""
+// once it has.
+func RolloutPendingForTest(
+	ctx context.Context,
+	resources dynamic.Interface,
+	core kubernetes.Interface,
+) (string, error) {
+	return rolloutPending(ctx, resources, core)
+}
+
+// WaitForRolloutForTest waits for the Calico rollout with an explicit timeout.
+func WaitForRolloutForTest(
+	ctx context.Context,
+	resources dynamic.Interface,
+	core kubernetes.Interface,
+	timeout time.Duration,
+) error {
+	return waitForRollout(ctx, resources, core, timeout)
 }

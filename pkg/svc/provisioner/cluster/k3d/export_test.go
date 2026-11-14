@@ -18,6 +18,33 @@ func (k *Provisioner) ListAgentNodesForTest(ctx context.Context, clusterName str
 	return err
 }
 
+// RunK3dSafelyForTest exposes runK3dSafely so a test can raise k3d's fatal exit
+// with a chosen message and check the error it becomes.
+func (k *Provisioner) RunK3dSafelyForTest(action func() error) error {
+	return k.runK3dSafely(action)
+}
+
+// RuntimeInfoClientForTest is the client interface the runtime check uses, so a
+// test can stand in for the Docker daemon without a connection.
+type RuntimeInfoClientForTest = runtimeInfoClient
+
+// RuntimeReachableWithinForTest exposes the real runtime check with a chosen
+// client and time limit, so a test can prove a silent daemon cannot hold it up.
+func RuntimeReachableWithinForTest(
+	newClient func() (RuntimeInfoClientForTest, error),
+	timeout time.Duration,
+) error {
+	return runtimeReachableWithin(newClient, timeout)
+}
+
+// WithRuntimeProbeForTest replaces the check of whether k3d's runtime answers,
+// so a test decides whether Docker counts as reachable.
+func (k *Provisioner) WithRuntimeProbeForTest(probe func() error) *Provisioner {
+	k.runtimeReachable = probe
+
+	return k
+}
+
 // AddAgentNodesForTest exposes addAgentNodes (a synchronous node-command site) so
 // its runtime-down behavior can be exercised.
 func (k *Provisioner) AddAgentNodesForTest(

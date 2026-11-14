@@ -49,10 +49,10 @@ func uninstallStatus(reason metav1.StatusReason, code int32) metav1.Status {
 	}
 
 	return metav1.Status{
-		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Status"},
-		Status:   status,
-		Reason:   reason,
-		Code:     code,
+		APIVersion: "v1", Kind: "Status",
+		Status: status,
+		Reason: reason,
+		Code:   code,
 	}
 }
 
@@ -123,12 +123,16 @@ func (fixture *uninstallFixture) serveConfigMap(
 		)
 	default:
 		writeUninstallJSON(response, corev1.ConfigMap{
-			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:            "owned",
-				Namespace:       "fixture",
-				UID:             "owned-uid",
-				ResourceVersion: "1",
+			APIVersion: "v1", Kind: "ConfigMap",
+			Name:            "owned",
+			Namespace:       "fixture",
+			UID:             "owned-uid",
+			ResourceVersion: "1",
+			// helm v4.3 deletes only resources that carry its ownership markers.
+			Labels: map[string]string{"app.kubernetes.io/managed-by": "Helm"},
+			Annotations: map[string]string{
+				"meta.helm.sh/release-name":      "fixture",
+				"meta.helm.sh/release-namespace": "fixture",
 			},
 		})
 	}
@@ -145,13 +149,11 @@ func uninstallAPIResources(version, resource, kind string) map[string]any {
 
 func uninstallHookJob(mode string) batchv1.Job {
 	job := batchv1.Job{
-		TypeMeta: metav1.TypeMeta{APIVersion: "batch/v1", Kind: "Job"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "pre-delete",
-			Namespace:       "fixture",
-			UID:             "hook-uid",
-			ResourceVersion: "1",
-		},
+		APIVersion: "batch/v1", Kind: "Job",
+		Name:            "pre-delete",
+		Namespace:       "fixture",
+		UID:             "hook-uid",
+		ResourceVersion: "1",
 	}
 
 	switch mode {
@@ -175,11 +177,9 @@ func writeUninstallHookWatch(response http.ResponseWriter, request *http.Request
 
 	if request.URL.Query().Get("sendInitialEvents") == "true" {
 		bookmark := batchv1.Job{
-			TypeMeta: metav1.TypeMeta{APIVersion: "batch/v1", Kind: "Job"},
-			ObjectMeta: metav1.ObjectMeta{
-				ResourceVersion: "1",
-				Annotations:     map[string]string{"k8s.io/initial-events-end": "true"},
-			},
+			APIVersion: "batch/v1", Kind: "Job",
+			ResourceVersion: "1",
+			Annotations:     map[string]string{"k8s.io/initial-events-end": "true"},
 		}
 		writeUninstallJSON(response, map[string]any{"type": "BOOKMARK", "object": bookmark})
 	}
@@ -224,8 +224,8 @@ func (fixture *uninstallFixture) serveHook(response http.ResponseWriter, request
 		fixture.hookCompleted = fixture.hookMode == "complete"
 
 		writeUninstallJSON(response, batchv1.JobList{
-			TypeMeta: metav1.TypeMeta{APIVersion: "batch/v1", Kind: "JobList"},
-			ListMeta: metav1.ListMeta{ResourceVersion: "1"}, Items: []batchv1.Job{job},
+			APIVersion: "batch/v1", Kind: "JobList",
+			ResourceVersion: "1", Items: []batchv1.Job{job},
 		})
 	default:
 		writeUninstallJSON(response, job)

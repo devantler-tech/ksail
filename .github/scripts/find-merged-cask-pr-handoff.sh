@@ -2,6 +2,10 @@
 
 set -euo pipefail
 
+# These commands only collect evidence; keep their allowance independent of writes.
+export GH_TOKEN="${KSAIL_CASK_READ_TOKEN:-${GH_TOKEN:-}}"
+read_api() { "${script_dir}/cask-read-api.sh" "$@"; }
+
 # Describe the required release identity and optional known-PR reconciliation lead.
 usage() {
 	cat <<'EOF'
@@ -19,6 +23,8 @@ validation fails.
 With --pr, validate the already-selected PR directly before discovery and once
 more after unsuccessful discovery. The number is only a lead; all merged
 evidence gates still apply.
+Exit 3 preserves a validator-confirmed current-release integrity failure when
+no valid candidate is found. Missing or unavailable evidence alone returns 1.
 EOF
 }
 
@@ -71,7 +77,7 @@ while (($# > 0)); do
 	esac
 done
 
-if [[ ! "${tap}" =~ ^[^/]+/[^/]+$ || -z "${cask_name}" ||
+if [[ ! "${tap}" =~ ^[^/]+/[^/]+$ || ! "${cask_name}" =~ ^[a-z0-9][a-z0-9-]*$ ||
 	! "${source_repo}" =~ ^[^/]+/[^/]+$ || -z "${tag}" ||
 	! -d "${output_dir}" ]]; then
 	printf 'ERROR: --tap OWNER/REPO, --cask-name NAME, --source-repo OWNER/REPO, --tag TAG, and an existing --output-dir DIR are required\n' >&2
@@ -82,29 +88,57 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 branch="goreleaser/${cask_name}"
 work="$(mktemp -d)"
 trap 'rm -rf "${work}"' EXIT
+integrity_rejected=0
+
+exit_unmatched() {
+	if [[ "${integrity_rejected}" -eq 1 ]]; then
+		exit 3
+	fi
+	exit 1
+}
 
 # Recollect a candidate and require immutable merge, current-main and release-digest proof.
 # Preserve successful evidence while keeping candidate diagnostics off the PR-number output.
 validate_candidate() {
 	local pr="$1" evidence="${output_dir}/merged-$1.json"
-	local candidate_log="${work}/candidate-$1.log"
+	local candidate_log="${work}/candidate-$1.log" validation_status=0
 	{
-		"${script_dir}/collect-cask-pr-handoff.sh" \
+		if ! "${script_dir}/collect-cask-pr-handoff.sh" \
 			--tap "${tap}" \
 			--pr "${pr}" \
 			--source-repo "${source_repo}" \
 			--tag "${tag}" \
 			--output "${evidence}" \
-			--include-main &&
-			"${script_dir}/validate-cask-pr-handoff.sh" \
-				--evidence "${evidence}" \
-				--tap "${tap}" \
-				--cask-name "${cask_name}" \
-				--source-repo "${source_repo}" \
-				--tag "${tag}" \
-				--merged
+			--include-main; then
+			# A collector's transport status is never an integrity verdict.
+			return 1
+		fi
+		"${script_dir}/validate-cask-pr-handoff.sh" \
+			--evidence "${evidence}" \
+			--tap "${tap}" \
+			--cask-name "${cask_name}" \
+			--source-repo "${source_repo}" \
+			--tag "${tag}" \
+			--merged || validation_status=$?
+		if [[ "${validation_status}" -eq 3 ]]; then
+			integrity_rejected=1
+		fi
+		return "${validation_status}"
 	} >"${candidate_log}" 2>&1
 }
+
+# A historical merge cannot prove delivery while main still serves another
+# version. This snapshot only rules out candidate collection. Success still requires the
+# collector to pin main and validate the exact merged cask and asset digests.
+if [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] &&
+	current_cask="$(read_api "repos/${tap}/contents/Casks/${cask_name}.rb?ref=main" 2>/dev/null |
+		jq -er '.content | gsub("[[:space:]]"; "") | @base64d' 2>/dev/null)"; then
+	current_version="$(sed -nE 's/^[[:space:]]*version[[:space:]]+"([^"]*)"[[:space:]]*(#.*)?$/\1/p' <<<"${current_cask}")"
+	if [[ "${current_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "${current_version}" != "${tag#v}" ]]; then
+		printf 'BLOCKED: tap main still pins %s; expected %s\n' "${current_version}" "${tag#v}" >&2
+		exit 1
+	fi
+fi
 
 if [[ -n "${known_pr}" ]]; then
 	if validate_candidate "${known_pr}"; then
@@ -114,7 +148,7 @@ if [[ -n "${known_pr}" ]]; then
 	printf '%s\n' "${known_pr}" >>"${work}/rejected"
 fi
 
-if ! gh api --paginate --slurp \
+if ! read_api --paginate --slurp \
 	"repos/${tap}/pulls?state=closed&head=${tap%%/*}:${branch}&per_page=100" \
 	>"${work}/pages.json" 2>"${work}/discovery.log"; then
 	if [[ -n "${known_pr}" ]] && validate_candidate "${known_pr}"; then
@@ -122,7 +156,7 @@ if ! gh api --paginate --slurp \
 		exit 0
 	fi
 	printf 'BLOCKED: could not enumerate merged cask PRs for %s\n' "${branch}" >&2
-	exit 1
+	exit_unmatched
 fi
 if ! jq -e 'type == "array" and all(.[]; type == "array")' \
 	"${work}/pages.json" >/dev/null 2>&1; then
@@ -132,7 +166,7 @@ if ! jq -e 'type == "array" and all(.[]; type == "array")' \
 	fi
 	printf 'BLOCKED: could not enumerate merged cask PRs for %s: malformed response\n' \
 		"${branch}" >&2
-	exit 1
+	exit_unmatched
 fi
 
 # The list response is discovery only. Filter obvious mismatches, deduplicate across pages, then
@@ -160,7 +194,7 @@ jq -r \
 
 if [[ ! -s "${work}/candidates" && -z "${known_pr}" ]]; then
 	printf 'BLOCKED: no trusted merged cask PR found for %s\n' "${branch}" >&2
-	exit 1
+	exit_unmatched
 fi
 
 while IFS= read -r pr; do
@@ -189,4 +223,4 @@ if [[ -s "${work}/rejected" ]]; then
 		printf -- '- PR #%s: %s\n' "${pr}" "${reason:-validation failed without diagnostics}" >&2
 	done <"${work}/rejected"
 fi
-exit 1
+exit_unmatched

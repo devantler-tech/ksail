@@ -14,10 +14,19 @@ func NewMockValidator[T any](t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockValidator[T] {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockValidator[T]{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -61,7 +70,7 @@ type MockValidator_Validate_Call[T any] struct {
 
 // Validate is a helper method to define mock.On call
 //   - config T
-func (_e *MockValidator_Expecter[T]) Validate(config interface{}) *MockValidator_Validate_Call[T] {
+func (_e *MockValidator_Expecter[T]) Validate(config any) *MockValidator_Validate_Call[T] {
 	return &MockValidator_Validate_Call[T]{Call: _e.mock.On("Validate", config)}
 }
 

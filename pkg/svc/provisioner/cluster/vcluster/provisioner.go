@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	semver "github.com/Masterminds/semver/v3"
 	dockerengine "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	vclusterconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/vcluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
@@ -21,10 +22,14 @@ import (
 	cliconfig "github.com/loft-sh/vcluster/pkg/cli/config"
 	"github.com/loft-sh/vcluster/pkg/cli/flags"
 	"github.com/sirupsen/logrus"
+	"sigs.k8s.io/yaml"
 )
 
 // defaultVClusterName is used when no name is provided.
 const defaultVClusterName = "vcluster-default"
+
+// maxTemporaryValuesFiles covers defaults, Kubernetes compatibility, and persistence.
+const maxTemporaryValuesFiles = 3
 
 // createMaxAttempts is the number of times to retry CreateDocker for transient
 // startup failures. Exit status 22 (EINVAL) and similar infrastructure errors
@@ -192,7 +197,7 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 
 	// Standalone VCluster-in-Docker (Vind) manages its own storage and is not subject to a
 	// host cluster's StorageClass, so persistence is left at vCluster's default here.
-	valuesFiles, cleanup, err := buildValuesFiles(p.valuesPath, p.disableFlannel, "", false)
+	valuesFiles, cleanup, err := buildDockerValuesFiles(p.valuesPath, p.disableFlannel)
 	if err != nil {
 		return fmt.Errorf("failed to prepare values files: %w", err)
 	}
@@ -528,7 +533,7 @@ func (p *Provisioner) withProvider(
 const emptyDirPersistenceValues = "controlPlane:\n  statefulSet:\n" +
 	"    persistence:\n      volumeClaim:\n        enabled: false\n"
 
-// buildValuesFiles returns the ordered list of Helm values files for CreateDocker.
+// buildValuesFiles returns the ordered list of Helm values files for vCluster creation.
 // A temp file with the default Kubernetes version is prepended so the user's
 // values file (if present) can override it. The returned cleanup function removes
 // the temp file(s) and must be deferred by the caller.
@@ -537,67 +542,326 @@ const emptyDirPersistenceValues = "controlPlane:\n  statefulSet:\n" +
 // deploy.cni.flannel.enabled=false to prevent flannel from conflicting with a
 // custom CNI that will be installed post-creation.
 //
-// When disablePersistence is true, an emptyDir override is appended LAST so it wins over the
-// defaults and the user's values. Callers must only set this after resolving the storage
-// precedence (an explicit user request for persistence is handled before this and never
-// silently downgraded here).
+// A version-specific controller-manager compatibility file follows user values when required; it
+// carries forward the user's other controller arguments. When disablePersistence is true, an
+// emptyDir override is appended LAST so it wins over every earlier file. Callers must only set this
+// after resolving the storage precedence (an explicit user request for persistence is handled
+// before this and never silently downgraded here).
 func buildValuesFiles(
 	userValuesPath string,
 	disableFlannel bool,
 	extraSAN string,
 	disablePersistence bool,
 ) ([]string, func(), error) {
-	defaultsContent := fmt.Sprintf(
-		"controlPlane:\n  distro:\n    k8s:\n      image:\n        tag: %s\n",
+	return buildValuesFilesForVersion(
+		userValuesPath,
+		disableFlannel,
+		extraSAN,
+		disablePersistence,
 		vclusterconfigmanager.DefaultKubernetesVersion,
+		false,
 	)
+}
 
-	if extraSAN != "" {
-		// Add the stable exposure address to the vCluster proxy certificate SANs so kubectl
-		// verifies TLS when connecting via the exposure address.
-		defaultsContent += fmt.Sprintf("  proxy:\n    extraSANs:\n    - %q\n", extraSAN)
+func buildDockerValuesFiles(userValuesPath string, disableFlannel bool) ([]string, func(), error) {
+	return buildValuesFilesForVersion(
+		userValuesPath,
+		disableFlannel,
+		"",
+		false,
+		vclusterconfigmanager.DefaultKubernetesVersion,
+		true,
+	)
+}
+
+func buildValuesFilesForVersion(
+	userValuesPath string,
+	disableFlannel bool,
+	extraSAN string,
+	disablePersistence bool,
+	kubernetesVersion string,
+	defaultPrivateNodes bool,
+) ([]string, func(), error) {
+	compatibilityValues, err := controllerManagerCompatibilityValues(
+		kubernetesVersion,
+		userValuesPath,
+		defaultPrivateNodes,
+	)
+	if err != nil {
+		return nil, func() {}, err
 	}
 
-	if disableFlannel {
-		defaultsContent += "deploy:\n  cni:\n    flannel:\n      enabled: false\n"
-	}
+	tmpNames := make([]string, 0, maxTemporaryValuesFiles)
+	cleanupFn := func() { removeTempValuesFiles(tmpNames) }
 
-	var tmpNames []string
-
-	cleanupFn := func() {
-		for _, name := range tmpNames {
-			_ = os.Remove(name)
-		}
-	}
-
-	defaultsFile, err := writeTempValuesFile("ksail-vcluster-defaults-*.yaml", defaultsContent)
+	defaultsFile, err := writeTempValuesFile(
+		"ksail-vcluster-defaults-*.yaml",
+		defaultValuesContent(kubernetesVersion, extraSAN, disableFlannel),
+	)
 	if err != nil {
 		return nil, func() {}, err
 	}
 
 	tmpNames = append(tmpNames, defaultsFile)
 
-	// Defaults first, user values second — later files override earlier ones.
+	// Defaults first, then user values; targeted compatibility overrides follow below.
 	result := []string{defaultsFile}
 	if strings.TrimSpace(userValuesPath) != "" {
 		result = append(result, userValuesPath)
 	}
 
-	if disablePersistence {
-		overrideFile, oErr := writeTempValuesFile(
-			"ksail-vcluster-persistence-*.yaml", emptyDirPersistenceValues,
-		)
-		if oErr != nil {
-			cleanupFn()
+	result, tmpNames, err = appendOptionalTempValuesFile(
+		result,
+		tmpNames,
+		"ksail-vcluster-kubernetes-compatibility-*.yaml",
+		compatibilityValues,
+	)
+	if err != nil {
+		cleanupFn()
 
-			return nil, func() {}, oErr
-		}
+		return nil, func() {}, err
+	}
 
-		tmpNames = append(tmpNames, overrideFile)
-		result = append(result, overrideFile)
+	result, tmpNames, err = appendOptionalTempValuesFile(
+		result,
+		tmpNames,
+		"ksail-vcluster-persistence-*.yaml",
+		optionalPersistenceValues(disablePersistence),
+	)
+	if err != nil {
+		cleanupFn()
+
+		return nil, func() {}, err
 	}
 
 	return result, cleanupFn, nil
+}
+
+func defaultValuesContent(kubernetesVersion, extraSAN string, disableFlannel bool) string {
+	content := fmt.Sprintf(
+		"controlPlane:\n  distro:\n    k8s:\n      image:\n        tag: %s\n",
+		kubernetesVersion,
+	)
+	if extraSAN != "" {
+		// Add the stable exposure address to the vCluster proxy certificate SANs so kubectl
+		// verifies TLS when connecting via the exposure address.
+		content += fmt.Sprintf("  proxy:\n    extraSANs:\n    - %q\n", extraSAN)
+	}
+
+	if disableFlannel {
+		content += "deploy:\n  cni:\n    flannel:\n      enabled: false\n"
+	}
+
+	return content
+}
+
+func optionalPersistenceValues(disablePersistence bool) string {
+	if disablePersistence {
+		return emptyDirPersistenceValues
+	}
+
+	return ""
+}
+
+type controllerManagerCompatibilityConfig struct {
+	kubernetesVersion string
+	// versionFromImageTag marks a version read from the Kubernetes image tag. An image tag may
+	// carry a digest or a custom name, so it is read on a best-effort basis.
+	versionFromImageTag    bool
+	privateNodes           bool
+	virtualScheduler       bool
+	resourceClaimTemplates bool
+	extraArgs              []string
+}
+
+type controllerManagerCompatibilityInput struct {
+	ControlPlane struct {
+		Advanced struct {
+			VirtualScheduler struct {
+				Enabled bool `json:"enabled"`
+			} `json:"virtualScheduler"`
+		} `json:"advanced"`
+		Distro struct {
+			K8S struct {
+				Version string `json:"version"`
+				Image   struct {
+					Tag string `json:"tag"`
+				} `json:"image"`
+				ControllerManager struct {
+					ExtraArgs []string `json:"extraArgs"`
+				} `json:"controllerManager"`
+				Scheduler struct {
+					Enabled bool `json:"enabled"`
+				} `json:"scheduler"`
+			} `json:"k8s"`
+		} `json:"distro"`
+	} `json:"controlPlane"`
+	PrivateNodes struct {
+		Enabled *bool `json:"enabled"`
+	} `json:"privateNodes"`
+	Sync struct {
+		ToHost struct {
+			ResourceClaimTemplates struct {
+				Enabled bool `json:"enabled"`
+			} `json:"resourceClaimTemplates"`
+		} `json:"toHost"`
+	} `json:"sync"`
+}
+
+// controllerManagerCompatibilityValues removes the cloud-node-lifecycle exclusion for Kubernetes
+// 1.37+, where that controller name no longer exists. vCluster 0.37.3 still renders the retired
+// name in its built-in virtual-node controller lists, so the complete list must be replaced.
+func controllerManagerCompatibilityValues(
+	defaultVersion string,
+	userValuesPath string,
+	defaultPrivateNodes bool,
+) (string, error) {
+	config, err := loadControllerManagerCompatibilityConfig(
+		defaultVersion,
+		userValuesPath,
+		defaultPrivateNodes,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	parsedVersion, err := semver.NewVersion(strings.TrimPrefix(config.kubernetesVersion, "v"))
+	if err != nil && config.versionFromImageTag {
+		// An image tag that is not a version tells us nothing about the controller set.
+		return "", nil
+	}
+
+	if err != nil {
+		return "", fmt.Errorf(
+			"parse vCluster Kubernetes version %q: %w",
+			config.kubernetesVersion,
+			err,
+		)
+	}
+
+	if parsedVersion.Major() < 1 || (parsedVersion.Major() == 1 && parsedVersion.Minor() < 37) {
+		return "", nil
+	}
+
+	if slices.ContainsFunc(config.extraArgs, isControllerManagerControllersArg) {
+		return "", nil
+	}
+
+	extraArgs := append(slices.Clone(config.extraArgs), compatibleControllerManagerArg(config))
+	values := map[string]any{
+		"controlPlane": map[string]any{
+			"distro": map[string]any{
+				"k8s": map[string]any{
+					"controllerManager": map[string]any{
+						"extraArgs": extraArgs,
+					},
+				},
+			},
+		},
+	}
+
+	content, err := yaml.Marshal(values)
+	if err != nil {
+		return "", fmt.Errorf("marshal vCluster Kubernetes compatibility values: %w", err)
+	}
+
+	return string(content), nil
+}
+
+func loadControllerManagerCompatibilityConfig(
+	defaultVersion string,
+	userValuesPath string,
+	defaultPrivateNodes bool,
+) (controllerManagerCompatibilityConfig, error) {
+	config := controllerManagerCompatibilityConfig{
+		kubernetesVersion: defaultVersion,
+		privateNodes:      defaultPrivateNodes,
+	}
+	if strings.TrimSpace(userValuesPath) == "" {
+		return config, nil
+	}
+
+	content, err := os.ReadFile(userValuesPath) //nolint:gosec // user-selected vCluster values path
+	if err != nil {
+		return config, fmt.Errorf("read vCluster values for Kubernetes compatibility: %w", err)
+	}
+
+	var input controllerManagerCompatibilityInput
+
+	err = yaml.Unmarshal(content, &input)
+	if err != nil {
+		return config, fmt.Errorf("parse vCluster values for Kubernetes compatibility: %w", err)
+	}
+
+	k8s := input.ControlPlane.Distro.K8S
+	if k8s.Image.Tag != "" {
+		tag, _, _ := strings.Cut(k8s.Image.Tag, "@")
+		config.kubernetesVersion = tag
+		config.versionFromImageTag = true
+	}
+
+	if k8s.Version != "" {
+		config.kubernetesVersion = k8s.Version
+		config.versionFromImageTag = false
+	}
+
+	if input.PrivateNodes.Enabled != nil {
+		config.privateNodes = *input.PrivateNodes.Enabled
+	}
+
+	config.virtualScheduler = k8s.Scheduler.Enabled ||
+		input.ControlPlane.Advanced.VirtualScheduler.Enabled
+	config.resourceClaimTemplates = input.Sync.ToHost.ResourceClaimTemplates.Enabled
+	config.extraArgs = k8s.ControllerManager.ExtraArgs
+
+	return config, nil
+}
+
+func compatibleControllerManagerArg(config controllerManagerCompatibilityConfig) string {
+	controllers := "--controllers=*,-nodeipam,-nodelifecycle,-persistentvolume-binder," +
+		"-attachdetach,-persistentvolume-expander,-ttl"
+	if config.privateNodes {
+		controllers = "--controllers=*,bootstrapsigner,tokencleaner"
+	} else if config.virtualScheduler {
+		controllers = "--controllers=*,-nodeipam,-persistentvolume-binder," +
+			"-attachdetach,-persistentvolume-expander,-ttl"
+	}
+
+	if config.resourceClaimTemplates {
+		controllers += ",-resourceclaim-controller"
+	}
+
+	return controllers
+}
+
+func isControllerManagerControllersArg(arg string) bool {
+	arg = strings.TrimSpace(arg)
+
+	return arg == "--controllers" || strings.HasPrefix(arg, "--controllers=")
+}
+
+func appendOptionalTempValuesFile(
+	files []string,
+	tmpNames []string,
+	pattern string,
+	content string,
+) ([]string, []string, error) {
+	if content == "" {
+		return files, tmpNames, nil
+	}
+
+	name, err := writeTempValuesFile(pattern, content)
+	if err != nil {
+		return files, tmpNames, err
+	}
+
+	return append(files, name), append(tmpNames, name), nil
+}
+
+func removeTempValuesFiles(names []string) {
+	for _, name := range names {
+		_ = os.Remove(name)
+	}
 }
 
 // writeTempValuesFile writes content to a new temp file matching pattern and returns its path.

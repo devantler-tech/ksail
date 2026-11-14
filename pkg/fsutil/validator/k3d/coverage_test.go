@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	k3dvalidator "github.com/devantler-tech/ksail/v7/pkg/fsutil/validator/k3d"
-	configtypes "github.com/k3d-io/k3d/v5/pkg/config/types"
 	k3dapi "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,28 +26,20 @@ func TestValidate_UpstreamErrors(t *testing.T) {
 		{
 			name: "valid basic config",
 			config: &k3dapi.SimpleConfig{
-				TypeMeta: configtypes.TypeMeta{
-					APIVersion: "k3d.io/v1alpha5",
-					Kind:       "Simple",
-				},
-				ObjectMeta: configtypes.ObjectMeta{
-					Name: "valid-cluster",
-				},
-				Servers: 1,
+				APIVersion: "k3d.io/v1alpha5",
+				Kind:       "Simple",
+				Name:       "valid-cluster",
+				Servers:    1,
 			},
 			wantValid: true,
 		},
 		{
 			name: "invalid api version triggers error",
 			config: &k3dapi.SimpleConfig{
-				TypeMeta: configtypes.TypeMeta{
-					APIVersion: "invalid/v99",
-					Kind:       "Simple",
-				},
-				ObjectMeta: configtypes.ObjectMeta{
-					Name: "test",
-				},
-				Servers: 1,
+				APIVersion: "invalid/v99",
+				Kind:       "Simple",
+				Name:       "test",
+				Servers:    1,
 			},
 			// The upstream validation should report an error for wrong apiVersion
 			wantValid: false,
@@ -56,28 +47,20 @@ func TestValidate_UpstreamErrors(t *testing.T) {
 		{
 			name: "invalid kind triggers error",
 			config: &k3dapi.SimpleConfig{
-				TypeMeta: configtypes.TypeMeta{
-					APIVersion: "k3d.io/v1alpha5",
-					Kind:       "WrongKind",
-				},
-				ObjectMeta: configtypes.ObjectMeta{
-					Name: "test",
-				},
-				Servers: 1,
+				APIVersion: "k3d.io/v1alpha5",
+				Kind:       "WrongKind",
+				Name:       "test",
+				Servers:    1,
 			},
 			wantValid: false,
 		},
 		{
 			name: "zero servers valid in K3d",
 			config: &k3dapi.SimpleConfig{
-				TypeMeta: configtypes.TypeMeta{
-					APIVersion: "k3d.io/v1alpha5",
-					Kind:       "Simple",
-				},
-				ObjectMeta: configtypes.ObjectMeta{
-					Name: "zero-servers",
-				},
-				Servers: 0,
+				APIVersion: "k3d.io/v1alpha5",
+				Kind:       "Simple",
+				Name:       "zero-servers",
+				Servers:    0,
 			},
 			wantValid: true,
 		},
@@ -135,14 +118,10 @@ func TestValidate_ConfigWithInvalidPortMapping(t *testing.T) {
 	validatorInstance := k3dvalidator.NewValidator()
 
 	config := &k3dapi.SimpleConfig{
-		TypeMeta: configtypes.TypeMeta{
-			APIVersion: "k3d.io/v1alpha5",
-			Kind:       "Simple",
-		},
-		ObjectMeta: configtypes.ObjectMeta{
-			Name: "port-test",
-		},
-		Servers: 1,
+		APIVersion: "k3d.io/v1alpha5",
+		Kind:       "Simple",
+		Name:       "port-test",
+		Servers:    1,
 		Ports: []k3dapi.PortWithNodeFilters{
 			{Port: "invalid-port-spec:::::"},
 		},
@@ -163,14 +142,10 @@ func TestValidate_ConfigWithVolumes(t *testing.T) {
 	validatorInstance := k3dvalidator.NewValidator()
 
 	config := &k3dapi.SimpleConfig{
-		TypeMeta: configtypes.TypeMeta{
-			APIVersion: "k3d.io/v1alpha5",
-			Kind:       "Simple",
-		},
-		ObjectMeta: configtypes.ObjectMeta{
-			Name: "volume-test",
-		},
-		Servers: 1,
+		APIVersion: "k3d.io/v1alpha5",
+		Kind:       "Simple",
+		Name:       "volume-test",
+		Servers:    1,
 		Volumes: []k3dapi.VolumeWithNodeFilters{
 			{Volume: "/nonexistent/path:/data"},
 		},

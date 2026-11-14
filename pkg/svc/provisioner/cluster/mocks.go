@@ -16,10 +16,19 @@ func NewMockProvisioner(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockProvisioner {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockProvisioner{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -62,7 +71,7 @@ type MockProvisioner_Create_Call struct {
 // Create is a helper method to define mock.On call
 //   - ctx context.Context
 //   - name string
-func (_e *MockProvisioner_Expecter) Create(ctx interface{}, name interface{}) *MockProvisioner_Create_Call {
+func (_e *MockProvisioner_Expecter) Create(ctx any, name any) *MockProvisioner_Create_Call {
 	return &MockProvisioner_Create_Call{Call: _e.mock.On("Create", ctx, name)}
 }
 
@@ -119,7 +128,7 @@ type MockProvisioner_Delete_Call struct {
 // Delete is a helper method to define mock.On call
 //   - ctx context.Context
 //   - name string
-func (_e *MockProvisioner_Expecter) Delete(ctx interface{}, name interface{}) *MockProvisioner_Delete_Call {
+func (_e *MockProvisioner_Expecter) Delete(ctx any, name any) *MockProvisioner_Delete_Call {
 	return &MockProvisioner_Delete_Call{Call: _e.mock.On("Delete", ctx, name)}
 }
 
@@ -185,7 +194,7 @@ type MockProvisioner_Exists_Call struct {
 // Exists is a helper method to define mock.On call
 //   - ctx context.Context
 //   - name string
-func (_e *MockProvisioner_Expecter) Exists(ctx interface{}, name interface{}) *MockProvisioner_Exists_Call {
+func (_e *MockProvisioner_Expecter) Exists(ctx any, name any) *MockProvisioner_Exists_Call {
 	return &MockProvisioner_Exists_Call{Call: _e.mock.On("Exists", ctx, name)}
 }
 
@@ -252,7 +261,7 @@ type MockProvisioner_List_Call struct {
 
 // List is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockProvisioner_Expecter) List(ctx interface{}) *MockProvisioner_List_Call {
+func (_e *MockProvisioner_Expecter) List(ctx any) *MockProvisioner_List_Call {
 	return &MockProvisioner_List_Call{Call: _e.mock.On("List", ctx)}
 }
 
@@ -304,7 +313,7 @@ type MockProvisioner_Start_Call struct {
 // Start is a helper method to define mock.On call
 //   - ctx context.Context
 //   - name string
-func (_e *MockProvisioner_Expecter) Start(ctx interface{}, name interface{}) *MockProvisioner_Start_Call {
+func (_e *MockProvisioner_Expecter) Start(ctx any, name any) *MockProvisioner_Start_Call {
 	return &MockProvisioner_Start_Call{Call: _e.mock.On("Start", ctx, name)}
 }
 
@@ -361,7 +370,7 @@ type MockProvisioner_Stop_Call struct {
 // Stop is a helper method to define mock.On call
 //   - ctx context.Context
 //   - name string
-func (_e *MockProvisioner_Expecter) Stop(ctx interface{}, name interface{}) *MockProvisioner_Stop_Call {
+func (_e *MockProvisioner_Expecter) Stop(ctx any, name any) *MockProvisioner_Stop_Call {
 	return &MockProvisioner_Stop_Call{Call: _e.mock.On("Stop", ctx, name)}
 }
 

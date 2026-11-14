@@ -16,10 +16,19 @@ func NewMockInstaller(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockInstaller {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockInstaller{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -72,7 +81,7 @@ type MockInstaller_Images_Call struct {
 
 // Images is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockInstaller_Expecter) Images(ctx interface{}) *MockInstaller_Images_Call {
+func (_e *MockInstaller_Expecter) Images(ctx any) *MockInstaller_Images_Call {
 	return &MockInstaller_Images_Call{Call: _e.mock.On("Images", ctx)}
 }
 
@@ -123,7 +132,7 @@ type MockInstaller_Install_Call struct {
 
 // Install is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockInstaller_Expecter) Install(ctx interface{}) *MockInstaller_Install_Call {
+func (_e *MockInstaller_Expecter) Install(ctx any) *MockInstaller_Install_Call {
 	return &MockInstaller_Install_Call{Call: _e.mock.On("Install", ctx)}
 }
 
@@ -174,7 +183,7 @@ type MockInstaller_Uninstall_Call struct {
 
 // Uninstall is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockInstaller_Expecter) Uninstall(ctx interface{}) *MockInstaller_Uninstall_Call {
+func (_e *MockInstaller_Expecter) Uninstall(ctx any) *MockInstaller_Uninstall_Call {
 	return &MockInstaller_Uninstall_Call{Call: _e.mock.On("Uninstall", ctx)}
 }
 

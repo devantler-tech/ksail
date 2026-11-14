@@ -20,7 +20,6 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -117,7 +116,7 @@ func newScheme(t *testing.T) *runtime.Scheme {
 
 func newCluster(withFinalizer bool) *v1alpha1.Cluster {
 	cluster := &v1alpha1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "c1", Namespace: "default", Generation: 1},
+		Name: "c1", Namespace: "default", Generation: 1,
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{Distribution: v1alpha1.DistributionVCluster},
 		},
@@ -163,7 +162,7 @@ func newReconciler(
 }
 
 func request() ctrl.Request {
-	return ctrl.Request{NamespacedName: types.NamespacedName{Name: "c1", Namespace: "default"}}
+	return ctrl.Request{Name: "c1", Namespace: "default"}
 }
 
 func TestReconcile_AddsFinalizer(t *testing.T) {
@@ -328,7 +327,7 @@ func TestProvisionedName(t *testing.T) {
 			t.Parallel()
 
 			cluster := &v1alpha1.Cluster{
-				ObjectMeta: metav1.ObjectMeta{Name: testCase.name, Namespace: testCase.namespace},
+				Name: testCase.name, Namespace: testCase.namespace,
 			}
 
 			assert.Equal(t, testCase.want, controller.ProvisionedName(cluster))
@@ -340,10 +339,8 @@ func TestProvisionedNameTruncatesLongNames(t *testing.T) {
 	t.Parallel()
 
 	cluster := &v1alpha1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      strings.Repeat("b", 40),
-			Namespace: strings.Repeat("a", 40),
-		},
+		Name:      strings.Repeat("b", 40),
+		Namespace: strings.Repeat("a", 40),
 	}
 
 	got := controller.ProvisionedName(cluster)
@@ -618,21 +615,17 @@ func TestReconcile_ComponentsSkippedReportsUnknown(t *testing.T) {
 
 func managedNamespace(name string) *corev1.Namespace {
 	return &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   name,
-			Labels: map[string]string{v1alpha1.ManagedNamespaceLabel: "true"},
-		},
+		Name:   name,
+		Labels: map[string]string{v1alpha1.ManagedNamespaceLabel: "true"},
 	}
 }
 
 func clusterInNamespace(name, namespace string) *v1alpha1.Cluster {
 	return &v1alpha1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       name,
-			Namespace:  namespace,
-			Generation: 1,
-			Finalizers: []string{controller.FinalizerName},
-		},
+		Name:       name,
+		Namespace:  namespace,
+		Generation: 1,
+		Finalizers: []string{controller.FinalizerName},
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{Distribution: v1alpha1.DistributionVCluster},
 		},
@@ -640,7 +633,7 @@ func clusterInNamespace(name, namespace string) *v1alpha1.Cluster {
 }
 
 func deleteRequest(name, namespace string) ctrl.Request {
-	return ctrl.Request{NamespacedName: types.NamespacedName{Name: name, Namespace: namespace}}
+	return ctrl.Request{Name: name, Namespace: namespace}
 }
 
 func reconcileDeletion(
@@ -704,7 +697,7 @@ func TestReconcileDelete_DeletesEmptyManagedNamespace(t *testing.T) {
 func TestReconcileDelete_KeepsUnmanagedNamespace(t *testing.T) {
 	t.Parallel()
 
-	userNS := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "user-ns"}}
+	userNS := &corev1.Namespace{Name: "user-ns"}
 
 	fakeClient := reconcileDeletion(t, userNS, clusterInNamespace("c1", "user-ns"))
 
@@ -736,7 +729,7 @@ func TestReconcileDelete_KeepsManagedNamespaceWithUserConfig(t *testing.T) {
 	t.Parallel()
 
 	userConfigMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "app-config", Namespace: "team-a"},
+		Name: "app-config", Namespace: "team-a",
 	}
 
 	fakeClient := reconcileDeletion(

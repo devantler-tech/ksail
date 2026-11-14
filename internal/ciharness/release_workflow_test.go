@@ -45,7 +45,7 @@ func TestReleaseJobsRequireValidatedRef(t *testing.T) {
 	assert.Empty(t, gate.Needs)
 	assert.Empty(t, gate.If)
 	assert.False(t, gate.ContinueOnError)
-	assert.Equal(t, map[string]string{"contents": "read"}, gate.Permissions)
+	assert.Equal(t, map[string]string{"contents": "read", "actions": "read"}, gate.Permissions)
 
 	for name, job := range jobs {
 		if name == "validate-release-ref" {
@@ -57,14 +57,19 @@ func TestReleaseJobsRequireValidatedRef(t *testing.T) {
 			assert.True(t, releaseDependsOnValidation(jobs, name, map[string]bool{}),
 				"release job must be downstream of ref validation")
 
-			if name == "cleanup-failed-release" {
+			switch name {
+			case "cleanup-failed-release":
 				assert.Contains(t, job.Needs, "validate-release-ref")
 				assert.Contains(t, job.Needs, "publish-release")
 				// This approved condition allows cleanup after a valid release fails,
 				// but never lets always() delete a ref that failed validation.
 				assert.Equal(t, "always() && needs.publish-release.result != 'success' && "+
 					"needs.validate-release-ref.result == 'success'", job.If)
-			} else {
+			case "homebrew":
+				// A condition without a status function keeps GitHub's implicit success() gate,
+				// so this approved condition only narrows delivery to tags allowed to move the casks.
+				assert.Equal(t, "needs.cask-checkpoint.outputs.cask-publish == 'true'", job.If)
+			default:
 				assert.Empty(t, job.If,
 					"release jobs must retain the default success dependency gate")
 			}
@@ -104,7 +109,7 @@ func TestReleaseRefValidationStep(t *testing.T) {
 
 	gate, exists := readReleaseJobs(t)["validate-release-ref"]
 	require.True(t, exists)
-	require.Len(t, gate.Steps, 2, "checkout followed immediately by validation")
+	require.Len(t, gate.Steps, 5, "checkout and ref validation precede replay verification")
 	assert.Contains(t, gate.Steps[0].Uses, "actions/checkout@")
 	assert.Equal(t, false, gate.Steps[0].With["persist-credentials"])
 	validation := gate.Steps[1]

@@ -149,10 +149,10 @@ func TestConfigs_WithSecretsAndEndpoint_PreservesBoth(t *testing.T) {
 	require.NotNil(t, existingSecrets)
 
 	// Extract endpoint from running config (as fetchClusterSecretsAndEndpoint does).
-	// In production this reads runningConfig.Cluster().Endpoint().Hostname(),
+	// In production this reads runningConfig.K8sClusterConfig().ClusterEndpoint().Hostname(),
 	// which returns the endpoint the cluster is actually using (deterministic
 	// even in HA clusters with multiple CP nodes).
-	runningEndpoint := runningConfigs.ControlPlane().Cluster().Endpoint().Hostname()
+	runningEndpoint := runningConfigs.ControlPlane().K8sClusterConfig().ClusterEndpoint().Hostname()
 	require.NotEmpty(t, runningEndpoint, "running config should have a cluster endpoint")
 
 	// Simulate freshly loaded configs (different CA, empty endpoint)
@@ -182,7 +182,7 @@ func TestConfigs_WithSecretsAndEndpoint_PreservesBoth(t *testing.T) {
 		"CA should still match running cluster after WithEndpoint")
 
 	// Verify endpoint is in the cluster endpoint URL
-	clusterEndpoint := afterEndpoint.ControlPlane().Cluster().Endpoint().String()
+	clusterEndpoint := afterEndpoint.ControlPlane().K8sClusterConfig().ClusterEndpoint().String()
 	assert.Contains(t, clusterEndpoint, runningEndpoint,
 		"cluster endpoint should contain the synced IP")
 

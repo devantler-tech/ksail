@@ -265,10 +265,11 @@ func unmanagedClusters(
 // shown green/normal even before a surface adds a dedicated badge. Distribution and provider are left
 // empty: without a ksail spec they are unknown.
 func newUnmanagedCluster(contextName, endpoint string) v1alpha1.Cluster {
-	cluster := v1alpha1.Cluster{}
-	cluster.Name = contextName
-	cluster.Namespace = localNamespace
-	cluster.Annotations = map[string]string{v1alpha1.UnmanagedAnnotation: "true"}
+	cluster := v1alpha1.Cluster{
+		Name:        contextName,
+		Namespace:   localNamespace,
+		Annotations: map[string]string{v1alpha1.UnmanagedAnnotation: "true"},
+	}
 	cluster.Status.Endpoint = endpoint
 	cluster.Status.Conditions = []metav1.Condition{unmanagedCondition()}
 

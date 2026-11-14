@@ -45,11 +45,9 @@ func NewKindCluster(name, apiVersion, kind string) *v1alpha4.Cluster {
 	}
 
 	return &v1alpha4.Cluster{
-		TypeMeta: v1alpha4.TypeMeta{
-			APIVersion: apiVersion,
-			Kind:       kind,
-		},
-		Name: name,
+		APIVersion: apiVersion,
+		Kind:       kind,
+		Name:       name,
 	}
 }
 

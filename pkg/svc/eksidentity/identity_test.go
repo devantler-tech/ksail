@@ -110,6 +110,42 @@ func TestCaptureClearsStaleNodegroupCapacityState(t *testing.T) {
 	require.ErrorIs(t, err, state.ErrEKSNodegroupStateNotFound)
 }
 
+// TestCaptureSpendsFailedCreateHint pins ksail#8324: once an ownership record exists, a failed
+// create's attempts kept for that account are spent; another account's attempts stay.
+func TestCaptureSpendsFailedCreateHint(t *testing.T) {
+	t.Parallel()
+
+	const clusterName = "capture-spends-creation-hint"
+
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+
+	require.NoError(t, state.RecordEKSCreationAttempt(
+		clusterName, "eu-north-1", "123456789012", "attempt-8324",
+	))
+	require.NoError(t, state.RecordEKSCreationAttempt(
+		clusterName, "eu-north-1", "210987654321", "attempt-other-account",
+	))
+
+	client := &fakeClient{
+		accountID: "123456789012",
+		cluster: eksCluster(
+			clusterName,
+			"arn:aws:eks:eu-north-1:123456789012:cluster/"+clusterName,
+			identityTime(),
+		),
+	}
+
+	_, err := eksidentity.Capture(
+		t.Context(), client, clusterName, "eu-north-1", captureAWSOptions(),
+	)
+	require.NoError(t, err)
+
+	hint, err := state.LoadEKSCreationHint(clusterName, "eu-north-1")
+	require.NoError(t, err, "another account's attempts are not spent")
+	assert.Empty(t, hint.CreationIDsFor("123456789012"))
+	assert.Equal(t, []string{"attempt-other-account"}, hint.CreationIDsFor("210987654321"))
+}
+
 func TestCaptureFailsClosedWhenNodegroupCapacityStateCannotBeCleared(t *testing.T) {
 	t.Parallel()
 
@@ -390,4 +426,43 @@ func eksCluster(name, arn string, createdAt time.Time) *ekstypes.Cluster {
 
 func identityTime() time.Time {
 	return time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
+}
+
+// TestCaptureRemovesUnusableFailedCreateHint pins a review finding on ksail#8335: a malformed hint can
+// never be matched, so ownership capture removes it instead of failing after the record was written.
+func TestCaptureRemovesUnusableFailedCreateHint(t *testing.T) {
+	t.Parallel()
+
+	const clusterName = "capture-removes-unusable-hint"
+
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+
+	hintDir := filepath.Join(home, ".ksail", "clusters", clusterName)
+	require.NoError(t, os.MkdirAll(hintDir, 0o700))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(hintDir, "eks-creation-hint-eu-north-1.json"), []byte("{"), 0o600,
+	))
+
+	client := &fakeClient{
+		accountID: "123456789012",
+		cluster: eksCluster(
+			clusterName,
+			"arn:aws:eks:eu-north-1:123456789012:cluster/"+clusterName,
+			identityTime(),
+		),
+	}
+
+	_, err = eksidentity.Capture(
+		t.Context(), client, clusterName, "eu-north-1", captureAWSOptions(),
+	)
+	require.NoError(t, err)
+
+	_, err = state.LoadEKSOwnershipState(clusterName, "eu-north-1")
+	require.NoError(t, err)
+
+	_, err = state.LoadEKSCreationHint(clusterName, "eu-north-1")
+	require.ErrorIs(t, err, state.ErrEKSCreationHintNotFound)
 }

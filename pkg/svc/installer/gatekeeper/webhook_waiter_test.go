@@ -103,7 +103,7 @@ func TestWaitForGatekeeperWebhookReadyCaBundlePopulatedAfterDelay(t *testing.T) 
 // populated caBundle, simulating a fully-initialised Gatekeeper admission controller.
 func readyGatekeeperWebhookConfig() *admissionregistrationv1.ValidatingWebhookConfiguration {
 	return &admissionregistrationv1.ValidatingWebhookConfiguration{
-		ObjectMeta: metav1.ObjectMeta{Name: "gatekeeper-validating-webhook-configuration"},
+		Name: "gatekeeper-validating-webhook-configuration",
 		Webhooks: []admissionregistrationv1.ValidatingWebhook{
 			{
 				Name: "validation.gatekeeper.sh",
@@ -120,7 +120,7 @@ func readyGatekeeperWebhookConfig() *admissionregistrationv1.ValidatingWebhookCo
 // initialised its TLS certificate.
 func unreadyGatekeeperWebhookConfig() *admissionregistrationv1.ValidatingWebhookConfiguration {
 	return &admissionregistrationv1.ValidatingWebhookConfiguration{
-		ObjectMeta: metav1.ObjectMeta{Name: "gatekeeper-validating-webhook-configuration"},
+		Name: "gatekeeper-validating-webhook-configuration",
 		Webhooks: []admissionregistrationv1.ValidatingWebhook{
 			{
 				Name:         "validation.gatekeeper.sh",

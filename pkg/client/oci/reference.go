@@ -84,16 +84,16 @@ func ParseReference(ref string) (*Reference, error) {
 
 // parseHostPort extracts host and port from a "host:port" string.
 func parseHostPort(result *Reference, hostPort string) error {
-	colonIdx := strings.LastIndex(hostPort, ":")
-	if colonIdx == -1 {
+	before, after, ok := strings.CutLast(hostPort, ":")
+	if !ok {
 		result.Host = hostPort
 		result.Port = 0
 
 		return nil
 	}
 
-	result.Host = hostPort[:colonIdx]
-	portStr := hostPort[colonIdx+1:]
+	result.Host = before
+	portStr := after
 
 	port, err := strconv.ParseInt(portStr, parseIntBase, parseIntBitSize)
 	if err != nil || port < minPort || port > maxPort {
@@ -107,16 +107,16 @@ func parseHostPort(result *Reference, hostPort string) error {
 
 // parsePathAndRef extracts repository, variant, and ref from the path portion.
 func parsePathAndRef(result *Reference, pathAndRef string) {
-	colonIdx := strings.LastIndex(pathAndRef, ":")
-	if colonIdx == -1 {
+	before, after, ok := strings.CutLast(pathAndRef, ":")
+	if !ok {
 		result.Repository, result.Variant = splitRepositoryPath(pathAndRef)
 		result.Ref = ""
 
 		return
 	}
 
-	repoPath := pathAndRef[:colonIdx]
-	result.Ref = pathAndRef[colonIdx+1:]
+	repoPath := before
+	result.Ref = after
 	result.Repository, result.Variant = splitRepositoryPath(repoPath)
 }
 

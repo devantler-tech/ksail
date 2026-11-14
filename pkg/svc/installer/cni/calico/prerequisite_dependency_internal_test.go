@@ -282,13 +282,11 @@ func TestCalicoDependencyAPIVersionTransitionPreservesIncarnation(t *testing.T) 
 				digest, err := prerequisiteSpecDigest(&unstructured.Unstructured{Object: policy})
 				require.NoError(t, err)
 				fixture.setInventory(t, prerequisiteState{Dependencies: []prerequisiteDependency{{
-					prerequisiteRef: prerequisiteRef{
-						Group:    admissionRegistrationGroup,
-						Version:  "v1beta1",
-						Resource: "validatingadmissionpolicies",
-						Name:     "calico-fixture",
-						UID:      "external-policy",
-					},
+					Group:           admissionRegistrationGroup,
+					Version:         "v1beta1",
+					Resource:        "validatingadmissionpolicies",
+					Name:            "calico-fixture",
+					UID:             "external-policy",
 					InstallationUID: "installation-uid", SpecSHA256: digest,
 				}}})
 				installer := dependencyInstaller(fixture)

@@ -734,19 +734,9 @@ func marshalMigratedKubernetesDocuments(
 	structuredDocuments []map[string]any,
 	cniDeleteDocument []byte,
 ) ([]byte, error) {
-	documents := make([][]byte, 0, len(legacyDocuments))
-
-	for _, document := range legacyDocuments {
-		if len(document) == 0 {
-			continue
-		}
-
-		encoded, err := yaml.Marshal(document)
-		if err != nil {
-			return nil, fmt.Errorf("marshal migrated Kubernetes patch %q: %w", patchPath, err)
-		}
-
-		documents = append(documents, bytes.TrimSpace(encoded))
+	documents, err := marshalNonEmptyDocuments(legacyDocuments)
+	if err != nil {
+		return nil, fmt.Errorf("marshal migrated Kubernetes patch %q: %w", patchPath, err)
 	}
 
 	if len(cniDeleteDocument) > 0 {
@@ -776,6 +766,27 @@ func marshalMigratedKubernetesDocuments(
 	}
 
 	return append(bytes.Join(documents, []byte("\n---\n")), '\n'), nil
+}
+
+// marshalNonEmptyDocuments encodes each non-empty document as trimmed YAML,
+// skipping documents a migration emptied.
+func marshalNonEmptyDocuments(documents []map[string]any) ([][]byte, error) {
+	encoded := make([][]byte, 0, len(documents))
+
+	for _, document := range documents {
+		if len(document) == 0 {
+			continue
+		}
+
+		content, err := yaml.Marshal(document)
+		if err != nil {
+			return nil, fmt.Errorf("marshal document: %w", err)
+		}
+
+		encoded = append(encoded, bytes.TrimSpace(content))
+	}
+
+	return encoded, nil
 }
 
 func mapValue(parent map[string]any, key string) (map[string]any, bool) {

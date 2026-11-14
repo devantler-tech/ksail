@@ -74,10 +74,8 @@ func EnsurePrivilegedNamespace(
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			newNS := &corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:   name,
-					Labels: pssLabels(),
-				},
+				Name:   name,
+				Labels: pssLabels(),
 			}
 
 			_, err = clientset.CoreV1().Namespaces().Create(ctx, newNS, metav1.CreateOptions{})

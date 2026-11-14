@@ -125,7 +125,7 @@ func (p *Provisioner) rollingReplaceRole(
 	}
 
 	// Fail fast before mutating infrastructure if the new type is unavailable.
-	availErr := p.checkHetznerAvailabilityForRole(ctx, hzProvider, role)
+	availErr := p.checkHetznerAvailabilityForRole(ctx, hzProvider, role, stopWhenUnavailable)
 	if availErr != nil {
 		return availErr
 	}

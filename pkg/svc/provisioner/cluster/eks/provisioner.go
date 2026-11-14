@@ -19,9 +19,15 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// ClusterCreationTag is the eksctl metadata tag carrying the identifier of the create attempt that
+// built a cluster. KSail reads it back after a failed create to attribute a partially created
+// cluster to that attempt and to no other.
+const ClusterCreationTag = "ksail.io/cluster-creation-id"
+
 var (
 	errEKSCreateConfigMetadataRequired = errors.New("metadata is required")
 	errEKSCreateConfigMetadataType     = errors.New("metadata must be an object")
+	errEKSCreateConfigTagsType         = errors.New("metadata.tags must be a mapping")
 )
 
 // Provisioner manages Amazon EKS clusters via the eksctl CLI.
@@ -58,6 +64,9 @@ type Provisioner struct {
 	requireCredentialValues bool
 	// ownershipVerifier rechecks immutable identity immediately before EKS mutations.
 	ownershipVerifier eksidentity.Verifier
+	// creationID is the per-attempt identifier Create tags the cluster with (ClusterCreationTag), so a
+	// cluster left behind by a failed create can be attributed to that exact attempt.
+	creationID string
 	// awsMu guards the lazy awsClient resolution.
 	awsMu sync.Mutex
 }
@@ -107,6 +116,14 @@ func WithOwnershipVerifier(verifier eksidentity.Verifier) Option {
 	}
 }
 
+// WithCreationID makes Create tag the cluster and its eksctl stacks with ClusterCreationTag set to id.
+// An empty id adds no tag.
+func WithCreationID(id string) Option {
+	return func(p *Provisioner) {
+		p.creationID = strings.TrimSpace(id)
+	}
+}
+
 // WithKubeconfigPath pins where eksctl writes the created cluster context.
 func WithKubeconfigPath(path string) Option {
 	return func(p *Provisioner) {
@@ -136,6 +153,7 @@ func NewProvisioner(
 		eksClientOptions:        nil,
 		requireCredentialValues: false,
 		ownershipVerifier:       nil,
+		creationID:              "",
 		awsMu:                   sync.Mutex{},
 	}
 
@@ -310,14 +328,15 @@ func (p *Provisioner) resolveName(name string) string {
 // effectiveCreateConfig copies the declarative eksctl config to a private temporary file and
 // replaces metadata.region with the region selected by KSail's credential/lifecycle resolver. This
 // keeps eksctl's config-file-only invocation aligned with the exact region used for identity capture
-// and cleanup without modifying the user's source file.
+// and cleanup without modifying the user's source file. When a creation ID is set, it is added to
+// metadata.tags, which eksctl applies to the cluster and the stacks it creates.
 func (p *Provisioner) effectiveCreateConfig() (string, func(), error) {
 	region := strings.TrimSpace(p.region)
-	if region == "" {
+	if region == "" && p.creationID == "" {
 		return p.configPath, func() {}, nil
 	}
 
-	effectiveData, err := effectiveCreateConfigData(p.configPath, region)
+	effectiveData, err := effectiveCreateConfigData(p.configPath, region, p.creationID)
 	if err != nil {
 		return "", func() {}, err
 	}
@@ -325,7 +344,9 @@ func (p *Provisioner) effectiveCreateConfig() (string, func(), error) {
 	return writeEffectiveCreateConfig(effectiveData)
 }
 
-func effectiveCreateConfigData(configPath, region string) ([]byte, error) {
+// effectiveCreateConfigData returns the source config with metadata.region pinned (when region is
+// set) and the creation tag added (when creationID is set).
+func effectiveCreateConfigData(configPath, region, creationID string) ([]byte, error) {
 	canonical, err := fsutil.EvalCanonicalPath(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("canonicalize EKS create config: %w", err)
@@ -353,7 +374,16 @@ func effectiveCreateConfigData(configPath, region string) ([]byte, error) {
 		return nil, fmt.Errorf("parse EKS create config: %w", errEKSCreateConfigMetadataType)
 	}
 
-	metadata["region"] = region
+	if region != "" {
+		metadata["region"] = region
+	}
+
+	if creationID != "" {
+		err = addCreationTag(metadata, creationID)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	effectiveData, err := yaml.Marshal(config)
 	if err != nil {
@@ -388,4 +418,23 @@ func writeEffectiveCreateConfig(data []byte) (string, func(), error) {
 	}
 
 	return tempPath, cleanup, nil
+}
+
+// addCreationTag sets ClusterCreationTag in metadata.tags, creating the mapping when absent.
+func addCreationTag(metadata map[string]any, creationID string) error {
+	tags := map[string]any{}
+
+	if existing, exists := metadata["tags"]; exists && existing != nil {
+		existingTags, ok := existing.(map[string]any)
+		if !ok {
+			return fmt.Errorf("parse EKS create config: %w", errEKSCreateConfigTagsType)
+		}
+
+		tags = existingTags
+	}
+
+	tags[ClusterCreationTag] = creationID
+	metadata["tags"] = tags
+
+	return nil
 }

@@ -45,9 +45,25 @@ func NewInstaller(
 	}
 }
 
-// Install installs or upgrades Argo CD via its Helm chart.
+// Install installs or upgrades Argo CD via its Helm chart. A release a GitOps controller
+// owns is left alone, as for every other KSail component.
 func (a *Installer) Install(ctx context.Context) error {
-	err := a.helmInstallOrUpgrade(ctx)
+	skip, err := helmutil.SkipIfGitOpsManaged(
+		ctx,
+		a.client,
+		"argocd",
+		argoCDReleaseName,
+		argoCDNamespace,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to install Argo CD: %w", err)
+	}
+
+	if skip {
+		return nil
+	}
+
+	err = a.helmInstallOrUpgrade(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to install Argo CD: %w", err)
 	}
@@ -63,6 +79,19 @@ func (a *Installer) Uninstall(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// ValuesDrifted reports whether the installed Argo CD release carries other
+// user-supplied values than this installer renders (ksail#7772), using the
+// shared comparison: a missing or Flux- or Argo CD-owned release is not drift.
+func (a *Installer) ValuesDrifted(ctx context.Context) (bool, error) {
+	drifted, err := helmutil.NewBase("argocd", a.client, a.timeout, nil, a.chartSpec()).
+		ValuesDrifted(ctx)
+	if err != nil {
+		return false, fmt.Errorf("compare Argo CD values: %w", err)
+	}
+
+	return drifted, nil
 }
 
 // Images returns the container images used by Argo CD.

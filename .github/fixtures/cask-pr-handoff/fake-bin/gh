@@ -20,6 +20,9 @@ if [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/pulls/43" ]]; 
 	exit 2
 elif [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/pulls/42" ]]; then
 	[[ "${scenario}" == pr-failure || "${scenario}" == merged-known-pr-failure ]] && exit 1
+	if [[ "${scenario}" == merged-stale-current ]]; then
+		touch "${state_dir}/candidate-read"
+	fi
 	if [[ "${merged_scenario}" == true ]]; then
 		pr='{
     "state":"closed",
@@ -102,10 +105,14 @@ elif [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/git/ref/head
 elif [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/contents/Casks/ksail.rb?ref=4444444444444444444444444444444444444444" ]]; then
 	[[ "${scenario}" == merged-merge-file-failure ]] && exit 1
 	printf '%s\n' '{"path":"Casks/ksail.rb","sha":"2222222222222222222222222222222222222222","content":"Y2FzayAia3NhaWwiIGRvCiAgdmVyc2lvbiAiNy4xNjYuMSIKICBzaGEyNTYgIjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiCgogIHVybCAiaHR0cHM6Ly9naXRodWIuY29tL2RldmFudGxlci10ZWNoL2tzYWlsL3JlbGVhc2VzL2Rvd25sb2FkL3Y3LjE2Ni4xL2tzYWlsXzcuMTY2LjFfZGFyd2luX2FybTY0LnRhci5neiIKZW5kCg=="}'
-elif [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/contents/Casks/ksail.rb?ref=5555555555555555555555555555555555555555" ]]; then
+elif [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/contents/Casks/ksail.rb?ref=5555555555555555555555555555555555555555" ||
+	"${command_line}" == "api repos/devantler-tech/homebrew-tap/contents/Casks/ksail.rb?ref=main" ]]; then
 	[[ "${scenario}" == merged-main-file-failure ]] && exit 1
 	if [[ "${scenario}" == merged-malformed-main-file ]]; then
 		printf '%s\n' '{"path":"Casks/ksail.rb"}'
+	elif [[ "${scenario}" == merged-stale-current ]]; then
+		printf 'cask "ksail" do\n  version "7.166.0"\nend\n' |
+			jq -Rs '{path:"Casks/ksail.rb",sha:"3333333333333333333333333333333333333333",content:(. | @base64)}'
 	else
 		printf '%s\n' '{"path":"Casks/ksail.rb","sha":"2222222222222222222222222222222222222222","content":"Y2FzayAia3NhaWwiIGRvCiAgdmVyc2lvbiAiNy4xNjYuMSIKICBzaGEyNTYgIjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiCgogIHVybCAiaHR0cHM6Ly9naXRodWIuY29tL2RldmFudGxlci10ZWNoL2tzYWlsL3JlbGVhc2VzL2Rvd25sb2FkL3Y3LjE2Ni4xL2tzYWlsXzcuMTY2LjFfZGFyd2luX2FybTY0LnRhci5neiIKZW5kCg=="}'
 	fi
@@ -113,6 +120,9 @@ elif [[ "${command_line}" == "api repos/devantler-tech/homebrew-tap/compare/4444
 	[[ "${scenario}" == merged-comparison-failure ]] && exit 1
 	printf '%s\n' '{"status":"ahead","behind_by":0,"merge_base_commit":{"sha":"4444444444444444444444444444444444444444"}}'
 elif [[ "${command_line}" == "api --paginate --slurp repos/devantler-tech/homebrew-tap/pulls?state=closed&head=devantler-tech:goreleaser/ksail&per_page=100" ]]; then
+	if [[ "${scenario}" == merged-stale-current ]]; then
+		touch "${state_dir}/list-read"
+	fi
 	[[ "${scenario}" == merged-list-failure ]] && exit 1
 	if [[ "${scenario}" == merged-known-late-list-failure* || "${scenario}" == merged-known-open-list-failure ]]; then
 		touch "${state_dir}/list-read"

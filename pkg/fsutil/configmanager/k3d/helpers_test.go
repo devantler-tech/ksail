@@ -8,7 +8,6 @@ import (
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/k3d"
-	"github.com/k3d-io/k3d/v5/pkg/config/types"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,9 +27,7 @@ func assertSingleDockerIOMirror(t *testing.T, result map[string][]string) {
 // createK3dConfig is a helper that creates a SimpleConfig with the given name.
 func createK3dConfig(name string) *v1alpha5.SimpleConfig {
 	return &v1alpha5.SimpleConfig{
-		ObjectMeta: types.ObjectMeta{
-			Name: name,
-		},
+		Name: name,
 	}
 }
 
@@ -250,9 +247,7 @@ func TestResolveClusterName(t *testing.T) {
 		t.Parallel()
 
 		k3dConfig := &v1alpha5.SimpleConfig{
-			ObjectMeta: types.ObjectMeta{
-				Name: "test-k3d-cluster",
-			},
+			Name: "test-k3d-cluster",
 		}
 		clusterCfg := &v1alpha1.Cluster{
 			Spec: v1alpha1.Spec{
@@ -305,9 +300,7 @@ func TestResolveClusterName(t *testing.T) {
 		t.Parallel()
 
 		k3dConfig := &v1alpha5.SimpleConfig{
-			ObjectMeta: types.ObjectMeta{
-				Name: "  test-cluster  ",
-			},
+			Name: "  test-cluster  ",
 		}
 
 		name := k3d.ResolveClusterName(nil, k3dConfig)

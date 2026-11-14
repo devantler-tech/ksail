@@ -1,5 +1,7 @@
 name: Restore Go modules
-description: Restore the shared main-backed module archive without saving duplicate Go caches.
+description: >-
+  Restore the shared main-backed module archive without saving duplicate Go caches,
+  then download any missing modules with a bounded retry.
 
 runs:
   using: composite
@@ -21,3 +23,12 @@ runs:
         # Match the released validator: main starts from exact inputs, while a
         # PR may reuse modules from an earlier default-branch dependency graph.
         restore-keys: ${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) && format('go-mod-v1-{0}-{1}-.-', runner.os, runner.arch) || '' }}
+
+    # A cache miss, such as a pull request that changes go.sum, fetches modules
+    # fresh, and one dropped Go proxy stream would otherwise fail the job (#8053).
+    # Download whatever the restore did not supply through the shared bounded
+    # retry, read from this action's own pinned checkout. Only downloads are
+    # retried: a later build or test failure still stops the job at once.
+    - name: Download Go modules
+      shell: bash
+      run: bash "$GITHUB_ACTION_PATH/../../scripts/download-go-modules.sh"

@@ -26,14 +26,15 @@ import (
 
 // ErrK3dRuntimeUnavailable is returned by the k3d provisioner when the k3d
 // runtime (the Docker daemon) is unavailable. k3d's embedded cobra commands react
-// to an unreachable runtime by calling logrus Fatal on their own logger, which by
-// default calls os.Exit(1) and would terminate the whole host process — fatal for
-// a long-lived host such as the desktop app or `ksail open web`, which must keep running
-// when Docker Desktop is not started. NewProvisioner permanently rewires k3d's
-// logger to raise this sentinel via panic instead, and every site that runs a k3d
-// command routes through runK3dSafely, which recovers it into this error — so a
-// Docker-down list, lifecycle, or node-scaling operation fails gracefully rather
-// than crashing.
+// to an unreachable runtime, and to any other fatal failure, by calling logrus
+// Fatal on their own logger, which by default calls os.Exit(1) and would terminate
+// the whole host process — fatal for a long-lived host such as the desktop app or
+// `ksail open web`, which must keep running when Docker Desktop is not started.
+// NewProvisioner permanently rewires k3d's logger to panic instead, and every site
+// that runs a k3d command routes through runK3dSafely, which recovers the panic
+// into an error — so a Docker-down list, lifecycle, or node-scaling operation fails
+// gracefully rather than crashing. A fatal failure becomes this error only when the
+// runtime cannot be reached; any other becomes ErrK3dCommandFailed with k3d's reason.
 var ErrK3dRuntimeUnavailable = errors.New("k3d runtime unavailable (is the Docker daemon running?)")
 
 var (
@@ -73,6 +74,10 @@ type Provisioner struct {
 	// and a basic authorized read succeeds). It is a seam so tests can run
 	// Start() without a live cluster. Defaults to k8s.WaitForClusterReady.
 	waitForReady func(ctx context.Context, kubeconfigPath, contextName string) error
+	// runtimeReachable reports whether k3d's runtime answers, so a fatal k3d exit
+	// is blamed on Docker only when Docker really cannot be reached. It is a seam
+	// so tests can choose the answer. Defaults to defaultRuntimeReachable.
+	runtimeReachable func() error
 }
 
 // NewProvisioner constructs a new command-backed provisioner.
@@ -99,14 +104,17 @@ func NewProvisioner(
 		// Fatal invokes ExitFunc, which defaults to os.Exit(1) and would terminate the
 		// whole host process: fatal for a long-lived host such as the desktop app or
 		// `ksail open web`, where running create/delete/start/stop (or background discovery)
-		// with Docker stopped must yield an error, not a crash. Permanently replace
-		// ExitFunc with one that panics ErrK3dRuntimeUnavailable; every site that runs a
-		// k3d command routes through runK3dSafely, which recovers it into an ordinary
-		// error. Set once and never restored —
-		// embedded k3d must never os.Exit the host, and a fixed value avoids races
-		// between concurrent commands sharing this process-global logger (a long-running
-		// Create must not race a quick List save/restore of the shared ExitFunc).
-		k3dlogger.Log().ExitFunc = func(int) { panic(ErrK3dRuntimeUnavailable) }
+		// with Docker stopped must yield an error, not a crash. A fatal-level hook panics
+		// with k3d's message before logrus reaches ExitFunc, so the reason is kept; every
+		// site that runs a k3d command routes through runK3dSafely, which recovers it into
+		// an ordinary error. ExitFunc is replaced too, as a backstop for an exit that logs
+		// nothing. Both are set once and never restored — embedded k3d must never os.Exit
+		// the host, and fixed values avoid races between concurrent commands sharing this
+		// process-global logger (a long-running Create must not race a quick List
+		// save/restore of the shared ExitFunc).
+		k3dLog := k3dlogger.Log()
+		k3dLog.AddHook(k3dFatalHook{})
+		k3dLog.ExitFunc = func(int) { panic(k3dFatal{}) }
 	})
 
 	prov := &Provisioner{
@@ -116,6 +124,7 @@ func NewProvisioner(
 		runner:                     runner.NewCobraCommandRunner(nil, nil),
 		kubeconfig:                 defaultKubeconfigPath,
 		waitForReady:               k8s.WaitForClusterReady,
+		runtimeReachable:           defaultRuntimeReachable,
 	}
 	prov.listClustersRaw = prov.defaultListClustersRaw
 
@@ -488,17 +497,18 @@ func (k *Provisioner) runLifecycleCommand(
 	return nil
 }
 
-// runK3dSafely runs action and converts the runtime-down panic raised by k3d's
-// neutralized Fatal (the ExitFunc set in NewProvisioner) into a returned
-// ErrK3dRuntimeUnavailable, so a Docker-down k3d command fails with an error
-// instead of terminating the host process (e.g. the desktop app, where these run
-// in background goroutines). It is the single recover seam every site that runs an
-// embedded k3d command routes through — List, the create/delete/start/stop
-// lifecycle commands, and the node create/delete/list commands in update.go — so
-// "embedded k3d can never exit the host" holds package-wide rather than as a
-// per-call-site checklist. A command may have partially run, so the panic is
-// surfaced as an error and execution does not continue past it; any non-sentinel
-// panic is a genuine bug and is re-raised.
+// runK3dSafely runs action and converts the panic raised by k3d's neutralized
+// Fatal (the hook and ExitFunc set in NewProvisioner) into a returned error:
+// ErrK3dRuntimeUnavailable when k3d's message shows the Docker daemon could not be
+// reached, ErrK3dCommandFailed with k3d's message otherwise. A k3d command
+// therefore fails with an error instead of terminating the host process (e.g. the
+// desktop app, where these run in background goroutines). It is the single recover
+// seam every site that runs an embedded k3d command routes through — List, the
+// create/delete/start/stop lifecycle commands, and the node create/delete/list
+// commands in update.go — so "embedded k3d can never exit the host" holds
+// package-wide rather than as a per-call-site checklist. A command may have
+// partially run, so the panic is surfaced as an error and execution does not
+// continue past it; any other panic is a genuine bug and is re-raised.
 func (k *Provisioner) runK3dSafely(action func() error) (err error) {
 	defer func() {
 		recovered := recover()
@@ -506,14 +516,14 @@ func (k *Provisioner) runK3dSafely(action func() error) (err error) {
 			return
 		}
 
-		recoveredErr, ok := recovered.(error)
-		if ok && errors.Is(recoveredErr, ErrK3dRuntimeUnavailable) {
-			err = ErrK3dRuntimeUnavailable
+		fatal, ok := recovered.(k3dFatal)
+		if ok {
+			err = k.fatalError(fatal.message)
 
 			return
 		}
 
-		// Not our sentinel: a genuine bug. Re-panic so it is not swallowed.
+		// Not k3d's fatal exit: a genuine bug. Re-panic so it is not swallowed.
 		panic(recovered)
 	}()
 

@@ -160,13 +160,17 @@ func runResolvedDeleteAction(
 		return fmt.Errorf("failed to create provisioner: %w", err)
 	}
 
-	// Pre-discover registries before deletion for Docker provider
-	preDiscovered := prepareDockerDeletion(cmd, resolved, clusterInfo)
+	// Pre-discover registries before deletion for Docker provider, so the prompt can list them
+	preDiscovered := discoverDockerRegistries(cmd, resolved, clusterInfo)
 
 	err = confirmAndReverifyDeleteTarget(cmd, flags, resolved, preDiscovered, isKindCluster)
 	if err != nil {
 		return err
 	}
+
+	// Detach them only once the delete is confirmed: a declined delete must leave the cluster
+	// untouched, or the next delete cannot find its registries on the network (#8353).
+	disconnectRegistriesBeforeDelete(cmd, clusterInfo, preDiscovered)
 
 	// Delete the cluster
 	err = executeDelete(cmd, tmr, provisioner, resolved)
@@ -303,8 +307,10 @@ func detectDeleteClusterInfo(
 	return detectedInfo, isKindCluster, clusterInfo
 }
 
-// prepareDockerDeletion prepares Docker-specific resources before deletion.
-func prepareDockerDeletion(
+// discoverDockerRegistries finds the cluster's registries before deletion on the Docker provider.
+// It only reads: the confirmation prompt lists what it finds, and nothing changes until the
+// delete is confirmed.
+func discoverDockerRegistries(
 	cmd *cobra.Command,
 	resolved *lifecycle.ResolvedClusterInfo,
 	clusterInfo *clusterdetector.Info,
@@ -313,10 +319,7 @@ func prepareDockerDeletion(
 		return nil
 	}
 
-	preDiscovered := discoverRegistriesBeforeDelete(cmd, clusterInfo)
-	disconnectRegistriesBeforeDelete(cmd, clusterInfo, preDiscovered)
-
-	return preDiscovered
+	return discoverRegistriesBeforeDelete(cmd, clusterInfo)
 }
 
 // performPostDeletionCleanup handles all post-deletion cleanup tasks.
@@ -505,8 +508,11 @@ func disconnectRegistriesBeforeDelete(
 	// cluster. Kind's "kind" is shared by every Kind cluster outright, and the generated names
 	// collide across distributions too: cluster names may contain hyphens, so a K3d cluster "foo"
 	// and a Talos cluster "k3d-foo" both resolve to "k3d-foo" (likewise "kwok-" prefixed names).
-	// Detaching a bystander's registries would break a live cluster — and this runs before the
-	// confirmation prompt, so it would happen even if the user then cancelled.
+	// Detaching a bystander's registries would break a live cluster.
+	//
+	// This runs only after the delete is confirmed. It used to run before the prompt, so a
+	// declined delete already detached the registries, and the next delete, which finds them by
+	// network, missed them and left them running (#8353).
 	//
 	// Errors are ignored: a registry may already be gone or never have been connected.
 	_ = mirrorregistry.DisconnectRegistriesByInfo(

@@ -19,10 +19,25 @@ type fluxSourceRef struct {
 	Branch string `json:"branch,omitempty"`
 }
 
+// gitVerifyModeHEAD verifies the commit the GitRepository checks out.
+const gitVerifyModeHEAD = "HEAD"
+
+type fluxSourceSecretRef struct {
+	Name string `json:"name"`
+}
+
+// fluxSourceVerify is a GitRepository spec.verify block: Flux checks the signature of the
+// selected Git object against the public keys in the referenced Secret.
+type fluxSourceVerify struct {
+	Mode      string              `json:"mode"`
+	SecretRef fluxSourceSecretRef `json:"secretRef"`
+}
+
 type fluxSourceSpec struct {
-	Interval string        `json:"interval"`
-	URL      string        `json:"url"`
-	Ref      fluxSourceRef `json:"ref"`
+	Interval string            `json:"interval"`
+	URL      string            `json:"url"`
+	Ref      fluxSourceRef     `json:"ref"`
+	Verify   *fluxSourceVerify `json:"verify,omitempty"`
 }
 
 type fluxSource struct {
@@ -221,6 +236,15 @@ func buildFluxGitSource(opts Options, primaryNS string) (fluxSource, error) {
 
 	host := resolveProviderHost(opts.GitProvider)
 
+	var verify *fluxSourceVerify
+	if opts.GitVerifySecretRef != "" {
+		// The tenant tracks a branch, so verify the checked-out HEAD commit.
+		verify = &fluxSourceVerify{
+			Mode:      gitVerifyModeHEAD,
+			SecretRef: fluxSourceSecretRef{Name: opts.GitVerifySecretRef},
+		}
+	}
+
 	return fluxSource{
 		APIVersion: "source.toolkit.fluxcd.io/v1",
 		Kind:       "GitRepository",
@@ -233,6 +257,7 @@ func buildFluxGitSource(opts Options, primaryNS string) (fluxSource, error) {
 			Interval: "1m",
 			URL:      fmt.Sprintf("https://%s/%s", host, opts.TenantRepo),
 			Ref:      fluxSourceRef{Branch: "main"},
+			Verify:   verify,
 		},
 	}, nil
 }

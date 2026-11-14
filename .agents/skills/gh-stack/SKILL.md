@@ -4,9 +4,9 @@ description: |
 metadata:
     author: github
     github-path: skills/gh-stack
-    github-ref: refs/tags/v0.2.0
+    github-ref: refs/tags/v0.3.0
     github-repo: https://github.com/github/gh-stack
-    github-tree-sha: bde7bcf5a96697d31aa55b33565fa0ff002167ca
+    github-tree-sha: 1f58c48379bc9fcab68e8a37cb41aad3ad937419
     version: 0.2.0
     internal: true
 name: gh-stack

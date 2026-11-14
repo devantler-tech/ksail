@@ -129,7 +129,7 @@ func CloneEnvironmentConfig(
 	rewrites []Rewrite,
 	force bool,
 ) (string, bool, error) {
-	return cloneEnvironmentConfig(repoRoot, srcConfigRel, "", rewrites, Identity{}, force)
+	return cloneEnvironmentConfig(repoRoot, srcConfigRel, "", rewrites, Identity{}, force, nil)
 }
 
 // CloneEnvironmentConfigTo is [CloneEnvironmentConfig] with an explicit
@@ -144,7 +144,15 @@ func CloneEnvironmentConfigTo(
 	rewrites []Rewrite,
 	force bool,
 ) (string, bool, error) {
-	return cloneEnvironmentConfig(repoRoot, srcConfigRel, dstConfigRel, rewrites, Identity{}, force)
+	return cloneEnvironmentConfig(
+		repoRoot,
+		srcConfigRel,
+		dstConfigRel,
+		rewrites,
+		Identity{},
+		force,
+		nil,
+	)
 }
 
 // CloneBaseSyncedConfigTo is [CloneEnvironmentConfigTo] for a base-synced source: after
@@ -157,7 +165,46 @@ func CloneBaseSyncedConfigTo(
 	identity Identity,
 	force bool,
 ) (string, bool, error) {
-	return cloneEnvironmentConfig(repoRoot, srcConfigRel, dstConfigRel, rewrites, identity, force)
+	return cloneEnvironmentConfig(
+		repoRoot,
+		srcConfigRel,
+		dstConfigRel,
+		rewrites,
+		identity,
+		force,
+		nil,
+	)
+}
+
+// CloneTarget identifies the destination of a root-config clone. Its name replaces
+// only metadata.name; its context fills an omitted value without discarding a
+// custom context. A non-empty Provider is an explicit override, not an inherited default.
+type CloneTarget struct {
+	Identity Identity
+	Provider string
+}
+
+// CloneEnvironmentConfigForTarget clones a selected root config with a distinct
+// destination identity and optional explicit provider, using the same encrypted-copy,
+// containment, source-protection and no-overwrite behavior as the other clone APIs.
+func CloneEnvironmentConfigForTarget(
+	repoRoot, srcConfigRel, dstConfigRel string,
+	rewrites []Rewrite,
+	target CloneTarget,
+	force bool,
+) (string, bool, error) {
+	clone, err := PrepareEnvironmentConfigCloneForTarget(
+		repoRoot,
+		srcConfigRel,
+		dstConfigRel,
+		rewrites,
+		target,
+	)
+	if err != nil {
+		return "", false, err
+	}
+
+	return clone.Write(force)
 }
 
 // cloneEnvironmentConfig is the shared implementation behind CloneEnvironmentConfig
@@ -170,30 +217,64 @@ func cloneEnvironmentConfig(
 	rewrites []Rewrite,
 	identity Identity,
 	force bool,
+	target *cloneTargetPlan,
 ) (string, bool, error) {
+	clone, err := prepareCloneEnvironmentConfig(
+		repoRoot,
+		srcConfigRel,
+		dstConfigRel,
+		rewrites,
+		identity,
+		target,
+	)
+	if err != nil {
+		return "", false, err
+	}
+
+	return clone.Write(force)
+}
+
+// prepareCloneEnvironmentConfig validates the complete target without writing.
+// The plan retains these exact source bytes, avoiding a second source read after
+// the caller begins cloning its overlay.
+func prepareCloneEnvironmentConfig(
+	repoRoot, srcConfigRel, dstConfigRel string,
+	rewrites []Rewrite,
+	identity Identity,
+	target *cloneTargetPlan,
+) (ConfigClone, error) {
+	repoRoot, err := fsutil.EvalCanonicalPath(repoRoot)
+	if err != nil {
+		return ConfigClone{}, fmt.Errorf(
+			"%w: resolving repository root: %w",
+			ErrSourceConfigMissing,
+			err,
+		)
+	}
+
 	srcConfigRel = filepath.ToSlash(srcConfigRel)
 	srcAbs := filepath.Join(repoRoot, filepath.FromSlash(srcConfigRel))
 
 	// Containment guard: a srcConfigRel with ".." segments or a symlink escape must
 	// not let the clone read from outside repoRoot.
 	if !fsutil.IsPathWithinDirectory(srcAbs, repoRoot) {
-		return "", false, fmt.Errorf("%w: %s escapes the repository root",
+		return ConfigClone{}, fmt.Errorf("%w: %s escapes the repository root",
 			ErrSourceConfigMissing, srcConfigRel)
 	}
 
 	info, err := os.Stat(srcAbs)
 	if err != nil || !info.Mode().IsRegular() {
-		return "", false, fmt.Errorf("%w: %s", ErrSourceConfigMissing, srcConfigRel)
+		return ConfigClone{}, fmt.Errorf("%w: %s", ErrSourceConfigMissing, srcConfigRel)
 	}
 
 	newRelPath, content, err := cloneFile(repoRoot, repoRoot, srcAbs, rewrites)
 	if err != nil {
-		return "", false, err
+		return ConfigClone{}, err
 	}
 
-	content, err = materializeCloneIdentity(content, srcConfigRel, identity)
+	content, err = materializeCloneIdentity(content, srcConfigRel, identity, target)
 	if err != nil {
-		return "", false, err
+		return ConfigClone{}, err
 	}
 
 	if dstConfigRel != "" {
@@ -201,31 +282,55 @@ func cloneEnvironmentConfig(
 	}
 
 	if newRelPath == path.Clean(srcConfigRel) {
-		return "", false, fmt.Errorf("%w: %s", ErrDestinationIsSource, srcConfigRel)
+		return ConfigClone{}, fmt.Errorf("%w: %s", ErrDestinationIsSource, srcConfigRel)
 	}
 
-	wrote, err := writeClone(repoRoot, newRelPath, content, force)
+	err = validateCloneDestination(
+		repoRoot,
+		filepath.Join(repoRoot, filepath.FromSlash(newRelPath)),
+		newRelPath,
+	)
 	if err != nil {
-		return "", false, err
+		return ConfigClone{}, err
 	}
 
-	return newRelPath, wrote, nil
+	return ConfigClone{
+		repoRoot:     repoRoot,
+		relativePath: newRelPath,
+		content:      content,
+		prepared:     true,
+	}, nil
 }
 
 // materializeCloneIdentity writes identity into a cloned config's content (see
 // [MaterializeIdentity]). Ciphertext is cloned verbatim, so identity is only written
 // into a plaintext config, and an empty identity leaves the content unchanged.
-func materializeCloneIdentity(content, srcConfigRel string, identity Identity) (string, error) {
-	if identity == (Identity{}) || strings.HasSuffix(srcConfigRel, encryptedFileSuffix) {
+func materializeCloneIdentity(
+	content, srcConfigRel string, identity Identity, target *cloneTargetPlan,
+) (string, error) {
+	if strings.HasSuffix(srcConfigRel, encryptedFileSuffix) {
 		return content, nil
 	}
 
-	materialized, err := MaterializeIdentity(content, identity)
-	if err != nil {
-		return "", fmt.Errorf("writing clone identity: %w", err)
+	if target != nil {
+		materialized, err := materializeCloneTarget(content, *target)
+		if err != nil {
+			return "", fmt.Errorf("writing clone target: %w", err)
+		}
+
+		return materialized, nil
 	}
 
-	return materialized, nil
+	if identity != (Identity{}) {
+		materialized, err := MaterializeIdentity(content, identity)
+		if err != nil {
+			return "", fmt.Errorf("writing clone identity: %w", err)
+		}
+
+		content = materialized
+	}
+
+	return content, nil
 }
 
 // writeClone writes one cloned file's content to repoRoot/newRelPath, returning

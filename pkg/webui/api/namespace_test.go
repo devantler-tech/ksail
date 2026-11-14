@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -52,7 +51,7 @@ func TestCreateClusterCreatesMissingNamespace(t *testing.T) {
 func TestCreateClusterPreservesExistingNamespace(t *testing.T) {
 	t.Parallel()
 
-	existing := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "preexisting"}}
+	existing := &corev1.Namespace{Name: "preexisting"}
 	kubeClient := newClient(t, existing)
 	server := &api.Server{Service: operator.NewCRClusterService(kubeClient)}
 

@@ -12,6 +12,15 @@ import (
 // FirewallRulesMatchForTest exports firewallRulesMatch for testing.
 var FirewallRulesMatchForTest = firewallRulesMatch
 
+// WaitForServersStatusForTest exposes the real server-status poll for regression tests.
+func (p *Provider) WaitForServersStatusForTest(
+	ctx context.Context,
+	clusterName string,
+	status hcloud.ServerStatus,
+) error {
+	return p.waitForServersStatus(ctx, clusterName, status, DefaultActionTimeout)
+}
+
 // SourceIPsEqualForTest exports sourceIPsEqual for testing.
 var SourceIPsEqualForTest = sourceIPsEqual
 
@@ -122,3 +131,8 @@ func NewSnapshotManagerWithUploaderForTest(
 
 // BuildSSHFirewallRulesForTest exports buildSSHFirewallRules for testing.
 var BuildSSHFirewallRulesForTest = buildSSHFirewallRules
+
+// SetGracefulShutdownTimeoutForTest shortens the graceful shutdown window StopNodes waits for.
+func (p *Provider) SetGracefulShutdownTimeoutForTest(timeout time.Duration) {
+	p.gracefulShutdownTimeout = timeout
+}

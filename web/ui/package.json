@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "gen:types": "node scripts/gen-types.mjs",
+    "gen:icons": "node scripts/gen-icons.mjs",
     "build": "npm run gen:types && tsc && vite build",
     "preview": "vite preview",
     "lint": "npm run gen:types && tsc --noEmit",
@@ -42,6 +43,6 @@
     "json-schema-to-typescript": "^15.0.4",
     "tailwindcss": "^4.1.13",
     "typescript": "^5.9.2",
-    "vite": "^8.0.16"
+    "vite": "^8.3.4"
   }
 }

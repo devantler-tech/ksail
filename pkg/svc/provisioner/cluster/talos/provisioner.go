@@ -463,6 +463,11 @@ func (p *Provisioner) TalosConfigs() *talosconfigmanager.Configs {
 func (p *Provisioner) Create(ctx context.Context, name string) error {
 	defer addressmask.Flush(p.logWriter)
 
+	err := p.validateAutoscalerPoolPatches()
+	if err != nil {
+		return p.maskErr(err)
+	}
+
 	return p.maskErr(p.createUnmasked(ctx, name))
 }
 

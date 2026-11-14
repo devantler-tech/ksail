@@ -19,7 +19,8 @@ import (
 
 // goListPackageFields limits `go list -json` to the fields goListPackage reads: the full record is
 // about 69 MB per module and platform, and the audit lists ten of them.
-const goListPackageFields = "ImportPath,Name,Dir,Standard,Module,GoFiles,CgoFiles,IgnoredGoFiles,Imports"
+const goListPackageFields = "ImportPath,Name,Dir,Standard,Module,GoFiles,CgoFiles,SFiles,CFiles,HFiles," +
+	"CXXFiles,MFiles,FFiles,SwigFiles,SwigCXXFiles,SysoFiles,EmbedFiles,IgnoredGoFiles,Imports"
 
 // goListPackage mirrors the Go command's exported JSON field names.
 type goListPackage struct {
@@ -30,6 +31,16 @@ type goListPackage struct {
 	Module         *goListModule `json:"Module"`         //nolint:tagliatelle // Go command output contract.
 	GoFiles        []string      `json:"GoFiles"`        //nolint:tagliatelle // Go command output contract.
 	CgoFiles       []string      `json:"CgoFiles"`       //nolint:tagliatelle // Go command output contract.
+	EmbedFiles     []string      `json:"EmbedFiles"`     //nolint:tagliatelle // Go command output contract.
+	SFiles         []string      `json:"SFiles"`         //nolint:tagliatelle // Go command output contract.
+	CFiles         []string      `json:"CFiles"`         //nolint:tagliatelle // Go command output contract.
+	HFiles         []string      `json:"HFiles"`         //nolint:tagliatelle // Go command output contract.
+	CXXFiles       []string      `json:"CXXFiles"`       //nolint:tagliatelle // Go command output contract.
+	MFiles         []string      `json:"MFiles"`         //nolint:tagliatelle // Go command output contract.
+	FFiles         []string      `json:"FFiles"`         //nolint:tagliatelle // Go command output contract.
+	SwigFiles      []string      `json:"SwigFiles"`      //nolint:tagliatelle // Go command output contract.
+	SwigCXXFiles   []string      `json:"SwigCXXFiles"`   //nolint:tagliatelle // Go command output contract.
+	SysoFiles      []string      `json:"SysoFiles"`      //nolint:tagliatelle // Go command output contract.
 	IgnoredGoFiles []string      `json:"IgnoredGoFiles"` //nolint:tagliatelle // Go command output contract.
 	Imports        []string      `json:"Imports"`        //nolint:tagliatelle // Go command output contract.
 }
@@ -91,15 +102,27 @@ func listDependencyPackages(
 ) []goListPackage {
 	t.Helper()
 
+	return listDependencyEntry(t, moduleDir, target, cgo, tags, "./...")
+}
+
+func listDependencyEntry(
+	t *testing.T,
+	moduleDir string,
+	target platform,
+	cgo, tags, entry string,
+) []goListPackage {
+	t.Helper()
+
 	//nolint:gosec // G204: a fixed go subcommand; tags come from moduleBuildTags.
 	cmd := exec.CommandContext(
 		t.Context(),
 		"go",
 		"list",
 		"-deps",
+		"-mod=readonly",
 		"-tags="+tags,
 		"-json="+goListPackageFields,
-		"./...",
+		entry,
 	)
 	cmd.Dir = moduleDir
 
@@ -389,12 +412,17 @@ func goreleaserCGO(t *testing.T, path string) string {
 //nolint:lll // file-path keys and 64-character SHA-256 digests do not wrap
 func auditedReleaseConfigDigests() map[string]string {
 	return map[string]string{
-		".goreleaser.yaml":                                   "603b04ca07558b8e1acb3d9c4e00e3c49ceaa10ea9f5af0ed2f84f01f96496c2",
-		".goreleaser.desktop.yaml":                           "46eef12c0c592f5fae1a76082d897a1f63099a4a87b268ed7a39629c8e7c4eb6",
-		".github/actions/setup-desktop-build/action.yml":     "09d319886697e84b880a9744cacb0928daa9a6998f24600cf09183e152592c6a",
-		"scripts/stage-webui.sh":                             "5b3d7b0fa8b237f77ee9a88e6807e070c1b35c97df3d5f17357b3ecb8b2938a6",
+		".gitattributes":                                     "8f4a3c1a7f77200945aa239d943a26a6950bd2fc51b1a8704e0211bf8b90bc48",
+		".goreleaser.yaml":                                   "ea95f53728ff9000bbee279ca38a8c408899d732e82f3e0d07579eed5e922c6c",
+		".goreleaser.desktop.yaml":                           "e40864a1d4465aa020ce68879b4f9d11d8d0e6abaf13e98ffb20e35e1c0d8201",
+		".github/actions/setup-desktop-build/action.yml":     "148ab46c474e23a9bef1107ef18002c9b69c3c8a2ba0a7762f2693784d1bc8e0",
+		".github/scripts/download-go-modules.sh":             "e5af8edf61a77de4397e952a05b1cc6ca0f83cd848523c4cf6b3aaa2539561fa",
+		".github/scripts/resolve-release-replay.sh":          "84418fef708bae31c86fb45fccc03b4e9186e312e5cb45951cc5a1dcd35af590",
+		".github/scripts/go-notices.go":                      "e7b4840dd9245a7576e578ed14d4e01efc6ed3aca664f20949bd133fbb8c61d9",
+		".github/actions/release-admission/action.yaml":      "a8ac217c7e2195fee64b364748a6724b99aa0aa4a9988127084f1d6b45953f0c",
+		"scripts/stage-webui.sh":                             "56f99977b9e5026eedd693e59da4e0cd82d0167e94d0ce4b9c7bb5ce2cd8ed3c",
 		".github/actions/free-disk-space/free-disk-space.sh": "2dd12fcf3779137ca1cb5f21194947f6a10d3f94f8fb438a1a29ec9021fbdc30",
-		".github/workflows/cd.yaml#without-uses":             "ec2e457affddc8ceb3628055c23e2b78d1330f352c8a5a8cc1ce5ecf6e055e6f",
+		".github/workflows/cd.yaml#without-uses":             "c769bc23d3b558d51a13c9de4558911414640c42ff651ed5079d073f6f68694e",
 	}
 }
 
@@ -434,8 +462,13 @@ func releaseConfigDigests(t *testing.T, root string) map[string]string {
 	digests := map[string]string{}
 
 	for _, name := range []string{
+		".gitattributes",
 		".goreleaser.yaml", ".goreleaser.desktop.yaml", ".github/actions/setup-desktop-build/action.yml",
 		"scripts/stage-webui.sh",
+		".github/scripts/download-go-modules.sh",
+		".github/scripts/resolve-release-replay.sh",
+		".github/scripts/go-notices.go",
+		".github/actions/release-admission/action.yaml",
 		".github/actions/free-disk-space/free-disk-space.sh",
 	} {
 		path := filepath.Join(root, name)

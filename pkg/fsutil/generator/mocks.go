@@ -14,10 +14,19 @@ func NewMockGenerator[T any, Options any](t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockGenerator[T, Options] {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockGenerator[T, Options]{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -69,7 +78,7 @@ type MockGenerator_Generate_Call[T any, Options any] struct {
 // Generate is a helper method to define mock.On call
 //   - model T
 //   - opts Options
-func (_e *MockGenerator_Expecter[T, Options]) Generate(model interface{}, opts interface{}) *MockGenerator_Generate_Call[T, Options] {
+func (_e *MockGenerator_Expecter[T, Options]) Generate(model any, opts any) *MockGenerator_Generate_Call[T, Options] {
 	return &MockGenerator_Generate_Call[T, Options]{Call: _e.mock.On("Generate", model, opts)}
 }
 

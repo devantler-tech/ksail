@@ -676,10 +676,8 @@ func buildAPIService(spec APIExposureSpec, serviceType corev1.ServiceType) *core
 	labels := CommonLabels(spec.ClusterName)
 
 	return &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   APIServiceName,
-			Labels: labels,
-		},
+		Name:   APIServiceName,
+		Labels: labels,
 		Spec: corev1.ServiceSpec{
 			Type:     serviceType,
 			Selector: spec.BackendSelector,

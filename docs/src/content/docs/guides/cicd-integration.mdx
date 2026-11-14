@@ -19,12 +19,24 @@ actually needs one.
 
 ## The shape
 
-```text
-  pull request                         merge
-  ┌─────────────────────────┐          ┌──────────────────────────────────────────┐
-  │ validate  +  scan        │          │ push  ──►  reconcile  ──►  cluster update │
-  │ (offline, no cluster)    │          │ (manifests first)        (node config last)│
-  └─────────────────────────┘          └──────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    accTitle: The recommended CI/CD shape
+    accDescr: On every pull request, validate and scan run offline with no cluster. On merge, delivery runs push, then reconcile, then cluster update, so manifests ship first and node configuration is synced last.
+
+    subgraph PullRequest["pull request"]
+        Gate["validate + scan<br/>(offline, no cluster)"]
+    end
+
+    subgraph Merge["merge"]
+        subgraph Manifests["manifests first"]
+            Push["push"] --> Reconcile["reconcile"]
+        end
+        Update["cluster update<br/>(node config last)"]
+        Reconcile --> Update
+    end
+
+    Gate ~~~ Push
 ```
 
 - **On every pull request**, gate the change offline — no cluster, no credentials beyond what
@@ -54,7 +66,8 @@ ksail --config ksail.prod.yaml workload scan --framework nsa --compliance-thresh
 ```
 
 `scan` fails the job when the compliance score drops below `--compliance-threshold`, so a regression in
-security posture blocks the merge. Both commands also read their defaults from `spec.workload` in
+security posture blocks the merge. A passing scan prints the score it measured, so the job log shows how
+much headroom the threshold has. Both commands also read their defaults from `spec.workload` in
 `ksail.yaml`, so `ksail workload scan` with no flags is a turnkey gate once configured.
 
 :::tip[Render-aware checks]

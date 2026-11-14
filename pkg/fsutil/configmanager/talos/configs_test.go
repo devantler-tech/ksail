@@ -461,8 +461,8 @@ func TestConfigs_WithSecrets(t *testing.T) {
 		assert.Equal(t, originalOSCA, rebuiltOSCA, "OS CA should match after WithSecrets")
 
 		// The rebuilt config should have the same cluster CA as config1
-		originalClusterCA := configs1.ControlPlane().Cluster().IssuingCA().Crt
-		rebuiltClusterCA := rebuilt.ControlPlane().Cluster().IssuingCA().Crt
+		originalClusterCA := configs1.ControlPlane().K8sAPIServerCAConfig().IssuingCA().Crt
+		rebuiltClusterCA := rebuilt.ControlPlane().K8sAPIServerCAConfig().IssuingCA().Crt
 		assert.Equal(
 			t,
 			originalClusterCA,
@@ -510,8 +510,8 @@ func TestConfigs_WithKubernetesVersion(t *testing.T) {
 
 		// PKI is preserved so the regenerated config still matches the cluster.
 		assert.Equal(t,
-			configs.ControlPlane().Cluster().IssuingCA().Crt,
-			rebuilt.ControlPlane().Cluster().IssuingCA().Crt,
+			configs.ControlPlane().K8sAPIServerCAConfig().IssuingCA().Crt,
+			rebuilt.ControlPlane().K8sAPIServerCAConfig().IssuingCA().Crt,
 			"cluster CA should be preserved across version change",
 		)
 		assert.Equal(t, "k8s-version-cluster", rebuilt.GetClusterName())
@@ -566,8 +566,8 @@ func TestConfigs_WithCertSANs(t *testing.T) {
 
 		// PKI must be preserved across regeneration.
 		assert.Equal(t,
-			configs.ControlPlane().Cluster().IssuingCA().Crt,
-			updated.ControlPlane().Cluster().IssuingCA().Crt,
+			configs.ControlPlane().K8sAPIServerCAConfig().IssuingCA().Crt,
+			updated.ControlPlane().K8sAPIServerCAConfig().IssuingCA().Crt,
 		)
 		assert.Equal(t, "cluster-a", updated.GetClusterName())
 	})
@@ -641,8 +641,8 @@ func TestConfigs_WithHetznerVIP(t *testing.T) {
 
 		// PKI must be preserved across regeneration.
 		assert.Equal(t,
-			configs.ControlPlane().Cluster().IssuingCA().Crt,
-			updated.ControlPlane().Cluster().IssuingCA().Crt,
+			configs.ControlPlane().K8sAPIServerCAConfig().IssuingCA().Crt,
+			updated.ControlPlane().K8sAPIServerCAConfig().IssuingCA().Crt,
 		)
 		assert.Equal(t, "vip-cluster", updated.GetClusterName())
 	})

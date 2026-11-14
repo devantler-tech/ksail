@@ -246,6 +246,8 @@ func TestBuildDesiredNodeConfig_NoFalsePositive(t *testing.T) {
 // after KSail creates the cluster. Those additional map entries are not owned by
 // KSail's desired patch set and must not make every subsequent update delete
 // them, report phantom machine.config drift, and re-apply all node configs.
+//
+//nolint:staticcheck // exercises the legacy v1alpha1 node fields of pre-1.14 contracts
 func TestBuildDesiredNodeConfig_PreservesExternallyManagedNodeAnnotations(t *testing.T) {
 	t.Parallel()
 
@@ -304,6 +306,8 @@ func TestBuildDesiredNodeConfig_PreservesExternallyManagedNodeAnnotations(t *tes
 // TestBuildDesiredNodeConfig_ReconcilesDesiredNodeAnnotation verifies the
 // ownership boundary: preserving live-only keys must not hide drift for an
 // annotation that KSail's current desired patch explicitly declares.
+//
+//nolint:staticcheck // exercises the legacy v1alpha1 node fields of pre-1.14 contracts
 func TestBuildDesiredNodeConfig_ReconcilesDesiredNodeAnnotation(t *testing.T) {
 	t.Parallel()
 
@@ -345,6 +349,8 @@ func TestBuildDesiredNodeConfig_ReconcilesDesiredNodeAnnotation(t *testing.T) {
 // ownership boundary across updates: once KSail has rendered an annotation from
 // its patch set, removing that key from the patch must remain an intentional
 // deletion while unrelated live-only annotations stay preserved.
+//
+//nolint:staticcheck // exercises the legacy v1alpha1 node fields of pre-1.14 contracts
 func TestBuildDesiredNodeConfig_RemovesPreviouslyDesiredNodeAnnotation(t *testing.T) {
 	t.Parallel()
 
@@ -393,6 +399,8 @@ func TestBuildDesiredNodeConfig_RemovesPreviouslyDesiredNodeAnnotation(t *testin
 // explicit migration path for a cluster created before KSail persisted annotation
 // ownership. A bootstrap directive seeds the previous ownership set once; KSail
 // strips it, persists the current set, and preserves unrelated live-only keys.
+//
+//nolint:staticcheck // exercises the legacy v1alpha1 node fields of pre-1.14 contracts
 func TestGraftNodeManagedSections_BootstrapsLegacyAnnotationRemoval(t *testing.T) {
 	t.Parallel()
 
@@ -427,6 +435,8 @@ func TestGraftNodeManagedSections_BootstrapsLegacyAnnotationRemoval(t *testing.T
 // TestGraftNodeManagedSections_RejectsDesiredOwnershipMarkerCollision guards
 // the reserved annotation key at patch-loading time. An arbitrary user value
 // must fail before it can be applied and poison every subsequent update.
+//
+//nolint:staticcheck // exercises the legacy v1alpha1 node fields of pre-1.14 contracts
 func TestGraftNodeManagedSections_RejectsDesiredOwnershipMarkerCollision(t *testing.T) {
 	t.Parallel()
 
@@ -448,6 +458,8 @@ func TestGraftNodeManagedSections_RejectsDesiredOwnershipMarkerCollision(t *test
 // KSail accounts for its metadata before returning a config for Talos to apply.
 // The user's annotation map is valid at the Kubernetes 256 KiB ceiling by itself,
 // but adding the ownership marker must return a clear preflight error.
+//
+//nolint:staticcheck // exercises the legacy v1alpha1 node fields of pre-1.14 contracts
 func TestGraftNodeManagedSections_RejectsOwnershipMarkerPastAnnotationLimit(t *testing.T) {
 	t.Parallel()
 
@@ -471,6 +483,8 @@ func TestGraftNodeManagedSections_RejectsOwnershipMarkerPastAnnotationLimit(t *t
 // TestBuildDesiredNodeConfig_RejectsNullManagedNodeAnnotationKeys guards the
 // ownership boundary against a malformed marker that would otherwise erase
 // KSail's prior ownership set and restore intentionally removed annotations.
+//
+//nolint:staticcheck // exercises the legacy v1alpha1 node fields of pre-1.14 contracts
 func TestBuildDesiredNodeConfig_RejectsNullManagedNodeAnnotationKeys(t *testing.T) {
 	t.Parallel()
 

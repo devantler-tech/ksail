@@ -80,6 +80,8 @@ func autoscalerServer(pool string) *hcloud.Server {
 // and that rebuild must keep the shape the node booted from. The static worker config
 // would drop the ksail.io/autoscaled marker and the pool labels and taints, and add
 // the Longhorn default-disk label.
+//
+//nolint:staticcheck // exercises the legacy v1alpha1 node fields of pre-1.14 contracts
 func TestAutoscalerNodeDesiredConfigKeepsAutoscalerShape(t *testing.T) {
 	t.Parallel()
 
@@ -111,6 +113,8 @@ func TestAutoscalerNodeDesiredConfigKeepsAutoscalerShape(t *testing.T) {
 
 // TestStaticWorkerDesiredConfigKeepsStaticShape is the control: a KSail-owned worker
 // still gets the static worker config, Longhorn label included and no autoscaler marker.
+//
+//nolint:staticcheck // exercises the legacy v1alpha1 node fields of pre-1.14 contracts
 func TestStaticWorkerDesiredConfigKeepsStaticShape(t *testing.T) {
 	t.Parallel()
 

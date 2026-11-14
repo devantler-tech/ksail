@@ -86,16 +86,14 @@ func (c *Client) createHelmRelease(
 	)
 
 	helmRelease := &helmv2.HelmRelease{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		Name:      name,
+		Namespace: namespace,
 		Spec: helmv2.HelmReleaseSpec{
 			Interval: metav1.Duration{Duration: flags.interval},
 			Chart: &helmv2.HelmChartTemplate{
 				Spec: helmv2.HelmChartTemplateSpec{
 					Chart: flags.chart,
-					SourceRef: helmv2.CrossNamespaceObjectReference{
+					SourceRef: &helmv2.CrossNamespaceObjectReference{
 						Kind:      sourceKind,
 						Name:      sourceName,
 						Namespace: sourceNs,

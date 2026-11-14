@@ -1,6 +1,13 @@
 name: Update Agent Skills
 on:
   workflow_dispatch:
+    inputs:
+      unpin:
+        description: >-
+          Release every pinned skill (gh skill update --unpin). Use once after removing a
+          hold from `pins`; the scheduled run never sets it.
+        type: boolean
+        default: false
   schedule:
     - cron: "0 6 * * *" # Daily at 06:00 UTC
 
@@ -17,13 +24,19 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: devantler-tech/actions/.github/workflows/update-agent-skills.yaml@ea4df9004d4ab43b6c9af5b0c5f55712f7211328 # v13.10.12
+    uses: devantler-tech/update-agent-skills-action/.github/workflows/update-agent-skills.yaml@0a1221ae238c91bc6ca29af55d800553f906aabe # v1.1.1
     with:
       dir: .agents/skills
       # These are development skills our own agents use, not skills KSail publishes. Marking
       # them internal after every update keeps `npx skills add devantler-tech/ksail` offering
       # only the ksail skill (#6221).
       mark-internal: true
+      # No skill is held. To hold one at a reviewed upstream commit, add a `pins:` block naming
+      # its tracking issue. Removing that block leaves the skill's pinned metadata in place, so
+      # release it with one dispatch that sets `unpin`; the updater refuses both together.
+      # The git-commit hold (devantler-tech/platform#5224) ended once upstream fixed it in
+      # github/awesome-copilot#6261 (devantler-tech/agent-plugins#598).
+      unpin: ${{ inputs.unpin == true }}
       # Open the PR with a GitHub App token so the caller's `on: pull_request`
       # CI runs (a PR opened with GITHUB_TOKEN does not trigger workflows, so
       # the required `CI - Required Checks` never reports and the PR stays

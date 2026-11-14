@@ -52,6 +52,16 @@ type ClusterStatus struct {
 	// NodesTotal is the total number of cluster nodes.
 	NodesTotal int32 `json:"nodesTotal,omitempty"`
 
+	// ObservedDistribution is the distribution the cluster's own nodes prove it runs, reported for
+	// the self-registered host cluster, whose spec is left empty because the operator does not own
+	// its lifecycle. Empty when the nodes prove no single distribution. Observed state only: it never
+	// makes the cluster provisionable.
+	ObservedDistribution Distribution `json:"observedDistribution,omitempty"`
+
+	// ObservedProvider is the infrastructure provider the cluster's own nodes prove it runs on,
+	// reported alongside ObservedDistribution. Empty when the nodes prove no single provider.
+	ObservedProvider Provider `json:"observedProvider,omitempty"`
+
 	// LastReconcileTime is when the operator last reconciled this cluster.
 	LastReconcileTime *metav1.Time `json:"lastReconcileTime,omitempty"`
 

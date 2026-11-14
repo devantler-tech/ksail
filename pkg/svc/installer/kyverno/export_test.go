@@ -1,6 +1,7 @@
 package kyvernoinstaller
 
 import (
+	"context"
 	"time"
 
 	"k8s.io/client-go/kubernetes"
@@ -29,4 +30,9 @@ func SetWebhookReadinessTimeout(d time.Duration) func() {
 	webhookReadinessTimeout = d
 
 	return func() { webhookReadinessTimeout = original }
+}
+
+// WaitForWebhookReadyForTest exercises readiness without Install's tolerated timeout.
+func (i *Installer) WaitForWebhookReadyForTest(ctx context.Context) error {
+	return i.waitForWebhookReady(ctx)
 }

@@ -181,9 +181,9 @@ func TestNamespaceSelectorsResolveExclusions(t *testing.T) {
 
 			pol := requireTeam(t, "Enforce")
 			pol.GetSpec().Rules[0].ExcludeResources = &kyvernov1.MatchResources{
-				Any: kyvernov1.ResourceFilters{{ResourceDescription: kyvernov1.ResourceDescription{
+				Any: kyvernov1.ResourceFilters{{
 					NamespaceSelector: selector,
-				}}},
+				}},
 			}
 			engine := kyvernopolicy.NewEngine([]kyvernov1.PolicyInterface{pol}, nil)
 			violations, err := engine.Evaluate(t.Context(), configMap("kube-system", nil))

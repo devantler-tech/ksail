@@ -41,6 +41,13 @@ func (f DefaultFactory) createEKSProvisioner(
 		provisionerOptions,
 	)
 
+	if eksConfig.CreationID != "" {
+		provisionerOptions = append(
+			provisionerOptions,
+			eksprovisioner.WithCreationID(eksConfig.CreationID),
+		)
+	}
+
 	infraProvider, err := awsprovider.NewProvider(client, eksConfig.Region, providerOptions...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create AWS provider: %w", err)

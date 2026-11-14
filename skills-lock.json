@@ -2,10 +2,10 @@
   "version": 1,
   "skills": {
     "ways-of-working": {
-      "source": "devantler-tech/agent-skills",
+      "source": "devantler-tech/agent-plugins",
       "sourceType": "github",
-      "skillPath": "ways-of-working/SKILL.md",
-      "computedHash": "bc7d1c82bb68c3eb40146859c36cd526dd996407ba6a33472aad4f961b5fcb89"
+      "skillPath": "plugins/engineering-practices/skills/ways-of-working/SKILL.md",
+      "computedHash": "f7e93b0d3565d9e2c121b228df51b9d6dafb3a5d449a62ab04c79d932ee3d71a"
     }
   }
 }

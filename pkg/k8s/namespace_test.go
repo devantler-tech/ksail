@@ -57,9 +57,7 @@ func TestEnsurePrivilegedNamespace(t *testing.T) {
 			name: "updates existing namespace without labels",
 			existing: []runtime.Object{
 				&corev1.Namespace{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "existing-ns",
-					},
+					Name: "existing-ns",
 				},
 			},
 			namespace: "existing-ns",
@@ -68,10 +66,8 @@ func TestEnsurePrivilegedNamespace(t *testing.T) {
 			name: "updates existing namespace with nil labels",
 			existing: []runtime.Object{
 				&corev1.Namespace{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:   "nil-labels-ns",
-						Labels: nil,
-					},
+					Name:   "nil-labels-ns",
+					Labels: nil,
 				},
 			},
 			namespace: "nil-labels-ns",
@@ -80,13 +76,11 @@ func TestEnsurePrivilegedNamespace(t *testing.T) {
 			name: "no-op when labels already correct",
 			existing: []runtime.Object{
 				&corev1.Namespace{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "correct-ns",
-						Labels: map[string]string{
-							"pod-security.kubernetes.io/enforce": "privileged",
-							"pod-security.kubernetes.io/audit":   "privileged",
-							"pod-security.kubernetes.io/warn":    "privileged",
-						},
+					Name: "correct-ns",
+					Labels: map[string]string{
+						"pod-security.kubernetes.io/enforce": "privileged",
+						"pod-security.kubernetes.io/audit":   "privileged",
+						"pod-security.kubernetes.io/warn":    "privileged",
 					},
 				},
 			},
@@ -96,12 +90,10 @@ func TestEnsurePrivilegedNamespace(t *testing.T) {
 			name: "updates existing namespace with partial labels",
 			existing: []runtime.Object{
 				&corev1.Namespace{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "partial-ns",
-						Labels: map[string]string{
-							"pod-security.kubernetes.io/enforce": "privileged",
-							// missing audit and warn
-						},
+					Name: "partial-ns",
+					Labels: map[string]string{
+						"pod-security.kubernetes.io/enforce": "privileged",
+						// missing audit and warn
 					},
 				},
 			},

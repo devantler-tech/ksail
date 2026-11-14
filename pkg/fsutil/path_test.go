@@ -8,6 +8,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 )
 
+// TestExpandHomePath keeps home shorthand and literal path syntax distinct on each host.
 func TestExpandHomePath(t *testing.T) {
 	t.Parallel()
 
@@ -15,6 +16,8 @@ func TestExpandHomePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get user home directory: %v", err)
 	}
+
+	absolutePath := filepath.Join(t.TempDir(), "file")
 
 	tests := []struct {
 		name        string
@@ -34,8 +37,8 @@ func TestExpandHomePath(t *testing.T) {
 		},
 		{
 			name:     "returns unchanged when already absolute",
-			input:    filepath.Join(string(filepath.Separator), "tmp", "file"),
-			expected: filepath.Join(string(filepath.Separator), "tmp", "file"),
+			input:    absolutePath,
+			expected: absolutePath,
 		},
 		{
 			name:        "tilde only converted to absolute",
@@ -67,6 +70,57 @@ func TestExpandHomePath(t *testing.T) {
 				t.Fatalf("ExpandHomePath(%q) = %q, want %q", testCase.input, got, testCase.expected)
 			}
 		})
+	}
+}
+
+// TestExpandHomePathNativeBackslash distinguishes Windows shorthand from Unix literal names.
+func TestExpandHomePathNativeBackslash(t *testing.T) {
+	t.Parallel()
+
+	input := "~\\some\\nested\\dir"
+
+	want, err := filepath.Abs(input)
+	if err != nil {
+		t.Fatalf("resolve literal backslash path: %v", err)
+	}
+
+	if filepath.Separator != '/' {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			t.Fatalf("failed to get user home directory: %v", err)
+		}
+
+		want = filepath.Join(home, "some", "nested", "dir")
+	}
+
+	got, err := fsutil.ExpandHomePath(input)
+	if err != nil {
+		t.Fatalf("ExpandHomePath returned error: %v", err)
+	}
+
+	if got != want {
+		t.Fatalf("ExpandHomePath(%q) = %q, want %q", input, got, want)
+	}
+}
+
+// TestExpandHomePathNamedTilde preserves ordinary names that begin with a tilde.
+func TestExpandHomePathNamedTilde(t *testing.T) {
+	t.Parallel()
+
+	input := filepath.Join("~other-user", "some")
+
+	want, err := filepath.Abs(input)
+	if err != nil {
+		t.Fatalf("resolve named tilde path: %v", err)
+	}
+
+	got, err := fsutil.ExpandHomePath(input)
+	if err != nil {
+		t.Fatalf("ExpandHomePath returned error: %v", err)
+	}
+
+	if got != want {
+		t.Fatalf("ExpandHomePath(%q) = %q, want %q", input, got, want)
 	}
 }
 

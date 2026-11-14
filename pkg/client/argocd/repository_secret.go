@@ -3,7 +3,6 @@ package argocd
 import (
 	"github.com/devantler-tech/ksail/v7/pkg/registryauth"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -48,12 +47,10 @@ func buildRepositorySecret(opts repositorySecretOptions) *corev1.Secret {
 	}
 
 	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        repositorySecretName,
-			Namespace:   DefaultNamespace,
-			Labels:      map[string]string{"argocd.argoproj.io/secret-type": "repository"},
-			Annotations: annotations,
-		},
-		StringData: data,
+		Name:        repositorySecretName,
+		Namespace:   DefaultNamespace,
+		Labels:      map[string]string{"argocd.argoproj.io/secret-type": "repository"},
+		Annotations: annotations,
+		StringData:  data,
 	}
 }

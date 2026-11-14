@@ -66,6 +66,7 @@ func NewGenCmd() *cobra.Command {
 	cmd.AddCommand(NewPodDisruptionBudgetCmd())
 	cmd.AddCommand(NewPriorityClassCmd())
 	cmd.AddCommand(NewQuotaCmd())
+	cmd.AddCommand(NewReceiverCmd())
 	cmd.AddCommand(NewRoleCmd())
 	cmd.AddCommand(NewRoleBindingCmd())
 	cmd.AddCommand(NewSecretCmd())

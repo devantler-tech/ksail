@@ -1,8 +1,10 @@
 package image
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"slices"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
@@ -75,19 +77,18 @@ func getLabelScheme(distribution v1alpha1.Distribution) dockerprovider.LabelSche
 
 // Node role priorities for export selection.
 const (
-	rolePriorityControlPlane    = 0
-	rolePriorityServer          = 1
-	rolePriorityWorker          = 2
-	rolePriorityAgent           = 3
-	rolePriorityUnknown         = 4
-	rolePriorityUnselectedStart = 999
+	rolePriorityControlPlane = 0
+	rolePriorityServer       = 1
+	rolePriorityWorker       = 2
+	rolePriorityAgent        = 3
+	rolePriorityUnknown      = 4
 )
 
-// selectNodeForExport selects a suitable node for export operations.
-// It prefers control-plane/server nodes over workers, and filters out
-// helper containers (tools, loadbalancer, etc.) that don't have containerd.
-func selectNodeForExport(nodes []provider.NodeInfo) string {
-	// Define preferred role order - control-plane/server nodes first
+// orderExportCandidates returns the nodes that can serve an export, most
+// preferred first: control-plane/server nodes before workers/agents, and
+// helper containers (tools, loadbalancer, etc.) without containerd left out.
+// Nodes with the same role keep their listing order.
+func orderExportCandidates(nodes []provider.NodeInfo) []string {
 	rolePreference := map[string]int{
 		"control-plane": rolePriorityControlPlane, // Kind control-plane
 		"server":        rolePriorityServer,       // K3d server (control-plane)
@@ -96,28 +97,36 @@ func selectNodeForExport(nodes []provider.NodeInfo) string {
 		"":              rolePriorityUnknown,      // Unknown role - fallback
 	}
 
-	var bestNode provider.NodeInfo
+	type candidate struct {
+		name     string
+		priority int
+	}
 
-	bestPriority := rolePriorityUnselectedStart
+	candidates := make([]candidate, 0, len(nodes))
 
 	for _, node := range nodes {
-		// Skip helper containers without containerd
-		if isHelperContainer(node.Role) {
+		if isHelperContainer(node.Role) || node.Name == "" {
 			continue
 		}
 
 		priority, ok := rolePreference[node.Role]
 		if !ok {
-			priority = rolePriorityUnknown // Unknown role gets low priority
+			priority = rolePriorityUnknown
 		}
 
-		if priority < bestPriority {
-			bestPriority = priority
-			bestNode = node
-		}
+		candidates = append(candidates, candidate{name: node.Name, priority: priority})
 	}
 
-	return bestNode.Name
+	slices.SortStableFunc(candidates, func(left, right candidate) int {
+		return cmp.Compare(left.priority, right.priority)
+	})
+
+	names := make([]string, 0, len(candidates))
+	for _, c := range candidates {
+		names = append(names, c.name)
+	}
+
+	return names
 }
 
 // Temp path constants for different distributions.

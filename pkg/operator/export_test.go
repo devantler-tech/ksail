@@ -28,4 +28,10 @@ var (
 	SanitizeForWrite = sanitizeForWrite
 	// CountReadyNodes exposes countReadyNodes for testing.
 	CountReadyNodes = countReadyNodes
+	// DetectDistribution exposes detectDistribution for testing.
+	DetectDistribution = detectDistribution
+	// DetectProvider exposes detectProvider for testing.
+	DetectProvider = detectProvider
+	// ObserveHostNodes exposes observeHostNodes for testing.
+	ObserveHostNodes = observeHostNodes
 )

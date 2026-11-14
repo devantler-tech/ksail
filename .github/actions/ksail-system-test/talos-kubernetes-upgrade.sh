@@ -31,9 +31,25 @@ update_args_text=$(printf '%s' "${ARGS:-}" | sed -E 's/--image-verification [^ ]
 read -r -a update_args <<<"$update_args_text"
 # Bash 3.2 treats an empty array as unset under nounset. Expand only populated
 # arrays without introducing an empty CLI argument when there are no options.
-if ! timeout --kill-after=10s 900s ksail cluster update --force --distribution Talos --provider Docker \
-	${update_args[@]+"${update_args[@]}"} --kubernetes-version "$UPGRADE_TO" 2>&1 | tee "$log_dir/talos-kubernetes-upgrade.log"; then
+#
+# The first, state-changing request runs in JSON mode too: its progress must stay on
+# stderr, so stdout carries exactly one JSON document a client can parse.
+upgrade_stdout_file="$log_dir/talos-kubernetes-upgrade.stdout"
+upgrade_stderr_file="$log_dir/talos-kubernetes-upgrade.stderr"
+upgrade_status=0
+# Stream progress to the job log while it runs, so a cancelled or timed-out job still shows it.
+# Stderr goes through a real pipe, so pipefail also fails the step when its log cannot be written.
+timeout --kill-after=10s 900s ksail cluster update --force --output json --distribution Talos --provider Docker \
+	${update_args[@]+"${update_args[@]}"} --kubernetes-version "$UPGRADE_TO" \
+	2>&1 >"$upgrade_stdout_file" | tee "$upgrade_stderr_file" >&2 || upgrade_status=$?
+if [[ "$upgrade_status" -ne 0 ]]; then
 	echo "❌ ERROR: explicit Talos Kubernetes upgrade failed"
+	cat "$upgrade_stdout_file"
+	exit 1
+fi
+if ! jq -e -s 'length == 1 and (.[0] | type == "object")' "$upgrade_stdout_file" >/dev/null 2>&1; then
+	echo "❌ ERROR: explicit Talos Kubernetes upgrade did not write exactly one JSON document to stdout"
+	cat "$upgrade_stdout_file"
 	exit 1
 fi
 assert_running_version "$UPGRADE_TO" "after upgrade"

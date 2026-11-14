@@ -221,10 +221,8 @@ func TestUpsertSopsAgeSecret_Update(t *testing.T) {
 	)
 
 	existing := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      argocdinstaller.SopsAgeSecretName,
-			Namespace: "argocd",
-		},
+		Name:      argocdinstaller.SopsAgeSecretName,
+		Namespace: "argocd",
 		Data: map[string][]byte{
 			"sops.agekey": []byte(oldKey),
 		},

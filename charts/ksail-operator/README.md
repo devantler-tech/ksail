@@ -37,6 +37,25 @@ helm install ksail-operator charts/ksail-operator --namespace ksail-system --cre
 
 Helm installs the bundled `Cluster` CRD automatically. Override any value with `--set key=value` or a `-f values.yaml` file (see [Configuration](#configuration)).
 
+### Upgrading
+
+Helm installs CRDs from `crds/` only on the first install. `helm upgrade` never updates them. Before you upgrade an existing installation, apply the `Cluster` CRD from the chart version you are moving to. If you skip this step, the API server drops status fields that the old CRD does not define, such as `status.observedDistribution` and `status.observedProvider`.
+
+```sh
+helm show crds oci://ghcr.io/devantler-tech/charts/ksail-operator --version <version> \
+  | kubectl apply --server-side --force-conflicts -f -
+helm upgrade ksail-operator oci://ghcr.io/devantler-tech/charts/ksail-operator \
+  --version <version> --namespace ksail-system
+```
+
+From a repository checkout, apply `charts/ksail-operator/crds/` instead:
+
+```sh
+kubectl apply --server-side --force-conflicts -f charts/ksail-operator/crds/
+```
+
+The `helm upgrade --install` examples below need the same step when the release already exists.
+
 ### Verifying the chart
 
 The release job signs the chart's immutable manifest with GitHub Actions OIDC and verifies the signature before release publication succeeds. No stored signing key is used. Verify a selected chart version with:

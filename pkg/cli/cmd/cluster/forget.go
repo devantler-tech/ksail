@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/experimental"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/spf13/cobra"
 )
@@ -25,10 +24,10 @@ errors from cluster delete remain errors: forgetting a connection does not resol
 Cluster and user entries are removed only when no remaining context in the selected file
 references them. Other contexts and shared entries are preserved. No current context or
 KUBECONFIG environment default is selected implicitly.`,
-		Example: `  ksail cluster forget --kubeconfig ./nested.config --context kind-nested --experimental`,
+		Example: `  ksail cluster forget --kubeconfig ./nested.config --context kind-nested`,
 		Args:    cobra.NoArgs,
 		// Recovery must bypass the root's connection refresh even before Cobra
-		// validates required flags or the experimental guard runs.
+		// validates required flags.
 		PersistentPreRunE: func(_ *cobra.Command, _ []string) error { return nil },
 		Annotations: map[string]string{
 			annotations.AnnotationPermission: permissionWrite,
@@ -57,5 +56,5 @@ KUBECONFIG environment default is selected implicitly.`,
 	_ = cmd.MarkFlagRequired("kubeconfig")
 	_ = cmd.MarkFlagRequired("context")
 
-	return experimental.Guard(cmd)
+	return cmd
 }

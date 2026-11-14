@@ -74,4 +74,12 @@ var (
 	ErrUnsupportedNetworkPolicyEngine = errors.New("unsupported network policy engine")
 	// ErrInvalidImagePullSecret is returned when an imagePullSecret name is not a valid DNS-1123 subdomain.
 	ErrInvalidImagePullSecret = errors.New("invalid image pull secret name")
+	// ErrInvalidGitVerifySecretRef is returned when the commit-verification Secret name is not a
+	// valid DNS-1123 subdomain.
+	ErrInvalidGitVerifySecretRef = errors.New("invalid --git-verify-secret-ref")
+	// ErrGitVerifyRequiresGitSync is returned when commit verification is requested for a tenant
+	// that does not sync from a Flux GitRepository.
+	ErrGitVerifyRequiresGitSync = errors.New(
+		"--git-verify-secret-ref requires a Flux tenant with --sync-source git",
+	)
 )

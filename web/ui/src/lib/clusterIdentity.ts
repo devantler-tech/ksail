@@ -76,7 +76,8 @@ const PROVIDER_PREFIXES: { prefix: string; provider: string }[] = [
   { prefix: "aws://", provider: "AWS" },
   { prefix: "gce://", provider: "GCP" },
   { prefix: "azure://", provider: "Azure" },
-  { prefix: "kind://", provider: "Docker" },
+  // kind writes its node backend (docker, podman or nerdctl) into the ID; only docker is a KSail provider.
+  { prefix: "kind://docker/", provider: "Docker" },
 ];
 
 function providerOf(providerID: string): string | undefined {

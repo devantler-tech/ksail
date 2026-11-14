@@ -8,7 +8,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
@@ -17,7 +16,7 @@ func TestDumpNamespaceDiagnostics_ReportsPodStateEventsAndLogs(t *testing.T) {
 
 	clientset := k8sfake.NewClientset(
 		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "server-0", Namespace: "k3k-nested"},
+			Name: "server-0", Namespace: "k3k-nested",
 			Spec: corev1.PodSpec{
 				NodeName:   "talos-cp-1",
 				Containers: []corev1.Container{{Name: "k3s"}},
@@ -43,7 +42,7 @@ func TestDumpNamespaceDiagnostics_ReportsPodStateEventsAndLogs(t *testing.T) {
 			},
 		},
 		&corev1.Event{
-			ObjectMeta:     metav1.ObjectMeta{Name: "evt-1", Namespace: "k3k-nested"},
+			Name: "evt-1", Namespace: "k3k-nested",
 			Type:           corev1.EventTypeWarning,
 			Reason:         "Failed",
 			Message:        "failed to pull image",
@@ -74,7 +73,7 @@ func TestDumpNamespaceDiagnostics_PendingPodUsesSpecContainerCount(t *testing.T)
 	// must come from the spec so the output is "ready=0/2", not a misleading "ready=0/0".
 	clientset := k8sfake.NewClientset(
 		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "server-0", Namespace: "k3k-nested"},
+			Name: "server-0", Namespace: "k3k-nested",
 			Spec: corev1.PodSpec{
 				Containers: []corev1.Container{{Name: "k3s"}, {Name: "sidecar"}},
 			},
@@ -103,8 +102,8 @@ func TestDumpNamespaceDiagnostics_MultipleNamespaces(t *testing.T) {
 
 	clientset := k8sfake.NewClientset(
 		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "operator-0", Namespace: "k3k-system"},
-			Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "k3k"}}},
+			Name: "operator-0", Namespace: "k3k-system",
+			Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "k3k"}}},
 			Status: corev1.PodStatus{
 				Phase:             corev1.PodRunning,
 				ContainerStatuses: []corev1.ContainerStatus{{Name: "k3k", Ready: true}},

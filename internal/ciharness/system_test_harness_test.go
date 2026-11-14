@@ -56,15 +56,16 @@ addons:
 
 //nolint:tagliatelle // GitHub Actions defines these external keys in kebab-case.
 type harnessStep struct {
-	Name            string            `yaml:"name"`
-	ID              string            `yaml:"id"`
-	If              string            `yaml:"if"`
-	Env             map[string]string `yaml:"env"`
-	Uses            string            `yaml:"uses"`
-	Run             string            `yaml:"run"`
-	TimeoutMinutes  int               `yaml:"timeout-minutes"`
-	ContinueOnError bool              `yaml:"continue-on-error"`
-	With            map[string]any    `yaml:"with"`
+	Name             string            `yaml:"name"`
+	ID               string            `yaml:"id"`
+	If               string            `yaml:"if"`
+	Env              map[string]string `yaml:"env"`
+	Uses             string            `yaml:"uses"`
+	Run              string            `yaml:"run"`
+	TimeoutMinutes   int               `yaml:"timeout-minutes"`
+	ContinueOnError  bool              `yaml:"continue-on-error"`
+	WorkingDirectory string            `yaml:"working-directory"`
+	With             map[string]any    `yaml:"with"`
 }
 
 type compositeAction struct {
@@ -85,6 +86,7 @@ type ciWorkflow struct {
 	Jobs map[string]struct {
 		TimeoutMinutes  int               `yaml:"timeout-minutes"`
 		Permissions     map[string]string `yaml:"permissions"`
+		Strategy        map[string]any    `yaml:"strategy"`
 		Outputs         map[string]string `yaml:"outputs"`
 		Steps           []harnessStep     `yaml:"steps"`
 		ContinueOnError bool              `yaml:"continue-on-error"`
@@ -380,7 +382,11 @@ func TestSystemTestHarnessBoundsReservedSandboxRecovery(t *testing.T) {
 	assert.Contains(t, workflowCleanup.If, "always()")
 	assert.Equal(t, "${{ matrix.distribution }}", stringValue(workflowCleanup.With["distribution"]))
 	assert.Equal(t, "${{ matrix.provider }}", stringValue(workflowCleanup.With["provider"]))
-	assert.Equal(t, "${{ matrix.args }}", stringValue(workflowCleanup.With["args"]))
+	assert.Equal(
+		t,
+		"${{ matrix.effective-args || matrix.args }}",
+		stringValue(workflowCleanup.With["args"]),
+	)
 
 	diagnosticUploadIndex := harnessStepIndex(
 		t,
@@ -853,11 +859,12 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 		"🔐 Configure AWS credentials (OIDC)",
 		"🔐 Resolve EKS permissions boundary",
 		"⚙️ Setup Go",
-		"📦 Cache KSail Binary",
+		"📥 Restore KSail binary",
 		"📥 Install eksctl",
 		"🔧 Initialize EKS project",
 		"🔧 Prepare EKS upgrade trial project",
 		"🔎 Check EKS capacity before create",
+		"🔎 Capture EKS regional baseline",
 		"🧪 ksail cluster create",
 		"🧪 ksail cluster info",
 		"🔐 Refresh AWS credentials before EKS update and cleanup",
@@ -869,13 +876,24 @@ func TestEKSSmokeReservesCleanupBudgetAndFreshCredentials(t *testing.T) {
 		"⏳ Wait for EKS update before cleanup",
 		"🔐 Refresh AWS credentials before EKS recovery",
 		"🧪 Recover EKS ownership after local state loss",
+		"🔎 Preserve EKS ownership before cleanup",
 		"🧹 Delete EKS smoke cluster",
+		"🔎 Verify EKS cleanup from private ownership",
+		"🧽 Remove private EKS evidence",
 	}
 
 	for _, name := range boundedStepNames {
 		step := findHarnessStep(t, smokeJob.Steps, name)
 		require.Positive(t, step.TimeoutMinutes, "%s must have a timeout", name)
 	}
+
+	// Node scaling belongs to the ordinary lifecycle path; an upgrade trial
+	// skips it so the trial, ownership capture and deletion fit one job.
+	assert.Equal(
+		t,
+		eksNoUpgradeTrialCondition,
+		findHarnessStep(t, smokeJob.Steps, "🧪 ksail cluster update scales EKS nodes").If,
+	)
 
 	// The upgrade trial and the ownership recovery never share a job, so the
 	// job timeout must cover the longer path rather than the sum of both.
@@ -1007,6 +1025,17 @@ set -euo pipefail
 printf '%s\n' "$*" >> "$AWS_RECOVERY_CALL_LOG"
 printf '%s\t%s\n' "$STUB_CLUSTER_ARN" '2026-09-27T00:00:00Z'
 `)
+	writeExecutableStub(t, filepath.Join(binDir, "eksctl"), `#!/usr/bin/env bash
+set -euo pipefail
+[[ "$*" == 'get nodegroup --cluster fixture --region us-east-1 --output json' ]]
+desired=3
+minimum=2
+if [[ "$(tail -n 1 "$KSAIL_RECOVERY_CALL_LOG")" == *'|cluster stop '* ]]; then
+  desired=0
+  minimum=0
+fi
+printf '[{"Name":"default","Status":"ACTIVE","DesiredCapacity":%d,"MinSize":%d,"MaxSize":5}]\n' "$desired" "$minimum"
+`)
 
 	command := exec.CommandContext(t.Context(), "bash", "-c", recovery.Run) //nolint:gosec
 	command.Dir = tempDir
@@ -1022,6 +1051,12 @@ printf '%s\t%s\n' "$STUB_CLUSTER_ARN" '2026-09-27T00:00:00Z'
 	)
 	diagnostics, err := command.CombinedOutput()
 	require.NoErrorf(t, err, "recovery step failed: %s", diagnostics)
+	assert.Contains(t, string(diagnostics), "EKS managed nodegroup capacities verified after stop.")
+	assert.Contains(
+		t,
+		string(diagnostics),
+		"EKS managed nodegroup capacities verified after start.",
+	)
 
 	calls, err := os.ReadFile(callLog) //nolint:gosec // Test-owned path.
 	require.NoError(t, err)

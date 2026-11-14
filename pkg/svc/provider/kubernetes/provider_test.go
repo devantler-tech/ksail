@@ -65,30 +65,24 @@ func TestProvider_ListNodes_WithPods(t *testing.T) {
 
 	client := fake.NewClientset(
 		&corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   namespace,
-				Labels: kubeprovider.CommonLabels("test-cluster"),
-			},
+			Name:   namespace,
+			Labels: kubeprovider.CommonLabels("test-cluster"),
 		},
 		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      testClusterCPPodName,
-				Namespace: namespace,
-				Labels: kubeprovider.NodeLabels(
-					"test-cluster",
-					kubeprovider.RoleControlPlane,
-					"K3s",
-				),
-			},
+			Name:      testClusterCPPodName,
+			Namespace: namespace,
+			Labels: kubeprovider.NodeLabels(
+				"test-cluster",
+				kubeprovider.RoleControlPlane,
+				"K3s",
+			),
 			Status: corev1.PodStatus{Phase: corev1.PodRunning},
 		},
 		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-cluster-worker-0",
-				Namespace: namespace,
-				Labels:    kubeprovider.NodeLabels("test-cluster", kubeprovider.RoleWorker, "K3s"),
-			},
-			Status: corev1.PodStatus{Phase: corev1.PodRunning},
+			Name:      "test-cluster-worker-0",
+			Namespace: namespace,
+			Labels:    kubeprovider.NodeLabels("test-cluster", kubeprovider.RoleWorker, "K3s"),
+			Status:    corev1.PodStatus{Phase: corev1.PodRunning},
 		},
 	)
 
@@ -112,21 +106,15 @@ func TestProvider_ListAllClusters(t *testing.T) {
 
 	client := fake.NewClientset(
 		&corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "ksail-cluster-a",
-				Labels: kubeprovider.CommonLabels("cluster-a"),
-			},
+			Name:   "ksail-cluster-a",
+			Labels: kubeprovider.CommonLabels("cluster-a"),
 		},
 		&corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "ksail-cluster-b",
-				Labels: kubeprovider.CommonLabels("cluster-b"),
-			},
+			Name:   "ksail-cluster-b",
+			Labels: kubeprovider.CommonLabels("cluster-b"),
 		},
 		&corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "default",
-			},
+			Name: "default",
 		},
 	)
 
@@ -145,15 +133,13 @@ func TestProvider_NodesExist(t *testing.T) {
 
 	client := fake.NewClientset(
 		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-cluster-cp-0",
-				Namespace: namespaceName,
-				Labels: kubeprovider.NodeLabels(
-					"test-cluster",
-					kubeprovider.RoleControlPlane,
-					"K3s",
-				),
-			},
+			Name:      "test-cluster-cp-0",
+			Namespace: namespaceName,
+			Labels: kubeprovider.NodeLabels(
+				"test-cluster",
+				kubeprovider.RoleControlPlane,
+				"K3s",
+			),
 		},
 	)
 
@@ -219,15 +205,13 @@ func TestProvider_GetClusterStatus(t *testing.T) {
 
 	client := fake.NewClientset(
 		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      testClusterCPPodName,
-				Namespace: namespace,
-				Labels: kubeprovider.NodeLabels(
-					"test-cluster",
-					kubeprovider.RoleControlPlane,
-					"K3s",
-				),
-			},
+			Name:      testClusterCPPodName,
+			Namespace: namespace,
+			Labels: kubeprovider.NodeLabels(
+				"test-cluster",
+				kubeprovider.RoleControlPlane,
+				"K3s",
+			),
 			Status: corev1.PodStatus{Phase: corev1.PodRunning},
 		},
 	)

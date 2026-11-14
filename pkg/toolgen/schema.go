@@ -396,12 +396,18 @@ const neutralMergedFlagDescription = "Behavior depends on the selected subcomman
 // is taken from the first subcommand encountered (alphabetically by key), while AppliesToSubcommands
 // tracks all subcommands that use this flag. Descriptions are kept only when identical across
 // subcommands; differing usage strings collapse to neutralMergedFlagDescription.
+// Defaults are kept only when identical too: a default that differs between
+// subcommands is dropped, since advertising one subcommand's default would
+// misdocument the others (and invite clients to send it).
 func mergeSubcommandFlags(
 	subcommands map[string]*SubcommandDef,
 	excludeFlags []string,
 ) map[string]*FlagDef {
 	allFlags := make(map[string]*FlagDef)
-	conflictingDescriptions := make(map[string]bool)
+	conflicts := mergedFlagConflicts{
+		descriptions: make(map[string]bool),
+		defaults:     make(map[string]bool),
+	}
 
 	// Sort keys for deterministic output — first alphabetical key wins when the same flag
 	// name appears in multiple subcommands.
@@ -417,22 +423,14 @@ func mergeSubcommandFlags(
 		for flagName, flagDef := range subCmd.Flags {
 			// Skip excluded flags — they are hidden from the AI schema but still
 			// forwarded at runtime via SubcommandDef.Flags in handleConsolidatedTool.
-			if slices.Contains(excludeFlags, flagName) {
-				continue
-			}
-
-			// Skip deprecated flags — same rationale: they are still forwarded at
+			// Skip deprecated flags for the same reason: they are still forwarded at
 			// runtime, but never advertised as a tool parameter.
-			if flagDef.Deprecated {
+			if slices.Contains(excludeFlags, flagName) || flagDef.Deprecated {
 				continue
 			}
 
 			if existing, exists := allFlags[flagName]; exists {
-				existing.AppliesToSubcommands = append(existing.AppliesToSubcommands, subCmdName)
-
-				if existing.Description != flagDef.Description {
-					conflictingDescriptions[flagName] = true
-				}
+				conflicts.record(flagName, existing, flagDef, subCmdName)
 			} else {
 				allFlags[flagName] = &FlagDef{
 					Name:                 flagDef.Name,
@@ -448,16 +446,49 @@ func mergeSubcommandFlags(
 	}
 
 	// Sort AppliesToSubcommands for deterministic schema output and neutralize
-	// descriptions that differ between subcommands.
+	// descriptions and defaults that differ between subcommands.
 	for flagName, flagDef := range allFlags {
 		slices.Sort(flagDef.AppliesToSubcommands)
-
-		if conflictingDescriptions[flagName] {
-			flagDef.Description = neutralMergedFlagDescription
-		}
+		conflicts.neutralize(flagName, flagDef)
 	}
 
 	return allFlags
+}
+
+// mergedFlagConflicts records, per merged flag name, whether subcommands
+// disagree on its description or its default.
+type mergedFlagConflicts struct {
+	descriptions map[string]bool
+	defaults     map[string]bool
+}
+
+// record adds subCmdName to an already merged flag and notes any disagreement.
+func (c mergedFlagConflicts) record(
+	flagName string,
+	existing, flagDef *FlagDef,
+	subCmdName string,
+) {
+	existing.AppliesToSubcommands = append(existing.AppliesToSubcommands, subCmdName)
+
+	if existing.Description != flagDef.Description {
+		c.descriptions[flagName] = true
+	}
+
+	if existing.Default != flagDef.Default {
+		c.defaults[flagName] = true
+	}
+}
+
+// neutralize replaces a conflicting description with the neutral text and
+// drops a conflicting default.
+func (c mergedFlagConflicts) neutralize(flagName string, flagDef *FlagDef) {
+	if c.descriptions[flagName] {
+		flagDef.Description = neutralMergedFlagDescription
+	}
+
+	if c.defaults[flagName] {
+		flagDef.Default = ""
+	}
 }
 
 // addFlagProperties adds flag definitions to the properties map with conditional annotations.

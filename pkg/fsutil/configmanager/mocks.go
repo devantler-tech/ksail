@@ -14,10 +14,19 @@ func NewMockConfigManager[T any](t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockConfigManager[T] {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockConfigManager[T]{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -70,7 +79,7 @@ type MockConfigManager_Load_Call[T any] struct {
 
 // Load is a helper method to define mock.On call
 //   - opts LoadOptions
-func (_e *MockConfigManager_Expecter[T]) Load(opts interface{}) *MockConfigManager_Load_Call[T] {
+func (_e *MockConfigManager_Expecter[T]) Load(opts any) *MockConfigManager_Load_Call[T] {
 	return &MockConfigManager_Load_Call[T]{Call: _e.mock.On("Load", opts)}
 }
 

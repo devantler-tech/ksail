@@ -51,15 +51,18 @@ func TestCommentScannerRevisionRejectsInvalidCallerBeforePublishing(t *testing.T
 	caller := scannerCallerAtRevision(t, "498fb4b11f129928d3af9a90e9c5a46f1c4dbd77")
 
 	for name, invalid := range map[string]string{
-		"mutable tag":       strings.ReplaceAll(caller, "498fb4b11f129928d3af9a90e9c5a46f1c4dbd77", "v7.0.0"),
-		"wrong owner":       strings.ReplaceAll(caller, "devantler-tech/.github/", "other/.github/"),
-		"wrong path":        strings.ReplaceAll(caller, "scan-for-todo-comments.yaml@", "other.yaml@"),
-		"vendor filter off": strings.ReplaceAll(caller, "exclude-vendored: true", "exclude-vendored: false"),
-		"extra job":         caller + "\n  extra:\n    runs-on: ubuntu-latest\n",
+		"mutable tag": strings.ReplaceAll(caller, "498fb4b11f129928d3af9a90e9c5a46f1c4dbd77", "v7.0.0"),
+		"wrong owner": strings.ReplaceAll(caller, "devantler-tech/.github/", "other/.github/"),
+		"wrong path":  strings.ReplaceAll(caller, "scan-for-todo-comments.yaml@", "other.yaml@"),
+		"retired vendor input": strings.Replace(caller, "    secrets:",
+			"    with:\n      exclude-vendored: true\n    secrets:", 1),
+		"custom filter override": strings.Replace(caller, "    secrets:", "    with:\n      ignore: '^$'\n    secrets:", 1),
+		"extra job":              caller + "\n  extra:\n    runs-on: ubuntu-latest\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
+			require.NotEqual(t, caller, invalid, "negative control must change the actual caller")
 			output, published, err := runScannerRevisionStep(t, resolver.Run, invalid)
 			require.Error(t, err, output)
 			assert.Contains(t, output, "::error::Consumer")

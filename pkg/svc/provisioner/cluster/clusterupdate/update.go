@@ -546,6 +546,18 @@ type Upgrader interface {
 	PrepareConfigForVersion(upgradeType string, version string) error
 }
 
+// InPlaceDistributionUpgrader is implemented by upgraders that can tell, before
+// any upgrade runs, whether UpgradeDistribution reboots the cluster's running
+// nodes into the new version. Update uses it to prepare the running workloads
+// for the new version first (ksail#8281). An upgrader that does not implement it
+// is treated as one whose distribution upgrades never roll nodes in place.
+type InPlaceDistributionUpgrader interface {
+	// UpgradesDistributionInPlace reports whether UpgradeDistribution upgrades the
+	// existing nodes in place, rather than recreating the cluster or leaving the
+	// upgrade to an external manager.
+	UpgradesDistributionInPlace() bool
+}
+
 // ExtractTag returns the tag portion of an OCI image reference, stripping any
 // digest suffix (e.g., "v1.35.1" from "kindest/node:v1.35.1@sha256:abc...").
 func ExtractTag(image string) string {

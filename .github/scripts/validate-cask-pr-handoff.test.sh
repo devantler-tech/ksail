@@ -189,6 +189,28 @@ merged_fixture='.
 run_case coalesced-merged 0 'PASS: merged generated cask PR identity and scope are valid' \
 	"${merged_fixture}" \
 	false false true
+# Only a fully bound merged cask that claims this release can report a definitive
+# integrity failure. Missing digest proof and historical/invalid bindings stay unavailable.
+wrong_published_digest=' | .releaseAssets[0].digest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"'
+run_case merged-current-wrong-digest 3 'does not match the published digest' \
+	"${merged_fixture}${wrong_published_digest}" false false true
+run_case merged-current-wrong-release-url 3 'is not a devantler-tech/ksail v7.166.1 release asset' \
+	"${merged_fixture}"' | .headFile.content |= (@base64d | sub("/v7[.]166[.]1/"; "/v7.160.0/") | @base64)
+	| .mergeFile.content = .headFile.content | .mainFile.content = .headFile.content' \
+	false false true
+run_case merged-missing-release-digests 1 'BLOCKED:' \
+	"${merged_fixture} | del(.releaseAssets)" false false true
+run_case merged-missing-published-digest 1 'BLOCKED:' \
+	"${merged_fixture} | del(.releaseAssets[0].digest)" false false true
+run_case merged-malformed-published-digest 1 'BLOCKED:' \
+	"${merged_fixture}"' | .releaseAssets[0].digest = "sha256:not-a-digest"' false false true
+run_case merged-unbound-wrong-digest 1 'merged PR cask blob must still be current on main' \
+	"${merged_fixture}${wrong_published_digest}"' | .mainFile.sha = "3333333333333333333333333333333333333333"' \
+	false false true
+run_case merged-historical-wrong-digest 1 'cask on main must pin version 7.166.1' \
+	"${merged_fixture}${wrong_published_digest}"' | .headFile.content |= (@base64d | gsub("7[.]166[.]1"; "7.166.0") | @base64)
+	| .mergeFile.content = .headFile.content | .mainFile.content = .headFile.content' \
+	false false true
 run_case merged-without-merge 1 'merged PR must have a merged_at timestamp' \
 	"${merged_fixture} | .pr.merged_at = null" false false true
 run_case merged-flag-false 1 'merged PR must be marked merged' \
@@ -256,7 +278,7 @@ source_repo_case explicit-source-repo devantler-tech/ksail 0 'PASS: generated ca
 source_repo_case other-source-repo someone-else/ksail 1 'is not a someone-else/ksail v7.166.1 release asset'
 
 # In merged mode the digest proof reads current main, so a failure must say so rather than "at head".
-run_case merged-main-without-sha256 1 'cask on main must pin at least one sha256' \
+run_case merged-main-without-sha256 3 'cask on main must pin at least one sha256' \
 	"${merged_fixture}"' | .mainFile.content = ("cask \"ksail\" do\n  version \"7.166.1\"\nend\n" | @base64)' \
 	false false true
 

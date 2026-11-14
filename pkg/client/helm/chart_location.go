@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
+	"golang.org/x/sync/semaphore"
 	helmv4action "helm.sh/helm/v4/pkg/action"
 	helmv4loader "helm.sh/helm/v4/pkg/chart/loader"
 	chartv2 "helm.sh/helm/v4/pkg/chart/v2"
@@ -74,9 +74,12 @@ func locateChartWithRetry(
 	return chartPath, nil
 }
 
-// chartAcquireMu serializes the whole chart-acquisition window — locate →
-// download → load → values-file reads — across the process, together with the
-// process-global HELM_HTTP_TIMEOUT mutation in locateChartFromRepo.
+// chartAcquireMu serializes repository registration and the whole chart-acquisition
+// window — locate → download → load → values-file reads — across the process,
+// together with the process-global HELM_HTTP_TIMEOUT mutation in locateChartFromRepo.
+// AddRepository holds the same gate from its config read through the index download
+// and config write, preventing lost updates and partially written config reads
+// during concurrent component installation (devantler-tech/ksail#8112).
 //
 // Every Helm client built by NewTemplateOnlyClient shares the SAME process-global
 // Helm directories (HELM_REPOSITORY_CACHE, HELM_CONTENT_CACHE, the registry
@@ -92,12 +95,35 @@ func locateChartWithRetry(
 // is on the filesystem, not Go memory (the prior env-var-only fix passed `-race`
 // yet the corruption persisted in production).
 //
-// The lock is held by loadChartAndValues for acquisition only; rendering
-// (RunWithContext, operating on the already-loaded in-memory chart) runs outside
-// it and stays parallel.
+// The gate covers registration and acquisition only; install/upgrade/render
+// RunWithContext calls operate on the already-loaded in-memory chart outside it
+// and stay parallel. Waiting for the gate respects caller cancellation.
 //
 //nolint:gochecknoglobals // package-level lock guarding process-global Helm state
-var chartAcquireMu sync.Mutex
+var chartAcquireMu = semaphore.NewWeighted(1)
+
+func acquireChartState(ctx context.Context) error {
+	err := ctx.Err()
+	if err != nil {
+		return fmt.Errorf("acquire Helm chart state: %w", err)
+	}
+
+	err = chartAcquireMu.Acquire(ctx, 1)
+	if err != nil {
+		return fmt.Errorf("acquire Helm chart state: %w", err)
+	}
+
+	// Cancellation can race a successful acquisition. Return the token before
+	// refusing so neither shared state nor the next waiter is affected.
+	err = ctx.Err()
+	if err != nil {
+		chartAcquireMu.Release(1)
+
+		return fmt.Errorf("acquire Helm chart state: %w", err)
+	}
+
+	return nil
+}
 
 // chartLocator abstracts the common chart location capabilities shared by
 // helmv4action.Install and helmv4action.Upgrade.
@@ -113,8 +139,12 @@ func (c *Client) loadChartAndValues(
 ) (*chartv2.Chart, map[string]any, error) {
 	// Serialize the entire acquisition window so concurrent renders never touch the
 	// shared process-global Helm cache/config at the same time. See chartAcquireMu.
-	chartAcquireMu.Lock()
-	defer chartAcquireMu.Unlock()
+	acquireErr := acquireChartState(ctx)
+	if acquireErr != nil {
+		return nil, nil, acquireErr
+	}
+
+	defer chartAcquireMu.Release(1)
 
 	chartPath, chart, err := c.locateAndLoadChart(ctx, spec, client)
 	if err != nil {

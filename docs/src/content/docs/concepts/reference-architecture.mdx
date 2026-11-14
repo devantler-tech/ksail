@@ -12,21 +12,21 @@ import { Steps } from "@astrojs/starlight/components";
 
 ## The shape
 
-```text
-        one Git repository
-        ┌───────────────────────────────────────────────┐
-        │  ksail.yaml          ksail.prod.yaml           │
-        │  (local)             (production)              │
-        │        │                    │                  │
-        │   k8s/  ── bases/ ─ providers/ ─ clusters/ ─┐  │
-        └────────┼────────────────────────────────────┼──┘
-                 ▼                                    ▼
-        ┌──────────────────┐               ┌────────────────────────┐
-        │ Local cluster    │               │ Production cluster     │
-        │ Talos + Docker   │               │ Talos + Hetzner        │
-        │ thin: core only  │               │ full: + autoscaling,   │
-        │                  │               │ HA, cloud LB & storage │
-        └──────────────────┘               └────────────────────────┘
+```mermaid
+flowchart TD
+    accTitle: Reference architecture
+    accDescr: One Git repository holds ksail.yaml for the local cluster, ksail.prod.yaml for production, and one shared k8s/ tree layered as bases/, providers/ and clusters/. ksail.yaml drives a thin local cluster running Talos on Docker with core components only. ksail.prod.yaml drives a full production cluster running Talos on Hetzner with autoscaling, HA, a cloud load balancer and cloud storage.
+
+    subgraph repo["one Git repository"]
+        Tree["k8s/<br/>bases/ → providers/<br/>→ clusters/"]
+        LocalConfig["ksail.yaml<br/>(local)"]
+        ProdConfig["ksail.prod.yaml<br/>(production)"]
+        Tree --- LocalConfig
+        Tree --- ProdConfig
+    end
+
+    LocalConfig --> LocalCluster["Local cluster<br/>Talos + Docker<br/>thin: core only"]
+    ProdConfig --> ProdCluster["Production cluster<br/>Talos + Hetzner<br/>full: + autoscaling,<br/>HA, cloud LB<br/>& storage"]
 ```
 
 Both clusters run the **same distribution** (Talos) so local development has high fidelity to production —

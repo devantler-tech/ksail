@@ -29,6 +29,10 @@ var (
 	localRegistryServiceFactoryMu sync.RWMutex
 	//nolint:gochecknoglobals // dependency injection for tests
 	localRegistryServiceFactory localregistry.ServiceFactoryFunc
+	//nolint:gochecknoglobals // dependency injection for tests
+	identityMarkerClientMu sync.RWMutex
+	//nolint:gochecknoglobals // dependency injection for tests
+	identityMarkerClientOverride identityMarkerClientFactory
 )
 
 // getInstallerFactories returns the installer factories to use, allowing test override.

@@ -80,15 +80,13 @@ func (c *Client) createOCIRepository(
 	}
 
 	ociRepo := &sourcev1.OCIRepository{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		Name:      name,
+		Namespace: namespace,
 		Spec: sourcev1.OCIRepositorySpec{
 			URL:       flags.url,
 			Provider:  flags.provider,
 			Insecure:  flags.insecure,
-			Interval:  metav1.Duration{Duration: flags.interval},
+			Interval:  &metav1.Duration{Duration: flags.interval},
 			Reference: &sourcev1.OCIRepositoryRef{},
 		},
 	}

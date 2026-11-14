@@ -2,6 +2,7 @@ package ciharness_test
 
 import (
 	"image/color"
+	"reflect"
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
@@ -59,16 +60,39 @@ func TestANSIQuietModeRejectsOutOfRangeValues(t *testing.T) {
 		t.Run(input, func(t *testing.T) {
 			t.Parallel()
 
-			options := kitty.Options{Quite: 1}
+			var options kitty.Options
+
+			quiet := quietMode(t, &options)
+			quiet.SetUint(1)
 
 			err := options.UnmarshalText([]byte("i=42," + input + ",p=21"))
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			if options.Quite != expected || options.ID != 42 || options.PlacementID != 21 {
+			if quiet.Uint() != uint64(expected) || options.ID != 42 || options.PlacementID != 21 {
 				t.Errorf("incorrect parsed options: %+v", options)
 			}
 		})
 	}
+}
+
+// quietMode returns the field the selected parser fills for q=: the root
+// parser renamed the misspelled Quite to Quiet, while Glamour's standalone
+// parser still only has Quite.
+func quietMode(t *testing.T, options *kitty.Options) reflect.Value {
+	t.Helper()
+
+	value := reflect.ValueOf(options).Elem()
+
+	field := value.FieldByName("Quiet")
+	if !field.IsValid() {
+		field = value.FieldByName("Quite")
+	}
+
+	if !field.IsValid() || field.Kind() != reflect.Uint8 {
+		t.Fatalf("kitty.Options has no byte quiet mode field: %+v", *options)
+	}
+
+	return field
 }

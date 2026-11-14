@@ -190,9 +190,7 @@ func ownedDinDPod() *corev1.Pod {
 	labels[kubeprovider.LabelApp] = kubeprovider.DinDPodName
 
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: kubeprovider.DinDPodName, Namespace: "ksail-demo", Labels: labels,
-		},
+		Name: kubeprovider.DinDPodName, Namespace: "ksail-demo", Labels: labels,
 		Status: corev1.PodStatus{
 			Phase: corev1.PodRunning,
 			PodIP: "10.42.0.5",

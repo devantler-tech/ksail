@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 )
 
@@ -36,8 +35,8 @@ func (c *captureClient) TemplateChart(_ context.Context, spec *helm.ChartSpec) (
 
 func helmReleaseObj(name string, spec helmv2.HelmReleaseSpec) *helmv2.HelmRelease {
 	return &helmv2.HelmRelease{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "flux-system"},
-		Spec:       spec,
+		Name: name, Namespace: "flux-system",
+		Spec: spec,
 	}
 }
 
@@ -136,7 +135,7 @@ func TestBuildChartSpecHelmRepositoryHTTP(t *testing.T) {
 			Spec: helmv2.HelmChartTemplateSpec{
 				Chart:   "podinfo",
 				Version: "6.5.0",
-				SourceRef: helmv2.CrossNamespaceObjectReference{
+				SourceRef: &helmv2.CrossNamespaceObjectReference{
 					Kind: sourcev1.HelmRepositoryKind,
 					Name: "podinfo",
 				},
@@ -166,7 +165,7 @@ func TestBuildChartSpecHelmRepositoryOCIType(t *testing.T) {
 			Spec: helmv2.HelmChartTemplateSpec{
 				Chart:   "podinfo",
 				Version: "6.5.0",
-				SourceRef: helmv2.CrossNamespaceObjectReference{
+				SourceRef: &helmv2.CrossNamespaceObjectReference{
 					Kind: sourcev1.HelmRepositoryKind,
 					Name: "podinfo",
 				},
@@ -281,11 +280,26 @@ func TestRenderUnsupportedSourceKindDegrades(t *testing.T) {
 		Chart: &helmv2.HelmChartTemplate{
 			Spec: helmv2.HelmChartTemplateSpec{
 				Chart: "app",
-				SourceRef: helmv2.CrossNamespaceObjectReference{
+				SourceRef: &helmv2.CrossNamespaceObjectReference{
 					Kind: sourcev1.GitRepositoryKind,
 					Name: "repo",
 				},
 			},
+		},
+	})
+
+	resolver := render.NewHelmChartResolver(&captureClient{})
+
+	_, err := resolver.Render(context.Background(), helmRelease, render.SourceIndex{})
+	require.ErrorIs(t, err, render.ErrUnsupportedSourceKind)
+}
+
+func TestRenderMissingSourceRefDegrades(t *testing.T) {
+	t.Parallel()
+
+	helmRelease := helmReleaseObj("app", helmv2.HelmReleaseSpec{
+		Chart: &helmv2.HelmChartTemplate{
+			Spec: helmv2.HelmChartTemplateSpec{Chart: "app"},
 		},
 	})
 

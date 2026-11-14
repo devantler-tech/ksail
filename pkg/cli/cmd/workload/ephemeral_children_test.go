@@ -54,9 +54,10 @@ func TestValidateObservedChildFailsCELAndCleansUp(t *testing.T) {
 		},
 		"spec": map[string]any{"privileged": true},
 	}}
-	client := &childAdmission{admissionRecorder: admissionRecorder{
-		apply: func(context.Context, *unstructured.Unstructured) error { return nil },
-	}, children: []*unstructured.Unstructured{child}}
+	client := &childAdmission{
+		apply:    func(context.Context, *unstructured.Unstructured) error { return nil },
+		children: []*unstructured.Unstructured{child},
+	}
 	restore := workload.ExportSetEphemeralAdmissionClient(
 		func(string, string) (ephemeral.Client, error) { return client, nil },
 	)
@@ -117,9 +118,10 @@ func TestValidateObservedChildIgnoresServerUIDForCEL(t *testing.T) {
 		},
 		"spec": map[string]any{"privileged": false},
 	}}
-	client := &childAdmission{admissionRecorder: admissionRecorder{
-		apply: func(context.Context, *unstructured.Unstructured) error { return nil },
-	}, children: []*unstructured.Unstructured{child}}
+	client := &childAdmission{
+		apply:    func(context.Context, *unstructured.Unstructured) error { return nil },
+		children: []*unstructured.Unstructured{child},
+	}
 	restore := workload.ExportSetEphemeralAdmissionClient(
 		func(string, string) (ephemeral.Client, error) { return client, nil },
 	)

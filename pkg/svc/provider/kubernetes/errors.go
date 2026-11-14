@@ -40,6 +40,9 @@ var (
 	// ErrDinDNoIP is returned when the DinD pod has no IP assigned.
 	ErrDinDNoIP = errors.New("DinD pod has no IP assigned")
 
+	// ErrDinDAddressPool means the host inventory cannot establish a disjoint private pool.
+	ErrDinDAddressPool = errors.New("cannot select a disjoint nested Docker address pool")
+
 	// ErrUnexpectedAddressFormat is returned when a listener address has an unexpected format.
 	ErrUnexpectedAddressFormat = errors.New("unexpected listener address format")
 

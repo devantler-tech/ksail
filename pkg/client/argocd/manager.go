@@ -196,7 +196,7 @@ func (m *ManagerImpl) ensureNamespace(ctx context.Context, name string) error {
 
 	_, err = m.clientset.CoreV1().
 		Namespaces().
-		Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name}}, metav1.CreateOptions{})
+		Create(ctx, &corev1.Namespace{Name: name}, metav1.CreateOptions{})
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		return fmt.Errorf("create namespace %s: %w", name, err)
 	}

@@ -67,15 +67,11 @@ func testK3dInvalidNetworkConfig(t *testing.T) {
 
 	// Test with invalid network configuration
 	config := &k3dapi.SimpleConfig{
-		TypeMeta: configtypes.TypeMeta{
-			APIVersion: "k3d.io/v1alpha5",
-			Kind:       "Simple",
-		},
-		ObjectMeta: configtypes.ObjectMeta{
-			Name: "test-cluster",
-		},
-		Servers: 1,
-		Agents:  1,
+		APIVersion: "k3d.io/v1alpha5",
+		Kind:       "Simple",
+		Name:       "test-cluster",
+		Servers:    1,
+		Agents:     1,
 		// Very long network name that might cause validation to fail
 		Network: "invalid-network-123456789012345678901234567890123456789012345678901234567890",
 	}
@@ -109,15 +105,11 @@ func testK3dLargeServerCount(t *testing.T) {
 
 	// Test with large server count that might cause issues
 	config := &k3dapi.SimpleConfig{
-		TypeMeta: configtypes.TypeMeta{
-			APIVersion: "k3d.io/v1alpha5",
-			Kind:       "Simple",
-		},
-		ObjectMeta: configtypes.ObjectMeta{
-			Name: "large-cluster",
-		},
-		Servers: 10, // Very large server count
-		Agents:  20, // Very large agent count
+		APIVersion: "k3d.io/v1alpha5",
+		Kind:       "Simple",
+		Name:       "large-cluster",
+		Servers:    10, // Very large server count
+		Agents:     20, // Very large agent count
 	}
 
 	result := validatorInstance.Validate(config)
@@ -169,15 +161,11 @@ func testK3dDeepCopyScenarios(t *testing.T) {
 
 	// Test with configuration that exercises deep copy logic
 	config := &k3dapi.SimpleConfig{
-		TypeMeta: configtypes.TypeMeta{
-			APIVersion: "k3d.io/v1alpha5",
-			Kind:       "Simple",
-		},
-		ObjectMeta: configtypes.ObjectMeta{
-			Name: "deepcopy-test-cluster",
-		},
-		Servers: 2,
-		Agents:  2,
+		APIVersion: "k3d.io/v1alpha5",
+		Kind:       "Simple",
+		Name:       "deepcopy-test-cluster",
+		Servers:    2,
+		Agents:     2,
 		// Test network configuration that gets deep copied
 		Network: "test-network",
 		Subnet:  "172.20.0.0/16",
@@ -202,15 +190,11 @@ func testK3dUpstreamValidationScenarios(t *testing.T) {
 
 	// Test scenario that exercises the upstream validation path more thoroughly
 	config := &k3dapi.SimpleConfig{
-		TypeMeta: configtypes.TypeMeta{
-			APIVersion: "k3d.io/v1alpha5",
-			Kind:       "Simple",
-		},
-		ObjectMeta: configtypes.ObjectMeta{
-			Name: "upstream-test",
-		},
-		Servers: 1,
-		Agents:  0,
+		APIVersion: "k3d.io/v1alpha5",
+		Kind:       "Simple",
+		Name:       "upstream-test",
+		Servers:    1,
+		Agents:     0,
 		// Test with specific K3s image that might trigger upstream validation
 		Image: "rancher/k3s:latest",
 		// Test with network configuration
@@ -241,15 +225,11 @@ func testK3dConfigTransformationEdgeCases(t *testing.T) {
 
 	// Test configuration with potentially problematic values that might trigger error paths
 	config := &k3dapi.SimpleConfig{
-		TypeMeta: configtypes.TypeMeta{
-			APIVersion: "k3d.io/v1alpha5",
-			Kind:       "Simple",
-		},
-		ObjectMeta: configtypes.ObjectMeta{
-			Name: "transform-test",
-		},
-		Servers: 1,
-		Agents:  1,
+		APIVersion: "k3d.io/v1alpha5",
+		Kind:       "Simple",
+		Name:       "transform-test",
+		Servers:    1,
+		Agents:     1,
 		// Basic image configuration to test transformation
 		Image:   "rancher/k3s:v1.27.0-k3s1",
 		Network: "bridge",
@@ -291,10 +271,8 @@ func TestK3dValidatorErrorPaths(t *testing.T) {
 
 		// Test with malformed configuration that might trigger processing errors
 		config := &k3dapi.SimpleConfig{
-			TypeMeta: configtypes.TypeMeta{
-				APIVersion: "invalid-version",
-				Kind:       "Invalid",
-			},
+			APIVersion: "invalid-version",
+			Kind:       "Invalid",
 			ObjectMeta: configtypes.ObjectMeta{
 				Name: "", // Empty name might cause issues
 			},
@@ -321,15 +299,11 @@ func TestK3dValidatorErrorPaths(t *testing.T) {
 
 		// Test with extreme values that might trigger validation failures
 		config := &k3dapi.SimpleConfig{
-			TypeMeta: configtypes.TypeMeta{
-				APIVersion: "k3d.io/v1alpha5",
-				Kind:       "Simple",
-			},
-			ObjectMeta: configtypes.ObjectMeta{
-				Name: "extreme-test",
-			},
-			Servers: 1000, // Extremely large server count
-			Agents:  1000, // Extremely large agent count
+			APIVersion: "k3d.io/v1alpha5",
+			Kind:       "Simple",
+			Name:       "extreme-test",
+			Servers:    1000, // Extremely large server count
+			Agents:     1000, // Extremely large agent count
 			// Potentially problematic image
 			Image: "nonexistent:invalid-tag",
 		}
@@ -350,10 +324,8 @@ func testK3dEmptyNameComplexConfig(t *testing.T) {
 
 	// Test empty name with more complex configuration
 	config := &k3dapi.SimpleConfig{
-		TypeMeta: configtypes.TypeMeta{
-			APIVersion: "k3d.io/v1alpha5",
-			Kind:       "Simple",
-		},
+		APIVersion: "k3d.io/v1alpha5",
+		Kind:       "Simple",
 		ObjectMeta: configtypes.ObjectMeta{
 			Name: "", // Empty name
 		},
@@ -398,15 +370,11 @@ func createK3dValidTestCases() []validatorTestCase[*k3dapi.SimpleConfig] {
 		{
 			Name: "valid_k3d_config",
 			Config: &k3dapi.SimpleConfig{
-				TypeMeta: configtypes.TypeMeta{
-					APIVersion: "k3d.io/v1alpha5",
-					Kind:       "Simple",
-				},
-				ObjectMeta: configtypes.ObjectMeta{
-					Name: "test-cluster",
-				},
-				Servers: 1,
-				Agents:  2,
+				APIVersion: "k3d.io/v1alpha5",
+				Kind:       "Simple",
+				Name:       "test-cluster",
+				Servers:    1,
+				Agents:     2,
 			},
 			ExpectedValid:  true,
 			ExpectedErrors: []validator.ValidationError{},
@@ -414,15 +382,11 @@ func createK3dValidTestCases() []validatorTestCase[*k3dapi.SimpleConfig] {
 		{
 			Name: "valid_k3d_config_zero_servers",
 			Config: &k3dapi.SimpleConfig{
-				TypeMeta: configtypes.TypeMeta{
-					APIVersion: "k3d.io/v1alpha5",
-					Kind:       "Simple",
-				},
-				ObjectMeta: configtypes.ObjectMeta{
-					Name: "test-cluster",
-				},
-				Servers: 0,
-				Agents:  1,
+				APIVersion: "k3d.io/v1alpha5",
+				Kind:       "Simple",
+				Name:       "test-cluster",
+				Servers:    0,
+				Agents:     1,
 			},
 			ExpectedValid:  true,
 			ExpectedErrors: []validator.ValidationError{},
@@ -430,12 +394,10 @@ func createK3dValidTestCases() []validatorTestCase[*k3dapi.SimpleConfig] {
 		{
 			Name: "valid_k3d_config_no_name",
 			Config: &k3dapi.SimpleConfig{
-				TypeMeta: configtypes.TypeMeta{
-					APIVersion: "k3d.io/v1alpha5",
-					Kind:       "Simple",
-				},
-				Servers: 1,
-				Agents:  2,
+				APIVersion: "k3d.io/v1alpha5",
+				Kind:       "Simple",
+				Servers:    1,
+				Agents:     2,
 			},
 			ExpectedValid:  true,
 			ExpectedErrors: []validator.ValidationError{},
@@ -448,11 +410,9 @@ func createK3dInvalidTestCases() []validatorTestCase[*k3dapi.SimpleConfig] {
 	configFactory := func() *k3dapi.SimpleConfig {
 		return &k3dapi.SimpleConfig{
 			TypeMeta: configtypes.TypeMeta{},
-			ObjectMeta: configtypes.ObjectMeta{
-				Name: "test-cluster",
-			},
-			Servers: 1,
-			Agents:  2,
+			Name:     "test-cluster",
+			Servers:  1,
+			Agents:   2,
 		}
 	}
 

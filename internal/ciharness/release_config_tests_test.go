@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -17,10 +18,14 @@ import (
 // every one of them (auditedReleaseConfigDigests), so editing any of them can turn a Go test red.
 func releaseConfigFiles() []string {
 	return []string{
+		".gitattributes",
 		".goreleaser.yaml",
 		".goreleaser.desktop.yaml",
 		".github/workflows/cd.yaml",
 		".github/scripts/publish-operator-chart.sh",
+		".github/scripts/resolve-release-replay.sh",
+		".github/scripts/go-notices.go",
+		".github/actions/release-admission/action.yaml",
 		".github/actions/setup-desktop-build/action.yml",
 		".github/actions/free-disk-space/free-disk-space.sh",
 		"scripts/stage-webui.sh",
@@ -100,7 +105,14 @@ func TestReleaseConfigChangesRunTheGoTests(t *testing.T) {
 		"the required-checks aggregator must wait for test-release-config",
 	)
 
-	aggregateStep := aggregator.Steps[len(aggregator.Steps)-1]
+	var aggregateStep harnessStep
+
+	for _, step := range aggregator.Steps {
+		if strings.HasPrefix(step.Uses, "devantler-tech/.github/actions/aggregate-job-checks@") {
+			aggregateStep = step
+		}
+	}
+
 	assert.Contains(
 		t,
 		stringValue(aggregateStep.With["job-results"]),

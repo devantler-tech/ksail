@@ -9,6 +9,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	fluxclient "github.com/devantler-tech/ksail/v7/pkg/client/flux"
+	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/sopsutil"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/dynamic"
@@ -247,4 +248,9 @@ func EnsureSopsAgeSecret(
 	clusterCfg *v1alpha1.Cluster,
 ) error {
 	return ensureSopsAgeSecret(ctx, restConfig, clusterCfg)
+}
+
+// ChartSpec exports chartSpec for testing.
+func (b *Installer) ChartSpec() *helm.ChartSpec {
+	return b.chartSpec()
 }

@@ -547,7 +547,23 @@ func buildKustomizationTasks(
 		tasks = append(tasks, notify.ProgressTask{
 			Name: name,
 			Fn: func(ctx context.Context) error {
-				return pollUntilKustomizationReady(ctx, fluxReconciler, name, deps, failed)
+				err := failed.checkDependencies(deps)
+				if err != nil {
+					failed.record(name, err)
+
+					return err
+				}
+
+				token, err := fluxReconciler.RequestNamedKustomizationReconciliation(ctx, name)
+				if err != nil {
+					if !reconcilerclient.IsContextError(err) {
+						failed.record(name, err)
+					}
+
+					return fmt.Errorf("request reconciliation for %q: %w", name, err)
+				}
+
+				return pollUntilKustomizationReady(ctx, fluxReconciler, name, deps, failed, token)
 			},
 		})
 	}
@@ -580,6 +596,7 @@ func pollUntilKustomizationReady(
 	name string,
 	dependsOn []string,
 	failed *failedKustomizations,
+	requestToken string,
 ) error {
 	return reconcilerclient.PollUntilReady( //nolint:wrapcheck // identity preserved
 		ctx,
@@ -595,7 +612,11 @@ func pollUntilKustomizationReady(
 				return reconcilerclient.CheckResult{}, reconcilerclient.Halt(depErr)
 			}
 
-			ready, status, err := fluxReconciler.CheckNamedKustomizationReady(ctx, name)
+			ready, status, err := fluxReconciler.CheckNamedKustomizationReadyForRequest(
+				ctx,
+				name,
+				requestToken,
+			)
 			if err != nil {
 				// Record permanent failure so dependents can fail-fast. Context
 				// errors are not permanent, so they are left unrecorded.

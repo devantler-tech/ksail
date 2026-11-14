@@ -31,12 +31,10 @@ KSail accepts configuration from four sources:
 
 When the same setting is specified in multiple sources, KSail uses this order (highest to lowest priority):
 
-```text
-1. CLI flags          (e.g., --metrics-server Disabled)
-2. Environment vars   (e.g., KSAIL_SPEC_CLUSTER_DISTRIBUTION=K3s)
-3. ksail.yaml         (nearest file in current or parent directories)
-4. Built-in defaults
-```
+1. **CLI flags**, e.g. `--metrics-server Disabled`
+2. **Environment variables**, e.g. `KSAIL_SPEC_CLUSTER_DISTRIBUTION=K3s`
+3. **`ksail.yaml`**, the nearest file in the current or a parent directory
+4. **Built-in defaults**
 
 **Example:** If `ksail.yaml` sets `distribution: Vanilla` but you run `ksail cluster create --distribution K3s`, the CLI flag wins and K3s is used.
 

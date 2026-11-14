@@ -3,6 +3,9 @@ package kyvernopolicy_test
 import (
 	"errors"
 	"net"
+	"net/http"
+	"net/url"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -177,6 +180,9 @@ const (
 	sentinelTimeout = 10 * time.Second
 )
 
+// errOfflineRequestIntercepted is returned by the test transport for every request it stops.
+var errOfflineRequestIntercepted = errors.New("test intercepted an offline HTTP request")
+
 // TestEvaluate_NetworkContextIsNeverLoaded pins that the offline evaluator opens no connection for a
 // policy's context entries. The engine has no Kubernetes client, registry client, ConfigMap resolver
 // or global context store, so Kyverno disables every network-backed loader; this is why the Kyverno
@@ -198,4 +204,58 @@ func TestEvaluate_NetworkContextIsNeverLoaded(t *testing.T) {
 		"every rule must run, or its context was never reached",
 	)
 	assert.Zero(t, connectionsMade(), "evaluating a policy must not open a network connection")
+}
+
+// TestEvaluate_APICallFixturesDoNotEnableServiceCalls proves that enabling reviewed
+// Kubernetes API responses cannot accidentally enable Kyverno's HTTP service-call
+// context. The fixture client is intentionally narrower than Kyverno's APICall type.
+//
+//nolint:paralleltest // Replaces the process-wide http.DefaultTransport.
+func TestEvaluate_APICallFixturesDoNotEnableServiceCalls(t *testing.T) {
+	// This test changes the process-wide transport. A public test address avoids
+	// Kyverno's loopback blocklist; the proxy callback stops every attempted request
+	// before a socket is opened, including in the regression's broken state.
+	base, ok := http.DefaultTransport.(*http.Transport)
+	require.True(t, ok)
+
+	transport := base.Clone()
+
+	var requests atomic.Int32
+
+	transport.Proxy = func(*http.Request) (*url.URL, error) {
+		requests.Add(1)
+
+		return nil, errOfflineRequestIntercepted
+	}
+	original := http.DefaultTransport
+	http.DefaultTransport = transport
+
+	t.Cleanup(func() {
+		http.DefaultTransport = original
+
+		transport.CloseIdleConnections()
+	})
+
+	engine := kyvernopolicy.NewEngine(
+		[]kyvernov1.PolicyInterface{policy(t, sprintf(networkContextPolicy, "203.0.113.1"))},
+		nil,
+		kyvernopolicy.WithAPICallResponses(kyvernopolicy.APICallResponses{}),
+	)
+
+	violations, err := engine.Evaluate(t.Context(), configMap("default", nil))
+	require.NoError(t, err)
+	require.Len(t, violations, networkContextRules)
+	assert.Zero(t, requests.Load(), "a response fixture must never enable HTTP service calls")
+
+	serviceCallFound := false
+
+	for _, violation := range violations {
+		if violation.Rule == "service-call" {
+			serviceCallFound = true
+
+			assert.Contains(t, violation.Message, "service API calls are disabled offline")
+		}
+	}
+
+	assert.True(t, serviceCallFound, "the service-call rule must report its refusal")
 }

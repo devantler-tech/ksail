@@ -1,0 +1,46 @@
+name: Verify release admission
+description: Require a fresh full-attempt decision before release work.
+inputs:
+  attempt:
+    description: Run attempt admitted by the release preflight.
+    required: true
+  mode:
+    description: Build unpublished content or verify an existing immutable publication.
+    required: true
+  proof:
+    description: Verified publication receipt, required in verify mode.
+    required: false
+runs:
+  using: composite
+  steps:
+    - name: 🔒 Verify full-attempt release admission
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        ADMITTED_ATTEMPT: ${{ inputs.attempt }}
+        ADMITTED_MODE: ${{ inputs.mode }}
+        ADMITTED_PROOF: ${{ inputs.proof }}
+      run: |
+        set -euo pipefail
+        if [[ -z "$ADMITTED_ATTEMPT" || "$ADMITTED_ATTEMPT" != "$GITHUB_RUN_ATTEMPT" ]]; then
+          echo "Fresh full-attempt admission is required: rerun all CD jobs." >&2
+          exit 1
+        fi
+        case "$ADMITTED_MODE" in
+          build) ;;
+          verify)
+            jq -e --arg sha "$GITHUB_SHA" --arg tag "$GITHUB_REF_NAME" --arg run "$GITHUB_RUN_ID" '
+              .source == $sha and .tag == $tag and .originalRun == ($run | tonumber) and
+              (.releaseId | type == "number" and . > 0) and
+              (.assets | type == "array" and length >= 12) and
+              (.images | type == "object" and length == 3)
+            ' <<< "$ADMITTED_PROOF" > /dev/null || {
+              echo "Fresh verified publication proof is required." >&2
+              exit 1
+            }
+            ;;
+          *)
+            echo "Fresh release mode is missing or unsupported." >&2
+            exit 1
+            ;;
+        esac

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 )
@@ -14,11 +15,17 @@ const (
 	// FluxNameLabel is the label key set by the Flux helm-controller on
 	// Helm release Secrets it manages.
 	FluxNameLabel = "helm.toolkit.fluxcd.io/name"
-	// ArgoCDManagedByLabel is the label key set by ArgoCD on resources it
-	// manages. Present on Helm release Secrets when ArgoCD manages charts
-	// through its Helm integration.
-	ArgoCDManagedByLabel = "argocd.argoproj.io/managed-by"
+	// ArgoCDManagedByLabel marks a release Argo CD owns: present on Helm release
+	// Secrets when Argo CD manages charts through its Helm integration, and
+	// reported by [helm.Client.GetReleaseStorageLabels] when an Argo CD
+	// Application tracks the release's objects.
+	ArgoCDManagedByLabel = helm.ArgoCDManagedByLabel
 )
+
+// ownershipLookupTimeout bounds the release ownership read. It runs before the Helm operation
+// creates its own deadline, and the Kubernetes client sets no request timeout by default, so an
+// unresponsive API server would otherwise hang the caller.
+const ownershipLookupTimeout = time.Minute
 
 // IsGitOpsManaged inspects Helm release Secret labels for known GitOps
 // controller ownership markers. It returns the controller name and true when
@@ -55,7 +62,10 @@ func SkipIfGitOpsManaged(
 	client helm.Interface,
 	name, releaseName, namespace string,
 ) (bool, error) {
-	labels, err := client.GetReleaseStorageLabels(ctx, releaseName, namespace)
+	lookupCtx, cancel := context.WithTimeout(ctx, ownershipLookupTimeout)
+	defer cancel()
+
+	labels, err := client.GetReleaseStorageLabels(lookupCtx, releaseName, namespace)
 	if err != nil && !errors.Is(err, helm.ErrNoReleaseStorage) {
 		return false, fmt.Errorf("check release ownership for %s: %w", name, err)
 	}

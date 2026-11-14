@@ -119,12 +119,12 @@ func (s *Service) EncryptSecret(
 	return runCipherOp(plaintext, format, sopsclient.GetStores, "encrypt secret",
 		func(path string, inputStore, outputStore sops.Store) ([]byte, error) {
 			return sopsclient.Encrypt(sopsclient.EncryptOpts{
-				EncryptConfig: sopsclient.EncryptConfig{KeyGroups: []sops.KeyGroup{{masterKey}}},
-				Cipher:        aes.NewCipher(),
-				InputStore:    inputStore,
-				OutputStore:   outputStore,
-				InputPath:     path,
-				KeyServices:   []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
+				KeyGroups:   []sops.KeyGroup{{masterKey}},
+				Cipher:      aes.NewCipher(),
+				InputStore:  inputStore,
+				OutputStore: outputStore,
+				InputPath:   path,
+				KeyServices: []keyservice.KeyServiceClient{keyservice.NewLocalClient()},
 			})
 		})
 }

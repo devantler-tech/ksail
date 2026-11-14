@@ -77,7 +77,7 @@ func (m *MockProvisioner) Reflect(
 }
 
 func (m *MockProvisioner) GenOptions(
-	req provision.NetworkRequest,
+	req provision.ClusterRequest,
 	versionContract *config.VersionContract,
 ) ([]generate.Option, []bundle.Option) {
 	args := m.Called(req, versionContract)

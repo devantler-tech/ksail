@@ -216,7 +216,13 @@ func applySourceRef(
 	sources SourceIndex,
 ) error {
 	chart := helmRelease.Spec.Chart.Spec
+
 	ref := chart.SourceRef
+	if ref == nil {
+		// The resolver renders only charts reached through a sourceRef; a
+		// chart template without one (an inline OCI repository) is unsupported.
+		return fmt.Errorf("%w: chart template has no sourceRef", ErrUnsupportedSourceKind)
+	}
 
 	switch ref.Kind {
 	case sourcev1.HelmRepositoryKind:

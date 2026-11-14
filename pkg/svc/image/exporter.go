@@ -3,13 +3,14 @@ package image
 import (
 	"archive/tar"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
-	"strings"
+	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
@@ -26,11 +27,41 @@ const (
 	ctrNamespaceArg = "--namespace=k8s.io"
 	// ctrImages is the ctr subcommand group for image operations.
 	ctrImages = "images"
+	// ctrSkipDigestForNamed stops ctr import from adding an import-<date>@<digest> alias for an
+	// image the archive names.
+	ctrSkipDigestForNamed = "--skip-digest-for-named"
+	// nodeCleanupTimeout bounds removing an export or import archive from a node
+	// after the command's context is done, so a cancelled operation still cleans up.
+	nodeCleanupTimeout = 30 * time.Second
+	// nodeArchiveSuffixBytes is the random suffix length of a node-side archive name.
+	nodeArchiveSuffixBytes = 8
 )
+
+// newExportArchiveName returns the file name of one export's archive on a node.
+// Each export gets its own name, so two exports on the same node, from separate
+// commands or from one command, never write to or remove each other's archive.
+// Tests replace it to keep the node-side path predictable.
+//
+//nolint:gochecknoglobals // Test seam: tests pin the name so node-side commands stay exact.
+var newExportArchiveName = defaultExportArchiveName
+
+// defaultExportArchiveName returns a random node-side archive name, so concurrent
+// exports on the same node never write to the same file.
+func defaultExportArchiveName() string {
+	return randomNodeArchiveName("ksail-images-export-")
+}
+
+// randomNodeArchiveName returns prefix followed by a random hex suffix and ".tar".
+func randomNodeArchiveName(prefix string) string {
+	suffix := make([]byte, nodeArchiveSuffixBytes)
+	_, _ = rand.Read(suffix)
+
+	return prefix + hex.EncodeToString(suffix) + ".tar"
+}
 
 // Error definitions.
 var (
-	errIncompleteExportHelp = errors.New("incomplete help output")
+	errIncompleteImageHelp = errors.New("incomplete help output")
 
 	// ErrNoNodes is returned when no cluster nodes are found.
 	ErrNoNodes = errors.New("no cluster nodes found")
@@ -38,6 +69,8 @@ var (
 	ErrUnsupportedProvider = errors.New("unsupported provider for image operations")
 	// ErrNoImagesFound is returned when no images are found in the cluster.
 	ErrNoImagesFound = errors.New("no images found in cluster")
+	// ErrIncompleteExport means complete image coverage could not be established.
+	ErrIncompleteExport = errors.New("cannot establish complete image export")
 )
 
 // ExportOptions configures the image export operation.
@@ -55,6 +88,7 @@ type Exporter struct {
 	dockerClient dockerclient.Client
 	executor     *ContainerExecutor
 	localExport  bool
+	ociOnly      bool
 }
 
 // NewExporter creates a new image exporter.
@@ -97,19 +131,44 @@ func (e *Exporter) Export(
 		return fmt.Errorf("failed to resolve export output path: %w", err)
 	}
 
-	// Find a suitable node for export
-	nodeName, err := e.findExportNode(ctx, clusterName, distribution)
+	plan, err := e.findExportSources(ctx, clusterName, distribution, opts.Images)
 	if err != nil {
 		return err
 	}
 
-	// Get the temp path for this distribution
-	tmpPath := getTempPath(distribution)
+	// A single-node cluster keeps its original export and repair path. A
+	// captured inventory marks a multi-node plan, even if one node covers it.
+	if len(plan.sources) == 1 && plan.sources[0].images == nil {
+		_, err = e.exportSource(ctx, plan.sources[0], distribution, opts)
+	} else {
+		err = e.exportSources(ctx, &plan, distribution, opts)
+	}
 
-	// Get list of images to export
-	images, err := e.resolveImages(ctx, nodeName, opts)
 	if err != nil {
 		return err
+	}
+
+	reportPartialPlatforms(ctx, opts.OutputPath)
+
+	return nil
+}
+
+// exportSource exports one node's share of the images to the archive at
+// opts.OutputPath, repairing missing content on that node when needed, and
+// returns the platform it exported.
+func (e *Exporter) exportSource(
+	ctx context.Context,
+	source nodeExportSource,
+	distribution v1alpha1.Distribution,
+	opts ExportOptions,
+) (string, error) {
+	if len(opts.Images) > 0 && source.images != nil {
+		opts.Images = source.wanted
+	}
+
+	images, err := e.resolveImages(ctx, source.node, opts, source.images)
+	if err != nil {
+		return "", err
 	}
 
 	var (
@@ -125,35 +184,26 @@ func (e *Exporter) Export(
 	// Export images using ctr inside the node container
 	return e.exportImagesFromNode(
 		ctx,
-		nodeName,
+		source.node,
 		opts.OutputPath,
 		images,
-		tmpPath,
+		getTempPath(distribution),
 		repairImages,
 		resolveImages,
 	)
 }
 
-// findExportNode finds a suitable node for export operations. The
-// unsupported-distribution and Docker-only provider guards are validated by
-// Export via validateImageOpParams before this is reached.
-func (e *Exporter) findExportNode(
-	ctx context.Context,
-	clusterName string,
-	distribution v1alpha1.Distribution,
-) (string, error) {
-	nodes, err := listClusterNodes(ctx, e.dockerClient, clusterName, distribution)
-	if err != nil {
-		return "", err
+// countHeldImages counts the requested refs the lookup resolves to a local image.
+func countHeldImages(lookup localImageLookup, normalizedRequested []string) int {
+	held := 0
+
+	for _, imageRef := range normalizedRequested {
+		if _, exists := lookup.byExactRef[lookup.resolve(imageRef)]; exists {
+			held++
+		}
 	}
 
-	// Find a suitable node for export (control-plane or server node)
-	nodeName := selectNodeForExport(nodes)
-	if nodeName == "" {
-		return "", fmt.Errorf("%w: no suitable node found in cluster %s", ErrNoNodes, clusterName)
-	}
-
-	return nodeName, nil
+	return held
 }
 
 // exportImagesFromNode exports images from a node's containerd to the host filesystem.
@@ -165,20 +215,23 @@ func (e *Exporter) exportImagesFromNode(
 	tmpBasePath string,
 	repairImages []string,
 	resolveImages []string,
-) error {
-	// Create a temporary file path inside the container
-	tmpPath := tmpBasePath + "/ksail-images-export.tar"
+) (string, error) {
+	tmpPath := tmpBasePath + "/" + newExportArchiveName()
 
 	// Detect the node's platform (OS/architecture)
 	platform, err := e.detectNodePlatform(ctx, nodeName)
 	if err != nil {
-		return fmt.Errorf("failed to detect node platform: %w", err)
+		return "", fmt.Errorf("failed to detect node platform: %w", err)
 	}
 
 	e, err = e.withLocalExport(ctx, nodeName)
 	if err != nil {
-		return err
+		return "", err
 	}
+
+	// From here on ctr may write the archive, so remove it on every path,
+	// including failures and cancellation.
+	defer e.removeNodeArchive(ctx, nodeName, tmpPath)
 
 	exportImages, exportErr := e.tryExportImagesWithRepair(
 		ctx,
@@ -199,7 +252,7 @@ func (e *Exporter) exportImagesFromNode(
 			exportErr,
 		)
 		if err != nil {
-			return err
+			return "", err
 		}
 	}
 
@@ -213,39 +266,27 @@ func (e *Exporter) exportImagesFromNode(
 		repairImages,
 	)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	// Clean up temporary file in container
-	_, _ = e.executor.ExecInContainer(ctx, nodeName, []string{"rm", "-f", tmpPath})
-
-	return nil
+	return platform, nil
 }
 
+// withLocalExport returns a copy of the exporter that uses the export mode the
+// node's containerd supports, probed once for this operation.
 func (e *Exporter) withLocalExport(ctx context.Context, nodeName string) (*Exporter, error) {
 	// Probe once for this operation. Containerd 1.6 exports synchronously but
 	// lacks --local; newer versions expose it and 2.x otherwise defaults to an
 	// asynchronous transfer whose output copy may outlive the export command.
-	help, err := e.executor.ExecInContainer(ctx, nodeName,
-		[]string{ctrCommand, ctrNamespaceArg, ctrImages, "export", "--help"})
+	local, err := e.executor.localImageMode(ctx, nodeName, "export")
 	if err != nil {
-		return nil, fmt.Errorf("failed to discover image export options: %w", err)
-	}
-
-	options := strings.Fields(help)
-	// ctr's help flag follows the export-specific flags. Its absence must not
-	// turn empty or truncated output into permission to use the transfer mode.
-	if !slices.Contains(options, "--help,") && !slices.Contains(options, "--help") {
-		return nil, fmt.Errorf(
-			"failed to discover image export options: %w",
-			errIncompleteExportHelp,
-		)
+		return nil, err
 	}
 
 	// Keep the selection local to this operation, including repairs and fallbacks,
 	// so concurrent calls on the same Exporter cannot change each other's mode.
 	exporter := *e
-	exporter.localExport = slices.Contains(options, "--local")
+	exporter.localExport = local
 
 	return &exporter, nil
 }
@@ -291,26 +332,7 @@ func (e *Exporter) collectExportedArchive(
 // detectNodePlatform detects the OS/architecture of the node container.
 // Returns a platform string in the format "os/arch" (e.g., "linux/amd64", "linux/arm64").
 func (e *Exporter) detectNodePlatform(ctx context.Context, nodeName string) (string, error) {
-	// Use uname to detect architecture
-	output, err := e.executor.ExecInContainer(ctx, nodeName, []string{"uname", "-m"})
-	if err != nil {
-		return "", fmt.Errorf("failed to detect architecture: %w", err)
-	}
-
-	arch := strings.TrimSpace(output)
-
-	// Convert uname output to Go/OCI architecture names
-	switch arch {
-	case "x86_64":
-		arch = "amd64"
-	case "aarch64":
-		arch = "arm64"
-	case "armv7l":
-		arch = "arm"
-	}
-
-	// Always linux for Kubernetes nodes
-	return "linux/" + arch, nil
+	return e.executor.detectPlatform(ctx, nodeName)
 }
 
 // copyFromContainer copies a file from a container to the host.
@@ -373,4 +395,9 @@ func (e *Exporter) writeFileFromTar(dstPath string, tarReader *tar.Reader) error
 	}
 
 	return nil
+}
+
+// removeNodeArchive deletes an export archive from a node.
+func (e *Exporter) removeNodeArchive(ctx context.Context, nodeName, tmpPath string) {
+	e.executor.removeNodeArchive(ctx, nodeName, tmpPath)
 }

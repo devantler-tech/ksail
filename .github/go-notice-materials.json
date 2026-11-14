@@ -1,0 +1,179 @@
+{
+  "schema": 1,
+  "files": [
+    {
+      "module": "github.com/derailed/k9s",
+      "version": "v0.51.0",
+      "sum": "h1:do0fkB1JuN9uURg6bH99I/6phINeFmaGJcldWn8GwSY=",
+      "path": "COPYING",
+      "sha256": "174eef39b7045848ed0c3e308a36891115a0fb5fee68c89d27bcec00522fb6d1",
+      "packages": [
+        "github.com/derailed/k9s/cmd",
+        "github.com/derailed/k9s/internal/client",
+        "github.com/derailed/k9s/internal/color",
+        "github.com/derailed/k9s/internal/config/data",
+        "github.com/derailed/k9s/internal/config/json",
+        "github.com/derailed/k9s/internal/config",
+        "github.com/derailed/k9s/internal/dao",
+        "github.com/derailed/k9s/internal/health",
+        "github.com/derailed/k9s/internal/model1",
+        "github.com/derailed/k9s/internal/model",
+        "github.com/derailed/k9s/internal/perf",
+        "github.com/derailed/k9s/internal/port",
+        "github.com/derailed/k9s/internal/render/helm",
+        "github.com/derailed/k9s/internal/render",
+        "github.com/derailed/k9s/internal/slogs",
+        "github.com/derailed/k9s/internal/tchart",
+        "github.com/derailed/k9s/internal/ui/dialog",
+        "github.com/derailed/k9s/internal/ui",
+        "github.com/derailed/k9s/internal/view/cmd",
+        "github.com/derailed/k9s/internal/view",
+        "github.com/derailed/k9s/internal/vul",
+        "github.com/derailed/k9s/internal/watch",
+        "github.com/derailed/k9s/internal/xray",
+        "github.com/derailed/k9s/internal"
+      ],
+      "detected": ["Unknown"],
+      "role": "attribution",
+      "evidence": [
+        {
+          "path": "LICENSE",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+        }
+      ],
+      "reason": "Preserve this Apache-2.0 copyright and attribution notice alongside the independently admitted Apache-2.0 LICENSE; this is no additional package grant."
+    },
+    {
+      "module": "github.com/inconshreveable/go-update",
+      "version": "v0.0.0-20160112193335-8152e7eb6ccf",
+      "sum": "h1:WfD7VjIE6z8dIvMsI4/s+1qr5EL+zoIGev1BQj1eoJ8=",
+      "path": "LICENSE",
+      "sha256": "737e1cfb4ce24e701a37ebd22d1dafcc27bd75864f85ba6b0ac81326a5f14039",
+      "packages": [
+        "github.com/inconshreveable/go-update/internal/binarydist",
+        "github.com/inconshreveable/go-update/internal/osext"
+      ],
+      "detected": ["Unknown"],
+      "role": "attribution",
+      "evidence": [
+        {
+          "path": "internal/binarydist/License",
+          "sha256": "4b6c0720c3a112229d5f8b8065641023db5cadf615bf98d3150c944adae283f2"
+        },
+        {
+          "path": "internal/osext/LICENSE",
+          "sha256": "dd26a7abddd02e2d0aba97805b31f248ef7835d9e10da289b22e3b8ab78b324d"
+        }
+      ],
+      "reason": "Retain the exact module-root Apache copyright notice without replacing the separately selected nested MIT and BSD-3-Clause licenses. This attribution decision does not change nested package admission or infer an additional grant."
+    },
+    {
+      "module": "github.com/opencontainers/go-digest",
+      "version": "v1.0.0",
+      "sum": "h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8Oi/yOhh5U=",
+      "path": "LICENSE.docs",
+      "sha256": "a1d1adec3ba691ef6e377a78bbe9e9e2501f2f4a1723d08857da1ac6564e4fed",
+      "packages": ["github.com/opencontainers/go-digest"],
+      "detected": ["CC-BY-SA-4.0"],
+      "role": "excluded",
+      "evidence": [
+        {
+          "path": "README.md",
+          "sha256": "cde5e79ad3a2c65cd30a5df53b0f990480ab632e9305065a8162ea204d7e297b"
+        }
+      ],
+      "noEmbeddedFiles": true,
+      "reason": "The exact README limits LICENSE.docs to README.md and CONTRIBUTING.md, separately declaring code under Apache-2.0. These selected source packages contain no embedded files; documentation is not copied into recipient text."
+    },
+    {
+      "module": "github.com/spdx/tools-golang",
+      "version": "v0.5.7",
+      "sum": "h1:+sWcKGnhwp3vLdMqPcLdA6QK679vd86cK9hQWH3AwCg=",
+      "path": "LICENSE.docs",
+      "sha256": "c207c95c7c34ea909fd949c737c3d942045a09f145ddee15d165a360a1000c72",
+      "packages": [
+        "github.com/spdx/tools-golang/convert",
+        "github.com/spdx/tools-golang/json/marshal",
+        "github.com/spdx/tools-golang/json",
+        "github.com/spdx/tools-golang/spdx/common",
+        "github.com/spdx/tools-golang/spdx/v2/common",
+        "github.com/spdx/tools-golang/spdx/v2/v2_1/tagvalue/reader",
+        "github.com/spdx/tools-golang/spdx/v2/v2_1/tagvalue/writer",
+        "github.com/spdx/tools-golang/spdx/v2/v2_1",
+        "github.com/spdx/tools-golang/spdx/v2/v2_2/tagvalue/reader",
+        "github.com/spdx/tools-golang/spdx/v2/v2_2/tagvalue/writer",
+        "github.com/spdx/tools-golang/spdx/v2/v2_2",
+        "github.com/spdx/tools-golang/spdx/v2/v2_3/tagvalue/reader",
+        "github.com/spdx/tools-golang/spdx/v2/v2_3/tagvalue/writer",
+        "github.com/spdx/tools-golang/spdx/v2/v2_3",
+        "github.com/spdx/tools-golang/spdx",
+        "github.com/spdx/tools-golang/tagvalue/reader",
+        "github.com/spdx/tools-golang/tagvalue"
+      ],
+      "detected": ["CC-BY-4.0"],
+      "role": "excluded",
+      "evidence": [
+        {
+          "path": "README.md",
+          "sha256": "06d5d86ffb0cbb547daebe8f8182935a7146d4b93d76a0af6312187dbf905156"
+        }
+      ],
+      "noEmbeddedFiles": true,
+      "reason": "The exact README separates source-code Apache-2.0 OR GPL-2.0-or-later from documentation CC-BY-4.0. These selected source packages contain no embedded files; documentation is not copied into recipient text."
+    },
+    {
+      "module": "modernc.org/memory",
+      "version": "v1.11.0",
+      "sum": "h1:o4QC8aMQzmcwCK3t3Ux/ZHmwFPzE6hf2Y5LbkRs+hbI=",
+      "path": "LICENSE-LOGO",
+      "sha256": "5ae5bee3072a841376451b48d8cfcec7188e10543926d5870828d36c8a750dc5",
+      "packages": ["modernc.org/memory"],
+      "detected": ["Unknown"],
+      "role": "excluded",
+      "evidence": [
+        {
+          "path": "README.md",
+          "sha256": "0bb55fb1137b237df074eaf9a8ec936e1279c81a18a64887fcc145025ade5966"
+        }
+      ],
+      "noEmbeddedFiles": true,
+      "reason": "The exact LICENSE-LOGO points to the memory logo, shown in README.md. The selected source package contains no embedded files; no logo is included in this Go recipient payload."
+    },
+    {
+      "module": "sigs.k8s.io/cli-utils",
+      "version": "v0.37.2",
+      "sum": "h1:GOfKw5RV2HDQZDJlru5KkfLO1tbxqMoyn1IYUxqBpNg=",
+      "path": "LICENSE_TEMPLATE",
+      "sha256": "4a3524b8a9c80ff8b3e8bcc5b5950bebbe8646c822cfc64fda97b6387531fac5",
+      "packages": ["sigs.k8s.io/cli-utils/pkg/object"],
+      "detected": ["Unknown"],
+      "role": "excluded",
+      "evidence": [
+        {
+          "path": "Makefile",
+          "sha256": "3abce35f184fc9b157c6a9832cad22c131419b6c7b8db276f508c70c923b6638"
+        }
+      ],
+      "noEmbeddedFiles": true,
+      "reason": "The exact Makefile uses LICENSE_TEMPLATE as addlicense input; its placeholder-owner template is not a completed source notice. The selected source package contains no embedded files; actual selected generated headers and the module LICENSE are retained."
+    },
+    {
+      "module": "sigs.k8s.io/cli-utils",
+      "version": "v0.37.2",
+      "sum": "h1:GOfKw5RV2HDQZDJlru5KkfLO1tbxqMoyn1IYUxqBpNg=",
+      "path": "LICENSE_TEMPLATE_GO",
+      "sha256": "369c80edfd9000c7dcdf58df43b4c8669744a5135b1dd8ed51e1aef7bb46f4c2",
+      "packages": ["sigs.k8s.io/cli-utils/pkg/object"],
+      "detected": ["Unknown"],
+      "role": "excluded",
+      "evidence": [
+        {
+          "path": "Makefile",
+          "sha256": "3abce35f184fc9b157c6a9832cad22c131419b6c7b8db276f508c70c923b6638"
+        }
+      ],
+      "noEmbeddedFiles": true,
+      "reason": "The exact Makefile uses LICENSE_TEMPLATE_GO as deepcopy-gen header input; its placeholder year is not a completed source notice. The selected source package contains no embedded files; actual selected generated headers and the module LICENSE are retained."
+    }
+  ]
+}

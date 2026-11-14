@@ -101,9 +101,7 @@ func TestSteerKeepaliveImageProven(t *testing.T) {
 func steeredPod() *corev1.Pod {
 	pod := newPod("api-0", selectorLabels(), corev1.PodRunning)
 	pod.Spec.EphemeralContainers = []corev1.EphemeralContainer{{
-		EphemeralContainerCommon: corev1.EphemeralContainerCommon{
-			Name: mirror.SteerContainerName,
-		},
+		Name: mirror.SteerContainerName,
 	}}
 
 	return pod

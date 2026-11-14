@@ -13,7 +13,6 @@ import (
 	kwokprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kwok"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	vclusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/vcluster"
-	k3dtypes "github.com/k3d-io/k3d/v5/pkg/config/types"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
@@ -226,11 +225,9 @@ var kindProvisionerFactory = kindprovisioner.CreateProvisioner
 // while preserving the caller-owned kubeconfig path.
 func createMinimalKindProvisioner(clusterName, kubeconfigPath string) (Provisioner, error) {
 	kindConfig := &v1alpha4.Cluster{
-		TypeMeta: v1alpha4.TypeMeta{
-			Kind:       "Cluster",
-			APIVersion: "kind.x-k8s.io/v1alpha4",
-		},
-		Name: clusterName,
+		Kind:       "Cluster",
+		APIVersion: "kind.x-k8s.io/v1alpha4",
+		Name:       clusterName,
 	}
 
 	provisioner, err := kindProvisionerFactory(kindConfig, kubeconfigPath)
@@ -245,7 +242,7 @@ func createMinimalKindProvisioner(clusterName, kubeconfigPath string) (Provision
 // name, for lifecycle actions that need no full ksail config.
 func createMinimalK3dProvisioner(clusterName, kubeconfigPath string) Provisioner {
 	k3dConfig := &k3dv1alpha5.SimpleConfig{
-		ObjectMeta: k3dtypes.ObjectMeta{Name: clusterName},
+		Name: clusterName,
 	}
 
 	return k3dprovisioner.CreateProvisioner(k3dConfig, "").WithKubeconfig(kubeconfigPath)

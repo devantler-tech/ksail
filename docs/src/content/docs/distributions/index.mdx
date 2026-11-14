@@ -12,12 +12,12 @@ the [Support Matrix](/support-matrix/).
 
 | Your goal | Start with | Why |
 |-----------|-----------|-----|
-| Learn Kubernetes / general local dev | **Vanilla** (Kind) | Unmodified upstream Kubernetes, fastest to start, Docker-only |
-| Fast inner loop & CI/CD | **K3s** (K3d) | Lightweight, batteries-included, quick to create and tear down |
+| Learn Kubernetes / general local dev | **Vanilla** (Kind) | Unmodified upstream Kubernetes, fastest to start, needs only Docker locally; also runs as kubeadm on Hetzner |
+| Fast inner loop & CI/CD | **K3s** (K3d) | Lightweight, batteries-included, quick to create and tear down; also runs as native K3s on Hetzner |
 | Production-grade / secure / immutable | **Talos** | API-driven immutable OS; runs on Docker, Hetzner, or Omni |
 | Isolate teams or feature branches cheaply | **VCluster** | Virtual clusters inside one host — low overhead, strong isolation |
 | Scale-test controllers or the API server | **KWOK** | Simulates thousands of nodes with near-zero resource cost |
-| Managed Kubernetes on AWS | **EKS** | Managed control plane on AWS (scaffolding today; provisioning coming) |
+| Managed Kubernetes on AWS | **EKS** | Managed control plane on AWS, created and managed with eksctl from a declarative `eks.yaml` spec |
 | Managed Kubernetes on Google Cloud | **GKE** | Managed control plane on Google Cloud, declarative `gke.yaml` spec |
 | Managed Kubernetes on Azure | **AKS** | Managed control plane on Azure, declarative `aks.yaml` spec |
 
@@ -25,8 +25,8 @@ the [Support Matrix](/support-matrix/).
 
 | Distribution | Tool | Best for | Providers |
 |--------------|------|----------|-----------|
-| [Vanilla](/distributions/vanilla/) | Kind | Upstream Kubernetes, learning, local dev | Docker, Kubernetes |
-| [K3s](/distributions/k3s/) | K3d | Lightweight dev & CI/CD | Docker, Kubernetes |
+| [Vanilla](/distributions/vanilla/) | Kind (local), kubeadm (Hetzner) | Upstream Kubernetes, learning, local dev | Docker, Kubernetes, Hetzner |
+| [K3s](/distributions/k3s/) | K3d (local), native K3s (Hetzner) | Lightweight dev & CI/CD | Docker, Kubernetes, Hetzner |
 | [Talos](/distributions/talos/) | Talos | Immutable, secure, production | Docker, Kubernetes, Hetzner, Omni |
 | [VCluster](/distributions/vcluster/) | Vind | Multi-tenancy, feature branches, CI isolation | Docker, Kubernetes |
 | [KWOK](/distributions/kwok/) | kwokctl | Simulation, scale & controller testing | Docker, Kubernetes |
@@ -37,13 +37,14 @@ the [Support Matrix](/support-matrix/).
 ## Providers at a glance
 
 The provider decides where nodes actually run. Most distributions default to **Docker** (local
-containers); **Talos** additionally runs on real or virtual cloud infrastructure.
+containers). **Vanilla**, **K3s** and **Talos** also run on Hetzner Cloud servers, and **Talos** on
+nodes managed through Omni.
 
 | Provider | Runs nodes as | Use it for |
 |----------|---------------|------------|
 | [Docker](/providers/docker/) | Local Docker containers | The default for all local distributions |
 | [Kubernetes (Nested)](/providers/kubernetes/) | Pods in an existing cluster | Running clusters inside a cluster — no Docker on the host |
-| [Hetzner](/providers/hetzner/) | Hetzner Cloud servers | Affordable real cloud clusters (Talos) |
+| [Hetzner](/providers/hetzner/) | Hetzner Cloud servers | Affordable real cloud clusters (Talos, K3s, Vanilla) |
 | [Omni (Sidero)](/providers/omni/) | Talos nodes via Sidero Omni | Managing Talos through the Omni SaaS |
 | [AWS](/providers/aws/) | Managed EKS | Managed Kubernetes on Amazon Web Services |
 | [GCP](/providers/gcp/) | Managed GKE | Managed Kubernetes on Google Cloud |

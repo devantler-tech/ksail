@@ -12,7 +12,6 @@ import (
 
 	rootcmd "github.com/devantler-tech/ksail/v7/pkg/cli/cmd"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/experimental"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/client-go/tools/clientcmd"
@@ -47,7 +46,6 @@ func TestForgetCommandLocalRecovery(t *testing.T) {
 
 				output, err := executeForget(
 					t,
-					"--experimental",
 					"--kubeconfig",
 					path,
 					"--context",
@@ -83,7 +81,6 @@ func assertForgetRetryUnchanged(t *testing.T, path string) {
 	require.NoError(t, err)
 	output, err := executeForget(
 		t,
-		"--experimental",
 		"--kubeconfig",
 		path,
 		"--context",
@@ -97,26 +94,30 @@ func assertForgetRetryUnchanged(t *testing.T, path string) {
 	assert.Equal(t, contents, afterRetry, "an idempotent retry must not rewrite the file")
 }
 
-func TestForgetCommandDisabledPreservesKubeconfig(t *testing.T) {
+func TestForgetCommandIsStable(t *testing.T) {
 	t.Parallel()
+
+	cmd := cluster.NewClusterCmd()
+	forget, _, err := cmd.Find([]string{"forget"})
+	require.NoError(t, err)
+	assert.False(t, forget.Hidden, "graduated recovery is listed in help and generated tools")
+	assert.NotContains(t, forget.Example, "--experimental", "stable usage needs no opt-in")
 
 	path := filepath.Join(t.TempDir(), "config")
 	require.NoError(
 		t,
 		clientcmd.WriteToFile(*forgetFixture("https://unused.invalid", "unused", false), path),
 	)
-	before, err := os.ReadFile(filepath.Clean(path))
-	require.NoError(t, err)
-	_, err = executeForget(t, "--kubeconfig", path, "--context", "kind-nested")
-	require.ErrorIs(t, err, experimental.ErrDisabled)
-	after, err := os.ReadFile(filepath.Clean(path))
-	require.NoError(t, err)
-	assert.Equal(t, before, after)
-
-	cmd := cluster.NewClusterCmd()
-	forget, _, err := cmd.Find([]string{"forget"})
-	require.NoError(t, err)
-	assert.True(t, forget.Hidden, "experimental recovery stays out of help and generated tools")
+	output, err := executeForget(
+		t,
+		"--experimental",
+		"--kubeconfig",
+		path,
+		"--context",
+		"kind-nested",
+	)
+	require.NoError(t, err, "the global opt-in stays harmless after graduation")
+	assert.Contains(t, output, "Forgot local context")
 }
 
 func TestForgetCommandRequiresExplicitFlags(t *testing.T) {
@@ -130,12 +131,12 @@ func TestForgetCommandRequiresExplicitFlags(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, args := range [][]string{
-		{"--experimental"},
-		{"--experimental", "--kubeconfig", path},
-		{"--experimental", "--context", "kind-nested"},
-		{"--experimental", "--kubeconfig", path, "--context", ""},
-		{"--experimental", "--kubeconfig", "", "--context", "kind-nested"},
-		{"--experimental", "--kubeconfig", path, "--context", "kind-nested", "unexpected"},
+		{},
+		{"--kubeconfig", path},
+		{"--context", "kind-nested"},
+		{"--kubeconfig", path, "--context", ""},
+		{"--kubeconfig", "", "--context", "kind-nested"},
+		{"--kubeconfig", path, "--context", "kind-nested", "unexpected"},
 	} {
 		output, err := executeForget(t, args...)
 		require.Error(t, err)
@@ -191,7 +192,7 @@ func TestForgetCommandBypassesRootConnectionRefresh(t *testing.T) {
 			t,
 			output,
 			"Omni",
-			"even invalid or disabled recovery must bypass provider hooks",
+			"even invalid or failed recovery must bypass provider hooks",
 		)
 		assert.NoFileExists(t, missing)
 	}

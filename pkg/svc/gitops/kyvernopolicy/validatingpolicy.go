@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 
+	"cel.dev/cel-go/cel"
+	celast "cel.dev/cel-go/common/ast"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	policieskyvernoio "github.com/kyverno/api/api/policies.kyverno.io"
 	policiesv1beta1 "github.com/kyverno/api/api/policies.kyverno.io/v1beta1"
@@ -55,19 +57,194 @@ var errOffline = errors.New(
 	"ksail evaluates Kyverno policies offline and cannot perform this lookup",
 )
 
-// httpReference matches the CEL http library identifier. A policy whose
-// expressions mention it is never evaluated: the library makes real requests
-// for any URL without an exact mock, and validation must not reach the
-// network. The match is deliberately broad; a false positive only turns a
-// policy into a warning.
-var httpReference = regexp.MustCompile(`(^|[^A-Za-z0-9_.])http([^A-Za-z0-9_]|$)`)
+// httpLibrary is the CEL variable through which Kyverno's http library is
+// called (`http.Get(…)`, `http.Post(…)`, `http.Client(…)`). A policy whose
+// expressions refer to it is never evaluated: the library makes real requests
+// for any URL without an exact mock, and validation must not reach the network.
+const httpLibrary = "http"
 
-// namespaceObjectReference matches the CEL namespaceObject variable. Offline it
-// is only known for namespaces among the rendered documents. The match is broad
-// for the same reason as httpReference.
-var namespaceObjectReference = regexp.MustCompile(
-	`(^|[^A-Za-z0-9_.])namespaceObject([^A-Za-z0-9_]|$)`,
+// namespaceObjectVariable is the CEL variable holding the document's
+// Namespace. Offline it is only known for namespaces among the rendered
+// documents.
+const namespaceObjectVariable = "namespaceObject"
+
+// httpReference and namespaceObjectReference match those identifiers as words
+// in a string that does not parse as CEL here, preceded by a dot or not: a
+// leading dot (`.http`) names the same root-scope variable. Kyverno may parse
+// the string with options this package does not share, so the match is
+// deliberately broad and also takes a field of that name: a false positive only
+// turns a policy into a warning, while a miss would let an http call run.
+var (
+	httpReference            = regexp.MustCompile(`(^|[^A-Za-z0-9_])http([^A-Za-z0-9_]|$)`)
+	namespaceObjectReference = regexp.MustCompile(
+		`(^|[^A-Za-z0-9_])namespaceObject([^A-Za-z0-9_]|$)`,
+	)
 )
+
+// newIdentifierParser returns a CEL environment that parses expressions as
+// Kyverno policies write them, optional syntax and escaped identifiers
+// included. It is only used to parse, never to type-check or evaluate.
+func newIdentifierParser() (*cel.Env, error) {
+	env, err := cel.NewEnv(cel.OptionalTypes(), cel.EnableIdentifierEscapeSyntax())
+	if err != nil {
+		return nil, fmt.Errorf("build CEL parser: %w", err)
+	}
+
+	return env, nil
+}
+
+// referencesIdentifier reports whether any string in strs refers to the CEL
+// identifier name. A string that parses as CEL refers to it only when its
+// syntax tree holds that identifier, written plainly or with the leading dot
+// that names the root scope (`.http`), so a field of the same name selected
+// from another value (`object.?spec.?http`), a map key or a string literal does
+// not count. A string that does not parse is matched against fallback instead,
+// so an expression that may use the identifier is never taken not to.
+func referencesIdentifier(
+	parser *cel.Env,
+	strs []string,
+	name string,
+	fallback *regexp.Regexp,
+) bool {
+	for _, str := range strs {
+		parsed, issues := parser.Parse(str)
+		if issues != nil && issues.Err() != nil {
+			if fallback.MatchString(str) {
+				return true
+			}
+
+			continue
+		}
+
+		if usesIdentifier(parsed.NativeRep().Expr(), name, false) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// usesIdentifier reports whether expr refers to the root-scope identifier name.
+// shadowed is set inside a comprehension that binds a local variable of that
+// name (`list.all(http, http != 'x')`): there the plain name is the local
+// variable, while `.http` still names the root one. A comprehension's range and
+// initial accumulator are evaluated outside the scope it opens. An expression
+// kind this function does not know counts as a reference.
+func usesIdentifier(expr celast.Expr, name string, shadowed bool) bool {
+	switch expr.Kind() {
+	case celast.IdentKind:
+		return identRefersTo(expr.AsIdent(), name, shadowed)
+	case celast.SelectKind:
+		return usesIdentifier(expr.AsSelect().Operand(), name, shadowed)
+	case celast.CallKind:
+		return callUsesIdentifier(expr.AsCall(), name, shadowed)
+	case celast.ListKind, celast.MapKind, celast.StructKind:
+		return literalUsesIdentifier(expr, name, shadowed)
+	case celast.ComprehensionKind:
+		return comprehensionUsesIdentifier(expr.AsComprehension(), name, shadowed)
+	case celast.LiteralKind, celast.UnspecifiedExprKind:
+		return false
+	default:
+		return true
+	}
+}
+
+// identRefersTo reports whether the identifier ident is the root-scope name: a
+// leading dot always names the root scope, a plain name only where no local
+// variable shadows it.
+func identRefersTo(ident, name string, shadowed bool) bool {
+	if root, found := strings.CutPrefix(ident, "."); found {
+		return root == name
+	}
+
+	return ident == name && !shadowed
+}
+
+// literalUsesIdentifier checks the elements of a list, map or struct literal.
+func literalUsesIdentifier(expr celast.Expr, name string, shadowed bool) bool {
+	if expr.Kind() == celast.ListKind {
+		return anyUsesIdentifier(expr.AsList().Elements(), name, shadowed)
+	}
+
+	if expr.Kind() == celast.MapKind {
+		return entriesUseIdentifier(expr.AsMap().Entries(), name, shadowed)
+	}
+
+	return entriesUseIdentifier(expr.AsStruct().Fields(), name, shadowed)
+}
+
+func callUsesIdentifier(call celast.CallExpr, name string, shadowed bool) bool {
+	if call.IsMemberFunction() && usesIdentifier(call.Target(), name, shadowed) {
+		return true
+	}
+
+	return anyUsesIdentifier(call.Args(), name, shadowed)
+}
+
+func anyUsesIdentifier(exprs []celast.Expr, name string, shadowed bool) bool {
+	for _, expr := range exprs {
+		if usesIdentifier(expr, name, shadowed) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// entriesUseIdentifier checks the keys and values of map entries and the
+// values of struct fields. Any other entry kind counts as a reference.
+func entriesUseIdentifier(entries []celast.EntryExpr, name string, shadowed bool) bool {
+	for _, entry := range entries {
+		if entry.Kind() == celast.MapEntryKind {
+			mapEntry := entry.AsMapEntry()
+			if usesIdentifier(mapEntry.Key(), name, shadowed) ||
+				usesIdentifier(mapEntry.Value(), name, shadowed) {
+				return true
+			}
+
+			continue
+		}
+
+		if entry.Kind() == celast.StructFieldKind {
+			if usesIdentifier(entry.AsStructField().Value(), name, shadowed) {
+				return true
+			}
+
+			continue
+		}
+
+		return true
+	}
+
+	return false
+}
+
+// comprehensionUsesIdentifier checks a comprehension, every CEL macro such as
+// all, exists, map and filter included. Its iteration and accumulator
+// variables are in scope in the loop condition and step; only the accumulator
+// is in scope in the result.
+func comprehensionUsesIdentifier(
+	comprehension celast.ComprehensionExpr,
+	name string,
+	shadowed bool,
+) bool {
+	if usesIdentifier(comprehension.IterRange(), name, shadowed) ||
+		usesIdentifier(comprehension.AccuInit(), name, shadowed) {
+		return true
+	}
+
+	loopShadowed := shadowed || comprehension.IterVar() == name ||
+		(comprehension.HasIterVar2() && comprehension.IterVar2() == name) ||
+		comprehension.AccuVar() == name
+	if usesIdentifier(comprehension.LoopCondition(), name, loopShadowed) ||
+		usesIdentifier(comprehension.LoopStep(), name, loopShadowed) {
+		return true
+	}
+
+	return usesIdentifier(
+		comprehension.Result(), name, shadowed || comprehension.AccuVar() == name,
+	)
+}
 
 // installOffline makes Kyverno's process-wide CEL library context the offline
 // one. The vpol compiler binds its resource, image-data and global-context
@@ -155,8 +332,18 @@ func NewCELEngine(
 		return namespaceForMatching(name)
 	}
 
-	compiler := vpolcompiler.NewCompiler()
+	parser, err := newIdentifierParser()
+	if err != nil {
+		return nil, err
+	}
+
 	matcher := matching.NewMatcher()
+	policyCompiler := celPolicyCompiler{
+		parser:   parser,
+		compiler: vpolcompiler.NewCompiler(),
+		resolve:  resolve,
+		matcher:  matcher,
+	}
 	compiled := make([]compiledCELPolicy, 0, len(policies))
 
 	for _, policy := range policies {
@@ -166,38 +353,59 @@ func NewCELEngine(
 			continue
 		}
 
-		strs, err := specStrings(spec)
+		entry, err := policyCompiler.compile(policy)
 		if err != nil {
-			return nil, fmt.Errorf("inspect %s: %w", celPolicyName(policy), err)
+			return nil, err
 		}
 
-		if slices.ContainsFunc(strs, httpReference.MatchString) {
-			compiled = append(compiled, compiledCELPolicy{
-				policy: policy,
-				unsupported: "the policy uses the CEL http library, which makes network " +
-					"requests, so it is not evaluated offline",
-			})
-
-			continue
-		}
-
-		provider, err := vpolengine.NewProvider(
-			compiler,
-			[]policiesv1beta1.ValidatingPolicyLike{policy},
-			nil,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("compile %s: %w", celPolicyName(policy), err)
-		}
-
-		compiled = append(compiled, compiledCELPolicy{
-			policy:         policy,
-			engine:         vpolengine.NewEngine(provider, resolve, matcher),
-			readsNamespace: slices.ContainsFunc(strs, namespaceObjectReference.MatchString),
-		})
+		compiled = append(compiled, entry)
 	}
 
 	return &CELEngine{policies: compiled, namespaces: known, matcher: matcher}, nil
+}
+
+// celPolicyCompiler prepares one policy at a time for a CELEngine.
+type celPolicyCompiler struct {
+	parser   *cel.Env
+	compiler vpolcompiler.Compiler
+	resolve  celengine.NamespaceResolver
+	matcher  matching.Matcher
+}
+
+// compile returns policy ready to evaluate, or with the reason it cannot be
+// evaluated offline. A policy that uses the http library is never compiled.
+func (c celPolicyCompiler) compile(
+	policy policiesv1beta1.ValidatingPolicyLike,
+) (compiledCELPolicy, error) {
+	strs, err := specStrings(policy.GetValidatingPolicySpec())
+	if err != nil {
+		return compiledCELPolicy{}, fmt.Errorf("inspect %s: %w", celPolicyName(policy), err)
+	}
+
+	if referencesIdentifier(c.parser, strs, httpLibrary, httpReference) {
+		return compiledCELPolicy{
+			policy: policy,
+			unsupported: "the policy uses the CEL http library, which makes network " +
+				"requests, so it is not evaluated offline",
+		}, nil
+	}
+
+	provider, err := vpolengine.NewProvider(
+		c.compiler,
+		[]policiesv1beta1.ValidatingPolicyLike{policy},
+		nil,
+	)
+	if err != nil {
+		return compiledCELPolicy{}, fmt.Errorf("compile %s: %w", celPolicyName(policy), err)
+	}
+
+	return compiledCELPolicy{
+		policy: policy,
+		engine: vpolengine.NewEngine(provider, c.resolve, c.matcher),
+		readsNamespace: referencesIdentifier(
+			c.parser, strs, namespaceObjectVariable, namespaceObjectReference,
+		),
+	}, nil
 }
 
 // renderedNamespaces indexes the Namespace documents among docs.
@@ -212,8 +420,8 @@ func renderedNamespaces(docs []map[string]any) map[string]*corev1.Namespace {
 
 		labels, _, _ := unstructured.NestedStringMap(doc, "metadata", "labels")
 		known[name] = &corev1.Namespace{
-			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: kindNamespace},
-			ObjectMeta: metav1.ObjectMeta{Name: name, Labels: labels},
+			APIVersion: "v1", Kind: kindNamespace,
+			Name: name, Labels: labels,
 		}
 	}
 
@@ -485,8 +693,9 @@ func (e *CELEngine) appliesIgnoringNamespace(
 	return matches
 }
 
-// specStrings returns every string in spec, which is where its CEL
-// expressions live.
+// specStrings returns every string in spec that may hold a CEL expression: all
+// of them except a validation's static message, which is shown as written and
+// never evaluated.
 func specStrings(spec *policiesv1beta1.ValidatingPolicySpec) ([]string, error) {
 	encoded, err := json.Marshal(spec)
 	if err != nil {
@@ -512,7 +721,11 @@ func collectStrings(value any, out *[]string) {
 	case string:
 		*out = append(*out, typed)
 	case map[string]any:
-		for _, v := range typed {
+		for key, v := range typed {
+			if _, static := v.(string); static && key == "message" {
+				continue
+			}
+
 			collectStrings(v, out)
 		}
 	case []any:

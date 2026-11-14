@@ -20,10 +20,8 @@ func TestFluxInstance_DeepCopy(t *testing.T) {
 	t.Parallel()
 
 	original := &fluxinstaller.FluxInstance{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-instance",
-			Namespace: "test-namespace",
-		},
+		Name:      "test-instance",
+		Namespace: "test-namespace",
 		Spec: fluxinstaller.InstanceSpec{
 			Distribution: fluxinstaller.Distribution{
 				Version:  "2.x",
@@ -80,9 +78,7 @@ func TestFluxInstance_DeepCopyObject(t *testing.T) {
 	t.Parallel()
 
 	original := &fluxinstaller.FluxInstance{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "test",
-		},
+		Name: "test",
 	}
 
 	obj := original.DeepCopyObject()
@@ -99,10 +95,10 @@ func TestFluxInstanceList_DeepCopy(t *testing.T) {
 	original := &fluxinstaller.FluxInstanceList{
 		Items: []fluxinstaller.FluxInstance{
 			{
-				ObjectMeta: metav1.ObjectMeta{Name: "item1"},
+				Name: "item1",
 			},
 			{
-				ObjectMeta: metav1.ObjectMeta{Name: "item2"},
+				Name: "item2",
 			},
 		},
 	}
@@ -134,7 +130,7 @@ func TestFluxInstanceList_DeepCopyObject(t *testing.T) {
 
 	original := &fluxinstaller.FluxInstanceList{
 		Items: []fluxinstaller.FluxInstance{
-			{ObjectMeta: metav1.ObjectMeta{Name: "test"}},
+			{Name: "test"},
 		},
 	}
 

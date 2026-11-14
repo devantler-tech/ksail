@@ -7,11 +7,9 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
-	"github.com/k3d-io/k3d/v5/pkg/config/types"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
@@ -38,9 +36,7 @@ func TestResolveClusterNameFromContext_K3s(t *testing.T) {
 	t.Parallel()
 
 	k3dConfig := &v1alpha5.SimpleConfig{
-		ObjectMeta: types.ObjectMeta{
-			Name: "k3s-cluster",
-		},
+		Name: "k3s-cluster",
 	}
 	ctx := &localregistry.Context{
 		ClusterCfg: &v1alpha1.Cluster{
@@ -62,7 +58,7 @@ func TestResolveClusterNameFromContext_EKS(t *testing.T) {
 
 	ctx := &localregistry.Context{
 		ClusterCfg: &v1alpha1.Cluster{
-			ObjectMeta: metav1.ObjectMeta{Name: "stale-top-level-name"},
+			Name: "stale-top-level-name",
 			Spec: v1alpha1.Spec{
 				Cluster: v1alpha1.ClusterSpec{Distribution: v1alpha1.DistributionEKS},
 			},

@@ -50,6 +50,8 @@ func TestUpgradeDistributionReconcilesAutoscalerBaseline(t *testing.T) {
 
 // A new CLI invocation generates a fresh PKI bundle. Same-version image rolls
 // must load the running cluster's identity before generating autoscaler configs.
+//
+//nolint:staticcheck // reads the legacy v1alpha1 cluster CA the fixture carries
 func TestUpgradeDistributionSyncsAutoscalerBaselineFromRunningControlPlane(t *testing.T) {
 	t.Setenv(v1alpha1.DefaultHetznerTokenEnvVar, "")
 

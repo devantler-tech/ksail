@@ -4,18 +4,19 @@
   "version": "0.0.1",
   "scripts": {
     "dev": "astro dev",
-    "build": "npm run test:dependencies && astro build",
+    "build": "npm run test:dependencies && npm run test:redirects && astro build",
     "test:dependencies": "node --test tests/dependency-compatibility.test.mjs",
+    "test:redirects": "node --test tests/legacy-cli-flags-redirects.test.mjs",
     "preview": "astro preview",
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/starlight": "^0.42.5",
-    "astro": "^7.3.8",
-    "astro-mermaid": "^2.1.0",
-    "mermaid": "^11.17.2",
+    "@astrojs/starlight": "^0.42.9",
+    "astro": "^7.4.7",
+    "astro-mermaid": "^2.2.0",
+    "mermaid": "^12.3.0",
     "sharp": "^0.35.5",
-    "starlight-links-validator": "^0.26.0"
+    "starlight-links-validator": "^0.27.0"
   },
   "devDependencies": {
     "starlight-github-alerts": "^0.5.0"

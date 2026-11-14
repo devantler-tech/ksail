@@ -75,12 +75,10 @@ func (b *Base) publishConnectorKubeconfig(
 	}
 
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      b.connectorSecretName(clusterName),
-			Namespace: b.HubNamespace,
-			Labels:    kubernetesprovider.CommonLabels(clusterName),
-		},
-		Data: map[string][]byte{connectorKubeconfigKey: kubeconfig},
+		Name:      b.connectorSecretName(clusterName),
+		Namespace: b.HubNamespace,
+		Labels:    kubernetesprovider.CommonLabels(clusterName),
+		Data:      map[string][]byte{connectorKubeconfigKey: kubeconfig},
 	}
 
 	// Retry any error with backoff: UpsertSecret itself only retries update

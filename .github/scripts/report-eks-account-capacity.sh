@@ -6,6 +6,15 @@ usage() {
 	cat <<'EOF_USAGE'
 Usage:
   report-eks-account-capacity.sh --region REGION
+  report-eks-account-capacity.sh --region REGION --baseline-file NEW_FILE \
+    --cluster-name LABEL --run-id ID --run-attempt ATTEMPT --source-sha SHA
+  report-eks-account-capacity.sh --region REGION --baseline-file FILE \
+    --ownership-file FILE --cluster-name NAME --run-id ID \
+    --run-attempt ATTEMPT --source-sha SHA \
+    [--classic-load-balancer NAME] [--load-balancer-arn ARN] \
+    [--load-balancer-host DNS] [--volume-id ID] [--workload-inventory-complete]
+  report-eks-account-capacity.sh --region REGION --verify-ownership-file FILE \
+    --cluster-name NAME --run-id ID --run-attempt ATTEMPT --source-sha SHA
 
 Print a read-only regional EKS resource diagnostic.
 
@@ -16,12 +25,34 @@ not establish run ownership or prove a completed teardown.
 
 It only reads and it creates nothing, so it can be run without a cluster. It
 prints validated states, types and counts, never an identifier. Read failures
-remain diagnostic and exit 0. Usage errors exit 2; a runtime/build failure is
+remain diagnostic and exit 0. Shell option errors exit 2; a runtime/build failure is
 nonzero. Requires Go matching go.mod and the AWS CLI.
+
+Baseline mode writes a new owner-only regional identity snapshot instead of the
+ordinary report. All context flags are required. Failed reads write unknown
+families without partial identities and return nonzero. Existing files and
+symlinks are never overwritten. The parent must be an existing Unix directory
+owned by the current user with no group or other access (for example, mktemp -d).
+The snapshot belongs only to its observation run; new identities do not prove
+ownership. Account binding, instant-fleet coverage and teardown remain unknown.
+Keep the file private; it is local evidence, not durable cross-job retention.
+
+Ownership mode imports that complete baseline and atomically creates or updates
+an owner-only cumulative manifest. Exact workload identities supplied by the
+caller are verified through read-only AWS operations before recording. Later
+captures union relationships, so scale-down or detachment cannot erase them.
+The public summary contains only family counts and coverage states. The manifest
+stays in the runner job and must be handed to the post-cleanup verifier privately.
+
+Verification mode reads every recorded identity and compares a complete regional
+census with the embedded pre-create baseline. Remaining resources, incomplete
+ownership, a failed read, identity replacement, or an unattributed new regional
+resource returns nonzero. Output contains only kind, count, state and safe reason.
 EOF_USAGE
 }
 
 region=""
+report_args=()
 
 while (($# > 0)); do
 	case "$1" in
@@ -36,6 +67,19 @@ while (($# > 0)); do
 		fi
 		region="$2"
 		shift 2
+		;;
+	--baseline-file | --ownership-file | --verify-ownership-file | --cluster-name | --run-id | --run-attempt | --source-sha | \
+		--classic-load-balancer | --load-balancer-arn | --load-balancer-host | --volume-id)
+		if (($# < 2)); then
+			usage >&2
+			exit 2
+		fi
+		report_args+=("$1" "$2")
+		shift 2
+		;;
+	--workload-inventory-complete)
+		report_args+=("$1")
+		shift
 		;;
 	*)
 		usage >&2
@@ -56,4 +100,5 @@ fence="capacity-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
 printf '::stop-commands::%s\n' "${fence}"
 trap 'printf "::%s::\n::endgroup::\n" "${fence}"' EXIT
 cd "${repo_root}"
-go run ./internal/maintenance/eksinventory/cmd --region "${region}"
+report_args+=(--region "${region}")
+go run ./internal/maintenance/eksinventory/cmd "${report_args[@]}"

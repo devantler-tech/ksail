@@ -117,6 +117,10 @@ type Options struct {
 	TargetBranch string
 	// SourceDirectory is the directory name for tenant manifests (default: "k8s").
 	SourceDirectory string
+	// GitVerifySecretRef names a Secret in the tenant namespace holding the public keys of
+	// trusted committers. When set, the Flux GitRepository verifies the signature of the
+	// checked-out commit (SSH or OpenPGP) before applying it. Flux Git sync only.
+	GitVerifySecretRef string
 
 	// --- Production hardening (all opt-in) ---
 
@@ -275,6 +279,11 @@ func (o *Options) Validate() error {
 		}
 	}
 
+	err = o.validateGitVerification()
+	if err != nil {
+		return err
+	}
+
 	return o.validateProduction()
 }
 
@@ -347,6 +356,25 @@ func (o *Options) validateImagePullSecrets() error {
 			return fmt.Errorf("%w: %q (%s)",
 				ErrInvalidImagePullSecret, trimmed, strings.Join(errs, "; "))
 		}
+	}
+
+	return nil
+}
+
+// validateGitVerification checks that commit verification, when requested, is requested only where Flux
+// verifies a GitRepository, and that the Secret name is one Kubernetes accepts.
+func (o *Options) validateGitVerification() error {
+	if o.GitVerifySecretRef == "" {
+		return nil
+	}
+
+	if o.TenantType != TypeFlux || o.SyncSource != SyncSourceGit {
+		return ErrGitVerifyRequiresGitSync
+	}
+
+	if errs := validation.IsDNS1123Subdomain(o.GitVerifySecretRef); len(errs) > 0 {
+		return fmt.Errorf("%w: %q (%s)",
+			ErrInvalidGitVerifySecretRef, o.GitVerifySecretRef, strings.Join(errs, "; "))
 	}
 
 	return nil

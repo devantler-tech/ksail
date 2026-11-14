@@ -30,7 +30,7 @@ func TestOperatorChartPublicationRequiresVerifiedSignature(t *testing.T) {
 
 	for _, step := range job.Steps {
 		if strings.HasPrefix(step.Uses, "sigstore/cosign-installer@") {
-			assert.Empty(t, step.If)
+			assert.Equal(t, "needs.goreleaser.outputs.release-mode == 'build'", step.If)
 			assert.False(t, step.ContinueOnError)
 
 			installed = true
@@ -40,7 +40,7 @@ func TestOperatorChartPublicationRequiresVerifiedSignature(t *testing.T) {
 			publications++
 
 			assert.True(t, installed, "install Cosign before publishing")
-			assert.Empty(t, step.If)
+			assert.Equal(t, "needs.goreleaser.outputs.release-mode == 'build'", step.If)
 			assert.False(t, step.ContinueOnError)
 		}
 

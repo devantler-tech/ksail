@@ -53,11 +53,9 @@ func TestEnsureSecret_UpdatePreservesResourceVersion(t *testing.T) {
 	updatedToken := "updated-token-456"
 
 	existing := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            hetzner.SecretName,
-			Namespace:       hetzner.Namespace,
-			ResourceVersion: "12345",
-		},
+		Name:            hetzner.SecretName,
+		Namespace:       hetzner.Namespace,
+		ResourceVersion: "12345",
 		Data: map[string][]byte{
 			"token": []byte("old-token"),
 		},
@@ -169,11 +167,9 @@ func TestEnsureSecret_PreservesExistingKeysOnMerge(t *testing.T) {
 
 	// Simulate CCM having already written "network" into the secret.
 	existing := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            hetzner.SecretName,
-			Namespace:       hetzner.Namespace,
-			ResourceVersion: "1",
-		},
+		Name:            hetzner.SecretName,
+		Namespace:       hetzner.Namespace,
+		ResourceVersion: "1",
 		Data: map[string][]byte{
 			"token":   []byte("old-token"),
 			"network": []byte(testNetworkName),

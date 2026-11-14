@@ -67,7 +67,7 @@ type Server struct {
 	ReadOnly bool
 	// BindAddress is the address the HTTP server listens on (e.g. ":8080").
 	BindAddress string
-	// UIOrigin is the server-held loopback origin allowed to issue mutating requests (for example,
+	// UIOrigin is the server-held loopback origin that every request must address (for example,
 	// "http://127.0.0.1:8080"). Serve derives it from the listener for ModeLocal; other deployment
 	// modes leave it empty because their origin boundary is owned by their ingress or webview.
 	UIOrigin string
@@ -475,6 +475,9 @@ func securityHeaders(next http.Handler) http.Handler {
 // Host and Origin are compared with a server-held loopback origin, never with each other: an attacker
 // can control both request values after rebinding, but cannot change the listener-derived UIOrigin.
 // Non-browser clients may omit Origin, but still have to address the exact configured Host.
+// It applies to every method, not only mutations: GET routes such as the cluster proxy, the watch
+// stream and the WebSocket multiplexer read cluster data with the user's kubeconfig credentials, so a
+// rebound page must not be able to read through them either.
 func (s *Server) originGuard(next http.Handler) http.Handler {
 	var configured *url.URL
 
@@ -485,7 +488,7 @@ func (s *Server) originGuard(next http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if !isMutating(request.Method) || s.UIOrigin == "" {
+		if s.UIOrigin == "" {
 			next.ServeHTTP(writer, request)
 
 			return

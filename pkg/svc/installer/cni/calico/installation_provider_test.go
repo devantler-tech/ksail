@@ -92,6 +92,8 @@ func expectedInstallationSpec(
 			cidr = "10.80.0.0/16"
 		}
 
+		want["flexVolumePath"] = "None"
+
 		want["calicoNetwork"] = map[string]any{
 			"linuxDataplane": "Nftables", "bgp": "Disabled",
 			"ipPools": []any{map[string]any{

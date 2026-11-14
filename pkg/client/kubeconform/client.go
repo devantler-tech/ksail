@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -265,7 +264,16 @@ type ValidationOptions struct {
 	// or URL templates) consulted after built-in Kubernetes schemas but before the
 	// CRDs-catalog. They let a repo validate CRDs that are absent from (or stale in)
 	// the catalog against a supplied schema instead of skipping the kind entirely.
+	// SchemaLocationsOnly instead selects this list without implicit locations.
 	SchemaLocations []string
+	// SchemaLocationsOnly selects exactly the supplied locations, excluding
+	// implicit built-in and catalogue registries. It does not disable transport:
+	// selected schemas and remote references must be cached for offline use.
+	SchemaLocationsOnly bool
+	// CacheDirectory selects an isolated schema cache; empty uses the shared default.
+	CacheDirectory string
+	// schemaRefresh coordinates native writes only within an explicit refresh session.
+	schemaRefresh *SchemaRefresh
 	// Strict enables strict validation mode.
 	Strict bool
 	// IgnoreMissingSchemas ignores resources with missing schemas.
@@ -279,45 +287,80 @@ type ValidationOptions struct {
 	Attribution map[string]string
 }
 
+// Refreshing reports whether these options belong to an explicit schema refresh session.
+func (opts *ValidationOptions) Refreshing() bool {
+	return opts != nil && opts.schemaRefresh != nil
+}
+
 // createValidator creates a kubeconform validator with the given options.
 func (c *Client) createValidator(opts *ValidationOptions) (validator.Validator, error) {
-	// Preserve built-in Kubernetes validation, then prefer the caller's CRD schemas
-	// over potentially older catalogue entries. Keep the catalogue as a fallback.
-	schemaLocations := make([]string, 0, builtinSchemaLocationCount+len(opts.SchemaLocations))
-	schemaLocations = append(schemaLocations, "default")
-	schemaLocations = append(schemaLocations, opts.SchemaLocations...)
-	schemaLocations = append(schemaLocations,
-		// Add Datree CRDs catalog for additional CRD schemas
-		"https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/"+
-			"{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json",
-	)
+	schemaLocations, err := validationSchemaLocations(opts)
+	if err != nil {
+		return nil, err
+	}
 
+	return c.createValidatorWithLocations(opts, schemaLocations)
+}
+
+// validationSchemaLocations preserves native order without letting an empty
+// exclusive selection silently restore the engine's implicit registries.
+func validationSchemaLocations(opts *ValidationOptions) ([]string, error) {
+	// The native engine restores defaults for an empty list. An exclusive choice
+	// must instead be explicit, including when missing schemas are normally ignored.
+	if opts.SchemaLocationsOnly {
+		if len(opts.SchemaLocations) == 0 {
+			return nil, fmt.Errorf(
+				"%w: at least one schema location is required in only mode",
+				os.ErrInvalid,
+			)
+		}
+
+		for _, location := range opts.SchemaLocations {
+			if strings.TrimSpace(location) == "" {
+				return nil, fmt.Errorf(
+					"%w: schema locations in only mode must not be blank",
+					os.ErrInvalid,
+				)
+			}
+		}
+	}
+
+	schemaLocations := make([]string, 0, builtinSchemaLocationCount+len(opts.SchemaLocations))
+	if !opts.SchemaLocationsOnly {
+		schemaLocations = append(schemaLocations, "default")
+	}
+
+	schemaLocations = append(schemaLocations, opts.SchemaLocations...)
+	if !opts.SchemaLocationsOnly {
+		schemaLocations = append(schemaLocations,
+			"https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/"+
+				"{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json",
+		)
+	}
+
+	return schemaLocations, nil
+}
+
+// createValidatorWithLocations keeps schema choice independent of the native
+// validator's cache, TLS and validation settings.
+func (c *Client) createValidatorWithLocations(
+	opts *ValidationOptions,
+	schemaLocations []string,
+) (validator.Validator, error) {
 	// Convert skip kinds to map
 	skipKinds := make(map[string]struct{})
 	for _, kind := range opts.SkipKinds {
 		skipKinds[kind] = struct{}{}
 	}
 
-	// Set up schema cache directory
-	var cacheDir string
+	cacheDir := opts.CacheDirectory
+	if cacheDir == "" {
+		cacheDir = DefaultSchemaCacheDir()
+	}
 
-	userCacheDir, userCacheDirErr := os.UserCacheDir()
-	if userCacheDirErr == nil {
-		cacheDir = filepath.Join(userCacheDir, "ksail", "kubeconform")
-
-		err := os.MkdirAll(cacheDir, schemaCacheDirPerm)
-		if err != nil {
-			return nil, fmt.Errorf("create schema cache directory: %w", err)
-		}
-	} else {
-		// Fallback: use a stable cache directory under the system temp dir to avoid leaking
-		// unique directories on every validator construction when $HOME is unavailable (e.g. CI).
-		cacheDir = filepath.Join(os.TempDir(), "ksail", "kubeconform")
-
-		err := os.MkdirAll(cacheDir, schemaCacheDirPerm)
-		if err != nil {
-			return nil, fmt.Errorf("create fallback schema cache directory: %w", err)
-		}
+	err := os.MkdirAll(cacheDir, schemaCacheDirPerm)
+	if err != nil {
+		return nil, fmt.Errorf("create schema cache directory: %w", err)
 	}
 
 	// Create validator options

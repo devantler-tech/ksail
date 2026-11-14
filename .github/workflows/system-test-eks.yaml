@@ -52,6 +52,11 @@ on:
         required: false
         type: string
         default: ""
+      capture_resource_ownership:
+        description: "Opt in to private run-owned capture and fail-closed post-cleanup verification"
+        required: false
+        type: boolean
+        default: false
   # No schedule yet: this smoke test creates billable AWS resources. Keep it
   # manual until the OIDC role and the expected spend envelope exist.
 
@@ -166,6 +171,11 @@ jobs:
     if: "!inputs.preflight_only && needs.preflight.outputs.aws-credentials == 'true'"
     permissions:
       contents: read
+    # The smoke job installs exactly this binary from the uploaded artifact. It
+    # never compiles KSail itself, so a missed cache cannot spend its budget.
+    outputs:
+      artifact-id: ${{ steps.binary-artifact.outputs.artifact-id }}
+      binary-sha256: ${{ steps.binary-checksum.outputs.binary-sha256 }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -180,14 +190,36 @@ jobs:
           cache: false
 
       - name: ♻️ Restore Go modules
-        uses: devantler-tech/ksail/.github/actions/restore-go-modules@46fdd72dff3ccc24a494508fde43426c7e65a0e3
+        uses: devantler-tech/ksail/.github/actions/restore-go-modules@93412f612d35018a21eafd7cf28b523b92f5038a
 
       - name: 📦 Cache KSail Binary
+        id: binary
         uses: ./.github/actions/cache-ksail-binary
         with:
           go-version: ${{ steps.setup-go.outputs.go-version }}
-          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
           output-path: /usr/local/bin/ksail
+
+      - name: 🔍 Seal prepared KSail binary
+        id: binary-checksum
+        env:
+          BINARY_PATH: ${{ steps.binary.outputs.binary-path }}
+        run: |
+          if [[ ! -f "$BINARY_PATH" || -L "$BINARY_PATH" || ! -s "$BINARY_PATH" ]]; then
+            echo "Missing or invalid prepared KSail binary" >&2
+            exit 1
+          fi
+          checksum=$(sha256sum "$BINARY_PATH" | cut -d ' ' -f 1)
+          echo "binary-sha256=$checksum" >> "$GITHUB_OUTPUT"
+
+      - name: 📤 Publish KSail binary
+        id: binary-artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: ksail-binary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.binary.outputs.binary-path }}
+          if-no-files-found: error
+          compression-level: 1
+          retention-days: 1
 
   smoke-test:
     name: 🧪 EKS Smoke Test
@@ -195,12 +227,16 @@ jobs:
     # Must cover the longer of two mutually exclusive paths, or a worst-case run
     # is cancelled while the always-run cleanup is still deleting the cluster.
     # The upgrade trial path (trial project, 90m trial, 21m settling step) and the
-    # ownership recovery path (5m credential refresh, 40m recovery) never run in
-    # the same job: together with the shared steps and the 45m deletion they
-    # would exceed the six-hour hosted-job limit. The ciharness tests sum each
-    # path's actual budgets, including the pre-create capacity read, plus 15m of
-    # job-level headroom and enforce the cap. The failed-create diagnostic and
-    # the success-gated upgrade trial are mutually exclusive as well.
+    # ordinary lifecycle path (45m node scaling with its pre-scale ownership
+    # capture, 5m credential refresh, 40m ownership recovery) never run in the
+    # same job: together with the shared steps, the opt-in ownership baseline,
+    # pre-delete capture and verification, and the 45m deletion they would exceed
+    # the six-hour hosted-job limit. Every ordinary dispatch covers node scaling
+    # and recovery; an upgrade trial covers the control-plane upgrade instead.
+    # The ciharness tests sum each path's actual budgets, including the pre-create
+    # capacity read, plus 15m of job-level headroom and enforce the cap. The
+    # failed-create diagnostic and the success-gated upgrade trial are mutually
+    # exclusive as well.
     timeout-minutes: 360
     needs: [preflight, build-artifact]
     if: "!inputs.preflight_only && needs.preflight.outputs.aws-credentials == 'true'"
@@ -214,6 +250,9 @@ jobs:
       AWS_DEFAULT_REGION: ${{ inputs.region }}
       KSAIL_EKS_WORKDIR: /tmp/ksail-eks-smoke-${{ github.run_id }}-${{ github.run_attempt }}
       KSAIL_EKS_CLUSTER_NAME: st-eks-${{ github.run_id }}-${{ github.run_attempt }}
+      KSAIL_EKS_EVIDENCE_DIR: /tmp/ksail-eks-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+      KSAIL_EKS_BASELINE_FILE: /tmp/ksail-eks-evidence-${{ github.run_id }}-${{ github.run_attempt }}/baseline.json
+      KSAIL_EKS_OWNERSHIP_FILE: /tmp/ksail-eks-evidence-${{ github.run_id }}-${{ github.run_attempt }}/ownership.json
     steps:
       - name: 📄 Checkout
         timeout-minutes: 5
@@ -266,14 +305,30 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      - name: 📦 Cache KSail Binary
-        timeout-minutes: 10
-        uses: ./.github/actions/cache-ksail-binary
+      # Install the build job's exact binary. A missing or mismatched handoff
+      # fails here in seconds, naming the producer artifact, instead of
+      # recompiling KSail into this step's budget after a missed cache.
+      - name: 📥 Restore KSail binary
+        timeout-minutes: 5
+        # Pin the identical published action until actionlint supports $/ references.
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@1ede3ba954c719fd3b50362e29bd22cc30d6ff15
         with:
-          go-version: ${{ steps.setup-go.outputs.go-version }}
-          source-hash: ${{ hashFiles('go.mod', 'go.sum', '**/*.go') }}
-          output-path: /usr/local/bin/ksail
-          save: "false"
+          artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
+          binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
+
+      - name: 🔎 Capture EKS regional baseline
+        if: inputs.capture_resource_ownership
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -m 700 "$KSAIL_EKS_EVIDENCE_DIR"
+          "$GITHUB_WORKSPACE/.github/scripts/report-eks-account-capacity.sh" \
+            --region "$AWS_REGION" --baseline-file "$KSAIL_EKS_BASELINE_FILE" \
+            --cluster-name "$KSAIL_EKS_CLUSTER_NAME" --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" --source-sha "$GITHUB_SHA"
+          test -s "$KSAIL_EKS_BASELINE_FILE"
+          test "$(stat -c '%a' "$KSAIL_EKS_BASELINE_FILE")" = 600
 
       - name: 📥 Install eksctl
         timeout-minutes: 10
@@ -403,10 +458,15 @@ jobs:
         # Must exceed this step's own worst case, or the step timeout fires first
         # and masks the diagnostic wait_for_capacity would have printed. Budget:
         # wait_for_capacity polls 30 x 20s = 10m and runs twice (20m), leaving 20m
-        # for the two `ksail cluster update` invocations and the identity asserts.
-        # The harness test caps this step at 47m via the post-refresh budget.
-        timeout-minutes: 40
+        # for the two `ksail cluster update` invocations and the identity asserts,
+        # plus a separately bounded 5m ownership capture before scale-down.
+        # The harness test caps this step at 52m via the post-refresh budget.
+        # An upgrade trial skips it so its path fits the hosted-job limit.
+        if: inputs.upgrade_from_version == ''
+        timeout-minutes: 45
         shell: bash
+        env:
+          CAPTURE_RESOURCE_OWNERSHIP: ${{ inputs.capture_resource_ownership }}
         run: |
           set -euo pipefail
           cd "$KSAIL_EKS_WORKDIR"
@@ -532,6 +592,15 @@ jobs:
           assert_same_cluster "$cluster_identity"
           assert_same_nodegroup "$nodegroup_identity"
 
+          if [[ "${CAPTURE_RESOURCE_OWNERSHIP:-false}" == "true" ]]; then
+            timeout --kill-after=10s 5m \
+              "$GITHUB_WORKSPACE/.github/scripts/report-eks-account-capacity.sh" \
+                --region "$AWS_REGION" --baseline-file "$KSAIL_EKS_BASELINE_FILE" \
+                --ownership-file "$KSAIL_EKS_OWNERSHIP_FILE" \
+                --cluster-name "$KSAIL_EKS_CLUSTER_NAME" --run-id "$GITHUB_RUN_ID" \
+                --run-attempt "$GITHUB_RUN_ATTEMPT" --source-sha "$GITHUB_SHA"
+          fi
+
           set_nodegroup_capacity 1 1 1
           ksail cluster update --yes
           wait_for_capacity 1 1 1 1
@@ -610,8 +679,43 @@ jobs:
             echo "::error::EKS ownership recovery failed."
             exit 1
           fi
+
+          read_capacity() {
+            timeout 20s eksctl get nodegroup --cluster "$KSAIL_EKS_CLUSTER_NAME" \
+              --region "$AWS_REGION" --output json |
+              jq -ce '
+                select(type == "array" and length > 0 and all(.[];
+                  .Status == "ACTIVE" and
+                  (.Name | type == "string" and length > 0) and
+                  ([(.DesiredCapacity), (.MinSize), (.MaxSize)] |
+                    all(.[]; type == "number" and . >= 0 and . == floor)) and
+                  .MaxSize > 0 and .MinSize <= .DesiredCapacity and .DesiredCapacity <= .MaxSize)) |
+                map({Name, DesiredCapacity, MinSize, MaxSize}) |
+                sort_by(.Name) |
+                select((map(.Name) | unique | length) == length)'
+          }
+
+          wait_for_recovery_capacity() {
+            local expected="$1" phase="$2" actual
+            local deadline=$((SECONDS + 600))
+            while ((SECONDS < deadline)); do
+              if actual="$(read_capacity)" && [[ "$actual" == "$expected" ]]; then
+                echo "EKS managed nodegroup capacities verified after $phase."
+                return 0
+              fi
+              sleep 20
+            done
+            echo "::error::EKS managed nodegroup capacities did not match after $phase."
+            return 1
+          }
+
+          saved_capacity="$(read_capacity)"
+          jq -e 'any(.[]; .DesiredCapacity > 0)' <<< "$saved_capacity" >/dev/null
+          stopped_capacity="$(jq -c 'map(.DesiredCapacity = 0 | .MinSize = 0)' <<< "$saved_capacity")"
           ksail cluster stop --name "$KSAIL_EKS_CLUSTER_NAME" --provider AWS
+          wait_for_recovery_capacity "$stopped_capacity" stop
           ksail cluster start --name "$KSAIL_EKS_CLUSTER_NAME" --provider AWS
+          wait_for_recovery_capacity "$saved_capacity" start
           actual_identity="$(aws eks describe-cluster \
             --name "$KSAIL_EKS_CLUSTER_NAME" --region "$AWS_REGION" \
             --query 'cluster.[arn,createdAt]' --output text)"
@@ -635,6 +739,48 @@ jobs:
         timeout-minutes: 21
         shell: bash
         run: timeout 20m bash .github/scripts/eks-upgrade-trial.sh --wait-before-cleanup
+      - name: 🔎 Preserve EKS ownership before cleanup
+        if: always() && inputs.capture_resource_ownership && steps.create.outputs.attempted == 'true'
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(
+            --region "$AWS_REGION" --baseline-file "$KSAIL_EKS_BASELINE_FILE"
+            --ownership-file "$KSAIL_EKS_OWNERSHIP_FILE"
+            --cluster-name "$KSAIL_EKS_CLUSTER_NAME" --run-id "$GITHUB_RUN_ID"
+            --run-attempt "$GITHUB_RUN_ATTEMPT" --source-sha "$GITHUB_SHA"
+          )
+
+          workload_complete=false
+          services=""
+          volumes=""
+          if services="$(kubectl get services --all-namespaces -o json 2>/dev/null)" &&
+             volumes="$(kubectl get persistentvolumes -o json 2>/dev/null)"; then
+            load_balancers="$(jq -ce '[
+              .items[].status.loadBalancer.ingress[]?.hostname | strings
+            ] | unique' <<< "$services")"
+            volume_ids="$(jq -ce '[
+              .items[].spec.csi.volumeHandle? |
+              select(type == "string" and test("^vol-[0-9a-f]{17}$"))
+            ] | unique' <<< "$volumes")"
+            while IFS= read -r identity; do
+              args+=(--load-balancer-host "$identity")
+            done < <(jq -r '.[]' <<< "$load_balancers")
+            while IFS= read -r identity; do
+              args+=(--volume-id "$identity")
+            done < <(jq -r '.[]' <<< "$volume_ids")
+            args+=(--workload-inventory-complete)
+            workload_complete=true
+          else
+            echo "::warning::Kubernetes workload ownership inventory is unavailable."
+          fi
+
+          status=0
+          "$GITHUB_WORKSPACE/.github/scripts/report-eks-account-capacity.sh" "${args[@]}" || status=$?
+          if [[ "$workload_complete" != "true" || "$status" -ne 0 ]]; then
+            exit 1
+          fi
 
       - name: 🧹 Delete EKS smoke cluster
         if: always()
@@ -648,3 +794,35 @@ jobs:
             --region "$AWS_REGION" \
             --workdir "$KSAIL_EKS_WORKDIR" \
             --create-attempted "${EKS_CREATE_ATTEMPTED:-false}"
+
+      - name: 🔎 Verify EKS cleanup from private ownership
+        if: always() && inputs.capture_resource_ownership
+        timeout-minutes: 5
+        shell: bash
+        env:
+          EKS_CREATE_OUTCOME: ${{ steps.create.outcome }}
+          EKS_CREATE_ATTEMPTED: ${{ steps.create.outputs.attempted }}
+        run: |
+          set -euo pipefail
+          # Only a create step that never ran proves this attempt created nothing
+          # in AWS. Say that plainly rather than reporting an unknown ownership
+          # record. Any create that started, or any recorded ownership, is
+          # verified in full and fails closed.
+          if [[ "$EKS_CREATE_OUTCOME" == "skipped" && -z "$EKS_CREATE_ATTEMPTED" &&
+                ! -e "$KSAIL_EKS_OWNERSHIP_FILE" ]]; then
+            echo "cleanup-verdict=not-started reason=create-not-attempted"
+            echo "::notice::The run stopped before cluster create, so it created no EKS resources and has no ownership record to verify."
+            exit 0
+          fi
+          "$GITHUB_WORKSPACE/.github/scripts/report-eks-account-capacity.sh" \
+            --region "$AWS_REGION" --verify-ownership-file "$KSAIL_EKS_OWNERSHIP_FILE" \
+            --cluster-name "$KSAIL_EKS_CLUSTER_NAME" --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" --source-sha "$GITHUB_SHA"
+
+      - name: 🧽 Remove private EKS evidence
+        if: always()
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          rm -f -- "$KSAIL_EKS_BASELINE_FILE" "$KSAIL_EKS_OWNERSHIP_FILE"
+          rmdir "$KSAIL_EKS_EVIDENCE_DIR" 2>/dev/null || true

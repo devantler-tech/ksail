@@ -1,17 +1,26 @@
 #!/usr/bin/env bash
 # Complete a generated cask release by a direct, verified-head squash merge.
 set -euo pipefail
+# Exit 75 records bounded readiness/evidence unavailability. No write is authorized
+# by that outcome; callers must report pending and revalidate on a later attempt.
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 tap="" pr="" name="" tag="" source_repo="devantler-tech/ksail"
 attempts=30 interval=10
+checks_wait=3600
+checks_deadline="${KSAIL_CASK_CHECK_DEADLINE:-}"
+verify_merged=false
 # Describe the fixed release identity and bounded wait arguments accepted by this command.
 usage() {
-	printf 'Usage: finish-cask-pr-handoff.sh --tap OWNER/REPO --pr NUMBER --cask-name NAME --tag TAG [--source-repo OWNER/REPO] [--attempts 1..30] [--interval 0..10]\n' >&2
+	printf 'Usage: finish-cask-pr-handoff.sh --tap OWNER/REPO --pr NUMBER --cask-name NAME --tag TAG [--source-repo OWNER/REPO] [--attempts 1..30] [--interval 0..10] [--checks-wait 1..3600] [--verify-merged]\n' >&2
 }
 while (($#)); do
 	case "$1" in
-	--tap | --pr | --cask-name | --tag | --source-repo | --attempts | --interval)
+	--verify-merged)
+		verify_merged=true
+		shift
+		;;
+	--tap | --pr | --cask-name | --tag | --source-repo | --attempts | --interval | --checks-wait)
 		[[ $# -ge 2 ]] || {
 			usage
 			exit 2
@@ -19,6 +28,7 @@ while (($#)); do
 		case "$1" in
 		--tap) tap="$2" ;; --pr) pr="$2" ;; --cask-name) name="$2" ;; --tag) tag="$2" ;;
 		--source-repo) source_repo="$2" ;; --attempts) attempts="$2" ;; --interval) interval="$2" ;;
+		--checks-wait) checks_wait="$2" ;;
 		esac
 		shift 2
 		;;
@@ -31,7 +41,9 @@ done
 if [[ "${tap}" != devantler-tech/homebrew-tap || "${source_repo}" != devantler-tech/ksail ||
 	! "${pr}" =~ ^[1-9][0-9]*$ || ! "${name}" =~ ^ksail(-desktop)?$ ||
 	! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ||
-	! "${attempts}" =~ ^([1-9]|[12][0-9]|30)$ || ! "${interval}" =~ ^([0-9]|10)$ ]]; then
+	! "${attempts}" =~ ^([1-9]|[12][0-9]|30)$ || ! "${interval}" =~ ^([0-9]|10)$ ||
+	! "${checks_wait}" =~ ^[1-9][0-9]{0,3}$ || "${checks_wait}" -gt 3600 ||
+	(-n "${checks_deadline}" && ! "${checks_deadline}" =~ ^[1-9][0-9]{0,9}$) ]]; then
 	usage
 	exit 2
 fi
@@ -51,16 +63,31 @@ cleanup() {
 	exit "${code}"
 }
 trap cleanup EXIT
+export KSAIL_CASK_READ_RECOVERY_MARKER="${work}/read-recoveries"
+: >"$KSAIL_CASK_READ_RECOVERY_MARKER"
 head="" base="" draft="" node="" boundary="" merge_state=""
 # Report a refusal without converting missing or invalid evidence into delivery success.
 blocked() { printf 'BLOCKED: %s\n' "$1" >&2; }
 
+# Public evidence reads use the workflow's independently scoped allowance.
+read_api() { "${script_dir}/cask-read-api.sh" "$@"; }
+# The production caller binds all write waits to one shared, finite window.
+wait_write_budget() {
+	if [[ -n "${KSAIL_GITHUB_WRITE_BUDGET_DEADLINE:-}" ]]; then
+		local readiness_status=0
+		screen || readiness_status=$?
+		case "${readiness_status}" in
+		0 | 3) ;; # Ready or still pending; terminal failures must not wait for quota.
+		*) return "${readiness_status}" ;;
+		esac
+		"${script_dir}/wait-for-github-api-budget.sh" || return 75
+	fi
+	wait_screen "$1"
+}
+
 # Require the requested source tag to identify a published, non-draft release.
 published_release() {
-	if ! gh api "repos/${source_repo}/releases/tags/${tag}" >"${work}/release.json"; then
-		blocked 'release read failed; publication is unknown'
-		return 1
-	fi
+	read_api "repos/${source_repo}/releases/tags/${tag}" >"${work}/release.json" || return "$?"
 	if ! jq -e --arg tag "${tag}" --slurpfile evidence "${work}/evidence.json" '
 	 type == "object" and .tag_name == $tag and .draft == false
 	 and (.published_at | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T"))
@@ -76,10 +103,7 @@ published_release() {
 # These identities/messages mirror the canonical monorepo programmed-bot exemption's cask arm.
 # Admit only the programmed cask updater's expected author and commit sequence.
 provenance() {
-	if ! gh api --paginate --slurp "repos/${tap}/pulls/${pr}/commits?per_page=100" >"${work}/commits.json"; then
-		blocked 'commit provenance read failed'
-		return 1
-	fi
+	read_api --paginate --slurp "repos/${tap}/pulls/${pr}/commits?per_page=100" >"${work}/commits.json" || return "$?"
 	if ! jq -e --arg head "${head}" --arg component "${name}" --arg tag "${tag}" '
 	 def generator:
 	   .author.login == "goreleaserbot" and .committer.login == "goreleaserbot"
@@ -106,10 +130,7 @@ provenance() {
 
 # Verify the captured PR identity and metadata still describe the same head and base.
 rebind_rest() {
-	if ! gh api "repos/${tap}/pulls/${pr}" >"${work}/rebound-pr.json"; then
-		blocked 'PR rebind read failed'
-		return 1
-	fi
+	read_api "repos/${tap}/pulls/${pr}" >"${work}/rebound-pr.json" || return "$?"
 	if ! jq -e --slurpfile prior "${work}/evidence.json" '
 	 def identity: [.state,.draft,.user.login,.head.sha,.head.ref,.head.repo.full_name,
 	   .base.sha,.base.ref,.title,(.labels|map(.name)|sort)];
@@ -122,11 +143,9 @@ rebind_rest() {
 
 # Collect and validate release contents, then capture the identity used by every later gate.
 capture() {
-	if ! "${script_dir}/collect-cask-pr-handoff.sh" --tap "${tap}" --pr "${pr}" \
-		--source-repo "${source_repo}" --tag "${tag}" --output "${work}/evidence.json"; then
-		blocked 'cask handoff collection failed'
-		return 1
-	fi
+	local collect_args=(--tap "${tap}" --pr "${pr}" --source-repo "${source_repo}" --tag "${tag}" --output "${work}/evidence.json")
+	[[ "${verify_merged}" != true ]] || collect_args+=(--include-main)
+	"${script_dir}/collect-cask-pr-handoff.sh" "${collect_args[@]}" || return "$?"
 	local captured_head captured_base captured_draft
 	if ! captured_head="$(jq -er '.pr.head.sha | select(test("^[0-9a-f]{40}$"))' "${work}/evidence.json")" ||
 		! captured_base="$(jq -er '.pr.base.sha | select(test("^[0-9a-f]{40}$"))' "${work}/evidence.json")" ||
@@ -139,11 +158,17 @@ capture() {
 		return 1
 	fi
 	head="${captured_head}" base="${captured_base}" draft="${captured_draft}"
-	local args=(--evidence "${work}/evidence.json" --tap "${tap}" --cask-name "${name}" --tag "${tag}" --source-repo "${source_repo}" --prepared)
-	[[ "${draft}" == true ]] || args+=(--ready)
-	if ! "${script_dir}/validate-cask-pr-handoff.sh" "${args[@]}" || ! published_release || ! provenance || ! rebind_rest; then
-		return 1
+	local args=(--evidence "${work}/evidence.json" --tap "${tap}" --cask-name "${name}" --tag "${tag}" --source-repo "${source_repo}")
+	if [[ "${verify_merged}" == true ]]; then
+		args+=(--merged)
+	else
+		args+=(--prepared)
+		[[ "${draft}" == true ]] || args+=(--ready)
 	fi
+	"${script_dir}/validate-cask-pr-handoff.sh" "${args[@]}" || return "$?"
+	published_release || return "$?"
+	provenance || return "$?"
+	rebind_rest
 }
 
 # Fetch one readiness page and reject API failures, GraphQL errors, or a missing PR.
@@ -159,10 +184,7 @@ graphql() {
 			gql_args+=(-f "cursor=${cursor}")
 		fi
 	fi
-	if ! gh api graphql "${gql_args[@]}" >"${work}/graphql.json"; then
-		blocked 'GraphQL read failed; readiness is unknown'
-		return 1
-	fi
+	read_api graphql "${gql_args[@]}" >"${work}/graphql.json" || return "$?"
 	if ! jq -e '(.errors == null or .errors == []) and (.data.repository.pullRequest | type == "object")' \
 		"${work}/graphql.json" >/dev/null; then
 		blocked 'GraphQL returned incomplete or erroneous evidence'
@@ -180,7 +202,7 @@ state_query='query CaskState($owner:String!,$name:String!,$number:Int!) {
  } } }'
 # Recheck exact-head mergeability, review state, and the absence of armed auto-merge.
 read_state() {
-	if ! graphql "${state_query}"; then return 1; fi
+	graphql "${state_query}" || return "$?"
 	if ! jq -e --arg head "${head}" --arg base "${base}" --arg tap "${tap}" --arg branch "goreleaser/${name}" --argjson pr "${pr}" '
 	 .data.repository.pullRequest |
 	 .number == $pr and .state == "OPEN" and (.isDraft | type == "boolean")
@@ -194,10 +216,6 @@ read_state() {
 		blocked 'PR identity, head/base, review, or unarmed state changed'
 		return 1
 	fi
-	if ! jq -e '.data.repository.pullRequest.mergeable == "MERGEABLE"' "${work}/graphql.json" >/dev/null; then
-		blocked 'PR is not demonstrably mergeable'
-		return 1
-	fi
 	if [[ "${draft}" == true ]]; then
 		if ! jq -e '.data.repository.pullRequest.isDraft == true' "${work}/graphql.json" >/dev/null; then return 1; fi
 	else
@@ -205,6 +223,23 @@ read_state() {
 	fi
 	if ! node="$(jq -er '.data.repository.pullRequest.id' "${work}/graphql.json")" ||
 		! merge_state="$(jq -er '.data.repository.pullRequest.mergeStateStatus | select(type == "string")' "${work}/graphql.json")"; then return 1; fi
+	case "$(jq -r '.data.repository.pullRequest.mergeable' "${work}/graphql.json")" in
+	MERGEABLE) return 0 ;;
+	UNKNOWN) return 3 ;;
+	*)
+		blocked 'PR is not demonstrably mergeable'
+		return 1
+		;;
+	esac
+}
+
+# Only an unknown mergeability computation becomes pending at a mutation gate.
+# Conflicts, identity changes and malformed responses retain their refusal.
+require_settled_state() {
+	local status=0
+	read_state || status=$?
+	if [[ "$status" -eq 3 ]]; then return 75; fi
+	return "$status"
 }
 
 # shellcheck disable=SC2016 # Literal GraphQL variables.
@@ -246,7 +281,7 @@ connection() {
 	esac
 	printf '[]\n' >"${work}/${kind}.json"
 	for ((page = 0; page < 20; page++)); do
-		if ! graphql "${query}" "${cursor}"; then return 1; fi
+		graphql "${query}" "${cursor}" || return "$?"
 		if ! jq -e --arg head "${head}" --arg base "${base}" '
 		 .data.repository.pullRequest | .headRefOid == $head and .baseRefOid == $base
 		' "${work}/graphql.json" >/dev/null; then
@@ -296,7 +331,12 @@ connection() {
 
 # Return success only for complete review/check evidence; return 3 while valid checks settle.
 screen() {
-	if ! read_state || ! connection checks || ! connection threads || ! connection reviews; then return 1; fi
+	local state_status=0
+	read_state || state_status=$?
+	if [[ "$state_status" -ne 0 && "$state_status" -ne 3 ]]; then return "$state_status"; fi
+	connection checks || return "$?"
+	connection threads || return "$?"
+	connection reviews || return "$?"
 	if ! jq -e 'all(.[]; (.isResolved | type == "boolean") and .isResolved == true)' "${work}/threads.json" >/dev/null ||
 		! jq -e 'all(.[]; .state as $state | (["APPROVED","COMMENTED","DISMISSED"] | index($state)) != null)' "${work}/reviews.json" >/dev/null; then
 		blocked 'unresolved threads or negative/incomplete review evidence'
@@ -377,32 +417,149 @@ screen() {
 		' "${work}/checks.json" >/dev/null; then return 3; fi
 		if [[ "${merge_state}" != CLEAN ]]; then return 3; fi
 	fi
-	return 0
+	return "$state_status"
 }
 
-# Give each readiness phase its own wait budget; terminal refusals never consume retry loops.
+# Read the clock without granting more time when the release deadline is unknown.
+check_clock() {
+	local now
+	if ! now="$(date +%s)" || [[ ! "${now}" =~ ^[1-9][0-9]{0,9}$ ]]; then
+		blocked 'could not read the check readiness clock'
+		return 1
+	fi
+	printf '%s\n' "${now}"
+}
+
+# Runner queue time can exceed a five-minute merge-result poll. Use a separate
+# wall-clock bound for checks, capped across both casks by the release job.
 wait_screen() {
-	local code remaining="${attempts}"
-	while ((remaining > 0)); do
+	local phase="$1" started now deadline code poll waiting=false
+	started="$(check_clock)" || return 1
+	now="${started}"
+	deadline=$((started + checks_wait))
+	if [[ -n "${checks_deadline}" ]] && ((checks_deadline < deadline)); then
+		deadline="${checks_deadline}"
+	fi
+	# Reads and write-budget rechecks during polling share this phase's deadline.
+	if [[ -n "${KSAIL_GITHUB_WRITE_BUDGET_DEADLINE:-}" ]] && ((KSAIL_GITHUB_WRITE_BUDGET_DEADLINE > deadline)); then
+		local -x KSAIL_GITHUB_WRITE_BUDGET_DEADLINE="${deadline}"
+	fi
+	while ((now < deadline)); do
 		code=0
 		screen || code=$?
+		if [[ "${code}" -eq 0 && -n "${KSAIL_GITHUB_WRITE_BUDGET_DEADLINE:-}" ]]; then
+			# Pending checks can outlive the earlier quota observation. Recheck
+			# capacity when they settle, then refresh readiness after any quota
+			# wait without granting this phase another retry budget.
+			"${script_dir}/wait-for-github-api-budget.sh" || return 75
+			now="$(check_clock)" || return 1
+			if ((now >= deadline)); then break; fi
+			screen || code=$?
+		fi
+		now="$(check_clock)" || return 1
 		case "${code}" in
-		0) return 0 ;;
-		3)
-			remaining=$((remaining - 1))
-			if ((remaining > 0)); then sleep "${interval}"; fi
+		0)
+			if ((now >= deadline)); then break; fi
+			if [[ "${waiting}" == true ]]; then
+				printf '%s checks settled after %s seconds for %s#%s\n' "${phase}" "$((now - started))" "${tap}" "${pr}"
+			fi
+			return 0
 			;;
-		*) return 1 ;;
+		3)
+			# Leave one second for a final poll without crossing the deadline.
+			poll=$((deadline - now - 1))
+			if ((poll <= 0)); then break; fi
+			if ((poll > 30)); then poll=30; fi
+			if [[ "${waiting}" == false ]]; then
+				printf 'Waiting for %s checks for %s#%s, up to %s seconds\n' "${phase}" "${tap}" "${pr}" "$((deadline - now))"
+				waiting=true
+			fi
+			sleep "${poll}" || return 1
+			now="$(check_clock)" || return 1
+			;;
+		*) return "${code}" ;;
 		esac
 	done
-	blocked 'required checks or the actual online audit did not settle within the wait bound'
-	return 1
+	blocked "required checks or the actual online audit did not settle within the wait bound (${phase}, $((now - started))s elapsed)"
+	return 75
+}
+
+# Verify every gate without adding a readiness retry phase.
+complete_readiness() {
+	local screen_status=0
+	capture || return "$?"
+	screen || screen_status=$?
+	if [[ "$screen_status" -eq 3 ]]; then
+		blocked 'required checks or the online audit are pending during final verification'
+		return 75
+	fi
+	[[ "$screen_status" -eq 0 ]] || return "$screen_status"
+	require_settled_state || return "$?"
+	rebind_rest || return "$?"
+	published_release || return "$?"
+	if [[ "$1" == merge && "$merge_state" != CLEAN ]]; then return 1; fi
+}
+
+# Preserve the original phase and its retries. A recovered read requires one
+# complete fresh pass; another recovery during that pass refuses the mutation.
+stable_mutation_gate() {
+	local phase="$1" before after
+	before="$(wc -c <"$KSAIL_CASK_READ_RECOVERY_MARKER")" || return 1
+	wait_write_budget "${phase}" || return "$?"
+	if [[ "$phase" == promotion ]]; then
+		capture || return "$?"
+		require_settled_state || return "$?"
+	else
+		complete_readiness "$phase" || return "$?"
+	fi
+	after="$(wc -c <"$KSAIL_CASK_READ_RECOVERY_MARKER")" || return 1
+	if [[ "$before" -eq "$after" ]]; then return 0; fi
+	printf 'Recovered read invalidated the snapshot; rechecking every delivery gate.\n' >&2
+	if [[ -n "${KSAIL_GITHUB_WRITE_BUDGET_DEADLINE:-}" ]]; then
+		"${script_dir}/wait-for-github-api-budget.sh" || return 75
+	fi
+	before="$(wc -c <"$KSAIL_CASK_READ_RECOVERY_MARKER")" || return 1
+	complete_readiness "$phase" || return "$?"
+	after="$(wc -c <"$KSAIL_CASK_READ_RECOVERY_MARKER")" || return 1
+	if [[ "$before" -ne "$after" ]]; then
+		blocked 'read recovery repeated during final verification; reevaluation is required'
+		return 1
+	fi
+}
+
+# The promotion mutation can confirm ready before REST exposes that state.
+# Allow a bounded read-only wait on the same open PR, head and base before
+# starting the existing full post-promotion validation.
+wait_promotion_readback() {
+	local remaining=3 observed
+	while ((remaining > 0)); do
+		read_api "repos/${tap}/pulls/${pr}" >"${work}/promotion-readback.json" || return "$?"
+		if ! observed="$(jq -er --arg head "${head}" --arg base "${base}" '
+		  select(.state == "open" and .head.sha == $head and .base.sha == $base)
+		  | .draft | select(type == "boolean") | tostring' "${work}/promotion-readback.json")"; then
+			blocked 'promotion readback failed or PR identity changed'
+			return 1
+		fi
+		if [[ "${observed}" == false ]]; then return 0; fi
+		remaining=$((remaining - 1))
+		if ((remaining > 0)); then sleep "${interval}"; fi
+	done
+	blocked 'REST still shows draft after confirmed promotion; reevaluation is required'
+	return 75
 }
 
 capture
-wait_screen
-capture
-read_state
+if [[ "${verify_merged}" == true ]]; then
+	# The provenance and publication reads follow the collector's main snapshot.
+	# Rebind it once more before accepting a late delivery as current.
+	read_api "repos/${tap}/git/ref/heads/main" >"${work}/final-main.json"
+	jq -e --slurpfile evidence "${work}/evidence.json" \
+		'.object.sha == $evidence[0].mainRef.sha' "${work}/final-main.json" >/dev/null
+	handoff_delivered=true
+	printf 'PASS: %s#%s merged cask %s is verified for %s at %s\n' "${tap}" "${pr}" "${name}" "${tag}" "${head}"
+	exit 0
+fi
+stable_mutation_gate promotion
 if [[ "${draft}" == true ]]; then
 	boundary="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 	if [[ ! "${boundary}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
@@ -417,10 +574,9 @@ if [[ "${draft}" == true ]]; then
 		exit 1
 	fi
 	draft=false
+	wait_promotion_readback
 fi
-wait_screen
-capture
-if ! screen || ! read_state || [[ "${merge_state}" != CLEAN ]] || ! rebind_rest || ! published_release; then exit 1; fi
+stable_mutation_gate merge
 
 # The async API provides the explicit non-bypass contract the synchronous merge endpoint lacks
 # for privileged actors. Accepted requests are not delivery; only the merged result and exact
@@ -471,14 +627,15 @@ merge_result() {
 			fi
 			if ((polls >= attempts)); then
 				blocked 'asynchronous merge result did not settle within its independent poll bound'
-				return 1
+				return 75
 			fi
 			if ((polls > 0)); then sleep "${interval}"; fi
+			# GitHub requires Contents:write for this result read as well as the request.
 			if ! gh api "${endpoint}/${merge_uuid}" \
 				-H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2026-03-10' \
 				>"${work}/merge.json"; then
 				blocked 'asynchronous merge result read failed; delivery is unknown'
-				return 1
+				return 75
 			fi
 			polls=$((polls + 1))
 			;;
@@ -490,8 +647,8 @@ merge_result() {
 	done
 }
 merge_result
-if ! gh api "repos/${tap}/pulls/${pr}" >"${work}/merged-pr.json" ||
-	! jq -e --arg head "${head}" --arg sha "${merge_sha}" '
+read_api "repos/${tap}/pulls/${pr}" >"${work}/merged-pr.json" || exit "$?"
+if ! jq -e --arg head "${head}" --arg sha "${merge_sha}" '
 	 .state == "closed" and .merged == true and .draft == false
 	 and .head.sha == $head and .merge_commit_sha == $sha
 	 and (.merged_at | type == "string" and length > 0)

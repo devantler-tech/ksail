@@ -12,7 +12,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
-	k3dtypes "github.com/k3d-io/k3d/v5/pkg/config/types"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -32,7 +31,7 @@ func newFullyPopulatedFactoryContext() *localregistry.Context {
 		ClusterCfg: &v1alpha1.Cluster{},
 		KindConfig: &kindv1alpha4.Cluster{Name: name},
 		K3dConfig: &k3dv1alpha5.SimpleConfig{
-			ObjectMeta: k3dtypes.ObjectMeta{Name: name},
+			Name: name,
 		},
 		TalosConfig:    &talosconfigmanager.Configs{Name: name},
 		VClusterConfig: &clusterprovisioner.VClusterConfig{Name: name},
