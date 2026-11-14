@@ -132,7 +132,7 @@ golangci-lint run --build-tags desktop ./desktop/...  # native lint
 
 Linux requires GTK4 and WebKitGTK 6.0 development packages; macOS requires Xcode
 command line tools. Desktop CI runs native tests on Linux, macOS and Windows and checks the
-macOS app/cask packaging.
+macOS app packaging.
 
 ### Test
 
@@ -433,7 +433,7 @@ The workflow also sets **`KSAIL_SPEC_CLUSTER_OMNI_MACHINECLASS`** to `ksail` via
 The release process for KSail is fully automated and split across two GitHub Actions workflows:
 
 1. **Release** (`.github/workflows/release.yaml`) runs on pushes to `main` and creates the next semantic version tag (`vX.Y.Z`) based on Conventional Commits (typically the PR title / squash-merge commit message).
-2. **CD** (`.github/workflows/cd.yaml`) runs on tag pushes (`v*`) and uses **GoReleaser** to build and publish release artifacts, followed by MCP registry publishing, documentation deployment to GitHub Pages, VSCode extension publishing, and a Homebrew tap PR.
+2. **CD** (`.github/workflows/cd.yaml`) runs on tag pushes (`v*`) and uses **GoReleaser** to build and publish release artifacts, followed by MCP registry publishing, documentation deployment to GitHub Pages, and VSCode extension publishing.
 
 Versioning conventions:
 
@@ -452,7 +452,7 @@ The CD workflow implements an atomic publication strategy to ensure users never 
    - Docker images published to GHCR
    - Generated changelog from commit history
 
-   GoReleaser also opens a separate draft PR to update the Homebrew cask in [`devantler-tech/homebrew-tap`](https://github.com/devantler-tech/homebrew-tap) (branch: `goreleaser/ksail`).
+   CD writes nothing to the Homebrew tap. [`devantler-tech/homebrew-tap`](https://github.com/devantler-tech/homebrew-tap) bumps its `ksail` and `ksail-desktop` casks itself once the release is published.
 
 2. **Other artifacts**: Separate jobs build the VSCode extension and the desktop apps, which are attached to the same draft release. Two more jobs publish the operator chart to the container registry and build the documentation site for GitHub Pages; they are not attached to the release, but publication waits for them too.
 
