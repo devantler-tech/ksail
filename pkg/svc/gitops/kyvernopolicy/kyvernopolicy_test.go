@@ -228,3 +228,33 @@ func TestDecodePolicy_RejectsUnknownField(t *testing.T) {
 func sprintf(format string, args ...any) string {
 	return fmt.Sprintf(format, args...)
 }
+
+func TestIsClusterScopedPolicy(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		apiVersion string
+		kind       string
+		want       bool
+	}{
+		"ClusterPolicy":    {"kyverno.io/v1", "ClusterPolicy", true},
+		"ValidatingPolicy": {"policies.kyverno.io/v1", "ValidatingPolicy", true},
+		"Policy":           {"kyverno.io/v1", "Policy", false},
+		"NamespacedValidatingPolicy": {
+			"policies.kyverno.io/v1",
+			"NamespacedValidatingPolicy",
+			false,
+		},
+		"foreign ClusterPolicy": {"example.com/v1", "ClusterPolicy", false},
+		"ConfigMap":             {"v1", "ConfigMap", false},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			doc := map[string]any{"apiVersion": test.apiVersion, "kind": test.kind}
+			assert.Equal(t, test.want, kyvernopolicy.IsClusterScopedPolicy(doc))
+		})
+	}
+}

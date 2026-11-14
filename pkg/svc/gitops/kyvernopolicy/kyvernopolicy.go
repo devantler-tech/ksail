@@ -595,3 +595,15 @@ func labelFreeFilters(filters kyvernov1.ResourceFilters) kyvernov1.ResourceFilte
 
 	return kept
 }
+
+// IsClusterScopedPolicy reports whether doc is a cluster-scoped Kyverno policy
+// this package evaluates: a kyverno.io ClusterPolicy or a policies.kyverno.io
+// ValidatingPolicy. Such a policy governs every namespace, so it applies to a
+// document whichever kustomization renders the two. A namespaced Policy or
+// NamespacedValidatingPolicy is not one.
+func IsClusterScopedPolicy(doc map[string]any) bool {
+	kind, _ := doc["kind"].(string)
+
+	return (IsPolicy(doc) && kind == kindClusterPolicy) ||
+		(IsValidatingPolicy(doc) && kind == kindValidatingPolicy)
+}
