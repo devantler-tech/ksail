@@ -1156,7 +1156,7 @@ runs:
 
     - name: 🧪 ksail cluster update — load balancers off then on
       id: cluster-update-load-balancer-toggle
-      if: inputs.provider == 'Hetzner' && inputs.distribution == 'Talos' && inputs.load-balancer-toggle == 'true'
+      if: inputs.provider == 'Hetzner' && inputs.distribution == 'Talos' && inputs.init == 'true' && inputs.load-balancer-toggle == 'true'
       shell: bash
       env:
         DISTRIBUTION: ${{ inputs.distribution }}
@@ -1169,7 +1169,7 @@ runs:
         # cloud controller's service controller off, and switching them back on must
         # restore it, each leaving nothing for a dry run to change.
         LOG_DIR="/tmp/ksail-system-test-logs"
-        UPDATE_ARGS=$(echo "$ARGS" | sed 's/--image-verification [^ ]*//')
+        UPDATE_ARGS=$(echo "$ARGS" | sed -e 's/--image-verification [^ ]*//' -e 's/--load-balancer[ =][^ ]*//')
         ccm_command() {
           kubectl -n kube-system get deployments,daemonsets -o json |
             jq -r '[.items[] | select(.metadata.name == "hcloud-cloud-controller-manager")

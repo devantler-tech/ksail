@@ -57,6 +57,39 @@ func TestHetznerLoadBalancerToggleIsOptIn(t *testing.T) {
 	assert.Contains(t, log, "load_balancer_toggle=true")
 }
 
+// The toggle edits ksail.yaml, which only an initialized project has, and needs load
+// balancers on at create, so a dispatch that cannot run it fails before any server exists.
+func TestLoadBalancerToggleNeedsInitializedTalosWithLoadBalancers(t *testing.T) {
+	t.Parallel()
+
+	workflow := readCIWorkflow(t, ".github/workflows/system-test-hetzner.yaml")
+	validate := findHarnessStep(
+		t,
+		workflow.Jobs["system-test"].Steps,
+		"✅ Validate load-balancer toggle trial",
+	)
+
+	for _, testCase := range []struct {
+		name string
+		env  []string
+		ok   bool
+	}{
+		{"initialized Talos default", []string{"DISTRIBUTION=Talos", "INIT=true", "LOAD_BALANCER=Default"}, true},
+		{"initialized Talos enabled", []string{"DISTRIBUTION=Talos", "INIT=true", "LOAD_BALANCER=Enabled"}, true},
+		{"no init", []string{"DISTRIBUTION=Talos", "INIT=false", "LOAD_BALANCER=Default"}, false},
+		{"disabled at create", []string{"DISTRIBUTION=Talos", "INIT=true", "LOAD_BALANCER=Disabled"}, false},
+		{"not Talos", []string{"DISTRIBUTION=K3s", "INIT=true", "LOAD_BALANCER=Default"}, false},
+	} {
+		log, err := runStepScript(t, validate.Run, "", testCase.env)
+		if testCase.ok {
+			require.NoError(t, err, "%s: %s", testCase.name, log)
+		} else {
+			require.Error(t, err, "%s: %s", testCase.name, log)
+			assert.Contains(t, log, "load-balancer toggle trial requires", testCase.name)
+		}
+	}
+}
+
 // The toggle checks the running cloud controller in both directions, and a failure in it
 // collects the same diagnostics as the other update trials.
 func TestLoadBalancerToggleChecksBothDirections(t *testing.T) {
@@ -70,6 +103,9 @@ func TestLoadBalancerToggleChecksBothDirections(t *testing.T) {
 	assert.Contains(t, step.If, "inputs.load-balancer-toggle == 'true'")
 	assert.Contains(t, step.If, "inputs.provider == 'Hetzner'")
 	assert.Contains(t, step.If, "inputs.distribution == 'Talos'")
+	assert.Contains(t, step.If, "inputs.init == 'true'")
+	// An explicit --load-balancer flag would override ksail.yaml, which drives the toggle.
+	assert.Contains(t, step.Run, `-e 's/--load-balancer[ =][^ ]*//'`)
 
 	for _, want := range []string{
 		`.spec.cluster.loadBalancer = "Disabled"`,

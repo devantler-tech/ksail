@@ -293,6 +293,22 @@ jobs:
             exit 1
           fi
 
+      - name: ✅ Validate load-balancer toggle trial
+        if: inputs.load_balancer_toggle
+        shell: bash
+        env:
+          DISTRIBUTION: ${{ inputs.distribution }}
+          INIT: ${{ inputs.init }}
+          LOAD_BALANCER: ${{ inputs.load_balancer }}
+        run: |
+          set -euo pipefail
+          # The toggle edits ksail.yaml, which only an initialized project has, and needs load
+          # balancers on at create; fail here, before any server is created.
+          if [[ "$DISTRIBUTION" != Talos || "$INIT" != true || "$LOAD_BALANCER" == Disabled ]]; then
+            echo 'ERROR: load-balancer toggle trial requires initialized Talos with load balancers on at create' >&2
+            exit 1
+          fi
+
       - name: ⚙️ Setup bounded inventory trial admission
         if: inputs.autoscaler_inventory_trial
         uses: hetznercloud/setup-hcloud@28cdd3fc4a4a8013e86d57c7254be72df92fcc02 # v2.0.1
