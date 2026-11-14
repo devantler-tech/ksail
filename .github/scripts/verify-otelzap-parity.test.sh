@@ -68,7 +68,7 @@ grep -Fq ' "context"' "${repo_root}/third_party/otelzap/README.md" || {
 }
 real_go="$(command -v go)"
 # Fetch through the bounded retry first (#8053); the read below then uses the cache.
-bash "${script_dir}/download-go-modules.sh" github.com/uptrace/opentelemetry-go-extra/otelzap@v0.3.2
+bash "${script_dir}/download-go-module-versions.sh" github.com/uptrace/opentelemetry-go-extra/otelzap@v0.3.2
 resolved="$(go mod download -json github.com/uptrace/opentelemetry-go-extra/otelzap@v0.3.2)"
 cp -R "$(jq -er '.Dir' <<<"${resolved}")" "${temporary}/cached"
 cp -R "${repo_root}/third_party/otelzap" "${temporary}/adapter"

@@ -362,7 +362,7 @@ func TestPinnedModuleVersionDownloadRetries(t *testing.T) {
 	requireTestExecutable(t, "bash")
 
 	prefetch := harnessStep{
-		Run: "PINNED_RELEASE=1 bash .github/scripts/download-go-modules.sh example.invalid/provenance@v1.0.0",
+		Run: "PINNED_RELEASE=1 bash .github/scripts/download-go-module-versions.sh example.invalid/provenance@v1.0.0",
 	}
 	for _, scenario := range []moduleDownloadScenario{
 		{name: "cache_warm", downloads: 1, operations: 1},
@@ -397,7 +397,7 @@ func TestProvenanceChecksFetchPinnedReleasesThroughRetry(t *testing.T) {
 
 			text := string(readRepoFile(t, script))
 			retry := strings.Index(text,
-				`bash "${script_dir}/download-go-modules.sh" "${module}@${version}"`)
+				`bash "${script_dir}/download-go-module-versions.sh" "${module}@${version}"`)
 			read := strings.Index(text, `go mod download -json "${module}@${version}"`)
 
 			require.NotEqual(t, -1, retry, "the pinned release must be fetched through the retry")
