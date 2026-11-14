@@ -247,7 +247,6 @@ jobs:
               # metadata edits that the shared Go source filter does not select.
               - 'third_party/cel-go/**'
               - 'third_party/glamour/**'
-              - 'third_party/go-macholibre/**'
               - 'third_party/kyverno-jmespath/**'
               - 'third_party/jmespath/**'
               - 'third_party/ansi/**'

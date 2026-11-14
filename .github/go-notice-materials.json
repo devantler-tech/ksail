@@ -87,8 +87,8 @@
     },
     {
       "module": "github.com/spdx/tools-golang",
-      "version": "v0.5.7",
-      "sum": "h1:+sWcKGnhwp3vLdMqPcLdA6QK679vd86cK9hQWH3AwCg=",
+      "version": "v0.6.0-rc4",
+      "sum": "h1:2GkvNr0DcnJHY9BDm3OYHo229jZS/h4qYDK+tHYXPOo=",
       "path": "LICENSE.docs",
       "sha256": "c207c95c7c34ea909fd949c737c3d942045a09f145ddee15d165a360a1000c72",
       "packages": [
@@ -106,6 +106,9 @@
         "github.com/spdx/tools-golang/spdx/v2/v2_3/tagvalue/reader",
         "github.com/spdx/tools-golang/spdx/v2/v2_3/tagvalue/writer",
         "github.com/spdx/tools-golang/spdx/v2/v2_3",
+        "github.com/spdx/tools-golang/spdx/v3/internal/ld",
+        "github.com/spdx/tools-golang/spdx/v3/internal",
+        "github.com/spdx/tools-golang/spdx/v3/v3_0",
         "github.com/spdx/tools-golang/spdx",
         "github.com/spdx/tools-golang/tagvalue/reader",
         "github.com/spdx/tools-golang/tagvalue"
@@ -115,7 +118,7 @@
       "evidence": [
         {
           "path": "README.md",
-          "sha256": "06d5d86ffb0cbb547daebe8f8182935a7146d4b93d76a0af6312187dbf905156"
+          "sha256": "f79a704af860cd1b558604295b864aab065580071aee533bf42babadc68177f1"
         }
       ],
       "noEmbeddedFiles": true,
@@ -123,8 +126,8 @@
     },
     {
       "module": "modernc.org/memory",
-      "version": "v1.11.0",
-      "sum": "h1:o4QC8aMQzmcwCK3t3Ux/ZHmwFPzE6hf2Y5LbkRs+hbI=",
+      "version": "v1.12.1",
+      "sum": "h1:nFMiWrpStgZczNl6XI9GnIk/rWhYIyHGUaR04pGbp9g=",
       "path": "LICENSE-LOGO",
       "sha256": "5ae5bee3072a841376451b48d8cfcec7188e10543926d5870828d36c8a750dc5",
       "packages": ["modernc.org/memory"],
@@ -174,6 +177,59 @@
       ],
       "noEmbeddedFiles": true,
       "reason": "The exact Makefile uses LICENSE_TEMPLATE_GO as deepcopy-gen header input; its placeholder year is not a completed source notice. The selected source package contains no embedded files; actual selected generated headers and the module LICENSE are retained."
+    },
+    {
+      "module": "modernc.org/sqlite",
+      "version": "v1.60.1",
+      "sum": "h1:/blz53O951KWFOso4QQvEs/Fq6cDBKLtMVrYNSeJVKw=",
+      "path": "LICENSE-3RD-PARTY.md",
+      "sha256": "b4366b9c27a9364633e015011a231913ed19bf1228f335bf617e50a6f7b168a6",
+      "packages": ["modernc.org/sqlite/lib"],
+      "detected": ["MIT", "Apache-2.0", "BSD-3-Clause", "MPL-2.0"],
+      "role": "excluded",
+      "evidence": [
+        {
+          "path": "LICENSE-3RD-PARTY.md",
+          "sha256": "b4366b9c27a9364633e015011a231913ed19bf1228f335bf617e50a6f7b168a6"
+        }
+      ],
+      "noEmbeddedFiles": true,
+      "reason": "The exact file is a generated inventory of the driver's whole module graph, not a license grant for this package. Its section 1 lists what links into a program: separately admitted Go modules (each carrying its own module license), code transpiled into modernc.org/libc, and SQLite's public-domain dedication for lib. The MPL-2.0 entries are in its test-only and not-compiled sections. The selected source package contains no embedded files."
+    },
+    {
+      "module": "modernc.org/sqlite",
+      "version": "v1.60.1",
+      "sum": "h1:/blz53O951KWFOso4QQvEs/Fq6cDBKLtMVrYNSeJVKw=",
+      "path": "LICENSE-SQLITE_VEC",
+      "sha256": "6ce72bbe12d975bd5286e5ab0a064c069693300c47bccbc57bec18485f1621ea",
+      "packages": ["modernc.org/sqlite/lib"],
+      "detected": ["MIT"],
+      "role": "excluded",
+      "evidence": [
+        {
+          "path": "LICENSE-3RD-PARTY.md",
+          "sha256": "b4366b9c27a9364633e015011a231913ed19bf1228f335bf617e50a6f7b168a6"
+        }
+      ],
+      "noEmbeddedFiles": true,
+      "reason": "The exact inventory states that sqlite-vec is transpiled into the module's vec package and linked only when modernc.org/sqlite/vec is imported. KSail selects lib, not vec, so no sqlite-vec code is in this Go recipient payload."
+    },
+    {
+      "module": "modernc.org/sqlite",
+      "version": "v1.60.1",
+      "sum": "h1:/blz53O951KWFOso4QQvEs/Fq6cDBKLtMVrYNSeJVKw=",
+      "path": "LICENSE-SQLITE",
+      "sha256": "8438c9c89b849131ead81d5435cb97fcf052df5b0b286dda8a2d4c29e6cb3fd0",
+      "packages": ["modernc.org/sqlite/lib"],
+      "detected": ["Unknown"],
+      "role": "attribution",
+      "evidence": [
+        {
+          "path": "LICENSE-3RD-PARTY.md",
+          "sha256": "b4366b9c27a9364633e015011a231913ed19bf1228f335bf617e50a6f7b168a6"
+        }
+      ],
+      "reason": "The exact inventory names this file as the local copy of SQLite's public-domain dedication for the amalgamation transpiled into lib. Preserve it alongside the independently admitted BSD-3-Clause module LICENSE; this is no additional package grant."
     }
   ]
 }

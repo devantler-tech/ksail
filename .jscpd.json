@@ -30,7 +30,6 @@
     "**/third_party/go-archive/**",
     "**/third_party/cel-go/**",
     "**/third_party/glamour/**",
-    "**/third_party/go-macholibre/**",
     "**/third_party/kyverno-jmespath/**",
     "**/third_party/jmespath/**",
     "**/third_party/ansi/**",
