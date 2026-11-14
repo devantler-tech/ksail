@@ -1409,3 +1409,8 @@ func ReplacementAvailabilityCheckResultForTest(
 //
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
 var ClusterEndpointHostnameForTest = clusterEndpointHostname
+
+// HasControlPlanePKIForTest exposes the control-plane PKI check.
+func HasControlPlanePKIForTest(provider talosconfig.Provider) bool {
+	return hasControlPlanePKI(provider)
+}

@@ -21,7 +21,9 @@ const (
 )
 
 var (
-	errLegacyKubeletFieldUnsupported = errors.New(
+	// ErrLegacyKubeletFieldUnsupported marks a legacy machine.kubelet field that has no Talos 1.14
+	// document equivalent. Its message names the fields by key only, never by value.
+	ErrLegacyKubeletFieldUnsupported = errors.New(
 		"kubelet field has no Talos 1.14 KubeletConfig or KubeNodeConfig equivalent",
 	)
 	errLegacyAllowSchedulingType = errors.New("expected true or false")
@@ -289,7 +291,7 @@ func moveLegacyMachineFields(
 				"patch %q: machine.kubelet.%s: %w; move it into its own Talos 1.14 configuration document",
 				patchPath,
 				strings.Join(remaining, ", machine.kubelet."),
-				errLegacyKubeletFieldUnsupported,
+				ErrLegacyKubeletFieldUnsupported,
 			)
 		}
 

@@ -430,7 +430,16 @@ func graftNodeHostname(
 // full Talos config bundle (which re-issues certificates) cannot proceed and Talos
 // fails with an opaque "failed to parse PEM block".
 func hasControlPlanePKI(provider talosconfig.Provider) bool {
-	ca := provider.K8sAPIServerCAConfig().IssuingCA()
+	if provider == nil {
+		return false
+	}
+
+	caConfig := provider.K8sAPIServerCAConfig()
+	if caConfig == nil {
+		return false
+	}
+
+	ca := caConfig.IssuingCA()
 
 	return ca != nil && len(ca.Key) > 0
 }

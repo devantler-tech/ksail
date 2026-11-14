@@ -279,3 +279,34 @@ func hasKubeDocuments(provider talosconfig.Provider) bool {
 
 	return hasCluster && hasCA
 }
+
+// TestAutoscalerPoolPatchNamesUnsupportedKubeletField guards the autoscaler path's error: a Talos
+// 1.14 pool patch with a kubelet field that has no 1.14 document must say which field, like a
+// shared patch does, without printing the value the patch set.
+func TestAutoscalerPoolPatchNamesUnsupportedKubeletField(t *testing.T) {
+	t.Parallel()
+
+	const suppliedValue = "/fixture-private-mount"
+
+	configs, err := talosconfigmanager.NewDefaultConfigsWithVersionContractAndPatches(
+		"", talosconfig.TalosVersion1_14, nil,
+	)
+	require.NoError(t, err)
+
+	prov := talosprovisioner.NewProvisioner(configs, nil).
+		WithHetznerOptions(ksailv1alpha1.OptionsHetzner{
+			NodeAutoscalerEnabled: true,
+			AutoscalerNodePools: []ksailv1alpha1.NodePool{{
+				Name: autoscalerTestPool,
+				TalosPatches: []string{
+					"machine:\n  kubelet:\n    extraMounts:\n      - destination: " + suppliedValue + "\n",
+				},
+			}},
+		})
+
+	_, err = prov.BuildAutoscalerPoolConfigsForTest(configs.Bundle())
+	require.ErrorIs(t, err, talosconfigmanager.ErrLegacyKubeletFieldUnsupported)
+	require.ErrorContains(t, err, "migrating pool machine config patch 1")
+	require.ErrorContains(t, err, "machine.kubelet.extraMounts")
+	require.NotContains(t, err.Error(), suppliedValue)
+}

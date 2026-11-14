@@ -32,6 +32,12 @@ type autoscalerPoolPatchError struct {
 }
 
 func (err autoscalerPoolPatchError) Error() string {
+	// A legacy kubelet field with no Talos 1.14 home is named by key in the cause, which carries
+	// no configuration value, so the user learns which field to move.
+	if errors.Is(err.cause, talosconfigmanager.ErrLegacyKubeletFieldUnsupported) {
+		return fmt.Sprintf("%v: %v", errInvalidAutoscalerPoolPatch, err.cause)
+	}
+
 	syntax, ok := errors.AsType[*json.SyntaxError](err.cause)
 	if ok && syntax.Offset > 0 {
 		return fmt.Sprintf("%v at byte %d", errInvalidAutoscalerPoolPatch, syntax.Offset)

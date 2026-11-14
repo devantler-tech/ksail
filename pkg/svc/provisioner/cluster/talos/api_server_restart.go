@@ -103,7 +103,12 @@ func (p *Provisioner) kubernetesCAPEM() []byte {
 		return nil
 	}
 
-	ca := p.talosConfigs.ControlPlane().K8sAPIServerCAConfig().IssuingCA()
+	caConfig := p.talosConfigs.ControlPlane().K8sAPIServerCAConfig()
+	if caConfig == nil {
+		return nil
+	}
+
+	ca := caConfig.IssuingCA()
 	if ca == nil {
 		return nil
 	}
