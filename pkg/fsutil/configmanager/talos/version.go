@@ -261,11 +261,9 @@ func KubernetesVersionFromProvider(provider talosconfig.Provider) string {
 		}
 	}
 
-	if machineCfg := provider.Machine(); machineCfg != nil {
-		if kubelet := machineCfg.Kubelet(); kubelet != nil {
-			if tag := extractImageTag(kubelet.Image()); tag != "" {
-				return normalizeKubernetesVersion(tag)
-			}
+	if kubelet := provider.K8sKubeletConfig(); kubelet != nil {
+		if tag := extractImageTag(kubelet.Image()); tag != "" {
+			return normalizeKubernetesVersion(tag)
 		}
 	}
 

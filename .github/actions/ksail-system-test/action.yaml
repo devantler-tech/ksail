@@ -1127,6 +1127,19 @@ runs:
         ksail cluster info
         echo "✅ Floating IP ${FLOATING_IP} is the API endpoint"
 
+        echo "=== Unchanged update with the floating IP enabled ==="
+        # ksail#7695: an update that changes nothing still runs the read-only stray
+        # floating IP check and says that it ran.
+        # shellcheck disable=SC2086
+        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG \
+          2>&1 | tee "$LOG_DIR/cluster-update-floating-ip-unchanged.log"
+        if ! grep -qE 'No stray floating IPs labelled for this cluster|is labelled for this cluster but not managed by it' \
+          "$LOG_DIR/cluster-update-floating-ip-unchanged.log"; then
+          echo "❌ ERROR: the unchanged update did not report the stray floating IP check"
+          exit 1
+        fi
+        echo "✅ The unchanged update ran the stray floating IP check"
+
         echo "=== Disabling the floating IP ==="
         yq -i '.spec.provider.hetzner.floatingIPEnabled = false' ksail.yaml
         # shellcheck disable=SC2086

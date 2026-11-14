@@ -8,7 +8,7 @@ go 1.27.4
 exclude google.golang.org/grpc/stats/opentelemetry v0.0.0-20241028142157-ada6787961b3
 
 require (
-	cel.dev/cel-go v0.33.0
+	cel.dev/cel-go v0.33.2
 	cloud.google.com/go/container v1.56.0
 	filippo.io/age v1.3.2
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.3
@@ -18,13 +18,13 @@ require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/apricote/hcloud-upload-image/hcloudimages v1.4.0
 	github.com/atotto/clipboard v0.1.4
-	github.com/aws/aws-sdk-go-v2 v1.47.5
+	github.com/aws/aws-sdk-go-v2 v1.47.7
 	github.com/aws/aws-sdk-go-v2/config v1.33.9
-	github.com/aws/aws-sdk-go-v2/credentials v1.20.12
+	github.com/aws/aws-sdk-go-v2/credentials v1.20.15
 	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.82.2
-	github.com/aws/aws-sdk-go-v2/service/eks v1.105.1
-	github.com/aws/aws-sdk-go-v2/service/sts v1.51.6
-	github.com/aws/smithy-go v1.28.7
+	github.com/aws/aws-sdk-go-v2/service/eks v1.105.4
+	github.com/aws/aws-sdk-go-v2/service/sts v1.51.8
+	github.com/aws/smithy-go v1.28.8
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/glamour v1.0.0
@@ -49,7 +49,7 @@ require (
 	github.com/fluxcd/source-controller/api v1.10.1
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/getsops/sops/v3 v3.13.3
-	github.com/github/copilot-sdk/go v1.0.27
+	github.com/github/copilot-sdk/go v1.0.28
 	github.com/gkampitakis/go-snaps v0.5.25
 	github.com/go-jose/go-jose/v4 v4.1.6
 	github.com/go-logr/logr v1.4.4
@@ -61,7 +61,7 @@ require (
 	github.com/google/go-github/v72 v72.0.0
 	github.com/google/go-licenses/v2 v2.0.1
 	github.com/googleapis/gax-go/v2 v2.27.0
-	github.com/gopacket/gopacket v1.7.4
+	github.com/gopacket/gopacket v1.7.7
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/hetznercloud/hcloud-go/v2 v2.53.0
 	github.com/invopop/jsonschema v0.14.0
@@ -85,8 +85,8 @@ require (
 	github.com/siderolabs/go-retry v0.3.3
 	github.com/siderolabs/image-factory v1.8.0
 	github.com/siderolabs/omni/client v1.9.1
-	github.com/siderolabs/talos v1.14.5
-	github.com/siderolabs/talos/pkg/machinery v1.14.5
+	github.com/siderolabs/talos v1.14.6
+	github.com/siderolabs/talos/pkg/machinery v1.14.6
 	github.com/sigstore/sigstore v1.11.1
 	github.com/sigstore/sigstore-go v1.3.0
 	github.com/sirupsen/logrus v1.10.2
@@ -107,7 +107,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.47.0
 	go.opentelemetry.io/proto/otlp v1.11.1
 	go.uber.org/zap v1.28.0
-	go.yaml.in/yaml/v3 v3.0.5
+	go.yaml.in/yaml/v3 v3.0.6
 	golang.org/x/crypto v0.58.0
 	golang.org/x/mod v0.42.0
 	golang.org/x/oauth2 v0.37.0
@@ -279,23 +279,23 @@ require (
 	github.com/ashanbrown/makezero/v2 v2.1.0 // indirect
 	github.com/aws/aws-sdk-go v1.55.8 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.20 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.5 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.7 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.22.34 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.8 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.8 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.8 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.10 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.10 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.10 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ecr v1.55.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ecrpublic v1.38.10 // indirect
 	github.com/aws/aws-sdk-go-v2/service/iam v1.56.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.23 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.24 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.11.5 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.8 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.10 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.20.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/kms v1.55.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.0 // indirect
-	github.com/aws/aws-sdk-go-v2/service/signin v1.12.0 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sso v1.39.0 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.44.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/signin v1.12.3 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.39.3 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.44.3 // indirect
 	github.com/awslabs/amazon-ecr-credential-helper/ecr-login v0.12.0 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
@@ -994,7 +994,7 @@ require (
 	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e // indirect
 	golang.org/x/exp/typeparams v0.0.0-20260209203927-2842357ff358 // indirect
 	golang.org/x/image v0.45.0 // indirect
-	golang.org/x/net v0.61.0 // indirect
+	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/telemetry v0.0.0-20261009151841-97e8ea77aa2a // indirect
 	golang.org/x/time v0.16.0 // indirect
 	golang.org/x/tools v0.52.0 // indirect
@@ -1184,14 +1184,18 @@ replace (
 // mapping is qualified to that exact requirement so a later one cannot reuse it without validation.
 replace k8s.io/kube-openapi v0.0.0-20261001230523-97fa35140926 => k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad
 
-// helm v4.3.1 requires Kubernetes v0.37.1 for these modules too, and controller-runtime v0.25.2,
-// which does not compile against v0.36 (it needs events.AnnotatedEventRecorder). Hold them on the
-// embedded v0.36 tools until #7259 lands; each mapping is qualified so a later requirement cannot
-// reuse it without validation.
+// helm v4.3.1 and siderolabs/talos v1.14.6 require Kubernetes v0.37.1 for these modules, and helm
+// also requires controller-runtime v0.25.2, which does not compile against v0.36 (it needs
+// events.AnnotatedEventRecorder). Hold them on the embedded v0.36 tools until #7259 lands; each
+// mapping is qualified so a later requirement cannot reuse it without validation.
 replace (
 	k8s.io/cli-runtime v0.37.1 => k8s.io/cli-runtime v0.36.6
 	k8s.io/component-helpers v0.37.1 => k8s.io/component-helpers v0.36.6
+	k8s.io/cri-api v0.37.1 => k8s.io/cri-api v0.36.3
+	k8s.io/cri-client v0.37.0 => k8s.io/cri-client v0.36.3
+	k8s.io/kube-proxy v0.37.1 => k8s.io/kube-proxy v0.36.2
 	k8s.io/kubectl v0.37.1 => k8s.io/kubectl v0.36.6
+	k8s.io/kubelet v0.37.1 => k8s.io/kubelet v0.36.2
 	k8s.io/metrics v0.37.1 => k8s.io/metrics v0.36.6
 	sigs.k8s.io/controller-runtime v0.25.2 => sigs.k8s.io/controller-runtime v0.24.1
 )

@@ -29,8 +29,10 @@ repos/devantler-tech/homebrew-tap/pulls\?state=open\&head=devantler-tech:gorelea
   release=v7.213.2
   [[ "$CASE_SCENARIO" != stale-title && "$CASE_SCENARIO" != title-write-failed ]] || release=v7.213.1
   jq -n --arg scenario "$CASE_SCENARIO" --arg title "chore(cask): update ${name} to ${release}" '
-    [{number:42,title:$title,user:{login:"devantler"},head:{repo:{full_name:"devantler-tech/homebrew-tap"}}}] |
-    if $scenario == "no-pr" or $scenario == "rejected-current" then []
+    [{number:42,title:$title,user:{login:"devantler"},head:{repo:{full_name:"devantler-tech/homebrew-tap"}},
+      labels:[{name:"automation"},{name:"dependencies"}]}] |
+    if $scenario == "missing-labels" or $scenario == "label-write-failed" then .[0].labels=[{name:"automation"}]
+    elif $scenario == "no-pr" or $scenario == "rejected-current" then []
     elif $scenario == "ambiguous" then . + [.[0] + {number:43}]
     elif $scenario == "fork-pr" then .[0].head.repo.full_name="untrusted/tap" else . end' ;;
 *) exit 2 ;;
@@ -73,6 +75,7 @@ cat >"$work/bin/gh" <<'EOF'
 set -euo pipefail
 printf '%s\n' "$*" >>"$CASE_STATE/gh-calls"
 [[ "$CASE_SCENARIO" != title-write-failed ]] || exit 1
+[[ "$CASE_SCENARIO" != label-write-failed || "$*" != *'/labels '* ]] || exit 1
 EOF
 chmod +x "$work/bin/gh"
 
@@ -105,6 +108,16 @@ run_case() {
 	title-write-failed)
 		[[ ! -e "$state/helper-calls" ]] || fail 'a PR whose title could not be set reached delivery'
 		[[ "$(grep -c Failed "$state/summary")" -eq 2 ]] || fail 'a failed title update was not recorded as a failure'
+		;;
+	missing-labels)
+		[[ "$(grep -c '^deliver$' "$state/helper-calls")" -eq 2 ]] || fail 'a relabelled PR skipped the guarded finisher'
+		[[ "$(grep -cxF 'api -X POST repos/devantler-tech/homebrew-tap/issues/42/labels -f labels[]=dependencies' "$state/gh-calls")" -eq 2 ]] ||
+			fail 'a cask PR missing the dependencies label was not given it'
+		! grep -q 'labels\[\]=automation' "$state/gh-calls" || fail 'a label the PR already carries was added again'
+		;;
+	label-write-failed)
+		[[ ! -e "$state/helper-calls" ]] || fail 'a PR whose labels could not be added reached delivery'
+		[[ "$(grep -c Failed "$state/summary")" -eq 2 ]] || fail 'a failed label update was not recorded as a failure'
 		;;
 	merged)
 		[[ "$(grep -c '^verify$' "$state/helper-calls")" -eq 2 ]] || fail 'finder candidates lack independent provenance verification'
@@ -146,6 +159,8 @@ run_case merged-invalid-signature 1
 run_case delivered 0
 run_case stale-title 0
 run_case title-write-failed 1
+run_case missing-labels 0
+run_case label-write-failed 1
 run_case merged 0
 run_case invalid-merge 1
 run_case invalid-signature 1

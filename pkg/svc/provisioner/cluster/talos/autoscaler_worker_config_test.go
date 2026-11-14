@@ -40,6 +40,8 @@ const clusterConfigSecretKey = clusterautoscalerinstaller.AutoscalerConfigHcloud
 
 // newTestWorkerProvider builds a minimal v1alpha1 Config wrapped in a Provider
 // for use across autoscaler worker config tests.
+//
+//nolint:staticcheck // fixture builds the legacy v1alpha1 worker shape under test
 func newTestWorkerProvider() *taloscontainer.Container {
 	falseVal := false
 
@@ -164,6 +166,7 @@ func generateAndParseAutoscalerConfig(
 	return rawCfg
 }
 
+//nolint:staticcheck // fixture builds the legacy v1alpha1 worker shape under test
 func TestGenerateAutoscalerWorkerConfig_StrippingLogic(t *testing.T) {
 	t.Parallel()
 
@@ -212,6 +215,7 @@ func TestGenerateAutoscalerWorkerConfig_StrippingLogic(t *testing.T) {
 	})
 }
 
+//nolint:staticcheck // exercises the legacy v1alpha1 node fields of pre-1.14 contracts
 func TestGenerateAutoscalerWorkerConfig_StampsAutoscaledMarker(t *testing.T) {
 	t.Parallel()
 
@@ -278,6 +282,7 @@ func kubeletStorageLabelCases() []kubeletStorageLabelCase {
 	}
 }
 
+//nolint:staticcheck // exercises the legacy v1alpha1 node fields of pre-1.14 contracts
 func TestGenerateAutoscalerWorkerConfig_StripsKubeletStorageLabel(t *testing.T) {
 	t.Parallel()
 
@@ -322,6 +327,7 @@ func TestGenerateAutoscalerWorkerConfig_StripsKubeletStorageLabel(t *testing.T) 
 	}
 }
 
+//nolint:staticcheck // exercises the legacy v1alpha1 node fields of pre-1.14 contracts
 func TestGenerateAutoscalerWorkerConfig_AppliesPoolLabelsAndTaints(t *testing.T) {
 	t.Parallel()
 
@@ -353,6 +359,7 @@ func TestGenerateAutoscalerWorkerConfig_NilInput(t *testing.T) {
 	require.ErrorIs(t, err, talosprovisioner.ErrNilWorkerConfig)
 }
 
+//nolint:staticcheck // exercises the legacy v1alpha1 node fields of pre-1.14 contracts
 func TestGenerateAutoscalerWorkerConfig_InstallNilBeforePatch(t *testing.T) {
 	t.Parallel()
 
@@ -375,6 +382,7 @@ func TestGenerateAutoscalerWorkerConfig_InstallNilBeforePatch(t *testing.T) {
 	assert.True(t, *rawCfg.MachineConfig.MachineInstall.InstallWipe)
 }
 
+//nolint:staticcheck // exercises the legacy v1alpha1 node fields of pre-1.14 contracts
 func TestGenerateAutoscalerWorkerConfig_NilMachineConfig(t *testing.T) {
 	t.Parallel()
 
@@ -792,6 +800,8 @@ func autoscalerSecretFor(
 
 // workerProviderWithToken builds a minimal worker provider carrying a (secret)
 // machine token, so two providers can differ ONLY in redacted PKI.
+//
+//nolint:staticcheck // exercises the legacy v1alpha1 node fields of pre-1.14 contracts
 func workerProviderWithToken(token string) *taloscontainer.Container {
 	falseVal := false
 
@@ -808,6 +818,8 @@ func workerProviderWithToken(token string) *taloscontainer.Container {
 // workerProviderWithEndpoint builds a minimal worker provider whose cluster
 // control-plane endpoint is set to the given URL, so two providers can differ ONLY
 // in the endpoint — the field syncSecretsFromCluster realigns during apply (#4963).
+//
+//nolint:staticcheck // exercises the legacy v1alpha1 node fields of pre-1.14 contracts
 func workerProviderWithEndpoint(t *testing.T, endpoint string) *taloscontainer.Container {
 	t.Helper()
 
@@ -980,6 +992,8 @@ func TestAutoscalerTemplateDrift_IgnoresEndpointOnlyDifference(t *testing.T) {
 // worker config carries the CA certs with empty keys (workers hold no CA private
 // key; see talos-worker-config-lacks-pki), so two providers differing only here
 // must still normalise to the same fingerprint.
+//
+//nolint:staticcheck // fixture builds the legacy v1alpha1 worker shape under test
 func workerProviderWithIdentity(
 	machineCACrt, clusterCACrt []byte,
 	clusterID string,

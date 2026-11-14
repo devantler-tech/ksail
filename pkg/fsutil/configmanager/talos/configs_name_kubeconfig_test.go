@@ -9,6 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	taloskubeconfig "github.com/siderolabs/talos/pkg/kubeconfig"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+	talosconfigconfig "github.com/siderolabs/talos/pkg/machinery/config/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/client-go/tools/clientcmd"
@@ -46,11 +47,11 @@ func TestConfigsWithNameKeepsNativeKubeconfigsSeparate(t *testing.T) {
 			require.NoError(t, err)
 			nested, err = nested.WithCertSANs([]string{"keep.example.test", "nested.example.test"})
 			require.NoError(t, err)
-			assert.Equal(t, "nested-talos", nested.Worker().Cluster().Name())
+			assert.Equal(t, "nested-talos", nested.Worker().K8sClusterConfig().ClusterName())
 
 			for _, config := range []talosconfig.Provider{nested.ControlPlane(), nested.Worker()} {
 				assert.Equal(t, "preserved",
-					config.Machine().NodeLabels()["inherited.example.test"])
+					config.K8sNodeConfig().Labels()["inherited.example.test"])
 			}
 
 			nestedRaw := nativeAdminKubeconfig(t, nested)
@@ -61,7 +62,7 @@ func TestConfigsWithNameKeepsNativeKubeconfigsSeparate(t *testing.T) {
 			assert.Equal(t, "admin@nested-talos", nestedConfig.CurrentContext)
 
 			requireSeparateKubeconfigEntries(t, hostRaw, nestedRaw)
-			assert.Equal(t, "host-fixture", host.ControlPlane().Cluster().Name())
+			assert.Equal(t, "host-fixture", host.ControlPlane().K8sClusterConfig().ClusterName())
 			assert.Contains(
 				t,
 				host.ControlPlane().Machine().Security().CertSANs(),
@@ -146,8 +147,8 @@ func TestConfigsWithNameRepairsAnInheritedNameEvenWhenMetadataMatches(t *testing
 	require.NoError(t, err)
 	repaired, err := base.WithName(base.Name)
 	require.NoError(t, err)
-	assert.Equal(t, base.Name, repaired.ControlPlane().Cluster().Name())
-	assert.Equal(t, base.Name, repaired.Worker().Cluster().Name())
+	assert.Equal(t, base.Name, repaired.ControlPlane().K8sClusterConfig().ClusterName())
+	assert.Equal(t, base.Name, repaired.Worker().K8sClusterConfig().ClusterName())
 }
 
 // TestConfigsWithNameKeepsGenerationOverridesPrivate protects external patch
@@ -176,8 +177,8 @@ func TestConfigsWithNameKeepsGenerationOverridesPrivate(t *testing.T) {
 	require.Len(t, patches, len(originalPatches)+1)
 	assert.Equal(t, originalPatches, patches[:len(originalPatches)])
 	assert.Equal(t, "ksail-exposure-cert-sans", patches[len(originalPatches)].Path)
-	assert.Equal(t, "renamed-talos", nested.ControlPlane().Cluster().Name())
-	assert.Equal(t, "renamed-talos", nested.Worker().Cluster().Name())
+	assert.Equal(t, "renamed-talos", nested.ControlPlane().K8sClusterConfig().ClusterName())
+	assert.Equal(t, "renamed-talos", nested.Worker().K8sClusterConfig().ClusterName())
 	assert.Equal(t, originalPatches, host.Patches())
 }
 
@@ -186,8 +187,20 @@ func TestConfigsWithNameKeepsGenerationOverridesPrivate(t *testing.T) {
 func nativeAdminKubeconfig(t *testing.T, configs *talos.Configs) []byte {
 	t.Helper()
 
+	// Talos 1.14 splits the generator's inputs across documents; compose them the way
+	// machined does for its own admin kubeconfig.
+	controlPlane := configs.ControlPlane()
+
 	var raw bytes.Buffer
-	require.NoError(t, taloskubeconfig.GenerateAdmin(configs.ControlPlane().Cluster(), &raw))
+	require.NoError(t, taloskubeconfig.GenerateAdmin(struct {
+		talosconfigconfig.ClusterConfig
+		talosconfigconfig.K8sAPIServerCAConfig
+		talosconfigconfig.K8sClusterConfig
+	}{
+		ClusterConfig:        controlPlane.Cluster(),
+		K8sAPIServerCAConfig: controlPlane.K8sAPIServerCAConfig(),
+		K8sClusterConfig:     controlPlane.K8sClusterConfig(),
+	}, &raw))
 
 	return raw.Bytes()
 }
