@@ -21,8 +21,12 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	x509 "github.com/siderolabs/crypto/x509"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+	talosconfigtypes "github.com/siderolabs/talos/pkg/machinery/config/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/configloader"
+	taloscontainer "github.com/siderolabs/talos/pkg/machinery/config/container"
+	"github.com/siderolabs/talos/pkg/machinery/config/types/k8s"
 	talosmeta "github.com/siderolabs/talos/pkg/machinery/config/types/meta"
+	talosruntime "github.com/siderolabs/talos/pkg/machinery/config/types/runtime"
 	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -105,37 +109,23 @@ func GenerateAutoscalerWorkerConfig(
 // GenerateAutoscalerWorkerConfig. A pool's boot config and the rebuild of a running
 // autoscaler node both use it, so the two cannot drift apart (#7013).
 //
-//nolint:staticcheck // legacy v1alpha1 worker fields; the 1.14 document move is separate
+// Under the Talos 1.14 contract the node labels and taints live in the
+// KubeNodeConfig document, the kubelet arguments in the KubeletConfig document and
+// the install settings in the UnattendedInstallConfig document, and Talos refuses
+// the matching v1alpha1 fields next to those documents, so each setting follows
+// the config's layout (#8366).
 func shapeAutoscalerWorker(
 	workerConfig talosconfig.Provider,
 	poolLabels map[string]string,
 	poolTaints []corev1.Taint,
 ) (talosconfig.Provider, error) {
+	layout := autoscalerWorkerLayout{
+		nodeDocument:    hasKubeNodeConfig(workerConfig),
+		installDocument: hasDocument[*talosruntime.UnattendedInstallConfigV1Alpha1](workerConfig),
+	}
+
 	patched, err := workerConfig.PatchV1Alpha1(func(cfg *v1alpha1.Config) error {
-		if cfg.MachineConfig == nil {
-			cfg.MachineConfig = &v1alpha1.MachineConfig{}
-		}
-
-		if cfg.MachineConfig.MachineInstall == nil {
-			cfg.MachineConfig.MachineInstall = &v1alpha1.InstallConfig{}
-		}
-
-		wipe := true
-		cfg.MachineConfig.MachineInstall.InstallWipe = &wipe
-
-		cfg.MachineConfig.MachineDisks = nil //nolint:staticcheck // deprecated; v1alpha1.Config has no replacement field
-
-		if cfg.MachineConfig.MachineNodeLabels == nil {
-			cfg.MachineConfig.MachineNodeLabels = map[string]string{}
-		}
-
-		maps.Copy(cfg.MachineConfig.MachineNodeLabels, poolLabels)
-
-		delete(cfg.MachineConfig.MachineNodeLabels, longhornDefaultDiskLabel)
-		stripKubeletStorageLabel(cfg.MachineConfig.MachineKubelet)
-		cfg.MachineConfig.MachineNodeLabels[LabelAutoscaled] = labelValueTrue
-
-		applyPoolTaints(cfg, poolTaints)
+		shapeAutoscalerV1Alpha1(cfg, layout, poolLabels, poolTaints)
 
 		return nil
 	})
@@ -143,20 +133,136 @@ func shapeAutoscalerWorker(
 		return nil, fmt.Errorf("patch autoscaler worker config: %w", err)
 	}
 
+	return shapeAutoscalerDocuments(patched, poolLabels, poolTaints)
+}
+
+// autoscalerWorkerLayout records which Talos 1.14 documents own settings that
+// older contracts keep in v1alpha1.
+type autoscalerWorkerLayout struct {
+	nodeDocument    bool
+	installDocument bool
+}
+
+// shapeAutoscalerV1Alpha1 shapes the v1alpha1 document, leaving alone every field
+// a Talos 1.14 document owns.
+//
+//nolint:staticcheck // legacy v1alpha1 worker fields of configs that predate the 1.14 documents
+func shapeAutoscalerV1Alpha1(
+	cfg *v1alpha1.Config,
+	layout autoscalerWorkerLayout,
+	poolLabels map[string]string,
+	poolTaints []corev1.Taint,
+) {
+	if cfg.MachineConfig == nil {
+		cfg.MachineConfig = &v1alpha1.MachineConfig{}
+	}
+
+	if !layout.installDocument {
+		if cfg.MachineConfig.MachineInstall == nil {
+			cfg.MachineConfig.MachineInstall = &v1alpha1.InstallConfig{}
+		}
+
+		wipe := true
+		cfg.MachineConfig.MachineInstall.InstallWipe = &wipe
+	}
+
+	cfg.MachineConfig.MachineDisks = nil
+
+	if cfg.MachineConfig.MachineKubelet != nil {
+		stripKubeletStorageLabel(cfg.MachineConfig.MachineKubelet.KubeletExtraArgs)
+	}
+
+	if !layout.nodeDocument {
+		cfg.MachineConfig.MachineNodeLabels = shapeAutoscalerNodeLabels(
+			cfg.MachineConfig.MachineNodeLabels,
+			poolLabels,
+		)
+		cfg.MachineConfig.MachineNodeTaints = applyPoolTaints(
+			cfg.MachineConfig.MachineNodeTaints,
+			poolTaints,
+		)
+	}
+}
+
+// shapeAutoscalerDocuments shapes the Talos 1.14 documents. Each patch leaves a
+// config without that document unchanged.
+func shapeAutoscalerDocuments(
+	config talosconfig.Provider,
+	poolLabels map[string]string,
+	poolTaints []corev1.Taint,
+) (talosconfig.Provider, error) {
+	patched, err := taloscontainer.PatchDocument(
+		config,
+		func(install *talosruntime.UnattendedInstallConfigV1Alpha1) error {
+			wipe := true
+			install.ProvisioningSpec.Wipe = &wipe
+
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("patch autoscaler worker UnattendedInstallConfig: %w", err)
+	}
+
+	patched, err = taloscontainer.PatchDocument(
+		patched,
+		func(kubelet *k8s.KubeletConfigV1Alpha1) error {
+			stripKubeletStorageLabel(kubelet.KubeletArgs)
+
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("patch autoscaler worker KubeletConfig: %w", err)
+	}
+
+	patched, err = taloscontainer.PatchDocument(
+		patched,
+		func(node *k8s.KubeNodeConfigV1Alpha1) error {
+			node.LabelsConfig = shapeAutoscalerNodeLabels(node.LabelsConfig, poolLabels)
+			node.TaintsConfig = applyPoolTaints(node.TaintsConfig, poolTaints)
+
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("patch autoscaler worker KubeNodeConfig: %w", err)
+	}
+
 	return patched, nil
 }
 
-// Kubelet registration labels are independent of machine.nodeLabels. Static workers
-// may set the Longhorn label here so storage can schedule immediately on first boot.
-// Remove it from every argument value when shaping compute-only autoscaler workers.
-//
-//nolint:staticcheck // legacy v1alpha1 worker fields; the 1.14 document move is separate
-func stripKubeletStorageLabel(kubelet *v1alpha1.KubeletConfig) {
-	if kubelet == nil {
-		return
+// hasDocument reports whether a config carries a document of type D.
+func hasDocument[D talosconfigtypes.Document](provider talosconfig.Provider) bool {
+	for _, document := range provider.Documents() {
+		if _, ok := document.(D); ok {
+			return true
+		}
 	}
 
-	values, ok := kubelet.KubeletExtraArgs.ToMap()["node-labels"]
+	return false
+}
+
+// shapeAutoscalerNodeLabels adds the pool labels and the LabelAutoscaled marker to
+// a node-label map and removes the Longhorn storage label. It returns the map,
+// allocated when it was nil.
+func shapeAutoscalerNodeLabels(labels, poolLabels map[string]string) map[string]string {
+	if labels == nil {
+		labels = map[string]string{}
+	}
+
+	maps.Copy(labels, poolLabels)
+	delete(labels, longhornDefaultDiskLabel)
+	labels[LabelAutoscaled] = labelValueTrue
+
+	return labels
+}
+
+// Kubelet registration labels are independent of the node labels. Static workers
+// may set the Longhorn label here so storage can schedule immediately on first boot.
+// Remove it from every argument value when shaping compute-only autoscaler workers.
+func stripKubeletStorageLabel(args talosmeta.Args) {
+	values, ok := args.ToMap()["node-labels"]
 	if !ok {
 		return
 	}
@@ -185,28 +291,27 @@ func stripKubeletStorageLabel(kubelet *v1alpha1.KubeletConfig) {
 
 	switch len(filtered) {
 	case 0:
-		delete(kubelet.KubeletExtraArgs, "node-labels")
+		delete(args, "node-labels")
 	case 1:
-		kubelet.KubeletExtraArgs["node-labels"] = talosmeta.NewArgValue(filtered[0], nil)
+		args["node-labels"] = talosmeta.NewArgValue(filtered[0], nil)
 	default:
-		kubelet.KubeletExtraArgs["node-labels"] = talosmeta.NewArgValue("", filtered)
+		args["node-labels"] = talosmeta.NewArgValue("", filtered)
 	}
 }
 
-// applyPoolTaints writes the pool's taints into machine.nodeTaints. Talos encodes
+// applyPoolTaints writes the pool's taints into a node-taint map. Talos encodes
 // each taint as a map entry keyed by the taint key, with the value formatted as
 // "<value>:<effect>" (or "<value>" when the effect is empty). Talos reconciles
 // these onto the real Node via its node-labels controller, so they apply even
-// under the kubelet NodeRestriction admission plugin.
-//
-//nolint:staticcheck // legacy v1alpha1 worker fields; the 1.14 document move is separate
-func applyPoolTaints(cfg *v1alpha1.Config, poolTaints []corev1.Taint) {
+// under the kubelet NodeRestriction admission plugin. A pool without taints
+// leaves the map as it was, nil included.
+func applyPoolTaints(taints map[string]string, poolTaints []corev1.Taint) map[string]string {
 	if len(poolTaints) == 0 {
-		return
+		return taints
 	}
 
-	if cfg.MachineConfig.MachineNodeTaints == nil {
-		cfg.MachineConfig.MachineNodeTaints = map[string]string{}
+	if taints == nil {
+		taints = map[string]string{}
 	}
 
 	for _, taint := range poolTaints {
@@ -215,8 +320,10 @@ func applyPoolTaints(cfg *v1alpha1.Config, poolTaints []corev1.Taint) {
 			value += ":" + string(taint.Effect)
 		}
 
-		cfg.MachineConfig.MachineNodeTaints[taint.Key] = value
+		taints[taint.Key] = value
 	}
+
+	return taints
 }
 
 // AutoscalerPoolConfig is the per-pool data the cluster-autoscaler needs to
