@@ -246,7 +246,7 @@ func writeModuleDownloadStubs(t *testing.T, directory string) {
 	writeExecutableStub(t, filepath.Join(directory, "go"), `#!/usr/bin/env bash
 set -euo pipefail
 case "$*" in
-"mod download")
+"mod download"|"list -deps -test "*)
 	count=0
 	if [[ -f "$DOWNLOAD_CALLS" ]]; then count=$(wc -l < "$DOWNLOAD_CALLS"); fi
 	printf 'download\n' >> "$DOWNLOAD_CALLS"
@@ -263,4 +263,84 @@ esac
 set -euo pipefail
 printf '%s\n' "$*" >> "$DOWNLOAD_DELAYS"
 `)
+}
+
+// The narrow Windows and macOS checks compile a few files on runners that have no shared module
+// archive, so a full restore would download the whole graph on every run. Each one instead fetches
+// only its own packages' modules through a bounded retry before it compiles (#8053): a dropped Go
+// proxy stream is retried, while the check itself still runs once and fails on its own error.
+func TestNarrowChecksDownloadPackageModulesThroughBoundedRetry(t *testing.T) {
+	t.Parallel()
+	requireTestExecutable(t, "bash")
+
+	const script = ".github/scripts/download-go-package-modules.sh"
+
+	jobs := readCIWorkflow(t, ".github/workflows/ci.yaml").Jobs
+	for job, want := range map[string]struct {
+		directory, packages, operation string
+	}{
+		"native-home-paths": {
+			packages:  "./pkg/fsutil/path_test.go",
+			operation: "🔎 Verify native home prefixes and literal paths",
+		},
+		"windows-notice-staging": {
+			packages:  ".github/scripts/go-notices.go",
+			operation: "🔎 Stage the Windows desktop notices",
+		},
+		"verify-bash-32-workflow-contract": {
+			directory: "internal/ciharness",
+			packages:  "kubernetes_update_test.go system_test_harness_test.go",
+			operation: "🧪 Verify empty arguments under Bash 3.2",
+		},
+	} {
+		t.Run(job, func(t *testing.T) {
+			t.Parallel()
+
+			steps := jobs[job].Steps
+			download := findHarnessStep(t, steps, "📥 Download Go modules")
+
+			path := script
+			if want.directory != "" {
+				path = "../../" + script
+			}
+
+			assert.Equal(t, "bash "+path+" "+want.packages, strings.TrimSpace(download.Run),
+				"download exactly the packages the check compiles")
+			assert.Equal(t, want.directory, download.WorkingDirectory)
+			assert.Empty(t, download.If, "every run must download through the retry")
+			assert.False(t, download.ContinueOnError, "an exhausted download must fail the job")
+			assert.Less(t, harnessStepIndex(t, steps, "⚙️ Setup Go"),
+				harnessStepIndex(t, steps, download.Name), "download with the configured toolchain")
+			assert.Less(t, harnessStepIndex(t, steps, download.Name),
+				harnessStepIndex(t, steps, want.operation), "download before the check compiles")
+		})
+	}
+}
+
+// The narrow download retries a dropped Go proxy stream, gives up after three attempts with its
+// own error, and leaves a later build failure as the job's real verdict (#8053).
+func TestPackageModuleDownloadRetries(t *testing.T) {
+	t.Parallel()
+	requireTestExecutable(t, "bash")
+
+	prefetch := harnessStep{
+		Run: "bash .github/scripts/download-go-package-modules.sh ./pkg/fsutil/path_test.go",
+	}
+	for _, scenario := range []moduleDownloadScenario{
+		{name: "cache_warm", downloads: 1, operations: 1},
+		{name: "two_proxy_blips", failures: 2, downloads: 3, operations: 1, backoff: "5\n10\n"},
+		{name: "exhausted", failures: 3, downloads: 3, backoff: "5\n10\n"},
+		{name: "downstream_error", operationExit: 37, downloads: 1, operations: 1},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			runModuleDownloadScenario(
+				t,
+				prefetch,
+				"go build",
+				".github/actions/restore-go-modules",
+				scenario,
+			)
+		})
+	}
 }
