@@ -87,6 +87,7 @@ func writeTwoLayerTree(t *testing.T, infrastructure, apps map[string]string) str
 
 			require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600))
 		}
+
 		resources += resourcesSb83.String()
 
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "kustomization.yaml"), []byte(
