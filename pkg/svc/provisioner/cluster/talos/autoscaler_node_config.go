@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
@@ -31,6 +32,12 @@ type autoscalerPoolPatchError struct {
 }
 
 func (err autoscalerPoolPatchError) Error() string {
+	// A legacy kubelet field with no Talos 1.14 home is named by key in the cause, which carries
+	// no configuration value, so the user learns which field to move.
+	if errors.Is(err.cause, talosconfigmanager.ErrLegacyKubeletFieldUnsupported) {
+		return fmt.Sprintf("%v: %v", errInvalidAutoscalerPoolPatch, err.cause)
+	}
+
 	syntax, ok := errors.AsType[*json.SyntaxError](err.cause)
 	if ok && syntax.Offset > 0 {
 		return fmt.Sprintf("%v at byte %d", errInvalidAutoscalerPoolPatch, syntax.Offset)
@@ -102,6 +109,66 @@ func (p *Provisioner) buildDesiredConfigForNode(
 	return shapeAutoscalerWorker(desired, pool.Labels, poolTaintsToCoreV1(pool.Taints))
 }
 
+// poolPatchContents returns a pool patch as the patches to apply. A worker
+// rendered under the Talos 1.14 contract keeps its node, kubelet and Kubernetes
+// settings in their own documents, so the patch is migrated to that layout
+// first, exactly as the shared patches are.
+func poolPatchContents(patch string, multiDocument bool) ([][]byte, error) {
+	if !multiDocument {
+		return [][]byte{[]byte(patch)}, nil
+	}
+
+	migrated, err := talosconfigmanager.MigratePatchesToMultiDocument([]talosconfigmanager.Patch{{
+		Path:    "autoscaler pool patch",
+		Scope:   talosconfigmanager.PatchScopeWorker,
+		Content: []byte(patch),
+	}})
+	if err != nil {
+		return nil, fmt.Errorf("migrate to the Talos 1.14 documents: %w", err)
+	}
+
+	contents := make([][]byte, 0, len(migrated))
+	for _, migratedPatch := range migrated {
+		contents = append(contents, migratedPatch.Content)
+	}
+
+	return contents, nil
+}
+
+// loadAutoscalerPoolPatches parses the pool patches, migrated to the worker's
+// document layout. Errors name the patch by position, never by content.
+func loadAutoscalerPoolPatches(
+	patches []string,
+	multiDocument bool,
+) ([]configpatcher.Patch, error) {
+	parsed := make([]configpatcher.Patch, 0, len(patches))
+	for index, patch := range patches {
+		contents, err := poolPatchContents(patch, multiDocument)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"migrating pool machine config patch %d: %w",
+				index+1,
+				autoscalerPoolPatchError{cause: err},
+			)
+		}
+
+		for _, content := range contents {
+			loaded, err := configpatcher.LoadPatch(content)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"parsing pool machine config patch %d: %w",
+					index+1,
+					autoscalerPoolPatchError{cause: err},
+				)
+			}
+
+			parsed = append(parsed, loaded)
+		}
+	}
+
+	return parsed, nil
+}
+
 // applyAutoscalerPoolPatches uses Talos's own patch semantics without changing
 // the shared worker config. Errors identify the patch without printing its values.
 func applyAutoscalerPoolPatches(
@@ -116,18 +183,9 @@ func applyAutoscalerPoolPatches(
 		return nil, ErrNilWorkerConfig
 	}
 
-	parsed := make([]configpatcher.Patch, 0, len(patches))
-	for index, patch := range patches {
-		loaded, err := configpatcher.LoadPatch([]byte(patch))
-		if err != nil {
-			return nil, fmt.Errorf(
-				"parsing pool machine config patch %d: %w",
-				index+1,
-				autoscalerPoolPatchError{cause: err},
-			)
-		}
-
-		parsed = append(parsed, loaded)
+	parsed, err := loadAutoscalerPoolPatches(patches, hasKubeNodeConfig(worker))
+	if err != nil {
+		return nil, err
 	}
 
 	patched, err := configpatcher.Apply(configpatcher.WithConfig(worker), parsed)

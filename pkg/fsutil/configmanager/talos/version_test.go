@@ -120,8 +120,14 @@ var resolveKubernetesVersionCases = []struct {
 		want:        "1.35.0",
 	},
 	{
-		name:        "default kept when pinned talos supports it",
+		// Talos 1.13 supports Kubernetes <= 1.36, so the 1.37 default is capped.
+		name:        "default capped for the previous talos minor",
 		pinnedTalos: "v1.13.2",
+		want:        "1.36.0",
+	},
+	{
+		name:        "default kept when pinned talos supports it",
+		pinnedTalos: "v1.14.6",
 		want:        talos.DefaultKubernetesVersion,
 	},
 	{

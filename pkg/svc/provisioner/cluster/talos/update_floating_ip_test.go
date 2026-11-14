@@ -1061,7 +1061,7 @@ func TestUpdateApplyStep_SyncsFloatingIPEndpointBeforeWorkerRoll(t *testing.T) {
 	provisioner := runFloatingIPWorkerRollSecretsSync(t, nil)
 
 	assert.Equal(t, "192.0.2.10",
-		provisioner.TalosConfigsForTest().Worker().Cluster().Endpoint().Hostname())
+		provisioner.TalosConfigsForTest().Worker().K8sClusterConfig().ClusterEndpoint().Hostname())
 }
 
 // TestUpdateApplyStep_SecretsSyncFallsBackWhenEndpointUnreachable pins the
@@ -1074,7 +1074,7 @@ func TestUpdateApplyStep_SecretsSyncFallsBackWhenEndpointUnreachable(t *testing.
 	provisioner := runFloatingIPWorkerRollSecretsSync(t, withUnreachableEndpointProbe)
 
 	assert.Equal(t, "203.0.113.5",
-		provisioner.TalosConfigsForTest().Worker().Cluster().Endpoint().Hostname())
+		provisioner.TalosConfigsForTest().Worker().K8sClusterConfig().ClusterEndpoint().Hostname())
 }
 
 // TestPrepareFloatingIPConfigForNewControlPlane_RefreshesSANsWithoutReassigning
@@ -1115,7 +1115,7 @@ func TestPrepareFloatingIPConfigForNewControlPlane_RefreshesSANsWithoutReassigni
 	))
 
 	controlPlane := provisioner.TalosConfigsForTest().ControlPlane()
-	assert.Equal(t, "192.0.2.10", controlPlane.Cluster().Endpoint().Hostname())
+	assert.Equal(t, "192.0.2.10", controlPlane.K8sClusterConfig().ClusterEndpoint().Hostname())
 	assert.Contains(t, controlPlane.K8sAPIServerConfig().CertSANs(), "203.0.113.6")
 	assert.Contains(t, controlPlane.RawV1Alpha1().MachineConfig.MachineCertSANs, "203.0.113.6")
 	assert.Zero(t, calls.create.Load(), "the read-only refresh must not create a floating IP")
@@ -1211,7 +1211,11 @@ func TestUpdateApplyStep_WaitsForAPIServerBeforeKubeconfigRefresh(t *testing.T) 
 	calls := &fipUpdateCalls{}
 	server := fipUpdateTestServer(t, true, calls)
 	provisioner, _, capture := newFloatingIPKubeconfigTestProvisioner(t, server.URL)
-	wantCA := provisioner.TalosConfigsForTest().ControlPlane().Cluster().IssuingCA().Crt
+	wantCA := provisioner.TalosConfigsForTest().
+		ControlPlane().
+		K8sAPIServerCAConfig().
+		IssuingCA().
+		Crt
 
 	var waited []string
 
@@ -1425,7 +1429,7 @@ func TestReconcileFloatingIPEndpoint_AppliesDetectedChange(t *testing.T) {
 		"the floating IP must be attached to the control-plane server")
 
 	configs := provisioner.TalosConfigsForTest()
-	endpoint := configs.ControlPlane().Cluster().Endpoint()
+	endpoint := configs.ControlPlane().K8sClusterConfig().ClusterEndpoint()
 	require.NotNil(t, endpoint)
 	assert.Equal(t, "192.0.2.10", endpoint.Hostname(),
 		"the regenerated endpoint must be the floating IP")
@@ -1460,7 +1464,11 @@ func TestBuildDesiredNodeConfig_PreservesReconciledFloatingIPEndpoint(t *testing
 	runningControlPlane := provisioner.TalosConfigsForTest().ControlPlane()
 	runningWorker := provisioner.TalosConfigsForTest().Worker()
 
-	require.NotEqual(t, "192.0.2.10", runningControlPlane.Cluster().Endpoint().Hostname())
+	require.NotEqual(
+		t,
+		"192.0.2.10",
+		runningControlPlane.K8sClusterConfig().ClusterEndpoint().Hostname(),
+	)
 
 	require.NoError(t, provisioner.UpdateConfigsWithEndpointForTest(
 		t.Context(), hzProvider, "fip-cluster",
@@ -1488,7 +1496,7 @@ func TestBuildDesiredNodeConfig_PreservesReconciledFloatingIPEndpoint(t *testing
 				test.running, runningControlPlane, test.role,
 			)
 			require.NoError(t, err)
-			assert.Equal(t, "192.0.2.10", desired.Cluster().Endpoint().Hostname(),
+			assert.Equal(t, "192.0.2.10", desired.K8sClusterConfig().ClusterEndpoint().Hostname(),
 				"the in-place push must preserve the reconciled floating-IP endpoint")
 		})
 	}
@@ -1593,7 +1601,7 @@ func TestReplacementCertSANRetainsPreparedConfig(t *testing.T) {
 		),
 	)
 	after := provisioner.TalosConfigsForTest().ControlPlane()
-	assert.Equal(t, "192.0.2.10", after.Cluster().Endpoint().Hostname())
+	assert.Equal(t, "192.0.2.10", after.K8sClusterConfig().ClusterEndpoint().Hostname())
 	assert.Equal(t, certificate, after.Machine().Security().IssuingCA().Crt)
 	assert.Subset(
 		t,

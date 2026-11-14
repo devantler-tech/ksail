@@ -70,6 +70,7 @@ func createAutoscalerTestSecret(
 	return secret.Data[clusterConfigSecretKey]
 }
 
+//nolint:staticcheck // exercises the legacy v1alpha1 node fields of pre-1.14 contracts
 func bootedMachineLabels(t *testing.T, cloudInit string) map[string]string {
 	t.Helper()
 
@@ -79,6 +80,7 @@ func bootedMachineLabels(t *testing.T, cloudInit string) map[string]string {
 	return booted.RawV1Alpha1().MachineConfig.MachineNodeLabels
 }
 
+//nolint:staticcheck // exercises the legacy v1alpha1 node fields of pre-1.14 contracts
 func assertBootedKubeletLabels(t *testing.T, cloudInit string) {
 	t.Helper()
 
@@ -93,6 +95,8 @@ func assertBootedKubeletLabels(t *testing.T, cloudInit string) {
 // intermediate generated worker config. This builds that Secret the way cluster create and update
 // do, decodes each pool's cloudInit the way the autoscaler and Talos do, and checks the booted
 // config carries the autoscaler marker and not the Longhorn default-disk label (#7013).
+//
+//nolint:staticcheck // exercises the legacy v1alpha1 node fields of pre-1.14 contracts
 func TestAutoscalerSecretPayloadBootsEveryPoolWithTheAutoscalerShape(t *testing.T) {
 	t.Parallel()
 

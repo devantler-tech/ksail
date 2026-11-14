@@ -635,12 +635,7 @@ func (p *Provisioner) refreshFloatingIPKubeconfig(ctx context.Context, clusterNa
 		return nil
 	}
 
-	if p.talosConfigs == nil || p.talosConfigs.ControlPlane() == nil ||
-		p.talosConfigs.ControlPlane().Cluster().Endpoint() == nil {
-		return errFloatingIPConfigsUnavailable
-	}
-
-	endpointIP := p.talosConfigs.ControlPlane().Cluster().Endpoint().Hostname()
+	endpointIP := p.desiredControlPlaneEndpoint()
 	if endpointIP == "" {
 		return errFloatingIPConfigsUnavailable
 	}
@@ -760,12 +755,11 @@ func (p *Provisioner) disableTransitionSucceeded(diff, result *clusterupdate.Upd
 // desiredControlPlaneEndpoint returns the host of the reconciled control-plane
 // endpoint, or "" when no control-plane config is loaded.
 func (p *Provisioner) desiredControlPlaneEndpoint() string {
-	if p.talosConfigs == nil || p.talosConfigs.ControlPlane() == nil ||
-		p.talosConfigs.ControlPlane().Cluster().Endpoint() == nil {
+	if p.talosConfigs == nil {
 		return ""
 	}
 
-	return p.talosConfigs.ControlPlane().Cluster().Endpoint().Hostname()
+	return clusterEndpointHostname(p.talosConfigs.ControlPlane())
 }
 
 // floatingIPEnabled reports whether Hetzner floating-IP management is enabled.

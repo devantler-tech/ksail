@@ -144,6 +144,10 @@ linters:
         - k8s.io/kubectl
         - k8s.io/metrics
         - sigs.k8s.io/controller-runtime
+        # siderolabs/talos v1.14.6 holds its v0.37.1 node modules the same way (#7259).
+        - k8s.io/cri-api
+        - k8s.io/kube-proxy
+        - k8s.io/kubelet
     wsl_v5:
       allow-first-in-block: true
       allow-whole-block: false
