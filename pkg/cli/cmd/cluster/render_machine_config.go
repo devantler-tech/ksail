@@ -182,12 +182,48 @@ func writeRenderedConfigs(
 	} {
 		path := filepath.Join(dir, file.name)
 
-		err = os.WriteFile(path, file.data, renderFileMode)
+		err = writePrivateFile(dir, path, file.data)
 		if err != nil {
 			return fmt.Errorf("failed to write %s: %w", file.name, err)
 		}
 
 		notify.Infof(cmd.OutOrStdout(), "rendered %s (as node %s)", path, file.node)
+	}
+
+	return nil
+}
+
+// writePrivateFile writes data, which holds cluster PKI, to path with
+// owner-only permissions. It writes a fresh temporary file in dir and renames
+// it over path, so an existing file's wider mode is never kept and a symlink
+// at path is replaced rather than followed.
+func writePrivateFile(dir, path string, data []byte) error {
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".*")
+	if err != nil {
+		return fmt.Errorf("create temporary file: %w", err)
+	}
+
+	tmpPath := tmp.Name()
+
+	defer func() { _ = os.Remove(tmpPath) }()
+
+	err = tmp.Chmod(renderFileMode)
+	if err == nil {
+		_, err = tmp.Write(data)
+	}
+
+	closeErr := tmp.Close()
+	if err == nil {
+		err = closeErr
+	}
+
+	if err != nil {
+		return fmt.Errorf("write temporary file: %w", err)
+	}
+
+	err = os.Rename(tmpPath, path)
+	if err != nil {
+		return fmt.Errorf("replace output file: %w", err)
 	}
 
 	return nil

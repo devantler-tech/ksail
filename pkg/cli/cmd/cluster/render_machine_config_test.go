@@ -120,3 +120,56 @@ func TestRenderWithSuppliedSecretsIsReproducible(t *testing.T) {
 		assert.Contains(t, string(first), bundle.Secrets.BootstrapToken)
 	}
 }
+
+//nolint:paralleltest // changes the working directory.
+func TestRenderReplacesOutputSymlinkWithoutFollowingIt(t *testing.T) {
+	project := setupRenderProject(t)
+
+	input := filepath.Join(project, "ksail.yaml")
+	before := readRendered(t, input)
+
+	require.NoError(t, os.Mkdir(filepath.Join(project, "out"), 0o750))
+	require.NoError(t, os.Symlink(input, filepath.Join(project, "out", "worker.yaml")))
+
+	require.NoError(t, runRender(t, true, "out"))
+
+	assert.Equal(
+		t,
+		string(before),
+		string(readRendered(t, input)),
+		"symlink target was overwritten",
+	)
+
+	info, err := os.Lstat(filepath.Join(project, "out", "worker.yaml"))
+	require.NoError(t, err)
+	assert.True(t, info.Mode().IsRegular(), "worker.yaml is still a symlink")
+	assert.Contains(t, string(readRendered(t, filepath.Join(project, "out", "worker.yaml"))),
+		"hostname: prod-worker-1")
+}
+
+//nolint:paralleltest // changes the working directory.
+func TestRenderMakesExistingOutputFilesOwnerOnly(t *testing.T) {
+	project := setupRenderProject(t)
+
+	out := filepath.Join(project, "out")
+	require.NoError(t, os.Mkdir(out, 0o750))
+
+	for _, file := range []string{"controlplane.yaml", "worker.yaml"} {
+		require.NoError(t, os.WriteFile(filepath.Join(out, file), []byte("old"), 0o600))
+		// The wide mode is the one the render must replace.
+		err := os.Chmod(filepath.Join(out, file), 0o644) //nolint:gosec // see above.
+		require.NoError(t, err)
+	}
+
+	require.NoError(t, runRender(t, true, "out"))
+
+	for _, file := range []string{"controlplane.yaml", "worker.yaml"} {
+		info, err := os.Stat(filepath.Join(out, file))
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), file)
+	}
+
+	entries, err := os.ReadDir(out)
+	require.NoError(t, err)
+	assert.Len(t, entries, 2, "temporary files were left behind")
+}
