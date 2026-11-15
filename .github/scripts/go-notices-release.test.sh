@@ -48,7 +48,7 @@ contracts() {
 		before(idx("desktop"; "verify_desktop_notices"); named("desktop"; "📤 Upload desktop archive artifact")) and
 		([.jobs.goreleaser.steps[], .jobs["desktop-macos"].steps[] |
 		  select(.id == "verify_cli_notices" or .id == "verify_macos_notices") | .if] ==
-		  ["needs.cask-checkpoint.outputs.release-mode == '\''build'\''", "needs.cask-checkpoint.outputs.release-mode == '\''build'\''"]) and
+		  ["needs.validate-release-ref.outputs.release-mode == '\''build'\''", "needs.validate-release-ref.outputs.release-mode == '\''build'\''"]) and
 		([.jobs.desktop.steps[] | select(.id == "verify_desktop_notices") | .if] ==
 		  ["needs.validate-release-ref.outputs.release-mode == '\''build'\''"]) and
 		([.jobs[] .steps[] | select(.id // "" | test("^verify_.*_notices$")) |

@@ -1098,7 +1098,7 @@ type kustomizationValidator struct {
 	opts             *kubeconform.ValidationOptions
 	engine           *celrules.Engine               // nil → CEL rule validation disabled
 	celSink          *celViolationSink              // collects warning-severity CEL violations
-	kyverno          bool                           // evaluate each output's own Kyverno policies
+	kyverno          bool                           // evaluate each output against the Kyverno policies
 	kyvernoSink      *celViolationSink              // collects non-blocking Kyverno results
 	apiCallResponses kyvernopolicy.APICallResponses // reviewed offline Kubernetes API context
 
@@ -1148,10 +1148,10 @@ func (v *kustomizationValidator) run(
 	return errors.Join(err, v.runKyverno(ctx, cmd, progressOpts))
 }
 
-// runKyverno evaluates every stored output's own Kyverno policies once all
-// outputs are rendered, giving each the Namespaces the others render (see
-// sharedNamespaces). It is a no-op when the pass is disabled or nothing passed the
-// first pass.
+// runKyverno evaluates every stored output against its own Kyverno policies and
+// the cluster-scoped ones every other output renders, once all outputs are
+// rendered, giving each the Namespaces the others render too (see kyvernoShared).
+// It is a no-op when the pass is disabled or nothing passed the first pass.
 func (v *kustomizationValidator) runKyverno(
 	ctx context.Context,
 	cmd *cobra.Command,
@@ -1169,7 +1169,10 @@ func (v *kustomizationValidator) runKyverno(
 		outputs = append(outputs, v.renderedOutputs[dir])
 	}
 
-	shared := sharedNamespaces(outputs)
+	shared := kyvernoShared{
+		namespaces: sharedNamespaces(outputs),
+		policies:   sharedClusterPolicies(outputs),
+	}
 
 	err := runParallelValidation(
 		ctx, cmd, dirs, v.dirPath, "Evaluating Kyverno policies", "🛡️",

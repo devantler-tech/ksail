@@ -146,7 +146,7 @@ func releaseModuleDownloadStep(t *testing.T, steps []harnessStep) harnessStep {
 
 	if buildIndex < len(steps) &&
 		strings.HasPrefix(steps[buildIndex].Uses, "goreleaser/goreleaser-action@") {
-		assert.Equal(t, "needs.cask-checkpoint.outputs.release-mode == 'build'", prefetch.If)
+		assert.Equal(t, "needs.validate-release-ref.outputs.release-mode == 'build'", prefetch.If)
 	} else {
 		assert.Empty(t, prefetch.If)
 	}

@@ -2,8 +2,9 @@
 #
 # The desktop entry point shares the root Go module and links a system webview via CGO, so it
 # cannot be cross-compiled in the main release; this config runs on a macOS runner and builds the
-# darwin binary natively. It packages the binary into a KSail.app bundle, archives it, and publishes
-# a Homebrew cask to the same tap as the main `ksail` cask.
+# darwin binary natively. It packages the binary into a KSail.app bundle and archives it. It publishes
+# nothing itself: the cd.yaml job uploads the archive to the main release. The Homebrew tap bumps the
+# `ksail-desktop` cask on its own once that release is published (devantler-tech/homebrew-tap#2568).
 version: 2
 
 project_name: ksail-desktop
@@ -15,8 +16,7 @@ dist: dist-desktop
 # get-release-by-tag API, which does NOT return drafts, so it would not find the main run's draft and
 # would instead create a brand-new — and immediately published, hence immutable — release for the tag
 # (see #4874). The cd.yaml job uploads the built archive to the existing draft with `gh release upload`
-# instead. The Homebrew cask PR is still opened: the cask pipe builds its download URL from
-# owner/repo/tag (not from a created release object), so it works with the release pipe disabled.
+# instead.
 release:
   disable: true
 
@@ -70,73 +70,3 @@ archives:
         dst: KSail.app/Contents/Resources/GoNotices/release.txt
       - src: desktop/build/KSail.app/Contents/_CodeSignature/CodeResources
         dst: KSail.app/Contents/_CodeSignature/CodeResources
-
-homebrew_casks:
-  - name: ksail-desktop
-    # Upload only when the CD cask-checkpoint job found this tag at least as new as every current
-    # cask and the latest release (#7898). Anything else, including an unset value, keeps the cask
-    # in dist/ so an older or prerelease tag can never move the shared cask pointer.
-    skip_upload: '{{ if eq (envOrDefault "KSAIL_CASK_PUBLISH" "false") "true" }}false{{ else }}true{{ end }}'
-    ids: [ksail-desktop]
-    # The release pipe is disabled (see above), so GoReleaser refuses to derive the default cask
-    # download URL ("release is disabled, cannot use default url_template"). Set it explicitly to the
-    # main repo's release assets — where the cd.yaml desktop-macos job uploads the archive via
-    # `gh release upload`. This is the same URL the default would have produced.
-    url:
-      template: "https://github.com/devantler-tech/ksail/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
-      # The download URL host (github.com) differs from the homepage host
-      # (ksail.devantler.tech), so `brew audit --strict` requires the URL to be
-      # marked `verified:` with a trusted prefix.
-      verified: "github.com/devantler-tech/ksail/"
-    # `brew style` (Cask/Desc) rejects a desc that starts with the cask token
-    # ("ksail-desktop") or ends with a full stop; keep it a plain noun phrase.
-    description: "Native desktop app to manage local Kubernetes clusters"
-    # Trailing slash required by `brew style` (Cask/HomepageUrlStyling).
-    homepage: "https://ksail.devantler.tech/"
-    repository:
-      owner: devantler-tech
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_GITHUB_API_TOKEN }}"
-      branch: "goreleaser/{{ .ProjectName }}"
-      pull_request:
-        enabled: true
-        # Open as a draft so the tap cannot auto-merge it while the GitHub release is still a draft
-        # (the cask download URL would 404 for `brew install`). Once the release is public the
-        # cd.yaml `homebrew` job style-cleans, validates, and marks the PR ready for the tap's
-        # check-gated auto-merge — a trusted programmed release path with no review or maintainer
-        # promotion step (maintainer direction ksail#6095).
-        # The branch is deliberately version-less (evergreen): a new release commits onto the same
-        # branch so the ONE open cask PR updates in place instead of a new PR superseding it each
-        # release (tap#1172 — GoReleaser tolerates an existing ref and soft-skips the duplicate PR;
-        # the tap deletes the branch on merge, so it is recreated fresh from main next release).
-        draft: true
-    # The commit message is also the cask PR's title, and the tap squash-merges on that title under a
-    # Conventional commit-message ruleset that rejects GoReleaser's default ("Brew cask update for
-    # ..."). Match the title the cd.yaml handoff normalizes to (#6975).
-    commit_msg_template: "chore(cask): update {{ .ProjectName }} to {{ .Tag }}"
-    # The cask schema has no first-class `app` or `uninstall` field; emit them via a custom stanza.
-    # Declare no macOS dependency here: GoReleaser 2.19 already emits `depends_on :macos` for this
-    # macOS-only cask, and Homebrew refuses a cask that adds a versioned one such as
-    # `depends_on macos: :big_sur` (#8196). No minimum is lost: the cask is arm64-only, and every
-    # Apple silicon Mac runs macOS 11 or newer. `uninstall quit:` names the app's bundle id
-    # so Homebrew quits a running KSail.app before it replaces the bundle on upgrade/uninstall; without
-    # it, upgrading while the app is open interrupts the transaction and leaves a stale
-    # `<version>.upgrading` staging dir that blocks every subsequent `brew upgrade` (a real cascade
-    # observed in the field). The cd.yaml `homebrew` job runs `brew style --fix`, which reorders these
-    # stanzas into canonical position before the cask lands in the tap.
-    # GoReleaser 2.19 supplies the macOS URL/checksum and arm64 dependency itself. Do not add an
-    # Intel fallback: both branches would execute and override sha256 twice (#7943).
-    # Escape Homebrew's install-time token through GoReleaser's template pass.
-    custom_block: |
-      app "KSail.app"
-      uninstall quit: "tech.devantler.ksail.desktop"
-      postflight_steps do
-        on_macos do
-          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{appdir}}" }}/KSail.app"]
-        end
-      end
-    # Symlink the CLI from inside the installed app (the canonical GUI-app-with-CLI cask pattern),
-    # so `ksail-desktop` is on PATH and `ksail open desktop` finds it. Without this, GoReleaser would
-    # default the symlink to the bare basename, which does not exist at the archive root.
-    binaries:
-      - "#{appdir}/KSail.app/Contents/MacOS/ksail-desktop"

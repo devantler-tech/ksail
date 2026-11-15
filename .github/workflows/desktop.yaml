@@ -113,10 +113,10 @@ jobs:
       - name: 🧪 Test desktop app
         run: go test -mod=readonly -tags desktop ./desktop
 
-  # Validate the full macOS desktop release pipeline (build into KSail.app, archive, cask
-  # generation) without publishing. --snapshot needs no secrets, so this runs on fork PRs too.
+  # Validate the full macOS desktop release pipeline (build into KSail.app, sign and archive)
+  # without publishing. --snapshot needs no secrets, so this runs on fork PRs too.
   build-macos:
-    name: 🏗️ Build + cask (macOS)
+    name: 🏗️ Build + archive (macOS)
     runs-on: macos-latest
     timeout-minutes: 40
     steps:

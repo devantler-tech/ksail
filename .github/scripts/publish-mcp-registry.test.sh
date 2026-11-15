@@ -12,7 +12,7 @@ fail() {
 }
 yq -r '.jobs.changes.steps[] | select(.id=="filter") | .with.filters' \
 	"$root/.github/workflows/ci.yaml" >"$work/ci-filters.yaml"
-yq -o=json '."cask-pr-handoff"' "$work/ci-filters.yaml" |
+yq -o=json '."release-publication-scripts"' "$work/ci-filters.yaml" |
 	jq -e 'index("server.json") != null' >/dev/null ||
 	fail 'manifest-only changes must select MCP publication controls'
 

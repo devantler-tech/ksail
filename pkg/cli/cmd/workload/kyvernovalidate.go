@@ -31,8 +31,10 @@ const kyvernoPoliciesFlagDescription = "Evaluate the source's own Kyverno Cluste
 	"validations, against the rendered manifests, as if each document were being " +
 	"created. On by default when ksail.yaml sets spec.cluster.policyEngine to Kyverno, off " +
 	"otherwise; --kyverno-policies=false turns it off. Each kustomization is evaluated " +
-	"against the policies in its own rendered output: a policy delivered by a different " +
-	"kustomization is not seen, loose YAML files are not evaluated, a document is " +
+	"against the policies in its own rendered output plus every cluster-scoped " +
+	"ClusterPolicy and ValidatingPolicy any other kustomization renders (its own copy of " +
+	"a same-named policy wins); a namespaced Policy or NamespacedValidatingPolicy applies " +
+	"only within the kustomization that renders it, loose YAML files are not evaluated, a document is " +
 	"evaluated in the namespace it declares (a Flux " +
 	"targetNamespace is not applied, so a policy that depends on the namespace of a " +
 	"namespaced document that declares none is reported as a warning), and other " +
@@ -68,11 +70,12 @@ const kyvernoPoliciesFlagDescription = "Evaluate the source's own Kyverno Cluste
 // after the progress group. A policy that does not decode is an error: skipping it
 // would report a clean run for a policy that was never applied.
 //
-// shared holds Namespace documents rendered elsewhere in the validated tree (see
-// sharedNamespaces). They only supply labels for a Namespace data does not render
-// itself: a kustomization's own Namespace always wins, and shared Namespaces are
-// never evaluated as targets here — each is evaluated by the kustomization that
-// renders it.
+// shared holds what the rest of the validated tree contributes (see
+// kyvernoShared): the cluster-scoped policies other kustomizations render, which
+// are applied to data's documents too, and the Namespaces they render, which only
+// supply labels. A kustomization's own policy or Namespace of the same name always
+// wins, and nothing shared is evaluated as a target here — each document is
+// evaluated by the kustomization that renders it.
 func evaluateKyvernoDocuments(
 	ctx context.Context,
 	enabled bool,
@@ -81,7 +84,7 @@ func evaluateKyvernoDocuments(
 	skipKinds []string,
 	sink *celViolationSink,
 	attribution map[string]string,
-	shared []map[string]any,
+	shared kyvernoShared,
 	apiCallResponses kyvernopolicy.APICallResponses,
 ) error {
 	if !enabled {
@@ -95,11 +98,13 @@ func evaluateKyvernoDocuments(
 		return fmt.Errorf("%s: %w", source, err)
 	}
 
+	split.addSharedClusterPolicies(docs, shared.policies)
+
 	if len(split.policies) == 0 && len(split.celPolicies) == 0 {
 		return nil
 	}
 
-	namespaces := withSharedNamespaces(docs, shared)
+	namespaces := withSharedNamespaces(docs, shared.namespaces)
 
 	var engine *kyvernopolicy.Engine
 	if apiCallResponses == nil {
@@ -283,6 +288,116 @@ func withSharedNamespaces(docs, shared []map[string]any) []map[string]any {
 	}
 
 	return combined
+}
+
+// kyvernoShared is what the whole validated tree contributes to each
+// kustomization's Kyverno evaluation: the Namespaces rendered anywhere (see
+// sharedNamespaces) and the cluster-scoped policies rendered anywhere (see
+// sharedClusterPolicies).
+type kyvernoShared struct {
+	namespaces []map[string]any
+	policies   []sharedClusterPolicy
+}
+
+// sharedClusterPolicy is one decoded cluster-scoped Kyverno policy, keyed by kind
+// and name. Exactly one of classic and cel is set.
+type sharedClusterPolicy struct {
+	key     string
+	classic kyvernov1.PolicyInterface
+	cel     policiesv1beta1.ValidatingPolicyLike
+}
+
+// clusterPolicyKey identifies a cluster-scoped policy document by kind and name,
+// the identity a cluster stores it under. ok is false for any other document.
+func clusterPolicyKey(doc map[string]any) (string, bool) {
+	if !kyvernopolicy.IsClusterScopedPolicy(doc) {
+		return "", false
+	}
+
+	kind, _ := doc["kind"].(string)
+	name, _, _ := unstructured.NestedString(doc, "metadata", "name")
+
+	return kind + "/" + name, true
+}
+
+// sharedClusterPolicies collects the cluster-scoped Kyverno policies —
+// ClusterPolicy and ValidatingPolicy — rendered across every kustomization's
+// output. A cluster-scoped policy governs every namespace once applied, so it
+// applies to documents whichever kustomization delivers them: a policy shipped by
+// an infrastructure layer must still catch a workload in an apps layer.
+//
+// When two outputs render a policy of the same kind and name, the first output
+// (in the order given) supplies it. A policy that does not decode is left out:
+// the kustomization that renders it fails on it in its own evaluation, so the
+// run cannot report clean.
+func sharedClusterPolicies(outputs [][]byte) []sharedClusterPolicy {
+	seen := map[string]struct{}{}
+
+	var shared []sharedClusterPolicy
+
+	for _, data := range outputs {
+		for _, doc := range decodeDocuments(data) {
+			key, ok := clusterPolicyKey(doc)
+			if !ok {
+				continue
+			}
+
+			if _, found := seen[key]; found {
+				continue
+			}
+
+			entry := sharedClusterPolicy{key: key}
+
+			var err error
+			if kyvernopolicy.IsPolicy(doc) {
+				entry.classic, err = kyvernopolicy.DecodePolicy(doc)
+			} else {
+				entry.cel, err = kyvernopolicy.DecodeValidatingPolicy(doc)
+			}
+
+			if err != nil {
+				continue
+			}
+
+			seen[key] = struct{}{}
+
+			shared = append(shared, entry)
+		}
+	}
+
+	return shared
+}
+
+// addSharedClusterPolicies adds every shared cluster-scoped policy that docs does
+// not render itself, so a kustomization's own copy of a policy always wins and no
+// policy is applied twice.
+func (s *kyvernoSplit) addSharedClusterPolicies(
+	docs []map[string]any,
+	shared []sharedClusterPolicy,
+) {
+	if len(shared) == 0 {
+		return
+	}
+
+	own := map[string]struct{}{}
+
+	for _, doc := range docs {
+		if key, ok := clusterPolicyKey(doc); ok {
+			own[key] = struct{}{}
+		}
+	}
+
+	for _, policy := range shared {
+		if _, rendered := own[policy.key]; rendered {
+			continue
+		}
+
+		if policy.classic != nil {
+			s.policies = append(s.policies, policy.classic)
+		} else {
+			s.celPolicies = append(s.celPolicies, policy.cel)
+		}
+	}
 }
 
 // kyvernoSplit is a document stream separated into the Kyverno policies it

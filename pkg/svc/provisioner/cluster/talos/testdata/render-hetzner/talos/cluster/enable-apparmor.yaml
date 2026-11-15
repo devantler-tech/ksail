@@ -1,0 +1,5 @@
+machine:
+  install:
+    extraKernelArgs:
+      - apparmor=1
+      - lsm=yama,apparmor,selinux,loadpin,safesetid,integrity,bpf,lockdown,landlock
