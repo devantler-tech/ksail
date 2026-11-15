@@ -32,6 +32,15 @@ var (
 	// exists but is not labelled as owned by that cluster, so KSail must not change
 	// its rules.
 	ErrFirewallNotOwned = errors.New("firewall is not owned by this cluster")
+	// ErrHostFirewallNotFound indicates that a nested API grant was requested for a host whose
+	// KSail firewall does not exist.
+	ErrHostFirewallNotFound = errors.New("host firewall not found")
+	// ErrNoKubernetesAPIRule indicates that the host firewall has no Kubernetes API rule whose
+	// sources a nested API grant could inherit.
+	ErrNoKubernetesAPIRule = errors.New("host firewall has no Kubernetes API rule")
+	// ErrInvalidNestedAPIGrant indicates a nested API grant request without a nested cluster
+	// name or with a port outside the valid range.
+	ErrInvalidNestedAPIGrant = errors.New("invalid nested API grant")
 	// ErrServerTypeUnavailable indicates that the server type is not available in any configured location.
 	ErrServerTypeUnavailable = errors.New("server type unavailable in all configured locations")
 	// ErrNoLocationsConfigured indicates that no valid locations were provided for server creation.

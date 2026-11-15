@@ -194,6 +194,10 @@ func (p *Provider) ensureFirewallRules(
 			)
 		}
 
+		// Keep the API grants of nested clusters hosted here, so a host update does not
+		// cut them off; their sources follow the host API rule in desiredRules.
+		desiredRules = withNestedAPIGrants(desiredRules, firewall.Rules)
+
 		err = p.setRulesIfChanged(ctx, firewall, desiredRules)
 		if err != nil {
 			return nil, err
@@ -219,6 +223,8 @@ func (p *Provider) ensureFirewallRules(
 // SyncFirewallRules updates an existing firewall's rules to match the current secure
 // rule set. This migrates already-created clusters to the hardened configuration
 // on the next `ksail cluster update`.
+// API grants of nested clusters hosted on this cluster are kept, with their sources
+// following the host Kubernetes API rule.
 // When allowedCIDRs is non-empty, the Kubernetes API and Talos API rules
 // restrict source IPs to the specified CIDR blocks instead of 0.0.0.0/0 and ::/0.
 func (p *Provider) SyncFirewallRules(
@@ -241,7 +247,9 @@ func (p *Provider) SyncFirewallRules(
 		return nil // No firewall to sync
 	}
 
-	return p.setRulesIfChanged(ctx, firewall, buildFirewallRules(allowedCIDRs))
+	return p.setRulesIfChanged(
+		ctx, firewall, withNestedAPIGrants(buildFirewallRules(allowedCIDRs), firewall.Rules),
+	)
 }
 
 // setRulesIfChanged replaces the firewall's rules with desiredRules unless they
