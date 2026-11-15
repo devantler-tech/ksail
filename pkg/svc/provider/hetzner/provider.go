@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
@@ -59,6 +60,10 @@ type Provider struct {
 	client *hcloud.Client
 	// gracefulShutdownTimeout overrides DefaultGracefulShutdownTimeout when positive.
 	gracefulShutdownTimeout time.Duration
+	// firewallRulesMu serializes the read, build and write of firewall rules, so a rule
+	// list built from an older snapshot cannot replace a newer one. It covers calls
+	// through this Provider only; separate KSail processes are not serialized.
+	firewallRulesMu sync.Mutex
 }
 
 // NewProvider creates a new Hetzner Cloud provider with the given client.

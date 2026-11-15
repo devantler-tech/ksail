@@ -100,6 +100,9 @@ func (p *Provider) GrantNestedAPIPort(
 		return fmt.Errorf("%w: port %d is outside 1-%d", ErrInvalidNestedAPIGrant, port, maxPort)
 	}
 
+	p.firewallRulesMu.Lock()
+	defer p.firewallRulesMu.Unlock()
+
 	firewall, err := p.ownedHostFirewall(ctx, hostCluster)
 	if err != nil {
 		return err
@@ -133,6 +136,9 @@ func (p *Provider) RevokeNestedAPIPort(
 	if nestedCluster == "" {
 		return fmt.Errorf("%w: nested cluster name is required", ErrInvalidNestedAPIGrant)
 	}
+
+	p.firewallRulesMu.Lock()
+	defer p.firewallRulesMu.Unlock()
 
 	firewall, err := p.ownedHostFirewall(ctx, hostCluster)
 	if errors.Is(err, ErrHostFirewallNotFound) {
