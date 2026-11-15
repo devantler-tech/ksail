@@ -1414,3 +1414,41 @@ var ClusterEndpointHostnameForTest = clusterEndpointHostname
 func HasControlPlanePKIForTest(provider talosconfig.Provider) bool {
 	return hasControlPlanePKI(provider)
 }
+
+// HetznerCreateNodeConfigsForTest drives the config steps cluster create takes
+// on Hetzner: regenerateHetznerEndpointConfigs (as updateConfigsWithEndpoint
+// calls it once the endpoint is known) and then the per-node marshalling
+// applyConfigToNode sends to the first node of each role.
+func (p *Provisioner) HetznerCreateNodeConfigsForTest(
+	clusterName, endpointIP string,
+	certSANs []string,
+) ([]byte, []byte, error) {
+	err := p.regenerateHetznerEndpointConfigs(endpointIP, certSANs)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	configBundle := p.talosConfigs.Bundle()
+
+	cpName, err := hetznerNodeName(clusterName, RoleControlPlane, 1)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	workerName, err := hetznerNodeName(clusterName, RoleWorker, 1)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	controlPlane, err := marshalConfigWithHostname(configBundle.ControlPlane(), cpName)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	worker, err := marshalConfigWithHostname(configBundle.Worker(), workerName)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return controlPlane, worker, nil
+}

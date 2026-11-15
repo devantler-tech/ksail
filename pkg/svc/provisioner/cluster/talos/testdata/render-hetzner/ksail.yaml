@@ -1,0 +1,26 @@
+# Talos on Hetzner with the floating IP, Image Factory extensions and a
+# kernel-argument patch that KSail folds into the installer schematic.
+apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: prod
+spec:
+  cluster:
+    distribution: Talos
+    distributionConfig: talos
+    provider: Hetzner
+    cni: Cilium
+    connection:
+      context: admin@prod
+    kubernetesVersion: v1.35.0
+    talos:
+      version: v1.12.4
+      extensions:
+        - siderolabs/iscsi-tools
+        - siderolabs/qemu-guest-agent
+  provider:
+    hetzner:
+      floatingIPEnabled: true
+      networkCidr: 10.0.0.0/16
+  workload:
+    sourceDirectory: k8s

@@ -208,19 +208,9 @@ func (p *Provisioner) regenerateHetznerEndpointConfigs(
 
 	_, _ = fmt.Fprintf(p.logWriter, "Regenerating configs with endpoint IP %s...\n", endpointIP)
 
-	updatedConfigs, err := p.talosConfigs.WithEndpoint(endpointIP)
-	if err != nil {
-		return fmt.Errorf("failed to regenerate configs with endpoint: %w", err)
-	}
-
-	if len(certSANs) > 0 {
-		updatedConfigs, err = updatedConfigs.WithCertSANs(certSANs)
-		if err != nil {
-			return fmt.Errorf("failed to regenerate configs with cert SANs: %w", err)
-		}
-	}
-
-	updatedConfigs, err = p.withHetznerVIPIfEnabled(updatedConfigs, endpointIP)
+	updatedConfigs, err := hetznerEndpointConfigs(
+		p.talosConfigs, endpointIP, certSANs, p.hetznerOpts.FloatingIPEnabled, p.hetznerAPIToken,
+	)
 	if err != nil {
 		return err
 	}
@@ -291,20 +281,48 @@ func (p *Provisioner) prepareFloatingIPConfig(
 	return floatingIP, nil
 }
 
-// withHetznerVIPIfEnabled renders the Talos VIP block for the floating-IP
-// endpoint onto the control-plane configs when FloatingIPEnabled is set —
-// the node-side ownership handover that makes the elected leader claim the
-// floating IP via the hcloud API on every leader change. Returns the configs
-// unchanged when the floating IP is disabled.
-func (p *Provisioner) withHetznerVIPIfEnabled(
+// hetznerEndpointConfigs regenerates configs around the Hetzner endpoint: the
+// endpoint itself, the certificate SAN set when one is supplied, and — when
+// floatingIPEnabled is set — the Talos VIP block for the floating-IP endpoint on
+// the control-plane configs (the node-side ownership handover that makes the
+// elected leader claim the floating IP via the hcloud API on every leader
+// change). It touches no cloud API: the token is only embedded in the VIP block.
+// It is the single renderer shared by cluster create/update and the offline
+// cluster render command, so the two cannot drift.
+func hetznerEndpointConfigs(
 	configs *talosconfigmanager.Configs,
 	endpointIP string,
+	certSANs []string,
+	floatingIPEnabled bool,
+	token func() (string, error),
 ) (*talosconfigmanager.Configs, error) {
-	if !p.hetznerOpts.FloatingIPEnabled {
-		return configs, nil
+	updated, err := configs.WithEndpoint(endpointIP)
+	if err != nil {
+		return nil, fmt.Errorf("failed to regenerate configs with endpoint: %w", err)
 	}
 
-	token, err := p.hetznerAPIToken()
+	if len(certSANs) > 0 {
+		updated, err = updated.WithCertSANs(certSANs)
+		if err != nil {
+			return nil, fmt.Errorf("failed to regenerate configs with cert SANs: %w", err)
+		}
+	}
+
+	if !floatingIPEnabled {
+		return updated, nil
+	}
+
+	return withHetznerVIP(updated, endpointIP, token)
+}
+
+// withHetznerVIP renders the Talos VIP block for the floating-IP endpoint onto
+// the control-plane configs.
+func withHetznerVIP(
+	configs *talosconfigmanager.Configs,
+	endpointIP string,
+	tokenFn func() (string, error),
+) (*talosconfigmanager.Configs, error) {
+	token, err := tokenFn()
 	if err != nil {
 		return nil, err
 	}
