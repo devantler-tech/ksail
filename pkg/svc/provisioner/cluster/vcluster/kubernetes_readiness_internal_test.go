@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
@@ -176,6 +177,56 @@ func TestMergeReadyVClusterKubeconfigBoundsBlockedRequest(t *testing.T) {
 	after, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, original, after)
+}
+
+func TestMergeReadyVClusterKubeconfigRetainsAPIErrorBeforeCancellation(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	var calls atomic.Int32
+
+	server := httptest.NewServer(
+		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			if calls.Add(1) == 1 {
+				writer.Header().Set("Content-Type", "application/json")
+				writer.WriteHeader(http.StatusUnauthorized)
+				_, _ = writer.Write([]byte(
+					`{"kind":"Status","apiVersion":"v1","status":"Failure","reason":"Unauthorized","code":401}`,
+				))
+
+				return
+			}
+
+			cancel()
+			<-request.Context().Done()
+		}),
+	)
+	t.Cleanup(server.Close)
+
+	path, original := readinessHostKubeconfig(t)
+	err := mergeReadyVClusterKubeconfig(
+		ctx,
+		path,
+		readinessNestedKubeconfig(t, server.URL),
+		time.Millisecond,
+		time.Second,
+	)
+	require.ErrorIs(t, err, context.Canceled)
+	require.True(
+		t,
+		apierrors.IsUnauthorized(err),
+		"the API's answer must survive the final canceled probe: %v",
+		err,
+	)
+	require.ErrorContains(t, err, "provide credentials")
+	require.GreaterOrEqual(t, calls.Load(), int32(2))
+
+	//nolint:gosec // G304: path is created by the test (temp directory).
+	after, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	require.Equal(t, original, after, "a failed probe must preserve the host connection")
 }
 
 func TestMergeReadyVClusterKubeconfigHonorsCancellation(t *testing.T) {

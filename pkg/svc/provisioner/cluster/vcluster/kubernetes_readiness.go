@@ -39,8 +39,8 @@ func mergeReadyVClusterKubeconfig(
 		return fmt.Errorf("create vCluster API client: %w", err)
 	}
 
-	// The final probe is usually cut short by the deadline, so the last answer the
-	// endpoint actually gave is kept apart from the last transport error.
+	// A final probe cut short by the polling context must not replace the last
+	// completed probe's error. Keep unexpected response bodies separately too.
 	var lastProbeErr, lastResponseErr error
 
 	err = wait.PollUntilContextTimeout(
@@ -51,7 +51,10 @@ func mergeReadyVClusterKubeconfig(
 		func(ctx context.Context) (bool, error) {
 			body, probeErr := client.Discovery().RESTClient().Get().AbsPath("/readyz").DoRaw(ctx)
 
-			lastProbeErr = probeErr
+			if ctx.Err() == nil || !errors.Is(probeErr, ctx.Err()) {
+				lastProbeErr = probeErr
+			}
+
 			if probeErr == nil {
 				got := strings.TrimSpace(string(body))
 				if got == "ok" {
