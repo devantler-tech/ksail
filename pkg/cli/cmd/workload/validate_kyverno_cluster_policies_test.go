@@ -70,29 +70,34 @@ data:
 func writeTwoLayerTree(t *testing.T, infrastructure, apps map[string]string) string {
 	t.Helper()
 
-	root := t.TempDir()
-
-	for layer, files := range map[string]map[string]string{
+	return writeLayers(t, map[string]map[string]string{
 		"infrastructure": infrastructure,
 		"apps":           apps,
-	} {
+	})
+}
+
+// writeLayers writes one kustomization per layer name, each rendering its map of
+// file name to content, and returns the tree's root.
+func writeLayers(t *testing.T, layers map[string]map[string]string) string {
+	t.Helper()
+
+	root := t.TempDir()
+
+	for layer, files := range layers {
 		dir := filepath.Join(root, layer)
 		require.NoError(t, os.MkdirAll(dir, 0o750))
 
-		resources := ""
+		var resources strings.Builder
 
-		var resourcesSb83 strings.Builder
 		for name, content := range files {
-			resourcesSb83.WriteString("  - " + name + "\n")
+			resources.WriteString("  - " + name + "\n")
 
 			require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600))
 		}
 
-		resources += resourcesSb83.String()
-
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "kustomization.yaml"), []byte(
 			"apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n"+
-				resources,
+				resources.String(),
 		), 0o600))
 	}
 
@@ -159,16 +164,18 @@ func TestValidateKyvernoClusterPolicyFromAnotherKustomizationFails(t *testing.T)
 
 // A kustomization's own copy of a cluster-scoped policy wins over a same-named
 // one another kustomization renders, so the policy is applied once, as its own.
+// The enforcing layer sorts before apps, so it is the copy shared with apps: only
+// apps skipping the shared copy of its own policy keeps validation passing.
 func TestValidateKyvernoOwnClusterPolicyWins(t *testing.T) {
 	t.Parallel()
 
-	root := writeTwoLayerTree(t,
-		map[string]string{"policy.yaml": requireTeamLabelPolicy("Enforce")},
-		map[string]string{
+	root := writeLayers(t, map[string]map[string]string{
+		"00-infrastructure": {"policy.yaml": requireTeamLabelPolicy("Enforce")},
+		"apps": {
 			"policy.yaml":    requireTeamLabelPolicy("Audit"),
 			"configmap.yaml": unlabelledConfigMap,
 		},
-	)
+	})
 
 	output, err := runValidate(t, root, "--kyverno-policies")
 	require.NoError(t, err, "the apps layer's own audit-only copy must win")
