@@ -39,11 +39,28 @@ func mergeReadyVClusterKubeconfig(
 		return fmt.Errorf("create vCluster API client: %w", err)
 	}
 
+	return mergeReadyVClusterKubeconfigWithClient(
+		ctx,
+		path,
+		kubeconfigData,
+		client,
+		interval,
+		timeout,
+	)
+}
+
+func mergeReadyVClusterKubeconfigWithClient(
+	ctx context.Context,
+	path string,
+	kubeconfigData []byte,
+	client *kubernetes.Clientset,
+	interval, timeout time.Duration,
+) error {
 	// A final probe cut short by the polling context must not replace the last
 	// completed probe's error. Keep unexpected response bodies separately too.
 	var lastProbeErr, lastResponseErr error
 
-	err = wait.PollUntilContextTimeout(
+	err := wait.PollUntilContextTimeout(
 		ctx,
 		interval,
 		timeout,
