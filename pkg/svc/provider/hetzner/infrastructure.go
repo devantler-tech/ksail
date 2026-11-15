@@ -178,6 +178,8 @@ func (p *Provider) ensureFirewallRules(
 
 	firewallName := clusterName + FirewallSuffix
 
+	defer lockFirewallRules(firewallName)()
+
 	firewall, _, err := p.client.Firewall.GetByName(ctx, firewallName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get firewall %s: %w", firewallName, err)
@@ -238,8 +240,7 @@ func (p *Provider) SyncFirewallRules(
 
 	firewallName := clusterName + FirewallSuffix
 
-	p.firewallRulesMu.Lock()
-	defer p.firewallRulesMu.Unlock()
+	defer lockFirewallRules(firewallName)()
 
 	firewall, _, err := p.client.Firewall.GetByName(ctx, firewallName)
 	if err != nil {

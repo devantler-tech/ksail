@@ -74,6 +74,12 @@ linters:
       - linters:
           - gochecknoglobals
         path: pkg/svc/repairer/
+      # Hetzner firewall rule writes are serialized per firewall across every
+      # Provider in the process, so the lock registry is process-wide.
+      - linters:
+          - gochecknoglobals
+        path: pkg/svc/provider/hetzner/firewall_lock\.go
+        text: "firewallRuleLocks is a global variable"
       # Kyverno's CEL compiler reads its library context from a process-wide
       # package variable, so the offline context is installed once per process.
       - linters:
