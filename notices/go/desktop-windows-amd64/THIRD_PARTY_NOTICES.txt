@@ -553,9 +553,9 @@ Files: LICENSE.txt
 Material: md348098b7096d78c (notice), SHA-256 ae29545608f708a0f778e8e5f9a5792641c974a7ec96a94f191026e93ef1a54f
 Files: NOTICE.txt
 
-Component: github.com/Azure/azure-sdk-for-go/sdk/azcore@v1.23.3
-Source: https://proxy.golang.org/github.com/!azure/azure-sdk-for-go/sdk/azcore/@v/v1.23.3.zip
-Selected Go source checksum: h1:qgnWTiWs1G7AqcKZegFvkJD1bmXJcaDU3uC0ELSgZ5U=
+Component: github.com/Azure/azure-sdk-for-go/sdk/azcore@v1.24.0
+Source: https://proxy.golang.org/github.com/!azure/azure-sdk-for-go/sdk/azcore/@v/v1.24.0.zip
+Selected Go source checksum: h1:5H6YRLGMoC8z5aXpxqcD6FfswI8mwoVNHSecvIoazt4=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -573,6 +573,7 @@ github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers/body
 github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers/fake
 github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers/loc
 github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers/op
+github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/sanitizer
 github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared
 github.com/Azure/azure-sdk-for-go/sdk/azcore/log
 github.com/Azure/azure-sdk-for-go/sdk/azcore/policy
