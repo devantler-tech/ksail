@@ -34,33 +34,34 @@ import (
 )
 
 type removalFixture struct {
-	mu                   sync.Mutex
-	t                    *testing.T
-	servers              map[int64]*hcloud.Server
-	nodes                map[string]*corev1.Node
-	members              map[uint64]bool
-	pods                 []corev1.Pod
-	budgets              []policyv1.PodDisruptionBudget
-	floatingHolder       int64
-	storageNode          string
-	apiBad               bool
-	etcdBad              bool
-	snapshotBad          bool
-	leaveBad             bool
-	fipChangesAfterLeave bool
-	targetRoutingChanged bool
-	storageAfterLeave    bool
-	retainDeletedNode    bool
-	lateRoleChange       bool
-	lateFloatingOwner    bool
-	lateProviderVolume   bool
-	wrongResponseID      bool
-	cordonReplacesNode   bool
-	leaves               []int64
-	deleted              []int64
-	apiWrites            []string
-	snapshots            int
-	provisioner          *Provisioner
+	mu                    sync.Mutex
+	t                     *testing.T
+	servers               map[int64]*hcloud.Server
+	nodes                 map[string]*corev1.Node
+	members               map[uint64]bool
+	pods                  []corev1.Pod
+	budgets               []policyv1.PodDisruptionBudget
+	floatingHolder        int64
+	storageNode           string
+	apiBad                bool
+	etcdBad               bool
+	snapshotBad           bool
+	leaveBad              bool
+	fipChangesAfterLeave  bool
+	targetRoutingChanged  bool
+	storageAfterLeave     bool
+	retainDeletedNode     bool
+	lateRoleChange        bool
+	lateFloatingOwner     bool
+	lateProviderVolume    bool
+	attachVolumeOnRefresh bool
+	wrongResponseID       bool
+	cordonReplacesNode    bool
+	leaves                []int64
+	deleted               []int64
+	apiWrites             []string
+	snapshots             int
+	provisioner           *Provisioner
 }
 
 var (
@@ -208,6 +209,13 @@ func (fixture *removalFixture) serveReady(response http.ResponseWriter, _ *http.
 }
 
 func (fixture *removalFixture) serveServers(response http.ResponseWriter, request *http.Request) {
+	targetNode := fixture.nodes["fixture-control-plane-1"]
+	if fixture.attachVolumeOnRefresh && targetNode != nil && targetNode.Spec.Unschedulable {
+		if target := fixture.servers[1]; target != nil {
+			target.Volumes = []*hcloud.Volume{{ID: 71}}
+		}
+	}
+
 	servers := []any{}
 	for _, serverID := range []int64{1, 2, 3, 4, 5} {
 		server := fixture.servers[serverID]

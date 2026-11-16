@@ -220,3 +220,20 @@ func TestControlPlaneRemovalRefusesProviderVolume(t *testing.T) {
 	require.Empty(t, fixture.leaves)
 	require.Empty(t, fixture.deleted)
 }
+
+func TestControlPlaneRemovalRechecksProviderStorageBeforeMembership(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	fixture.attachVolumeOnRefresh = true
+
+	err := fixture.provisioner.removeHetznerNodes(
+		t.Context(), "fixture", RoleControlPlane, 2, clusterupdate.NewEmptyUpdateResult(),
+	)
+
+	fixture.mu.Lock()
+	defer fixture.mu.Unlock()
+
+	require.Error(t, err)
+	require.Empty(t, fixture.leaves, "fresh provider storage must stop before a membership RPC")
+	require.Empty(t, fixture.deleted)
+}

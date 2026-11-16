@@ -208,7 +208,8 @@ func sameRemovalServer(planned, observed *hcloud.Server) bool {
 		planned.Created.Equal(observed.Created) &&
 		planned.Labels[hetzner.LabelOwned] == observed.Labels[hetzner.LabelOwned] &&
 		planned.Labels[hetzner.LabelClusterName] == observed.Labels[hetzner.LabelClusterName] &&
-		planned.Labels[hetzner.LabelNodeType] == observed.Labels[hetzner.LabelNodeType]
+		planned.Labels[hetzner.LabelNodeType] == observed.Labels[hetzner.LabelNodeType] &&
+		len(observed.Volumes) == 0
 }
 
 func sameRemovalInventory(expected, current []*hcloud.Server) error {
