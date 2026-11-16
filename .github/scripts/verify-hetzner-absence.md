@@ -9,11 +9,11 @@ The workflow lists servers, primary IPs, floating IPs, volumes, load balancers,
 networks, firewalls, placement groups, SSH keys, and snapshot/backup images. It
 prints only family counts, the observation's source/run/time and an aggregate:
 
-| Verdict | Meaning |
-| --- | --- |
-| `EMPTY` (exit 0) | All ten complete inventories were empty at observation time. |
-| `NONEMPTY` (exit 1) | Every read completed, but at least one family contained resources. |
-| `UNVERIFIED` (exit 2) | A prerequisite, provider read or response validation failed. |
+| Verdict               | Meaning                                                            |
+|-----------------------|--------------------------------------------------------------------|
+| `EMPTY` (exit 0)      | All ten complete inventories were empty at observation time.       |
+| `NONEMPTY` (exit 1)   | Every read completed, but at least one family contained resources. |
+| `UNVERIFIED` (exit 2) | A prerequisite, provider read or response validation failed.       |
 
 A timeout is incomplete evidence. The workflow retains no resource identifiers or
 provider error payloads in logs or artifacts. It excludes vendor system/app images.
