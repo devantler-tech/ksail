@@ -127,35 +127,37 @@ func newAPIGrantCloud(t *testing.T) *apiGrantCloud {
 			"source_ips": []string{"192.0.2.7/32"}, "description": "KSail nested API: sibling",
 		},
 	}}
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("Content-Type", "application/json")
+	server := httptest.NewServer(
+		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			writer.Header().Set("Content-Type", "application/json")
 
-		switch {
-		case request.Method == http.MethodGet && request.URL.Path == "/servers/42":
-			cloud.writeHostServer(writer)
-		case request.Method == http.MethodGet && request.URL.Path == "/firewalls":
-			_ = json.NewEncoder(writer).Encode(map[string]any{"firewalls": []map[string]any{{
-				"id": 7, "name": "host-firewall",
-				"labels": map[string]string{"ksail.owned": "true", "ksail.cluster.name": "host"},
-				"rules":  cloud.rules,
-			}}})
-		case request.Method == http.MethodPost && request.URL.Path == "/firewalls/7/actions/set_rules":
-			var payload map[string][]map[string]any
+			switch {
+			case request.Method == http.MethodGet && request.URL.Path == "/servers/42":
+				cloud.writeHostServer(t, writer)
+			case request.Method == http.MethodGet && request.URL.Path == "/firewalls":
+				cloud.writeFirewalls(t, writer)
+			case request.Method == http.MethodPost && request.URL.Path == "/firewalls/7/actions/set_rules":
+				var payload map[string][]map[string]any
 
-			err := json.NewDecoder(request.Body).Decode(&payload)
-			if err != nil {
-				http.Error(writer, "invalid rules", http.StatusBadRequest)
+				err := json.NewDecoder(request.Body).Decode(&payload)
+				if err != nil {
+					http.Error(writer, "invalid rules", http.StatusBadRequest)
 
-				return
+					return
+				}
+
+				cloud.rules = payload["rules"]
+				cloud.writes++
+
+				assert.NoError(
+					t,
+					json.NewEncoder(writer).Encode(map[string]any{"actions": []any{}}),
+				)
+			default:
+				http.Error(writer, "unexpected cloud request", http.StatusBadRequest)
 			}
-
-			cloud.rules = payload["rules"]
-			cloud.writes++
-			_ = json.NewEncoder(writer).Encode(map[string]any{"actions": []any{}})
-		default:
-			http.Error(writer, "unexpected cloud request", http.StatusBadRequest)
-		}
-	}))
+		}),
+	)
 	t.Cleanup(server.Close)
 
 	cloud.client = hcloud.NewClient(hcloud.WithToken("fixture"), hcloud.WithEndpoint(server.URL))
@@ -163,7 +165,19 @@ func newAPIGrantCloud(t *testing.T) *apiGrantCloud {
 	return cloud
 }
 
-func (cloud *apiGrantCloud) writeHostServer(writer http.ResponseWriter) {
+func (cloud *apiGrantCloud) writeFirewalls(t *testing.T, writer http.ResponseWriter) {
+	t.Helper()
+
+	assert.NoError(t, json.NewEncoder(writer).Encode(map[string]any{"firewalls": []map[string]any{{
+		"id": 7, "name": "host-firewall",
+		"labels": map[string]string{"ksail.owned": "true", "ksail.cluster.name": "host"},
+		"rules":  cloud.rules,
+	}}}))
+}
+
+func (cloud *apiGrantCloud) writeHostServer(t *testing.T, writer http.ResponseWriter) {
+	t.Helper()
+
 	labels := map[string]string{"ksail.owned": "true", "ksail.cluster.name": "host"}
 	if cloud.unowned {
 		delete(labels, "ksail.owned")
@@ -174,20 +188,29 @@ func (cloud *apiGrantCloud) writeHostServer(writer http.ResponseWriter) {
 		firewalls = nil
 	}
 
-	_ = json.NewEncoder(writer).Encode(map[string]any{"server": map[string]any{
+	assert.NoError(t, json.NewEncoder(writer).Encode(map[string]any{"server": map[string]any{
 		"id": 42, "name": "host-node", "labels": labels,
 		"public_net": map[string]any{"firewalls": firewalls},
-	}})
+	}}))
 }
 
-func newAPIGrantProvider(t *testing.T, cloud *apiGrantCloud, providerID string) *kubeprovider.Provider {
+func newAPIGrantProvider(
+	t *testing.T,
+	cloud *apiGrantCloud,
+	providerID string,
+) *kubeprovider.Provider {
 	t.Helper()
 
-	node := nodeWithAddresses(corev1.NodeAddress{Type: corev1.NodeExternalIP, Address: "198.51.100.9"})
+	node := nodeWithAddresses(
+		corev1.NodeAddress{Type: corev1.NodeExternalIP, Address: "198.51.100.9"},
+	)
 	node.Spec.ProviderID = providerID
 	client := fake.NewClientset(node, &corev1.Service{
-		Name: kubeprovider.APIServiceName, Namespace: "ksail-demo",
-		Spec: corev1.ServiceSpec{Ports: []corev1.ServicePort{{Name: "https", Port: 6443, NodePort: 31234}}},
+		Name:      kubeprovider.APIServiceName,
+		Namespace: "ksail-demo",
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{{Name: "https", Port: 6443, NodePort: 31234}},
+		},
 	})
 	prov, err := kubeprovider.NewProvider(client, v1alpha1.OptionsKubernetes{})
 	require.NoError(t, err)

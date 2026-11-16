@@ -154,7 +154,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		kubernetesprovider.DinDDockerPort,
 	)
 	if err != nil {
-		return exposure.CleanupOnFailure(ctx, fmt.Errorf("port-forward Docker API: %w", err))
+		return fmt.Errorf("port-forward Docker API: %w", exposure.CleanupOnFailure(ctx, err))
 	}
 
 	p.portForwards = append(p.portForwards, dockerPF)
@@ -170,10 +170,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	restoreDockerHost, err := nested.SetDockerHost(dockerPF.LocalPort)
 	if err != nil {
-		return exposure.CleanupOnFailure(
-			ctx,
-			err,
-		) //nolint:wrapcheck // helper already wraps with "set DOCKER_HOST" context
+		return fmt.Errorf("set nested Docker host: %w", exposure.CleanupOnFailure(ctx, err))
 	}
 
 	defer restoreDockerHost()
@@ -184,35 +181,20 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		dockerclient.WithAPIVersionNegotiation(),
 	)
 	if err != nil {
-		return exposure.CleanupOnFailure(ctx, fmt.Errorf("create DinD Docker client: %w", err))
+		return fmt.Errorf("create DinD Docker client: %w", exposure.CleanupOnFailure(ctx, err))
 	}
 
 	defer func() { _ = dindClient.Close() }()
 
 	p.inner.WithDockerClient(dindClient)
 
-	err = p.inner.kernelModuleLoader(ctx, p.inner.logWriter)
-	if err != nil {
-		return exposure.CleanupOnFailure(ctx, fmt.Errorf("kernel module check: %w", err))
-	}
-
-	err = p.inner.checkDockerAvailable(ctx)
-	if err != nil {
-		return exposure.CleanupOnFailure(ctx, fmt.Errorf("DinD Docker not available: %w", err))
-	}
-
-	err = p.inner.ensureTalosImage(ctx)
-	if err != nil {
-		return exposure.CleanupOnFailure(ctx, fmt.Errorf("ensure Talos image: %w", err))
-	}
-
 	// Set up authenticated pull-through registry mirrors inside DinD so the nested
 	// cluster pulls k8s/control-plane images through them (avoiding anonymous upstream
 	// rate limits that otherwise stall the kubelet). Must run before Bundle() so the
 	// mirror config is baked into the machine config the nodes boot with.
-	err = p.setupDinDMirrors(ctx, dindClient, clusterName)
+	err = p.prepareNestedTalos(ctx, dindClient, clusterName)
 	if err != nil {
-		return exposure.CleanupOnFailure(ctx, fmt.Errorf("set up nested registry mirrors: %w", err))
+		return fmt.Errorf("prepare nested Talos: %w", exposure.CleanupOnFailure(ctx, err))
 	}
 
 	configBundle := p.inner.talosConfigs.Bundle()
@@ -221,7 +203,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	cluster, err := p.provisionNestedCluster(ctx, clusterName, configBundle, podIP)
 	if err != nil {
-		return exposure.CleanupOnFailure(ctx, fmt.Errorf("provision cluster: %w", err))
+		return fmt.Errorf("provision cluster: %w", exposure.CleanupOnFailure(ctx, err))
 	}
 
 	_, _ = fmt.Fprintf(p.progressWriter(), "► containers provisioned inside DinD [%s]\n",
@@ -246,7 +228,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		kubernetesprovider.DinDPodName, talosPort,
 	)
 	if err != nil {
-		return exposure.CleanupOnFailure(ctx, fmt.Errorf("port-forward Talos API: %w", err))
+		return fmt.Errorf("port-forward Talos API: %w", exposure.CleanupOnFailure(ctx, err))
 	}
 
 	p.portForwards = append(p.portForwards, talosPF)
@@ -257,7 +239,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		kubernetesprovider.DinDPodName, k8sPort,
 	)
 	if err != nil {
-		return exposure.CleanupOnFailure(ctx, fmt.Errorf("port-forward K8s API: %w", err))
+		return fmt.Errorf("port-forward K8s API: %w", exposure.CleanupOnFailure(ctx, err))
 	}
 
 	p.portForwards = append(p.portForwards, k8sPF)
@@ -275,7 +257,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	if p.inner.options.TalosconfigPath != "" {
 		saveErr := p.inner.saveTalosconfig(configBundle)
 		if saveErr != nil {
-			return exposure.CleanupOnFailure(ctx, fmt.Errorf("save talosconfig: %w", saveErr))
+			return fmt.Errorf("save talosconfig: %w", exposure.CleanupOnFailure(ctx, saveErr))
 		}
 	}
 
@@ -297,31 +279,31 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		// back, or just slow on a cold cache? No-op unless the env var is set.
 		p.dumpNestedDiagnostics(ctx, dindClient, clusterName)
 
-		return exposure.CleanupOnFailure(ctx, fmt.Errorf("bootstrap: %w", err))
+		return fmt.Errorf("bootstrap: %w", exposure.CleanupOnFailure(ctx, err))
 	}
 
 	// Fetch and save kubeconfig (server set to the loopback endpoint used for bootstrap).
 	err = p.inner.fetchAndSaveKubeconfig(ctx, clusterAccess)
 	if err != nil {
-		return exposure.CleanupOnFailure(ctx, fmt.Errorf("save kubeconfig: %w", err))
+		return fmt.Errorf("save kubeconfig: %w", exposure.CleanupOnFailure(ctx, err))
 	}
 
 	// Point the exposure Service at the DinD-mapped K8s API port (only known now).
 	//nolint:gosec // port value is bounded within TCP port range (1-65535)
 	err = p.k8sProvider.UpdateAPIServiceTargetPort(ctx, clusterName, int32(servicePort))
 	if err != nil {
-		return exposure.CleanupOnFailure(
-			ctx,
-			fmt.Errorf("update API exposure target port: %w", err),
+		return fmt.Errorf(
+			"update API exposure target port: %w",
+			exposure.CleanupOnFailure(ctx, err),
 		)
 	}
 
 	// Repoint the persisted kubeconfig at the stable exposure address (survives the CLI exit).
 	err = k8s.ModifyKubeconfigCluster(p.kubeconfigPath, clusterName, exposure.ServerURL())
 	if err != nil {
-		return exposure.CleanupOnFailure(
-			ctx,
-			fmt.Errorf("repoint kubeconfig at exposure address: %w", err),
+		return fmt.Errorf(
+			"repoint kubeconfig at exposure address: %w",
+			exposure.CleanupOnFailure(ctx, err),
 		)
 	}
 
@@ -329,15 +311,15 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// reach the nested cluster without a DinD-internal or host-only address.
 	raw, err := clusterAccess.Kubeconfig(ctx)
 	if err != nil {
-		return exposure.CleanupOnFailure(
-			ctx,
-			fmt.Errorf("fetch kubeconfig for connector publish: %w", err),
+		return fmt.Errorf(
+			"fetch kubeconfig for connector publish: %w",
+			exposure.CleanupOnFailure(ctx, err),
 		)
 	}
 
 	err = p.publishConnectorKubeconfig(ctx, clusterName, raw)
 	if err != nil {
-		return exposure.CleanupOnFailure(ctx, fmt.Errorf("publish connector kubeconfig: %w", err))
+		return fmt.Errorf("publish connector kubeconfig: %w", exposure.CleanupOnFailure(ctx, err))
 	}
 
 	return nil
@@ -429,6 +411,35 @@ func (p *KubernetesProvisioner) Stop(_ context.Context, _ string) error {
 	return ErrStopNotSupported
 }
 
+// prepareNestedTalos prepares the runtime and mirrors before the node config is bundled.
+func (p *KubernetesProvisioner) prepareNestedTalos(
+	ctx context.Context,
+	dindClient *dockerclient.Client,
+	clusterName string,
+) error {
+	err := p.inner.kernelModuleLoader(ctx, p.inner.logWriter)
+	if err != nil {
+		return fmt.Errorf("kernel module check: %w", err)
+	}
+
+	err = p.inner.checkDockerAvailable(ctx)
+	if err != nil {
+		return fmt.Errorf("DinD Docker not available: %w", err)
+	}
+
+	err = p.inner.ensureTalosImage(ctx)
+	if err != nil {
+		return fmt.Errorf("ensure Talos image: %w", err)
+	}
+
+	err = p.setupDinDMirrors(ctx, dindClient, clusterName)
+	if err != nil {
+		return fmt.Errorf("set up nested registry mirrors: %w", err)
+	}
+
+	return nil
+}
+
 // prepareExposure resolves a stable, server-side exposure for the nested Kubernetes API server and
 // regenerates the Talos config so the API server certificate is valid for that address (preserving
 // the existing PKI). The Service target port is corrected later, once the DinD-mapped K8s port is
@@ -448,7 +459,7 @@ func (p *KubernetesProvisioner) prepareExposure(
 		},
 	)
 	if err != nil {
-		return nil, exposure.CleanupOnFailure(ctx, fmt.Errorf("expose API server: %w", err))
+		return nil, fmt.Errorf("expose API server: %w", exposure.CleanupOnFailure(ctx, err))
 	}
 
 	// The in-cluster Service DNS names (Connection.CertSANs) are included so the kubeconfig
@@ -460,9 +471,9 @@ func (p *KubernetesProvisioner) prepareExposure(
 		),
 	)
 	if err != nil {
-		return nil, exposure.CleanupOnFailure(
-			ctx,
-			fmt.Errorf("add exposure address to cert SANs: %w", err),
+		return nil, fmt.Errorf(
+			"add exposure address to cert SANs: %w",
+			exposure.CleanupOnFailure(ctx, err),
 		)
 	}
 

@@ -128,7 +128,7 @@ func (p *KubernetesProvisioner) Create(
 		},
 	)
 	if err != nil {
-		return exposure.CleanupOnFailure(ctx, fmt.Errorf("expose API server: %w", err))
+		return fmt.Errorf("expose API server: %w", exposure.CleanupOnFailure(ctx, err))
 	}
 
 	// Step 3: Add the exposure address to the API server cert SANs so kubectl verifies TLS when
@@ -145,7 +145,7 @@ func (p *KubernetesProvisioner) Create(
 		kubernetesprovider.DinDDockerPort,
 	)
 	if err != nil {
-		return exposure.CleanupOnFailure(ctx, fmt.Errorf("port-forward Docker API: %w", err))
+		return fmt.Errorf("port-forward Docker API: %w", exposure.CleanupOnFailure(ctx, err))
 	}
 	defer dockerPF.Close()
 

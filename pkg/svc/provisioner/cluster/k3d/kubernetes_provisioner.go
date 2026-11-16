@@ -589,7 +589,7 @@ func (p *K3kProvisioner) setupCluster(
 
 	err = p.createClusterCR(ctx, clusterName, namespace, exposure.Address)
 	if err != nil {
-		return nil, exposure.CleanupOnFailure(ctx, fmt.Errorf("create k3k cluster CR: %w", err))
+		return nil, fmt.Errorf("create k3k cluster CR: %w", exposure.CleanupOnFailure(ctx, err))
 	}
 
 	_, _ = fmt.Fprintln(os.Stdout, "► waiting for k3k cluster to become ready")
@@ -598,9 +598,9 @@ func (p *K3kProvisioner) setupCluster(
 	if err != nil {
 		p.dumpNestedK3sFailureDiagnostics(ctx, namespace)
 
-		return nil, exposure.CleanupOnFailure(
-			ctx,
-			fmt.Errorf("wait for k3k cluster ready: %w", err),
+		return nil, fmt.Errorf(
+			"wait for k3k cluster ready: %w",
+			exposure.CleanupOnFailure(ctx, err),
 		)
 	}
 
