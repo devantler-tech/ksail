@@ -86,7 +86,8 @@ func validateGoMaintenanceInputs(uses string, with map[string]any) error {
 
 	switch {
 	case uses == goMaintenanceInputRetiredRevision || uses == goMaintenanceInputPreviousRevision ||
-		uses == goMaintenanceInputLatestRevision || uses == goMaintenanceInputDiagnosticsRevision:
+		uses == goMaintenanceInputLatestRevision || uses == goMaintenanceInputDiagnosticsRevision ||
+		uses == goMaintenanceInputHeadroomRevision:
 		if explicit {
 			return errGoMaintenanceRetiredInput
 		}
@@ -152,6 +153,8 @@ func validateGoMaintenanceIdentity(workflow ciWorkflow, caller todosWorkflow) er
 	// v21.6.3 supplies bounded module downloads and scan resource diagnostics. Its
 	// interface, job admission, permissions and secrets match v20.1.18; runner hardening
 	// and the disabled signed-fix callees move, and this caller keeps signed fixes off.
+	// v21.7.2 adds bounded scanner swap preparation and retirement. Its caller inputs,
+	// admission, permissions, secrets and signed-fix opt-out remain unchanged.
 	// Keep explicit reviewed identities: a syntactically valid SHA alone is insufficient.
 	reviewed := slices.Contains([]string{
 		prefix + "0600006235510307a04efebcac1ac1f363f5f862",
@@ -173,6 +176,7 @@ func validateGoMaintenanceIdentity(workflow ciWorkflow, caller todosWorkflow) er
 		prefix + "1a0eb6f18b88a7816b91cbf692b8ad8ea9a08123",
 		prefix + "9ba573406426900207a3b5afeebe16f2d89ca751",
 		prefix + "ac1f346773da6f47444c283927fb1ce31187fe21",
+		prefix + "d70d50665465117f01104313e53057374a96a1a3",
 	}, job.Uses)
 	if !found || !reviewed || len(job.Steps) != 0 ||
 		caller.Jobs["ci-go"].RunsOn != "" || !reflect.DeepEqual(job.Needs, []string{"changes"}) {
@@ -306,6 +310,9 @@ const (
 	// The resource-diagnostics revision retains the retired-input contract.
 	goMaintenanceInputDiagnosticsRevision = "devantler-tech/.github/.github/workflows/validate-go-project.yaml@" +
 		"ac1f346773da6f47444c283927fb1ce31187fe21"
+	// The bounded scanner headroom revision retains the retired-input contract.
+	goMaintenanceInputHeadroomRevision = "devantler-tech/.github/.github/workflows/validate-go-project.yaml@" +
+		"d70d50665465117f01104313e53057374a96a1a3"
 )
 
 type goMaintenanceMutation struct {
@@ -421,6 +428,12 @@ func goMaintenanceInputMutations() []goMaintenanceMutation {
 			t.Helper()
 
 			job["uses"] = goMaintenanceInputLatestRevision
+			goMaintenanceMap(t, job, "with")["maintenance-default-branch"] = true
+		}, "maintenance-default-branch is retired"},
+		{"retired input at headroom revision", func(t *testing.T, job map[string]any) {
+			t.Helper()
+
+			job["uses"] = goMaintenanceInputHeadroomRevision
 			goMaintenanceMap(t, job, "with")["maintenance-default-branch"] = true
 		}, "maintenance-default-branch is retired"},
 		{"signed fixes omitted", func(t *testing.T, job map[string]any) {
