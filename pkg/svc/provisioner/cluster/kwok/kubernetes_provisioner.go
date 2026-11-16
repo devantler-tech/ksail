@@ -120,7 +120,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("expose API server: %w", err)
+		return exposure.CleanupOnFailure(ctx, fmt.Errorf("expose API server: %w", err))
 	}
 
 	// Step 1c: Pin the API server port and add the exposure address to the API server cert SANs
@@ -128,7 +128,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// connecting via the stable address.
 	cleanupCfg, err := p.applyKwokCertSANs(exposure.Address)
 	if err != nil {
-		return fmt.Errorf("configure kwok cert SANs: %w", err)
+		return exposure.CleanupOnFailure(ctx, fmt.Errorf("configure kwok cert SANs: %w", err))
 	}
 	defer cleanupCfg()
 
@@ -140,7 +140,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	err = p.createPlaceholderFiles(ctx, target)
 	if err != nil {
-		return fmt.Errorf("create placeholder files: %w", err)
+		return exposure.CleanupOnFailure(ctx, fmt.Errorf("create placeholder files: %w", err))
 	}
 
 	// Step 3: Start exec tunnel for Docker API (2375)
@@ -150,7 +150,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		kubernetesprovider.DinDDockerPort,
 	)
 	if err != nil {
-		return fmt.Errorf("exec tunnel Docker API: %w", err)
+		return exposure.CleanupOnFailure(ctx, fmt.Errorf("exec tunnel Docker API: %w", err))
 	}
 
 	defer dockerPF.Close()
@@ -168,7 +168,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		return p.CreateCluster(ctx, name)
 	})
 	if err != nil {
-		return fmt.Errorf("kwok create via SDK: %w", err)
+		return exposure.CleanupOnFailure(ctx, fmt.Errorf("kwok create via SDK: %w", err))
 	}
 
 	// Step 5: Copy real PKI, kubeconfig, and kwok.yaml from the local host
@@ -177,7 +177,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	err = p.copyStateToDinD(ctx, target)
 	if err != nil {
-		return fmt.Errorf("copy state to DinD: %w", err)
+		return exposure.CleanupOnFailure(ctx, fmt.Errorf("copy state to DinD: %w", err))
 	}
 
 	// Step 6: Restart crash-looping containers so they pick up the real files.
@@ -186,13 +186,13 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	err = p.restartContainersInDinD(ctx, target)
 	if err != nil {
-		return fmt.Errorf("restart containers: %w", err)
+		return exposure.CleanupOnFailure(ctx, fmt.Errorf("restart containers: %w", err))
 	}
 
 	// Step 7: Discover the API server port from the kubeconfig that kwokctl wrote.
 	apiServerPort, err := p.discoverAPIServerPort(name)
 	if err != nil {
-		return fmt.Errorf("discover API server port: %w", err)
+		return exposure.CleanupOnFailure(ctx, fmt.Errorf("discover API server port: %w", err))
 	}
 
 	// Step 8: Port-forward the nested API server from DinD to localhost. This forward is
@@ -205,7 +205,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		kubernetesprovider.DinDPodName, apiServerPort,
 	)
 	if err != nil {
-		return fmt.Errorf("port-forward API server: %w", err)
+		return exposure.CleanupOnFailure(ctx, fmt.Errorf("port-forward API server: %w", err))
 	}
 
 	defer portForward.Close()
@@ -214,7 +214,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// check and node scaling can reach the API during creation (the cert includes 127.0.0.1).
 	err = p.rewriteKubeconfig(name, fmt.Sprintf("https://127.0.0.1:%d", portForward.LocalPort))
 	if err != nil {
-		return fmt.Errorf("rewrite kubeconfig: %w", err)
+		return exposure.CleanupOnFailure(ctx, fmt.Errorf("rewrite kubeconfig: %w", err))
 	}
 
 	// Step 10: Wait for the nested API server to be reachable through port-forward.
@@ -222,7 +222,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	err = k8s.WaitForAPIServer(ctx, p.kubeconfigPath, "kwok-"+target)
 	if err != nil {
-		return fmt.Errorf("wait for API server: %w", err)
+		return exposure.CleanupOnFailure(ctx, fmt.Errorf("wait for API server: %w", err))
 	}
 
 	// Step 11: Scale simulated nodes — now the API server is accessible via port-forward
@@ -230,20 +230,20 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	err = p.ScaleNodes(ctx, name)
 	if err != nil {
-		return fmt.Errorf("kwok scale via SDK: %w", err)
+		return exposure.CleanupOnFailure(ctx, fmt.Errorf("kwok scale via SDK: %w", err))
 	}
 
 	// Step 12: Point the kubeconfig at the stable exposure address (survives the CLI process exit).
 	err = p.rewriteKubeconfig(name, exposure.ServerURL())
 	if err != nil {
-		return fmt.Errorf("rewrite kubeconfig: %w", err)
+		return exposure.CleanupOnFailure(ctx, fmt.Errorf("rewrite kubeconfig: %w", err))
 	}
 
 	// Step 13: Publish the nested cluster's kubeconfig as a host-cluster Secret so the operator's
 	// Connector can install components into the child cluster (see connector.go).
 	err = p.publishConnectorKubeconfig(ctx, target)
 	if err != nil {
-		return fmt.Errorf("publish connector kubeconfig: %w", err)
+		return exposure.CleanupOnFailure(ctx, fmt.Errorf("publish connector kubeconfig: %w", err))
 	}
 
 	return nil

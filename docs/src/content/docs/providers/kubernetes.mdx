@@ -146,6 +146,10 @@ The nested cluster's API server is exposed through the first mechanism that yiel
 
 In every case the resolved address is added to the nested API server's certificate SANs and written to the nested cluster's kubeconfig, so `kubectl` verifies TLS and connects directly — the connection survives the `ksail` process exiting.
 
+On a KSail-managed Hetzner host, setting `HCLOUD_TOKEN` also lets KSail admit the nested API's exact NodePort through the host firewall. Every host node must identify an owned Hetzner server with the host's owned firewall applied. The grant uses the same allowed source addresses as the host's own Kubernetes API. Deleting the nested cluster removes only its grant; a failed create attempts the same cleanup and reports any cleanup failure.
+
+Without that credential or verified host ownership, KSail leaves firewall rules unchanged. The NodePort still needs to be reachable from your machine. Gateway and LoadBalancer exposure use their existing network configuration.
+
 ## Operations
 
 ### Start / Stop

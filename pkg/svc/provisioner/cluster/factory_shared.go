@@ -118,6 +118,8 @@ func buildKubernetesInfra(
 		return nil, nil, nil, nil, fmt.Errorf("create Kubernetes provider: %w", err)
 	}
 
+	k8sProvider.WithHetznerAPIFirewallFromEnvironment()
+
 	return hostClient, restConfig, dynClient, k8sProvider, nil
 }
 

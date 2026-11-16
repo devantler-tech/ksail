@@ -8,6 +8,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,7 +18,8 @@ import (
 // Provider implements provider.Provider for Kubernetes-hosted nested clusters.
 // Nested cluster nodes run as pods inside a dedicated namespace on the host cluster.
 type Provider struct {
-	client kubernetes.Interface
+	client        kubernetes.Interface
+	hetznerClient *hcloud.Client
 }
 
 // NewProvider creates a new Kubernetes provider with the given host cluster client and options.

@@ -163,7 +163,7 @@ func (p *KubernetesProvisioner) Create(
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("expose vCluster API server: %w", err)
+		return exposure.CleanupOnFailure(ctx, fmt.Errorf("expose vCluster API server: %w", err))
 	}
 
 	// Step 2: Deploy the vCluster Helm chart
@@ -180,14 +180,14 @@ func (p *KubernetesProvisioner) Create(
 	// storage the host cannot provide, and otherwise decides whether to force emptyDir.
 	disablePersistence, err := resolvePersistenceDisabled(ctx, p.hostClientset, p.valuesPath)
 	if err != nil {
-		return fmt.Errorf("resolve vCluster persistence: %w", err)
+		return exposure.CleanupOnFailure(ctx, fmt.Errorf("resolve vCluster persistence: %w", err))
 	}
 
 	valuesFiles, cleanup, err := buildValuesFiles(
 		p.valuesPath, p.disableFlannel, exposure.Address, disablePersistence,
 	)
 	if err != nil {
-		return fmt.Errorf("prepare values files: %w", err)
+		return exposure.CleanupOnFailure(ctx, fmt.Errorf("prepare values files: %w", err))
 	}
 	defer cleanup()
 
@@ -203,7 +203,7 @@ func (p *KubernetesProvisioner) Create(
 
 	err = cli.CreateHelm(ctx, opts, globalFlags, clusterName, logger)
 	if err != nil {
-		return fmt.Errorf("create vCluster via Helm: %w", err)
+		return exposure.CleanupOnFailure(ctx, fmt.Errorf("create vCluster via Helm: %w", err))
 	}
 
 	// Step 3: Wait for the kubeconfig Secret to appear
@@ -213,7 +213,7 @@ func (p *KubernetesProvisioner) Create(
 	if err != nil {
 		p.dumpNestedVClusterFailureDiagnostics(ctx, namespace)
 
-		return fmt.Errorf("get kubeconfig secret: %w", err)
+		return exposure.CleanupOnFailure(ctx, fmt.Errorf("get kubeconfig secret: %w", err))
 	}
 
 	// Step 4: Rewrite kubeconfig to point at the stable exposure address.
@@ -223,7 +223,7 @@ func (p *KubernetesProvisioner) Create(
 		kubeconfigData, exposure.ServerURL(), clusterName,
 	)
 	if err != nil {
-		return fmt.Errorf("rewrite vCluster kubeconfig: %w", err)
+		return exposure.CleanupOnFailure(ctx, fmt.Errorf("rewrite vCluster kubeconfig: %w", err))
 	}
 
 	// Step 5: Verify the saved endpoint is ready before publishing its kubeconfig.
@@ -235,7 +235,7 @@ func (p *KubernetesProvisioner) Create(
 	if err != nil {
 		p.dumpNestedVClusterFailureDiagnostics(ctx, namespace)
 
-		return fmt.Errorf("publish vCluster kubeconfig: %w", err)
+		return exposure.CleanupOnFailure(ctx, fmt.Errorf("publish vCluster kubeconfig: %w", err))
 	}
 
 	_, _ = fmt.Fprintf(os.Stdout, "✓ vCluster %q ready (context: %s)\n", clusterName, contextName)
@@ -248,6 +248,11 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	clusterName := p.clusterName
 	if clusterName == "" {
 		clusterName = name
+	}
+
+	err := p.k8sProvider.RevokeNestedAPIGrant(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("revoke nested API before deletion: %w", err)
 	}
 
 	namespace := NamespacePrefix + clusterName
@@ -269,7 +274,7 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	)
 
 	// platformClient is nil — no platform integration for local clusters.
-	err := cli.DeleteHelm(ctx, nil, deleteOpts, globalFlags, clusterName, logger)
+	err = cli.DeleteHelm(ctx, nil, deleteOpts, globalFlags, clusterName, logger)
 	if err != nil {
 		return fmt.Errorf("delete vCluster via Helm: %w", err)
 	}

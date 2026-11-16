@@ -20,6 +20,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
+	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
@@ -863,6 +864,18 @@ func (p *kubernetesCleanupProvisioner) Create(_ context.Context, _ string) error
 }
 
 func (p *kubernetesCleanupProvisioner) Delete(ctx context.Context, _ string) error {
+	provider, err := kubernetesprovider.NewProvider(p.clientset, v1alpha1.OptionsKubernetes{})
+	if err != nil {
+		return fmt.Errorf("create nested cleanup provider: %w", err)
+	}
+
+	provider.WithHetznerAPIFirewallFromEnvironment()
+
+	err = provider.RevokeNestedAPIGrant(ctx, p.clusterName)
+	if err != nil {
+		return fmt.Errorf("revoke nested API before deletion: %w", err)
+	}
+
 	// Try all known namespace prefixes used by nested cluster provisioners:
 	// - "ksail-" for DinD-based Kind-on-Kubernetes
 	// - "k3k-" for k3k-based K3s-on-Kubernetes
