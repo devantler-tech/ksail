@@ -2,6 +2,7 @@ package talosprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -93,6 +94,7 @@ func (p *Provisioner) getDockerNodesByRole(
 	}
 
 	containers, err := p.dockerClient.ContainerList(ctx, container.ListOptions{
+		All: true,
 		Filters: filters.NewArgs(
 			filters.Arg("label", LabelTalosClusterName+"="+clusterName),
 		),
@@ -116,19 +118,33 @@ func (p *Provisioner) getDockerNodesByRole(
 			}
 		}
 
-		for _, network := range ctr.NetworkSettings.Networks {
-			if network.IPAddress != "" {
-				nodes = append(nodes, nodeWithRole{
-					IP:   network.IPAddress,
-					Role: role,
-				})
-
-				break
-			}
+		address := dockerInventoryAddress(ctr)
+		if address == "" {
+			return nil, errDockerInventoryMissingAddress
 		}
+
+		nodes = append(nodes, nodeWithRole{IP: address, Role: role})
 	}
 
 	return nodes, nil
+}
+
+var errDockerInventoryMissingAddress = errors.New(
+	"docker node inventory contains a container without an IP address",
+)
+
+func dockerInventoryAddress(ctr container.Summary) string {
+	if ctr.NetworkSettings == nil {
+		return ""
+	}
+
+	for _, network := range ctr.NetworkSettings.Networks {
+		if network != nil && network.IPAddress != "" {
+			return network.IPAddress
+		}
+	}
+
+	return ""
 }
 
 // countNodeRoles counts control-plane and worker nodes from a list of nodeWithRole.
