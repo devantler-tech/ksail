@@ -1,0 +1,55 @@
+name: "Verify Hetzner Resource Absence"
+
+# Observation only. This workflow neither cleans resources nor admits a new trial.
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type VERIFY_HETZNER_ABSENCE to read the dedicated CI project"
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: system-test-hetzner
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ci
+    permissions:
+      contents: read
+    steps:
+      - name: Admit only reviewed main and explicit confirmation
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$CONFIRMATION" == VERIFY_HETZNER_ABSENCE ]]
+
+      - name: Checkout reviewed source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned provider CLI
+        uses: hetznercloud/setup-hcloud@28cdd3fc4a4a8013e86d57c7254be72df92fcc02 # v2.0.1
+        with:
+          hcloud-version: v1.70.2
+
+      - name: Read every provider resource family
+        timeout-minutes: 7
+        shell: bash
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf 'Observation source=%s run=%s attempt=%s at=%s\n' \
+            "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$(date -u +%FT%TZ)"
+          timeout --signal=TERM --kill-after=5s 360s \
+            bash .github/scripts/verify-hetzner-absence.sh
