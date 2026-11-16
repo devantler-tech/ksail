@@ -144,10 +144,6 @@ func countNodeRoles(nodes []nodeWithRole) (int32, int32) {
 		}
 	}
 
-	if controlPlanes == 0 {
-		controlPlanes = 1
-	}
-
 	return controlPlanes, workers
 }
 
