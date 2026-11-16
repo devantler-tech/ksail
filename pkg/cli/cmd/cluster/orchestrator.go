@@ -136,6 +136,17 @@ func (o *updateOrchestrator) runVerifiedProvisioner(
 		return o.runEKSUpdate(provisioner, outputTimer)
 	}
 
+	updater, supportsUpdate := provisioner.(clusterprovisioner.Updater)
+	if supportsUpdate {
+		// Version reconciliation can mutate snapshots, autoscaler configuration and
+		// nodes before the regular diff. Refuse an unknown baseline first, then
+		// read it again after reconciliation because versions may have changed.
+		_, _, err := updater.GetCurrentConfig(o.cmd.Context(), o.clusterName)
+		if err != nil {
+			return fmt.Errorf("could not retrieve current cluster configuration: %w", err)
+		}
+	}
+
 	// Reconcile cluster versions declaratively on every update: each dimension
 	// follows the latest supported version when unset, or the pinned value when set
 	// (spec.cluster.kubernetesVersion / spec.cluster.talos.version, overridable via
@@ -151,7 +162,6 @@ func (o *updateOrchestrator) runVerifiedProvisioner(
 	}
 
 	// Check if provisioner supports updates
-	updater, supportsUpdate := provisioner.(clusterprovisioner.Updater)
 	if !supportsUpdate {
 		return o.runWithoutUpdater()
 	}
