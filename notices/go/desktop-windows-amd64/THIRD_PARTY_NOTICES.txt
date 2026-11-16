@@ -2009,9 +2009,9 @@ Files: internal/sync/singleflight/LICENSE
 Material: mad5cadf65364d792 (notice), SHA-256 a6e830174d62dafad3a718384772ea1f4c0e27989f050932dc442a5e3ddad080
 Files: NOTICE.txt
 
-Component: github.com/aws/aws-sdk-go-v2@v1.47.7
-Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/@v/v1.47.7.zip
-Selected Go source checksum: h1:jBmtzRtGWVAzbfc4RBWo1dTte0ZZH8p9U42YJIw2+Bw=
+Component: github.com/aws/aws-sdk-go-v2@v1.47.8
+Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/@v/v1.47.8.zip
+Selected Go source checksum: h1:fuClo7Un+Bi0EDTnSIPWxVEoJcze+wkGzNA4Vo3jRcQ=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
@@ -2115,9 +2115,9 @@ github.com/aws/aws-sdk-go-v2/feature/s3/manager
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE.txt
 
-Component: github.com/aws/aws-sdk-go-v2/internal/configsources@v1.5.10
-Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/internal/configsources/@v/v1.5.10.zip
-Selected Go source checksum: h1:DKtPO+uoekvZX1tIFGVlWypYGSYkHPb7rliUI1wZtEw=
+Component: github.com/aws/aws-sdk-go-v2/internal/configsources@v1.5.11
+Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/internal/configsources/@v/v1.5.11.zip
+Selected Go source checksum: h1:LTxHSJ/rwTFfaXqi5mlKKHJOW+shFB+HQ7NrCa4OQ48=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -2125,9 +2125,9 @@ github.com/aws/aws-sdk-go-v2/internal/configsources
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE.txt
 
-Component: github.com/aws/aws-sdk-go-v2/internal/endpoints/v2@v2.8.10
-Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/internal/endpoints/v2/@v/v2.8.10.zip
-Selected Go source checksum: h1:r8p95YELmfmuV9VvAaFcLesVBZduCCCccxpzQKkNThw=
+Component: github.com/aws/aws-sdk-go-v2/internal/endpoints/v2@v2.8.11
+Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/internal/endpoints/v2/@v/v2.8.11.zip
+Selected Go source checksum: h1:DGUM0yztI3Zz5kePulT/mMP/gVZFGTTISUiCcqSQtT0=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -2183,9 +2183,9 @@ github.com/aws/aws-sdk-go-v2/service/ecrpublic/types
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE.txt
 
-Component: github.com/aws/aws-sdk-go-v2/service/eks@v1.105.4
-Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/eks/@v/v1.105.4.zip
-Selected Go source checksum: h1:qah4hOtxuJm/H5sOLI4rcNzQou639ThSbzfwasDjcnc=
+Component: github.com/aws/aws-sdk-go-v2/service/eks@v1.105.5
+Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/eks/@v/v1.105.5.zip
+Selected Go source checksum: h1:zuhQc4yjQ2noYuv+vnn+dnfkiJHPW+nGv/L2oRB436w=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
