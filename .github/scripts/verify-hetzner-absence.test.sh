@@ -103,27 +103,27 @@ chmod +x "${test_dir}/bin/hcloud" "${test_dir}/bin/curl"
 
 cases=0
 run_case() {
-  local name="$1" family="$2" mode="$3" want_status="$4" want_verdict="$5"
-  local output status=0 calls="${test_dir}/${name}.calls" want_calls="${6:-10}"
-  : >"${calls}"
-  output="$(PATH="${test_dir}/bin:${PATH}" HCLOUD_TOKEN=fixture-token \
-    TEST_CALLS="${calls}" TEST_FAMILY="${family}" TEST_MODE="${mode}" \
-    bash "${inventory}" 2>&1)" || status=$?
-  if [[ "${status}" -ne "${want_status}" || "${output}" != *"HETZNER-INVENTORY=${want_verdict} families=10"* ]]; then
-    printf 'FAIL %s: expected status=%s verdict=%s; got status=%s\n%s\n' \
-      "${name}" "${want_status}" "${want_verdict}" "${status}" "${output}" >&2
-    exit 1
-  fi
-  # A failed family never suppresses the other nine independent reads.
-  if [[ "$(cut -d ' ' -f 1 "${calls}" | sort -u | wc -l | tr -d ' ')" -ne 10 || "$(wc -l <"${calls}" | tr -d ' ')" -ne "${want_calls}" ]]; then
-    echo "FAIL ${name}: incomplete family coverage" >&2
-    exit 1
-  fi
-  if [[ "${output}" == *private-* || "${output}" == *928374* || "${output}" == *fixture-token* ]]; then
-    echo "FAIL ${name}: provider data reached the log" >&2
-    exit 1
-  fi
-  cases=$((cases + 1))
+	local name="$1" family="$2" mode="$3" want_status="$4" want_verdict="$5"
+	local output status=0 calls="${test_dir}/${name}.calls" want_calls="${6:-10}"
+	: >"${calls}"
+	output="$(PATH="${test_dir}/bin:${PATH}" HCLOUD_TOKEN=fixture-token \
+		TEST_CALLS="${calls}" TEST_FAMILY="${family}" TEST_MODE="${mode}" \
+		bash "${inventory}" 2>&1)" || status=$?
+	if [[ "${status}" -ne "${want_status}" || "${output}" != *"HETZNER-INVENTORY=${want_verdict} families=10"* ]]; then
+		printf 'FAIL %s: expected status=%s verdict=%s; got status=%s\n%s\n' \
+			"${name}" "${want_status}" "${want_verdict}" "${status}" "${output}" >&2
+		exit 1
+	fi
+	# A failed family never suppresses the other nine independent reads.
+	if [[ "$(cut -d ' ' -f 1 "${calls}" | sort -u | wc -l | tr -d ' ')" -ne 10 || "$(wc -l <"${calls}" | tr -d ' ')" -ne "${want_calls}" ]]; then
+		echo "FAIL ${name}: incomplete family coverage" >&2
+		exit 1
+	fi
+	if [[ "${output}" == *private-* || "${output}" == *928374* || "${output}" == *fixture-token* ]]; then
+		echo "FAIL ${name}: provider data reached the log" >&2
+		exit 1
+	fi
+	cases=$((cases + 1))
 }
 
 run_case null-provider-list server null-list 2 UNVERIFIED
@@ -131,11 +131,11 @@ run_case missing-provider-list server missing-list 2 UNVERIFIED
 run_case redirect-with-valid-body server redirect-with-json 2 UNVERIFIED
 # Omitting any family would turn its residual case into a false empty verdict.
 for family in server primary-ip floating-ip volume load-balancer network firewall placement-group ssh-key image; do
-  run_case "residual-${family}" "${family}" residual 1 NONEMPTY
+	run_case "residual-${family}" "${family}" residual 1 NONEMPTY
 done
 run_case empty-project '' '' 0 EMPTY
 for mode in failure object multiple empty invalid-id missing-pagination wrong-page wrong-total cyclic-page; do
-  run_case "unverified-${mode}" server "${mode}" 2 UNVERIFIED
+	run_case "unverified-${mode}" server "${mode}" 2 UNVERIFIED
 done
 run_case paginated-residual server pagination 1 NONEMPTY 11
 run_case malformed-second-page server second-page-null 2 UNVERIFIED 11
