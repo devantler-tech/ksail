@@ -49,9 +49,9 @@ func TestCountNodeRoles(t *testing.T) {
 		wantWorker int32
 	}{
 		{
-			name:       "empty node list defaults to 1 CP",
+			name:       "empty node list counts no control planes",
 			nodes:      nil,
-			wantCP:     1,
+			wantCP:     0,
 			wantWorker: 0,
 		},
 		{
@@ -75,11 +75,11 @@ func TestCountNodeRoles(t *testing.T) {
 			wantWorker: 2,
 		},
 		{
-			name: "only workers defaults CP to 1",
+			name: "only workers counts no control planes",
 			nodes: []talosprovisioner.NodeWithRoleForTest{
 				newNode("10.0.0.5", talosprovisioner.RoleWorker),
 			},
-			wantCP:     1,
+			wantCP:     0,
 			wantWorker: 1,
 		},
 	}
