@@ -14,6 +14,7 @@ permissions: {}
 concurrency:
   group: system-test-hetzner
   cancel-in-progress: false
+  queue: max
 
 jobs:
   verify:
@@ -36,11 +37,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: Install the pinned provider CLI
-        uses: hetznercloud/setup-hcloud@28cdd3fc4a4a8013e86d57c7254be72df92fcc02 # v2.0.1
-        with:
-          hcloud-version: v1.70.2
 
       - name: Read every provider resource family
         timeout-minutes: 7

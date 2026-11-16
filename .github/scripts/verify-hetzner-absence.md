@@ -7,7 +7,14 @@ It uses the existing dedicated CI test project, creates nothing and deletes noth
 
 The workflow lists servers, primary IPs, floating IPs, volumes, load balancers,
 networks, firewalls, placement groups, SSH keys, and snapshot/backup images. It
-prints only family counts, the observation's source/run/time and an aggregate:
+prints only family counts, the observation's source/run/time and an aggregate verdict.
+
+It reads the raw [Cloud API](https://docs.hetzner.cloud/reference/cloud) rather
+than a CLI-normalized list. Every page must contain the resource array and valid
+pagination metadata. Missing/null arrays, repeated IDs, inconsistent totals and
+failed reads are unverified. Each family is bounded to 100 pages of 50 entries;
+exceeding that bound is also unverified. Deprecated snapshots/backups are included.
+The workflow's overall deadline still bounds an interrupted observation.
 
 | Verdict               | Meaning                                                            |
 |-----------------------|--------------------------------------------------------------------|
