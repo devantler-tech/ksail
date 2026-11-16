@@ -335,26 +335,19 @@ func (p *Provisioner) removeHetznerNodes(
 		count = len(existing)
 	}
 
+	if role == RoleControlPlane {
+		err = p.removeHetznerControlPlanes(ctx, hzProvider, existing, clusterName, count, result)
+		if err != nil {
+			recordFailedChange(result, role, clusterName, err)
+
+			return err
+		}
+
+		return nil
+	}
+
 	for i := len(existing) - 1; i >= len(existing)-count; i-- {
 		server := existing[i]
-
-		// Address resolution and etcd cleanup must succeed before destruction.
-		if role == RoleControlPlane {
-			serverIP, cleanupErr := p.hetznerNodeAddress(server)
-			if cleanupErr == nil {
-				cleanupErr = p.etcdCleanupBeforeRemoval(ctx, serverIP)
-			}
-
-			if cleanupErr != nil {
-				recordFailedChange(result, role, server.Name, cleanupErr)
-
-				return fmt.Errorf(
-					"retaining control-plane server %s after etcd cleanup failure: %w",
-					server.Name,
-					cleanupErr,
-				)
-			}
-		}
 
 		err = p.deleteHetznerServer(ctx, hzProvider, server)
 		if err != nil {

@@ -216,6 +216,28 @@ You can also provide the version per invocation, for example
 KSail's tracked default ISO ID, keeps the default version contract. A schematic
 snapshot also requires a version pin and takes precedence over the ISO.
 
+### Reducing the static control plane
+
+Automatic control-plane removal retains the server holding the cluster's assigned,
+owned floating API endpoint and selects the newest eligible servers rather than
+assuming reused node numbers indicate age. It requires at least three remaining
+control planes, matching provider/Kubernetes/etcd identities, healthy surviving
+voters and readiness through the original API route.
+
+Move application pods off the selected nodes first. Removal refuses application
+pods even when they are terminating or completed, persistent volumes, Longhorn
+membership and unqualified local storage. Only node agents and native static pods
+with rebuildable system volumes are permitted. KSail cordons the exact Node UID;
+this path never evicts or deletes Pods and does not bypass disruption budgets.
+
+Before each membership change, KSail verifies a private etcd snapshot beside the
+canonical kubeconfig in a `.ksail-control-plane-recovery-*` directory. These files
+contain cluster secrets: retain them in private recovery storage and never publish
+them as plaintext artifacts. A `.ksail-cp-removal-<server-id>.json` attempt record
+prevents a new invocation from blindly repeating an uncertain membership operation.
+If removal stops, inspect the actual member, server, Node and endpoint state before
+recovering that attempt; a failed RPC is not proof that nothing changed.
+
 ### Autoscaler Configuration
 
 KSail supports node and pod autoscaling for Hetzner clusters via `spec.cluster.autoscaler`. Node pools are Hetzner-specific and map directly to the [Kubernetes Cluster Autoscaler](https://github.com/kubernetes/autoscaler) node group format.
