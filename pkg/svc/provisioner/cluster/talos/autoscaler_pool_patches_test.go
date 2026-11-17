@@ -131,7 +131,7 @@ func TestInvalidAutoscalerPoolPatchStopsBeforeProvisioning(t *testing.T) {
 	var wrapped interface{ Unwrap() []error }
 	require.ErrorAs(t, err, &wrapped)
 	require.Len(t, wrapped.Unwrap(), 2)
-	require.ErrorContains(t, wrapped.Unwrap()[1], "go-yaml load error")
+	require.ErrorContains(t, wrapped.Unwrap()[1], "did not find expected node content")
 	require.ErrorContains(t, prov.Create(t.Context(), ""), "pool machine config patch 1")
 
 	_, err = prov.DiffConfig(t.Context(), "", nil, nil)
