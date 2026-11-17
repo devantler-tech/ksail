@@ -2935,7 +2935,7 @@ jobs:
           persist-credentials: false
       - name: Check active documentation
         id: links
-        uses: devantler-tech/.github/actions/validate-retired-repo-links@d70d50665465117f01104313e53057374a96a1a3 # v21.7.2
+        uses: devantler-tech/.github/actions/validate-retired-repo-links@cc156a3693019fdbe9817c46f1a91cd50a124695 # v21.7.3
         with:
           enabled: "true"
       - name: Require a completed scan
