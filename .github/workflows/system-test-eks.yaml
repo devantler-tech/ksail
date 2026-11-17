@@ -225,7 +225,7 @@ jobs:
       - name: 📥 Restore KSail binary
         timeout-minutes: 5
         # Pin the identical published action until actionlint supports $/ references.
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@fc4e3d24c8d814fe6a058e87b55841788cb5267e
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@1f11639aa011dfce2b2971edaae1adf9ebc0daf7
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
