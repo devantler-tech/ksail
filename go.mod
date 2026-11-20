@@ -37,7 +37,7 @@ require (
 	github.com/containerd/errdefs v1.0.0
 	github.com/containerd/platforms v1.0.0-rc.5
 	github.com/coreos/go-oidc/v3 v3.21.0
-	github.com/cosi-project/runtime v1.16.4
+	github.com/cosi-project/runtime v1.16.5
 	github.com/derailed/k9s v0.51.0
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/docker/go-connections v0.8.2
@@ -84,9 +84,9 @@ require (
 	github.com/siderolabs/go-kubernetes v0.2.41
 	github.com/siderolabs/go-retry v0.3.3
 	github.com/siderolabs/image-factory v1.8.0
-	github.com/siderolabs/omni/client v1.9.1
+	github.com/siderolabs/omni/client v1.13.3
 	github.com/siderolabs/talos v1.14.6
-	github.com/siderolabs/talos/pkg/machinery v1.14.6
+	github.com/siderolabs/talos/pkg/machinery v1.15.0-alpha.2.0.20261028085643-3ba3d6a5e784
 	github.com/sigstore/sigstore v1.11.1
 	github.com/sigstore/sigstore-go v1.3.0
 	github.com/sirupsen/logrus v1.10.2
@@ -115,7 +115,7 @@ require (
 	golang.org/x/sys v0.49.0
 	golang.org/x/term v0.47.0
 	golang.org/x/text v0.43.0
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20261019180522-ce908d29299b
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20261026165753-2ffab32bce7e
 	google.golang.org/grpc v1.85.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
@@ -682,7 +682,7 @@ require (
 	github.com/mdlayher/ethtool v0.6.1 // indirect
 	github.com/mdlayher/genetlink v1.4.0 // indirect
 	github.com/mdlayher/netlink v1.11.2 // indirect
-	github.com/mdlayher/socket v0.6.1 // indirect
+	github.com/mdlayher/socket v0.8.0 // indirect
 	github.com/mgechev/revive v1.13.0 // indirect
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
 	github.com/mholt/archives v0.1.5 // indirect
@@ -771,7 +771,7 @@ require (
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
-	github.com/petermattis/goid v0.0.0-20260713124913-97594f28f5ca // indirect
+	github.com/petermattis/goid v0.0.0-20260918085751-abfca077860b // indirect
 	github.com/pierrec/lz4/v4 v4.1.33 // indirect
 	github.com/pin/tftp/v3 v3.2.0 // indirect
 	github.com/piprate/json-gold v0.7.0 // indirect
@@ -836,7 +836,7 @@ require (
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/shibumi/go-pathspec v1.3.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
-	github.com/siderolabs/go-api-signature v0.3.13 // indirect
+	github.com/siderolabs/go-api-signature v0.4.0 // indirect
 	github.com/siderolabs/go-blockdevice/v2 v2.0.36 // indirect
 	github.com/siderolabs/go-cmd v0.2.1 // indirect
 	github.com/siderolabs/go-pointer v1.0.1 // indirect
@@ -990,7 +990,7 @@ require (
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.6.0.20260809190231-643e93b9c9be // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
-	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
+	go4.org/netipx v0.0.0-20260823151212-3075585bcbeb // indirect
 	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e // indirect
 	golang.org/x/exp/typeparams v0.0.0-20260209203927-2842357ff358 // indirect
 	golang.org/x/image v0.45.0 // indirect
@@ -1029,7 +1029,7 @@ require (
 	k8s.io/metrics v0.37.1 // indirect
 	k8s.io/pod-security-admission v0.37.1 // indirect
 	k8s.io/streaming v0.37.1 // indirect
-	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 // indirect
+	k8s.io/utils v0.0.0-20261023123148-ca04ba58ecab // indirect
 	modernc.org/libc v1.77.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
