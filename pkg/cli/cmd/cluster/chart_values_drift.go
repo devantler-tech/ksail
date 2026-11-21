@@ -170,6 +170,57 @@ func ksailInstallsArgoCD(clusterCfg *v1alpha1.Cluster) bool {
 	return setup.GetComponentRequirements(clusterCfg).NeedsArgoCD
 }
 
+// metalLBValuesProbe compares MetalLB's values (ksail#7771). Only Talos on
+// Docker installs MetalLB, and only while load balancers are Enabled. KSail
+// renders no chart values for it today (its address pool is applied as a
+// resource after install), so the comparison reports nothing until it does.
+func metalLBValuesProbe() chartValuesDriftProbe {
+	return chartValuesDriftProbe{
+		component: "metallb",
+		field:     specdiff.MetalLBValuesField,
+		needed:    ksailInstallsMetalLB,
+		factory: func(factories *setup.InstallerFactories) installerFactory {
+			return factories.MetalLB
+		},
+	}
+}
+
+// ksailInstallsMetalLB reports whether the configuration has KSail install
+// MetalLB.
+func ksailInstallsMetalLB(clusterCfg *v1alpha1.Cluster) bool {
+	return clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos &&
+		clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderDocker &&
+		setup.NeedsLoadBalancerInstall(clusterCfg)
+}
+
+// awsLoadBalancerControllerValuesProbe compares the AWS Load Balancer
+// Controller's values (ksail#7771). EKS installs it only on the experimental
+// opt-in with load balancers Enabled. The probe builds the controller exactly
+// as the install path does, so both render the same values.
+func awsLoadBalancerControllerValuesProbe() chartValuesDriftProbe {
+	return chartValuesDriftProbe{
+		component: "aws-load-balancer-controller",
+		field:     specdiff.AWSLoadBalancerControllerValuesField,
+		needed:    ksailInstallsAWSLoadBalancerController,
+		factory: func(factories *setup.InstallerFactories) installerFactory {
+			if factories.AWSLoadBalancerController == nil {
+				return nil
+			}
+
+			return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+				return factories.AWSLoadBalancerController(clusterCfg, false)
+			}
+		},
+	}
+}
+
+// ksailInstallsAWSLoadBalancerController reports whether the configuration has
+// KSail install the AWS Load Balancer Controller.
+func ksailInstallsAWSLoadBalancerController(clusterCfg *v1alpha1.Cluster) bool {
+	return clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS &&
+		setup.NeedsLoadBalancerInstall(clusterCfg)
+}
+
 // chartValuesDriftProbes lists the components whose rendered chart values are
 // compared with their installed release. The remaining component families are
 // tracked on ksail#7366.
@@ -184,6 +235,8 @@ func chartValuesDriftProbes() []chartValuesDriftProbe {
 		hetznerCSIValuesProbe(),
 		hcloudCCMValuesProbe(),
 		argoCDValuesProbe(),
+		metalLBValuesProbe(),
+		awsLoadBalancerControllerValuesProbe(),
 	}
 }
 
