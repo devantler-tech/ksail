@@ -84,7 +84,7 @@ require (
 	github.com/siderolabs/go-kubernetes v0.2.41
 	github.com/siderolabs/go-retry v0.3.3
 	github.com/siderolabs/image-factory v1.8.0
-	github.com/siderolabs/omni/client v1.9.1
+	github.com/siderolabs/omni/client v1.11.0
 	github.com/siderolabs/talos v1.14.6
 	github.com/siderolabs/talos/pkg/machinery v1.14.6
 	github.com/sigstore/sigstore v1.11.1

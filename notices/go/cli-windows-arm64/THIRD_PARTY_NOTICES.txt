@@ -9695,9 +9695,9 @@ github.com/siderolabs/net
 Material: m5651bc505679cef6 (license), SHA-256 1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5
 Files: LICENSE
 
-Component: github.com/siderolabs/omni/client@v1.9.1
-Source: https://proxy.golang.org/github.com/siderolabs/omni/client/@v/v1.9.1.zip
-Selected Go source checksum: h1:3YEjJTdAj3mqIAs6ICMnizRju4bkdMfGnvKfL6kQtfY=
+Component: github.com/siderolabs/omni/client@v1.11.0
+Source: https://proxy.golang.org/github.com/siderolabs/omni/client/@v/v1.11.0.zip
+Selected Go source checksum: h1:bwPxPjBApGK4Gji2zEvhR2nQBZX1fSwNfEnH+o6pM2U=
 Raw classifier detections: MPL-2.0
 Effective package-admission terms: MPL-2.0
 To obtain the exact MPL covered source, retrieve the source locator above and verify its recorded checksum. Repository-source modifications are identified by the release source binding.
@@ -9706,6 +9706,7 @@ github.com/siderolabs/omni/client/api/common
 github.com/siderolabs/omni/client/api/omni/management
 github.com/siderolabs/omni/client/api/omni/oidc
 github.com/siderolabs/omni/client/api/omni/specs
+github.com/siderolabs/omni/client/internal/safeout
 github.com/siderolabs/omni/client/pkg/client
 github.com/siderolabs/omni/client/pkg/client/management
 github.com/siderolabs/omni/client/pkg/client/oidc
@@ -9714,6 +9715,7 @@ github.com/siderolabs/omni/client/pkg/client/talos
 github.com/siderolabs/omni/client/pkg/compression
 github.com/siderolabs/omni/client/pkg/constants
 github.com/siderolabs/omni/client/pkg/diff
+github.com/siderolabs/omni/client/pkg/kubeconfig
 github.com/siderolabs/omni/client/pkg/omni/resources
 github.com/siderolabs/omni/client/pkg/omni/resources/auth
 github.com/siderolabs/omni/client/pkg/omni/resources/infra
