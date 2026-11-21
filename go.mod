@@ -9,9 +9,9 @@ exclude google.golang.org/grpc/stats/opentelemetry v0.0.0-20241028142157-ada6787
 
 require (
 	cel.dev/cel-go v0.33.2
-	cloud.google.com/go/container v1.56.0
+	cloud.google.com/go/container v1.56.1
 	filippo.io/age v1.3.2
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.3
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.24.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.15.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v7 v7.3.0
 	github.com/BurntSushi/toml v1.6.0
@@ -79,7 +79,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/rancher/k3k v1.1.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
-	github.com/siderolabs/crypto v0.6.5
+	github.com/siderolabs/crypto v0.6.6
 	github.com/siderolabs/gen v0.8.8
 	github.com/siderolabs/go-kubernetes v0.2.41
 	github.com/siderolabs/go-retry v0.3.3
@@ -109,10 +109,10 @@ require (
 	go.uber.org/zap v1.28.0
 	go.yaml.in/yaml/v3 v3.0.6
 	golang.org/x/crypto v0.58.0
-	golang.org/x/mod v0.42.0
+	golang.org/x/mod v0.43.0
 	golang.org/x/oauth2 v0.37.0
-	golang.org/x/sync v0.24.0
-	golang.org/x/sys v0.49.0
+	golang.org/x/sync v0.25.0
+	golang.org/x/sys v0.50.0
 	golang.org/x/term v0.47.0
 	golang.org/x/text v0.43.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20261019180522-ce908d29299b
@@ -988,7 +988,7 @@ require (
 	go.uber.org/mock v0.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
-	go.yaml.in/yaml/v4 v4.0.0-rc.6.0.20260809190231-643e93b9c9be // indirect
+	go.yaml.in/yaml/v4 v4.0.0-rc.8 // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
 	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e // indirect

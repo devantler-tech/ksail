@@ -160,9 +160,9 @@ Material: m406074398f800eb4 (copyright-header), SHA-256 76c6046cb636a6ea9d694c14
 Material: m4efccfd21890f556 (copyright-header), SHA-256 e6951b8e194b03fb217b36d599a7cd6b24c6ebe784a7aeb6a557a5e11451f841
 Material: mcc2e9cb132665144 (copyright-header), SHA-256 7fee2556d9778558a6a54fba0718d3f19d4034cf6a6a702b1ecd7017d857bad6
 
-Component: cloud.google.com/go/container@v1.56.0
-Source: https://proxy.golang.org/cloud.google.com/go/container/@v/v1.56.0.zip
-Selected Go source checksum: h1:ySw+ybbeCaoEoYunWQjpcA96n+NG9echRil1/BMirIQ=
+Component: cloud.google.com/go/container@v1.56.1
+Source: https://proxy.golang.org/cloud.google.com/go/container/@v/v1.56.1.zip
+Selected Go source checksum: h1:qhXiBO+eV5nX8Bkdwnp7173QtupzrZGi8YpBdi5K2BI=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -541,9 +541,9 @@ Files: LICENSE.txt
 Material: md348098b7096d78c (notice), SHA-256 ae29545608f708a0f778e8e5f9a5792641c974a7ec96a94f191026e93ef1a54f
 Files: NOTICE.txt
 
-Component: github.com/Azure/azure-sdk-for-go/sdk/azcore@v1.23.3
-Source: https://proxy.golang.org/github.com/!azure/azure-sdk-for-go/sdk/azcore/@v/v1.23.3.zip
-Selected Go source checksum: h1:qgnWTiWs1G7AqcKZegFvkJD1bmXJcaDU3uC0ELSgZ5U=
+Component: github.com/Azure/azure-sdk-for-go/sdk/azcore@v1.24.0
+Source: https://proxy.golang.org/github.com/!azure/azure-sdk-for-go/sdk/azcore/@v/v1.24.0.zip
+Selected Go source checksum: h1:5H6YRLGMoC8z5aXpxqcD6FfswI8mwoVNHSecvIoazt4=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -561,6 +561,7 @@ github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers/body
 github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers/fake
 github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers/loc
 github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers/op
+github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/sanitizer
 github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared
 github.com/Azure/azure-sdk-for-go/sdk/azcore/log
 github.com/Azure/azure-sdk-for-go/sdk/azcore/policy
@@ -9624,9 +9625,9 @@ Material: m709a34dcb01e757b (copyright-header), SHA-256 aad37084e91ba1ef8d8ece7c
 Material: mb492e763b67f9c9c (license), SHA-256 b92ba0f6ee02f2309628bfdadb123668a17c016e475ba477b857d33470d9d625
 Files: LICENSE
 
-Component: github.com/siderolabs/crypto@v0.6.5
-Source: https://proxy.golang.org/github.com/siderolabs/crypto/@v/v0.6.5.zip
-Selected Go source checksum: h1:Elq5tpWP2ApZ4Y+Kg+eIDiiWbmriCPI1mjYIMwvsYkw=
+Component: github.com/siderolabs/crypto@v0.6.6
+Source: https://proxy.golang.org/github.com/siderolabs/crypto/@v/v0.6.6.zip
+Selected Go source checksum: h1:tUFqUifryTTc0yRoKAlga+DGXYrrJQ4As4qrD7H6dMk=
 Raw classifier detections: MPL-2.0
 Effective package-admission terms: MPL-2.0
 To obtain the exact MPL covered source, retrieve the source locator above and verify its recorded checksum. Repository-source modifications are identified by the release source binding.
@@ -12211,15 +12212,21 @@ Material: m9c29bf4a5889ac9b (copyright-header), SHA-256 5fab688fb8a9069026d52d6f
 Material: mef336eb04fa224ff (notice), SHA-256 f6c2dd3a67b576eafb89b80200b8b1627230bf3821a0c14cb99a22ac19107d00
 Files: NOTICE
 
-Component: go.yaml.in/yaml/v4@v4.0.0-rc.6.0.20260809190231-643e93b9c9be
-Source: https://proxy.golang.org/go.yaml.in/yaml/v4/@v/v4.0.0-rc.6.0.20260809190231-643e93b9c9be.zip
-Selected Go source checksum: h1:Z8OHneHWcT7EMR9qqMjtC2zZXUTwmS1MVUpnsWKFYsc=
+Component: go.yaml.in/yaml/v4@v4.0.0-rc.8
+Source: https://proxy.golang.org/go.yaml.in/yaml/v4/@v/v4.0.0-rc.8.zip
+Selected Go source checksum: h1:fN4inF7W6XHH4Kb0btX0spuNk02igzhJa+rGbuRCkkY=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
 go.yaml.in/yaml/v4
 go.yaml.in/yaml/v4/internal/libyaml
-go.yaml.in/yaml/v4/plugin/limit
+go.yaml.in/yaml/v4/internal/plugin
+go.yaml.in/yaml/v4/internal/plugin/mergekey
+go.yaml.in/yaml/v4/plugin/aliasdata
+go.yaml.in/yaml/v4/plugin/errorformat/v3
+go.yaml.in/yaml/v4/plugin/errorformat/v4
+go.yaml.in/yaml/v4/plugin/loaderlimits
+go.yaml.in/yaml/v4/plugin/mergekey
 Material: m04138b77249c9b15 (copyright-header), SHA-256 55dbc654c3708fb5629d3ca45a06ec0db4e8b398d9c2bb008dc1100d054917f6
 Material: m1429c70ef80a7d74 (notice), SHA-256 257bb2d062ee0b9226e3b5f9c3c5d6aa3d38a450df27a9e060f061d4d4a4eb6f
 Files: NOTICE
@@ -12352,9 +12359,9 @@ Material: m4f3b003b30c5125b (copyright-header), SHA-256 d343a5b935a965e26110d30e
 Material: m69e735fcdc92f0dd (copyright-header), SHA-256 119068dd82212dba2aedcb667d6e3d7802b04606d52240b646c71ed89122a6f6
 Material: m9e4b7a0aaf0aa8ca (copyright-header), SHA-256 62fe87c24497fd9e5ec0e30d266b0e09fa8afcc93810e86cc600667932013ab9
 
-Component: golang.org/x/mod@v0.42.0
-Source: https://proxy.golang.org/golang.org/x/mod/@v/v0.42.0.zip
-Selected Go source checksum: h1:ICeL3t2L30ljSPHHxDnR4fqVcBt/zR2zJAb9juavmQg=
+Component: golang.org/x/mod@v0.43.0
+Source: https://proxy.golang.org/golang.org/x/mod/@v/v0.43.0.zip
+Selected Go source checksum: h1:MFuq5J6s35W9D3IjkwyWc9vHh0nENOrt5K8Iof4ofmg=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
@@ -12443,9 +12450,9 @@ Material: maf4433239ff44962 (copyright-header), SHA-256 069cb0283a00546dc616002c
 Material: mb0215a920c0237de (copyright-header), SHA-256 ab0f67f9da61a754e80d8bc0a7d9821af68e17360c9236250c600241822f9a1d
 Material: mf2ca01b16ebacb4d (copyright-header), SHA-256 5012cff8e1624b272b44f4f4bf7bea401f64a8ee2df0de44dc0ec70f3f4f08d7
 
-Component: golang.org/x/sync@v0.24.0
-Source: https://proxy.golang.org/golang.org/x/sync/@v/v0.24.0.zip
-Selected Go source checksum: h1:iqiDrGoDgyuvAKrhLQthUEzU/R378N78gXbBjxed7oA=
+Component: golang.org/x/sync@v0.25.0
+Source: https://proxy.golang.org/golang.org/x/sync/@v/v0.25.0.zip
+Selected Go source checksum: h1:dJnifr0nMV8/SBnBvdo4eSGGnrc3O4FFx6IqvtLcmRs=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
@@ -12458,9 +12465,9 @@ Material: m4a74781cd64ccb4b (license), SHA-256 911f8f5782931320f5b8d1160a76365b8
 Files: LICENSE
 Material: mb0215a920c0237de (copyright-header), SHA-256 ab0f67f9da61a754e80d8bc0a7d9821af68e17360c9236250c600241822f9a1d
 
-Component: golang.org/x/sys@v0.49.0
-Source: https://proxy.golang.org/golang.org/x/sys/@v/v0.49.0.zip
-Selected Go source checksum: h1:XbzkgYJHdqh/8m2Uu0W/dQv8nktxx4BFHp1M0gROTXA=
+Component: golang.org/x/sys@v0.50.0
+Source: https://proxy.golang.org/golang.org/x/sys/@v/v0.50.0.zip
+Selected Go source checksum: h1:dkKZEFTEKaLr1sjhs0WiKqoi8Jj5nHbS3Njmx1UoMJs=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
