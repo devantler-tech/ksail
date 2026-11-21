@@ -491,6 +491,9 @@ jobs:
               - '.github/workflows/ci.yaml'
             hetzner-cleanup-script:
               - '.github/actions/cleanup-hetzner/**'
+              - '.github/scripts/verify-hetzner-absence.sh'
+              - '.github/scripts/verify-hetzner-absence.test.sh'
+              - '.github/workflows/verify-hetzner-absence.yaml'
               - '.github/workflows/ci.yaml'
             gitops-assert-scripts:
               - '.github/scripts/assert-gitops-deployed.sh'
@@ -694,6 +697,8 @@ jobs:
             .github/actions/cleanup-hetzner/cleanup-hetzner.sh \
             .github/actions/cleanup-hetzner/cleanup-hetzner.test.sh
           .github/actions/cleanup-hetzner/cleanup-hetzner.test.sh
+          shellcheck .github/scripts/verify-hetzner-absence.sh .github/scripts/verify-hetzner-absence.test.sh
+          bash .github/scripts/verify-hetzner-absence.test.sh
 
   gitops-assert-scripts:
     name: 🔐 Validate GitOps And Workload Guards
