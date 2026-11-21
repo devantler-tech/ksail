@@ -140,8 +140,9 @@ func (p *Provisioner) createHetznerNodeGroups(
 //
 // By default the endpoint is the first control-plane node's reachable IP. When
 // FloatingIPEnabled is set, a cluster-owned Hetzner floating IP is ensured,
-// attached to the first control-plane server, and rendered as the endpoint
-// instead — with the control-plane node IPs added to the certificate SANs so
+// initially attached when unassigned, and rendered as the endpoint instead.
+// An existing control-plane holder is preserved because Talos owns VIP elections.
+// The control-plane node IPs are added to the certificate SANs so
 // direct node access (and the readiness checks, which dial the first node)
 // keeps verifying, and a Talos VIP block on the control-plane configs so the
 // elected leader owns the address from then on (the explicit attach is only
@@ -352,9 +353,10 @@ func (p *Provisioner) hetznerAPIToken() (string, error) {
 	return token, nil
 }
 
-// ensureFloatingIPEndpoint ensures the cluster's floating IP exists, attaches
-// it to the first control-plane server, and returns it as the stable endpoint
-// together with the certificate SAN set (floating IP + every control-plane
+// ensureFloatingIPEndpoint ensures the cluster's floating IP exists, initially
+// attaches an unassigned address, and returns it as the stable endpoint.
+// Existing control-plane attachments belong to Talos's VIP election. It also
+// returns the certificate SAN set (floating IP + every control-plane
 // node IP). The node IPs must stay in the SAN set because clients — including
 // KSail's own cluster-readiness checks — still dial nodes directly.
 func (p *Provisioner) ensureFloatingIPEndpoint(
@@ -370,9 +372,21 @@ func (p *Provisioner) ensureFloatingIPEndpoint(
 		return "", nil, fmt.Errorf("failed to ensure floating IP: %w", err)
 	}
 
-	err = hzProvider.AttachFloatingIPToServer(ctx, floatingIP, controlPlaneServers[0])
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to attach floating IP: %w", err)
+	holder := controlPlaneServers[0]
+	if floatingIP.Server != nil {
+		index := slices.IndexFunc(controlPlaneServers, func(server *hcloud.Server) bool {
+			return server != nil && server.ID > 0 && server.ID == floatingIP.Server.ID
+		})
+		if index < 0 {
+			return "", nil, errFloatingIPHolderOutsideControlPlanes
+		}
+
+		holder = controlPlaneServers[index]
+	} else {
+		err = hzProvider.AttachFloatingIPToServer(ctx, floatingIP, holder)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to attach floating IP: %w", err)
+		}
 	}
 
 	endpointIP := floatingIP.IP.String()
@@ -381,7 +395,7 @@ func (p *Provisioner) ensureFloatingIPEndpoint(
 		p.logWriter,
 		"  ✓ Floating IP %s attached to %s\n",
 		endpointIP,
-		controlPlaneServers[0].Name,
+		holder.Name,
 	)
 
 	p.warnAboutStrayFloatingIPs(ctx, hzProvider, clusterName)
@@ -477,6 +491,10 @@ func hetznerFloatingIPEndpointCertSANs(
 // beats the silent no-op the change was detected to fix (#5947).
 var errFloatingIPConfigsUnavailable = errors.New(
 	"cannot reconcile floating IP: talos configs are not loaded",
+)
+
+var errFloatingIPHolderOutsideControlPlanes = errors.New(
+	"floating IP holder is outside the control-plane inventory",
 )
 
 // reconcileFloatingIPEndpoint applies a detected floatingIPEnabled change
