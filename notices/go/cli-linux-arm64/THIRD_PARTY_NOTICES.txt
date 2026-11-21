@@ -3071,9 +3071,9 @@ Material: m3f03e2f3d737cf7b (copyright-header), SHA-256 938109aaa305884dcdf6d545
 Material: maaaae92d5bc916e5 (copyright-header), SHA-256 52365a56340adc4cfb38583b4a787a98c9cda3bd1e8fa3f302f01e2e89e9c021
 Material: mb665c39a066bf17f (copyright-header), SHA-256 62d7209795fd07f83cce8f0a00cce2d7bcf371047aaa5420a4cda607bcaa79eb
 
-Component: github.com/containerd/containerd/v2@v2.4.1
-Source: https://proxy.golang.org/github.com/containerd/containerd/v2/@v/v2.4.1.zip
-Selected Go source checksum: h1:DUx/ZJN7cEu0WuzHClDB+68H/bqMEH5pWoEjf0ae4hc=
+Component: github.com/containerd/containerd/v2@v2.4.2
+Source: https://proxy.golang.org/github.com/containerd/containerd/v2/@v/v2.4.2.zip
+Selected Go source checksum: h1:p6Qg+xbEz8lvwdhHDx0U469xENvp4LgGBx+E7djXkGw=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
