@@ -72,6 +72,8 @@ func TestLoadBalancerToggleNeedsInitializedTalosWithLoadBalancers(t *testing.T) 
 		workflow.Jobs["system-test"].Steps,
 		"✅ Validate load-balancer toggle trial",
 	)
+	// Without this guard the check would fail every scheduled smoke before a cluster exists.
+	assert.Equal(t, "inputs.load_balancer_toggle", validate.If)
 
 	for _, testCase := range []struct {
 		name string
