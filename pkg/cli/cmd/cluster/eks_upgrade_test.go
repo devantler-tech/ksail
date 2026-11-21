@@ -29,21 +29,33 @@ import (
 
 const eksUpgradeStartingVersion = "1.34"
 
-func TestEKSUpgradeSDKRejectsShortTokenBeforeValidRequest(t *testing.T) {
+// TestEKSUpgradeSDKPreservesServiceTokenRejection preserves the provider's error
+// without asserting an unsupported client-side token-length rule.
+func TestEKSUpgradeSDKPreservesServiceTokenRejection(t *testing.T) {
 	t.Parallel()
 
-	mutations := 0
-	endpoint := eksUpgradeHTTPFixture(t, &mutations, false)
+	// Replay the observed service error without inventing an AWS token-length rule.
+	server := httptest.NewServer(
+		http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+			writer.Header().Set("X-Amzn-Errortype", "InvalidParameterException")
+			writer.WriteHeader(http.StatusBadRequest)
+			_, _ = writer.Write([]byte(
+				`{"message":"The client request token parameter must be between 33 and 126 characters."}`,
+			))
+		}),
+	)
+	t.Cleanup(server.Close)
+
 	client := awseks.NewFromConfig(aws.Config{
 		Region: "us-east-1",
 		Credentials: aws.NewCredentialsCache(
 			awscredentials.NewStaticCredentialsProvider("FROZENUPGRADE", "secret", ""),
 		),
-	}, func(options *awseks.Options) { options.BaseEndpoint = aws.String(endpoint) })
+	}, func(options *awseks.Options) { options.BaseEndpoint = aws.String(server.URL) })
 
 	input := &awseks.UpdateClusterVersionInput{
 		Name: aws.String("demo"), Version: aws.String("1.35"),
-		ClientRequestToken: aws.String(strings.Repeat("a", 32)),
+		ClientRequestToken: aws.String("replayed-request-token"),
 	}
 	_, err := client.UpdateClusterVersion(t.Context(), input)
 
@@ -51,14 +63,6 @@ func TestEKSUpgradeSDKRejectsShortTokenBeforeValidRequest(t *testing.T) {
 
 	require.ErrorAs(t, err, &invalidToken)
 	assert.Contains(t, invalidToken.Error(), "between 33 and 126 characters")
-	assert.Zero(t, mutations, "a rejected request must not accept an update")
-
-	input.ClientRequestToken = aws.String(strings.Repeat("a", 33))
-	result, err := client.UpdateClusterVersion(t.Context(), input)
-	require.NoError(t, err)
-	require.NotNil(t, result.Update)
-	assert.Equal(t, "upgrade-id", aws.ToString(result.Update.Id))
-	assert.Equal(t, 1, mutations)
 }
 
 type eksUpgradeCase struct {
@@ -250,6 +254,7 @@ type eksUpgradeRequestContract struct {
 	submittedToken  string
 }
 
+// accept checks KSail's request format and models a retryable submission.
 func (contract *eksUpgradeRequestContract) accept(
 	t *testing.T, writer http.ResponseWriter, body map[string]any,
 ) bool {
@@ -257,13 +262,10 @@ func (contract *eksUpgradeRequestContract) accept(
 
 	assert.Equal(t, "1.35", body["version"])
 
-	token, validToken := body["clientRequestToken"].(string)
-	if !validToken || len(token) < 33 || len(token) > 126 {
-		writer.Header().Set("X-Amzn-Errortype", "InvalidParameterException")
+	token, _ := body["clientRequestToken"].(string)
+	// This is KSail's chosen token format, not a published AWS length constraint.
+	if !assert.Regexp(t, "^[0-9a-f]{64}$", token) {
 		writer.WriteHeader(http.StatusBadRequest)
-		_, _ = writer.Write([]byte(
-			`{"message":"The client request token parameter must be between 33 and 126 characters."}`,
-		))
 
 		return false
 	}
