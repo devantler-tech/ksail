@@ -107,8 +107,11 @@ func TestControlPlaneRemovalRefusesUnknownSystemHostPath(t *testing.T) {
 func TestControlPlaneScaleDownRebindsFinalProviderResponse(t *testing.T) {
 	t.Parallel()
 
-	for _, scenario := range []string{
-		"role changed", "floating owner changed", "wrong immutable response ID", "provider volume attached",
+	for scenario, refusal := range map[string]string{
+		"role changed":                "candidate is not a control plane",
+		"floating owner changed":      "target currently carries a floating endpoint",
+		"wrong immutable response ID": "does not match requested immutable identity",
+		"provider volume attached":    "provider target has attached storage volumes",
 	} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
@@ -125,23 +128,16 @@ func TestControlPlaneScaleDownRebindsFinalProviderResponse(t *testing.T) {
 				fixture.wrongResponseID = true
 			}
 
-			err := fixture.provisioner.removeHetznerNodes(
-				t.Context(),
-				"fixture",
-				RoleControlPlane,
-				2,
-				clusterupdate.NewEmptyUpdateResult(),
-			)
-			if scenario == "wrong immutable response ID" {
-				require.ErrorContains(t, err, "does not match requested immutable identity")
-			} else {
-				require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
-			}
+			err := runRemovalScaleDown(fixture)
 
-			require.Equal(
+			fixture.mu.Lock()
+			defer fixture.mu.Unlock()
+
+			require.ErrorContains(t, err, refusal)
+			require.Equal(t, []int64{1}, fixture.leaves)
+			require.Positive(
 				t,
-				[]int64{1},
-				fixture.leaves,
+				fixture.finalLookups,
 				"the scenario must reach the final provider lookup after membership removal",
 			)
 			require.Empty(
@@ -289,6 +285,15 @@ func TestControlPlaneRemovalRefusesUnprovenPersistentVolumeLocality(t *testing.T
 			fixture.nodes["fixture-control-plane-1"].Labels[corev1.LabelHostname] = "rack-a-01"
 
 			return removalLocalVolume("rack-a-01")
+		},
+		"metadata.name label expression is not the Node name": func(
+			fixture *removalFixture,
+		) corev1.PersistentVolume {
+			fixture.nodes["fixture-control-plane-1"].Labels["metadata.name"] = "pool-a"
+			volume := removalLocalVolume("pool-a")
+			volume.Spec.NodeAffinity.Required.NodeSelectorTerms[0].MatchExpressions[0].Key = "metadata.name"
+
+			return volume
 		},
 		"unrecognized CSI driver with topology-only affinity": func(*removalFixture) corev1.PersistentVolume {
 			volume := removalLocalVolume("unused")

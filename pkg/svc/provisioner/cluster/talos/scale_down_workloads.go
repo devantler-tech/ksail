@@ -99,17 +99,31 @@ func removalTargetIdentity(
 	)
 }
 
-// value returns the target's value for a node affinity key, or false for any key that does
-// not identify a single node.
-func (id removalNodeIdentity) value(key string) (string, bool) {
-	switch key {
-	case corev1.LabelHostname:
-		return id.hostname, true
-	case "metadata.name":
-		return id.name, true
-	default:
-		return "", false
+// anyTargetValueIn reports whether any In requirement of a term that identifies a single node
+// satisfies match for the target's value. Kubernetes evaluates matchExpressions against Node
+// labels and matchFields against Node fields, so only the hostname label identifies the node
+// in an expression and only metadata.name identifies it in a field selector.
+func (id removalNodeIdentity) anyTargetValueIn(
+	term corev1.NodeSelectorTerm,
+	match func(values []string, value string) bool,
+) bool {
+	for _, requirement := range term.MatchExpressions {
+		if requirement.Key == corev1.LabelHostname &&
+			requirement.Operator == corev1.NodeSelectorOpIn &&
+			match(requirement.Values, id.hostname) {
+			return true
+		}
 	}
+
+	for _, requirement := range term.MatchFields {
+		if requirement.Key == "metadata.name" &&
+			requirement.Operator == corev1.NodeSelectorOpIn &&
+			match(requirement.Values, id.name) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // proveNoRemovalPersistentVolumes refuses removal while any PersistentVolume may keep its data
@@ -199,30 +213,16 @@ func removalNetworkVolume(volume *corev1.PersistentVolume) bool {
 }
 
 func removalTermNamesTarget(term corev1.NodeSelectorTerm, target removalNodeIdentity) bool {
-	for _, requirement := range slices.Concat(term.MatchExpressions, term.MatchFields) {
-		value, identifies := target.value(requirement.Key)
-		if identifies && requirement.Operator == corev1.NodeSelectorOpIn &&
-			slices.Contains(requirement.Values, value) {
-			return true
-		}
-	}
-
-	return false
+	return target.anyTargetValueIn(term, slices.Contains[[]string])
 }
 
 // removalTermExcludesTarget reports whether a node selector term provably cannot match the
 // target. Only an In requirement on the target's hostname label or Node name whose values omit
 // the target's value is accepted as proof; any other requirement may match it.
 func removalTermExcludesTarget(term corev1.NodeSelectorTerm, target removalNodeIdentity) bool {
-	for _, requirement := range slices.Concat(term.MatchExpressions, term.MatchFields) {
-		value, identifies := target.value(requirement.Key)
-		if identifies && requirement.Operator == corev1.NodeSelectorOpIn &&
-			!slices.Contains(requirement.Values, value) {
-			return true
-		}
-	}
-
-	return false
+	return target.anyTargetValueIn(term, func(values []string, value string) bool {
+		return !slices.Contains(values, value)
+	})
 }
 
 func proveNoRemovalNodeVolumes(nodes []corev1.Node, target replacementTarget) error {

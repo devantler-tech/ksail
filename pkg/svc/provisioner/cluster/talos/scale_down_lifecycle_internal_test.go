@@ -66,6 +66,7 @@ type removalFixture struct {
 	deleted               []int64
 	apiWrites             []string
 	snapshots             int
+	finalLookups          int
 	provisioner           *Provisioner
 }
 
@@ -278,6 +279,7 @@ func (fixture *removalFixture) serveServer(response http.ResponseWriter, request
 
 	server := fixture.servers[serverID]
 	if server != nil {
+		fixture.countFinalLookup(serverID)
 		fixture.respond(response, fixture.serverResponse(server))
 
 		return
@@ -287,6 +289,13 @@ func (fixture *removalFixture) serveServer(response http.ResponseWriter, request
 	fixture.respond(response,
 		map[string]any{"error": map[string]any{"code": "not_found", "message": "not found"}},
 	)
+}
+
+// countFinalLookup records a target lookup made after its membership was removed.
+func (fixture *removalFixture) countFinalLookup(serverID int64) {
+	if serverID == 1 && len(fixture.leaves) > 0 {
+		fixture.finalLookups++
+	}
 }
 
 func (fixture *removalFixture) serverResponse(server *hcloud.Server) map[string]any {
