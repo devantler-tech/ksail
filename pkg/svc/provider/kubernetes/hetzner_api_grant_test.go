@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -13,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -197,21 +199,29 @@ func (cloud *apiGrantCloud) writeHostServer(t *testing.T, writer http.ResponseWr
 func newAPIGrantProvider(
 	t *testing.T,
 	cloud *apiGrantCloud,
-	providerID string,
+	providerIDs ...string,
 ) *kubeprovider.Provider {
 	t.Helper()
 
-	node := nodeWithAddresses(
-		corev1.NodeAddress{Type: corev1.NodeExternalIP, Address: "198.51.100.9"},
-	)
-	node.Spec.ProviderID = providerID
-	client := fake.NewClientset(node, &corev1.Service{
+	objects := make([]runtime.Object, 0, len(providerIDs)+1)
+
+	for index, providerID := range providerIDs {
+		node := nodeWithAddresses(
+			corev1.NodeAddress{Type: corev1.NodeExternalIP, Address: "198.51.100.9"},
+		)
+		node.Name = "n" + strconv.Itoa(index+1)
+		node.Spec.ProviderID = providerID
+		objects = append(objects, node)
+	}
+
+	objects = append(objects, &corev1.Service{
 		Name:      kubeprovider.APIServiceName,
 		Namespace: "ksail-demo",
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{{Name: "https", Port: 6443, NodePort: 31234}},
 		},
 	})
+	client := fake.NewClientset(objects...)
 	prov, err := kubeprovider.NewProvider(client, v1alpha1.OptionsKubernetes{})
 	require.NoError(t, err)
 
@@ -223,4 +233,32 @@ func apiGrantSpec() kubeprovider.APIExposureSpec {
 		ClusterName: "demo", APIPort: 6443, SkipLoadBalancer: true,
 		HostAddress: "https://198.51.100.9:6443",
 	}
+}
+
+// A node that joined after the grant and has no Hetzner identity yet must not
+// turn revocation into a silent no-op that leaves the nested API port open.
+func TestHetznerNodePortRevokeIgnoresUnidentifiedJoiningNode(t *testing.T) {
+	t.Parallel()
+
+	cloud := newAPIGrantCloud(t)
+	prov := newAPIGrantProvider(t, cloud, "hcloud://42")
+	_, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
+	require.NoError(t, err)
+	require.Len(t, cloud.rules, 3)
+
+	afterJoin := newAPIGrantProvider(t, cloud, "hcloud://42", "")
+	require.NoError(t, afterJoin.RevokeNestedAPIGrant(t.Context(), "demo"))
+	require.Len(t, cloud.rules, 2, "revoke must remove the grant despite a joining node")
+	assert.Equal(t, "31235", cloud.rules[1]["port"], "keep the sibling cluster's grant")
+}
+
+// A grant still needs every node to be a proven Hetzner server.
+func TestHetznerNodePortGrantRefusesMixedNodes(t *testing.T) {
+	t.Parallel()
+
+	cloud := newAPIGrantCloud(t)
+	prov := newAPIGrantProvider(t, cloud, "hcloud://42", "")
+	_, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
+	require.NoError(t, err)
+	assert.Zero(t, cloud.writes, "a node without a Hetzner identity never authorizes a grant")
 }

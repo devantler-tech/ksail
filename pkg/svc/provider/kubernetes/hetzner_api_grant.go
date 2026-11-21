@@ -102,7 +102,7 @@ func (r *ExposureResult) CleanupOnFailure(ctx context.Context, createErr error) 
 // ownedHetznerHost requires all host nodes to belong to one KSail cluster and
 // have its owned firewall applied. Names and addresses alone grant no authority.
 func (p *Provider) ownedHetznerHost(ctx context.Context, requireAttached bool) (string, error) {
-	ids, err := p.hetznerHostNodeIDs(ctx)
+	ids, err := p.hetznerHostNodeIDs(ctx, requireAttached)
 	if err != nil || len(ids) == 0 {
 		return "", err
 	}
@@ -125,7 +125,11 @@ func (p *Provider) ownedHetznerHost(ctx context.Context, requireAttached bool) (
 	return host, nil
 }
 
-func (p *Provider) hetznerHostNodeIDs(ctx context.Context) ([]int64, error) {
+// hetznerHostNodeIDs reads the host nodes' Hetzner server IDs. A grant needs every node to be
+// a Hetzner server, so any other node means no grant. A revoke skips nodes without a Hetzner
+// identity, such as a node that is still joining, so it cannot leave an opened port behind;
+// the remaining servers and the firewall must still prove ownership.
+func (p *Provider) hetznerHostNodeIDs(ctx context.Context, requireAll bool) ([]int64, error) {
 	if p == nil || p.hetznerClient == nil {
 		return nil, nil
 	}
@@ -140,7 +144,11 @@ func (p *Provider) hetznerHostNodeIDs(ctx context.Context) ([]int64, error) {
 	for _, node := range nodes.Items {
 		text, ok := strings.CutPrefix(node.Spec.ProviderID, "hcloud://")
 		if !ok {
-			return nil, nil
+			if requireAll {
+				return nil, nil
+			}
+
+			continue
 		}
 
 		id, parseErr := strconv.ParseInt(text, 10, 64)
