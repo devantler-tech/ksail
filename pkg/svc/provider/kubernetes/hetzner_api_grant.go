@@ -13,6 +13,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -54,11 +55,12 @@ func (p *Provider) WithHetznerAPIFirewallFromEnvironment() *Provider {
 
 // grantNestedAPI admits the NodePort of the nested cluster in namespace on its owned Hetzner
 // host. The grant is keyed by namespace, which is unique on the host. Compensation removes
-// it only when this attempt created it, so a failed duplicate create keeps a running
-// cluster's grant.
+// it only when this attempt created it and no grant was recorded before the resolution
+// (prior), so a failed duplicate create keeps a running cluster's grant.
 func (p *Provider) grantNestedAPI(
 	ctx context.Context,
 	namespace string,
+	prior bool,
 	result *ExposureResult,
 ) error {
 	host, err := p.ownedHetznerHost(ctx, true)
@@ -69,7 +71,7 @@ func (p *Provider) grantNestedAPI(
 	cloud := hetzner.NewProvider(p.hetznerClient)
 
 	created, err := cloud.GrantNestedAPIPort(ctx, host, namespace, int(result.Port))
-	if created {
+	if created && !prior {
 		result.cleanupGrant = func(ctx context.Context) error {
 			return cloud.RevokeNestedAPIPort(ctx, host, namespace)
 		}
@@ -136,22 +138,13 @@ func (p *Provider) RevokeNestedAPIGrant(ctx context.Context, namespace string) e
 		return fmt.Errorf("revoke nested API access: %w", err)
 	}
 
-	return nil
+	return p.clearNestedAPIGrantRecord(ctx, namespace)
 }
 
 func (p *Provider) requireNoRecordedGrant(ctx context.Context, namespace string) error {
-	svc, err := p.client.CoreV1().Services(namespace).Get(ctx, APIServiceName, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		return nil
-	}
-
-	if err != nil {
-		return fmt.Errorf("read nested API grant record: %w", err)
-	}
-
-	host := svc.Annotations[HetznerAPIGrantAnnotation]
-	if host == "" {
-		return nil
+	host, err := p.recordedGrantHost(ctx, namespace)
+	if err != nil || host == "" {
+		return err
 	}
 
 	return fmt.Errorf(
@@ -298,4 +291,53 @@ func (p *Provider) ownedHetznerServers(
 	}
 
 	return host, servers, nil
+}
+
+// recordedGrantHost returns the host recorded on the namespace's API Service, or "" when the
+// Service is absent or records no grant.
+func (p *Provider) recordedGrantHost(ctx context.Context, namespace string) (string, error) {
+	svc, err := p.client.CoreV1().Services(namespace).Get(ctx, APIServiceName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return "", nil
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("read nested API grant record: %w", err)
+	}
+
+	return svc.Annotations[HetznerAPIGrantAnnotation], nil
+}
+
+// clearNestedAPIGrantRecord removes the record once the grant is gone, so deletion without a
+// credential does not refuse a cluster that no longer holds a grant.
+func (p *Provider) clearNestedAPIGrantRecord(ctx context.Context, namespace string) error {
+	host, err := p.recordedGrantHost(ctx, namespace)
+	if err != nil || host == "" {
+		return err
+	}
+
+	patch := []byte(`{"metadata":{"annotations":{"` + HetznerAPIGrantAnnotation + `":null}}}`)
+
+	_, err = p.client.CoreV1().Services(namespace).
+		Patch(ctx, APIServiceName, types.MergePatchType, patch, metav1.PatchOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("clear nested API grant record: %w", err)
+	}
+
+	return nil
+}
+
+// preserveGrantRecord keeps the grant record across a rebuild of the API Service, because the
+// record is what tells deletion without a credential that a grant still exists.
+func preserveGrantRecord(svc, existing *corev1.Service) {
+	host := existing.Annotations[HetznerAPIGrantAnnotation]
+	if host == "" {
+		return
+	}
+
+	if svc.Annotations == nil {
+		svc.Annotations = map[string]string{}
+	}
+
+	svc.Annotations[HetznerAPIGrantAnnotation] = host
 }

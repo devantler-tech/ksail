@@ -3,6 +3,7 @@ package kubernetes_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -16,6 +17,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 )
@@ -362,3 +364,70 @@ func TestHetznerNodePortGrantRemovedWhenLoadBalancerTakesOver(t *testing.T) {
 	assert.Equal(t, kubeprovider.ExposureLoadBalancer, result.Kind)
 	require.Len(t, cloud.rules, 2, "the NodePort grant is removed")
 }
+
+// A Gateway attempt removes the grant before its ClusterIP Service releases the NodePort.
+// When the Gateway then fails and resolution falls back to NodePort, the re-created grant
+// belongs to the running cluster, so a failed duplicate create must keep it.
+func TestHetznerNodePortGatewayFallbackKeepsRunningClusterGrant(t *testing.T) {
+	t.Parallel()
+
+	cloud := newAPIGrantCloud(t)
+	prov, client := newAPIGrantProviderWithClient(t, cloud, "hcloud://42")
+	_, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
+	require.NoError(t, err)
+
+	// The fake clientset does not allocate node ports; the API server re-allocates one
+	// when the Service returns to NodePort.
+	client.PrependReactor("update", "services",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			update, _ := action.(k8stesting.UpdateAction)
+
+			svc, _ := update.GetObject().(*corev1.Service)
+			if svc.Spec.Type == corev1.ServiceTypeNodePort {
+				svc.Spec.Ports[0].NodePort = 31234
+			}
+
+			return false, nil, nil
+		})
+
+	gateway := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+	gateway.PrependReactor("*", "*", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errGatewayUnavailable
+	})
+
+	spec := apiGrantSpec()
+	spec.GatewayClassName = "unavailable"
+	duplicate, err := prov.ResolveExposure(t.Context(), gateway, spec)
+	require.NoError(t, err)
+	require.Equal(t, kubeprovider.ExposureNodePort, duplicate.Kind)
+	require.Len(t, cloud.rules, 3, "the fallback grants the NodePort again")
+
+	failure := context.DeadlineExceeded
+	require.ErrorIs(t, duplicate.CleanupOnFailure(t.Context(), failure), failure)
+	require.Len(t, cloud.rules, 3, "the running cluster keeps its grant")
+}
+
+// Rebuilding the API Service must keep the grant record, or deletion without a credential
+// would treat a granted cluster as never granted.
+func TestHetznerNodePortServiceRebuildKeepsGrantRecord(t *testing.T) {
+	t.Parallel()
+
+	cloud := newAPIGrantCloud(t)
+	prov, client := newAPIGrantProviderWithClient(t, cloud, "hcloud://42")
+	_, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
+	require.NoError(t, err)
+
+	prov.WithHetznerAPIFirewall(nil)
+	_, err = prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
+	require.NoError(t, err)
+
+	svc, err := client.CoreV1().Services("ksail-demo").
+		Get(t.Context(), kubeprovider.APIServiceName, metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, "host", svc.Annotations[kubeprovider.HetznerAPIGrantAnnotation])
+	require.ErrorIs(t,
+		prov.RevokeNestedAPIGrant(t.Context(), "ksail-demo"),
+		kubeprovider.ErrHetznerGrantCredentials)
+}
+
+var errGatewayUnavailable = errors.New("gateway unavailable")

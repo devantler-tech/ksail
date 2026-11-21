@@ -80,6 +80,10 @@ type APIExposureSpec struct {
 	// directly to NodePort. Use this when the host cluster's LB controller (e.g. K3s
 	// klipper-lb) would bind the API port on the node, conflicting with the host API server.
 	SkipLoadBalancer bool
+
+	// priorGrant is set by ResolveExposure when the API Service already records a Hetzner
+	// grant, so a grant re-created during this resolution is never removed as a new one.
+	priorGrant bool
 }
 
 // ExposureResult is the resolved, stable endpoint for a nested cluster's API server.
@@ -147,6 +151,10 @@ func (p *Provider) ResolveExposure(
 	spec APIExposureSpec,
 ) (*ExposureResult, error) {
 	spec = spec.withDefaults()
+
+	prior, err := p.recordedGrantHost(ctx, spec.Namespace)
+	// An unreadable record counts as a grant, so compensation never removes it.
+	spec.priorGrant = err != nil || prior != ""
 
 	if spec.GatewayClassName != "" {
 		if dynamicClient == nil {
@@ -267,7 +275,7 @@ func (p *Provider) exposeViaNodePort(
 		Kind:    ExposureNodePort,
 	}
 
-	err = p.grantNestedAPI(ctx, spec.Namespace, result)
+	err = p.grantNestedAPI(ctx, spec.Namespace, spec.priorGrant, result)
 	if err != nil {
 		return nil, err
 	}
@@ -348,6 +356,7 @@ func (p *Provider) ensureService(
 
 		svc.ResourceVersion = existing.ResourceVersion
 		preserveImmutableServiceFields(svc, existing, serviceType)
+		preserveGrantRecord(svc, existing)
 
 		created, err = p.client.CoreV1().
 			Services(spec.Namespace).
