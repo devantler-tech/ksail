@@ -10,5 +10,5 @@
 #   breaks Flux bootstrap when the manifests' bundled Flux distribution restructures a
 #   CRD the operator patches (see ksail#5595).
 
-FROM ghcr.io/controlplaneio-fluxcd/charts/flux-operator:0.62.1@sha256:1135514a01cc11e206f5ff0b568ac30d9defd675022b7a9da88d4a3474fbdf13
-FROM ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:v0.62.1@sha256:033a75c33b911d534e10c58cbcc60dda75027c99054fcd414339c9fd5019f7c3
+FROM ghcr.io/controlplaneio-fluxcd/charts/flux-operator:0.63.0@sha256:62c547ad36803ebc2d679d0b50c1e1ad965cfec6352f27720907361e411891d2
+FROM ghcr.io/controlplaneio-fluxcd/flux-operator-manifests:v0.63.0@sha256:96199561a7539e309a820e7c0d245712efbb4a9be1c10a97f0df1d0e86d91020

@@ -36,6 +36,9 @@ effective_dir="$(jq -er '.Replace.Dir' <<<"${metadata}")"
 }
 
 if [[ -z "${upstream_dir}" ]]; then
+	# Fetch through the bounded retry first so a dropped Go proxy stream does not fail
+	# the check (#8053); the read below then comes from the module cache.
+	bash "${script_dir}/download-go-module-versions.sh" "${module}@${version}"
 	resolved="$(go mod download -json "${module}@${version}")"
 	upstream_dir="$(jq -er --arg sum "${checksum}" \
 		'select(.Sum == $sum and (.Error // "") == "") | .Dir' <<<"${resolved}")" || {
