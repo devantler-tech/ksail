@@ -338,6 +338,17 @@ jobs:
           cd "$KSAIL_EKS_WORKDIR"
           ksail cluster info
 
+      - name: 🧪 ksail cluster diff reports no drift on the unchanged cluster
+        # ksail#7837: with the project-init default (no explicit kube context), diff
+        # must resolve the context eksctl wrote, so every drift probe reads its
+        # baseline. Exit 2 here means an unknown baseline or real drift.
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$KSAIL_EKS_WORKDIR"
+          ksail cluster diff --exit-code
+
       - name: 🔐 Refresh AWS credentials before EKS update and cleanup
         if: always() && steps.init.outcome == 'success'
         timeout-minutes: 5
