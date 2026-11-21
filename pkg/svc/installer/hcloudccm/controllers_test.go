@@ -69,6 +69,20 @@ func checkControllerValues(
 ) {
 	t.Helper()
 
+	if networkName != "" {
+		assert.Equal(t, map[string]any{
+			"type":          "RollingUpdate",
+			"rollingUpdate": map[string]any{"maxSurge": float64(0), "maxUnavailable": float64(1)},
+		}, values["strategy"], "replace a controller before scheduling another pod on its occupied host port")
+	} else {
+		assert.NotContains(
+			t,
+			values,
+			"strategy",
+			"pod networking needs no host-port rollout override",
+		)
+	}
+
 	if disabled {
 		require.Contains(t, values, "args")
 		assert.Equal(t, map[string]any{"controllers": "*,-service"}, values["args"])
