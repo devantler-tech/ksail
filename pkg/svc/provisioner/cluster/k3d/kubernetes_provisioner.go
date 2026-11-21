@@ -245,12 +245,12 @@ func (p *K3kProvisioner) Delete(ctx context.Context, name string) error {
 
 	p.closeAPIServerPortForward()
 
-	err := p.k8sProvider.RevokeNestedAPIGrant(ctx, clusterName)
+	namespace := k3kNamespacePrefix + clusterName
+
+	err := p.k8sProvider.RevokeNestedAPIGrant(ctx, namespace)
 	if err != nil {
 		return fmt.Errorf("revoke nested API before deletion: %w", err)
 	}
-
-	namespace := k3kNamespacePrefix + clusterName
 
 	// Delete the namespace (cascading delete removes Cluster CR, pods, services, etc.)
 	_, _ = fmt.Fprintf(os.Stdout, "► deleting namespace %s\n", namespace)

@@ -86,33 +86,40 @@ func withNestedAPIGrants(baseRules, existingRules []hcloud.FirewallRule) []hclou
 // of the host's Kubernetes API rule, so it is never reachable from more addresses than the
 // host's own API. Granting again for the same nested cluster replaces its earlier grant;
 // other nested clusters' grants are kept. It returns once the rules are in effect.
+//
+// created reports whether this call wrote a grant where nestedCluster had none, so a caller
+// compensating a failed create removes only a grant that its own attempt added. It is true
+// when that write failed too, because a failed action wait can follow an applied rule.
 func (p *Provider) GrantNestedAPIPort(
 	ctx context.Context,
 	hostCluster string,
 	nestedCluster string,
 	port int,
-) error {
+) (bool, error) {
 	if nestedCluster == "" {
-		return fmt.Errorf("%w: nested cluster name is required", ErrInvalidNestedAPIGrant)
+		return false, fmt.Errorf("%w: nested cluster name is required", ErrInvalidNestedAPIGrant)
 	}
 
 	if port < 1 || port > maxPort {
-		return fmt.Errorf("%w: port %d is outside 1-%d", ErrInvalidNestedAPIGrant, port, maxPort)
+		return false, fmt.Errorf(
+			"%w: port %d is outside 1-%d", ErrInvalidNestedAPIGrant, port, maxPort,
+		)
 	}
 
 	defer lockFirewallRules(hostCluster + FirewallSuffix)()
 
 	firewall, err := p.ownedHostFirewall(ctx, hostCluster)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	sources, ok := kubernetesAPISourceIPs(firewall.Rules)
 	if !ok {
-		return fmt.Errorf("%w: %s", ErrNoKubernetesAPIRule, firewall.Name)
+		return false, fmt.Errorf("%w: %s", ErrNoKubernetesAPIRule, firewall.Name)
 	}
 
 	rules := withoutNestedAPIGrant(firewall.Rules, nestedCluster)
+	created := len(rules) == len(firewall.Rules)
 	rules = append(rules, hcloud.FirewallRule{
 		Direction:   hcloud.FirewallRuleDirectionIn,
 		Protocol:    hcloud.FirewallRuleProtocolTCP,
@@ -121,7 +128,7 @@ func (p *Provider) GrantNestedAPIPort(
 		Description: new(nestedAPIRuleDescription(nestedCluster)),
 	})
 
-	return p.setRulesIfChanged(ctx, firewall, rules)
+	return created, p.setRulesIfChanged(ctx, firewall, rules)
 }
 
 // RevokeNestedAPIPort removes the API grant of nestedCluster from the KSail-owned firewall

@@ -188,7 +188,13 @@ func (p *Provider) exposeViaGateway(
 	dynamicClient dynamic.Interface,
 	spec APIExposureSpec,
 ) (*ExposureResult, error) {
-	_, err := p.ensureService(ctx, spec, corev1.ServiceTypeClusterIP)
+	// A ClusterIP Service releases its NodePort, so the grant on that port goes first.
+	err := p.RevokeNestedAPIGrant(ctx, spec.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = p.ensureService(ctx, spec, corev1.ServiceTypeClusterIP)
 	if err != nil {
 		return nil, err
 	}
@@ -226,6 +232,13 @@ func (p *Provider) exposeViaLoadBalancer(
 		return nil, err
 	}
 
+	// A LoadBalancer Service keeps its NodePort, so an earlier NodePort grant is removed only
+	// once clients reach the load balancer instead.
+	err = p.RevokeNestedAPIGrant(ctx, spec.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
 	return &ExposureResult{Address: addr, Port: spec.APIPort, Kind: ExposureLoadBalancer}, nil
 }
 
@@ -254,7 +267,7 @@ func (p *Provider) exposeViaNodePort(
 		Kind:    ExposureNodePort,
 	}
 
-	err = p.grantNestedAPI(ctx, spec.ClusterName, result)
+	err = p.grantNestedAPI(ctx, spec.Namespace, result)
 	if err != nil {
 		return nil, err
 	}
@@ -651,12 +664,12 @@ func (p *Provider) DeleteAPIExposure(
 	dynamicClient dynamic.Interface,
 	clusterName string,
 ) error {
-	err := p.RevokeNestedAPIGrant(ctx, clusterName)
+	namespace := NamespaceName(clusterName)
+
+	err := p.RevokeNestedAPIGrant(ctx, namespace)
 	if err != nil {
 		return err
 	}
-
-	namespace := NamespaceName(clusterName)
 
 	// Delete TCPRoute + Gateway (only present on the Gateway path).
 	if dynamicClient != nil {

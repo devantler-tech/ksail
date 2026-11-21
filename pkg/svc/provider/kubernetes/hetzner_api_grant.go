@@ -2,20 +2,36 @@ package kubernetes
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
-// ErrInvalidHetznerHost identifies an ambiguous host identity that cannot authorize a grant.
-var ErrInvalidHetznerHost = errors.New("invalid Hetzner host identity")
+// HetznerAPIGrantAnnotation records, on a nested cluster's API Service, the Hetzner host whose
+// firewall admits that cluster's API port. Deletion reads it to tell a recorded grant from a
+// host that never received one.
+const HetznerAPIGrantAnnotation = "ksail.io/hetzner-api-grant"
+
+var (
+	// ErrInvalidHetznerHost identifies an ambiguous host identity that cannot authorize a grant.
+	ErrInvalidHetznerHost = errors.New("invalid Hetzner host identity")
+	// ErrHetznerGrantCredentials means a recorded grant exists but no Hetzner credential is
+	// available to remove it, so deletion stops instead of leaving the port open.
+	ErrHetznerGrantCredentials = errors.New(
+		"hetzner credential required to revoke nested API grant",
+	)
+)
 
 // WithHetznerAPIFirewall enables source-restricted grants for owned Hetzner host nodes.
 // Configure it before sharing the provider; nil leaves ordinary exposure unchanged.
@@ -36,9 +52,13 @@ func (p *Provider) WithHetznerAPIFirewallFromEnvironment() *Provider {
 	return p
 }
 
+// grantNestedAPI admits the NodePort of the nested cluster in namespace on its owned Hetzner
+// host. The grant is keyed by namespace, which is unique on the host. Compensation removes
+// it only when this attempt created it, so a failed duplicate create keeps a running
+// cluster's grant.
 func (p *Provider) grantNestedAPI(
 	ctx context.Context,
-	clusterName string,
+	namespace string,
 	result *ExposureResult,
 ) error {
 	host, err := p.ownedHetznerHost(ctx, true)
@@ -47,11 +67,18 @@ func (p *Provider) grantNestedAPI(
 	}
 
 	cloud := hetzner.NewProvider(p.hetznerClient)
-	result.cleanupGrant = func(ctx context.Context) error {
-		return cloud.RevokeNestedAPIPort(ctx, host, clusterName)
+
+	created, err := cloud.GrantNestedAPIPort(ctx, host, namespace, int(result.Port))
+	if created {
+		result.cleanupGrant = func(ctx context.Context) error {
+			return cloud.RevokeNestedAPIPort(ctx, host, namespace)
+		}
 	}
 
-	err = cloud.GrantNestedAPIPort(ctx, host, clusterName, int(result.Port))
+	if err == nil {
+		err = p.recordNestedAPIGrant(ctx, namespace, host)
+	}
+
 	if err != nil {
 		// A failed action wait can follow an applied rule. Retain both failures if
 		// compensating cleanup cannot establish removal.
@@ -63,20 +90,74 @@ func (p *Provider) grantNestedAPI(
 	return nil
 }
 
-// RevokeNestedAPIGrant discovers the host independently of the child's namespace,
-// so deletion can retry after a failed create or after namespace removal.
-func (p *Provider) RevokeNestedAPIGrant(ctx context.Context, clusterName string) error {
+func (p *Provider) recordNestedAPIGrant(ctx context.Context, namespace, host string) error {
+	var record struct {
+		Metadata struct {
+			Annotations map[string]string `json:"annotations"`
+		} `json:"metadata"`
+	}
+
+	record.Metadata.Annotations = map[string]string{HetznerAPIGrantAnnotation: host}
+
+	patch, err := json.Marshal(record)
+	if err != nil {
+		return fmt.Errorf("encode nested API grant record: %w", err)
+	}
+
+	_, err = p.client.CoreV1().Services(namespace).
+		Patch(ctx, APIServiceName, types.MergePatchType, patch, metav1.PatchOptions{})
+	if err != nil {
+		return fmt.Errorf("record nested API grant: %w", err)
+	}
+
+	return nil
+}
+
+// RevokeNestedAPIGrant removes the grant of the nested cluster in namespace. It discovers
+// the host independently of the namespace, so deletion can retry after a failed create or
+// after namespace removal. Without a Hetzner credential it succeeds only when no grant is
+// recorded on the namespace's API Service.
+func (p *Provider) RevokeNestedAPIGrant(ctx context.Context, namespace string) error {
+	if p == nil {
+		return nil
+	}
+
+	if p.hetznerClient == nil {
+		return p.requireNoRecordedGrant(ctx, namespace)
+	}
+
 	host, err := p.ownedHetznerHost(ctx, false)
 	if err != nil || host == "" {
 		return err
 	}
 
-	err = hetzner.NewProvider(p.hetznerClient).RevokeNestedAPIPort(ctx, host, clusterName)
+	err = hetzner.NewProvider(p.hetznerClient).RevokeNestedAPIPort(ctx, host, namespace)
 	if err != nil {
 		return fmt.Errorf("revoke nested API access: %w", err)
 	}
 
 	return nil
+}
+
+func (p *Provider) requireNoRecordedGrant(ctx context.Context, namespace string) error {
+	svc, err := p.client.CoreV1().Services(namespace).Get(ctx, APIServiceName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("read nested API grant record: %w", err)
+	}
+
+	host := svc.Annotations[HetznerAPIGrantAnnotation]
+	if host == "" {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"%w: the firewall of Hetzner host %q admits %s; set %s and retry",
+		ErrHetznerGrantCredentials, host, namespace, v1alpha1.DefaultHetznerTokenEnvVar,
+	)
 }
 
 const nestedGrantCleanupTimeout = 30 * time.Second

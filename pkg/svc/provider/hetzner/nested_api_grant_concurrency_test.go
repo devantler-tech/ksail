@@ -97,7 +97,7 @@ func TestGrantNestedAPIPortConcurrentGrantsAreAllKept(t *testing.T) {
 		workers.Go(func() {
 			// Each grant uses its own Provider: the guard must hold across instances.
 			prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
-			errs[i] = prov.GrantNestedAPIPort(
+			_, errs[i] = prov.GrantNestedAPIPort(
 				context.Background(), "test-cluster", "nested-"+strconv.Itoa(i), 30000+i,
 			)
 		})

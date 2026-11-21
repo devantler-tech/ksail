@@ -75,9 +75,15 @@ func TestGrantNestedAPIPortAddsSourceRestrictedRule(t *testing.T) {
 	}, ownedFirewallLabels(), "success")
 	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
 
-	err := prov.GrantNestedAPIPort(context.Background(), "test-cluster", "nested-kind", 30668)
+	created, err := prov.GrantNestedAPIPort(
+		context.Background(),
+		"test-cluster",
+		"nested-kind",
+		30668,
+	)
 
 	require.NoError(t, err)
+	assert.True(t, created, "no earlier grant existed")
 	assert.Equal(t, map[string][]string{
 		"6443":                                 {"203.0.113.0/24"},
 		"31000 " + nestedGrantPrefix + "other": {"0.0.0.0/0"},
@@ -95,9 +101,15 @@ func TestGrantNestedAPIPortReplacesEarlierGrant(t *testing.T) {
 	}, ownedFirewallLabels(), "success")
 	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
 
-	err := prov.GrantNestedAPIPort(context.Background(), "test-cluster", "nested-kind", 30668)
+	created, err := prov.GrantNestedAPIPort(
+		context.Background(),
+		"test-cluster",
+		"nested-kind",
+		30668,
+	)
 
 	require.NoError(t, err)
+	assert.False(t, created, "replacing an earlier grant is not a new grant")
 	assert.Equal(t, map[string][]string{
 		"6443": {"203.0.113.0/24"},
 		"30668 " + nestedGrantPrefix + "nested-kind": {"203.0.113.0/24"},
@@ -144,7 +156,7 @@ func TestGrantNestedAPIPortRefusals(t *testing.T) {
 			srv := newFirewallRepairServer(t, test.rules, test.labels, "success")
 			prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
 
-			err := prov.GrantNestedAPIPort(
+			_, err := prov.GrantNestedAPIPort(
 				context.Background(), "test-cluster", test.nested, test.port,
 			)
 
@@ -159,7 +171,7 @@ func TestGrantNestedAPIPortRefusesMissingFirewall(t *testing.T) {
 
 	prov := hetzner.NewProvider(newTestHcloudClient(t, newNoFirewallServer(t)))
 
-	err := prov.GrantNestedAPIPort(context.Background(), "test-cluster", "nested-kind", 30668)
+	_, err := prov.GrantNestedAPIPort(context.Background(), "test-cluster", "nested-kind", 30668)
 
 	require.ErrorIs(t, err, hetzner.ErrHostFirewallNotFound)
 }

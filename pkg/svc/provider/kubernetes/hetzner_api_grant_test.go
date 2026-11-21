@@ -14,8 +14,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 // Removing the grant or using the service's target port instead of its allocated
@@ -45,11 +47,11 @@ func TestHetznerNodePortGrantLifecycle(t *testing.T) {
 	otherProcess := newAPIGrantProvider(t, cloud, "hcloud://42")
 	cloud.unattached = true
 
-	require.NoError(t, otherProcess.RevokeNestedAPIGrant(t.Context(), "demo"))
+	require.NoError(t, otherProcess.RevokeNestedAPIGrant(t.Context(), "ksail-demo"))
 	require.Len(t, cloud.rules, 2)
 	assert.Equal(t, "6443", cloud.rules[0]["port"])
 	assert.Equal(t, "31235", cloud.rules[1]["port"], "keep the sibling cluster's grant")
-	require.NoError(t, otherProcess.RevokeNestedAPIGrant(t.Context(), "demo"))
+	require.NoError(t, otherProcess.RevokeNestedAPIGrant(t.Context(), "ksail-demo"))
 }
 
 func TestHetznerNodePortFailedCreateRevokesWithCancelledContext(t *testing.T) {
@@ -203,6 +205,18 @@ func newAPIGrantProvider(
 ) *kubeprovider.Provider {
 	t.Helper()
 
+	prov, _ := newAPIGrantProviderWithClient(t, cloud, providerIDs...)
+
+	return prov
+}
+
+func newAPIGrantProviderWithClient(
+	t *testing.T,
+	cloud *apiGrantCloud,
+	providerIDs ...string,
+) (*kubeprovider.Provider, *fake.Clientset) {
+	t.Helper()
+
 	objects := make([]runtime.Object, 0, len(providerIDs)+1)
 
 	for index, providerID := range providerIDs {
@@ -225,7 +239,7 @@ func newAPIGrantProvider(
 	prov, err := kubeprovider.NewProvider(client, v1alpha1.OptionsKubernetes{})
 	require.NoError(t, err)
 
-	return prov.WithHetznerAPIFirewall(cloud.client)
+	return prov.WithHetznerAPIFirewall(cloud.client), client
 }
 
 func apiGrantSpec() kubeprovider.APIExposureSpec {
@@ -247,7 +261,7 @@ func TestHetznerNodePortRevokeIgnoresUnidentifiedJoiningNode(t *testing.T) {
 	require.Len(t, cloud.rules, 3)
 
 	afterJoin := newAPIGrantProvider(t, cloud, "hcloud://42", "")
-	require.NoError(t, afterJoin.RevokeNestedAPIGrant(t.Context(), "demo"))
+	require.NoError(t, afterJoin.RevokeNestedAPIGrant(t.Context(), "ksail-demo"))
 	require.Len(t, cloud.rules, 2, "revoke must remove the grant despite a joining node")
 	assert.Equal(t, "31235", cloud.rules[1]["port"], "keep the sibling cluster's grant")
 }
@@ -261,4 +275,90 @@ func TestHetznerNodePortGrantRefusesMixedNodes(t *testing.T) {
 	_, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
 	require.NoError(t, err)
 	assert.Zero(t, cloud.writes, "a node without a Hetzner identity never authorizes a grant")
+}
+
+// The grant is keyed by the namespace, which is unique on the host, so a same-named
+// cluster of another distribution keeps its own grant.
+func TestHetznerNodePortGrantIsKeyedByNamespace(t *testing.T) {
+	t.Parallel()
+
+	cloud := newAPIGrantCloud(t)
+	prov := newAPIGrantProvider(t, cloud, "hcloud://42")
+	_, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
+	require.NoError(t, err)
+	require.Len(t, cloud.rules, 3)
+	assert.Equal(t, "KSail nested API: ksail-demo", cloud.rules[2]["description"])
+
+	require.NoError(t, prov.RevokeNestedAPIGrant(t.Context(), "k3k-demo"))
+	require.Len(t, cloud.rules, 3, "another namespace's revoke keeps this grant")
+}
+
+// A failed create of a cluster that already holds a grant must not revoke it: the attempt
+// did not create that grant, and the running cluster still needs it.
+func TestHetznerNodePortFailedDuplicateCreateKeepsExistingGrant(t *testing.T) {
+	t.Parallel()
+
+	cloud := newAPIGrantCloud(t)
+	prov := newAPIGrantProvider(t, cloud, "hcloud://42")
+	_, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
+	require.NoError(t, err)
+
+	duplicate, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
+	require.NoError(t, err)
+
+	failure := context.DeadlineExceeded
+	require.ErrorIs(t, duplicate.CleanupOnFailure(t.Context(), failure), failure)
+	require.Len(t, cloud.rules, 3, "the existing cluster's grant is kept")
+}
+
+// Deletion without a Hetzner credential stops when a grant is recorded, and stays a no-op
+// for a host that never received one.
+func TestHetznerNodePortRevokeWithoutCredentialNeedsNoRecordedGrant(t *testing.T) {
+	t.Parallel()
+
+	cloud := newAPIGrantCloud(t)
+	prov, client := newAPIGrantProviderWithClient(t, cloud, "hcloud://42")
+	_, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
+	require.NoError(t, err)
+
+	svc, err := client.CoreV1().Services("ksail-demo").
+		Get(t.Context(), kubeprovider.APIServiceName, metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, "host", svc.Annotations[kubeprovider.HetznerAPIGrantAnnotation])
+
+	prov.WithHetznerAPIFirewall(nil)
+	err = prov.RevokeNestedAPIGrant(t.Context(), "ksail-demo")
+	require.ErrorIs(t, err, kubeprovider.ErrHetznerGrantCredentials)
+	require.Len(t, cloud.rules, 3)
+
+	plain := newAPIGrantProvider(t, cloud, "hcloud://42").WithHetznerAPIFirewall(nil)
+	require.NoError(t, plain.RevokeNestedAPIGrant(t.Context(), "ksail-demo"))
+}
+
+// Moving the API to a load balancer removes the NodePort grant once clients reach the
+// load balancer, so the port is not left admitted after another Service takes it.
+func TestHetznerNodePortGrantRemovedWhenLoadBalancerTakesOver(t *testing.T) {
+	t.Parallel()
+
+	cloud := newAPIGrantCloud(t)
+	prov, client := newAPIGrantProviderWithClient(t, cloud, "hcloud://42")
+	_, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
+	require.NoError(t, err)
+	require.Len(t, cloud.rules, 3)
+
+	client.PrependReactor("update", "services",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			update, _ := action.(k8stesting.UpdateAction)
+			svc, _ := update.GetObject().(*corev1.Service)
+			svc.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{{IP: "203.0.113.5"}}
+
+			return false, nil, nil
+		})
+
+	spec := apiGrantSpec()
+	spec.SkipLoadBalancer = false
+	result, err := prov.ResolveExposure(t.Context(), nil, spec)
+	require.NoError(t, err)
+	assert.Equal(t, kubeprovider.ExposureLoadBalancer, result.Kind)
+	require.Len(t, cloud.rules, 2, "the NodePort grant is removed")
 }

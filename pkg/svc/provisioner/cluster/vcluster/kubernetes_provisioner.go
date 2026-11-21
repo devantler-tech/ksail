@@ -250,12 +250,12 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 		clusterName = name
 	}
 
-	err := p.k8sProvider.RevokeNestedAPIGrant(ctx, clusterName)
+	namespace := NamespacePrefix + clusterName
+
+	err := p.k8sProvider.RevokeNestedAPIGrant(ctx, namespace)
 	if err != nil {
 		return fmt.Errorf("revoke nested API before deletion: %w", err)
 	}
-
-	namespace := NamespacePrefix + clusterName
 
 	deleteOpts := &cli.DeleteOptions{
 		DeleteNamespace: true,
