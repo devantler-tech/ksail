@@ -32,6 +32,11 @@ var (
 	ErrHetznerGrantCredentials = errors.New(
 		"hetzner credential required to revoke nested API grant",
 	)
+	// ErrHetznerGrantUnresolved means a recorded grant exists but the owned host cannot be
+	// proven from the host nodes, so its removal cannot be established.
+	ErrHetznerGrantUnresolved = errors.New(
+		"hetzner host of recorded nested API grant is unresolved",
+	)
 )
 
 // WithHetznerAPIFirewall enables source-restricted grants for owned Hetzner host nodes.
@@ -73,7 +78,13 @@ func (p *Provider) grantNestedAPI(
 	created, err := cloud.GrantNestedAPIPort(ctx, host, namespace, int(result.Port))
 	if created && !prior {
 		result.cleanupGrant = func(ctx context.Context) error {
-			return cloud.RevokeNestedAPIPort(ctx, host, namespace)
+			err := cloud.RevokeNestedAPIPort(ctx, host, namespace)
+			if err != nil {
+				return fmt.Errorf("revoke nested API access: %w", err)
+			}
+
+			// A stale record would make a retry treat its own new grant as an earlier one.
+			return p.clearNestedAPIGrantRecord(ctx, namespace)
 		}
 	}
 
@@ -125,12 +136,16 @@ func (p *Provider) RevokeNestedAPIGrant(ctx context.Context, namespace string) e
 	}
 
 	if p.hetznerClient == nil {
-		return p.requireNoRecordedGrant(ctx, namespace)
+		return p.requireNoRecordedGrant(ctx, namespace, ErrHetznerGrantCredentials)
 	}
 
 	host, err := p.ownedHetznerHost(ctx, false)
-	if err != nil || host == "" {
+	if err != nil {
 		return err
+	}
+
+	if host == "" {
+		return p.requireNoRecordedGrant(ctx, namespace, ErrHetznerGrantUnresolved)
 	}
 
 	err = hetzner.NewProvider(p.hetznerClient).RevokeNestedAPIPort(ctx, host, namespace)
@@ -141,15 +156,20 @@ func (p *Provider) RevokeNestedAPIGrant(ctx context.Context, namespace string) e
 	return p.clearNestedAPIGrantRecord(ctx, namespace)
 }
 
-func (p *Provider) requireNoRecordedGrant(ctx context.Context, namespace string) error {
+func (p *Provider) requireNoRecordedGrant(
+	ctx context.Context,
+	namespace string,
+	cause error,
+) error {
 	host, err := p.recordedGrantHost(ctx, namespace)
 	if err != nil || host == "" {
 		return err
 	}
 
 	return fmt.Errorf(
-		"%w: the firewall of Hetzner host %q admits %s; set %s and retry",
-		ErrHetznerGrantCredentials, host, namespace, v1alpha1.DefaultHetznerTokenEnvVar,
+		"%w: the firewall of Hetzner host %q admits %s; set %s, wait until every host "+
+			"node has its Hetzner identity, and retry",
+		cause, host, namespace, v1alpha1.DefaultHetznerTokenEnvVar,
 	)
 }
 

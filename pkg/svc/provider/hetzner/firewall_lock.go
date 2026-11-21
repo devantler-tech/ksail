@@ -1,20 +1,29 @@
 package hetzner
 
-import "sync"
+import (
+	"context"
+	"fmt"
+	"sync"
+)
 
-// firewallRuleLocks holds one mutex per firewall name. Every read, build and write of a
-// firewall's rules holds that firewall's mutex, so a rule list built from an older snapshot
+// firewallRuleLocks holds one lock per firewall name. Every read, build and write of a
+// firewall's rules holds that firewall's lock, so a rule list built from an older snapshot
 // cannot replace a newer one. It is shared by every Provider in the process; separate
 // KSail processes are not serialized.
 var firewallRuleLocks sync.Map
 
 // lockFirewallRules locks the rules of the firewall named firewallName and returns the
-// function that unlocks them.
-func lockFirewallRules(firewallName string) func() {
-	value, _ := firewallRuleLocks.LoadOrStore(firewallName, &sync.Mutex{})
+// function that unlocks them. Waiting for the lock ends with ctx, so a bounded cleanup is
+// not held past its deadline by another operation's long action wait.
+func lockFirewallRules(ctx context.Context, firewallName string) (func(), error) {
+	value, _ := firewallRuleLocks.LoadOrStore(firewallName, make(chan struct{}, 1))
 
-	mutex, _ := value.(*sync.Mutex)
-	mutex.Lock()
+	lock, _ := value.(chan struct{})
 
-	return mutex.Unlock
+	select {
+	case lock <- struct{}{}:
+		return func() { <-lock }, nil
+	case <-ctx.Done():
+		return nil, fmt.Errorf("wait for firewall %s rules lock: %w", firewallName, ctx.Err())
+	}
 }

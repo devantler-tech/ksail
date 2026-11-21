@@ -178,7 +178,12 @@ func (p *Provider) ensureFirewallRules(
 
 	firewallName := clusterName + FirewallSuffix
 
-	defer lockFirewallRules(firewallName)()
+	unlock, err := lockFirewallRules(ctx, firewallName)
+	if err != nil {
+		return nil, err
+	}
+
+	defer unlock()
 
 	firewall, _, err := p.client.Firewall.GetByName(ctx, firewallName)
 	if err != nil {
@@ -240,7 +245,12 @@ func (p *Provider) SyncFirewallRules(
 
 	firewallName := clusterName + FirewallSuffix
 
-	defer lockFirewallRules(firewallName)()
+	unlock, err := lockFirewallRules(ctx, firewallName)
+	if err != nil {
+		return err
+	}
+
+	defer unlock()
 
 	firewall, _, err := p.client.Firewall.GetByName(ctx, firewallName)
 	if err != nil {

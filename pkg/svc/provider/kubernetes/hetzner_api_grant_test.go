@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"sync/atomic"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -431,3 +432,73 @@ func TestHetznerNodePortServiceRebuildKeepsGrantRecord(t *testing.T) {
 }
 
 var errGatewayUnavailable = errors.New("gateway unavailable")
+
+// Compensation clears the grant record with the grant, so a retry's new grant is not taken
+// for an earlier one and keeps its own cleanup.
+func TestHetznerNodePortFailedCreateClearsGrantRecord(t *testing.T) {
+	t.Parallel()
+
+	cloud := newAPIGrantCloud(t)
+	prov, client := newAPIGrantProviderWithClient(t, cloud, "hcloud://42")
+	result, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
+	require.NoError(t, err)
+
+	failure := context.DeadlineExceeded
+	require.ErrorIs(t, result.CleanupOnFailure(t.Context(), failure), failure)
+
+	svc, err := client.CoreV1().Services("ksail-demo").
+		Get(t.Context(), kubeprovider.APIServiceName, metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Empty(t, svc.Annotations[kubeprovider.HetznerAPIGrantAnnotation])
+
+	retry, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
+	require.NoError(t, err)
+	require.ErrorIs(t, retry.CleanupOnFailure(t.Context(), failure), failure)
+	require.Len(t, cloud.rules, 2, "a failed retry removes its own grant")
+}
+
+// When a grant is recorded but the host cannot be proven from the nodes, revocation reports
+// it instead of letting deletion remove the record while the rule stays.
+func TestHetznerNodePortRevokeRefusesUnresolvedRecordedHost(t *testing.T) {
+	t.Parallel()
+
+	cloud := newAPIGrantCloud(t)
+	prov, client := newAPIGrantProviderWithClient(t, cloud, "hcloud://42")
+	_, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
+	require.NoError(t, err)
+
+	node, err := client.CoreV1().Nodes().Get(t.Context(), "n1", metav1.GetOptions{})
+	require.NoError(t, err)
+
+	node.Spec.ProviderID = ""
+	_, err = client.CoreV1().Nodes().Update(t.Context(), node, metav1.UpdateOptions{})
+	require.NoError(t, err)
+
+	err = prov.RevokeNestedAPIGrant(t.Context(), "ksail-demo")
+	require.ErrorIs(t, err, kubeprovider.ErrHetznerGrantUnresolved)
+	require.Len(t, cloud.rules, 3)
+}
+
+// An unreadable grant record stops exposure before any grant, so no rule is written
+// without its cleanup.
+func TestHetznerNodePortUnreadableRecordStopsExposure(t *testing.T) {
+	t.Parallel()
+
+	cloud := newAPIGrantCloud(t)
+	prov, client := newAPIGrantProviderWithClient(t, cloud, "hcloud://42")
+	// Only the first read, the grant record, fails; later Service reads succeed.
+	var failed atomic.Bool
+
+	client.PrependReactor("get", "services",
+		func(k8stesting.Action) (bool, runtime.Object, error) {
+			if failed.CompareAndSwap(false, true) {
+				return true, nil, errGatewayUnavailable
+			}
+
+			return false, nil, nil
+		})
+
+	_, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
+	require.ErrorIs(t, err, errGatewayUnavailable)
+	assert.Zero(t, cloud.writes)
+}

@@ -153,8 +153,11 @@ func (p *Provider) ResolveExposure(
 	spec = spec.withDefaults()
 
 	prior, err := p.recordedGrantHost(ctx, spec.Namespace)
-	// An unreadable record counts as a grant, so compensation never removes it.
-	spec.priorGrant = err != nil || prior != ""
+	if err != nil {
+		return nil, err
+	}
+
+	spec.priorGrant = prior != ""
 
 	if spec.GatewayClassName != "" {
 		if dynamicClient == nil {
