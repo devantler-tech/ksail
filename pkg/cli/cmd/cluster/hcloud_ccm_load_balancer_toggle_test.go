@@ -69,11 +69,23 @@ func TestReconcileLoadBalancer_TogglesHcloudCCMOnTalosHetzner(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			inst := &driftingInstaller{}
 
+			var built []v1alpha1.LoadBalancer
+
 			result, stderr, err := loadBalancerToggle(t, transition.from, transition.to,
-				func(*v1alpha1.Cluster) (installer.Installer, error) { return inst, nil })
+				func(cfg *v1alpha1.Cluster) (installer.Installer, error) {
+					built = append(built, cfg.Spec.Cluster.LoadBalancer)
+
+					return inst, nil
+				})
 
 			require.NoError(t, err)
 			assert.Equal(t, 1, inst.installs, "the cloud controller must be upgraded once")
+			assert.Equal(
+				t,
+				[]v1alpha1.LoadBalancer{transition.to},
+				built,
+				"the cloud controller must be built from the new load-balancer setting",
+			)
 			require.Len(t, result.AppliedChanges, 1)
 			assert.Equal(t, "cluster.loadBalancer", result.AppliedChanges[0].Field)
 			assert.Equal(
