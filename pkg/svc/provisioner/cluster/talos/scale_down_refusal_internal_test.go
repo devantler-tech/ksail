@@ -370,6 +370,35 @@ func TestControlPlaneRemovalRefusesUnprovenPersistentVolumeLocality(t *testing.T
 
 // unprovenLocalityVolumes lists persistent volumes whose data may live on the target.
 func unprovenLocalityVolumes() map[string]func(*removalFixture) corev1.PersistentVolume {
+	volumes := localityVolumes()
+
+	// Network sources whose server may be the target. Affinity that excludes the target as a
+	// consumer says nothing about where that server runs.
+	for name, source := range map[string]corev1.PersistentVolumeSource{
+		"NFS export": {NFS: &corev1.NFSVolumeSource{Server: "10.0.0.1", Path: "/export"}},
+		"iSCSI portal": {ISCSI: &corev1.ISCSIPersistentVolumeSource{
+			TargetPortal: "10.0.0.1:3260",
+			IQN:          "iqn.2026-11.example:data",
+		}},
+		"NFS CSI driver": {CSI: &corev1.CSIPersistentVolumeSource{
+			Driver:       "nfs.csi.k8s.io",
+			VolumeHandle: "10.0.0.1#export",
+		}},
+	} {
+		volumes[name+" with affinity excluding the target"] = func(
+			*removalFixture,
+		) corev1.PersistentVolume {
+			volume := removalLocalVolume("fixture-control-plane-2")
+			volume.Spec.PersistentVolumeSource = source
+
+			return volume
+		}
+	}
+
+	return volumes
+}
+
+func localityVolumes() map[string]func(*removalFixture) corev1.PersistentVolume {
 	return map[string]func(*removalFixture) corev1.PersistentVolume{
 		"hostname label differs from node name": func(fixture *removalFixture) corev1.PersistentVolume {
 			fixture.nodes["fixture-control-plane-1"].Labels[corev1.LabelHostname] = "rack-a-01"
@@ -384,23 +413,6 @@ func unprovenLocalityVolumes() map[string]func(*removalFixture) corev1.Persisten
 			volume.Spec.Local = nil
 			volume.Spec.NFS = &corev1.NFSVolumeSource{Server: "10.0.0.4", Path: "/export"}
 			volume.Spec.NodeAffinity = nil
-
-			return volume
-		},
-		"NFS export with affinity excluding the target": func(*removalFixture) corev1.PersistentVolume {
-			volume := removalLocalVolume("fixture-control-plane-2")
-			volume.Spec.Local = nil
-			volume.Spec.NFS = &corev1.NFSVolumeSource{Server: "10.0.0.1", Path: "/export"}
-
-			return volume
-		},
-		"NFS CSI driver with affinity excluding the target": func(*removalFixture) corev1.PersistentVolume {
-			volume := removalLocalVolume("fixture-control-plane-2")
-			volume.Spec.Local = nil
-			volume.Spec.CSI = &corev1.CSIPersistentVolumeSource{
-				Driver:       "nfs.csi.k8s.io",
-				VolumeHandle: "10.0.0.1#export",
-			}
 
 			return volume
 		},
@@ -514,4 +526,44 @@ func removalPartials(t *testing.T, parent string) []string {
 	require.NoError(t, err)
 
 	return partials
+}
+
+func TestControlPlaneRemovalRechecksEndpointAfterRecordPublication(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	fixture.endpointMovesOnCordon = true
+
+	err := runRemovalScaleDown(fixture)
+	require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+	require.True(t, fixture.endpointMoved, "the endpoint must have moved after the cordon proof")
+	require.Empty(t, fixture.leaves, "an endpoint moved to the target must stop before the leave")
+	require.Empty(t, fixture.deleted)
+}
+
+func TestControlPlaneScaleDownWaitsForNodeFinalizer(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	fixture.finalizerReads = 2
+
+	err := runRemovalScaleDown(fixture)
+	require.NoError(t, err, "an accepted deletion held by a finalizer must be waited for")
+	require.Equal(t, []int64{1, 3}, fixture.deleted)
+	require.NotContains(t, fixture.nodes, "fixture-control-plane-1")
+}
+
+func TestControlPlaneScaleDownStopsOnReplacementNode(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	fixture.replaceDeletedNode = true
+
+	err := runRemovalScaleDown(fixture)
+	require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+	require.ErrorContains(t, err, "replacement Node")
+	require.Equal(t, []int64{1}, fixture.deleted, "the second target must not be removed")
+	require.Equal(
+		t,
+		types.UID("replacement"),
+		fixture.nodes["fixture-control-plane-1"].UID,
+		"the replacement Node must be left in place",
+	)
 }

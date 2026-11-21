@@ -169,29 +169,36 @@ func proveNoRemovalPersistentVolumes(
 	return nil
 }
 
+// removalVolumeMayUseTarget accepts a volume only when its source is on an allow-list whose
+// data location is known. For every other source (NFS, iSCSI, Fibre Channel, Ceph, an
+// unrecognized CSI driver, ...) node affinity restricts only where consumers run, never where
+// the data or its server lives, so the volume is refused.
 func removalVolumeMayUseTarget(volume *corev1.PersistentVolume, target removalNodeIdentity) bool {
-	// An NFS export may be served by the target itself. Node affinity on an NFS volume only
-	// restricts its consumers, so it never proves the export lives elsewhere.
-	if removalNFSVolume(volume) {
-		return true
-	}
-
 	terms := removalAffinityTerms(volume)
-	if len(terms) > 0 && !slices.ContainsFunc(terms, func(term corev1.NodeSelectorTerm) bool {
-		return !removalTermExcludesTarget(term, target)
-	}) {
-		return false
+
+	if removalNetworkVolume(volume) {
+		// A network volume carries topology affinity (region, zone) that says nothing about
+		// the target; only an explicit binding to the target node keeps data there.
+		return slices.ContainsFunc(terms, func(term corev1.NodeSelectorTerm) bool {
+			return removalTermNamesTarget(term, target)
+		})
 	}
 
-	if !removalNetworkVolume(volume) {
+	if !removalNodeLocalVolume(volume) {
 		return true
 	}
 
-	// A network volume carries topology affinity (region, zone) that says nothing about the
-	// target; only an explicit binding to the target node keeps data there.
-	return slices.ContainsFunc(terms, func(term corev1.NodeSelectorTerm) bool {
-		return removalTermNamesTarget(term, target)
+	// A local or hostPath volume keeps its data on the node its affinity selects, so affinity
+	// that provably excludes the target proves the data lives elsewhere.
+	return len(terms) == 0 || slices.ContainsFunc(terms, func(term corev1.NodeSelectorTerm) bool {
+		return !removalTermExcludesTarget(term, target)
 	})
+}
+
+// removalNodeLocalVolume reports whether a volume stores its data on the node its affinity
+// selects.
+func removalNodeLocalVolume(volume *corev1.PersistentVolume) bool {
+	return volume.Spec.Local != nil || volume.Spec.HostPath != nil
 }
 
 func removalAffinityTerms(volume *corev1.PersistentVolume) []corev1.NodeSelectorTerm {
@@ -207,18 +214,12 @@ func removalAffinityTerms(volume *corev1.PersistentVolume) []corev1.NodeSelector
 // the node.
 // Hetzner volumes are attached to a server, which the node and provider volume checks
 // refuse; Longhorn replicas live on Longhorn members, which the storage membership check
-// refuses. NFS is not accepted: its export server may be the target itself. Any other source
-// can keep data on a node and is accepted only with node affinity that provably excludes the
-// target.
+// refuses. NFS and other network sources are not accepted: their server may be the target
+// itself.
 func removalNetworkVolume(volume *corev1.PersistentVolume) bool {
 	csi := volume.Spec.CSI
 
 	return csi != nil && (csi.Driver == "csi.hetzner.cloud" || csi.Driver == "driver.longhorn.io")
-}
-
-func removalNFSVolume(volume *corev1.PersistentVolume) bool {
-	return volume.Spec.NFS != nil ||
-		(volume.Spec.CSI != nil && volume.Spec.CSI.Driver == "nfs.csi.k8s.io")
 }
 
 func removalTermNamesTarget(term corev1.NodeSelectorTerm, target removalNodeIdentity) bool {

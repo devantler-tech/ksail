@@ -394,6 +394,14 @@ func (p *Provisioner) removeOneControlPlane(
 		return err
 	}
 
+	// The provider can reassign the endpoint at any time, so read it once more after the
+	// recovery record is published. A move during the leave RPC itself is still caught only
+	// by the post-membership check.
+	err = checkRemovalEndpoint(ctx, cloud, clusterName, floating)
+	if err != nil {
+		return err
+	}
+
 	address, err := p.hetznerNodeAddress(serverFromRemoval(state.servers, state.target.ServerID))
 	if err != nil {
 		return err
@@ -697,18 +705,38 @@ func (removal controlPlaneRemoval) deleteNative(ctx context.Context) error {
 		return fmt.Errorf("delete removed native target: %w", err)
 	}
 
-	_, err = removal.clientset.CoreV1().
-		Nodes().
-		Get(ctx, removal.state.target.ServerName, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		return nil
-	}
+	// A finalizer can keep an accepted deletion visible for a while, so wait for it to finish.
+	// A Node with another UID is a replacement: stop without touching it.
+	err = wait.PollUntilContextTimeout(
+		ctx, time.Second, time.Minute, true,
+		func(readCtx context.Context) (bool, error) {
+			node, readErr := removal.clientset.CoreV1().
+				Nodes().
+				Get(readCtx, removal.state.target.ServerName, metav1.GetOptions{})
+			if apierrors.IsNotFound(readErr) {
+				return true, nil
+			}
 
+			if readErr != nil {
+				return false, fmt.Errorf("confirm native target absence: %w", readErr)
+			}
+
+			if node.UID != uid {
+				return false, fmt.Errorf(
+					"%w: a replacement Node took the target's name",
+					ErrControlPlaneScaleDownUnsafe,
+				)
+			}
+
+			return false, nil
+		},
+	)
 	if err != nil {
-		return fmt.Errorf("confirm native target absence: %w", err)
+		return fmt.Errorf("%w: native target deletion is not confirmed: %w",
+			ErrControlPlaneScaleDownUnsafe, err)
 	}
 
-	return fmt.Errorf("%w: native target deletion is not confirmed", ErrControlPlaneScaleDownUnsafe)
+	return nil
 }
 
 func (removal controlPlaneRemoval) finish(ctx context.Context, survivors []*hcloud.Server) error {

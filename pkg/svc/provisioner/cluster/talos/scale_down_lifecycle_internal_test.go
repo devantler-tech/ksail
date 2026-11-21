@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -60,6 +61,11 @@ type removalFixture struct {
 	floatingOnRefresh     bool
 	extraFloatingOn       int64
 	retainedVolumeOnLeave bool
+	endpointMovesOnCordon bool
+	endpointMoved         bool
+	finalizerReads        int
+	pendingNodeDelete     string
+	replaceDeletedNode    bool
 	wrongResponseID       bool
 	cordonReplacesNode    bool
 	cordonRejoinsSurvivor bool
@@ -81,6 +87,11 @@ var (
 
 func newRemovalFixture(t *testing.T) *removalFixture {
 	t.Helper()
+
+	if goruntime.GOOS == "windows" {
+		t.Skip("automated control-plane removal refuses to run on Windows")
+	}
+
 	fixture := &removalFixture{
 		t:              t,
 		servers:        map[int64]*hcloud.Server{},
@@ -391,6 +402,14 @@ func (fixture *removalFixture) serveFloatingIP(response http.ResponseWriter, _ *
 			},
 		},
 	)
+
+	// Model a reassignment that lands right after the cordon proof read the endpoint.
+	target := fixture.nodes["fixture-control-plane-1"]
+	if fixture.endpointMovesOnCordon && !fixture.endpointMoved &&
+		target != nil && target.Spec.Unschedulable {
+		fixture.floatingHolder = 1
+		fixture.endpointMoved = true
+	}
 }
 
 func (fixture *removalFixture) serveNodes(response http.ResponseWriter, _ *http.Request) {
@@ -404,6 +423,7 @@ func (fixture *removalFixture) serveNodes(response http.ResponseWriter, _ *http.
 
 func (fixture *removalFixture) serveNode(response http.ResponseWriter, request *http.Request) {
 	name := strings.TrimPrefix(request.URL.Path, "/api/v1/nodes/")
+	fixture.finishPendingNodeDelete(name, request.Method)
 
 	node := fixture.nodes[name]
 	if node == nil {
@@ -454,7 +474,14 @@ func (fixture *removalFixture) deleteNode(
 		return
 	}
 
-	if !fixture.retainDeletedNode {
+	switch {
+	case fixture.replaceDeletedNode:
+		replacement := node.DeepCopy()
+		replacement.UID = "replacement"
+		fixture.nodes[node.Name] = replacement
+	case fixture.finalizerReads > 0:
+		fixture.pendingNodeDelete = node.Name
+	case !fixture.retainDeletedNode:
 		delete(fixture.nodes, node.Name)
 	}
 
@@ -1137,4 +1164,21 @@ func TestControlPlaneScaleDownAllowsVolumesProvablyElsewhere(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Equal(t, []int64{1, 3}, fixture.leaves)
+}
+
+// finishPendingNodeDelete models a finalizer: an accepted Node deletion stays visible for
+// finalizerReads further reads and then completes.
+func (fixture *removalFixture) finishPendingNodeDelete(name, method string) {
+	if name == "" || name != fixture.pendingNodeDelete || method != http.MethodGet {
+		return
+	}
+
+	if fixture.finalizerReads > 0 {
+		fixture.finalizerReads--
+
+		return
+	}
+
+	delete(fixture.nodes, name)
+	fixture.pendingNodeDelete = ""
 }
