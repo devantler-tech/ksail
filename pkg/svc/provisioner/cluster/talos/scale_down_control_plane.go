@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
@@ -402,6 +403,19 @@ func (p *Provisioner) removeOneControlPlane(
 		return err
 	}
 
+	// Provider state can change at any time, so prove the target removable one last time,
+	// by immutable ID, right before the leave. Hetzner and etcd cannot change together, so a
+	// change during the RPC is still caught only by the deletion-time check.
+	latest, err := cloud.GetServerByID(ctx, state.target.ServerID)
+	if err != nil {
+		return fmt.Errorf("rebind removal target before membership change: %w", err)
+	}
+
+	err = removal.proveProviderTarget(latest)
+	if err != nil {
+		return err
+	}
+
 	address, err := p.hetznerNodeAddress(serverFromRemoval(state.servers, state.target.ServerID))
 	if err != nil {
 		return err
@@ -443,9 +457,9 @@ func (removal controlPlaneRemoval) prepare(ctx context.Context) error {
 	}
 
 	parent := filepath.Dir(kubePath)
-	recordName := fmt.Sprintf(".ksail-cp-removal-%d.json", removal.state.target.ServerID)
+	recordName := removalRecordName(removal.clusterName, removal.state.target.ServerID)
 
-	err = proveNoRemovalRecord(filepath.Join(parent, recordName))
+	err = proveNoRemovalRecord(parent, removal.clusterName)
 	if err != nil {
 		return err
 	}
@@ -468,16 +482,52 @@ func (removal controlPlaneRemoval) prepare(ctx context.Context) error {
 	return writeRemovalRecord(parent, recordName, removal.state.target, artifact)
 }
 
-func proveNoRemovalRecord(recordPath string) error {
-	_, err := os.Lstat(recordPath)
-	if err == nil || !os.IsNotExist(err) {
+// removalRecordName names the attempt record of one server. Cluster names are DNS labels,
+// so the "@" separator cannot occur in them and one cluster's records never match another's.
+func removalRecordName(clusterName string, serverID int64) string {
+	return fmt.Sprintf(".ksail-cp-removal-%s@%d.json", clusterName, serverID)
+}
+
+// removalCompletedName names the record of a removal that finished and was verified.
+func removalCompletedName(clusterName string, serverID int64) string {
+	return fmt.Sprintf(".ksail-cp-removed-%s@%d.json", clusterName, serverID)
+}
+
+// proveNoRemovalRecord refuses a new removal while any attempt for the cluster is
+// unresolved, whichever server it targeted. A verified removal renames its record to the
+// completed name, so it never blocks later removals.
+func proveNoRemovalRecord(parent, clusterName string) error {
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		return fmt.Errorf("read prior removal attempts: %w", err)
+	}
+
+	prefix := fmt.Sprintf(".ksail-cp-removal-%s@", clusterName)
+
+	if slices.ContainsFunc(entries, func(entry os.DirEntry) bool {
+		return strings.HasPrefix(entry.Name(), prefix) && strings.HasSuffix(entry.Name(), ".json")
+	}) {
 		return fmt.Errorf(
-			"%w: a prior removal attempt needs recovery review",
+			"%w: a prior removal attempt for this cluster needs recovery review",
 			ErrControlPlaneScaleDownUnsafe,
 		)
 	}
 
 	return nil
+}
+
+// completeRemovalRecord marks a verified removal by renaming its attempt record. The
+// completed record is kept as private recovery evidence.
+func completeRemovalRecord(parent, clusterName string, serverID int64) error {
+	err := os.Rename(
+		filepath.Join(parent, removalRecordName(clusterName, serverID)),
+		filepath.Join(parent, removalCompletedName(clusterName, serverID)),
+	)
+	if err != nil {
+		return fmt.Errorf("mark removal attempt complete: %w", err)
+	}
+
+	return syncRemovalDirectory(parent)
 }
 
 func (removal controlPlaneRemoval) reproveCordon(ctx context.Context) error {
@@ -756,6 +806,18 @@ func (removal controlPlaneRemoval) finish(ctx context.Context, survivors []*hclo
 	}
 
 	err = removal.proveAfterMembership(ctx, survivors)
+	if err != nil {
+		return err
+	}
+
+	kubePath, _, err := removal.provisioner.resolveKubeconfig(removal.clusterName)
+	if err != nil {
+		return err
+	}
+
+	err = completeRemovalRecord(
+		filepath.Dir(kubePath), removal.clusterName, removal.state.target.ServerID,
+	)
 	if err != nil {
 		return err
 	}

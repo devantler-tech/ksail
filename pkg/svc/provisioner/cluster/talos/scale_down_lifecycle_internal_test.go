@@ -63,6 +63,8 @@ type removalFixture struct {
 	retainedVolumeOnLeave bool
 	endpointMovesOnCordon bool
 	endpointMoved         bool
+	volumeOnCordonRead    bool
+	volumeAttached        bool
 	finalizerReads        int
 	pendingNodeDelete     string
 	replaceDeletedNode    bool
@@ -346,24 +348,27 @@ func (fixture *removalFixture) serverResponse(server *hcloud.Server) map[string]
 	serverID := server.ID
 	labels := maps.Clone(server.Labels)
 	responseID := server.ID
+	// The late changes model a provider that changes after the membership change, so they
+	// reach the deletion-time lookup and not the final read before the leave.
+	late := serverID == 1 && len(fixture.leaves) > 0
 
-	if serverID == 1 && fixture.lateRoleChange {
+	if late && fixture.lateRoleChange {
 		labels[hetzner.LabelNodeType] = hetzner.NodeTypeWorker
 	}
 
-	if serverID == 1 && fixture.lateFloatingOwner {
+	if late && fixture.lateFloatingOwner {
 		fixture.floatingHolder = 1
 		fixture.lateFloatingOwner = false
 	}
 
-	if serverID == 1 && fixture.wrongResponseID {
+	if late && fixture.wrongResponseID {
 		responseID = 99
 	}
 
 	floating := fixture.floatingIDs(serverID)
 
 	volumes := removalVolumeIDs(server)
-	if serverID == 1 && fixture.lateProviderVolume {
+	if late && fixture.lateProviderVolume {
 		volumes = []int64{71}
 	}
 
@@ -409,6 +414,12 @@ func (fixture *removalFixture) serveFloatingIP(response http.ResponseWriter, _ *
 		target != nil && target.Spec.Unschedulable {
 		fixture.floatingHolder = 1
 		fixture.endpointMoved = true
+	}
+
+	if fixture.volumeOnCordonRead && !fixture.volumeAttached && target != nil &&
+		target.Spec.Unschedulable {
+		fixture.servers[1].Volumes = []*hcloud.Volume{{ID: 73}}
+		fixture.volumeAttached = true
 	}
 }
 
@@ -1136,7 +1147,9 @@ func removalLocalVolume(nodeName string) corev1.PersistentVolume {
 	}
 }
 
-func TestControlPlaneScaleDownAllowsVolumesProvablyElsewhere(t *testing.T) {
+// Volumes whose data provably lives elsewhere still refuse: the first release of automatic
+// removal supports only clusters without persistent volumes (devantler-tech/ksail#8479).
+func TestControlPlaneScaleDownRefusesVolumesEvenWhenElsewhere(t *testing.T) {
 	t.Parallel()
 	fixture := newRemovalFixture(t)
 	network := removalLocalVolume("unused")
@@ -1162,8 +1175,10 @@ func TestControlPlaneScaleDownAllowsVolumesProvablyElsewhere(t *testing.T) {
 		2,
 		clusterupdate.NewEmptyUpdateResult(),
 	)
-	require.NoError(t, err)
-	require.Equal(t, []int64{1, 3}, fixture.leaves)
+	require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+	require.ErrorContains(t, err, "supports only clusters without persistent volumes")
+	require.Empty(t, fixture.leaves)
+	require.Empty(t, fixture.deleted)
 }
 
 // finishPendingNodeDelete models a finalizer: an accepted Node deletion stays visible for

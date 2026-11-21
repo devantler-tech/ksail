@@ -229,22 +229,22 @@ fails a safety check, removal stops; KSail does not pick an older server instead
 Empty the selected servers first. Removal refuses a selected server that has
 application pods, even terminating or completed ones, attached Hetzner volumes,
 delete protection, a floating IP, Longhorn membership or unqualified local storage.
-KSail checks these again immediately before each membership change. It also
-refuses any persistent volume that may keep data on that server. A volume passes
-only when it is a local or hostPath volume whose node affinity names other current
-nodes, or when it uses Hetzner or Longhorn storage and is not bound to that server.
-Every other source, including NFS and iSCSI, is refused whatever its node affinity,
-because its server may be the one being removed. Only node agents and native static pods with rebuildable system
+KSail checks these again immediately before each membership change. Automatic
+control-plane removal supports only clusters without PersistentVolumes: if the
+cluster has any, removal refuses before changing anything. Only node agents and native static pods with rebuildable system
 volumes are permitted. KSail cordons the exact Node UID;
 this path never evicts or deletes Pods through the API, so it does not consult
 PodDisruptionBudgets. Removing the server still stops the node agents and static
-Pods left on it.
+Pods left on it. The kube-apiserver audit log directory that Talos keeps on each
+control plane is removed with its server; other writable log mounts refuse.
 
 Before each membership change, KSail verifies a private etcd snapshot beside the
 canonical kubeconfig in a `.ksail-control-plane-recovery-*` directory. These files
 contain cluster secrets: retain them in private recovery storage and never publish
-them as plaintext artifacts. A `.ksail-cp-removal-<server-id>.json` attempt record
-prevents a new invocation from blindly repeating an uncertain membership operation.
+them as plaintext artifacts. A `.ksail-cp-removal-<cluster>@<server-id>.json` attempt record
+blocks every new removal for that cluster until the uncertain attempt is reviewed.
+A verified removal renames its record to `.ksail-cp-removed-<cluster>@<server-id>.json`,
+which is kept as evidence and blocks nothing.
 Automated control-plane removal runs from Linux, macOS or WSL2 and refuses to run on
 Windows, where the recovery record cannot be made durable before the membership change.
 If removal stops, inspect the actual member, server, Node and endpoint state before

@@ -350,7 +350,7 @@ func TestControlPlaneRemovalAllowsStorageOnRetainedServer(t *testing.T) {
 	require.Equal(t, []int64{1, 3}, fixture.deleted)
 }
 
-func TestControlPlaneRemovalRefusesUnprovenPersistentVolumeLocality(t *testing.T) {
+func TestControlPlaneRemovalRefusesAnyPersistentVolume(t *testing.T) {
 	t.Parallel()
 
 	for scenario, prepare := range unprovenLocalityVolumes() {
@@ -361,14 +361,15 @@ func TestControlPlaneRemovalRefusesUnprovenPersistentVolumeLocality(t *testing.T
 
 			err := runRemovalScaleDown(fixture)
 			require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
-			require.ErrorContains(t, err, "may keep data on the target")
+			require.ErrorContains(t, err, "supports only clusters without persistent volumes")
 			require.Empty(t, fixture.leaves)
 			require.Empty(t, fixture.deleted)
 		})
 	}
 }
 
-// unprovenLocalityVolumes lists persistent volumes whose data may live on the target.
+// unprovenLocalityVolumes lists persistent volumes of every kind, including ones whose data
+// provably lives elsewhere: automatic removal refuses them all.
 func unprovenLocalityVolumes() map[string]func(*removalFixture) corev1.PersistentVolume {
 	volumes := localityVolumes()
 
@@ -566,4 +567,134 @@ func TestControlPlaneScaleDownStopsOnReplacementNode(t *testing.T) {
 		fixture.nodes["fixture-control-plane-1"].UID,
 		"the replacement Node must be left in place",
 	)
+}
+
+func TestControlPlaneRemovalRereadsTargetBeforeMembership(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	fixture.volumeOnCordonRead = true
+
+	err := runRemovalScaleDown(fixture)
+	require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+	require.ErrorContains(t, err, "provider target has attached storage volumes")
+	require.True(t, fixture.volumeAttached, "storage must have attached after the cordon proof")
+	require.Empty(t, fixture.leaves, "storage attached after the cordon proof must stop the leave")
+	require.Empty(t, fixture.deleted)
+}
+
+func TestControlPlaneRemovalAdmitsTalosAPIServerAuditMount(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	controller := true
+	// The kube-apiserver mirror Pod as Talos v1.14 runs it: its audit directory is writable.
+	apiserver := corev1.Pod{
+		Name:        "kube-apiserver-fixture-control-plane-1",
+		Namespace:   metav1.NamespaceSystem,
+		UID:         "apiserver-mirror",
+		Annotations: map[string]string{corev1.MirrorPodAnnotationKey: "mirror-hash"},
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: "v1", Kind: "Node", Name: "fixture-control-plane-1",
+			UID: "native-1", Controller: &controller,
+		}},
+		Spec: corev1.PodSpec{
+			NodeName: "fixture-control-plane-1",
+			Volumes: []corev1.Volume{
+				{
+					Name:     "audit",
+					HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/audit/kube"},
+				},
+				{Name: "config", HostPath: &corev1.HostPathVolumeSource{
+					Path: "/system/config/kubernetes/kube-apiserver",
+				}},
+			},
+			Containers: []corev1.Container{{
+				Name:  "kube-apiserver",
+				Image: "registry.k8s.io/kube-apiserver:fixture",
+				VolumeMounts: []corev1.VolumeMount{
+					{Name: "audit", MountPath: "/var/log/audit/kube"},
+					{
+						Name:      "config",
+						MountPath: "/system/config/kubernetes/kube-apiserver",
+						ReadOnly:  true,
+					},
+				},
+			}},
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+	fixture.pods = []corev1.Pod{apiserver}
+
+	err := runRemovalScaleDown(fixture)
+	require.NoError(t, err, "the Talos kube-apiserver audit mount must not block removal")
+	require.Equal(t, []int64{1, 3}, fixture.deleted)
+}
+
+func TestControlPlaneRemovalRefusesWritableLogOutsideAuditOnMirrorPod(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	pod := removalApplicationPod()
+	pod.Namespace = metav1.NamespaceSystem
+	pod.Annotations = map[string]string{corev1.MirrorPodAnnotationKey: "mirror-hash"}
+	pod.OwnerReferences[0].Kind = "Node"
+	pod.OwnerReferences[0].Name = pod.Spec.NodeName
+	pod.OwnerReferences[0].UID = "native-1"
+	pod.Spec.Volumes = []corev1.Volume{
+		{Name: "state", HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/audit"}},
+	}
+	pod.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{{Name: "state", MountPath: "/state"}}
+	fixture.pods = []corev1.Pod{pod}
+
+	err := runRemovalScaleDown(fixture)
+	require.ErrorContains(t, err, "unqualified node-local hostPath")
+	require.Empty(t, fixture.leaves)
+}
+
+func TestControlPlaneRemovalRecordsScopeToCluster(t *testing.T) {
+	t.Parallel()
+
+	for scenario, recordCase := range map[string]struct {
+		record  string
+		blocked bool
+	}{
+		"unresolved attempt on another server": {".ksail-cp-removal-fixture@4.json", true},
+		"completed removal":                    {".ksail-cp-removed-fixture@4.json", false},
+		"another cluster's attempt":            {".ksail-cp-removal-fixture-b@4.json", false},
+		"interrupted partial write":            {".ksail-cp-removal-fixture@4.json.x.partial", false},
+	} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			fixture := newRemovalFixture(t)
+			parent := filepath.Dir(fixture.provisioner.options.KubeconfigPath)
+			require.NoError(
+				t,
+				os.WriteFile(filepath.Join(parent, recordCase.record), []byte("{}"), 0o600),
+			)
+
+			err := runRemovalScaleDown(fixture)
+			if recordCase.blocked {
+				require.ErrorContains(t, err, "prior removal attempt for this cluster")
+				require.Empty(t, fixture.leaves)
+
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, []int64{1, 3}, fixture.deleted)
+		})
+	}
+}
+
+func TestControlPlaneRemovalMarksVerifiedRemovalsComplete(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	parent := filepath.Dir(fixture.provisioner.options.KubeconfigPath)
+
+	require.NoError(t, runRemovalScaleDown(fixture))
+
+	for _, serverID := range []int64{1, 3} {
+		require.FileExists(t, filepath.Join(parent, removalCompletedName("fixture", serverID)))
+		require.NoFileExists(t, filepath.Join(parent, removalRecordName("fixture", serverID)))
+	}
+
+	require.NoError(t, proveNoRemovalRecord(parent, "fixture"), "completed removals never block")
 }
