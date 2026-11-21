@@ -161,6 +161,9 @@ for mutation in \
 		exit 1
 	fi
 	[[ "$(cat "$tmp/reads")" == 1 && ! -s "$tmp/delays" ]]
+	# A rejection must name the evidence it refused, never exit silently.
+	grep -q 'artifact evidence rejected' "$tmp/rejected.log"
+	grep -q '"total_count"' "$tmp/rejected.log"
 done
 # A successful final JSON document must not hide an earlier invalid response.
 printf '{"total_count":2,"artifacts":[]}\n' >"$tmp/reply.json"
