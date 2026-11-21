@@ -1189,8 +1189,17 @@ runs:
               | .spec.template.spec.containers[] | ((.command // []) + (.args // []))[]] | join(" ")'
         }
         wait_ccm() {
-          kubectl -n kube-system rollout status deployment/hcloud-cloud-controller-manager --timeout=5m 2>/dev/null ||
-            kubectl -n kube-system rollout status daemonset/hcloud-cloud-controller-manager --timeout=5m
+          # Wait on the kind that actually runs the controller, so its own rollout error is
+          # the one reported.
+          local kind
+          kind=$(kubectl -n kube-system get deployments,daemonsets -o json |
+            jq -r '[.items[] | select(.metadata.name == "hcloud-cloud-controller-manager") | .kind]
+              | if length == 1 then .[0] | ascii_downcase else "" end')
+          if [ -z "$kind" ]; then
+            echo "❌ ERROR: expected exactly one hcloud-cloud-controller-manager Deployment or DaemonSet"
+            return 1
+          fi
+          kubectl -n kube-system rollout status "$kind/hcloud-cloud-controller-manager" --timeout=5m
         }
         update() {
           # shellcheck disable=SC2086

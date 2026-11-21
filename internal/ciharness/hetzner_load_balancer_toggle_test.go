@@ -1,6 +1,10 @@
 package ciharness_test
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -121,4 +125,92 @@ func TestLoadBalancerToggleChecksBothDirections(t *testing.T) {
 
 	debug := findHarnessStep(t, action.Runs.Steps, "🐞 Debug Kubernetes failure")
 	assert.Contains(t, debug.If, "steps.cluster-update-load-balancer-toggle.outcome == 'failure'")
+}
+
+// The toggle waits on the controller's own workload kind, so a stuck Deployment rollout
+// reports its own failure instead of falling through to a missing DaemonSet.
+func TestLoadBalancerToggleWaitsOnTheControllerKind(t *testing.T) {
+	t.Parallel()
+
+	jqPath, err := exec.LookPath("jq")
+	require.NoError(t, err, "the toggle step requires jq")
+
+	waitCCM := toggleWaitCCM(t)
+
+	for _, testCase := range []struct {
+		name, kinds, rollout string
+		ok                   bool
+		want                 []string
+	}{
+		{"deployment ready", "Deployment", "0", true, []string{"rollout status deployment/hcloud-cloud-controller-manager"}},
+		{"daemonset ready", "DaemonSet", "0", true, []string{"rollout status daemonset/hcloud-cloud-controller-manager"}},
+		{"deployment stuck", "Deployment", "1", false, []string{"deployment rollout timed out"}},
+		{"missing", "", "0", false, []string{"expected exactly one hcloud-cloud-controller-manager"}},
+		{"both kinds", "Deployment,DaemonSet", "0", false, []string{"expected exactly one hcloud-cloud-controller-manager"}},
+	} {
+		fakeDir := writeFakeCCMKubectl(t, jqPath, testCase.kinds, testCase.rollout)
+
+		log, err := runStepScript(t, waitCCM+"wait_ccm\n", fakeDir, nil)
+		if testCase.ok {
+			require.NoError(t, err, "%s: %s", testCase.name, log)
+		} else {
+			require.Error(t, err, "%s: %s", testCase.name, log)
+		}
+
+		for _, want := range testCase.want {
+			assert.Contains(t, log, want, testCase.name)
+		}
+
+		if testCase.kinds == "Deployment" {
+			assert.NotContains(
+				t,
+				log,
+				"rollout status daemonset",
+				"%s: never falls through",
+				testCase.name,
+			)
+		}
+	}
+}
+
+// toggleWaitCCM returns the toggle step's wait_ccm function definition.
+func toggleWaitCCM(t *testing.T) string {
+	t.Helper()
+
+	action := readCompositeAction(t, ".github/actions/ksail-system-test/action.yaml")
+	step := findHarnessStep(t, action.Runs.Steps, loadBalancerToggleStep)
+	start := strings.Index(step.Run, "wait_ccm() {")
+	require.NotEqual(t, -1, start, "toggle step defines wait_ccm")
+	end := strings.Index(step.Run[start:], "\n}\n")
+	require.NotEqual(t, -1, end, "wait_ccm has a closing brace")
+
+	return step.Run[start : start+end+len("\n}\n")]
+}
+
+// writeFakeCCMKubectl writes a kubectl that lists the given controller kinds and reports each
+// rollout wait, failing it when rollout is not 0.
+func writeFakeCCMKubectl(t *testing.T, jqPath, kinds, rollout string) string {
+	t.Helper()
+
+	fakeDir := t.TempDir()
+	require.NoError(t, os.Symlink(jqPath, filepath.Join(fakeDir, "jq")))
+
+	kubectl := `#!/bin/bash
+if [ "$3" = get ]; then
+  printf '{"items":['
+  sep=""
+  for kind in ` + strings.ReplaceAll(kinds, ",", " ") + `; do
+    printf '%s{"kind":"%s","metadata":{"name":"hcloud-cloud-controller-manager"}}' "$sep" "$kind"
+    sep=","
+  done
+  printf ']}'
+  exit 0
+fi
+echo "kubectl $*"
+if [ "` + rollout + `" != 0 ]; then echo "deployment rollout timed out"; exit 1; fi
+`
+	//nolint:gosec // the fake must be executable
+	require.NoError(t, os.WriteFile(filepath.Join(fakeDir, "kubectl"), []byte(kubectl), 0o700))
+
+	return fakeDir
 }
