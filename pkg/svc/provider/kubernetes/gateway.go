@@ -89,7 +89,8 @@ type ExposureResult struct {
 	// Port is the port clients should connect to.
 	Port int32
 	// Kind is one of ExposureGateway, ExposureLoadBalancer, or ExposureNodePort.
-	Kind string
+	Kind         string
+	cleanupGrant func(context.Context) error
 }
 
 // ServerURL returns the kubeconfig server URL for the resolved exposure.
@@ -251,6 +252,11 @@ func (p *Provider) exposeViaNodePort(
 		Address: addr,
 		Port:    svc.Spec.Ports[0].NodePort,
 		Kind:    ExposureNodePort,
+	}
+
+	err = p.grantNestedAPI(ctx, spec.ClusterName, result)
+	if err != nil {
+		return nil, err
 	}
 
 	warnNodePortReachability(result)
@@ -645,6 +651,11 @@ func (p *Provider) DeleteAPIExposure(
 	dynamicClient dynamic.Interface,
 	clusterName string,
 ) error {
+	err := p.RevokeNestedAPIGrant(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
 	namespace := NamespaceName(clusterName)
 
 	// Delete TCPRoute + Gateway (only present on the Gateway path).
@@ -664,7 +675,7 @@ func (p *Provider) DeleteAPIExposure(
 		}
 	}
 
-	err := p.client.CoreV1().Services(namespace).Delete(ctx, APIServiceName, metav1.DeleteOptions{})
+	err = p.client.CoreV1().Services(namespace).Delete(ctx, APIServiceName, metav1.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("delete API service: %w", err)
 	}
