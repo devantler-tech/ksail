@@ -86,10 +86,22 @@ func proveRemovableTargets(targets []*hcloud.Server) error {
 }
 
 // proveRemovableTarget refuses a selected target whose deletion cannot complete cleanly.
-// Storage attached to a retained server does not block removal; storage or delete protection
-// on a target does, because either would stop the provider deletion only after the target's
-// etcd membership is gone. Selection never substitutes an older server for a refused target.
+// Storage, delete protection or a floating endpoint on a retained server does not block
+// removal; any of them on a target does, because each would stop the provider deletion only
+// after the target's etcd membership is gone. Selection never substitutes an older server for
+// a refused target.
 func proveRemovableTarget(server *hcloud.Server) error {
+	if server == nil {
+		return fmt.Errorf("%w: provider target is not present", ErrControlPlaneScaleDownUnsafe)
+	}
+
+	if len(server.PublicNet.FloatingIPs) > 0 {
+		return fmt.Errorf(
+			"%w: target currently carries a floating endpoint",
+			ErrControlPlaneScaleDownUnsafe,
+		)
+	}
+
 	if len(server.Volumes) > 0 {
 		return fmt.Errorf(
 			"%w: provider target has attached storage volumes",

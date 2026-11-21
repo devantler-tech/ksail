@@ -57,6 +57,9 @@ type removalFixture struct {
 	lateFloatingOwner     bool
 	lateProviderVolume    bool
 	attachVolumeOnRefresh bool
+	floatingOnRefresh     bool
+	extraFloatingOn       int64
+	retainedVolumeOnLeave bool
 	wrongResponseID       bool
 	cordonReplacesNode    bool
 	cordonRejoinsSurvivor bool
@@ -217,12 +220,7 @@ func (fixture *removalFixture) serveReady(response http.ResponseWriter, _ *http.
 }
 
 func (fixture *removalFixture) serveServers(response http.ResponseWriter, request *http.Request) {
-	targetNode := fixture.nodes["fixture-control-plane-1"]
-	if fixture.attachVolumeOnRefresh && targetNode != nil && targetNode.Spec.Unschedulable {
-		if target := fixture.servers[1]; target != nil {
-			target.Volumes = []*hcloud.Volume{{ID: 71}}
-		}
-	}
+	fixture.applyRefreshChanges()
 
 	servers := []any{}
 	for _, serverID := range []int64{1, 2, 3, 4, 5} {
@@ -246,13 +244,47 @@ func (fixture *removalFixture) serveServers(response http.ResponseWriter, reques
 				"volumes":    removalVolumeIDs(server),
 				"protection": map[string]any{"delete": server.Protection.Delete},
 				"public_net": map[string]any{
-					"ipv4": map[string]any{"ip": server.PublicNet.IPv4.IP.String()},
+					"ipv4":         map[string]any{"ip": server.PublicNet.IPv4.IP.String()},
+					"floating_ips": fixture.floatingIDs(serverID),
 				},
 			},
 		)
 	}
 
 	fixture.respond(response, map[string]any{"servers": servers})
+}
+
+// applyRefreshChanges models provider changes that appear once the target is cordoned.
+func (fixture *removalFixture) applyRefreshChanges() {
+	targetNode := fixture.nodes["fixture-control-plane-1"]
+	if targetNode == nil || !targetNode.Spec.Unschedulable {
+		return
+	}
+
+	if fixture.attachVolumeOnRefresh {
+		if target := fixture.servers[1]; target != nil {
+			target.Volumes = []*hcloud.Volume{{ID: 71}}
+		}
+	}
+
+	if fixture.floatingOnRefresh {
+		fixture.extraFloatingOn = 1
+	}
+}
+
+// floatingIDs lists the floating IPs assigned to a server, as both the list and the single
+// server responses of the provider API report them.
+func (fixture *removalFixture) floatingIDs(serverID int64) []int64 {
+	floating := []int64{}
+	if fixture.floatingHolder == serverID {
+		floating = append(floating, 7)
+	}
+
+	if fixture.extraFloatingOn == serverID {
+		floating = append(floating, 8)
+	}
+
+	return floating
 }
 
 func removalVolumeIDs(server *hcloud.Server) []int64 {
@@ -317,10 +349,7 @@ func (fixture *removalFixture) serverResponse(server *hcloud.Server) map[string]
 		responseID = 99
 	}
 
-	floating := []int64{}
-	if fixture.floatingHolder == serverID {
-		floating = append(floating, 7)
-	}
+	floating := fixture.floatingIDs(serverID)
 
 	volumes := removalVolumeIDs(server)
 	if serverID == 1 && fixture.lateProviderVolume {
@@ -655,6 +684,10 @@ func (c *removalTalosClient) EtcdLeaveCluster(
 
 	if c.fixture.fipChangesAfterLeave {
 		c.fixture.floatingHolder = 2
+	}
+
+	if c.fixture.retainedVolumeOnLeave {
+		c.fixture.servers[5].Volumes = []*hcloud.Volume{{ID: 72}}
 	}
 
 	return nil

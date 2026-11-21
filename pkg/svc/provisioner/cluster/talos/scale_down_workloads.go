@@ -170,6 +170,12 @@ func proveNoRemovalPersistentVolumes(
 }
 
 func removalVolumeMayUseTarget(volume *corev1.PersistentVolume, target removalNodeIdentity) bool {
+	// An NFS export may be served by the target itself. Node affinity on an NFS volume only
+	// restricts its consumers, so it never proves the export lives elsewhere.
+	if removalNFSVolume(volume) {
+		return true
+	}
+
 	terms := removalAffinityTerms(volume)
 	if len(terms) > 0 && !slices.ContainsFunc(terms, func(term corev1.NodeSelectorTerm) bool {
 		return !removalTermExcludesTarget(term, target)
@@ -208,6 +214,11 @@ func removalNetworkVolume(volume *corev1.PersistentVolume) bool {
 	csi := volume.Spec.CSI
 
 	return csi != nil && (csi.Driver == "csi.hetzner.cloud" || csi.Driver == "driver.longhorn.io")
+}
+
+func removalNFSVolume(volume *corev1.PersistentVolume) bool {
+	return volume.Spec.NFS != nil ||
+		(volume.Spec.CSI != nil && volume.Spec.CSI.Driver == "nfs.csi.k8s.io")
 }
 
 func removalTermNamesTarget(term corev1.NodeSelectorTerm, target removalNodeIdentity) bool {

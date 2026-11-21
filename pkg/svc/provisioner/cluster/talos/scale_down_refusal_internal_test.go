@@ -252,7 +252,7 @@ func TestControlPlaneRemovalRechecksProviderStorageBeforeMembership(t *testing.T
 	fixture.mu.Lock()
 	defer fixture.mu.Unlock()
 
-	require.ErrorContains(t, err, "control-plane identity changed")
+	require.ErrorContains(t, err, "provider target has attached storage volumes")
 	require.Len(
 		t,
 		fixture.servers[1].Volumes,
@@ -281,6 +281,64 @@ func TestControlPlaneRemovalRefusesDeleteProtectedTarget(t *testing.T) {
 	require.Empty(t, fixture.deleted)
 }
 
+func TestControlPlaneRemovalRefusesFloatingEndpointOnTargetBeforeMembership(t *testing.T) {
+	t.Parallel()
+
+	for scenario, prepare := range map[string]func(*removalFixture){
+		"at selection":  func(fixture *removalFixture) { fixture.extraFloatingOn = 1 },
+		"after cordon":  func(fixture *removalFixture) { fixture.floatingOnRefresh = true },
+		"later targets": func(fixture *removalFixture) { fixture.extraFloatingOn = 3 },
+	} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			fixture := newRemovalFixture(t)
+			prepare(fixture)
+
+			err := runRemovalScaleDown(fixture)
+			require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+			require.ErrorContains(t, err, "target currently carries a floating endpoint")
+			require.Empty(
+				t, fixture.leaves, "a target floating endpoint must stop before any leave",
+			)
+			require.Empty(t, fixture.deleted)
+		})
+	}
+}
+
+func TestControlPlaneRemovalAllowsFloatingEndpointOnRetainedServer(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	fixture.extraFloatingOn = 2
+
+	err := runRemovalScaleDown(fixture)
+	require.NoError(t, err)
+	require.Equal(t, []int64{1, 3}, fixture.deleted)
+}
+
+func TestControlPlaneRemovalCompletesWhenRetainedServerGainsStorage(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	fixture.retainedVolumeOnLeave = true
+
+	err := runRemovalScaleDown(fixture)
+	require.NoError(t, err, "storage on a retained server is not a survivor identity change")
+	require.Equal(t, []int64{1, 3}, fixture.leaves)
+	require.Equal(t, []int64{1, 3}, fixture.deleted)
+	require.Len(t, fixture.servers[5].Volumes, 1, "the retained server must have gained storage")
+}
+
+func TestControlPlaneRemovalRefusesWindows(t *testing.T) {
+	t.Parallel()
+
+	err := proveDurableRecoveryPlatform("windows")
+	require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+	require.ErrorContains(t, err, "not supported on Windows")
+
+	for _, goos := range []string{"linux", "darwin"} {
+		require.NoError(t, proveDurableRecoveryPlatform(goos), goos)
+	}
+}
+
 func TestControlPlaneRemovalAllowsStorageOnRetainedServer(t *testing.T) {
 	t.Parallel()
 	fixture := newRemovalFixture(t)
@@ -295,7 +353,24 @@ func TestControlPlaneRemovalAllowsStorageOnRetainedServer(t *testing.T) {
 func TestControlPlaneRemovalRefusesUnprovenPersistentVolumeLocality(t *testing.T) {
 	t.Parallel()
 
-	for scenario, prepare := range map[string]func(*removalFixture) corev1.PersistentVolume{
+	for scenario, prepare := range unprovenLocalityVolumes() {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			fixture := newRemovalFixture(t)
+			fixture.volumes = []corev1.PersistentVolume{prepare(fixture)}
+
+			err := runRemovalScaleDown(fixture)
+			require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+			require.ErrorContains(t, err, "may keep data on the target")
+			require.Empty(t, fixture.leaves)
+			require.Empty(t, fixture.deleted)
+		})
+	}
+}
+
+// unprovenLocalityVolumes lists persistent volumes whose data may live on the target.
+func unprovenLocalityVolumes() map[string]func(*removalFixture) corev1.PersistentVolume {
+	return map[string]func(*removalFixture) corev1.PersistentVolume{
 		"hostname label differs from node name": func(fixture *removalFixture) corev1.PersistentVolume {
 			fixture.nodes["fixture-control-plane-1"].Labels[corev1.LabelHostname] = "rack-a-01"
 
@@ -309,6 +384,23 @@ func TestControlPlaneRemovalRefusesUnprovenPersistentVolumeLocality(t *testing.T
 			volume.Spec.Local = nil
 			volume.Spec.NFS = &corev1.NFSVolumeSource{Server: "10.0.0.4", Path: "/export"}
 			volume.Spec.NodeAffinity = nil
+
+			return volume
+		},
+		"NFS export with affinity excluding the target": func(*removalFixture) corev1.PersistentVolume {
+			volume := removalLocalVolume("fixture-control-plane-2")
+			volume.Spec.Local = nil
+			volume.Spec.NFS = &corev1.NFSVolumeSource{Server: "10.0.0.1", Path: "/export"}
+
+			return volume
+		},
+		"NFS CSI driver with affinity excluding the target": func(*removalFixture) corev1.PersistentVolume {
+			volume := removalLocalVolume("fixture-control-plane-2")
+			volume.Spec.Local = nil
+			volume.Spec.CSI = &corev1.CSIPersistentVolumeSource{
+				Driver:       "nfs.csi.k8s.io",
+				VolumeHandle: "10.0.0.1#export",
+			}
 
 			return volume
 		},
@@ -336,18 +428,6 @@ func TestControlPlaneRemovalRefusesUnprovenPersistentVolumeLocality(t *testing.T
 
 			return volume
 		},
-	} {
-		t.Run(scenario, func(t *testing.T) {
-			t.Parallel()
-			fixture := newRemovalFixture(t)
-			fixture.volumes = []corev1.PersistentVolume{prepare(fixture)}
-
-			err := runRemovalScaleDown(fixture)
-			require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
-			require.ErrorContains(t, err, "may keep data on the target")
-			require.Empty(t, fixture.leaves)
-			require.Empty(t, fixture.deleted)
-		})
 	}
 }
 
@@ -400,11 +480,18 @@ func TestControlPlaneRemovalRecordNeverReplacesAnAttempt(t *testing.T) {
 	t.Parallel()
 	parent := t.TempDir()
 	target := replacementTarget{ServerID: 1, ServerName: "fixture-control-plane-1"}
-	partial := filepath.Join(parent, "attempt.json.partial")
-	require.NoError(t, os.WriteFile(partial, []byte("{"), 0o600))
+	// Another attempt's incomplete partial file under the old shared name must never be the
+	// file this attempt publishes, and this attempt must not touch it.
+	foreign := filepath.Join(parent, "attempt.json.partial")
+	require.NoError(t, os.WriteFile(foreign, []byte("{"), 0o600))
 
 	require.NoError(t, writeRemovalRecord(parent, "attempt.json", target, etcdSnapshotArtifact{}))
-	require.NoFileExists(t, partial, "a stale partial record is replaced and then removed")
+
+	foreignAfter, err := os.ReadFile(filepath.Clean(foreign))
+	require.NoError(t, err)
+	require.Equal(t, "{", string(foreignAfter), "another attempt's partial file is left alone")
+	require.Equal(t, []string{foreign}, removalPartials(t, parent),
+		"this attempt leaves no partial file of its own")
 
 	published, err := os.ReadFile(filepath.Clean(filepath.Join(parent, "attempt.json")))
 	require.NoError(t, err)
@@ -412,9 +499,19 @@ func TestControlPlaneRemovalRecordNeverReplacesAnAttempt(t *testing.T) {
 
 	err = writeRemovalRecord(parent, "attempt.json", target, etcdSnapshotArtifact{})
 	require.ErrorContains(t, err, "publish membership attempt")
-	require.NoFileExists(t, partial, "a refused publication leaves no partial record")
+	require.Equal(t, []string{foreign}, removalPartials(t, parent),
+		"a refused publication leaves no partial file of its own")
 
 	again, err := os.ReadFile(filepath.Clean(filepath.Join(parent, "attempt.json")))
 	require.NoError(t, err)
 	require.Equal(t, published, again, "an existing attempt record is never replaced")
+}
+
+func removalPartials(t *testing.T, parent string) []string {
+	t.Helper()
+
+	partials, err := filepath.Glob(filepath.Join(parent, "*.partial"))
+	require.NoError(t, err)
+
+	return partials
 }

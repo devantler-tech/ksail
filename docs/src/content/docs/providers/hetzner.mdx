@@ -228,11 +228,12 @@ KSail chooses the servers to remove before it checks them. If a selected server
 fails a safety check, removal stops; KSail does not pick an older server instead.
 Empty the selected servers first. Removal refuses a selected server that has
 application pods, even terminating or completed ones, attached Hetzner volumes,
-delete protection, Longhorn membership or unqualified local storage. It also
+delete protection, a floating IP, Longhorn membership or unqualified local storage.
+KSail checks these again immediately before each membership change. It also
 refuses any persistent volume that may keep data on that server: a volume passes
 only when its node affinity names other current nodes, or when it uses Hetzner
-or Longhorn storage and is not bound to that server. NFS volumes are refused,
-because their export may live on the server being removed. Only node agents and native static pods with rebuildable system
+or Longhorn storage and is not bound to that server. NFS volumes are refused
+whatever their node affinity, because their export may live on the server being removed. Only node agents and native static pods with rebuildable system
 volumes are permitted. KSail cordons the exact Node UID;
 this path never evicts or deletes Pods and does not bypass disruption budgets.
 
@@ -241,6 +242,8 @@ canonical kubeconfig in a `.ksail-control-plane-recovery-*` directory. These fil
 contain cluster secrets: retain them in private recovery storage and never publish
 them as plaintext artifacts. A `.ksail-cp-removal-<server-id>.json` attempt record
 prevents a new invocation from blindly repeating an uncertain membership operation.
+Automated control-plane removal runs from Linux, macOS or WSL2 and refuses to run on
+Windows, where the recovery record cannot be made durable before the membership change.
 If removal stops, inspect the actual member, server, Node and endpoint state before
 recovering that attempt; a failed RPC is not proof that nothing changed.
 

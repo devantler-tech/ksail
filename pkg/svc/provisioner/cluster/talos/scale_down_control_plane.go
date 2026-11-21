@@ -2,8 +2,8 @@ package talosprovisioner
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -49,6 +49,11 @@ func (p *Provisioner) removeHetznerControlPlanes(
 			"%w: automated removal must retain at least three control planes",
 			ErrControlPlaneScaleDownUnsafe,
 		)
+	}
+
+	err := proveDurableRecoveryPlatform(runtime.GOOS)
+	if err != nil {
+		return err
 	}
 
 	clientset, err := p.createK8sClient(clusterName)
@@ -188,7 +193,15 @@ func proveInitialRemovalMembership(
 	target replacementTarget,
 	quorum etcdQuorumObservation,
 ) error {
-	err := proveSurvivingQuorum(target, quorum)
+	// Storage, delete protection and floating endpoints are target-only properties: they are
+	// read fresh on every observation, including the one before each leave RPC, and again
+	// before provider deletion.
+	err := proveRemovableTarget(serverFromRemoval(servers, target.ServerID))
+	if err != nil {
+		return err
+	}
+
+	err = proveSurvivingQuorum(target, quorum)
 	if err != nil {
 		return err
 	}
@@ -205,14 +218,15 @@ func proveInitialRemovalMembership(
 	return nil
 }
 
+// sameRemovalServer compares the identity of one control-plane server. Storage and delete
+// protection are deliberately not identity: on a retained server they never block removal,
+// and on the target proveRemovableTarget rechecks them before the leave and before deletion.
 func sameRemovalServer(planned, observed *hcloud.Server) bool {
 	return planned.ID == observed.ID && planned.Name == observed.Name &&
 		planned.Created.Equal(observed.Created) &&
 		planned.Labels[hetzner.LabelOwned] == observed.Labels[hetzner.LabelOwned] &&
 		planned.Labels[hetzner.LabelClusterName] == observed.Labels[hetzner.LabelClusterName] &&
-		planned.Labels[hetzner.LabelNodeType] == observed.Labels[hetzner.LabelNodeType] &&
-		len(planned.Volumes) == len(observed.Volumes) &&
-		planned.Protection.Delete == observed.Protection.Delete
+		planned.Labels[hetzner.LabelNodeType] == observed.Labels[hetzner.LabelNodeType]
 }
 
 func sameRemovalInventory(expected, current []*hcloud.Server) error {
@@ -506,9 +520,11 @@ func sameRemovalMembership(before, fresh etcdQuorumObservation) error {
 }
 
 // writeRemovalRecord publishes the membership-attempt record before the leave RPC. The record
-// is written and synced under a partial name first and then linked to its final name, which
-// never replaces an existing record. A failed write therefore leaves no final record behind
-// and stays retryable, while every attempt that can reach the leave has a complete record.
+// is written and synced under a partial name unique to this attempt and then linked to its
+// final name, which never replaces an existing record. A concurrent attempt for the same
+// target therefore cannot publish this attempt's file before it is complete. A failed write
+// leaves no final record behind and stays retryable, while every attempt that can reach the
+// leave has a complete record.
 func writeRemovalRecord(
 	parent, recordName string,
 	target replacementTarget,
@@ -520,12 +536,7 @@ func writeRemovalRecord(
 	}
 	defer root.Close() //nolint:errcheck
 
-	partial := recordName + ".partial"
-
-	err = root.Remove(partial)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("clear partial membership attempt: %w", err)
-	}
+	partial := recordName + "." + rand.Text() + ".partial"
 
 	err = writeRemovalRecordFile(root, partial, target, artifact)
 	if err == nil {
@@ -652,19 +663,7 @@ func (removal controlPlaneRemoval) proveProviderTarget(server *hcloud.Server) er
 		)
 	}
 
-	err := validateRemovalTarget(server, removal.clusterName)
-	if err != nil {
-		return err
-	}
-
-	if len(server.PublicNet.FloatingIPs) > 0 {
-		return fmt.Errorf(
-			"%w: target currently carries a floating endpoint",
-			ErrControlPlaneScaleDownUnsafe,
-		)
-	}
-
-	return nil
+	return validateRemovalTarget(server, removal.clusterName)
 }
 
 func (removal controlPlaneRemoval) confirmProviderAbsent(ctx context.Context) error {
@@ -893,12 +892,30 @@ func (p *Provisioner) captureRemovalSnapshot(
 	return artifact, nil
 }
 
+// proveDurableRecoveryPlatform refuses automated control-plane removal where the recovery
+// record and snapshot names cannot be made durable before the leave RPC. Removal flushes the
+// directories that hold them; Windows offers no supported way to flush a directory handle,
+// and filesystem journaling keeps metadata consistent without making a completed link durable
+// when the call returns. A crash after the leave could then lose the recovery evidence.
+func proveDurableRecoveryPlatform(goos string) error {
+	if goos == "windows" {
+		return fmt.Errorf(
+			"%w: automated control-plane removal is not supported on Windows, because the "+
+				"recovery record cannot be made durable before the membership change; run it "+
+				"from Linux, macOS or WSL2",
+			ErrControlPlaneScaleDownUnsafe,
+		)
+	}
+
+	return nil
+}
+
 // syncRemovalDirectory flushes a directory so the entries created in it are durable. A file
 // sync alone does not persist the name that points at the file.
 func syncRemovalDirectory(dir string) error {
-	if runtime.GOOS == "windows" {
-		// Windows cannot flush a directory handle; NTFS journals the entries themselves.
-		return nil
+	err := proveDurableRecoveryPlatform(runtime.GOOS)
+	if err != nil {
+		return err
 	}
 
 	handle, err := os.Open(dir) //nolint:gosec // dir is a KSail-created recovery path
