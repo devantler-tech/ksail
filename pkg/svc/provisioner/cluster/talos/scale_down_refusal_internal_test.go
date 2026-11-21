@@ -1,6 +1,8 @@
 package talosprovisioner
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -9,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 func removalApplicationPod() corev1.Pod {
@@ -160,7 +163,13 @@ func TestControlPlaneScaleDownCordonIsBoundToNativeUID(t *testing.T) {
 		2,
 		clusterupdate.NewEmptyUpdateResult(),
 	)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "cordon native identity")
+	require.Equal(
+		t,
+		types.UID("replacement-node"),
+		fixture.nodes["fixture-control-plane-1"].UID,
+		"the cordon request must have reached the replaced Node",
+	)
 	require.Empty(t, fixture.leaves)
 	require.Empty(t, fixture.deleted)
 	require.False(
@@ -243,7 +252,13 @@ func TestControlPlaneRemovalRechecksProviderStorageBeforeMembership(t *testing.T
 	fixture.mu.Lock()
 	defer fixture.mu.Unlock()
 
-	require.Error(t, err)
+	require.ErrorContains(t, err, "control-plane identity changed")
+	require.Len(
+		t,
+		fixture.servers[1].Volumes,
+		1,
+		"the refresh after cordon must have attached storage",
+	)
 	require.Empty(t, fixture.leaves, "fresh provider storage must stop before a membership RPC")
 	require.Empty(t, fixture.deleted)
 }
@@ -285,6 +300,17 @@ func TestControlPlaneRemovalRefusesUnprovenPersistentVolumeLocality(t *testing.T
 			fixture.nodes["fixture-control-plane-1"].Labels[corev1.LabelHostname] = "rack-a-01"
 
 			return removalLocalVolume("rack-a-01")
+		},
+		"hostname value no current Node carries": func(*removalFixture) corev1.PersistentVolume {
+			return removalLocalVolume("rack-a-04")
+		},
+		"NFS export without affinity": func(*removalFixture) corev1.PersistentVolume {
+			volume := removalLocalVolume("unused")
+			volume.Spec.Local = nil
+			volume.Spec.NFS = &corev1.NFSVolumeSource{Server: "10.0.0.4", Path: "/export"}
+			volume.Spec.NodeAffinity = nil
+
+			return volume
 		},
 		"metadata.name label expression is not the Node name": func(
 			fixture *removalFixture,
@@ -344,4 +370,51 @@ func TestControlPlaneRemovalRefusesWritableSystemLogPath(t *testing.T) {
 	require.ErrorContains(t, err, "unqualified node-local hostPath")
 	require.Empty(t, fixture.leaves)
 	require.Empty(t, fixture.deleted)
+}
+
+func TestControlPlaneRemovalRefusesWritableKubeletSubdirectory(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	pod := removalApplicationPod()
+	pod.Namespace = metav1.NamespaceSystem
+	pod.OwnerReferences[0].Kind = "DaemonSet"
+	pod.Spec.Volumes = []corev1.Volume{
+		{
+			Name:     "checkpoints",
+			HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/kubelet/custom-agent"},
+		},
+	}
+	pod.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
+		{Name: "checkpoints", MountPath: "/checkpoints"},
+	}
+	fixture.pods = []corev1.Pod{pod}
+
+	err := runRemovalScaleDown(fixture)
+	require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+	require.ErrorContains(t, err, "unqualified node-local hostPath")
+	require.Empty(t, fixture.leaves)
+	require.Empty(t, fixture.deleted)
+}
+
+func TestControlPlaneRemovalRecordNeverReplacesAnAttempt(t *testing.T) {
+	t.Parallel()
+	parent := t.TempDir()
+	target := replacementTarget{ServerID: 1, ServerName: "fixture-control-plane-1"}
+	partial := filepath.Join(parent, "attempt.json.partial")
+	require.NoError(t, os.WriteFile(partial, []byte("{"), 0o600))
+
+	require.NoError(t, writeRemovalRecord(parent, "attempt.json", target, etcdSnapshotArtifact{}))
+	require.NoFileExists(t, partial, "a stale partial record is replaced and then removed")
+
+	published, err := os.ReadFile(filepath.Clean(filepath.Join(parent, "attempt.json")))
+	require.NoError(t, err)
+	require.Contains(t, string(published), "membership-attempted")
+
+	err = writeRemovalRecord(parent, "attempt.json", target, etcdSnapshotArtifact{})
+	require.ErrorContains(t, err, "publish membership attempt")
+	require.NoFileExists(t, partial, "a refused publication leaves no partial record")
+
+	again, err := os.ReadFile(filepath.Clean(filepath.Join(parent, "attempt.json")))
+	require.NoError(t, err)
+	require.Equal(t, published, again, "an existing attempt record is never replaced")
 }

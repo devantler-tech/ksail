@@ -230,8 +230,9 @@ Empty the selected servers first. Removal refuses a selected server that has
 application pods, even terminating or completed ones, attached Hetzner volumes,
 delete protection, Longhorn membership or unqualified local storage. It also
 refuses any persistent volume that may keep data on that server: a volume passes
-only when its node affinity names other nodes, or when it uses a known network
-storage driver and is not bound to that server. Only node agents and native static pods with rebuildable system
+only when its node affinity names other current nodes, or when it uses Hetzner
+or Longhorn storage and is not bound to that server. NFS volumes are refused,
+because their export may live on the server being removed. Only node agents and native static pods with rebuildable system
 volumes are permitted. KSail cordons the exact Node UID;
 this path never evicts or deletes Pods and does not bypass disruption budgets.
 

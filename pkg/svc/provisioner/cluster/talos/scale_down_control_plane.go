@@ -3,9 +3,11 @@ package talosprovisioner
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"time"
 
@@ -503,6 +505,10 @@ func sameRemovalMembership(before, fresh etcdQuorumObservation) error {
 	return nil
 }
 
+// writeRemovalRecord publishes the membership-attempt record before the leave RPC. The record
+// is written and synced under a partial name first and then linked to its final name, which
+// never replaces an existing record. A failed write therefore leaves no final record behind
+// and stays retryable, while every attempt that can reach the leave has a complete record.
 func writeRemovalRecord(
 	parent, recordName string,
 	target replacementTarget,
@@ -514,11 +520,43 @@ func writeRemovalRecord(
 	}
 	defer root.Close() //nolint:errcheck
 
-	record, err := root.OpenFile(
-		recordName,
-		os.O_WRONLY|os.O_CREATE|os.O_EXCL,
-		removalRecordPermissions,
-	)
+	partial := recordName + ".partial"
+
+	err = root.Remove(partial)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("clear partial membership attempt: %w", err)
+	}
+
+	err = writeRemovalRecordFile(root, partial, target, artifact)
+	if err == nil {
+		err = root.Link(partial, recordName)
+		if err != nil {
+			err = fmt.Errorf("publish membership attempt: %w", err)
+		}
+	}
+
+	removeErr := root.Remove(partial)
+
+	if err != nil {
+		return err
+	}
+
+	if removeErr != nil {
+		return fmt.Errorf("remove partial membership attempt: %w", removeErr)
+	}
+
+	// The record and the recovery directory are both entries of parent; sync it so neither
+	// can vanish after a crash once the leave has committed.
+	return syncRemovalDirectory(parent)
+}
+
+func writeRemovalRecordFile(
+	root *os.Root,
+	name string,
+	target replacementTarget,
+	artifact etcdSnapshotArtifact,
+) error {
+	record, err := root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, removalRecordPermissions)
 	if err != nil {
 		return fmt.Errorf("reserve membership attempt: %w", err)
 	}
@@ -542,9 +580,7 @@ func writeRemovalRecord(
 		return fmt.Errorf("close membership attempt: %w", closeErr)
 	}
 
-	// The record and the recovery directory are both entries of parent; sync it so neither
-	// can vanish after a crash once the leave has committed.
-	return syncRemovalDirectory(parent)
+	return nil
 }
 
 func (removal controlPlaneRemoval) proveAfterMembership(
@@ -860,6 +896,11 @@ func (p *Provisioner) captureRemovalSnapshot(
 // syncRemovalDirectory flushes a directory so the entries created in it are durable. A file
 // sync alone does not persist the name that points at the file.
 func syncRemovalDirectory(dir string) error {
+	if runtime.GOOS == "windows" {
+		// Windows cannot flush a directory handle; NTFS journals the entries themselves.
+		return nil
+	}
+
 	handle, err := os.Open(dir) //nolint:gosec // dir is a KSail-created recovery path
 	if err != nil {
 		return fmt.Errorf("open recovery directory for sync: %w", err)

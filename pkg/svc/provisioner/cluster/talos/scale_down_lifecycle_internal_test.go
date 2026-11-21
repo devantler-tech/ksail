@@ -48,6 +48,7 @@ type removalFixture struct {
 	etcdBad               bool
 	snapshotBad           bool
 	leaveBad              bool
+	leaveCommitsThenFails bool
 	fipChangesAfterLeave  bool
 	targetRoutingChanged  bool
 	storageAfterLeave     bool
@@ -642,6 +643,10 @@ func (c *removalTalosClient) EtcdLeaveCluster(
 
 	delete(c.fixture.members, c.fixture.memberID(c.serverID))
 
+	if c.fixture.leaveCommitsThenFails {
+		return errRemovalMembership
+	}
+
 	if c.fixture.storageAfterLeave {
 		c.fixture.nodes[fmt.Sprintf("fixture-control-plane-%d", c.serverID)].Status.VolumesInUse = []corev1.UniqueVolumeName{
 			"new-storage-attachment",
@@ -892,8 +897,27 @@ func TestControlPlaneScaleDownRefusesSurvivorRejoinDuringCordon(t *testing.T) {
 
 func TestControlPlaneScaleDownStopsAfterUncertainMembership(t *testing.T) {
 	t.Parallel()
-	fixture := newRemovalFixture(t)
-	fixture.leaveBad = true
+
+	for _, committed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("leave committed=%t", committed), func(t *testing.T) {
+			t.Parallel()
+			fixture := newRemovalFixture(t)
+			fixture.leaveBad = !committed
+			fixture.leaveCommitsThenFails = committed
+			testUncertainMembershipStops(t, fixture)
+			require.Equal(
+				t,
+				!committed,
+				fixture.members[removalMemberID(1)],
+				"the fixture must model the leave outcome under test",
+			)
+			require.Contains(t, fixture.servers, int64(1), "an uncertain removal keeps the server")
+		})
+	}
+}
+
+func testUncertainMembershipStops(t *testing.T, fixture *removalFixture) {
+	t.Helper()
 	err := fixture.provisioner.removeHetznerNodes(
 		t.Context(),
 		"fixture",
