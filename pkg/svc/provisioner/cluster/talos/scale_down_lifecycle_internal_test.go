@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -57,6 +58,10 @@ type removalFixture struct {
 	attachVolumeOnRefresh bool
 	wrongResponseID       bool
 	cordonReplacesNode    bool
+	cordonRejoinsSurvivor bool
+	rejoined              map[int64]uint64
+	volumes               []corev1.PersistentVolume
+	events                []string
 	leaves                []int64
 	deleted               []int64
 	apiWrites             []string
@@ -260,6 +265,7 @@ func (fixture *removalFixture) serveServer(response http.ResponseWriter, request
 	if request.Method == http.MethodDelete {
 		delete(fixture.servers, serverID)
 		fixture.deleted = append(fixture.deleted, serverID)
+		fixture.events = append(fixture.events, fmt.Sprintf("delete-%d", serverID))
 		fixture.respond(
 			response,
 			map[string]any{"action": map[string]any{"id": serverID, "status": "success"}},
@@ -429,6 +435,14 @@ func (fixture *removalFixture) patchNode(
 		fixture.cordonReplacesNode = false
 	}
 
+	if fixture.cordonRejoinsSurvivor {
+		// Survivor 2 rejoins etcd on the same server under a new member ID.
+		delete(fixture.members, removalMemberID(2))
+		fixture.rejoined = map[int64]uint64{2: 2002}
+		fixture.members[2002] = true
+		fixture.cordonRejoinsSurvivor = false
+	}
+
 	if !strings.Contains(request.Header.Get("Content-Type"), "json-patch") {
 		response.WriteHeader(http.StatusUnsupportedMediaType)
 
@@ -503,6 +517,12 @@ func (fixture *removalFixture) servePods(response http.ResponseWriter, request *
 
 func (fixture *removalFixture) serveDiscovery(response http.ResponseWriter, request *http.Request) {
 	switch request.URL.Path {
+	case "/api/v1/persistentvolumes":
+		fixture.respond(response, corev1.PersistentVolumeList{
+			APIVersion: "v1", Kind: "PersistentVolumeList",
+			ResourceVersion: "1",
+			Items:           fixture.volumes,
+		})
 	case "/apis/policy/v1/poddisruptionbudgets":
 		fixture.respond(response,
 			policyv1.PodDisruptionBudgetList{
@@ -569,6 +589,15 @@ func removalMemberID(serverID int64) uint64 {
 	}
 }
 
+// memberID returns the server's current etcd member ID, honouring a simulated rejoin.
+func (fixture *removalFixture) memberID(serverID int64) uint64 {
+	if id, ok := fixture.rejoined[serverID]; ok {
+		return id
+	}
+
+	return removalMemberID(serverID)
+}
+
 type removalTalosClient struct {
 	fixture  *removalFixture
 	serverID int64
@@ -593,11 +622,13 @@ func (c *removalTalosClient) EtcdLeaveCluster(
 	defer c.fixture.mu.Unlock()
 
 	c.fixture.leaves = append(c.fixture.leaves, c.serverID)
+
+	c.fixture.events = append(c.fixture.events, fmt.Sprintf("leave-%d", c.serverID))
 	if c.fixture.leaveBad {
 		return errRemovalMembership
 	}
 
-	delete(c.fixture.members, removalMemberID(c.serverID))
+	delete(c.fixture.members, c.fixture.memberID(c.serverID))
 
 	if c.fixture.storageAfterLeave {
 		c.fixture.nodes[fmt.Sprintf("fixture-control-plane-%d", c.serverID)].Status.VolumesInUse = []corev1.UniqueVolumeName{
@@ -622,11 +653,11 @@ func (c *removalTalosClient) EtcdMemberList(
 
 	members := []*machineapi.EtcdMember{}
 	for serverID := int64(1); serverID <= 5; serverID++ {
-		if c.fixture.members[removalMemberID(serverID)] {
+		if c.fixture.members[c.fixture.memberID(serverID)] {
 			members = append(
 				members,
 				&machineapi.EtcdMember{
-					Id:       removalMemberID(serverID),
+					Id:       c.fixture.memberID(serverID),
 					Hostname: fmt.Sprintf("fixture-control-plane-%d", serverID),
 				},
 			)
@@ -646,7 +677,7 @@ func (c *removalTalosClient) EtcdStatus(
 	defer c.fixture.mu.Unlock()
 
 	status := &machineapi.EtcdMemberStatus{
-		MemberId:         removalMemberID(c.serverID),
+		MemberId:         c.fixture.memberID(c.serverID),
 		Leader:           1004,
 		RaftIndex:        100,
 		RaftAppliedIndex: 100,
@@ -676,6 +707,8 @@ func (c *removalTalosClient) EtcdSnapshot(
 	defer c.fixture.mu.Unlock()
 
 	c.fixture.snapshots++
+
+	c.fixture.events = append(c.fixture.events, "snapshot")
 	if c.fixture.snapshotBad {
 		return nil, errRemovalSnapshot
 	}
@@ -708,6 +741,12 @@ func TestControlPlaneScaleDownCompletesOnlyExactNewTargets(t *testing.T) {
 		t,
 		fixture.snapshots,
 		"a verified recovery snapshot must precede membership changes",
+	)
+	require.Equal(
+		t,
+		[]string{"snapshot", "leave-1", "delete-1", "snapshot", "leave-3", "delete-3"},
+		slices.Compact(slices.Clone(fixture.events)),
+		"each target needs a fresh snapshot, then membership removal, then provider deletion",
 	)
 
 	for _, serverID := range []int64{2, 4, 5} {
@@ -772,6 +811,71 @@ func TestControlPlaneScaleDownRefusesUnprovenPreconditions(t *testing.T) {
 			require.Empty(t, fixture.deleted)
 		})
 	}
+}
+
+// An unmounted volume keeps its data on its node after the pod stops, so neither the pod nor
+// the node volume inventory sees it.
+func TestControlPlaneScaleDownRefusesTargetPersistentVolumes(t *testing.T) {
+	t.Parallel()
+
+	for scenario, volume := range map[string]func() corev1.PersistentVolume{
+		"unmounted local PV on target": func() corev1.PersistentVolume {
+			return removalLocalVolume("fixture-control-plane-1")
+		},
+		"local PV without affinity": func() corev1.PersistentVolume {
+			volume := removalLocalVolume("fixture-control-plane-2")
+			volume.Spec.NodeAffinity = nil
+
+			return volume
+		},
+		"CSI PV bound to target": func() corev1.PersistentVolume {
+			volume := removalLocalVolume("fixture-control-plane-1")
+			volume.Spec.Local = nil
+			volume.Spec.CSI = &corev1.CSIPersistentVolumeSource{
+				Driver:       "local.csi.example",
+				VolumeHandle: "data",
+			}
+
+			return volume
+		},
+	} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			fixture := newRemovalFixture(t)
+			fixture.volumes = []corev1.PersistentVolume{volume()}
+
+			err := fixture.provisioner.removeHetznerNodes(
+				t.Context(),
+				"fixture",
+				RoleControlPlane,
+				2,
+				clusterupdate.NewEmptyUpdateResult(),
+			)
+			require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+			require.Empty(t, fixture.leaves)
+			require.Empty(t, fixture.deleted)
+		})
+	}
+}
+
+func TestControlPlaneScaleDownRefusesSurvivorRejoinDuringCordon(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	fixture.cordonRejoinsSurvivor = true
+	err := fixture.provisioner.removeHetznerNodes(
+		t.Context(),
+		"fixture",
+		RoleControlPlane,
+		2,
+		clusterupdate.NewEmptyUpdateResult(),
+	)
+	require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+	require.Empty(
+		t,
+		fixture.leaves,
+		"a membership change after the snapshot must refuse before the leave RPC",
+	)
+	require.Empty(t, fixture.deleted)
 }
 
 func TestControlPlaneScaleDownStopsAfterUncertainMembership(t *testing.T) {
@@ -912,4 +1016,56 @@ func TestRemoveHetznerNodes_CleanupFailurePreservesServer(t *testing.T) {
 			}
 		})
 	}
+}
+
+func removalLocalVolume(nodeName string) corev1.PersistentVolume {
+	return corev1.PersistentVolume{
+		Name: "local-" + nodeName,
+		Spec: corev1.PersistentVolumeSpec{
+			PersistentVolumeSource: corev1.PersistentVolumeSource{
+				Local: &corev1.LocalVolumeSource{Path: "/var/mnt/data"},
+			},
+			NodeAffinity: &corev1.VolumeNodeAffinity{
+				Required: &corev1.NodeSelector{
+					NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+						MatchExpressions: []corev1.NodeSelectorRequirement{{
+							Key:      corev1.LabelHostname,
+							Operator: corev1.NodeSelectorOpIn,
+							Values:   []string{nodeName},
+						}},
+					}},
+				},
+			},
+		},
+	}
+}
+
+func TestControlPlaneScaleDownAllowsVolumesProvablyElsewhere(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	network := removalLocalVolume("unused")
+	network.Name = "network"
+	network.Spec.Local = nil
+	network.Spec.CSI = &corev1.CSIPersistentVolumeSource{
+		Driver:       "csi.hetzner.cloud",
+		VolumeHandle: "7",
+	}
+	network.Spec.NodeAffinity.Required.NodeSelectorTerms[0].MatchExpressions[0] = corev1.NodeSelectorRequirement{
+		Key:      corev1.LabelTopologyZone,
+		Operator: corev1.NodeSelectorOpIn,
+		Values:   []string{"fsn1-dc14"},
+	}
+	fixture.volumes = []corev1.PersistentVolume{
+		removalLocalVolume("fixture-control-plane-2"),
+		network,
+	}
+	err := fixture.provisioner.removeHetznerNodes(
+		t.Context(),
+		"fixture",
+		RoleControlPlane,
+		2,
+		clusterupdate.NewEmptyUpdateResult(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, []int64{1, 3}, fixture.leaves)
 }

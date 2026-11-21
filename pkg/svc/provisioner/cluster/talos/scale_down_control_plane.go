@@ -468,7 +468,38 @@ func (removal controlPlaneRemoval) reproveCordon(ctx context.Context) error {
 		return fmt.Errorf("%w: target changed after cordon", ErrControlPlaneScaleDownUnsafe)
 	}
 
+	err = sameRemovalMembership(removal.state.quorum, fresh.quorum)
+	if err != nil {
+		return err
+	}
+
 	return proveRemovalCordon(fresh.nodes, removal.state.target)
+}
+
+// sameRemovalMembership refuses any membership change between the observation the recovery
+// snapshot and the expected post-removal membership were derived from and the fresh proof
+// taken immediately before the leave RPC. A survivor that rejoined under a new member ID
+// would otherwise pass the fresh proof while the later exact-membership check could only
+// detect the mismatch after the target's membership was already removed.
+func sameRemovalMembership(before, fresh etcdQuorumObservation) error {
+	expected, err := consistentMembership(before.Views)
+	if err != nil {
+		return err
+	}
+
+	actual, err := consistentMembership(fresh.Views)
+	if err != nil {
+		return err
+	}
+
+	if !slices.Equal(expected, actual) {
+		return fmt.Errorf(
+			"%w: etcd membership changed after cordon: %v and %v",
+			ErrControlPlaneScaleDownUnsafe, expected, actual,
+		)
+	}
+
+	return nil
 }
 
 func writeRemovalRecord(

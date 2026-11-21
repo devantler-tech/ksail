@@ -50,12 +50,112 @@ func (p *Provisioner) proveRemovalWorkloads(
 		}
 	}
 
+	err = proveNoRemovalPersistentVolumes(ctx, clientset, target.ServerName)
+	if err != nil {
+		return err
+	}
+
 	err = proveNoRemovalStorageNode(ctx, clientset, target.ServerName)
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// proveNoRemovalPersistentVolumes refuses removal while any PersistentVolume may keep its data
+// on the target. A local or hostPath volume stays bound to its node after the application pod
+// stops, so neither the pod nor the node volume inventory sees it; server deletion would then
+// destroy its backing data. A volume is accepted only when its node affinity provably names
+// nodes other than the target. Any node-local volume without such a proof is refused.
+func proveNoRemovalPersistentVolumes(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	targetName string,
+) error {
+	volumes, err := clientset.CoreV1().PersistentVolumes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("read removal persistent volumes: %w", err)
+	}
+
+	if volumes.ResourceVersion == "" {
+		return fmt.Errorf(
+			"%w: persistent volume inventory has no resource version",
+			ErrControlPlaneScaleDownUnsafe,
+		)
+	}
+
+	for _, volume := range volumes.Items {
+		if removalVolumeMayUseTarget(&volume, targetName) {
+			return fmt.Errorf(
+				"%w: persistent volume %s may keep data on the target",
+				ErrControlPlaneScaleDownUnsafe, volume.Name,
+			)
+		}
+	}
+
+	return nil
+}
+
+func removalVolumeMayUseTarget(volume *corev1.PersistentVolume, targetName string) bool {
+	nodeLocal := volume.Spec.Local != nil || volume.Spec.HostPath != nil
+
+	affinity := volume.Spec.NodeAffinity
+	if affinity == nil || affinity.Required == nil ||
+		len(affinity.Required.NodeSelectorTerms) == 0 {
+		// Without affinity a network volume is not bound to any node, but a node-local
+		// volume's location is unknown.
+		return nodeLocal
+	}
+
+	for _, term := range affinity.Required.NodeSelectorTerms {
+		if nodeLocal && !removalTermExcludesTarget(term, targetName) {
+			return true
+		}
+
+		// A network volume carries topology affinity (region, zone) that says nothing about
+		// the target; only an explicit binding to the target node keeps data there, as a
+		// node-local CSI driver records it.
+		if !nodeLocal && removalTermNamesTarget(term, targetName) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func removalTermNamesTarget(term corev1.NodeSelectorTerm, targetName string) bool {
+	for _, requirement := range slices.Concat(term.MatchExpressions, term.MatchFields) {
+		if requirement.Operator == corev1.NodeSelectorOpIn &&
+			(requirement.Key == corev1.LabelHostname || requirement.Key == "metadata.name") &&
+			slices.Contains(requirement.Values, targetName) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// removalTermExcludesTarget reports whether a node selector term provably cannot match the
+// target. Only an In requirement on the node hostname or name whose values omit the target is
+// accepted as proof; any other requirement is treated as possibly matching it.
+func removalTermExcludesTarget(term corev1.NodeSelectorTerm, targetName string) bool {
+	requirements := slices.Concat(term.MatchExpressions, term.MatchFields)
+	for _, requirement := range requirements {
+		if requirement.Operator != corev1.NodeSelectorOpIn {
+			continue
+		}
+
+		if requirement.Key != corev1.LabelHostname && requirement.Key != "metadata.name" {
+			continue
+		}
+
+		if !slices.Contains(requirement.Values, targetName) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func proveNoRemovalNodeVolumes(nodes []corev1.Node, target replacementTarget) error {
