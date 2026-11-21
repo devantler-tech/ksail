@@ -68,13 +68,15 @@ func TestControlPlaneRemovalRequiresNoApplicationPods(t *testing.T) {
 				t.Context(),
 				clientset,
 				replacementTarget{ServerName: pod.Spec.NodeName, NodeUID: "native-1"},
-				nil,
+				[]corev1.Node{*fixture.nodes[pod.Spec.NodeName]},
 			)
-			require.Error(
+			require.ErrorIs(
 				t,
 				err,
+				ErrControlPlaneScaleDownUnsafe,
 				"automatic removal must not begin evicting or ignoring application pods",
 			)
+			require.ErrorContains(t, err, "application pods must be absent")
 			require.Empty(t, fixture.apiWrites)
 		})
 	}
@@ -95,9 +97,10 @@ func TestControlPlaneRemovalRefusesUnknownSystemHostPath(t *testing.T) {
 		t.Context(),
 		clientset,
 		replacementTarget{ServerName: pod.Spec.NodeName, NodeUID: "native-1"},
-		nil,
+		[]corev1.Node{*fixture.nodes[pod.Spec.NodeName]},
 	)
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+	require.ErrorContains(t, err, "unqualified node-local hostPath")
 	require.Empty(t, fixture.apiWrites)
 }
 
@@ -129,7 +132,18 @@ func TestControlPlaneScaleDownRebindsFinalProviderResponse(t *testing.T) {
 				2,
 				clusterupdate.NewEmptyUpdateResult(),
 			)
-			require.Error(t, err)
+			if scenario == "wrong immutable response ID" {
+				require.ErrorContains(t, err, "does not match requested immutable identity")
+			} else {
+				require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+			}
+
+			require.Equal(
+				t,
+				[]int64{1},
+				fixture.leaves,
+				"the scenario must reach the final provider lookup after membership removal",
+			)
 			require.Empty(
 				t,
 				fixture.deleted,
@@ -235,5 +249,94 @@ func TestControlPlaneRemovalRechecksProviderStorageBeforeMembership(t *testing.T
 
 	require.Error(t, err)
 	require.Empty(t, fixture.leaves, "fresh provider storage must stop before a membership RPC")
+	require.Empty(t, fixture.deleted)
+}
+
+func runRemovalScaleDown(fixture *removalFixture) error {
+	return fixture.provisioner.removeHetznerNodes(
+		fixture.t.Context(), "fixture", RoleControlPlane, 2, clusterupdate.NewEmptyUpdateResult(),
+	)
+}
+
+func TestControlPlaneRemovalRefusesDeleteProtectedTarget(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	fixture.servers[1].Protection.Delete = true
+
+	err := runRemovalScaleDown(fixture)
+	require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+	require.ErrorContains(t, err, "delete protection")
+	require.Empty(t, fixture.leaves, "a protected target must stop before any membership change")
+	require.Empty(t, fixture.deleted)
+}
+
+func TestControlPlaneRemovalAllowsStorageOnRetainedServer(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	fixture.servers[fixture.floatingHolder].Volumes = []*hcloud.Volume{{ID: 71}}
+	fixture.servers[fixture.floatingHolder].Protection.Delete = true
+
+	err := runRemovalScaleDown(fixture)
+	require.NoError(t, err)
+	require.Equal(t, []int64{1, 3}, fixture.deleted)
+}
+
+func TestControlPlaneRemovalRefusesUnprovenPersistentVolumeLocality(t *testing.T) {
+	t.Parallel()
+
+	for scenario, prepare := range map[string]func(*removalFixture) corev1.PersistentVolume{
+		"hostname label differs from node name": func(fixture *removalFixture) corev1.PersistentVolume {
+			fixture.nodes["fixture-control-plane-1"].Labels[corev1.LabelHostname] = "rack-a-01"
+
+			return removalLocalVolume("rack-a-01")
+		},
+		"unrecognized CSI driver with topology-only affinity": func(*removalFixture) corev1.PersistentVolume {
+			volume := removalLocalVolume("unused")
+			volume.Spec.Local = nil
+			volume.Spec.CSI = &corev1.CSIPersistentVolumeSource{
+				Driver:       "zfs.csi.openebs.io",
+				VolumeHandle: "data",
+			}
+			volume.Spec.NodeAffinity.Required.NodeSelectorTerms[0].MatchExpressions[0] = corev1.NodeSelectorRequirement{
+				Key:      "openebs.io/nodename",
+				Operator: corev1.NodeSelectorOpIn,
+				Values:   []string{"fixture-control-plane-1"},
+			}
+
+			return volume
+		},
+	} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			fixture := newRemovalFixture(t)
+			fixture.volumes = []corev1.PersistentVolume{prepare(fixture)}
+
+			err := runRemovalScaleDown(fixture)
+			require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+			require.ErrorContains(t, err, "may keep data on the target")
+			require.Empty(t, fixture.leaves)
+			require.Empty(t, fixture.deleted)
+		})
+	}
+}
+
+func TestControlPlaneRemovalRefusesWritableSystemLogPath(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	pod := removalApplicationPod()
+	pod.Namespace = metav1.NamespaceSystem
+	pod.OwnerReferences[0].Kind = "DaemonSet"
+	pod.Spec.Volumes = []corev1.Volume{
+		{Name: "state", HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/app-state"}},
+	}
+	pod.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
+		{Name: "state", MountPath: "/state"},
+	}
+	fixture.pods = []corev1.Pod{pod}
+
+	err := runRemovalScaleDown(fixture)
+	require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+	require.ErrorContains(t, err, "unqualified node-local hostPath")
+	require.Empty(t, fixture.leaves)
 	require.Empty(t, fixture.deleted)
 }

@@ -209,7 +209,8 @@ func sameRemovalServer(planned, observed *hcloud.Server) bool {
 		planned.Labels[hetzner.LabelOwned] == observed.Labels[hetzner.LabelOwned] &&
 		planned.Labels[hetzner.LabelClusterName] == observed.Labels[hetzner.LabelClusterName] &&
 		planned.Labels[hetzner.LabelNodeType] == observed.Labels[hetzner.LabelNodeType] &&
-		len(observed.Volumes) == 0
+		len(planned.Volumes) == len(observed.Volumes) &&
+		planned.Protection.Delete == observed.Protection.Delete
 }
 
 func sameRemovalInventory(expected, current []*hcloud.Server) error {
@@ -541,7 +542,9 @@ func writeRemovalRecord(
 		return fmt.Errorf("close membership attempt: %w", closeErr)
 	}
 
-	return nil
+	// The record and the recovery directory are both entries of parent; sync it so neither
+	// can vanish after a crash once the leave has committed.
+	return syncRemovalDirectory(parent)
 }
 
 func (removal controlPlaneRemoval) proveAfterMembership(
@@ -613,7 +616,7 @@ func (removal controlPlaneRemoval) proveProviderTarget(server *hcloud.Server) er
 		)
 	}
 
-	err := validateRemovalCandidate(server, removal.clusterName)
+	err := validateRemovalTarget(server, removal.clusterName)
 	if err != nil {
 		return err
 	}
@@ -839,7 +842,41 @@ func (p *Provisioner) captureRemovalSnapshot(
 		return etcdSnapshotArtifact{}, err
 	}
 
-	return captureVerifiedSnapshot(ctx, source, dir, "etcd-before-removal.db", membership)
+	artifact, err := captureVerifiedSnapshot(ctx, source, dir, "etcd-before-removal.db", membership)
+	if err != nil {
+		return etcdSnapshotArtifact{}, err
+	}
+
+	// The snapshot is named in the recovery record, so its directory entry must survive a
+	// host crash before any membership change. The parent entry is synced with the record.
+	err = syncRemovalDirectory(dir)
+	if err != nil {
+		return etcdSnapshotArtifact{}, err
+	}
+
+	return artifact, nil
+}
+
+// syncRemovalDirectory flushes a directory so the entries created in it are durable. A file
+// sync alone does not persist the name that points at the file.
+func syncRemovalDirectory(dir string) error {
+	handle, err := os.Open(dir) //nolint:gosec // dir is a KSail-created recovery path
+	if err != nil {
+		return fmt.Errorf("open recovery directory for sync: %w", err)
+	}
+
+	syncErr := handle.Sync()
+	closeErr := handle.Close()
+
+	if syncErr != nil {
+		return fmt.Errorf("sync recovery directory: %w", syncErr)
+	}
+
+	if closeErr != nil {
+		return fmt.Errorf("close recovery directory: %w", closeErr)
+	}
+
+	return nil
 }
 
 func (p *Provisioner) proveRemovalAfterMembership(

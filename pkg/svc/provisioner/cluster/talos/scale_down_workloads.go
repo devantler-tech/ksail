@@ -29,6 +29,11 @@ func (p *Provisioner) proveRemovalWorkloads(
 		return err
 	}
 
+	identity, err := removalTargetIdentity(nodes, target)
+	if err != nil {
+		return err
+	}
+
 	pods, err := clientset.CoreV1().
 		Pods("").
 		List(ctx, metav1.ListOptions{FieldSelector: "spec.nodeName=" + target.ServerName})
@@ -50,7 +55,7 @@ func (p *Provisioner) proveRemovalWorkloads(
 		}
 	}
 
-	err = proveNoRemovalPersistentVolumes(ctx, clientset, target.ServerName)
+	err = proveNoRemovalPersistentVolumes(ctx, clientset, identity)
 	if err != nil {
 		return err
 	}
@@ -63,15 +68,59 @@ func (p *Provisioner) proveRemovalWorkloads(
 	return nil
 }
 
+// removalNodeIdentity holds the values a PersistentVolume node affinity can bind to the
+// target: its Node name (matchFields metadata.name) and its hostname label, which Kubernetes
+// does not require to equal the Node name.
+type removalNodeIdentity struct {
+	name     string
+	hostname string
+}
+
+func removalTargetIdentity(
+	nodes []corev1.Node,
+	target replacementTarget,
+) (removalNodeIdentity, error) {
+	for _, node := range nodes {
+		if node.UID != target.NodeUID {
+			continue
+		}
+
+		hostname := node.Labels[corev1.LabelHostname]
+		if node.Name != target.ServerName || hostname == "" {
+			break
+		}
+
+		return removalNodeIdentity{name: node.Name, hostname: hostname}, nil
+	}
+
+	return removalNodeIdentity{}, fmt.Errorf(
+		"%w: target node name and hostname label are unproven",
+		ErrControlPlaneScaleDownUnsafe,
+	)
+}
+
+// value returns the target's value for a node affinity key, or false for any key that does
+// not identify a single node.
+func (id removalNodeIdentity) value(key string) (string, bool) {
+	switch key {
+	case corev1.LabelHostname:
+		return id.hostname, true
+	case "metadata.name":
+		return id.name, true
+	default:
+		return "", false
+	}
+}
+
 // proveNoRemovalPersistentVolumes refuses removal while any PersistentVolume may keep its data
-// on the target. A local or hostPath volume stays bound to its node after the application pod
-// stops, so neither the pod nor the node volume inventory sees it; server deletion would then
-// destroy its backing data. A volume is accepted only when its node affinity provably names
-// nodes other than the target. Any node-local volume without such a proof is refused.
+// on the target. A volume stays bound to its node after the application pod stops, so neither
+// the pod nor the node volume inventory sees it; server deletion would then destroy its data.
+// A volume is accepted only on positive evidence: node affinity that provably excludes the
+// target, or a known network source that is not bound to the target. Everything else refuses.
 func proveNoRemovalPersistentVolumes(
 	ctx context.Context,
 	clientset kubernetes.Interface,
-	targetName string,
+	target removalNodeIdentity,
 ) error {
 	volumes, err := clientset.CoreV1().PersistentVolumes().List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -86,7 +135,7 @@ func proveNoRemovalPersistentVolumes(
 	}
 
 	for _, volume := range volumes.Items {
-		if removalVolumeMayUseTarget(&volume, targetName) {
+		if removalVolumeMayUseTarget(&volume, target) {
 			return fmt.Errorf(
 				"%w: persistent volume %s may keep data on the target",
 				ErrControlPlaneScaleDownUnsafe, volume.Name,
@@ -97,38 +146,63 @@ func proveNoRemovalPersistentVolumes(
 	return nil
 }
 
-func removalVolumeMayUseTarget(volume *corev1.PersistentVolume, targetName string) bool {
-	nodeLocal := volume.Spec.Local != nil || volume.Spec.HostPath != nil
-
-	affinity := volume.Spec.NodeAffinity
-	if affinity == nil || affinity.Required == nil ||
-		len(affinity.Required.NodeSelectorTerms) == 0 {
-		// Without affinity a network volume is not bound to any node, but a node-local
-		// volume's location is unknown.
-		return nodeLocal
+func removalVolumeMayUseTarget(volume *corev1.PersistentVolume, target removalNodeIdentity) bool {
+	terms := removalAffinityTerms(volume)
+	if len(terms) > 0 && !slices.ContainsFunc(terms, func(term corev1.NodeSelectorTerm) bool {
+		return !removalTermExcludesTarget(term, target)
+	}) {
+		return false
 	}
 
-	for _, term := range affinity.Required.NodeSelectorTerms {
-		if nodeLocal && !removalTermExcludesTarget(term, targetName) {
-			return true
-		}
-
-		// A network volume carries topology affinity (region, zone) that says nothing about
-		// the target; only an explicit binding to the target node keeps data there, as a
-		// node-local CSI driver records it.
-		if !nodeLocal && removalTermNamesTarget(term, targetName) {
-			return true
-		}
+	if !removalNetworkVolume(volume) {
+		return true
 	}
 
-	return false
+	// A network volume carries topology affinity (region, zone) that says nothing about the
+	// target; only an explicit binding to the target node keeps data there.
+	return slices.ContainsFunc(terms, func(term corev1.NodeSelectorTerm) bool {
+		return removalTermNamesTarget(term, target)
+	})
 }
 
-func removalTermNamesTarget(term corev1.NodeSelectorTerm, targetName string) bool {
+func removalAffinityTerms(volume *corev1.PersistentVolume) []corev1.NodeSelectorTerm {
+	affinity := volume.Spec.NodeAffinity
+	if affinity == nil || affinity.Required == nil {
+		return nil
+	}
+
+	return affinity.Required.NodeSelectorTerms
+}
+
+// removalNetworkVolume reports whether a volume uses a source whose data provably lives off
+// the node.
+// Hetzner volumes are attached to a server, which the node and provider volume checks
+// refuse; Longhorn replicas live on Longhorn members, which the storage membership check
+// refuses. Any other driver can keep data on the node it is bound to and is accepted only
+// with node affinity that provably excludes the target.
+func removalNetworkVolume(volume *corev1.PersistentVolume) bool {
+	source := volume.Spec.PersistentVolumeSource
+
+	switch {
+	case source.NFS != nil:
+		return true
+	case source.CSI != nil:
+		switch source.CSI.Driver {
+		case "csi.hetzner.cloud", "driver.longhorn.io", "nfs.csi.k8s.io":
+			return true
+		default:
+			return false
+		}
+	default:
+		return false
+	}
+}
+
+func removalTermNamesTarget(term corev1.NodeSelectorTerm, target removalNodeIdentity) bool {
 	for _, requirement := range slices.Concat(term.MatchExpressions, term.MatchFields) {
-		if requirement.Operator == corev1.NodeSelectorOpIn &&
-			(requirement.Key == corev1.LabelHostname || requirement.Key == "metadata.name") &&
-			slices.Contains(requirement.Values, targetName) {
+		value, identifies := target.value(requirement.Key)
+		if identifies && requirement.Operator == corev1.NodeSelectorOpIn &&
+			slices.Contains(requirement.Values, value) {
 			return true
 		}
 	}
@@ -137,20 +211,13 @@ func removalTermNamesTarget(term corev1.NodeSelectorTerm, targetName string) boo
 }
 
 // removalTermExcludesTarget reports whether a node selector term provably cannot match the
-// target. Only an In requirement on the node hostname or name whose values omit the target is
-// accepted as proof; any other requirement is treated as possibly matching it.
-func removalTermExcludesTarget(term corev1.NodeSelectorTerm, targetName string) bool {
-	requirements := slices.Concat(term.MatchExpressions, term.MatchFields)
-	for _, requirement := range requirements {
-		if requirement.Operator != corev1.NodeSelectorOpIn {
-			continue
-		}
-
-		if requirement.Key != corev1.LabelHostname && requirement.Key != "metadata.name" {
-			continue
-		}
-
-		if !slices.Contains(requirement.Values, targetName) {
+// target. Only an In requirement on the target's hostname label or Node name whose values omit
+// the target's value is accepted as proof; any other requirement may match it.
+func removalTermExcludesTarget(term corev1.NodeSelectorTerm, target removalNodeIdentity) bool {
+	for _, requirement := range slices.Concat(term.MatchExpressions, term.MatchFields) {
+		value, identifies := target.value(requirement.Key)
+		if identifies && requirement.Operator == corev1.NodeSelectorOpIn &&
+			!slices.Contains(requirement.Values, value) {
 			return true
 		}
 	}
@@ -249,7 +316,6 @@ func removalSystemPath(pod *corev1.Pod, volume corev1.Volume) bool {
 			"/system/secrets/kubernetes",
 			"/var/etc/kubernetes",
 			"/etc/kubernetes",
-			"/var/log",
 		},
 		within,
 	) {
@@ -259,8 +325,8 @@ func removalSystemPath(pod *corev1.Pod, volume corev1.Volume) bool {
 	if !within("/var/log") {
 		return false
 	}
-	// A log forwarder may read system logs from another namespace. It may
-	// not claim an arbitrary writable host directory as rebuildable state.
+	// A log reader in any namespace, kube-system included, may read system logs. It may
+	// not claim a writable host directory under /var/log as rebuildable state.
 	mounts := []corev1.VolumeMount{}
 	for _, container := range pod.Spec.Containers {
 		mounts = append(mounts, container.VolumeMounts...)

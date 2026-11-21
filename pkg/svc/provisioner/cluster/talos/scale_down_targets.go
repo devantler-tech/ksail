@@ -66,7 +66,55 @@ func controlPlaneScaleDownTargets(
 	targets := slices.Clone(candidates[:count])
 	slices.Reverse(targets)
 
+	err = proveRemovableTargets(targets)
+	if err != nil {
+		return nil, err
+	}
+
 	return targets, nil
+}
+
+func proveRemovableTargets(targets []*hcloud.Server) error {
+	for _, target := range targets {
+		err := proveRemovableTarget(target)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// proveRemovableTarget refuses a selected target whose deletion cannot complete cleanly.
+// Storage attached to a retained server does not block removal; storage or delete protection
+// on a target does, because either would stop the provider deletion only after the target's
+// etcd membership is gone. Selection never substitutes an older server for a refused target.
+func proveRemovableTarget(server *hcloud.Server) error {
+	if len(server.Volumes) > 0 {
+		return fmt.Errorf(
+			"%w: provider target has attached storage volumes",
+			ErrControlPlaneScaleDownUnsafe,
+		)
+	}
+
+	if server.Protection.Delete {
+		return fmt.Errorf(
+			"%w: provider target has delete protection enabled",
+			ErrControlPlaneScaleDownUnsafe,
+		)
+	}
+
+	return nil
+}
+
+// validateRemovalTarget applies the candidate identity checks and the target-only checks.
+func validateRemovalTarget(server *hcloud.Server, clusterName string) error {
+	err := validateRemovalCandidate(server, clusterName)
+	if err != nil {
+		return err
+	}
+
+	return proveRemovableTarget(server)
 }
 
 func validateRemovalCandidates(
@@ -96,13 +144,6 @@ func validateRemovalCandidate(server *hcloud.Server, clusterName string) error {
 	if server == nil || server.ID <= 0 || server.Name == "" || server.Created.IsZero() {
 		return fmt.Errorf(
 			"%w: incomplete server identity or creation time",
-			ErrControlPlaneScaleDownUnsafe,
-		)
-	}
-
-	if len(server.Volumes) > 0 {
-		return fmt.Errorf(
-			"%w: provider target has attached storage volumes",
 			ErrControlPlaneScaleDownUnsafe,
 		)
 	}

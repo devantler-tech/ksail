@@ -154,6 +154,7 @@ func (fixture *removalFixture) populateNodes() {
 			Name:            name,
 			UID:             types.UID(fmt.Sprintf("native-%d", serverID)),
 			ResourceVersion: "1",
+			Labels:          map[string]string{corev1.LabelHostname: name},
 			Spec:            corev1.NodeSpec{ProviderID: fmt.Sprintf("hcloud://%d", serverID)},
 			Status: corev1.NodeStatus{
 				Conditions: []corev1.NodeCondition{
@@ -235,12 +236,13 @@ func (fixture *removalFixture) serveServers(response http.ResponseWriter, reques
 		servers = append(
 			servers,
 			map[string]any{
-				"id":      serverID,
-				"name":    server.Name,
-				"created": server.Created,
-				"status":  "running",
-				"labels":  server.Labels,
-				"volumes": removalVolumeIDs(server),
+				"id":         serverID,
+				"name":       server.Name,
+				"created":    server.Created,
+				"status":     "running",
+				"labels":     server.Labels,
+				"volumes":    removalVolumeIDs(server),
+				"protection": map[string]any{"delete": server.Protection.Delete},
 				"public_net": map[string]any{
 					"ipv4": map[string]any{"ip": server.PublicNet.IPv4.IP.String()},
 				},
@@ -317,12 +319,13 @@ func (fixture *removalFixture) serverResponse(server *hcloud.Server) map[string]
 
 	return map[string]any{
 		"server": map[string]any{
-			"id":      responseID,
-			"name":    server.Name,
-			"created": server.Created,
-			"labels":  labels,
-			"status":  "running",
-			"volumes": volumes,
+			"id":         responseID,
+			"name":       server.Name,
+			"created":    server.Created,
+			"labels":     labels,
+			"status":     "running",
+			"volumes":    volumes,
+			"protection": map[string]any{"delete": server.Protection.Delete},
 			"public_net": map[string]any{
 				"ipv4":         map[string]any{"ip": server.PublicNet.IPv4.IP.String()},
 				"floating_ips": floating,
