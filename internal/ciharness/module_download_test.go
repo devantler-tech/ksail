@@ -245,8 +245,13 @@ func writeModuleDownloadStubs(t *testing.T, directory string) {
 	t.Helper()
 	writeExecutableStub(t, filepath.Join(directory, "go"), `#!/usr/bin/env bash
 set -euo pipefail
+# A pinned-release download must name its module; a bare graph download is then wrong.
+if [[ -n "${PINNED_RELEASE:-}" && "$*" == "mod download" ]]; then
+	printf 'pinned download lost its module: %s\n' "$*" >&2
+	exit 64
+fi
 case "$*" in
-"mod download"|"list -deps -test "*)
+"mod download"|"mod download example.invalid/provenance@v1.0.0"|"list -deps -test "*)
 	count=0
 	if [[ -f "$DOWNLOAD_CALLS" ]]; then count=$(wc -l < "$DOWNLOAD_CALLS"); fi
 	printf 'download\n' >> "$DOWNLOAD_CALLS"
@@ -291,6 +296,10 @@ func TestNarrowChecksDownloadPackageModulesThroughBoundedRetry(t *testing.T) {
 			directory: "internal/ciharness",
 			packages:  "kubernetes_update_test.go system_test_harness_test.go",
 			operation: "🧪 Verify empty arguments under Bash 3.2",
+		},
+		"verify-go-archive": {
+			packages:  "./internal/moduleintegrity/cmd/verify",
+			operation: "🧪 Verify parity guard behavior",
 		},
 	} {
 		t.Run(job, func(t *testing.T) {
@@ -341,6 +350,59 @@ func TestPackageModuleDownloadRetries(t *testing.T) {
 				".github/actions/restore-go-modules",
 				scenario,
 			)
+		})
+	}
+}
+
+// The provenance checks fetch the exact upstream release they compare a local replacement
+// against. Naming that release must still go through the bounded retry, give up after three
+// attempts with its own error, and leave the check's own failure as the job's verdict (#8053).
+func TestPinnedModuleVersionDownloadRetries(t *testing.T) {
+	t.Parallel()
+	requireTestExecutable(t, "bash")
+
+	prefetch := harnessStep{
+		Run: "PINNED_RELEASE=1 bash .github/scripts/download-go-module-versions.sh example.invalid/provenance@v1.0.0",
+	}
+	for _, scenario := range []moduleDownloadScenario{
+		{name: "cache_warm", downloads: 1, operations: 1},
+		{name: "two_proxy_blips", failures: 2, downloads: 3, operations: 1, backoff: "5\n10\n"},
+		{name: "exhausted", failures: 3, downloads: 3, backoff: "5\n10\n"},
+		{name: "downstream_error", operationExit: 37, downloads: 1, operations: 1},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			runModuleDownloadScenario(
+				t,
+				prefetch,
+				"go build",
+				".github/actions/restore-go-modules",
+				scenario,
+			)
+		})
+	}
+}
+
+// Each provenance check fetches its own pinned upstream release through the bounded retry
+// before reading it, so the pin lives in one place and a dropped proxy stream is retried.
+func TestProvenanceChecksFetchPinnedReleasesThroughRetry(t *testing.T) {
+	t.Parallel()
+
+	for _, script := range []string{
+		".github/scripts/verify-go-archive-parity.sh",
+		".github/scripts/verify-otelzap-parity.sh",
+	} {
+		t.Run(filepath.Base(script), func(t *testing.T) {
+			t.Parallel()
+
+			text := string(readRepoFile(t, script))
+			retry := strings.Index(text,
+				`bash "${script_dir}/download-go-module-versions.sh" "${module}@${version}"`)
+			read := strings.Index(text, `go mod download -json "${module}@${version}"`)
+
+			require.NotEqual(t, -1, retry, "the pinned release must be fetched through the retry")
+			require.NotEqual(t, -1, read, "test must inspect the real metadata read")
+			assert.Less(t, retry, read, "fetch through the retry before reading the metadata")
 		})
 	}
 }
