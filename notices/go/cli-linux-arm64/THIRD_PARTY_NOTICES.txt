@@ -4727,9 +4727,9 @@ github.com/go-gota/gota/series
 Material: mb580122337e0ddb2 (license), SHA-256 6ff5009f5725d858d7ce745587e35c7c31b1e4e52cd7c5826202abc32f8bf93c
 Files: LICENSE.md
 
-Component: github.com/go-jose/go-jose/v4@v4.1.6
-Source: https://proxy.golang.org/github.com/go-jose/go-jose/v4/@v/v4.1.6.zip
-Selected Go source checksum: h1:sNRkftxFJxwsILiQukqp5z83QBSmntVwmgRY7AqBDO4=
+Component: github.com/go-jose/go-jose/v4@v4.1.9
+Source: https://proxy.golang.org/github.com/go-jose/go-jose/v4/@v/v4.1.9.zip
+Selected Go source checksum: h1:pKfeQkig1NmgK4hJrZYXLEYURXfoJB61Larw0uIW4gY=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
@@ -4753,6 +4753,7 @@ Material: m668d2ad8816749ee (copyright-header), SHA-256 5242906dd55aba2ced3c26fe
 Material: m71e4f13be68e2579 (copyright-header), SHA-256 e4598550a377c05ec1ea07eb22031859356f856cfbbddcf1ab61a84c68261e69
 Material: m9e4b7a0aaf0aa8ca (copyright-header), SHA-256 62fe87c24497fd9e5ec0e30d266b0e09fa8afcc93810e86cc600667932013ab9
 Material: mc9515ee1b5e87e5a (copyright-header), SHA-256 e9f42108d54c2ef935932f559606155a381271d6f4928f056e1a8124c65dbd05
+Material: mf4ab71dac7f1b052 (copyright-header), SHA-256 f774f6f64ec12677b0794e70d8e32492bc62e22276b4f4df8c3658eab5aed2e2
 
 Component: github.com/go-ldap/ldap/v3@v3.4.10
 Source: https://proxy.golang.org/github.com/go-ldap/ldap/v3/@v/v3.4.10.zip
@@ -59232,6 +59233,26 @@ limitations under the License.
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+
+
+
+--- Recipient material SHA-256 f774f6f64ec12677b0794e70d8e32492bc62e22276b4f4df8c3658eab5aed2e2 ---
+/*-
+ * Copyright 2026 The Go JOSE Authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 
 
