@@ -50,15 +50,15 @@ Usage:
   ksail workload watch [flags]
 
 Flags:
-      --debug              Show diagnostic output for file events and polling (useful for troubleshooting watch behavior)
-      --hook stringArray   Shell command to run before each apply (repeatable; appended after spec.workload.watch.hooks)
-      --initial-apply      Apply all workloads once immediately on startup before entering the watch loop
-      --path string        Directory to watch for changes (default: k8s/ or spec.workload.sourceDirectory from ksail.yaml)
+      --debug[=true|false]           Show diagnostic output for file events and polling (useful for troubleshooting watch behavior)
+      --hook stringArray             Shell command to run before each apply (repeatable; appended after spec.workload.watch.hooks)
+      --initial-apply[=true|false]   Apply all workloads once immediately on startup before entering the watch loop
+      --path string                  Directory to watch for changes (default: k8s/ or spec.workload.sourceDirectory from ksail.yaml)
 
 Global Flags:
-      --benchmark       Show per-activity benchmark output
-      --config string   Path to config file (default: ksail.yaml found via directory traversal)
-      --experimental    Enable experimental (unstable) commands and features
+      --benchmark[=true|false]      Show per-activity benchmark output
+      --config string               Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental[=true|false]   Enable experimental (unstable) commands and features
 
 ```
 

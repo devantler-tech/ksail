@@ -28,15 +28,15 @@ Usage:
   ksail cluster delete [flags]
 
 Flags:
-      --delete-storage      Delete storage volumes when cleaning up (registry volumes for Docker, block storage for Hetzner)
-  -f, --force               Skip confirmation prompt and delete immediately
-  -k, --kubeconfig string   Path to kubeconfig file for context cleanup
-  -n, --name string         Name of the cluster to delete
-  -p, --provider Provider   Provider to use (Docker, Hetzner, Omni, AWS, GCP, Azure, Kubernetes)
+      --delete-storage[=true|false]   Delete storage volumes when cleaning up (registry volumes for Docker, block storage for Hetzner)
+  -f, --force[=true|false]            Skip confirmation prompt and delete immediately
+  -k, --kubeconfig string             Path to kubeconfig file for context cleanup
+  -n, --name string                   Name of the cluster to delete
+  -p, --provider Provider             Provider to use (Docker, Hetzner, Omni, AWS, GCP, Azure, Kubernetes)
 
 Global Flags:
-      --benchmark       Show per-activity benchmark output
-      --config string   Path to config file (default: ksail.yaml found via directory traversal)
-      --experimental    Enable experimental (unstable) commands and features
+      --benchmark[=true|false]      Show per-activity benchmark output
+      --config string               Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental[=true|false]   Enable experimental (unstable) commands and features
 
 ```

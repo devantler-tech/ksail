@@ -43,17 +43,17 @@ Usage:
 
 Flags:
       --compliance-threshold float32   Fail if compliance score is below this threshold (0-100) (overrides spec.workload.scan.complianceThreshold from ksail.yaml)
-      --ephemeral                      EXPERIMENTAL: run offline checks, then check workload admission in an isolated throwaway Kind cluster with declared Helm charts installed and ready (guaranteed teardown; off by default). Operator-generated children are not inspected.
+      --ephemeral[=true|false]         EXPERIMENTAL: run offline checks, then check workload admission in an isolated throwaway Kind cluster with declared Helm charts installed and ready (guaranteed teardown; off by default). Operator-generated children are not inspected.
       --exceptions string              Path to a Kubescape exceptions file (a JSON array of PostureExceptionPolicy objects) forwarded to Kubescape's --exceptions (overrides spec.workload.scan.exceptions from ksail.yaml)
       --format string                  Output format (pretty-printer, json, sarif, junit) (default "pretty-printer")
       --framework strings              Security frameworks to scan against (e.g. nsa, mitre, cis, pss) (overrides spec.workload.scan.frameworks from ksail.yaml) (default [nsa])
-      --no-render                      Scan the raw manifest files instead of the Kustomize + Helm rendered output (skip rendering entirely; restores the pre-rendering behavior)
+      --no-render[=true|false]         Scan the raw manifest files instead of the Kustomize + Helm rendered output (skip rendering entirely; restores the pre-rendering behavior)
   -o, --output string                  Output file path (stdout if empty)
-      --verbose                        Show all resources in output, not just failed ones
+      --verbose[=true|false]           Show all resources in output, not just failed ones
 
 Global Flags:
-      --benchmark       Show per-activity benchmark output
-      --config string   Path to config file (default: ksail.yaml found via directory traversal)
-      --experimental    Enable experimental (unstable) commands and features
+      --benchmark[=true|false]      Show per-activity benchmark output
+      --config string               Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental[=true|false]   Enable experimental (unstable) commands and features
 
 ```
