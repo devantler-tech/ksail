@@ -154,5 +154,15 @@ func (p *Provider) DeleteNetworkForTest(ctx context.Context, clusterName string)
 
 // DeleteLoadBalancersForTest exports deleteLoadBalancers for testing.
 func (p *Provider) DeleteLoadBalancersForTest(ctx context.Context, clusterName string) error {
-	return p.deleteLoadBalancers(ctx, clusterName)
+	_, err := p.deleteLoadBalancers(ctx, clusterName)
+
+	return err
+}
+
+// DeleteLoadBalancersAndNetworkForTest exports deleteLoadBalancersAndNetwork for testing.
+func (p *Provider) DeleteLoadBalancersAndNetworkForTest(
+	ctx context.Context,
+	clusterName string,
+) error {
+	return p.deleteLoadBalancersAndNetwork(ctx, clusterName)
 }

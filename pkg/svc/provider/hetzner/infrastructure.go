@@ -556,14 +556,41 @@ func (p *Provider) deleteInfrastructure(ctx context.Context, clusterName string)
 		return err
 	}
 
-	// Delete load balancers before the network — LBs attached to the network
-	// must be removed first, otherwise network deletion will fail.
-	err = p.deleteLoadBalancers(ctx, clusterName)
+	return p.deleteLoadBalancersAndNetwork(ctx, clusterName)
+}
+
+// deleteLoadBalancersAndNetwork deletes the cluster's load balancers, then its
+// network. Load balancers go first because the network cannot be deleted while
+// they are attached. When a load balancer KSail does not own stays attached, the
+// network is kept too: deleting it would detach that load balancer from its
+// private network, which changes a resource KSail does not own.
+func (p *Provider) deleteLoadBalancersAndNetwork(ctx context.Context, clusterName string) error {
+	keptLoadBalancers, err := p.deleteLoadBalancers(ctx, clusterName)
 	if err != nil {
 		return err
 	}
 
+	if len(keptLoadBalancers) > 0 {
+		p.reportNetworkKept(clusterName+NetworkSuffix, keptLoadBalancers)
+
+		return nil
+	}
+
 	return p.deleteNetwork(ctx, clusterName)
+}
+
+// reportNetworkKept tells the user the cluster's network was left in place
+// because load balancers KSail does not own are still attached to it.
+func (p *Provider) reportNetworkKept(networkName string, loadBalancers []string) {
+	if p.logWriter == nil {
+		return
+	}
+
+	_, _ = fmt.Fprintf(
+		p.logWriter,
+		"Keeping network %q: load balancers not owned by KSail are still attached: %s\n",
+		networkName, strings.Join(loadBalancers, ", "),
+	)
 }
 
 // deletePlacementGroup deletes the placement group for a cluster if it exists.
@@ -733,13 +760,14 @@ func (p *Provider) deleteNetwork(ctx context.Context, clusterName string) error 
 // Kubernetes Service objects of type LoadBalancer.
 //
 // Load balancers must be deleted before the network, otherwise network deletion
-// will fail because the network still has attached resources.
-func (p *Provider) deleteLoadBalancers(ctx context.Context, clusterName string) error {
+// will fail because the network still has attached resources. It returns the
+// names of the attached load balancers it kept because KSail does not own them.
+func (p *Provider) deleteLoadBalancers(ctx context.Context, clusterName string) ([]string, error) {
 	// Look up the network with transient-retry to avoid silently skipping LB
 	// cleanup on a transient API error (which could leave billed resources).
 	network, err := p.getNetworkByClusterName(ctx, clusterName)
 	if err != nil {
-		return fmt.Errorf("failed to look up network for LB cleanup: %w", err)
+		return nil, fmt.Errorf("failed to look up network for LB cleanup: %w", err)
 	}
 
 	// Load balancers are created by hcloud-ccm, not by KSail. One is deleted only
@@ -747,7 +775,7 @@ func (p *Provider) deleteLoadBalancers(ctx context.Context, clusterName string) 
 	// hcloud-ccm service label or this cluster's KSail labels. deleteNetwork
 	// reports a foreign network, so it is not reported here too.
 	if network == nil || !ownedByCluster(network.Labels, clusterName) {
-		return nil
+		return nil, nil
 	}
 
 	loadBalancers, err := retryTransientHetznerOperation(
@@ -759,8 +787,10 @@ func (p *Provider) deleteLoadBalancers(ctx context.Context, clusterName string) 
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("failed to list load balancers: %w", err)
+		return nil, fmt.Errorf("failed to list load balancers: %w", err)
 	}
+
+	var kept []string
 
 	for _, loadBalancer := range loadBalancers {
 		if !lbInNetwork(loadBalancer, network.ID) {
@@ -770,16 +800,18 @@ func (p *Provider) deleteLoadBalancers(ctx context.Context, clusterName string) 
 		if !loadBalancerOwnedByCluster(loadBalancer.Labels, clusterName) {
 			p.reportRetained("load balancer", loadBalancer.Name, clusterName)
 
+			kept = append(kept, loadBalancer.Name)
+
 			continue
 		}
 
 		deleteErr := p.deleteLoadBalancerWithRetry(ctx, loadBalancer)
 		if deleteErr != nil {
-			return deleteErr
+			return nil, deleteErr
 		}
 	}
 
-	return nil
+	return kept, nil
 }
 
 // deleteLoadBalancerWithRetry deletes a single load balancer with retry logic.

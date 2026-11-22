@@ -200,7 +200,7 @@ func TestDeleteLoadBalancers_OnlyRemovesClusterLoadBalancers(t *testing.T) {
 
 			var deletes atomic.Int32
 
-			srv := newLoadBalancerOwnershipServer(t, testCase.network, testCase.lb, &deletes)
+			srv := newLoadBalancerOwnershipServer(t, testCase.network, testCase.lb, &deletes, nil)
 
 			prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
 
@@ -226,11 +226,12 @@ func TestDeleteLoadBalancers_OnlyRemovesClusterLoadBalancers(t *testing.T) {
 }
 
 // newLoadBalancerOwnershipServer serves one network with networkLabels and one
-// load balancer attached to it with lbLabels, and counts load balancer deletes.
+// load balancer attached to it with lbLabels, and counts load balancer deletes
+// and, when networkDeletes is set, network deletes.
 func newLoadBalancerOwnershipServer(
 	t *testing.T,
 	networkLabels, lbLabels string,
-	deletes *atomic.Int32,
+	deletes, networkDeletes *atomic.Int32,
 ) *httptest.Server {
 	t.Helper()
 
@@ -239,6 +240,13 @@ func newLoadBalancerOwnershipServer(
 		responseWriter.Header().Set("Content-Type", "application/json")
 		_, _ = responseWriter.Write([]byte(`{"networks":[` +
 			ownershipResources()["network"].item(networkLabels) + `]}`))
+	})
+	mux.HandleFunc("/networks/11", func(responseWriter http.ResponseWriter, request *http.Request) {
+		if request.Method == http.MethodDelete && networkDeletes != nil {
+			networkDeletes.Add(1)
+		}
+
+		responseWriter.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc(
 		"/load_balancers",
@@ -273,4 +281,54 @@ func newLoadBalancerOwnershipServer(
 	t.Cleanup(srv.Close)
 
 	return srv
+}
+
+// TestDeleteLoadBalancersAndNetwork_KeepsNetworkWithForeignLoadBalancer proves
+// that the cluster's network is not deleted while a load balancer KSail keeps
+// is still attached to it: deleting the network would detach that load balancer.
+func TestDeleteLoadBalancersAndNetwork_KeepsNetworkWithForeignLoadBalancer(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		lb             string
+		networkDeleted bool
+	}{
+		"owned lb removed, network deleted": {ccmLBLabels, true},
+		"foreign lb kept, network kept":     {`{}`, false},
+		"other cluster lb kept, net kept":   {otherCluster, false},
+	}
+
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var lbDeletes, networkDeletes atomic.Int32
+
+			srv := newLoadBalancerOwnershipServer(
+				t, ownedLabels, testCase.lb, &lbDeletes, &networkDeletes,
+			)
+			prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
+
+			var out bytes.Buffer
+			prov.SetLogWriter(&out)
+
+			require.NoError(
+				t,
+				prov.DeleteLoadBalancersAndNetworkForTest(t.Context(), ownershipCluster),
+			)
+
+			if testCase.networkDeleted {
+				assert.Equal(t, int32(1), networkDeletes.Load())
+				assert.NotContains(t, out.String(), "Keeping network")
+
+				return
+			}
+
+			assert.Zero(t, lbDeletes.Load())
+			assert.Zero(t, networkDeletes.Load(),
+				"the network must survive while a kept load balancer is attached")
+			assert.Contains(t, out.String(), `Keeping network "test-cluster-network"`)
+			assert.Contains(t, out.String(), "svc-lb")
+		})
+	}
 }
