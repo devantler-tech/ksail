@@ -481,6 +481,7 @@ func TestHetznerNodePortForbiddenNodeReadKeepsLifecycleWorking(t *testing.T) {
 	for _, withCredential := range []bool{false, true} {
 		cloud := newAPIGrantCloud(t)
 		prov, client := newAPIGrantProviderWithClient(t, cloud, "aws:///zone/i-123")
+
 		if !withCredential {
 			prov.WithHetznerAPIFirewall(nil)
 		}
