@@ -3,67 +3,67 @@
   "inputs": {
     ".github/go-license-policy.json": "ac5cf484450d12cb302aa7563ad92c99194472f3e3994a3abc8f58eb1332a792",
     ".github/go-notice-materials.json": "df77a85b2a83c78513bd4ca49280bfd9996c81d7b3ba8d1f20e85613f05072aa",
-    "go.mod": "0314f34711aa8149094561f0602125af7e1324a00a954c94965f0bf0dded371e",
-    "go.sum": "a929fa4ca097ed24d636cd43d5537bb08442df3a48e31c885cb6aa69a7a01ca4"
+    "go.mod": "833784fee55dca7dd69c4333411925ba12c2c39bdf1bf7c277f9e555dc883645",
+    "go.sum": "c9b44113149a5d54bf4d8f26774796a6ab3da1451470b3279158c736dad7279c"
   },
   "toolchainVersion": "go1.27.4",
   "toolchainLicenseSha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
   "targets": [
     {
       "target": "cli-darwin-arm64",
-      "noticesSha256": "8b28643c0a9cbacaec4d8194fb0c5adfd750a3dcc25eaf56064f9c55e159236c",
-      "manifestSha256": "f0d3d8a49310b760225565627fece02c58d066f3dca77c2a180003dcd2b697cb",
-      "packages": 5462,
-      "files": 27647
+      "noticesSha256": "a9596b195945dd739d99f31d4568cb6dcd6d7e471f6a098fab7d9d14c5fb9c6c",
+      "manifestSha256": "219e0e3454cddd5d58755a282ea7387c3d960e1d164ea1761f6cd2c68e11aa4c",
+      "packages": 5476,
+      "files": 27679
     },
     {
       "target": "cli-linux-amd64",
-      "noticesSha256": "ccd86dcb5f4731641c75887a4968d3b63fd0064e47b570330622f7eb6d13fbd0",
-      "manifestSha256": "fec9ce9e0f78d89b18557f4e23fff68f9bb0c25ad1a4c56a5121cee0006dc4dd",
-      "packages": 5477,
-      "files": 28040
+      "noticesSha256": "3e054ff4b19bea239be7385b22c9dff5e04251936045e8c842a577e87330184f",
+      "manifestSha256": "5445a1edcf37c4045b6b92101e82a592f94f8513bd892add4fd989e05aeddc69",
+      "packages": 5491,
+      "files": 28072
     },
     {
       "target": "cli-linux-arm64",
-      "noticesSha256": "445cc6e47401a2ba2ac604aae8ef4490f09ec52ce825d723b632f320f97cda27",
-      "manifestSha256": "b22d4ab469d21498bf16b2497768a7ca8f004ce467376ae09c0db5e32f6bfd6d",
-      "packages": 5475,
-      "files": 27949
+      "noticesSha256": "4e7fe2afd249739da9b8dc5b9009aaecdbda631ec96f50cc3dff41f1d29b4155",
+      "manifestSha256": "d2d2ff48bbab523e044f4f7ba2fc9a800c67d51a25dbb3c23657f9a44e33340a",
+      "packages": 5489,
+      "files": 27981
     },
     {
       "target": "cli-windows-amd64",
-      "noticesSha256": "83cbedd7815e844a0f89875fec84dd3869a307d810e9d121ab9091c716ddba8f",
-      "manifestSha256": "ba8fe64adec8292be482a911f9dc2b5300cec6968f3643715dd2891a446137fb",
-      "packages": 5463,
-      "files": 27801
+      "noticesSha256": "5139207ee6048aaf4f976df70f5ad7eb3a6ed8232bc870a5ecb69c949991bca6",
+      "manifestSha256": "f61e3432e033c53af5896a31c9f13606738e44a15628e02c90209ed54fdc32d1",
+      "packages": 5477,
+      "files": 27833
     },
     {
       "target": "cli-windows-arm64",
-      "noticesSha256": "61d8117e3b5e7c7420d6eff79d54d4d10ee20600d989695c8c21620e85b1a731",
-      "manifestSha256": "17d5b50d1a1353ffa3c90e8bd343c587f506483f23b901aacd03f4daaf04d6ae",
-      "packages": 5461,
-      "files": 27715
+      "noticesSha256": "351105b6757a5b24c24fb3ff4c5cb87a802b6801856859c1d551c30eca55a401",
+      "manifestSha256": "ffe4c11ef084cf2098c973d9530b2a7eb31108b2468bf716638555191278e91f",
+      "packages": 5475,
+      "files": 27747
     },
     {
       "target": "desktop-darwin-arm64",
-      "noticesSha256": "db665d2a6f916600a4c0750407b546ddb3e5456dd4fd2091cfc98da6ea4a3c32",
-      "manifestSha256": "e1c1a3f0b779f794545704ef5fe623a8c7fe493337f8a9a75f5ec16a329a91e1",
-      "packages": 5492,
-      "files": 27998
+      "noticesSha256": "fbfcedd119c8baca35112a42c708c63d4d2d7d6d7aec4f5cc639ccc600669b25",
+      "manifestSha256": "59e0d9a579924df0b7afa1a73730a62eb51c6b919ffcad97bfbc73722bcf10db",
+      "packages": 5506,
+      "files": 28030
     },
     {
       "target": "desktop-linux-amd64",
-      "noticesSha256": "6ccd0e756118c9bac9528995665aafbee8103e758773d252013faa01640eebc1",
-      "manifestSha256": "063294f5f59639f4c745f7951f60f53c421463e22ae9a86b0ec592af646476bc",
-      "packages": 5512,
-      "files": 28392
+      "noticesSha256": "28edef6067a3e3ad6750d8df3b38343ab35c5f7bb2426a8cbf14ff835c29bf21",
+      "manifestSha256": "6e32fb6947624e62bfd5ffe22c43a692b272af0dc907c0e60cbfc7840e889fdb",
+      "packages": 5526,
+      "files": 28424
     },
     {
       "target": "desktop-windows-amd64",
-      "noticesSha256": "b333cd82ea7b499e6fb93eba8104e0105fd66651f34ead455aabc6f347a91f69",
-      "manifestSha256": "bd20cb3cadab9d7293c80a4d04ed8bbd641e51b49c32034e038355deab1b114e",
-      "packages": 5512,
-      "files": 28324
+      "noticesSha256": "47c97e338245fa908da8e644024549b7d6ca0057e9d14dec2b10e65b723223d4",
+      "manifestSha256": "1eec99dee513373187b5d4b2193b574f0107cab6a57b7de42e342d899217d019",
+      "packages": 5526,
+      "files": 28356
     }
   ]
 }
