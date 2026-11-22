@@ -295,6 +295,10 @@ func partialNestedDeletionHost(
 			requests.Add(1)
 			writer.Header().Set("Content-Type", "application/json")
 
+			if writeEmptyHostNodes(t, writer, request) {
+				return
+			}
+
 			if request.Method == http.MethodDelete {
 				assert.Equal(t, "/api/v1/namespaces/ksail-nested", request.URL.Path)
 				deletes.Add(1)
@@ -341,6 +345,22 @@ func partialNestedDeletionHost(
 	return host
 }
 
+// writeEmptyHostNodes answers the host node list the nested API grant reads before
+// deletion. A real API server lists nodes; it never answers the collection with 404.
+func writeEmptyHostNodes(t *testing.T, writer http.ResponseWriter, request *http.Request) bool {
+	t.Helper()
+
+	if request.Method != http.MethodGet || request.URL.Path != "/api/v1/nodes" {
+		return false
+	}
+
+	assert.NoError(t, json.NewEncoder(writer).Encode(corev1.NodeList{
+		APIVersion: "v1", Kind: "NodeList",
+	}))
+
+	return true
+}
+
 func writePartialDeletionDenied(t *testing.T, writer http.ResponseWriter) {
 	t.Helper()
 
@@ -358,6 +378,10 @@ func nestedCleanupHost(t *testing.T, deletes *atomic.Int32) *httptest.Server {
 	host := httptest.NewServer(
 		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			writer.Header().Set("Content-Type", "application/json")
+
+			if writeEmptyHostNodes(t, writer, request) {
+				return
+			}
 
 			if request.URL.Path != "/api/v1/namespaces/ksail-nested" {
 				writer.WriteHeader(http.StatusNotFound)
