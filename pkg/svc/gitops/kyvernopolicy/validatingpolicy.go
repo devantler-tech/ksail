@@ -12,6 +12,8 @@ import (
 
 	"cel.dev/cel-go/cel"
 	celast "cel.dev/cel-go/common/ast"
+	"cel.dev/cel-go/common/operators"
+	"cel.dev/cel-go/common/types"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	policieskyvernoio "github.com/kyverno/api/api/policies.kyverno.io"
 	policiesv1beta1 "github.com/kyverno/api/api/policies.kyverno.io/v1beta1"
@@ -23,7 +25,6 @@ import (
 	engineapi "github.com/kyverno/kyverno/pkg/engine/api"
 	admissionv1 "k8s.io/api/admission/v1"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
-	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -68,6 +69,22 @@ const httpLibrary = "http"
 // documents.
 const namespaceObjectVariable = "namespaceObject"
 
+// requestVariable is the CEL variable holding the admission request, and
+// userInfoField its field naming the requester.
+const (
+	requestVariable = "request"
+	userInfoField   = "userInfo"
+)
+
+// requesterReference matches request.userInfo, in select, optional-select or
+// index form, in a string that does not parse as CEL here. Unlike the http
+// fallback it is narrow: a miss only evaluates the policy as an empty
+// requester, as before identities could be declared, while a false positive
+// would hide a real evaluation.
+var requesterReference = regexp.MustCompile(
+	`(^|[^A-Za-z0-9_])request\s*(\.\s*\??\s*userInfo([^A-Za-z0-9_]|$)|\[\s*\??\s*['"]userInfo['"])`,
+)
+
 // httpReference and namespaceObjectReference match those identifiers as words
 // in a string that does not parse as CEL here, preceded by a dot or not: a
 // leading dot (`.http`) names the same root-scope variable. Kyverno may parse
@@ -93,17 +110,25 @@ func newIdentifierParser() (*cel.Env, error) {
 	return env, nil
 }
 
-// referencesIdentifier reports whether any string in strs refers to the CEL
-// identifier name. A string that parses as CEL refers to it only when its
-// syntax tree holds that identifier, written plainly or with the leading dot
-// that names the root scope (`.http`), so a field of the same name selected
-// from another value (`object.?spec.?http`), a map key or a string literal does
-// not count. A string that does not parse is matched against fallback instead,
-// so an expression that may use the identifier is never taken not to.
+// celReference is what a CEL expression is searched for: the root-scope
+// identifier name or, when field is set, that field selected from it
+// (`request.userInfo`, `request.?userInfo`, `request['userInfo']`).
+type celReference struct {
+	name  string
+	field string
+}
+
+// referencesIdentifier reports whether any string in strs refers to ref. A
+// string that parses as CEL refers to it only when its syntax tree holds the
+// identifier, written plainly or with the leading dot that names the root
+// scope (`.http`), so a field of the same name selected from another value
+// (`object.?spec.?http`), a map key or a string literal does not count. A
+// string that does not parse is matched against fallback instead, so an
+// expression that may refer to it is never taken not to.
 func referencesIdentifier(
 	parser *cel.Env,
 	strs []string,
-	name string,
+	ref celReference,
 	fallback *regexp.Regexp,
 ) bool {
 	for _, str := range strs {
@@ -116,7 +141,7 @@ func referencesIdentifier(
 			continue
 		}
 
-		if usesIdentifier(parsed.NativeRep().Expr(), name, false) {
+		if usesIdentifier(parsed.NativeRep().Expr(), ref, false) {
 			return true
 		}
 	}
@@ -124,29 +149,40 @@ func referencesIdentifier(
 	return false
 }
 
-// usesIdentifier reports whether expr refers to the root-scope identifier name.
-// shadowed is set inside a comprehension that binds a local variable of that
-// name (`list.all(http, http != 'x')`): there the plain name is the local
-// variable, while `.http` still names the root one. A comprehension's range and
-// initial accumulator are evaluated outside the scope it opens. An expression
-// kind this function does not know counts as a reference.
-func usesIdentifier(expr celast.Expr, name string, shadowed bool) bool {
+// usesIdentifier reports whether expr refers to ref. shadowed is set inside a
+// comprehension that binds a local variable of ref's name (`list.all(http,
+// http != 'x')`): there the plain name is the local variable, while `.http`
+// still names the root one. A comprehension's range and initial accumulator
+// are evaluated outside the scope it opens. An expression kind this function
+// does not know counts as a reference.
+func usesIdentifier(expr celast.Expr, ref celReference, shadowed bool) bool {
 	switch expr.Kind() {
 	case celast.IdentKind:
-		return identRefersTo(expr.AsIdent(), name, shadowed)
+		return ref.field == "" && identRefersTo(expr.AsIdent(), ref.name, shadowed)
 	case celast.SelectKind:
-		return usesIdentifier(expr.AsSelect().Operand(), name, shadowed)
+		return selectUsesIdentifier(expr.AsSelect(), ref, shadowed)
 	case celast.CallKind:
-		return callUsesIdentifier(expr.AsCall(), name, shadowed)
+		return callUsesIdentifier(expr.AsCall(), ref, shadowed)
 	case celast.ListKind, celast.MapKind, celast.StructKind:
-		return literalUsesIdentifier(expr, name, shadowed)
+		return literalUsesIdentifier(expr, ref, shadowed)
 	case celast.ComprehensionKind:
-		return comprehensionUsesIdentifier(expr.AsComprehension(), name, shadowed)
+		return comprehensionUsesIdentifier(expr.AsComprehension(), ref, shadowed)
 	case celast.LiteralKind, celast.UnspecifiedExprKind:
 		return false
 	default:
 		return true
 	}
+}
+
+// selectUsesIdentifier checks a field selection, which is ref itself when it
+// selects ref's field from the root identifier.
+func selectUsesIdentifier(selected celast.SelectExpr, ref celReference, shadowed bool) bool {
+	if ref.field != "" && selected.FieldName() == ref.field &&
+		isRootIdent(selected.Operand(), ref.name, shadowed) {
+		return true
+	}
+
+	return usesIdentifier(selected.Operand(), ref, shadowed)
 }
 
 // identRefersTo reports whether the identifier ident is the root-scope name: a
@@ -160,30 +196,62 @@ func identRefersTo(ident, name string, shadowed bool) bool {
 	return ident == name && !shadowed
 }
 
+// isRootIdent reports whether expr is the root-scope identifier name itself.
+func isRootIdent(expr celast.Expr, name string, shadowed bool) bool {
+	return expr.Kind() == celast.IdentKind && identRefersTo(expr.AsIdent(), name, shadowed)
+}
+
 // literalUsesIdentifier checks the elements of a list, map or struct literal.
-func literalUsesIdentifier(expr celast.Expr, name string, shadowed bool) bool {
+func literalUsesIdentifier(expr celast.Expr, ref celReference, shadowed bool) bool {
 	if expr.Kind() == celast.ListKind {
-		return anyUsesIdentifier(expr.AsList().Elements(), name, shadowed)
+		return anyUsesIdentifier(expr.AsList().Elements(), ref, shadowed)
 	}
 
 	if expr.Kind() == celast.MapKind {
-		return entriesUseIdentifier(expr.AsMap().Entries(), name, shadowed)
+		return entriesUseIdentifier(expr.AsMap().Entries(), ref, shadowed)
 	}
 
-	return entriesUseIdentifier(expr.AsStruct().Fields(), name, shadowed)
+	return entriesUseIdentifier(expr.AsStruct().Fields(), ref, shadowed)
 }
 
-func callUsesIdentifier(call celast.CallExpr, name string, shadowed bool) bool {
-	if call.IsMemberFunction() && usesIdentifier(call.Target(), name, shadowed) {
+// callUsesIdentifier checks a call. A field reference is also written as an
+// index or optional select with a constant key (`request['userInfo']`,
+// `request[?'userInfo']`, `request.?userInfo`), all of which parse as calls.
+func callUsesIdentifier(call celast.CallExpr, ref celReference, shadowed bool) bool {
+	if ref.field != "" && selectsFieldByCall(call, ref, shadowed) {
 		return true
 	}
 
-	return anyUsesIdentifier(call.Args(), name, shadowed)
+	if call.IsMemberFunction() && usesIdentifier(call.Target(), ref, shadowed) {
+		return true
+	}
+
+	return anyUsesIdentifier(call.Args(), ref, shadowed)
 }
 
-func anyUsesIdentifier(exprs []celast.Expr, name string, shadowed bool) bool {
+// selectsFieldByCall reports whether call selects ref's field from the root
+// identifier through an index or optional-select operator with a constant key.
+func selectsFieldByCall(call celast.CallExpr, ref celReference, shadowed bool) bool {
+	switch call.FunctionName() {
+	case operators.Index, operators.OptIndex, operators.OptSelect:
+	default:
+		return false
+	}
+
+	args := call.Args()
+	if len(args) != 2 || !isRootIdent(args[0], ref.name, shadowed) ||
+		args[1].Kind() != celast.LiteralKind {
+		return false
+	}
+
+	key, isString := args[1].AsLiteral().(types.String)
+
+	return isString && string(key) == ref.field
+}
+
+func anyUsesIdentifier(exprs []celast.Expr, ref celReference, shadowed bool) bool {
 	for _, expr := range exprs {
-		if usesIdentifier(expr, name, shadowed) {
+		if usesIdentifier(expr, ref, shadowed) {
 			return true
 		}
 	}
@@ -193,12 +261,12 @@ func anyUsesIdentifier(exprs []celast.Expr, name string, shadowed bool) bool {
 
 // entriesUseIdentifier checks the keys and values of map entries and the
 // values of struct fields. Any other entry kind counts as a reference.
-func entriesUseIdentifier(entries []celast.EntryExpr, name string, shadowed bool) bool {
+func entriesUseIdentifier(entries []celast.EntryExpr, ref celReference, shadowed bool) bool {
 	for _, entry := range entries {
 		if entry.Kind() == celast.MapEntryKind {
 			mapEntry := entry.AsMapEntry()
-			if usesIdentifier(mapEntry.Key(), name, shadowed) ||
-				usesIdentifier(mapEntry.Value(), name, shadowed) {
+			if usesIdentifier(mapEntry.Key(), ref, shadowed) ||
+				usesIdentifier(mapEntry.Value(), ref, shadowed) {
 				return true
 			}
 
@@ -206,7 +274,7 @@ func entriesUseIdentifier(entries []celast.EntryExpr, name string, shadowed bool
 		}
 
 		if entry.Kind() == celast.StructFieldKind {
-			if usesIdentifier(entry.AsStructField().Value(), name, shadowed) {
+			if usesIdentifier(entry.AsStructField().Value(), ref, shadowed) {
 				return true
 			}
 
@@ -225,24 +293,26 @@ func entriesUseIdentifier(entries []celast.EntryExpr, name string, shadowed bool
 // is in scope in the result.
 func comprehensionUsesIdentifier(
 	comprehension celast.ComprehensionExpr,
-	name string,
+	ref celReference,
 	shadowed bool,
 ) bool {
-	if usesIdentifier(comprehension.IterRange(), name, shadowed) ||
-		usesIdentifier(comprehension.AccuInit(), name, shadowed) {
+	if usesIdentifier(comprehension.IterRange(), ref, shadowed) ||
+		usesIdentifier(comprehension.AccuInit(), ref, shadowed) {
 		return true
 	}
+
+	name := ref.name
 
 	loopShadowed := shadowed || comprehension.IterVar() == name ||
 		(comprehension.HasIterVar2() && comprehension.IterVar2() == name) ||
 		comprehension.AccuVar() == name
-	if usesIdentifier(comprehension.LoopCondition(), name, loopShadowed) ||
-		usesIdentifier(comprehension.LoopStep(), name, loopShadowed) {
+	if usesIdentifier(comprehension.LoopCondition(), ref, loopShadowed) ||
+		usesIdentifier(comprehension.LoopStep(), ref, loopShadowed) {
 		return true
 	}
 
 	return usesIdentifier(
-		comprehension.Result(), name, shadowed || comprehension.AccuVar() == name,
+		comprehension.Result(), ref, shadowed || comprehension.AccuVar() == name,
 	)
 }
 
@@ -300,6 +370,9 @@ type compiledCELPolicy struct {
 	unsupported string
 	// readsNamespace is set when an expression mentions namespaceObject.
 	readsNamespace bool
+	// readsIdentity is set when an expression reads request.userInfo, the
+	// requester identity.
+	readsIdentity bool
 }
 
 // CELEngine evaluates a fixed set of CEL ValidatingPolicies against documents.
@@ -382,7 +455,7 @@ func (c celPolicyCompiler) compile(
 		return compiledCELPolicy{}, fmt.Errorf("inspect %s: %w", celPolicyName(policy), err)
 	}
 
-	if referencesIdentifier(c.parser, strs, httpLibrary, httpReference) {
+	if referencesIdentifier(c.parser, strs, celReference{name: httpLibrary}, httpReference) {
 		return compiledCELPolicy{
 			policy: policy,
 			unsupported: "the policy uses the CEL http library, which makes network " +
@@ -403,7 +476,12 @@ func (c celPolicyCompiler) compile(
 		policy: policy,
 		engine: vpolengine.NewEngine(provider, c.resolve, c.matcher),
 		readsNamespace: referencesIdentifier(
-			c.parser, strs, namespaceObjectVariable, namespaceObjectReference,
+			c.parser, strs, celReference{name: namespaceObjectVariable}, namespaceObjectReference,
+		),
+		readsIdentity: referencesIdentifier(
+			c.parser, strs,
+			celReference{name: requestVariable, field: userInfoField},
+			requesterReference,
 		),
 	}, nil
 }
@@ -428,16 +506,28 @@ func renderedNamespaces(docs []map[string]any) map[string]*corev1.Namespace {
 	return known
 }
 
-// Evaluate applies every policy to doc, simulating its creation, and returns
-// the failing and erroring validations. A NamespacedValidatingPolicy applies
+// Evaluate is EvaluateAs with no declared admission identity.
+func (e *CELEngine) Evaluate(ctx context.Context, doc map[string]any) ([]Violation, error) {
+	return e.EvaluateAs(ctx, doc, nil)
+}
+
+// EvaluateAs applies every policy to doc, simulating its creation by identity,
+// and returns the failing and erroring validations. A NamespacedValidatingPolicy applies
 // only to documents in its own namespace. A policy that selects on namespace
 // labels, for a document whose Namespace is not among the rendered documents,
 // is evaluated only when the immutable name label determines its selector.
 // Other selectors and namespaceObject reads are reported as Unsupported.
-// Such a report, like one for a policy that
-// cannot run offline at all, is made only for documents the policy's other
-// match constraints select. As with Evaluate, doc's namespace is used as given.
-func (e *CELEngine) Evaluate(ctx context.Context, doc map[string]any) ([]Violation, error) {
+// identity is who applies doc; its user name and groups are the request's
+// userInfo. With a nil identity a policy that reads request.userInfo is
+// reported as Unsupported instead of being evaluated as an empty requester.
+// Such a report, like one for a policy that cannot run offline at all, is made
+// only for documents the policy's other match constraints select. As with
+// Engine.EvaluateAs, doc's namespace is used as given.
+func (e *CELEngine) EvaluateAs(
+	ctx context.Context,
+	doc map[string]any,
+	identity *Identity,
+) ([]Violation, error) {
 	resource := &unstructured.Unstructured{Object: doc}
 	namespace := resource.GetNamespace()
 
@@ -451,16 +541,11 @@ func (e *CELEngine) Evaluate(ctx context.Context, doc map[string]any) ([]Violati
 			continue
 		}
 
-		reason := e.offlineLimitation(entry, namespace, resource.GroupVersionKind().GroupKind())
+		reason, unknownNamespace := e.limitation(entry, resource, identity)
 		if reason != "" {
 			// A limitation is only worth reporting for a document the policy
 			// would select at all.
 			if e.appliesIgnoringNamespace(policy, resource) {
-				unknownNamespace := ""
-				if entry.unsupported == "" {
-					unknownNamespace = namespace
-				}
-
 				violations = append(violations, Violation{
 					Policy:           celPolicyName(policy),
 					Message:          reason,
@@ -472,7 +557,7 @@ func (e *CELEngine) Evaluate(ctx context.Context, doc map[string]any) ([]Violati
 			continue
 		}
 
-		response, err := entry.engine.Handle(ctx, admissionRequest(resource), nil)
+		response, err := entry.engine.Handle(ctx, admissionRequest(resource, identity), nil)
 		if err != nil {
 			return nil, fmt.Errorf("evaluate %s: %w", celPolicyName(policy), err)
 		}
@@ -485,11 +570,39 @@ func (e *CELEngine) Evaluate(ctx context.Context, doc map[string]any) ([]Violati
 	return violations, nil
 }
 
+// limitation returns why entry is not evaluated offline for resource applied by
+// identity, or "" when it is, along with the unknown namespace the reason
+// names, if any. A namespace limitation comes first; a nil identity is one only
+// for a policy that reads request.userInfo.
+func (e *CELEngine) limitation(
+	entry compiledCELPolicy,
+	resource *unstructured.Unstructured,
+	identity *Identity,
+) (string, string) {
+	namespace := resource.GetNamespace()
+
+	reason := e.offlineLimitation(entry, namespace, resource.GroupVersionKind().GroupKind())
+	switch {
+	case reason != "" && entry.unsupported == "":
+		return reason, namespace
+	case reason != "":
+		return reason, ""
+	case identity == nil && entry.readsIdentity:
+		return "the policy reads the requester identity (request.userInfo) and " +
+			undeclaredIdentityReason, ""
+	default:
+		return "", ""
+	}
+}
+
 // admissionRequest builds the create request the policy would see at admission.
 // Without API discovery the resource name is guessed from the kind, as kubectl
 // does offline; resourceRules name plural resources, so the guess is what they
-// match against.
-func admissionRequest(resource *unstructured.Unstructured) celengine.EngineRequest {
+// match against. identity supplies the request's userInfo; nil leaves it empty.
+func admissionRequest(
+	resource *unstructured.Unstructured,
+	identity *Identity,
+) celengine.EngineRequest {
 	gvk := resource.GroupVersionKind()
 	gvr, _ := meta.UnsafeGuessKindToResource(gvk)
 
@@ -501,7 +614,7 @@ func admissionRequest(resource *unstructured.Unstructured) celengine.EngineReque
 		resource.GetName(),
 		resource.GetNamespace(),
 		admissionv1.Create,
-		authenticationv1.UserInfo{},
+		identity.userInfo(),
 		resource,
 		nil,
 		false,
