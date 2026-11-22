@@ -81,8 +81,9 @@ type APIExposureSpec struct {
 	// klipper-lb) would bind the API port on the node, conflicting with the host API server.
 	SkipLoadBalancer bool
 
-	// priorGrant is set by ResolveExposure when the API Service already records a Hetzner
-	// grant, so a grant re-created during this resolution is never removed as a new one.
+	// priorGrant is set by ResolveExposure when the host firewall already admits the
+	// namespace before any tier runs, so a grant re-created during this resolution is never
+	// removed as a new one.
 	priorGrant bool
 }
 
@@ -152,12 +153,12 @@ func (p *Provider) ResolveExposure(
 ) (*ExposureResult, error) {
 	spec = spec.withDefaults()
 
-	prior, err := p.recordedGrantHost(ctx, spec.Namespace)
+	prior, err := p.priorNestedAPIGrant(ctx, spec.Namespace)
 	if err != nil {
 		return nil, err
 	}
 
-	spec.priorGrant = prior != ""
+	spec.priorGrant = prior
 
 	if spec.GatewayClassName != "" {
 		if dynamicClient == nil {
@@ -359,7 +360,6 @@ func (p *Provider) ensureService(
 
 		svc.ResourceVersion = existing.ResourceVersion
 		preserveImmutableServiceFields(svc, existing, serviceType)
-		preserveGrantRecord(svc, existing)
 
 		created, err = p.client.CoreV1().
 			Services(spec.Namespace).

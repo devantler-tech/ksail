@@ -278,3 +278,56 @@ func newNoFirewallServer(t *testing.T) string {
 
 	return srv.URL
 }
+
+// Clients that can reach the host API through any of its rules can reach the nested API too.
+// Returning only the first rule's sources, or repeating a shared source, must fail this test.
+func TestGrantNestedAPIPortInheritsSourcesOfEveryHostAPIRule(t *testing.T) {
+	t.Parallel()
+
+	second := hostAPIRule()
+	second["source_ips"] = []string{"198.51.100.0/24", "203.0.113.0/24"}
+
+	srv := newFirewallRepairServer(t, []map[string]any{
+		hostAPIRule(),
+		second,
+	}, ownedFirewallLabels(), "success")
+	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
+
+	_, err := prov.GrantNestedAPIPort(context.Background(), "test-cluster", "nested-kind", 30668)
+	require.NoError(t, err)
+
+	sent := srv.sentRules.Load()
+	require.NotNil(t, sent)
+
+	var grantSources []string
+
+	for _, rule := range *sent {
+		if rule.Description != nil && *rule.Description == nestedGrantPrefix+"nested-kind" {
+			grantSources = rule.SourceIPs
+		}
+	}
+
+	assert.Equal(t, []string{"203.0.113.0/24", "198.51.100.0/24"}, grantSources)
+}
+
+// The firewall is the only record of a grant, so the check reads it and nothing else.
+func TestHasNestedAPIGrantReadsTheFirewall(t *testing.T) {
+	t.Parallel()
+
+	srv := newFirewallRepairServer(t, []map[string]any{
+		hostAPIRule(),
+		nestedGrantRule("nested-kind", "30001"),
+	}, ownedFirewallLabels(), "success")
+	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
+
+	granted, err := prov.HasNestedAPIGrant(context.Background(), "test-cluster", "nested-kind")
+	require.NoError(t, err)
+	assert.True(t, granted)
+
+	granted, err = prov.HasNestedAPIGrant(context.Background(), "test-cluster", "other")
+	require.NoError(t, err)
+	assert.False(t, granted, "another nested cluster's grant is not this one's")
+
+	_, err = prov.HasNestedAPIGrant(context.Background(), "test-cluster", "")
+	require.ErrorIs(t, err, hetzner.ErrInvalidNestedAPIGrant)
+}

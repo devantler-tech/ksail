@@ -39,19 +39,36 @@ func isNestedAPIRuleFor(rule hcloud.FirewallRule, nestedCluster string) bool {
 	return rule.Description != nil && *rule.Description == nestedAPIRuleDescription(nestedCluster)
 }
 
-// kubernetesAPISourceIPs returns the sources of the inbound TCP rule for the host's
-// Kubernetes API, and false when rules hold no such rule.
+// kubernetesAPISourceIPs returns the sources of every inbound TCP rule for the host's
+// Kubernetes API, without duplicates and in rule order, and false when rules hold no such
+// rule. A grant then admits exactly the clients that can reach the host's own API.
 func kubernetesAPISourceIPs(rules []hcloud.FirewallRule) ([]net.IPNet, bool) {
+	var sources []net.IPNet
+
+	found := false
+	seen := map[string]bool{}
+
 	for _, rule := range rules {
-		if rule.Direction == hcloud.FirewallRuleDirectionIn &&
-			rule.Protocol == hcloud.FirewallRuleProtocolTCP &&
-			rule.Port != nil && *rule.Port == kubernetesAPIPort &&
-			!isNestedAPIRule(rule) {
-			return rule.SourceIPs, true
+		if rule.Direction != hcloud.FirewallRuleDirectionIn ||
+			rule.Protocol != hcloud.FirewallRuleProtocolTCP ||
+			rule.Port == nil || *rule.Port != kubernetesAPIPort ||
+			isNestedAPIRule(rule) {
+			continue
+		}
+
+		found = true
+
+		for _, source := range rule.SourceIPs {
+			key := source.String()
+			if !seen[key] {
+				seen[key] = true
+
+				sources = append(sources, source)
+			}
 		}
 	}
 
-	return nil, false
+	return sources, found
 }
 
 // withNestedAPIGrants returns baseRules followed by every nested API grant in existingRules.
@@ -170,6 +187,29 @@ func (p *Provider) RevokeNestedAPIPort(
 	}
 
 	return p.setRulesIfChanged(ctx, firewall, rules)
+}
+
+// HasNestedAPIGrant reports whether the KSail-owned firewall of hostCluster admits the API
+// of nestedCluster. The firewall is the only record of a grant. A missing firewall holds none.
+func (p *Provider) HasNestedAPIGrant(
+	ctx context.Context,
+	hostCluster string,
+	nestedCluster string,
+) (bool, error) {
+	if nestedCluster == "" {
+		return false, fmt.Errorf("%w: nested cluster name is required", ErrInvalidNestedAPIGrant)
+	}
+
+	firewall, err := p.ownedHostFirewall(ctx, hostCluster)
+	if errors.Is(err, ErrHostFirewallNotFound) {
+		return false, nil
+	}
+
+	if err != nil {
+		return false, err
+	}
+
+	return len(withoutNestedAPIGrant(firewall.Rules, nestedCluster)) != len(firewall.Rules), nil
 }
 
 // ownedHostFirewall returns the firewall of hostCluster, or ErrHostFirewallNotFound when it

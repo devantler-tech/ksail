@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
-	"sync/atomic"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -16,7 +15,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
@@ -119,6 +117,8 @@ type apiGrantCloud struct {
 	writes     int
 	unowned    bool
 	unattached bool
+	// failFirewallReads makes every firewall read fail, as an unreadable host firewall would.
+	failFirewallReads bool
 }
 
 func newAPIGrantCloud(t *testing.T) *apiGrantCloud {
@@ -174,6 +174,12 @@ func newAPIGrantCloud(t *testing.T) *apiGrantCloud {
 
 func (cloud *apiGrantCloud) writeFirewalls(t *testing.T, writer http.ResponseWriter) {
 	t.Helper()
+
+	if cloud.failFirewallReads {
+		http.Error(writer, "forbidden", http.StatusForbidden)
+
+		return
+	}
 
 	assert.NoError(t, json.NewEncoder(writer).Encode(map[string]any{"firewalls": []map[string]any{{
 		"id": 7, "name": "host-firewall",
@@ -314,28 +320,85 @@ func TestHetznerNodePortFailedDuplicateCreateKeepsExistingGrant(t *testing.T) {
 	require.Len(t, cloud.rules, 3, "the existing cluster's grant is kept")
 }
 
-// Deletion without a Hetzner credential stops when a grant is recorded, and stays a no-op
-// for a host that never received one.
-func TestHetznerNodePortRevokeWithoutCredentialNeedsNoRecordedGrant(t *testing.T) {
+// Deletion without a Hetzner credential stops on a host whose nodes are Hetzner servers,
+// because only the firewall can tell whether a grant exists, and stays a no-op elsewhere.
+func TestHetznerNodePortRevokeWithoutCredentialRefusesHetznerHost(t *testing.T) {
 	t.Parallel()
 
 	cloud := newAPIGrantCloud(t)
-	prov, client := newAPIGrantProviderWithClient(t, cloud, "hcloud://42")
+	prov := newAPIGrantProvider(t, cloud, "hcloud://42")
 	_, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
 	require.NoError(t, err)
-
-	svc, err := client.CoreV1().Services("ksail-demo").
-		Get(t.Context(), kubeprovider.APIServiceName, metav1.GetOptions{})
-	require.NoError(t, err)
-	assert.Equal(t, "host", svc.Annotations[kubeprovider.HetznerAPIGrantAnnotation])
 
 	prov.WithHetznerAPIFirewall(nil)
 	err = prov.RevokeNestedAPIGrant(t.Context(), "ksail-demo")
 	require.ErrorIs(t, err, kubeprovider.ErrHetznerGrantCredentials)
 	require.Len(t, cloud.rules, 3)
 
-	plain := newAPIGrantProvider(t, cloud, "hcloud://42").WithHetznerAPIFirewall(nil)
-	require.NoError(t, plain.RevokeNestedAPIGrant(t.Context(), "ksail-demo"))
+	// A Hetzner host that never granted this namespace still needs the credential to prove it.
+	require.ErrorIs(t,
+		prov.RevokeNestedAPIGrant(t.Context(), "k3k-demo"),
+		kubeprovider.ErrHetznerGrantCredentials)
+
+	other := newAPIGrantProvider(t, cloud, "aws:///zone/i-123", "").WithHetznerAPIFirewall(nil)
+	require.NoError(t, other.RevokeNestedAPIGrant(t.Context(), "ksail-demo"))
+}
+
+// The firewall alone records a grant: rebuilding the API Service without a credential
+// leaves the grant in place, and a later credentialed delete still removes it.
+func TestHetznerNodePortServiceRebuildKeepsGrantRevocable(t *testing.T) {
+	t.Parallel()
+
+	cloud := newAPIGrantCloud(t)
+	prov := newAPIGrantProvider(t, cloud, "hcloud://42")
+	_, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
+	require.NoError(t, err)
+
+	prov.WithHetznerAPIFirewall(nil)
+	_, err = prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
+	require.NoError(t, err)
+	require.Len(t, cloud.rules, 3)
+
+	prov.WithHetznerAPIFirewall(cloud.client)
+	require.NoError(t, prov.RevokeNestedAPIGrant(t.Context(), "ksail-demo"))
+	require.Len(t, cloud.rules, 2)
+}
+
+var errGatewayUnavailable = errors.New("gateway unavailable")
+
+// After compensation removed a failed attempt's grant, a retry's new grant is its own, so
+// a failed retry removes it too.
+func TestHetznerNodePortFailedRetryRemovesItsOwnGrant(t *testing.T) {
+	t.Parallel()
+
+	cloud := newAPIGrantCloud(t)
+	prov := newAPIGrantProvider(t, cloud, "hcloud://42")
+	result, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
+	require.NoError(t, err)
+
+	failure := context.DeadlineExceeded
+	require.ErrorIs(t, result.CleanupOnFailure(t.Context(), failure), failure)
+	require.Len(t, cloud.rules, 2)
+
+	retry, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
+	require.NoError(t, err)
+	require.Len(t, cloud.rules, 3)
+	require.ErrorIs(t, retry.CleanupOnFailure(t.Context(), failure), failure)
+	require.Len(t, cloud.rules, 2, "a failed retry removes its own grant")
+}
+
+// An unreadable host firewall stops exposure before any grant, so no rule is written
+// without knowing whether it predates the attempt.
+func TestHetznerNodePortUnreadableFirewallStopsExposure(t *testing.T) {
+	t.Parallel()
+
+	cloud := newAPIGrantCloud(t)
+	cloud.failFirewallReads = true
+	prov := newAPIGrantProvider(t, cloud, "hcloud://42")
+
+	_, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
+	require.Error(t, err)
+	assert.Zero(t, cloud.writes)
 }
 
 // Moving the API to a load balancer removes the NodePort grant once clients reach the
@@ -406,99 +469,4 @@ func TestHetznerNodePortGatewayFallbackKeepsRunningClusterGrant(t *testing.T) {
 	failure := context.DeadlineExceeded
 	require.ErrorIs(t, duplicate.CleanupOnFailure(t.Context(), failure), failure)
 	require.Len(t, cloud.rules, 3, "the running cluster keeps its grant")
-}
-
-// Rebuilding the API Service must keep the grant record, or deletion without a credential
-// would treat a granted cluster as never granted.
-func TestHetznerNodePortServiceRebuildKeepsGrantRecord(t *testing.T) {
-	t.Parallel()
-
-	cloud := newAPIGrantCloud(t)
-	prov, client := newAPIGrantProviderWithClient(t, cloud, "hcloud://42")
-	_, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
-	require.NoError(t, err)
-
-	prov.WithHetznerAPIFirewall(nil)
-	_, err = prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
-	require.NoError(t, err)
-
-	svc, err := client.CoreV1().Services("ksail-demo").
-		Get(t.Context(), kubeprovider.APIServiceName, metav1.GetOptions{})
-	require.NoError(t, err)
-	assert.Equal(t, "host", svc.Annotations[kubeprovider.HetznerAPIGrantAnnotation])
-	require.ErrorIs(t,
-		prov.RevokeNestedAPIGrant(t.Context(), "ksail-demo"),
-		kubeprovider.ErrHetznerGrantCredentials)
-}
-
-var errGatewayUnavailable = errors.New("gateway unavailable")
-
-// Compensation clears the grant record with the grant, so a retry's new grant is not taken
-// for an earlier one and keeps its own cleanup.
-func TestHetznerNodePortFailedCreateClearsGrantRecord(t *testing.T) {
-	t.Parallel()
-
-	cloud := newAPIGrantCloud(t)
-	prov, client := newAPIGrantProviderWithClient(t, cloud, "hcloud://42")
-	result, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
-	require.NoError(t, err)
-
-	failure := context.DeadlineExceeded
-	require.ErrorIs(t, result.CleanupOnFailure(t.Context(), failure), failure)
-
-	svc, err := client.CoreV1().Services("ksail-demo").
-		Get(t.Context(), kubeprovider.APIServiceName, metav1.GetOptions{})
-	require.NoError(t, err)
-	assert.Empty(t, svc.Annotations[kubeprovider.HetznerAPIGrantAnnotation])
-
-	retry, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
-	require.NoError(t, err)
-	require.ErrorIs(t, retry.CleanupOnFailure(t.Context(), failure), failure)
-	require.Len(t, cloud.rules, 2, "a failed retry removes its own grant")
-}
-
-// When a grant is recorded but the host cannot be proven from the nodes, revocation reports
-// it instead of letting deletion remove the record while the rule stays.
-func TestHetznerNodePortRevokeRefusesUnresolvedRecordedHost(t *testing.T) {
-	t.Parallel()
-
-	cloud := newAPIGrantCloud(t)
-	prov, client := newAPIGrantProviderWithClient(t, cloud, "hcloud://42")
-	_, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
-	require.NoError(t, err)
-
-	node, err := client.CoreV1().Nodes().Get(t.Context(), "n1", metav1.GetOptions{})
-	require.NoError(t, err)
-
-	node.Spec.ProviderID = ""
-	_, err = client.CoreV1().Nodes().Update(t.Context(), node, metav1.UpdateOptions{})
-	require.NoError(t, err)
-
-	err = prov.RevokeNestedAPIGrant(t.Context(), "ksail-demo")
-	require.ErrorIs(t, err, kubeprovider.ErrHetznerGrantUnresolved)
-	require.Len(t, cloud.rules, 3)
-}
-
-// An unreadable grant record stops exposure before any grant, so no rule is written
-// without its cleanup.
-func TestHetznerNodePortUnreadableRecordStopsExposure(t *testing.T) {
-	t.Parallel()
-
-	cloud := newAPIGrantCloud(t)
-	prov, client := newAPIGrantProviderWithClient(t, cloud, "hcloud://42")
-	// Only the first read, the grant record, fails; later Service reads succeed.
-	var failed atomic.Bool
-
-	client.PrependReactor("get", "services",
-		func(k8stesting.Action) (bool, runtime.Object, error) {
-			if failed.CompareAndSwap(false, true) {
-				return true, nil, errGatewayUnavailable
-			}
-
-			return false, nil, nil
-		})
-
-	_, err := prov.ResolveExposure(t.Context(), nil, apiGrantSpec())
-	require.ErrorIs(t, err, errGatewayUnavailable)
-	assert.Zero(t, cloud.writes)
 }
