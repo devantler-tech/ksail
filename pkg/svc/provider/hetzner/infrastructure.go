@@ -556,14 +556,41 @@ func (p *Provider) deleteInfrastructure(ctx context.Context, clusterName string)
 		return err
 	}
 
-	// Delete load balancers before the network — LBs attached to the network
-	// must be removed first, otherwise network deletion will fail.
-	err = p.deleteLoadBalancers(ctx, clusterName)
+	return p.deleteLoadBalancersAndNetwork(ctx, clusterName)
+}
+
+// deleteLoadBalancersAndNetwork deletes the cluster's load balancers, then its
+// network. Load balancers go first because the network cannot be deleted while
+// they are attached. When a load balancer KSail does not own stays attached, the
+// network is kept too: deleting it would detach that load balancer from its
+// private network, which changes a resource KSail does not own.
+func (p *Provider) deleteLoadBalancersAndNetwork(ctx context.Context, clusterName string) error {
+	keptLoadBalancers, err := p.deleteLoadBalancers(ctx, clusterName)
 	if err != nil {
 		return err
 	}
 
+	if len(keptLoadBalancers) > 0 {
+		p.reportNetworkKept(clusterName+NetworkSuffix, keptLoadBalancers)
+
+		return nil
+	}
+
 	return p.deleteNetwork(ctx, clusterName)
+}
+
+// reportNetworkKept tells the user the cluster's network was left in place
+// because load balancers KSail does not own are still attached to it.
+func (p *Provider) reportNetworkKept(networkName string, loadBalancers []string) {
+	if p.logWriter == nil {
+		return
+	}
+
+	_, _ = fmt.Fprintf(
+		p.logWriter,
+		"Keeping network %q: load balancers not owned by KSail are still attached: %s\n",
+		networkName, strings.Join(loadBalancers, ", "),
+	)
 }
 
 // deletePlacementGroup deletes the placement group for a cluster if it exists.
@@ -588,11 +615,18 @@ func (p *Provider) deletePlacementGroup(ctx context.Context, clusterName string)
 		},
 	)
 	if err != nil {
-		// Log error but don't fail - resource may not exist
-		return nil //nolint:nilerr // Ignoring lookup error - resource may not exist
+		// GetByName answers (nil, nil) for an absent group, so an error here is a
+		// real failure: surface it instead of silently leaving the group behind.
+		return err
 	}
 
 	if placementGroup == nil {
+		return nil
+	}
+
+	if !ownedByCluster(placementGroup.Labels, clusterName) {
+		p.reportRetained("placement group", placementGroupName, clusterName)
+
 		return nil
 	}
 
@@ -606,36 +640,10 @@ func (p *Provider) deletePlacementGroup(ctx context.Context, clusterName string)
 
 // deleteFirewallWithRetry deletes the firewall for a cluster with retry logic.
 // Retries are needed because firewall may still be attached during server deletion.
+// A same-named firewall KSail does not own is left in place.
 func (p *Provider) deleteFirewallWithRetry(ctx context.Context, clusterName string) error {
 	firewallName := clusterName + FirewallSuffix
 
-	return retryDelete(
-		ctx,
-		MaxDeleteRetries,
-		DefaultDeleteRetryDelay,
-		"context cancelled while retrying firewall deletion",
-		func() (bool, error) {
-			return p.attemptFirewallDelete(ctx, firewallName)
-		},
-		func(lastErr error) error {
-			return fmt.Errorf(
-				"failed to delete firewall %s after %d attempts: %w",
-				firewallName,
-				MaxDeleteRetries,
-				lastErr,
-			)
-		},
-	)
-}
-
-// attemptFirewallDelete performs one firewall lookup-and-delete attempt. It
-// returns done=true on success or when the firewall is absent / its lookup
-// fails (best-effort: the resource may not exist), and (false, err) when the
-// delete call itself fails and should be retried.
-func (p *Provider) attemptFirewallDelete(
-	ctx context.Context,
-	firewallName string,
-) (bool, error) {
 	firewall, err := retryTransientHetznerOperation(
 		ctx,
 		DefaultTransientRetryCount,
@@ -649,14 +657,49 @@ func (p *Provider) attemptFirewallDelete(
 			return firewall, nil
 		},
 	)
-	if err != nil || firewall == nil {
-		//nolint:nilerr // Ignoring lookup error - resource may not exist.
-		return true, nil // Resource may not exist; treat as done.
+	if err != nil {
+		return err
 	}
 
+	if firewall == nil {
+		return nil
+	}
+
+	if !ownedByCluster(firewall.Labels, clusterName) {
+		p.reportRetained("firewall", firewallName, clusterName)
+
+		return nil
+	}
+
+	return retryDelete(
+		ctx,
+		MaxDeleteRetries,
+		DefaultDeleteRetryDelay,
+		"context cancelled while retrying firewall deletion",
+		func() (bool, error) {
+			return p.attemptFirewallDelete(ctx, firewall)
+		},
+		func(lastErr error) error {
+			return fmt.Errorf(
+				"failed to delete firewall %s after %d attempts: %w",
+				firewallName,
+				MaxDeleteRetries,
+				lastErr,
+			)
+		},
+	)
+}
+
+// attemptFirewallDelete performs one firewall delete attempt. It returns
+// done=true on success or when the firewall is already gone, and (false, err)
+// when the delete call fails and should be retried.
+func (p *Provider) attemptFirewallDelete(
+	ctx context.Context,
+	firewall *hcloud.Firewall,
+) (bool, error) {
 	_, delErr := p.client.Firewall.Delete(ctx, firewall)
-	if delErr == nil {
-		return true, nil // Successfully deleted.
+	if delErr == nil || hcloud.IsError(delErr, hcloud.ErrorCodeNotFound) {
+		return true, nil // Deleted, or already gone.
 	}
 
 	return false, delErr //nolint:wrapcheck // identity preserved
@@ -698,6 +741,20 @@ func (p *Provider) deleteNetwork(ctx context.Context, clusterName string) error 
 		return nil
 	}
 
+	if !ownedByCluster(network.Labels, clusterName) {
+		p.reportRetained("network", networkName, clusterName)
+
+		return nil
+	}
+
+	// Re-check attachments on this fresh read: a load balancer attached after the
+	// owned ones were deleted would be detached by deleting the network.
+	if len(network.LoadBalancers) > 0 {
+		p.reportNetworkKept(networkName, loadBalancerIDs(network.LoadBalancers))
+
+		return nil
+	}
+
 	_, deleteErr := p.client.Network.Delete(ctx, network)
 	if deleteErr != nil {
 		return fmt.Errorf("failed to delete network %s: %w", networkName, deleteErr)
@@ -711,17 +768,22 @@ func (p *Provider) deleteNetwork(ctx context.Context, clusterName string) error 
 // Kubernetes Service objects of type LoadBalancer.
 //
 // Load balancers must be deleted before the network, otherwise network deletion
-// will fail because the network still has attached resources.
-func (p *Provider) deleteLoadBalancers(ctx context.Context, clusterName string) error {
+// will fail because the network still has attached resources. It returns the
+// names of the attached load balancers it kept because KSail does not own them.
+func (p *Provider) deleteLoadBalancers(ctx context.Context, clusterName string) ([]string, error) {
 	// Look up the network with transient-retry to avoid silently skipping LB
 	// cleanup on a transient API error (which could leave billed resources).
 	network, err := p.getNetworkByClusterName(ctx, clusterName)
 	if err != nil {
-		return fmt.Errorf("failed to look up network for LB cleanup: %w", err)
+		return nil, fmt.Errorf("failed to look up network for LB cleanup: %w", err)
 	}
 
-	if network == nil {
-		return nil
+	// Load balancers are created by hcloud-ccm, not by KSail. One is deleted only
+	// when it sits on this cluster's KSail-owned network AND carries either the
+	// hcloud-ccm service label or this cluster's KSail labels. deleteNetwork
+	// reports a foreign network, so it is not reported here too.
+	if network == nil || !ownedByCluster(network.Labels, clusterName) {
+		return nil, nil
 	}
 
 	loadBalancers, err := retryTransientHetznerOperation(
@@ -733,21 +795,31 @@ func (p *Provider) deleteLoadBalancers(ctx context.Context, clusterName string) 
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("failed to list load balancers: %w", err)
+		return nil, fmt.Errorf("failed to list load balancers: %w", err)
 	}
 
-	for _, lb := range loadBalancers {
-		if !lbInNetwork(lb, network.Name) {
+	var kept []string
+
+	for _, loadBalancer := range loadBalancers {
+		if !lbInNetwork(loadBalancer, network.ID) {
 			continue
 		}
 
-		deleteErr := p.deleteLoadBalancerWithRetry(ctx, lb)
+		if !loadBalancerOwnedByCluster(loadBalancer.Labels, clusterName) {
+			p.reportRetained("load balancer", loadBalancer.Name, clusterName)
+
+			kept = append(kept, loadBalancer.Name)
+
+			continue
+		}
+
+		deleteErr := p.deleteLoadBalancerWithRetry(ctx, loadBalancer)
 		if deleteErr != nil {
-			return deleteErr
+			return nil, deleteErr
 		}
 	}
 
-	return nil
+	return kept, nil
 }
 
 // deleteLoadBalancerWithRetry deletes a single load balancer with retry logic.
@@ -794,11 +866,23 @@ func (p *Provider) deleteLoadBalancerWithRetry(
 	)
 }
 
-// lbInNetwork reports whether the given load balancer is attached to the named
-// private network.
-func lbInNetwork(lb *hcloud.LoadBalancer, networkName string) bool {
+// loadBalancerIDs names load balancers by ID: a network lists its attached load
+// balancers by ID only.
+func loadBalancerIDs(loadBalancers []*hcloud.LoadBalancer) []string {
+	ids := make([]string, 0, len(loadBalancers))
+	for _, loadBalancer := range loadBalancers {
+		ids = append(ids, fmt.Sprintf("ID %d", loadBalancer.ID))
+	}
+
+	return ids
+}
+
+// lbInNetwork reports whether the given load balancer is attached to the given
+// private network. It matches by ID: the API names a load balancer's networks
+// by ID only, so their Name is always empty in a list response.
+func lbInNetwork(lb *hcloud.LoadBalancer, networkID int64) bool {
 	for _, privateNet := range lb.PrivateNet {
-		if privateNet.Network != nil && privateNet.Network.Name == networkName {
+		if privateNet.Network != nil && privateNet.Network.ID == networkID {
 			return true
 		}
 	}
