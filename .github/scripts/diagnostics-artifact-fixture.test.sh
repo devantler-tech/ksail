@@ -94,7 +94,9 @@ read -r reads <"${FIXTURE_READS:?}"
 printf '%s\n' "$((reads + 1))" >"$FIXTURE_READS"
 [[ "${FIXTURE_API_STATUS:-0}" == 0 ]] || exit 1
 if ((reads < FIXTURE_EMPTY_READS)); then
-	printf '%s\n' '{"total_count":0,"artifacts":[]}'
+	empty=${FIXTURE_EMPTY_REPLY:-}
+	[[ -n "$empty" ]] || empty='{"total_count":0,"artifacts":[]}'
+	printf '%s\n' "$empty"
 	exit 0
 fi
 cat "${FIXTURE_REPLY:?}"
@@ -116,6 +118,7 @@ verify() {
 	env PATH="$tmp/bin:$PATH" FIXTURE_REPLY="$tmp/reply.json" \
 		FIXTURE_READS="$tmp/reads" FIXTURE_DELAYS="$tmp/delays" \
 		FIXTURE_EMPTY_READS="${FIXTURE_EMPTY_READS:-0}" \
+		FIXTURE_EMPTY_REPLY="${FIXTURE_EMPTY_REPLY:-}" \
 		FIXTURE_MODE="$1" PROBE_OUTCOME=failure TRIAL_OUTCOME=failure \
 		SAVE_OUTCOME="$2" UPLOAD_OUTCOME="$2" EXPECTED_HEAD="$head" \
 		GITHUB_REPOSITORY=fixture/fixture GITHUB_RUN_ID=123 GITHUB_RUN_ATTEMPT=1 \
@@ -130,6 +133,18 @@ FIXTURE_EMPTY_READS=1 verify candidate success
 printf '{"total_count":0,"artifacts":[]}' >"$tmp/reply.json"
 if verify candidate success >"$tmp/rejected.log" 2>&1; then
 	echo 'persistent absence was accepted for a successful upload' >&2
+	exit 1
+fi
+[[ "$(cat "$tmp/reads")" == 4 ]]
+printf '1\n2\n4\n' | cmp - "$tmp/delays"
+grep -q 'artifact did not become visible after 4 reads' "$tmp/rejected.log"
+# The count can reach 1 before the artifact is listed (#8475): wait, then verify.
+cp "$tmp/valid.json" "$tmp/reply.json"
+FIXTURE_EMPTY_READS=1 FIXTURE_EMPTY_REPLY='{"total_count":1,"artifacts":[]}' verify candidate success
+[[ "$(cat "$tmp/reads")" == 2 && "$(cat "$tmp/delays")" == 1 ]]
+printf '{"total_count":1,"artifacts":[]}' >"$tmp/reply.json"
+if verify candidate success >"$tmp/rejected.log" 2>&1; then
+	echo 'a count with no listed artifact was accepted' >&2
 	exit 1
 fi
 [[ "$(cat "$tmp/reads")" == 4 ]]
@@ -154,7 +169,7 @@ for mutation in \
 	'.artifacts[0].size_in_bytes = 0' \
 	'.artifacts[0].size_in_bytes = -1' \
 	'.artifacts[0].size_in_bytes = 1.5' \
-	'.artifacts = []'; do
+	'.total_count = 2 | .artifacts = []'; do
 	jq "$mutation" "$tmp/valid.json" >"$tmp/reply.json"
 	if verify candidate success >"$tmp/rejected.log" 2>&1; then
 		echo "unsafe artifact evidence accepted: $mutation" >&2
