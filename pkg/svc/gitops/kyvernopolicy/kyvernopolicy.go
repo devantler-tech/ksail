@@ -241,6 +241,13 @@ func (e *Engine) EvaluateAs(
 	resource := unstructured.Unstructured{Object: doc}
 	requestInfo := identity.requestInfo()
 
+	// With no identity the policy context gets no admission info at all, as
+	// before identities could be declared, so its variables stay unset.
+	var admissionInfo *kyvernov2.RequestInfo
+	if identity != nil {
+		admissionInfo = &requestInfo
+	}
+
 	var violations []Violation
 
 	for _, original := range e.policies {
@@ -274,7 +281,7 @@ func (e *Engine) EvaluateAs(
 		}
 
 		policyContext, err := policycontext.NewPolicyContext(
-			e.jp, resource, kyvernov1.Create, &requestInfo, e.config,
+			e.jp, resource, kyvernov1.Create, admissionInfo, e.config,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("build policy context for %s: %w", policyName(policy), err)
