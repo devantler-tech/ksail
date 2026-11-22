@@ -332,3 +332,104 @@ func TestDeleteLoadBalancersAndNetwork_KeepsNetworkWithForeignLoadBalancer(t *te
 		})
 	}
 }
+
+// newCombinedCleanupServer serves one owned network whose load_balancers field
+// is attachedLBs, an empty load balancer list, and counts network deletes. When
+// failPath is "/networks" or "/load_balancers", that lookup answers forbidden.
+func newCombinedCleanupServer(
+	t *testing.T,
+	attachedLBs, failPath string,
+	networkDeletes *atomic.Int32,
+) *httptest.Server {
+	t.Helper()
+
+	forbidden := func(responseWriter http.ResponseWriter) {
+		responseWriter.Header().Set("Content-Type", "application/json")
+		responseWriter.WriteHeader(http.StatusForbidden)
+		_, _ = responseWriter.Write([]byte(forbiddenReply))
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/networks", func(responseWriter http.ResponseWriter, _ *http.Request) {
+		if failPath == "/networks" {
+			forbidden(responseWriter)
+
+			return
+		}
+
+		responseWriter.Header().Set("Content-Type", "application/json")
+		_, _ = responseWriter.Write([]byte(`{"networks":[{"id":11,"name":"test-cluster-network",` +
+			`"ip_range":"10.0.0.0/16","subnets":[],"routes":[],"servers":[],` +
+			`"load_balancers":` + attachedLBs + `,"labels":` + ownedLabels + `}]}`))
+	})
+	mux.HandleFunc("/load_balancers", func(responseWriter http.ResponseWriter, _ *http.Request) {
+		if failPath == "/load_balancers" {
+			forbidden(responseWriter)
+
+			return
+		}
+
+		responseWriter.Header().Set("Content-Type", "application/json")
+		_, _ = responseWriter.Write([]byte(`{"load_balancers":[],` +
+			`"meta":{"pagination":{"page":1,"per_page":50,"total_entries":0}}}`))
+	})
+	mux.HandleFunc("/networks/11", func(responseWriter http.ResponseWriter, request *http.Request) {
+		if request.Method == http.MethodDelete {
+			networkDeletes.Add(1)
+		}
+
+		responseWriter.WriteHeader(http.StatusNoContent)
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	return srv
+}
+
+// TestDeleteLoadBalancersAndNetwork_RechecksAttachmentsBeforeNetworkDelete
+// proves that a load balancer still attached when the network is re-read (for
+// example one attached while the owned ones were being deleted) keeps the
+// network, even though the earlier load balancer list did not include it.
+func TestDeleteLoadBalancersAndNetwork_RechecksAttachmentsBeforeNetworkDelete(t *testing.T) {
+	t.Parallel()
+
+	var networkDeletes atomic.Int32
+
+	srv := newCombinedCleanupServer(t, `[8]`, "", &networkDeletes)
+	prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
+
+	var out bytes.Buffer
+	prov.SetLogWriter(&out)
+
+	require.NoError(t, prov.DeleteLoadBalancersAndNetworkForTest(t.Context(), ownershipCluster))
+	assert.Zero(t, networkDeletes.Load())
+	assert.Contains(t, out.String(), `Keeping network "test-cluster-network"`)
+	assert.Contains(t, out.String(), "ID 8")
+}
+
+// TestDeleteLoadBalancersAndNetwork_LookupErrorsFail proves that a failed
+// network lookup or load balancer list reaches the caller and leaves the
+// network in place.
+func TestDeleteLoadBalancersAndNetwork_LookupErrorsFail(t *testing.T) {
+	t.Parallel()
+
+	for name, failPath := range map[string]string{
+		"network lookup fails":     "/networks",
+		"load balancer list fails": "/load_balancers",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var networkDeletes atomic.Int32
+
+			srv := newCombinedCleanupServer(t, `[]`, failPath, &networkDeletes)
+			prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
+
+			err := prov.DeleteLoadBalancersAndNetworkForTest(t.Context(), ownershipCluster)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "insufficient permissions")
+			assert.Zero(t, networkDeletes.Load())
+		})
+	}
+}

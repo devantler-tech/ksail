@@ -747,6 +747,14 @@ func (p *Provider) deleteNetwork(ctx context.Context, clusterName string) error 
 		return nil
 	}
 
+	// Re-check attachments on this fresh read: a load balancer attached after the
+	// owned ones were deleted would be detached by deleting the network.
+	if len(network.LoadBalancers) > 0 {
+		p.reportNetworkKept(networkName, loadBalancerIDs(network.LoadBalancers))
+
+		return nil
+	}
+
 	_, deleteErr := p.client.Network.Delete(ctx, network)
 	if deleteErr != nil {
 		return fmt.Errorf("failed to delete network %s: %w", networkName, deleteErr)
@@ -856,6 +864,17 @@ func (p *Provider) deleteLoadBalancerWithRetry(
 			)
 		},
 	)
+}
+
+// loadBalancerIDs names load balancers by ID: a network lists its attached load
+// balancers by ID only.
+func loadBalancerIDs(loadBalancers []*hcloud.LoadBalancer) []string {
+	ids := make([]string, 0, len(loadBalancers))
+	for _, loadBalancer := range loadBalancers {
+		ids = append(ids, fmt.Sprintf("ID %d", loadBalancer.ID))
+	}
+
+	return ids
 }
 
 // lbInNetwork reports whether the given load balancer is attached to the given
