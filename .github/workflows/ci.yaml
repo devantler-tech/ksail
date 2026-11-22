@@ -301,6 +301,7 @@ jobs:
               - 'internal/depcontract/**'
               - 'pkg/svc/installer/cni/cilium/Dockerfile'
               - 'pkg/svc/installer/kyverno/Dockerfile'
+              - 'pkg/fsutil/configmanager/talos/Dockerfile'
               - '.github/dependabot.yaml'
               - 'go.mod'
               - 'go.sum'
