@@ -218,6 +218,11 @@ func NewBase(
 		return nil, fmt.Errorf("create Hetzner provider: %w", err)
 	}
 
+	// Cluster delete reports the resources it keeps because KSail does not own
+	// them; without a writer those notices are dropped and an incomplete cleanup
+	// looks like a complete one.
+	provider.SetLogWriter(os.Stdout)
+
 	return &Base{
 		Infra:          provider,
 		Servers:        provider,
