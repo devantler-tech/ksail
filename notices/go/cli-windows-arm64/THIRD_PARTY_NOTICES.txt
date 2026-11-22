@@ -10396,9 +10396,9 @@ Material: m2dfa04ff0a8ac0f4 (license), SHA-256 5e3400b93bbb099e83e52bab885e74417
 Files: LICENSE.txt
 Material: m6d022f65d93b5a8f (copyright-header), SHA-256 2208ea3e94076ef5c348b07c4e56358443a03e83822bdee4d094629b5a9f4b32
 
-Component: github.com/spf13/pflag@v1.0.10
-Source: https://proxy.golang.org/github.com/spf13/pflag/@v/v1.0.10.zip
-Selected Go source checksum: h1:4EBh2KAYBwaONj6b2Ye1GiHfwjqyROoF4RwYO+vPwFk=
+Component: github.com/spf13/pflag@v1.1.0
+Source: https://proxy.golang.org/github.com/spf13/pflag/@v/v1.1.0.zip
+Selected Go source checksum: h1:6W6MbVUrnMb8PEhjkqwsVLY7ryuzRfFHF4mQd7L94ag=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:

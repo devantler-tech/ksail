@@ -22,7 +22,7 @@ Flags:
   -d, --distribution Distribution                                 Kubernetes distribution to use
       --distribution-config string                                Configuration file for the distribution
       --distribution-version string                               Distribution version to deploy and reconcile toward (Talos OS version). When unset KSail follows the latest supported version; set it to pin a specific version. Other distributions carry their version in the distribution config.
-  -f, --force                                                     Overwrite existing files
+  -f, --force[=true|false]                                        Overwrite existing files
   -g, --gitops-engine GitOpsEngine                                GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)
       --image-verification ImageVerification                      Image verification (Talos: scaffold ImageVerificationConfig template; Vanilla/Kind: inject containerd verifier plugin patch; requires verifier binaries and typically policy to be present in the node image bin_dir; K3s/K3d: scaffold containerd config template with image verifier plugin and mount into node containers; requires verifier binaries and typically policy to be present in the node image bin_dir; Disabled: skip)
       --import-images string                                      Path to tar archive with container images to import after cluster creation but before component installation
@@ -35,7 +35,7 @@ Flags:
       --mirror-registry strings                                   Configure mirror registries with optional authentication. Format: [user:pass@]host[=upstream]. Credentials support environment variables using ${VAR} syntax (quote placeholders so KSail can expand them). Examples: docker.io=https://registry-1.docker.io, '${USER}:${TOKEN}@ghcr.io=https://ghcr.io'
       --multi-cluster string                                      Scaffold a multi-cluster source layout (clusters/base/ + clusters/<env>/) with the given initial environment name; the generated ksail.yaml points its kustomizationFile at the environment overlay
   -n, --name string                                               Cluster name used for container names, registry names, and kubeconfig context
-      --no-devcontainer                                           Skip scaffolding .devcontainer/devcontainer.json
+      --no-devcontainer[=true|false]                              Skip scaffolding .devcontainer/devcontainer.json
       --node-autoscaler-enabled NodeAutoscalerEnabled[=Enabled]   Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts; other distributions currently ignore this setting)
       --node-autoscaling NodeAutoscaling                          [Deprecated: use autoscaler.node.enabled instead] Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts; other distributions currently ignore this setting)
       --oidc-ca-file string                                       Path to CA certificate for self-signed OIDC providers
@@ -53,8 +53,8 @@ Flags:
       --workers int32                                             Number of worker nodes
 
 Global Flags:
-      --benchmark       Show per-activity benchmark output
-      --config string   Path to config file (default: ksail.yaml found via directory traversal)
-      --experimental    Enable experimental (unstable) commands and features
+      --benchmark[=true|false]      Show per-activity benchmark output
+      --config string               Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental[=true|false]   Enable experimental (unstable) commands and features
 
 ```
