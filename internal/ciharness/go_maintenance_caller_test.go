@@ -434,36 +434,40 @@ func goMaintenanceInputMutations() []goMaintenanceMutation {
 			job["uses"] = goMaintenanceInputDefaultRevision
 			goMaintenanceMap(t, job, "with")["maintenance-default-branch"] = "true"
 		}, "maintenance must be enabled"},
-		{"retired maintenance input passed", func(t *testing.T, job map[string]any) {
-			t.Helper()
+	}
+}
 
-			job["uses"] = goMaintenanceInputRetiredRevision
-			goMaintenanceMap(t, job, "with")["maintenance-default-branch"] = true
-		}, "maintenance-default-branch is retired"},
-		{"retired input passed at latest revision", func(t *testing.T, job map[string]any) {
-			t.Helper()
+// goMaintenanceRetiredInputMutations passes the retired maintenance input at
+// each reviewed revision that no longer accepts it.
+func goMaintenanceRetiredInputMutations() []goMaintenanceMutation {
+	revisions := []struct{ name, uses string }{
+		{"retired maintenance input passed", goMaintenanceInputRetiredRevision},
+		{"retired input passed at latest revision", goMaintenanceInputLatestRevision},
+		{"retired input at headroom revision", goMaintenanceInputHeadroomRevision},
+		{"retired input at signed-fix pin revision", goMaintenanceInputSignedFixPinRevision},
+		{"retired input at scanner retry revision", goMaintenanceInputScannerRetryRevision},
+	}
 
-			job["uses"] = goMaintenanceInputLatestRevision
-			goMaintenanceMap(t, job, "with")["maintenance-default-branch"] = true
-		}, "maintenance-default-branch is retired"},
-		{"retired input at headroom revision", func(t *testing.T, job map[string]any) {
-			t.Helper()
+	mutations := make([]goMaintenanceMutation, 0, len(revisions))
 
-			job["uses"] = goMaintenanceInputHeadroomRevision
-			goMaintenanceMap(t, job, "with")["maintenance-default-branch"] = true
-		}, "maintenance-default-branch is retired"},
-		{"retired input at signed-fix pin revision", func(t *testing.T, job map[string]any) {
-			t.Helper()
+	for _, revision := range revisions {
+		mutations = append(mutations, goMaintenanceMutation{
+			revision.name,
+			func(t *testing.T, job map[string]any) {
+				t.Helper()
 
-			job["uses"] = goMaintenanceInputSignedFixPinRevision
-			goMaintenanceMap(t, job, "with")["maintenance-default-branch"] = true
-		}, "maintenance-default-branch is retired"},
-		{"retired input at scanner retry revision", func(t *testing.T, job map[string]any) {
-			t.Helper()
+				job["uses"] = revision.uses
+				goMaintenanceMap(t, job, "with")["maintenance-default-branch"] = true
+			},
+			"maintenance-default-branch is retired",
+		})
+	}
 
-			job["uses"] = goMaintenanceInputScannerRetryRevision
-			goMaintenanceMap(t, job, "with")["maintenance-default-branch"] = true
-		}, "maintenance-default-branch is retired"},
+	return mutations
+}
+
+func goMaintenanceSignedFixMutations() []goMaintenanceMutation {
+	return []goMaintenanceMutation{
 		{"signed fixes omitted", func(t *testing.T, job map[string]any) {
 			t.Helper()
 
@@ -523,6 +527,8 @@ func TestGoMaintenanceCallerRejectsBoundaryWidening(t *testing.T) {
 	contents := readRepoFile(t, ".github/workflows/ci.yaml")
 
 	cases := append(goMaintenanceAdmissionMutations(), goMaintenanceInputMutations()...)
+	cases = append(cases, goMaintenanceRetiredInputMutations()...)
+	cases = append(cases, goMaintenanceSignedFixMutations()...)
 	cases = append(cases, goMaintenanceEnvelopeMutations()...)
 	cases = append(cases, goMaintenanceIdentityMutations()...)
 
