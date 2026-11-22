@@ -24,7 +24,7 @@ Available Commands:
   rotate      Rotate data keys for SOPS-encrypted files
 
 Flags:
-  -h, --help   help for cipher
+  -h, --help[=true|false]   help for cipher
 
 Use "cipher [command] --help" for more information about a command.
 
@@ -54,10 +54,10 @@ Usage:
   cipher decrypt [file] [flags]
 
 Flags:
-  -e, --extract string   extract a specific key from the decrypted file (JSONPath format)
-  -h, --help             help for decrypt
-      --ignore-mac       ignore Message Authentication Code (MAC) check
-  -o, --output string    output file path (default: stdout)
+  -e, --extract string            extract a specific key from the decrypted file (JSONPath format)
+  -h, --help[=true|false]         help for decrypt
+      --ignore-mac[=true|false]   ignore Message Authentication Code (MAC) check
+  -o, --output string             output file path (default: stdout)
 
 ---
 
@@ -90,10 +90,10 @@ Usage:
   cipher edit <file> [flags]
 
 Flags:
-      --editor string      editor command to use (e.g., 'code --wait', 'vim', 'nano')
-  -h, --help               help for edit
-      --ignore-mac         ignore Message Authentication Code during decryption
-      --show-master-keys   show master keys in the editor
+      --editor string                   editor command to use (e.g., 'code --wait', 'vim', 'nano')
+  -h, --help[=true|false]               help for edit
+      --ignore-mac[=true|false]         ignore Message Authentication Code during decryption
+      --show-master-keys[=true|false]   show master keys in the editor
 
 ---
 
@@ -115,7 +115,7 @@ Usage:
   cipher encrypt <file> [flags]
 
 Flags:
-  -h, --help   help for encrypt
+  -h, --help[=true|false]   help for encrypt
 
 ---
 
@@ -149,7 +149,7 @@ Usage:
   cipher import PRIVATE_KEY [flags]
 
 Flags:
-  -h, --help   help for import
+  -h, --help[=true|false]   help for import
 
 ---
 
@@ -210,12 +210,12 @@ Usage:
   cipher rotate <file/folder> [flags]
 
 Flags:
-      --add-key string        public key to add as a master key recipient
-      --dry-run               show which files would be rotated without making changes
-  -f, --force                 skip confirmation prompt and rotate immediately
-  -h, --help                  help for rotate
-  -r, --recursive             scan subdirectories when target is a folder
-      --remove-key string     public key to remove from master key recipients
-      --set-key stringArray   public key for the complete new recipient set (repeatable); replaces all recipients and re-seals to a fresh data key — mutually exclusive with --add-key/--remove-key
+      --add-key string           public key to add as a master key recipient
+      --dry-run[=true|false]     show which files would be rotated without making changes
+  -f, --force[=true|false]       skip confirmation prompt and rotate immediately
+  -h, --help[=true|false]        help for rotate
+  -r, --recursive[=true|false]   scan subdirectories when target is a folder
+      --remove-key string        public key to remove from master key recipients
+      --set-key stringArray      public key for the complete new recipient set (repeatable); replaces all recipients and re-seals to a fresh data key — mutually exclusive with --add-key/--remove-key
 
 ---

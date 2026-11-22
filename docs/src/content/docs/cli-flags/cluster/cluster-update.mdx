@@ -50,8 +50,8 @@ Flags:
       --distribution-config string                                Configuration file for the distribution
       --distribution-version string                               Distribution version to deploy and reconcile toward (Talos OS version). When unset KSail follows the latest supported version; set it to pin a specific version. Other distributions carry their version in the distribution config.
       --drain-timeout duration                                    Per-node pod-eviction budget for rolling node drains during cluster update (default 10m when unset). Increase it for stateful workloads that need longer to evict gracefully (e.g. Longhorn rebuilds, database failovers). On timeout the update aborts; re-run with --force-drain to delete pods bypassing PodDisruptionBudgets. Talos only.
-      --dry-run                                                   Preview changes without applying them
-      --force-drain                                               Make node drains delete pods directly, bypassing PodDisruptionBudgets, so a rolling reboot/recreate completes even when a budget would block graceful eviction; also authorizes partition wipes (may cause workload disruption or data loss). This is the destructive behavior the old --force implied.
+      --dry-run[=true|false]                                      Preview changes without applying them
+      --force-drain[=true|false]                                  Make node drains delete pods directly, bypassing PodDisruptionBudgets, so a rolling reboot/recreate completes even when a budget would block graceful eviction; also authorizes partition wipes (may cause workload disruption or data loss). This is the destructive behavior the old --force implied.
   -g, --gitops-engine GitOpsEngine                                GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)
       --import-images string                                      Path to tar archive with container images to import after cluster creation but before component installation
   -k, --kubeconfig string                                         Path to kubeconfig file (default "~/.kube/config")
@@ -75,11 +75,11 @@ Flags:
       --policy-engine PolicyEngine                                Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
   -p, --provider Provider                                         Infrastructure provider backend (e.g., Docker)
       --workers int32                                             Number of worker nodes
-  -y, --yes                                                       Skip KSail's interactive confirmation prompts (does NOT bypass PodDisruptionBudgets — use --force-drain for that)
+  -y, --yes[=true|false]                                          Skip KSail's interactive confirmation prompts (does NOT bypass PodDisruptionBudgets — use --force-drain for that)
 
 Global Flags:
-      --benchmark       Show per-activity benchmark output
-      --config string   Path to config file (default: ksail.yaml found via directory traversal)
-      --experimental    Enable experimental (unstable) commands and features
+      --benchmark[=true|false]      Show per-activity benchmark output
+      --config string               Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental[=true|false]   Enable experimental (unstable) commands and features
 
 ```

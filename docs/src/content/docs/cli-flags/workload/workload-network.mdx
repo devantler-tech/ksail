@@ -44,18 +44,18 @@ Usage:
   ksail workload network [flags]
 
 Flags:
-      --cni CNI            Container Network Interface (CNI) to use
-  -f, --follow             Stream flows continuously until interrupted (Ctrl-C)
-      --last uint          Number of most recent flows to fetch (default 20)
-  -n, --namespace string   Filter flows by namespace (source or destination)
-  -o, --output string      Output format: plain, json (default "plain")
-      --pod string         Filter flows by pod-name substring (source or destination)
-      --protocol string    Filter flows by L4 protocol (TCP, UDP, ICMPv4, ICMPv6, SCTP)
-      --server string      Hubble Relay address to query (default "localhost:4245")
+      --cni CNI               Container Network Interface (CNI) to use
+  -f, --follow[=true|false]   Stream flows continuously until interrupted (Ctrl-C)
+      --last uint             Number of most recent flows to fetch (default 20)
+  -n, --namespace string      Filter flows by namespace (source or destination)
+  -o, --output string         Output format: plain, json (default "plain")
+      --pod string            Filter flows by pod-name substring (source or destination)
+      --protocol string       Filter flows by L4 protocol (TCP, UDP, ICMPv4, ICMPv6, SCTP)
+      --server string         Hubble Relay address to query (default "localhost:4245")
 
 Global Flags:
-      --benchmark       Show per-activity benchmark output
-      --config string   Path to config file (default: ksail.yaml found via directory traversal)
-      --experimental    Enable experimental (unstable) commands and features
+      --benchmark[=true|false]      Show per-activity benchmark output
+      --config string               Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental[=true|false]   Enable experimental (unstable) commands and features
 
 ```

@@ -30,20 +30,20 @@ Examples:
     --create-target-namespace=true
 
 Flags:
-      --chart string              Helm chart name or path
-      --chart-version string      Helm chart version
-      --create-target-namespace   create the target namespace if it doesn't exist
-      --depends-on strings        HelmRelease that must be ready before this one
-      --export                    export in YAML format to stdout
-      --interval duration         reconciliation interval (default 1m0s)
-  -n, --namespace string          the namespace scope for this operation (default "flux-system")
-      --source string             source name in format 'Kind/name' or 'Kind/name.namespace'
-      --source-kind string        source kind (HelmRepository, GitRepository, Bucket) (default "HelmRepository")
-      --target-namespace string   namespace to install the Helm release
+      --chart string                           Helm chart name or path
+      --chart-version string                   Helm chart version
+      --create-target-namespace[=true|false]   create the target namespace if it doesn't exist
+      --depends-on strings                     HelmRelease that must be ready before this one
+      --export[=true|false]                    export in YAML format to stdout
+      --interval duration                      reconciliation interval (default 1m0s)
+  -n, --namespace string                       the namespace scope for this operation (default "flux-system")
+      --source string                          source name in format 'Kind/name' or 'Kind/name.namespace'
+      --source-kind string                     source kind (HelmRepository, GitRepository, Bucket) (default "HelmRepository")
+      --target-namespace string                namespace to install the Helm release
 
 Global Flags:
-      --benchmark       Show per-activity benchmark output
-      --config string   Path to config file (default: ksail.yaml found via directory traversal)
-      --experimental    Enable experimental (unstable) commands and features
+      --benchmark[=true|false]      Show per-activity benchmark output
+      --config string               Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental[=true|false]   Enable experimental (unstable) commands and features
 
 ```
