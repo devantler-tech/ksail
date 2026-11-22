@@ -1,6 +1,7 @@
 package hetzner_test
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,9 @@ const (
 	ownershipCluster = "test-cluster"
 	ownedLabels      = `{"ksail.owned":"true","ksail.cluster.name":"test-cluster"}`
 	foreignLabels    = `{"team":"someone-else"}`
+	otherCluster     = `{"ksail.owned":"true","ksail.cluster.name":"other-cluster"}`
+	noClusterLabel   = `{"ksail.owned":"true"}`
+	ccmLBLabels      = `{"hcloud-ccm/service-uid":"0f3a"}`
 	forbiddenReply   = `{"error":{"code":"forbidden","message":"insufficient permissions"}}`
 )
 
@@ -130,17 +134,29 @@ func TestDeleteInfrastructure_OnlyRemovesKSailOwnedResources(t *testing.T) {
 			assert.Equal(t, int32(1), atomic.LoadInt32(&deletes))
 		})
 
-		t.Run(kind+" foreign is kept", func(t *testing.T) {
-			t.Parallel()
+		for variant, labels := range map[string]string{
+			"foreign":              foreignLabels,
+			"other cluster":        otherCluster,
+			"missing cluster name": noClusterLabel,
+		} {
+			t.Run(kind+" "+variant+" is kept and reported", func(t *testing.T) {
+				t.Parallel()
 
-			var deletes int32
+				var deletes int32
 
-			srv := newOwnershipServer(t, res, foreignLabels, false, &deletes)
-			prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
+				srv := newOwnershipServer(t, res, labels, false, &deletes)
+				prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
 
-			require.NoError(t, res.remove(prov, t.Context()))
-			assert.Zero(t, atomic.LoadInt32(&deletes), "a resource KSail does not own must survive")
-		})
+				var out bytes.Buffer
+				prov.SetLogWriter(&out)
+
+				require.NoError(t, res.remove(prov, t.Context()))
+				assert.Zero(t, atomic.LoadInt32(&deletes),
+					"a resource not owned by this cluster must survive")
+				assert.Contains(t, out.String(), "Keeping "+kind)
+				assert.Contains(t, out.String(), `KSail cluster "test-cluster"`)
+			})
+		}
 
 		t.Run(kind+" lookup error fails", func(t *testing.T) {
 			t.Parallel()
@@ -158,65 +174,103 @@ func TestDeleteInfrastructure_OnlyRemovesKSailOwnedResources(t *testing.T) {
 	}
 }
 
-// TestDeleteLoadBalancers_SkipsLoadBalancersOnAForeignNetwork proves that load
-// balancers, which carry no KSail labels, are deleted only when the network
-// they sit on is KSail-owned.
-func TestDeleteLoadBalancers_SkipsLoadBalancersOnAForeignNetwork(t *testing.T) {
+// TestDeleteLoadBalancers_OnlyRemovesClusterLoadBalancers proves that a load
+// balancer is deleted only when it sits on this cluster's KSail-owned network
+// and was created by hcloud-ccm or carries this cluster's KSail labels. Any
+// other load balancer on the network is kept and reported.
+func TestDeleteLoadBalancers_OnlyRemovesClusterLoadBalancers(t *testing.T) {
 	t.Parallel()
 
-	for name, labels := range map[string]string{"owned": ownedLabels, "foreign": foreignLabels} {
+	cases := map[string]struct {
+		network, lb string
+		deleted     bool
+		reported    bool
+	}{
+		"ccm lb on owned network":        {ownedLabels, ccmLBLabels, true, false},
+		"ksail lb on owned network":      {ownedLabels, ownedLabels, true, false},
+		"unlabelled lb on owned network": {ownedLabels, `{}`, false, true},
+		"other cluster lb":               {ownedLabels, otherCluster, false, true},
+		"ccm lb on foreign network":      {foreignLabels, ccmLBLabels, false, false},
+		"ccm lb on other cluster net":    {otherCluster, ccmLBLabels, false, false},
+	}
+
+	for name, testCase := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
 			var deletes atomic.Int32
 
-			mux := http.NewServeMux()
-			mux.HandleFunc("/networks", func(responseWriter http.ResponseWriter, _ *http.Request) {
-				responseWriter.Header().Set("Content-Type", "application/json")
-				_, _ = responseWriter.Write([]byte(`{"networks":[` +
-					ownershipResources()["network"].item(labels) + `]}`))
-			})
-			mux.HandleFunc(
-				"/load_balancers",
-				func(responseWriter http.ResponseWriter, _ *http.Request) {
-					responseWriter.Header().Set("Content-Type", "application/json")
-					_, _ = responseWriter.Write(
-						[]byte(`{"load_balancers":[{"id":7,"name":"svc-lb",` +
-							`"private_net":[{"network":11,"ip":"10.0.0.5"}]}],` +
-							`"meta":{"pagination":{"page":1,"per_page":50,"total_entries":1}}}`),
-					)
-				},
-			)
-			mux.HandleFunc(
-				"/load_balancers/7",
-				func(responseWriter http.ResponseWriter, request *http.Request) {
-					if request.Method == http.MethodDelete {
-						deletes.Add(1)
-					}
-
-					responseWriter.Header().Set("Content-Type", "application/json")
-					_, _ = responseWriter.Write([]byte(loadBalancerDeleteReply))
-				},
-			)
-			mux.HandleFunc("/actions", func(responseWriter http.ResponseWriter, _ *http.Request) {
-				responseWriter.Header().Set("Content-Type", "application/json")
-				_, _ = responseWriter.Write([]byte(
-					`{"actions":[{"id":9,"command":"delete_load_balancer","status":"success"}]}`))
-			})
-
-			srv := httptest.NewServer(mux)
-			t.Cleanup(srv.Close)
+			srv := newLoadBalancerOwnershipServer(t, testCase.network, testCase.lb, &deletes)
 
 			prov := hetzner.NewProvider(newTestHcloudClient(t, srv.URL))
+
+			var out bytes.Buffer
+			prov.SetLogWriter(&out)
 
 			require.NoError(t, prov.DeleteLoadBalancersForTest(t.Context(), ownershipCluster))
 
 			want := int32(0)
-			if name == "owned" {
+			if testCase.deleted {
 				want = 1
 			}
 
 			assert.Equal(t, want, deletes.Load())
+
+			if testCase.reported {
+				assert.Contains(t, out.String(), `Keeping load balancer "svc-lb"`)
+			} else {
+				assert.Empty(t, out.String())
+			}
 		})
 	}
+}
+
+// newLoadBalancerOwnershipServer serves one network with networkLabels and one
+// load balancer attached to it with lbLabels, and counts load balancer deletes.
+func newLoadBalancerOwnershipServer(
+	t *testing.T,
+	networkLabels, lbLabels string,
+	deletes *atomic.Int32,
+) *httptest.Server {
+	t.Helper()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/networks", func(responseWriter http.ResponseWriter, _ *http.Request) {
+		responseWriter.Header().Set("Content-Type", "application/json")
+		_, _ = responseWriter.Write([]byte(`{"networks":[` +
+			ownershipResources()["network"].item(networkLabels) + `]}`))
+	})
+	mux.HandleFunc(
+		"/load_balancers",
+		func(responseWriter http.ResponseWriter, _ *http.Request) {
+			responseWriter.Header().Set("Content-Type", "application/json")
+			_, _ = responseWriter.Write(
+				[]byte(`{"load_balancers":[{"id":7,"name":"svc-lb",` +
+					`"labels":` + lbLabels + `,` +
+					`"private_net":[{"network":11,"ip":"10.0.0.5"}]}],` +
+					`"meta":{"pagination":{"page":1,"per_page":50,"total_entries":1}}}`),
+			)
+		},
+	)
+	mux.HandleFunc(
+		"/load_balancers/7",
+		func(responseWriter http.ResponseWriter, request *http.Request) {
+			if request.Method == http.MethodDelete {
+				deletes.Add(1)
+			}
+
+			responseWriter.Header().Set("Content-Type", "application/json")
+			_, _ = responseWriter.Write([]byte(loadBalancerDeleteReply))
+		},
+	)
+	mux.HandleFunc("/actions", func(responseWriter http.ResponseWriter, _ *http.Request) {
+		responseWriter.Header().Set("Content-Type", "application/json")
+		_, _ = responseWriter.Write([]byte(
+			`{"actions":[{"id":9,"command":"delete_load_balancer","status":"success"}]}`))
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	return srv
 }

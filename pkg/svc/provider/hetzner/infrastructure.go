@@ -593,7 +593,13 @@ func (p *Provider) deletePlacementGroup(ctx context.Context, clusterName string)
 		return err
 	}
 
-	if placementGroup == nil || !ownedByKSail(placementGroup.Labels) {
+	if placementGroup == nil {
+		return nil
+	}
+
+	if !ownedByCluster(placementGroup.Labels, clusterName) {
+		p.reportRetained("placement group", placementGroupName, clusterName)
+
 		return nil
 	}
 
@@ -628,7 +634,13 @@ func (p *Provider) deleteFirewallWithRetry(ctx context.Context, clusterName stri
 		return err
 	}
 
-	if firewall == nil || !ownedByKSail(firewall.Labels) {
+	if firewall == nil {
+		return nil
+	}
+
+	if !ownedByCluster(firewall.Labels, clusterName) {
+		p.reportRetained("firewall", firewallName, clusterName)
+
 		return nil
 	}
 
@@ -698,7 +710,13 @@ func (p *Provider) deleteNetwork(ctx context.Context, clusterName string) error 
 		return fmt.Errorf("failed to look up network for deletion: %w", err)
 	}
 
-	if network == nil || !ownedByKSail(network.Labels) {
+	if network == nil {
+		return nil
+	}
+
+	if !ownedByCluster(network.Labels, clusterName) {
+		p.reportRetained("network", networkName, clusterName)
+
 		return nil
 	}
 
@@ -724,9 +742,11 @@ func (p *Provider) deleteLoadBalancers(ctx context.Context, clusterName string) 
 		return fmt.Errorf("failed to look up network for LB cleanup: %w", err)
 	}
 
-	// Load balancers are created by hcloud-ccm and carry no KSail labels, so
-	// they are trusted only through the KSail-owned network they are attached to.
-	if network == nil || !ownedByKSail(network.Labels) {
+	// Load balancers are created by hcloud-ccm, not by KSail. One is deleted only
+	// when it sits on this cluster's KSail-owned network AND carries either the
+	// hcloud-ccm service label or this cluster's KSail labels. deleteNetwork
+	// reports a foreign network, so it is not reported here too.
+	if network == nil || !ownedByCluster(network.Labels, clusterName) {
 		return nil
 	}
 
@@ -742,12 +762,18 @@ func (p *Provider) deleteLoadBalancers(ctx context.Context, clusterName string) 
 		return fmt.Errorf("failed to list load balancers: %w", err)
 	}
 
-	for _, lb := range loadBalancers {
-		if !lbInNetwork(lb, network.ID) {
+	for _, loadBalancer := range loadBalancers {
+		if !lbInNetwork(loadBalancer, network.ID) {
 			continue
 		}
 
-		deleteErr := p.deleteLoadBalancerWithRetry(ctx, lb)
+		if !loadBalancerOwnedByCluster(loadBalancer.Labels, clusterName) {
+			p.reportRetained("load balancer", loadBalancer.Name, clusterName)
+
+			continue
+		}
+
+		deleteErr := p.deleteLoadBalancerWithRetry(ctx, loadBalancer)
 		if deleteErr != nil {
 			return deleteErr
 		}
