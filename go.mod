@@ -87,7 +87,7 @@ require (
 	github.com/siderolabs/omni/client v1.11.0
 	github.com/siderolabs/talos v1.14.6
 	github.com/siderolabs/talos/pkg/machinery v1.14.6
-	github.com/sigstore/sigstore v1.11.1
+	github.com/sigstore/sigstore v1.11.3
 	github.com/sigstore/sigstore-go v1.3.0
 	github.com/sirupsen/logrus v1.10.2
 	github.com/spf13/cobra v1.10.2
