@@ -1177,7 +1177,7 @@ jobs:
       - name: 🧹 Free disk space
         if: steps.calico-cache.outputs.cache-hit != 'true'
         # Only cold compilation needs the large working-space reclamation.
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@d029d5bb6288a6f5d083c971470deaf8cf756439
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@c927b22ddb47aa32347d5230a9eacde3b0e4df1a
 
       - name: ♻️ Restore Go modules
         if: steps.calico-cache.outputs.cache-hit != 'true'
@@ -2076,7 +2076,7 @@ jobs:
       # This job already waits for the producer. Reuse its exact sealed bytes
       # instead of restoring Go modules or compiling again after cache eviction.
       - name: 📥 Restore KSail binary
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@d029d5bb6288a6f5d083c971470deaf8cf756439
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@c927b22ddb47aa32347d5230a9eacde3b0e4df1a
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2290,7 +2290,7 @@ jobs:
 
       - name: 📥 Restore KSail binary
         # Pin the identical published action until actionlint supports $/ references.
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@d029d5bb6288a6f5d083c971470deaf8cf756439
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@c927b22ddb47aa32347d5230a9eacde3b0e4df1a
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2848,7 +2848,7 @@ jobs:
         with:
           persist-credentials: false
       - name: 🧹 Free runner disk
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@d029d5bb6288a6f5d083c971470deaf8cf756439
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@c927b22ddb47aa32347d5230a9eacde3b0e4df1a
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
