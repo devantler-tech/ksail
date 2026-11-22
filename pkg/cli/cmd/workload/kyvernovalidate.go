@@ -40,9 +40,7 @@ const kyvernoPoliciesFlagDescription = "Evaluate the source's own Kyverno Cluste
 	"namespaced document that declares none is reported as a warning), and other " +
 	"policies.kyverno.io kinds are not " +
 	"supported. A ValidatingPolicy that calls the http library, or a CEL lookup of cluster, " +
-	"registry or global-context data, cannot be evaluated offline. No admission identity is " +
-	"declared, so a rule that reads the requester (request.userInfo, match or exclude " +
-	"subjects, roles or clusterRoles) is not evaluated and is reported as a warning. A classic policy's Kubernetes " +
+	"registry or global-context data, cannot be evaluated offline. A classic policy's Kubernetes " +
 	"apiCall context requires a reviewed --kyverno-api-call-responses fixture; the fixture never " +
 	"enables live cluster or service access, and a missing response fails closed. Namespace labels come " +
 	"from the kustomization's own Namespaces first, then from " +

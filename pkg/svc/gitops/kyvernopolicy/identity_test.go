@@ -10,9 +10,8 @@ import (
 )
 
 const (
-	fluxController  = "system:serviceaccount:flux-system:kustomize-controller"
-	tenantAccount   = "system:serviceaccount:tenant-a:tenant-a"
-	missingIdentity = "no admission identity is declared for this document"
+	fluxController = "system:serviceaccount:flux-system:kustomize-controller"
+	tenantAccount  = "system:serviceaccount:tenant-a:tenant-a"
 )
 
 func fluxIdentity() *kyvernopolicy.Identity {
@@ -82,6 +81,34 @@ spec:
             team: "?*"
 `
 
+// fluxGroupExemptPolicy requires a team label, except for documents a member
+// of the flux-system service account group applies.
+const fluxGroupExemptPolicy = `
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: flux-group-exempt
+spec:
+  validationFailureAction: Enforce
+  rules:
+  - name: check-team
+    match:
+      any:
+      - resources:
+          kinds: ["ConfigMap"]
+    exclude:
+      any:
+      - subjects:
+        - kind: Group
+          name: system:serviceaccounts:flux-system
+    validate:
+      message: "label team is required"
+      pattern:
+        metadata:
+          labels:
+            team: "?*"
+`
+
 // tenantOnlyPolicy selects by subject alone: it applies to whatever the tenant
 // service account applies.
 const tenantOnlyPolicy = `
@@ -107,12 +134,15 @@ spec:
             team: "?*"
 `
 
-// rolesPolicy selects on a Kyverno role, which comes from cluster RBAC.
-const rolesPolicy = `
+// fluxExemptPlatformPolicy requires a team label in platform-labelled
+// namespaces, except for documents Flux's kustomize-controller applies. For a
+// document whose Namespace is not rendered, the exclusion still decides
+// whether the rule could apply.
+const fluxExemptPlatformPolicy = `
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
-  name: by-role
+  name: flux-exempt-platform
 spec:
   validationFailureAction: Enforce
   rules:
@@ -121,7 +151,15 @@ spec:
       any:
       - resources:
           kinds: ["ConfigMap"]
-        clusterRoles: ["tenant-admin"]
+          namespaceSelector:
+            matchLabels:
+              tier: platform
+    exclude:
+      any:
+      - subjects:
+        - kind: ServiceAccount
+          name: kustomize-controller
+          namespace: flux-system
     validate:
       message: "label team is required"
       pattern:
@@ -135,88 +173,86 @@ type identityCase struct {
 	doc         map[string]any
 	identity    *kyvernopolicy.Identity
 	blocking    int
+	errored     int
 	unsupported int
-	message     string
 }
 
+// assertIdentityCase checks the outcome counts. blocking counts policy
+// denials only, never evaluation errors, so an engine that fails to apply the
+// policy cannot pass as one that rejects the requester.
 func assertIdentityCase(t *testing.T, testCase identityCase, violations []kyvernopolicy.Violation) {
 	t.Helper()
 
-	blocking, unsupported := 0, 0
+	blocking, errored, unsupported := 0, 0, 0
 
 	for _, violation := range violations {
-		if violation.Blocking {
+		switch {
+		case violation.Error:
+			errored++
+		case violation.Blocking:
 			blocking++
 		}
 
 		if violation.Unsupported {
 			unsupported++
-
-			assert.False(t, violation.Blocking, "an Unsupported report never blocks")
-			assert.Empty(
-				t,
-				violation.UnknownNamespace,
-				"a missing identity is not a namespace limitation",
-			)
-			assert.Contains(t, violation.Message, testCase.message)
 		}
 	}
 
-	assert.Len(t, violations, blocking+unsupported, "%+v", violations)
+	assert.Len(t, violations, blocking+errored+unsupported, "%+v", violations)
 	assert.Equal(t, testCase.blocking, blocking, "%+v", violations)
+	assert.Equal(t, testCase.errored, errored, "%+v", violations)
 	assert.Equal(t, testCase.unsupported, unsupported, "%+v", violations)
 }
 
 func classicIdentityCases() map[string][]identityCase {
 	unlabelled := configMap("default", nil)
+	unrendered := configMap("dev", nil)
 
 	return map[string][]identityCase{
 		onlyFluxPolicy: {
 			{name: "flux is admitted", doc: unlabelled, identity: fluxIdentity()},
 			{name: "tenant is rejected", doc: unlabelled, identity: tenantIdentity(), blocking: 1},
+			// An empty requester has no username to read, so the rule errors.
+			{name: "no identity is an empty requester", doc: unlabelled, errored: 1},
 			{
-				name: "undeclared identity is named", doc: unlabelled,
-				unsupported: 1, message: missingIdentity,
+				name:     "unselected document passes",
+				doc:      secret("default"),
+				identity: tenantIdentity(),
 			},
-			{name: "unselected document gets no diagnostic", doc: secret("default")},
 		},
 		fluxExemptPolicy: {
 			{name: "excluded subject is admitted", doc: unlabelled, identity: fluxIdentity()},
 			{
-				name:     "other subject is rejected",
-				doc:      unlabelled,
-				identity: tenantIdentity(),
-				blocking: 1,
+				name: "other subject is rejected", doc: unlabelled,
+				identity: tenantIdentity(), blocking: 1,
 			},
+			{name: "no identity is an empty requester", doc: unlabelled, blocking: 1},
+		},
+		fluxGroupExemptPolicy: {
+			{name: "excluded group is admitted", doc: unlabelled, identity: fluxIdentity()},
 			{
-				name: "undeclared identity is named", doc: unlabelled,
-				unsupported: 1, message: missingIdentity,
+				name: "other group is rejected", doc: unlabelled,
+				identity: tenantIdentity(), blocking: 1,
 			},
-			{name: "unselected document gets no diagnostic", doc: secret("default")},
 		},
 		tenantOnlyPolicy: {
 			{name: "unmatched subject is admitted", doc: unlabelled, identity: fluxIdentity()},
 			{
-				name:     "matched subject is rejected",
-				doc:      unlabelled,
-				identity: tenantIdentity(),
-				blocking: 1,
+				name: "matched subject is rejected", doc: unlabelled,
+				identity: tenantIdentity(), blocking: 1,
 			},
-			{
-				name: "subject-only match still names the missing identity", doc: unlabelled,
-				unsupported: 1, message: missingIdentity,
-			},
+			{name: "no identity matches no subject", doc: unlabelled},
 		},
-		rolesPolicy: {
+		fluxExemptPlatformPolicy: {
 			{
-				name: "roles stay unknown under a declared identity", doc: unlabelled,
-				identity: tenantIdentity(), unsupported: 1, message: "unknown offline",
+				name: "pre-match excludes the declared subject", doc: unrendered,
+				identity: fluxIdentity(),
 			},
 			{
-				name: "undeclared identity is named", doc: unlabelled,
-				unsupported: 1, message: missingIdentity,
+				name: "pre-match keeps another subject", doc: unrendered,
+				identity: tenantIdentity(), unsupported: 1,
 			},
-			{name: "unselected document gets no diagnostic", doc: secret("default")},
+			{name: "no identity is an empty requester", doc: unrendered, unsupported: 1},
 		},
 	}
 }
@@ -263,123 +299,22 @@ func TestEvaluate_IsEvaluateAsWithoutIdentity(t *testing.T) {
 	undeclared, err := engine.EvaluateAs(t.Context(), configMap("default", nil), nil)
 	require.NoError(t, err)
 
+	require.Len(t, plain, 1)
 	assert.Equal(t, undeclared, plain)
-}
 
-// A rule that reads the requester only alongside one that does not must not
-// hide the other rule's result.
-func TestEvaluateAs_ClassicIdentityRuleKeepsOtherRules(t *testing.T) {
-	t.Parallel()
+	cel := celEngine(t, nil, validatingPolicy(t, sprintf(
+		onlyFluxCELPolicy,
+		"request.userInfo.username == '"+fluxController+"'",
+	)))
 
-	mixed := policy(t, `
-apiVersion: kyverno.io/v1
-kind: ClusterPolicy
-metadata:
-  name: mixed
-spec:
-  validationFailureAction: Enforce
-  rules:
-  - name: who
-    match:
-      any:
-      - resources:
-          kinds: ["ConfigMap"]
-    validate:
-      message: "only Flux"
-      deny:
-        conditions:
-          any:
-          - key: "{{ serviceAccountNamespace }}"
-            operator: NotEquals
-            value: flux-system
-  - name: check-team
-    match:
-      any:
-      - resources:
-          kinds: ["ConfigMap"]
-    validate:
-      message: "label team is required"
-      pattern:
-        metadata:
-          labels:
-            team: "?*"
-`)
-	engine := kyvernopolicy.NewEngine([]kyvernov1.PolicyInterface{mixed}, nil)
-
-	violations, err := engine.Evaluate(t.Context(), configMap("default", nil))
+	celPlain, err := cel.Evaluate(t.Context(), configMap("default", nil))
 	require.NoError(t, err)
-	require.Len(t, violations, 2, "%+v", violations)
-	assert.Equal(t, "who", violations[0].Rule)
-	assert.True(t, violations[0].Unsupported)
-	assert.Equal(t, "check-team", violations[1].Rule)
-	assert.True(t, violations[1].Blocking)
-}
 
-// A field named like an identity variable, selected from the document, is not
-// the requester.
-func TestEvaluateAs_ClassicDocumentFieldIsNotIdentity(t *testing.T) {
-	t.Parallel()
-
-	podAccount := policy(t, `
-apiVersion: kyverno.io/v1
-kind: ClusterPolicy
-metadata:
-  name: pod-account
-spec:
-  validationFailureAction: Enforce
-  rules:
-  - name: no-default-account
-    match:
-      any:
-      - resources:
-          kinds: ["ConfigMap"]
-    validate:
-      message: "uses {{ request.object.spec.serviceAccountName || 'none' }}"
-      deny:
-        conditions:
-          any:
-          - key: "{{ request.object.metadata.name }}"
-            operator: Equals
-            value: settings
-`)
-	engine := kyvernopolicy.NewEngine([]kyvernov1.PolicyInterface{podAccount}, nil)
-
-	violations, err := engine.Evaluate(t.Context(), configMap("default", nil))
+	celUndeclared, err := cel.EvaluateAs(t.Context(), configMap("default", nil), nil)
 	require.NoError(t, err)
-	require.Len(t, violations, 1, "%+v", violations)
-	assert.True(t, violations[0].Blocking)
-	assert.False(t, violations[0].Unsupported)
-}
 
-func TestEvaluateAs_PolicyNotReadingIdentityIgnoresIt(t *testing.T) {
-	t.Parallel()
-
-	classic := kyvernopolicy.NewEngine(
-		[]kyvernov1.PolicyInterface{requireTeam(t, "Enforce")}, nil,
-	)
-	cel := celEngine(t, nil, requireTeamCEL(t, "v1", "Deny"))
-
-	for _, identity := range []*kyvernopolicy.Identity{fluxIdentity(), tenantIdentity()} {
-		classicUndeclared, err := classic.EvaluateAs(t.Context(), configMap("default", nil), nil)
-		require.NoError(t, err)
-
-		classicDeclared, err := classic.EvaluateAs(t.Context(), configMap("default", nil), identity)
-		require.NoError(t, err)
-
-		require.Len(t, classicUndeclared, 1)
-		assert.True(t, classicUndeclared[0].Blocking)
-		assert.Equal(t, classicUndeclared, classicDeclared)
-
-		celUndeclared, err := cel.EvaluateAs(t.Context(), configMap("default", nil), nil)
-		require.NoError(t, err)
-
-		celDeclared, err := cel.EvaluateAs(t.Context(), configMap("default", nil), identity)
-		require.NoError(t, err)
-
-		require.Len(t, celUndeclared, 1)
-		assert.True(t, celUndeclared[0].Blocking)
-		assert.Equal(t, celUndeclared, celDeclared)
-	}
+	require.Len(t, celPlain, 1)
+	assert.Equal(t, celUndeclared, celPlain)
 }
 
 // onlyFluxCELPolicy denies a ConfigMap unless Flux's kustomize-controller
@@ -405,73 +340,30 @@ spec:
 func TestCELEvaluateAs_PolicyReadingIdentity(t *testing.T) {
 	t.Parallel()
 
-	engine := celEngine(t, nil, validatingPolicy(t, sprintf(
-		onlyFluxCELPolicy,
-		"request.userInfo.username == '"+fluxController+"'",
-	)))
 	unlabelled := configMap("default", nil)
 
-	for _, testCase := range []identityCase{
-		{name: "flux is admitted", doc: unlabelled, identity: fluxIdentity()},
-		{name: "tenant is rejected", doc: unlabelled, identity: tenantIdentity(), blocking: 1},
-		{
-			name: "undeclared identity is named", doc: unlabelled,
-			unsupported: 1, message: missingIdentity,
+	for expression, cases := range map[string][]identityCase{
+		"request.userInfo.username == '" + fluxController + "'": {
+			{name: "flux is admitted", doc: unlabelled, identity: fluxIdentity()},
+			{name: "tenant is rejected", doc: unlabelled, identity: tenantIdentity(), blocking: 1},
+			{name: "no identity is an empty requester", doc: unlabelled, errored: 1},
+			{name: "unselected document passes", doc: secret("default"), identity: tenantIdentity()},
 		},
-		{name: "unselected document gets no diagnostic", doc: secret("default")},
-	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			violations, err := engine.EvaluateAs(t.Context(), testCase.doc, testCase.identity)
-			require.NoError(t, err)
-			assertIdentityCase(t, testCase, violations)
-		})
-	}
-}
-
-func TestCELEvaluateAs_IdentityDetection(t *testing.T) {
-	t.Parallel()
-
-	for _, testCase := range []struct {
-		expression string
-		reads      bool
-	}{
-		{expression: "request.userInfo.username != ''", reads: true},
-		{expression: ".request.userInfo.username != ''", reads: true},
-		{expression: "has(request.userInfo.username)", reads: true},
-		{expression: "request.?userInfo.username.orValue('') != ''", reads: true},
-		{expression: "request.userInfo.groups.exists(g, g == 'system:masters')", reads: true},
-		{
-			expression: "[object.metadata.name].all(request, .request.userInfo.username != '')",
-			reads:      true,
+		"'system:serviceaccounts:flux-system' in request.userInfo.groups": {
+			{name: "flux group is admitted", doc: unlabelled, identity: fluxIdentity()},
+			{name: "tenant group is rejected", doc: unlabelled, identity: tenantIdentity(), blocking: 1},
 		},
-		{expression: "[object.metadata.name].all(request, request != '')", reads: false},
-		{expression: "[object.metadata.name].all(request, request != 'userInfo')", reads: false},
-		{expression: "request.operation == 'CREATE'", reads: false},
-		{expression: "!has(object.metadata.userInfo)", reads: false},
 	} {
-		t.Run(testCase.expression, func(t *testing.T) {
-			t.Parallel()
+		engine := celEngine(t, nil, validatingPolicy(t, sprintf(onlyFluxCELPolicy, expression)))
 
-			engine := celEngine(t, nil, validatingPolicy(t, sprintf(
-				onlyFluxCELPolicy, testCase.expression,
-			)))
+		for _, testCase := range cases {
+			t.Run(expression+"/"+testCase.name, func(t *testing.T) {
+				t.Parallel()
 
-			violations, err := engine.Evaluate(t.Context(), configMap("default", nil))
-			require.NoError(t, err)
-
-			if testCase.reads {
-				require.Len(t, violations, 1, "%+v", violations)
-				assert.True(t, violations[0].Unsupported)
-				assert.Contains(t, violations[0].Message, missingIdentity)
-
-				return
-			}
-
-			for _, violation := range violations {
-				assert.False(t, violation.Unsupported, "%+v", violation)
-			}
-		})
+				violations, err := engine.EvaluateAs(t.Context(), testCase.doc, testCase.identity)
+				require.NoError(t, err)
+				assertIdentityCase(t, testCase, violations)
+			})
+		}
 	}
 }
