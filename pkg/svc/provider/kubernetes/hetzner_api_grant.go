@@ -12,6 +12,8 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -137,12 +139,12 @@ func (p *Provider) RevokeNestedAPIGrant(ctx context.Context, namespace string) e
 // requireNoHetznerHost succeeds only when no host node is a Hetzner server. Without a
 // credential the firewall cannot be read, so a Hetzner host may still admit namespace.
 func (p *Provider) requireNoHetznerHost(ctx context.Context, namespace string) error {
-	nodes, err := p.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	nodes, err := p.hostNodes(ctx)
 	if err != nil {
-		return fmt.Errorf("read host nodes for nested API grant: %w", err)
+		return err
 	}
 
-	for _, node := range nodes.Items {
+	for _, node := range nodes {
 		if strings.HasPrefix(node.Spec.ProviderID, "hcloud://") {
 			return fmt.Errorf(
 				"%w: host node %q is a Hetzner server whose firewall may admit %s; "+
@@ -156,6 +158,22 @@ func (p *Provider) requireNoHetznerHost(ctx context.Context, namespace string) e
 	}
 
 	return nil
+}
+
+// hostNodes lists the host nodes for a grant decision. An identity that may not read nodes
+// cannot prove a Hetzner host, so a forbidden read yields no nodes: KSail then neither grants
+// nor requires a Hetzner credential, and ordinary exposure and deletion keep working.
+func (p *Provider) hostNodes(ctx context.Context) ([]corev1.Node, error) {
+	nodes, err := p.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if apierrors.IsForbidden(err) {
+		return nil, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("read host nodes for nested API grant: %w", err)
+	}
+
+	return nodes.Items, nil
 }
 
 const nestedGrantCleanupTimeout = 30 * time.Second
@@ -213,14 +231,14 @@ func (p *Provider) hetznerHostNodeIDs(ctx context.Context, requireAll bool) ([]i
 		return nil, nil
 	}
 
-	nodes, err := p.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	nodes, err := p.hostNodes(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("read host nodes for nested API grant: %w", err)
+		return nil, err
 	}
 
-	ids := make([]int64, 0, len(nodes.Items))
+	ids := make([]int64, 0, len(nodes))
 
-	for _, node := range nodes.Items {
+	for _, node := range nodes {
 		text, ok := strings.CutPrefix(node.Spec.ProviderID, "hcloud://")
 		if !ok {
 			if requireAll {

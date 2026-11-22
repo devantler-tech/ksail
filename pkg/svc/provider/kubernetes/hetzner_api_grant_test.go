@@ -15,7 +15,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
@@ -469,4 +471,27 @@ func TestHetznerNodePortGatewayFallbackKeepsRunningClusterGrant(t *testing.T) {
 	failure := context.DeadlineExceeded
 	require.ErrorIs(t, duplicate.CleanupOnFailure(t.Context(), failure), failure)
 	require.Len(t, cloud.rules, 3, "the running cluster keeps its grant")
+}
+
+// An identity that may not read host nodes cannot prove a Hetzner host. Exposure and
+// deletion keep working without touching the firewall, with or without a credential.
+func TestHetznerNodePortForbiddenNodeReadKeepsLifecycleWorking(t *testing.T) {
+	t.Parallel()
+
+	for _, withCredential := range []bool{false, true} {
+		cloud := newAPIGrantCloud(t)
+		prov, client := newAPIGrantProviderWithClient(t, cloud, "aws:///zone/i-123")
+		if !withCredential {
+			prov.WithHetznerAPIFirewall(nil)
+		}
+
+		client.PrependReactor("list", "nodes",
+			func(k8stesting.Action) (bool, runtime.Object, error) {
+				return true, nil, apierrors.NewForbidden(
+					schema.GroupResource{Resource: "nodes"}, "", errGatewayUnavailable)
+			})
+
+		require.NoError(t, prov.RevokeNestedAPIGrant(t.Context(), "ksail-demo"))
+		assert.Zero(t, cloud.writes)
+	}
 }
