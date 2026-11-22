@@ -29,7 +29,10 @@ var (
 )
 
 // WithHetznerAPIFirewall enables source-restricted grants for owned Hetzner host nodes.
-// Configure it before sharing the provider; nil leaves ordinary exposure unchanged.
+// Configure it before sharing the provider. Nil grants nothing and leaves exposure unchanged on
+// hosts without Hetzner nodes. On a Hetzner host the firewall cannot be read without it, so a
+// tier that would release a granted NodePort (Gateway, LoadBalancer) fails and exposure falls
+// back to NodePort, and deletion stops (ErrHetznerGrantCredentials).
 func (p *Provider) WithHetznerAPIFirewall(client *hcloud.Client) *Provider {
 	p.hetznerClient = client
 

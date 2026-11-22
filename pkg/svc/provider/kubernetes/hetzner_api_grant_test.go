@@ -496,3 +496,29 @@ func TestHetznerNodePortForbiddenNodeReadKeepsLifecycleWorking(t *testing.T) {
 		assert.Zero(t, cloud.writes)
 	}
 }
+
+// Without a credential, a Hetzner host's firewall cannot show whether a NodePort grant
+// remains, so the Gateway tier, which would release that port, refuses and exposure falls
+// back to the NodePort. It must not touch the firewall or a Gateway resource on the way.
+func TestHetznerGatewayWithoutCredentialFallsBackToNodePort(t *testing.T) {
+	t.Parallel()
+
+	cloud := newAPIGrantCloud(t)
+	prov := newAPIGrantProvider(t, cloud, "hcloud://42").WithHetznerAPIFirewall(nil)
+
+	gatewayCalls := 0
+	gateway := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+	gateway.PrependReactor("*", "*", func(k8stesting.Action) (bool, runtime.Object, error) {
+		gatewayCalls++
+
+		return true, nil, errGatewayUnavailable
+	})
+
+	spec := apiGrantSpec()
+	spec.GatewayClassName = "cilium"
+	result, err := prov.ResolveExposure(t.Context(), gateway, spec)
+	require.NoError(t, err)
+	assert.Equal(t, kubeprovider.ExposureNodePort, result.Kind)
+	assert.Zero(t, gatewayCalls, "the Gateway tier stops before creating Gateway resources")
+	assert.Zero(t, cloud.writes, "no credential means no firewall change")
+}
