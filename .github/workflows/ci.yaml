@@ -301,6 +301,7 @@ jobs:
               - 'internal/depcontract/**'
               - 'pkg/svc/installer/cni/cilium/Dockerfile'
               - 'pkg/svc/installer/kyverno/Dockerfile'
+              - 'pkg/fsutil/configmanager/talos/Dockerfile'
               - '.github/dependabot.yaml'
               - 'go.mod'
               - 'go.sum'
@@ -491,6 +492,9 @@ jobs:
               - '.github/workflows/ci.yaml'
             hetzner-cleanup-script:
               - '.github/actions/cleanup-hetzner/**'
+              - '.github/scripts/verify-hetzner-absence.sh'
+              - '.github/scripts/verify-hetzner-absence.test.sh'
+              - '.github/workflows/verify-hetzner-absence.yaml'
               - '.github/workflows/ci.yaml'
             gitops-assert-scripts:
               - '.github/scripts/assert-gitops-deployed.sh'
@@ -694,6 +698,8 @@ jobs:
             .github/actions/cleanup-hetzner/cleanup-hetzner.sh \
             .github/actions/cleanup-hetzner/cleanup-hetzner.test.sh
           .github/actions/cleanup-hetzner/cleanup-hetzner.test.sh
+          shellcheck .github/scripts/verify-hetzner-absence.sh .github/scripts/verify-hetzner-absence.test.sh
+          bash .github/scripts/verify-hetzner-absence.test.sh
 
   gitops-assert-scripts:
     name: 🔐 Validate GitOps And Workload Guards
@@ -791,7 +797,7 @@ jobs:
       || (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
       && needs.changes.outputs.govuln-allowlist == 'true')
-    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@d70d50665465117f01104313e53057374a96a1a3 # v21.7.2
+    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@cc156a3693019fdbe9817c46f1a91cd50a124695 # v21.7.3
     # The canonical defaults make a default-branch run answer "did the check run" rather than
     # "did the diff touch a Go file". On main the branch's green IS the protection
     # signal, so a path filter that skips the suite or the scan leaves main green
@@ -931,6 +937,13 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+
+      # The provenance checks build the module verifier and load the module graph; fetch
+      # what they need through the bounded retry so one dropped Go proxy stream does not
+      # fail the job (#8053). The pinned upstream releases they compare against are
+      # fetched by the check scripts themselves, through the same retry.
+      - name: 📥 Download Go modules
+        run: bash .github/scripts/download-go-package-modules.sh ./internal/moduleintegrity/cmd/verify
 
       - name: 📦 Verify release installer
         run: .github/scripts/install-release.test.sh
@@ -1164,7 +1177,7 @@ jobs:
       - name: 🧹 Free disk space
         if: steps.calico-cache.outputs.cache-hit != 'true'
         # Only cold compilation needs the large working-space reclamation.
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@c3e20d41c7971ba9617250ba512d0f04381121e1
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@c927b22ddb47aa32347d5230a9eacde3b0e4df1a
 
       - name: ♻️ Restore Go modules
         if: steps.calico-cache.outputs.cache-hit != 'true'
@@ -2063,7 +2076,7 @@ jobs:
       # This job already waits for the producer. Reuse its exact sealed bytes
       # instead of restoring Go modules or compiling again after cache eviction.
       - name: 📥 Restore KSail binary
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@c3e20d41c7971ba9617250ba512d0f04381121e1
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@c927b22ddb47aa32347d5230a9eacde3b0e4df1a
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2277,7 +2290,7 @@ jobs:
 
       - name: 📥 Restore KSail binary
         # Pin the identical published action until actionlint supports $/ references.
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@c3e20d41c7971ba9617250ba512d0f04381121e1
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@c927b22ddb47aa32347d5230a9eacde3b0e4df1a
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2609,7 +2622,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devantler-tech/ksail
-          ref: be7d4483a4abf07a246f977d558ff10bb4a0bd36
+          ref: 2e2a248305b7a1a294aaa6ef807f46f533230aa5
           path: .diagnostics-artifact-source
           persist-credentials: false
 
@@ -2628,7 +2641,7 @@ jobs:
         id: probe-baseline
         if: matrix.mode == 'baseline'
         continue-on-error: true
-        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-baseline@be7d4483a4abf07a246f977d558ff10bb4a0bd36
+        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-baseline@2e2a248305b7a1a294aaa6ef807f46f533230aa5
         with:
           distribution: Vanilla
           provider: Hetzner
@@ -2639,7 +2652,7 @@ jobs:
         id: probe-candidate
         if: matrix.mode == 'candidate'
         continue-on-error: true
-        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-candidate@be7d4483a4abf07a246f977d558ff10bb4a0bd36
+        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-candidate@2e2a248305b7a1a294aaa6ef807f46f533230aa5
         with:
           distribution: Vanilla
           provider: Hetzner
@@ -2835,7 +2848,7 @@ jobs:
         with:
           persist-credentials: false
       - name: 🧹 Free runner disk
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@c3e20d41c7971ba9617250ba512d0f04381121e1
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@c927b22ddb47aa32347d5230a9eacde3b0e4df1a
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:

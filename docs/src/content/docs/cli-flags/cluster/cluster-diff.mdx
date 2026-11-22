@@ -36,16 +36,16 @@ Usage:
   ksail cluster diff [flags]
 
 Flags:
-  -c, --context string          Kubernetes context of cluster
-      --exit-code               Return exit code 2 when drift is detected (for CI gates)
-      --include-version-drift   Also report distribution/Kubernetes version drift the next 'cluster update' would reconcile (performs OCI registry lookups; off by default)
-  -k, --kubeconfig string       Path to kubeconfig file (default "~/.kube/config")
-  -n, --name string             Cluster name used for container names, registry names, and kubeconfig context
-      --output string           Output format: text or json. Use json for machine-readable structured output. (default "text")
+  -c, --context string                       Kubernetes context of cluster
+      --exit-code[=true|false]               Return exit code 2 when drift is detected (for CI gates)
+      --include-version-drift[=true|false]   Also report distribution/Kubernetes version drift the next 'cluster update' would reconcile (performs OCI registry lookups; off by default)
+  -k, --kubeconfig string                    Path to kubeconfig file (default "~/.kube/config")
+  -n, --name string                          Cluster name used for container names, registry names, and kubeconfig context
+      --output string                        Output format: text or json. Use json for machine-readable structured output. (default "text")
 
 Global Flags:
-      --benchmark       Show per-activity benchmark output
-      --config string   Path to config file (default: ksail.yaml found via directory traversal)
-      --experimental    Enable experimental (unstable) commands and features
+      --benchmark[=true|false]      Show per-activity benchmark output
+      --config string               Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental[=true|false]   Enable experimental (unstable) commands and features
 
 ```

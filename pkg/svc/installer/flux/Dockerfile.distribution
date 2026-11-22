@@ -14,4 +14,4 @@
 FROM ghcr.io/fluxcd/source-controller:v1.10.2
 FROM ghcr.io/fluxcd/kustomize-controller:v1.10.2
 FROM ghcr.io/fluxcd/helm-controller:v1.7.2
-FROM ghcr.io/fluxcd/notification-controller:v1.10.0
+FROM ghcr.io/fluxcd/notification-controller:v1.10.1

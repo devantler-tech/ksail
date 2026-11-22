@@ -160,6 +160,15 @@ spec:
 
 See the [Hetzner CCM documentation](https://github.com/hetznercloud/hcloud-cloud-controller-manager#service) for all available annotations.
 
+#### Disabling LoadBalancer Support
+
+Set `loadBalancer: Disabled` and run `ksail cluster update`. The cloud controller stays installed, because it also initialises nodes, but KSail upgrades it with its service controller switched off, so it no longer creates load balancers for `LoadBalancer` Services. Setting `Enabled` or `Default` again switches the service controller back on.
+
+Delete or convert your `LoadBalancer` Services **before** you switch load balancers off, while the cloud controller can still remove their Hetzner load balancers. Anything left after the switch is no longer managed, and `cluster update` warns about it:
+
+- Hetzner load balancers that already exist stay in place and keep billing, and their targets no longer follow node changes. Delete them in the Hetzner Console.
+- A `LoadBalancer` Service that still carries the `service.kubernetes.io/load-balancer-cleanup` finalizer stays `Terminating` when you delete it or change its type, because nothing removes the finalizer. After deleting its load balancer, remove that one finalizer yourself, for example with `kubectl edit service <name>`, deleting only the `service.kubernetes.io/load-balancer-cleanup` entry under `metadata.finalizers`. Leave any other finalizers in place, because their controllers still need to clean up.
+
 ## Troubleshooting
 
 ### LoadBalancer Service Stuck in Pending

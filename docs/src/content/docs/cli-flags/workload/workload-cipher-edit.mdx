@@ -34,13 +34,13 @@ Usage:
   ksail workload cipher edit <file> [flags]
 
 Flags:
-      --editor string      editor command to use (e.g., 'code --wait', 'vim', 'nano')
-      --ignore-mac         ignore Message Authentication Code during decryption
-      --show-master-keys   show master keys in the editor
+      --editor string                   editor command to use (e.g., 'code --wait', 'vim', 'nano')
+      --ignore-mac[=true|false]         ignore Message Authentication Code during decryption
+      --show-master-keys[=true|false]   show master keys in the editor
 
 Global Flags:
-      --benchmark       Show per-activity benchmark output
-      --config string   Path to config file (default: ksail.yaml found via directory traversal)
-      --experimental    Enable experimental (unstable) commands and features
+      --benchmark[=true|false]      Show per-activity benchmark output
+      --config string               Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental[=true|false]   Enable experimental (unstable) commands and features
 
 ```

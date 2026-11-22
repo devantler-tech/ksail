@@ -30,6 +30,12 @@ for delay in 1 2 4 0; do
 	fi
 	sleep "$delay"
 done
+# Name the rejected evidence: a silent exit hid which field disagreed (#8475).
+reject() {
+	echo "Native diagnostics artifact $FIXTURE_MODE: artifact evidence rejected (expected name=$name run=$GITHUB_RUN_ID head=$EXPECTED_HEAD); API response:" >&2
+	jq -c '.' "$tmp" >&2 || cat "$tmp" >&2
+	exit 1
+}
 jq -es --arg name "$name" --arg mode "$FIXTURE_MODE" --arg head "$EXPECTED_HEAD" \
 	--argjson run "$GITHUB_RUN_ID" '
   length == 1 and (.[0] |
@@ -41,5 +47,5 @@ jq -es --arg name "$name" --arg mode "$FIXTURE_MODE" --arg head "$EXPECTED_HEAD"
       (.size_in_bytes | type == "number") and .size_in_bytes > 0 and
       (.size_in_bytes | floor) == .size_in_bytes and
       .workflow_run.id == $run and .workflow_run.head_sha == $head)
-  end)' "$tmp" >/dev/null
+  end)' "$tmp" >/dev/null || reject
 printf 'Native diagnostics artifact %s: complete outcomes and artifact identity verified\n' "$FIXTURE_MODE"
