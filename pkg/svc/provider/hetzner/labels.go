@@ -93,6 +93,14 @@ func ResourceLabels(clusterName string) map[string]string {
 	}
 }
 
+// ownedByKSail reports whether a resource's labels mark it as created by KSail.
+// Cleanup paths that look a resource up by its conventional name must check
+// this before deleting it, so a same-named resource made by another tool is
+// never removed.
+func ownedByKSail(labels map[string]string) bool {
+	return labels[LabelOwned] == LabelOwnedValue
+}
+
 // NodeLabels creates the complete label set for a cluster node.
 func NodeLabels(clusterName string, nodeType string, index int) map[string]string {
 	labels := ResourceLabels(clusterName)
