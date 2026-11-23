@@ -1236,7 +1236,8 @@ runs:
           echo "❌ ERROR: the API server does not report etcd healthy after the removal"
           exit 1
         fi
-        RECORD_DIR=$(dirname "${KUBECONFIG:-$HOME/.kube/config}")
+        KUBECONFIG_CANONICAL=$(realpath -e -- "${KUBECONFIG:-$HOME/.kube/config}")
+        RECORD_DIR=$(dirname -- "$KUBECONFIG_CANONICAL")
         if ! test -f "${RECORD_DIR}/.ksail-cp-removed-${CLUSTER_NAME}@${TARGET_ID}.json"; then
           echo "❌ ERROR: no verified removal record for server ${TARGET_ID}"
           exit 1
