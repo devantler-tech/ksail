@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -84,6 +85,12 @@ func autoscalerAuditTrialCommand(
 	return cmd
 }
 
+// autoscalerUpdatePins matches the Kubernetes and Talos OS pins the trial passes to every
+// unchanged update, so an update that would follow the newest Talos release is rejected.
+var autoscalerUpdatePins = regexp.MustCompile(
+	`--kubernetes-version v\d+\.\d+\.\d+ --distribution-version v\d+\.\d+\.\d+(\s|$)`,
+)
+
 func assertAutoscalerAuditAccepted(t *testing.T, state string, output []byte, trialErr error) {
 	t.Helper()
 	require.NoError(t, trialErr, string(output))
@@ -97,6 +104,25 @@ func assertAutoscalerAuditAccepted(t *testing.T, state string, output []byte, tr
 	require.NoError(t, readErr)
 	assert.Equal(t, 3, strings.Count(strings.TrimSpace(string(calls)), "\n")+1)
 	assert.NotContains(t, string(calls), "cluster delete")
+
+	updates := 0
+
+	for call := range strings.SplitSeq(strings.TrimSpace(string(calls)), "\n") {
+		if !strings.Contains(call, "cluster update") {
+			continue
+		}
+
+		updates++
+
+		assert.Regexp(
+			t,
+			autoscalerUpdatePins,
+			call,
+			"every update must pin Kubernetes and the Talos OS",
+		)
+	}
+
+	assert.Equal(t, 3, updates, "every recorded call must be a pinned update")
 }
 
 func prepareAutoscalerAuditFixture(t *testing.T) (string, string) {
