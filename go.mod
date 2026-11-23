@@ -119,15 +119,15 @@ require (
 	google.golang.org/grpc v1.85.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
-	helm.sh/helm/v4 v4.3.1
-	k8s.io/api v0.37.1
-	k8s.io/apiextensions-apiserver v0.37.1
-	k8s.io/apimachinery v0.37.1
-	k8s.io/apiserver v0.37.1
-	k8s.io/cli-runtime v0.37.1
-	k8s.io/client-go v0.37.1
+	helm.sh/helm/v4 v4.3.2
+	k8s.io/api v0.37.2
+	k8s.io/apiextensions-apiserver v0.37.2
+	k8s.io/apimachinery v0.37.2
+	k8s.io/apiserver v0.37.2
+	k8s.io/cli-runtime v0.37.2
+	k8s.io/client-go v0.37.2
 	k8s.io/klog/v2 v2.140.0
-	k8s.io/kubectl v0.37.1
+	k8s.io/kubectl v0.37.2
 	sigs.k8s.io/controller-runtime v0.25.2
 	sigs.k8s.io/gateway-api v1.6.3
 	sigs.k8s.io/kind v0.33.0
@@ -1018,8 +1018,8 @@ require (
 	honnef.co/go/tools v0.8.2 // indirect
 	howett.net/plist v1.0.2-0.20250314012144-ee69052608d9 // indirect
 	k8s.io/cluster-bootstrap v0.36.0 // indirect
-	k8s.io/component-base v0.37.1 // indirect
-	k8s.io/component-helpers v0.37.1 // indirect
+	k8s.io/component-base v0.37.2 // indirect
+	k8s.io/component-helpers v0.37.2 // indirect
 	k8s.io/cri-api v0.37.1 // indirect
 	k8s.io/cri-client v0.37.0 // indirect
 	k8s.io/kube-aggregator v0.36.3 // indirect
@@ -1027,9 +1027,9 @@ require (
 	k8s.io/kube-proxy v0.37.1 // indirect
 	k8s.io/kubelet v0.37.1 // indirect
 	k8s.io/kubernetes v1.36.0 // indirect
-	k8s.io/metrics v0.37.1 // indirect
+	k8s.io/metrics v0.37.2 // indirect
 	k8s.io/pod-security-admission v0.37.1 // indirect
-	k8s.io/streaming v0.37.1 // indirect
+	k8s.io/streaming v0.37.2 // indirect
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 // indirect
 	modernc.org/libc v1.77.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
