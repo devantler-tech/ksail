@@ -13,13 +13,15 @@ fi
 name="system-test-diagnostics-fixture-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$FIXTURE_MODE"
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
-# After a successful upload the filtered listing may briefly be empty. Only a
-# complete empty candidate response may wait; errors and wrong evidence fail.
+# After a successful upload the filtered listing may briefly be empty, and its
+# count can reach 1 before the artifact itself is listed (#8475). Only those two
+# complete, otherwise-empty candidate responses may wait; errors and wrong
+# evidence fail.
 for delay in 1 2 4 0; do
 	gh api --method GET "repos/${GITHUB_REPOSITORY:?}/actions/runs/$GITHUB_RUN_ID/artifacts" \
 		-f name="$name" -f per_page=100 >"$tmp"
 	if [[ "$FIXTURE_MODE" == baseline ]] ||
-		! jq -es 'length == 1 and .[0].total_count == 0 and .[0].artifacts == []' "$tmp" >/dev/null; then
+		! jq -es 'length == 1 and (.[0].total_count == 0 or .[0].total_count == 1) and .[0].artifacts == []' "$tmp" >/dev/null; then
 		break
 	fi
 	if ((delay == 0)); then

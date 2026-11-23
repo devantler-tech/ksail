@@ -209,21 +209,44 @@ func namespaceLister(docs []map[string]any) corev1listers.NamespaceLister {
 	return corev1listers.NewNamespaceLister(indexer)
 }
 
-// Evaluate applies every validating policy to doc, simulating its creation,
-// and returns the failing and erroring rules. As in a cluster, the engine
-// applies a namespaced Policy only to documents in its own namespace. A rule
-// that selects on namespace labels, for a document whose Namespace is not
-// among the rendered documents, is evaluated only when the immutable namespace
-// name label determines all its selectors. Otherwise it is Unsupported; the
-// policy's other rules are still evaluated.
+// Evaluate is EvaluateAs with no declared admission identity.
+func (e *Engine) Evaluate(ctx context.Context, doc map[string]any) ([]Violation, error) {
+	return e.EvaluateAs(ctx, doc, nil)
+}
+
+// EvaluateAs applies every validating policy to doc, simulating its creation
+// by identity, and returns the failing and erroring rules. As in a cluster,
+// the engine applies a namespaced Policy only to documents in its own
+// namespace. A rule that selects on namespace labels, for a document whose
+// Namespace is not among the rendered documents, is evaluated only when the
+// immutable namespace name label determines all its selectors. Otherwise it is
+// Unsupported; the policy's other rules are still evaluated.
+//
+// identity is who applies doc. Its user name and groups are the request's
+// admission user info, which match and exclude subjects and the
+// request.userInfo variables read, in the unknown-namespace pre-match as well
+// as in the engine. A nil identity is an empty requester. Roles and cluster
+// roles stay empty either way, because Kyverno resolves them from cluster RBAC.
 //
 // doc's namespace is used as given. For a namespaced kind the namespace a
 // cluster admits it into is chosen by whatever applies it (a Flux
 // targetNamespace, a kubectl context), not by the document, and the engine has
 // no API discovery to tell namespaced kinds from cluster-scoped ones, so the
 // caller sets the namespace the applier would use before evaluating.
-func (e *Engine) Evaluate(ctx context.Context, doc map[string]any) ([]Violation, error) {
+func (e *Engine) EvaluateAs(
+	ctx context.Context,
+	doc map[string]any,
+	identity *Identity,
+) ([]Violation, error) {
 	resource := unstructured.Unstructured{Object: doc}
+	requestInfo := identity.requestInfo()
+
+	// With no identity the policy context gets no admission info at all, as
+	// before identities could be declared, so its variables stay unset.
+	var admissionInfo *kyvernov2.RequestInfo
+	if identity != nil {
+		admissionInfo = &requestInfo
+	}
 
 	var violations []Violation
 
@@ -234,7 +257,11 @@ func (e *Engine) Evaluate(ctx context.Context, doc map[string]any) ([]Violation,
 
 		namespaceLabels, err := e.namespaceLabels(resource, policy)
 		if apierrors.IsNotFound(err) {
-			evaluable, unsupported, splitErr := e.splitOnUnknownNamespace(resource, policy)
+			evaluable, unsupported, splitErr := e.splitOnUnknownNamespace(
+				resource,
+				policy,
+				requestInfo,
+			)
 			if splitErr != nil {
 				return nil, splitErr
 			}
@@ -254,7 +281,7 @@ func (e *Engine) Evaluate(ctx context.Context, doc map[string]any) ([]Violation,
 		}
 
 		policyContext, err := policycontext.NewPolicyContext(
-			e.jp, resource, kyvernov1.Create, nil, e.config,
+			e.jp, resource, kyvernov1.Create, admissionInfo, e.config,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("build policy context for %s: %w", policyName(policy), err)
@@ -300,10 +327,12 @@ func (e *Engine) namespaceLabels(
 // rule at a time, so a rule that selects on those labels does not hide the
 // results of the rules that do not. It returns a copy of policy holding only the
 // rules whose selectors are decidable (nil when there are none), and an
-// Unsupported violation for each rule that does.
+// Unsupported violation for each rule that does. requestInfo is the requester
+// rules match on, as in the engine.
 func (e *Engine) splitOnUnknownNamespace(
 	resource unstructured.Unstructured,
 	policy kyvernov1.PolicyInterface,
+	requestInfo kyvernov2.RequestInfo,
 ) (kyvernov1.PolicyInterface, []Violation, error) {
 	rules := policy.GetSpec().Rules
 	namespace := resource.GetNamespace()
@@ -322,7 +351,7 @@ func (e *Engine) splitOnUnknownNamespace(
 		// Kyverno resolves namespace labels before matching kinds, so a rule
 		// that cannot match this resource would otherwise be reported as
 		// Unsupported instead of producing no result.
-		matched, name := matchedRule(resource, policy, rules[index])
+		matched, name := matchedRule(resource, policy, rules[index], requestInfo)
 		if !matched {
 			continue
 		}
@@ -412,12 +441,13 @@ func matchedRule(
 	resource unstructured.Unstructured,
 	policy kyvernov1.PolicyInterface,
 	rule kyvernov1.Rule,
+	requestInfo kyvernov2.RequestInfo,
 ) (bool, string) {
 	single := policy.CreateDeepCopy()
 	single.GetSpec().Rules = []kyvernov1.Rule{rule}
 
 	for _, computed := range autogen.Default.ComputeRules(single, resource.GetKind()) {
-		if broadMatch(resource, policy, computed) {
+		if broadMatch(resource, policy, computed, requestInfo) {
 			return true, computed.Name
 		}
 	}
@@ -426,11 +456,13 @@ func matchedRule(
 }
 
 // broadMatch matches a copy of rule without its namespace selectors and
-// without its exclude block, both of which can only narrow a match.
+// without its exclude block, both of which can only narrow a match. It
+// matches for the requester requestInfo.
 func broadMatch(
 	resource unstructured.Unstructured,
 	policy kyvernov1.PolicyInterface,
 	rule kyvernov1.Rule,
+	requestInfo kyvernov2.RequestInfo,
 ) bool {
 	broadened := *rule.DeepCopy()
 	broadened.ExcludeResources = labelFreeExclusions(broadened.ExcludeResources)
@@ -447,7 +479,7 @@ func broadMatch(
 	err := enginematch.MatchesResourceDescription(
 		resource,
 		broadened,
-		kyvernov2.RequestInfo{},
+		requestInfo,
 		nil,
 		policy.GetNamespace(),
 		resource.GroupVersionKind(),

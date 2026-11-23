@@ -136,3 +136,33 @@ var BuildSSHFirewallRulesForTest = buildSSHFirewallRules
 func (p *Provider) SetGracefulShutdownTimeoutForTest(timeout time.Duration) {
 	p.gracefulShutdownTimeout = timeout
 }
+
+// DeletePlacementGroupForTest exports deletePlacementGroup for testing.
+func (p *Provider) DeletePlacementGroupForTest(ctx context.Context, clusterName string) error {
+	return p.deletePlacementGroup(ctx, clusterName)
+}
+
+// DeleteFirewallForTest exports deleteFirewallWithRetry for testing.
+func (p *Provider) DeleteFirewallForTest(ctx context.Context, clusterName string) error {
+	return p.deleteFirewallWithRetry(ctx, clusterName)
+}
+
+// DeleteNetworkForTest exports deleteNetwork for testing.
+func (p *Provider) DeleteNetworkForTest(ctx context.Context, clusterName string) error {
+	return p.deleteNetwork(ctx, clusterName)
+}
+
+// DeleteLoadBalancersForTest exports deleteLoadBalancers for testing.
+func (p *Provider) DeleteLoadBalancersForTest(ctx context.Context, clusterName string) error {
+	_, err := p.deleteLoadBalancers(ctx, clusterName)
+
+	return err
+}
+
+// DeleteLoadBalancersAndNetworkForTest exports deleteLoadBalancersAndNetwork for testing.
+func (p *Provider) DeleteLoadBalancersAndNetworkForTest(
+	ctx context.Context,
+	clusterName string,
+) error {
+	return p.deleteLoadBalancersAndNetwork(ctx, clusterName)
+}

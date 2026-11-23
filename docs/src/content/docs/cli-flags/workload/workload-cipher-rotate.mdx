@@ -62,16 +62,16 @@ Usage:
   ksail workload cipher rotate <file/folder> [flags]
 
 Flags:
-      --add-key string        public key to add as a master key recipient
-      --dry-run               show which files would be rotated without making changes
-  -f, --force                 skip confirmation prompt and rotate immediately
-  -r, --recursive             scan subdirectories when target is a folder
-      --remove-key string     public key to remove from master key recipients
-      --set-key stringArray   public key for the complete new recipient set (repeatable); replaces all recipients and re-seals to a fresh data key — mutually exclusive with --add-key/--remove-key
+      --add-key string           public key to add as a master key recipient
+      --dry-run[=true|false]     show which files would be rotated without making changes
+  -f, --force[=true|false]       skip confirmation prompt and rotate immediately
+  -r, --recursive[=true|false]   scan subdirectories when target is a folder
+      --remove-key string        public key to remove from master key recipients
+      --set-key stringArray      public key for the complete new recipient set (repeatable); replaces all recipients and re-seals to a fresh data key — mutually exclusive with --add-key/--remove-key
 
 Global Flags:
-      --benchmark       Show per-activity benchmark output
-      --config string   Path to config file (default: ksail.yaml found via directory traversal)
-      --experimental    Enable experimental (unstable) commands and features
+      --benchmark[=true|false]      Show per-activity benchmark output
+      --config string               Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental[=true|false]   Enable experimental (unstable) commands and features
 
 ```

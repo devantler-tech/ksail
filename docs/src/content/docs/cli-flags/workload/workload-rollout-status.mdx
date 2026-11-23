@@ -18,17 +18,17 @@ Examples:
   kubectl rollout status deployment/nginx
 
 Flags:
-  -f, --filename strings   Filename, directory, or URL to files identifying the resource to get from a server.
-  -k, --kustomize string   Process the kustomization directory. This flag can't be used together with -f or -R.
-  -R, --recursive          Process the directory used in -f, --filename recursively. Useful when you want to manage related manifests organized within the same directory.
-      --revision int       Pin to a specific revision for showing its status. Defaults to 0 (last revision).
-  -l, --selector string    Selector (label query) to filter on, supports '=', '==', '!=', 'in', 'notin'.(e.g. -l key1=value1,key2=value2,key3 in (value3)). Matching objects must satisfy all of the specified label constraints.
-      --timeout duration   The length of time to wait before ending watch, zero means never. Any other values should contain a corresponding time unit (e.g. 1s, 2m, 3h).
-  -w, --watch              Watch the status of the rollout until it's done. (default true)
+  -f, --filename strings         Filename, directory, or URL to files identifying the resource to get from a server.
+  -k, --kustomize string         Process the kustomization directory. This flag can't be used together with -f or -R.
+  -R, --recursive[=true|false]   Process the directory used in -f, --filename recursively. Useful when you want to manage related manifests organized within the same directory.
+      --revision int             Pin to a specific revision for showing its status. Defaults to 0 (last revision).
+  -l, --selector string          Selector (label query) to filter on, supports '=', '==', '!=', 'in', 'notin'.(e.g. -l key1=value1,key2=value2,key3 in (value3)). Matching objects must satisfy all of the specified label constraints.
+      --timeout duration         The length of time to wait before ending watch, zero means never. Any other values should contain a corresponding time unit (e.g. 1s, 2m, 3h).
+  -w, --watch[=true|false]       Watch the status of the rollout until it's done. (default true)
 
 Global Flags:
-      --benchmark       Show per-activity benchmark output
-      --config string   Path to config file (default: ksail.yaml found via directory traversal)
-      --experimental    Enable experimental (unstable) commands and features
+      --benchmark[=true|false]      Show per-activity benchmark output
+      --config string               Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental[=true|false]   Enable experimental (unstable) commands and features
 
 ```

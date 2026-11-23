@@ -1588,6 +1588,9 @@ func (p *Provisioner) deleteHetznerCluster(ctx context.Context, clusterName stri
 	// Delete all nodes and infrastructure
 	_, _ = fmt.Fprintf(p.logWriter, "Deleting Talos cluster %q on Hetzner...\n", clusterName)
 
+	// Same-named resources KSail does not own are kept; report them here.
+	hetznerProv.SetLogWriter(p.logWriter)
+
 	err = hetznerProv.DeleteNodes(ctx, clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to delete Hetzner nodes: %w", err)
