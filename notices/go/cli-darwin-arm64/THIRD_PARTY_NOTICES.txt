@@ -1988,9 +1988,9 @@ github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream/eventstreamapi
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE.txt
 
-Component: github.com/aws/aws-sdk-go-v2/config@v1.33.9
-Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/config/@v/v1.33.9.zip
-Selected Go source checksum: h1:Hv6bcQUJVnmuWaKjqD6Ot8sE75NrWsWV20oGT5aWle0=
+Component: github.com/aws/aws-sdk-go-v2/config@v1.33.18
+Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/config/@v/v1.33.18.zip
+Selected Go source checksum: h1:WC0C4jM/tewXG8DWXnoxXnusJPZTryPazqk2k/zgd2s=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -2106,9 +2106,9 @@ github.com/aws/aws-sdk-go-v2/service/ecrpublic/types
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE.txt
 
-Component: github.com/aws/aws-sdk-go-v2/service/eks@v1.105.5
-Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/eks/@v/v1.105.5.zip
-Selected Go source checksum: h1:zuhQc4yjQ2noYuv+vnn+dnfkiJHPW+nGv/L2oRB436w=
+Component: github.com/aws/aws-sdk-go-v2/service/eks@v1.105.6
+Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/eks/@v/v1.105.6.zip
+Selected Go source checksum: h1:Uy58lpLYdqznK5ozOITAyGfQOfmYmWw2SxPVZj/FQ9I=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -4475,9 +4475,9 @@ Material: m2b50515d53b4ae33 (copyright-header), SHA-256 7030fb5b2204affa78b4d86f
 Material: m7c49c1a683cef577 (license), SHA-256 24653fd8a39354396da1a265d68316399edc39b1df48c5866d55f9f06484fa9a
 Files: LICENSE
 
-Component: github.com/github/copilot-sdk/go@v1.0.28
-Source: https://proxy.golang.org/github.com/github/copilot-sdk/go/@v/v1.0.28.zip
-Selected Go source checksum: h1:p9205uladSUScyM7B+AbdaGLbcQGSTbx3U+bSH1YXZ4=
+Component: github.com/github/copilot-sdk/go@v1.0.34
+Source: https://proxy.golang.org/github.com/github/copilot-sdk/go/@v/v1.0.34.zip
+Selected Go source checksum: h1:WX2fPUsqeJT+963s31sVBQEAPNHFHk3WzfWYhskS6iw=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
@@ -5144,9 +5144,9 @@ Material: m80b68b9874afb52e (copyright-header), SHA-256 9bbf7a23e7d37367c687e607
 Material: mbc449fc2e982b24d (copyright-header), SHA-256 f5925cad38cba2c783741a8fb603ed99e70e4283efbc6835095dbe2a837f13f6
 Material: mfbcaf1d1a2d5e264 (copyright-header), SHA-256 458f96fd2f7df62d61f6e5b3c1cfae182c4ccc5415706299af193269aa150c62
 
-Component: github.com/gofrs/flock@v0.13.1
-Source: https://proxy.golang.org/github.com/gofrs/flock/@v/v0.13.1.zip
-Selected Go source checksum: h1:jjREztyBeSKBZYAC+mgc1laB+xsgy4kYMf3FbKF2UBo=
+Component: github.com/gofrs/flock@v0.13.2
+Source: https://proxy.golang.org/github.com/gofrs/flock/@v/v0.13.2.zip
+Selected Go source checksum: h1:9o62TArG4T0f8L46kSf8sLtNUGvJEfiCK9md7/ilko0=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
@@ -13046,9 +13046,9 @@ Material: ma6f958c5e7e8f01b (copyright-header), SHA-256 da4cd8ef4b9a411df8b61678
 Material: mcf7ad2c4be3234b0 (copyright-header), SHA-256 3c4ff5ea3ab3905c7a5890dd95cebcfd1ce6be5c581795794c23db8045508627
 Material: mdf9fb7958e0ff40d (copyright-header), SHA-256 15250ab94a55191b3e9df9fe00126f8e106b1356278c84128553224fcd7266f6
 
-Component: helm.sh/helm/v4@v4.3.1
-Source: https://proxy.golang.org/helm.sh/helm/v4/@v/v4.3.1.zip
-Selected Go source checksum: h1:UndCoLe9UPmNoL7IvWzaUXveL7T5t/ijoorEmgJdI9g=
+Component: helm.sh/helm/v4@v4.3.2
+Source: https://proxy.golang.org/helm.sh/helm/v4/@v/v4.3.2.zip
+Selected Go source checksum: h1:zdd8DgKTlLrlYIzdoAntDHLH0V3RkgNIpQ3yjzuD84M=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -13127,7 +13127,7 @@ howett.net/plist
 Material: m065c8db878d76a58 (license), SHA-256 20d9b7d9372369484ecadae229d3e3efee8029b259e11c9a1b07d2e0a3c82e39
 Files: LICENSE
 
-Component: k8s.io/api@v0.37.1
+Component: k8s.io/api@v0.37.2
 Source: https://proxy.golang.org/k8s.io/api/@v/v0.36.6.zip
 Selected replacement: k8s.io/api@v0.36.6
 Selected Go source checksum: h1:3rpdtvtevl++F7XJ9lnSsNje6+032Lc9bUQRoMWFyDk=
@@ -13207,7 +13207,7 @@ Material: mb65e4d0566ca884c (copyright-header), SHA-256 e4414a7a62454953ce9048bb
 Material: mc93a7549b781fd12 (copyright-header), SHA-256 663e76d9545b8b2fd572c56941b9dc99e20fa9c1aa604caa0c08b8b2476b8a06
 Material: mff89ce360703bbfd (copyright-header), SHA-256 31c0f69dabebb2c43c5f51ed042037b22049cbab5278bb1210ec0b95b5d0a83d
 
-Component: k8s.io/apiextensions-apiserver@v0.37.1
+Component: k8s.io/apiextensions-apiserver@v0.37.2
 Source: https://proxy.golang.org/k8s.io/apiextensions-apiserver/@v/v0.36.6.zip
 Selected replacement: k8s.io/apiextensions-apiserver@v0.36.6
 Selected Go source checksum: h1:Yk7MDGJBGaxJVDcLYpT6rmWCoetjwijwQ8Y2zECJipY=
@@ -13229,7 +13229,7 @@ Files: LICENSE
 Material: m969246257ce9c732 (copyright-header), SHA-256 ff345f5babf52ae9caaac55971a3f44ec6a8f8e2245cec4ece03182134748d29
 Material: mb65e4d0566ca884c (copyright-header), SHA-256 e4414a7a62454953ce9048bb4945811c9a10a97692aa2c131da2f25a14434a0c
 
-Component: k8s.io/apimachinery@v0.37.1
+Component: k8s.io/apimachinery@v0.37.2
 Source: https://proxy.golang.org/k8s.io/apimachinery/@v/v0.36.6.zip
 Selected replacement: k8s.io/apimachinery@v0.36.6
 Selected Go source checksum: h1:XYM5fEI+Vs6QZ8G+pcl95dXrLpNXVJ7Yhzfao/T+qK0=
@@ -13335,7 +13335,7 @@ Material: mb65e4d0566ca884c (copyright-header), SHA-256 e4414a7a62454953ce9048bb
 Material: mc93a7549b781fd12 (copyright-header), SHA-256 663e76d9545b8b2fd572c56941b9dc99e20fa9c1aa604caa0c08b8b2476b8a06
 Material: mff89ce360703bbfd (copyright-header), SHA-256 31c0f69dabebb2c43c5f51ed042037b22049cbab5278bb1210ec0b95b5d0a83d
 
-Component: k8s.io/apiserver@v0.37.1
+Component: k8s.io/apiserver@v0.37.2
 Source: https://proxy.golang.org/k8s.io/apiserver/@v/v0.36.6.zip
 Selected replacement: k8s.io/apiserver@v0.36.6
 Selected Go source checksum: h1:/Jg/J+2b+vQS53SULDPgM05f+GGAzgnWQo6tyXPwLz0=
@@ -13512,7 +13512,7 @@ Material: mb65e4d0566ca884c (copyright-header), SHA-256 e4414a7a62454953ce9048bb
 Material: mc93a7549b781fd12 (copyright-header), SHA-256 663e76d9545b8b2fd572c56941b9dc99e20fa9c1aa604caa0c08b8b2476b8a06
 Material: mff89ce360703bbfd (copyright-header), SHA-256 31c0f69dabebb2c43c5f51ed042037b22049cbab5278bb1210ec0b95b5d0a83d
 
-Component: k8s.io/cli-runtime@v0.37.1
+Component: k8s.io/cli-runtime@v0.37.2
 Source: https://proxy.golang.org/k8s.io/cli-runtime/@v/v0.36.6.zip
 Selected replacement: k8s.io/cli-runtime@v0.36.6
 Selected Go source checksum: h1:6prmmxvGHeSM0x6pdvD9TIwKiBt1EVrI59dytwU+wzw=
@@ -13535,7 +13535,7 @@ Material: m977d7cea62a9b236 (copyright-header), SHA-256 33ed9207ae346250eaeff05e
 Material: mb65e4d0566ca884c (copyright-header), SHA-256 e4414a7a62454953ce9048bb4945811c9a10a97692aa2c131da2f25a14434a0c
 Material: mc93a7549b781fd12 (copyright-header), SHA-256 663e76d9545b8b2fd572c56941b9dc99e20fa9c1aa604caa0c08b8b2476b8a06
 
-Component: k8s.io/client-go@v0.37.1
+Component: k8s.io/client-go@v0.37.2
 Source: https://proxy.golang.org/k8s.io/client-go/@v/v0.36.6.zip
 Selected replacement: k8s.io/client-go@v0.36.6
 Selected Go source checksum: h1:/nxcosTtar7svq4xjpzMPirzoShNK2+nSZ7AGDL6c3k=
@@ -13941,7 +13941,7 @@ Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756
 Files: LICENSE
 Material: mb65e4d0566ca884c (copyright-header), SHA-256 e4414a7a62454953ce9048bb4945811c9a10a97692aa2c131da2f25a14434a0c
 
-Component: k8s.io/component-base@v0.37.1
+Component: k8s.io/component-base@v0.37.2
 Source: https://proxy.golang.org/k8s.io/component-base/@v/v0.36.6.zip
 Selected replacement: k8s.io/component-base@v0.36.6
 Selected Go source checksum: h1:GT/t2DOG5axW1ZfDfHr0A9FVCPepdUihU6rjFEPN2bY=
@@ -13988,7 +13988,7 @@ Material: ma6f958c5e7e8f01b (copyright-header), SHA-256 da4cd8ef4b9a411df8b61678
 Material: mb65e4d0566ca884c (copyright-header), SHA-256 e4414a7a62454953ce9048bb4945811c9a10a97692aa2c131da2f25a14434a0c
 Material: mc93a7549b781fd12 (copyright-header), SHA-256 663e76d9545b8b2fd572c56941b9dc99e20fa9c1aa604caa0c08b8b2476b8a06
 
-Component: k8s.io/component-helpers@v0.37.1
+Component: k8s.io/component-helpers@v0.37.2
 Source: https://proxy.golang.org/k8s.io/component-helpers/@v/v0.36.6.zip
 Selected replacement: k8s.io/component-helpers@v0.36.6
 Selected Go source checksum: h1:/9puIftBWGam1BPYsDbXP4hUwhjYcrs0ign6e7a/8Ts=
@@ -14159,7 +14159,7 @@ Files: LICENSE
 Material: m969246257ce9c732 (copyright-header), SHA-256 ff345f5babf52ae9caaac55971a3f44ec6a8f8e2245cec4ece03182134748d29
 Material: mc93a7549b781fd12 (copyright-header), SHA-256 663e76d9545b8b2fd572c56941b9dc99e20fa9c1aa604caa0c08b8b2476b8a06
 
-Component: k8s.io/kubectl@v0.37.1
+Component: k8s.io/kubectl@v0.37.2
 Source: https://proxy.golang.org/k8s.io/kubectl/@v/v0.36.6.zip
 Selected replacement: k8s.io/kubectl@v0.36.6
 Selected Go source checksum: h1:1rk5Thi09ISl7O8heVwP3eQKhQRmLNrLvXEfY8HNqAI=
@@ -14293,7 +14293,7 @@ Material: ma6f958c5e7e8f01b (copyright-header), SHA-256 da4cd8ef4b9a411df8b61678
 Material: mb65e4d0566ca884c (copyright-header), SHA-256 e4414a7a62454953ce9048bb4945811c9a10a97692aa2c131da2f25a14434a0c
 Material: mc93a7549b781fd12 (copyright-header), SHA-256 663e76d9545b8b2fd572c56941b9dc99e20fa9c1aa604caa0c08b8b2476b8a06
 
-Component: k8s.io/metrics@v0.37.1
+Component: k8s.io/metrics@v0.37.2
 Source: https://proxy.golang.org/k8s.io/metrics/@v/v0.36.6.zip
 Selected replacement: k8s.io/metrics@v0.36.6
 Selected Go source checksum: h1:TChXaCsyn/VxKl5hZqWK+S7ywu9mba9H5NvOMn+N1yI=
@@ -14327,7 +14327,7 @@ Material: m4c81d48912793052 (copyright-header), SHA-256 efdae5566a2bad84de4a6c02
 Material: m72a423085b6faa73 (copyright-header), SHA-256 0f2c0852c64cb6cda92a90caef7a8134ae7d7d466f7a926620e5d710390f07aa
 Material: m943840ca44adbb47 (copyright-header), SHA-256 4f5cc6c329d6767d5d45311affb8f18bc325218331efd54da9c18101a527ab80
 
-Component: k8s.io/streaming@v0.37.1
+Component: k8s.io/streaming@v0.37.2
 Source: https://proxy.golang.org/k8s.io/streaming/@v/v0.36.6.zip
 Selected replacement: k8s.io/streaming@v0.36.6
 Selected Go source checksum: h1:cqaB2f/NshA0ldEoab/DLRWP0yz0mB4IvbERHjoEdxs=
