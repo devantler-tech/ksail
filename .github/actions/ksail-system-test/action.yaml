@@ -171,6 +171,14 @@ inputs:
   inventory-trial-location:
     description: Location shared by the cluster and powered-off inventory probe.
     default: "fsn1"
+  load-balancer-toggle:
+    description: |
+      Hetzner + Talos only. When 'true', switches load balancers off with `ksail cluster
+      update`, asserts the cloud controller runs without its service controller, the nodes
+      stay Ready and a dry run finds nothing left to change, then restores the original
+      setting and asserts the reverse. Needs load balancers on at create (ksail#7678).
+    required: false
+    default: "false"
   floating-ip-toggle:
     description: |
       Hetzner + Talos only. When 'true', runs an additional step that enables
@@ -601,6 +609,7 @@ runs:
       shell: bash
       env:
         DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
       run: |
         set -euo pipefail
         # `cluster create` provisions from the node image KSail pins in
@@ -617,6 +626,13 @@ runs:
         #
         # Talos has a separate OS image: pin its no-op checks to the Kubernetes
         # version actually created. Its upgrade trial runs as a distinct step.
+        #
+        # On Hetzner, pin the Talos OS version too. An unpinned update follows the
+        # newest Talos tag in the registry, while Hetzner boots from an ISO fixed at
+        # DefaultHetznerTalosVersion, so the "no-op" update would otherwise run
+        # a rolling OS upgrade of every node (28 steps on 2026-11-23, #8543).
+        # Docker nodes already run the newest tag, and an explicit version there
+        # changes the machine-config contract the cluster was created with (#8545).
         case "$DISTRIBUTION" in
           Talos)
             version=$(kubectl version --request-timeout=30s -o json | jq -er '.serverVersion.gitVersion')
@@ -624,7 +640,27 @@ runs:
               echo "❌ ERROR: could not determine the created Talos Kubernetes version"
               exit 1
             fi
-            echo "flag=--kubernetes-version $version" >> "$GITHUB_OUTPUT"
+            if [[ "$PROVIDER" != Hetzner ]]; then
+              echo "🔖 Pinning cluster update to Kubernetes $version (as created)"
+              echo "flag=--kubernetes-version $version" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if ! talos_version=$(kubectl get nodes --request-timeout=30s -o json | jq -er '
+              .items
+              | if type != "array" or length == 0 then error("no nodes") else . end
+              | map(.status.nodeInfo.osImage
+                  | if type != "string" then error("missing Talos version")
+                    elif test("^Talos \\(v[0-9]+\\.[0-9]+\\.[0-9]+\\)$") then
+                      capture("^Talos \\((?<version>v[0-9]+\\.[0-9]+\\.[0-9]+)\\)$").version
+                    else error("invalid Talos version") end)
+              | unique
+              | if length == 1 then .[0] else error("mixed Talos versions") end
+            '); then
+              echo "❌ ERROR: could not determine one running Talos version across all nodes"
+              exit 1
+            fi
+            echo "🔖 Pinning cluster update to Kubernetes $version and Talos $talos_version (as created)"
+            echo "flag=--kubernetes-version $version --distribution-version $talos_version" >> "$GITHUB_OUTPUT"
             exit 0
             ;;
           K3s)     dockerfile="pkg/fsutil/configmanager/k3d/Dockerfile";  repo="rancher/k3s" ;;
@@ -666,25 +702,33 @@ runs:
         CREATED_BY_RELEASE: ${{ inputs.create-binary != '' }}
       run: |
         set -o pipefail
+        DRY_RUN_LOG="${KSAIL_SYSTEM_TEST_LOG_DIR:-/tmp/ksail-system-test-logs}/cluster-update-dry-run.log"
         # Strip init-only flags that cluster update does not accept
         UPDATE_ARGS=$(echo "$ARGS" | sed 's/--image-verification [^ ]*//')
         # shellcheck disable=SC2086
-        ksail cluster update --dry-run --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG 2>&1 | tee /tmp/ksail-system-test-logs/cluster-update-dry-run.log
+        ksail cluster update --dry-run --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG 2>&1 | tee "$DRY_RUN_LOG"
         update_status=$?
         if [[ "$CREATED_BY_RELEASE" == true ]]; then
           [[ "$update_status" -eq 0 ]] || { echo "❌ ERROR: the dry run failed on the cluster an earlier release created"; exit "$update_status"; }
           # ksail#8347: an earlier release created this cluster, so this build may change it in
           # place, but it must never need to recreate it.
-          if grep -qE "[1-9][0-9]* recreate-required" /tmp/ksail-system-test-logs/cluster-update-dry-run.log; then
+          if grep -qE "[1-9][0-9]* recreate-required" "$DRY_RUN_LOG"; then
             echo "❌ ERROR: this build would recreate a cluster an earlier release created"
             exit 1
           fi
           echo "✅ No recreation needed for the cluster the earlier release created (dry run)"
           exit 0
         fi
+        # A planned version upgrade is printed apart from the change summary, which can
+        # still say "No changes detected" (#8542), so check for it on its own.
+        if grep -qE "upgrade path: |Dry run complete\. No [a-z]+ upgrades applied" "$DRY_RUN_LOG"; then
+          echo "❌ ERROR: the dry run plans a version upgrade on the cluster it just created"
+          echo "The no-op update must not upgrade Kubernetes or the distribution (#8543)."
+          exit 1
+        fi
         # Fail early if the dry run detects unexpected changes.
         # The cluster was just created with the same config, so zero changes are expected.
-        if ! grep -qE "No changes detected|Would apply 0 in-place, 0 reboot-required, 0 recreate-required" /tmp/ksail-system-test-logs/cluster-update-dry-run.log; then
+        if ! grep -qE "No changes detected|Would apply 0 in-place, 0 reboot-required, 0 recreate-required" "$DRY_RUN_LOG"; then
           echo "❌ ERROR: Unexpected changes detected in dry run after cluster creation"
           echo "This indicates a regression — the cluster was just created with the same configuration."
           exit 1
@@ -807,7 +851,7 @@ runs:
           echo "❌ Running Talos version differs from the declared trial baseline" >&2
           exit 1
         fi
-        if [[ ! "${K8S_VERSION_FLAG:-}" =~ ^--kubernetes-version[[:space:]]v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        if [[ ! "${K8S_VERSION_FLAG:-}" =~ ^--kubernetes-version[[:space:]]v[0-9]+\.[0-9]+\.[0-9]+([[:space:]]--distribution-version[[:space:]]v[0-9]+\.[0-9]+\.[0-9]+)?$ ]]; then
           echo "❌ Missing stable Kubernetes version pin for the schematic trial" >&2
           exit 1
         fi
@@ -1049,6 +1093,7 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ steps.resolve-args.outputs.args }}
         NEW_SERVER_TYPE: ${{ inputs.rolling-resize-server-type }}
+        K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
       run: |
         set -o pipefail
         LOG_FILE="/tmp/ksail-system-test-logs/cluster-update-rolling-resize.log"
@@ -1060,7 +1105,7 @@ runs:
         # Strip init-only flags that cluster update does not accept.
         UPDATE_ARGS=$(echo "$ARGS" | sed 's/--image-verification [^ ]*//')
         # shellcheck disable=SC2086
-        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS
+        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG
 
         echo "=== Verifying cluster is healthy after rolling resize ==="
         ksail cluster info
@@ -1153,7 +1198,7 @@ runs:
 
         echo "=== Lowering the control plane from ${BEFORE} to ${AFTER} ==="
         yq -i ".spec.cluster.controlPlanes = ${AFTER}" ksail.yaml
-        SCALE_ARGS=$(echo "$UPDATE_ARGS" | sed -E "s/--control-planes [0-9]+/--control-planes ${AFTER}/")
+        SCALE_ARGS=$(printf '%s\n' "$UPDATE_ARGS" | sed -E "s/(^|[[:space:]])--control-planes([[:space:]]+|=)[0-9]+([[:space:]]|$)/\1--control-planes ${AFTER}\3/")
         # shellcheck disable=SC2086
         ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $SCALE_ARGS $K8S_VERSION_FLAG \
           2>&1 | tee "$LOG_DIR/cluster-update-scale-down.log"
@@ -1307,6 +1352,96 @@ runs:
         kubectl get nodes -o wide
         echo "✅ Floating IP released; API reachable at ${SERVER}"
 
+    - name: 🧪 ksail cluster update — load balancers off then on
+      id: cluster-update-load-balancer-toggle
+      if: inputs.provider == 'Hetzner' && inputs.distribution == 'Talos' && inputs.init == 'true' && inputs.load-balancer-toggle == 'true'
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ steps.resolve-args.outputs.args }}
+        K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
+      run: |
+        set -euo pipefail
+        # ksail#7678: switching load balancers off on a running cluster must switch the
+        # cloud controller's service controller off, and switching them back on must
+        # restore it, each leaving nothing for a dry run to change.
+        LOG_DIR="/tmp/ksail-system-test-logs"
+        UPDATE_ARGS=$(echo "$ARGS" | sed -e 's/--image-verification [^ ]*//' -e 's/--load-balancer[ =][^ ]*//')
+        ccm_command() {
+          kubectl -n kube-system get deployments,daemonsets -o json |
+            jq -r '[.items[] | select(.metadata.name == "hcloud-cloud-controller-manager")
+              | .spec.template.spec.containers[] | ((.command // []) + (.args // []))[]] | join(" ")'
+        }
+        wait_ccm() {
+          # Wait on the kind that actually runs the controller, so its own rollout error is
+          # the one reported.
+          local kind
+          kind=$(kubectl -n kube-system get deployments,daemonsets -o json |
+            jq -r '[.items[] | select(.metadata.name == "hcloud-cloud-controller-manager") | .kind]
+              | if length == 1 then .[0] | ascii_downcase else "" end')
+          if [ -z "$kind" ]; then
+            echo "❌ ERROR: expected exactly one hcloud-cloud-controller-manager Deployment or DaemonSet"
+            return 1
+          fi
+          kubectl -n kube-system rollout status "$kind/hcloud-cloud-controller-manager" --timeout=5m
+        }
+        update() {
+          # shellcheck disable=SC2086
+          ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG \
+            2>&1 | tee "$LOG_DIR/$1.log"
+        }
+        dry_run_unchanged() {
+          # shellcheck disable=SC2086
+          ksail cluster update --dry-run --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG \
+            2>&1 | tee "$LOG_DIR/$1.log"
+          grep -qE "No changes detected|Would apply 0 in-place, 0 reboot-required, 0 recreate-required" "$LOG_DIR/$1.log"
+        }
+
+        ORIGINAL=$(yq -r '.spec.cluster.loadBalancer // ""' ksail.yaml)
+        if [[ "$ORIGINAL" == Disabled || "$(ccm_command)" == *-service* ]]; then
+          echo "❌ ERROR: the load-balancer toggle needs load balancers on at create"
+          exit 1
+        fi
+
+        echo "=== Switching load balancers off ==="
+        yq -i '.spec.cluster.loadBalancer = "Disabled"' ksail.yaml
+        update cluster-update-load-balancer-disable
+        if ! grep -q "load balancers are disabled" "$LOG_DIR/cluster-update-load-balancer-disable.log"; then
+          echo "❌ ERROR: the update did not report the load balancers it leaves in place"
+          exit 1
+        fi
+        wait_ccm
+        if [[ "$(ccm_command)" != *"--controllers=*,-service"* ]]; then
+          echo "❌ ERROR: the cloud controller still runs its service controller: $(ccm_command)"
+          exit 1
+        fi
+        kubectl wait --for=condition=Ready nodes --all --timeout=5m
+        if ! dry_run_unchanged cluster-update-load-balancer-disable-dry-run; then
+          echo "❌ ERROR: a dry run after switching load balancers off still finds changes"
+          exit 1
+        fi
+        echo "✅ Load balancers off: the service controller is off and the nodes are Ready"
+
+        echo "=== Restoring the original load-balancer setting ==="
+        if [[ -z "$ORIGINAL" ]]; then
+          yq -i 'del(.spec.cluster.loadBalancer)' ksail.yaml
+        else
+          ORIGINAL="$ORIGINAL" yq -i '.spec.cluster.loadBalancer = strenv(ORIGINAL)' ksail.yaml
+        fi
+        update cluster-update-load-balancer-enable
+        wait_ccm
+        if [[ "$(ccm_command)" == *-service* ]]; then
+          echo "❌ ERROR: the cloud controller still runs without its service controller: $(ccm_command)"
+          exit 1
+        fi
+        kubectl wait --for=condition=Ready nodes --all --timeout=5m
+        if ! dry_run_unchanged cluster-update-load-balancer-enable-dry-run; then
+          echo "❌ ERROR: a dry run after switching load balancers back on still finds changes"
+          exit 1
+        fi
+        echo "✅ Load balancers back on: the service controller runs and the nodes are Ready"
+
     # ── Phase 4b — Lifecycle tests (stop/start) ──────────────────────
     # Exercise stop/start on the freshly-created cluster BEFORE the heavy
     # nested-provider suite. Running it here keeps single-node etcd recovery
@@ -1421,7 +1556,7 @@ runs:
         || steps.cluster-update-rolling-resize.outcome == 'failure'
         || steps.cluster-update-floating-ip-toggle.outcome == 'failure'
         || steps.cluster-update-control-plane-scale-down.outcome == 'failure'
-        || steps.cluster-update-control-plane-scale-down.outcome == 'failure'
+        || steps.cluster-update-load-balancer-toggle.outcome == 'failure'
         || steps.kubernetes-provider-tests.outcome == 'failure')
       uses: $/.github/actions/debug-kubernetes-failure
       with:
@@ -1470,7 +1605,10 @@ runs:
       run: |
         set -euo pipefail
         [[ "$DISTRIBUTION" == Talos && "$PROVIDER" == Hetzner && "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
-        export K8S_VERSION="${K8S_VERSION_FLAG#--kubernetes-version }"
+        read -r -a version_args <<<"$K8S_VERSION_FLAG"
+        # The Talos pin is "--kubernetes-version <v> --distribution-version <v>" (#8543).
+        [[ ${#version_args[@]} == 4 && ${version_args[0]} == --kubernetes-version && ${version_args[2]} == --distribution-version ]]
+        export K8S_VERSION="${version_args[1]}" TALOS_VERSION="${version_args[3]}"
         timeout --kill-after=6m 20m bash "$GITHUB_WORKSPACE/.github/actions/ksail-system-test/autoscaler-audit-trial.sh"
 
     # ── Diagnostic artifact upload (on failure) ─────────────────────

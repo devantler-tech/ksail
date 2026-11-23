@@ -156,6 +156,14 @@ inputs:
   inventory-trial-location:
     description: Location shared by the cluster and powered-off inventory probe.
     default: fsn1
+  load-balancer-toggle:
+    description: |
+      Hetzner + Talos only. When 'true', switches load balancers off with `ksail cluster
+      update`, asserts the cloud controller runs without its service controller, the nodes
+      stay Ready and a dry run finds nothing left to change, then restores the original
+      setting and asserts the reverse. Needs load balancers on at create (ksail#7678).
+    required: false
+    default: "false"
   floating-ip-toggle:
     description: |
       Hetzner + Talos only. When 'true', runs an additional step that enables
@@ -234,7 +242,10 @@ runs:
       run: |
         set -euo pipefail
         [[ "$DISTRIBUTION" == Talos && "$PROVIDER" == Hetzner && "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
-        export K8S_VERSION="${K8S_VERSION_FLAG#--kubernetes-version }"
+        read -r -a version_args <<<"$K8S_VERSION_FLAG"
+        # The Talos pin is "--kubernetes-version <v> --distribution-version <v>" (#8543).
+        [[ ${#version_args[@]} == 4 && ${version_args[0]} == --kubernetes-version && ${version_args[2]} == --distribution-version ]]
+        export K8S_VERSION="${version_args[1]}" TALOS_VERSION="${version_args[3]}"
         timeout --kill-after=6m 20m bash "$GITHUB_WORKSPACE/.github/actions/ksail-system-test/autoscaler-audit-trial.sh"
       id: fixture-trial
     - name: "\U0001F4CB Save system test diagnostics"

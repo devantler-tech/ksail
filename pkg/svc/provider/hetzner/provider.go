@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
@@ -64,6 +65,9 @@ type Provider struct {
 	client *hcloud.Client
 	// gracefulShutdownTimeout overrides DefaultGracefulShutdownTimeout when positive.
 	gracefulShutdownTimeout time.Duration
+	// logWriter receives notices about resources cleanup leaves in place. Nil
+	// discards them.
+	logWriter io.Writer
 }
 
 // NewProvider creates a new Hetzner Cloud provider with the given client.
@@ -80,6 +84,12 @@ func NewProviderFromToken(token string) *Provider {
 	return &Provider{
 		client: client,
 	}
+}
+
+// SetLogWriter sets where the provider reports resources that cluster cleanup
+// keeps because KSail does not own them. A nil writer discards the notices.
+func (p *Provider) SetLogWriter(writer io.Writer) {
+	p.logWriter = writer
 }
 
 // StartNodes starts all servers for the given cluster.
@@ -896,4 +906,18 @@ func retryTransientHetznerOperation[T any](
 	}
 
 	return result, err
+}
+
+// reportRetained tells the user that cleanup kept a same-named resource because
+// it is not labelled as owned by the cluster being deleted.
+func (p *Provider) reportRetained(kind, name, clusterName string) {
+	if p.logWriter == nil {
+		return
+	}
+
+	_, _ = fmt.Fprintf(
+		p.logWriter,
+		"Keeping %s %q: it is not labelled as owned by KSail cluster %q\n",
+		kind, name, clusterName,
+	)
 }

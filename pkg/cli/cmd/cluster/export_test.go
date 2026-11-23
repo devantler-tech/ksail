@@ -1080,6 +1080,16 @@ func ExportChartValuesDriftFields() []string {
 	return fields
 }
 
+// ExportResolveImplicitEKSKubeContext exports resolveImplicitEKSKubeContext for testing.
+func ExportResolveImplicitEKSKubeContext(ctx *localregistry.Context) error {
+	return resolveImplicitEKSKubeContext(context.Background(), ctx)
+}
+
+// ExportRecordUnselectableKubeContext exports recordUnselectableKubeContext for testing.
+func ExportRecordUnselectableKubeContext(diff *clusterupdate.UpdateResult, err error) {
+	recordUnselectableKubeContext(diff, err)
+}
+
 // ExportWriteClusterIdentityMarker runs the best-effort marker write with an injected client
 // factory, so tests can prove it records the provisioned identity and never fails the caller.
 func ExportWriteClusterIdentityMarker(

@@ -29,13 +29,13 @@ Usage:
   ksail workload cipher decrypt [file] [flags]
 
 Flags:
-  -e, --extract string   extract a specific key from the decrypted file (JSONPath format)
-      --ignore-mac       ignore Message Authentication Code (MAC) check
-  -o, --output string    output file path (default: stdout)
+  -e, --extract string            extract a specific key from the decrypted file (JSONPath format)
+      --ignore-mac[=true|false]   ignore Message Authentication Code (MAC) check
+  -o, --output string             output file path (default: stdout)
 
 Global Flags:
-      --benchmark       Show per-activity benchmark output
-      --config string   Path to config file (default: ksail.yaml found via directory traversal)
-      --experimental    Enable experimental (unstable) commands and features
+      --benchmark[=true|false]      Show per-activity benchmark output
+      --config string               Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental[=true|false]   Enable experimental (unstable) commands and features
 
 ```

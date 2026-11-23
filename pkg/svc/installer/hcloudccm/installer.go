@@ -104,6 +104,13 @@ func buildValuesYaml(networkName string, haEnabled bool, opts ...Option) string 
 	}
 
 	if networkName != "" {
+		// Networking enables hostNetwork, so a surge pod cannot replace its
+		// predecessor without a spare eligible node. Replace one pod at a time,
+		// retaining the other replica when HA is enabled.
+		parts = append(
+			parts,
+			"strategy:\n  type: RollingUpdate\n  rollingUpdate:\n    maxSurge: 0\n    maxUnavailable: 1",
+		)
 		parts = append(parts, "networking:\n  enabled: true\n  clusterCIDR: "+DefaultClusterCIDR)
 	}
 

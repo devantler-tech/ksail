@@ -231,6 +231,7 @@ Each of these adds a phase and is off unless set. The action's `action.yaml` des
 | `inventory-trial-location`          | Location shared by the cluster and the inventory probe                                        | `fsn1`                       |
 | `floating-ip-toggle`                | Hetzner Talos only: enable then disable the floating IP and verify the API endpoint each time | `false`                      |
 | `control-plane-scale-down`          | Hetzner Talos only: remove one of four or more control planes and verify API access and etcd  | `false`                      |
+| `load-balancer-toggle`              | Hetzner Talos only: switch load balancers off and back on and verify the cloud controller     | `false`                      |
 
 ### Diagnostics and cleanup
 

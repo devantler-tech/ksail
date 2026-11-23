@@ -93,6 +93,35 @@ func ResourceLabels(clusterName string) map[string]string {
 	}
 }
 
+// LabelCCMServiceUID is the label hcloud-ccm sets on every load balancer it
+// creates for a Kubernetes Service of type LoadBalancer.
+const LabelCCMServiceUID = "hcloud-ccm/service-uid"
+
+// ownedByCluster reports whether a resource's labels mark it as created by
+// KSail for the named cluster. Both the ownership label and the cluster-name
+// label must match. Cleanup paths that look a resource up by its conventional
+// name must check this before deleting it, so a same-named resource made by
+// another tool, or by KSail for another cluster, is never removed.
+func ownedByCluster(labels map[string]string, clusterName string) bool {
+	return labels[LabelOwned] == LabelOwnedValue && labels[LabelClusterName] == clusterName
+}
+
+// loadBalancerOwnedByCluster reports whether a load balancer attached to the
+// cluster's KSail-owned network may be deleted with the cluster. KSail does not
+// create load balancers itself; hcloud-ccm does, and marks each one with
+// LabelCCMServiceUID. A load balancer carrying the cluster's KSail labels is
+// accepted too. Any other load balancer on the network was attached by someone
+// else and is kept.
+func loadBalancerOwnedByCluster(labels map[string]string, clusterName string) bool {
+	if ownedByCluster(labels, clusterName) {
+		return true
+	}
+
+	_, createdByCCM := labels[LabelCCMServiceUID]
+
+	return createdByCCM
+}
+
 // NodeLabels creates the complete label set for a cluster node.
 func NodeLabels(clusterName string, nodeType string, index int) map[string]string {
 	labels := ResourceLabels(clusterName)

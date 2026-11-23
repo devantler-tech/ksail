@@ -64,8 +64,10 @@ func TestHetznerScaleDownTrialAdmission(t *testing.T) {
 		{name: "default control planes", overrides: map[string]string{"CONTROL_PLANES": ""}},
 		{name: "non-numeric control planes", overrides: map[string]string{"CONTROL_PLANES": "4x"}},
 		{name: "direct provider", overrides: map[string]string{"DISTRIBUTION": "K3s"}},
+		{name: "no project init", overrides: map[string]string{"INIT": "false"}},
 		{name: "resize", overrides: map[string]string{"ROLLING_RESIZE": "cx33"}},
 		{name: "floating ip toggle", overrides: map[string]string{"FLOATING_IP_TOGGLE": "true"}},
+		{name: "load balancer toggle", overrides: map[string]string{"LOAD_BALANCER_TOGGLE": "true"}},
 		{name: "inventory", overrides: map[string]string{"INVENTORY_TRIAL": "true"}},
 		{name: "schematic", overrides: map[string]string{"SCHEMATIC_TRIAL": "true"}},
 	} {
@@ -85,12 +87,14 @@ func assertHetznerScaleDownAdmission(
 	t.Helper()
 
 	values := map[string]string{
-		"DISTRIBUTION":       "Talos",
-		"CONTROL_PLANES":     "4",
-		"ROLLING_RESIZE":     "",
-		"FLOATING_IP_TOGGLE": "false",
-		"INVENTORY_TRIAL":    "false",
-		"SCHEMATIC_TRIAL":    "false",
+		"DISTRIBUTION":         "Talos",
+		"INIT":                 "true",
+		"CONTROL_PLANES":       "4",
+		"ROLLING_RESIZE":       "",
+		"FLOATING_IP_TOGGLE":   "false",
+		"LOAD_BALANCER_TOGGLE": "false",
+		"INVENTORY_TRIAL":      "false",
+		"SCHEMATIC_TRIAL":      "false",
 	}
 	maps.Copy(values, overrides)
 

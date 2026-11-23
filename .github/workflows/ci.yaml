@@ -301,6 +301,7 @@ jobs:
               - 'internal/depcontract/**'
               - 'pkg/svc/installer/cni/cilium/Dockerfile'
               - 'pkg/svc/installer/kyverno/Dockerfile'
+              - 'pkg/fsutil/configmanager/talos/Dockerfile'
               - '.github/dependabot.yaml'
               - 'go.mod'
               - 'go.sum'
@@ -491,6 +492,9 @@ jobs:
               - '.github/workflows/ci.yaml'
             hetzner-cleanup-script:
               - '.github/actions/cleanup-hetzner/**'
+              - '.github/scripts/verify-hetzner-absence.sh'
+              - '.github/scripts/verify-hetzner-absence.test.sh'
+              - '.github/workflows/verify-hetzner-absence.yaml'
               - '.github/workflows/ci.yaml'
             gitops-assert-scripts:
               - '.github/scripts/assert-gitops-deployed.sh'
@@ -694,6 +698,8 @@ jobs:
             .github/actions/cleanup-hetzner/cleanup-hetzner.sh \
             .github/actions/cleanup-hetzner/cleanup-hetzner.test.sh
           .github/actions/cleanup-hetzner/cleanup-hetzner.test.sh
+          shellcheck .github/scripts/verify-hetzner-absence.sh .github/scripts/verify-hetzner-absence.test.sh
+          bash .github/scripts/verify-hetzner-absence.test.sh
 
   gitops-assert-scripts:
     name: 🔐 Validate GitOps And Workload Guards
@@ -791,7 +797,7 @@ jobs:
       || (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
       && needs.changes.outputs.govuln-allowlist == 'true')
-    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@cc156a3693019fdbe9817c46f1a91cd50a124695 # v21.7.3
+    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@711337ea623e44536204b40fff5278166aa64ffa # v21.12.3
     # The canonical defaults make a default-branch run answer "did the check run" rather than
     # "did the diff touch a Go file". On main the branch's green IS the protection
     # signal, so a path filter that skips the suite or the scan leaves main green
@@ -1171,7 +1177,7 @@ jobs:
       - name: 🧹 Free disk space
         if: steps.calico-cache.outputs.cache-hit != 'true'
         # Only cold compilation needs the large working-space reclamation.
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@d029d5bb6288a6f5d083c971470deaf8cf756439
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@4a36d987d64e34a915867f296151812fe9011f09
 
       - name: ♻️ Restore Go modules
         if: steps.calico-cache.outputs.cache-hit != 'true'
@@ -2070,7 +2076,7 @@ jobs:
       # This job already waits for the producer. Reuse its exact sealed bytes
       # instead of restoring Go modules or compiling again after cache eviction.
       - name: 📥 Restore KSail binary
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@d029d5bb6288a6f5d083c971470deaf8cf756439
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@4a36d987d64e34a915867f296151812fe9011f09
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2284,7 +2290,7 @@ jobs:
 
       - name: 📥 Restore KSail binary
         # Pin the identical published action until actionlint supports $/ references.
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@d029d5bb6288a6f5d083c971470deaf8cf756439
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@4a36d987d64e34a915867f296151812fe9011f09
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2616,7 +2622,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devantler-tech/ksail
-          ref: be7d4483a4abf07a246f977d558ff10bb4a0bd36
+          ref: f11afe46d1c0a0e5a37d7ef2e6dda13e00ed47f0
           path: .diagnostics-artifact-source
           persist-credentials: false
 
@@ -2635,7 +2641,7 @@ jobs:
         id: probe-baseline
         if: matrix.mode == 'baseline'
         continue-on-error: true
-        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-baseline@be7d4483a4abf07a246f977d558ff10bb4a0bd36
+        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-baseline@f11afe46d1c0a0e5a37d7ef2e6dda13e00ed47f0
         with:
           distribution: Vanilla
           provider: Hetzner
@@ -2646,7 +2652,7 @@ jobs:
         id: probe-candidate
         if: matrix.mode == 'candidate'
         continue-on-error: true
-        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-candidate@be7d4483a4abf07a246f977d558ff10bb4a0bd36
+        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-candidate@f11afe46d1c0a0e5a37d7ef2e6dda13e00ed47f0
         with:
           distribution: Vanilla
           provider: Hetzner
@@ -2842,7 +2848,7 @@ jobs:
         with:
           persist-credentials: false
       - name: 🧹 Free runner disk
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@d029d5bb6288a6f5d083c971470deaf8cf756439
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@4a36d987d64e34a915867f296151812fe9011f09
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -2942,7 +2948,7 @@ jobs:
           persist-credentials: false
       - name: Check active documentation
         id: links
-        uses: devantler-tech/.github/actions/validate-retired-repo-links@cc156a3693019fdbe9817c46f1a91cd50a124695 # v21.7.3
+        uses: devantler-tech/.github/actions/validate-retired-repo-links@711337ea623e44536204b40fff5278166aa64ffa # v21.12.3
         with:
           enabled: "true"
       - name: Require a completed scan
@@ -3031,7 +3037,7 @@ jobs:
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/.github/actions/aggregate-job-checks@cc156a3693019fdbe9817c46f1a91cd50a124695 # v21.7.3
+      - uses: devantler-tech/.github/actions/aggregate-job-checks@711337ea623e44536204b40fff5278166aa64ffa # v21.12.3
         with:
           check-workflow-startup: ${{ contains(fromJSON('["pull_request","push","merge_group"]'), github.event_name) }}
           job-results: >-
