@@ -76,6 +76,7 @@ func autoscalerAuditTrialCommand(
 		"GITHUB_RUN_ID=1234",
 		"CLUSTER_NAME=st-hetzner-dispatch-1234",
 		"K8S_VERSION=v1.36.2",
+		"TALOS_VERSION=v1.12.4",
 		"HCLOUD_TOKEN=fixture",
 		"EVIDENCE_DIR="+filepath.Join(state, "evidence"),
 	)

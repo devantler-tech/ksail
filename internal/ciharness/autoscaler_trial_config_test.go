@@ -202,7 +202,7 @@ func TestAutoscalerTrialCapacityReachesThePoweredOffProbe(t *testing.T) {
 	cmd.Dir = state
 	cmd.Env = append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"STATE="+state, "MODE=complete", "GITHUB_RUN_ID=1234",
-		"CLUSTER_NAME=st-hetzner-dispatch-1234", "K8S_VERSION=v1.35.0",
+		"CLUSTER_NAME=st-hetzner-dispatch-1234", "K8S_VERSION=v1.35.0", "TALOS_VERSION=v1.12.4",
 		"HCLOUD_TOKEN=fixture", "EVIDENCE_DIR="+filepath.Join(state, "evidence"),
 		"TRIAL_SERVER_TYPE=cx33", "TRIAL_LOCATION=nbg1")
 	output, runErr := cmd.CombinedOutput()

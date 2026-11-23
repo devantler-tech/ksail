@@ -1447,9 +1447,10 @@ runs:
       run: |
         set -euo pipefail
         [[ "$DISTRIBUTION" == Talos && "$PROVIDER" == Hetzner && "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
-        K8S_VERSION="${K8S_VERSION_FLAG#--kubernetes-version }"
-        # The pin can also carry --distribution-version (#8543); keep only the Kubernetes version.
-        export K8S_VERSION="${K8S_VERSION%% *}"
+        read -r -a version_args <<<"$K8S_VERSION_FLAG"
+        # The Talos pin is "--kubernetes-version <v> --distribution-version <v>" (#8543).
+        [[ ${#version_args[@]} == 4 && ${version_args[0]} == --kubernetes-version && ${version_args[2]} == --distribution-version ]]
+        export K8S_VERSION="${version_args[1]}" TALOS_VERSION="${version_args[3]}"
         timeout --kill-after=6m 20m bash "$GITHUB_WORKSPACE/.github/actions/ksail-system-test/autoscaler-audit-trial.sh"
 
     # ── Diagnostic artifact upload (on failure) ─────────────────────
