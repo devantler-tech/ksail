@@ -230,6 +230,7 @@ Each of these adds a phase and is off unless set. The action's `action.yaml` des
 | `inventory-trial-server-type`       | Server type shared by the cluster and the inventory probe                                     | `cx23`                       |
 | `inventory-trial-location`          | Location shared by the cluster and the inventory probe                                        | `fsn1`                       |
 | `floating-ip-toggle`                | Hetzner Talos only: enable then disable the floating IP and verify the API endpoint each time | `false`                      |
+| `control-plane-scale-down`          | Hetzner Talos only: remove one of four or more control planes and verify API access and etcd  | `false`                      |
 
 ### Diagnostics and cleanup
 

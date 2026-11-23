@@ -180,6 +180,18 @@ inputs:
       and the API is reachable on the node address. Needs an explicit --name.
     required: false
     default: "false"
+  control-plane-scale-down:
+    description: |
+      Hetzner + Talos only. When 'true', runs an additional step that gives the
+      cluster its ksail-owned floating API address, empties the control plane
+      KSail will remove (the newest one that does not hold that address), lowers
+      spec.cluster.controlPlanes by one and applies it via `ksail cluster update
+      --force`. It then asserts the server and Node are gone, the API still
+      answers through the floating address with etcd healthy, the removal record
+      is verified, and a second update finds nothing to change. Needs an explicit
+      --name and at least four control planes, so three remain.
+    required: false
+    default: "false"
   upload-artifacts:
     description: |
       Upload diagnostics and logs from inside this composite action. Callers
@@ -1064,6 +1076,142 @@ runs:
         fi
         echo "✅ Rolling server-type resize completed"
 
+    - name: 🧪 ksail cluster update — control-plane scale-down
+      id: cluster-update-control-plane-scale-down
+      if: inputs.provider == 'Hetzner' && inputs.distribution == 'Talos' && inputs.control-plane-scale-down == 'true'
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ steps.resolve-args.outputs.args }}
+        K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
+      run: |
+        set -euo pipefail
+        LOG_DIR="/tmp/ksail-system-test-logs"
+        CLUSTER_NAME=$(echo "$ARGS" | grep -oP '(?<=--name\s)\S+' || true)
+        if [ -z "$CLUSTER_NAME" ]; then
+          echo "❌ ERROR: the control-plane scale-down needs an explicit --name in the args"
+          exit 1
+        fi
+        # Strip init-only flags that cluster update does not accept.
+        UPDATE_ARGS=$(echo "$ARGS" | sed 's/--image-verification [^ ]*//')
+
+        hcloud_get() {
+          curl -fsS -H "Authorization: Bearer ${HCLOUD_TOKEN}" "https://api.hetzner.cloud/v1/$1"
+        }
+        # The cluster's control-plane servers as one JSON array.
+        control_plane_servers() {
+          hcloud_get "servers?per_page=50&label_selector=ksail.cluster.name%3D${CLUSTER_NAME}%2Cksail.node.type%3Dcontrolplane" |
+            jq -c '.servers'
+        }
+        # The cluster's ksail-owned floating IP as {ip, server}, or nothing.
+        owned_floating_ip() {
+          hcloud_get "floating_ips?label_selector=ksail.cluster.name%3D${CLUSTER_NAME}%2Cksail.owned%3Dtrue" |
+            jq -c '[.floating_ips[] | {ip, server}] | first // empty'
+        }
+        kubeconfig_host() {
+          local host
+          host=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
+          host=${host#*://}
+          host=${host%%/*}
+          printf '%s' "${host%:*}"
+        }
+
+        BEFORE=$(control_plane_servers | jq 'length')
+        if (( BEFORE < 4 )); then
+          echo "❌ ERROR: found ${BEFORE} control-plane servers; provision at least four so three remain"
+          exit 1
+        fi
+        AFTER=$((BEFORE - 1))
+
+        echo "=== Giving the API a ksail-owned floating address ==="
+        yq -i '.spec.provider.hetzner.floatingIPEnabled = true' ksail.yaml
+        # shellcheck disable=SC2086
+        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG \
+          2>&1 | tee "$LOG_DIR/cluster-update-scale-down-floating-ip.log"
+        FLOATING=$(owned_floating_ip)
+        FLOATING_IP=$(jq -r '.ip // empty' <<<"${FLOATING:-null}")
+        RETAINED_ID=$(jq -r '.server // empty' <<<"${FLOATING:-null}")
+        if [[ -z "$FLOATING_IP" || -z "$RETAINED_ID" ]]; then
+          echo "❌ ERROR: no assigned ksail-owned floating IP exists after enabling it"
+          exit 1
+        fi
+        if [[ "$(kubeconfig_host)" != "$FLOATING_IP" ]]; then
+          echo "❌ ERROR: the kubeconfig does not use the floating IP ${FLOATING_IP}"
+          exit 1
+        fi
+
+        # KSail keeps the server holding the floating IP and removes the newest
+        # other one (ties broken by name), so that is the server to empty.
+        TARGET=$(control_plane_servers | jq -c --argjson retained "$RETAINED_ID" '
+          [.[] | select(.id != $retained)]
+          | group_by(.created) | reverse | map(sort_by(.name)) | add | first')
+        TARGET_ID=$(jq -r '.id' <<<"$TARGET")
+        TARGET_NAME=$(jq -r '.name' <<<"$TARGET")
+        echo "=== Emptying ${TARGET_NAME} (server ${TARGET_ID}) before removal ==="
+        kubectl drain "$TARGET_NAME" --ignore-daemonsets --delete-emptydir-data --force --timeout=10m
+
+        echo "=== Lowering the control plane from ${BEFORE} to ${AFTER} ==="
+        yq -i ".spec.cluster.controlPlanes = ${AFTER}" ksail.yaml
+        SCALE_ARGS=$(echo "$UPDATE_ARGS" | sed -E "s/--control-planes [0-9]+/--control-planes ${AFTER}/")
+        # shellcheck disable=SC2086
+        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $SCALE_ARGS $K8S_VERSION_FLAG \
+          2>&1 | tee "$LOG_DIR/cluster-update-scale-down.log"
+
+        echo "=== Verifying the removal ==="
+        SERVERS=$(control_plane_servers)
+        if [[ "$(jq 'length' <<<"$SERVERS")" != "$AFTER" ]]; then
+          echo "❌ ERROR: expected ${AFTER} control-plane servers, found $(jq 'length' <<<"$SERVERS")"
+          exit 1
+        fi
+        if jq -e --argjson id "$TARGET_ID" 'any(.[]; .id == $id)' <<<"$SERVERS" >/dev/null; then
+          echo "❌ ERROR: server ${TARGET_ID} still exists"
+          exit 1
+        fi
+        if ! jq -e --argjson id "$RETAINED_ID" 'any(.[]; .id == $id)' <<<"$SERVERS" >/dev/null; then
+          echo "❌ ERROR: the server holding the floating IP was removed"
+          exit 1
+        fi
+        if [[ "$(kubeconfig_host)" != "$FLOATING_IP" ]]; then
+          echo "❌ ERROR: the kubeconfig no longer uses the floating IP ${FLOATING_IP}"
+          exit 1
+        fi
+        if kubectl get node "$TARGET_NAME" >/dev/null 2>&1; then
+          echo "❌ ERROR: Node ${TARGET_NAME} is still registered"
+          exit 1
+        fi
+        READY=$(kubectl get nodes -l node-role.kubernetes.io/control-plane \
+          -o jsonpath='{range .items[*]}{.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}' | grep -c '^True$' || true)
+        if [[ "$READY" != "$AFTER" ]]; then
+          echo "❌ ERROR: expected ${AFTER} Ready control-plane Nodes, found ${READY}"
+          exit 1
+        fi
+        kubectl get --raw='/readyz?verbose' | tee "$LOG_DIR/cluster-scale-down-readyz.log"
+        if ! grep -q '^\[+\]etcd ok' "$LOG_DIR/cluster-scale-down-readyz.log"; then
+          echo "❌ ERROR: the API server does not report etcd healthy after the removal"
+          exit 1
+        fi
+        RECORD_DIR=$(dirname "${KUBECONFIG:-$HOME/.kube/config}")
+        if ! test -f "${RECORD_DIR}/.ksail-cp-removed-${CLUSTER_NAME}@${TARGET_ID}.json"; then
+          echo "❌ ERROR: no verified removal record for server ${TARGET_ID}"
+          exit 1
+        fi
+        if compgen -G "${RECORD_DIR}/.ksail-cp-removal-${CLUSTER_NAME}@*" >/dev/null; then
+          echo "❌ ERROR: an unverified removal attempt record remains"
+          exit 1
+        fi
+
+        echo "=== A second update must find nothing to change ==="
+        # shellcheck disable=SC2086
+        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $SCALE_ARGS $K8S_VERSION_FLAG \
+          2>&1 | tee "$LOG_DIR/cluster-update-scale-down-converged.log"
+        if ! grep -q "No changes detected" "$LOG_DIR/cluster-update-scale-down-converged.log"; then
+          echo "❌ ERROR: the update after the removal still found changes"
+          exit 1
+        fi
+        kubectl get nodes -o wide
+        echo "✅ Removed ${TARGET_NAME}; ${AFTER} control planes remain and the API answers on ${FLOATING_IP}"
+
     - name: 🧪 ksail cluster update — floating IP enable then disable
       id: cluster-update-floating-ip-toggle
       if: inputs.provider == 'Hetzner' && inputs.distribution == 'Talos' && inputs.floating-ip-toggle == 'true'
@@ -1272,6 +1420,8 @@ runs:
         || steps.cluster-update-schematic.outcome == 'failure'
         || steps.cluster-update-rolling-resize.outcome == 'failure'
         || steps.cluster-update-floating-ip-toggle.outcome == 'failure'
+        || steps.cluster-update-control-plane-scale-down.outcome == 'failure'
+        || steps.cluster-update-control-plane-scale-down.outcome == 'failure'
         || steps.kubernetes-provider-tests.outcome == 'failure')
       uses: $/.github/actions/debug-kubernetes-failure
       with:

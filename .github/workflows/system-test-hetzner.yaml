@@ -105,6 +105,11 @@ on:
         required: false
         type: boolean
         default: false
+      control_plane_scale_down:
+        description: "Talos only: remove one control plane via cluster update and verify API access and etcd. Needs control_planes>=4."
+        required: false
+        type: boolean
+        default: false
       create_with_release:
         description: "Talos only: create the cluster with this published KSail release (for example v7.212.22), then run every later step with this build. Leave empty to create with this build."
         required: false
@@ -374,6 +379,28 @@ jobs:
           fi
           echo "PASS: no stack input is set that the $DISTRIBUTION smoke test would ignore"
 
+      - name: ✅ Validate control-plane scale-down trial selection
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.control_plane_scale_down }}
+        shell: bash
+        env:
+          DISTRIBUTION: ${{ matrix.distribution }}
+          CONTROL_PLANES: ${{ inputs.control_planes }}
+          ROLLING_RESIZE: ${{ inputs.rolling_resize_server_type }}
+          FLOATING_IP_TOGGLE: ${{ inputs.floating_ip_toggle }}
+          INVENTORY_TRIAL: ${{ inputs.autoscaler_inventory_trial }}
+          SCHEMATIC_TRIAL: ${{ inputs.test_schematic_rollout }}
+        run: |
+          set -euo pipefail
+          if [[ "$DISTRIBUTION" != Talos || ! "${CONTROL_PLANES:-1}" =~ ^[0-9]+$ ]] || (( CONTROL_PLANES < 4 )); then
+            echo 'ERROR: the scale-down trial requires Talos and at least four control planes, so three remain' >&2
+            exit 1
+          fi
+          if [[ -n "$ROLLING_RESIZE" || "$FLOATING_IP_TOGGLE" != false || "$INVENTORY_TRIAL" != false || "$SCHEMATIC_TRIAL" != false ]]; then
+            echo 'ERROR: the scale-down trial runs alone, without a resize, floating IP toggle, inventory or schematic trial' >&2
+            exit 1
+          fi
+          echo "PASS: scale-down trial removes one of ${CONTROL_PLANES} control planes"
+
       - name: 🔧 Build args string
         id: args
         shell: bash
@@ -555,6 +582,7 @@ jobs:
           test-talos-schematic-rollout: ${{ github.event_name == 'workflow_dispatch' && inputs.test_schematic_rollout || false }}
           talos-schematic-server-type: ${{ github.event_name == 'workflow_dispatch' && inputs.schematic_server_type != 'Default' && inputs.schematic_server_type || '' }}
           floating-ip-toggle: ${{ github.event_name == 'workflow_dispatch' && inputs.floating_ip_toggle || false }}
+          control-plane-scale-down: ${{ github.event_name == 'workflow_dispatch' && inputs.control_plane_scale_down || false }}
           create-binary: ${{ steps.create-release.outputs.binary }}
           create-binary-sha256: ${{ steps.create-release.outputs.sha256 }}
 
