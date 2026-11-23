@@ -21,8 +21,8 @@ case "$1" in
   version) printf '{"serverVersion":{"gitVersion":"%s"}}\n' "$version" ;;
   get)
     cat <<EOF
-{"items":[{"status":{"nodeInfo":{"kubeletVersion":"${FIXTURE_NODE_VERSION:-$version}"},
-"conditions":[{"type":"Ready","status":"${FIXTURE_READY:-True}"}]}}]}
+{"items":[{"status":{"nodeInfo":{"kubeletVersion":"${FIXTURE_NODE_VERSION:-$version}","osImage":"${FIXTURE_OS_IMAGE:-Talos (v1.12.4)}"},
+"conditions":[{"type":"Ready","status":"${FIXTURE_READY:-True}"}]}}${FIXTURE_EXTRA_NODE:-}]}
 EOF
     ;;
   *) exit 99 ;;
@@ -172,7 +172,92 @@ func TestSystemTestTalosNoopUsesRunningVersion(t *testing.T) {
 	t.Parallel()
 	output, _, err := runVersionStep(t, "🔖 Resolve Kubernetes version pin for update", nil)
 	require.NoError(t, err, output)
-	assert.Contains(t, output, "flag=--kubernetes-version v1.36.2")
+	assert.Contains(t, output, "flag=--kubernetes-version v1.36.2 --distribution-version v1.12.4")
+}
+
+// The no-op update must not upgrade the Talos OS either (#8543): an unpinned update follows the
+// newest registry tag while Hetzner boots from a fixed ISO.
+func TestSystemTestTalosNoopPinsOneRunningTalosVersion(t *testing.T) {
+	t.Parallel()
+
+	for name, env := range map[string]map[string]string{
+		"mixed versions": {
+			"FIXTURE_EXTRA_NODE": `,{"status":{"nodeInfo":{"osImage":"Talos (v1.12.5)"}}}`,
+		},
+		"not Talos":  {"FIXTURE_OS_IMAGE": "Ubuntu 24.04"},
+		"no version": {"FIXTURE_OS_IMAGE": "Talos"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			output, _, err := runVersionStep(t, "🔖 Resolve Kubernetes version pin for update", env)
+			require.Error(t, err, output)
+			assert.Contains(t, output, "could not determine one running Talos version")
+			assert.NotContains(t, output, "flag=")
+		})
+	}
+}
+
+// runNoopDryRun runs the no-op dry-run step against a ksail stub that prints dryRunOutput.
+func runNoopDryRun(t *testing.T, dryRunOutput string) (string, error) {
+	t.Helper()
+
+	action := readCompositeAction(t, ".github/actions/ksail-system-test/action.yaml")
+	step := findHarnessStep(t, action.Runs.Steps, "🧪 ksail cluster update --dry-run")
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "output"), []byte(dryRunOutput), 0o600))
+	writeExecutableStub(
+		t,
+		filepath.Join(dir, "ksail"),
+		"#!/usr/bin/env bash\ncat \"$FIXTURE_OUTPUT\" >&2\n",
+	)
+
+	command := exec.CommandContext(t.Context(), "bash")
+	command.Stdin = strings.NewReader(step.Run)
+	command.Dir = filepath.Join("..", "..")
+	command.Env = append(
+		os.Environ(),
+		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"DISTRIBUTION=Talos",
+		"PROVIDER=Hetzner",
+		"ARGS=",
+		"K8S_VERSION_FLAG=--kubernetes-version v1.35.0 --distribution-version v1.12.4",
+		"CREATED_BY_RELEASE=false",
+		"KSAIL_SYSTEM_TEST_LOG_DIR="+dir,
+		"FIXTURE_OUTPUT="+filepath.Join(dir, "output"),
+	)
+
+	output, err := command.CombinedOutput()
+
+	return string(output), err
+}
+
+// The 2026-11-23 Hetzner trial's dry run planned a 28-step Talos upgrade and still printed
+// "No changes detected" (#8542), so the no-op check must reject the plan on its own (#8543).
+func TestSystemTestNoopDryRunRejectsPlannedUpgrade(t *testing.T) {
+	t.Parallel()
+
+	for name, planned := range map[string]string{
+		"distribution": "ℹ distribution upgrade path: v1.12.4 → v1.14.6 (28 step(s))\n" +
+			"  1. v1.12.5\nℹ Dry run complete. No distribution upgrades applied.\n",
+		"kubernetes": "ℹ Dry run complete. No kubernetes upgrades applied.\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			output, err := runNoopDryRun(t, planned+"ℹ No changes detected\n")
+			require.Error(t, err, output)
+			assert.Contains(t, output, "the dry run plans a version upgrade")
+		})
+	}
+}
+
+func TestSystemTestNoopDryRunAcceptsNoChanges(t *testing.T) {
+	t.Parallel()
+
+	output, err := runNoopDryRun(t, "ℹ No changes detected\n")
+	require.NoError(t, err, output)
+	assert.Contains(t, output, "No unexpected changes detected (dry run)")
 }
 
 func TestSystemTestTalosUpgradeObservesTargetAndRepeatsNoop(t *testing.T) {
