@@ -21,7 +21,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.48.0
 	github.com/aws/aws-sdk-go-v2/config v1.33.9
 	github.com/aws/aws-sdk-go-v2/credentials v1.21.0
-	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.82.2
+	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.84.0
 	github.com/aws/aws-sdk-go-v2/service/eks v1.105.5
 	github.com/aws/aws-sdk-go-v2/service/sts v1.52.0
 	github.com/aws/smithy-go v1.28.9
@@ -67,17 +67,17 @@ require (
 	github.com/invopop/jsonschema v0.14.0
 	github.com/jinzhu/copier v0.4.0
 	github.com/k3d-io/k3d/v5 v5.9.0
-	github.com/klauspost/compress v1.20.3
+	github.com/klauspost/compress v1.20.4
 	github.com/kubescape/kubescape/v3 v3.0.48
-	github.com/kubescape/opa-utils v0.0.315
+	github.com/kubescape/opa-utils v0.0.320
 	github.com/kyverno/api v0.0.1-alpha.3.0.20260723090831-fb2785727f98
 	github.com/kyverno/kyverno v1.19.2
 	github.com/loft-sh/log v0.0.0-20261016082928-2e30e984f250
-	github.com/loft-sh/vcluster v0.37.6
+	github.com/loft-sh/vcluster v0.37.7
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/opencontainers/image-spec v1.1.1
-	github.com/rancher/k3k v1.1.1
+	github.com/rancher/k3k v1.1.2
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/siderolabs/crypto v0.6.6
 	github.com/siderolabs/gen v0.8.8
@@ -108,13 +108,13 @@ require (
 	go.opentelemetry.io/proto/otlp v1.11.1
 	go.uber.org/zap v1.28.0
 	go.yaml.in/yaml/v3 v3.0.6
-	golang.org/x/crypto v0.58.0
+	golang.org/x/crypto v0.59.0
 	golang.org/x/mod v0.43.0
-	golang.org/x/oauth2 v0.37.0
+	golang.org/x/oauth2 v0.38.0
 	golang.org/x/sync v0.25.0
 	golang.org/x/sys v0.50.0
-	golang.org/x/term v0.47.0
-	golang.org/x/text v0.43.0
+	golang.org/x/term v0.48.0
+	golang.org/x/text v0.44.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20261019180522-ce908d29299b
 	google.golang.org/grpc v1.85.0
 	google.golang.org/protobuf v1.36.12
@@ -991,6 +991,7 @@ require (
 	go.yaml.in/yaml/v4 v4.0.0-rc.8 // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
+	golang.org/x/crypto/openpgp v0.1.0-deprecated // indirect
 	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e // indirect
 	golang.org/x/exp/typeparams v0.0.0-20260209203927-2842357ff358 // indirect
 	golang.org/x/image v0.45.0 // indirect

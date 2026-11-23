@@ -2124,14 +2124,15 @@ github.com/aws/aws-sdk-go-v2/internal/v4a/internal/v4
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE.txt
 
-Component: github.com/aws/aws-sdk-go-v2/service/cloudformation@v1.82.2
-Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/cloudformation/@v/v1.82.2.zip
-Selected Go source checksum: h1:ktk58Tx/JuhBAKomCk5XqJrdlsm+RZNu6jMK+5MVK3g=
+Component: github.com/aws/aws-sdk-go-v2/service/cloudformation@v1.84.0
+Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/cloudformation/@v/v1.84.0.zip
+Selected Go source checksum: h1:ap0xq0413jOFrQZVs318qjtnXSAVAf/RNBzPZK1aP8A=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
 github.com/aws/aws-sdk-go-v2/service/cloudformation
 github.com/aws/aws-sdk-go-v2/service/cloudformation/internal/endpoints
+github.com/aws/aws-sdk-go-v2/service/cloudformation/schemas
 github.com/aws/aws-sdk-go-v2/service/cloudformation/types
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE.txt
@@ -6683,9 +6684,9 @@ github.com/kevinburke/ssh_config
 Material: m09193878b02fa8e8 (license), SHA-256 a15a6f732df3a033a71853ce1d255bd671f00fbc537fa629b78d71baecda0ace
 Files: LICENSE
 
-Component: github.com/klauspost/compress@v1.20.3
-Source: https://proxy.golang.org/github.com/klauspost/compress/@v/v1.20.3.zip
-Selected Go source checksum: h1:zWNoFqq/lSuYQRim3dUXlXeA0IqwuZGicdG5ZTfY5j4=
+Component: github.com/klauspost/compress@v1.20.4
+Source: https://proxy.golang.org/github.com/klauspost/compress/@v/v1.20.4.zip
+Selected Go source checksum: h1:dD0v/bvxtjCBqQu6sx1TNWkalEY5lNTIe+HY9w8TeNI=
 Raw classifier detections: MIT, Apache-2.0, BSD-3-Clause
 Effective package-admission terms: Apache-2.0, BSD-3-Clause, MIT
 Packages:
@@ -6902,9 +6903,9 @@ github.com/kubescape/kubescape/v3/pkg/imagescan
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE
 
-Component: github.com/kubescape/opa-utils@v0.0.315
-Source: https://proxy.golang.org/github.com/kubescape/opa-utils/@v/v0.0.315.zip
-Selected Go source checksum: h1:43b6beRDo74nMztOFUBLWV0Vr2T0Ugap7/goU3JPe0Q=
+Component: github.com/kubescape/opa-utils@v0.0.320
+Source: https://proxy.golang.org/github.com/kubescape/opa-utils/@v/v0.0.320.zip
+Selected Go source checksum: h1:Lpfr02nfW+LYSh958VjfrVNVVVZp9BUiiUtYrnD2lbM=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -7481,9 +7482,9 @@ github.com/loft-sh/utils/pkg/extract
 Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
 Files: LICENSE
 
-Component: github.com/loft-sh/vcluster@v0.37.6
-Source: https://proxy.golang.org/github.com/loft-sh/vcluster/@v/v0.37.6.zip
-Selected Go source checksum: h1:RC2kw7byY7qmMhCmRY4eiJPOSwXnvqJKEwRDcOTI+Dk=
+Component: github.com/loft-sh/vcluster@v0.37.7
+Source: https://proxy.golang.org/github.com/loft-sh/vcluster/@v/v0.37.7.zip
+Selected Go source checksum: h1:uh2ue3WTqvEh8ckJOCwoJBI8Ujbm2Dm7fva+Xuiow7Q=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -9215,9 +9216,9 @@ Material: m8197baaa8544adde (license), SHA-256 d0bc204f82616d966e412365cc98afa1a
 Files: LICENSE
 Material: m8b07067c394b8660 (copyright-header), SHA-256 cea8c25d6aae028c2d89bf51387e7ea69cf4b760c490708b361d7d39fcae4708
 
-Component: github.com/rancher/k3k@v1.1.1
-Source: https://proxy.golang.org/github.com/rancher/k3k/@v/v1.1.1.zip
-Selected Go source checksum: h1:WfjrKY3MXR2/BrzgSbv1RP8czErzZ+RDue3g6S/u5ZE=
+Component: github.com/rancher/k3k@v1.1.2
+Source: https://proxy.golang.org/github.com/rancher/k3k/@v/v1.1.2.zip
+Selected Go source checksum: h1:0ff6Jq8AuXmg0Azg7cNWMXa+qhYpHoPuOAR3hNVlJRI=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -12106,9 +12107,9 @@ Files: LICENSE
 Material: m34629cf4edcf2fda (copyright-header), SHA-256 2fb7d9e93ce405fee7c7ce8f4a5ca8c078827b937259c8d7e76ed44670fb215f
 Material: mb4718c0d2f0eafe3 (copyright-header), SHA-256 905bd2dda10017b0f70029cef5e2bd44fd4c1a5c24fe9f79c97a5d4e82ec7e57
 
-Component: golang.org/x/crypto@v0.58.0
-Source: https://proxy.golang.org/golang.org/x/crypto/@v/v0.58.0.zip
-Selected Go source checksum: h1:COkYLr4k7nDI4r6QtMML2AfzeIswWHAJthLS6K/M/54=
+Component: golang.org/x/crypto@v0.59.0
+Source: https://proxy.golang.org/golang.org/x/crypto/@v/v0.59.0.zip
+Selected Go source checksum: h1:xS2jhqYbzNrpvkWP2YTDf4TJwBy3ykR03i8vFDxEc7c=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
@@ -12131,13 +12132,6 @@ golang.org/x/crypto/nacl/box
 golang.org/x/crypto/nacl/secretbox
 golang.org/x/crypto/nacl/sign
 golang.org/x/crypto/ocsp
-golang.org/x/crypto/openpgp
-golang.org/x/crypto/openpgp/armor
-golang.org/x/crypto/openpgp/clearsign
-golang.org/x/crypto/openpgp/elgamal
-golang.org/x/crypto/openpgp/errors
-golang.org/x/crypto/openpgp/packet
-golang.org/x/crypto/openpgp/s2k
 golang.org/x/crypto/pbkdf2
 golang.org/x/crypto/pkcs12
 golang.org/x/crypto/pkcs12/internal/rc2
@@ -12165,6 +12159,26 @@ Material: md4322d96af5527c5 (copyright-header), SHA-256 6377411533e1ac08d49e4e19
 Material: mf2ca01b16ebacb4d (copyright-header), SHA-256 5012cff8e1624b272b44f4f4bf7bea401f64a8ee2df0de44dc0ec70f3f4f08d7
 Material: mf489d7731cb0a697 (copyright-header), SHA-256 e1771531ee4abf18410c9c0005b38eade9836b7e1261c475bf669d8ec4376061
 Material: mf8afa12dcc7c1a5e (copyright-header), SHA-256 53b6e0235c1167911bb85330f2923f5761009cebbd5e4892e5d9e762c3df0964
+
+Component: golang.org/x/crypto/openpgp@v0.1.0-deprecated
+Source: https://proxy.golang.org/golang.org/x/crypto/openpgp/@v/v0.1.0-deprecated.zip
+Selected Go source checksum: h1:T+duersHJVuH6qLtQk22qtGKH5vZhxGSlL5SMFHclaQ=
+Raw classifier detections: BSD-3-Clause
+Effective package-admission terms: BSD-3-Clause
+Packages:
+golang.org/x/crypto/openpgp
+golang.org/x/crypto/openpgp/armor
+golang.org/x/crypto/openpgp/clearsign
+golang.org/x/crypto/openpgp/elgamal
+golang.org/x/crypto/openpgp/errors
+golang.org/x/crypto/openpgp/packet
+golang.org/x/crypto/openpgp/s2k
+Material: m14a87b6cd6042b7f (copyright-header), SHA-256 0c946c5be44e2f91508b30aca91895d095ac4e12e2128e4e9ef55f486471b02e
+Material: m42f19e0af38c0e76 (copyright-header), SHA-256 71cdfe5e01cab03f2fa235bbfaee331f282eb99069b0d9b0c2697a223a495c72
+Material: m4a74781cd64ccb4b (license), SHA-256 911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad
+Files: LICENSE
+Material: m9e4b7a0aaf0aa8ca (copyright-header), SHA-256 62fe87c24497fd9e5ec0e30d266b0e09fa8afcc93810e86cc600667932013ab9
+Material: mf489d7731cb0a697 (copyright-header), SHA-256 e1771531ee4abf18410c9c0005b38eade9836b7e1261c475bf669d8ec4376061
 
 Component: golang.org/x/exp@v0.0.0-20261014143641-f0251eb4aa3e
 Source: https://proxy.golang.org/golang.org/x/exp/@v/v0.0.0-20261014143641-f0251eb4aa3e.zip
@@ -12264,9 +12278,9 @@ Material: mf2ca01b16ebacb4d (copyright-header), SHA-256 5012cff8e1624b272b44f4f4
 Material: mf489d7731cb0a697 (copyright-header), SHA-256 e1771531ee4abf18410c9c0005b38eade9836b7e1261c475bf669d8ec4376061
 Material: mf8afa12dcc7c1a5e (copyright-header), SHA-256 53b6e0235c1167911bb85330f2923f5761009cebbd5e4892e5d9e762c3df0964
 
-Component: golang.org/x/oauth2@v0.37.0
-Source: https://proxy.golang.org/golang.org/x/oauth2/@v/v0.37.0.zip
-Selected Go source checksum: h1:JUlcxA8oAtauLfiH8FX2/FkAWHAdi0QtGCGc+hofE98=
+Component: golang.org/x/oauth2@v0.38.0
+Source: https://proxy.golang.org/golang.org/x/oauth2/@v/v0.38.0.zip
+Selected Go source checksum: h1:uW7XQbcu1eoiQS7uMJvLOjPMl04bTbmY1VeRPxvbspI=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
@@ -12335,9 +12349,9 @@ Material: mf2ca01b16ebacb4d (copyright-header), SHA-256 5012cff8e1624b272b44f4f4
 Material: mf489d7731cb0a697 (copyright-header), SHA-256 e1771531ee4abf18410c9c0005b38eade9836b7e1261c475bf669d8ec4376061
 Material: mf8afa12dcc7c1a5e (copyright-header), SHA-256 53b6e0235c1167911bb85330f2923f5761009cebbd5e4892e5d9e762c3df0964
 
-Component: golang.org/x/term@v0.47.0
-Source: https://proxy.golang.org/golang.org/x/term/@v/v0.47.0.zip
-Selected Go source checksum: h1:cpyOwQkr2Nzxe2p6KnrTG7Ei2wtzjsuSjhpXXepZ/BM=
+Component: golang.org/x/term@v0.48.0
+Source: https://proxy.golang.org/golang.org/x/term/@v/v0.48.0.zip
+Selected Go source checksum: h1:G6UU1eiSB8nl3DzeUGt7Mg+2SctI8tPS6Z5/mBt6cOk=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
@@ -12347,9 +12361,9 @@ Files: LICENSE
 Material: m69e735fcdc92f0dd (copyright-header), SHA-256 119068dd82212dba2aedcb667d6e3d7802b04606d52240b646c71ed89122a6f6
 Material: m9e4b7a0aaf0aa8ca (copyright-header), SHA-256 62fe87c24497fd9e5ec0e30d266b0e09fa8afcc93810e86cc600667932013ab9
 
-Component: golang.org/x/text@v0.43.0
-Source: https://proxy.golang.org/golang.org/x/text/@v/v0.43.0.zip
-Selected Go source checksum: h1:1QivrlhwAsnMOcqgOdl9my7s9OyZl8O5/UGUTJVXoWc=
+Component: golang.org/x/text@v0.44.0
+Source: https://proxy.golang.org/golang.org/x/text/@v/v0.44.0.zip
+Selected Go source checksum: h1:YItdp/mQNGnsmrgpcdA5yQ3bnRxCfo/Tj/iByGW9GGo=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
