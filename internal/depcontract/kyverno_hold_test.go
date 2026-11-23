@@ -63,6 +63,45 @@ func TestDependabotHoldsTheKyvernoLine(t *testing.T) {
 	}
 }
 
+func TestDependabotHoldsKyvernoGoModuleMinorUpdates(t *testing.T) {
+	t.Parallel()
+
+	const module = "github.com/kyverno/kyverno"
+
+	var config struct {
+		Updates []dependabotUpdate `yaml:"updates"`
+	}
+
+	err := yaml.Unmarshal(readRepositoryFile(t, dependabotConfigPath), &config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	root := rootGoModulesUpdate(config.Updates)
+	if root == nil {
+		t.Fatal("missing root gomod update entry")
+	}
+
+	minorHeld := false
+
+	for _, rule := range root.Ignore {
+		if !dependencyPatternMatches(rule.Name, module) {
+			continue
+		}
+
+		if rule.Name != module || len(rule.Versions) > 0 ||
+			!slices.Equal(rule.UpdateTypes, []string{semverMinorUpdate}) {
+			t.Fatalf("the %s rule must hold only routine minor updates: %+v", module, rule)
+		}
+
+		minorHeld = true
+	}
+
+	if !minorHeld {
+		t.Fatalf("missing root gomod minor-update hold for %s", module)
+	}
+}
+
 func TestCheckKyvernoChartBelowHold(t *testing.T) {
 	t.Parallel()
 
