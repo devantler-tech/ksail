@@ -277,7 +277,8 @@ func runSchematicRolloutScenario(
 ) ([]byte, error) {
 	t.Helper()
 
-	kubernetesFlag := "--kubernetes-version v1.35.0"
+	// The pin step emits both pins for Talos (#8543).
+	kubernetesFlag := "--kubernetes-version v1.35.0 --distribution-version " + liveVersion
 
 	switch scenario {
 	case "missing-kubernetes-pin":
