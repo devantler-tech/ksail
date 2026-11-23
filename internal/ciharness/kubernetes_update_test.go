@@ -21,7 +21,8 @@ case "$1" in
   version) printf '{"serverVersion":{"gitVersion":"%s"}}\n' "$version" ;;
   get)
     cat <<EOF
-{"items":[{"status":{"nodeInfo":{"kubeletVersion":"${FIXTURE_NODE_VERSION:-$version}","osImage":"${FIXTURE_OS_IMAGE:-Talos (v1.12.4)}"},
+{"items":[{"status":{"nodeInfo":{"kubeletVersion":"${FIXTURE_NODE_VERSION:-$version}",
+"osImage":"${FIXTURE_OS_IMAGE:-Talos (v1.12.4)}"},
 "conditions":[{"type":"Ready","status":"${FIXTURE_READY:-True}"}]}}${FIXTURE_EXTRA_NODE:-}]}
 EOF
     ;;
@@ -172,6 +173,21 @@ func TestSystemTestTalosNoopUsesRunningVersion(t *testing.T) {
 	t.Parallel()
 	output, _, err := runVersionStep(t, "🔖 Resolve Kubernetes version pin for update", nil)
 	require.NoError(t, err, output)
+	assert.Contains(t, output, "flag=--kubernetes-version v1.36.2\n")
+	assert.NotContains(t, output, "--distribution-version")
+}
+
+// Only Hetzner pins the Talos OS: Docker nodes already run the newest tag, and an explicit
+// version there changes the machine-config contract the cluster was created with.
+func TestSystemTestTalosNoopPinsHetznerTalosVersion(t *testing.T) {
+	t.Parallel()
+
+	output, _, err := runVersionStep(
+		t,
+		"🔖 Resolve Kubernetes version pin for update",
+		map[string]string{"PROVIDER": "Hetzner"},
+	)
+	require.NoError(t, err, output)
 	assert.Contains(t, output, "flag=--kubernetes-version v1.36.2 --distribution-version v1.12.4")
 }
 
@@ -189,6 +205,8 @@ func TestSystemTestTalosNoopPinsOneRunningTalosVersion(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
+			env["PROVIDER"] = "Hetzner"
 
 			output, _, err := runVersionStep(t, "🔖 Resolve Kubernetes version pin for update", env)
 			require.Error(t, err, output)

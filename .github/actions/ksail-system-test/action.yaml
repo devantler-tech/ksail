@@ -597,6 +597,7 @@ runs:
       shell: bash
       env:
         DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
       run: |
         set -euo pipefail
         # `cluster create` provisions from the node image KSail pins in
@@ -614,16 +615,23 @@ runs:
         # Talos has a separate OS image: pin its no-op checks to the Kubernetes
         # version actually created. Its upgrade trial runs as a distinct step.
         #
-        # Pin the Talos OS version too. An unpinned update follows the newest
-        # Talos tag in the registry, while Hetzner boots from an ISO fixed at
+        # On Hetzner, pin the Talos OS version too. An unpinned update follows the
+        # newest Talos tag in the registry, while Hetzner boots from an ISO fixed at
         # DefaultHetznerTalosVersion, so the "no-op" update would otherwise run
         # a rolling OS upgrade of every node (28 steps on 2026-11-23, #8543).
+        # Docker nodes already run the newest tag, and an explicit version there
+        # changes the machine-config contract the cluster was created with (#8545).
         case "$DISTRIBUTION" in
           Talos)
             version=$(kubectl version --request-timeout=30s -o json | jq -er '.serverVersion.gitVersion')
             if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
               echo "❌ ERROR: could not determine the created Talos Kubernetes version"
               exit 1
+            fi
+            if [[ "$PROVIDER" != Hetzner ]]; then
+              echo "🔖 Pinning cluster update to Kubernetes $version (as created)"
+              echo "flag=--kubernetes-version $version" >> "$GITHUB_OUTPUT"
+              exit 0
             fi
             if ! talos_version=$(kubectl get nodes --request-timeout=30s -o json | jq -er '
               .items
