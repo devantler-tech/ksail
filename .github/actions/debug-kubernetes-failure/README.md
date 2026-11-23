@@ -68,7 +68,7 @@ Every section is on by default; set its input to `"false"` to skip it.
 | `show-helm-releases`  | Show Helm release status summary                                 | `true`    |
 | `show-events`         | Show recent cluster events                                       | `true`    |
 | `events-limit`        | Number of recent events to show                                  | `50`      |
-| `show-cni`            | Show CNI (Cilium/Calico) status and logs                         | `true`    |
+| `show-cni`            | Show cluster DNS and CNI (Cilium/Calico) status and logs          | `true`    |
 | `show-csi`            | Show CSI (Local Path/Hetzner) status                             | `true`    |
 | `show-gitops`         | Show GitOps (Flux/ArgoCD) status, resources, and controller logs | `true`    |
 | `show-policy-engine`  | Show policy engine (Kyverno/Gatekeeper) status and logs          | `true`    |
