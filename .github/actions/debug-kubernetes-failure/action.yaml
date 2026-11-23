@@ -43,7 +43,7 @@ inputs:
     required: false
     default: "true"
   show-cni:
-    description: Show CNI (Cilium/Calico) status and logs
+    description: Show cluster DNS and CNI (Cilium/Calico) status and logs
     required: false
     default: "true"
   show-csi:
@@ -239,6 +239,16 @@ runs:
 
         if [ "$SHOW_CNI" = "true" ]; then
           print_section "CNI STATUS"
+
+          echo "--- Cluster DNS Service and Endpoints ---"
+          $KUBECTL_CMD --request-timeout=10s get service kube-dns --namespace kube-system -o wide || true
+          $KUBECTL_CMD --request-timeout=10s get endpointslices --namespace kube-system \
+            -l kubernetes.io/service-name=kube-dns -o wide || true
+          echo ""
+          echo "--- CoreDNS Logs (last $LOG_TAIL_LINES lines per pod) ---"
+          $KUBECTL_CMD --request-timeout=10s logs deployment/coredns --namespace kube-system \
+            --all-pods=true --tail="$LOG_TAIL_LINES" || echo "Unable to fetch CoreDNS logs"
+          echo ""
 
           # Check for Cilium
           CILIUM_PODS=$($KUBECTL_CMD get pods --namespace kube-system -l app.kubernetes.io/name=cilium-agent -o name 2>/dev/null || true)
