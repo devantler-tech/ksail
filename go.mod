@@ -77,7 +77,7 @@ require (
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/opencontainers/image-spec v1.1.1
-	github.com/rancher/k3k v1.1.1
+	github.com/rancher/k3k v1.1.2
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/siderolabs/crypto v0.6.6
 	github.com/siderolabs/gen v0.8.8
