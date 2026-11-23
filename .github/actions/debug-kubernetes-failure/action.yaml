@@ -215,7 +215,7 @@ runs:
               $KUBECTL_CMD logs --namespace "$POD_NS" "$POD_NAME" --tail=50 --all-containers=true || echo "  (unable to fetch logs)"
               # A crash-looping container's current instance has usually only just started, so the
               # output that explains the crash is in its previous instance.
-              RESTARTED_CONTAINERS=$($KUBECTL_CMD get pod --namespace "$POD_NS" "$POD_NAME" -o jsonpath='{range .status.containerStatuses[?(@.restartCount>0)]}{.name}{"\n"}{end}' 2>/dev/null || true)
+              RESTARTED_CONTAINERS=$($KUBECTL_CMD get pod --namespace "$POD_NS" "$POD_NAME" -o jsonpath='{range .status.initContainerStatuses[?(@.restartCount>0)]}{.name}{"\n"}{end}{range .status.containerStatuses[?(@.restartCount>0)]}{.name}{"\n"}{end}' 2>/dev/null || true)
               for CONTAINER in $RESTARTED_CONTAINERS; do
                 echo "--- Previous logs: $POD_NS/$POD_NAME/$CONTAINER ---"
                 $KUBECTL_CMD logs --namespace "$POD_NS" "$POD_NAME" --container "$CONTAINER" --previous --tail=50 || echo "  (unable to fetch previous logs)"
