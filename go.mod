@@ -69,7 +69,7 @@ require (
 	github.com/k3d-io/k3d/v5 v5.9.0
 	github.com/klauspost/compress v1.20.3
 	github.com/kubescape/kubescape/v3 v3.0.48
-	github.com/kubescape/opa-utils v0.0.315
+	github.com/kubescape/opa-utils v0.0.320
 	github.com/kyverno/api v0.0.1-alpha.3.0.20260723090831-fb2785727f98
 	github.com/kyverno/kyverno v1.19.2
 	github.com/loft-sh/log v0.0.0-20261016082928-2e30e984f250
