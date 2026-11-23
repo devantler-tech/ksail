@@ -597,6 +597,7 @@ runs:
       shell: bash
       env:
         DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
       run: |
         set -euo pipefail
         # `cluster create` provisions from the node image KSail pins in
@@ -613,6 +614,13 @@ runs:
         #
         # Talos has a separate OS image: pin its no-op checks to the Kubernetes
         # version actually created. Its upgrade trial runs as a distinct step.
+        #
+        # On Hetzner, pin the Talos OS version too. An unpinned update follows the
+        # newest Talos tag in the registry, while Hetzner boots from an ISO fixed at
+        # DefaultHetznerTalosVersion, so the "no-op" update would otherwise run
+        # a rolling OS upgrade of every node (28 steps on 2026-11-23, #8543).
+        # Docker nodes already run the newest tag, and an explicit version there
+        # changes the machine-config contract the cluster was created with (#8545).
         case "$DISTRIBUTION" in
           Talos)
             version=$(kubectl version --request-timeout=30s -o json | jq -er '.serverVersion.gitVersion')
@@ -620,7 +628,27 @@ runs:
               echo "❌ ERROR: could not determine the created Talos Kubernetes version"
               exit 1
             fi
-            echo "flag=--kubernetes-version $version" >> "$GITHUB_OUTPUT"
+            if [[ "$PROVIDER" != Hetzner ]]; then
+              echo "🔖 Pinning cluster update to Kubernetes $version (as created)"
+              echo "flag=--kubernetes-version $version" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if ! talos_version=$(kubectl get nodes --request-timeout=30s -o json | jq -er '
+              .items
+              | if type != "array" or length == 0 then error("no nodes") else . end
+              | map(.status.nodeInfo.osImage
+                  | if type != "string" then error("missing Talos version")
+                    elif test("^Talos \\(v[0-9]+\\.[0-9]+\\.[0-9]+\\)$") then
+                      capture("^Talos \\((?<version>v[0-9]+\\.[0-9]+\\.[0-9]+)\\)$").version
+                    else error("invalid Talos version") end)
+              | unique
+              | if length == 1 then .[0] else error("mixed Talos versions") end
+            '); then
+              echo "❌ ERROR: could not determine one running Talos version across all nodes"
+              exit 1
+            fi
+            echo "🔖 Pinning cluster update to Kubernetes $version and Talos $talos_version (as created)"
+            echo "flag=--kubernetes-version $version --distribution-version $talos_version" >> "$GITHUB_OUTPUT"
             exit 0
             ;;
           K3s)     dockerfile="pkg/fsutil/configmanager/k3d/Dockerfile";  repo="rancher/k3s" ;;
@@ -662,25 +690,33 @@ runs:
         CREATED_BY_RELEASE: ${{ inputs.create-binary != '' }}
       run: |
         set -o pipefail
+        DRY_RUN_LOG="${KSAIL_SYSTEM_TEST_LOG_DIR:-/tmp/ksail-system-test-logs}/cluster-update-dry-run.log"
         # Strip init-only flags that cluster update does not accept
         UPDATE_ARGS=$(echo "$ARGS" | sed 's/--image-verification [^ ]*//')
         # shellcheck disable=SC2086
-        ksail cluster update --dry-run --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG 2>&1 | tee /tmp/ksail-system-test-logs/cluster-update-dry-run.log
+        ksail cluster update --dry-run --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG 2>&1 | tee "$DRY_RUN_LOG"
         update_status=$?
         if [[ "$CREATED_BY_RELEASE" == true ]]; then
           [[ "$update_status" -eq 0 ]] || { echo "❌ ERROR: the dry run failed on the cluster an earlier release created"; exit "$update_status"; }
           # ksail#8347: an earlier release created this cluster, so this build may change it in
           # place, but it must never need to recreate it.
-          if grep -qE "[1-9][0-9]* recreate-required" /tmp/ksail-system-test-logs/cluster-update-dry-run.log; then
+          if grep -qE "[1-9][0-9]* recreate-required" "$DRY_RUN_LOG"; then
             echo "❌ ERROR: this build would recreate a cluster an earlier release created"
             exit 1
           fi
           echo "✅ No recreation needed for the cluster the earlier release created (dry run)"
           exit 0
         fi
+        # A planned version upgrade is printed apart from the change summary, which can
+        # still say "No changes detected" (#8542), so check for it on its own.
+        if grep -qE "upgrade path: |Dry run complete\. No [a-z]+ upgrades applied" "$DRY_RUN_LOG"; then
+          echo "❌ ERROR: the dry run plans a version upgrade on the cluster it just created"
+          echo "The no-op update must not upgrade Kubernetes or the distribution (#8543)."
+          exit 1
+        fi
         # Fail early if the dry run detects unexpected changes.
         # The cluster was just created with the same config, so zero changes are expected.
-        if ! grep -qE "No changes detected|Would apply 0 in-place, 0 reboot-required, 0 recreate-required" /tmp/ksail-system-test-logs/cluster-update-dry-run.log; then
+        if ! grep -qE "No changes detected|Would apply 0 in-place, 0 reboot-required, 0 recreate-required" "$DRY_RUN_LOG"; then
           echo "❌ ERROR: Unexpected changes detected in dry run after cluster creation"
           echo "This indicates a regression — the cluster was just created with the same configuration."
           exit 1
@@ -803,7 +839,7 @@ runs:
           echo "❌ Running Talos version differs from the declared trial baseline" >&2
           exit 1
         fi
-        if [[ ! "${K8S_VERSION_FLAG:-}" =~ ^--kubernetes-version[[:space:]]v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        if [[ ! "${K8S_VERSION_FLAG:-}" =~ ^--kubernetes-version[[:space:]]v[0-9]+\.[0-9]+\.[0-9]+([[:space:]]--distribution-version[[:space:]]v[0-9]+\.[0-9]+\.[0-9]+)?$ ]]; then
           echo "❌ Missing stable Kubernetes version pin for the schematic trial" >&2
           exit 1
         fi
@@ -1045,6 +1081,7 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ steps.resolve-args.outputs.args }}
         NEW_SERVER_TYPE: ${{ inputs.rolling-resize-server-type }}
+        K8S_VERSION_FLAG: ${{ steps.k8s-version-pin.outputs.flag }}
       run: |
         set -o pipefail
         LOG_FILE="/tmp/ksail-system-test-logs/cluster-update-rolling-resize.log"
@@ -1056,7 +1093,7 @@ runs:
         # Strip init-only flags that cluster update does not accept.
         UPDATE_ARGS=$(echo "$ARGS" | sed 's/--image-verification [^ ]*//')
         # shellcheck disable=SC2086
-        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS
+        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS $K8S_VERSION_FLAG
 
         echo "=== Verifying cluster is healthy after rolling resize ==="
         ksail cluster info
@@ -1419,7 +1456,10 @@ runs:
       run: |
         set -euo pipefail
         [[ "$DISTRIBUTION" == Talos && "$PROVIDER" == Hetzner && "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
-        export K8S_VERSION="${K8S_VERSION_FLAG#--kubernetes-version }"
+        read -r -a version_args <<<"$K8S_VERSION_FLAG"
+        # The Talos pin is "--kubernetes-version <v> --distribution-version <v>" (#8543).
+        [[ ${#version_args[@]} == 4 && ${version_args[0]} == --kubernetes-version && ${version_args[2]} == --distribution-version ]]
+        export K8S_VERSION="${version_args[1]}" TALOS_VERSION="${version_args[3]}"
         timeout --kill-after=6m 20m bash "$GITHUB_WORKSPACE/.github/actions/ksail-system-test/autoscaler-audit-trial.sh"
 
     # ── Diagnostic artifact upload (on failure) ─────────────────────

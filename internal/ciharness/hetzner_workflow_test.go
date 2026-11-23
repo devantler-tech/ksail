@@ -126,6 +126,15 @@ func assertSchematicRolloutActionSelection(t *testing.T) {
 	assert.Contains(t, rollout.Run, "Would reconcile distribution image")
 	assert.Contains(t, rollout.Run, "No changes detected")
 	assert.Equal(t, "${{ steps.k8s-version-pin.outputs.flag }}", rollout.Env["K8S_VERSION_FLAG"])
+
+	// A rolling resize must keep the running Talos OS too, not follow the newest release.
+	resize := findHarnessStep(
+		t,
+		action.Runs.Steps,
+		"🧪 ksail cluster update — rolling server-type resize",
+	)
+	assert.Equal(t, "${{ steps.k8s-version-pin.outputs.flag }}", resize.Env["K8S_VERSION_FLAG"])
+	assert.Contains(t, resize.Run, "$UPDATE_ARGS $K8S_VERSION_FLAG")
 	assert.Greater(t,
 		harnessStepIndex(t, action.Runs.Steps, rollout.Name),
 		harnessStepIndex(t, action.Runs.Steps, "🧪 ksail cluster update"),
@@ -277,7 +286,8 @@ func runSchematicRolloutScenario(
 ) ([]byte, error) {
 	t.Helper()
 
-	kubernetesFlag := "--kubernetes-version v1.35.0"
+	// The pin step emits both pins for Talos (#8543).
+	kubernetesFlag := "--kubernetes-version v1.35.0 --distribution-version " + liveVersion
 
 	switch scenario {
 	case "missing-kubernetes-pin":

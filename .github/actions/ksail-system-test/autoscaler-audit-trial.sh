@@ -9,11 +9,13 @@ umask 077
 : "${GITHUB_RUN_ID:?GITHUB_RUN_ID is required}"
 : "${CLUSTER_NAME:?CLUSTER_NAME is required}"
 : "${K8S_VERSION:?K8S_VERSION is required}"
+: "${TALOS_VERSION:?TALOS_VERSION is required}"
 [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ && "$CLUSTER_NAME" == "st-hetzner-dispatch-$GITHUB_RUN_ID" ]] || {
 	echo 'ERROR: trial requires the current dispatch-owned cluster' >&2
 	exit 1
 }
 [[ "$K8S_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]] || exit 1
+[[ "$TALOS_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
 
 probe_name="$CLUSTER_NAME-audit-removed"
 selector="ksail.trial.run=$GITHUB_RUN_ID"
@@ -87,7 +89,7 @@ probe_id=$(timeout --kill-after=10s 3m hcloud server create \
 update() {
 	timeout --kill-after=10s 5m ksail cluster update --force \
 		--distribution Talos --provider Hetzner --name "$CLUSTER_NAME" \
-		--kubernetes-version "$K8S_VERSION" >"$scratch/update.log" 2>&1
+		--kubernetes-version "$K8S_VERSION" --distribution-version "$TALOS_VERSION" >"$scratch/update.log" 2>&1
 }
 
 # A server with the same pool label outside this network must be ignored.
