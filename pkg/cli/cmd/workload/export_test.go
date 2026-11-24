@@ -68,7 +68,7 @@ func (r *ExportValidationRenderer) Validate(
 		Strict: true, IgnoreMissingSchemas: true,
 		SkipKinds:       []string{"CustomResourceDefinition", "OCIRepository", "HelmRelease"},
 		SchemaLocations: []string{crdschema.SchemaLocation(schemas)},
-	}, r.renderer, nil, kyverno, kyvernoAPICallFixture{})
+	}, r.renderer, nil, kyverno, kyvernoAPICallFixture{}, "")
 }
 
 // Test exports for unexported workload helpers used by external-package tests.

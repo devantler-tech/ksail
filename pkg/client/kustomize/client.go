@@ -76,3 +76,58 @@ func (c *Client) Build(_ context.Context, path string) (*bytes.Buffer, error) {
 
 	return bytes.NewBuffer(yaml), nil
 }
+
+// composeDir is the in-memory directory Compose builds in.
+const composeDir = "/compose"
+
+// Compose applies a namespace and patches on top of already-built manifests,
+// the way Flux's kustomize-controller composes the folder a Flux Kustomization
+// applies: the patches run first, then every namespaced resource is moved into
+// namespace. An empty namespace leaves namespaces unchanged. The build runs on
+// an in-memory filesystem, so nothing on disk is read or written.
+func (c *Client) Compose(
+	_ context.Context,
+	manifests []byte,
+	namespace string,
+	patches []types.Patch,
+) (*bytes.Buffer, error) {
+	warmSchema()
+
+	fSys := filesys.MakeFsInMemory()
+
+	err := fSys.WriteFile(composeDir+"/resources.yaml", manifests)
+	if err != nil {
+		return nil, fmt.Errorf("write composed resources: %w", err)
+	}
+
+	kustomization := types.Kustomization{
+		Resources: []string{"resources.yaml"},
+		Namespace: namespace,
+		Patches:   patches,
+
+		APIVersion: types.KustomizationVersion,
+		Kind:       types.KustomizationKind,
+	}
+
+	data, err := kyaml.Marshal(kustomization)
+	if err != nil {
+		return nil, fmt.Errorf("marshal composed kustomization: %w", err)
+	}
+
+	err = fSys.WriteFile(composeDir+"/kustomization.yaml", data)
+	if err != nil {
+		return nil, fmt.Errorf("write composed kustomization: %w", err)
+	}
+
+	resMap, err := krusty.MakeKustomizer(krusty.MakeDefaultOptions()).Run(fSys, composeDir)
+	if err != nil {
+		return nil, fmt.Errorf("compose manifests: %w", err)
+	}
+
+	yaml, err := resMap.AsYaml()
+	if err != nil {
+		return nil, fmt.Errorf("convert composed resources to yaml: %w", err)
+	}
+
+	return bytes.NewBuffer(yaml), nil
+}

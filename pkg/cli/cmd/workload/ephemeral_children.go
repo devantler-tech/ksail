@@ -260,6 +260,7 @@ func evaluateObservedKyverno(
 		"operator-generated children",
 		sink,
 		nil,
+		nil,
 	)
 	if err != nil {
 		return err
