@@ -213,4 +213,56 @@ if verify candidate skipped >"$tmp/rejected.log" 2>&1; then
 	echo 'missing capture outcomes were accepted' >&2
 	exit 1
 fi
+
+# Execute the actual workflow step with a transient API failure and a real archive.
+readback="$tmp/readback"
+mkdir -p "$readback/bin" "$readback/source"
+printf 'KSail diagnostics artifact fixture\n' >"$readback/source/diagnostics.log"
+(cd "$readback/source" && zip -q "$readback/fixture.zip" diagnostics.log)
+yq -r '.jobs.system-test-diagnostics-artifact.steps[] | select(.name == "Download the observed candidate artifact") | .run' \
+	"$root/.github/workflows/ci.yaml" >"$readback/download.sh"
+cat >"$readback/bin/gh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$#" == 2 && "$1" == api && "$2" == repos/example/ksail/actions/artifacts/123/zip ]]
+printf '.\n' >>"$RUNNER_TEMP/attempts"
+case "$READBACK_REPLY" in
+	transient)
+		if [[ "$(wc -l <"$RUNNER_TEMP/attempts" | tr -d ' ')" == 2 ]]; then
+			cat "$RUNNER_TEMP/fixture.zip"
+			exit 0
+		fi
+		;;
+	forbidden)
+		echo 'gh: Forbidden (HTTP 403)' >&2
+		exit 1
+		;;
+esac
+echo 'gh: Not Found (HTTP 404)' >&2
+exit 1
+SH
+printf '#!/usr/bin/env bash\nexit 0\n' >"$readback/bin/sleep"
+chmod +x "$readback/bin/gh" "$readback/bin/sleep"
+download_archive() {
+	rm -rf "$readback/unpacked"
+	: >"$readback/attempts"
+	PATH="$readback/bin:$PATH" GITHUB_REPOSITORY=example/ksail ARTIFACT_ID=123 \
+		RUNNER_TEMP="$readback" READBACK_DIR="$readback/unpacked" READBACK_REPLY="$1" \
+		bash -e "$readback/download.sh"
+}
+download_archive transient
+cmp "$readback/source/diagnostics.log" "$readback/unpacked/diagnostics.log"
+[[ "$(wc -l <"$readback/attempts" | tr -d ' ')" == 2 ]]
+if download_archive missing >"$readback/error.log" 2>&1; then
+	echo 'persistent 404 passed diagnostics readback' >&2
+	exit 1
+fi
+[[ "$(wc -l <"$readback/attempts" | tr -d ' ')" == 4 && ! -e "$readback/unpacked" ]]
+grep -Fq 'gh: Not Found (HTTP 404)' "$readback/error.log"
+if download_archive forbidden >"$readback/error.log" 2>&1; then
+	echo '403 passed diagnostics readback' >&2
+	exit 1
+fi
+[[ "$(wc -l <"$readback/attempts" | tr -d ' ')" == 1 && ! -e "$readback/unpacked" ]]
+grep -Fq 'gh: Forbidden (HTTP 403)' "$readback/error.log"
 echo 'diagnostics artifact fixture: production programs retained; baseline and adverse evidence controls passed'

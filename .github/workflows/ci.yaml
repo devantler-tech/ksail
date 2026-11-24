@@ -2675,6 +2675,7 @@ jobs:
 
       # Read back the exact artifact the verifier proved, by ID. A second by-name
       # lookup through download-artifact could miss it moments after upload.
+      # The archive endpoint can briefly return 404 even after the listing shows it.
       - name: Download the observed candidate artifact
         if: matrix.mode == 'candidate'
         env:
@@ -2683,9 +2684,21 @@ jobs:
           READBACK_DIR: ${{ runner.temp }}/diagnostics-artifact-readback
         run: |
           [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
-          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" >"$RUNNER_TEMP/diagnostics-artifact.zip"
+          archive="$RUNNER_TEMP/diagnostics-artifact.zip"
+          download_error="$RUNNER_TEMP/diagnostics-artifact-download.error"
+          for delay in 1 2 4 ''; do
+            if gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" >"$archive" 2>"$download_error"; then
+              break
+            fi
+            if [[ -z "$delay" || "$(cat "$download_error")" != 'gh: Not Found (HTTP 404)' ]]; then
+              cat "$download_error" >&2
+              exit 1
+            fi
+            printf 'Diagnostics archive is temporarily unavailable. Retrying in %s seconds.\n' "$delay" >&2
+            sleep "$delay"
+          done
           mkdir -p "$READBACK_DIR"
-          unzip -q "$RUNNER_TEMP/diagnostics-artifact.zip" -d "$READBACK_DIR"
+          unzip -q "$archive" -d "$READBACK_DIR"
 
       - name: Verify downloaded diagnostics content
         if: matrix.mode == 'candidate'
