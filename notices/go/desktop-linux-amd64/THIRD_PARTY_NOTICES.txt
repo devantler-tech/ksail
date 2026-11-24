@@ -4368,6 +4368,8 @@ Packages:
 github.com/fluxcd/pkg/envsubst
 github.com/fluxcd/pkg/envsubst/parse
 github.com/fluxcd/pkg/envsubst/path
+Material: m066a2faea91aeb88 (upstream-license), SHA-256 6ed5e52fe9c2f84ae6c5059a20c5349deff41f24984c2654fadc92547bb715de; recipient disposition: license; material terms: MIT
+Files: github.com/drone/envsubst@v1.0.3/LICENSE
 Material: m14a87b6cd6042b7f (copyright-header), SHA-256 0c946c5be44e2f91508b30aca91895d095ac4e12e2128e4e9ef55f486471b02e
 Material: m20b3532512e60a31 (copyright-header), SHA-256 fc5dc03c9b99ac6991338524ee69606c0e5d8463b2dec284587dd2238d6821b6
 Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
@@ -33495,6 +33497,30 @@ limitations under the License.
 // limitations under the License.
 
 
+
+
+--- Recipient material SHA-256 6ed5e52fe9c2f84ae6c5059a20c5349deff41f24984c2654fadc92547bb715de ---
+MIT License
+
+Copyright (c) 2017 drone.io
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 
 --- Recipient material SHA-256 6ee2c434ce464d8564bc281160a8c8fafc5fafb8022e0936f11ef8a9a494e93b ---
