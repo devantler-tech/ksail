@@ -392,6 +392,7 @@ func validMaterialKind(kind string) bool {
 			copyrightHeaderKind,
 			assemblyHeaderKind,
 			compiledHeaderKind,
+			upstreamLicenseKind,
 		},
 		kind,
 	)
