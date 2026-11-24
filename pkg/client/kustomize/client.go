@@ -9,6 +9,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	fluxkustomize "github.com/fluxcd/pkg/kustomize"
+	fluxfilesys "github.com/fluxcd/pkg/kustomize/filesys"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/kustomize/api/krusty"
 	"sigs.k8s.io/kustomize/api/types"
@@ -87,35 +88,31 @@ func (c *Client) Build(_ context.Context, path string) (*bytes.Buffer, error) {
 // folder's kustomization file, or generates one listing the folder's manifests
 // when it has none, and that single kustomize build then runs every transformer
 // in kustomize's own order. The merged file is served from memory, so nothing on
-// disk is read outside the build or written.
+// disk is read outside the build or written. As in kustomize-controller,
+// generation and every file the build reads are confined to root, the source
+// the Kustomization reads, so a component or resource outside it fails here as
+// it fails in the cluster.
 func (c *Client) BuildFlux(
-	_ context.Context,
+	ctx context.Context,
+	root string,
 	dir string,
 	kustomization map[string]any,
 ) (*bytes.Buffer, error) {
+	err := ctx.Err()
+	if err != nil {
+		return nil, fmt.Errorf("build %s: %w", dir, err)
+	}
+
 	warmSchema()
 
-	// kustomize resolves the folder to an absolute path through symlinks, so the
-	// overlaid file must be named by the same absolute, resolved path; a relative
-	// dir such as "." would otherwise leave the overlay unmatched.
-	resolved, err := fsutil.EvalCanonicalPath(dir)
+	fSys, dir, err := fluxBuildFS(root, dir, kustomization)
 	if err != nil {
-		return nil, fmt.Errorf("resolve %s: %w", dir, err)
+		return nil, err
 	}
 
-	dir = resolved
-
-	generator := fluxkustomize.NewGenerator("", unstructured.Unstructured{Object: kustomization})
-
-	manifest, kustFile, _, err := generator.GenerateManifest(dir)
+	err = ctx.Err()
 	if err != nil {
-		return nil, fmt.Errorf("generate Flux kustomization for %s: %w", dir, err)
-	}
-
-	fSys := overlayFS{
-		FileSystem: filesys.MakeFsOnDisk(),
-		path:       filepath.Clean(kustFile),
-		data:       manifest,
+		return nil, fmt.Errorf("build %s: %w", dir, err)
 	}
 
 	opts := krusty.MakeDefaultOptions()
@@ -132,6 +129,48 @@ func (c *Client) BuildFlux(
 	}
 
 	return bytes.NewBuffer(yaml), nil
+}
+
+// fluxBuildFS generates the kustomization Flux builds for dir and returns the
+// filesystem serving it, confined to root, with dir resolved to the absolute
+// path kustomize builds.
+func fluxBuildFS(
+	root string,
+	dir string,
+	kustomization map[string]any,
+) (filesys.FileSystem, string, error) {
+	sourceRoot, err := fsutil.EvalCanonicalPath(root)
+	if err != nil {
+		return nil, "", fmt.Errorf("resolve source root %s: %w", root, err)
+	}
+
+	// kustomize resolves the folder to an absolute path through symlinks, so the
+	// overlaid file must be named by the same absolute, resolved path; a relative
+	// dir such as "." would otherwise leave the overlay unmatched.
+	resolved, err := fsutil.EvalCanonicalPath(dir)
+	if err != nil {
+		return nil, "", fmt.Errorf("resolve %s: %w", dir, err)
+	}
+
+	generator := fluxkustomize.NewGenerator(
+		sourceRoot, unstructured.Unstructured{Object: kustomization},
+	)
+
+	manifest, kustFile, _, err := generator.GenerateManifest(resolved)
+	if err != nil {
+		return nil, "", fmt.Errorf("generate Flux kustomization for %s: %w", resolved, err)
+	}
+
+	secure, err := fluxfilesys.MakeFsOnDiskSecureBuild(sourceRoot)
+	if err != nil {
+		return nil, "", fmt.Errorf("confine build to %s: %w", sourceRoot, err)
+	}
+
+	return overlayFS{
+		FileSystem: secure,
+		path:       filepath.Clean(kustFile),
+		data:       manifest,
+	}, resolved, nil
 }
 
 // overlayFS is the on-disk filesystem with one file, the merged kustomization

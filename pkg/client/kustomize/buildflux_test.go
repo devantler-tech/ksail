@@ -1,6 +1,7 @@
 package kustomize_test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -42,7 +43,7 @@ func TestBuildFluxGeneratesMissingKustomization(t *testing.T) {
 	dir := writeFiles(t, map[string]string{"configmap.yaml": webConfigMap})
 
 	out, err := kustomize.NewClient().BuildFlux(
-		t.Context(), dir, fluxSpec(map[string]any{"targetNamespace": "tenant-a"}),
+		t.Context(), dir, dir, fluxSpec(map[string]any{"targetNamespace": "tenant-a"}),
 	)
 	require.NoError(t, err)
 	assert.Contains(t, out.String(), "name: web")
@@ -70,7 +71,7 @@ func TestBuildFluxPatchesRunInsideTheFolderBuild(t *testing.T) {
 	}
 
 	out, err := kustomize.NewClient().BuildFlux(
-		t.Context(), dir, fluxSpec(map[string]any{"patches": []any{patch}}),
+		t.Context(), dir, dir, fluxSpec(map[string]any{"patches": []any{patch}}),
 	)
 	require.NoError(t, err)
 	assert.Contains(t, out.String(), "app: web", "the folder's own labels still apply")
@@ -80,7 +81,7 @@ func TestBuildFluxPatchesRunInsideTheFolderBuild(t *testing.T) {
 	patch["target"] = map[string]any{"kind": "ConfigMap", "name": "web"}
 
 	out, err = kustomize.NewClient().BuildFlux(
-		t.Context(), dir, fluxSpec(map[string]any{"patches": []any{patch}}),
+		t.Context(), dir, dir, fluxSpec(map[string]any{"patches": []any{patch}}),
 	)
 	require.NoError(t, err)
 	assert.Contains(t, out.String(), "patched")
@@ -106,8 +107,61 @@ func TestBuildFluxResolvesRelativeFolder(t *testing.T) {
 	t.Chdir(dir)
 
 	out, err := kustomize.NewClient().BuildFlux(
-		t.Context(), ".", fluxSpec(map[string]any{"targetNamespace": "tenant-a"}),
+		t.Context(), ".", ".", fluxSpec(map[string]any{"targetNamespace": "tenant-a"}),
 	)
 	require.NoError(t, err)
 	assert.Contains(t, out.String(), "namespace: tenant-a")
+}
+
+// A component outside the source root fails, as kustomize-controller confines
+// generation and the build to the source; a sibling inside the root still loads.
+func TestBuildFluxConfinesTheBuildToTheSourceRoot(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	outside := t.TempDir()
+
+	for _, component := range []string{filepath.Join(root, "shared"), outside} {
+		require.NoError(t, os.MkdirAll(component, 0o750))
+		require.NoError(t, os.WriteFile(filepath.Join(component, "kustomization.yaml"),
+			[]byte("apiVersion: kustomize.config.k8s.io/v1alpha1\nkind: Component\n"+
+				"commonAnnotations:\n  component: applied\n"), 0o600))
+	}
+
+	dir := filepath.Join(root, "apps")
+	require.NoError(t, os.MkdirAll(dir, 0o750))
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(dir, "configmap.yaml"), []byte(webConfigMap), 0o600),
+	)
+
+	inside, err := filepath.Rel(dir, filepath.Join(root, "shared"))
+	require.NoError(t, err)
+
+	out, err := kustomize.NewClient().BuildFlux(
+		t.Context(), root, dir, fluxSpec(map[string]any{"components": []any{inside}}),
+	)
+	require.NoError(t, err)
+	assert.Contains(t, out.String(), "component: applied", "a component inside the source loads")
+
+	escaping, err := filepath.Rel(dir, outside)
+	require.NoError(t, err)
+
+	_, err = kustomize.NewClient().BuildFlux(
+		t.Context(), root, dir, fluxSpec(map[string]any{"components": []any{escaping}}),
+	)
+	require.Error(t, err, "a component outside the source root is refused")
+}
+
+// A canceled context stops the build before any work starts.
+func TestBuildFluxObservesCancellation(t *testing.T) {
+	t.Parallel()
+
+	dir := writeFiles(t, map[string]string{"configmap.yaml": webConfigMap})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	_, err := kustomize.NewClient().BuildFlux(ctx, dir, dir, fluxSpec(map[string]any{}))
+	require.ErrorIs(t, err, context.Canceled)
 }

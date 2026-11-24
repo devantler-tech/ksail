@@ -226,8 +226,9 @@ The validation process:
 With --kyverno-policies, admission follows the Flux Kustomizations the tree renders from its
 own flux-system source: the folder each spec.path names is built the way Flux builds it (the
 Kustomization's composition merged into the folder's kustomization, or a generated one) and
-evaluated as its serviceAccountName (or the kustomize-controller). Unbound
-folders, ambiguous bindings and paths outside the validated tree fail with named errors.
+evaluated as its serviceAccountName (or the kustomize-controller). An admission failure
+in a folder no Kustomization applies, an ambiguous binding and a path outside the
+validated tree each fail with a named error.
 
     Flux variable substitutions are resolved before validation using type-aware placeholders:
   - ${VAR} (bare, no default): when a JSON schema type is available, substitutes a typed
@@ -3342,8 +3343,9 @@ The validation process:
 With --kyverno-policies, admission follows the Flux Kustomizations the tree renders from its
 own flux-system source: the folder each spec.path names is built the way Flux builds it (the
 Kustomization's composition merged into the folder's kustomization, or a generated one) and
-evaluated as its serviceAccountName (or the kustomize-controller). Unbound
-folders, ambiguous bindings and paths outside the validated tree fail with named errors.
+evaluated as its serviceAccountName (or the kustomize-controller). An admission failure
+in a folder no Kustomization applies, an ambiguous binding and a path outside the
+validated tree each fail with a named error.
 
     Flux variable substitutions are resolved before validation using type-aware placeholders:
   - ${VAR} (bare, no default): when a JSON schema type is available, substitutes a typed

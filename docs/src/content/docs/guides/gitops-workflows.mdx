@@ -121,6 +121,10 @@ checked and as whom:
   composition happens before Helm renders the folder's HelmReleases, and policies check the rendered
   output. A shared base that is only valid once patched passes, while a real violation in the composed
   output still fails.
+- Cluster-scoped policies and `Namespace` objects that one folder renders also apply when other
+  folders are checked, but in the form the folder's own build produces, before its Flux
+  Kustomization's patches. A Flux patch that changes such a policy (for example from audit to
+  enforce) is therefore not reflected when other folders are checked.
 - A child Kustomization is read from its parent's composed output, so a parent that patches a child's
   `serviceAccountName`, path or namespace changes how the child's folder is admitted.
 - The requester is the Kustomization's `serviceAccountName` in its own namespace

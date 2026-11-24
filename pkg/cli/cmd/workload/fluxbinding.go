@@ -61,6 +61,16 @@ type fluxSourceRoots struct {
 	artifact string
 }
 
+// of returns the source root kustomization reads: the Git top level for a
+// GitRepository source, the artifact root for any other source.
+func (r fluxSourceRoots) of(kustomization *kustomizev1.Kustomization) string {
+	if kustomization.Spec.SourceRef.Kind == fluxGitRepositoryKind {
+		return r.git
+	}
+
+	return r.artifact
+}
+
 // resolveFluxSourceRoots finds the source roots for the validated tree. A
 // missing Git top level or source directory falls back to the tree itself.
 func resolveFluxSourceRoots(tree, sourceDir string) fluxSourceRoots {
@@ -107,6 +117,8 @@ const maxFluxBindingRounds = 32
 // fluxBinding is how Flux admits one folder: the identity it applies as and
 // the Kustomization whose composition it applies first.
 type fluxBinding struct {
+	// root is the source the Kustomization reads; the build is confined to it.
+	root     string
 	identity kyvernopolicy.Identity
 	// object is the Flux Kustomization as rendered, which Flux's generator reads.
 	object map[string]any
@@ -353,6 +365,7 @@ func (p *fluxBindingPlan) bind(
 	}
 
 	binding := &fluxBinding{
+		root:        roots.of(kustomization),
 		identity:    fluxIdentity(kustomization),
 		object:      object,
 		composition: fluxComposition(object),
@@ -418,12 +431,7 @@ func resolveBindingDir(
 	kustomization *kustomizev1.Kustomization,
 	owner string,
 ) (string, string, error) {
-	root := roots.artifact
-	if kustomization.Spec.SourceRef.Kind == fluxGitRepositoryKind {
-		root = roots.git
-	}
-
-	dir := filepath.Join(root, filepath.FromSlash(kustomization.Spec.Path))
+	dir := filepath.Join(roots.of(kustomization), filepath.FromSlash(kustomization.Spec.Path))
 
 	canonical, err := fsutil.EvalCanonicalPath(dir)
 	if err == nil {
@@ -573,7 +581,7 @@ func (v *kustomizationValidator) composedManifests(
 	dir string,
 	binding *fluxBinding,
 ) ([]byte, map[string]string, error) {
-	composed, err := v.kustomize.BuildFlux(ctx, dir, binding.object)
+	composed, err := v.kustomize.BuildFlux(ctx, binding.root, dir, binding.object)
 	if err != nil {
 		return nil, nil, fmt.Errorf("apply Flux Kustomization %s: %w",
 			strings.Join(binding.owners, ", "), err)
@@ -589,6 +597,8 @@ func (v *kustomizationValidator) composedManifests(
 	if err != nil {
 		return nil, nil, err
 	}
+
+	v.sink.add(result.Degradations)
 
 	data, err := finishRenderedValidationSubstitutions(ctx, result, v.opts)
 
