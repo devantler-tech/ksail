@@ -34,12 +34,23 @@ const kyvernoPoliciesFlagDescription = "Evaluate the source's own Kyverno Cluste
 	"against the policies in its own rendered output plus every cluster-scoped " +
 	"ClusterPolicy and ValidatingPolicy any other kustomization renders (its own copy of " +
 	"a same-named policy wins); a namespaced Policy or NamespacedValidatingPolicy applies " +
-	"only within the kustomization that renders it, loose YAML files are not evaluated, a document is " +
-	"evaluated in the namespace it declares (a Flux " +
-	"targetNamespace is not applied, so a policy that depends on the namespace of a " +
-	"namespaced document that declares none is reported as a warning), and other " +
-	"policies.kyverno.io kinds are not " +
-	"supported. A ValidatingPolicy that calls the http library, or a CEL lookup of cluster, " +
+	"only within the kustomization that renders it, loose YAML files are not evaluated, and other " +
+	"policies.kyverno.io kinds are not supported. When the tree renders Flux Kustomizations " +
+	"reading its own flux-system source, admission follows them: the kustomization folder each " +
+	"spec.path names (resolved against the Git top level for a GitRepository, otherwise against " +
+	"the source directory) is evaluated from its own build, as its serviceAccountName in its own " +
+	"namespace or else as the kustomize-controller service account; the Kustomization's " +
+	"targetNamespace, patches and other composition are not applied, and a folder without a " +
+	"kustomization file is not evaluated; a folder another folder includes is evaluated only " +
+	"through it unless a Flux Kustomization applies it; a failure in a folder no Flux " +
+	"Kustomization applies is reported as unbound; and a path outside the validated tree, a " +
+	"missing path, or two Flux Kustomizations applying one folder as different identities each " +
+	"fail by name. Without them, " +
+	"every kustomization is evaluated as rendered with no requester identity. Either way a " +
+	"document is evaluated in the namespace it declares (a policy that depends on " +
+	"the namespace of a namespaced document that declares none is reported as a " +
+	"warning). A ValidatingPolicy that calls the http " +
+	"library, or a CEL lookup of cluster, " +
 	"registry or global-context data, cannot be evaluated offline. A classic policy's Kubernetes " +
 	"apiCall context requires a reviewed --kyverno-api-call-responses fixture; the fixture never " +
 	"enables live cluster or service access, and a missing response fails closed. Namespace labels come " +
@@ -86,6 +97,7 @@ func evaluateKyvernoDocuments(
 	attribution map[string]string,
 	shared kyvernoShared,
 	apiCallResponses kyvernopolicy.APICallResponses,
+	identity *kyvernopolicy.Identity,
 ) error {
 	if !enabled {
 		return nil
@@ -123,7 +135,7 @@ func evaluateKyvernoDocuments(
 	}
 
 	blocking, err := evaluateKyvernoTargets(
-		ctx, engine, celEngine, split.targets, source, sink, attribution,
+		ctx, engine, celEngine, split.targets, source, sink, attribution, identity,
 	)
 	if err != nil {
 		return err
@@ -146,11 +158,12 @@ func evaluateKyvernoTargets(
 	source string,
 	sink *celViolationSink,
 	attribution map[string]string,
+	identity *kyvernopolicy.Identity,
 ) ([]string, error) {
 	var blocking []string
 
 	for _, doc := range targets {
-		violations, err := evaluateKyvernoDocument(ctx, engine, celEngine, doc, source)
+		violations, err := evaluateKyvernoDocument(ctx, engine, celEngine, doc, source, identity)
 		if err != nil {
 			return nil, err
 		}
@@ -179,13 +192,14 @@ func evaluateKyvernoDocument(
 	celEngine *kyvernopolicy.CELEngine,
 	doc map[string]any,
 	source string,
+	identity *kyvernopolicy.Identity,
 ) ([]kyvernopolicy.Violation, error) {
-	violations, err := engine.Evaluate(ctx, doc)
+	violations, err := engine.EvaluateAs(ctx, doc, identity)
 	if err != nil {
 		return nil, fmt.Errorf("evaluate Kyverno policies in %s: %w", source, err)
 	}
 
-	celViolations, err := celEngine.Evaluate(ctx, doc)
+	celViolations, err := celEngine.EvaluateAs(ctx, doc, identity)
 	if err != nil {
 		return nil, fmt.Errorf("evaluate Kyverno ValidatingPolicies in %s: %w", source, err)
 	}
