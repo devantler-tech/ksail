@@ -397,6 +397,11 @@ func fluxComposition(object map[string]any) map[string]any {
 	spec, _ := object["spec"].(map[string]any)
 	for _, field := range fluxCompositionFields {
 		if value, set := spec[field]; set && value != nil {
+			if list, isList := value.([]any); isList && len(list) == 0 {
+				// Flux appends nothing for an empty list, so it does not change the folder.
+				continue
+			}
+
 			composition[field] = value
 		}
 	}

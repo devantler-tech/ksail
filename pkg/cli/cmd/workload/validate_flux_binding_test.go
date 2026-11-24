@@ -301,6 +301,33 @@ func TestValidateFluxBindingAmbiguousIsNamed(t *testing.T) {
 	require.ErrorContains(t, err, "flux-system/shadow")
 }
 
+// An empty composition list such as patches: [] adds nothing to the build, so
+// a second Flux Kustomization applying the folder the same way is not ambiguous.
+func TestValidateFluxBindingEmptyCompositionListIsNotAmbiguous(t *testing.T) {
+	t.Parallel()
+
+	root := tenancyTree(t, map[string]string{
+		"clusters/prod/kustomization.yaml": kustomizationOf(
+			"policy.yaml", "platform.yaml", "tenant.yaml", "twin.yaml",
+		),
+		"clusters/prod/twin.yaml": fluxKustomization(
+			"twin",
+			"flux-system",
+			"platform",
+			"  patches: []\n",
+		),
+	})
+
+	_, err := runBindingValidate(t, root)
+	require.NotErrorIs(t, err, workload.ErrAmbiguousFluxBinding)
+	require.ErrorIs(
+		t,
+		err,
+		workload.ErrKyvernoPolicyViolation,
+		"the tenant folder is still checked",
+	)
+}
+
 // A Flux Kustomization whose path leaves the validated tree fails with the
 // out-of-tree diagnostic instead of being skipped.
 func TestValidateFluxBindingOutsideTreeIsNamed(t *testing.T) {
