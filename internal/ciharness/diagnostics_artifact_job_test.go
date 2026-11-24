@@ -41,6 +41,7 @@ func TestDiagnosticsArtifactProbeIsBlockingAndIncludesCounterfactual(t *testing.
 	}
 
 	verify := findHarnessStep(t, job.Steps, "Verify native outcomes and artifact identity")
+	assert.Equal(t, "verify-artifact", verify.ID)
 	assert.Equal(t, "always()", verify.If)
 	assert.False(t, verify.ContinueOnError)
 	assert.Equal(t, "bash .github/scripts/verify-diagnostics-artifact.sh\n", verify.Run)
@@ -61,7 +62,11 @@ func TestDiagnosticsArtifactProbeIsBlockingAndIncludesCounterfactual(t *testing.
 
 	download := findHarnessStep(t, job.Steps, "Download the observed candidate artifact")
 	assert.Equal(t, "matrix.mode == 'candidate'", download.If)
-	assert.Contains(t, download.Uses, "actions/download-artifact@")
+	// The readback must fetch the exact artifact ID the verifier proved; a
+	// by-name re-resolution can miss a just-uploaded artifact.
+	assert.Empty(t, download.Uses)
+	assert.Equal(t, "${{ steps.verify-artifact.outputs.artifact-id }}", download.Env["ARTIFACT_ID"])
+	assert.Contains(t, download.Run, `actions/artifacts/$ARTIFACT_ID/zip`)
 	assert.Contains(t, findHarnessStep(t, job.Steps, "Verify downloaded diagnostics content").Run,
 		"KSail diagnostics artifact fixture")
 
