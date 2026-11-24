@@ -43,9 +43,15 @@ jq -es --arg name "$name" --arg mode "$FIXTURE_MODE" --arg head "$EXPECTED_HEAD"
   .total_count == (.artifacts | length) and
   if $mode == "baseline" then .total_count == 0 else
     .total_count == 1 and all(.artifacts[];
+      (.id | type == "number") and .id > 0 and (.id | floor) == .id and
       .name == $name and .expired == false and
       (.size_in_bytes | type == "number") and .size_in_bytes > 0 and
       (.size_in_bytes | floor) == .size_in_bytes and
       .workflow_run.id == $run and .workflow_run.head_sha == $head)
   end)' "$tmp" >/dev/null || reject
+# Hand the readback the exact verified identity: a second by-name lookup can
+# miss an artifact this listing already proved (ci run 45304265375).
+if [[ "$FIXTURE_MODE" == candidate ]]; then
+	printf 'artifact-id=%s\n' "$(jq -r '.artifacts[0].id' "$tmp")" >>"${GITHUB_OUTPUT:?}"
+fi
 printf 'Native diagnostics artifact %s: complete outcomes and artifact identity verified\n' "$FIXTURE_MODE"

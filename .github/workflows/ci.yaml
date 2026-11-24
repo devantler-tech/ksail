@@ -2660,6 +2660,7 @@ jobs:
           upload-artifacts: "true"
 
       - name: Verify native outcomes and artifact identity
+        id: verify-artifact
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
@@ -2672,12 +2673,19 @@ jobs:
         run: |
           bash .github/scripts/verify-diagnostics-artifact.sh
 
+      # Read back the exact artifact the verifier proved, by ID. A second by-name
+      # lookup through download-artifact could miss it moments after upload.
       - name: Download the observed candidate artifact
         if: matrix.mode == 'candidate'
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: system-test-diagnostics-fixture-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.mode }}
-          path: ${{ runner.temp }}/diagnostics-artifact-readback
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.verify-artifact.outputs.artifact-id }}
+          READBACK_DIR: ${{ runner.temp }}/diagnostics-artifact-readback
+        run: |
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" >"$RUNNER_TEMP/diagnostics-artifact.zip"
+          mkdir -p "$READBACK_DIR"
+          unzip -q "$RUNNER_TEMP/diagnostics-artifact.zip" -d "$READBACK_DIR"
 
       - name: Verify downloaded diagnostics content
         if: matrix.mode == 'candidate'
