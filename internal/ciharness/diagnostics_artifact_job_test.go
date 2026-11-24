@@ -79,6 +79,10 @@ func assertReadbackUsesVerifiedArtifactID(t *testing.T, steps []harnessStep) {
 	assert.Empty(t, download.Uses)
 	assert.Equal(t, "${{ steps.verify-artifact.outputs.artifact-id }}", download.Env["ARTIFACT_ID"])
 	assert.Contains(t, download.Run, `actions/artifacts/$ARTIFACT_ID/zip`)
+	// The zip endpoint can 404 for a few seconds after upload finalizes; a
+	// bounded retry absorbs that without hiding a persistent failure.
+	assert.Contains(t, download.Run, `for attempt in 1 2 3 4 5 6; do`)
+	assert.Contains(t, download.Run, `if [ "$attempt" -eq 6 ]; then exit 1; fi`)
 	assert.Contains(t, findHarnessStep(t, steps, "Verify downloaded diagnostics content").Run,
 		"KSail diagnostics artifact fixture")
 }
