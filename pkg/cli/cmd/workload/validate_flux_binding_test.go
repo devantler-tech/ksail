@@ -410,3 +410,75 @@ func TestValidateFluxBindingPatchAppliesBeforeHelmRender(t *testing.T) {
 	require.ErrorIs(t, err, workload.ErrKyvernoPolicyViolation, "the default value still fails")
 	require.ErrorContains(t, err, "ConfigMap/default/app-config")
 }
+
+// parentPatchTree has a parent Flux Kustomization applying a folder that holds a
+// child Kustomization; extra is the parent's spec addition. The child names no
+// serviceAccountName of its own and applies a ConfigMap.
+func parentPatchTree(t *testing.T, extra string) string {
+	t.Helper()
+
+	return writeTree(t, map[string]string{
+		"clusters/prod/kustomization.yaml": kustomizationOf("policy.yaml", "tenants.yaml"),
+		"clusters/prod/policy.yaml":        onlyFluxControllerPolicy,
+		"clusters/prod/tenants.yaml": fluxKustomization(
+			"tenants", "flux-system", "tenants", extra,
+		),
+		"tenants/kustomization.yaml": kustomizationOf("tenant.yaml"),
+		"tenants/tenant.yaml":        fluxKustomization("tenant", "tenant-a", "tenant", ""),
+		"tenant/kustomization.yaml":  kustomizationOf("configmap.yaml"),
+		"tenant/configmap.yaml":      configMap("tenant-settings"),
+	})
+}
+
+// tenantIdentityPatch is a parent spec.patches entry that sets the child
+// Kustomization's serviceAccountName.
+const tenantIdentityPatch = `  patches:
+    - target:
+        kind: Kustomization
+        group: kustomize.toolkit.fluxcd.io
+      patch: |
+        - op: add
+          path: /spec/serviceAccountName
+          value: tenant-a
+`
+
+// A child Kustomization is bound as its parent composes it: a parent patch that
+// sets the child's serviceAccountName makes the child's folder apply as the
+// tenant, so a platform-only rule rejects it.
+func TestValidateFluxBindingChildReadFromComposedParent(t *testing.T) {
+	t.Parallel()
+
+	_, err := runBindingValidate(t, parentPatchTree(t, tenantIdentityPatch))
+	require.ErrorIs(t, err, workload.ErrKyvernoPolicyViolation)
+	require.ErrorContains(t, err, "ConfigMap/tenant-settings")
+	require.ErrorContains(t, err, "applied by Flux Kustomization tenant-a/tenant")
+	require.ErrorContains(t, err, "as system:serviceaccount:tenant-a:tenant-a")
+}
+
+// Negative control: without the parent patch the child applies as Flux's own
+// controller and the platform-only rule admits it.
+func TestValidateFluxBindingChildWithoutParentPatchIsPlatform(t *testing.T) {
+	t.Parallel()
+
+	_, err := runBindingValidate(t, parentPatchTree(t, ""))
+	require.NoError(t, err)
+}
+
+// A folder with no kustomization file is evaluated as Flux generates it, not
+// skipped: its manifests still face admission under the binding's identity.
+func TestValidateFluxBindingGeneratedFolderIsEvaluated(t *testing.T) {
+	t.Parallel()
+
+	root := writeTree(t, map[string]string{
+		"clusters/prod/kustomization.yaml": kustomizationOf("policy.yaml", "tenant.yaml"),
+		"clusters/prod/policy.yaml":        onlyFluxControllerPolicy,
+		"clusters/prod/tenant.yaml": fluxKustomization("tenant", "tenant-a", "tenant",
+			"  serviceAccountName: tenant-a\n  targetNamespace: tenant-a\n"),
+		"tenant/configmap.yaml": configMap("tenant-settings"),
+	})
+
+	_, err := runBindingValidate(t, root)
+	require.ErrorIs(t, err, workload.ErrKyvernoPolicyViolation)
+	require.ErrorContains(t, err, "ConfigMap/tenant-a/tenant-settings")
+	require.ErrorContains(t, err, "as system:serviceaccount:tenant-a:tenant-a")
+}

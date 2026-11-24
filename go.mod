@@ -46,6 +46,7 @@ require (
 	github.com/fluxcd/kustomize-controller/api v1.10.1
 	github.com/fluxcd/pkg/apis/kustomize v1.23.0
 	github.com/fluxcd/pkg/apis/meta v1.38.0
+	github.com/fluxcd/pkg/kustomize v1.44.0
 	github.com/fluxcd/source-controller/api v1.10.1
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/getsops/sops/v3 v3.13.3
@@ -432,7 +433,9 @@ require (
 	github.com/florianl/go-tc v0.4.8 // indirect
 	github.com/fluxcd/cli-utils v1.2.2 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.12.0 // indirect
+	github.com/fluxcd/pkg/envsubst v1.9.0 // indirect
 	github.com/fluxcd/pkg/oci v0.45.0 // indirect
+	github.com/fluxcd/pkg/sourceignore v0.22.0 // indirect
 	github.com/fluxcd/pkg/ssa v0.77.0 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
 	github.com/fvbommel/sortorder v1.1.0 // indirect

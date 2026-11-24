@@ -57,8 +57,9 @@ The validation process:
 2. Validates kustomizations by building them with kustomize and validating the output
 
 With --kyverno-policies, admission follows the Flux Kustomizations the tree renders from its
-own flux-system source: the folder each spec.path names is evaluated after the Kustomization's
-targetNamespace and patches, as its serviceAccountName (or the kustomize-controller). Unbound
+own flux-system source: the folder each spec.path names is built the way Flux builds it (the
+Kustomization's composition merged into the folder's kustomization, or a generated one) and
+evaluated as its serviceAccountName (or the kustomize-controller). Unbound
 folders, ambiguous bindings and paths outside the validated tree fail with named errors.
 
 	Flux variable substitutions are resolved before validation using type-aware placeholders:
@@ -1196,12 +1197,13 @@ func (v *kustomizationValidator) runKyverno(
 		v.sourceRoots,
 		v.kustomizations,
 		v.renderedOutputs,
+		func(dir string, binding *fluxBinding) ([]byte, map[string]string, error) {
+			return v.composedManifests(ctx, dir, binding)
+		},
 	)
-	for _, warning := range plan.warnings {
-		v.kyvernoSink.add(warning)
-	}
 
 	dirs = slices.DeleteFunc(dirs, func(dir string) bool { return !plan.target(dir) })
+	dirs = append(dirs, plan.generatedTargets()...)
 
 	err := runParallelValidation(
 		ctx, cmd, dirs, v.dirPath, "Evaluating Kyverno policies", "🛡️",
@@ -1232,7 +1234,12 @@ func (v *kustomizationValidator) evaluateKyvernoTarget(
 	plan fluxBindingPlan,
 	shared kyvernoShared,
 ) error {
-	input := v.kyvernoInputs[dir]
+	input, validated := v.kyvernoInputs[dir]
+	if !validated && v.opts != nil {
+		// A folder Flux generates a kustomization for has no validated output
+		// of its own; it takes the configured kind exclusions.
+		input.skipKinds = v.opts.SkipKinds
+	}
 
 	binding, bound := plan.bindings[dir]
 	if !bound {
@@ -1255,7 +1262,12 @@ func (v *kustomizationValidator) evaluateKyvernoTarget(
 	if binding.composed() {
 		var err error
 
-		data, attribution, err = v.composedManifests(ctx, dir, binding)
+		data, attribution, err = binding.render(
+			dir,
+			func(dir string, binding *fluxBinding) ([]byte, map[string]string, error) {
+				return v.composedManifests(ctx, dir, binding)
+			},
+		)
 		if err != nil {
 			return err
 		}

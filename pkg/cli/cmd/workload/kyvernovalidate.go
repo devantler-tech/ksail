@@ -38,11 +38,14 @@ const kyvernoPoliciesFlagDescription = "Evaluate the source's own Kyverno Cluste
 	"policies.kyverno.io kinds are not supported. When the tree renders Flux Kustomizations " +
 	"reading its own flux-system source, admission follows them: each one's spec.path (resolved " +
 	"against the Git top level for a GitRepository, otherwise against the source directory) is " +
-	"evaluated after its targetNamespace and patches, as its serviceAccountName in its own " +
+	"built the way Flux builds it (its targetNamespace, patches, images and components merged into " +
+	"the folder's kustomization, or into one Flux generates for a folder without one; a child " +
+	"Kustomization is read from its parent's composed output), as its serviceAccountName in its own " +
 	"namespace or else as the kustomize-controller service account; a folder another folder " +
 	"includes is evaluated only through it; a failure in a folder no Flux Kustomization applies " +
 	"is reported as unbound; and a path outside the validated tree, a missing path, or two " +
-	"Flux Kustomizations applying one folder differently each fail by name. Without them, " +
+	"Flux Kustomizations applying one folder differently, or bindings that never settle, each " +
+	"fail by name. Without them, " +
 	"every kustomization is evaluated as rendered with no requester identity, in the namespace " +
 	"each document declares (a policy that depends on the namespace of a namespaced document " +
 	"that declares none is reported as a warning). A ValidatingPolicy that calls the http " +
