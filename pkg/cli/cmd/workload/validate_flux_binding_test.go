@@ -169,20 +169,13 @@ func runBindingValidate(t *testing.T, root string) (string, error) {
 		"--schema-location-mode", "only", "--schema-location", t.TempDir())
 }
 
-// A HelmRelease base that fails on its own passes once the Flux patch that
-// composes it is applied (devantler-tech/ksail#8509).
-func TestValidateFluxBindingComposedHelmReleasePasses(t *testing.T) {
+// A bound folder is checked from its own build: the Flux patch is not applied
+// (composition is devantler-tech/ksail#8561), so the base still fails, and the
+// failure names the Flux Kustomization that applies the folder.
+func TestValidateFluxBindingViolationNamesBinding(t *testing.T) {
 	t.Parallel()
 
 	_, err := runBindingValidate(t, helmReleaseTree(t, replicaPatch("2")))
-	require.NoError(t, err, "the composed HelmRelease meets the policy")
-}
-
-// A real violation in the composed output still fails.
-func TestValidateFluxBindingComposedViolationFails(t *testing.T) {
-	t.Parallel()
-
-	_, err := runBindingValidate(t, helmReleaseTree(t, replicaPatch("1")))
 	require.ErrorIs(t, err, workload.ErrKyvernoPolicyViolation)
 	require.ErrorContains(t, err, `policy "require-replicas" rule "at-least-two" failed`)
 	require.ErrorContains(t, err, "HelmRelease/podinfo/podinfo")
@@ -190,8 +183,7 @@ func TestValidateFluxBindingComposedViolationFails(t *testing.T) {
 }
 
 // Without a Flux Kustomization the tree behaves as before: the base is
-// evaluated as rendered and fails. This is the negative control for the
-// composition test above.
+// evaluated as rendered and fails, with no binding named.
 func TestValidateFluxBindingAbsentEvaluatesBaseAsBefore(t *testing.T) {
 	t.Parallel()
 
@@ -238,7 +230,7 @@ func TestValidateFluxBindingTenantRejectedPlatformAdmitted(t *testing.T) {
 
 	_, err := runBindingValidate(t, tenancyTree(t, nil))
 	require.ErrorIs(t, err, workload.ErrKyvernoPolicyViolation)
-	require.ErrorContains(t, err, "ConfigMap/tenant-a/tenant-settings")
+	require.ErrorContains(t, err, "ConfigMap/tenant-settings")
 	require.ErrorContains(t, err, "as system:serviceaccount:tenant-a:tenant-a")
 	assert.NotContains(t, err.Error(), "platform-settings", "the platform folder is admitted")
 }
@@ -301,9 +293,9 @@ func TestValidateFluxBindingAmbiguousIsNamed(t *testing.T) {
 	require.ErrorContains(t, err, "flux-system/shadow")
 }
 
-// An empty composition list such as patches: [] adds nothing to the build, so
-// a second Flux Kustomization applying the folder the same way is not ambiguous.
-func TestValidateFluxBindingEmptyCompositionListIsNotAmbiguous(t *testing.T) {
+// Two Flux Kustomizations applying one folder as the same identity are not
+// ambiguous, even when their composition differs.
+func TestValidateFluxBindingSameIdentityIsNotAmbiguous(t *testing.T) {
 	t.Parallel()
 
 	root := tenancyTree(t, map[string]string{
@@ -314,7 +306,7 @@ func TestValidateFluxBindingEmptyCompositionListIsNotAmbiguous(t *testing.T) {
 			"twin",
 			"flux-system",
 			"platform",
-			"  patches: []\n",
+			"  targetNamespace: elsewhere\n",
 		),
 	})
 
@@ -373,139 +365,59 @@ func TestValidateFluxBindingOtherSourceIsIgnored(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// tunedValuePolicy rejects a ConfigMap still carrying the chart's default value.
-const tunedValuePolicy = `apiVersion: kyverno.io/v1
-kind: ClusterPolicy
-metadata:
-  name: tuned-value
-spec:
-  validationFailureAction: Enforce
-  rules:
-    - name: not-default
-      match:
-        any:
-          - resources:
-              kinds:
-                - ConfigMap
-      validate:
-        message: "the chart value must be tuned"
-        pattern:
-          data:
-            key: "!default"
-`
-
-// With Helm rendering on, the Flux patch reaches the HelmRelease before the
-// chart is rendered, so the rendered ConfigMap carries the patched value.
-func TestValidateFluxBindingPatchAppliesBeforeHelmRender(t *testing.T) {
-	t.Parallel()
-
-	tree := func(extra string) string {
-		root := writeTree(t, map[string]string{
-			"clusters/prod/kustomization.yaml": kustomizationOf("policy.yaml", "apps.yaml"),
-			"clusters/prod/policy.yaml":        tunedValuePolicy,
-			"clusters/prod/apps.yaml": fluxKustomization(
-				"apps", "flux-system", "apps/chart", extra,
-			),
-		})
-		dir := filepath.Join(root, "apps", "chart")
-		require.NoError(t, os.MkdirAll(dir, 0o750))
-		writeKustomizationFiles(t, dir, localChartURL(t, "validchart"))
-
-		return root
-	}
-
-	patch := `  patches:
-    - target:
-        kind: HelmRelease
-        name: app
-      patch: |
-        - op: add
-          path: /spec/values
-          value: {"value": "tuned"}
-`
-
-	validate := func(root string) error {
-		_, err := runValidate(t, root, "--kyverno-policies", "--skip-kinds", "OCIRepository",
-			"--schema-location-mode", "only", "--schema-location", t.TempDir())
-
-		return err
-	}
-
-	require.NoError(t, validate(tree(patch)), "the patched value reaches the rendered chart")
-
-	err := validate(tree(""))
-	require.ErrorIs(t, err, workload.ErrKyvernoPolicyViolation, "the default value still fails")
-	require.ErrorContains(t, err, "ConfigMap/default/app-config")
-}
-
-// parentPatchTree has a parent Flux Kustomization applying a folder that holds a
-// child Kustomization; extra is the parent's spec addition. The child names no
-// serviceAccountName of its own and applies a ConfigMap.
-func parentPatchTree(t *testing.T, extra string) string {
+// nestedTree has a parent Flux Kustomization applying a folder that holds a
+// child Kustomization with extra under its spec; the child applies a ConfigMap.
+func nestedTree(t *testing.T, extra string) string {
 	t.Helper()
 
 	return writeTree(t, map[string]string{
 		"clusters/prod/kustomization.yaml": kustomizationOf("policy.yaml", "tenants.yaml"),
 		"clusters/prod/policy.yaml":        onlyFluxControllerPolicy,
 		"clusters/prod/tenants.yaml": fluxKustomization(
-			"tenants", "flux-system", "tenants", extra,
+			"tenants", "flux-system", "tenants", "",
 		),
 		"tenants/kustomization.yaml": kustomizationOf("tenant.yaml"),
-		"tenants/tenant.yaml":        fluxKustomization("tenant", "tenant-a", "tenant", ""),
+		"tenants/tenant.yaml":        fluxKustomization("tenant", "tenant-a", "tenant", extra),
 		"tenant/kustomization.yaml":  kustomizationOf("configmap.yaml"),
 		"tenant/configmap.yaml":      configMap("tenant-settings"),
 	})
 }
 
-// tenantIdentityPatch is a parent spec.patches entry that sets the child
-// Kustomization's serviceAccountName.
-const tenantIdentityPatch = `  patches:
-    - target:
-        kind: Kustomization
-        group: kustomize.toolkit.fluxcd.io
-      patch: |
-        - op: add
-          path: /spec/serviceAccountName
-          value: tenant-a
-`
-
-// A child Kustomization is bound as its parent composes it: a parent patch that
-// sets the child's serviceAccountName makes the child's folder apply as the
-// tenant, so a platform-only rule rejects it.
-func TestValidateFluxBindingChildReadFromComposedParent(t *testing.T) {
+// A child Kustomization rendered by a bound folder binds its own folder: with
+// a serviceAccountName it applies as the tenant, so a platform-only rule
+// rejects it.
+func TestValidateFluxBindingNestedChildIsBound(t *testing.T) {
 	t.Parallel()
 
-	_, err := runBindingValidate(t, parentPatchTree(t, tenantIdentityPatch))
+	_, err := runBindingValidate(t, nestedTree(t, "  serviceAccountName: tenant-a\n"))
 	require.ErrorIs(t, err, workload.ErrKyvernoPolicyViolation)
 	require.ErrorContains(t, err, "ConfigMap/tenant-settings")
 	require.ErrorContains(t, err, "applied by Flux Kustomization tenant-a/tenant")
 	require.ErrorContains(t, err, "as system:serviceaccount:tenant-a:tenant-a")
 }
 
-// Negative control: without the parent patch the child applies as Flux's own
-// controller and the platform-only rule admits it.
-func TestValidateFluxBindingChildWithoutParentPatchIsPlatform(t *testing.T) {
+// Negative control: without a serviceAccountName the child applies as Flux's
+// own controller and the platform-only rule admits it.
+func TestValidateFluxBindingNestedChildWithoutAccountIsPlatform(t *testing.T) {
 	t.Parallel()
 
-	_, err := runBindingValidate(t, parentPatchTree(t, ""))
+	_, err := runBindingValidate(t, nestedTree(t, ""))
 	require.NoError(t, err)
 }
 
-// A folder with no kustomization file is evaluated as Flux generates it, not
-// skipped: its manifests still face admission under the binding's identity.
-func TestValidateFluxBindingGeneratedFolderIsEvaluated(t *testing.T) {
+// A folder with no kustomization file has no build of its own, so it is not
+// bound and Kyverno does not evaluate its loose manifests, as before.
+func TestValidateFluxBindingFolderWithoutKustomizationIsNotEvaluated(t *testing.T) {
 	t.Parallel()
 
 	root := writeTree(t, map[string]string{
 		"clusters/prod/kustomization.yaml": kustomizationOf("policy.yaml", "tenant.yaml"),
 		"clusters/prod/policy.yaml":        onlyFluxControllerPolicy,
 		"clusters/prod/tenant.yaml": fluxKustomization("tenant", "tenant-a", "tenant",
-			"  serviceAccountName: tenant-a\n  targetNamespace: tenant-a\n"),
+			"  serviceAccountName: tenant-a\n"),
 		"tenant/configmap.yaml": configMap("tenant-settings"),
 	})
 
 	_, err := runBindingValidate(t, root)
-	require.ErrorIs(t, err, workload.ErrKyvernoPolicyViolation)
-	require.ErrorContains(t, err, "ConfigMap/tenant-a/tenant-settings")
-	require.ErrorContains(t, err, "as system:serviceaccount:tenant-a:tenant-a")
+	require.NoError(t, err)
 }

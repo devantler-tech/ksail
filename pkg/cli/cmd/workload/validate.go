@@ -57,9 +57,9 @@ The validation process:
 2. Validates kustomizations by building them with kustomize and validating the output
 
 With --kyverno-policies, admission follows the Flux Kustomizations the tree renders from its
-own flux-system source: the folder each spec.path names is built the way Flux builds it (the
-Kustomization's composition merged into the folder's kustomization, or a generated one) and
-evaluated as its serviceAccountName (or the kustomize-controller). An admission failure
+own flux-system source: the kustomization folder each spec.path names is checked from its own
+build, as its serviceAccountName (or the kustomize-controller). The Kustomization's targetNamespace,
+patches and other composition are not applied. An admission failure
 in a folder no Kustomization applies, an ambiguous binding and a path outside the
 validated tree each fail with a named error.
 
@@ -1194,17 +1194,10 @@ func (v *kustomizationValidator) runKyverno(
 	}
 
 	plan, bindingErr := planFluxBindings(
-		v.dirPath,
-		v.sourceRoots,
-		v.kustomizations,
-		v.renderedOutputs,
-		func(dir string, binding *fluxBinding) ([]byte, map[string]string, error) {
-			return v.composedManifests(ctx, dir, binding)
-		},
+		v.dirPath, v.sourceRoots, v.kustomizations, v.renderedOutputs,
 	)
 
 	dirs = slices.DeleteFunc(dirs, func(dir string) bool { return !plan.target(dir) })
-	dirs = append(dirs, plan.generatedTargets()...)
 
 	err := runParallelValidation(
 		ctx, cmd, dirs, v.dirPath, "Evaluating Kyverno policies", "🛡️",
@@ -1225,22 +1218,17 @@ func (v *kustomizationValidator) runKyverno(
 }
 
 // evaluateKyvernoTarget evaluates one folder's admission. A folder a Flux
-// Kustomization binds is evaluated as Flux applies it: composed with its
-// targetNamespace and patches, as its identity. Without bindings in the tree
-// every folder is evaluated as rendered with no identity, as before; with
-// bindings, a failure in an unbound folder is named as such.
+// Kustomization binds is evaluated from its own build as the identity Flux
+// applies it as. Without bindings in the tree every folder is evaluated with no
+// identity, as before; with bindings, a failure in an unbound folder is named
+// as such.
 func (v *kustomizationValidator) evaluateKyvernoTarget(
 	ctx context.Context,
 	dir string,
 	plan fluxBindingPlan,
 	shared kyvernoShared,
 ) error {
-	input, validated := v.kyvernoInputs[dir]
-	if !validated && v.opts != nil {
-		// A folder Flux generates a kustomization for has no validated output
-		// of its own; it takes the configured kind exclusions.
-		input.skipKinds = v.opts.SkipKinds
-	}
+	input := v.kyvernoInputs[dir]
 
 	binding, bound := plan.bindings[dir]
 	if !bound {
@@ -1258,25 +1246,9 @@ func (v *kustomizationValidator) evaluateKyvernoTarget(
 		return err
 	}
 
-	data, attribution := input.data, input.attribution
-
-	if binding.composed() {
-		var err error
-
-		data, attribution, err = binding.render(
-			dir,
-			func(dir string, binding *fluxBinding) ([]byte, map[string]string, error) {
-				return v.composedManifests(ctx, dir, binding)
-			},
-		)
-		if err != nil {
-			return err
-		}
-	}
-
 	return evaluateKyvernoDocuments(
-		ctx, true, data, binding.source(dir), input.skipKinds, v.kyvernoSink,
-		attribution, shared, v.apiCallResponses, &binding.identity,
+		ctx, true, input.data, binding.source(dir), input.skipKinds, v.kyvernoSink,
+		input.attribution, shared, v.apiCallResponses, &binding.identity,
 	)
 }
 

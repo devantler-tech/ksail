@@ -231,16 +231,5 @@
       ],
       "reason": "The exact inventory names this file as the local copy of SQLite's public-domain dedication for the amalgamation transpiled into lib. Preserve it alongside the independently admitted BSD-3-Clause module LICENSE; this is no additional package grant."
     }
-  ],
-  "supplements": [
-    {
-      "module": "github.com/fluxcd/pkg/envsubst",
-      "version": "v1.9.0",
-      "sum": "h1:QTagwV4WLmqF+JsD1rGkcKFmmj4HV64BnqNM1T311kc=",
-      "upstream": "github.com/drone/envsubst@v1.0.3/LICENSE",
-      "sha256": "6ed5e52fe9c2f84ae6c5059a20c5349deff41f24984c2654fadc92547bb715de",
-      "terms": ["MIT"],
-      "reason": "The module is a fork of github.com/drone/envsubst: its sources name the MIT license and the drone.io copyright, but the module ships only its own Apache-2.0 LICENSE. This is the upstream MIT text those headers refer to."
-    }
   ]
 }

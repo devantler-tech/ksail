@@ -36,19 +36,20 @@ const kyvernoPoliciesFlagDescription = "Evaluate the source's own Kyverno Cluste
 	"a same-named policy wins); a namespaced Policy or NamespacedValidatingPolicy applies " +
 	"only within the kustomization that renders it, loose YAML files are not evaluated, and other " +
 	"policies.kyverno.io kinds are not supported. When the tree renders Flux Kustomizations " +
-	"reading its own flux-system source, admission follows them: each one's spec.path (resolved " +
-	"against the Git top level for a GitRepository, otherwise against the source directory) is " +
-	"built the way Flux builds it (its targetNamespace, patches, images and components merged into " +
-	"the folder's kustomization, or into one Flux generates for a folder without one; a child " +
-	"Kustomization is read from its parent's composed output), as its serviceAccountName in its own " +
-	"namespace or else as the kustomize-controller service account; a folder another folder " +
-	"includes is evaluated only through it; a failure in a folder no Flux Kustomization applies " +
-	"is reported as unbound; and a path outside the validated tree, a missing path, or two " +
-	"Flux Kustomizations applying one folder differently, or bindings that never settle, each " +
+	"reading its own flux-system source, admission follows them: the kustomization folder each " +
+	"spec.path names (resolved against the Git top level for a GitRepository, otherwise against " +
+	"the source directory) is evaluated from its own build, as its serviceAccountName in its own " +
+	"namespace or else as the kustomize-controller service account; the Kustomization's " +
+	"targetNamespace, patches and other composition are not applied, and a folder without a " +
+	"kustomization file is not evaluated; a folder another folder includes is evaluated only " +
+	"through it unless a Flux Kustomization applies it; a failure in a folder no Flux " +
+	"Kustomization applies is reported as unbound; and a path outside the validated tree, a " +
+	"missing path, or two Flux Kustomizations applying one folder as different identities each " +
 	"fail by name. Without them, " +
-	"every kustomization is evaluated as rendered with no requester identity, in the namespace " +
-	"each document declares (a policy that depends on the namespace of a namespaced document " +
-	"that declares none is reported as a warning). A ValidatingPolicy that calls the http " +
+	"every kustomization is evaluated as rendered with no requester identity. Either way a " +
+	"document is evaluated in the namespace it declares (a policy that depends on " +
+	"the namespace of a namespaced document that declares none is reported as a " +
+	"warning). A ValidatingPolicy that calls the http " +
 	"library, or a CEL lookup of cluster, " +
 	"registry or global-context data, cannot be evaluated offline. A classic policy's Kubernetes " +
 	"apiCall context requires a reviewed --kyverno-api-call-responses fixture; the fixture never " +

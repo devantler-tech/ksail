@@ -1,13 +1,11 @@
 package workload
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strings"
 
@@ -26,7 +24,7 @@ var (
 	// Kustomization from this source applies: it has no admission identity.
 	ErrUnboundFluxKustomization = errors.New("unbound: not applied by any Flux Kustomization")
 	// ErrAmbiguousFluxBinding is returned when two Flux Kustomizations apply the
-	// same folder with a different identity, targetNamespace or patches.
+	// same folder as different identities.
 	ErrAmbiguousFluxBinding = errors.New("ambiguous Flux Kustomization binding")
 	// ErrFluxBindingOutsideTree is returned when a Flux Kustomization's
 	// spec.path resolves outside the validated tree.
@@ -34,9 +32,6 @@ var (
 	// ErrFluxBindingPathNotFound is returned when a Flux Kustomization's
 	// spec.path names a folder that does not exist.
 	ErrFluxBindingPathNotFound = errors.New("flux Kustomization path does not exist")
-	// ErrFluxBindingsDoNotSettle is returned when composing parent Flux
-	// Kustomizations keeps changing the bindings of their children.
-	ErrFluxBindingsDoNotSettle = errors.New("flux Kustomization bindings do not settle")
 )
 
 const (
@@ -99,47 +94,11 @@ func resolveFluxSourceRoots(tree, sourceDir string) fluxSourceRoots {
 	return roots
 }
 
-// fluxCompositionFields are the Flux Kustomization spec fields Flux's own
-// generator merges into a folder's kustomization before it is built. Two
-// Kustomizations that agree on all of them, and on the identity, apply a folder
-// the same way.
-var fluxCompositionFields = []string{ //nolint:gochecknoglobals // fixed list of Flux API fields
-	"targetNamespace", "namePrefix", "nameSuffix",
-	"patches", "patchesStrategicMerge", "patchesJson6902",
-	"images", "components", "ignoreMissingComponents", "buildMetadata",
-}
-
-// maxFluxBindingRounds bounds how many times bindings are re-discovered from
-// composed output. Each round reaches one Kustomization level deeper, so only a
-// chain that keeps changing, such as a parent patched by its own child, hits it.
-const maxFluxBindingRounds = 32
-
-// fluxBinding is how Flux admits one folder: the identity it applies as and
-// the Kustomization whose composition it applies first.
+// fluxBinding is the identity Flux applies one folder as, and the Flux
+// Kustomizations that apply it.
 type fluxBinding struct {
-	// root is the source the Kustomization reads; the build is confined to it.
-	root     string
 	identity kyvernopolicy.Identity
-	// object is the Flux Kustomization as rendered, which Flux's generator reads.
-	object map[string]any
-	// composition holds the object's fluxCompositionFields that are set.
-	composition map[string]any
-	// generated is true when the folder has no kustomization file, so Flux
-	// generates one listing its manifests.
-	generated bool
-	owners    []string
-
-	// The folder's composed output, rendered once and reused by discovery and
-	// evaluation.
-	rendered    bool
-	data        []byte
-	attribution map[string]string
-	renderErr   error
-}
-
-// composed reports whether Flux changes the folder's output before applying it.
-func (b *fluxBinding) composed() bool {
-	return b.generated || len(b.composition) > 0
+	owners   []string
 }
 
 // source names the folder and the Flux Kustomizations that apply it.
@@ -150,28 +109,9 @@ func (b *fluxBinding) source(dir string) string {
 	)
 }
 
-// sameAs reports whether other applies a folder exactly as b does.
-func (b *fluxBinding) sameAs(other *fluxBinding) bool {
-	return b.identity.Username == other.identity.Username &&
-		reflect.DeepEqual(b.composition, other.composition)
-}
-
-// composeFunc renders dir as binding composes it.
-type composeFunc func(dir string, binding *fluxBinding) ([]byte, map[string]string, error)
-
-// render returns the folder's composed output, rendering it on first use.
-func (b *fluxBinding) render(dir string, compose composeFunc) ([]byte, map[string]string, error) {
-	if !b.rendered {
-		b.data, b.attribution, b.renderErr = compose(dir, b)
-		b.rendered = true
-	}
-
-	return b.data, b.attribution, b.renderErr
-}
-
-// fluxBindingPlan decides which folders Kyverno admission evaluates and how.
-// When active is false the tree renders no Flux Kustomization from its own
-// source, and every folder is evaluated as before.
+// fluxBindingPlan decides which folders Kyverno admission evaluates and as
+// whom. When active is false the tree renders no Flux Kustomization from its
+// own source, and every folder is evaluated as before.
 type fluxBindingPlan struct {
 	active   bool
 	bindings map[string]*fluxBinding
@@ -202,67 +142,20 @@ func (p *fluxBindingPlan) target(dir string) bool {
 	return entry
 }
 
-// generatedTargets are the bound folders without a kustomization file: they
-// have no validated output of their own and are evaluated only as Flux
-// generates them.
-func (p *fluxBindingPlan) generatedTargets() []string {
-	var dirs []string
-
-	for dir, binding := range p.bindings {
-		if binding.generated {
-			dirs = append(dirs, dir)
-		}
-	}
-
-	slices.Sort(dirs)
-
-	return dirs
-}
-
-// planFluxBindings binds each folder a Flux Kustomization from the tree's own
-// source applies. Kustomizations are read from the entry folders' output
-// (folders no other folder includes, so every rendered document is seen once)
-// and, for a bound folder, from its output as Flux composes it: a parent's
-// targetNamespace or patches can change a child Kustomization's namespace,
-// path or serviceAccountName. Discovery repeats until the bindings stop
-// changing. Kustomizations that read another source apply another tree and are
-// left out. It returns the plan and the named diagnostics joined into one error.
+// planFluxBindings binds each kustomization folder a Flux Kustomization from
+// the tree's own source applies to the identity Flux applies it as. The Flux
+// Kustomizations are read from the entry folders' rendered output: every
+// kustomization folder is an entry or is included by one, so every rendered
+// document is seen once. Each bound folder keeps its own build. A Flux
+// Kustomization whose folder has no kustomization file is not bound, because
+// that folder has no build of its own to check. Kustomizations that read
+// another source apply another tree and are left out. It returns the plan and
+// the named diagnostics joined into one error.
 func planFluxBindings(
 	tree string,
 	roots fluxSourceRoots,
 	kustomizations []string,
 	outputs map[string][]byte,
-	compose composeFunc,
-) (fluxBindingPlan, error) {
-	var previous map[string]*fluxBinding
-
-	for range maxFluxBindingRounds {
-		plan, err := discoverFluxBindings(tree, roots, kustomizations, outputs, previous, compose)
-		if previous != nil && sameBindings(previous, plan.bindings) {
-			// Keep the bindings whose composed output is already rendered.
-			plan.bindings = previous
-
-			return plan, err
-		}
-
-		previous = plan.bindings
-	}
-
-	return fluxBindingPlan{active: true}, fmt.Errorf(
-		"%w: they still change after %d rounds of composing parents",
-		ErrFluxBindingsDoNotSettle, maxFluxBindingRounds,
-	)
-}
-
-// discoverFluxBindings is one discovery round. A folder bound in previous is
-// read as previous composes it; any other folder is read as rendered.
-func discoverFluxBindings(
-	tree string,
-	roots fluxSourceRoots,
-	kustomizations []string,
-	outputs map[string][]byte,
-	previous map[string]*fluxBinding,
-	compose composeFunc,
 ) (fluxBindingPlan, error) {
 	plan := fluxBindingPlan{
 		bindings: map[string]*fluxBinding{},
@@ -270,31 +163,10 @@ func discoverFluxBindings(
 		skipped:  map[string]struct{}{},
 	}
 
-	scan := maps.Clone(plan.entries)
+	errs := make([]error, 0, len(plan.entries))
 
-	for dir, binding := range previous {
-		if binding.generated {
-			scan[dir] = struct{}{}
-		}
-	}
-
-	var errs []error
-
-	for _, dir := range slices.Sorted(maps.Keys(scan)) {
-		data := outputs[dir]
-
-		if binding, bound := previous[dir]; bound && binding.composed() {
-			composed, _, err := binding.render(dir, compose)
-			if err != nil {
-				errs = append(errs, err)
-
-				continue
-			}
-
-			data = composed
-		}
-
-		errs = append(errs, plan.bindDocuments(tree, roots, kustomizations, dir, data))
+	for _, dir := range slices.Sorted(maps.Keys(plan.entries)) {
+		errs = append(errs, plan.bindDocuments(tree, roots, kustomizations, dir, outputs[dir]))
 	}
 
 	return plan, errors.Join(errs...)
@@ -325,27 +197,10 @@ func (p *fluxBindingPlan) bindDocuments(
 
 		p.active = true
 
-		errs = append(errs, p.bind(tree, roots, kustomizations, kustomization, doc))
+		errs = append(errs, p.bind(tree, roots, kustomizations, kustomization))
 	}
 
 	return errors.Join(errs...)
-}
-
-// sameBindings reports whether two rounds bound the same folders the same way.
-func sameBindings(previous, current map[string]*fluxBinding) bool {
-	if len(previous) != len(current) {
-		return false
-	}
-
-	for dir, binding := range current {
-		before, found := previous[dir]
-		if !found || !before.sameAs(binding) || before.generated != binding.generated ||
-			!slices.Equal(before.owners, binding.owners) {
-			return false
-		}
-	}
-
-	return true
 }
 
 // bind records the folder kustomization applies, or the named diagnostic that
@@ -355,7 +210,6 @@ func (p *fluxBindingPlan) bind(
 	roots fluxSourceRoots,
 	kustomizations []string,
 	kustomization *kustomizev1.Kustomization,
-	object map[string]any,
 ) error {
 	owner := kustomization.Namespace + "/" + kustomization.Name
 
@@ -364,14 +218,13 @@ func (p *fluxBindingPlan) bind(
 		return err
 	}
 
-	binding := &fluxBinding{
-		root:        roots.of(kustomization),
-		identity:    fluxIdentity(kustomization),
-		object:      object,
-		composition: fluxComposition(object),
-		generated:   !slices.Contains(kustomizations, dir),
-		owners:      []string{owner},
+	if !slices.Contains(kustomizations, dir) {
+		// Flux generates a kustomization for this folder at apply time; it has
+		// no build of its own here, so it is not checked, as before.
+		return nil
 	}
+
+	binding := &fluxBinding{identity: fluxIdentity(kustomization), owners: []string{owner}}
 
 	existing, found := p.bindings[dir]
 	if !found {
@@ -382,7 +235,7 @@ func (p *fluxBindingPlan) bind(
 		return nil
 	}
 
-	if existing.sameAs(binding) {
+	if existing.identity.Username == binding.identity.Username {
 		if !slices.Contains(existing.owners, owner) {
 			existing.owners = append(existing.owners, owner)
 			slices.Sort(existing.owners)
@@ -395,31 +248,11 @@ func (p *fluxBindingPlan) bind(
 	p.skipped[dir] = struct{}{}
 
 	return fmt.Errorf(
-		"%w: %s is applied by Flux Kustomization %s as %s and by %s as %s, "+
-			"with a different identity or composition (targetNamespace, patches, images, ...)",
+		"%w: %s is applied by Flux Kustomization %s as %s and by %s as %s",
 		ErrAmbiguousFluxBinding, rel,
 		strings.Join(existing.owners, ", "), existing.identity.Username,
 		owner, binding.identity.Username,
 	)
-}
-
-// fluxComposition returns the fluxCompositionFields set on object's spec.
-func fluxComposition(object map[string]any) map[string]any {
-	composition := map[string]any{}
-
-	spec, _ := object["spec"].(map[string]any)
-	for _, field := range fluxCompositionFields {
-		if value, set := spec[field]; set && value != nil {
-			if list, isList := value.([]any); isList && len(list) == 0 {
-				// Flux appends nothing for an empty list, so it does not change the folder.
-				continue
-			}
-
-			composition[field] = value
-		}
-	}
-
-	return composition
 }
 
 // resolveBindingDir resolves kustomization's spec.path against its source root
@@ -570,37 +403,4 @@ func readKustomization(rootDir, kustDir string) (*kustomizeTypes.Kustomization, 
 	}
 
 	return nil, false
-}
-
-// composedManifests renders dir as binding composes it: the folder built the
-// way Flux builds it (the Kustomization's composition merged into the folder's
-// kustomization, or into one Flux generates), then Flux substitution and Helm
-// rendering, in the order kustomize-controller and helm-controller apply them.
-func (v *kustomizationValidator) composedManifests(
-	ctx context.Context,
-	dir string,
-	binding *fluxBinding,
-) ([]byte, map[string]string, error) {
-	composed, err := v.kustomize.BuildFlux(ctx, binding.root, dir, binding.object)
-	if err != nil {
-		return nil, nil, fmt.Errorf("apply Flux Kustomization %s: %w",
-			strings.Join(binding.owners, ", "), err)
-	}
-
-	if v.renderer == nil {
-		expanded, err := expandValidationSubstitutions(ctx, composed.Bytes(), v.opts)
-
-		return expanded, nil, err
-	}
-
-	result, err := v.renderer.expandBuilt(ctx, composed.Bytes())
-	if err != nil {
-		return nil, nil, err
-	}
-
-	v.sink.add(result.Degradations)
-
-	data, err := finishRenderedValidationSubstitutions(ctx, result, v.opts)
-
-	return data, attributionFromDocuments(result.Documents), err
 }
