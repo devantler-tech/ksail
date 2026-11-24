@@ -1605,7 +1605,9 @@ jobs:
   home-isolation:
     name: 🏠 Home Isolation Guard
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # The step runs the whole go test suite: passing runs took 16-24 minutes
+    # on 2026-11-24, and two main pushes hit a 25-minute ceiling mid-suite.
+    timeout-minutes: 40
     needs: [changes]
     if: github.event_name != 'merge_group' && needs.changes.outputs.code == 'true'
     permissions:
@@ -2683,7 +2685,16 @@ jobs:
           READBACK_DIR: ${{ runner.temp }}/diagnostics-artifact-readback
         run: |
           [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
-          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" >"$RUNNER_TEMP/diagnostics-artifact.zip"
+          # The zip endpoint can answer 404 for a few seconds after the upload
+          # finalizes (4 of 18 runs on 2026-11-24). Retry briefly; a persistent
+          # failure still fails the step after about 75 seconds.
+          for attempt in 1 2 3 4 5 6; do
+            if gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" >"$RUNNER_TEMP/diagnostics-artifact.zip"; then
+              break
+            fi
+            if [ "$attempt" -eq 6 ]; then exit 1; fi
+            sleep $((attempt * 5))
+          done
           mkdir -p "$READBACK_DIR"
           unzip -q "$RUNNER_TEMP/diagnostics-artifact.zip" -d "$READBACK_DIR"
 
