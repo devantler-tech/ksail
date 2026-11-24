@@ -1605,7 +1605,9 @@ jobs:
   home-isolation:
     name: 🏠 Home Isolation Guard
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # The step runs the whole go test suite: passing runs took 16-24 minutes
+    # on 2026-11-24, and two main pushes hit a 25-minute ceiling mid-suite.
+    timeout-minutes: 40
     needs: [changes]
     if: github.event_name != 'merge_group' && needs.changes.outputs.code == 'true'
     permissions:
