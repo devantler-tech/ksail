@@ -8,6 +8,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/kustomize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/kustomize/api/types"
 )
 
 const webConfigMap = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: web\ndata:\n  key: value\n"
@@ -24,16 +25,6 @@ func writeFiles(t *testing.T, files map[string]string) string {
 	return dir
 }
 
-// fluxSpec is a Flux Kustomization object with spec.
-func fluxSpec(spec map[string]any) map[string]any {
-	return map[string]any{
-		"apiVersion": "kustomize.toolkit.fluxcd.io/v1",
-		"kind":       "Kustomization",
-		"metadata":   map[string]any{"name": "apps", "namespace": "flux-system"},
-		"spec":       spec,
-	}
-}
-
 // A folder without a kustomization file is built from the one Flux generates,
 // with the Kustomization's targetNamespace applied, and nothing is written.
 func TestBuildFluxGeneratesMissingKustomization(t *testing.T) {
@@ -42,7 +33,7 @@ func TestBuildFluxGeneratesMissingKustomization(t *testing.T) {
 	dir := writeFiles(t, map[string]string{"configmap.yaml": webConfigMap})
 
 	out, err := kustomize.NewClient().BuildFlux(
-		t.Context(), dir, fluxSpec(map[string]any{"targetNamespace": "tenant-a"}),
+		t.Context(), dir, kustomize.FluxComposition{TargetNamespace: "tenant-a"},
 	)
 	require.NoError(t, err)
 	assert.Contains(t, out.String(), "name: web")
@@ -64,50 +55,64 @@ func TestBuildFluxPatchesRunInsideTheFolderBuild(t *testing.T) {
 			"resources:\n  - configmap.yaml\nlabels:\n  - pairs:\n      app: web\n",
 	})
 
-	patch := map[string]any{
-		"target": map[string]any{"kind": "ConfigMap", "labelSelector": "app=web"},
-		"patch":  "- op: add\n  path: /data/patched\n  value: \"yes\"\n",
+	patch := types.Patch{
+		Target: &types.Selector{LabelSelector: "app=web", Kind: "ConfigMap"},
+		Patch:  "- op: add\n  path: /data/patched\n  value: \"yes\"\n",
 	}
 
 	out, err := kustomize.NewClient().BuildFlux(
-		t.Context(), dir, fluxSpec(map[string]any{"patches": []any{patch}}),
+		t.Context(), dir, kustomize.FluxComposition{Patches: []types.Patch{patch}},
 	)
 	require.NoError(t, err)
 	assert.Contains(t, out.String(), "app: web", "the folder's own labels still apply")
 	assert.NotContains(t, out.String(), "patched", "the label is added after the patch runs")
 
 	// Control: a patch selecting by name does apply.
-	patch["target"] = map[string]any{"kind": "ConfigMap", "name": "web"}
+	patch.Target = &types.Selector{Kind: "ConfigMap", Name: "web"}
 
 	out, err = kustomize.NewClient().BuildFlux(
-		t.Context(), dir, fluxSpec(map[string]any{"patches": []any{patch}}),
+		t.Context(), dir, kustomize.FluxComposition{Patches: []types.Patch{patch}},
 	)
 	require.NoError(t, err)
 	assert.Contains(t, out.String(), "patched")
 
-	original, err := os.ReadFile( //nolint:gosec // test-owned temp folder
-		filepath.Join(dir, "kustomization.yaml"),
-	)
+	kustFile := filepath.Join(dir, "kustomization.yaml")
+	original, err := os.ReadFile(kustFile) //nolint:gosec // test-owned temp folder
 	require.NoError(t, err)
 	assert.NotContains(t, string(original), "patches", "the folder's file is never rewritten")
 }
 
-// A relative folder such as "." is resolved to the same absolute path kustomize
-// builds, so the merged kustomization is still served and the Flux spec applies
-// (devantler-tech/ksail#8560).
+// A relative folder builds like its absolute path, with and without a
+// kustomization file, so the in-memory kustomization is still the one used.
 //
-//nolint:paralleltest // t.Chdir changes the process working directory.
-func TestBuildFluxResolvesRelativeFolder(t *testing.T) {
-	dir := writeFiles(t, map[string]string{
-		"configmap.yaml": webConfigMap,
-		"kustomization.yaml": "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\n" +
-			"resources:\n  - configmap.yaml\n",
-	})
-	t.Chdir(dir)
+//nolint:paralleltest // t.Chdir changes the process working directory
+func TestBuildFluxRelativeFolder(t *testing.T) {
+	root := t.TempDir()
 
-	out, err := kustomize.NewClient().BuildFlux(
-		t.Context(), ".", fluxSpec(map[string]any{"targetNamespace": "tenant-a"}),
+	generated := filepath.Join(root, "generated")
+	listed := filepath.Join(root, "listed")
+
+	require.NoError(t, os.MkdirAll(generated, 0o750))
+	require.NoError(t, os.MkdirAll(listed, 0o750))
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(generated, "configmap.yaml"), []byte(webConfigMap), 0o600),
 	)
-	require.NoError(t, err)
-	assert.Contains(t, out.String(), "namespace: tenant-a")
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(listed, "configmap.yaml"), []byte(webConfigMap), 0o600),
+	)
+	require.NoError(t, os.WriteFile(filepath.Join(listed, "kustomization.yaml"), []byte(
+		"apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n  - configmap.yaml\n",
+	), 0o600))
+
+	t.Chdir(root)
+
+	for _, dir := range []string{"generated", "./listed"} {
+		out, err := kustomize.NewClient().BuildFlux(
+			t.Context(), dir, kustomize.FluxComposition{TargetNamespace: "tenant-a"},
+		)
+		require.NoError(t, err, dir)
+		assert.Contains(t, out.String(), "namespace: tenant-a", dir)
+	}
 }

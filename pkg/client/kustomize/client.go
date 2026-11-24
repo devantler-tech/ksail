@@ -4,12 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"path/filepath"
 	"sync"
 
-	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
-	fluxkustomize "github.com/fluxcd/pkg/kustomize"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/kustomize/api/krusty"
 	"sigs.k8s.io/kustomize/api/types"
 	"sigs.k8s.io/kustomize/kyaml/filesys"
@@ -79,90 +75,4 @@ func (c *Client) Build(_ context.Context, path string) (*bytes.Buffer, error) {
 	}
 
 	return bytes.NewBuffer(yaml), nil
-}
-
-// BuildFlux builds dir the way Flux's kustomize-controller builds the folder a
-// Flux Kustomization applies. Flux's own generator merges the Kustomization's
-// spec (targetNamespace, namePrefix, patches, images, components, ...) into the
-// folder's kustomization file, or generates one listing the folder's manifests
-// when it has none, and that single kustomize build then runs every transformer
-// in kustomize's own order. The merged file is served from memory, so nothing on
-// disk is read outside the build or written.
-func (c *Client) BuildFlux(
-	_ context.Context,
-	dir string,
-	kustomization map[string]any,
-) (*bytes.Buffer, error) {
-	warmSchema()
-
-	// kustomize resolves the folder to an absolute path through symlinks, so the
-	// overlaid file must be named by the same absolute, resolved path; a relative
-	// dir such as "." would otherwise leave the overlay unmatched.
-	resolved, err := fsutil.EvalCanonicalPath(dir)
-	if err != nil {
-		return nil, fmt.Errorf("resolve %s: %w", dir, err)
-	}
-
-	dir = resolved
-
-	generator := fluxkustomize.NewGenerator("", unstructured.Unstructured{Object: kustomization})
-
-	manifest, kustFile, _, err := generator.GenerateManifest(dir)
-	if err != nil {
-		return nil, fmt.Errorf("generate Flux kustomization for %s: %w", dir, err)
-	}
-
-	fSys := overlayFS{
-		FileSystem: filesys.MakeFsOnDisk(),
-		path:       filepath.Clean(kustFile),
-		data:       manifest,
-	}
-
-	opts := krusty.MakeDefaultOptions()
-	opts.LoadRestrictions = types.LoadRestrictionsNone
-
-	resMap, err := krusty.MakeKustomizer(opts).Run(fSys, dir)
-	if err != nil {
-		return nil, fmt.Errorf("kustomize build %s: %w", dir, err)
-	}
-
-	yaml, err := resMap.AsYaml()
-	if err != nil {
-		return nil, fmt.Errorf("convert resources to yaml: %w", err)
-	}
-
-	return bytes.NewBuffer(yaml), nil
-}
-
-// overlayFS is the on-disk filesystem with one file, the merged kustomization
-// file, served from memory in place of whatever is (or is not) on disk.
-type overlayFS struct {
-	filesys.FileSystem
-
-	path string
-	data []byte
-}
-
-// ReadFile returns the overlaid file's content for its path.
-func (o overlayFS) ReadFile(path string) ([]byte, error) {
-	if filepath.Clean(path) == o.path {
-		return bytes.Clone(o.data), nil
-	}
-
-	data, err := o.FileSystem.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", path, err)
-	}
-
-	return data, nil
-}
-
-// Exists reports the overlaid file as present.
-func (o overlayFS) Exists(path string) bool {
-	return filepath.Clean(path) == o.path || o.FileSystem.Exists(path)
-}
-
-// IsDir reports the overlaid file as a file.
-func (o overlayFS) IsDir(path string) bool {
-	return filepath.Clean(path) != o.path && o.FileSystem.IsDir(path)
 }

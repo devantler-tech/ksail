@@ -128,7 +128,10 @@ checked and as whom:
   `kustomize-controller` service account in `flux-system`. Rules that treat the platform and a tenant
   differently therefore give the cluster's answer.
 - A folder that another folder includes (a shared base) is checked only through the folders that
-  include it. Every folder still gets the full build, schema and CEL checks.
+  include it. Every folder still gets the full build, schema and CEL checks, and a folder Flux
+  composes gets them again on its composed output.
+- Namespaces and cluster-wide policies are collected from what the cluster admits: each bound folder
+  as Flux composes it, including folders without a kustomization file.
 
 Bindings that cannot be trusted fail with a named error instead of being guessed:
 

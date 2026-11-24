@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v7/pkg/client/kustomize"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/kyvernopolicy"
 	kustomizev1 "github.com/fluxcd/kustomize-controller/api/v1"
@@ -89,16 +90,6 @@ func resolveFluxSourceRoots(tree, sourceDir string) fluxSourceRoots {
 	return roots
 }
 
-// fluxCompositionFields are the Flux Kustomization spec fields Flux's own
-// generator merges into a folder's kustomization before it is built. Two
-// Kustomizations that agree on all of them, and on the identity, apply a folder
-// the same way.
-var fluxCompositionFields = []string{ //nolint:gochecknoglobals // fixed list of Flux API fields
-	"targetNamespace", "namePrefix", "nameSuffix",
-	"patches", "patchesStrategicMerge", "patchesJson6902",
-	"images", "components", "ignoreMissingComponents", "buildMetadata",
-}
-
 // maxFluxBindingRounds bounds how many times bindings are re-discovered from
 // composed output. Each round reaches one Kustomization level deeper, so only a
 // chain that keeps changing, such as a parent patched by its own child, hits it.
@@ -108,10 +99,9 @@ const maxFluxBindingRounds = 32
 // the Kustomization whose composition it applies first.
 type fluxBinding struct {
 	identity kyvernopolicy.Identity
-	// object is the Flux Kustomization as rendered, which Flux's generator reads.
-	object map[string]any
-	// composition holds the object's fluxCompositionFields that are set.
-	composition map[string]any
+	// composition is what the Flux Kustomization merges into the folder's
+	// kustomization before it is built.
+	composition kustomize.FluxComposition
 	// generated is true when the folder has no kustomization file, so Flux
 	// generates one listing its manifests.
 	generated bool
@@ -127,7 +117,7 @@ type fluxBinding struct {
 
 // composed reports whether Flux changes the folder's output before applying it.
 func (b *fluxBinding) composed() bool {
-	return b.generated || len(b.composition) > 0
+	return b.generated || !reflect.DeepEqual(b.composition, kustomize.FluxComposition{})
 }
 
 // source names the folder and the Flux Kustomizations that apply it.
@@ -313,7 +303,7 @@ func (p *fluxBindingPlan) bindDocuments(
 
 		p.active = true
 
-		errs = append(errs, p.bind(tree, roots, kustomizations, kustomization, doc))
+		errs = append(errs, p.bind(tree, roots, kustomizations, kustomization))
 	}
 
 	return errors.Join(errs...)
@@ -343,7 +333,6 @@ func (p *fluxBindingPlan) bind(
 	roots fluxSourceRoots,
 	kustomizations []string,
 	kustomization *kustomizev1.Kustomization,
-	object map[string]any,
 ) error {
 	owner := kustomization.Namespace + "/" + kustomization.Name
 
@@ -354,8 +343,7 @@ func (p *fluxBindingPlan) bind(
 
 	binding := &fluxBinding{
 		identity:    fluxIdentity(kustomization),
-		object:      object,
-		composition: fluxComposition(object),
+		composition: fluxComposition(kustomization),
 		generated:   !slices.Contains(kustomizations, dir),
 		owners:      []string{owner},
 	}
@@ -390,15 +378,45 @@ func (p *fluxBindingPlan) bind(
 	)
 }
 
-// fluxComposition returns the fluxCompositionFields set on object's spec.
-func fluxComposition(object map[string]any) map[string]any {
-	composition := map[string]any{}
+// fluxComposition is what kustomization merges into the folder it applies.
+func fluxComposition(kustomization *kustomizev1.Kustomization) kustomize.FluxComposition {
+	spec := kustomization.Spec
 
-	spec, _ := object["spec"].(map[string]any)
-	for _, field := range fluxCompositionFields {
-		if value, set := spec[field]; set && value != nil {
-			composition[field] = value
+	composition := kustomize.FluxComposition{
+		TargetNamespace:         spec.TargetNamespace,
+		NamePrefix:              spec.NamePrefix,
+		NameSuffix:              spec.NameSuffix,
+		Components:              spec.Components,
+		IgnoreMissingComponents: spec.IgnoreMissingComponents,
+	}
+
+	for _, patch := range spec.Patches {
+		entry := kustomizeTypes.Patch{Patch: patch.Patch}
+
+		if target := patch.Target; target != nil {
+			selector := &kustomizeTypes.Selector{
+				AnnotationSelector: target.AnnotationSelector,
+				LabelSelector:      target.LabelSelector,
+			}
+			selector.Group = target.Group
+			selector.Version = target.Version
+			selector.Kind = target.Kind
+			selector.Name = target.Name
+			selector.Namespace = target.Namespace
+			entry.Target = selector
 		}
+
+		composition.Patches = append(composition.Patches, entry)
+	}
+
+	for _, image := range spec.Images {
+		composition.Images = append(composition.Images, kustomizeTypes.Image{
+			Name: image.Name, NewName: image.NewName, NewTag: image.NewTag, Digest: image.Digest,
+		})
+	}
+
+	for _, option := range spec.BuildMetadata {
+		composition.BuildMetadata = append(composition.BuildMetadata, string(option))
 	}
 
 	return composition
@@ -568,7 +586,7 @@ func (v *kustomizationValidator) composedManifests(
 	dir string,
 	binding *fluxBinding,
 ) ([]byte, map[string]string, error) {
-	composed, err := v.kustomize.BuildFlux(ctx, dir, binding.object)
+	composed, err := v.kustomize.BuildFlux(ctx, dir, binding.composition)
 	if err != nil {
 		return nil, nil, fmt.Errorf("apply Flux Kustomization %s: %w",
 			strings.Join(binding.owners, ", "), err)

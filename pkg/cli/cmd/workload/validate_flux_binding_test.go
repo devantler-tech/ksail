@@ -482,3 +482,77 @@ func TestValidateFluxBindingGeneratedFolderIsEvaluated(t *testing.T) {
 	require.ErrorContains(t, err, "ConfigMap/tenant-a/tenant-settings")
 	require.ErrorContains(t, err, "as system:serviceaccount:tenant-a:tenant-a")
 }
+
+// A ClusterPolicy in a folder Flux generates a kustomization for is part of
+// what the cluster admits, so it applies to every other bound folder.
+func TestValidateFluxBindingGeneratedPolicyIsShared(t *testing.T) {
+	t.Parallel()
+
+	root := writeTree(t, map[string]string{
+		"clusters/prod/kustomization.yaml": kustomizationOf("policies.yaml", "tenant.yaml"),
+		"clusters/prod/policies.yaml": fluxKustomization(
+			"policies", "flux-system", "policies", "",
+		),
+		"clusters/prod/tenant.yaml": fluxKustomization("tenant", "tenant-a", "tenant",
+			"  serviceAccountName: tenant-a\n"),
+		"policies/policy.yaml":      onlyFluxControllerPolicy,
+		"tenant/kustomization.yaml": kustomizationOf("configmap.yaml"),
+		"tenant/configmap.yaml":     configMap("tenant-settings"),
+	})
+
+	_, err := runBindingValidate(t, root)
+	require.ErrorIs(t, err, workload.ErrKyvernoPolicyViolation)
+	require.ErrorContains(t, err, `policy "platform-only-configmaps"`)
+	require.ErrorContains(t, err, "ConfigMap/tenant-settings")
+}
+
+// forbiddenNamespaceRule rejects anything in the "forbidden" namespace.
+const forbiddenNamespaceRule = `rules:
+  - name: no-forbidden-namespace
+    expression: '!has(object.metadata.namespace) || object.metadata.namespace != "forbidden"'
+    message: "nothing may run in the forbidden namespace"
+    severity: error
+`
+
+// The composed output of a bound folder faces the same CEL checks as the
+// folder's own output: a targetNamespace that breaks a rule fails validation.
+func TestValidateFluxBindingComposedOutputFacesCELRules(t *testing.T) {
+	t.Parallel()
+
+	tree := func(extra string) string {
+		return writeTree(t, map[string]string{
+			"clusters/prod/kustomization.yaml": kustomizationOf("apps.yaml"),
+			"clusters/prod/apps.yaml": fluxKustomization(
+				"apps",
+				"flux-system",
+				"apps",
+				extra,
+			),
+			"apps/kustomization.yaml": kustomizationOf("configmap.yaml"),
+			"apps/configmap.yaml":     configMap("app-settings"),
+		})
+	}
+
+	validate := func(root string) error {
+		_, err := runBindingValidate(t, root)
+		if err != nil {
+			return err
+		}
+
+		_, err = runValidate(t, root, "--kyverno-policies", "--skip-helm-render",
+			"--rules", writeRulesFile(t, forbiddenNamespaceRule),
+			"--schema-location-mode", "only", "--schema-location", t.TempDir())
+
+		return err
+	}
+
+	err := validate(tree("  targetNamespace: forbidden\n"))
+	require.ErrorContains(t, err, "no-forbidden-namespace")
+	require.ErrorContains(t, err, "ConfigMap/forbidden/app-settings")
+
+	require.NoError(
+		t,
+		validate(tree("  targetNamespace: allowed\n")),
+		"the control namespace passes",
+	)
+}

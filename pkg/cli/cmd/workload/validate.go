@@ -1180,27 +1180,21 @@ func (v *kustomizationValidator) runKyverno(
 	}
 
 	dirs := slices.Sorted(maps.Keys(v.kyvernoInputs))
-	rendered := slices.Sorted(maps.Keys(v.renderedOutputs))
-
-	outputs := make([][]byte, 0, len(rendered))
-	for _, dir := range rendered {
-		outputs = append(outputs, v.renderedOutputs[dir])
-	}
-
-	shared := kyvernoShared{
-		namespaces: sharedNamespaces(outputs),
-		policies:   sharedClusterPolicies(outputs),
-	}
 
 	plan, bindingErr := planFluxBindings(
 		v.dirPath,
 		v.sourceRoots,
 		v.kustomizations,
 		v.renderedOutputs,
-		func(dir string, binding *fluxBinding) ([]byte, map[string]string, error) {
-			return v.composedManifests(ctx, dir, binding)
-		},
+		v.composer(ctx),
 	)
+
+	outputs := v.admittedOutputs(ctx, plan)
+
+	shared := kyvernoShared{
+		namespaces: sharedNamespaces(outputs),
+		policies:   sharedClusterPolicies(outputs),
+	}
 
 	dirs = slices.DeleteFunc(dirs, func(dir string) bool { return !plan.target(dir) })
 	dirs = append(dirs, plan.generatedTargets()...)
@@ -1221,6 +1215,70 @@ func (v *kustomizationValidator) runKyverno(
 	}
 
 	return errors.Join(bindingErr, err)
+}
+
+// composer renders a bound folder as its Flux Kustomization composes it.
+func (v *kustomizationValidator) composer(ctx context.Context) composeFunc {
+	return func(dir string, binding *fluxBinding) ([]byte, map[string]string, error) {
+		return v.composedManifests(ctx, dir, binding)
+	}
+}
+
+// admittedOutputs returns what the cluster is asked to admit, the source of the
+// Namespaces and cluster-wide policies every evaluation shares: each bound
+// folder as Flux composes it (folders Flux generates a kustomization for
+// included) and every other folder as rendered. Without Flux bindings it is the
+// rendered output of every folder, as before. A folder whose composition fails
+// keeps its rendered output here; its evaluation reports the failure.
+func (v *kustomizationValidator) admittedOutputs(
+	ctx context.Context,
+	plan fluxBindingPlan,
+) [][]byte {
+	dirs := slices.Sorted(maps.Keys(v.renderedOutputs))
+	dirs = append(dirs, plan.generatedTargets()...)
+
+	outputs := make([][]byte, 0, len(dirs))
+
+	for _, dir := range dirs {
+		data := v.renderedOutputs[dir]
+
+		if binding, bound := plan.bindings[dir]; bound && binding.composed() {
+			composed, _, err := binding.render(dir, v.composer(ctx))
+			if err == nil {
+				data = composed
+			}
+		}
+
+		outputs = append(outputs, data)
+	}
+
+	return outputs
+}
+
+// checkComposed runs the schema and CEL checks on a bound folder's composed
+// output, with the same kind exclusions and render attribution as the folder's
+// own output.
+func (v *kustomizationValidator) checkComposed(
+	ctx context.Context,
+	source string,
+	data []byte,
+	skipKinds []string,
+	attribution map[string]string,
+) error {
+	opts := kubeconform.ValidationOptions{}
+	if v.opts != nil {
+		opts = *v.opts
+	}
+
+	opts.SkipKinds = skipKinds
+	opts.Attribution = attribution
+
+	err := v.kubeconform.ValidateBytes(ctx, source, data, &opts)
+	if err != nil {
+		return fmt.Errorf("validate composed manifests: %w", err)
+	}
+
+	return evaluateCELDocuments(v.engine, data, source, opts.SkipKinds, v.celSink, opts.Attribution)
 }
 
 // evaluateKyvernoTarget evaluates one folder's admission. A folder a Flux
@@ -1262,12 +1320,14 @@ func (v *kustomizationValidator) evaluateKyvernoTarget(
 	if binding.composed() {
 		var err error
 
-		data, attribution, err = binding.render(
-			dir,
-			func(dir string, binding *fluxBinding) ([]byte, map[string]string, error) {
-				return v.composedManifests(ctx, dir, binding)
-			},
-		)
+		data, attribution, err = binding.render(dir, v.composer(ctx))
+		if err != nil {
+			return err
+		}
+
+		// Flux composition can change what is applied, so the composed output
+		// faces the same schema and CEL checks as the folder's own output.
+		err = v.checkComposed(ctx, binding.source(dir), data, input.skipKinds, attribution)
 		if err != nil {
 			return err
 		}

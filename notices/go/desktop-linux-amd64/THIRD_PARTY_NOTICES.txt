@@ -4359,36 +4359,6 @@ Files: LICENSE
 Material: m915eacbfe4e80de0 (copyright-header), SHA-256 19451847ba593d4d401e0f1b3bea6df59063435f09f9863e7b34719f3cc85500
 Material: mc527239d593d7cff (copyright-header), SHA-256 e5e21677637eb56ee50b3c213444e44d1c309f958238463d2f162adf430fd8c6
 
-Component: github.com/fluxcd/pkg/envsubst@v1.9.0
-Source: https://proxy.golang.org/github.com/fluxcd/pkg/envsubst/@v/v1.9.0.zip
-Selected Go source checksum: h1:QTagwV4WLmqF+JsD1rGkcKFmmj4HV64BnqNM1T311kc=
-Raw classifier detections: Apache-2.0
-Effective package-admission terms: Apache-2.0
-Packages:
-github.com/fluxcd/pkg/envsubst
-github.com/fluxcd/pkg/envsubst/parse
-github.com/fluxcd/pkg/envsubst/path
-Material: m14a87b6cd6042b7f (copyright-header), SHA-256 0c946c5be44e2f91508b30aca91895d095ac4e12e2128e4e9ef55f486471b02e
-Material: m20b3532512e60a31 (copyright-header), SHA-256 fc5dc03c9b99ac6991338524ee69606c0e5d8463b2dec284587dd2238d6821b6
-Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
-Files: LICENSE
-Material: ma143d8dbe0d7c7f0 (copyright-header), SHA-256 ca7fc0da627e3be627b454f7ef70723997d5cde8dac88a31f7cc374d61d961c3
-
-Component: github.com/fluxcd/pkg/kustomize@v1.44.0
-Source: https://proxy.golang.org/github.com/fluxcd/pkg/kustomize/@v/v1.44.0.zip
-Selected Go source checksum: h1:S9ExtSX/wuuqQpvpzuRewM+PTeBVD6IHymnVQE1vFhg=
-Raw classifier detections: Apache-2.0
-Effective package-admission terms: Apache-2.0
-Packages:
-github.com/fluxcd/pkg/kustomize
-github.com/fluxcd/pkg/kustomize/filesys
-Material: m23eef6897dc5e6d0 (copyright-header), SHA-256 7a12eededd043c59211dc2396efdff44d948f1f0fd2a10a29c70b96050d6caf1
-Material: m5fe28487e9114bff (copyright-header), SHA-256 907d1fc6b0a8ba9362ee99637c601e33ff6d241ac141aa49f62b439961a6120c
-Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
-Files: LICENSE
-Material: m81d1d3c75566d226 (copyright-header), SHA-256 cc0bb31e186a0e7eb32d7e00d96b28677bf29ab6dfb383c8e1e092d94fd8121e
-Material: ma143d8dbe0d7c7f0 (copyright-header), SHA-256 ca7fc0da627e3be627b454f7ef70723997d5cde8dac88a31f7cc374d61d961c3
-
 Component: github.com/fluxcd/pkg/oci@v0.45.0
 Source: https://proxy.golang.org/github.com/fluxcd/pkg/oci/@v/v0.45.0.zip
 Selected Go source checksum: h1:lPtxqqzDOF3TAYx+Y91nULFiLzgmE8XDHt/uZwBqx44=
@@ -4402,20 +4372,6 @@ Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65
 Files: LICENSE
 Material: m81d1d3c75566d226 (copyright-header), SHA-256 cc0bb31e186a0e7eb32d7e00d96b28677bf29ab6dfb383c8e1e092d94fd8121e
 Material: me2e303746cdcf1c9 (copyright-header), SHA-256 e0a1126a0fa8e7122d37cc058234f149f09dc989c2765ccc8276ceda4e3a4c11
-
-Component: github.com/fluxcd/pkg/sourceignore@v0.22.0
-Source: https://proxy.golang.org/github.com/fluxcd/pkg/sourceignore/@v/v0.22.0.zip
-Selected Go source checksum: h1:GFvVgEA8HW4mZL26NFxhry3ZzCA8nR12MQovvZvbXm0=
-Raw classifier detections: Apache-2.0
-Effective package-admission terms: Apache-2.0
-Packages:
-github.com/fluxcd/pkg/sourceignore
-github.com/fluxcd/pkg/sourceignore/gitignore
-Material: m56cb95c11f58f6f8 (copyright-header), SHA-256 cad4eff957ff7d988f03e2e911f7b6a8674f58ee1c67c6a35d4ff95b992153ec
-Material: m5fe28487e9114bff (copyright-header), SHA-256 907d1fc6b0a8ba9362ee99637c601e33ff6d241ac141aa49f62b439961a6120c
-Material: m7bbc7b0d5edc65ed (copyright-header), SHA-256 4f8c82aa2d0466506974405374c60c67770b2e323d15c1c9c662fdbbcceab4e5
-Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
-Files: LICENSE
 
 Component: github.com/fluxcd/pkg/ssa@v0.77.0
 Source: https://proxy.golang.org/github.com/fluxcd/pkg/ssa/@v/v0.77.0.zip
@@ -28094,96 +28050,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-
-
-
---- Recipient material SHA-256 4f8c82aa2d0466506974405374c60c67770b2e323d15c1c9c662fdbbcceab4e5 ---
-/*
-Copyright 2026 The Flux authors
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
-
-// Package gitignore implements matching file system paths to gitignore patterns that
-// can be automatically read from a git repository tree in the order of definition
-// priorities. It support all pattern formats as specified in the original gitignore
-// documentation, copied below:
-//
-//	  Pattern format
-//	  ==============
-//
-//			- A blank line matches no files, so it can serve as a separator for readability.
-//
-//			- A line starting with # serves as a comment. Put a backslash ("\") in front of
-//			  the first hash for patterns that begin with a hash.
-//
-//			- Trailing spaces are ignored unless they are quoted with backslash ("\").
-//
-//			- An optional prefix "!" which negates the pattern; any matching file excluded
-//			  by a previous pattern will become included again. It is not possible to
-//			  re-include a file if a parent directory of that file is excluded.
-//			  Git doesn’t list excluded directories for performance reasons, so
-//			  any patterns on contained files have no effect, no matter where they are
-//			  defined. Put a backslash ("\") in front of the first "!" for patterns
-//			  that begin with a literal "!", for example, "\!important!.txt".
-//
-//			- If the pattern ends with a slash, it is removed for the purpose of the
-//			  following description, but it would only find a match with a directory.
-//			  In other words, foo/ will match a directory foo and paths underneath it,
-//			  but will not match a regular file or a symbolic link foo (this is consistent
-//			  with the way how pathspec works in general in Git).
-//
-//			- If the pattern does not contain a slash /, Git treats it as a shell glob
-//			  pattern and checks for a match against the pathname relative to the location
-//			  of the .gitignore file (relative to the toplevel of the work tree if not
-//			  from a .gitignore file).
-//
-//			- Otherwise, Git treats the pattern as a shell glob suitable for consumption
-//			  by fnmatch(3) with the FNM_PATHNAME flag: wildcards in the pattern will
-//			  not match a / in the pathname. For example, "Documentation/*.html" matches
-//			  "Documentation/git.html" but not "Documentation/ppc/ppc.html" or
-//			  "tools/perf/Documentation/perf.html".
-//
-//			- A leading slash matches the beginning of the pathname. For example,
-//			  "/*.c" matches "cat-file.c" but not "mozilla-sha1/sha1.c".
-//
-//			Two consecutive asterisks ("**") in patterns matched against full pathname
-//			may have special meaning:
-//
-//			- A leading "**" followed by a slash means match in all directories.
-//			  For example, "**/foo" matches file or directory "foo" anywhere, the same as
-//			  pattern "foo". "**/foo/bar" matches file or directory "bar"
-//			  anywhere that is directly under directory "foo".
-//
-//			- A trailing "/**" matches everything inside. For example, "abc/**" matches
-//			  all files inside directory "abc", relative to the location of the
-//			  .gitignore file, with infinite depth.
-//
-//			- A slash followed by two consecutive asterisks then a slash matches
-//			  zero or more directories. For example, "a/**/b" matches "a/b", "a/x/b",
-//			  "a/x/y/b" and so on.
-//
-//			- Other consecutive asterisks are considered invalid.
-//
-//	  Copyright and license
-//	  =====================
-//
-//			Copyright (c) Oleg Sklyar, Silvertern and source{d}
-//
-//			The package code was donated to source{d} to include, modify and develop
-//			further as a part of the `go-git` project, release it on the license of
-//			the whole project or delete it from the project.
 
 
 
@@ -60539,31 +60405,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-
-
-
---- Recipient material SHA-256 fc5dc03c9b99ac6991338524ee69606c0e5d8463b2dec284587dd2238d6821b6 ---
-/*
-Copyright 2024 The Flux authors
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
-
-// Forked from: https://github.com/drone/envsubst
-// MIT License
-// Copyright (c) 2017 drone.io.
 
 
 
