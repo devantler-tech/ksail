@@ -168,7 +168,10 @@ func (policy MaterialPolicy) VerifySupplementsUsed(payloads map[string]Payload) 
 		for _, record := range metadata.Components {
 			for _, entry := range record.Materials {
 				if entry.Kind == upstreamLicenseKind {
-					emitted[upstreamLicenseKey(record.Module, record.Version, record.Checksum, entry.Path, entry.SHA256)] = true
+					key := upstreamLicenseKey(
+						record.Module, record.Version, record.Checksum, entry.Path, entry.SHA256,
+					)
+					emitted[key] = true
 				}
 			}
 		}
