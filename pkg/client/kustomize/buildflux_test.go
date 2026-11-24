@@ -85,9 +85,29 @@ func TestBuildFluxPatchesRunInsideTheFolderBuild(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out.String(), "patched")
 
-	original, err := os.ReadFile(
+	original, err := os.ReadFile( //nolint:gosec // test-owned temp folder
 		filepath.Join(dir, "kustomization.yaml"),
-	) //nolint:gosec // test-owned temp folder
+	)
 	require.NoError(t, err)
 	assert.NotContains(t, string(original), "patches", "the folder's file is never rewritten")
+}
+
+// A relative folder such as "." is resolved to the same absolute path kustomize
+// builds, so the merged kustomization is still served and the Flux spec applies
+// (devantler-tech/ksail#8560).
+//
+//nolint:paralleltest // t.Chdir changes the process working directory.
+func TestBuildFluxResolvesRelativeFolder(t *testing.T) {
+	dir := writeFiles(t, map[string]string{
+		"configmap.yaml": webConfigMap,
+		"kustomization.yaml": "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\n" +
+			"resources:\n  - configmap.yaml\n",
+	})
+	t.Chdir(dir)
+
+	out, err := kustomize.NewClient().BuildFlux(
+		t.Context(), ".", fluxSpec(map[string]any{"targetNamespace": "tenant-a"}),
+	)
+	require.NoError(t, err)
+	assert.Contains(t, out.String(), "namespace: tenant-a")
 }

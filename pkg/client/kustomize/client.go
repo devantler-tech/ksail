@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	fluxkustomize "github.com/fluxcd/pkg/kustomize"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/kustomize/api/krusty"
@@ -94,9 +95,10 @@ func (c *Client) BuildFlux(
 ) (*bytes.Buffer, error) {
 	warmSchema()
 
-	// kustomize resolves the folder through symlinks, so the overlaid file must
-	// be named by the same resolved path.
-	resolved, err := filepath.EvalSymlinks(dir)
+	// kustomize resolves the folder to an absolute path through symlinks, so the
+	// overlaid file must be named by the same absolute, resolved path; a relative
+	// dir such as "." would otherwise leave the overlay unmatched.
+	resolved, err := fsutil.EvalCanonicalPath(dir)
 	if err != nil {
 		return nil, fmt.Errorf("resolve %s: %w", dir, err)
 	}
