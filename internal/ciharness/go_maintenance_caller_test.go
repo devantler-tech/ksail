@@ -89,7 +89,7 @@ func validateGoMaintenanceInputs(uses string, with map[string]any) error {
 		goMaintenanceInputRetiredRevision, goMaintenanceInputPreviousRevision,
 		goMaintenanceInputLatestRevision, goMaintenanceInputDiagnosticsRevision,
 		goMaintenanceInputHeadroomRevision, goMaintenanceInputSignedFixPinRevision,
-		goMaintenanceInputScannerRetryRevision,
+		goMaintenanceInputScannerRetryRevision, goMaintenanceInputLintHeadroomRevision,
 	}, uses):
 		if explicit {
 			return errGoMaintenanceRetiredInput
@@ -162,6 +162,9 @@ func validateGoMaintenanceIdentity(workflow ciWorkflow, caller todosWorkflow) er
 	// admission, permissions, secrets and the signed-fix opt-out are unchanged.
 	// v21.12.3 prepares scanner state once and reuses it on timeout retry. The caller contract
 	// remains the same, and the updated signed-fix callees stay disabled.
+	// v22.0.0 gives the lint job 40 minutes and a soft Go heap target for cold-cache analyses,
+	// and moves the disabled signed-fix callee pins to v21.12.3. Its inputs, admission,
+	// permissions, secrets and the signed-fix opt-out are unchanged.
 	// Keep explicit reviewed identities: a syntactically valid SHA alone is insufficient.
 	reviewed := slices.Contains([]string{
 		prefix + "0600006235510307a04efebcac1ac1f363f5f862",
@@ -186,6 +189,7 @@ func validateGoMaintenanceIdentity(workflow ciWorkflow, caller todosWorkflow) er
 		prefix + "d70d50665465117f01104313e53057374a96a1a3",
 		prefix + "cc156a3693019fdbe9817c46f1a91cd50a124695",
 		goMaintenanceInputScannerRetryRevision,
+		goMaintenanceInputLintHeadroomRevision,
 	}, job.Uses)
 	if !found || !reviewed || len(job.Steps) != 0 ||
 		caller.Jobs["ci-go"].RunsOn != "" || !reflect.DeepEqual(job.Needs, []string{"changes"}) {
@@ -329,6 +333,9 @@ const (
 	// The scanner retry revision retains the retired-input contract.
 	goMaintenanceInputScannerRetryRevision = "devantler-tech/.github/.github/workflows/validate-go-project.yaml@" +
 		"711337ea623e44536204b40fff5278166aa64ffa"
+	// The v22.0.0 lint headroom revision retains the retired-input contract.
+	goMaintenanceInputLintHeadroomRevision = "devantler-tech/.github/.github/workflows/validate-go-project.yaml@" +
+		"cd371c6003deca3a3b417b783da73e05b4bf690f"
 )
 
 type goMaintenanceMutation struct {
@@ -446,6 +453,7 @@ func goMaintenanceRetiredInputMutations() []goMaintenanceMutation {
 		{"retired input at headroom revision", goMaintenanceInputHeadroomRevision},
 		{"retired input at signed-fix pin revision", goMaintenanceInputSignedFixPinRevision},
 		{"retired input at scanner retry revision", goMaintenanceInputScannerRetryRevision},
+		{"retired input at lint headroom revision", goMaintenanceInputLintHeadroomRevision},
 	}
 
 	mutations := make([]goMaintenanceMutation, 0, len(revisions))
