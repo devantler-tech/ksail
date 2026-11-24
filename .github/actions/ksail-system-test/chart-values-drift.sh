@@ -110,7 +110,8 @@ kubectl config view --minify --output json "${cli_target_args[@]}" |
 # values-only trial into a distribution upgrade. The saved config contains the
 # cluster identity and desired components; diff does not accept creation flags.
 read -r -a version_args <<<"$K8S_VERSION_FLAG"
-[[ ${#version_args[@]} == 2 && ${version_args[0]} == --kubernetes-version &&
+[[ (${#version_args[@]} == 2 || (${#version_args[@]} == 4 && ${version_args[2]} == --distribution-version &&
+	${version_args[3]} =~ ^v[0-9]+\.[0-9]+\.[0-9]+$)) && ${version_args[0]} == --kubernetes-version &&
 	${version_args[1]} =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]] || fail 'missing create-time Kubernetes version pin'
 
 release_state() {

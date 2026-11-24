@@ -40,7 +40,13 @@ func TestAutoscalerAuditTrialRejectsFalseAcceptance(t *testing.T) {
 			assert.NotContains(t, string(output), "must-never-reach-evidence")
 
 			if mode == "complete" {
-				assertAutoscalerAuditAccepted(t, state, output, err)
+				assertAutoscalerAuditAccepted(
+					t,
+					state,
+					output,
+					err,
+					"--kubernetes-version v1.36.2 --distribution-version v1.12.4",
+				)
 			} else {
 				require.Error(t, err, string(output))
 				assert.NotContains(t, string(output), "PASS:")
@@ -76,6 +82,7 @@ func autoscalerAuditTrialCommand(
 		"GITHUB_RUN_ID=1234",
 		"CLUSTER_NAME=st-hetzner-dispatch-1234",
 		"K8S_VERSION=v1.36.2",
+		"TALOS_VERSION=v1.12.4",
 		"HCLOUD_TOKEN=fixture",
 		"EVIDENCE_DIR="+filepath.Join(state, "evidence"),
 	)
@@ -83,7 +90,11 @@ func autoscalerAuditTrialCommand(
 	return cmd
 }
 
-func assertAutoscalerAuditAccepted(t *testing.T, state string, output []byte, trialErr error) {
+// assertAutoscalerAuditAccepted also requires every recorded update to carry pins, the exact
+// Kubernetes and Talos OS version flags the caller supplied to the trial.
+func assertAutoscalerAuditAccepted(
+	t *testing.T, state string, output []byte, trialErr error, pins string,
+) {
 	t.Helper()
 	require.NoError(t, trialErr, string(output))
 	assert.Contains(
@@ -96,6 +107,24 @@ func assertAutoscalerAuditAccepted(t *testing.T, state string, output []byte, tr
 	require.NoError(t, readErr)
 	assert.Equal(t, 3, strings.Count(strings.TrimSpace(string(calls)), "\n")+1)
 	assert.NotContains(t, string(calls), "cluster delete")
+
+	updates := 0
+
+	for call := range strings.SplitSeq(strings.TrimSpace(string(calls)), "\n") {
+		if !strings.Contains(call, "cluster update") {
+			continue
+		}
+
+		updates++
+
+		assert.True(
+			t,
+			strings.HasSuffix(call, " "+pins) || strings.Contains(call, " "+pins+" "),
+			"every update must pin exactly %q, got %q", pins, call,
+		)
+	}
+
+	assert.Equal(t, 3, updates, "every recorded call must be a pinned update")
 }
 
 func prepareAutoscalerAuditFixture(t *testing.T) (string, string) {

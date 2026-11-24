@@ -19,10 +19,10 @@ require (
 	github.com/apricote/hcloud-upload-image/hcloudimages v1.4.0
 	github.com/atotto/clipboard v0.1.4
 	github.com/aws/aws-sdk-go-v2 v1.48.0
-	github.com/aws/aws-sdk-go-v2/config v1.33.9
+	github.com/aws/aws-sdk-go-v2/config v1.33.18
 	github.com/aws/aws-sdk-go-v2/credentials v1.21.0
-	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.82.2
-	github.com/aws/aws-sdk-go-v2/service/eks v1.105.5
+	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.84.0
+	github.com/aws/aws-sdk-go-v2/service/eks v1.105.6
 	github.com/aws/aws-sdk-go-v2/service/sts v1.52.0
 	github.com/aws/smithy-go v1.28.9
 	github.com/charmbracelet/bubbles v1.0.0
@@ -49,12 +49,12 @@ require (
 	github.com/fluxcd/source-controller/api v1.10.1
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/getsops/sops/v3 v3.13.3
-	github.com/github/copilot-sdk/go v1.0.28
+	github.com/github/copilot-sdk/go v1.0.34
 	github.com/gkampitakis/go-snaps v0.5.25
 	github.com/go-jose/go-jose/v4 v4.1.9
 	github.com/go-logr/logr v1.4.4
 	github.com/go-viper/mapstructure/v2 v2.5.0
-	github.com/gofrs/flock v0.13.1
+	github.com/gofrs/flock v0.13.2
 	github.com/google/cel-go v0.31.0
 	github.com/google/gnostic-models v0.7.1
 	github.com/google/go-containerregistry v0.22.1
@@ -67,17 +67,17 @@ require (
 	github.com/invopop/jsonschema v0.14.0
 	github.com/jinzhu/copier v0.4.0
 	github.com/k3d-io/k3d/v5 v5.9.0
-	github.com/klauspost/compress v1.20.3
+	github.com/klauspost/compress v1.20.4
 	github.com/kubescape/kubescape/v3 v3.0.48
-	github.com/kubescape/opa-utils v0.0.315
+	github.com/kubescape/opa-utils v0.0.320
 	github.com/kyverno/api v0.0.1-alpha.3.0.20260723090831-fb2785727f98
 	github.com/kyverno/kyverno v1.19.2
 	github.com/loft-sh/log v0.0.0-20261016082928-2e30e984f250
-	github.com/loft-sh/vcluster v0.37.6
+	github.com/loft-sh/vcluster v0.37.7
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/opencontainers/image-spec v1.1.1
-	github.com/rancher/k3k v1.1.1
+	github.com/rancher/k3k v1.1.2
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/siderolabs/crypto v0.6.6
 	github.com/siderolabs/gen v0.8.8
@@ -108,26 +108,26 @@ require (
 	go.opentelemetry.io/proto/otlp v1.11.1
 	go.uber.org/zap v1.28.0
 	go.yaml.in/yaml/v3 v3.0.6
-	golang.org/x/crypto v0.58.0
+	golang.org/x/crypto v0.59.0
 	golang.org/x/mod v0.43.0
-	golang.org/x/oauth2 v0.37.0
+	golang.org/x/oauth2 v0.38.0
 	golang.org/x/sync v0.25.0
 	golang.org/x/sys v0.50.0
-	golang.org/x/term v0.47.0
-	golang.org/x/text v0.43.0
+	golang.org/x/term v0.48.0
+	golang.org/x/text v0.44.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20261019180522-ce908d29299b
 	google.golang.org/grpc v1.85.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
-	helm.sh/helm/v4 v4.3.1
-	k8s.io/api v0.37.1
-	k8s.io/apiextensions-apiserver v0.37.1
-	k8s.io/apimachinery v0.37.1
-	k8s.io/apiserver v0.37.1
-	k8s.io/cli-runtime v0.37.1
-	k8s.io/client-go v0.37.1
+	helm.sh/helm/v4 v4.3.2
+	k8s.io/api v0.37.2
+	k8s.io/apiextensions-apiserver v0.37.2
+	k8s.io/apimachinery v0.37.2
+	k8s.io/apiserver v0.37.2
+	k8s.io/cli-runtime v0.37.2
+	k8s.io/client-go v0.37.2
 	k8s.io/klog/v2 v2.140.0
-	k8s.io/kubectl v0.37.1
+	k8s.io/kubectl v0.37.2
 	sigs.k8s.io/controller-runtime v0.25.2
 	sigs.k8s.io/gateway-api v1.6.3
 	sigs.k8s.io/kind v0.33.0
@@ -406,7 +406,7 @@ require (
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/dylibso/observe-sdk/go v0.0.0-20240819160327-2d926c5d788a // indirect
-	github.com/ebitengine/purego v0.11.1 // indirect
+	github.com/ebitengine/purego v0.11.3 // indirect
 	github.com/elliotchance/orderedmap v1.5.0 // indirect
 	github.com/elliotchance/phpserialize v1.4.0 // indirect
 	github.com/emicklei/dot v1.11.0 // indirect
@@ -991,6 +991,7 @@ require (
 	go.yaml.in/yaml/v4 v4.0.0-rc.8 // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
+	golang.org/x/crypto/openpgp v0.1.0-deprecated // indirect
 	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e // indirect
 	golang.org/x/exp/typeparams v0.0.0-20260209203927-2842357ff358 // indirect
 	golang.org/x/image v0.45.0 // indirect
@@ -1017,8 +1018,8 @@ require (
 	honnef.co/go/tools v0.8.2 // indirect
 	howett.net/plist v1.0.2-0.20250314012144-ee69052608d9 // indirect
 	k8s.io/cluster-bootstrap v0.36.0 // indirect
-	k8s.io/component-base v0.37.1 // indirect
-	k8s.io/component-helpers v0.37.1 // indirect
+	k8s.io/component-base v0.37.2 // indirect
+	k8s.io/component-helpers v0.37.2 // indirect
 	k8s.io/cri-api v0.37.1 // indirect
 	k8s.io/cri-client v0.37.0 // indirect
 	k8s.io/kube-aggregator v0.36.3 // indirect
@@ -1026,9 +1027,9 @@ require (
 	k8s.io/kube-proxy v0.37.1 // indirect
 	k8s.io/kubelet v0.37.1 // indirect
 	k8s.io/kubernetes v1.36.0 // indirect
-	k8s.io/metrics v0.37.1 // indirect
+	k8s.io/metrics v0.37.2 // indirect
 	k8s.io/pod-security-admission v0.37.1 // indirect
-	k8s.io/streaming v0.37.1 // indirect
+	k8s.io/streaming v0.37.2 // indirect
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 // indirect
 	modernc.org/libc v1.77.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
@@ -1155,22 +1156,23 @@ tool (
 	golang.org/x/tools/cmd/deadcode
 )
 
-// Flux meta v1.38.0 has unchanged Go APIs but requires Kubernetes v0.37.1.
+// Flux meta v1.38.0 has unchanged Go APIs but requires Kubernetes v0.37.1, and helm v4.3.2
+// raises it to v0.37.2.
 // Keep its runtime compatible with the embedded v0.36 tools until #7259 lands.
 // Qualify this mapping so a later requirement cannot reuse it without validation.
-replace k8s.io/apimachinery v0.37.1 => k8s.io/apimachinery v0.36.6
+replace k8s.io/apimachinery v0.37.2 => k8s.io/apimachinery v0.36.6
 
 // fluxcd/pkg/apis/kustomize v1.23.0, fluxcd/helm-controller/api v1.7.1 and
-// fluxcd/source-controller/api v1.10.1 require Kubernetes
-// v0.37.1 for these modules. Hold them on the embedded v0.36 tools until #7259 lands; each
-// mapping is qualified to v0.37.1 so a later requirement cannot reuse it without validation.
+// fluxcd/source-controller/api v1.10.1 require Kubernetes v0.37.1 for these modules, and
+// helm v4.3.2 raises them to v0.37.2. Hold them on the embedded v0.36 tools until #7259 lands; each
+// mapping is qualified to v0.37.2 so a later requirement cannot reuse it without validation.
 replace (
-	k8s.io/api v0.37.1 => k8s.io/api v0.36.6
-	k8s.io/apiextensions-apiserver v0.37.1 => k8s.io/apiextensions-apiserver v0.36.6
-	k8s.io/apiserver v0.37.1 => k8s.io/apiserver v0.36.6
-	k8s.io/client-go v0.37.1 => k8s.io/client-go v0.36.6
-	k8s.io/component-base v0.37.1 => k8s.io/component-base v0.36.6
-	k8s.io/streaming v0.37.1 => k8s.io/streaming v0.36.6
+	k8s.io/api v0.37.2 => k8s.io/api v0.36.6
+	k8s.io/apiextensions-apiserver v0.37.2 => k8s.io/apiextensions-apiserver v0.36.6
+	k8s.io/apiserver v0.37.2 => k8s.io/apiserver v0.36.6
+	k8s.io/client-go v0.37.2 => k8s.io/client-go v0.36.6
+	k8s.io/component-base v0.37.2 => k8s.io/component-base v0.36.6
+	k8s.io/streaming v0.37.2 => k8s.io/streaming v0.36.6
 )
 
 // kustomize v0.21.3 compiles unchanged against the kube-openapi that main already uses, but it
@@ -1179,18 +1181,18 @@ replace (
 // mapping is qualified to that exact requirement so a later one cannot reuse it without validation.
 replace k8s.io/kube-openapi v0.0.0-20261001230523-97fa35140926 => k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad
 
-// helm v4.3.1 and siderolabs/talos v1.14.6 require Kubernetes v0.37.1 for these modules, and helm
+// helm v4.3.2 and siderolabs/talos v1.14.6 require Kubernetes v0.37.2 or v0.37.1 for these modules, and helm
 // also requires controller-runtime v0.25.2, which does not compile against v0.36 (it needs
 // events.AnnotatedEventRecorder). Hold them on the embedded v0.36 tools until #7259 lands; each
 // mapping is qualified so a later requirement cannot reuse it without validation.
 replace (
-	k8s.io/cli-runtime v0.37.1 => k8s.io/cli-runtime v0.36.6
-	k8s.io/component-helpers v0.37.1 => k8s.io/component-helpers v0.36.6
+	k8s.io/cli-runtime v0.37.2 => k8s.io/cli-runtime v0.36.6
+	k8s.io/component-helpers v0.37.2 => k8s.io/component-helpers v0.36.6
 	k8s.io/cri-api v0.37.1 => k8s.io/cri-api v0.36.3
 	k8s.io/cri-client v0.37.0 => k8s.io/cri-client v0.36.3
 	k8s.io/kube-proxy v0.37.1 => k8s.io/kube-proxy v0.36.2
-	k8s.io/kubectl v0.37.1 => k8s.io/kubectl v0.36.6
+	k8s.io/kubectl v0.37.2 => k8s.io/kubectl v0.36.6
 	k8s.io/kubelet v0.37.1 => k8s.io/kubelet v0.36.2
-	k8s.io/metrics v0.37.1 => k8s.io/metrics v0.36.6
+	k8s.io/metrics v0.37.2 => k8s.io/metrics v0.36.6
 	sigs.k8s.io/controller-runtime v0.25.2 => sigs.k8s.io/controller-runtime v0.24.1
 )

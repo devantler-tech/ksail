@@ -35,7 +35,8 @@ config_file="$PWD/ksail.yaml"
 cp "$config_file" "$log_dir/ksail-before.yaml"
 
 read -r -a version_args <<<"${K8S_VERSION_FLAG:-}"
-[[ ${#version_args[@]} == 2 && ${version_args[0]} == --kubernetes-version ]] ||
+[[ (${#version_args[@]} == 2 || (${#version_args[@]} == 4 && ${version_args[2]} == --distribution-version)) &&
+	${version_args[0]} == --kubernetes-version ]] ||
 	fail 'missing create-time Kubernetes version pin'
 
 # shellcheck source=.github/actions/ksail-system-test/helm-cli.sh
