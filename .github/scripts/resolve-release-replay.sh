@@ -85,7 +85,8 @@ if ! gh api "repos/$repo/actions/runs/$run/attempts/1" >"$tmp/run.json"; then bl
 jq -e --argjson run "$run" --arg sha "$sha" --arg tag "$tag" --arg repo "$repo" '
   .id == $run and .run_attempt == 1 and .head_sha == $sha and .head_branch == $tag and
   .event == "push" and .path == ".github/workflows/cd.yaml" and .repository.full_name == $repo and
-  (.actor.login == "devantler" or .actor.login == "ksail-bot[bot]" or .actor.login == "github-actions[bot]")
+  (.actor.login == "devantler" or .actor.login == "botantler-1[bot]" or .actor.login == "botantler-2[bot]" or
+    .actor.login == "github-actions[bot]")
 ' "$tmp/run.json" >/dev/null || blocked 'original publisher run/source differs'
 
 if ! gh api --paginate "repos/$repo/actions/runs/$run/attempts/1/jobs?per_page=100" >"$tmp/job-pages.json"; then
