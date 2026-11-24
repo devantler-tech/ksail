@@ -417,7 +417,7 @@ func auditedReleaseConfigDigests() map[string]string {
 		".goreleaser.desktop.yaml":                           "85a8d69957d6882817112faf5c7b9935932747c6696e49050205aa636178e6ed",
 		".github/actions/setup-desktop-build/action.yml":     "148ab46c474e23a9bef1107ef18002c9b69c3c8a2ba0a7762f2693784d1bc8e0",
 		".github/scripts/download-go-modules.sh":             "e5af8edf61a77de4397e952a05b1cc6ca0f83cd848523c4cf6b3aaa2539561fa",
-		".github/scripts/resolve-release-replay.sh":          "613c18e89ee9ffe7bc545dac7caf4fef587cc3506df54c12f95fba6e8aa4c925",
+		".github/scripts/resolve-release-replay.sh":          "e4ee032575f7b9bbfacfdbdf7036206fcd3ab890782feb7b869ae02cb3faaa7a",
 		".github/scripts/go-notices.go":                      "e7b4840dd9245a7576e578ed14d4e01efc6ed3aca664f20949bd133fbb8c61d9",
 		".github/actions/release-admission/action.yaml":      "a8ac217c7e2195fee64b364748a6724b99aa0aa4a9988127084f1d6b45953f0c",
 		"scripts/stage-webui.sh":                             "56f99977b9e5026eedd693e59da4e0cd82d0167e94d0ce4b9c7bb5ce2cd8ed3c",
