@@ -36,8 +36,9 @@ type MaterialEvidence struct {
 
 // MaterialPolicy contains closed, reviewed source-material decisions.
 type MaterialPolicy struct {
-	Schema int            `json:"schema"`
-	Files  []MaterialRule `json:"files"`
+	Schema      int               `json:"schema"`
+	Files       []MaterialRule    `json:"files"`
+	Supplements []UpstreamLicense `json:"supplements,omitempty"`
 }
 
 // LoadMaterialPolicy reads only the fixed repository-owned recipient decisions.
@@ -62,7 +63,7 @@ func LoadMaterialPolicy(root string) (MaterialPolicy, error) {
 	if err != nil || json.Compact(&compact, data) != nil ||
 		!bytes.Equal(canonical, compact.Bytes()) ||
 		!publicMaterial(data) ||
-		!validMaterialRules(policy.Files) {
+		!validMaterialPolicy(root, policy) {
 		return MaterialPolicy{}, ErrIncomplete
 	}
 
@@ -75,6 +76,10 @@ const (
 	excludedDisposition    = "excluded"
 	sha256ByteCount        = 32
 )
+
+func validMaterialPolicy(root string, policy MaterialPolicy) bool {
+	return validMaterialRules(policy.Files) && validUpstreamLicenses(root, policy.Supplements)
+}
 
 func validMaterialRules(rules []MaterialRule) bool {
 	seen := map[string]bool{}

@@ -113,6 +113,13 @@ func TestReleasedGoDependencyLicenses(t *testing.T) {
 		return
 	}
 
+	err := audit.materialPolicy.VerifySupplementsUsed(generated)
+	if err != nil {
+		t.Fatal(
+			"a reviewed upstream license supplement names no selected module version; remove it",
+		)
+	}
+
 	audit.verifyReceipt(t, generated)
 }
 
@@ -506,6 +513,11 @@ func inventoryNoticePackage(
 	)
 	if err != nil {
 		t.Errorf("unresolved recipient declaration: %s: %v", pkg.ImportPath, err)
+	}
+
+	result.UpstreamTexts, err = materialPolicy.UpstreamTexts(root, result, policy.Allowed)
+	if err != nil {
+		t.Errorf("unresolved upstream license supplement: %s: %v", pkg.ImportPath, err)
 	}
 
 	return result
