@@ -1177,7 +1177,7 @@ jobs:
       - name: 🧹 Free disk space
         if: steps.calico-cache.outputs.cache-hit != 'true'
         # Only cold compilation needs the large working-space reclamation.
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@4a36d987d64e34a915867f296151812fe9011f09
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@c28efa3c57adf582c4c780b213287c2cae61a431
 
       - name: ♻️ Restore Go modules
         if: steps.calico-cache.outputs.cache-hit != 'true'
@@ -2076,7 +2076,7 @@ jobs:
       # This job already waits for the producer. Reuse its exact sealed bytes
       # instead of restoring Go modules or compiling again after cache eviction.
       - name: 📥 Restore KSail binary
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@4a36d987d64e34a915867f296151812fe9011f09
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@c28efa3c57adf582c4c780b213287c2cae61a431
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2290,7 +2290,7 @@ jobs:
 
       - name: 📥 Restore KSail binary
         # Pin the identical published action until actionlint supports $/ references.
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@4a36d987d64e34a915867f296151812fe9011f09
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@c28efa3c57adf582c4c780b213287c2cae61a431
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2660,6 +2660,7 @@ jobs:
           upload-artifacts: "true"
 
       - name: Verify native outcomes and artifact identity
+        id: verify-artifact
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
@@ -2672,12 +2673,19 @@ jobs:
         run: |
           bash .github/scripts/verify-diagnostics-artifact.sh
 
+      # Read back the exact artifact the verifier proved, by ID. A second by-name
+      # lookup through download-artifact could miss it moments after upload.
       - name: Download the observed candidate artifact
         if: matrix.mode == 'candidate'
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: system-test-diagnostics-fixture-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.mode }}
-          path: ${{ runner.temp }}/diagnostics-artifact-readback
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.verify-artifact.outputs.artifact-id }}
+          READBACK_DIR: ${{ runner.temp }}/diagnostics-artifact-readback
+        run: |
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" >"$RUNNER_TEMP/diagnostics-artifact.zip"
+          mkdir -p "$READBACK_DIR"
+          unzip -q "$RUNNER_TEMP/diagnostics-artifact.zip" -d "$READBACK_DIR"
 
       - name: Verify downloaded diagnostics content
         if: matrix.mode == 'candidate'
@@ -2848,7 +2856,7 @@ jobs:
         with:
           persist-credentials: false
       - name: 🧹 Free runner disk
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@4a36d987d64e34a915867f296151812fe9011f09
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@c28efa3c57adf582c4c780b213287c2cae61a431
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
