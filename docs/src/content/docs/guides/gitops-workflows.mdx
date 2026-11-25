@@ -119,8 +119,10 @@ checked and as whom:
   `images`, `components` and name prefix or suffix are merged into the folder's own kustomization
   file (or into the one Flux generates for a folder without one) before that single build runs. Flux
   composition happens before Helm renders the folder's HelmReleases, and policies check the rendered
-  output. A shared base that is only valid once patched passes, while a real violation in the composed
-  output still fails.
+  output. A shared base that is only valid once patched passes admission, while a real violation in
+  the composed output still fails. A base with its own kustomization file is also built on its own
+  for the schema and `--rules` checks, so an error-severity failure in that standalone build still
+  fails the folder.
 - After the build, the Kustomization's `commonMetadata` labels and annotations are set on every
   object it applies, as kustomize-controller does. Objects its HelmReleases render later do not get
   them.

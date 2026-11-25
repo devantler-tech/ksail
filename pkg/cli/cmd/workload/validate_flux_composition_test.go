@@ -1,6 +1,7 @@
 package workload_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload"
@@ -187,4 +188,39 @@ func TestValidateFluxBindingComposedOutputFacesCELRules(t *testing.T) {
 		validate(tree("  targetNamespace: allowed\n")),
 		"the control namespace passes",
 	)
+}
+
+// A base policy an overlay strengthens reaches the cluster only as the overlay
+// composes it, so the raw base never stands in for the strengthened policy that
+// every other bound folder faces.
+func TestValidateFluxBindingOverlayPolicyReplacesItsBase(t *testing.T) {
+	t.Parallel()
+
+	tree := func(overlayAction string) string {
+		return writeTree(t, map[string]string{
+			"clusters/prod/kustomization.yaml": kustomizationOf("policies.yaml", "tenant.yaml"),
+			"clusters/prod/policies.yaml": fluxKustomization(
+				"policies", "flux-system", "policies/prod", "",
+			),
+			"clusters/prod/tenant.yaml": fluxKustomization("tenant", "tenant-a", "tenant",
+				"  serviceAccountName: tenant-a\n"),
+			"policies/base/kustomization.yaml": kustomizationOf("policy.yaml"),
+			"policies/base/policy.yaml": strings.Replace(
+				onlyFluxControllerPolicy, "Enforce", "Audit", 1,
+			),
+			"policies/prod/kustomization.yaml": kustomizationOf("../base") +
+				"patches:\n  - target:\n      kind: ClusterPolicy\n" +
+				"    patch: |-\n      - op: replace\n        path: /spec/validationFailureAction\n" +
+				"        value: " + overlayAction + "\n",
+			"tenant/kustomization.yaml": kustomizationOf("configmap.yaml"),
+			"tenant/configmap.yaml":     configMap("tenant-settings"),
+		})
+	}
+
+	_, err := runBindingValidate(t, tree("Enforce"))
+	require.ErrorIs(t, err, workload.ErrKyvernoPolicyViolation)
+	require.ErrorContains(t, err, `policy "platform-only-configmaps"`)
+
+	_, err = runBindingValidate(t, tree("Audit"))
+	require.NoError(t, err, "control: the overlay keeps the base in Audit")
 }

@@ -1368,15 +1368,8 @@ func (v *kustomizationValidator) manifests(
 ) ([]byte, map[string]string, error) {
 	if v.renderer != nil {
 		result, err := v.renderer.expand(ctx, kustDir)
-		if err != nil {
-			return nil, nil, err
-		}
 
-		v.sink.add(result.Degradations)
-
-		data, err := finishRenderedValidationSubstitutions(ctx, result, v.opts)
-
-		return data, attributionFromDocuments(result.Documents), err
+		return v.finishRendered(ctx, result, err)
 	}
 
 	output, err := v.kustomize.Build(ctx, kustDir)
@@ -1387,6 +1380,26 @@ func (v *kustomizationValidator) manifests(
 	expanded, err := expandValidationSubstitutions(ctx, output.Bytes(), v.opts)
 
 	return expanded, nil, err
+}
+
+// finishRendered turns a render result into the validation input: it records
+// the render's degradations, applies the deferred Flux substitutions, and
+// attributes each document to the HelmRelease it came from. A render error is
+// returned unchanged.
+func (v *kustomizationValidator) finishRendered(
+	ctx context.Context,
+	result render.Result,
+	renderErr error,
+) ([]byte, map[string]string, error) {
+	if renderErr != nil {
+		return nil, nil, renderErr
+	}
+
+	v.sink.add(result.Degradations)
+
+	data, err := finishRenderedValidationSubstitutions(ctx, result, v.opts)
+
+	return data, attributionFromDocuments(result.Documents), err
 }
 
 // attributionFromDocuments maps each rendered document's identity to a source

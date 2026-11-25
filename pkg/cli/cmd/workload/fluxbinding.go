@@ -267,6 +267,17 @@ func (p *fluxBindingPlan) target(dir string) bool {
 	return entry
 }
 
+// admits reports whether dir's own output reaches the cluster under plan: every
+// folder without Flux bindings, and otherwise a bound folder, an entry, or a
+// folder whose binding failed (it is still applied; its evaluation reports why).
+func (p *fluxBindingPlan) admits(dir string) bool {
+	if _, skipped := p.skipped[dir]; skipped {
+		return true
+	}
+
+	return p.target(dir)
+}
+
 // generatedTargets are the bound folders without a kustomization file: they
 // have no validated output of their own and are evaluated only as Flux
 // generates them.
@@ -319,8 +330,13 @@ func planFluxBindings(
 	)
 }
 
-// discoverFluxBindings is one discovery round. A folder bound in previous is
-// read as previous composes it; any other folder is read as rendered.
+// discoverFluxBindings is one discovery round. Entries are read, and so is
+// every folder previous binds with a composition or a generated kustomization,
+// as previous composes it: a parent's patches reach the Kustomizations the
+// folder renders even when an entry also includes the folder. Any other folder
+// is read as rendered. A folder that an entry includes and a Flux Kustomization
+// also composes is applied twice, so a child Kustomization the two copies
+// disagree on is reported as ambiguous rather than bound either way.
 func discoverFluxBindings(
 	tree string,
 	roots fluxSourceRoots,
@@ -338,7 +354,7 @@ func discoverFluxBindings(
 	scan := maps.Clone(plan.entries)
 
 	for dir, binding := range previous {
-		if binding.generated {
+		if binding.composed() {
 			scan[dir] = struct{}{}
 		}
 	}
@@ -487,6 +503,11 @@ func fluxComposition(object map[string]any) map[string]any {
 		if value, set := spec[field]; set && value != nil {
 			if list, isList := value.([]any); isList && len(list) == 0 {
 				// Flux appends nothing for an empty list, so it does not change the folder.
+				continue
+			}
+
+			if flag, isBool := value.(bool); isBool && !flag {
+				// An unset flag is false (ignoreMissingComponents), so false does not change the folder.
 				continue
 			}
 
@@ -675,15 +696,8 @@ func (v *kustomizationValidator) composedManifests(
 	}
 
 	result, err := v.renderer.expandBuilt(ctx, built)
-	if err != nil {
-		return nil, nil, err
-	}
 
-	v.sink.add(result.Degradations)
-
-	data, err := finishRenderedValidationSubstitutions(ctx, result, v.opts)
-
-	return data, attributionFromDocuments(result.Documents), err
+	return v.finishRendered(ctx, result, err)
 }
 
 // composer renders a bound folder as its Flux Kustomization composes it.
@@ -698,7 +712,11 @@ func (v *kustomizationValidator) composer(ctx context.Context) composeFunc {
 // folder as Flux composes it (folders Flux generates a kustomization for
 // included) and every other folder as rendered. Without Flux bindings it is the
 // rendered output of every folder, as before. A folder whose composition fails
-// keeps its rendered output here; its own evaluation reports the failure.
+// keeps its rendered output here; its own evaluation reports the failure. A
+// folder that is neither bound nor an entry reaches the cluster only through the
+// folders that include it, whose outputs already carry it as composed, so its
+// own raw output is left out: a base policy a composed overlay strengthens must
+// not stand in for the composed one.
 func (v *kustomizationValidator) admittedOutputs(
 	ctx context.Context,
 	plan fluxBindingPlan,
@@ -709,6 +727,10 @@ func (v *kustomizationValidator) admittedOutputs(
 	outputs := make([][]byte, 0, len(dirs))
 
 	for _, dir := range dirs {
+		if !plan.admits(dir) {
+			continue
+		}
+
 		data := v.renderedOutputs[dir]
 
 		if binding, bound := plan.bindings[dir]; bound && binding.composed() {

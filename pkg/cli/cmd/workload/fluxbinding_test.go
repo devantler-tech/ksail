@@ -1,8 +1,9 @@
-package workload
+package workload_test
 
 import (
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -12,13 +13,10 @@ import (
 func TestFluxBindingSameAsComparesRoot(t *testing.T) {
 	t.Parallel()
 
-	identity := serviceAccountIdentity(fluxSystemNamespace, fluxControllerAccount)
-	git := &fluxBinding{root: "/repo", identity: identity, composition: map[string]any{}}
-	artifact := &fluxBinding{root: "/repo/k8s", identity: identity, composition: map[string]any{}}
-	twin := &fluxBinding{root: "/repo", identity: identity, composition: map[string]any{}}
+	empty := map[string]any{}
 
-	assert.False(t, git.sameAs(artifact))
-	assert.True(t, git.sameAs(twin))
+	assert.False(t, workload.FluxBindingsSameAs("/repo", "/repo/k8s", empty, empty))
+	assert.True(t, workload.FluxBindingsSameAs("/repo", "/repo", empty, empty))
 }
 
 // Only fields validation reproduces or knows to leave the applied objects
@@ -32,8 +30,11 @@ func TestUnmodelledFluxFields(t *testing.T) {
 		"decryption": map[string]any{}, "kubeConfig": map[string]any{}, "futureField": true,
 	}}
 
-	assert.Equal(t, []string{"futureField", "kubeConfig"}, unmodelledFluxFields(object))
-	assert.Empty(t, unmodelledFluxFields(map[string]any{"spec": map[string]any{"path": "."}}))
+	assert.Equal(t, []string{"futureField", "kubeConfig"}, workload.UnmodelledFluxFields(object))
+	assert.Empty(
+		t,
+		workload.UnmodelledFluxFields(map[string]any{"spec": map[string]any{"path": "."}}),
+	)
 }
 
 // commonMetadata replaces same-named keys and keeps every other key, on every
@@ -48,10 +49,10 @@ func TestWithCommonMetadata(t *testing.T) {
 		"annotations": map[string]any{"owner": "flux"},
 	}}}
 
-	out, err := withCommonMetadata(data, object)
+	out, err := workload.WithCommonMetadata(data, object)
 	require.NoError(t, err)
 
-	docs := decodeDocuments(out)
+	docs := workload.DecodeDocuments(out)
 	require.Len(t, docs, 2)
 
 	for _, doc := range docs {
@@ -67,12 +68,32 @@ func TestWithCommonMetadata(t *testing.T) {
 	firstLabels, _ := first["labels"].(map[string]any)
 	assert.Equal(t, "me", firstLabels["keep"])
 
-	unchanged, err := withCommonMetadata(data, map[string]any{"spec": map[string]any{}})
+	unchanged, err := workload.WithCommonMetadata(data, map[string]any{"spec": map[string]any{}})
 	require.NoError(t, err)
 	assert.Equal(t, data, unchanged)
 
-	_, err = withCommonMetadata(data, map[string]any{"spec": map[string]any{
+	_, err = workload.WithCommonMetadata(data, map[string]any{"spec": map[string]any{
 		"commonMetadata": map[string]any{"labels": map[string]any{"n": 1}},
 	}})
-	require.ErrorIs(t, err, ErrFluxCommonMetadataInvalid)
+	require.ErrorIs(t, err, workload.ErrFluxCommonMetadataInvalid)
+}
+
+// An omitted list and an empty one, and an omitted flag and a false one, change
+// nothing Flux builds, so they compose a folder the same way; a set value does.
+func TestFluxCompositionNormalizesNoOpValues(t *testing.T) {
+	t.Parallel()
+
+	omitted := workload.FluxComposition(map[string]any{"spec": map[string]any{"path": "."}})
+	noOps := workload.FluxComposition(map[string]any{"spec": map[string]any{
+		"path": ".", "patches": []any{}, "components": []any{}, "ignoreMissingComponents": false,
+	}})
+	set := workload.FluxComposition(map[string]any{"spec": map[string]any{
+		"path": ".", "ignoreMissingComponents": true,
+	}})
+
+	assert.Empty(t, omitted)
+	assert.Empty(t, noOps)
+	assert.True(t, workload.FluxBindingsSameAs("/repo", "/repo", omitted, noOps))
+	assert.Equal(t, map[string]any{"ignoreMissingComponents": true}, set)
+	assert.False(t, workload.FluxBindingsSameAs("/repo", "/repo", omitted, set))
 }

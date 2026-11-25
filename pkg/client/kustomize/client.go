@@ -5,17 +5,12 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"sync"
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	fluxkustomize "github.com/fluxcd/pkg/kustomize"
 	fluxfilesys "github.com/fluxcd/pkg/kustomize/filesys"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"sigs.k8s.io/kustomize/api/krusty"
-	"sigs.k8s.io/kustomize/api/types"
 	"sigs.k8s.io/kustomize/kyaml/filesys"
-	"sigs.k8s.io/kustomize/kyaml/openapi"
-	kyaml "sigs.k8s.io/kustomize/kyaml/yaml"
 )
 
 // Client provides kustomize build functionality.
@@ -26,54 +21,24 @@ func NewClient() *Client {
 	return &Client{}
 }
 
-// schemaWarmOnce serializes the first kyaml openapi builtin-schema
-// initialization across concurrent builds. See warmSchema and
-// https://github.com/devantler-tech/ksail/issues/5858.
-var schemaWarmOnce sync.Once //nolint:gochecknoglobals
-
-// warmSchema forces kustomize's kyaml openapi builtin-schema package globals to
-// initialize once, serially, before any concurrent build reads them.
-//
-// The first kustomize build lazily initializes those globals (schema parse plus
-// the namespaceability map). That init is not goroutine-safe: kyaml writes the
-// namespaceability map under a lock inside findNamespaceability, but
-// IsNamespaceScoped reads the same map without the lock — so a second concurrent
-// build racing the first's init trips the race detector (and can read a
-// half-populated map). Running one SchemaForResourceType call under a sync.Once
-// forces the full init (findNamespaceability included) exactly once; after it
-// every concurrent build only ever reads a settled, no-longer-mutated global.
-// This covers the default built-in schema that ksail always uses.
-func warmSchema() {
-	schemaWarmOnce.Do(func() {
-		_ = openapi.SchemaForResourceType(
-			kyaml.TypeMeta{APIVersion: "apps/v1", Kind: "Deployment"},
-		)
-	})
-}
-
 // Build runs kustomize build on the specified directory and returns the output.
 func (c *Client) Build(_ context.Context, path string) (*bytes.Buffer, error) {
-	// Initialize the shared kyaml openapi schema once before building, so
-	// concurrent Build calls never race its lazy first-init (#5858).
-	warmSchema()
+	return build(filesys.MakeFsOnDisk(), path)
+}
 
-	// Create a file system abstraction
-	fSys := filesys.MakeFsOnDisk()
-
-	// Create kustomize options with load restrictions disabled
-	opts := krusty.MakeDefaultOptions()
-	opts.LoadRestrictions = types.LoadRestrictionsNone
-
-	// Create a kustomizer
-	k := krusty.MakeKustomizer(opts)
-
-	// Run the build
-	resMap, err := k.Run(fSys, path)
+// build runs one kustomize build through Flux's own Build, the one
+// kustomize-controller uses. kustomize keeps its OpenAPI schema in package
+// globals that a kustomization's `openapi` field replaces and that are not safe
+// for concurrent use (#5858), so Flux serializes every build behind one lock
+// and resets the schema to the built-in one before and after each build. Every
+// build here goes through it, so one folder's custom schema never reaches
+// another folder's build and two builds never touch the schema at once.
+func build(fSys filesys.FileSystem, path string) (*bytes.Buffer, error) {
+	resMap, err := fluxkustomize.Build(fSys, path)
 	if err != nil {
 		return nil, fmt.Errorf("kustomize build %s: %w", path, err)
 	}
 
-	// Convert resource map to YAML
 	yaml, err := resMap.AsYaml()
 	if err != nil {
 		return nil, fmt.Errorf("convert resources to yaml: %w", err)
@@ -103,8 +68,6 @@ func (c *Client) BuildFlux(
 		return nil, fmt.Errorf("build %s: %w", dir, err)
 	}
 
-	warmSchema()
-
 	fSys, dir, err := fluxBuildFS(root, dir, kustomization)
 	if err != nil {
 		return nil, err
@@ -115,20 +78,7 @@ func (c *Client) BuildFlux(
 		return nil, fmt.Errorf("build %s: %w", dir, err)
 	}
 
-	opts := krusty.MakeDefaultOptions()
-	opts.LoadRestrictions = types.LoadRestrictionsNone
-
-	resMap, err := krusty.MakeKustomizer(opts).Run(fSys, dir)
-	if err != nil {
-		return nil, fmt.Errorf("kustomize build %s: %w", dir, err)
-	}
-
-	yaml, err := resMap.AsYaml()
-	if err != nil {
-		return nil, fmt.Errorf("convert resources to yaml: %w", err)
-	}
-
-	return bytes.NewBuffer(yaml), nil
+	return build(fSys, dir)
 }
 
 // fluxBuildFS generates the kustomization Flux builds for dir and returns the

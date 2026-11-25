@@ -509,3 +509,33 @@ func TestValidateFluxBindingGeneratedFolderIsEvaluated(t *testing.T) {
 	require.ErrorContains(t, err, "ConfigMap/tenant-a/tenant-settings")
 	require.ErrorContains(t, err, "as system:serviceaccount:tenant-a:tenant-a")
 }
+
+// A bound folder that an entry also includes is read as Flux composes it, not
+// only as the entry renders it: the parent patch reaches the child, and since
+// the entry applies the unpatched child too, the two copies are named ambiguous.
+func TestValidateFluxBindingIncludedBoundFolderIsComposed(t *testing.T) {
+	t.Parallel()
+
+	tree := func(extra string) string {
+		return writeTree(t, map[string]string{
+			"clusters/prod/kustomization.yaml": kustomizationOf(
+				"policy.yaml", "tenants.yaml", "../../tenants",
+			),
+			"clusters/prod/policy.yaml": onlyFluxControllerPolicy,
+			"clusters/prod/tenants.yaml": fluxKustomization(
+				"tenants", "flux-system", "tenants", extra,
+			),
+			"tenants/kustomization.yaml": kustomizationOf("tenant.yaml"),
+			"tenants/tenant.yaml":        fluxKustomization("tenant", "tenant-a", "tenant", ""),
+			"tenant/kustomization.yaml":  kustomizationOf("configmap.yaml"),
+			"tenant/configmap.yaml":      configMap("tenant-settings"),
+		})
+	}
+
+	_, err := runBindingValidate(t, tree(tenantIdentityPatch))
+	require.ErrorIs(t, err, workload.ErrAmbiguousFluxBinding)
+	require.ErrorContains(t, err, "as system:serviceaccount:tenant-a:tenant-a")
+
+	_, err = runBindingValidate(t, tree(""))
+	require.NoError(t, err, "control: an unpatched child is the same in both copies")
+}

@@ -745,3 +745,34 @@ func ExportResolveKubeconfigFlag(
 func NewCreateCmdWithStreams(ioStreams genericiooptions.IOStreams) *cobra.Command {
 	return newCreateCmd(ioStreams)
 }
+
+// FluxBindingsSameAs reports whether a binding at rootA with compositionA is
+// the same application of a folder as one at rootB with compositionB, both
+// applied as the Flux controller's service account.
+func FluxBindingsSameAs(rootA, rootB string, compositionA, compositionB map[string]any) bool {
+	identity := serviceAccountIdentity(fluxSystemNamespace, fluxControllerAccount)
+	first := &fluxBinding{root: rootA, identity: identity, composition: compositionA}
+	second := &fluxBinding{root: rootB, identity: identity, composition: compositionB}
+
+	return first.sameAs(second)
+}
+
+// FluxComposition exposes fluxComposition for black-box tests.
+func FluxComposition(object map[string]any) map[string]any {
+	return fluxComposition(object)
+}
+
+// UnmodelledFluxFields exposes unmodelledFluxFields for black-box tests.
+func UnmodelledFluxFields(object map[string]any) []string {
+	return unmodelledFluxFields(object)
+}
+
+// WithCommonMetadata exposes withCommonMetadata for black-box tests.
+func WithCommonMetadata(data []byte, object map[string]any) ([]byte, error) {
+	return withCommonMetadata(data, object)
+}
+
+// DecodeDocuments exposes decodeDocuments for black-box tests.
+func DecodeDocuments(data []byte) []map[string]any {
+	return decodeDocuments(data)
+}
