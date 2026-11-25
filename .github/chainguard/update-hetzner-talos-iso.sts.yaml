@@ -1,0 +1,12 @@
+---
+# Repository trust policy for .github/workflows/update-hetzner-talos-iso.yaml, served by the GitHub token broker
+# (devantler-tech/monorepo ADR 0020). Only that workflow, on this repository's main branch,
+# may exchange its Actions OIDC token. It grants contents and pull requests write, to open the ISO update pull request on this repository alone.
+issuer: https://token.actions.githubusercontent.com
+subject: repo:devantler-tech/ksail:ref:refs/heads/main
+claim_pattern:
+  repository_owner_id: "178524219"
+  job_workflow_ref: devantler-tech/ksail/\.github/workflows/update-hetzner-talos-iso\.yaml@refs/heads/main
+permissions:
+  contents: write
+  pull_requests: write
