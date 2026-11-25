@@ -87,9 +87,8 @@ jobs:
           token: ${{ steps.generate-token.outputs.token }}
           branch-token: ${{ steps.generate-token.outputs.token }}
           commit-message: "chore(talos): update Hetzner ISO compatibility pair"
-          # The action ignores committer while sign-commits is true: the signed commit is
-          # the App token's bot (botantler-1). This names the same identity for clarity.
-          committer: "botantler-1[bot] <185060876+botantler-1[bot]@users.noreply.github.com>"
+          # The signed commit is the bot of whichever botantler App the broker minted the
+          # token from. The action ignores committer while sign-commits is true, so none is set.
           branch: chore/update-hetzner-talos-iso
           base: ${{ github.event.repository.default_branch }}
           title: "chore(talos): update Hetzner ISO compatibility pair"
