@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/kustomize"
 	"github.com/stretchr/testify/assert"
@@ -164,4 +165,34 @@ func TestBuildFluxObservesCancellation(t *testing.T) {
 
 	_, err := kustomize.NewClient().BuildFlux(ctx, dir, dir, fluxSpec(map[string]any{}))
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+// A caller canceled while another build holds the lock stops waiting instead of
+// building once the lock frees. The gate is freed only after the deadline the
+// test asserts against, so a caller that kept waiting would build and succeed.
+//
+//nolint:paralleltest // holds the process-wide build gate, so it must not overlap other builds
+func TestBuildFluxStopsWaitingWhenCanceled(t *testing.T) {
+	dir := writeFiles(t, map[string]string{"configmap.yaml": webConfigMap})
+
+	release := kustomize.HoldBuildGate()
+	freed := make(chan struct{})
+
+	go func() {
+		defer close(freed)
+
+		time.Sleep(2 * time.Second)
+		release()
+	}()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, err := kustomize.NewClient().BuildFlux(ctx, dir, dir, fluxSpec(map[string]any{}))
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Less(t, time.Since(start), time.Second, "the canceled caller stopped waiting")
+
+	<-freed
 }

@@ -22,8 +22,35 @@ func NewClient() *Client {
 }
 
 // Build runs kustomize build on the specified directory and returns the output.
-func (c *Client) Build(_ context.Context, path string) (*bytes.Buffer, error) {
-	return build(filesys.MakeFsOnDisk(), path)
+func (c *Client) Build(ctx context.Context, path string) (*bytes.Buffer, error) {
+	return build(ctx, filesys.MakeFsOnDisk(), path)
+}
+
+// buildGate admits one build at a time ahead of Flux's own lock. Flux acquires
+// that lock without a context, so a caller canceled while it waits would still
+// build once the lock frees; waiting here instead lets it give up.
+//
+//nolint:gochecknoglobals // guards Flux's process-wide build lock
+var buildGate = make(chan struct{}, 1)
+
+// admitBuild waits for the build gate or for ctx to end, and returns the
+// release function on admission.
+func admitBuild(ctx context.Context) (func(), error) {
+	select {
+	case buildGate <- struct{}{}:
+	case <-ctx.Done():
+		return nil, fmt.Errorf("wait for kustomize build: %w", ctx.Err())
+	}
+
+	// The gate and ctx can both be ready; never start a build for a canceled caller.
+	err := ctx.Err()
+	if err != nil {
+		<-buildGate
+
+		return nil, fmt.Errorf("wait for kustomize build: %w", err)
+	}
+
+	return func() { <-buildGate }, nil
 }
 
 // build runs one kustomize build through Flux's own Build, the one
@@ -33,7 +60,15 @@ func (c *Client) Build(_ context.Context, path string) (*bytes.Buffer, error) {
 // and resets the schema to the built-in one before and after each build. Every
 // build here goes through it, so one folder's custom schema never reaches
 // another folder's build and two builds never touch the schema at once.
-func build(fSys filesys.FileSystem, path string) (*bytes.Buffer, error) {
+// Callers are admitted through buildGate first, so a canceled one stops
+// waiting instead of building late.
+func build(ctx context.Context, fSys filesys.FileSystem, path string) (*bytes.Buffer, error) {
+	release, err := admitBuild(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("kustomize build %s: %w", path, err)
+	}
+	defer release()
+
 	resMap, err := fluxkustomize.Build(fSys, path)
 	if err != nil {
 		return nil, fmt.Errorf("kustomize build %s: %w", path, err)
@@ -73,12 +108,7 @@ func (c *Client) BuildFlux(
 		return nil, err
 	}
 
-	err = ctx.Err()
-	if err != nil {
-		return nil, fmt.Errorf("build %s: %w", dir, err)
-	}
-
-	return build(fSys, dir)
+	return build(ctx, fSys, dir)
 }
 
 // fluxBuildFS generates the kustomization Flux builds for dir and returns the
