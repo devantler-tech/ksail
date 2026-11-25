@@ -148,6 +148,8 @@ linters:
         - k8s.io/cri-api
         - k8s.io/kube-proxy
         - k8s.io/kubelet
+        # containerd v2.4.1 asks for cri-client v0.37.0, which needs the held cri-api (#7259).
+        - k8s.io/cri-client
     wsl_v5:
       allow-first-in-block: true
       allow-whole-block: false

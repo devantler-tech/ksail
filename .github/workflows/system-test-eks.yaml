@@ -225,7 +225,7 @@ jobs:
       - name: 📥 Restore KSail binary
         timeout-minutes: 5
         # Pin the identical published action until actionlint supports $/ references.
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@1ede3ba954c719fd3b50362e29bd22cc30d6ff15
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@c28efa3c57adf582c4c780b213287c2cae61a431
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -337,6 +337,17 @@ jobs:
           set -euo pipefail
           cd "$KSAIL_EKS_WORKDIR"
           ksail cluster info
+
+      - name: 🧪 ksail cluster diff reports no drift on the unchanged cluster
+        # ksail#7837: with the project-init default (no explicit kube context), diff
+        # must resolve the context eksctl wrote, so every drift probe reads its
+        # baseline. Exit 2 here means an unknown baseline or real drift.
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$KSAIL_EKS_WORKDIR"
+          ksail cluster diff --exit-code
 
       - name: 🔐 Refresh AWS credentials before EKS update and cleanup
         if: always() && steps.init.outcome == 'success'

@@ -38,13 +38,13 @@ Usage:
   ksail workload push [oci://<host>:<port>/<repository>[/<variant>]:<ref>] [flags]
 
 Flags:
-      --path string       Source directory containing manifests to push
-      --registry string   Registry to push to (format: [user:pass@]host[:port][/path]), can also be set via KSAIL_REGISTRY env var
-      --validate          Validate manifests before pushing
+      --path string             Source directory containing manifests to push
+      --registry string         Registry to push to (format: [user:pass@]host[:port][/path]), can also be set via KSAIL_REGISTRY env var
+      --validate[=true|false]   Validate manifests before pushing
 
 Global Flags:
-      --benchmark       Show per-activity benchmark output
-      --config string   Path to config file (default: ksail.yaml found via directory traversal)
-      --experimental    Enable experimental (unstable) commands and features
+      --benchmark[=true|false]      Show per-activity benchmark output
+      --config string               Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental[=true|false]   Enable experimental (unstable) commands and features
 
 ```

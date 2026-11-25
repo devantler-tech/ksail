@@ -8,7 +8,6 @@ import (
 
 	"github.com/cosi-project/runtime/pkg/state"
 	"github.com/cosi-project/runtime/pkg/state/impl/inmem"
-	"github.com/cosi-project/runtime/pkg/state/impl/namespaced"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosconfig "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
@@ -20,7 +19,7 @@ import (
 )
 
 func newInMemStateForOmniTest() state.State {
-	return state.WrapCore(namespaced.NewState(inmem.Build))
+	return state.WrapCore(inmem.NewState())
 }
 
 // newOmniProviderWithVersions creates a test provider with TalosVersion resources seeded in state.

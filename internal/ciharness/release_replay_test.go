@@ -26,24 +26,7 @@ func TestReleaseReplayEntrypoint(t *testing.T) {
 	require.False(t, step.ContinueOnError)
 	require.Empty(t, step.If, "every full release attempt must classify its publication state")
 
-	for _, test := range []struct {
-		name, mode, diagnostic string
-	}{
-		{"new", "build", ""},
-		{"published", "verify", ""},
-		{"annotated-tag", "verify", ""},
-		{"annotated-wrong-source", "", "source/tag"},
-		{"annotated-unreadable", "", "annotated source tag"},
-		{"annotated-cycle", "", "source/tag"},
-		{"missing-asset", "", "asset set"},
-		{"wrong-source", "", "source"},
-		{"read-failure", "", "release state"},
-		{"invalid-attestation", "", "attestation"},
-		{"failed-publisher", "", "publisher jobs"},
-		{"unsigned-image", "", "OCI"},
-		{"mutable-release", "", "immutable"},
-		{"duplicate-release", "", "conflicting release"},
-	} {
+	for _, test := range releaseReplayEntrypointCases() {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			directory := releaseReplayFixture(t)
@@ -74,6 +57,36 @@ func TestReleaseReplayEntrypoint(t *testing.T) {
 				require.Contains(t, string(output), "proof=")
 			}
 		})
+	}
+}
+
+// releaseReplayCase is one fixture scenario: the mode it must admit, or the refusal it must report.
+type releaseReplayCase struct {
+	name, mode, diagnostic string
+}
+
+// releaseReplayEntrypointCases lists every publication state the preflight classifies. Only the
+// exact botantler-1 and botantler-2 App logins may have published a replayed release; the deleted
+// ksail-bot App and a bare lookalike user are refused.
+func releaseReplayEntrypointCases() []releaseReplayCase {
+	return []releaseReplayCase{
+		{"new", "build", ""},
+		{"published", "verify", ""},
+		{"annotated-tag", "verify", ""},
+		{"annotated-wrong-source", "", "source/tag"},
+		{"annotated-unreadable", "", "annotated source tag"},
+		{"annotated-cycle", "", "source/tag"},
+		{"missing-asset", "", "asset set"},
+		{"wrong-source", "", "source"},
+		{"read-failure", "", "release state"},
+		{"invalid-attestation", "", "attestation"},
+		{"failed-publisher", "", "publisher jobs"},
+		{"unsigned-image", "", "OCI"},
+		{"mutable-release", "", "immutable"},
+		{"duplicate-release", "", "conflicting release"},
+		{"second-bot-publisher", "verify", ""},
+		{"retired-bot-publisher", "", "publisher run"},
+		{"lookalike-publisher", "", "publisher run"},
 	}
 }
 
@@ -175,12 +188,12 @@ func releaseReplayMetadata(t *testing.T, directory string) {
 		"event":       "push",
 		"path":        ".github/workflows/cd.yaml",
 		"repository":  map[string]any{"full_name": "devantler-tech/ksail"},
-		"actor":       map[string]any{"login": "ksail-bot[bot]"},
+		"actor":       map[string]any{"login": "botantler-1[bot]"},
 	})
 
 	jobs := make([]map[string]any, 0, 8)
 	for _, name := range []string{
-		"🧩 Release CLI", "🧩 Release VSCode Extension", "🧩 Release Desktop App (macOS cask)",
+		"🧩 Release CLI", "🧩 Release VSCode Extension", "🧩 Release Desktop App (macOS)",
 		"🧩 Release Desktop App (ubuntu-24.04, linux, amd64)",
 		"🧩 Release Desktop App (windows-latest, windows, amd64, .exe)",
 		"⛵ Release Operator Chart", "📄 Build Pages", "📢 Publish Release",
@@ -340,7 +353,13 @@ else
       if [[ $REPLAY_CASE == missing-asset ]]; then
         jq '.[0:-1]' "$REPLAY_FIXTURE/assets.json"
       else cat "$REPLAY_FIXTURE/assets.json"; fi ;;
-    'api repos/devantler-tech/ksail/actions/runs/42/attempts/1') cat "$REPLAY_FIXTURE/run.json" ;;
+    'api repos/devantler-tech/ksail/actions/runs/42/attempts/1')
+      case $REPLAY_CASE in
+        second-bot-publisher) jq '.actor.login = "botantler-2[bot]"' "$REPLAY_FIXTURE/run.json" ;;
+        retired-bot-publisher) jq '.actor.login = "ksail-bot[bot]"' "$REPLAY_FIXTURE/run.json" ;;
+        lookalike-publisher) jq '.actor.login = "botantler-1"' "$REPLAY_FIXTURE/run.json" ;;
+        *) cat "$REPLAY_FIXTURE/run.json" ;;
+      esac ;;
     'api --paginate repos/devantler-tech/ksail/actions/runs/42/attempts/1/jobs?per_page=100')
       if [[ $REPLAY_CASE == failed-publisher ]]; then
         jq '.jobs[0].conclusion = "failure"' "$REPLAY_FIXTURE/jobs.json"
@@ -428,12 +447,12 @@ func executeReleaseReplay(t *testing.T, step harnessStep, directory, scenario st
 // releaseReplayDependencies names each publisher’s direct admission source.
 func releaseReplayDependencies() map[string]string {
 	return map[string]string{
-		"cask-checkpoint": "validate-release-ref", "goreleaser": "cask-checkpoint",
-		"vscode-extension": "validate-release-ref", "desktop-macos": "cask-checkpoint",
+		"goreleaser":       "validate-release-ref",
+		"vscode-extension": "validate-release-ref", "desktop-macos": "validate-release-ref",
 		"desktop": "validate-release-ref", "operator-chart": "goreleaser",
 		"mcp-publish": "goreleaser", "pages-build": "validate-release-ref",
 		"pages-deploy": "goreleaser", "publish-release": "goreleaser",
-		"homebrew": "cask-checkpoint", "cleanup-failed-release": "validate-release-ref",
+		"cleanup-failed-release": "validate-release-ref",
 	}
 }
 
@@ -566,7 +585,13 @@ func TestReleaseReplayReusesPublishedArtifacts(t *testing.T) {
 	require.Contains(
 		t,
 		pages.If,
-		"cask-publish == 'true'",
+		"needs.goreleaser.outputs.replay-latest == 'true'",
 		"an older replay must not replace current documentation",
 	)
+
+	reuse := findHarnessStep(t, jobs["goreleaser"].Steps, "♻️ Reuse verified publication")
+	require.Equal(t, "reuse", reuse.ID)
+	require.Contains(t, reuse.Run, `gh api "repos/${GITHUB_REPOSITORY}/releases/latest"`)
+	require.Contains(t, reuse.Run, `"$latest" == "$GITHUB_REF_NAME"`)
+	require.Contains(t, reuse.Run, "latest=true")
 }

@@ -7,7 +7,6 @@ import (
 
 	"github.com/cosi-project/runtime/pkg/state"
 	"github.com/cosi-project/runtime/pkg/state/impl/inmem"
-	"github.com/cosi-project/runtime/pkg/state/impl/namespaced"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
 	"github.com/siderolabs/omni/client/api/omni/specs"
@@ -17,7 +16,7 @@ import (
 )
 
 func newInMemState() state.State {
-	return state.WrapCore(namespaced.NewState(inmem.Build))
+	return state.WrapCore(inmem.NewState())
 }
 
 func TestNewProvider(t *testing.T) {

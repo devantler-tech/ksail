@@ -37,7 +37,7 @@ Examples:
 Flags:
       --branch string              git branch
       --commit string              git commit
-      --export                     export in YAML format to stdout
+      --export[=true|false]        export in YAML format to stdout
       --interval duration          source sync interval (default 1m0s)
   -n, --namespace string           the namespace scope for this operation (default "flux-system")
       --secret-ref string          the name of an existing secret containing SSH or basic credentials
@@ -48,8 +48,8 @@ Flags:
       --verify-secret-ref string   verify the signature of the checked-out commit (or tag) against the public keys in this existing secret (SSH keys under *.sshpub keys, OpenPGP keys under *.asc)
 
 Global Flags:
-      --benchmark       Show per-activity benchmark output
-      --config string   Path to config file (default: ksail.yaml found via directory traversal)
-      --experimental    Enable experimental (unstable) commands and features
+      --benchmark[=true|false]      Show per-activity benchmark output
+      --config string               Path to config file (default: ksail.yaml found via directory traversal)
+      --experimental[=true|false]   Enable experimental (unstable) commands and features
 
 ```

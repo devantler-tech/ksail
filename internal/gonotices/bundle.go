@@ -42,6 +42,7 @@ type Package struct {
 	EvidenceFiles                       []string
 	OtherFiles                          []string
 	Declarations                        []Declaration
+	UpstreamTexts                       []UpstreamText
 	Module                              Module
 }
 
@@ -461,6 +462,11 @@ func (collector *Collector) componentMaterialContents(
 		if entry.Disposition != excludedDisposition {
 			contents[digest(data)] = data
 		}
+	}
+
+	err := upstreamLicenseMaterials(result.Source, pkg.UpstreamTexts, result, contents)
+	if err != nil {
+		return nil, err
 	}
 
 	return contents, nil

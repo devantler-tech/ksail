@@ -9,8 +9,8 @@ rebuilding the CLI and desktop binaries and trying to upload them again.
 Use a **full rerun of the original CD run**, for a tag whose CD workflow contains
 the replay preflight and admission guard. The first attempt must have successfully
 published all GitHub release assets, both signed container images and the signed
-operator chart. MCP, documentation deployment or the Homebrew handoff may still
-need to finish.
+operator chart. MCP or documentation deployment may still need to finish. CD does
+not update the Homebrew casks: the tap bumps them itself from the published release.
 
 1. Open the original **CD** run in GitHub Actions. Confirm its tag and source are
    the release you intend to recover.
@@ -25,14 +25,15 @@ need to finish.
    OCI publication's signature against the original workflow and source commit.
    A conflict, missing publication or failed read stops the attempt here.
 4. The CLI, desktop, VS Code package and chart jobs report reuse of the verified
-   publication. Documentation is rebuilt, MCP uses its existing
-   identical-version verification, and Homebrew retains its protected handoff.
+   publication. Documentation is rebuilt, and MCP uses its existing
+   identical-version verification.
 5. **Publish Release** independently repeats the publication verification and
    compares the GitHub asset IDs/digests and OCI manifest digests with preflight.
-   An older replay also leaves the newer documentation and cask pointers intact.
+   Documentation is redeployed only when the replayed tag is still the latest
+   published release, so an older replay leaves the newer documentation intact.
 6. Wait for the complete CD run, then check the intended downstream delivery.
-   An immutable GitHub release by itself does not prove MCP, documentation or
-   Homebrew delivery succeeded.
+   An immutable GitHub release by itself does not prove MCP or documentation
+   delivery succeeded.
 
 Use **all jobs**, rather than only failed jobs or an individual producer. Every
 consumer checks that its admission belongs to the current attempt. A partial
@@ -48,8 +49,7 @@ VS Code Marketplace publication is attempted only during normal first publicatio
 this replay path does not recover a missing optional Marketplace publication.
 It reuses the verified VSIX release asset without rebuilding or uploading it.
 Normal first publication retains the complete build, signing, asset-completeness
-and publication gates. CD keeps its existing serialized release queue and cask
-ordering checks.
+and publication gates. CD keeps its existing serialized release queue.
 
 ## Historical runs
 

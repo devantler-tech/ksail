@@ -2,10 +2,12 @@ package talosprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
@@ -56,7 +58,11 @@ func (p *Provisioner) GetCurrentConfig(
 
 	// Introspect actual node counts from the running cluster
 	// to avoid false-positive diffs from hardcoded defaults.
-	controlPlanes, workers := p.introspectNodeCounts(ctx)
+	controlPlanes, workers, err := p.introspectNodeCounts(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("introspect node counts: %w", err)
+	}
+
 	spec.ControlPlanes = controlPlanes
 	spec.Workers = workers
 
@@ -96,34 +102,29 @@ func (p *Provisioner) mergePersistedState(spec *v1alpha1.ClusterSpec, clusterNam
 }
 
 // introspectNodeCounts determines the actual control-plane and worker node
-// counts from the running cluster. Falls back to safe defaults (1 CP, 0 workers)
-// when the cluster cannot be queried.
-func (p *Provisioner) introspectNodeCounts(ctx context.Context) (int32, int32) {
+// counts from a complete, successful inventory. Unknown capacity cannot be used
+// as the current baseline for a cluster update.
+func (p *Provisioner) introspectNodeCounts(ctx context.Context) (int32, int32, error) {
 	clusterName := p.resolveClusterName("")
 
-	if p.dockerClient != nil {
-		nodes, err := p.getDockerNodesByRole(ctx, clusterName)
-		if err == nil {
-			return countNodeRoles(nodes)
-		}
+	nodes, err := p.getNodesByRole(ctx, clusterName)
+	if err != nil {
+		return 0, 0, err
 	}
 
-	if p.hetznerOpts != nil {
-		nodes, err := p.getHetznerNodesByRole(ctx, clusterName)
-		if err == nil {
-			return countNodeRoles(nodes)
-		}
+	controlPlanes, workers := countNodeRoles(nodes)
+	if int(controlPlanes)+int(workers) != len(nodes) {
+		return 0, 0, errNodeInventoryUnknownRole
 	}
 
-	if p.omniOpts != nil {
-		nodes, err := p.getOmniNodesByRole(ctx, clusterName)
-		if err == nil {
-			return countNodeRoles(nodes)
-		}
+	if controlPlanes == 0 {
+		return 0, 0, clustererr.ErrNoControlPlaneNodes
 	}
 
-	return 1, 0
+	return controlPlanes, workers, nil
 }
+
+var errNodeInventoryUnknownRole = errors.New("node inventory contains an unknown role")
 
 // introspectVersions sets the running Talos OS and Kubernetes versions on spec so
 // that a pinned spec.cluster.talos.version / spec.cluster.kubernetesVersion that

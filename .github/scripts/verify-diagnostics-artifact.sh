@@ -13,13 +13,15 @@ fi
 name="system-test-diagnostics-fixture-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$FIXTURE_MODE"
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
-# After a successful upload the filtered listing may briefly be empty. Only a
-# complete empty candidate response may wait; errors and wrong evidence fail.
+# After a successful upload the filtered listing may briefly be empty, and its
+# count can reach 1 before the artifact itself is listed (#8475). Only those two
+# complete, otherwise-empty candidate responses may wait; errors and wrong
+# evidence fail.
 for delay in 1 2 4 0; do
 	gh api --method GET "repos/${GITHUB_REPOSITORY:?}/actions/runs/$GITHUB_RUN_ID/artifacts" \
 		-f name="$name" -f per_page=100 >"$tmp"
 	if [[ "$FIXTURE_MODE" == baseline ]] ||
-		! jq -es 'length == 1 and .[0].total_count == 0 and .[0].artifacts == []' "$tmp" >/dev/null; then
+		! jq -es 'length == 1 and (.[0].total_count == 0 or .[0].total_count == 1) and .[0].artifacts == []' "$tmp" >/dev/null; then
 		break
 	fi
 	if ((delay == 0)); then
@@ -28,6 +30,12 @@ for delay in 1 2 4 0; do
 	fi
 	sleep "$delay"
 done
+# Name the rejected evidence: a silent exit hid which field disagreed (#8475).
+reject() {
+	echo "Native diagnostics artifact $FIXTURE_MODE: artifact evidence rejected (expected name=$name run=$GITHUB_RUN_ID head=$EXPECTED_HEAD); API response:" >&2
+	jq -c '.' "$tmp" >&2 || cat "$tmp" >&2
+	exit 1
+}
 jq -es --arg name "$name" --arg mode "$FIXTURE_MODE" --arg head "$EXPECTED_HEAD" \
 	--argjson run "$GITHUB_RUN_ID" '
   length == 1 and (.[0] |
@@ -35,9 +43,15 @@ jq -es --arg name "$name" --arg mode "$FIXTURE_MODE" --arg head "$EXPECTED_HEAD"
   .total_count == (.artifacts | length) and
   if $mode == "baseline" then .total_count == 0 else
     .total_count == 1 and all(.artifacts[];
+      (.id | type == "number") and .id > 0 and (.id | floor) == .id and
       .name == $name and .expired == false and
       (.size_in_bytes | type == "number") and .size_in_bytes > 0 and
       (.size_in_bytes | floor) == .size_in_bytes and
       .workflow_run.id == $run and .workflow_run.head_sha == $head)
-  end)' "$tmp" >/dev/null
+  end)' "$tmp" >/dev/null || reject
+# Hand the readback the exact verified identity: a second by-name lookup can
+# miss an artifact this listing already proved (ci run 45304265375).
+if [[ "$FIXTURE_MODE" == candidate ]]; then
+	printf 'artifact-id=%s\n' "$(jq -r '.artifacts[0].id' "$tmp")" >>"${GITHUB_OUTPUT:?}"
+fi
 printf 'Native diagnostics artifact %s: complete outcomes and artifact identity verified\n' "$FIXTURE_MODE"

@@ -15,6 +15,12 @@ registries:
     replaces-base: true
 
 updates:
+  # Each entry runs at its own time (UTC), ten to twenty minutes apart between
+  # 00:30 and 05:00. Without a time, every entry ran in the same quarter-hour, and
+  # the CI its pull requests started took the organisation's shared runners away
+  # from the platform's evening deploys (ksail#7579). Give a new entry the next
+  # free slot in this window.
+  #
   # Other ecosystems retain the default five version-update PR slots. Go has
   # four standing compatibility upgrades, so ten slots leave six for unrelated
   # updates instead of one (ksail#7135). Security updates are not subject to this limit.
@@ -33,6 +39,7 @@ updates:
     rebase-strategy: disabled
     schedule:
       interval: daily
+      time: "00:30"
     cooldown:
       default-days: 7
       semver-major-days: 14
@@ -96,6 +103,11 @@ updates:
       # it ever ignores more than minors.
       - dependency-name: "sigs.k8s.io/gateway-api"
         update-types: ["version-update:semver-minor"]
+      # Kyverno 1.20 removes legacy Go packages KSail still imports, so the
+      # routine root update fails. Lift this hold when ksail#7259 migrates
+      # those imports. Patch and security updates remain eligible.
+      - dependency-name: "github.com/kyverno/kyverno"
+        update-types: ["version-update:semver-minor"]
       # k3k v1.2.0 splits pkg/apis into its own module but publishes a go.mod that
       # requires it at v0.0.0-00010101000000-000000000000, resolved only by k3k's OWN
       # `replace ... => ./pkg/apis`. Go honours replace only in the main module, so every
@@ -109,6 +121,7 @@ updates:
     directory: /
     schedule:
       interval: daily
+      time: "00:50"
     cooldown:
       default-days: 7
       # devantler-tech actions/workflows are our own code — bump now, no cooldown.
@@ -135,6 +148,7 @@ updates:
     directory: /docs
     schedule:
       interval: daily
+      time: "01:10"
     cooldown:
       default-days: 7
       semver-major-days: 14
@@ -155,6 +169,7 @@ updates:
     directory: /vsce
     schedule:
       interval: daily
+      time: "01:20"
     cooldown:
       default-days: 7
       semver-major-days: 14
@@ -173,6 +188,7 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+      time: "01:40"
 
   - package-ecosystem: docker
     directory: /pkg/svc/installer/cloudproviderkind # cloud-provider-kind image (embedded in Go via go:embed)
@@ -180,6 +196,7 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+      time: "01:50"
 
   - package-ecosystem: docker
     registries: [ghcr]
@@ -188,6 +205,7 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+      time: "02:00"
 
   - package-ecosystem: docker
     registries: [dockerhub, ghcr]
@@ -196,6 +214,7 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+      time: "02:10"
 
   - package-ecosystem: docker
     registries: [dockerhub, ghcr]
@@ -204,6 +223,7 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+      time: "02:20"
 
   - package-ecosystem: docker
     registries: [ghcr]
@@ -212,6 +232,7 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+      time: "02:30"
 
   # Helm chart version pins (embedded in Go via go:embed)
   - package-ecosystem: docker
@@ -221,6 +242,7 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+      time: "02:40"
 
   - package-ecosystem: docker
     directory: /pkg/svc/installer/cni/cilium # Cilium chart version
@@ -228,6 +250,7 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+      time: "02:50"
 
   - package-ecosystem: docker
     directory: /pkg/svc/installer/metallb # MetalLB chart version
@@ -235,6 +258,7 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+      time: "03:00"
 
   - package-ecosystem: docker
     directory: /pkg/svc/installer/certmanager # cert-manager chart version
@@ -242,6 +266,7 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+      time: "03:10"
 
   - package-ecosystem: docker
     registries: [ghcr]
@@ -250,6 +275,7 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+      time: "03:20"
     # Kyverno 1.20 (chart 3.10, every chart minor carries one Kyverno minor) removes the
     # kyverno.io ClusterPolicy and Policy APIs. `ksail cluster create` installs the pinned
     # chart, and ksail.yaml cannot choose another one, so a consumer whose GitOps manifests
@@ -269,6 +295,7 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+      time: "03:30"
 
   - package-ecosystem: docker
     registries: [ghcr]
@@ -277,6 +304,7 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+      time: "03:40"
     # The flux-operator chart and its manifests-distribution artifact are a MATCHED
     # PAIR released together; bumping one without the other breaks Flux bootstrap
     # (ksail#5595). Group them so Dependabot raises a single PR that moves both tags.
@@ -292,6 +320,7 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+      time: "03:50"
 
   - package-ecosystem: docker
     registries: [ghcr]
@@ -300,6 +329,7 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+      time: "04:00"
 
   - package-ecosystem: docker
     registries: [dockerhub]
@@ -308,6 +338,7 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+      time: "04:10"
 
   # Helm chart version pins whose chart version diverges from the app/image tag, so they
   # cannot be tracked via a Dockerfile FROM directive. Tracked via the native helm
@@ -318,6 +349,7 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+      time: "04:20"
 
   - package-ecosystem: helm
     directory: /pkg/svc/installer/awslbcontroller # aws-load-balancer-controller chart version
@@ -325,6 +357,7 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+      time: "04:30"
 
   - package-ecosystem: helm
     directory: /pkg/svc/installer/hcloudccm # hcloud-cloud-controller-manager chart version
@@ -332,6 +365,7 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+      time: "04:40"
 
   - package-ecosystem: helm
     directory: /pkg/svc/installer/hetznercsi # hcloud-csi chart version
@@ -339,6 +373,7 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+      time: "04:50"
 
   - package-ecosystem: helm
     directory: /pkg/svc/installer/metricsserver # metrics-server chart version
@@ -346,3 +381,4 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+      time: "05:00"

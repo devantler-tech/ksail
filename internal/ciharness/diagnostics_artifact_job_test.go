@@ -41,6 +41,7 @@ func TestDiagnosticsArtifactProbeIsBlockingAndIncludesCounterfactual(t *testing.
 	}
 
 	verify := findHarnessStep(t, job.Steps, "Verify native outcomes and artifact identity")
+	assert.Equal(t, "verify-artifact", verify.ID)
 	assert.Equal(t, "always()", verify.If)
 	assert.False(t, verify.ContinueOnError)
 	assert.Equal(t, "bash .github/scripts/verify-diagnostics-artifact.sh\n", verify.Run)
@@ -59,17 +60,31 @@ func TestDiagnosticsArtifactProbeIsBlockingAndIncludesCounterfactual(t *testing.
 		assert.Equal(t, expression, verify.Env[key])
 	}
 
-	download := findHarnessStep(t, job.Steps, "Download the observed candidate artifact")
-	assert.Equal(t, "matrix.mode == 'candidate'", download.If)
-	assert.Contains(t, download.Uses, "actions/download-artifact@")
-	assert.Contains(t, findHarnessStep(t, job.Steps, "Verify downloaded diagnostics content").Run,
-		"KSail diagnostics artifact fixture")
+	assertReadbackUsesVerifiedArtifactID(t, job.Steps)
 
 	gate := workflow.Jobs["require-checks-in-pr"]
 	assert.Contains(t, gate.Needs, "system-test-diagnostics-artifact")
 	require.NotEmpty(t, gate.Steps)
 	assert.Contains(t, gate.Steps[0].With["job-results"],
 		"${{ needs.system-test-diagnostics-artifact.result }}")
+}
+
+// The readback must fetch the exact artifact ID the verifier proved; a by-name
+// re-resolution can miss a just-uploaded artifact.
+func assertReadbackUsesVerifiedArtifactID(t *testing.T, steps []harnessStep) {
+	t.Helper()
+
+	download := findHarnessStep(t, steps, "Download the observed candidate artifact")
+	assert.Equal(t, "matrix.mode == 'candidate'", download.If)
+	assert.Empty(t, download.Uses)
+	assert.Equal(t, "${{ steps.verify-artifact.outputs.artifact-id }}", download.Env["ARTIFACT_ID"])
+	assert.Contains(t, download.Run, `actions/artifacts/$ARTIFACT_ID/zip`)
+	// The zip endpoint can 404 for a few seconds after upload finalizes; a
+	// bounded retry absorbs that without hiding a persistent failure.
+	assert.Contains(t, download.Run, `for attempt in 1 2 3 4 5 6; do`)
+	assert.Contains(t, download.Run, `if [ "$attempt" -eq 6 ]; then exit 1; fi`)
+	assert.Contains(t, findHarnessStep(t, steps, "Verify downloaded diagnostics content").Run,
+		"KSail diagnostics artifact fixture")
 }
 
 func assertPinnedFixtureSource(t *testing.T, steps []harnessStep) string {

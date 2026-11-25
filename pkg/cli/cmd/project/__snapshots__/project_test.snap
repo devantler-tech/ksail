@@ -13,7 +13,7 @@ Available Commands:
   init              Initialize a new project
 
 Flags:
-  -h, --help   help for project
+  -h, --help[=true|false]   help for project
 
 Use "project [command] --help" for more information about a command.
 

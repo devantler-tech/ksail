@@ -76,7 +76,7 @@ jobs:
 
       - name: 📤 Open compatibility update PR
         if: steps.catalog.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8.1.3
         with:
           # Commits through the GitHub API rather than the git CLI, because the
           # repository requires signed commits (ruleset "Require signed commits")
@@ -87,7 +87,9 @@ jobs:
           token: ${{ steps.generate-token.outputs.token }}
           branch-token: ${{ steps.generate-token.outputs.token }}
           commit-message: "chore(talos): update Hetzner ISO compatibility pair"
-          committer: "ksail-bot <ksail-bot@users.noreply.github.com>"
+          # The action ignores committer while sign-commits is true: the signed commit is
+          # the App token's bot (botantler-1). This names the same identity for clarity.
+          committer: "botantler-1[bot] <185060876+botantler-1[bot]@users.noreply.github.com>"
           branch: chore/update-hetzner-talos-iso
           base: ${{ github.event.repository.default_branch }}
           title: "chore(talos): update Hetzner ISO compatibility pair"

@@ -343,7 +343,7 @@ func valuesTrialEnv(
 		"GITHUB_WORKSPACE="+repositoryRootForCertTrial(t),
 		"DISTRIBUTION=Vanilla", "PROVIDER=Docker",
 		"ARGS="+args,
-		"K8S_VERSION_FLAG=--kubernetes-version v1.36.2",
+		"K8S_VERSION_FLAG=--kubernetes-version v1.36.2 --distribution-version v1.12.4",
 		"SYSTEM_TEST_LOG_DIR="+dir,
 		"FIXTURE_REVISION="+filepath.Join(dir, "revision"),
 		"FIXTURE_ADMISSION_NAMESPACE="+filepath.Join(dir, "admission-namespace"),

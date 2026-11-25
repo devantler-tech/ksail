@@ -3,6 +3,9 @@ package vclusterprovisioner
 
 import "time"
 
+// MergeReadyVClusterKubeconfigWithClientForTest exposes the readiness publication boundary.
+var MergeReadyVClusterKubeconfigWithClientForTest = mergeReadyVClusterKubeconfigWithClient
+
 // IsTransientCreateErrorForTest exposes isTransientCreateError for unit testing.
 var IsTransientCreateErrorForTest = isTransientCreateError
 

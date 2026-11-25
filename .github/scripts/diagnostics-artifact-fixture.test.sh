@@ -94,7 +94,9 @@ read -r reads <"${FIXTURE_READS:?}"
 printf '%s\n' "$((reads + 1))" >"$FIXTURE_READS"
 [[ "${FIXTURE_API_STATUS:-0}" == 0 ]] || exit 1
 if ((reads < FIXTURE_EMPTY_READS)); then
-	printf '%s\n' '{"total_count":0,"artifacts":[]}'
+	empty=${FIXTURE_EMPTY_REPLY:-}
+	[[ -n "$empty" ]] || empty='{"total_count":0,"artifacts":[]}'
+	printf '%s\n' "$empty"
 	exit 0
 fi
 cat "${FIXTURE_REPLY:?}"
@@ -108,14 +110,17 @@ SH
 chmod +x "$tmp/bin/gh" "$tmp/bin/sleep"
 head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 jq -n --arg head "$head" '{total_count:1,artifacts:[{
-  name:"system-test-diagnostics-fixture-123-1-candidate",expired:false,size_in_bytes:42,
+  id:14880686892,name:"system-test-diagnostics-fixture-123-1-candidate",expired:false,size_in_bytes:42,
   workflow_run:{id:123,head_sha:$head}}]}' >"$tmp/valid.json"
 verify() {
 	printf '0\n' >"$tmp/reads"
 	: >"$tmp/delays"
+	: >"$tmp/output"
 	env PATH="$tmp/bin:$PATH" FIXTURE_REPLY="$tmp/reply.json" \
 		FIXTURE_READS="$tmp/reads" FIXTURE_DELAYS="$tmp/delays" \
 		FIXTURE_EMPTY_READS="${FIXTURE_EMPTY_READS:-0}" \
+		FIXTURE_EMPTY_REPLY="${FIXTURE_EMPTY_REPLY:-}" \
+		GITHUB_OUTPUT="$tmp/output" \
 		FIXTURE_MODE="$1" PROBE_OUTCOME=failure TRIAL_OUTCOME=failure \
 		SAVE_OUTCOME="$2" UPLOAD_OUTCOME="$2" EXPECTED_HEAD="$head" \
 		GITHUB_REPOSITORY=fixture/fixture GITHUB_RUN_ID=123 GITHUB_RUN_ATTEMPT=1 \
@@ -125,11 +130,25 @@ verify() {
 cp "$tmp/valid.json" "$tmp/reply.json"
 verify candidate success
 [[ "$(cat "$tmp/reads")" == 1 && ! -s "$tmp/delays" ]]
+# The readback must receive the exact verified identity, not re-resolve a name.
+printf 'artifact-id=14880686892\n' | cmp - "$tmp/output"
 FIXTURE_EMPTY_READS=1 verify candidate success
 [[ "$(cat "$tmp/reads")" == 2 && "$(cat "$tmp/delays")" == 1 ]]
 printf '{"total_count":0,"artifacts":[]}' >"$tmp/reply.json"
 if verify candidate success >"$tmp/rejected.log" 2>&1; then
 	echo 'persistent absence was accepted for a successful upload' >&2
+	exit 1
+fi
+[[ "$(cat "$tmp/reads")" == 4 ]]
+printf '1\n2\n4\n' | cmp - "$tmp/delays"
+grep -q 'artifact did not become visible after 4 reads' "$tmp/rejected.log"
+# The count can reach 1 before the artifact is listed (#8475): wait, then verify.
+cp "$tmp/valid.json" "$tmp/reply.json"
+FIXTURE_EMPTY_READS=1 FIXTURE_EMPTY_REPLY='{"total_count":1,"artifacts":[]}' verify candidate success
+[[ "$(cat "$tmp/reads")" == 2 && "$(cat "$tmp/delays")" == 1 ]]
+printf '{"total_count":1,"artifacts":[]}' >"$tmp/reply.json"
+if verify candidate success >"$tmp/rejected.log" 2>&1; then
+	echo 'a count with no listed artifact was accepted' >&2
 	exit 1
 fi
 [[ "$(cat "$tmp/reads")" == 4 ]]
@@ -142,6 +161,10 @@ fi
 [[ "$(cat "$tmp/reads")" == 1 && ! -s "$tmp/delays" ]]
 for mutation in \
 	'.total_count = 2' \
+	'.artifacts[0].id = "14880686892"' \
+	'.artifacts[0].id = null' \
+	'.artifacts[0].id = 0' \
+	'.artifacts[0].id = 1.5' \
 	'.artifacts[0].workflow_run.head_sha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"' \
 	'.artifacts[0].workflow_run.id = 124' \
 	'.artifacts[0].expired = true' \
@@ -154,13 +177,16 @@ for mutation in \
 	'.artifacts[0].size_in_bytes = 0' \
 	'.artifacts[0].size_in_bytes = -1' \
 	'.artifacts[0].size_in_bytes = 1.5' \
-	'.artifacts = []'; do
+	'.total_count = 2 | .artifacts = []'; do
 	jq "$mutation" "$tmp/valid.json" >"$tmp/reply.json"
 	if verify candidate success >"$tmp/rejected.log" 2>&1; then
 		echo "unsafe artifact evidence accepted: $mutation" >&2
 		exit 1
 	fi
-	[[ "$(cat "$tmp/reads")" == 1 && ! -s "$tmp/delays" ]]
+	[[ "$(cat "$tmp/reads")" == 1 && ! -s "$tmp/delays" && ! -s "$tmp/output" ]]
+	# A rejection must name the evidence it refused, never exit silently.
+	grep -qF "artifact evidence rejected (expected name=system-test-diagnostics-fixture-123-1-candidate run=123 head=$head)" "$tmp/rejected.log"
+	grep -qxF "$(jq -c '.' "$tmp/reply.json")" "$tmp/rejected.log"
 done
 # A successful final JSON document must not hide an earlier invalid response.
 printf '{"total_count":2,"artifacts":[]}\n' >"$tmp/reply.json"
@@ -171,7 +197,7 @@ if verify candidate success >"$tmp/rejected.log" 2>&1; then
 fi
 printf '{"total_count":0,"artifacts":[]}' >"$tmp/reply.json"
 verify baseline skipped
-[[ "$(cat "$tmp/reads")" == 1 && ! -s "$tmp/delays" ]]
+[[ "$(cat "$tmp/reads")" == 1 && ! -s "$tmp/delays" && ! -s "$tmp/output" ]]
 printf '{"total_count":1,"artifacts":[]}\n{"total_count":0,"artifacts":[]}' >"$tmp/reply.json"
 if verify baseline skipped >"$tmp/rejected.log" 2>&1; then
 	echo 'multiple API response documents authorized baseline absence' >&2

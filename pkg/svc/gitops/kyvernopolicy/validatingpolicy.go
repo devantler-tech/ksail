@@ -23,7 +23,6 @@ import (
 	engineapi "github.com/kyverno/kyverno/pkg/engine/api"
 	admissionv1 "k8s.io/api/admission/v1"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
-	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -428,16 +427,26 @@ func renderedNamespaces(docs []map[string]any) map[string]*corev1.Namespace {
 	return known
 }
 
-// Evaluate applies every policy to doc, simulating its creation, and returns
-// the failing and erroring validations. A NamespacedValidatingPolicy applies
-// only to documents in its own namespace. A policy that selects on namespace
-// labels, for a document whose Namespace is not among the rendered documents,
-// is evaluated only when the immutable name label determines its selector.
-// Other selectors and namespaceObject reads are reported as Unsupported.
-// Such a report, like one for a policy that
-// cannot run offline at all, is made only for documents the policy's other
-// match constraints select. As with Evaluate, doc's namespace is used as given.
+// Evaluate is EvaluateAs with no declared admission identity.
 func (e *CELEngine) Evaluate(ctx context.Context, doc map[string]any) ([]Violation, error) {
+	return e.EvaluateAs(ctx, doc, nil)
+}
+
+// EvaluateAs applies every policy to doc, simulating its creation by identity,
+// and returns the failing and erroring validations. A
+// NamespacedValidatingPolicy applies only to documents in its own namespace. A
+// policy that selects on namespace labels, for a document whose Namespace is
+// not among the rendered documents, is evaluated only when the immutable name
+// label determines its selector. Other selectors and namespaceObject reads are
+// reported as Unsupported. Such a report, like one for a policy that cannot run
+// offline at all, is made only for documents the policy's other match
+// constraints select. As with Engine.EvaluateAs, doc's namespace is used as
+// given. identity supplies the request's userInfo; nil is an empty requester.
+func (e *CELEngine) EvaluateAs(
+	ctx context.Context,
+	doc map[string]any,
+	identity *Identity,
+) ([]Violation, error) {
 	resource := &unstructured.Unstructured{Object: doc}
 	namespace := resource.GetNamespace()
 
@@ -472,7 +481,7 @@ func (e *CELEngine) Evaluate(ctx context.Context, doc map[string]any) ([]Violati
 			continue
 		}
 
-		response, err := entry.engine.Handle(ctx, admissionRequest(resource), nil)
+		response, err := entry.engine.Handle(ctx, admissionRequest(resource, identity), nil)
 		if err != nil {
 			return nil, fmt.Errorf("evaluate %s: %w", celPolicyName(policy), err)
 		}
@@ -488,8 +497,11 @@ func (e *CELEngine) Evaluate(ctx context.Context, doc map[string]any) ([]Violati
 // admissionRequest builds the create request the policy would see at admission.
 // Without API discovery the resource name is guessed from the kind, as kubectl
 // does offline; resourceRules name plural resources, so the guess is what they
-// match against.
-func admissionRequest(resource *unstructured.Unstructured) celengine.EngineRequest {
+// match against. identity supplies the request's userInfo; nil leaves it empty.
+func admissionRequest(
+	resource *unstructured.Unstructured,
+	identity *Identity,
+) celengine.EngineRequest {
 	gvk := resource.GroupVersionKind()
 	gvr, _ := meta.UnsafeGuessKindToResource(gvk)
 
@@ -501,7 +513,7 @@ func admissionRequest(resource *unstructured.Unstructured) celengine.EngineReque
 		resource.GetName(),
 		resource.GetNamespace(),
 		admissionv1.Create,
-		authenticationv1.UserInfo{},
+		identity.userInfo(),
 		resource,
 		nil,
 		false,

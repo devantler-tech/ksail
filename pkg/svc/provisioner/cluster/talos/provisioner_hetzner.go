@@ -140,8 +140,9 @@ func (p *Provisioner) createHetznerNodeGroups(
 //
 // By default the endpoint is the first control-plane node's reachable IP. When
 // FloatingIPEnabled is set, a cluster-owned Hetzner floating IP is ensured,
-// attached to the first control-plane server, and rendered as the endpoint
-// instead — with the control-plane node IPs added to the certificate SANs so
+// initially attached when unassigned, and rendered as the endpoint instead.
+// An existing control-plane holder is preserved because Talos owns VIP elections.
+// The control-plane node IPs are added to the certificate SANs so
 // direct node access (and the readiness checks, which dial the first node)
 // keeps verifying, and a Talos VIP block on the control-plane configs so the
 // elected leader owns the address from then on (the explicit attach is only
@@ -208,19 +209,9 @@ func (p *Provisioner) regenerateHetznerEndpointConfigs(
 
 	_, _ = fmt.Fprintf(p.logWriter, "Regenerating configs with endpoint IP %s...\n", endpointIP)
 
-	updatedConfigs, err := p.talosConfigs.WithEndpoint(endpointIP)
-	if err != nil {
-		return fmt.Errorf("failed to regenerate configs with endpoint: %w", err)
-	}
-
-	if len(certSANs) > 0 {
-		updatedConfigs, err = updatedConfigs.WithCertSANs(certSANs)
-		if err != nil {
-			return fmt.Errorf("failed to regenerate configs with cert SANs: %w", err)
-		}
-	}
-
-	updatedConfigs, err = p.withHetznerVIPIfEnabled(updatedConfigs, endpointIP)
+	updatedConfigs, err := hetznerEndpointConfigs(
+		p.talosConfigs, endpointIP, certSANs, p.hetznerOpts.FloatingIPEnabled, p.hetznerAPIToken,
+	)
 	if err != nil {
 		return err
 	}
@@ -291,20 +282,48 @@ func (p *Provisioner) prepareFloatingIPConfig(
 	return floatingIP, nil
 }
 
-// withHetznerVIPIfEnabled renders the Talos VIP block for the floating-IP
-// endpoint onto the control-plane configs when FloatingIPEnabled is set —
-// the node-side ownership handover that makes the elected leader claim the
-// floating IP via the hcloud API on every leader change. Returns the configs
-// unchanged when the floating IP is disabled.
-func (p *Provisioner) withHetznerVIPIfEnabled(
+// hetznerEndpointConfigs regenerates configs around the Hetzner endpoint: the
+// endpoint itself, the certificate SAN set when one is supplied, and — when
+// floatingIPEnabled is set — the Talos VIP block for the floating-IP endpoint on
+// the control-plane configs (the node-side ownership handover that makes the
+// elected leader claim the floating IP via the hcloud API on every leader
+// change). It touches no cloud API: the token is only embedded in the VIP block.
+// It is the single renderer shared by cluster create/update and the offline
+// cluster render command, so the two cannot drift.
+func hetznerEndpointConfigs(
 	configs *talosconfigmanager.Configs,
 	endpointIP string,
+	certSANs []string,
+	floatingIPEnabled bool,
+	token func() (string, error),
 ) (*talosconfigmanager.Configs, error) {
-	if !p.hetznerOpts.FloatingIPEnabled {
-		return configs, nil
+	updated, err := configs.WithEndpoint(endpointIP)
+	if err != nil {
+		return nil, fmt.Errorf("failed to regenerate configs with endpoint: %w", err)
 	}
 
-	token, err := p.hetznerAPIToken()
+	if len(certSANs) > 0 {
+		updated, err = updated.WithCertSANs(certSANs)
+		if err != nil {
+			return nil, fmt.Errorf("failed to regenerate configs with cert SANs: %w", err)
+		}
+	}
+
+	if !floatingIPEnabled {
+		return updated, nil
+	}
+
+	return withHetznerVIP(updated, endpointIP, token)
+}
+
+// withHetznerVIP renders the Talos VIP block for the floating-IP endpoint onto
+// the control-plane configs.
+func withHetznerVIP(
+	configs *talosconfigmanager.Configs,
+	endpointIP string,
+	tokenFn func() (string, error),
+) (*talosconfigmanager.Configs, error) {
+	token, err := tokenFn()
 	if err != nil {
 		return nil, err
 	}
@@ -334,9 +353,10 @@ func (p *Provisioner) hetznerAPIToken() (string, error) {
 	return token, nil
 }
 
-// ensureFloatingIPEndpoint ensures the cluster's floating IP exists, attaches
-// it to the first control-plane server, and returns it as the stable endpoint
-// together with the certificate SAN set (floating IP + every control-plane
+// ensureFloatingIPEndpoint ensures the cluster's floating IP exists, initially
+// attaches an unassigned address, and returns it as the stable endpoint.
+// Existing control-plane attachments belong to Talos's VIP election. It also
+// returns the certificate SAN set (floating IP + every control-plane
 // node IP). The node IPs must stay in the SAN set because clients — including
 // KSail's own cluster-readiness checks — still dial nodes directly.
 func (p *Provisioner) ensureFloatingIPEndpoint(
@@ -352,9 +372,21 @@ func (p *Provisioner) ensureFloatingIPEndpoint(
 		return "", nil, fmt.Errorf("failed to ensure floating IP: %w", err)
 	}
 
-	err = hzProvider.AttachFloatingIPToServer(ctx, floatingIP, controlPlaneServers[0])
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to attach floating IP: %w", err)
+	holder := controlPlaneServers[0]
+	if floatingIP.Server != nil {
+		index := slices.IndexFunc(controlPlaneServers, func(server *hcloud.Server) bool {
+			return server != nil && server.ID > 0 && server.ID == floatingIP.Server.ID
+		})
+		if index < 0 {
+			return "", nil, errFloatingIPHolderOutsideControlPlanes
+		}
+
+		holder = controlPlaneServers[index]
+	} else {
+		err = hzProvider.AttachFloatingIPToServer(ctx, floatingIP, holder)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to attach floating IP: %w", err)
+		}
 	}
 
 	endpointIP := floatingIP.IP.String()
@@ -363,7 +395,7 @@ func (p *Provisioner) ensureFloatingIPEndpoint(
 		p.logWriter,
 		"  ✓ Floating IP %s attached to %s\n",
 		endpointIP,
-		controlPlaneServers[0].Name,
+		holder.Name,
 	)
 
 	p.warnAboutStrayFloatingIPs(ctx, hzProvider, clusterName)
@@ -459,6 +491,10 @@ func hetznerFloatingIPEndpointCertSANs(
 // beats the silent no-op the change was detected to fix (#5947).
 var errFloatingIPConfigsUnavailable = errors.New(
 	"cannot reconcile floating IP: talos configs are not loaded",
+)
+
+var errFloatingIPHolderOutsideControlPlanes = errors.New(
+	"floating IP holder is outside the control-plane inventory",
 )
 
 // reconcileFloatingIPEndpoint applies a detected floatingIPEnabled change
@@ -1551,6 +1587,9 @@ func (p *Provisioner) deleteHetznerCluster(ctx context.Context, clusterName stri
 
 	// Delete all nodes and infrastructure
 	_, _ = fmt.Fprintf(p.logWriter, "Deleting Talos cluster %q on Hetzner...\n", clusterName)
+
+	// Same-named resources KSail does not own are kept; report them here.
+	hetznerProv.SetLogWriter(p.logWriter)
 
 	err = hetznerProv.DeleteNodes(ctx, clusterName)
 	if err != nil {

@@ -26,7 +26,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/kyvernopolicy"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/gitops/render"
 	"github.com/spf13/cobra"
-	kustomizeTypes "sigs.k8s.io/kustomize/api/types"
 )
 
 const (
@@ -56,6 +55,13 @@ The validation process:
    patchesStrategicMerge, or patchesJson6902 are excluded — they are not valid standalone
    Kubernetes resources and are validated as part of the kustomize build output instead)
 2. Validates kustomizations by building them with kustomize and validating the output
+
+With --kyverno-policies, admission follows the Flux Kustomizations the tree renders from its
+own flux-system source: the kustomization folder each spec.path names is checked from its own
+build, as its serviceAccountName (or the kustomize-controller). The Kustomization's targetNamespace,
+patches and other composition are not applied. An admission failure
+in a folder no Kustomization applies, an ambiguous binding and a path outside the
+validated tree each fail with a named error.
 
 	Flux variable substitutions are resolved before validation using type-aware placeholders:
   - ${VAR} (bare, no default): when a JSON schema type is available, substitutes a typed
@@ -352,8 +358,19 @@ func runValidateCmdInner(
 
 	return validatePath(
 		ctx, cmd, path, kubeconformClient, validationOpts, renderer, engine, kyvernoPolicies,
-		apiCallFixture,
+		apiCallFixture, fluxArtifactRoot(cfg, configFound, loadErr),
 	)
+}
+
+// fluxArtifactRoot is the folder Flux Kustomization paths from a pushed artifact
+// resolve against: the configured source directory, which workload push
+// publishes. It is empty without a loaded ksail.yaml.
+func fluxArtifactRoot(cfg *v1alpha1.Cluster, configFound bool, loadErr error) string {
+	if !configFound || loadErr != nil || cfg == nil {
+		return ""
+	}
+
+	return resolveSourceDir(cfg, "")
 }
 
 // resolveKyvernoPolicies returns whether to evaluate the source's own Kyverno
@@ -882,6 +899,7 @@ func validatePath(
 	engine *celrules.Engine,
 	kyvernoPolicies bool,
 	apiCallFixture kyvernoAPICallFixture,
+	artifactRoot string,
 ) error {
 	// Check if path exists
 	info, err := os.Stat(path)
@@ -899,7 +917,7 @@ func validatePath(
 	// If it's a directory, walk it to find YAML files and kustomizations
 	return validateDirectory(
 		ctx, cmd, path, kubeconformClient, opts, renderer, engine, kyvernoPolicies,
-		apiCallFixture,
+		apiCallFixture, artifactRoot,
 	)
 }
 
@@ -952,6 +970,7 @@ func validateDirectory(
 	engine *celrules.Engine,
 	kyvernoPolicies bool,
 	apiCallFixture kyvernoAPICallFixture,
+	artifactRoot string,
 ) error {
 	targets, err := discoverValidationTargets(dirPath)
 	if err != nil {
@@ -990,6 +1009,7 @@ func validateDirectory(
 			kyverno:          kyvernoPolicies,
 			kyvernoSink:      kyvernoSink,
 			apiCallResponses: apiCallFixture.responses,
+			sourceRoots:      resolveFluxSourceRoots(dirPath, artifactRoot),
 		}
 
 		err := validator.run(ctx, cmd, kustomizations, progressOpts)
@@ -999,14 +1019,9 @@ func validateDirectory(
 	}
 
 	// Validate individual YAML files in parallel with progress display
-	err = validateYAMLFiles(
+	return validateYAMLFiles(
 		ctx, cmd, dirPath, yamlFiles, kubeconformClient, opts, engine, celSink, progressOpts,
 	)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // validateYAMLFiles validates the loose YAML files in a directory in parallel,
@@ -1098,9 +1113,11 @@ type kustomizationValidator struct {
 	opts             *kubeconform.ValidationOptions
 	engine           *celrules.Engine               // nil → CEL rule validation disabled
 	celSink          *celViolationSink              // collects warning-severity CEL violations
-	kyverno          bool                           // evaluate each output's own Kyverno policies
+	kyverno          bool                           // evaluate each output against the Kyverno policies
 	kyvernoSink      *celViolationSink              // collects non-blocking Kyverno results
 	apiCallResponses kyvernopolicy.APICallResponses // reviewed offline Kubernetes API context
+	kustomizations   []string                       // every kustomization folder in the tree
+	sourceRoots      fluxSourceRoots                // where Flux Kustomization paths resolve
 
 	// kyvernoInputs holds each validated kustomization's output for the Kyverno
 	// pass, which runs after every output is rendered so Namespaces rendered by one
@@ -1131,6 +1148,8 @@ func (v *kustomizationValidator) run(
 	kustomizations []string,
 	progressOpts []notify.ProgressOption,
 ) error {
+	v.kustomizations = kustomizations
+
 	err := runParallelValidation(
 		ctx, cmd, kustomizations, v.dirPath, "Validating kustomizations", "✅",
 		v.validate,
@@ -1148,10 +1167,10 @@ func (v *kustomizationValidator) run(
 	return errors.Join(err, v.runKyverno(ctx, cmd, progressOpts))
 }
 
-// runKyverno evaluates every stored output's own Kyverno policies once all
-// outputs are rendered, giving each the Namespaces the others render (see
-// sharedNamespaces). It is a no-op when the pass is disabled or nothing passed the
-// first pass.
+// runKyverno evaluates every stored output against its own Kyverno policies and
+// the cluster-scoped ones every other output renders, once all outputs are
+// rendered, giving each the Namespaces the others render too (see kyvernoShared).
+// It is a no-op when the pass is disabled or nothing passed the first pass.
 func (v *kustomizationValidator) runKyverno(
 	ctx context.Context,
 	cmd *cobra.Command,
@@ -1169,25 +1188,68 @@ func (v *kustomizationValidator) runKyverno(
 		outputs = append(outputs, v.renderedOutputs[dir])
 	}
 
-	shared := sharedNamespaces(outputs)
+	shared := kyvernoShared{
+		namespaces: sharedNamespaces(outputs),
+		policies:   sharedClusterPolicies(outputs),
+	}
+
+	plan, bindingErr := planFluxBindings(
+		v.dirPath, v.sourceRoots, v.kustomizations, v.renderedOutputs,
+	)
+
+	dirs = slices.DeleteFunc(dirs, func(dir string) bool { return !plan.target(dir) })
 
 	err := runParallelValidation(
 		ctx, cmd, dirs, v.dirPath, "Evaluating Kyverno policies", "🛡️",
 		func(taskCtx context.Context, dir string) error {
-			input := v.kyvernoInputs[dir]
-
-			return evaluateKyvernoDocuments(
-				taskCtx, true, input.data, dir, input.skipKinds, v.kyvernoSink,
-				input.attribution, shared, v.apiCallResponses,
-			)
+			return v.evaluateKyvernoTarget(taskCtx, dir, plan, shared)
 		},
 		append(progressOpts, notify.WithCountLabel("kustomizations"))...,
 	)
 	if err != nil {
-		return fmt.Errorf("kyverno policy evaluation failed: %w", err)
+		err = fmt.Errorf("kyverno policy evaluation failed: %w", err)
 	}
 
-	return nil
+	if bindingErr != nil {
+		bindingErr = fmt.Errorf("flux Kustomization binding failed: %w", bindingErr)
+	}
+
+	return errors.Join(bindingErr, err)
+}
+
+// evaluateKyvernoTarget evaluates one folder's admission. A folder a Flux
+// Kustomization binds is evaluated from its own build as the identity Flux
+// applies it as. Without bindings in the tree every folder is evaluated with no
+// identity, as before; with bindings, a failure in an unbound folder is named
+// as such.
+func (v *kustomizationValidator) evaluateKyvernoTarget(
+	ctx context.Context,
+	dir string,
+	plan fluxBindingPlan,
+	shared kyvernoShared,
+) error {
+	input := v.kyvernoInputs[dir]
+
+	binding, bound := plan.bindings[dir]
+	if !bound {
+		err := evaluateKyvernoDocuments(
+			ctx, true, input.data, dir, input.skipKinds, v.kyvernoSink,
+			input.attribution, shared, v.apiCallResponses, nil,
+		)
+		if err != nil && plan.active {
+			return fmt.Errorf(
+				"%w: %s is evaluated with no admission identity: %w",
+				ErrUnboundFluxKustomization, dir, err,
+			)
+		}
+
+		return err
+	}
+
+	return evaluateKyvernoDocuments(
+		ctx, true, input.data, binding.source(dir), input.skipKinds, v.kyvernoSink,
+		input.attribution, shared, v.apiCallResponses, &binding.identity,
+	)
 }
 
 // validate builds (and optionally renders) a kustomization and validates the
@@ -1592,27 +1654,8 @@ func collectPatchPaths(rootDir string, kustomizationDirs []string) map[string]st
 // collectPatchPathsFromDir parses a kustomization file (trying all recognized names)
 // and adds the absolute paths of referenced patch files to the provided set.
 func collectPatchPathsFromDir(rootDir, kustDir string, patchPaths map[string]struct{}) {
-	var data []byte
-
-	var err error
-
-	for _, name := range kustomizationFileNames {
-		kustFile := filepath.Join(kustDir, name)
-
-		data, err = fsutil.ReadFileSafe(rootDir, kustFile)
-		if err == nil {
-			break
-		}
-	}
-
-	if err != nil {
-		return
-	}
-
-	var kust kustomizeTypes.Kustomization
-
-	err = kust.Unmarshal(data)
-	if err != nil {
+	kust, ok := readKustomization(rootDir, kustDir)
+	if !ok {
 		return
 	}
 

@@ -157,7 +157,7 @@ jobs:
       copilot-plugin: ${{ steps.filter.outputs.copilot-plugin }}
       operator-chart: ${{ steps.filter.outputs.operator-chart }}
       calico-cni: ${{ steps.filter.outputs.calico-cni }}
-      cask-pr-handoff: ${{ steps.filter.outputs.cask-pr-handoff }}
+      release-publication-scripts: ${{ steps.filter.outputs.release-publication-scripts }}
       eks-smoke-scripts: ${{ steps.filter.outputs.eks-smoke-scripts }}
       k3k-sentinel-scripts: ${{ steps.filter.outputs.k3k-sentinel-scripts }}
       rate-limit-gate-script: ${{ steps.filter.outputs.rate-limit-gate-script }}
@@ -247,7 +247,6 @@ jobs:
               # metadata edits that the shared Go source filter does not select.
               - 'third_party/cel-go/**'
               - 'third_party/glamour/**'
-              - 'third_party/go-macholibre/**'
               - 'third_party/kyverno-jmespath/**'
               - 'third_party/jmespath/**'
               - 'third_party/ansi/**'
@@ -275,7 +274,6 @@ jobs:
               - '.github/scripts/go-notices.go'
               - '.github/actions/release-admission/**'
               - '.github/scripts/download-go-modules.sh'
-              - '.github/scripts/cask-rendering.test.sh'
               - '.github/scripts/generate-completions.sh'
               - '.goreleaser.yaml'
               - '.goreleaser.desktop.yaml'
@@ -303,6 +301,7 @@ jobs:
               - 'internal/depcontract/**'
               - 'pkg/svc/installer/cni/cilium/Dockerfile'
               - 'pkg/svc/installer/kyverno/Dockerfile'
+              - 'pkg/fsutil/configmanager/talos/Dockerfile'
               - '.github/dependabot.yaml'
               - 'go.mod'
               - 'go.sum'
@@ -453,42 +452,18 @@ jobs:
               # so guard a bump to this file with validate-calico-chart.
               - 'pkg/svc/installer/cni/calico/Dockerfile'
               - '.github/workflows/ci.yaml'
-            cask-pr-handoff:
-              - '.github/scripts/reconcile-cask-handoff.sh'
-              - '.github/scripts/reconcile-cask-handoff.test.sh'
-              - '.github/workflows/reconcile-cask-handoff.yaml'
-              - '.github/scripts/verify-published-desktop-archive.sh'
-              - '.github/scripts/verify-published-desktop-archive.test.sh'
-              - 'desktop/scripts/verify-macos-archive.sh'
-              - '.github/scripts/cask-read-api.sh'
-              - '.github/scripts/cask-read-api.test.sh'
+            release-publication-scripts:
               - 'server.json'
               - '.goreleaser.yaml'
               - '.goreleaser.desktop.yaml'
-              - '.github/fixtures/cask-pr-handoff/**'
-              - '.github/scripts/cask-pr-handoff-workflow.test.sh'
-              - '.github/scripts/collect-cask-pr-handoff.sh'
-              - '.github/scripts/collect-cask-pr-handoff.test.sh'
-              - '.github/scripts/finish-cask-pr-handoff.sh'
-              - '.github/scripts/finish-cask-pr-handoff.test.sh'
-              - '.github/scripts/find-merged-cask-pr-handoff.sh'
-              - '.github/scripts/find-merged-cask-pr-handoff.test.sh'
-              - '.github/scripts/redraft-evergreen-cask-prs.sh'
-              - '.github/scripts/redraft-evergreen-cask-prs.test.sh'
-              - '.github/scripts/resolve-cask-publication.sh'
-              - '.github/scripts/resolve-cask-publication.test.sh'
               - '.github/scripts/resolve-release-publish-state.sh'
               - '.github/scripts/resolve-release-publish-state.test.sh'
               - '.github/scripts/publish-mcp-registry.sh'
               - '.github/scripts/publish-mcp-registry.test.sh'
-              - '.github/scripts/style-clean-cask-branch.sh'
-              - '.github/scripts/style-clean-cask-branch.test.sh'
               - '.github/scripts/upload-release-assets.sh'
               - '.github/scripts/upload-release-assets.test.sh'
-              - '.github/scripts/validate-cask-pr-handoff.sh'
               - '.github/scripts/wait-for-github-api-budget.sh'
               - '.github/scripts/wait-for-github-api-budget.test.sh'
-              - '.github/scripts/validate-cask-pr-handoff.test.sh'
               - '.github/workflows/cd.yaml'
               - '.github/workflows/ci.yaml'
             eks-smoke-scripts:
@@ -517,6 +492,9 @@ jobs:
               - '.github/workflows/ci.yaml'
             hetzner-cleanup-script:
               - '.github/actions/cleanup-hetzner/**'
+              - '.github/scripts/verify-hetzner-absence.sh'
+              - '.github/scripts/verify-hetzner-absence.test.sh'
+              - '.github/workflows/verify-hetzner-absence.yaml'
               - '.github/workflows/ci.yaml'
             gitops-assert-scripts:
               - '.github/scripts/assert-gitops-deployed.sh'
@@ -720,6 +698,8 @@ jobs:
             .github/actions/cleanup-hetzner/cleanup-hetzner.sh \
             .github/actions/cleanup-hetzner/cleanup-hetzner.test.sh
           .github/actions/cleanup-hetzner/cleanup-hetzner.test.sh
+          shellcheck .github/scripts/verify-hetzner-absence.sh .github/scripts/verify-hetzner-absence.test.sh
+          bash .github/scripts/verify-hetzner-absence.test.sh
 
   gitops-assert-scripts:
     name: 🔐 Validate GitOps And Workload Guards
@@ -749,28 +729,12 @@ jobs:
           .github/actions/ksail-test-workload/remote-resource-guard.test.sh
           .github/actions/ksail-test-workload/install-with-recovery.test.sh
 
-  desktop-recovery-signature:
-    name: 🔐 Verify Published Desktop Signature
-    runs-on: macos-latest
-    timeout-minutes: 5
-    needs: [changes]
-    if: needs.changes.outputs.cask-pr-handoff == 'true'
-    permissions:
-      contents: read
-    steps:
-      - name: 📄 Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Verify real resource seals in publication recovery
-        run: bash .github/scripts/verify-published-desktop-archive.test.sh
-
-  cask-pr-handoff:
-    name: 🔐 Validate Cask PR Handoff
+  release-publication-scripts:
+    name: 🔐 Validate Release Publication Scripts
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: [changes]
-    if: needs.changes.outputs.cask-pr-handoff == 'true'
+    if: needs.changes.outputs.release-publication-scripts == 'true'
     permissions:
       contents: read
     steps:
@@ -779,66 +743,24 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: 🔐 Verify fail-closed cask PR handoff
+      - name: 🔐 Verify fail-closed release publication scripts
         run: |
           suite_failed=0
           shellcheck \
-            .github/scripts/reconcile-cask-handoff.sh \
-            .github/scripts/reconcile-cask-handoff.test.sh \
-            .github/fixtures/cask-pr-handoff/fake-bin/gh \
-            .github/scripts/cask-read-api.sh \
-            .github/scripts/cask-read-api.test.sh \
-            .github/scripts/collect-cask-pr-handoff.sh \
-            .github/scripts/collect-cask-pr-handoff.test.sh \
-            .github/scripts/finish-cask-pr-handoff.sh \
-            .github/scripts/finish-cask-pr-handoff.test.sh \
-            .github/scripts/find-merged-cask-pr-handoff.sh \
-            .github/scripts/find-merged-cask-pr-handoff.test.sh \
-            .github/scripts/redraft-evergreen-cask-prs.sh \
-            .github/scripts/redraft-evergreen-cask-prs.test.sh \
-            .github/scripts/resolve-cask-publication.sh \
-            .github/scripts/resolve-cask-publication.test.sh \
             .github/scripts/resolve-release-publish-state.sh \
             .github/scripts/resolve-release-publish-state.test.sh \
-            .github/scripts/style-clean-cask-branch.sh \
-            .github/scripts/style-clean-cask-branch.test.sh \
             .github/scripts/upload-release-assets.sh \
             .github/scripts/upload-release-assets.test.sh \
-            .github/scripts/validate-cask-pr-handoff.sh \
-            .github/scripts/validate-cask-pr-handoff.test.sh \
-            .github/scripts/verify-published-desktop-archive.sh \
-            .github/scripts/verify-published-desktop-archive.test.sh \
             .github/scripts/wait-for-github-api-budget.sh \
-            .github/scripts/wait-for-github-api-budget.test.sh \
-            .github/scripts/cask-pr-handoff-workflow.test.sh || suite_failed=$?
+            .github/scripts/wait-for-github-api-budget.test.sh || suite_failed=$?
           # Keep independent behavioral results visible even when lint fails.
           # The final aggregate still fails for every nonzero check or suite.
           set +e
-          .github/scripts/reconcile-cask-handoff.test.sh
-          suite_failed=$((suite_failed | $?))
-          .github/scripts/cask-read-api.test.sh
-          suite_failed=$((suite_failed | $?))
-          .github/scripts/collect-cask-pr-handoff.test.sh
-          suite_failed=$((suite_failed | $?))
-          .github/scripts/finish-cask-pr-handoff.test.sh
-          suite_failed=$((suite_failed | $?))
-          .github/scripts/find-merged-cask-pr-handoff.test.sh
-          suite_failed=$((suite_failed | $?))
-          .github/scripts/redraft-evergreen-cask-prs.test.sh
-          suite_failed=$((suite_failed | $?))
-          .github/scripts/resolve-cask-publication.test.sh
-          suite_failed=$((suite_failed | $?))
           .github/scripts/resolve-release-publish-state.test.sh
-          suite_failed=$((suite_failed | $?))
-          .github/scripts/style-clean-cask-branch.test.sh
           suite_failed=$((suite_failed | $?))
           .github/scripts/upload-release-assets.test.sh
           suite_failed=$((suite_failed | $?))
-          .github/scripts/validate-cask-pr-handoff.test.sh
-          suite_failed=$((suite_failed | $?))
           .github/scripts/wait-for-github-api-budget.test.sh
-          suite_failed=$((suite_failed | $?))
-          .github/scripts/cask-pr-handoff-workflow.test.sh
           suite_failed=$((suite_failed | $?))
           exit "$suite_failed"
 
@@ -875,7 +797,7 @@ jobs:
       || (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
       && needs.changes.outputs.govuln-allowlist == 'true')
-    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@9ba573406426900207a3b5afeebe16f2d89ca751 # v20.1.18
+    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@cd371c6003deca3a3b417b783da73e05b4bf690f # v22.0.0
     # The canonical defaults make a default-branch run answer "did the check run" rather than
     # "did the diff touch a Go file". On main the branch's green IS the protection
     # signal, so a path filter that skips the suite or the scan leaves main green
@@ -1015,6 +937,13 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+
+      # The provenance checks build the module verifier and load the module graph; fetch
+      # what they need through the bounded retry so one dropped Go proxy stream does not
+      # fail the job (#8053). The pinned upstream releases they compare against are
+      # fetched by the check scripts themselves, through the same retry.
+      - name: 📥 Download Go modules
+        run: bash .github/scripts/download-go-package-modules.sh ./internal/moduleintegrity/cmd/verify
 
       - name: 📦 Verify release installer
         run: .github/scripts/install-release.test.sh
@@ -1248,7 +1177,7 @@ jobs:
       - name: 🧹 Free disk space
         if: steps.calico-cache.outputs.cache-hit != 'true'
         # Only cold compilation needs the large working-space reclamation.
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@1ede3ba954c719fd3b50362e29bd22cc30d6ff15
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@c28efa3c57adf582c4c780b213287c2cae61a431
 
       - name: ♻️ Restore Go modules
         if: steps.calico-cache.outputs.cache-hit != 'true'
@@ -1648,7 +1577,7 @@ jobs:
       - name: 📤 Open PR for generated changes (protected branch)
         id: protected-repair
         if: github.event_name != 'pull_request'
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8.1.3
         with:
           token: ${{ steps.generate-token.outputs.token }}
           commit-message: "chore: sync modules and update generated files"
@@ -1676,7 +1605,9 @@ jobs:
   home-isolation:
     name: 🏠 Home Isolation Guard
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # The step runs the whole go test suite: passing runs took 16-24 minutes
+    # on 2026-11-24, and two main pushes hit a 25-minute ceiling mid-suite.
+    timeout-minutes: 40
     needs: [changes]
     if: github.event_name != 'merge_group' && needs.changes.outputs.code == 'true'
     permissions:
@@ -2147,7 +2078,7 @@ jobs:
       # This job already waits for the producer. Reuse its exact sealed bytes
       # instead of restoring Go modules or compiling again after cache eviction.
       - name: 📥 Restore KSail binary
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@1ede3ba954c719fd3b50362e29bd22cc30d6ff15
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@c28efa3c57adf582c4c780b213287c2cae61a431
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2361,7 +2292,7 @@ jobs:
 
       - name: 📥 Restore KSail binary
         # Pin the identical published action until actionlint supports $/ references.
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@1ede3ba954c719fd3b50362e29bd22cc30d6ff15
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@c28efa3c57adf582c4c780b213287c2cae61a431
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2693,7 +2624,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: devantler-tech/ksail
-          ref: be7d4483a4abf07a246f977d558ff10bb4a0bd36
+          ref: f11afe46d1c0a0e5a37d7ef2e6dda13e00ed47f0
           path: .diagnostics-artifact-source
           persist-credentials: false
 
@@ -2712,7 +2643,7 @@ jobs:
         id: probe-baseline
         if: matrix.mode == 'baseline'
         continue-on-error: true
-        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-baseline@be7d4483a4abf07a246f977d558ff10bb4a0bd36
+        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-baseline@f11afe46d1c0a0e5a37d7ef2e6dda13e00ed47f0
         with:
           distribution: Vanilla
           provider: Hetzner
@@ -2723,7 +2654,7 @@ jobs:
         id: probe-candidate
         if: matrix.mode == 'candidate'
         continue-on-error: true
-        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-candidate@be7d4483a4abf07a246f977d558ff10bb4a0bd36
+        uses: devantler-tech/ksail/.github/actions/diagnostics-artifact-candidate@f11afe46d1c0a0e5a37d7ef2e6dda13e00ed47f0
         with:
           distribution: Vanilla
           provider: Hetzner
@@ -2731,6 +2662,7 @@ jobs:
           upload-artifacts: "true"
 
       - name: Verify native outcomes and artifact identity
+        id: verify-artifact
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
@@ -2743,12 +2675,28 @@ jobs:
         run: |
           bash .github/scripts/verify-diagnostics-artifact.sh
 
+      # Read back the exact artifact the verifier proved, by ID. A second by-name
+      # lookup through download-artifact could miss it moments after upload.
       - name: Download the observed candidate artifact
         if: matrix.mode == 'candidate'
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: system-test-diagnostics-fixture-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.mode }}
-          path: ${{ runner.temp }}/diagnostics-artifact-readback
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.verify-artifact.outputs.artifact-id }}
+          READBACK_DIR: ${{ runner.temp }}/diagnostics-artifact-readback
+        run: |
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          # The zip endpoint can answer 404 for a few seconds after the upload
+          # finalizes (4 of 18 runs on 2026-11-24). Retry briefly; a persistent
+          # failure still fails the step after about 75 seconds.
+          for attempt in 1 2 3 4 5 6; do
+            if gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" >"$RUNNER_TEMP/diagnostics-artifact.zip"; then
+              break
+            fi
+            if [ "$attempt" -eq 6 ]; then exit 1; fi
+            sleep $((attempt * 5))
+          done
+          mkdir -p "$READBACK_DIR"
+          unzip -q "$RUNNER_TEMP/diagnostics-artifact.zip" -d "$READBACK_DIR"
 
       - name: Verify downloaded diagnostics content
         if: matrix.mode == 'candidate'
@@ -2836,44 +2784,6 @@ jobs:
       # so a cached PASS from an earlier run would be replayed over the changed configuration.
       - name: 🧪 Test
         run: go test ./... -count=1
-  test-cask-rendering:
-    name: 🍺 Test Generated Cask Loading (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, macos-15-intel]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
-    needs: [changes]
-    if: needs.changes.outputs.release-config == 'true'
-    permissions:
-      contents: read
-    steps:
-      - name: 📄 Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-      - name: ⚙️ Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: false
-      - name: ⚙️ Setup GoReleaser
-        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
-        with:
-          distribution: goreleaser
-          version: "~> v2"
-          install-only: true
-      # Judge the cask with the current Homebrew style rules, as the tap does. Runner images ship
-      # different Homebrew snapshots, and an older one crashes inside its own cask style rule (#8244).
-      - name: 🍺 Update Homebrew
-        run: brew update --quiet
-      - name: ⚙️ Install YAML tooling
-        run: brew list yq >/dev/null 2>&1 || brew install yq
-      - name: 🍺 Render, style and load every cask platform
-        run: bash .github/scripts/cask-rendering.test.sh
 
   release-graph-audit:
     name: 🔐 Audit Shipped Dependency Graphs
@@ -2957,7 +2867,7 @@ jobs:
         with:
           persist-credentials: false
       - name: 🧹 Free runner disk
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@1ede3ba954c719fd3b50362e29bd22cc30d6ff15
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@c28efa3c57adf582c4c780b213287c2cae61a431
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -3057,7 +2967,7 @@ jobs:
           persist-credentials: false
       - name: Check active documentation
         id: links
-        uses: devantler-tech/.github/actions/validate-retired-repo-links@d2eeb91d37fcc8a13423c1bdfaf5079b30426625 # v21.1.5
+        uses: devantler-tech/.github/actions/validate-retired-repo-links@cd371c6003deca3a3b417b783da73e05b4bf690f # v22.0.0
         with:
           enabled: "true"
       - name: Require a completed scan
@@ -3133,10 +3043,8 @@ jobs:
         system-test-diagnostics-artifact,
         verify-bash-32-workflow-contract,
         test-release-config,
-        test-cask-rendering,
         release-graph-audit,
-        cask-pr-handoff,
-        desktop-recovery-signature,
+        release-publication-scripts,
         native-home-paths,
         windows-notice-staging,
         eks-smoke-scripts,
@@ -3148,7 +3056,7 @@ jobs:
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/.github/actions/aggregate-job-checks@89d152cc9565a4bafd255ffdb8c77375067f5fcd # v21.1.0
+      - uses: devantler-tech/.github/actions/aggregate-job-checks@711337ea623e44536204b40fff5278166aa64ffa # v21.12.3
         with:
           check-workflow-startup: ${{ contains(fromJSON('["pull_request","push","merge_group"]'), github.event_name) }}
           job-results: >-
@@ -3181,10 +3089,8 @@ jobs:
             ${{ needs.system-test-diagnostics-artifact.result }}
             ${{ needs.verify-bash-32-workflow-contract.result }}
             ${{ needs.test-release-config.result }}
-            ${{ needs.test-cask-rendering.result }}
             ${{ needs.release-graph-audit.result }}
-            ${{ needs.cask-pr-handoff.result }}
-            ${{ needs.desktop-recovery-signature.result }}
+            ${{ needs.release-publication-scripts.result }}
             ${{ needs.native-home-paths.result }}
             ${{ needs.windows-notice-staging.result }}
             ${{ needs.eks-smoke-scripts.result }}
