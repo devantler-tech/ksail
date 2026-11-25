@@ -30,9 +30,9 @@ Material: m2a6402769243aca1 (copyright-header), SHA-256 bda97d487bd650c6d2e7b492
 Material: m8636fff81dfb9124 (license), SHA-256 ab870089234b247d1f41828bf8f39a7dbb7171277f81a56e69b474dc2fe51098
 Files: LICENSE
 
-Component: cel.dev/cel-go@v0.33.2
-Source: https://proxy.golang.org/cel.dev/cel-go/@v/v0.33.2.zip
-Selected Go source checksum: h1:eAcEdBguc6AFrGbPOyE0g168Uey4kKFW9J6qsBLSeMU=
+Component: cel.dev/cel-go@v0.33.4
+Source: https://proxy.golang.org/cel.dev/cel-go/@v/v0.33.4.zip
+Selected Go source checksum: h1:9hd5BRPQZwj81qOddEXh0WhE1N3shkG3ad89pSqk+iU=
 Raw classifier detections: Apache-2.0, BSD-3-Clause
 Effective package-admission terms: Apache-2.0, BSD-3-Clause
 Packages:
@@ -2771,9 +2771,9 @@ Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756
 Files: LICENSE
 Material: m69ec84c626c7c3bc (copyright-header), SHA-256 f140526398d825cf9461e449e4d96369bd7ec8df7f2bb34493e7a45d198e93ea
 
-Component: github.com/cilium/cilium@v1.20.4
-Source: https://proxy.golang.org/github.com/cilium/cilium/@v/v1.20.4.zip
-Selected Go source checksum: h1:v2RVMtf62H8KkJS/Ju0zQkItebWADjtOczF9tKDkWQo=
+Component: github.com/cilium/cilium@v1.20.5
+Source: https://proxy.golang.org/github.com/cilium/cilium/@v/v1.20.5.zip
+Selected Go source checksum: h1:kqhMiKzzcSm6rScvoNW4E6Ev3qoXR9xsxiBhNGucNn4=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -4332,9 +4332,9 @@ Material: m5fe28487e9114bff (copyright-header), SHA-256 907d1fc6b0a8ba9362ee9963
 Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
 Files: LICENSE
 
-Component: github.com/fluxcd/pkg/apis/meta@v1.38.0
-Source: https://proxy.golang.org/github.com/fluxcd/pkg/apis/meta/@v/v1.38.0.zip
-Selected Go source checksum: h1:7t6/DuGFAPx2LE4MsRh1jskjnVE6qELKfr/LrfG7KE8=
+Component: github.com/fluxcd/pkg/apis/meta@v1.39.0
+Source: https://proxy.golang.org/github.com/fluxcd/pkg/apis/meta/@v/v1.39.0.zip
+Selected Go source checksum: h1:rbBMryj1DNNpS4hMg6HSOk4FHxco7pXXC1oN0i/59z4=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -14516,9 +14516,9 @@ Files: LICENSE
 Material: m969246257ce9c732 (copyright-header), SHA-256 ff345f5babf52ae9caaac55971a3f44ec6a8f8e2245cec4ece03182134748d29
 Material: mff89ce360703bbfd (copyright-header), SHA-256 31c0f69dabebb2c43c5f51ed042037b22049cbab5278bb1210ec0b95b5d0a83d
 
-Component: k8s.io/utils@v0.0.0-20260707023825-cf1189d6abe3
-Source: https://proxy.golang.org/k8s.io/utils/@v/v0.0.0-20260707023825-cf1189d6abe3.zip
-Selected Go source checksum: h1:jVkFFVfXdXP74B/zbO3hM3hpSFD0xvhQ5U686DPurkE=
+Component: k8s.io/utils@v0.0.0-20261023123148-ca04ba58ecab
+Source: https://proxy.golang.org/k8s.io/utils/@v/v0.0.0-20261023123148-ca04ba58ecab.zip
+Selected Go source checksum: h1:pjQrNLaF//ytZtWwCAHtW+pqwSKjtWDqzA8+TCX37RI=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
