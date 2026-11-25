@@ -30,7 +30,7 @@ require (
 	github.com/charmbracelet/glamour v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/charmbracelet/x/ansi v0.11.8
-	github.com/cilium/cilium v1.20.4
+	github.com/cilium/cilium v1.20.5
 	github.com/cli/go-gh/v2 v2.17.0
 	github.com/coder/websocket v1.8.15
 	github.com/containerd/containerd/v2 v2.4.2
@@ -1030,7 +1030,7 @@ require (
 	k8s.io/metrics v0.37.2 // indirect
 	k8s.io/pod-security-admission v0.37.1 // indirect
 	k8s.io/streaming v0.37.2 // indirect
-	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 // indirect
+	k8s.io/utils v0.0.0-20261023123148-ca04ba58ecab // indirect
 	modernc.org/libc v1.77.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
