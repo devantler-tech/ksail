@@ -23,6 +23,14 @@ permissions:
 jobs:
   release:
     name: 🎉 Create Release
+    # id-token: write lets the shared release workflow prove its identity to the
+    # GitHub token broker (devantler-tech/monorepo ADR 0020) instead of minting
+    # from the App key. Granting it is harmless until the workflow asks for it,
+    # and it must be here first: a reusable job that asks for more than its
+    # caller grants fails at startup.
+    permissions:
+      contents: read
+      id-token: write
     uses: devantler-tech/.github/.github/workflows/create-release.yaml@cd371c6003deca3a3b417b783da73e05b4bf690f # v22.0.0
     secrets:
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
