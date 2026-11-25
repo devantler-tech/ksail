@@ -108,32 +108,48 @@ for the full gate.
 ### Kyverno admission follows your Flux Kustomizations
 
 With `--kyverno-policies` (on by default when `spec.cluster.policyEngine` is `Kyverno`), `validate`
-checks your own Kyverno policies as the requester the cluster will see. When the tree renders Flux
-`Kustomization` objects that read its own `flux-system` source, those objects decide who applies
-each folder:
+checks your own Kyverno policies against what the cluster will actually admit. When the tree renders
+Flux `Kustomization` objects that read its own `flux-system` source, those objects decide what is
+checked and as whom:
 
-- The folder each `spec.path` names is resolved against the Git top level for a `GitRepository`
-  source, and against the configured source directory (the artifact `workload push` publishes) for
-  any other source.
+- The folder each `spec.path` names is the admitted object. The path is resolved against the Git top
+  level for a `GitRepository` source, and against the configured source directory (the artifact
+  `workload push` publishes) for any other source.
+- That folder is built the way Flux builds it: the Kustomization's `targetNamespace`, `patches`,
+  `images`, `components` and name prefix or suffix are merged into the folder's own kustomization
+  file (or into the one Flux generates for a folder without one) before that single build runs. Flux
+  composition happens before Helm renders the folder's HelmReleases, and policies check the rendered
+  output. A shared base that is only valid once patched passes, while a real violation in the composed
+  output still fails.
+- After the build, the Kustomization's `commonMetadata` labels and annotations are set on every
+  object it applies, as kustomize-controller does. Objects its HelmReleases render later do not get
+  them.
+- Cluster-scoped policies and `Namespace` objects that one folder renders also apply when other
+  folders are checked, in the form its Flux Kustomization composes them, including folders Flux
+  generates a kustomization for. A Flux patch that turns such a policy from audit to enforce is
+  therefore enforced for every other folder too.
+- The composed output also gets the schema and `--rules` checks, so a value a Flux patch or
+  `targetNamespace` changes is checked as the cluster receives it.
+- `postBuild` variables are filled with the same typed placeholders as everywhere else, because
+  `substituteFrom` values live in the cluster. `decryption` is not applied: Secret values stay
+  encrypted.
+- A child Kustomization is read from its parent's composed output, so a parent that patches a child's
+  `serviceAccountName`, path or namespace changes how the child's folder is admitted.
 - The requester is the Kustomization's `serviceAccountName` in its own namespace
   (`system:serviceaccount:<namespace>:<name>`), which Flux impersonates. Without one it is the
   `kustomize-controller` service account in `flux-system`. Rules that treat the platform and a tenant
   differently therefore give the cluster's answer.
-- Each folder is checked from its own kustomize build. The Kustomization's `targetNamespace`,
-  `patches` and other composition are not applied yet, so a document is checked in the namespace it
-  declares, and a base that is only valid once Flux patches it still fails.
-- A child Kustomization that a folder renders binds its own folder in the same way.
-- A folder without a kustomization file is not checked by Kyverno, because it has no build of its
-  own. A folder that another folder includes (a shared base) is checked only through the folders
-  that include it, unless a Flux Kustomization applies it directly. Every folder still gets the full
-  build, schema and CEL checks.
+- A folder that another folder includes (a shared base) is checked only through the folders that
+  include it. Every folder still gets the full build, schema and CEL checks.
 
 Bindings that cannot be trusted fail with a named error instead of being guessed:
 
 | Error | Cause |
 | --- | --- |
 | `unbound: not applied by any Flux Kustomization` | A policy fails in a folder that no Flux Kustomization applies, so it was checked with no requester identity. |
-| `ambiguous Flux Kustomization binding` | Two Flux Kustomizations apply the same folder as different identities. |
+| `ambiguous Flux Kustomization binding` | Two Flux Kustomizations apply the same folder with a different identity or composition (`targetNamespace`, `patches`, `images`, ...). |
+| `flux Kustomization bindings do not settle` | Composing parent Kustomizations keeps changing their children's bindings, for example a parent patched by its own child. |
+| `flux Kustomization field is not modelled` | A Kustomization sets a spec field validation does not reproduce, such as `kubeConfig` (which applies to another cluster). |
 | `flux Kustomization path is outside the validated tree` | A `spec.path` resolves outside the folder being validated, for example when you validate a subfolder. |
 | `flux Kustomization path does not exist` | A `spec.path` names a folder that is not there. |
 

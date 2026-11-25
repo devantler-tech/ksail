@@ -111,13 +111,19 @@ func (g *gitopsRenderer) expand(ctx context.Context, kustDir string) (render.Res
 		return render.Result{}, err
 	}
 
+	return g.expandBuilt(ctx, output.Bytes())
+}
+
+// expandBuilt substitutes and Helm-renders already-built kustomize output. It never
+// consults the prepared results, which belong to the directory as built on disk.
+func (g *gitopsRenderer) expandBuilt(ctx context.Context, output []byte) (render.Result, error) {
 	helmClient, err := helm.NewTemplateOnlyClient()
 	if err != nil {
 		return render.Result{}, fmt.Errorf("create helm template client: %w", err)
 	}
 
 	expanded, err := expandValidationSubstitutionsForStage(
-		ctx, output.Bytes(), g.validationOptions, g.discoveringCRDs,
+		ctx, output, g.validationOptions, g.discoveringCRDs,
 	)
 	if err != nil {
 		return render.Result{}, fmt.Errorf("prepare validation schemas: %w", err)
