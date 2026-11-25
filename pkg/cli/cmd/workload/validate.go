@@ -1140,9 +1140,11 @@ type kyvernoInput struct {
 	attribution map[string]string
 }
 
-// run validates every kustomization directory in parallel and then reports any
-// render degradations. Degradations are reported after the progress group so the
-// warnings do not interleave with its ANSI output.
+// run validates every kustomization directory in parallel, runs the Kyverno
+// pass, and then reports any render degradations. Degradations are reported after
+// both progress groups so the warnings do not interleave with their ANSI output,
+// and so the ones the Kyverno pass adds while rendering Flux-composed outputs are
+// reported too.
 func (v *kustomizationValidator) run(
 	ctx context.Context,
 	cmd *cobra.Command,
@@ -1156,16 +1158,17 @@ func (v *kustomizationValidator) run(
 		v.validate,
 		append(progressOpts, notify.WithCountLabel("kustomizations"))...,
 	)
-
-	v.sink.report(cmd)
-
 	if err != nil {
 		err = fmt.Errorf("kustomization validation failed: %w", err)
 	}
 
 	// The Kyverno pass still runs when another kustomization failed, so its own
 	// verdicts are reported in the same run, exactly as when it ran per kustomization.
-	return errors.Join(err, v.runKyverno(ctx, cmd, progressOpts))
+	kyvernoErr := v.runKyverno(ctx, cmd, progressOpts)
+
+	v.sink.report(cmd)
+
+	return errors.Join(err, kyvernoErr)
 }
 
 // runKyverno evaluates every stored output against its own Kyverno policies and

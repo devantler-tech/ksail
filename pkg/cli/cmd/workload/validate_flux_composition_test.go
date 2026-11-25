@@ -224,3 +224,25 @@ func TestValidateFluxBindingOverlayPolicyReplacesItsBase(t *testing.T) {
 	_, err = runBindingValidate(t, tree("Audit"))
 	require.NoError(t, err, "control: the overlay keeps the base in Audit")
 }
+
+// An entry that renders its own Flux Kustomization with a patch that cannot be
+// applied never settles: the failed render drops the binding, which the next
+// round restores. The patch error is reported with the settling error rather
+// than discarded, so the actionable cause stays visible.
+func TestValidateFluxBindingUnsettledKeepsCompositionError(t *testing.T) {
+	t.Parallel()
+
+	tree := writeTree(t, map[string]string{
+		"clusters/prod/kustomization.yaml": kustomizationOf("policy.yaml", "self.yaml"),
+		"clusters/prod/policy.yaml":        releaseTeamLabelPolicy,
+		"clusters/prod/self.yaml": fluxKustomization(
+			"self", "flux-system", "./clusters/prod",
+			"  patches:\n    - target:\n        kind: ConfigMap\n      patch: \"not: [valid\"\n",
+		),
+	})
+
+	_, err := runBindingValidate(t, tree)
+	require.ErrorIs(t, err, workload.ErrFluxBindingsDoNotSettle)
+	require.ErrorContains(t, err, "apply Flux Kustomization flux-system/self")
+	require.ErrorContains(t, err, "unable to parse SM or JSON patch")
+}

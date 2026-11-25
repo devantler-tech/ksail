@@ -43,7 +43,9 @@ const kyvernoPoliciesFlagDescription = "Evaluate the source's own Kyverno Cluste
 	"Kustomization is read from its parent's composed output; its commonMetadata labels and " +
 	"annotations are then set on every object it applies), as its serviceAccountName in its own " +
 	"namespace or else as the kustomize-controller service account; a folder another folder " +
-	"includes is evaluated only through it; a failure in a folder no Flux Kustomization applies " +
+	"includes is evaluated only through it unless a Flux Kustomization also applies it, in " +
+	"which case it is also evaluated with that binding's identity and composed output; a " +
+	"failure in a folder no Flux Kustomization applies " +
 	"is reported as unbound; and a path outside the validated tree, a missing path, or two " +
 	"Flux Kustomizations applying one folder differently, a spec field validation does not " +
 	"reproduce (such as kubeConfig), or bindings that never settle, each " +

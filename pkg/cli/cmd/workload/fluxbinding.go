@@ -310,7 +310,10 @@ func planFluxBindings(
 	outputs map[string][]byte,
 	compose composeFunc,
 ) (fluxBindingPlan, error) {
-	var previous map[string]*fluxBinding
+	var (
+		previous map[string]*fluxBinding
+		lastErr  error
+	)
 
 	for range maxFluxBindingRounds {
 		plan, err := discoverFluxBindings(tree, roots, kustomizations, outputs, previous, compose)
@@ -322,12 +325,16 @@ func planFluxBindings(
 		}
 
 		previous = plan.bindings
+		lastErr = err
 	}
 
-	return fluxBindingPlan{active: true}, fmt.Errorf(
+	// A composition error can be what keeps the bindings from settling: a failed
+	// render drops a binding that the next round restores. Keep it with the
+	// settling error so the actionable cause is not discarded.
+	return fluxBindingPlan{active: true}, errors.Join(fmt.Errorf(
 		"%w: they still change after %d rounds of composing parents",
 		ErrFluxBindingsDoNotSettle, maxFluxBindingRounds,
-	)
+	), lastErr)
 }
 
 // discoverFluxBindings is one discovery round. Entries are read, and so is
