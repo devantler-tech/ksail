@@ -797,7 +797,7 @@ jobs:
       || (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
       && needs.changes.outputs.govuln-allowlist == 'true')
-    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@cd371c6003deca3a3b417b783da73e05b4bf690f # v22.0.0
+    uses: devantler-tech/.github/.github/workflows/validate-go-project.yaml@946fff9cb37042f4c26c3342665727e28bd66c01 # v22.3.0
     # The canonical defaults make a default-branch run answer "did the check run" rather than
     # "did the diff touch a Go file". On main the branch's green IS the protection
     # signal, so a path filter that skips the suite or the scan leaves main green
@@ -1177,7 +1177,7 @@ jobs:
       - name: 🧹 Free disk space
         if: steps.calico-cache.outputs.cache-hit != 'true'
         # Only cold compilation needs the large working-space reclamation.
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@c28efa3c57adf582c4c780b213287c2cae61a431
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@126f59b476817ccc091929b2d8e82228dccc319e
 
       - name: ♻️ Restore Go modules
         if: steps.calico-cache.outputs.cache-hit != 'true'
@@ -2078,7 +2078,7 @@ jobs:
       # This job already waits for the producer. Reuse its exact sealed bytes
       # instead of restoring Go modules or compiling again after cache eviction.
       - name: 📥 Restore KSail binary
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@c28efa3c57adf582c4c780b213287c2cae61a431
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@126f59b476817ccc091929b2d8e82228dccc319e
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2292,7 +2292,7 @@ jobs:
 
       - name: 📥 Restore KSail binary
         # Pin the identical published action until actionlint supports $/ references.
-        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@c28efa3c57adf582c4c780b213287c2cae61a431
+        uses: devantler-tech/ksail/.github/actions/restore-ksail-binary@126f59b476817ccc091929b2d8e82228dccc319e
         with:
           artifact-id: ${{ needs.build-artifact.outputs.artifact-id }}
           binary-sha256: ${{ needs.build-artifact.outputs.binary-sha256 }}
@@ -2867,7 +2867,7 @@ jobs:
         with:
           persist-credentials: false
       - name: 🧹 Free runner disk
-        uses: devantler-tech/ksail/.github/actions/free-disk-space@c28efa3c57adf582c4c780b213287c2cae61a431
+        uses: devantler-tech/ksail/.github/actions/free-disk-space@126f59b476817ccc091929b2d8e82228dccc319e
       - name: ⚙️ Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -2967,7 +2967,7 @@ jobs:
           persist-credentials: false
       - name: Check active documentation
         id: links
-        uses: devantler-tech/.github/actions/validate-retired-repo-links@cd371c6003deca3a3b417b783da73e05b4bf690f # v22.0.0
+        uses: devantler-tech/.github/actions/validate-retired-repo-links@946fff9cb37042f4c26c3342665727e28bd66c01 # v22.3.0
         with:
           enabled: "true"
       - name: Require a completed scan
@@ -3056,7 +3056,7 @@ jobs:
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/.github/actions/aggregate-job-checks@711337ea623e44536204b40fff5278166aa64ffa # v21.12.3
+      - uses: devantler-tech/.github/actions/aggregate-job-checks@946fff9cb37042f4c26c3342665727e28bd66c01 # v22.3.0
         with:
           check-workflow-startup: ${{ contains(fromJSON('["pull_request","push","merge_group"]'), github.event_name) }}
           job-results: >-

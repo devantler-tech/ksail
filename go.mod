@@ -8,7 +8,7 @@ go 1.27.4
 exclude google.golang.org/grpc/stats/opentelemetry v0.0.0-20241028142157-ada6787961b3
 
 require (
-	cel.dev/cel-go v0.33.2
+	cel.dev/cel-go v0.33.4
 	cloud.google.com/go/container v1.56.1
 	filippo.io/age v1.3.2
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.24.0
@@ -30,7 +30,7 @@ require (
 	github.com/charmbracelet/glamour v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/charmbracelet/x/ansi v0.11.8
-	github.com/cilium/cilium v1.20.4
+	github.com/cilium/cilium v1.20.5
 	github.com/cli/go-gh/v2 v2.17.0
 	github.com/coder/websocket v1.8.15
 	github.com/containerd/containerd/v2 v2.4.2
@@ -45,7 +45,8 @@ require (
 	github.com/fluxcd/helm-controller/api v1.7.1
 	github.com/fluxcd/kustomize-controller/api v1.10.1
 	github.com/fluxcd/pkg/apis/kustomize v1.23.0
-	github.com/fluxcd/pkg/apis/meta v1.38.0
+	github.com/fluxcd/pkg/apis/meta v1.39.0
+	github.com/fluxcd/pkg/kustomize v1.44.0
 	github.com/fluxcd/source-controller/api v1.10.1
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/getsops/sops/v3 v3.13.3
@@ -432,7 +433,9 @@ require (
 	github.com/florianl/go-tc v0.4.8 // indirect
 	github.com/fluxcd/cli-utils v1.2.2 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.12.0 // indirect
+	github.com/fluxcd/pkg/envsubst v1.9.0 // indirect
 	github.com/fluxcd/pkg/oci v0.45.0 // indirect
+	github.com/fluxcd/pkg/sourceignore v0.22.0 // indirect
 	github.com/fluxcd/pkg/ssa v0.77.0 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
 	github.com/fvbommel/sortorder v1.1.0 // indirect
@@ -1030,7 +1033,7 @@ require (
 	k8s.io/metrics v0.37.2 // indirect
 	k8s.io/pod-security-admission v0.37.1 // indirect
 	k8s.io/streaming v0.37.2 // indirect
-	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 // indirect
+	k8s.io/utils v0.0.0-20261023123148-ca04ba58ecab // indirect
 	modernc.org/libc v1.77.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
