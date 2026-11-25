@@ -8,6 +8,7 @@ on:
 permissions:
   contents: read
   issues: write
+  id-token: write # lets the shared to-do scanner prove its identity to the GitHub token broker (ADR 0020)
 
 jobs:
   todos:

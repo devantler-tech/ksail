@@ -66,6 +66,7 @@ func validateGoMaintenanceCaller(contents []byte) error {
 
 	if !reflect.DeepEqual(job.Permissions, map[string]string{
 		"contents": "write", "issues": "write", "pull-requests": "write", "code-quality": "write",
+		"id-token": "write", // lets the shared Go validation reach the GitHub token broker (ADR 0020)
 	}) || !reflect.DeepEqual(caller.Jobs["ci-go"].Secrets, map[string]string{
 		"APP_PRIVATE_KEY": "${{ secrets.APP_PRIVATE_KEY }}",
 	}) {
@@ -505,10 +506,10 @@ func goMaintenanceSignedFixMutations() []goMaintenanceMutation {
 
 func goMaintenanceEnvelopeMutations() []goMaintenanceMutation {
 	return []goMaintenanceMutation{
-		{"new OIDC grant", func(t *testing.T, job map[string]any) {
+		{"new actions write grant", func(t *testing.T, job map[string]any) {
 			t.Helper()
 
-			goMaintenanceMap(t, job, "permissions")["id-token"] = "write"
+			goMaintenanceMap(t, job, "permissions")["actions"] = "write"
 		}, "credential envelope"},
 		{"new secret", func(t *testing.T, job map[string]any) {
 			t.Helper()
