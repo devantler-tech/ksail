@@ -65,8 +65,11 @@ func validateGoMaintenanceCaller(contents []byte) error {
 	}
 
 	if !reflect.DeepEqual(job.Permissions, map[string]string{
-		"contents": "write", "issues": "write", "pull-requests": "write", "code-quality": "write",
-		"id-token": "write", // lets the shared Go validation reach the GitHub token broker (ADR 0020)
+		"contents":      "write",
+		"issues":        "write",
+		"pull-requests": "write",
+		"code-quality":  "write",
+		"id-token":      "write", // lets the shared Go validation reach the GitHub token broker (ADR 0020)
 	}) || !reflect.DeepEqual(caller.Jobs["ci-go"].Secrets, map[string]string{
 		"APP_PRIVATE_KEY": "${{ secrets.APP_PRIVATE_KEY }}",
 	}) {
