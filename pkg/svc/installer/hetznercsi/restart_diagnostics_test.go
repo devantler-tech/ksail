@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,7 +23,37 @@ import (
 
 var errCSIChartUnready = errors.New("simulated CSI chart readiness failure")
 
+// The fixture's timestamps are deliberately far in the past: new Pods are told
+// apart by UID, so neither the installer's clock nor the API server's matters.
+func fixtureStartedAt() time.Time {
+	return time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
+}
+
+//nolint:paralleltest // sets HCLOUD_TOKEN and replaces the default logger
 func TestInstallRecordsControllerTerminationBeforeHelmReturns(t *testing.T) {
+	observed := installWithCSIRestartFixture(t, false)
+
+	require.NotEmpty(t, observed, "capture a driver termination while Helm waits")
+
+	finishedAt := fixtureStartedAt().Add(18 * time.Second).Format(time.RFC3339)
+
+	assert.Contains(t, observed, `"pod":"hcloud-csi-controller-test"`)
+	assert.Contains(t, observed, `"restart_count":1`)
+	assert.Contains(t, observed, `"exit_code":143`)
+	assert.Contains(t, observed, `"signal":15`)
+	assert.Contains(t, observed, `"finished_at":"`+finishedAt+`"`)
+	assert.NotContains(t, observed, "do-not-log")
+}
+
+//nolint:paralleltest // sets HCLOUD_TOKEN and replaces the default logger
+func TestInstallIgnoresControllerThatExistedBeforeInstall(t *testing.T) {
+	observed := installWithCSIRestartFixture(t, true)
+
+	assert.Empty(t, observed, "a Pod present before installation is not new evidence")
+}
+
+func installWithCSIRestartFixture(t *testing.T, podExistsBeforeInstall bool) string {
+	t.Helper()
 	t.Setenv("HCLOUD_TOKEN", "test-token")
 
 	restore := hetznercsiinstaller.SetWaitForCCMNodeLabelsFnForTest(
@@ -30,8 +61,7 @@ func TestInstallRecordsControllerTerminationBeforeHelmReturns(t *testing.T) {
 	)
 	t.Cleanup(restore)
 
-	createdAt := time.Now().UTC().Truncate(time.Second).Add(time.Second)
-	server := httptest.NewServer(csiRestartAPI(t, createdAt))
+	server := httptest.NewServer(csiRestartAPI(t, podExistsBeforeInstall))
 	t.Cleanup(server.Close)
 
 	logs := make(restartLogs, 1)
@@ -66,16 +96,8 @@ func TestInstallRecordsControllerTerminationBeforeHelmReturns(t *testing.T) {
 	err := installer.Install(t.Context())
 
 	require.ErrorIs(t, err, errCSIChartUnready)
-	require.NotEmpty(t, observed, "capture a driver termination while Helm waits")
 
-	finishedAt := createdAt.Add(18 * time.Second).Format(time.RFC3339)
-
-	assert.Contains(t, observed, `"pod":"hcloud-csi-controller-test"`)
-	assert.Contains(t, observed, `"restart_count":1`)
-	assert.Contains(t, observed, `"exit_code":143`)
-	assert.Contains(t, observed, `"signal":15`)
-	assert.Contains(t, observed, `"finished_at":"`+finishedAt+`"`)
-	assert.NotContains(t, observed, "do-not-log")
+	return observed
 }
 
 type restartLogs chan string
@@ -91,11 +113,26 @@ func (logs restartLogs) Write(message []byte) (int, error) {
 	return len(message), nil
 }
 
-func csiRestartAPI(t *testing.T, createdAt time.Time) http.Handler {
+// csiRestartAPI serves the CSI controller Pod list. The first list is the
+// installer's record of Pods that existed before installation; the Pod appears
+// in it only when podExistsBeforeInstall is set.
+func csiRestartAPI(t *testing.T, podExistsBeforeInstall bool) http.Handler {
 	t.Helper()
 
-	started := createdAt.Format(time.RFC3339)
-	finished := createdAt.Add(18 * time.Second).Format(time.RFC3339)
+	started := fixtureStartedAt().Format(time.RFC3339)
+	finished := fixtureStartedAt().Add(18 * time.Second).Format(time.RFC3339)
+	pod := fmt.Sprintf(`{
+		"metadata":{"name":"hcloud-csi-controller-test","namespace":"kube-system",
+			"uid":"csi-test","creationTimestamp":%q,"labels":{"app.kubernetes.io/instance":"hcloud-csi"}},
+		"status":{"containerStatuses":[
+			{"name":"csi-attacher","restartCount":4,"lastState":{"terminated":{"exitCode":99}}},
+			{"name":"hcloud-csi-driver","restartCount":1,"lastState":{"terminated":{
+				"exitCode":143,"signal":15,"reason":"Error","message":"do-not-log",
+				"startedAt":%q,"finishedAt":%q}}}
+		]}
+	}`, started, started, finished)
+
+	var podLists atomic.Int32
 
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		response.Header().Set("Content-Type", "application/json")
@@ -107,16 +144,16 @@ func csiRestartAPI(t *testing.T, createdAt time.Time) http.Handler {
 			_, err = fmt.Fprint(response, `{"apiVersion":"v1","kind":"Secret",
 				"metadata":{"name":"hcloud","namespace":"kube-system"},"data":{"token":"dGVzdC10b2tlbg=="}}`)
 		case "/api/v1/namespaces/kube-system/pods":
-			_, err = fmt.Fprintf(response, `{"apiVersion":"v1","kind":"PodList","items":[{
-				"metadata":{"name":"hcloud-csi-controller-test","namespace":"kube-system",
-					"uid":"csi-test","creationTimestamp":%q,"labels":{"app.kubernetes.io/instance":"hcloud-csi"}},
-				"status":{"containerStatuses":[
-					{"name":"csi-attacher","restartCount":4,"lastState":{"terminated":{"exitCode":99}}},
-					{"name":"hcloud-csi-driver","restartCount":1,"lastState":{"terminated":{
-						"exitCode":143,"signal":15,"reason":"Error","message":"do-not-log",
-						"startedAt":%q,"finishedAt":%q}}}
-				]}
-			}]}`, started, started, finished)
+			items := pod
+			if podLists.Add(1) == 1 && !podExistsBeforeInstall {
+				items = ""
+			}
+
+			_, err = fmt.Fprintf(
+				response,
+				`{"apiVersion":"v1","kind":"PodList","items":[%s]}`,
+				items,
+			)
 		default:
 			http.NotFound(response, request)
 		}

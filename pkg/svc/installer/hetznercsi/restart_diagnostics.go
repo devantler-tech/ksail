@@ -12,52 +12,79 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
+	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 )
 
-const controllerSampleInterval = 2 * time.Second
+const (
+	controllerSampleInterval = 2 * time.Second
+	controllerPodSelector    = "app.kubernetes.io/instance=hcloud-csi"
+)
 
-// observeControllerTerminations records a driver's earliest observed termination
-// before Helm can time out or replace the Pod. Observation is best effort so
-// it cannot change the installer result or its readiness decision.
-func (h *Installer) observeControllerTerminations(ctx context.Context, startedAt time.Time) {
+// controllerTerminationObserver records the CSI Pods that exist before installation
+// and returns an observer that reports a driver's earliest termination in Pods
+// created after that point. Pods are told apart by UID, so the installer's clock
+// is never compared with the API server's. Observation is best effort: when the
+// existing Pods cannot be read it returns nil, and it never changes the installer
+// result or its readiness decision.
+func (h *Installer) controllerTerminationObserver(ctx context.Context) func(context.Context) {
 	client, err := k8s.NewClientset(h.kubeconfig, h.kubeContext)
 	if err != nil {
 		slog.DebugContext(ctx, "could not initialize Hetzner CSI controller diagnostics")
 
-		return
+		return nil
 	}
 
 	pods := client.CoreV1().Pods(hetzner.Namespace)
-	observed := make(map[types.UID]struct{})
 
-	_ = wait.PollUntilContextCancel(ctx, controllerSampleInterval, true,
-		func(ctx context.Context) (bool, error) {
-			sampleContext, cancel := context.WithTimeout(ctx, controllerSampleInterval)
-			defer cancel()
+	existing, err := listControllerPods(ctx, pods)
+	if err != nil {
+		slog.DebugContext(ctx, "could not read existing Hetzner CSI controller Pods")
 
-			list, err := pods.List(sampleContext, metav1.ListOptions{
-				LabelSelector: "app.kubernetes.io/instance=hcloud-csi",
-			})
-			if err != nil {
+		return nil
+	}
+
+	ignored := make(map[types.UID]struct{}, len(existing))
+	for idx := range existing {
+		ignored[existing[idx].UID] = struct{}{}
+	}
+
+	return func(ctx context.Context) {
+		_ = wait.PollUntilContextCancel(ctx, controllerSampleInterval, true,
+			func(ctx context.Context) (bool, error) {
+				list, err := listControllerPods(ctx, pods)
+				if err != nil {
+					return false, nil //nolint:nilerr // a failed sample is retried on the next tick
+				}
+
+				for idx := range list {
+					pod := &list[idx]
+
+					_, skip := ignored[pod.UID]
+					if skip || pod.UID == "" ||
+						!strings.HasPrefix(pod.Name, "hcloud-csi-controller-") {
+						continue
+					}
+
+					if logControllerTermination(ctx, pod) {
+						ignored[pod.UID] = struct{}{}
+					}
+				}
+
 				return false, nil
-			}
+			})
+	}
+}
 
-			for idx := range list.Items {
-				pod := &list.Items[idx]
+func listControllerPods(ctx context.Context, pods typedcorev1.PodInterface) ([]corev1.Pod, error) {
+	sampleContext, cancel := context.WithTimeout(ctx, controllerSampleInterval)
+	defer cancel()
 
-				_, seen := observed[pod.UID]
-				if seen || pod.UID == "" || pod.CreationTimestamp.Time.Before(startedAt) ||
-					!strings.HasPrefix(pod.Name, "hcloud-csi-controller-") {
-					continue
-				}
+	list, err := pods.List(sampleContext, metav1.ListOptions{LabelSelector: controllerPodSelector})
+	if err != nil {
+		return nil, err //nolint:wrapcheck // diagnostics discard the error
+	}
 
-				if logControllerTermination(ctx, pod) {
-					observed[pod.UID] = struct{}{}
-				}
-			}
-
-			return false, nil
-		})
+	return list.Items, nil
 }
 
 func logControllerTermination(ctx context.Context, pod *corev1.Pod) bool {

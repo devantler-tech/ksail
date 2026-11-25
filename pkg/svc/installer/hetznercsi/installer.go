@@ -97,11 +97,12 @@ func (h *Installer) Install(ctx context.Context) error {
 	}
 
 	diagnosticContext, stopDiagnostics := context.WithCancel(ctx)
-	startedAt := time.Now().Truncate(time.Second)
 
 	var observer sync.WaitGroup
 
-	observer.Go(func() { h.observeControllerTerminations(diagnosticContext, startedAt) })
+	if observe := h.controllerTerminationObserver(diagnosticContext); observe != nil {
+		observer.Go(func() { observe(diagnosticContext) })
+	}
 
 	defer func() {
 		stopDiagnostics()
