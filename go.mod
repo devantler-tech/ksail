@@ -73,7 +73,7 @@ require (
 	github.com/kyverno/api v0.0.1-alpha.3.0.20260723090831-fb2785727f98
 	github.com/kyverno/kyverno v1.19.2
 	github.com/loft-sh/log v0.0.0-20261016082928-2e30e984f250
-	github.com/loft-sh/vcluster v0.37.7
+	github.com/loft-sh/vcluster v0.38.0
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/opencontainers/image-spec v1.1.1
@@ -620,7 +620,7 @@ require (
 	github.com/knqyf263/go-rpm-version v0.0.0-20220614171824-631e686d1075 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
-	github.com/kubernetes-csi/external-snapshotter/client/v8 v8.2.0 // indirect
+	github.com/kubernetes-csi/external-snapshotter/client/v8 v8.6.0 // indirect
 	github.com/kubescape/backend v0.0.20 // indirect
 	github.com/kubescape/go-git-url v0.0.31 // indirect
 	github.com/kubescape/go-logger v0.0.25 // indirect
@@ -653,10 +653,10 @@ require (
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/lithammer/dedent v1.1.0 // indirect
 	github.com/lmittmann/tint v1.2.0 // indirect
-	github.com/loft-sh/admin-apis v0.0.0-20260721223200-58c89e54604e // indirect
-	github.com/loft-sh/agentapi/v4 v4.12.2-rc.3 // indirect
+	github.com/loft-sh/admin-apis v0.0.0-20260928151145-c0a92a2b2cf8 // indirect
+	github.com/loft-sh/agentapi/v5 v5.0.0-rc.1 // indirect
 	github.com/loft-sh/analytics-client v0.0.0-20240219162240-2f4c64b2494e // indirect
-	github.com/loft-sh/api/v4 v4.12.2-rc.3 // indirect
+	github.com/loft-sh/api/v5 v5.0.0-rc.1 // indirect
 	github.com/loft-sh/apiserver v0.0.0-20260707184419-aef558a5ae8d // indirect
 	github.com/loft-sh/external-types v0.1.0-alpha.2.0.20260701070938-a59fea7bcfce // indirect
 	github.com/loft-sh/image v0.0.0-20250818103249-5e7d53b59343 // indirect
@@ -1017,7 +1017,7 @@ require (
 	helm.sh/helm/v3 v3.20.2 // indirect
 	honnef.co/go/tools v0.8.2 // indirect
 	howett.net/plist v1.0.2-0.20250314012144-ee69052608d9 // indirect
-	k8s.io/cluster-bootstrap v0.36.0 // indirect
+	k8s.io/cluster-bootstrap v0.36.3 // indirect
 	k8s.io/component-base v0.37.2 // indirect
 	k8s.io/component-helpers v0.37.2 // indirect
 	k8s.io/cri-api v0.37.1 // indirect
@@ -1026,7 +1026,7 @@ require (
 	k8s.io/kube-openapi v0.0.0-20261001230523-97fa35140926 // indirect
 	k8s.io/kube-proxy v0.37.1 // indirect
 	k8s.io/kubelet v0.37.1 // indirect
-	k8s.io/kubernetes v1.36.0 // indirect
+	k8s.io/kubernetes v1.36.3 // indirect
 	k8s.io/metrics v0.37.2 // indirect
 	k8s.io/pod-security-admission v0.37.1 // indirect
 	k8s.io/streaming v0.37.2 // indirect
