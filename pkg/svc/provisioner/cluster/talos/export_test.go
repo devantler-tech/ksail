@@ -822,7 +822,7 @@ func (p *Provisioner) UncordonAfterUpgradeForTest(
 	clientset kubernetes.Interface,
 	nodeName string,
 ) error {
-	return p.uncordonAfterUpgrade(ctx, clientset, nodeName)
+	return p.uncordonAfterUpgrade(ctx, clientset, imageUpgradeReservation{nodeName: nodeName})
 }
 
 // K8sClientOrWarnForUpgradeForTest exposes k8sClientOrWarnForUpgrade for unit testing.
@@ -1264,7 +1264,40 @@ func (p *Provisioner) MarkImageUpgradeCordonForTest(
 	clientset kubernetes.Interface,
 	nodeName string,
 ) error {
-	return p.markImageUpgradeCordon(ctx, clientset, nodeName)
+	_, err := p.markImageUpgradeCordon(ctx, clientset, nodeName)
+
+	return err
+}
+
+func NewProvisionerFromOptionsForTest(opts v1alpha1.OptionsTalos) (*Provisioner, error) {
+	return newProvisionerFromOptions(nil, "", "", opts, false)
+}
+
+func (p *Provisioner) PrepareNodeForImageUpgradeForTest(
+	ctx context.Context, clientset kubernetes.Interface, nodeIP string,
+) (string, error) {
+	reservation, err := p.prepareNodeForImageUpgrade(ctx, clientset, nodeIP)
+
+	return reservation.nodeName, err
+}
+
+func (p *Provisioner) UpgradeSingleNodeForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeIP string,
+	probe func(context.Context) ([]string, error),
+) error {
+	return p.upgradeSingleNode(ctx, upgradeNodeRequest{
+		clientset: clientset,
+		node:      nodeWithRole{IP: nodeIP},
+		prober:    StorageHealthProberForTest(probe),
+	})
+}
+
+func (p *Provisioner) WithImageRebootStorageGateForTest(
+	ctx context.Context, probe StorageHealthProberForTest, reboot func() error,
+) error {
+	return p.withImageRebootStorageGate(ctx, probe, reboot)
 }
 
 // BuildAutoscalerPoolConfigsForTest exposes buildAutoscalerPoolConfigs, the step that turns the
