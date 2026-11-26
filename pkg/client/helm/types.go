@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	helmv4action "helm.sh/helm/v4/pkg/action"
+	helmv4postrenderer "helm.sh/helm/v4/pkg/postrenderer"
 	helmv4driver "helm.sh/helm/v4/pkg/storage/driver"
 )
 
@@ -69,6 +71,11 @@ type ChartSpec struct {
 	// resource is migrated from From to To only when the cluster no longer
 	// serves From and does serve To.
 	APIVersionMigrations []APIVersionMigration
+
+	// TemplatePostRenderer and TemplatePostRenderStrategy apply to TemplateChart.
+	// The strategy controls how Helm sends chart hooks to the post-renderer.
+	TemplatePostRenderer       helmv4postrenderer.PostRenderer
+	TemplatePostRenderStrategy helmv4action.PostRenderStrategy
 
 	RepoURL  string
 	Username string

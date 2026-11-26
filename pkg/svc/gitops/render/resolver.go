@@ -128,11 +128,21 @@ func (r *HelmChartResolver) Render(
 		return "", err
 	}
 
+	postRenderKey, err := configurePostRenderers(spec, helmRelease)
+	if err != nil {
+		return "", fmt.Errorf(
+			"configure HelmRelease %s/%s post-renderers: %w",
+			helmRelease.Namespace,
+			helmRelease.Name,
+			err,
+		)
+	}
+
 	helmRenderMu.Lock()
 	defer helmRenderMu.Unlock()
 
 	if r.cache != nil {
-		if manifest, ok := r.cache.get(spec); ok {
+		if manifest, ok := r.cache.get(spec, postRenderKey); ok {
 			return manifest, nil
 		}
 	}
@@ -146,7 +156,7 @@ func (r *HelmChartResolver) Render(
 	}
 
 	if r.cache != nil {
-		r.cache.put(spec, manifest)
+		r.cache.put(spec, postRenderKey, manifest)
 	}
 
 	return manifest, nil
