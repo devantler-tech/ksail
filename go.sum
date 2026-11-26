@@ -989,8 +989,8 @@ github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32 h1:Mn26/9ZMNWSw9C9ER
 github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32/go.mod h1:GIjDIg/heH5DOkXY3YJ/wNhfHsQHoXGjl8G8amsYQ1I=
 github.com/ghostiam/protogetter v0.3.18 h1:yEpghRGtP9PjKvVXtEzGpYfQj1Wl/ZehAfU6fr62Lfo=
 github.com/ghostiam/protogetter v0.3.18/go.mod h1:FjIu5Yfs6FT391m+Fjp3fbAYJ6rkL/J6ySpZBfnODuI=
-github.com/github/copilot-sdk/go v1.0.34 h1:WX2fPUsqeJT+963s31sVBQEAPNHFHk3WzfWYhskS6iw=
-github.com/github/copilot-sdk/go v1.0.34/go.mod h1:8P5anw2Rv3kJAXZZgVf5jHls+i8Aquy4Bl7OGLmXstE=
+github.com/github/copilot-sdk/go v1.0.35 h1:RbXPX1agHSYngh9G7wBAFN0WnAOXu4VwG18MsjyYTQo=
+github.com/github/copilot-sdk/go v1.0.35/go.mod h1:Vr2C+RFglJeJ4zV7uo0C6YgBEm2rrx9hVZGgXdc50Zg=
 github.com/github/go-spdx/v2 v2.7.1 h1:+siV9wnsncI5pg4otH/sKvqGL8UkcLdPh16TSJYY1V4=
 github.com/github/go-spdx/v2 v2.7.1/go.mod h1:Ftc45YYG1WzpzwEPKRVm9Jv8vDqOrN4gWoCkK+bHer0=
 github.com/gkampitakis/ciinfo v0.3.4 h1:5eBSibVuSMbb/H6Elc0IIEFbkzCJi3lm94n0+U7Z0KY=
