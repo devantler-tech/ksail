@@ -1,6 +1,7 @@
 package helm
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	helmv4action "helm.sh/helm/v4/pkg/action"
 	helmv4cli "helm.sh/helm/v4/pkg/cli"
 	helmv4kube "helm.sh/helm/v4/pkg/kube"
+	helmv4postrenderer "helm.sh/helm/v4/pkg/postrenderer"
 	helmv4registry "helm.sh/helm/v4/pkg/registry"
 	helmv4release "helm.sh/helm/v4/pkg/release"
 	v1 "helm.sh/helm/v4/pkg/release/v1"
@@ -801,7 +803,10 @@ func (c *Client) templateInstall(spec *ChartSpec) (*helmv4action.Install, error)
 
 	client.DryRunStrategy = helmv4action.DryRunClient
 
+	client.PostRenderer = spec.TemplatePostRenderer
+	client.PostRenderStrategy = spec.TemplatePostRenderStrategy
 	client.Replace = true // Skip name uniqueness check
+
 	if len(spec.APIVersionMigrations) > 0 {
 		// Prerequisite charts select admission resources using live capabilities.
 		// Server dry-run renders them without publishing a release or resources.
@@ -816,7 +821,7 @@ func (c *Client) templateInstall(spec *ChartSpec) (*helmv4action.Install, error)
 			return nil, fmt.Errorf("resolve template API migrations: %w", rendererErr)
 		}
 
-		client.PostRenderer = renderer
+		client.PostRenderer = templateMigrationRenderer{spec.TemplatePostRenderer, renderer}
 	}
 
 	// Set version if provided
@@ -825,4 +830,22 @@ func (c *Client) templateInstall(spec *ChartSpec) (*helmv4action.Install, error)
 	}
 
 	return client, nil
+}
+
+type templateMigrationRenderer struct {
+	primary   helmv4postrenderer.PostRenderer
+	migration *apiVersionPostRenderer
+}
+
+func (r templateMigrationRenderer) Run(manifests *bytes.Buffer) (*bytes.Buffer, error) {
+	if r.primary == nil {
+		return r.migration.Run(manifests)
+	}
+
+	rendered, err := r.primary.Run(manifests)
+	if err != nil {
+		return nil, fmt.Errorf("apply template post-renderer: %w", err)
+	}
+
+	return r.migration.Run(rendered)
 }
