@@ -12,6 +12,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -225,6 +226,54 @@ func TestImageUpgradePreservesTheCordonOfAnInterruptedAttempt(t *testing.T) {
 		node.Annotations[testImageUpgradeStoragePendingAnnotation] != "true" {
 		t.Fatal("the retry released an earlier attempt's recovery markers")
 	}
+}
+
+func TestImageUpgradeDoesNotReleaseACordonResumedByAnotherAttempt(t *testing.T) {
+	t.Parallel()
+
+	const nodeIP, nodeName = "192.0.2.10", "worker-a"
+
+	clientset := fake.NewClientset(&corev1.Node{
+		Name: nodeName,
+		Status: corev1.NodeStatus{
+			Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: nodeIP}},
+			Conditions: []corev1.NodeCondition{
+				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+			},
+		},
+	})
+	options := talosprovisioner.NewOptions().WithStorageHealthTimeout(100 * time.Millisecond)
+	options.RequireStorageHealth = true
+	first := talosprovisioner.NewProvisioner(nil, options).WithLogWriter(io.Discard)
+	successor := talosprovisioner.NewProvisioner(nil, options).WithLogWriter(io.Discard)
+	resumed := false
+
+	probe := func(ctx context.Context) ([]string, error) {
+		degraded, err := (drainedNodeStorageHealth{client: clientset, node: nodeName}).degradedVolumes(
+			ctx,
+		)
+		if err != nil || len(degraded) == 0 {
+			return degraded, err
+		}
+
+		if !resumed {
+			require.NoError(t, successor.MarkImageUpgradeCordonForTest(ctx, clientset, nodeName))
+
+			resumed = true
+		}
+
+		return degraded, nil
+	}
+
+	err := first.UpgradeSingleNodeForTest(t.Context(), clientset, nodeIP, probe)
+	require.ErrorIs(t, err, talosprovisioner.ErrStorageHealthTimeout)
+	require.True(t, resumed)
+
+	node, err := clientset.CoreV1().Nodes().Get(t.Context(), nodeName, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.True(t, node.Spec.Unschedulable, "the second attempt's cordon must survive")
+	require.Equal(t, "true", node.Annotations[testImageUpgradeCordonAnnotation])
+	require.Equal(t, "true", node.Annotations[testImageUpgradeStoragePendingAnnotation])
 }
 
 type drainedNodeStorageHealth struct {
