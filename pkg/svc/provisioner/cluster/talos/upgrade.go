@@ -484,34 +484,15 @@ type upgradeNodeRequest struct {
 
 // upgradeSingleNode runs the full graceful per-node OS-upgrade sequence: cordon →
 // drain → reconcile desired config (#5294) → upgrade + reboot → wait Ready →
-// uncordon → between-node storage-health gate (#5467). When the clientset is nil
-// (Kubernetes API unreachable) or a successful lookup finds no Kubernetes node,
-// it degrades to the legacy reconcile + upgrade + reboot without draining.
-// A failed lookup aborts the roll because the node's cordon state is unknown.
+// uncordon → between-node storage-health gate (#5467). Optional storage checks
+// permit a legacy upgrade when Kubernetes is unavailable or the host has no
+// Node object. Required storage checks hold the upgrade in either case.
 // A drain failure aborts the roll with the node best-effort uncordoned
 // (see cordonAndDrain), matching the config-change path.
 func (p *Provisioner) upgradeSingleNode(ctx context.Context, req upgradeNodeRequest) error {
-	if p.storageHealthRequired() {
-		if req.prober == nil || p.storageHealthTimeout() <= 0 {
-			return errImageUpgradeStorageRequired
-		}
-
-		storageErr := p.waitForStorageHealthy(ctx, req.prober, p.storageHealthTimeout())
-		if storageErr != nil {
-			return fmt.Errorf("storage health before draining: %w", storageErr)
-		}
-	}
-	nodeName, err := p.prepareNodeForImageUpgrade(ctx, req.clientset, req.node.IP)
+	nodeName, err := p.drainForImageUpgrade(ctx, req)
 	if err != nil {
 		return err
-	}
-
-	if p.storageHealthRequired() {
-		storageErr := p.waitForStorageHealthy(ctx, req.prober, p.storageHealthTimeout())
-		if storageErr != nil {
-			return errors.Join(fmt.Errorf("storage health after draining: %w", storageErr),
-				releaseUnstartedImageUpgradeCordon(ctx, req.clientset, nodeName))
-		}
 	}
 
 	// Reconcile the desired config onto the node before upgrading it. Best-effort:
@@ -537,6 +518,39 @@ func (p *Provisioner) upgradeSingleNode(ctx context.Context, req upgradeNodeRequ
 	}
 
 	return p.completeNodeUpgrade(ctx, req.clientset, nodeName, req.prober)
+}
+
+// drainForImageUpgrade checks storage on both sides of a required drain.
+func (p *Provisioner) drainForImageUpgrade(
+	ctx context.Context,
+	req upgradeNodeRequest,
+) (string, error) {
+	if !p.storageHealthRequired() {
+		return p.prepareNodeForImageUpgrade(ctx, req.clientset, req.node.IP)
+	}
+
+	timeout := p.storageHealthTimeout()
+	if req.prober == nil || timeout <= 0 {
+		return "", errImageUpgradeStorageRequired
+	}
+
+	err := p.waitForStorageHealthy(ctx, req.prober, timeout)
+	if err != nil {
+		return "", fmt.Errorf("storage health before draining: %w", err)
+	}
+
+	nodeName, err := p.prepareNodeForImageUpgrade(ctx, req.clientset, req.node.IP)
+	if err != nil {
+		return "", err
+	}
+
+	err = p.waitForStorageHealthy(ctx, req.prober, timeout)
+	if err != nil {
+		return "", errors.Join(fmt.Errorf("storage health after draining: %w", err),
+			releaseUnstartedImageUpgradeCordon(ctx, req.clientset, nodeName))
+	}
+
+	return nodeName, nil
 }
 
 // Only an upgrade that never attempted a Talos change may release both
@@ -579,6 +593,7 @@ func (p *Provisioner) prepareNodeForImageUpgrade(
 		if p.storageHealthRequired() {
 			return "", errImageUpgradeKubernetesRequired
 		}
+
 		return "", nil
 	}
 
