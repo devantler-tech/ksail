@@ -405,7 +405,7 @@ func TestLonghornStorageGateWaitsForV2SnapshotDeletionBeforePurgeStarts(t *testi
 	}{
 		{name: "deletion requested", wantHold: true},
 		{name: "marked snapshot can be purged", marked: true, wantHold: true},
-		{name: "marked parent of volume head cannot be purged yet", marked: true, head: true},
+		{name: "marked parent of volume head with no purge observation", marked: true, head: true, wantHold: true},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()

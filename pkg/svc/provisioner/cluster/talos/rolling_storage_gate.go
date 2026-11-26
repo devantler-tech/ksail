@@ -506,16 +506,7 @@ func longhornSnapshotRemovalActive(snapshot *unstructured.Unstructured) (bool, e
 		return false, fmt.Errorf("read longhorn snapshot removal mark: %w", err)
 	}
 
-	if !marked {
-		return snapshot.GetDeletionTimestamp() != nil, nil
-	}
-
-	// Longhorn leaves a removed parent of the live head in place.
-	// The engine still reports an active purge of this volume.
-	hasHead, _, err := unstructured.NestedBool(snapshot.Object, "status", "children", "volume-head")
-	if err != nil {
-		return false, fmt.Errorf("read longhorn snapshot children: %w", err)
-	}
-
-	return !hasHead, nil
+	// Longhorn V2 1.13 does not report purge progress. Even a removed
+	// parent of the live head is insufficient evidence to clear a reboot.
+	return marked || snapshot.GetDeletionTimestamp() != nil, nil
 }

@@ -1264,7 +1264,9 @@ func (p *Provisioner) MarkImageUpgradeCordonForTest(
 	clientset kubernetes.Interface,
 	nodeName string,
 ) error {
-	return p.markImageUpgradeCordon(ctx, clientset, nodeName)
+	_, err := p.markImageUpgradeCordon(ctx, clientset, nodeName)
+
+	return err
 }
 
 func NewProvisionerFromOptionsForTest(opts v1alpha1.OptionsTalos) (*Provisioner, error) {
@@ -1274,7 +1276,9 @@ func NewProvisionerFromOptionsForTest(opts v1alpha1.OptionsTalos) (*Provisioner,
 func (p *Provisioner) PrepareNodeForImageUpgradeForTest(
 	ctx context.Context, clientset kubernetes.Interface, nodeIP string,
 ) (string, error) {
-	return p.prepareNodeForImageUpgrade(ctx, clientset, nodeIP)
+	reservation, err := p.prepareNodeForImageUpgrade(ctx, clientset, nodeIP)
+
+	return reservation.nodeName, err
 }
 
 func (p *Provisioner) UpgradeSingleNodeForTest(
@@ -1288,6 +1292,12 @@ func (p *Provisioner) UpgradeSingleNodeForTest(
 		node:      nodeWithRole{IP: nodeIP},
 		prober:    StorageHealthProberForTest(probe),
 	})
+}
+
+func (p *Provisioner) WithImageRebootStorageGateForTest(
+	ctx context.Context, probe StorageHealthProberForTest, reboot func() error,
+) error {
+	return p.withImageRebootStorageGate(ctx, probe, reboot)
 }
 
 // BuildAutoscalerPoolConfigsForTest exposes buildAutoscalerPoolConfigs, the step that turns the

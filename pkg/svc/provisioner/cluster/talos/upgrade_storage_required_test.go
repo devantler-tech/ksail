@@ -105,6 +105,34 @@ func (blockedStorageHealth) degradedVolumes(context.Context) ([]string, error) {
 	return []string{"longhorn-system/pvc-v2"}, nil
 }
 
+func TestImageUpgradeChecksStorageAtTheRebootBoundary(t *testing.T) {
+	t.Parallel()
+
+	options := talosprovisioner.NewOptions().WithStorageHealthTimeout(100 * time.Millisecond)
+	options.RequireStorageHealth = true
+	provisioner := talosprovisioner.NewProvisioner(nil, options).WithLogWriter(io.Discard)
+	reboots := 0
+	reboot := func() error {
+		reboots++
+
+		return nil
+	}
+
+	err := provisioner.WithImageRebootStorageGateForTest(
+		t.Context(), blockedStorageHealth{}.degradedVolumes, reboot,
+	)
+	if !errors.Is(err, talosprovisioner.ErrStorageHealthTimeout) || reboots != 0 {
+		t.Fatalf("unhealthy storage reached the reboot: reboots=%d err=%v", reboots, err)
+	}
+
+	probe := func(context.Context) ([]string, error) { return nil, nil }
+
+	err = provisioner.WithImageRebootStorageGateForTest(t.Context(), probe, reboot)
+	if err != nil || reboots != 1 {
+		t.Fatalf("healthy storage did not permit the reboot: reboots=%d err=%v", reboots, err)
+	}
+}
+
 func TestImageUpgradeStopsAndUncordonsWhenStorageBecomesUnhealthyAfterDrain(t *testing.T) {
 	t.Parallel()
 
@@ -145,6 +173,57 @@ func TestImageUpgradeStopsAndUncordonsWhenStorageBecomesUnhealthyAfterDrain(t *t
 	if node.Spec.Unschedulable || node.Annotations[testImageUpgradeCordonAnnotation] != "" ||
 		node.Annotations[testImageUpgradeStoragePendingAnnotation] != "" {
 		t.Fatal("an upgrade stopped before Talos execution must release its own cordon")
+	}
+}
+
+func TestImageUpgradePreservesTheCordonOfAnInterruptedAttempt(t *testing.T) {
+	t.Parallel()
+
+	const nodeIP, nodeName = "192.0.2.10", "worker-a"
+
+	clientset := fake.NewClientset(&corev1.Node{
+		Name: nodeName,
+		Annotations: map[string]string{
+			testImageUpgradeCordonAnnotation:         "true",
+			testImageUpgradeStoragePendingAnnotation: "true",
+		},
+		Spec: corev1.NodeSpec{Unschedulable: true},
+		Status: corev1.NodeStatus{
+			Addresses: []corev1.NodeAddress{
+				{Type: corev1.NodeInternalIP, Address: nodeIP},
+			},
+			Conditions: []corev1.NodeCondition{
+				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+			},
+		},
+	})
+	options := talosprovisioner.NewOptions().WithStorageHealthTimeout(100 * time.Millisecond)
+	options.RequireStorageHealth = true
+	provisioner := talosprovisioner.NewProvisioner(nil, options).WithLogWriter(io.Discard)
+	first := true
+	probe := func(ctx context.Context) ([]string, error) {
+		if first {
+			first = false
+
+			return nil, nil
+		}
+
+		return (blockedStorageHealth{}).degradedVolumes(ctx)
+	}
+
+	err := provisioner.UpgradeSingleNodeForTest(t.Context(), clientset, nodeIP, probe)
+	if !errors.Is(err, talosprovisioner.ErrStorageHealthTimeout) {
+		t.Fatalf("the resumed upgrade should be held before Talos execution: %v", err)
+	}
+
+	node, err := clientset.CoreV1().Nodes().Get(t.Context(), nodeName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !node.Spec.Unschedulable || node.Annotations[testImageUpgradeCordonAnnotation] != "true" ||
+		node.Annotations[testImageUpgradeStoragePendingAnnotation] != "true" {
+		t.Fatal("the retry released an earlier attempt's recovery markers")
 	}
 }
 
