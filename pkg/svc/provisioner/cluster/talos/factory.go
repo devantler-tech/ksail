@@ -90,6 +90,7 @@ func newProvisionerFromOptions(
 		WithDrainTimeout(opts.DrainTimeout.Duration).
 		WithStorageHealthTimeout(opts.StorageHealthTimeout.Duration).
 		WithSkipCNIChecks(skipCNIChecks)
+	options.RequireStorageHealth = opts.RequireStorageHealth
 
 	// Override the default Talos container image when a version pin is set.
 	if version := strings.TrimSpace(opts.Version); version != "" {

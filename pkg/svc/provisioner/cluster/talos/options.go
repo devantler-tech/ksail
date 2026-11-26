@@ -79,6 +79,9 @@ type Options struct {
 	// duration for the just-rebooted node's volumes to recover before draining the
 	// next node. Sourced from spec.cluster.talos.storageHealthTimeout.
 	StorageHealthTimeout time.Duration
+
+	// RequireStorageHealth requires native storage and node observations for image upgrades.
+	RequireStorageHealth bool
 }
 
 // NewOptions creates new Options with default values.

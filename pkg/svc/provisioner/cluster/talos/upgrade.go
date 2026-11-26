@@ -28,7 +28,15 @@ const (
 	lifecycleUpgradeMinMinor = 13
 )
 
-var errImageUpgradeNodeAlreadyCordoned = errors.New("node already cordoned for another purpose")
+var (
+	errImageUpgradeNodeAlreadyCordoned = errors.New("node already cordoned for another purpose")
+	errImageUpgradeKubernetesRequired  = errors.New(
+		"cannot start a storage-protected image upgrade without Kubernetes access",
+	)
+	errImageUpgradeStorageRequired = errors.New(
+		"a storage health probe and positive timeout are required for an image upgrade",
+	)
+)
 
 // supportsLifecycleUpgradeAPI reports whether a node running the given Talos
 // version tag implements the ImageService.Pull / LifecycleService.Upgrade APIs
@@ -387,15 +395,9 @@ func (p *Provisioner) rollingUpgradeNodes(
 	// to a best-effort per-node reconcile.
 	secretsSource, _, _ := p.fetchNodeConfigForRole(ctx, nodes, RoleControlPlane)
 
-	// Graceful drain and the between-node storage-health gate both need the
-	// Kubernetes API. Build the clientset (and the prober) once; when the API is
-	// unreachable both are nil and the per-node sequence degrades to the legacy
-	// reboot-without-drain rather than aborting a needed OS upgrade.
-	clientset := p.k8sClientOrWarnForUpgrade(clusterName)
-
-	var storageProber storageHealthProber
-	if clientset != nil {
-		storageProber = p.buildStorageHealthProberOrWarn(ctx, clientset, clusterName)
+	clientset, storageProber, err := p.imageUpgradeStorage(ctx, clusterName)
+	if err != nil {
+		return err
 	}
 
 	for index, node := range ordered {
@@ -439,6 +441,36 @@ func (p *Provisioner) rollingUpgradeNodes(
 	return nil
 }
 
+func (p *Provisioner) imageUpgradeStorage(
+	ctx context.Context,
+	clusterName string,
+) (kubernetes.Interface, storageHealthProber, error) {
+	if !p.storageHealthRequired() {
+		clientset := p.k8sClientOrWarnForUpgrade(clusterName)
+		if clientset == nil {
+			return nil, nil, nil
+		}
+
+		return clientset, p.buildStorageHealthProberOrWarn(ctx, clientset, clusterName), nil
+	}
+
+	if p.storageHealthTimeout() <= 0 {
+		return nil, nil, errImageUpgradeStorageRequired
+	}
+
+	clientset, err := p.createK8sClient(clusterName)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: %w", errImageUpgradeKubernetesRequired, err)
+	}
+
+	prober, err := p.buildStorageHealthProber(ctx, clientset, clusterName)
+	if err != nil {
+		return nil, nil, fmt.Errorf("prepare required storage health probe: %w", err)
+	}
+
+	return clientset, prober, nil
+}
+
 // upgradeNodeRequest bundles the inputs for upgradeSingleNode's graceful per-node
 // upgrade sequence.
 type upgradeNodeRequest struct {
@@ -459,9 +491,27 @@ type upgradeNodeRequest struct {
 // A drain failure aborts the roll with the node best-effort uncordoned
 // (see cordonAndDrain), matching the config-change path.
 func (p *Provisioner) upgradeSingleNode(ctx context.Context, req upgradeNodeRequest) error {
+	if p.storageHealthRequired() {
+		if req.prober == nil || p.storageHealthTimeout() <= 0 {
+			return errImageUpgradeStorageRequired
+		}
+
+		storageErr := p.waitForStorageHealthy(ctx, req.prober, p.storageHealthTimeout())
+		if storageErr != nil {
+			return fmt.Errorf("storage health before draining: %w", storageErr)
+		}
+	}
 	nodeName, err := p.prepareNodeForImageUpgrade(ctx, req.clientset, req.node.IP)
 	if err != nil {
 		return err
+	}
+
+	if p.storageHealthRequired() {
+		storageErr := p.waitForStorageHealthy(ctx, req.prober, p.storageHealthTimeout())
+		if storageErr != nil {
+			return errors.Join(fmt.Errorf("storage health after draining: %w", storageErr),
+				releaseUnstartedImageUpgradeCordon(ctx, req.clientset, nodeName))
+		}
 	}
 
 	// Reconcile the desired config onto the node before upgrading it. Best-effort:
@@ -489,20 +539,52 @@ func (p *Provisioner) upgradeSingleNode(ctx context.Context, req upgradeNodeRequ
 	return p.completeNodeUpgrade(ctx, req.clientset, nodeName, req.prober)
 }
 
+// Only an upgrade that never attempted a Talos change may release both
+// markers. A cordon installed by another actor is left in place.
+func releaseUnstartedImageUpgradeCordon(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeName string,
+) error {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), uncordonCleanupTimeout)
+	defer cancel()
+
+	err := updateLatestNode(ctx, clientset, nodeName, func(node *corev1.Node) bool {
+		if node.Annotations[imageUpgradeCordonAnnotation] != labelValueTrue ||
+			node.Annotations[imageUpgradeStoragePendingAnnotation] != labelValueTrue {
+			return false
+		}
+
+		node.Spec.Unschedulable = false
+		delete(node.Annotations, imageUpgradeCordonAnnotation)
+		delete(node.Annotations, imageUpgradeStoragePendingAnnotation)
+
+		return true
+	})
+	if err != nil {
+		return fmt.Errorf("release unstarted image-upgrade cordon: %w", err)
+	}
+
+	return nil
+}
+
 // prepareNodeForImageUpgrade reserves and drains a registered Kubernetes node.
-// Only a confirmed absent node or an unavailable client permits the recovery fallback.
+// The recovery fallback remains available when storage health is optional.
 func (p *Provisioner) prepareNodeForImageUpgrade(
 	ctx context.Context,
 	clientset kubernetes.Interface,
 	nodeIP string,
 ) (string, error) {
 	if clientset == nil {
+		if p.storageHealthRequired() {
+			return "", errImageUpgradeKubernetesRequired
+		}
 		return "", nil
 	}
 
 	nodeName, err := p.resolveNodeName(ctx, clientset, nodeIP)
 	if err != nil {
-		if !errors.Is(err, ErrNodeNotFoundByIP) {
+		if p.storageHealthRequired() || !errors.Is(err, ErrNodeNotFoundByIP) {
 			return "", fmt.Errorf("resolving Kubernetes node for %s: %w", nodeIP, err)
 		}
 

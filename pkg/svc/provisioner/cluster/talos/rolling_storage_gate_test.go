@@ -356,6 +356,105 @@ func TestLonghornDegradedVolumes_AllHealthy(t *testing.T) {
 	assert.Empty(t, got)
 }
 
+func TestLonghornStorageGateWaitsForActiveV2SnapshotPurge(t *testing.T) {
+	t.Parallel()
+
+	volume := longhornVolume("pvc-v2", "healthy")
+	require.NoError(t, unstructured.SetNestedField(volume.Object, "v2", "spec", "dataEngine"))
+	engine := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "longhorn.io/v1beta2",
+		"kind":       "Engine",
+		"metadata": map[string]any{
+			"name": "pvc-v2-e-0", "namespace": "longhorn-system",
+		},
+		"spec": map[string]any{
+			"volumeName": "pvc-v2", "dataEngine": "v2", "active": true,
+		},
+		"status": map[string]any{
+			"currentState": "running",
+			"purgeStatus": map[string]any{
+				"replica-a": map[string]any{
+					"isPurging": true,
+					"progress":  int64(12),
+					"state":     "in_progress",
+					"error":     "",
+				},
+			},
+		},
+	}}
+	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
+		map[schema.GroupVersionResource]string{
+			talosprovisioner.LonghornVolumeGVRForTest():                       "VolumeList",
+			{Group: "longhorn.io", Version: "v1beta2", Resource: "engines"}:   "EngineList",
+			{Group: "longhorn.io", Version: "v1beta2", Resource: "snapshots"}: "SnapshotList",
+		}, volume, engine)
+
+	blocked, err := talosprovisioner.LonghornDegradedVolumesForTest(t.Context(), client)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"longhorn-system/pvc-v2"}, blocked)
+}
+
+func TestLonghornStorageGateWaitsForV2SnapshotDeletionBeforePurgeStarts(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name     string
+		marked   bool
+		head     bool
+		wantHold bool
+	}{
+		{name: "deletion requested", wantHold: true},
+		{name: "marked snapshot can be purged", marked: true, wantHold: true},
+		{name: "marked parent of volume head cannot be purged yet", marked: true, head: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			volume := longhornVolume("pvc-v2", "healthy")
+			require.NoError(
+				t,
+				unstructured.SetNestedField(volume.Object, "v2", "spec", "dataEngine"),
+			)
+
+			children := map[string]any{"child": true}
+			if testCase.head {
+				children = map[string]any{"volume-head": true}
+			}
+
+			snapshot := &unstructured.Unstructured{Object: map[string]any{
+				"apiVersion": "longhorn.io/v1beta2",
+				"kind":       "Snapshot",
+				"metadata": map[string]any{
+					"name":              "snap-a",
+					"namespace":         "longhorn-system",
+					"deletionTimestamp": "2026-11-26T12:00:00Z",
+				},
+				"spec": map[string]any{"volume": "pvc-v2", "createSnapshot": true},
+				"status": map[string]any{
+					"markRemoved": testCase.marked,
+					"children":    children,
+					"readyToUse":  false,
+				},
+			}}
+			client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
+				map[schema.GroupVersionResource]string{
+					talosprovisioner.LonghornVolumeGVRForTest():                       "VolumeList",
+					{Group: "longhorn.io", Version: "v1beta2", Resource: "engines"}:   "EngineList",
+					{Group: "longhorn.io", Version: "v1beta2", Resource: "snapshots"}: "SnapshotList",
+				}, volume, snapshot)
+
+			blocked, err := talosprovisioner.LonghornDegradedVolumesForTest(t.Context(), client)
+			require.NoError(t, err)
+
+			if testCase.wantHold {
+				assert.Equal(t, []string{"longhorn-system/pvc-v2"}, blocked)
+			} else {
+				assert.Empty(t, blocked)
+			}
+		})
+	}
+}
+
 // longhornVolume builds an unstructured Longhorn Volume CR in the longhorn-system
 // namespace with the given status.robustness (omitted when empty, simulating a
 // detached volume).

@@ -1267,6 +1267,29 @@ func (p *Provisioner) MarkImageUpgradeCordonForTest(
 	return p.markImageUpgradeCordon(ctx, clientset, nodeName)
 }
 
+func NewProvisionerFromOptionsForTest(opts v1alpha1.OptionsTalos) (*Provisioner, error) {
+	return newProvisionerFromOptions(nil, "", "", opts, false)
+}
+
+func (p *Provisioner) PrepareNodeForImageUpgradeForTest(
+	ctx context.Context, clientset kubernetes.Interface, nodeIP string,
+) (string, error) {
+	return p.prepareNodeForImageUpgrade(ctx, clientset, nodeIP)
+}
+
+func (p *Provisioner) UpgradeSingleNodeForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeIP string,
+	probe func(context.Context) ([]string, error),
+) error {
+	return p.upgradeSingleNode(ctx, upgradeNodeRequest{
+		clientset: clientset,
+		node:      nodeWithRole{IP: nodeIP},
+		prober:    StorageHealthProberForTest(probe),
+	})
+}
+
 // BuildAutoscalerPoolConfigsForTest exposes buildAutoscalerPoolConfigs, the step that turns the
 // configured pools and the cluster's worker config into the configs the autoscaler Secret stores.
 func (p *Provisioner) BuildAutoscalerPoolConfigsForTest(
