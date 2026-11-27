@@ -2021,9 +2021,9 @@ github.com/aws/aws-sdk-go-v2/config/internal/ini
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE.txt
 
-Component: github.com/aws/aws-sdk-go-v2/credentials@v1.21.1
-Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/credentials/@v/v1.21.1.zip
-Selected Go source checksum: h1:4iuMmYSa42WMeClXjzE+HoZIeBud6o/bd00BN6WM9H4=
+Component: github.com/aws/aws-sdk-go-v2/credentials@v1.21.3
+Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/credentials/@v/v1.21.3.zip
+Selected Go source checksum: h1:bh+9VoJ4eDzJVEY6jfdNTBa0Dx7tdr+lWSPNovU1vXc=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -2222,9 +2222,9 @@ github.com/aws/aws-sdk-go-v2/service/s3/types
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE.txt
 
-Component: github.com/aws/aws-sdk-go-v2/service/signin@v1.13.1
-Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/signin/@v/v1.13.1.zip
-Selected Go source checksum: h1:ssrDA6AKfXEc3h0Pf4EI4vQ8sN5Zd136SrU9Tjr0XPc=
+Component: github.com/aws/aws-sdk-go-v2/service/signin@v1.14.0
+Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/signin/@v/v1.14.0.zip
+Selected Go source checksum: h1:bIEk1HfTd3MGzvDa5YOQUodGr96D9+UTnmBLBB8ZJ10=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -2261,9 +2261,9 @@ github.com/aws/aws-sdk-go-v2/service/ssooidc/types
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE.txt
 
-Component: github.com/aws/aws-sdk-go-v2/service/sts@v1.52.0
-Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/sts/@v/v1.52.0.zip
-Selected Go source checksum: h1:IaBLmJWiIEtKkjXMgMbYGZk7WKXbYA8148wCMCXq9hU=
+Component: github.com/aws/aws-sdk-go-v2/service/sts@v1.53.0
+Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/sts/@v/v1.53.0.zip
+Selected Go source checksum: h1:my9Y6lxcqvPV5k4OTqnxr8XbiTDDRos1leEh050Z93U=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
