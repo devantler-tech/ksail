@@ -94,7 +94,7 @@ func validateGoMaintenanceInputs(uses string, with map[string]any) error {
 		goMaintenanceInputLatestRevision, goMaintenanceInputDiagnosticsRevision,
 		goMaintenanceInputHeadroomRevision, goMaintenanceInputSignedFixPinRevision,
 		goMaintenanceInputScannerRetryRevision, goMaintenanceInputLintHeadroomRevision,
-		goMaintenanceInputSetupGoRevision,
+		goMaintenanceInputSetupGoRevision, goMaintenanceInputRunnerHardeningRevision,
 	}, uses):
 		if explicit {
 			return errGoMaintenanceRetiredInput
@@ -173,6 +173,8 @@ func validateGoMaintenanceIdentity(workflow ciWorkflow, caller todosWorkflow) er
 	// v22.3.0 only moves setup-go to v7.1.0 and the disabled signed-fix callee pins
 	// to v22.0.5. Its inputs, admission, permissions, secrets and the signed-fix
 	// opt-out are unchanged.
+	// v22.7.4 moves runner hardening to v2.23.0 and the disabled signed-fix callees
+	// to v22.7.3. The inputs, admission and credential envelope are unchanged.
 	// Keep explicit reviewed identities: a syntactically valid SHA alone is insufficient.
 	reviewed := slices.Contains([]string{
 		prefix + "0600006235510307a04efebcac1ac1f363f5f862",
@@ -199,6 +201,7 @@ func validateGoMaintenanceIdentity(workflow ciWorkflow, caller todosWorkflow) er
 		goMaintenanceInputScannerRetryRevision,
 		goMaintenanceInputLintHeadroomRevision,
 		goMaintenanceInputSetupGoRevision,
+		goMaintenanceInputRunnerHardeningRevision,
 	}, job.Uses)
 	if !found || !reviewed || len(job.Steps) != 0 ||
 		caller.Jobs["ci-go"].RunsOn != "" || !reflect.DeepEqual(job.Needs, []string{"changes"}) {
@@ -348,6 +351,8 @@ const (
 	// The v22.3.0 setup-go revision retains the retired-input contract.
 	goMaintenanceInputSetupGoRevision = "devantler-tech/.github/.github/workflows/validate-go-project.yaml@" +
 		"946fff9cb37042f4c26c3342665727e28bd66c01"
+	goMaintenanceInputRunnerHardeningRevision = "devantler-tech/.github/.github/workflows/validate-go-project.yaml@" +
+		"61d8f70f25d7d5deb8bd914136b329b5a59ff43b"
 )
 
 type goMaintenanceMutation struct {
