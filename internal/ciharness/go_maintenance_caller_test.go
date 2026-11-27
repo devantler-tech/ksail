@@ -65,7 +65,11 @@ func validateGoMaintenanceCaller(contents []byte) error {
 	}
 
 	if !reflect.DeepEqual(job.Permissions, map[string]string{
-		"contents": "write", "issues": "write", "pull-requests": "write", "code-quality": "write",
+		"contents":      "write",
+		"issues":        "write",
+		"pull-requests": "write",
+		"code-quality":  "write",
+		"id-token":      "write", // lets the shared Go validation reach the GitHub token broker (ADR 0020)
 	}) || !reflect.DeepEqual(caller.Jobs["ci-go"].Secrets, map[string]string{
 		"APP_PRIVATE_KEY": "${{ secrets.APP_PRIVATE_KEY }}",
 	}) {
@@ -90,6 +94,7 @@ func validateGoMaintenanceInputs(uses string, with map[string]any) error {
 		goMaintenanceInputLatestRevision, goMaintenanceInputDiagnosticsRevision,
 		goMaintenanceInputHeadroomRevision, goMaintenanceInputSignedFixPinRevision,
 		goMaintenanceInputScannerRetryRevision, goMaintenanceInputLintHeadroomRevision,
+		goMaintenanceInputSetupGoRevision,
 	}, uses):
 		if explicit {
 			return errGoMaintenanceRetiredInput
@@ -165,6 +170,9 @@ func validateGoMaintenanceIdentity(workflow ciWorkflow, caller todosWorkflow) er
 	// v22.0.0 gives the lint job 40 minutes and a soft Go heap target for cold-cache analyses,
 	// and moves the disabled signed-fix callee pins to v21.12.3. Its inputs, admission,
 	// permissions, secrets and the signed-fix opt-out are unchanged.
+	// v22.3.0 only moves setup-go to v7.1.0 and the disabled signed-fix callee pins
+	// to v22.0.5. Its inputs, admission, permissions, secrets and the signed-fix
+	// opt-out are unchanged.
 	// Keep explicit reviewed identities: a syntactically valid SHA alone is insufficient.
 	reviewed := slices.Contains([]string{
 		prefix + "0600006235510307a04efebcac1ac1f363f5f862",
@@ -190,6 +198,7 @@ func validateGoMaintenanceIdentity(workflow ciWorkflow, caller todosWorkflow) er
 		prefix + "cc156a3693019fdbe9817c46f1a91cd50a124695",
 		goMaintenanceInputScannerRetryRevision,
 		goMaintenanceInputLintHeadroomRevision,
+		goMaintenanceInputSetupGoRevision,
 	}, job.Uses)
 	if !found || !reviewed || len(job.Steps) != 0 ||
 		caller.Jobs["ci-go"].RunsOn != "" || !reflect.DeepEqual(job.Needs, []string{"changes"}) {
@@ -336,6 +345,9 @@ const (
 	// The v22.0.0 lint headroom revision retains the retired-input contract.
 	goMaintenanceInputLintHeadroomRevision = "devantler-tech/.github/.github/workflows/validate-go-project.yaml@" +
 		"cd371c6003deca3a3b417b783da73e05b4bf690f"
+	// The v22.3.0 setup-go revision retains the retired-input contract.
+	goMaintenanceInputSetupGoRevision = "devantler-tech/.github/.github/workflows/validate-go-project.yaml@" +
+		"946fff9cb37042f4c26c3342665727e28bd66c01"
 )
 
 type goMaintenanceMutation struct {
@@ -454,6 +466,7 @@ func goMaintenanceRetiredInputMutations() []goMaintenanceMutation {
 		{"retired input at signed-fix pin revision", goMaintenanceInputSignedFixPinRevision},
 		{"retired input at scanner retry revision", goMaintenanceInputScannerRetryRevision},
 		{"retired input at lint headroom revision", goMaintenanceInputLintHeadroomRevision},
+		{"retired input at setup-go revision", goMaintenanceInputSetupGoRevision},
 	}
 
 	mutations := make([]goMaintenanceMutation, 0, len(revisions))
@@ -496,10 +509,10 @@ func goMaintenanceSignedFixMutations() []goMaintenanceMutation {
 
 func goMaintenanceEnvelopeMutations() []goMaintenanceMutation {
 	return []goMaintenanceMutation{
-		{"new OIDC grant", func(t *testing.T, job map[string]any) {
+		{"new actions write grant", func(t *testing.T, job map[string]any) {
 			t.Helper()
 
-			goMaintenanceMap(t, job, "permissions")["id-token"] = "write"
+			goMaintenanceMap(t, job, "permissions")["actions"] = "write"
 		}, "credential envelope"},
 		{"new secret", func(t *testing.T, job map[string]any) {
 			t.Helper()

@@ -8,9 +8,10 @@ on:
 permissions:
   contents: read
   issues: write
+  id-token: write # lets the shared to-do scanner prove its identity to the GitHub token broker (ADR 0020)
 
 jobs:
   todos:
-    uses: devantler-tech/.github/.github/workflows/scan-for-todo-comments.yaml@711337ea623e44536204b40fff5278166aa64ffa # v21.12.3
+    uses: devantler-tech/.github/.github/workflows/scan-for-todo-comments.yaml@0e02148c251bcd65cfddc1cc7bec49ccce2eea42 # v22.7.0
     secrets:
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}

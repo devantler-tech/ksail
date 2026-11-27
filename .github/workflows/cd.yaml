@@ -152,7 +152,7 @@ jobs:
 
       - name: ⚙️ Setup Go
         if: needs.validate-release-ref.outputs.release-mode == 'build'
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           # Disable module cache restoration in release workflows to avoid
@@ -341,7 +341,7 @@ jobs:
 
       - name: ⚙️ Setup Go
         if: needs.validate-release-ref.outputs.release-mode == 'build'
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache: false
@@ -426,7 +426,7 @@ jobs:
 
       - name: 🛠️ Setup desktop build (Go, Node.js, webview deps, staged web UI)
         if: needs.validate-release-ref.outputs.release-mode == 'build'
-        uses: devantler-tech/ksail/.github/actions/setup-desktop-build@e63f0babb7424228315e45ebe5ce43e2c2c0fa11
+        uses: devantler-tech/ksail/.github/actions/setup-desktop-build@87ab9e1093b895fdeb2bdbac3664031615283d31
 
       - name: 🏷️ Extract version from tag
         if: needs.validate-release-ref.outputs.release-mode == 'build'

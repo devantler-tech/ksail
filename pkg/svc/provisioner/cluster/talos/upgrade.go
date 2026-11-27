@@ -2,6 +2,7 @@ package talosprovisioner
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -18,6 +19,8 @@ import (
 )
 
 const (
+	imageUpgradeAttemptAnnotation = "ksail.devantler.tech/image-upgrade-attempt"
+
 	// lifecycleUpgradeMinMajor and lifecycleUpgradeMinMinor are the major/minor of
 	// the first Talos release (1.13.0) that implements the ImageService.Pull and
 	// LifecycleService.Upgrade APIs. Nodes running older releases only expose the
@@ -28,7 +31,16 @@ const (
 	lifecycleUpgradeMinMinor = 13
 )
 
-var errImageUpgradeNodeAlreadyCordoned = errors.New("node already cordoned for another purpose")
+var (
+	errImageUpgradeNodeAlreadyCordoned = errors.New("node already cordoned for another purpose")
+	errImageUpgradeAttemptChanged      = errors.New("image upgrade cordon ownership changed")
+	errImageUpgradeKubernetesRequired  = errors.New(
+		"cannot start a storage-protected image upgrade without Kubernetes access",
+	)
+	errImageUpgradeStorageRequired = errors.New(
+		"a storage health probe and positive timeout are required for an image upgrade",
+	)
+)
 
 // supportsLifecycleUpgradeAPI reports whether a node running the given Talos
 // version tag implements the ImageService.Pull / LifecycleService.Upgrade APIs
@@ -71,6 +83,7 @@ func runningVersionMatchesTarget(running, target string) bool {
 func (p *Provisioner) upgradeNodeTalosVersion(
 	ctx context.Context,
 	nodeIP, installerImage, desiredTag string,
+	prober storageHealthProber,
 ) error {
 	// The upgrade issues non-idempotent RPCs (LifecycleService.Upgrade / legacy
 	// MachineService.Upgrade + Reboot) on this one client, so the transient apid
@@ -110,9 +123,9 @@ func (p *Provisioner) upgradeNodeTalosVersion(
 	}
 
 	if supportsLifecycleUpgradeAPI(runningVersion) {
-		err = p.lifecycleUpgradeNode(ctx, talosClient, nodeIP, installerImage)
+		err = p.lifecycleUpgradeNode(ctx, talosClient, nodeIP, installerImage, prober)
 	} else {
-		err = p.legacyUpgradeNode(ctx, talosClient, nodeIP, installerImage)
+		err = p.legacyUpgradeNode(ctx, talosClient, nodeIP, installerImage, prober)
 	}
 
 	if err != nil {
@@ -138,6 +151,7 @@ func (p *Provisioner) lifecycleUpgradeNode(
 	ctx context.Context,
 	talosClient *talosclient.Client,
 	nodeIP, installerImage string,
+	prober storageHealthProber,
 ) error {
 	containerd := &common.ContainerdInstance{
 		Driver:    common.ContainerDriver_CONTAINERD,
@@ -159,7 +173,9 @@ func (p *Provisioner) lifecycleUpgradeNode(
 	// Step 3: Reboot.
 	_, _ = fmt.Fprintf(p.logWriter, "    Rebooting %s...\n", nodeIP)
 
-	rebootErr := talosClient.Reboot(ctx)
+	rebootErr := p.withImageRebootStorageGate(ctx, prober, func() error {
+		return talosClient.Reboot(ctx)
+	})
 	if rebootErr != nil {
 		return fmt.Errorf("rebooting node %s: %w", nodeIP, rebootErr)
 	}
@@ -174,6 +190,7 @@ func (p *Provisioner) legacyUpgradeNode(
 	ctx context.Context,
 	talosClient *talosclient.Client,
 	nodeIP, installerImage string,
+	prober storageHealthProber,
 ) error {
 	_, _ = fmt.Fprintf(p.logWriter,
 		"    Upgrading %s via MachineService (legacy API)...\n", nodeIP)
@@ -186,7 +203,15 @@ func (p *Provisioner) legacyUpgradeNode(
 		talosclient.WithUpgradeRebootMode(machineapi.UpgradeRequest_DEFAULT),
 	}
 
-	_, err := talosClient.UpgradeWithOptions(ctx, opts...) //nolint:staticcheck // legacy <1.13 API
+	err := p.withImageRebootStorageGate(ctx, prober, func() error {
+		//nolint:staticcheck // The legacy API is required on Talos < 1.13.
+		_, upgradeErr := talosClient.UpgradeWithOptions(ctx, opts...)
+		if upgradeErr != nil {
+			return fmt.Errorf("request MachineService upgrade: %w", upgradeErr)
+		}
+
+		return nil
+	})
 	if err != nil {
 		return fmt.Errorf("legacy upgrade on %s: %w", nodeIP, err)
 	}
@@ -194,6 +219,26 @@ func (p *Provisioner) legacyUpgradeNode(
 	_, _ = fmt.Fprintf(p.logWriter, "    ✓ Upgrade initiated on %s\n", nodeIP)
 
 	return nil
+}
+
+// Check immediately before the RPC that can reboot the node. A failed check
+// leaves its image-upgrade recovery markers in place.
+func (p *Provisioner) withImageRebootStorageGate(
+	ctx context.Context, prober storageHealthProber, reboot func() error,
+) error {
+	if p.storageHealthRequired() {
+		timeout := p.storageHealthTimeout()
+		if prober == nil || timeout <= 0 {
+			return errImageUpgradeStorageRequired
+		}
+
+		err := p.waitForStorageHealthy(ctx, prober, timeout)
+		if err != nil {
+			return fmt.Errorf("storage health immediately before reboot: %w", err)
+		}
+	}
+
+	return reboot()
 }
 
 // versionTagFromClient returns the running Talos version tag reported by a node
@@ -387,15 +432,9 @@ func (p *Provisioner) rollingUpgradeNodes(
 	// to a best-effort per-node reconcile.
 	secretsSource, _, _ := p.fetchNodeConfigForRole(ctx, nodes, RoleControlPlane)
 
-	// Graceful drain and the between-node storage-health gate both need the
-	// Kubernetes API. Build the clientset (and the prober) once; when the API is
-	// unreachable both are nil and the per-node sequence degrades to the legacy
-	// reboot-without-drain rather than aborting a needed OS upgrade.
-	clientset := p.k8sClientOrWarnForUpgrade(clusterName)
-
-	var storageProber storageHealthProber
-	if clientset != nil {
-		storageProber = p.buildStorageHealthProberOrWarn(ctx, clientset, clusterName)
+	clientset, storageProber, err := p.imageUpgradeStorage(ctx, clusterName)
+	if err != nil {
+		return err
 	}
 
 	for index, node := range ordered {
@@ -439,6 +478,36 @@ func (p *Provisioner) rollingUpgradeNodes(
 	return nil
 }
 
+func (p *Provisioner) imageUpgradeStorage(
+	ctx context.Context,
+	clusterName string,
+) (kubernetes.Interface, storageHealthProber, error) {
+	if !p.storageHealthRequired() {
+		clientset := p.k8sClientOrWarnForUpgrade(clusterName)
+		if clientset == nil {
+			return nil, nil, nil
+		}
+
+		return clientset, p.buildStorageHealthProberOrWarn(ctx, clientset, clusterName), nil
+	}
+
+	if p.storageHealthTimeout() <= 0 {
+		return nil, nil, errImageUpgradeStorageRequired
+	}
+
+	clientset, err := p.createK8sClient(clusterName)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: %w", errImageUpgradeKubernetesRequired, err)
+	}
+
+	prober, err := p.buildStorageHealthProber(ctx, clientset, clusterName)
+	if err != nil {
+		return nil, nil, fmt.Errorf("prepare required storage health probe: %w", err)
+	}
+
+	return clientset, prober, nil
+}
+
 // upgradeNodeRequest bundles the inputs for upgradeSingleNode's graceful per-node
 // upgrade sequence.
 type upgradeNodeRequest struct {
@@ -450,18 +519,38 @@ type upgradeNodeRequest struct {
 	desiredTag     string
 }
 
+type imageUpgradeReservation struct {
+	nodeName string
+	attempt  string
+	acquired bool
+}
+
 // upgradeSingleNode runs the full graceful per-node OS-upgrade sequence: cordon →
 // drain → reconcile desired config (#5294) → upgrade + reboot → wait Ready →
-// uncordon → between-node storage-health gate (#5467). When the clientset is nil
-// (Kubernetes API unreachable) or a successful lookup finds no Kubernetes node,
-// it degrades to the legacy reconcile + upgrade + reboot without draining.
-// A failed lookup aborts the roll because the node's cordon state is unknown.
-// A drain failure aborts the roll with the node best-effort uncordoned
-// (see cordonAndDrain), matching the config-change path.
+// uncordon → between-node storage-health gate (#5467). Optional storage checks
+// permit a legacy upgrade when Kubernetes is unavailable or the host has no
+// Node object. Required storage checks hold the upgrade in either case.
+// A drain failure aborts the roll and releases a cordon acquired by this
+// attempt. An earlier interrupted upgrade keeps its recovery markers.
 func (p *Provisioner) upgradeSingleNode(ctx context.Context, req upgradeNodeRequest) error {
-	nodeName, err := p.prepareNodeForImageUpgrade(ctx, req.clientset, req.node.IP)
+	reservation, err := p.drainForImageUpgrade(ctx, req)
 	if err != nil {
 		return err
+	}
+
+	if reservation.nodeName != "" {
+		node, err := req.clientset.CoreV1().
+			Nodes().
+			Get(ctx, reservation.nodeName, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("checking image-upgrade ownership: %w", err)
+		}
+
+		if !node.Spec.Unschedulable ||
+			node.Annotations[imageUpgradeCordonAnnotation] != labelValueTrue ||
+			node.Annotations[imageUpgradeAttemptAnnotation] != reservation.attempt {
+			return errImageUpgradeAttemptChanged
+		}
 	}
 
 	// Reconcile the desired config onto the node before upgrading it. Best-effort:
@@ -476,34 +565,118 @@ func (p *Provisioner) upgradeSingleNode(ctx context.Context, req upgradeNodeRequ
 		)
 	}
 
-	upgradeErr := p.upgradeNodeTalosVersion(ctx, req.node.IP, req.installerImage, req.desiredTag)
+	upgradeErr := p.upgradeNodeTalosVersion(
+		ctx,
+		req.node.IP,
+		req.installerImage,
+		req.desiredTag,
+		req.prober,
+	)
 	if upgradeErr != nil {
 		return upgradeErr
 	}
 
 	// Nothing to uncordon (and no storage gate) when the node was never cordoned.
-	if nodeName == "" {
+	if reservation.nodeName == "" {
 		return nil
 	}
 
-	return p.completeNodeUpgrade(ctx, req.clientset, nodeName, req.prober)
+	return p.completeNodeUpgrade(ctx, req.clientset, reservation, req.prober)
+}
+
+// drainForImageUpgrade checks storage on both sides of a required drain.
+func (p *Provisioner) drainForImageUpgrade(
+	ctx context.Context,
+	req upgradeNodeRequest,
+) (imageUpgradeReservation, error) {
+	if !p.storageHealthRequired() {
+		return p.prepareNodeForImageUpgrade(ctx, req.clientset, req.node.IP)
+	}
+
+	timeout := p.storageHealthTimeout()
+	if req.prober == nil || timeout <= 0 {
+		return imageUpgradeReservation{}, errImageUpgradeStorageRequired
+	}
+
+	err := p.waitForStorageHealthy(ctx, req.prober, timeout)
+	if err != nil {
+		return imageUpgradeReservation{}, fmt.Errorf("storage health before draining: %w", err)
+	}
+
+	reservation, err := p.prepareNodeForImageUpgrade(ctx, req.clientset, req.node.IP)
+	if err != nil {
+		return imageUpgradeReservation{}, err
+	}
+
+	err = p.waitForStorageHealthy(ctx, req.prober, timeout)
+	if err != nil {
+		return imageUpgradeReservation{}, errors.Join(
+			fmt.Errorf("storage health after draining: %w", err),
+			releaseUnstartedImageUpgradeCordon(ctx, req.clientset, reservation),
+		)
+	}
+
+	return reservation, nil
+}
+
+// Only an upgrade that never attempted a Talos change may release both
+// markers. A cordon installed by another actor is left in place.
+func releaseUnstartedImageUpgradeCordon(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	reservation imageUpgradeReservation,
+) error {
+	if !reservation.acquired {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), uncordonCleanupTimeout)
+	defer cancel()
+
+	err := updateLatestNode(ctx, clientset, reservation.nodeName, func(node *corev1.Node) bool {
+		if node.Annotations[imageUpgradeCordonAnnotation] != labelValueTrue ||
+			node.Annotations[imageUpgradeStoragePendingAnnotation] != labelValueTrue ||
+			node.Annotations[imageUpgradeAttemptAnnotation] != reservation.attempt {
+			return false
+		}
+
+		node.Spec.Unschedulable = false
+		delete(node.Annotations, imageUpgradeCordonAnnotation)
+		delete(node.Annotations, imageUpgradeStoragePendingAnnotation)
+		delete(node.Annotations, imageUpgradeAttemptAnnotation)
+
+		return true
+	})
+	if err != nil {
+		return fmt.Errorf("release unstarted image-upgrade cordon: %w", err)
+	}
+
+	return nil
 }
 
 // prepareNodeForImageUpgrade reserves and drains a registered Kubernetes node.
-// Only a confirmed absent node or an unavailable client permits the recovery fallback.
+// The recovery fallback remains available when storage health is optional.
 func (p *Provisioner) prepareNodeForImageUpgrade(
 	ctx context.Context,
 	clientset kubernetes.Interface,
 	nodeIP string,
-) (string, error) {
+) (imageUpgradeReservation, error) {
 	if clientset == nil {
-		return "", nil
+		if p.storageHealthRequired() {
+			return imageUpgradeReservation{}, errImageUpgradeKubernetesRequired
+		}
+
+		return imageUpgradeReservation{}, nil
 	}
 
 	nodeName, err := p.resolveNodeName(ctx, clientset, nodeIP)
 	if err != nil {
-		if !errors.Is(err, ErrNodeNotFoundByIP) {
-			return "", fmt.Errorf("resolving Kubernetes node for %s: %w", nodeIP, err)
+		if p.storageHealthRequired() || !errors.Is(err, ErrNodeNotFoundByIP) {
+			return imageUpgradeReservation{}, fmt.Errorf(
+				"resolving Kubernetes node for %s: %w",
+				nodeIP,
+				err,
+			)
 		}
 
 		_, _ = fmt.Fprintf(p.logWriter,
@@ -511,46 +684,48 @@ func (p *Provisioner) prepareNodeForImageUpgrade(
 			nodeIP, err,
 		)
 
-		return "", nil
+		return imageUpgradeReservation{}, nil
 	}
 
-	err = p.markImageUpgradeCordon(ctx, clientset, nodeName)
+	reservation, err := p.markImageUpgradeCordon(ctx, clientset, nodeName)
 	if err != nil {
-		return "", fmt.Errorf("reserving image-upgrade cordon on %s: %w", nodeName, err)
+		return imageUpgradeReservation{}, fmt.Errorf(
+			"reserving image-upgrade cordon on %s: %w",
+			nodeName,
+			err,
+		)
 	}
 
-	err = p.cordonAndDrain(ctx, clientset, nodeName)
+	_, _ = fmt.Fprintf(p.logWriter, "    Draining %s...\n", nodeName)
+
+	err = p.drainNode(ctx, clientset, nodeName)
 	if err != nil {
-		return "", err
+		return imageUpgradeReservation{}, errors.Join(fmt.Errorf("drain: %w", err),
+			releaseUnstartedImageUpgradeCordon(ctx, clientset, reservation))
 	}
 
-	return nodeName, nil
+	return reservation, nil
 }
 
-// markImageUpgradeCordon atomically records KSail's ownership when it cordons a
-// node. An existing administrator cordon is left untouched and blocks the roll.
+// markImageUpgradeCordon records the attempt in the same update as the cordon.
+// Resuming a KSail cordon transfers ownership while preserving its recovery
+// markers. An administrator's cordon blocks the roll.
 func (p *Provisioner) markImageUpgradeCordon(
 	ctx context.Context,
 	clientset kubernetes.Interface,
 	nodeName string,
-) error {
+) (imageUpgradeReservation, error) {
 	foreignCordon := false
+	reservation := imageUpgradeReservation{nodeName: nodeName, attempt: rand.Text()}
 
 	err := updateLatestNode(ctx, clientset, nodeName, func(node *corev1.Node) bool {
-		foreignCordon = false
-
-		if node.Spec.Unschedulable {
-			if node.Annotations[imageUpgradeCordonAnnotation] == labelValueTrue &&
-				node.Annotations[imageUpgradeStoragePendingAnnotation] == labelValueTrue {
-				return false // resuming KSail's own interrupted roll
-			}
-
-			if node.Annotations[imageUpgradeCordonAnnotation] != labelValueTrue {
-				foreignCordon = true
-
-				return false
-			}
+		foreignCordon = node.Spec.Unschedulable &&
+			node.Annotations[imageUpgradeCordonAnnotation] != labelValueTrue
+		if foreignCordon {
+			return false
 		}
+
+		reservation.acquired = !node.Spec.Unschedulable
 
 		if node.Annotations == nil {
 			node.Annotations = make(map[string]string)
@@ -558,19 +733,28 @@ func (p *Provisioner) markImageUpgradeCordon(
 
 		node.Annotations[imageUpgradeCordonAnnotation] = labelValueTrue
 		node.Annotations[imageUpgradeStoragePendingAnnotation] = labelValueTrue
+		node.Annotations[imageUpgradeAttemptAnnotation] = reservation.attempt
 		node.Spec.Unschedulable = true
 
 		return true
 	})
 	if err != nil {
-		return fmt.Errorf("marking image-upgrade cordon on %s: %w", nodeName, err)
+		return imageUpgradeReservation{}, fmt.Errorf(
+			"marking image-upgrade cordon on %s: %w",
+			nodeName,
+			err,
+		)
 	}
 
 	if foreignCordon {
-		return fmt.Errorf("%w: %s", errImageUpgradeNodeAlreadyCordoned, nodeName)
+		return imageUpgradeReservation{}, fmt.Errorf(
+			"%w: %s",
+			errImageUpgradeNodeAlreadyCordoned,
+			nodeName,
+		)
 	}
 
-	return nil
+	return reservation, nil
 }
 
 // completeNodeUpgrade finishes the upgrade of a node that runs the target image: it
@@ -581,15 +765,15 @@ func (p *Provisioner) markImageUpgradeCordon(
 func (p *Provisioner) completeNodeUpgrade(
 	ctx context.Context,
 	clientset kubernetes.Interface,
-	nodeName string,
+	reservation imageUpgradeReservation,
 	prober storageHealthProber,
 ) error {
-	uncordonErr := p.uncordonAfterUpgrade(ctx, clientset, nodeName)
+	uncordonErr := p.uncordonAfterUpgrade(ctx, clientset, reservation)
 	if uncordonErr != nil {
 		return uncordonErr
 	}
 
-	storageErr := p.finishImageUpgradeStorageGate(ctx, clientset, nodeName, prober)
+	storageErr := p.finishImageUpgradeStorageGate(ctx, clientset, reservation, prober)
 	if storageErr != nil {
 		return fmt.Errorf("storage health gate: %w", storageErr)
 	}
@@ -600,7 +784,7 @@ func (p *Provisioner) completeNodeUpgrade(
 func (p *Provisioner) finishImageUpgradeStorageGate(
 	ctx context.Context,
 	clientset kubernetes.Interface,
-	nodeName string,
+	reservation imageUpgradeReservation,
 	prober storageHealthProber,
 ) error {
 	err := p.waitForStorageHealthy(ctx, prober, p.storageHealthTimeout())
@@ -608,17 +792,26 @@ func (p *Provisioner) finishImageUpgradeStorageGate(
 		return err
 	}
 
-	err = updateLatestNode(ctx, clientset, nodeName, func(node *corev1.Node) bool {
-		if node.Annotations[imageUpgradeStoragePendingAnnotation] != labelValueTrue {
+	ownershipChanged := false
+
+	err = updateLatestNode(ctx, clientset, reservation.nodeName, func(node *corev1.Node) bool {
+		ownershipChanged = node.Annotations[imageUpgradeAttemptAnnotation] != reservation.attempt
+		if ownershipChanged ||
+			node.Annotations[imageUpgradeStoragePendingAnnotation] != labelValueTrue {
 			return false
 		}
 
 		delete(node.Annotations, imageUpgradeStoragePendingAnnotation)
+		delete(node.Annotations, imageUpgradeAttemptAnnotation)
 
 		return true
 	})
 	if err != nil {
-		return fmt.Errorf("clearing storage recovery marker on %s: %w", nodeName, err)
+		return fmt.Errorf("clearing storage recovery marker on %s: %w", reservation.nodeName, err)
+	}
+
+	if ownershipChanged {
+		return errImageUpgradeAttemptChanged
 	}
 
 	return nil
@@ -662,6 +855,10 @@ func (p *Provisioner) recoverUpgradedNode(
 		return fmt.Errorf("reading node %s: %w", nodeName, getErr)
 	}
 
+	reservation := imageUpgradeReservation{
+		nodeName: nodeName,
+		attempt:  k8sNode.Annotations[imageUpgradeAttemptAnnotation],
+	}
 	if !k8sNode.Spec.Unschedulable ||
 		k8sNode.Annotations[imageUpgradeCordonAnnotation] != labelValueTrue {
 		// Check readiness without changing another actor's cordon. A previous
@@ -671,7 +868,7 @@ func (p *Provisioner) recoverUpgradedNode(
 			return fmt.Errorf("node %s did not report Ready after upgrade: %w", nodeName, readyErr)
 		}
 
-		storageErr := p.finishImageUpgradeStorageGate(ctx, clientset, nodeName, prober)
+		storageErr := p.finishImageUpgradeStorageGate(ctx, clientset, reservation, prober)
 		if storageErr != nil {
 			return fmt.Errorf("storage health gate: %w", storageErr)
 		}
@@ -684,7 +881,7 @@ func (p *Provisioner) recoverUpgradedNode(
 		nodeName,
 	)
 
-	return p.completeNodeUpgrade(ctx, clientset, nodeName, prober)
+	return p.completeNodeUpgrade(ctx, clientset, reservation, prober)
 }
 
 // uncordonAfterUpgrade waits for the upgraded node to report Ready, then uncordons
@@ -696,8 +893,10 @@ func (p *Provisioner) recoverUpgradedNode(
 func (p *Provisioner) uncordonAfterUpgrade(
 	ctx context.Context,
 	clientset kubernetes.Interface,
-	nodeName string,
+	reservation imageUpgradeReservation,
 ) error {
+	nodeName := reservation.nodeName
+
 	readyErr := p.waitForK8sNodeReady(ctx, clientset, nodeName)
 	if readyErr != nil {
 		return fmt.Errorf("node %s did not report Ready after upgrade: %w", nodeName, readyErr)
@@ -705,7 +904,26 @@ func (p *Provisioner) uncordonAfterUpgrade(
 
 	_, _ = fmt.Fprintf(p.logWriter, "    Uncordoning %s...\n", nodeName)
 
-	uncordonErr := p.uncordonNode(ctx, clientset, nodeName)
+	ownershipChanged := false
+	uncordonErr := updateLatestNode(ctx, clientset, nodeName, func(node *corev1.Node) bool {
+		ownershipChanged = node.Annotations[imageUpgradeAttemptAnnotation] != reservation.attempt ||
+			(reservation.attempt != "" && node.Spec.Unschedulable &&
+				node.Annotations[imageUpgradeCordonAnnotation] != labelValueTrue)
+		if ownershipChanged ||
+			(!node.Spec.Unschedulable && node.Annotations[imageUpgradeCordonAnnotation] != labelValueTrue) {
+			return false
+		}
+
+		node.Spec.Unschedulable = false
+		delete(node.Annotations, imageUpgradeCordonAnnotation)
+
+		return true
+	})
+
+	if ownershipChanged {
+		return errImageUpgradeAttemptChanged
+	}
+
 	if uncordonErr != nil {
 		_, _ = fmt.Fprintf(p.logWriter,
 			"    ⚠ Failed to uncordon %s (best-effort): %v\n", nodeName, uncordonErr)

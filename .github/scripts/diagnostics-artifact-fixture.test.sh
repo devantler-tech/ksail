@@ -154,6 +154,18 @@ fi
 [[ "$(cat "$tmp/reads")" == 4 ]]
 printf '1\n2\n4\n' | cmp - "$tmp/delays"
 grep -q 'artifact did not become visible after 4 reads' "$tmp/rejected.log"
+# The listing can name the artifact while still counting 0 (#8583): wait, then verify.
+cp "$tmp/valid.json" "$tmp/reply.json"
+FIXTURE_EMPTY_READS=1 FIXTURE_EMPTY_REPLY="$(jq -c '.total_count = 0' "$tmp/valid.json")" verify candidate success
+[[ "$(cat "$tmp/reads")" == 2 && "$(cat "$tmp/delays")" == 1 ]]
+jq '.total_count = 0' "$tmp/valid.json" >"$tmp/reply.json"
+if verify candidate success >"$tmp/rejected.log" 2>&1; then
+	echo 'a listing that never counted its artifact was accepted' >&2
+	exit 1
+fi
+[[ "$(cat "$tmp/reads")" == 4 ]]
+printf '1\n2\n4\n' | cmp - "$tmp/delays"
+grep -q 'artifact did not become visible after 4 reads' "$tmp/rejected.log"
 if FIXTURE_API_STATUS=1 verify candidate success >"$tmp/rejected.log" 2>&1; then
 	echo 'failed API read was accepted for a successful upload' >&2
 	exit 1
@@ -177,6 +189,10 @@ for mutation in \
 	'.artifacts[0].size_in_bytes = 0' \
 	'.artifacts[0].size_in_bytes = -1' \
 	'.artifacts[0].size_in_bytes = 1.5' \
+	'.total_count = 0 | .artifacts[0].name = "other"' \
+	'.total_count = 0 | .artifacts[0].workflow_run.id = 124' \
+	'.total_count = 0 | .artifacts[0].workflow_run.head_sha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"' \
+	'.total_count = 0 | .artifacts += .artifacts' \
 	'.total_count = 2 | .artifacts = []'; do
 	jq "$mutation" "$tmp/valid.json" >"$tmp/reply.json"
 	if verify candidate success >"$tmp/rejected.log" 2>&1; then

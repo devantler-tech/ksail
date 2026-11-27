@@ -488,6 +488,12 @@ export interface KSailClusterConfiguration {
          * (naming the stuck volumes) rather than hanging. Example: "10m".
          */
         storageHealthTimeout?: string;
+        /**
+         * RequireStorageHealth requires Kubernetes access, a drainable node, and a
+         * healthy storage observation before a Talos image upgrade. It requires a
+         * positive storageHealthTimeout. The default is false.
+         */
+        requireStorageHealth?: boolean;
       };
       /**
        * EKS holds options specific to the EKS distribution.

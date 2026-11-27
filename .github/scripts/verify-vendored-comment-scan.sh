@@ -16,7 +16,7 @@ jq -e '
   (.jobs | keys) == ["todos"] and
   (.jobs.todos | keys) == ["secrets", "uses"] and
   .jobs.todos.secrets == {"APP_PRIVATE_KEY":"${{ secrets.APP_PRIVATE_KEY }}"} and
-  .permissions == {"contents":"read", "issues":"write"}
+  .permissions == {"contents":"read", "issues":"write", "id-token":"write"}
 ' "$work/caller.json" >/dev/null || fail 'Consumer declaration changed outside the reviewed adoption'
 reference="$(jq -er '.jobs.todos.uses' "$work/caller.json")"
 [[ "$reference" =~ ^devantler-tech/\.github/\.github/workflows/scan-for-todo-comments\.yaml@([0-9a-f]{40})$ ]] ||

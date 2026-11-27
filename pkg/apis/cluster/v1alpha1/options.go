@@ -152,6 +152,10 @@ type OptionsTalos struct {
 	// (naming the stuck volumes) rather than hanging. Example: "10m".
 	//+kubebuilder:validation:XValidation:rule="self.matches('^[0-9]+(ns|us|µs|ms|s|m|h)$')"
 	StorageHealthTimeout metav1.Duration `json:"storageHealthTimeout,omitzero"`
+	// RequireStorageHealth requires Kubernetes access, a drainable node, and a
+	// healthy storage observation before a Talos image upgrade. It requires a
+	// positive storageHealthTimeout. The default is false.
+	RequireStorageHealth bool `json:"requireStorageHealth,omitempty"`
 }
 
 // PortMapping defines a mapping between a container port and a host port.
