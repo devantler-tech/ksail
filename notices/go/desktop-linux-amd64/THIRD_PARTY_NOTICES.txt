@@ -2091,9 +2091,9 @@ github.com/aws/aws-sdk-go-v2/internal/v4a/internal/v4
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE.txt
 
-Component: github.com/aws/aws-sdk-go-v2/service/cloudformation@v1.84.0
-Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/cloudformation/@v/v1.84.0.zip
-Selected Go source checksum: h1:ap0xq0413jOFrQZVs318qjtnXSAVAf/RNBzPZK1aP8A=
+Component: github.com/aws/aws-sdk-go-v2/service/cloudformation@v1.86.0
+Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/cloudformation/@v/v1.86.0.zip
+Selected Go source checksum: h1:1cFRmR5Eo9tm4KJ+B3KWaWhdLN1Dhy9KUZOtuhKUAzw=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
