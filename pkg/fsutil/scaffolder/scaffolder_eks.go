@@ -9,10 +9,13 @@ import (
 // EKSConfigFile is the default eksctl configuration filename.
 const EKSConfigFile = "eks.yaml"
 
+// Default to a Kubernetes version in Amazon EKS standard support.
+// See https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions.html.
+const defaultEKSVersion = "1.36"
+
 const (
 	defaultEKSClusterName           = "eks-default"
 	defaultEKSRegion                = "us-east-1"
-	defaultEKSVersion               = "1.31"
 	defaultEKSNodeGroupName         = "default"
 	defaultEKSInstanceType          = "t3.medium"
 	defaultEKSAMIFamily             = "AmazonLinux2023"

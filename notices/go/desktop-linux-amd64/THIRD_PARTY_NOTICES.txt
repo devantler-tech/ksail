@@ -2010,9 +2010,9 @@ github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream/eventstreamapi
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE.txt
 
-Component: github.com/aws/aws-sdk-go-v2/config@v1.33.19
-Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/config/@v/v1.33.19.zip
-Selected Go source checksum: h1:M0aPu5EdAMR6lGYN2GvM76WY0yqTyDi+gxV7s7Cdnr8=
+Component: github.com/aws/aws-sdk-go-v2/config@v1.33.21
+Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/config/@v/v1.33.21.zip
+Selected Go source checksum: h1:NY1d3yXmplUSYnUAue0sR88svD+SJiaI+YJGp8TxSNg=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -2021,9 +2021,9 @@ github.com/aws/aws-sdk-go-v2/config/internal/ini
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE.txt
 
-Component: github.com/aws/aws-sdk-go-v2/credentials@v1.21.1
-Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/credentials/@v/v1.21.1.zip
-Selected Go source checksum: h1:4iuMmYSa42WMeClXjzE+HoZIeBud6o/bd00BN6WM9H4=
+Component: github.com/aws/aws-sdk-go-v2/credentials@v1.21.3
+Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/credentials/@v/v1.21.3.zip
+Selected Go source checksum: h1:bh+9VoJ4eDzJVEY6jfdNTBa0Dx7tdr+lWSPNovU1vXc=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -2222,9 +2222,9 @@ github.com/aws/aws-sdk-go-v2/service/s3/types
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE.txt
 
-Component: github.com/aws/aws-sdk-go-v2/service/signin@v1.13.1
-Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/signin/@v/v1.13.1.zip
-Selected Go source checksum: h1:ssrDA6AKfXEc3h0Pf4EI4vQ8sN5Zd136SrU9Tjr0XPc=
+Component: github.com/aws/aws-sdk-go-v2/service/signin@v1.14.0
+Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/signin/@v/v1.14.0.zip
+Selected Go source checksum: h1:bIEk1HfTd3MGzvDa5YOQUodGr96D9+UTnmBLBB8ZJ10=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -2261,9 +2261,9 @@ github.com/aws/aws-sdk-go-v2/service/ssooidc/types
 Material: m1d7f646279c6049a (license), SHA-256 cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
 Files: LICENSE.txt
 
-Component: github.com/aws/aws-sdk-go-v2/service/sts@v1.52.0
-Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/sts/@v/v1.52.0.zip
-Selected Go source checksum: h1:IaBLmJWiIEtKkjXMgMbYGZk7WKXbYA8148wCMCXq9hU=
+Component: github.com/aws/aws-sdk-go-v2/service/sts@v1.53.0
+Source: https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/service/sts/@v/v1.53.0.zip
+Selected Go source checksum: h1:my9Y6lxcqvPV5k4OTqnxr8XbiTDDRos1leEh050Z93U=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -3918,7 +3918,6 @@ github.com/docker/docker/api/types/versions
 github.com/docker/docker/api/types/volume
 github.com/docker/docker/client
 github.com/docker/docker/pkg/archive
-github.com/docker/docker/pkg/homedir
 github.com/docker/docker/pkg/idtools
 github.com/docker/docker/pkg/jsonmessage
 github.com/docker/docker/pkg/namesgenerator
@@ -4359,9 +4358,9 @@ Files: LICENSE
 Material: m915eacbfe4e80de0 (copyright-header), SHA-256 19451847ba593d4d401e0f1b3bea6df59063435f09f9863e7b34719f3cc85500
 Material: mc527239d593d7cff (copyright-header), SHA-256 e5e21677637eb56ee50b3c213444e44d1c309f958238463d2f162adf430fd8c6
 
-Component: github.com/fluxcd/pkg/envsubst@v1.9.0
-Source: https://proxy.golang.org/github.com/fluxcd/pkg/envsubst/@v/v1.9.0.zip
-Selected Go source checksum: h1:QTagwV4WLmqF+JsD1rGkcKFmmj4HV64BnqNM1T311kc=
+Component: github.com/fluxcd/pkg/envsubst@v1.10.0
+Source: https://proxy.golang.org/github.com/fluxcd/pkg/envsubst/@v/v1.10.0.zip
+Selected Go source checksum: h1:CG4EYRqg0lUGlo++7zv/WNbZ6Piym9CqBEFsA5SyzwI=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -4376,9 +4375,9 @@ Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65
 Files: LICENSE
 Material: ma143d8dbe0d7c7f0 (copyright-header), SHA-256 ca7fc0da627e3be627b454f7ef70723997d5cde8dac88a31f7cc374d61d961c3
 
-Component: github.com/fluxcd/pkg/kustomize@v1.44.0
-Source: https://proxy.golang.org/github.com/fluxcd/pkg/kustomize/@v/v1.44.0.zip
-Selected Go source checksum: h1:S9ExtSX/wuuqQpvpzuRewM+PTeBVD6IHymnVQE1vFhg=
+Component: github.com/fluxcd/pkg/kustomize@v1.45.0
+Source: https://proxy.golang.org/github.com/fluxcd/pkg/kustomize/@v/v1.45.0.zip
+Selected Go source checksum: h1:NXBcMX+2aS/5xyLaelkK/QxyViS6sUBEI1vEnbFSr9o=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -4405,9 +4404,9 @@ Files: LICENSE
 Material: m81d1d3c75566d226 (copyright-header), SHA-256 cc0bb31e186a0e7eb32d7e00d96b28677bf29ab6dfb383c8e1e092d94fd8121e
 Material: me2e303746cdcf1c9 (copyright-header), SHA-256 e0a1126a0fa8e7122d37cc058234f149f09dc989c2765ccc8276ceda4e3a4c11
 
-Component: github.com/fluxcd/pkg/sourceignore@v0.22.0
-Source: https://proxy.golang.org/github.com/fluxcd/pkg/sourceignore/@v/v0.22.0.zip
-Selected Go source checksum: h1:GFvVgEA8HW4mZL26NFxhry3ZzCA8nR12MQovvZvbXm0=
+Component: github.com/fluxcd/pkg/sourceignore@v0.23.0
+Source: https://proxy.golang.org/github.com/fluxcd/pkg/sourceignore/@v/v0.23.0.zip
+Selected Go source checksum: h1:Gua6EJOtUIgHfgYKyKAFXSxFLkEhtGUlLg/pKdF3AFo=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -6868,9 +6867,9 @@ github.com/knqyf263/go-rpm-version
 Material: med54bb9a531845db (license), SHA-256 16f1f28fb026c76720ec63dc15caba227febd6d064367dc312eb857fbc3648b6
 Files: LICENSE
 
-Component: github.com/kubernetes-csi/external-snapshotter/client/v8@v8.2.0
-Source: https://proxy.golang.org/github.com/kubernetes-csi/external-snapshotter/client/v8/@v/v8.2.0.zip
-Selected Go source checksum: h1:Q3jQ1NkFqv5o+F8dMmHd8SfEmlcwNeo1immFApntEwE=
+Component: github.com/kubernetes-csi/external-snapshotter/client/v8@v8.6.0
+Source: https://proxy.golang.org/github.com/kubernetes-csi/external-snapshotter/client/v8/@v/v8.6.0.zip
+Selected Go source checksum: h1:FtGewu2k6HWw6evLGXY8JqUZ9eHpti1kd3e4amj+ilA=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -7390,9 +7389,9 @@ github.com/lmittmann/tint
 Material: m5991a150b35e6aa5 (license), SHA-256 97c4eab39597a7ddc24765e2e45e901f217f9ad9ef83cf38243318796d774292
 Files: LICENSE
 
-Component: github.com/loft-sh/admin-apis@v0.0.0-20260721223200-58c89e54604e
-Source: https://github.com/loft-sh/admin-apis/blob/58c89e54604e/LICENSE
-Selected Go source checksum: h1:A2KvOyV+gWsdo34lMkmYNi1T8/LmbQ3qXBKb16UiH3M=
+Component: github.com/loft-sh/admin-apis@v0.0.0-20260928151145-c0a92a2b2cf8
+Source: https://github.com/loft-sh/admin-apis/blob/c0a92a2b2cf8/LICENSE
+Selected Go source checksum: h1:cWuxRoc6g0QDRxmibH6DVukNibs88Mmdao56Didm5Vg=
 Raw classifier detections: Unknown
 Effective package-admission terms: LicenseRef-Loft-KSail-Binary-Permission
 The identified admin-apis component has a maintainer-verified permission record for compilation into KSail binaries. The upstream license stays unchanged; no general source grant, later-version permission, duration, irrevocability or downstream rights are inferred.
@@ -7401,20 +7400,20 @@ github.com/loft-sh/admin-apis/pkg/licenseapi
 Material: mf6b1d3da04f1b327 (reviewed-declaration), SHA-256 aba851442e6e14935d015beae5d867724728818889d223afa536a8959e8e5745
 Files: LICENSE
 
-Component: github.com/loft-sh/agentapi/v4@v4.12.2-rc.3
-Source: https://proxy.golang.org/github.com/loft-sh/agentapi/v4/@v/v4.12.2-rc.3.zip
-Selected Go source checksum: h1:t8tI7HbMDZ+onCraPdaubBWt3SALqDWNIJLKpUGORBQ=
+Component: github.com/loft-sh/agentapi/v5@v5.0.0-rc.1
+Source: https://proxy.golang.org/github.com/loft-sh/agentapi/v5/@v/v5.0.0-rc.1.zip
+Selected Go source checksum: h1:mgykeGqu6J73G8fYnugd/N+FANa7AIziUnSRH5PRiIA=
 Raw classifier detections: MPL-2.0
 Effective package-admission terms: MPL-2.0
 To obtain the exact MPL covered source, retrieve the source locator above and verify its recorded checksum. Repository-source modifications are identified by the release source binding.
 Packages:
-github.com/loft-sh/agentapi/v4/pkg/apis/loft/cluster
-github.com/loft-sh/agentapi/v4/pkg/apis/loft/cluster/v1
-github.com/loft-sh/agentapi/v4/pkg/apis/loft/storage/v1
-github.com/loft-sh/agentapi/v4/pkg/clientset/versioned
-github.com/loft-sh/agentapi/v4/pkg/clientset/versioned/scheme
-github.com/loft-sh/agentapi/v4/pkg/clientset/versioned/typed/cluster/v1
-github.com/loft-sh/agentapi/v4/pkg/clientset/versioned/typed/storage/v1
+github.com/loft-sh/agentapi/v5/pkg/apis/loft/cluster
+github.com/loft-sh/agentapi/v5/pkg/apis/loft/cluster/v1
+github.com/loft-sh/agentapi/v5/pkg/apis/loft/storage/v1
+github.com/loft-sh/agentapi/v5/pkg/clientset/versioned
+github.com/loft-sh/agentapi/v5/pkg/clientset/versioned/scheme
+github.com/loft-sh/agentapi/v5/pkg/clientset/versioned/typed/cluster/v1
+github.com/loft-sh/agentapi/v5/pkg/clientset/versioned/typed/storage/v1
 Material: m5651bc505679cef6 (license), SHA-256 1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5
 Files: LICENSE
 
@@ -7428,34 +7427,34 @@ github.com/loft-sh/analytics-client/client
 Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
 Files: LICENSE
 
-Component: github.com/loft-sh/api/v4@v4.12.2-rc.3
-Source: https://proxy.golang.org/github.com/loft-sh/api/v4/@v/v4.12.2-rc.3.zip
-Selected Go source checksum: h1:0V/Sk845ZKiJHSp9LdM3WrKL6RbmEVGNvmbbqvRJZjk=
+Component: github.com/loft-sh/api/v5@v5.0.0-rc.1
+Source: https://proxy.golang.org/github.com/loft-sh/api/v5/@v/v5.0.0-rc.1.zip
+Selected Go source checksum: h1:s4S91haNo37iFPetysQiY8JQg5U3m/g9eHEzJWB7fq0=
 Raw classifier detections: MPL-2.0
 Effective package-admission terms: MPL-2.0
 To obtain the exact MPL covered source, retrieve the source locator above and verify its recorded checksum. Repository-source modifications are identified by the release source binding.
 Packages:
-github.com/loft-sh/api/v4/pkg/apis/audit/v1
-github.com/loft-sh/api/v4/pkg/apis/management
-github.com/loft-sh/api/v4/pkg/apis/management/v1
-github.com/loft-sh/api/v4/pkg/apis/storage/v1
-github.com/loft-sh/api/v4/pkg/apis/ui/v1
-github.com/loft-sh/api/v4/pkg/auth
-github.com/loft-sh/api/v4/pkg/clientset/versioned
-github.com/loft-sh/api/v4/pkg/clientset/versioned/scheme
-github.com/loft-sh/api/v4/pkg/clientset/versioned/typed/management/v1
-github.com/loft-sh/api/v4/pkg/clientset/versioned/typed/storage/v1
-github.com/loft-sh/api/v4/pkg/managerfactory
-github.com/loft-sh/api/v4/pkg/product
-github.com/loft-sh/api/v4/pkg/snapshot
-github.com/loft-sh/api/v4/pkg/snapshot/storage
-github.com/loft-sh/api/v4/pkg/snapshot/storage/azure
-github.com/loft-sh/api/v4/pkg/snapshot/storage/container
-github.com/loft-sh/api/v4/pkg/snapshot/storage/oci
-github.com/loft-sh/api/v4/pkg/snapshot/storage/s3
-github.com/loft-sh/api/v4/pkg/snapshot/storage/types
-github.com/loft-sh/api/v4/pkg/vclusterconfig
-github.com/loft-sh/api/v4/pkg/vclusterconfig/constants
+github.com/loft-sh/api/v5/pkg/apis/audit/v1
+github.com/loft-sh/api/v5/pkg/apis/management
+github.com/loft-sh/api/v5/pkg/apis/management/v1
+github.com/loft-sh/api/v5/pkg/apis/storage/v1
+github.com/loft-sh/api/v5/pkg/apis/ui/v1
+github.com/loft-sh/api/v5/pkg/auth
+github.com/loft-sh/api/v5/pkg/clientset/versioned
+github.com/loft-sh/api/v5/pkg/clientset/versioned/scheme
+github.com/loft-sh/api/v5/pkg/clientset/versioned/typed/management/v1
+github.com/loft-sh/api/v5/pkg/clientset/versioned/typed/storage/v1
+github.com/loft-sh/api/v5/pkg/managerfactory
+github.com/loft-sh/api/v5/pkg/product
+github.com/loft-sh/api/v5/pkg/snapshot
+github.com/loft-sh/api/v5/pkg/snapshot/storage
+github.com/loft-sh/api/v5/pkg/snapshot/storage/azure
+github.com/loft-sh/api/v5/pkg/snapshot/storage/container
+github.com/loft-sh/api/v5/pkg/snapshot/storage/oci
+github.com/loft-sh/api/v5/pkg/snapshot/storage/s3
+github.com/loft-sh/api/v5/pkg/snapshot/storage/types
+github.com/loft-sh/api/v5/pkg/vclusterconfig
+github.com/loft-sh/api/v5/pkg/vclusterconfig/constants
 Material: m5651bc505679cef6 (license), SHA-256 1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5
 Files: LICENSE
 Material: m5f579be36ed4a0c1 (copyright-header), SHA-256 b51add480be278d8629fbb81e90b0a3e4ffcb51bc728b26226b00fe99a25b783
@@ -7564,9 +7563,9 @@ github.com/loft-sh/utils/pkg/extract
 Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
 Files: LICENSE
 
-Component: github.com/loft-sh/vcluster@v0.37.7
-Source: https://proxy.golang.org/github.com/loft-sh/vcluster/@v/v0.37.7.zip
-Selected Go source checksum: h1:uh2ue3WTqvEh8ckJOCwoJBI8Ujbm2Dm7fva+Xuiow7Q=
+Component: github.com/loft-sh/vcluster@v0.38.0
+Source: https://proxy.golang.org/github.com/loft-sh/vcluster/@v/v0.38.0.zip
+Selected Go source checksum: h1:ocKky32uPiOWQNH9JGQdi9IKJORAVq7Lt7WM4EvfVPs=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -14213,9 +14212,9 @@ Material: mb65e4d0566ca884c (copyright-header), SHA-256 e4414a7a62454953ce9048bb
 Material: mc93a7549b781fd12 (copyright-header), SHA-256 663e76d9545b8b2fd572c56941b9dc99e20fa9c1aa604caa0c08b8b2476b8a06
 Material: mff89ce360703bbfd (copyright-header), SHA-256 31c0f69dabebb2c43c5f51ed042037b22049cbab5278bb1210ec0b95b5d0a83d
 
-Component: k8s.io/cluster-bootstrap@v0.36.0
-Source: https://proxy.golang.org/k8s.io/cluster-bootstrap/@v/v0.36.0.zip
-Selected Go source checksum: h1:qh2yyP86NmlHaGFn/xXNv+sStL+kRaGE2125DeP6H78=
+Component: k8s.io/cluster-bootstrap@v0.36.3
+Source: https://proxy.golang.org/k8s.io/cluster-bootstrap/@v/v0.36.3.zip
+Selected Go source checksum: h1:pyPFVCjsHrwl3mIQV3dp7YuXn//1DHVpCDzpcjqF6tI=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -14535,9 +14534,9 @@ Files: LICENSE
 Material: m969246257ce9c732 (copyright-header), SHA-256 ff345f5babf52ae9caaac55971a3f44ec6a8f8e2245cec4ece03182134748d29
 Material: mc93a7549b781fd12 (copyright-header), SHA-256 663e76d9545b8b2fd572c56941b9dc99e20fa9c1aa604caa0c08b8b2476b8a06
 
-Component: k8s.io/kubernetes@v1.36.0
-Source: https://proxy.golang.org/k8s.io/kubernetes/@v/v1.36.0.zip
-Selected Go source checksum: h1:JKaAkgSzI4+ZvNWrNJg56jAkUaOiqgBaJstmi6ycyoU=
+Component: k8s.io/kubernetes@v1.36.3
+Source: https://proxy.golang.org/k8s.io/kubernetes/@v/v1.36.3.zip
+Selected Go source checksum: h1:qDQdoMiluAE2Eab6Fa52YV+WjiGz9mZFFoagEA6cI+o=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
