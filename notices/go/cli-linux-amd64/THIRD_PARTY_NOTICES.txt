@@ -5792,9 +5792,9 @@ github.com/gookit/color
 Material: m259d89a7ce2757d2 (license), SHA-256 42c8d055a76a6a91e8f7102a106cd5929592d193aab7d43cdd816a93b24fa218
 Files: LICENSE
 
-Component: github.com/gopacket/gopacket@v1.7.7
-Source: https://proxy.golang.org/github.com/gopacket/gopacket/@v/v1.7.7.zip
-Selected Go source checksum: h1:9MaMKsjcFCnUVPI9CHp/ZDhu1SSV+rs0THQ2ztRAqmE=
+Component: github.com/gopacket/gopacket@v1.8.0
+Source: https://proxy.golang.org/github.com/gopacket/gopacket/@v/v1.8.0.zip
+Selected Go source checksum: h1:1kiBo8+AXwzvqRBpJ01HvU6GQsb0oPK10tLJpuutEiw=
 Raw classifier detections: BSD-3-Clause
 Effective package-admission terms: BSD-3-Clause
 Packages:
@@ -5806,6 +5806,7 @@ Material: m0835e86cf19fff97 (copyright-header), SHA-256 68f24734eab398eff77084dd
 Material: m1e001b923b193622 (copyright-header), SHA-256 52dca2e6ddfc128e80f3c01441f2b673db3b087a7d9436aa06b12fe59def9825
 Material: m1e593e403bcbd6b2 (copyright-header), SHA-256 f66fa42b43c0b39f2ec3eea83a8ba0a4e0421bf17281bd38662a30cf95db4b34
 Material: m206a6c8f66b94254 (copyright-header), SHA-256 d97139faff377155576232fc5dfb621e49f82cf66710e5668f60697d0e93945d
+Material: m21a446973e4ab3ef (copyright-header), SHA-256 b8eddd8876b01d30e6b7557ba490fb3bf63a8a95d746f42dc785b513d04a89e5
 Material: m2711f521269d512a (copyright-header), SHA-256 20f6a55827c298a517899a11c0d06019f29e41208b283f2cb8ca20d1de8099b3
 Material: m3fdcdba8e08d633a (copyright-header), SHA-256 88580cea23bd447fafe9abb67708fa80217e0f6ef53f687b3df3b14b9f166e6b
 Material: m4ac08ecfb6894787 (copyright-header), SHA-256 3ef1c4bd86ec309edd4a1cd9f1c2d34550dfc0135c29780924e28799dbcf0097
@@ -48750,6 +48751,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 --- Recipient material SHA-256 b8e25ed3b997b0f4501eb19296847cf0b870a8425094aa3649d207ebe03f356a ---
 // Copyright © 2014 Steve Francia <spf@spf13.com>.
 // Copyright 2009 The Go Authors. All rights reserved.
+
+
+
+
+--- Recipient material SHA-256 b8eddd8876b01d30e6b7557ba490fb3bf63a8a95d746f42dc785b513d04a89e5 ---
+// Copyright 2026 The GoPacket Authors. All rights reserved.
+//
+// Use of this source code is governed by a BSD-style license that can be found
+// in the LICENSE file in the root of the source tree.
 
 
 
