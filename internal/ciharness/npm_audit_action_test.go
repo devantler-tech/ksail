@@ -238,9 +238,17 @@ func TestNPMAuditDelegatesWritesToSignedCorrectionJob(t *testing.T) {
 
 	writer, found := workflow.Jobs["auto-commit"]
 	require.True(t, found)
+	// The write token comes from the GitHub token broker (devantler-tech/monorepo ADR 0020): its
+	// whole authority is the repository trust policy, which must stay exactly the reviewed grant.
 	token := findHarnessStep(t, writer.Steps, "🔑 Generate GitHub App Token")
-	assert.Equal(t, "write", token.With["permission-contents"])
-	assert.Equal(t, "write", token.With["permission-pull-requests"])
+	assert.True(t, strings.HasPrefix(token.Uses, "octo-sts/action@"))
+	assert.Equal(t, "devantler-tech/ksail", token.With["scope"])
+	assert.Equal(t, "auto-commit", token.With["identity"])
+	assert.NotContains(t, token.With, "private-key")
+	assert.Equal(t, "write", writer.Permissions["id-token"])
+	policy := readRepoFile(t, ".github/chainguard/auto-commit.sts.yaml")
+	assert.Contains(t, string(policy), "permissions:\n  contents: write\n  pull_requests: write\n")
+	assert.NotContains(t, string(policy), "\napp:")
 	assert.Contains(t, writer.Needs, "audit-docs")
 	assert.Contains(t, writer.Needs, "audit-vsce")
 	assert.Contains(t, writer.If, "github.event_name != 'merge_group'")

@@ -1370,15 +1370,15 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      id-token: write # proves this job to the GitHub token broker (devantler-tech/monorepo ADR 0020)
     steps:
       - name: 🔑 Generate GitHub App Token
-        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # v1.1.1
         id: generate-token
         with:
-          client-id: ${{ vars.APP_CLIENT_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }} # zizmor: ignore[secrets-outside-env] - GitHub App token generation, no environment scoping available for app installations
-          permission-contents: write
-          permission-pull-requests: write
+          domain: sts.platform.devantler.tech
+          scope: devantler-tech/ksail
+          identity: auto-commit
 
       - name: 📄 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

@@ -1,0 +1,15 @@
+---
+# Repository trust policy for the Auto-Commit job in .github/workflows/ci.yaml, served by the GitHub
+# token broker (devantler-tech/monorepo ADR 0020). That job pushes generated changes back onto the
+# branch under test, so a same-repository pull request run or a branch run of this workflow may
+# exchange its Actions OIDC token. Fork pull requests get no OIDC token, and the job skips Dependabot
+# and Renovate. It grants contents and pull requests write on this repository alone, the same reach
+# the App key had in those runs. It names no App, so the broker mints from either botantler App.
+issuer: https://token.actions.githubusercontent.com
+subject_pattern: repo:devantler-tech/ksail:(pull_request|ref:refs/heads/[A-Za-z0-9._/-]+)
+claim_pattern:
+  repository_owner_id: "178524219"
+  job_workflow_ref: devantler-tech/ksail/\.github/workflows/ci\.yaml@refs/(heads/[A-Za-z0-9._/-]+|pull/[0-9]+/merge)
+permissions:
+  contents: write
+  pull_requests: write
