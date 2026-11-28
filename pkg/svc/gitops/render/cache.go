@@ -26,29 +26,27 @@ func NewChartCache() *ChartCache {
 }
 
 // get returns the cached manifest for spec, if present.
-func (c *ChartCache) get(spec *helm.ChartSpec) (string, bool) {
+func (c *ChartCache) get(spec *helm.ChartSpec, postRenderKey string) (string, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	manifest, ok := c.entries[chartCacheKey(spec)]
+	manifest, ok := c.entries[chartCacheKey(spec, postRenderKey)]
 
 	return manifest, ok
 }
 
 // put stores the rendered manifest for spec.
-func (c *ChartCache) put(spec *helm.ChartSpec, manifest string) {
+func (c *ChartCache) put(spec *helm.ChartSpec, postRenderKey, manifest string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.entries[chartCacheKey(spec)] = manifest
+	c.entries[chartCacheKey(spec, postRenderKey)] = manifest
 }
 
 // chartCacheKey builds a deterministic, collision-free key from the only fields
-// buildChartSpec populates that affect the rendered output. The NUL separator
-// cannot appear in a chart reference, release name, namespace, or valid YAML,
-// so the join is unambiguous. Keep this in sync with buildChartSpec: a new
-// output-affecting field there must be added here.
-func chartCacheKey(spec *helm.ChartSpec) string {
+// the resolver supplies that affect Helm output. The NUL separator cannot
+// occur in the chart identity, valid YAML, or serialized renderer settings.
+func chartCacheKey(spec *helm.ChartSpec, postRenderKey string) string {
 	return strings.Join([]string{
 		spec.ChartName,
 		spec.RepoURL,
@@ -56,5 +54,6 @@ func chartCacheKey(spec *helm.ChartSpec) string {
 		spec.ReleaseName,
 		spec.Namespace,
 		spec.ValuesYaml,
+		postRenderKey,
 	}, "\x00")
 }

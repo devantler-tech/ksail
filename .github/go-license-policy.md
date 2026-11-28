@@ -43,10 +43,11 @@ Some declarations need an explicit interpretation:
 - The selected xi2/xz declaration places its files in the public domain. This
   decision does not approve other projects with “XZ” in their name.
 - The identified admin-apis component has a maintainer-verified permission
-  record for compilation into KSail binaries. The upstream license stays
-  unchanged. The original correspondence remains private under
-  `LOFT-ADMIN-APIS-KSAIL-001`; no general source grant, later-version permission,
-  duration, irrevocability or downstream rights are inferred.
+  record for compilation into KSail binaries. The maintainer confirmed that it
+  covers the selected revision `c0a92a2b2cf8`. The
+  upstream license stays unchanged. The original correspondence remains private
+  under `LOFT-ADMIN-APIS-KSAIL-001`; no general source grant, permission for
+  other revisions, duration, irrevocability or downstream rights are inferred.
 
 ## Changing a dependency or extending admission
 

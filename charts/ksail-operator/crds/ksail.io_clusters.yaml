@@ -682,6 +682,12 @@ spec:
                           When SchematicID is set, ISO is ignored in favour of a pre-built snapshot.
                         format: int64
                         type: integer
+                      requireStorageHealth:
+                        description: |-
+                          RequireStorageHealth requires Kubernetes access, a drainable node, and a
+                          healthy storage observation before a Talos image upgrade. It requires a
+                          positive storageHealthTimeout. The default is false.
+                        type: boolean
                       schematicId:
                         description: |-
                           SchematicID is the Talos factory schematic ID used to build a Hetzner snapshot image.

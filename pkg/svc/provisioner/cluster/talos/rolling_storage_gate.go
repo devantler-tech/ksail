@@ -68,6 +68,10 @@ func (p *Provisioner) storageHealthTimeout() time.Duration {
 	return 0
 }
 
+func (p *Provisioner) storageHealthRequired() bool {
+	return p.options != nil && p.options.RequireStorageHealth
+}
+
 // buildStorageHealthProberOrWarn builds the between-node storage-health prober when
 // the gate is enabled (spec.cluster.talos.storageHealthTimeout > 0), degrading
 // gracefully on a construction error: it warns and returns nil so a probe-setup
@@ -359,9 +363,8 @@ type longhornVolumeProber struct {
 	client dynamic.Interface
 }
 
-// degradedVolumes lists Longhorn volumes and returns the namespaced names of those
-// whose status.robustness is "degraded" or "faulted" (see unhealthyRobustness). The
-// result is sorted for deterministic logs, errors, and tests.
+// degradedVolumes reports degraded or faulted Longhorn volumes and V2 volumes
+// with snapshot removal in progress. The result is sorted and de-duplicated.
 func (l *longhornVolumeProber) degradedVolumes(ctx context.Context) ([]string, error) {
 	list, err := l.client.Resource(longhornVolumeGVR()).
 		Namespace(longhornNamespace).
@@ -372,15 +375,138 @@ func (l *longhornVolumeProber) degradedVolumes(ctx context.Context) ([]string, e
 
 	var unhealthy []string
 
+	v2Volumes := map[string]bool{}
+
 	for i := range list.Items {
-		robustness, _, _ := unstructured.NestedString(list.Items[i].Object, "status", "robustness")
-		if isUnhealthyRobustness(robustness) {
-			unhealthy = append(unhealthy,
-				list.Items[i].GetNamespace()+"/"+list.Items[i].GetName())
+		volume := &list.Items[i]
+
+		dataEngine, _, err := unstructured.NestedString(volume.Object, "spec", "dataEngine")
+		if err != nil {
+			return nil, fmt.Errorf("read longhorn volume data engine: %w", err)
 		}
+
+		if dataEngine == "v2" {
+			v2Volumes[volume.GetName()] = true
+		}
+
+		robustness, _, _ := unstructured.NestedString(volume.Object, "status", "robustness")
+		if isUnhealthyRobustness(robustness) {
+			unhealthy = append(unhealthy, volume.GetNamespace()+"/"+volume.GetName())
+		}
+	}
+
+	if len(v2Volumes) > 0 {
+		purging, err := l.volumesPurgingSnapshots(ctx, v2Volumes)
+		if err != nil {
+			return nil, err
+		}
+
+		unhealthy = append(unhealthy, purging...)
+
+		deleting, err := l.volumesDeletingSnapshots(ctx, v2Volumes)
+		if err != nil {
+			return nil, err
+		}
+
+		unhealthy = append(unhealthy, deleting...)
 	}
 
 	slices.Sort(unhealthy)
 
-	return unhealthy, nil
+	return slices.Compact(unhealthy), nil
+}
+
+func (l *longhornVolumeProber) volumesPurgingSnapshots(
+	ctx context.Context,
+	v2Volumes map[string]bool,
+) ([]string, error) {
+	engines, err := l.client.Resource(longhornVolumeGVR().GroupVersion().WithResource("engines")).
+		Namespace(longhornNamespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list longhorn engines: %w", err)
+	}
+
+	var blocked []string
+
+	for i := range engines.Items {
+		engine := &engines.Items[i]
+
+		name, _, err := unstructured.NestedString(engine.Object, "spec", "volumeName")
+		if err != nil {
+			return nil, fmt.Errorf("read longhorn engine volume name: %w", err)
+		}
+
+		if !v2Volumes[name] {
+			continue
+		}
+
+		statuses, _, err := unstructured.NestedMap(engine.Object, "status", "purgeStatus")
+		if err != nil {
+			return nil, fmt.Errorf("read longhorn snapshot purge status: %w", err)
+		}
+
+		for replica := range statuses {
+			purging, _, err := unstructured.NestedBool(statuses, replica, "isPurging")
+			if err != nil {
+				return nil, fmt.Errorf("read longhorn snapshot purge progress: %w", err)
+			}
+
+			if purging {
+				blocked = append(blocked, engine.GetNamespace()+"/"+name)
+
+				break
+			}
+		}
+	}
+
+	return blocked, nil
+}
+
+func (l *longhornVolumeProber) volumesDeletingSnapshots(
+	ctx context.Context,
+	v2Volumes map[string]bool,
+) ([]string, error) {
+	snapshots, err := l.client.Resource(longhornVolumeGVR().GroupVersion().WithResource("snapshots")).
+		Namespace(longhornNamespace).
+		List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list longhorn snapshots: %w", err)
+	}
+
+	var blocked []string
+
+	for i := range snapshots.Items {
+		snapshot := &snapshots.Items[i]
+
+		name, _, err := unstructured.NestedString(snapshot.Object, "spec", "volume")
+		if err != nil {
+			return nil, fmt.Errorf("read longhorn snapshot volume name: %w", err)
+		}
+
+		if !v2Volumes[name] {
+			continue
+		}
+
+		removing, err := longhornSnapshotRemovalActive(snapshot)
+		if err != nil {
+			return nil, err
+		}
+
+		if removing {
+			blocked = append(blocked, snapshot.GetNamespace()+"/"+name)
+		}
+	}
+
+	return blocked, nil
+}
+
+func longhornSnapshotRemovalActive(snapshot *unstructured.Unstructured) (bool, error) {
+	marked, _, err := unstructured.NestedBool(snapshot.Object, "status", "markRemoved")
+	if err != nil {
+		return false, fmt.Errorf("read longhorn snapshot removal mark: %w", err)
+	}
+
+	// Longhorn V2 1.13 does not report purge progress. Even a removed
+	// parent of the live head is insufficient evidence to clear a reboot.
+	return marked || snapshot.GetDeletionTimestamp() != nil, nil
 }
