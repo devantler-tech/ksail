@@ -101,6 +101,14 @@ func TestScaffoldEKSConfigFallsBackToDefaultName(t *testing.T) {
 	assert.Contains(t, rendered, "name: eks-default")
 }
 
+func TestScaffoldEKSConfigUsesSupportedKubernetesVersion(t *testing.T) {
+	t.Parallel()
+
+	rendered := scaffoldEKSConfig(t, "my-eks-cluster")
+
+	assert.Contains(t, rendered, "  version: \"1.36\"")
+}
+
 func TestRenderEKSConfig_ScaffoldsEBScsiDriverAddon(t *testing.T) {
 	t.Parallel()
 
