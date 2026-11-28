@@ -4358,9 +4358,9 @@ Files: LICENSE
 Material: m915eacbfe4e80de0 (copyright-header), SHA-256 19451847ba593d4d401e0f1b3bea6df59063435f09f9863e7b34719f3cc85500
 Material: mc527239d593d7cff (copyright-header), SHA-256 e5e21677637eb56ee50b3c213444e44d1c309f958238463d2f162adf430fd8c6
 
-Component: github.com/fluxcd/pkg/envsubst@v1.9.0
-Source: https://proxy.golang.org/github.com/fluxcd/pkg/envsubst/@v/v1.9.0.zip
-Selected Go source checksum: h1:QTagwV4WLmqF+JsD1rGkcKFmmj4HV64BnqNM1T311kc=
+Component: github.com/fluxcd/pkg/envsubst@v1.10.0
+Source: https://proxy.golang.org/github.com/fluxcd/pkg/envsubst/@v/v1.10.0.zip
+Selected Go source checksum: h1:CG4EYRqg0lUGlo++7zv/WNbZ6Piym9CqBEFsA5SyzwI=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -4375,9 +4375,9 @@ Material: m8075fdfc10abb28f (license), SHA-256 c71d239df91726fc519c6eb72d318ec65
 Files: LICENSE
 Material: ma143d8dbe0d7c7f0 (copyright-header), SHA-256 ca7fc0da627e3be627b454f7ef70723997d5cde8dac88a31f7cc374d61d961c3
 
-Component: github.com/fluxcd/pkg/kustomize@v1.44.0
-Source: https://proxy.golang.org/github.com/fluxcd/pkg/kustomize/@v/v1.44.0.zip
-Selected Go source checksum: h1:S9ExtSX/wuuqQpvpzuRewM+PTeBVD6IHymnVQE1vFhg=
+Component: github.com/fluxcd/pkg/kustomize@v1.45.0
+Source: https://proxy.golang.org/github.com/fluxcd/pkg/kustomize/@v/v1.45.0.zip
+Selected Go source checksum: h1:NXBcMX+2aS/5xyLaelkK/QxyViS6sUBEI1vEnbFSr9o=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
@@ -4404,9 +4404,9 @@ Files: LICENSE
 Material: m81d1d3c75566d226 (copyright-header), SHA-256 cc0bb31e186a0e7eb32d7e00d96b28677bf29ab6dfb383c8e1e092d94fd8121e
 Material: me2e303746cdcf1c9 (copyright-header), SHA-256 e0a1126a0fa8e7122d37cc058234f149f09dc989c2765ccc8276ceda4e3a4c11
 
-Component: github.com/fluxcd/pkg/sourceignore@v0.22.0
-Source: https://proxy.golang.org/github.com/fluxcd/pkg/sourceignore/@v/v0.22.0.zip
-Selected Go source checksum: h1:GFvVgEA8HW4mZL26NFxhry3ZzCA8nR12MQovvZvbXm0=
+Component: github.com/fluxcd/pkg/sourceignore@v0.23.0
+Source: https://proxy.golang.org/github.com/fluxcd/pkg/sourceignore/@v/v0.23.0.zip
+Selected Go source checksum: h1:Gua6EJOtUIgHfgYKyKAFXSxFLkEhtGUlLg/pKdF3AFo=
 Raw classifier detections: Apache-2.0
 Effective package-admission terms: Apache-2.0
 Packages:
