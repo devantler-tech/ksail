@@ -128,7 +128,7 @@ func (p *KubernetesProvisioner) Create(
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("expose API server: %w", err)
+		return fmt.Errorf("expose API server: %w", exposure.CleanupOnFailure(ctx, err))
 	}
 
 	// Step 3: Add the exposure address to the API server cert SANs so kubectl verifies TLS when
@@ -145,21 +145,21 @@ func (p *KubernetesProvisioner) Create(
 		kubernetesprovider.DinDDockerPort,
 	)
 	if err != nil {
-		return fmt.Errorf("port-forward Docker API: %w", err)
+		return fmt.Errorf("port-forward Docker API: %w", exposure.CleanupOnFailure(ctx, err))
 	}
 	defer dockerPF.Close()
 
 	// Step 5: Set DOCKER_HOST so the Kind SDK talks to DinD
 	err = p.createInDinD(ctx, dockerPF, target)
 	if err != nil {
-		return err
+		return fmt.Errorf("create nested cluster: %w", exposure.CleanupOnFailure(ctx, err))
 	}
 
 	// Step 6: Point the kubeconfig at the stable exposure address and publish it as a host-cluster
 	// Secret so the operator's Connector can install components into the child cluster.
 	err = p.finalizeKubeconfig(ctx, target, exposure.ServerURL())
 	if err != nil {
-		return err
+		return fmt.Errorf("create nested cluster: %w", exposure.CleanupOnFailure(ctx, err))
 	}
 
 	return nil

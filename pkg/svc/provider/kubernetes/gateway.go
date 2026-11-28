@@ -80,6 +80,11 @@ type APIExposureSpec struct {
 	// directly to NodePort. Use this when the host cluster's LB controller (e.g. K3s
 	// klipper-lb) would bind the API port on the node, conflicting with the host API server.
 	SkipLoadBalancer bool
+
+	// priorGrant is set by ResolveExposure when the host firewall already admits the
+	// namespace before any tier runs, so a grant re-created during this resolution is never
+	// removed as a new one.
+	priorGrant bool
 }
 
 // ExposureResult is the resolved, stable endpoint for a nested cluster's API server.
@@ -89,7 +94,8 @@ type ExposureResult struct {
 	// Port is the port clients should connect to.
 	Port int32
 	// Kind is one of ExposureGateway, ExposureLoadBalancer, or ExposureNodePort.
-	Kind string
+	Kind         string
+	cleanupGrant func(context.Context) error
 }
 
 // ServerURL returns the kubeconfig server URL for the resolved exposure.
@@ -147,6 +153,13 @@ func (p *Provider) ResolveExposure(
 ) (*ExposureResult, error) {
 	spec = spec.withDefaults()
 
+	prior, err := p.priorNestedAPIGrant(ctx, spec.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	spec.priorGrant = prior
+
 	if spec.GatewayClassName != "" {
 		if dynamicClient == nil {
 			return nil, fmt.Errorf(
@@ -187,7 +200,13 @@ func (p *Provider) exposeViaGateway(
 	dynamicClient dynamic.Interface,
 	spec APIExposureSpec,
 ) (*ExposureResult, error) {
-	_, err := p.ensureService(ctx, spec, corev1.ServiceTypeClusterIP)
+	// A ClusterIP Service releases its NodePort, so the grant on that port goes first.
+	err := p.RevokeNestedAPIGrant(ctx, spec.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = p.ensureService(ctx, spec, corev1.ServiceTypeClusterIP)
 	if err != nil {
 		return nil, err
 	}
@@ -225,6 +244,13 @@ func (p *Provider) exposeViaLoadBalancer(
 		return nil, err
 	}
 
+	// A LoadBalancer Service keeps its NodePort, so an earlier NodePort grant is removed only
+	// once clients reach the load balancer instead.
+	err = p.RevokeNestedAPIGrant(ctx, spec.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
 	return &ExposureResult{Address: addr, Port: spec.APIPort, Kind: ExposureLoadBalancer}, nil
 }
 
@@ -251,6 +277,11 @@ func (p *Provider) exposeViaNodePort(
 		Address: addr,
 		Port:    svc.Spec.Ports[0].NodePort,
 		Kind:    ExposureNodePort,
+	}
+
+	err = p.grantNestedAPI(ctx, spec.Namespace, spec.priorGrant, result)
+	if err != nil {
+		return nil, err
 	}
 
 	warnNodePortReachability(result)
@@ -647,6 +678,11 @@ func (p *Provider) DeleteAPIExposure(
 ) error {
 	namespace := NamespaceName(clusterName)
 
+	err := p.RevokeNestedAPIGrant(ctx, namespace)
+	if err != nil {
+		return err
+	}
+
 	// Delete TCPRoute + Gateway (only present on the Gateway path).
 	if dynamicClient != nil {
 		err := dynamicClient.Resource(tcpRouteGVR()).Namespace(namespace).Delete(
@@ -664,7 +700,7 @@ func (p *Provider) DeleteAPIExposure(
 		}
 	}
 
-	err := p.client.CoreV1().Services(namespace).Delete(ctx, APIServiceName, metav1.DeleteOptions{})
+	err = p.client.CoreV1().Services(namespace).Delete(ctx, APIServiceName, metav1.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("delete API service: %w", err)
 	}

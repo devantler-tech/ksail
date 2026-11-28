@@ -195,7 +195,7 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 
 	exposure, err := p.setupCluster(ctx, clusterName, namespace)
 	if err != nil {
-		return err
+		return fmt.Errorf("create nested cluster: %w", exposure.CleanupOnFailure(ctx, err))
 	}
 
 	// Opt-in (KSAIL_NESTED_DEBUG) diagnostic: confirm the pinned K3s version and
@@ -226,7 +226,7 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 		// Avoid leaking the port-forward goroutine/listener if a later step fails.
 		p.closeAPIServerPortForward()
 
-		return err
+		return fmt.Errorf("create nested cluster: %w", exposure.CleanupOnFailure(ctx, err))
 	}
 
 	_, _ = fmt.Fprintf(
@@ -247,10 +247,15 @@ func (p *K3kProvisioner) Delete(ctx context.Context, name string) error {
 
 	namespace := k3kNamespacePrefix + clusterName
 
+	err := p.k8sProvider.RevokeNestedAPIGrant(ctx, namespace)
+	if err != nil {
+		return fmt.Errorf("revoke nested API before deletion: %w", err)
+	}
+
 	// Delete the namespace (cascading delete removes Cluster CR, pods, services, etc.)
 	_, _ = fmt.Fprintf(os.Stdout, "► deleting namespace %s\n", namespace)
 
-	err := p.hostClientset.CoreV1().Namespaces().Delete(ctx, namespace, metav1.DeleteOptions{})
+	err = p.hostClientset.CoreV1().Namespaces().Delete(ctx, namespace, metav1.DeleteOptions{})
 	if err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("delete namespace %s: %w", namespace, err)
 	}
@@ -577,14 +582,14 @@ func (p *K3kProvisioner) setupCluster(
 		},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("expose K3s API server: %w", err)
+		return nil, fmt.Errorf("expose K3s API server: %w", exposure.CleanupOnFailure(ctx, err))
 	}
 
 	_, _ = fmt.Fprintf(os.Stdout, "► creating k3k Cluster CR for %s\n", clusterName)
 
 	err = p.createClusterCR(ctx, clusterName, namespace, exposure.Address)
 	if err != nil {
-		return nil, fmt.Errorf("create k3k cluster CR: %w", err)
+		return nil, fmt.Errorf("create k3k cluster CR: %w", exposure.CleanupOnFailure(ctx, err))
 	}
 
 	_, _ = fmt.Fprintln(os.Stdout, "► waiting for k3k cluster to become ready")
@@ -593,7 +598,10 @@ func (p *K3kProvisioner) setupCluster(
 	if err != nil {
 		p.dumpNestedK3sFailureDiagnostics(ctx, namespace)
 
-		return nil, fmt.Errorf("wait for k3k cluster ready: %w", err)
+		return nil, fmt.Errorf(
+			"wait for k3k cluster ready: %w",
+			exposure.CleanupOnFailure(ctx, err),
+		)
 	}
 
 	return exposure, nil

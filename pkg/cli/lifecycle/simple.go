@@ -20,6 +20,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/eksidentity"
+	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
@@ -863,13 +864,20 @@ func (p *kubernetesCleanupProvisioner) Create(_ context.Context, _ string) error
 }
 
 func (p *kubernetesCleanupProvisioner) Delete(ctx context.Context, _ string) error {
+	provider, err := kubernetesprovider.NewProvider(p.clientset, v1alpha1.OptionsKubernetes{})
+	if err != nil {
+		return fmt.Errorf("create nested cleanup provider: %w", err)
+	}
+
+	provider.WithHetznerAPIFirewallFromEnvironment()
+
 	// Try all known namespace prefixes used by nested cluster provisioners:
 	// - "ksail-" for DinD-based Kind-on-Kubernetes
 	// - "k3k-" for k3k-based K3s-on-Kubernetes
 	// - "vcluster-" for vCluster-on-Kubernetes (Helm driver)
 	for _, prefix := range []string{namespaceKsailPrefix, namespaceK3kPrefix, namespaceVClusterPrefix} {
 		namespaceName := prefix + p.clusterName
-		err := p.verifyAndDeleteNamespace(ctx, namespaceName)
+		err := p.verifyAndDeleteNamespace(ctx, provider, namespaceName)
 		//nolint:wsl
 		if err != nil {
 			return err
@@ -967,15 +975,26 @@ func (p *kubernetesCleanupProvisioner) namespaceOwnership(
 	}, nil
 }
 
-// verifyAndDeleteNamespace rechecks exact ownership before deleting. Missing or
-// unowned namespaces are left untouched; a failed ownership read stops cleanup.
+// verifyAndDeleteNamespace rechecks exact ownership before deleting. Unowned namespaces
+// are left untouched; a failed ownership read stops cleanup. The nested API grant keyed
+// by the namespace is revoked first, and also when the namespace is already gone, so a
+// retry after namespace removal still closes the port.
 func (p *kubernetesCleanupProvisioner) verifyAndDeleteNamespace(
 	ctx context.Context,
+	provider *kubernetesprovider.Provider,
 	namespaceName string,
 ) error {
 	owned, identity, err := p.namespaceOwnership(ctx, namespaceName)
 	if err != nil {
 		return err
+	}
+
+	gone := !owned && identity == nil
+	if owned || gone {
+		err = provider.RevokeNestedAPIGrant(ctx, namespaceName)
+		if err != nil {
+			return fmt.Errorf("revoke nested API before deleting %s: %w", namespaceName, err)
+		}
 	}
 
 	if !owned {
