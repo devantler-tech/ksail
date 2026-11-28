@@ -21,7 +21,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.48.0
 	github.com/aws/aws-sdk-go-v2/config v1.33.21
 	github.com/aws/aws-sdk-go-v2/credentials v1.21.3
-	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.84.0
+	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.86.0
 	github.com/aws/aws-sdk-go-v2/service/eks v1.105.6
 	github.com/aws/aws-sdk-go-v2/service/sts v1.53.0
 	github.com/aws/smithy-go v1.28.9
@@ -50,7 +50,7 @@ require (
 	github.com/fluxcd/source-controller/api v1.10.1
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/getsops/sops/v3 v3.13.3
-	github.com/github/copilot-sdk/go v1.0.34
+	github.com/github/copilot-sdk/go v1.0.35
 	github.com/gkampitakis/go-snaps v0.5.25
 	github.com/go-jose/go-jose/v4 v4.1.9
 	github.com/go-logr/logr v1.4.4
@@ -62,7 +62,7 @@ require (
 	github.com/google/go-github/v72 v72.0.0
 	github.com/google/go-licenses/v2 v2.0.1
 	github.com/googleapis/gax-go/v2 v2.27.0
-	github.com/gopacket/gopacket v1.7.7
+	github.com/gopacket/gopacket v1.8.0
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/hetznercloud/hcloud-go/v2 v2.53.0
 	github.com/invopop/jsonschema v0.14.0
