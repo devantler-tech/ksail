@@ -24,6 +24,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      id-token: write # lets update-agent-skills-action's skill updater prove its identity to the GitHub token broker (ADR 0020)
     uses: devantler-tech/update-agent-skills-action/.github/workflows/update-agent-skills.yaml@ef115f991d843885b69a33ca955e966b1108084a # v1.1.3
     with:
       dir: .agents/skills
