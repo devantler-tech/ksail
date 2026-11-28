@@ -51,10 +51,10 @@ type etcdSnapshotSource interface {
 
 // etcdSnapshotArtifact describes a verified snapshot published as a recovery artifact.
 type etcdSnapshotArtifact struct {
-	Path    string
-	SHA256  string
-	Size    int64
-	Members []uint64
+	Path    string   `json:"path"`
+	SHA256  string   `json:"sha256"`
+	Size    int64    `json:"size"`
+	Members []uint64 `json:"members"`
 }
 
 // captureVerifiedSnapshot streams a snapshot into an owner-only file in dir and publishes it

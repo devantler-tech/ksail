@@ -1,0 +1,700 @@
+package talosprovisioner
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+)
+
+func removalApplicationPod() corev1.Pod {
+	controller := true
+
+	return corev1.Pod{
+		Name:      "application",
+		Namespace: "default",
+		UID:       "app-original",
+		OwnerReferences: []metav1.OwnerReference{
+			{
+				APIVersion: "apps/v1",
+				Kind:       "ReplicaSet",
+				Name:       "application-rs",
+				UID:        "replicaset",
+				Controller: &controller,
+			},
+		},
+		Spec: corev1.PodSpec{
+			NodeName: "fixture-control-plane-1",
+			Containers: []corev1.Container{
+				{Name: "application", Image: "example.invalid/application:fixture"},
+			},
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+}
+
+func TestControlPlaneRemovalRequiresNoApplicationPods(t *testing.T) {
+	t.Parallel()
+
+	for _, state := range []string{"running", "already terminating", "completed with local data"} {
+		t.Run(state, func(t *testing.T) {
+			t.Parallel()
+			fixture := newRemovalFixture(t)
+			pod := removalApplicationPod()
+
+			if state == "already terminating" {
+				stamp := metav1.NewTime(time.Now().Add(-2 * time.Minute))
+				pod.DeletionTimestamp = &stamp
+			}
+
+			if state == "completed with local data" {
+				pod.Status.Phase = corev1.PodSucceeded
+				pod.Spec.Volumes = []corev1.Volume{
+					{
+						Name:     "data",
+						HostPath: &corev1.HostPathVolumeSource{Path: "/application-data"},
+					},
+				}
+			}
+
+			fixture.pods = []corev1.Pod{pod}
+			clientset, err := fixture.provisioner.createK8sClient("fixture")
+			require.NoError(t, err)
+			err = fixture.provisioner.proveRemovalWorkloads(
+				t.Context(),
+				clientset,
+				replacementTarget{ServerName: pod.Spec.NodeName, NodeUID: "native-1"},
+				[]corev1.Node{*fixture.nodes[pod.Spec.NodeName]},
+			)
+			require.ErrorIs(
+				t,
+				err,
+				ErrControlPlaneScaleDownUnsafe,
+				"automatic removal must not begin evicting or ignoring application pods",
+			)
+			require.ErrorContains(t, err, "application pods must be absent")
+			require.Empty(t, fixture.apiWrites)
+		})
+	}
+}
+
+func TestControlPlaneRemovalRefusesUnknownSystemHostPath(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	pod := removalApplicationPod()
+	pod.OwnerReferences[0].Kind = "DaemonSet"
+	pod.Spec.Volumes = []corev1.Volume{
+		{Name: "data", HostPath: &corev1.HostPathVolumeSource{Path: "/application-data"}},
+	}
+	fixture.pods = []corev1.Pod{pod}
+	clientset, err := fixture.provisioner.createK8sClient("fixture")
+	require.NoError(t, err)
+	err = fixture.provisioner.proveRemovalWorkloads(
+		t.Context(),
+		clientset,
+		replacementTarget{ServerName: pod.Spec.NodeName, NodeUID: "native-1"},
+		[]corev1.Node{*fixture.nodes[pod.Spec.NodeName]},
+	)
+	require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+	require.ErrorContains(t, err, "unqualified node-local hostPath")
+	require.Empty(t, fixture.apiWrites)
+}
+
+func TestControlPlaneScaleDownRebindsFinalProviderResponse(t *testing.T) {
+	t.Parallel()
+
+	for scenario, refusal := range map[string]string{
+		"role changed":                "candidate is not a control plane",
+		"floating owner changed":      "target currently carries a floating endpoint",
+		"wrong immutable response ID": "does not match requested immutable identity",
+		"provider volume attached":    "provider target has attached storage volumes",
+	} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			fixture := newRemovalFixture(t)
+
+			switch scenario {
+			case "provider volume attached":
+				fixture.lateProviderVolume = true
+			case "role changed":
+				fixture.lateRoleChange = true
+			case "floating owner changed":
+				fixture.lateFloatingOwner = true
+			case "wrong immutable response ID":
+				fixture.wrongResponseID = true
+			}
+
+			err := runRemovalScaleDown(fixture)
+
+			fixture.mu.Lock()
+			defer fixture.mu.Unlock()
+
+			require.ErrorContains(t, err, refusal)
+			require.Equal(t, []int64{1}, fixture.leaves)
+			require.Positive(
+				t,
+				fixture.finalLookups,
+				"the scenario must reach the final provider lookup after membership removal",
+			)
+			require.Empty(
+				t,
+				fixture.deleted,
+				"contradictory final identity/route must retain every server",
+			)
+		})
+	}
+}
+
+func TestControlPlaneScaleDownCordonIsBoundToNativeUID(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	fixture.cordonReplacesNode = true
+	err := fixture.provisioner.removeHetznerNodes(
+		t.Context(),
+		"fixture",
+		RoleControlPlane,
+		2,
+		clusterupdate.NewEmptyUpdateResult(),
+	)
+	require.ErrorContains(t, err, "cordon native identity")
+	require.Equal(
+		t,
+		types.UID("replacement-node"),
+		fixture.nodes["fixture-control-plane-1"].UID,
+		"the cordon request must have reached the replaced Node",
+	)
+	require.Empty(t, fixture.leaves)
+	require.Empty(t, fixture.deleted)
+	require.False(
+		t,
+		fixture.nodes["fixture-control-plane-1"].Spec.Unschedulable,
+		"the replacement UID must not inherit the old node's cordon",
+	)
+}
+
+func TestControlPlaneScaleDownAllowsOnlyRebuildableSystemPods(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	agent := removalApplicationPod()
+	agent.Namespace = metav1.NamespaceSystem
+	agent.Name = "kernel-agent"
+	agent.OwnerReferences[0].Kind = "DaemonSet"
+	agent.Spec.Volumes = []corev1.Volume{
+		{Name: "bpf", HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf"}},
+	}
+	mirror := agent.DeepCopy()
+	mirror.Name = "static-control-plane"
+	mirror.Annotations = map[string]string{corev1.MirrorPodAnnotationKey: "mirror-hash"}
+	mirror.OwnerReferences[0].Kind = "Node"
+	mirror.OwnerReferences[0].Name = mirror.Spec.NodeName
+	mirror.OwnerReferences[0].UID = "native-1"
+	mirror.Spec.Volumes = []corev1.Volume{
+		{
+			Name: "config",
+			HostPath: &corev1.HostPathVolumeSource{
+				Path: "/system/config/kubernetes/kube-apiserver",
+			},
+		},
+	}
+	reader := agent.DeepCopy()
+	reader.Namespace = "observability"
+	reader.Name = "system-log-reader"
+	reader.Spec.Volumes = []corev1.Volume{
+		{Name: "logs", HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/audit/kube"}},
+	}
+	reader.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
+		{Name: "logs", MountPath: "/logs", ReadOnly: true},
+	}
+	fixture.pods = []corev1.Pod{agent, *mirror, *reader}
+	err := fixture.provisioner.removeHetznerNodes(
+		t.Context(),
+		"fixture",
+		RoleControlPlane,
+		2,
+		clusterupdate.NewEmptyUpdateResult(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, []int64{1, 3}, fixture.deleted)
+
+	for _, write := range fixture.apiWrites {
+		require.NotContains(t, write, "/pods/", "removal never evicts/deletes even system pods")
+	}
+}
+
+func TestControlPlaneRemovalRefusesProviderVolume(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	fixture.servers[1].Volumes = []*hcloud.Volume{{ID: 71}}
+	err := fixture.provisioner.removeHetznerNodes(
+		t.Context(), "fixture", RoleControlPlane, 2, clusterupdate.NewEmptyUpdateResult(),
+	)
+	require.Error(t, err)
+	require.Empty(t, fixture.leaves)
+	require.Empty(t, fixture.deleted)
+}
+
+func TestControlPlaneRemovalRechecksProviderStorageBeforeMembership(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	fixture.attachVolumeOnRefresh = true
+
+	err := fixture.provisioner.removeHetznerNodes(
+		t.Context(), "fixture", RoleControlPlane, 2, clusterupdate.NewEmptyUpdateResult(),
+	)
+
+	fixture.mu.Lock()
+	defer fixture.mu.Unlock()
+
+	require.ErrorContains(t, err, "provider target has attached storage volumes")
+	require.Len(
+		t,
+		fixture.servers[1].Volumes,
+		1,
+		"the refresh after cordon must have attached storage",
+	)
+	require.Empty(t, fixture.leaves, "fresh provider storage must stop before a membership RPC")
+	require.Empty(t, fixture.deleted)
+}
+
+func runRemovalScaleDown(fixture *removalFixture) error {
+	return fixture.provisioner.removeHetznerNodes(
+		fixture.t.Context(), "fixture", RoleControlPlane, 2, clusterupdate.NewEmptyUpdateResult(),
+	)
+}
+
+func TestControlPlaneRemovalRefusesDeleteProtectedTarget(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	fixture.servers[1].Protection.Delete = true
+
+	err := runRemovalScaleDown(fixture)
+	require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+	require.ErrorContains(t, err, "delete protection")
+	require.Empty(t, fixture.leaves, "a protected target must stop before any membership change")
+	require.Empty(t, fixture.deleted)
+}
+
+func TestControlPlaneRemovalRefusesFloatingEndpointOnTargetBeforeMembership(t *testing.T) {
+	t.Parallel()
+
+	for scenario, prepare := range map[string]func(*removalFixture){
+		"at selection":  func(fixture *removalFixture) { fixture.extraFloatingOn = 1 },
+		"after cordon":  func(fixture *removalFixture) { fixture.floatingOnRefresh = true },
+		"later targets": func(fixture *removalFixture) { fixture.extraFloatingOn = 3 },
+	} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			fixture := newRemovalFixture(t)
+			prepare(fixture)
+
+			err := runRemovalScaleDown(fixture)
+			require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+			require.ErrorContains(t, err, "target currently carries a floating endpoint")
+			require.Empty(
+				t, fixture.leaves, "a target floating endpoint must stop before any leave",
+			)
+			require.Empty(t, fixture.deleted)
+		})
+	}
+}
+
+func TestControlPlaneRemovalAllowsFloatingEndpointOnRetainedServer(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	fixture.extraFloatingOn = 2
+
+	err := runRemovalScaleDown(fixture)
+	require.NoError(t, err)
+	require.Equal(t, []int64{1, 3}, fixture.deleted)
+}
+
+func TestControlPlaneRemovalCompletesWhenRetainedServerGainsStorage(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	fixture.retainedVolumeOnLeave = true
+
+	err := runRemovalScaleDown(fixture)
+	require.NoError(t, err, "storage on a retained server is not a survivor identity change")
+	require.Equal(t, []int64{1, 3}, fixture.leaves)
+	require.Equal(t, []int64{1, 3}, fixture.deleted)
+	require.Len(t, fixture.servers[5].Volumes, 1, "the retained server must have gained storage")
+}
+
+func TestControlPlaneRemovalRefusesWindows(t *testing.T) {
+	t.Parallel()
+
+	err := proveDurableRecoveryPlatform("windows")
+	require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+	require.ErrorContains(t, err, "not supported on Windows")
+
+	for _, goos := range []string{"linux", "darwin"} {
+		require.NoError(t, proveDurableRecoveryPlatform(goos), goos)
+	}
+}
+
+func TestControlPlaneRemovalAllowsStorageOnRetainedServer(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	fixture.servers[fixture.floatingHolder].Volumes = []*hcloud.Volume{{ID: 71}}
+	fixture.servers[fixture.floatingHolder].Protection.Delete = true
+
+	err := runRemovalScaleDown(fixture)
+	require.NoError(t, err)
+	require.Equal(t, []int64{1, 3}, fixture.deleted)
+}
+
+func TestControlPlaneRemovalRefusesAnyPersistentVolume(t *testing.T) {
+	t.Parallel()
+
+	for scenario, prepare := range unprovenLocalityVolumes() {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			fixture := newRemovalFixture(t)
+			fixture.volumes = []corev1.PersistentVolume{prepare(fixture)}
+
+			err := runRemovalScaleDown(fixture)
+			require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+			require.ErrorContains(t, err, "supports only clusters without persistent volumes")
+			require.Empty(t, fixture.leaves)
+			require.Empty(t, fixture.deleted)
+		})
+	}
+}
+
+// unprovenLocalityVolumes lists persistent volumes of every kind, including ones whose data
+// provably lives elsewhere: automatic removal refuses them all.
+func unprovenLocalityVolumes() map[string]func(*removalFixture) corev1.PersistentVolume {
+	volumes := localityVolumes()
+
+	// Network sources whose server may be the target. Affinity that excludes the target as a
+	// consumer says nothing about where that server runs.
+	for name, source := range map[string]corev1.PersistentVolumeSource{
+		"NFS export": {NFS: &corev1.NFSVolumeSource{Server: "10.0.0.1", Path: "/export"}},
+		"iSCSI portal": {ISCSI: &corev1.ISCSIPersistentVolumeSource{
+			TargetPortal: "10.0.0.1:3260",
+			IQN:          "iqn.2026-11.example:data",
+		}},
+		"NFS CSI driver": {CSI: &corev1.CSIPersistentVolumeSource{
+			Driver:       "nfs.csi.k8s.io",
+			VolumeHandle: "10.0.0.1#export",
+		}},
+	} {
+		volumes[name+" with affinity excluding the target"] = func(
+			*removalFixture,
+		) corev1.PersistentVolume {
+			volume := removalLocalVolume("fixture-control-plane-2")
+			volume.Spec.PersistentVolumeSource = source
+
+			return volume
+		}
+	}
+
+	return volumes
+}
+
+func localityVolumes() map[string]func(*removalFixture) corev1.PersistentVolume {
+	return map[string]func(*removalFixture) corev1.PersistentVolume{
+		"hostname label differs from node name": func(fixture *removalFixture) corev1.PersistentVolume {
+			fixture.nodes["fixture-control-plane-1"].Labels[corev1.LabelHostname] = "rack-a-01"
+
+			return removalLocalVolume("rack-a-01")
+		},
+		"hostname value no current Node carries": func(*removalFixture) corev1.PersistentVolume {
+			return removalLocalVolume("rack-a-04")
+		},
+		"NFS export without affinity": func(*removalFixture) corev1.PersistentVolume {
+			volume := removalLocalVolume("unused")
+			volume.Spec.Local = nil
+			volume.Spec.NFS = &corev1.NFSVolumeSource{Server: "10.0.0.4", Path: "/export"}
+			volume.Spec.NodeAffinity = nil
+
+			return volume
+		},
+		"metadata.name label expression is not the Node name": func(
+			fixture *removalFixture,
+		) corev1.PersistentVolume {
+			fixture.nodes["fixture-control-plane-1"].Labels["metadata.name"] = "pool-a"
+			volume := removalLocalVolume("pool-a")
+			volume.Spec.NodeAffinity.Required.NodeSelectorTerms[0].MatchExpressions[0].Key = "metadata.name"
+
+			return volume
+		},
+		"unrecognized CSI driver with topology-only affinity": func(*removalFixture) corev1.PersistentVolume {
+			volume := removalLocalVolume("unused")
+			volume.Spec.Local = nil
+			volume.Spec.CSI = &corev1.CSIPersistentVolumeSource{
+				Driver:       "zfs.csi.openebs.io",
+				VolumeHandle: "data",
+			}
+			volume.Spec.NodeAffinity.Required.NodeSelectorTerms[0].MatchExpressions[0] = corev1.NodeSelectorRequirement{
+				Key:      "openebs.io/nodename",
+				Operator: corev1.NodeSelectorOpIn,
+				Values:   []string{"fixture-control-plane-1"},
+			}
+
+			return volume
+		},
+	}
+}
+
+func TestControlPlaneRemovalRefusesWritableSystemLogPath(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	pod := removalApplicationPod()
+	pod.Namespace = metav1.NamespaceSystem
+	pod.OwnerReferences[0].Kind = "DaemonSet"
+	pod.Spec.Volumes = []corev1.Volume{
+		{Name: "state", HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/app-state"}},
+	}
+	pod.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
+		{Name: "state", MountPath: "/state"},
+	}
+	fixture.pods = []corev1.Pod{pod}
+
+	err := runRemovalScaleDown(fixture)
+	require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+	require.ErrorContains(t, err, "unqualified node-local hostPath")
+	require.Empty(t, fixture.leaves)
+	require.Empty(t, fixture.deleted)
+}
+
+func TestControlPlaneRemovalRefusesWritableKubeletSubdirectory(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	pod := removalApplicationPod()
+	pod.Namespace = metav1.NamespaceSystem
+	pod.OwnerReferences[0].Kind = "DaemonSet"
+	pod.Spec.Volumes = []corev1.Volume{
+		{
+			Name:     "checkpoints",
+			HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/kubelet/custom-agent"},
+		},
+	}
+	pod.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
+		{Name: "checkpoints", MountPath: "/checkpoints"},
+	}
+	fixture.pods = []corev1.Pod{pod}
+
+	err := runRemovalScaleDown(fixture)
+	require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+	require.ErrorContains(t, err, "unqualified node-local hostPath")
+	require.Empty(t, fixture.leaves)
+	require.Empty(t, fixture.deleted)
+}
+
+func TestControlPlaneRemovalRecordNeverReplacesAnAttempt(t *testing.T) {
+	t.Parallel()
+	parent := t.TempDir()
+	target := replacementTarget{ServerID: 1, ServerName: "fixture-control-plane-1"}
+	// Another attempt's incomplete partial file under the old shared name must never be the
+	// file this attempt publishes, and this attempt must not touch it.
+	foreign := filepath.Join(parent, "attempt.json.partial")
+	require.NoError(t, os.WriteFile(foreign, []byte("{"), 0o600))
+
+	require.NoError(t, writeRemovalRecord(parent, "attempt.json", target, etcdSnapshotArtifact{}))
+
+	foreignAfter, err := os.ReadFile(filepath.Clean(foreign))
+	require.NoError(t, err)
+	require.Equal(t, "{", string(foreignAfter), "another attempt's partial file is left alone")
+	require.Equal(t, []string{foreign}, removalPartials(t, parent),
+		"this attempt leaves no partial file of its own")
+
+	published, err := os.ReadFile(filepath.Clean(filepath.Join(parent, "attempt.json")))
+	require.NoError(t, err)
+	require.Contains(t, string(published), "membership-attempted")
+
+	err = writeRemovalRecord(parent, "attempt.json", target, etcdSnapshotArtifact{})
+	require.ErrorContains(t, err, "publish membership attempt")
+	require.Equal(t, []string{foreign}, removalPartials(t, parent),
+		"a refused publication leaves no partial file of its own")
+
+	again, err := os.ReadFile(filepath.Clean(filepath.Join(parent, "attempt.json")))
+	require.NoError(t, err)
+	require.Equal(t, published, again, "an existing attempt record is never replaced")
+}
+
+func removalPartials(t *testing.T, parent string) []string {
+	t.Helper()
+
+	partials, err := filepath.Glob(filepath.Join(parent, "*.partial"))
+	require.NoError(t, err)
+
+	return partials
+}
+
+func TestControlPlaneRemovalRechecksEndpointAfterRecordPublication(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	fixture.endpointMovesOnCordon = true
+
+	err := runRemovalScaleDown(fixture)
+	require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+	require.True(t, fixture.endpointMoved, "the endpoint must have moved after the cordon proof")
+	require.Empty(t, fixture.leaves, "an endpoint moved to the target must stop before the leave")
+	require.Empty(t, fixture.deleted)
+}
+
+func TestControlPlaneScaleDownWaitsForNodeFinalizer(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	fixture.finalizerReads = 2
+
+	err := runRemovalScaleDown(fixture)
+	require.NoError(t, err, "an accepted deletion held by a finalizer must be waited for")
+	require.Equal(t, []int64{1, 3}, fixture.deleted)
+	require.NotContains(t, fixture.nodes, "fixture-control-plane-1")
+}
+
+func TestControlPlaneScaleDownStopsOnReplacementNode(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	fixture.replaceDeletedNode = true
+
+	err := runRemovalScaleDown(fixture)
+	require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+	require.ErrorContains(t, err, "replacement Node")
+	require.Equal(t, []int64{1}, fixture.deleted, "the second target must not be removed")
+	require.Equal(
+		t,
+		types.UID("replacement"),
+		fixture.nodes["fixture-control-plane-1"].UID,
+		"the replacement Node must be left in place",
+	)
+}
+
+func TestControlPlaneRemovalRereadsTargetBeforeMembership(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	fixture.volumeOnCordonRead = true
+
+	err := runRemovalScaleDown(fixture)
+	require.ErrorIs(t, err, ErrControlPlaneScaleDownUnsafe)
+	require.ErrorContains(t, err, "provider target has attached storage volumes")
+	require.True(t, fixture.volumeAttached, "storage must have attached after the cordon proof")
+	require.Empty(t, fixture.leaves, "storage attached after the cordon proof must stop the leave")
+	require.Empty(t, fixture.deleted)
+}
+
+func TestControlPlaneRemovalAdmitsTalosAPIServerAuditMount(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	controller := true
+	// The kube-apiserver mirror Pod as Talos v1.14 runs it: its audit directory is writable.
+	apiserver := corev1.Pod{
+		Name:        "kube-apiserver-fixture-control-plane-1",
+		Namespace:   metav1.NamespaceSystem,
+		UID:         "apiserver-mirror",
+		Annotations: map[string]string{corev1.MirrorPodAnnotationKey: "mirror-hash"},
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: "v1", Kind: "Node", Name: "fixture-control-plane-1",
+			UID: "native-1", Controller: &controller,
+		}},
+		Spec: corev1.PodSpec{
+			NodeName: "fixture-control-plane-1",
+			Volumes: []corev1.Volume{
+				{
+					Name:     "audit",
+					HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/audit/kube"},
+				},
+				{Name: "config", HostPath: &corev1.HostPathVolumeSource{
+					Path: "/system/config/kubernetes/kube-apiserver",
+				}},
+			},
+			Containers: []corev1.Container{{
+				Name:  "kube-apiserver",
+				Image: "registry.k8s.io/kube-apiserver:fixture",
+				VolumeMounts: []corev1.VolumeMount{
+					{Name: "audit", MountPath: "/var/log/audit/kube"},
+					{
+						Name:      "config",
+						MountPath: "/system/config/kubernetes/kube-apiserver",
+						ReadOnly:  true,
+					},
+				},
+			}},
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+	fixture.pods = []corev1.Pod{apiserver}
+
+	err := runRemovalScaleDown(fixture)
+	require.NoError(t, err, "the Talos kube-apiserver audit mount must not block removal")
+	require.Equal(t, []int64{1, 3}, fixture.deleted)
+}
+
+func TestControlPlaneRemovalRefusesWritableLogOutsideAuditOnMirrorPod(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	pod := removalApplicationPod()
+	pod.Namespace = metav1.NamespaceSystem
+	pod.Annotations = map[string]string{corev1.MirrorPodAnnotationKey: "mirror-hash"}
+	pod.OwnerReferences[0].Kind = "Node"
+	pod.OwnerReferences[0].Name = pod.Spec.NodeName
+	pod.OwnerReferences[0].UID = "native-1"
+	pod.Spec.Volumes = []corev1.Volume{
+		{Name: "state", HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/audit"}},
+	}
+	pod.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{{Name: "state", MountPath: "/state"}}
+	fixture.pods = []corev1.Pod{pod}
+
+	err := runRemovalScaleDown(fixture)
+	require.ErrorContains(t, err, "unqualified node-local hostPath")
+	require.Empty(t, fixture.leaves)
+}
+
+func TestControlPlaneRemovalRecordsScopeToCluster(t *testing.T) {
+	t.Parallel()
+
+	for scenario, recordCase := range map[string]struct {
+		record  string
+		blocked bool
+	}{
+		"unresolved attempt on another server": {".ksail-cp-removal-fixture@4.json", true},
+		"completed removal":                    {".ksail-cp-removed-fixture@4.json", false},
+		"another cluster's attempt":            {".ksail-cp-removal-fixture-b@4.json", false},
+		"interrupted partial write":            {".ksail-cp-removal-fixture@4.json.x.partial", false},
+	} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			fixture := newRemovalFixture(t)
+			parent := filepath.Dir(fixture.provisioner.options.KubeconfigPath)
+			require.NoError(
+				t,
+				os.WriteFile(filepath.Join(parent, recordCase.record), []byte("{}"), 0o600),
+			)
+
+			err := runRemovalScaleDown(fixture)
+			if recordCase.blocked {
+				require.ErrorContains(t, err, "prior removal attempt for this cluster")
+				require.Empty(t, fixture.leaves)
+
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, []int64{1, 3}, fixture.deleted)
+		})
+	}
+}
+
+func TestControlPlaneRemovalMarksVerifiedRemovalsComplete(t *testing.T) {
+	t.Parallel()
+	fixture := newRemovalFixture(t)
+	parent := filepath.Dir(fixture.provisioner.options.KubeconfigPath)
+
+	require.NoError(t, runRemovalScaleDown(fixture))
+
+	for _, serverID := range []int64{1, 3} {
+		require.FileExists(t, filepath.Join(parent, removalCompletedName("fixture", serverID)))
+		require.NoFileExists(t, filepath.Join(parent, removalRecordName("fixture", serverID)))
+	}
+
+	require.NoError(t, proveNoRemovalRecord(parent, "fixture"), "completed removals never block")
+}

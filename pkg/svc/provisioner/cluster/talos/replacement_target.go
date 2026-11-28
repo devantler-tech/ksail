@@ -62,6 +62,9 @@ func resolveReplacementTarget(observation replacementObservation) (replacementTa
 		ServerName: server.Name,
 		Role:       server.Labels[hetzner.LabelNodeType],
 	}
+	if target.Role == RoleControlPlane {
+		target.Role = hetzner.NodeTypeControlPlane
+	}
 
 	node, err := uniqueNodeForServer(observation.Nodes, server)
 	if err != nil {
@@ -160,7 +163,8 @@ func validateOwnedServer(server *hcloud.Server, clusterName string) error {
 	}
 
 	role := server.Labels[hetzner.LabelNodeType]
-	if role != hetzner.NodeTypeControlPlane && role != hetzner.NodeTypeWorker {
+	if role != hetzner.NodeTypeControlPlane && role != RoleControlPlane &&
+		role != hetzner.NodeTypeWorker {
 		return fmt.Errorf(
 			"%w: server %q has unknown role %q", ErrReplacementTargetInvalid, server.Name, role,
 		)

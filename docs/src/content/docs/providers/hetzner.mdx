@@ -216,6 +216,40 @@ You can also provide the version per invocation, for example
 KSail's tracked default ISO ID, keeps the default version contract. A schematic
 snapshot also requires a version pin and takes precedence over the ISO.
 
+### Reducing the static control plane
+
+Automatic control-plane removal retains the server holding the cluster's assigned,
+owned floating API endpoint and selects the newest eligible servers rather than
+assuming reused node numbers indicate age. It requires at least three remaining
+control planes, matching provider/Kubernetes/etcd identities, healthy surviving
+voters and readiness through the original API route.
+
+KSail chooses the servers to remove before it checks them. If a selected server
+fails a safety check, removal stops; KSail does not pick an older server instead.
+Empty the selected servers first. Removal refuses a selected server that has
+application pods, even terminating or completed ones, attached Hetzner volumes,
+delete protection, a floating IP, Longhorn membership or unqualified local storage.
+KSail checks these again immediately before each membership change. Automatic
+control-plane removal supports only clusters without PersistentVolumes: if the
+cluster has any, removal refuses before changing anything. Only node agents and native static pods with rebuildable system
+volumes are permitted. KSail cordons the exact Node UID;
+this path never evicts or deletes Pods through the API, so it does not consult
+PodDisruptionBudgets. Removing the server still stops the node agents and static
+Pods left on it. The kube-apiserver audit log directory that Talos keeps on each
+control plane is removed with its server; other writable log mounts refuse.
+
+Before each membership change, KSail verifies a private etcd snapshot beside the
+canonical kubeconfig in a `.ksail-control-plane-recovery-*` directory. These files
+contain cluster secrets: retain them in private recovery storage and never publish
+them as plaintext artifacts. A `.ksail-cp-removal-<cluster>@<server-id>.json` attempt record
+blocks every new removal for that cluster until the uncertain attempt is reviewed.
+A verified removal renames its record to `.ksail-cp-removed-<cluster>@<server-id>.json`,
+which is kept as evidence and blocks nothing.
+Automated control-plane removal runs from Linux, macOS or WSL2 and refuses to run on
+Windows, where the recovery record cannot be made durable before the membership change.
+If removal stops, inspect the actual member, server, Node and endpoint state before
+recovering that attempt; a failed RPC is not proof that nothing changed.
+
 ### Autoscaler Configuration
 
 KSail supports node and pod autoscaling for Hetzner clusters via `spec.cluster.autoscaler`. Node pools are Hetzner-specific and map directly to the [Kubernetes Cluster Autoscaler](https://github.com/kubernetes/autoscaler) node group format.

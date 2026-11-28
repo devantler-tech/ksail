@@ -13,6 +13,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
+// ErrServerIdentityMismatch rejects a response for another immutable server.
+var ErrServerIdentityMismatch = errors.New(
+	"server response does not match requested immutable identity",
+)
+
 // Default timeouts for Hetzner operations.
 const (
 	// DefaultActionTimeout is the timeout for waiting on Hetzner actions.
@@ -509,6 +514,29 @@ func (p *Provider) DeleteServer(ctx context.Context, server *hcloud.Server) erro
 	}
 
 	return nil
+}
+
+// GetServerByID reads an immutable server identity, including servers whose
+// labels or names changed. A nil result means the provider confirmed absence.
+func (p *Provider) GetServerByID(ctx context.Context, serverID int64) (*hcloud.Server, error) {
+	if serverID <= 0 {
+		return nil, ErrServerIdentityMismatch
+	}
+
+	if p.client == nil {
+		return nil, provider.ErrProviderUnavailable
+	}
+
+	server, _, err := p.client.Server.GetByID(ctx, serverID)
+	if err != nil {
+		return nil, fmt.Errorf("read server identity: %w", err)
+	}
+
+	if server != nil && server.ID != serverID {
+		return nil, ErrServerIdentityMismatch
+	}
+
+	return server, nil
 }
 
 // CreateServer creates a new Hetzner server with the specified configuration.

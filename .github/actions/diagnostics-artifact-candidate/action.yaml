@@ -173,6 +173,18 @@ inputs:
       and the API is reachable on the node address. Needs an explicit --name.
     required: false
     default: "false"
+  control-plane-scale-down:
+    description: |
+      Hetzner + Talos only. When 'true', runs an additional step that gives the
+      cluster its ksail-owned floating API address, empties the control plane
+      KSail will remove (the newest one that does not hold that address), lowers
+      spec.cluster.controlPlanes by one and applies it via `ksail cluster update
+      --force`. It then asserts the server and Node are gone, the API still
+      answers through the floating address with etcd healthy, the removal record
+      is verified, and a second update finds nothing to change. Needs an explicit
+      --name and at least four control planes, so three remain.
+    required: false
+    default: "false"
   upload-artifacts:
     description: |
       Upload diagnostics and logs from inside this composite action. Callers
