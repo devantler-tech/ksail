@@ -139,15 +139,15 @@
     {
       "packages": ["github.com/loft-sh/admin-apis/pkg/licenseapi"],
       "module": "github.com/loft-sh/admin-apis",
-      "version": "v0.0.0-20260721223200-58c89e54604e",
-      "sum": "h1:A2KvOyV+gWsdo34lMkmYNi1T8/LmbQ3qXBKb16UiH3M=",
+      "version": "v0.0.0-20260928151145-c0a92a2b2cf8",
+      "sum": "h1:cWuxRoc6g0QDRxmibH6DVukNibs88Mmdao56Didm5Vg=",
       "evidence": "LICENSE",
       "sha256": "aba851442e6e14935d015beae5d867724728818889d223afa536a8959e8e5745",
       "reportedFile": "",
       "detected": ["Unknown"],
       "effective": ["LicenseRef-Loft-KSail-Binary-Permission"],
-      "rationale": "Maintainer-verified permission for this identified component as compiled into KSail binaries. No source grant, later revisions, duration, irrevocability or downstream rights are inferred. Original correspondence remains private.",
-      "sourceUrl": "https://github.com/loft-sh/admin-apis/blob/58c89e54604e/LICENSE",
+      "rationale": "Maintainer-verified permission for this identified component as compiled into KSail binaries; the maintainer confirmed this revision is covered by the same permission record. No source grant, further revisions, duration, irrevocability or downstream rights are inferred. Original correspondence remains private.",
+      "sourceUrl": "https://github.com/loft-sh/admin-apis/blob/c0a92a2b2cf8/LICENSE",
       "permissionRecord": "LOFT-ADMIN-APIS-KSAIL-001"
     },
     {
