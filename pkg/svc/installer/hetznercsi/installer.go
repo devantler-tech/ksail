@@ -3,6 +3,7 @@ package hetznercsiinstaller
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
@@ -94,6 +95,19 @@ func (h *Installer) Install(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("wait for hcloud-ccm node initialization: %w", err)
 	}
+
+	diagnosticContext, stopDiagnostics := context.WithCancel(ctx)
+
+	var observer sync.WaitGroup
+
+	if observe := h.controllerTerminationObserver(diagnosticContext); observe != nil {
+		observer.Go(func() { observe(diagnosticContext) })
+	}
+
+	defer func() {
+		stopDiagnostics()
+		observer.Wait()
+	}()
 
 	err = h.Installer.Install(ctx)
 	if err != nil {
