@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/apricote/hcloud-upload-image/hcloudimages"
+	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
@@ -29,6 +31,29 @@ const snapshotBuildCleanupTimeout = 30 * time.Second
 // before looking for the resources to delete. See waitForUploadToSettle.
 const snapshotBuildSettleTimeout = 10 * time.Second
 
+// snapshotDownloadAttempts bounds how many times a snapshot build is attempted when the
+// temporary server fails to download the Talos image from the Image Factory.
+const snapshotDownloadAttempts = 3
+
+// snapshotDownloadRetryDelay is the wait before the second attempt of a snapshot build whose
+// image download failed. It doubles before each later attempt, up to
+// snapshotDownloadRetryMaxDelay.
+const (
+	snapshotDownloadRetryDelay    = 15 * time.Second
+	snapshotDownloadRetryMaxDelay = time.Minute
+)
+
+// snapshotImageProbeTimeout bounds the request that checks whether the Image Factory serves the
+// image a failed download asked for.
+const snapshotImageProbeTimeout = 30 * time.Second
+
+// imageDownloadFailure is the message hcloud-upload-image (hcloudimages v1.4.0) wraps around a
+// failure of the command that downloads the image on the temporary server and writes it to
+// disk. The library returns no typed error for that step, so its message is what tells a
+// download failure apart from the steps that are not worth repeating, such as authentication,
+// quota or server creation.
+const imageDownloadFailure = "failed to download and write the image"
+
 // snapshotUploader is the interface used by SnapshotManager to create a snapshot from a raw image URL.
 // It is satisfied by *hcloudimages.Client and can be replaced in tests.
 type snapshotUploader interface {
@@ -42,7 +67,12 @@ type SnapshotManager struct {
 	uploader     snapshotUploader
 	logWriter    io.Writer
 	settle       time.Duration
+	retryDelay   time.Duration
+	probeImage   imageProbe
 }
+
+// imageProbe reports the HTTP status the Image Factory answers for an image URL.
+type imageProbe func(ctx context.Context, imageURL *url.URL) (int, error)
 
 // NewSnapshotManager creates a new SnapshotManager backed by the given Hetzner Cloud client.
 // A nil logWriter is silently replaced with io.Discard.
@@ -56,6 +86,8 @@ func NewSnapshotManager(hcloudClient *hcloud.Client, logWriter io.Writer) *Snaps
 		uploader:     hcloudimages.NewClient(hcloudClient),
 		logWriter:    logWriter,
 		settle:       snapshotBuildSettleTimeout,
+		retryDelay:   snapshotDownloadRetryDelay,
+		probeImage:   headImageURL,
 	}
 }
 
@@ -108,7 +140,7 @@ func (sm *SnapshotManager) EnsureTalosSnapshot(
 
 	buildID := rand.Text()
 
-	image, err := sm.buildSnapshot(ctx, buildID, hcloudimages.UploadOptions{
+	image, err := sm.buildSnapshotRetryingDownload(ctx, buildID, hcloudimages.UploadOptions{
 		ImageURL:         imageURL,
 		ImageCompression: hcloudimages.CompressionXZ,
 		Architecture:     hcloud.ArchitectureX86,
@@ -188,6 +220,149 @@ func (sm *SnapshotManager) findExistingSnapshot(
 	}
 
 	return 0, nil
+}
+
+// buildSnapshotRetryingDownload runs the snapshot build and repeats it, up to
+// snapshotDownloadAttempts times with a growing wait, when the temporary server fails to
+// download the Talos image. One dropped download from the Image Factory otherwise fails the
+// whole create or update. Any other failure, and a cancelled build, is returned at once.
+//
+// A download also fails when the Image Factory has no image for the version and schematic,
+// which no retry fixes. So before repeating, it asks the Image Factory for the image and stops
+// when the answer is a client error such as 404. Before each new attempt it deletes the failed
+// attempt's temporary server and SSH key; if that deletion fails, it stops rather than leave a
+// second server running. It deletes them too when a download failure ends the build.
+//
+// SIGINT and SIGTERM cancel the whole sequence, including the probe, the cleanup and the wait
+// between attempts, so an interrupt there ends the build instead of killing the process.
+func (sm *SnapshotManager) buildSnapshotRetryingDownload(
+	parent context.Context,
+	buildID string,
+	opts hcloudimages.UploadOptions,
+) (*hcloud.Image, error) {
+	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	for attempt := 1; ; attempt++ {
+		image, err := sm.buildSnapshot(ctx, buildID, opts)
+		if err == nil || !strings.Contains(err.Error(), imageDownloadFailure) {
+			return image, err
+		}
+
+		if attempt == snapshotDownloadAttempts {
+			return nil, sm.withBuildCleanup(ctx, buildID, fmt.Errorf(
+				"downloading the Talos image from the Image Factory failed %d times: %w",
+				attempt, errors.Join(err, ctx.Err()),
+			))
+		}
+
+		retryErr := sm.prepareDownloadRetry(ctx, buildID, opts.ImageURL, attempt, err)
+		if retryErr != nil {
+			return nil, retryErr
+		}
+	}
+}
+
+// prepareDownloadRetry decides whether a failed image download is worth another attempt,
+// deletes the failed attempt's temporary resources and waits out the backoff. It returns the
+// error to report when the build must stop instead.
+func (sm *SnapshotManager) prepareDownloadRetry(
+	ctx context.Context,
+	buildID string,
+	imageURL *url.URL,
+	attempt int,
+	downloadErr error,
+) error {
+	status, probeErr := sm.probeImage(ctx, imageURL)
+	if probeErr == nil && imageMissing(status) {
+		// A build cancelled while the probe was answered is reported as cancelled, as every
+		// other cancelled step of the build is.
+		ctxErr := ctx.Err()
+		if ctxErr != nil {
+			return sm.withBuildCleanup(ctx, buildID, fmt.Errorf(
+				"cancelled while checking the Talos image: %w", errors.Join(ctxErr, downloadErr),
+			))
+		}
+
+		return sm.withBuildCleanup(ctx, buildID, fmt.Errorf(
+			"the Image Factory has no image at %s (HTTP %d), so the download is not retried: %w",
+			imageURL, status, downloadErr,
+		))
+	}
+
+	delay := netretry.ExponentialDelay(
+		attempt, sm.retryDelay, max(sm.retryDelay, snapshotDownloadRetryMaxDelay),
+	)
+
+	_, _ = fmt.Fprintf(sm.logWriter,
+		"  Talos image download failed (attempt %d of %d), retrying in %s...\n",
+		attempt, snapshotDownloadAttempts, delay,
+	)
+
+	cleanupErr := sm.deleteBuildResources(ctx, buildID)
+	if cleanupErr != nil {
+		return fmt.Errorf(
+			"%w; deleting the failed attempt's temporary resources also failed, "+
+				"so the download is not retried: %w",
+			errors.Join(downloadErr, ctx.Err()), cleanupErr,
+		)
+	}
+
+	return waitForBackoff(ctx, "cancelled while waiting to retry the Talos image download", delay)
+}
+
+// withBuildCleanup deletes the failed attempt's temporary server and SSH key before a download
+// failure ends the build, so a resource the uploader could not remove does not keep running.
+// A failed deletion is reported together with buildErr.
+func (sm *SnapshotManager) withBuildCleanup(
+	ctx context.Context,
+	buildID string,
+	buildErr error,
+) error {
+	cleanupErr := sm.deleteBuildResources(ctx, buildID)
+	if cleanupErr == nil {
+		return buildErr
+	}
+
+	return fmt.Errorf(
+		"%w; deleting the failed attempt's temporary resources also failed: %w",
+		buildErr, cleanupErr,
+	)
+}
+
+// imageMissing reports whether an Image Factory status means the image does not exist, as
+// opposed to a failure that may pass. Only "not found", "gone" and "bad request" (an unknown
+// version or schematic) say that. Other client errors, such as a method a proxy does not allow,
+// a refused request, a timeout or a rate limit, say nothing about the image, so the download
+// is retried.
+func imageMissing(status int) bool {
+	switch status {
+	case http.StatusBadRequest, http.StatusNotFound, http.StatusGone:
+		return true
+	default:
+		return false
+	}
+}
+
+// headImageURL asks the Image Factory for imageURL without downloading it and returns the
+// status it answers with.
+func headImageURL(ctx context.Context, imageURL *url.URL) (int, error) {
+	probeCtx, cancel := context.WithTimeout(ctx, snapshotImageProbeTimeout)
+	defer cancel()
+
+	request, err := http.NewRequestWithContext(probeCtx, http.MethodHead, imageURL.String(), nil)
+	if err != nil {
+		return 0, fmt.Errorf("building the Image Factory request: %w", err)
+	}
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return 0, fmt.Errorf("asking the Image Factory for the image: %w", err)
+	}
+
+	_ = response.Body.Close()
+
+	return response.StatusCode, nil
 }
 
 // uploadResult is the outcome of one snapshot upload.
