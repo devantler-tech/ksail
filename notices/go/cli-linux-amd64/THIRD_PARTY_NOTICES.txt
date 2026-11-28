@@ -4587,9 +4587,9 @@ Material: m2b50515d53b4ae33 (copyright-header), SHA-256 7030fb5b2204affa78b4d86f
 Material: m7c49c1a683cef577 (license), SHA-256 24653fd8a39354396da1a265d68316399edc39b1df48c5866d55f9f06484fa9a
 Files: LICENSE
 
-Component: github.com/github/copilot-sdk/go@v1.0.34
-Source: https://proxy.golang.org/github.com/github/copilot-sdk/go/@v/v1.0.34.zip
-Selected Go source checksum: h1:WX2fPUsqeJT+963s31sVBQEAPNHFHk3WzfWYhskS6iw=
+Component: github.com/github/copilot-sdk/go@v1.0.35
+Source: https://proxy.golang.org/github.com/github/copilot-sdk/go/@v/v1.0.35.zip
+Selected Go source checksum: h1:RbXPX1agHSYngh9G7wBAFN0WnAOXu4VwG18MsjyYTQo=
 Raw classifier detections: MIT
 Effective package-admission terms: MIT
 Packages:
