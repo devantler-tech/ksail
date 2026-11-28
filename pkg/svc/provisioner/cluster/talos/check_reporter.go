@@ -18,7 +18,7 @@ type checkReporter struct {
 }
 
 func (r *checkReporter) Update(condition conditions.Condition) {
-	line := fmt.Sprintf("    %s", condition)
+	line := "    " + conditions.StatusLine(condition)
 	if line != r.lastLine {
 		_, _ = fmt.Fprintf(r.writer, "%s\n", line)
 		r.lastLine = line
