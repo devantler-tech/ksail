@@ -31,10 +31,10 @@ const maxDecodedUserDataBytes = 1 << 20
 const maxProviderUserDataBytes = hetzner.UserDataLimitBytes
 
 // ErrUserDataTooLargeForProvider is returned when the user-data a node would be
-// created with exceeds what Hetzner accepts. Expanding compressed user-data
-// before forwarding it is what makes this reachable: a payload well under the
-// ceiling while compressed can expand past it, and forwarding the expanded text
-// would turn a deployable node into an opaque provider rejection.
+// created with exceeds what Hetzner accepts: uncompressed text over the ceiling,
+// or compressed input whose re-compressed, encoded form is still over it.
+// Refusing locally names the real problem instead of an opaque provider
+// rejection.
 var ErrUserDataTooLargeForProvider = errors.New(
 	"hetzner: provider user-data exceeds the maximum the provider accepts",
 )
@@ -602,9 +602,10 @@ func gunzipLimited(compressed []byte) (string, bool, bool) {
 // load-bearing: raw gzip bytes are not valid JSON text and must not be forwarded
 // to the provider after only their expanded form was validated.
 //
-// The returned text is finally bounded by what the provider accepts, which is a
-// separate ceiling from the inspection bound and is only reachable because the
-// expansion above can grow an acceptable input past it.
+// The returned value is finally bounded by what the provider accepts, a separate
+// ceiling from the inspection bound. When compressed input fits only while
+// compressed, the inspected text is sent compressed and encoded instead, and the
+// ceiling applies to that encoded value.
 func validateProviderUserData(userData string) (string, error) {
 	inspected, err := expandRawGzipUserData(userData)
 	if err != nil {
@@ -630,14 +631,55 @@ func validateProviderUserData(userData string) (string, error) {
 	// will take this value at all. Checked here rather than at the call site
 	// because this function decides what gets forwarded, and expanding gzip is
 	// what lets an acceptable input become an unacceptable output.
-	if len(inspected) > maxProviderUserDataBytes {
+	if len(inspected) <= maxProviderUserDataBytes {
+		return inspected, nil
+	}
+
+	// Compressed input that only outgrows the ceiling once expanded is sent
+	// compressed again, so compression keeps doing its job (#7669).
+	if looksLikeGzip([]byte(userData)) {
+		return compressedProviderUserData(inspected)
+	}
+
+	return "", fmt.Errorf(
+		"%w: %d bytes exceeds the %d-byte limit",
+		ErrUserDataTooLargeForProvider, len(inspected), maxProviderUserDataBytes,
+	)
+}
+
+// compressedProviderUserData returns the inspected text gzip-compressed and
+// base64-encoded, the form Hetzner's cloud-init datasource decodes before it
+// reads user-data: the API accepts only text, so raw gzip bytes cannot be sent.
+// It compresses the inspected text itself rather than forwarding the caller's
+// bytes, so what the node expands is exactly what the guards read. The
+// provider ceiling is enforced on the encoded value, the bytes actually sent.
+func compressedProviderUserData(inspected string) (string, error) {
+	var compressed bytes.Buffer
+
+	writer, err := gzip.NewWriterLevel(&compressed, gzip.BestCompression)
+	if err != nil {
+		return "", fmt.Errorf("compress provider user-data: %w", err)
+	}
+
+	_, err = writer.Write([]byte(inspected))
+	if err != nil {
+		return "", fmt.Errorf("compress provider user-data: %w", err)
+	}
+
+	err = writer.Close()
+	if err != nil {
+		return "", fmt.Errorf("compress provider user-data: %w", err)
+	}
+
+	encoded := base64.StdEncoding.EncodeToString(compressed.Bytes())
+	if len(encoded) > maxProviderUserDataBytes {
 		return "", fmt.Errorf(
-			"%w: %d bytes exceeds the %d-byte limit",
-			ErrUserDataTooLargeForProvider, len(inspected), maxProviderUserDataBytes,
+			"%w: %d bytes compressed and encoded exceeds the %d-byte limit",
+			ErrUserDataTooLargeForProvider, len(encoded), maxProviderUserDataBytes,
 		)
 	}
 
-	return inspected, nil
+	return encoded, nil
 }
 
 // expandRawGzipUserData returns the text the guards should inspect: the gzip
